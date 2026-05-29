@@ -23,6 +23,46 @@ service-role/secret key is never used or referenced anywhere in this app.
 - **System Event Log** — latest ~14 rows from `events`.
 - **Error banner** — a graceful red banner if reads fail (missing key / RLS).
 
+## Screens
+
+The app has three routes, switchable from the top nav:
+
+- **`/` — Monitor** — the read-only live market dashboard (above).
+- **`/console` — The SEVE Console** — a skeuomorphic Roland TR-909-style control
+  surface for the strategist desk. Four channel strips (Fade · Breakout · Power
+  Hour · Grinder), each with LEVEL (capital %) and AGGR (aggression) knobs, MAX /
+  STOP dials, MUTE/SOLO pads, and a live P&L meter. A master strip carries the
+  fund: a red 7-segment LED (NAV / day P&L, click to toggle), the CAPITAL knob,
+  START/STOP, a guarded PAPER↔LIVE switch, and a KILL switch. A 16-step tape
+  lights recent signals in each strategist's color.
+- **`/desk` — Desk** — open positions, per-strategist + fund P&L with an equity
+  sparkline, and a live signals tape.
+
+### Console state & the write seam (UI-first)
+
+The console is **UI-first**: controls drive **local React state only** — no DB
+writes yet. The anon key can't read the desk tables (RLS), and the bots haven't
+traded, so config is seeded from the schema's known values
+([`lib/desk/seed.ts`](lib/desk/seed.ts)) and positions/P&L/signals are
+**sample** data ([`lib/desk/sample.ts`](lib/desk/sample.ts)), flagged with a
+persistent amber "SAMPLE DATA" badge. Aggression scales a channel's P&L
+volatility, so turning a TUNE knob up visibly widens its swings.
+
+Everything sits behind a clean seam so going live later touches **only two
+hooks**, not the components:
+
+- [`hooks/useDeskState.ts`](hooks/useDeskState.ts) — the reducer that owns config
+  + fund state. To go live: seed from a Supabase read and fire authenticated
+  `update`s on `SET_CONFIG` / `SET_FUND` / `KILL` (the knob's `onCommit`, which
+  fires on pointer release, is the natural write boundary).
+- [`hooks/useDeskSampleData.ts`](hooks/useDeskSampleData.ts) — the ticking
+  positions/P&L/signals feed. To go live: replace the generators with reads of
+  the real `positions` / `fills` / `signals` / `equity_snapshots` tables. The
+  component contracts (`Position`, `Signal`, `ChannelPnl`) stay fixed.
+
+Mute/solo/halt are **derived, never cross-mutated** — soloing one channel dims
+the others via a selector, so un-soloing instantly restores prior states.
+
 ## Greeks (hybrid model)
 
 Alpaca returns real, broker-computed greeks for 1DTE and later expiries, and

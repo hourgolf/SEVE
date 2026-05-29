@@ -1,0 +1,797 @@
+/* ===========================================================================
+   SEVE Console — Roland TR-909 skeuomorphic skin.
+   Scoped under .console-root so the cream chassis never bleeds onto the dark
+   monitor (/). Shares the :root tokens from globals.css and adds hardware vars.
+   =========================================================================== */
+
+.console-root {
+  /* --- 909 chassis palette --- */
+  --chassis: #c9c7bd; /* cream/grey body */
+  --chassis-2: #b6b4a8;
+  --chassis-edge: #8f8d82;
+  --chassis-dark: #6e6c63;
+  --panel-plate: #2b2b2e; /* dark sub-panels behind knobs */
+  --panel-plate-2: #1d1d20;
+  --screw: #7a7870;
+  --ink: #2a2a28; /* dark text on cream */
+  --ink-soft: #55534c;
+
+  /* --- knob metal --- */
+  --knob-metal: #2c2d30;
+  --knob-metal-hi: #54565c;
+  --knob-skirt: #d7d5cb;
+
+  /* --- LED --- */
+  --led-red: #ff3b2f;
+  --led-red-dim: rgba(255, 59, 47, 0.07);
+  --led-bg: #1a0604;
+
+  /* --- 909 accent stripes (the orange/red/grey instrument bands) --- */
+  --stripe-orange: #e0552f;
+  --stripe-red: #c5362a;
+  --stripe-cream: #d9d7cc;
+
+  /* --- strategist accents (match schema colors) --- */
+  --pm-green: #2fd573;
+  --pm-blue: #3b9eff;
+  --pm-amber: #ffb224;
+  --pm-cyan: #45c4d6;
+
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+/* Map a PmColor token to its accent var. */
+.pm-green {
+  --pm: var(--pm-green);
+}
+.pm-blue {
+  --pm: var(--pm-blue);
+}
+.pm-amber {
+  --pm: var(--pm-amber);
+}
+.pm-cyan {
+  --pm: var(--pm-cyan);
+}
+
+/* ---------- console chassis ----------------------------------------------- */
+.chassis {
+  max-width: 1180px;
+  margin: 0 auto;
+  background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  border: 1px solid var(--chassis-edge);
+  border-top-color: #deded4;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow:
+    0 1px 0 #e6e4da inset,
+    0 -2px 6px rgba(0, 0, 0, 0.25) inset,
+    0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.chassis-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--chassis-edge);
+}
+.chassis-brand .mark {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 1px;
+  color: var(--stripe-red);
+}
+.chassis-brand .mark span {
+  color: var(--ink);
+}
+.chassis-brand .sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+/* the signature 909 accent stripes */
+.stripes {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.stripes i {
+  display: block;
+  width: 26px;
+  height: 7px;
+  border-radius: 1px;
+}
+.stripes .s1 {
+  background: var(--stripe-orange);
+}
+.stripes .s2 {
+  background: var(--stripe-red);
+}
+.stripes .s3 {
+  background: var(--chassis-dark);
+}
+
+/* a recessed dark sub-panel that knobs/labels sit on */
+.plate {
+  background: linear-gradient(180deg, var(--panel-plate), var(--panel-plate-2));
+  border-radius: 9px;
+  border: 1px solid #000;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 12px;
+}
+.plate-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #9a9a9a;
+}
+
+/* tiny chassis screw */
+.screw {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #9d9b92, var(--screw) 60%, #5b5950);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+.screw::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 1.4px;
+  background: #4a4842;
+  transform: rotate(35deg);
+}
+
+/* ---------- Knob ---------------------------------------------------------- */
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  touch-action: none; /* critical: stop the page scrolling on touch-drag */
+  cursor: grab;
+  user-select: none;
+  outline: none;
+}
+.knob.dragging {
+  cursor: grabbing;
+}
+.knob.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.knob:focus-visible .knob-well {
+  box-shadow:
+    0 0 0 2px var(--ind),
+    0 3px 7px rgba(0, 0, 0, 0.6) inset;
+}
+.knob-well {
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #3a3b3e, #0f1011 78%);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.6),
+    0 1px 0 rgba(255, 255, 255, 0.07) inset;
+  display: grid;
+  place-items: center;
+  transition: box-shadow 0.12s;
+}
+.knob-cap {
+  display: block;
+}
+.knob-lg .knob-well {
+  width: 76px;
+  height: 76px;
+  padding: 5px;
+}
+.knob-md .knob-well {
+  width: 56px;
+  height: 56px;
+  padding: 4px;
+}
+.knob-sm .knob-well {
+  width: 40px;
+  height: 40px;
+  padding: 3px;
+}
+.knob-lg .knob-cap {
+  width: 66px;
+  height: 66px;
+}
+.knob-md .knob-cap {
+  width: 48px;
+  height: 48px;
+}
+.knob-sm .knob-cap {
+  width: 34px;
+  height: 34px;
+}
+.knob-label {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #9a9a9a;
+}
+.knob-val {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #e9e9e6;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- console layout: channels + master ----------------------------- */
+.console-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.channels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+/* Responsive: stack the master below the channels, then drop to 2 columns. */
+@media (max-width: 1080px) {
+  .console-grid {
+    grid-template-columns: 1fr;
+  }
+  .master {
+    min-width: 0;
+  }
+  .master-volume,
+  .master-transport,
+  .master-controls {
+    display: flex;
+  }
+  .master {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    align-items: center;
+  }
+}
+@media (max-width: 720px) {
+  .channels {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 420px) {
+  .channels {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- channel strip ------------------------------------------------- */
+.channel {
+  background: linear-gradient(180deg, var(--panel-plate), var(--panel-plate-2));
+  border: 1px solid #000;
+  border-top: 3px solid var(--pm);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  transition: opacity 0.18s, filter 0.18s;
+}
+.channel.ducked {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+}
+.ch-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  justify-content: center;
+}
+.ch-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2a2b2e;
+  box-shadow: 0 0 0 1px #000 inset;
+}
+.ch-dot.on {
+  background: var(--pm);
+  box-shadow: 0 0 8px var(--pm);
+}
+.ch-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--pm);
+}
+.ch-regime {
+  font-family: var(--sans);
+  font-size: 9px;
+  line-height: 1.3;
+  color: #8d8b82;
+  text-align: center;
+  min-height: 24px;
+}
+.ch-knobs {
+  display: flex;
+  gap: 16px;
+}
+.ch-dials {
+  display: flex;
+  gap: 16px;
+}
+.ch-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+.ch-meter-track {
+  width: 10px;
+  height: 34px;
+  background: #14151700;
+  border: 1px solid #000;
+  border-radius: 3px;
+  background: #161719;
+  display: flex;
+  flex-direction: column-reverse;
+  overflow: hidden;
+}
+.ch-meter-fill {
+  width: 100%;
+  transition: height 0.4s ease-out;
+}
+.ch-meter-fill.pos {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.ch-meter-fill.neg {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+}
+.ch-pnl {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ch-pnl.pos {
+  color: var(--green);
+}
+.ch-pnl.neg {
+  color: var(--red);
+}
+.ch-pads {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---------- master strip -------------------------------------------------- */
+.master {
+  background: linear-gradient(180deg, #20140a, #160d06);
+  border: 1px solid #000;
+  border-top: 3px solid var(--stripe-orange);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 230px;
+}
+.master-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--stripe-orange);
+}
+.master-led {
+  cursor: pointer;
+}
+.master-volume {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.master-day {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+.master-day.pos {
+  color: var(--green);
+}
+.master-day.neg {
+  color: var(--red);
+}
+.master-transport {
+  display: flex;
+  gap: 8px;
+}
+.master-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.tape {
+  margin-top: 0;
+}
+
+/* ---------- LED 7-segment display ----------------------------------------- */
+.led {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.led-window {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--led-bg);
+  border-radius: 8px;
+  border: 1px solid #000;
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.6) inset,
+    0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.seven-seg {
+  width: 26px;
+  height: 47px;
+  display: block;
+}
+.led-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  pointer-events: none;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0) 40%
+  );
+}
+.led-caption {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #9a9a9a;
+}
+
+/* ---------- transport buttons --------------------------------------------- */
+.xport {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #f0efe9;
+  padding: 11px 16px;
+  border-radius: 7px;
+  border: 1px solid #000;
+  background: linear-gradient(180deg, #4a4b4f, #2a2b2e);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 3px 5px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.06s, box-shadow 0.06s, background 0.12s;
+}
+.xport:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) inset;
+}
+.xport-start.active {
+  background: linear-gradient(180deg, #36e07d, #1f9e54);
+  color: #07120b;
+}
+.xport-stop.active {
+  background: linear-gradient(180deg, #ff6a52, #c5362a);
+}
+.xport:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---------- mute/solo pads ------------------------------------------------ */
+.pad {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #cfcdc6;
+  width: 38px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid #000;
+  background: linear-gradient(180deg, #3a3b3e, #232427);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 2px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.06s, box-shadow 0.1s, color 0.1s;
+}
+.pad:active {
+  transform: translateY(1px);
+}
+.pad.lit {
+  color: #0a0a0a;
+  background: linear-gradient(180deg, var(--pad), color-mix(in srgb, var(--pad) 70%, #000));
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--pad) 60%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.3) inset;
+}
+
+/* ---------- 16-step sequencer row ----------------------------------------- */
+.steprow {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 5px;
+}
+.step {
+  position: relative;
+  height: 34px;
+  border-radius: 5px;
+  border: 1px solid #000;
+  background: linear-gradient(180deg, #e7e5da, #c3c1b6);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 2px 3px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: box-shadow 0.1s, transform 0.06s, background 0.1s;
+}
+.step:active {
+  transform: translateY(1px);
+}
+/* every 4th step is an accent (downbeat) like the 909 */
+.step:nth-child(4n + 1) {
+  background: linear-gradient(180deg, #f0a07f, #e0552f);
+}
+.step.lit {
+  background: linear-gradient(180deg, var(--step), color-mix(in srgb, var(--step) 60%, #000));
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--step) 70%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.3) inset;
+}
+.step.pulse {
+  animation: stepPulse 0.9s ease-out;
+}
+@keyframes stepPulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--step) 80%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 16px 2px transparent;
+  }
+}
+.step-num {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-family: var(--mono);
+  font-size: 7px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- bezel sub-panel ----------------------------------------------- */
+.bezel {
+  position: relative;
+  background: linear-gradient(180deg, var(--panel-plate), var(--panel-plate-2));
+  border: 1px solid #000;
+  border-radius: 9px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 14px 12px 12px;
+}
+.bezel-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #b9b7af;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.bezel-screw {
+  position: absolute;
+}
+.bezel-screw.tl {
+  top: 6px;
+  left: 6px;
+}
+.bezel-screw.tr {
+  top: 6px;
+  right: 6px;
+}
+.bezel-screw.bl {
+  bottom: 6px;
+  left: 6px;
+}
+.bezel-screw.br {
+  bottom: 6px;
+  right: 6px;
+}
+
+/* ---------- guarded PAPER/LIVE toggle ------------------------------------- */
+.guarded {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.mode-track {
+  width: 46px;
+  height: 22px;
+  border-radius: 12px;
+  background: #1c1d20;
+  border: 1px solid #000;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6) inset;
+  position: relative;
+  transition: background 0.15s;
+}
+.mode-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #e9e7dd, #b7b5aa);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  transition: left 0.15s;
+}
+.mode-live .mode-track {
+  background: #5a1410;
+}
+.mode-live .mode-knob {
+  left: 26px;
+  background: linear-gradient(180deg, #ff6a52, #c5362a);
+}
+.mode-arming .mode-track {
+  background: var(--amber);
+}
+.mode-labels {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1.3;
+}
+.ml-paper {
+  color: #9a9a9a;
+}
+.mode-live .ml-live {
+  color: var(--led-red);
+}
+.mode-hint {
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  color: #8d8b82;
+}
+
+/* ---------- KILL switch --------------------------------------------------- */
+.kill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kill-cover {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid #000;
+  background: linear-gradient(180deg, #d7d5cb, #a9a79c);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 0.12s;
+}
+.kill.armed .kill-cover {
+  transform: rotate(-32deg) translateY(-3px);
+  transform-origin: left center;
+}
+.kill-cover-grip {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: #6e6c63;
+}
+.kill-fire {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 7px;
+  border: 2px solid #7a1a13;
+  background: radial-gradient(circle at 50% 35%, #ff5946, #b5281d);
+  box-shadow: 0 0 12px rgba(255, 59, 47, 0.5), 0 2px 4px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: transform 0.06s, filter 0.1s;
+}
+.kill-fire:active {
+  transform: translateY(1px);
+}
+.kill-fire:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.kill.halted {
+  gap: 10px;
+}
+.kill-status {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--led-red);
+  text-shadow: 0 0 8px rgba(255, 59, 47, 0.6);
+  animation: killBlink 1s steps(2) infinite;
+}
+@keyframes killBlink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.kill-reset {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #e9e9e6;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid #000;
+  background: linear-gradient(180deg, #4a4b4f, #2a2b2e);
+  cursor: pointer;
+}
+
+/* SAMPLE-data badge (reuses amber semantics) */
+.sample-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--amber);
+  background: rgba(255, 178, 36, 0.1);
+  border: 1px solid rgba(255, 178, 36, 0.35);
+  border-radius: 7px;
+  padding: 5px 10px;
+}
