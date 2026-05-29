@@ -30,7 +30,15 @@ const DIGIT: Record<string, string> = {
   " ": "",
 };
 
-function SevenSeg({ char, color }: { char: string; color: string }) {
+function SevenSeg({
+  char,
+  color,
+  dot,
+}: {
+  char: string;
+  color: string;
+  dot?: boolean;
+}) {
   const on = DIGIT[char] ?? "";
   return (
     <svg viewBox="0 0 40 72" className="seven-seg" aria-hidden>
@@ -46,6 +54,15 @@ function SevenSeg({ char, color }: { char: string; color: string }) {
           />
         );
       })}
+      {/* decimal point — lit when this digit is immediately followed by '.' */}
+      <circle
+        cx="36"
+        cy="66"
+        r="3"
+        fill={color}
+        opacity={dot ? 1 : 0.06}
+        style={dot ? { filter: `drop-shadow(0 0 2.5px ${color})` } : undefined}
+      />
     </svg>
   );
 }
@@ -63,16 +80,21 @@ export function LedDisplay({
   color = "var(--led-red)",
   caption,
 }: LedDisplayProps) {
-  // Right-align into a fixed-width window: truncate or left-pad with blanks.
-  const trimmed = value.length > digits ? value.slice(-digits) : value;
-  const padded = trimmed.padStart(digits, " ");
-  const chars = padded.split("");
+  // Parse into digit cells; a '.' attaches as the decimal dot of the prior
+  // cell rather than consuming a cell of its own.
+  const cells: { char: string; dot: boolean }[] = [];
+  for (const ch of value) {
+    if (ch === "." && cells.length) cells[cells.length - 1].dot = true;
+    else cells.push({ char: ch, dot: false });
+  }
+  while (cells.length < digits) cells.unshift({ char: " ", dot: false });
+  const shown = cells.slice(-digits);
 
   return (
     <div className="led">
       <div className="led-window">
-        {chars.map((c, i) => (
-          <SevenSeg key={i} char={c} color={color} />
+        {shown.map((c, i) => (
+          <SevenSeg key={i} char={c.char} dot={c.dot} color={color} />
         ))}
         <div className="led-glass" />
       </div>

@@ -6,8 +6,10 @@ import { DeskScreen } from "@/components/console/DeskScreen";
 
 export default function DeskPage() {
   return (
-    <DeskProvider>
-      <DeskScreen />
-    </DeskProvider>
+    <div className="console-root">
+      <DeskProvider>
+        <DeskScreen />
+      </DeskProvider>
+    </div>
   );
 }

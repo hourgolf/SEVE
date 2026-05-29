@@ -2,6 +2,7 @@
 
 import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { MasterStrip } from "@/components/console/MasterStrip";
+import { Chassis } from "@/components/console/Chassis";
 import { StepRow } from "@/components/console/hw/StepRow";
 import { Bezel } from "@/components/console/hw/Bezel";
 import { useDeskState } from "@/hooks/useDeskState";
@@ -12,24 +13,11 @@ export function Console() {
   const feed = useDeskSampleData();
 
   return (
-    <div className="chassis">
-      <div className="chassis-head">
-        <div className="chassis-brand">
-          <div className="mark">
-            SEVE<span> · STRATEGY COMPOSER</span>
-          </div>
-          <div className="sub">SPY · 0DTE / 1DTE · paper desk</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span className="sample-badge">● SAMPLE DATA — not live</span>
-          <div className="stripes">
-            <i className="s1" />
-            <i className="s2" />
-            <i className="s3" />
-          </div>
-        </div>
-      </div>
-
+    <Chassis
+      brand={<>SEVE<span> · STRATEGY COMPOSER</span></>}
+      sub="SPY · 0DTE / 1DTE · paper desk"
+      right={<span className="sample-badge">● SAMPLE DATA — not live</span>}
+    >
       <div className="console-grid">
         <div className="channels">
           {desk.strategists.map((s) => (
@@ -48,6 +36,6 @@ export function Console() {
       <Bezel label="16-Step Tape · recent signals" className="tape">
         <StepRow steps={feed.steps} />
       </Bezel>
-    </div>
+    </Chassis>
   );
 }
