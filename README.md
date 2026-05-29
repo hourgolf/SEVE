@@ -1,5 +1,7 @@
 # SEVE — Live Market Monitor
 
+**Live:** https://seve-henna.vercel.app · **Repo:** https://github.com/hourgolf/SEVE
+
 A read-only live window over the SEVE paper-trading desk: SPY 0DTE/1DTE option
 tape ingested into Supabase Postgres every minute. This is a faithful Next.js
 reproduction of `live-market-monitor.html` — same dark trading-terminal look,
@@ -77,6 +79,24 @@ If the tables can't be read you'll see the red banner with the likely cause
 
 > Only ever paste the **anon/publishable** key. The service-role key must never
 > be added to this project.
+
+`vercel.json` pins the framework to Next.js so the build output is handled
+correctly (otherwise Vercel may look for a static `public/` directory and fail).
+
+## Making changes after deploy
+
+The repo is connected to Vercel for automatic deploys. To ship a change:
+
+```bash
+git add -A
+git commit -m "your message"
+git push
+```
+
+Vercel rebuilds and redeploys `main` automatically. Pushing uses an SSH **deploy
+key** stored on this machine (`~/.ssh/seve_deploy`), configured per-repo via
+`git config core.sshCommand` — no username/password prompt. If you ever clone
+fresh elsewhere, you'll re-authenticate there with your own GitHub credentials.
 
 ## Project layout
 
