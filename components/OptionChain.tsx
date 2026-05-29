@@ -6,9 +6,12 @@ import type { OptionQuote } from "@/lib/types";
 export function OptionChain({
   snapshot,
   spot,
+  deltasModeled = false,
 }: {
   snapshot: OptionQuote[];
   spot: number | null;
+  /** When true, the front board's deltas were modeled (Alpaca had none — 0DTE). */
+  deltasModeled?: boolean;
 }) {
   let rows: React.ReactNode;
   let meta = "—";
@@ -59,7 +62,17 @@ export function OptionChain({
     <div className="panel">
       <div className="phead">
         <span className="t">Live Option Chain</span>
-        <span className="x">{meta}</span>
+        <span className="x">
+          {meta}
+          {deltasModeled && snapshot.length > 0 && (
+            <span
+              title="Alpaca does not provide 0DTE greeks; these deltas are modeled (Black-Scholes from mid)."
+              style={{ color: "var(--amber)" }}
+            >
+              {" · Δ model"}
+            </span>
+          )}
+        </span>
       </div>
       <table>
         <thead>

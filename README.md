@@ -23,6 +23,18 @@ service-role/secret key is never used or referenced anywhere in this app.
 - **System Event Log** — latest ~14 rows from `events`.
 - **Error banner** — a graceful red banner if reads fail (missing key / RLS).
 
+## Greeks (hybrid model)
+
+Alpaca returns real, broker-computed greeks for 1DTE and later expiries, and
+those **always win**. But Alpaca suppresses greeks for same-day (0DTE) expiries
+— its model divides by time-to-expiry, which → 0 at the bell. Since 0DTE is the
+core of this desk, [`lib/greeks.ts`](lib/greeks.ts) fills only those null deltas
+with a Black-Scholes model: per strike it backs implied vol out of the OTM leg
+(pure time value, always solvable) and applies that one IV to both legs, so
+calls/puts stay arbitrage-consistent (delta difference = 1). Modeled boards show
+a small amber **Δ model** tag. The hook prefers the DB's real greek on every
+row, so if your feed ever supplies 0DTE greeks, the model silently stands down.
+
 ## Tech
 
 - Next.js (App Router) + TypeScript

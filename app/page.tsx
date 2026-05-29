@@ -22,7 +22,11 @@ export default function Page() {
       <div className="grid">
         <div className="col">
           <Sparkline bars={data.bars} />
-          <OptionChain snapshot={data.snapshot} spot={data.spot} />
+          <OptionChain
+            snapshot={data.snapshot}
+            spot={data.spot}
+            deltasModeled={data.deltasModeled}
+          />
         </div>
         <div className="col">
           <TapeHealth

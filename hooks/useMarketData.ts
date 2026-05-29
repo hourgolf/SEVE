@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import {
+  modelChainGreeks,
+  type ChainContract,
+  type ModeledGreeks,
+} from "@/lib/greeks";
 import type {
   FeedStatus,
   MarketEvent,
@@ -36,6 +41,8 @@ export interface MarketData {
   error: string | null;
   /** True when the error looks like an auth / RLS / key problem. */
   isAccessError: boolean;
+  /** True when ≥1 delta in the snapshot was modeled (Alpaca had none — 0DTE). */
+  deltasModeled: boolean;
 }
 
 const ACCESS_ERROR_RE =
@@ -53,6 +60,7 @@ const INITIAL: MarketData = {
   updatedAt: null,
   error: null,
   isAccessError: false,
+  deltasModeled: false,
 };
 
 /**
@@ -104,6 +112,7 @@ export function useMarketData(): MarketData {
         let spot: number | null = null;
         let lastIngestTs: string | null = null;
         let snapshot: OptionQuote[] = [];
+        let deltasModeled = false;
 
         if (quotes.length) {
           lastIngestTs = quotes[0].captured_at;
@@ -115,6 +124,46 @@ export function useMarketData(): MarketData {
           const ageMin =
             (Date.now() - new Date(lastIngestTs).getTime()) / 60000;
           status = ageMin > STALE_AFTER_MIN ? "stale" : "live";
+
+          // Hybrid greeks: Alpaca's real greeks always win. Only rows where
+          // delta is null (0DTE, which Alpaca suppresses) get modeled — and
+          // we model per expiration so each strike shares one IV across legs.
+          if (spot != null && spot > 0) {
+            const needsModel = snapshot.filter(
+              (r) => r.delta == null && r.mid != null
+            );
+            const byExp = new Map<string, ChainContract[]>();
+            for (const r of needsModel) {
+              const list = byExp.get(r.expiration) ?? [];
+              list.push({
+                key: r.id,
+                type: r.opt_type,
+                strike: r.strike,
+                mid: r.mid,
+              });
+              byExp.set(r.expiration, list);
+            }
+            const modeled = new Map<string, ModeledGreeks>();
+            for (const [exp, list] of byExp) {
+              const m = modelChainGreeks(list, spot, exp, lastIngestTs!);
+              for (const [k, v] of m) modeled.set(k, v);
+            }
+            if (modeled.size > 0) {
+              deltasModeled = true;
+              snapshot = snapshot.map((r) => {
+                const g = modeled.get(r.id);
+                if (!g) return r;
+                return {
+                  ...r,
+                  delta: g.delta,
+                  iv: r.iv ?? g.iv,
+                  gamma: r.gamma ?? g.gamma,
+                  theta: r.theta ?? g.theta,
+                  vega: r.vega ?? g.vega,
+                };
+              });
+            }
+          }
         }
 
         const expirations = new Set(quotes.map((r) => r.expiration)).size;
@@ -132,6 +181,7 @@ export function useMarketData(): MarketData {
           updatedAt: new Date().toISOString(),
           error: null,
           isAccessError: false,
+          deltasModeled,
         });
       } catch (err) {
         // Supabase/PostgREST errors are plain objects with a `.message`, not
