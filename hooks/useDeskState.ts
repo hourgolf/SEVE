@@ -11,6 +11,7 @@ import type { DeskState, FundState, StrategistConfig } from "@/lib/desk/types";
 // ============================================================================
 
 export type DeskAction =
+  | { type: "HYDRATE"; state: DeskState }
   | { type: "SET_CONFIG"; slug: string; patch: Partial<StrategistConfig> }
   | { type: "TOGGLE_MUTE"; slug: string }
   | { type: "TOGGLE_SOLO"; slug: string }
@@ -23,6 +24,9 @@ export type DeskAction =
 
 export function deskReducer(state: DeskState, action: DeskAction): DeskState {
   switch (action.type) {
+    case "HYDRATE":
+      // Replace local state with real DB config (one-time, on mount).
+      return action.state;
     case "SET_CONFIG":
       return {
         ...state,

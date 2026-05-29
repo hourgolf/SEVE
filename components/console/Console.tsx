@@ -5,18 +5,19 @@ import { MasterStrip } from "@/components/console/MasterStrip";
 import { Chassis } from "@/components/console/Chassis";
 import { StepRow } from "@/components/console/hw/StepRow";
 import { Bezel } from "@/components/console/hw/Bezel";
+import { FeedBadge } from "@/components/console/FeedBadge";
 import { useDeskState } from "@/hooks/useDeskState";
-import { useDeskSampleData } from "@/hooks/useDeskSampleData";
+import { useDeskFeed } from "@/hooks/useDeskFeed";
 
 export function Console() {
   const { desk, anySolo, isActive } = useDeskState();
-  const feed = useDeskSampleData();
+  const feed = useDeskFeed();
 
   return (
     <Chassis
       brand={<>SEVE<span> · STRATEGY COMPOSER</span></>}
       sub="SPY · 0DTE / 1DTE · paper desk"
-      right={<span className="sample-badge">● SAMPLE DATA — not live</span>}
+      right={<FeedBadge status={feed.status} />}
     >
       <div className="console-grid">
         <div className="channels">

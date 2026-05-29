@@ -5,12 +5,13 @@ import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { SignalsTape } from "@/components/console/SignalsTape";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
+import { FeedBadge } from "@/components/console/FeedBadge";
 import { useDeskState } from "@/hooks/useDeskState";
-import { useDeskSampleData } from "@/hooks/useDeskSampleData";
+import { useDeskFeed } from "@/hooks/useDeskFeed";
 
 export function DeskScreen() {
   const { desk } = useDeskState();
-  const feed = useDeskSampleData();
+  const feed = useDeskFeed();
 
   return (
     <Chassis
@@ -18,7 +19,7 @@ export function DeskScreen() {
       sub="POSITIONS · P&L · SIGNALS"
       right={
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span className="sample-badge">● SAMPLE DATA — not live</span>
+          <FeedBadge status={feed.status} />
           <LedDisplay value={String(feed.fundPnl.nav)} digits={7} caption="fund nav $" />
         </div>
       }

@@ -21,8 +21,23 @@ export interface KnobProps {
 const SWEEP = 270;
 const START = -135;
 
-// Tick marks around the dial, for the 909 look.
-const TICKS = Array.from({ length: 11 }, (_, i) => START + (i * SWEEP) / 10);
+// Tick marks around the dial (constant geometry). Coordinates are rounded so
+// the SSR (Node) and client (browser) Math.cos/sin — which can differ by one
+// ULP — stringify identically and don't trip a hydration mismatch.
+const round3 = (n: number) => Number(n.toFixed(3));
+const TICK_LINES = Array.from({ length: 11 }, (_, i) => {
+  const t = START + (i * SWEEP) / 10;
+  const rad = ((t - 90) * Math.PI) / 180;
+  const r1 = 48;
+  const r2 = i % 5 === 0 ? 41 : 44;
+  return {
+    x1: round3(50 + r1 * Math.cos(rad)),
+    y1: round3(50 + r1 * Math.sin(rad)),
+    x2: round3(50 + r2 * Math.cos(rad)),
+    y2: round3(50 + r2 * Math.sin(rad)),
+    major: i % 5 === 0,
+  };
+});
 
 export function Knob({
   value,
@@ -70,23 +85,18 @@ export function Knob({
             </radialGradient>
           </defs>
           {/* tick marks on the skirt */}
-          {TICKS.map((t, i) => {
-            const rad = ((t - 90) * Math.PI) / 180;
-            const r1 = 48;
-            const r2 = i % 5 === 0 ? 41 : 44;
-            return (
-              <line
-                key={i}
-                x1={50 + r1 * Math.cos(rad)}
-                y1={50 + r1 * Math.sin(rad)}
-                x2={50 + r2 * Math.cos(rad)}
-                y2={50 + r2 * Math.sin(rad)}
-                stroke="#8d8b82"
-                strokeWidth={i % 5 === 0 ? 2 : 1}
-                strokeLinecap="round"
-              />
-            );
-          })}
+          {TICK_LINES.map((t, i) => (
+            <line
+              key={i}
+              x1={t.x1}
+              y1={t.y1}
+              x2={t.x2}
+              y2={t.y2}
+              stroke="#8d8b82"
+              strokeWidth={t.major ? 2 : 1}
+              strokeLinecap="round"
+            />
+          ))}
           {/* cap */}
           <circle cx="50" cy="50" r="36" fill="url(#knobMetal)" stroke="#0c0d0e" strokeWidth="1.5" />
           <circle cx="50" cy="50" r="36" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />

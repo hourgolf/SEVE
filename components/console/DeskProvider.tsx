@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useReducer, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, type ReactNode } from "react";
 import {
   DeskDispatchContext,
   DeskStateContext,
@@ -8,12 +8,26 @@ import {
   type DeskView,
 } from "@/hooks/useDeskState";
 import { seedDesk } from "@/lib/desk/seed";
+import { loadDeskConfig } from "@/lib/desk/load";
 
 // Splits state and dispatch into two contexts: dispatch identity is stable, so
 // components that only dispatch never re-render on state changes. Combined with
 // React.memo'd ChannelStrips, knob drags stay smooth.
 export function DeskProvider({ children }: { children: ReactNode }) {
   const [desk, dispatch] = useReducer(deskReducer, undefined, seedDesk);
+
+  // One-time hydrate from real DB config; silent fallback to the seed if the
+  // read fails (e.g. RLS not applied yet). Not polled, so local knob turns
+  // aren't clobbered before the writes phase.
+  useEffect(() => {
+    let cancelled = false;
+    loadDeskConfig().then((state) => {
+      if (!cancelled && state) dispatch({ type: "HYDRATE", state });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const view = useMemo<DeskView>(() => {
     const anySolo = desk.strategists.some((s) => s.config.soloed);

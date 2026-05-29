@@ -833,7 +833,8 @@
 }
 
 /* SAMPLE-data badge (reuses amber semantics) */
-.sample-badge {
+.sample-badge,
+.feed-badge {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -846,4 +847,14 @@
   border: 1px solid rgba(255, 178, 36, 0.35);
   border-radius: 7px;
   padding: 5px 10px;
+}
+.feed-badge.live {
+  color: var(--pm-green);
+  background: rgba(47, 213, 115, 0.1);
+  border-color: rgba(47, 213, 115, 0.4);
+}
+.feed-badge.err {
+  color: var(--led-red);
+  background: rgba(240, 86, 63, 0.12);
+  border-color: rgba(240, 86, 63, 0.45);
 }
