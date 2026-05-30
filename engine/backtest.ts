@@ -18,6 +18,7 @@
 import { computeFeatures, feePerContract, fillPrice, riskGovernor } from "./engine";
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
+import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
 import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
 import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
 import type { Bar, Evaluate, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
@@ -47,10 +48,10 @@ const findQuote = (chain: Quote[], strike: number, optType: "call" | "put") =>
 // the synthetic and real paths — the ONLY thing that differs is the bar source.
 export function simulateSession(
   bars: Bar[],
-  ivAnnual: number,
   cfg: StrategistConfig,
   fund: FundState,
   evaluate: Evaluate,
+  chainAt: ChainProvider, // prices the chain at (spot, minutesToClose, tsMs)
   gross = false // gross=true → fill at mid, no fees (signal-only P&L)
 ): Trade[] {
   const trades: Trade[] = [];
@@ -59,7 +60,7 @@ export function simulateSession(
 
   for (let i = 0; i < bars.length; i++) {
     const f = computeFeatures(bars, i);
-    const chain = priceChain(f.close, f.minutesToClose, ivAnnual);
+    const chain = chainAt(f.close, f.minutesToClose, bars[i].ts);
 
     // update trailing peak (best favorable underlying) before the strategy reads it
     if (pos) {
@@ -199,17 +200,44 @@ async function main() {
       console.log("\nNo real sessions found — backfill underlying_bars first (07_backfill_bars.sql).\n");
       return;
     }
+    // --options real → price from real option_bars (forward-filled, modeled spread);
+    // otherwise model the chain with Black-Scholes off the day's realized IV.
+    const useRealOptions = argStr("options", "synthetic") === "real";
+    let byDay = new Map();
+    if (useRealOptions) {
+      try {
+        byDay = await loadOptionBarsByDay();
+      } catch (e) {
+        console.log(`  (option_bars unavailable — ${(e as Error).message}; falling back to modeled chains)`);
+      }
+    }
+    let realDays = 0;
+
     const all: Trade[] = [];
-    for (const s of sessions) all.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND, evaluate, gross));
+    for (const s of sessions) {
+      const contracts = byDay.get(s.dateET);
+      let chainAt: ChainProvider;
+      if (useRealOptions && contracts && contracts.length) {
+        chainAt = makeRealChain(contracts);
+        realDays++;
+      } else {
+        chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
+      }
+      all.push(...simulateSession(s.bars, FADE, FUND, evaluate, chainAt, gross));
+    }
+    const optLabel = useRealOptions
+      ? `REAL BARS + REAL option prices (modeled spread) · ${realDays}/${sessions.length} days had option data`
+      : "REAL BARS + modeled (Black-Scholes) option chains";
     const span = `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real SPY 1-min`;
-    report(all, sessions.length, stratLabel, "REAL BARS + modeled (Black-Scholes) option chains", span);
+    report(all, sessions.length, stratLabel, optLabel, span);
   } else {
     const days = argNum("days", 60);
     const seed = argNum("seed", 1);
     const all: Trade[] = [];
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
-      all.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND, evaluate, gross));
+      const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
+      all.push(...simulateSession(s.bars, FADE, FUND, evaluate, chainAt, gross));
     }
     report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }

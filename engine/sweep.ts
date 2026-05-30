@@ -11,6 +11,7 @@
 
 import { loadRealSessions } from "./realsource";
 import { simulateSession } from "./backtest";
+import { priceChain } from "./market";
 import { fadeEvaluate, type FadeParams } from "./strategies/fade";
 import type { FundState, StrategistConfig, Trade } from "./types";
 
@@ -44,7 +45,15 @@ interface Row {
 function evaluate(p: FadeParams, sessions: Awaited<ReturnType<typeof loadRealSessions>>): Row {
   const trades: Trade[] = [];
   for (const s of sessions)
-    trades.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND, (f, pos) => fadeEvaluate(f, pos, p)));
+    trades.push(
+      ...simulateSession(
+        s.bars,
+        FADE,
+        FUND,
+        (f, pos) => fadeEvaluate(f, pos, p),
+        (spot, mtc) => priceChain(spot, mtc, s.ivAnnual)
+      )
+    );
   const n = trades.length;
   const total = trades.reduce((a, t) => a + t.pnl, 0);
   const wins = trades.filter((t) => t.pnl > 0).length;
