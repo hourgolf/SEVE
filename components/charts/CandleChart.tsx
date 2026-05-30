@@ -1,6 +1,8 @@
 // Pure inline-SVG candlestick body (no panel chrome). OHLC candles from
 // underlying_bars; green up (close ≥ open), red down.
 
+import type { Overlay } from "./LineChart";
+
 const VIEW_W = 600;
 
 export interface Candle {
@@ -13,10 +15,12 @@ export interface Candle {
 export function CandleChart({
   bars,
   vwap,
+  overlays = [],
   height = 150,
 }: {
   bars: Candle[];
   vwap?: number[];
+  overlays?: Overlay[];
   height?: number;
 }) {
   const H = height;
@@ -34,8 +38,9 @@ export function CandleChart({
   const vw = vwap?.filter((v): v is number => v != null) ?? [];
   const lows = bars.map((b) => b.low);
   const highs = bars.map((b) => b.high);
-  const min = Math.min(...lows, ...(vw.length ? vw : []));
-  const max = Math.max(...highs, ...(vw.length ? vw : []));
+  const ovVals = overlays.flatMap((o) => o.values).filter((v): v is number => v != null);
+  const min = Math.min(...lows, ...(vw.length ? vw : []), ...ovVals);
+  const max = Math.max(...highs, ...(vw.length ? vw : []), ...ovVals);
   const N = bars.length;
   const slot = (VIEW_W - 2 * P) / N;
   const cx = (i: number) => P + i * slot + slot / 2;
@@ -47,6 +52,13 @@ export function CandleChart({
     vwapD = `M ${cx(0)} ${y(vwap[0])}`;
     for (let i = 1; i < N; i++) vwapD += ` L ${cx(i)} ${y(vwap[i])}`;
   }
+
+  const pathOf = (vals: number[]) => {
+    if (vals.length !== N) return "";
+    let p = `M ${cx(0)} ${y(vals[0])}`;
+    for (let i = 1; i < N; i++) p += ` L ${cx(i)} ${y(vals[i])}`;
+    return p;
+  };
 
   return (
     <svg
@@ -89,6 +101,17 @@ export function CandleChart({
           </g>
         );
       })}
+      {overlays.map((o, k) => (
+        <path
+          key={k}
+          d={pathOf(o.values)}
+          fill="none"
+          stroke={o.color}
+          strokeWidth={1.4}
+          strokeDasharray={o.dash ? "4 3" : undefined}
+          opacity={0.9}
+        />
+      ))}
     </svg>
   );
 }

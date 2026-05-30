@@ -3,14 +3,22 @@
 
 const VIEW_W = 600;
 
+export interface Overlay {
+  values: number[];
+  color: string;
+  dash?: boolean;
+}
+
 export function LineChart({
   values,
   vwap,
+  overlays = [],
   height = 150,
   id = "line",
 }: {
   values: number[];
   vwap?: number[];
+  overlays?: Overlay[];
   height?: number;
   id?: string;
 }) {
@@ -27,7 +35,8 @@ export function LineChart({
     );
   }
   const vw = vwap?.filter((v): v is number => v != null) ?? [];
-  const extent = vw.length ? values.concat(vw) : values;
+  const ovVals = overlays.flatMap((o) => o.values).filter((v): v is number => v != null);
+  const extent = values.concat(vw, ovVals);
   const min = Math.min(...extent);
   const max = Math.max(...extent);
   const N = values.length;
@@ -46,6 +55,13 @@ export function LineChart({
     vwapD = `M ${x(0)} ${y(vwap[0])}`;
     for (let i = 1; i < N; i++) vwapD += ` L ${x(i)} ${y(vwap[i])}`;
   }
+
+  const pathOf = (vals: number[]) => {
+    if (vals.length !== N) return "";
+    let p = `M ${x(0)} ${y(vals[0])}`;
+    for (let i = 1; i < N; i++) p += ` L ${x(i)} ${y(vals[i])}`;
+    return p;
+  };
 
   return (
     <svg
@@ -71,6 +87,17 @@ export function LineChart({
           opacity={0.7}
         />
       )}
+      {overlays.map((o, k) => (
+        <path
+          key={k}
+          d={pathOf(o.values)}
+          fill="none"
+          stroke={o.color}
+          strokeWidth={1.4}
+          strokeDasharray={o.dash ? "4 3" : undefined}
+          opacity={0.9}
+        />
+      ))}
       <path d={d} fill="none" stroke={c} strokeWidth={2} strokeLinejoin="round" />
       <circle cx={x(N - 1)} cy={y(values[N - 1])} r={3} fill={c} />
     </svg>
