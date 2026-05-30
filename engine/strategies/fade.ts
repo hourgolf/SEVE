@@ -7,7 +7,7 @@
 //  All thresholds are parameterized so the sweep can tune them.
 // ============================================================================
 
-import type { Features, OptType, Position } from "../types";
+import type { Features, Intent, Position } from "../types";
 
 export interface FadeParams {
   atrMult: number; // stretch beyond VWAP (in ATRs) to trigger
@@ -28,22 +28,11 @@ export const DEFAULT_FADE_PARAMS: FadeParams = {
   erMax: 0.4,
 };
 
-export interface EntryIntent {
-  kind: "enter";
-  direction: OptType;
-  reason: string;
-}
-export interface ExitIntent {
-  kind: "exit";
-  reason: string;
-}
-export type FadeIntent = EntryIntent | ExitIntent | null;
-
 export function fadeEvaluate(
   f: Features,
   pos: Position | null,
   p: FadeParams = DEFAULT_FADE_PARAMS
-): FadeIntent {
+): Intent {
   // ---- exits (when we hold) ----
   if (pos) {
     if (f.minutesToClose <= p.flattenBeforeClose) return { kind: "exit", reason: "eod_flatten" };

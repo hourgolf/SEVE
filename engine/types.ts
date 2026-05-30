@@ -54,7 +54,23 @@ export interface Features {
   atr: number; // 1-min ATR proxy
   mom: number; // close - close[3] (signed momentum)
   er: number; // efficiency ratio over ~30m (0 = chop, ~1 = clean trend)
+  relVol: number; // current volume / trailing-average volume (expansion > 1)
 }
+
+// A strategist's intent for a given bar (shared by every strategy).
+export interface EntryIntent {
+  kind: "enter";
+  direction: OptType;
+  reason: string;
+}
+export interface ExitIntent {
+  kind: "exit";
+  reason: string;
+}
+export type Intent = EntryIntent | ExitIntent | null;
+
+// A strategy is a pure function of features + current position.
+export type Evaluate = (f: Features, pos: Position | null) => Intent;
 
 // A strategist's intent (mirrors signals).
 export interface Signal {
@@ -74,6 +90,7 @@ export interface Position {
   entryPrice: number; // per-contract fill
   entryMinute: number; // bar index at entry (for the time-stop)
   entryUnderlying: number; // spot at entry (for the price stop)
+  peakFavorable: number; // best favorable underlying since entry (trailing stop)
 }
 
 // A completed round-trip (for metrics).

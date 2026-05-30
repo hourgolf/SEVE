@@ -18,8 +18,9 @@
 import { computeFeatures, feePerContract, fillPrice, riskGovernor } from "./engine";
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
-import { DEFAULT_FADE_PARAMS, fadeEvaluate, type FadeParams } from "./strategies/fade";
-import type { Bar, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
+import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
+import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
+import type { Bar, Evaluate, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
 
 const BASE_MS = 1_780_000_000_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,7 +50,8 @@ export function simulateSession(
   ivAnnual: number,
   cfg: StrategistConfig,
   fund: FundState,
-  params: FadeParams = DEFAULT_FADE_PARAMS
+  evaluate: Evaluate,
+  gross = false // gross=true → fill at mid, no fees (signal-only P&L)
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -58,12 +60,21 @@ export function simulateSession(
   for (let i = 0; i < bars.length; i++) {
     const f = computeFeatures(bars, i);
     const chain = priceChain(f.close, f.minutesToClose, ivAnnual);
-    const intent = fadeEvaluate(f, pos, params);
+
+    // update trailing peak (best favorable underlying) before the strategy reads it
+    if (pos) {
+      pos.peakFavorable =
+        pos.optType === "call"
+          ? Math.max(pos.peakFavorable, f.close)
+          : Math.min(pos.peakFavorable, f.close);
+    }
+    const intent = evaluate(f, pos);
 
     if (pos && intent && intent.kind === "exit") {
       const q = findQuote(chain, pos.strike, pos.optType);
-      const exitPrice = q ? fillPrice("sell", q) : 0;
-      const pnl = (exitPrice - pos.entryPrice) * pos.qty * 100 - feePerContract * pos.qty * 2;
+      const exitPrice = q ? (gross ? q.mid : fillPrice("sell", q)) : 0;
+      const fee = gross ? 0 : feePerContract;
+      const pnl = (exitPrice - pos.entryPrice) * pos.qty * 100 - fee * pos.qty * 2;
       dayPnl += pnl;
       trades.push({
         slug: pos.slug,
@@ -92,6 +103,7 @@ export function simulateSession(
             entryPrice: fillPrice("buy", q),
             entryMinute: i,
             entryUnderlying: f.close,
+            peakFavorable: f.close,
           };
         }
       }
@@ -142,10 +154,10 @@ function metrics(trades: Trade[], nDays: number): Metrics {
 
 const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(2);
 
-function report(trades: Trade[], nDays: number, label: string, span?: string) {
+function report(trades: Trade[], nDays: number, stratLabel: string, label: string, span?: string) {
   const m = metrics(trades, nDays);
   console.log("\n══════════════════════════════════════════════════");
-  console.log("  SEVE backtest · The Fade");
+  console.log(`  SEVE backtest · ${stratLabel}`);
   console.log(`  ${label}`);
   if (span) console.log(`  ${span}`);
   console.log("══════════════════════════════════════════════════");
@@ -172,6 +184,14 @@ function argStr(name: string, def: string): string {
 
 async function main() {
   const source = argStr("source", "synthetic");
+  const strat = argStr("strat", "fade");
+  const evaluate: Evaluate =
+    strat === "breakout"
+      ? (f, pos) => breakoutEvaluate(f, pos, DEFAULT_BREAKOUT_PARAMS)
+      : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
+  const gross = process.argv.includes("--gross");
+  const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
+  const stratLabel = (strat === "breakout" ? "The Breakout" : "The Fade") + costTag;
 
   if (source === "real") {
     const sessions = await loadRealSessions();
@@ -180,18 +200,18 @@ async function main() {
       return;
     }
     const all: Trade[] = [];
-    for (const s of sessions) all.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND));
+    for (const s of sessions) all.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND, evaluate, gross));
     const span = `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real SPY 1-min`;
-    report(all, sessions.length, "REAL BARS + modeled (Black-Scholes) option chains", span);
+    report(all, sessions.length, stratLabel, "REAL BARS + modeled (Black-Scholes) option chains", span);
   } else {
     const days = argNum("days", 60);
     const seed = argNum("seed", 1);
     const all: Trade[] = [];
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
-      all.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND));
+      all.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND, evaluate, gross));
     }
-    report(all, days, "SYNTHETIC data (engine/strategy shape-test — not a real-edge claim)");
+    report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }
 }
 

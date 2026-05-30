@@ -8,6 +8,7 @@ import type { Bar, Features, FundState, Quote, StrategistConfig } from "./types"
 const ATR_N = 14;
 const OPEN_RANGE_MIN = 30;
 const ER_N = 30; // efficiency-ratio window (minutes)
+const VOL_N = 20; // relative-volume trailing window
 const FEE_PER_CONTRACT = 0.65;
 const SLIPPAGE = 0.25; // fraction of the spread paid on entry/exit
 
@@ -43,6 +44,19 @@ export function computeFeatures(bars: Bar[], i: number): Features {
     er = path > 0 ? Math.abs(b.close - bars[i - n].close) / path : 0;
   }
 
+  // relative volume: this bar vs the trailing-average bar (expansion > 1)
+  let relVol = 1;
+  if (i >= 1) {
+    let vSum = 0;
+    let vCount = 0;
+    for (let j = Math.max(0, i - VOL_N); j < i; j++) {
+      vSum += bars[j].volume;
+      vCount++;
+    }
+    const avg = vCount ? vSum / vCount : 0;
+    relVol = avg > 0 ? b.volume / avg : 1;
+  }
+
   return {
     minute: i,
     // measured against this session's own length (real days vary; synthetic = 390)
@@ -54,6 +68,7 @@ export function computeFeatures(bars: Bar[], i: number): Features {
     atr,
     mom,
     er,
+    relVol,
   };
 }
 
