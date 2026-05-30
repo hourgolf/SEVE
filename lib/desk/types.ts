@@ -22,6 +22,7 @@ export interface StrategistConfig {
 
 // A strategist + its live config (strategists ⋈ strategist_config).
 export interface StrategistState {
+  id: string; // strategists.id (uuid) — target for strategist_config writes
   slug: string;
   name: string;
   mandate: string;

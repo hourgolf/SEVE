@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AuthControl } from "@/components/AuthControl";
 
 const TABS = [
   { href: "/", label: "Monitor" },
@@ -23,6 +24,8 @@ export function NavBar() {
           </Link>
         );
       })}
+      <span className="nav-spacer" />
+      <AuthControl />
     </nav>
   );
 }

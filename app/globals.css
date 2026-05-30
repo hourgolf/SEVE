@@ -62,6 +62,86 @@
   background: var(--green);
   border-color: var(--green);
 }
+.nav-spacer {
+  flex: 1 1 auto;
+}
+/* ---- auth widget (right of nav) ---- */
+.auth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.auth-placeholder {
+  width: 60px;
+  height: 1px;
+}
+.auth-email {
+  color: var(--green);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-btn {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.auth-btn:hover {
+  color: var(--text);
+  border-color: var(--border-bright);
+}
+.auth-form {
+  display: flex;
+  gap: 6px;
+}
+.auth-form input {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-bright);
+  border-radius: 7px;
+  padding: 6px 9px;
+  width: 160px;
+  outline: none;
+}
+.auth-form input:focus {
+  border-color: var(--green);
+}
+.auth-msg {
+  color: var(--muted);
+  font-size: 10px;
+}
+/* ---- console write-state chip (cream chassis head) ---- */
+.write-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 7px;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+.write-chip.on {
+  color: #1f7a45;
+  background: rgba(47, 213, 115, 0.16);
+  border-color: rgba(47, 213, 115, 0.5);
+}
 
 * {
   box-sizing: border-box;

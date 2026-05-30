@@ -9,6 +9,7 @@ import type { DeskState, StrategistState } from "@/lib/desk/types";
 // Maps the schema's hex accents to our PmColor tokens.
 const STRATEGISTS: StrategistState[] = [
   {
+    id: "",
     slug: "fade",
     name: "The Fade",
     mandate: "Mean reversion — fades range extremes back to VWAP",
@@ -24,6 +25,7 @@ const STRATEGISTS: StrategistState[] = [
     },
   },
   {
+    id: "",
     slug: "breakout",
     name: "The Breakout",
     mandate: "Momentum — rides opening-range expansion in the break's direction",
@@ -39,6 +41,7 @@ const STRATEGISTS: StrategistState[] = [
     },
   },
   {
+    id: "",
     slug: "power",
     name: "Power Hour",
     mandate: "0DTE gamma — directional lean in the final hour only",
@@ -54,6 +57,7 @@ const STRATEGISTS: StrategistState[] = [
     },
   },
   {
+    id: "",
     slug: "grind",
     name: "The Grinder",
     mandate: "Scalper — many small microstructure edges, quick in and out",

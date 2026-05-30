@@ -22,7 +22,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
       sb
         .from("strategists")
         .select(
-          "slug,name,mandate,regime,color,strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed)"
+          "id,slug,name,mandate,regime,color,strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed)"
         ),
       sb.from("fund_state").select("*").eq("id", 1).maybeSingle(),
     ]);
@@ -36,6 +36,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
           : r.strategist_config;
         if (!cfg) return null;
         return {
+          id: r.id,
           slug: r.slug,
           name: r.name,
           mandate: r.mandate,

@@ -38,29 +38,37 @@ The app has three routes, switchable from the top nav:
 - **`/desk` — Desk** — open positions, per-strategist + fund P&L with an equity
   sparkline, and a live signals tape.
 
-### Data: real reads (writes deferred)
+### Data: real reads + authenticated writes
 
-The desk now **reads real Supabase data**, but controls still drive **local
-state only** (persisted writes are a later phase). Two seam hooks own this:
+The desk **reads real Supabase data** (anon key) and **persists console changes**
+when an operator is signed in. Three seam hooks own this:
 
 - [`hooks/useDeskState.ts`](hooks/useDeskState.ts) + [`lib/desk/load.ts`](lib/desk/load.ts)
   — the console config. [`DeskProvider`](components/console/DeskProvider.tsx) does
   a **one-time** read of `strategists` ⋈ `strategist_config` + `fund_state` on
   mount and `HYDRATE`s the reducer; if the read fails it falls back to
   [`lib/desk/seed.ts`](lib/desk/seed.ts). Not polled, so local knob turns aren't
-  clobbered. *To enable writes:* fire authenticated `update`s on `SET_CONFIG` /
-  `SET_FUND` / `KILL` (the knob's `onCommit`, fired on pointer release, is the
-  write boundary).
+  clobbered.
 - [`hooks/useDeskFeed.ts`](hooks/useDeskFeed.ts) — polls real `positions` /
   `signals` / `equity_snapshots` every 5s (same structure as `useMarketData`),
   deriving P&L via [`lib/desk/derive.ts`](lib/desk/derive.ts). Honest empty
   states until the bots trade; a header badge shows **LIVE** / awaiting activity
   / "tables not readable".
+- [`hooks/useAuth.tsx`](hooks/useAuth.tsx) + [`hooks/useDeskWrite.ts`](hooks/useDeskWrite.ts)
+  — magic-link auth (nav widget) + persistence. When signed in, a knob's
+  `onCommit` (fired on pointer release) and the pad / kill / mode controls
+  `update` `strategist_config` / `fund_state`. Signed out, the console is
+  read-only (controls still move locally; a "○ read-only" chip shows). Reads stay
+  anon either way.
 
-**Required one-time setup:** run [`04_dashboard_read_policies.sql`](04_dashboard_read_policies.sql)
-in your Supabase SQL editor to grant the anon key SELECT access (+ RLS read
-policies) to the desk tables. Until then the desk shows the seed config and a
-red "tables not readable" badge — it never crashes.
+**Required one-time Supabase setup:**
+1. Run [`04_dashboard_read_policies.sql`](04_dashboard_read_policies.sql) — anon
+   SELECT on the desk tables (the desk reads real data; until then it shows seed
+   config + a red "tables not readable" badge, never crashing).
+2. Run [`05_console_write_policies.sql`](05_console_write_policies.sql) — lets
+   signed-in users SELECT + UPDATE `strategist_config` / `fund_state`.
+3. **Auth → Providers**: enable **Email** (magic link). **Auth → URL
+   Configuration**: add your site + `http://localhost:3000` to redirect URLs.
 
 Mute/solo/halt are **derived, never cross-mutated** — soloing one channel dims
 the others via a selector, so un-soloing instantly restores prior states.

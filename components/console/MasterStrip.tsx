@@ -7,6 +7,7 @@ import { TransportButton } from "@/components/console/hw/TransportButton";
 import { GuardedToggle } from "@/components/console/hw/GuardedToggle";
 import { KillSwitch } from "@/components/console/hw/KillSwitch";
 import { useDeskDispatch } from "@/hooks/useDeskState";
+import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { FundState } from "@/lib/desk/types";
 
@@ -17,6 +18,7 @@ export interface MasterStripProps {
 
 function MasterStripImpl({ fund, fundPnl }: MasterStripProps) {
   const dispatch = useDeskDispatch();
+  const { persistFund } = useDeskWrite();
   const [armed, setArmed] = useState(false);
   const [showNav, setShowNav] = useState(true);
 
@@ -46,6 +48,7 @@ function MasterStripImpl({ fund, fundPnl }: MasterStripProps) {
           max={50000}
           step={500}
           onChange={(v) => dispatch({ type: "SET_FUND", patch: { total_capital_usd: v } })}
+          onCommit={(v) => persistFund({ total_capital_usd: v })}
           size="lg"
           label="Capital"
           format={usd0}
@@ -72,16 +75,26 @@ function MasterStripImpl({ fund, fundPnl }: MasterStripProps) {
       </div>
 
       <div className="master-controls">
-        <GuardedToggle mode={fund.mode} onChange={(m) => dispatch({ type: "SET_MODE", mode: m })} />
+        <GuardedToggle
+          mode={fund.mode}
+          onChange={(m) => {
+            dispatch({ type: "SET_MODE", mode: m });
+            persistFund({ mode: m });
+          }}
+        />
         <KillSwitch
           halted={fund.is_halted}
           armed={armed}
           onArm={() => setArmed(true)}
           onFire={() => {
             dispatch({ type: "KILL", reason: "manual kill switch" });
+            persistFund({ is_halted: true, halted_reason: "manual kill switch" });
             setArmed(false);
           }}
-          onReset={() => dispatch({ type: "RESET_HALT" })}
+          onReset={() => {
+            dispatch({ type: "RESET_HALT" });
+            persistFund({ is_halted: false, halted_reason: null });
+          }}
         />
       </div>
     </div>

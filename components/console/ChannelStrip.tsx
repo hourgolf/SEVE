@@ -4,6 +4,7 @@ import { memo } from "react";
 import { Knob } from "@/components/console/hw/Knob";
 import { PadButton } from "@/components/console/hw/PadButton";
 import { useDeskDispatch } from "@/hooks/useDeskState";
+import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pct, signedUsd, usd0 } from "@/lib/format";
 import type { ChannelPnl, PmColor, StrategistState } from "@/lib/desk/types";
 
@@ -23,7 +24,8 @@ export interface ChannelStripProps {
 
 function ChannelStripImpl({ strategist, pnl, active, ducked }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
-  const { slug, name, regime, color, config } = strategist;
+  const { persistConfig } = useDeskWrite();
+  const { id, slug, name, regime, color, config } = strategist;
   const cssColor = PM_VAR[color];
 
   const day = pnl?.dayPnl ?? 0;
@@ -47,6 +49,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked }: ChannelStripProps
           max={100}
           step={1}
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
+          onCommit={(v) => persistConfig(id, { capital_pct: v })}
           size="md"
           color={cssColor}
           label="Level"
@@ -58,6 +61,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked }: ChannelStripProps
           max={100}
           step={1}
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { aggression: v } })}
+          onCommit={(v) => persistConfig(id, { aggression: v })}
           size="md"
           color={cssColor}
           label="Aggr"
@@ -72,6 +76,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked }: ChannelStripProps
           max={10}
           step={1}
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { max_contracts: v } })}
+          onCommit={(v) => persistConfig(id, { max_contracts: v })}
           size="sm"
           color={cssColor}
           label="Max"
@@ -82,6 +87,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked }: ChannelStripProps
           max={500}
           step={10}
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { daily_stop_usd: v } })}
+          onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}
           size="sm"
           color={cssColor}
           label="Stop"
@@ -104,14 +110,20 @@ function ChannelStripImpl({ strategist, pnl, active, ducked }: ChannelStripProps
           label="MUTE"
           lit={config.muted}
           color="var(--led-red)"
-          onClick={() => dispatch({ type: "TOGGLE_MUTE", slug })}
+          onClick={() => {
+            dispatch({ type: "TOGGLE_MUTE", slug });
+            persistConfig(id, { muted: !config.muted });
+          }}
           title="mute this strategist"
         />
         <PadButton
           label="SOLO"
           lit={config.soloed}
           color={cssColor}
-          onClick={() => dispatch({ type: "TOGGLE_SOLO", slug })}
+          onClick={() => {
+            dispatch({ type: "TOGGLE_SOLO", slug });
+            persistConfig(id, { soloed: !config.soloed });
+          }}
           title="solo this strategist"
         />
       </div>

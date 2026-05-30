@@ -8,16 +8,28 @@ import { Bezel } from "@/components/console/hw/Bezel";
 import { FeedBadge } from "@/components/console/FeedBadge";
 import { useDeskState } from "@/hooks/useDeskState";
 import { useDeskFeed } from "@/hooks/useDeskFeed";
+import { useDeskWrite } from "@/hooks/useDeskWrite";
 
 export function Console() {
   const { desk, anySolo, isActive } = useDeskState();
   const feed = useDeskFeed();
+  const { canWrite } = useDeskWrite();
 
   return (
     <Chassis
       brand={<>SEVE<span> · STRATEGY COMPOSER</span></>}
       sub="SPY · 0DTE / 1DTE · paper desk"
-      right={<FeedBadge status={feed.status} />}
+      right={
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <FeedBadge status={feed.status} />
+          <span
+            className={`write-chip${canWrite ? " on" : ""}`}
+            title={canWrite ? "changes persist to the desk" : "sign in (top right) to save changes"}
+          >
+            {canWrite ? "● operator" : "○ read-only"}
+          </span>
+        </div>
+      }
     >
       <div className="console-grid">
         <div className="channels">
