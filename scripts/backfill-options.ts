@@ -48,6 +48,7 @@ function arg(name: string, def: string): string {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
 const STRIKE_WINDOW = Number(arg("window", "4")); // extra $ beyond the day's range
+const OPT_TF = arg("tf", "1"); // option-bar timeframe (e.g. "1" or "15" min) — use 15 for long backfills to save storage
 const FROM = arg("from", "");
 const TO = arg("to", "");
 const BATCH = 40; // symbols per Alpaca request
@@ -116,7 +117,7 @@ async function fetchOptionBars(symbols: string[], day: string) {
   do {
     const q = new URLSearchParams({
       symbols: symbols.join(","),
-      timeframe: "1Min",
+      timeframe: `${OPT_TF}Min`,
       start: day,
       end: day,
       limit: "10000",
