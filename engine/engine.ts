@@ -5,7 +5,6 @@
 
 import type { Bar, Features, FundState, Quote, StrategistConfig } from "./types";
 
-const SESSION_MIN = 390;
 const ATR_N = 14;
 const OPEN_RANGE_MIN = 30;
 const FEE_PER_CONTRACT = 0.65;
@@ -34,7 +33,8 @@ export function computeFeatures(bars: Bar[], i: number): Features {
   const mom = i >= 3 ? b.close - bars[i - 3].close : 0;
   return {
     minute: i,
-    minutesToClose: SESSION_MIN - 1 - i,
+    // measured against this session's own length (real days vary; synthetic = 390)
+    minutesToClose: bars.length - 1 - i,
     close: b.close,
     vwap: b.vwap,
     openRangeHi: orHi,

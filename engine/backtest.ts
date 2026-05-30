@@ -1,23 +1,29 @@
 // ============================================================================
-//  Backtest driver (Phase A) — replays synthetic sessions through the SAME
-//  engine core + The Fade that the live worker will use, and prints an
-//  expectancy report. Run: `npm run backtest -- --days 60 --seed 1`
+//  Backtest driver — replays sessions through the SAME engine core + The Fade
+//  the live worker will use, and prints an expectancy report.
 //
-//  DATA HONESTY: synthetic sessions validate the engine + strategy SHAPE and
-//  the plumbing end-to-end. They are NOT a claim of real edge — that requires
-//  captured/real option history (we have ~1 partial day so far). Treat the
-//  expectancy below as a smoke-tested baseline, not a go/no-go number.
+//    npm run backtest                 # synthetic sessions (default, 60 days)
+//    npm run backtest -- --days 120 --seed 3
+//    npm run backtest -- --source real   # REAL backfilled SPY sessions
+//
+//  DATA HONESTY:
+//   • synthetic → validates engine + strategy SHAPE end-to-end; NOT a real edge.
+//   • real      → real SPY price paths (real opens/trends/ranges) with option
+//                 chains priced synthetically on top (we have no historical
+//                 option chains). "real bars + modeled options" — directionally
+//                 meaningful for the underlying logic, but the option fills are
+//                 modeled, so still not a final go/no-go number.
 // ============================================================================
 
 import { computeFeatures, feePerContract, fillPrice, riskGovernor } from "./engine";
 import { generateSession, priceChain } from "./market";
+import { loadRealSessions } from "./realsource";
 import { fadeEvaluate } from "./strategies/fade";
-import type { FundState, Position, Quote, StrategistConfig, Trade } from "./types";
+import type { Bar, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
 
-const BASE_MS = 1_780_000_000_000; // fixed epoch base (deterministic stamps)
+const BASE_MS = 1_780_000_000_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// The Fade's seed config (from the schema seed) + the fund master strip.
 const FADE: StrategistConfig = {
   slug: "fade",
   capital_pct: 30,
@@ -36,16 +42,21 @@ const FUND: FundState = {
 const findQuote = (chain: Quote[], strike: number, optType: "call" | "put") =>
   chain.find((q) => q.strike === strike && q.optType === optType);
 
-function runSession(seed: number, dayStartMs: number, cfg: StrategistConfig, fund: FundState): Trade[] {
-  const session = generateSession(seed, dayStartMs);
-  const bars = session.bars;
+// One session through the engine. Pure: bars + day IV in, trades out. Shared by
+// the synthetic and real paths — the ONLY thing that differs is the bar source.
+function simulateSession(
+  bars: Bar[],
+  ivAnnual: number,
+  cfg: StrategistConfig,
+  fund: FundState
+): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
   let dayPnl = 0;
 
   for (let i = 0; i < bars.length; i++) {
     const f = computeFeatures(bars, i);
-    const chain = priceChain(f.close, f.minutesToClose, session.ivAnnual);
+    const chain = priceChain(f.close, f.minutesToClose, ivAnnual);
     const intent = fadeEvaluate(f, pos);
 
     if (pos && intent && intent.kind === "exit") {
@@ -128,27 +139,17 @@ function metrics(trades: Trade[], nDays: number): Metrics {
   };
 }
 
-function arg(name: string, def: number): number {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 && process.argv[i + 1] ? Number(process.argv[i + 1]) : def;
-}
+const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(2);
 
-function main() {
-  const days = arg("days", 60);
-  const seed = arg("seed", 1);
-  const all: Trade[] = [];
-  for (let d = 0; d < days; d++) {
-    all.push(...runSession(seed + d, BASE_MS + d * DAY_MS, FADE, FUND));
-  }
-  const m = metrics(all, days);
-  const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(2);
-
+function report(trades: Trade[], nDays: number, label: string, span?: string) {
+  const m = metrics(trades, nDays);
   console.log("\n══════════════════════════════════════════════════");
-  console.log("  SEVE backtest · The Fade · SYNTHETIC data");
-  console.log("  (engine/strategy shape-test — not a real-edge claim)");
+  console.log("  SEVE backtest · The Fade");
+  console.log(`  ${label}`);
+  if (span) console.log(`  ${span}`);
   console.log("══════════════════════════════════════════════════");
   console.log(`  Sessions          ${m.nDays}`);
-  console.log(`  Trades            ${m.nTrades}  (${(m.nTrades / m.nDays).toFixed(1)}/day)`);
+  console.log(`  Trades            ${m.nTrades}  (${m.nDays ? (m.nTrades / m.nDays).toFixed(1) : "0"}/day)`);
   console.log(`  Win rate          ${(m.winRate * 100).toFixed(1)}%`);
   console.log(`  Avg win           ${usd(m.avgWin)}`);
   console.log(`  Avg loss          ${usd(m.avgLoss)}`);
@@ -159,4 +160,41 @@ function main() {
   console.log("══════════════════════════════════════════════════\n");
 }
 
-main();
+function argNum(name: string, def: number): number {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 && process.argv[i + 1] ? Number(process.argv[i + 1]) : def;
+}
+function argStr(name: string, def: string): string {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
+}
+
+async function main() {
+  const source = argStr("source", "synthetic");
+
+  if (source === "real") {
+    const sessions = await loadRealSessions();
+    if (!sessions.length) {
+      console.log("\nNo real sessions found — backfill underlying_bars first (07_backfill_bars.sql).\n");
+      return;
+    }
+    const all: Trade[] = [];
+    for (const s of sessions) all.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND));
+    const span = `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real SPY 1-min`;
+    report(all, sessions.length, "REAL BARS + modeled (Black-Scholes) option chains", span);
+  } else {
+    const days = argNum("days", 60);
+    const seed = argNum("seed", 1);
+    const all: Trade[] = [];
+    for (let d = 0; d < days; d++) {
+      const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
+      all.push(...simulateSession(s.bars, s.ivAnnual, FADE, FUND));
+    }
+    report(all, days, "SYNTHETIC data (engine/strategy shape-test — not a real-edge claim)");
+  }
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
