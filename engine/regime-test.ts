@@ -32,33 +32,37 @@ interface Cell { n: number; total: number }
 
 async function main() {
   const sessions = await loadRealSessions();
-  const byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET));
-  let realDays = 0;
-  const prepped = sessions.map((s) => {
-    const bars = aggregate(s.bars, TF);
-    const c = byDay.get(s.dateET);
-    let chain: ChainProvider;
-    if (c && c.length) { chain = makeRealChain(c); realDays++; }
-    else chain = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-    return { q: quarterOf(s.dateET), closes: bars.map((b: Bar) => b.close), bars, chain };
-  });
-  console.log(`(${realDays}/${sessions.length} days real option prices · ${TF}m · EMA ${DEFAULT_CROSS_PARAMS.emaFast}/${DEFAULT_CROSS_PARAMS.emaSlow})`);
 
   // results[er] -> Map<quarter, Cell>
   const results = new Map<number, Map<string, Cell>>();
-  for (const er of ER_VALUES) {
-    const params = { ...DEFAULT_CROSS_PARAMS, erMin: er };
-    const byQ = new Map<string, Cell>();
-    for (const p of prepped) {
-      const evalFn = makeCrossover(p.closes, params, TF);
-      const trades = simulateSession(p.bars, CFG, FUND, evalFn, p.chain);
-      const cell = byQ.get(p.q) ?? byQ.set(p.q, { n: 0, total: 0 }).get(p.q)!;
+  for (const er of ER_VALUES) results.set(er, new Map());
+  const quarterSet = new Set<string>();
+  let realDays = 0;
+
+  // Stream ONE day at a time: load that day's chain, run all erMin thresholds,
+  // discard it — keeps memory flat across 2+ years of option data.
+  for (const s of sessions) {
+    const q = quarterOf(s.dateET);
+    quarterSet.add(q);
+    const bars = aggregate(s.bars, TF);
+    const closes = bars.map((b: Bar) => b.close);
+    const day = await loadOptionBarsByDay([s.dateET]);
+    const c = day.get(s.dateET);
+    let chain: ChainProvider;
+    if (c && c.length) { chain = makeRealChain(c); realDays++; }
+    else chain = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
+
+    for (const er of ER_VALUES) {
+      const evalFn = makeCrossover(closes, { ...DEFAULT_CROSS_PARAMS, erMin: er }, TF);
+      const trades = simulateSession(bars, CFG, FUND, evalFn, chain);
+      const byQ = results.get(er)!;
+      const cell = byQ.get(q) ?? byQ.set(q, { n: 0, total: 0 }).get(q)!;
       for (const t of trades) { cell.n++; cell.total += t.pnl; }
     }
-    results.set(er, byQ);
   }
+  console.log(`(${realDays}/${sessions.length} days real option prices · ${TF}m · EMA ${DEFAULT_CROSS_PARAMS.emaFast}/${DEFAULT_CROSS_PARAMS.emaSlow})`);
 
-  const quarters = [...new Set(prepped.map((p) => p.q))].sort();
+  const quarters = [...quarterSet].sort();
   console.log("\n══════════════════════════════════════════════════════════════════════");
   console.log("  EMA Cross 15m · trend-filter (erMin) comparison · total P&L per quarter");
   console.log("══════════════════════════════════════════════════════════════════════");
