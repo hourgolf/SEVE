@@ -21,6 +21,7 @@ import { loadRealSessions } from "./realsource";
 import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
 import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
 import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
+import { makeCrossover } from "./strategies/crossover";
 import type { Bar, Evaluate, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
 
 const BASE_MS = 1_780_000_000_000;
@@ -186,13 +187,18 @@ function argStr(name: string, def: string): string {
 async function main() {
   const source = argStr("source", "synthetic");
   const strat = argStr("strat", "fade");
-  const evaluate: Evaluate =
-    strat === "breakout"
-      ? (f, pos) => breakoutEvaluate(f, pos, DEFAULT_BREAKOUT_PARAMS)
-      : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
+  // EMA Cross precomputes indicators over the session's closes, so its
+  // evaluator is built per session; fade/breakout ignore the closes arg.
+  const makeEval = (closes: number[]): Evaluate =>
+    strat === "cross"
+      ? makeCrossover(closes)
+      : strat === "breakout"
+        ? (f, pos) => breakoutEvaluate(f, pos, DEFAULT_BREAKOUT_PARAMS)
+        : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
-  const stratLabel = (strat === "breakout" ? "The Breakout" : "The Fade") + costTag;
+  const stratName = strat === "cross" ? "EMA Cross (9/21 + MACD + vol)" : strat === "breakout" ? "The Breakout" : "The Fade";
+  const stratLabel = stratName + costTag;
 
   if (source === "real") {
     const sessions = await loadRealSessions();
@@ -223,7 +229,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      all.push(...simulateSession(s.bars, FADE, FUND, evaluate, chainAt, gross));
+      all.push(...simulateSession(s.bars, FADE, FUND, makeEval(s.bars.map((b) => b.close)), chainAt, gross));
     }
     const optLabel = useRealOptions
       ? `REAL BARS + REAL option prices (modeled spread) · ${realDays}/${sessions.length} days had option data`
@@ -237,7 +243,7 @@ async function main() {
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
       const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-      all.push(...simulateSession(s.bars, FADE, FUND, evaluate, chainAt, gross));
+      all.push(...simulateSession(s.bars, FADE, FUND, makeEval(s.bars.map((b) => b.close)), chainAt, gross));
     }
     report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }
