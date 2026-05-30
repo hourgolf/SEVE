@@ -189,9 +189,34 @@ lib/
   format.ts         # money / time / number helpers
 ```
 
-## Extending (later phases)
+## Backtest engine
 
-The schema (`trading-desk-schema.sql`) already defines `positions`, `fills`,
-`orders`, `equity_snapshots`, and `strategist_config` for upcoming phases
-(positions, P&L, and the strategist "mixer" control panel). Add new panels as
-components and extend the hook (or add sibling hooks) to query those tables.
+`engine/` is a portable-TS strategy engine ("one engine, two drivers") with a
+shared fill model + risk governor. Run on real backfilled data:
+
+- `npm run backtest -- --source real --strat cross --options real` — replay a
+  strategist over real SPY sessions with real option fills.
+- `npm run sweep:cross` — timeframe × parameter sweep with in-/out-of-sample split.
+- `npm run regime` / `npm run daily-gate` — regime-robustness tests across quarters.
+
+Findings live in commit history; the headline: the **15m EMA cross** is a
+**regime-dependent momentum edge** (real in trending tape, lossy in chop) — the
+lever is regime-aware *allocation* (the console's mute/solo), not entry filters.
+Historical data is backfilled by `07_backfill_bars.sql` (underlying) and
+`npm run backfill:options` / `09_option_bars.sql` (option bars).
+
+## Live paper trading (Phase B)
+
+`supabase/functions/paper-trader/index.ts` runs the locked 15m EMA-cross config
+**forward** on Alpaca's paper API, trading as the **Breakout** strategist — so
+the Console's Breakout knobs + mute + the kill switch control a live bot, and the
+Desk fills with real `positions` / `signals` / `equity_snapshots`.
+
+**Deploy (no CLI):** Supabase Dashboard → Edge Functions → create `paper-trader`
+→ paste the file → Deploy (reuses the `market-ingest` ALPACA secrets). Then run
+`10_paper_trader_cron.sql` to schedule it every minute during market hours.
+
+**Safety:** `DRY_RUN` defaults **on** — it writes signals/events/equity but
+places **no orders**. Watch the Desk, then set the `DRY_RUN=false` secret to go
+live (paper). It refuses any non-`paper` mode and stands down on mute / kill
+switch every run.
