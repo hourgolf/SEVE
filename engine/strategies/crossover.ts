@@ -30,8 +30,13 @@ export const DEFAULT_CROSS_PARAMS: CrossParams = {
 };
 
 // Build the evaluator for one session (precomputes EMA/MACD over its closes;
-// `f.minute` indexes them). Returned shape matches the shared Evaluate type.
-export function makeCrossover(closes: number[], p: CrossParams = DEFAULT_CROSS_PARAMS): Evaluate {
+// `f.minute` indexes them). `tfMin` is the bar size so the time-stop stays in
+// real minutes across timeframes. Returned shape matches the shared Evaluate type.
+export function makeCrossover(
+  closes: number[],
+  p: CrossParams = DEFAULT_CROSS_PARAMS,
+  tfMin = 1
+): Evaluate {
   const ef = ema(closes, p.emaFast);
   const es = ema(closes, p.emaSlow);
   const md = macd(closes);
@@ -42,7 +47,7 @@ export function makeCrossover(closes: number[], p: CrossParams = DEFAULT_CROSS_P
     // ---- exits ----
     if (pos) {
       if (f.minutesToClose <= p.flattenBeforeClose) return { kind: "exit", reason: "eod_flatten" };
-      if (f.minute - pos.entryMinute >= p.timeStop) return { kind: "exit", reason: "time_stop" };
+      if ((f.minute - pos.entryMinute) * tfMin >= p.timeStop) return { kind: "exit", reason: "time_stop" };
       const x = crossDir(ef, es, i);
       if (pos.optType === "call") {
         if (x === -1) return { kind: "exit", reason: "ema_cross_down" };

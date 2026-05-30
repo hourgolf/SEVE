@@ -59,8 +59,9 @@ export function computeFeatures(bars: Bar[], i: number): Features {
 
   return {
     minute: i,
-    // measured against this session's own length (real days vary; synthetic = 390)
-    minutesToClose: bars.length - 1 - i,
+    // real minutes to the session's last bar (timestamp-based, so it's correct
+    // across timeframes and tolerant of gaps; equals bars.length-1-i at 1m).
+    minutesToClose: Math.max(0, Math.round((bars[bars.length - 1].ts - b.ts) / 60000)),
     close: b.close,
     vwap: b.vwap,
     openRangeHi: orHi,
