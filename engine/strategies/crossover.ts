@@ -19,11 +19,16 @@ export interface CrossParams {
   flattenBeforeClose: number; // minutes-to-close: no new entries / force exit
 }
 
+// Defaults chosen from the MIDDLE of the robust region in the OOS-validated
+// sweep (engine/sweep-cross.ts) — profitable in both the Jan–Mar and Apr–May
+// windows with a healthy trade count, not the single cherry-picked best.
+// IMPORTANT: this edge lives on the 15-MINUTE timeframe; run the strategy on
+// 15m bars (1m whipsaws and bleeds friction — it loses there).
 export const DEFAULT_CROSS_PARAMS: CrossParams = {
-  emaFast: 9,
-  emaSlow: 21,
-  volMult: 1.1,
-  useMacd: true,
+  emaFast: 12,
+  emaSlow: 26,
+  volMult: 1.2,
+  useMacd: false, // MACD confirmation didn't improve results in the sweep
   stopAtr: 1.5,
   timeStop: 45,
   flattenBeforeClose: 35,
