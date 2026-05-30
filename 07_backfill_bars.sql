@@ -1,36 +1,20 @@
 -- ============================================================================
 --  07_backfill_bars.sql   ·   historical SPY 1-min backfill WITHOUT the CLI.
---  Postgres calls Alpaca directly via pg_net, parses the JSON, and inserts into
---  underlying_bars — so the engine gets real history (with real opening
---  sessions the live capture missed).
+--  Postgres calls Alpaca via pg_net, then we parse the JSON into underlying_bars.
 --
---  Run the whole file once to create the helper, then call it per ~month chunk
---  (one Alpaca page holds 10,000 bars ≈ a month of RTH 1-min, so keep ranges
---  to a month or less or only the first page is fetched).
+--  IMPORTANT: pg_net only SENDS a request after the transaction that queued it
+--  COMMITS, and the response can only be read in a LATER transaction. So this is
+--  a TWO-STEP flow: (1) fire the fetches, (2) wait a few seconds, (3) ingest.
+--  Don't try to poll in the same statement — it can never see the response.
 --
---  You need your Alpaca API key + secret (the same ones set as the
---  market-ingest function secrets — grab them from your Alpaca dashboard).
---  They are passed as arguments, NOT stored in the function body.
+--  You need your Alpaca key + secret (same ones behind market-ingest).
 -- ============================================================================
 
 create extension if not exists pg_net;
 
-create or replace function backfill_spy_bars(
-  p_start  date,
-  p_end    date,
-  p_key    text,
-  p_secret text
-) returns integer
-language plpgsql
-as $$
-declare
-  v_req    bigint;
-  v_status int;
-  v_body   text;
-  v_tries  int := 0;
-  v_count  int;
-begin
-  -- 1) fire the async request (one page; keep ranges ≤ ~1 month so bars < 10k)
+-- Helper: fire ONE month's request and return its pg_net request id.
+create or replace function fire_spy_bars(p_start date, p_end date, p_key text, p_secret text)
+returns bigint language sql as $$
   select net.http_get(
     url := format(
       'https://data.alpaca.markets/v2/stocks/SPY/bars'
@@ -43,53 +27,54 @@ begin
       'accept', 'application/json'
     ),
     timeout_milliseconds := 30000
-  ) into v_req;
+  );
+$$;
 
-  -- 2) poll for the response (pg_net's worker writes it in the background)
-  loop
-    perform pg_sleep(2);
-    v_tries := v_tries + 1;
-    select status_code, content
-      into v_status, v_body
-      from net._http_response
-     where id = v_req;
-    exit when v_status is not null or v_tries >= 15;
-  end loop;
-
-  if v_status is null then
-    raise exception 'backfill_spy_bars: no response yet (request %); re-run', v_req;
-  end if;
-  if v_status <> 200 then
-    raise exception 'backfill_spy_bars: Alpaca HTTP % -> %', v_status, left(coalesce(v_body, ''), 300);
-  end if;
-
-  -- 3) parse the bars array and upsert (dedupes with the live cron's rows)
+-- Helper: ingest every recent (last 15 min) successful bars response into
+-- underlying_bars. Safe to run repeatedly; (symbol, ts) dedupes.
+create or replace function ingest_recent_bars()
+returns integer language plpgsql as $$
+declare v_count int;
+begin
+  with resp as (
+    select (r.content)::jsonb as j
+    from net._http_response r
+    where r.status_code = 200
+      and r.created > now() - interval '15 minutes'
+      and r.content is not null
+      and left(btrim(r.content), 1) = '{'     -- only JSON object bodies
+  )
   insert into underlying_bars (symbol, ts, open, high, low, close, volume, vwap)
   select 'SPY',
-         (b->>'t')::timestamptz,
-         (b->>'o')::numeric,
-         (b->>'h')::numeric,
-         (b->>'l')::numeric,
-         (b->>'c')::numeric,
-         (b->>'v')::bigint,
-         (b->>'vw')::numeric
-  from jsonb_array_elements(coalesce((v_body::jsonb) -> 'bars', '[]'::jsonb)) as b
+         (b->>'t')::timestamptz, (b->>'o')::numeric, (b->>'h')::numeric,
+         (b->>'l')::numeric, (b->>'c')::numeric, (b->>'v')::bigint, (b->>'vw')::numeric
+  from resp, jsonb_array_elements(coalesce(resp.j -> 'bars', '[]'::jsonb)) as b
+  where resp.j ? 'bars'
   on conflict (symbol, ts) do nothing;
-
   get diagnostics v_count = row_count;
-  return v_count;  -- number of NEW bars inserted
+  return v_count;
 end;
 $$;
 
--- ----------------------------------------------------------------------------
---  USAGE — replace the key/secret, then run one line per month:
+-- ============================================================================
+--  HOW TO RUN  (replace PK_YOUR_KEY / YOUR_SECRET with your Alpaca creds)
 --
---    select backfill_spy_bars('2026-01-02','2026-01-31','PK_YOUR_KEY','YOUR_SECRET');
---    select backfill_spy_bars('2026-02-01','2026-02-28','PK_YOUR_KEY','YOUR_SECRET');
---    select backfill_spy_bars('2026-03-01','2026-03-31','PK_YOUR_KEY','YOUR_SECRET');
---    select backfill_spy_bars('2026-04-01','2026-04-30','PK_YOUR_KEY','YOUR_SECRET');
---    select backfill_spy_bars('2026-05-01','2026-05-29','PK_YOUR_KEY','YOUR_SECRET');
+--  STEP 1 — fire the fetches (run this block; it commits, then Alpaca is called):
 --
---  Each returns the count of new bars. Re-running is safe (upsert dedupes).
---  Verify:  select min(ts), max(ts), count(*) from underlying_bars;
+--    select fire_spy_bars('2026-01-02','2026-01-31','PK_YOUR_KEY','YOUR_SECRET');
+--    select fire_spy_bars('2026-02-01','2026-02-28','PK_YOUR_KEY','YOUR_SECRET');
+--    select fire_spy_bars('2026-03-01','2026-03-31','PK_YOUR_KEY','YOUR_SECRET');
+--    select fire_spy_bars('2026-04-01','2026-04-30','PK_YOUR_KEY','YOUR_SECRET');
+--    select fire_spy_bars('2026-05-01','2026-05-29','PK_YOUR_KEY','YOUR_SECRET');
+--
+--  STEP 2 — WAIT ~15 seconds, then ingest:
+--
+--    select ingest_recent_bars();          -- returns # of new bars inserted
+--
+--  VERIFY:
+--    select min(ts), max(ts), count(*) from underlying_bars;
+--
+--  Troubleshoot (if ingest returns 0): inspect the raw responses —
+--    select id, status_code, left(content, 200) as body, created
+--    from net._http_response order by created desc limit 10;
 -- ============================================================================
