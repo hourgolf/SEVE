@@ -35,7 +35,10 @@ function loadEnvLocal() {
 loadEnvLocal();
 
 const SB_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SB_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Prefer the service-role key; fall back to the anon key (needs a temporary
+// INSERT/UPDATE policy on option_bars — see the SQL we run alongside).
+const SB_WRITE =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const ALPACA_KEY = process.env.ALPACA_KEY;
 const ALPACA_SECRET = process.env.ALPACA_SECRET;
 const DATA = "https://data.alpaca.markets";
@@ -146,9 +149,9 @@ async function fetchOptionBars(symbols: string[], day: string) {
 }
 
 async function main() {
-  if (!SB_URL || !SB_SERVICE) throw new Error("Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY");
+  if (!SB_URL || !SB_WRITE) throw new Error("Set SUPABASE_URL + a write key (service-role or anon)");
   if (!ALPACA_KEY || !ALPACA_SECRET) throw new Error("Set ALPACA_KEY + ALPACA_SECRET");
-  const sb = createClient(SB_URL, SB_SERVICE, { auth: { persistSession: false } });
+  const sb = createClient(SB_URL, SB_WRITE, { auth: { persistSession: false } });
 
   const days = await dayRanges(sb);
   console.log(`backfill-options: ${days.length} trading days (${days[0]?.date} → ${days[days.length - 1]?.date}), strike window ±$${STRIKE_WINDOW}`);

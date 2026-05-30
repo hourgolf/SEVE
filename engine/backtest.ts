@@ -206,7 +206,7 @@ async function main() {
     let byDay = new Map();
     if (useRealOptions) {
       try {
-        byDay = await loadOptionBarsByDay();
+        byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET));
       } catch (e) {
         console.log(`  (option_bars unavailable — ${(e as Error).message}; falling back to modeled chains)`);
       }

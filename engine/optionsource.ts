@@ -56,42 +56,44 @@ interface RawOB {
   expiration: string;
 }
 
-// Load all option_bars (anon read), grouped by expiration date (= the 0DTE
-// session). Each contract becomes a sorted ts/close series for forward-fill.
-export async function loadOptionBarsByDay(): Promise<Map<string, Series[]>> {
+// Load option_bars grouped by expiration date (= the 0DTE session), fetching
+// PER DAY (filtered by the indexed `expiration`) — offset-paging the whole
+// 1M+ row table times out, but a single day (~11k rows, small offsets) is fast.
+export async function loadOptionBarsByDay(dates: string[]): Promise<Map<string, Series[]>> {
   loadEnv();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY");
   const sb = createClient(url, key, { auth: { persistSession: false } });
 
-  // expiration → occ_symbol → Series
-  const byDay = new Map<string, Map<string, Series>>();
   const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
-      .from("option_bars")
-      .select("occ_symbol,ts,strike,opt_type,close,expiration")
-      .order("ts", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error("option_bars read: " + error.message);
-    const rows = (data ?? []) as RawOB[];
-    for (const r of rows) {
-      if (r.close == null) continue;
-      const day = byDay.get(r.expiration) ?? byDay.set(r.expiration, new Map()).get(r.expiration)!;
-      let s = day.get(r.occ_symbol);
-      if (!s) {
-        s = { strike: Number(r.strike), optType: r.opt_type, ts: [], close: [] };
-        day.set(r.occ_symbol, s);
-      }
-      s.ts.push(Date.parse(r.ts));
-      s.close.push(Number(r.close));
-    }
-    if (rows.length < PAGE) break;
-  }
-
   const out = new Map<string, Series[]>();
-  for (const [day, contracts] of byDay) out.set(day, [...contracts.values()]);
+
+  for (const date of dates) {
+    const contracts = new Map<string, Series>();
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb
+        .from("option_bars")
+        .select("occ_symbol,ts,strike,opt_type,close,expiration")
+        .eq("expiration", date)
+        .order("ts", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error("option_bars read: " + error.message);
+      const rows = (data ?? []) as RawOB[];
+      for (const r of rows) {
+        if (r.close == null) continue;
+        let s = contracts.get(r.occ_symbol);
+        if (!s) {
+          s = { strike: Number(r.strike), optType: r.opt_type, ts: [], close: [] };
+          contracts.set(r.occ_symbol, s);
+        }
+        s.ts.push(Date.parse(r.ts));
+        s.close.push(Number(r.close));
+      }
+      if (rows.length < PAGE) break;
+    }
+    if (contracts.size) out.set(date, [...contracts.values()]);
+  }
   return out;
 }
 
