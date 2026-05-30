@@ -97,7 +97,7 @@ async function main() {
           for (const stopAtr of GRID.stopAtr)
             for (const timeStop of GRID.timeStop) {
               if (emaFast >= emaSlow) continue;
-              const p: CrossParams = { emaFast, emaSlow, volMult, useMacd: false, stopAtr, timeStop, flattenBeforeClose: 35 };
+              const p: CrossParams = { emaFast, emaSlow, volMult, useMacd: false, stopAtr, timeStop, flattenBeforeClose: 35, erMin: 0 };
               rows.push({ tf, p, is: stat(runSet(IS, tf, p)), oos: stat(runSet(OOS, tf, p)) });
             }
 

@@ -17,6 +17,7 @@ export interface CrossParams {
   stopAtr: number; // underlying stop, in ATRs
   timeStop: number; // minutes held before time-stop
   flattenBeforeClose: number; // minutes-to-close: no new entries / force exit
+  erMin: number; // regime gate: only trade when efficiency ratio ≥ this (0 = off)
 }
 
 // Defaults chosen from the MIDDLE of the robust region in the OOS-validated
@@ -32,6 +33,7 @@ export const DEFAULT_CROSS_PARAMS: CrossParams = {
   stopAtr: 1.5,
   timeStop: 45,
   flattenBeforeClose: 35,
+  erMin: 0, // set by the regime-filter sweep below
 };
 
 // Build the evaluator for one session (precomputes EMA/MACD over its closes;
@@ -68,6 +70,7 @@ export function makeCrossover(
     if (f.minutesToClose <= p.flattenBeforeClose) return null;
     if (f.atr <= 0) return null;
     if (f.relVol < p.volMult) return null; // volume confirmation
+    if (p.erMin > 0 && f.er < p.erMin) return null; // regime gate: skip chop
 
     const x = crossDir(ef, es, i);
     if (x === 0) return null;
