@@ -1,8 +1,9 @@
 // ============================================================================
-//  EMA Cross sweep over TIMEFRAME × parameters, on real bars + real option
-//  prices. Loads the option data ONCE (the slow part) and reuses it across all
-//  configs. Ranks by total P&L so we can see whether any config is profitable.
-//  Run: `npm run sweep:cross`
+//  EMA Cross sweep with OUT-OF-SAMPLE validation — the honest fine-tune.
+//  Tunes on the in-sample window (Jan→Mar) and reports each config's
+//  out-of-sample (Apr→May) result, which the tuner never saw. A config that's
+//  profitable in BOTH is a robustness signal; great IS + poor OOS = overfit.
+//  Loads real option chains ONCE and reuses across configs. Run: npm run sweep:cross
 // ============================================================================
 
 import { loadRealSessions } from "./realsource";
@@ -11,7 +12,9 @@ import { priceChain } from "./market";
 import { aggregate } from "./aggregate";
 import { simulateSession } from "./backtest";
 import { makeCrossover, type CrossParams } from "./strategies/crossover";
-import type { FundState, StrategistConfig, Trade } from "./types";
+import type { Bar, FundState, StrategistConfig, Trade } from "./types";
+
+const OOS_CUTOFF = "2026-04-01"; // dates ≥ this are out-of-sample
 
 const CFG: StrategistConfig = {
   slug: "cross", capital_pct: 30, aggression: 40, max_contracts: 6,
@@ -20,28 +23,36 @@ const CFG: StrategistConfig = {
 const FUND: FundState = { total_capital_usd: 10000, master_daily_stop_usd: 300, is_halted: false };
 
 const GRID = {
-  tf: [1, 5, 15],
-  emaFast: [9, 12],
-  emaSlow: [21, 34],
+  tf: [5, 15],
+  emaFast: [9, 12, 15],
+  emaSlow: [21, 26, 34],
   volMult: [1.0, 1.2],
-  useMacd: [true, false],
+  stopAtr: [1.0, 2.0],
+  timeStop: [45, 90],
 };
-// fixed this pass
-const STOP_ATR = 1.5;
-const TIME_STOP = 60;
-const FLATTEN = 35;
 
-interface Row {
-  tf: number; p: CrossParams; n: number; total: number; exp: number; win: number; maxDD: number;
-}
+interface Stat { n: number; total: number; exp: number; win: number; maxDD: number }
+interface Row { tf: number; p: CrossParams; is: Stat; oos: Stat }
 
-function metric(tf: number, p: CrossParams, trades: Trade[]): Row {
+function stat(trades: Trade[]): Stat {
   const n = trades.length;
   const total = trades.reduce((a, t) => a + t.pnl, 0);
   const wins = trades.filter((t) => t.pnl > 0).length;
   let eq = 0, peak = 0, dd = 0;
   for (const t of trades) { eq += t.pnl; peak = Math.max(peak, eq); dd = Math.max(dd, peak - eq); }
-  return { tf, p, n, total, exp: n ? total / n : 0, win: n ? wins / n : 0, maxDD: dd };
+  return { n, total, exp: n ? total / n : 0, win: n ? wins / n : 0, maxDD: dd };
+}
+
+interface Sess { date: string; bars: Bar[]; chain: ChainProvider }
+
+function runSet(set: Sess[], tf: number, p: CrossParams): Trade[] {
+  const trades: Trade[] = [];
+  for (const s of set) {
+    const bars = aggregate(s.bars, tf);
+    const evalFn = makeCrossover(bars.map((b) => b.close), p, tf);
+    trades.push(...simulateSession(bars, CFG, FUND, evalFn, s.chain));
+  }
+  return trades;
 }
 
 const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
@@ -49,16 +60,17 @@ const pad = (s: string, w: number) => s.padStart(w);
 
 function printTable(title: string, rows: Row[]) {
   console.log(`\n  ${title}`);
-  console.log("   tf  fast  slow   vol  macd |   n   win%   exp/trd   total    maxDD");
-  console.log("  ──────────────────────────────────────────────────────────────────");
+  console.log("   tf  fast slow  vol stopA tStop |  IS n  IS exp  IS tot | OOS n OOS exp OOS tot  OOS win");
+  console.log("  ─────────────────────────────────────────────────────────────────────────────────────");
   for (const r of rows) {
     console.log(
       "  " +
-        [pad(r.tf + "m", 4), pad(String(r.p.emaFast), 4), pad(String(r.p.emaSlow), 5),
-         pad(r.p.volMult.toFixed(1), 5), pad(r.p.useMacd ? "Y" : "n", 5)].join(" ") +
-        " | " +
-        [pad(String(r.n), 4), pad((r.win * 100).toFixed(0) + "%", 5),
-         pad(usd(r.exp), 8), pad(usd(r.total), 8), pad(usd(r.maxDD), 8)].join("  ")
+        [pad(r.tf + "m", 4), pad(String(r.p.emaFast), 4), pad(String(r.p.emaSlow), 4),
+         pad(r.p.volMult.toFixed(1), 4), pad(r.p.stopAtr.toFixed(1), 5), pad(String(r.p.timeStop), 5)].join(" ") +
+        " |" +
+        [pad(String(r.is.n), 5), pad(usd(r.is.exp), 7), pad(usd(r.is.total), 7)].join(" ") +
+        " |" +
+        [pad(String(r.oos.n), 5), pad(usd(r.oos.exp), 7), pad(usd(r.oos.total), 7), pad((r.oos.win * 100).toFixed(0) + "%", 6)].join(" ")
     );
   }
 }
@@ -68,44 +80,37 @@ async function main() {
   console.log(`Loading real option chains for ${sessions.length} sessions…`);
   const byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET));
 
-  // chain provider per session (real option prices, or BS fallback) — reused across configs
-  const chainOf = new Map<string, ChainProvider>();
-  let realDays = 0;
-  for (const s of sessions) {
+  const all: Sess[] = sessions.map((s) => {
     const c = byDay.get(s.dateET);
-    if (c && c.length) { chainOf.set(s.dateET, makeRealChain(c)); realDays++; }
-    else chainOf.set(s.dateET, (spot, mtc) => priceChain(spot, mtc, s.ivAnnual));
-  }
-  console.log(`${realDays}/${sessions.length} days with real option data. Sweeping…`);
+    const chain: ChainProvider = c && c.length ? makeRealChain(c) : (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
+    return { date: s.dateET, bars: s.bars, chain };
+  });
+  const IS = all.filter((s) => s.date < OOS_CUTOFF);
+  const OOS = all.filter((s) => s.date >= OOS_CUTOFF);
+  console.log(`In-sample: ${IS.length} days (< ${OOS_CUTOFF})   Out-of-sample: ${OOS.length} days (≥ ${OOS_CUTOFF})`);
 
   const rows: Row[] = [];
-  for (const tf of GRID.tf) {
-    const agg = sessions.map((s) => ({ date: s.dateET, bars: aggregate(s.bars, tf) }));
+  for (const tf of GRID.tf)
     for (const emaFast of GRID.emaFast)
       for (const emaSlow of GRID.emaSlow)
         for (const volMult of GRID.volMult)
-          for (const useMacd of GRID.useMacd) {
-            const p: CrossParams = {
-              emaFast, emaSlow, volMult, useMacd,
-              stopAtr: STOP_ATR, timeStop: TIME_STOP, flattenBeforeClose: FLATTEN,
-            };
-            const trades: Trade[] = [];
-            for (const a of agg) {
-              const evalFn = makeCrossover(a.bars.map((b) => b.close), p, tf);
-              trades.push(...simulateSession(a.bars, CFG, FUND, evalFn, chainOf.get(a.date)!));
+          for (const stopAtr of GRID.stopAtr)
+            for (const timeStop of GRID.timeStop) {
+              if (emaFast >= emaSlow) continue;
+              const p: CrossParams = { emaFast, emaSlow, volMult, useMacd: false, stopAtr, timeStop, flattenBeforeClose: 35 };
+              rows.push({ tf, p, is: stat(runSet(IS, tf, p)), oos: stat(runSet(OOS, tf, p)) });
             }
-            rows.push(metric(tf, p, trades));
-          }
-  }
 
   console.log("\n══════════════════════════════════════════════════════════════════");
-  console.log(`  SEVE sweep · EMA Cross · ${rows.length} configs × ${sessions.length} real sessions`);
-  console.log(`  ${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real bars + real option prices`);
+  console.log(`  SEVE refined sweep · EMA Cross · ${rows.length} configs · IS-tuned, OOS-validated`);
   console.log("══════════════════════════════════════════════════════════════════");
-  printTable("TOP 12 by total P&L", [...rows].sort((a, b) => b.total - a.total).slice(0, 12));
-  printTable("TOP 8 by expectancy/trade (≥30 trades)",
-    rows.filter((r) => r.n >= 30).sort((a, b) => b.exp - a.exp).slice(0, 8));
-  console.log(`\n  Profitable configs: ${rows.filter((r) => r.total > 0).length} / ${rows.length}`);
+  // rank by in-sample expectancy (what a tuner would pick), show the OOS truth
+  printTable("TOP 14 by IN-SAMPLE expectancy (≥20 IS trades)",
+    rows.filter((r) => r.is.n >= 20).sort((a, b) => b.is.exp - a.is.exp).slice(0, 14));
+  const robust = rows.filter((r) => r.is.total > 0 && r.oos.total > 0 && r.oos.n >= 10);
+  console.log(`\n  Robust (profitable IS AND OOS, ≥10 OOS trades): ${robust.length} / ${rows.length}`);
+  printTable("BEST ROBUST configs by OOS expectancy",
+    robust.sort((a, b) => b.oos.exp - a.oos.exp).slice(0, 10));
   console.log("══════════════════════════════════════════════════════════════════\n");
 }
 
