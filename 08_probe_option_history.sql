@@ -30,14 +30,15 @@ $$;
 --    (b) historical option QUOTES (bid/ask — the OPRA-gated one)
 --    (c) historical option TRADES
 --
+--  (NOTE: historical options endpoints do NOT accept a `feed` param — omit it.)
 --    select fire_alpaca_get(
---      'https://data.alpaca.markets/v1beta1/options/bars?symbols=SPY260529C00756000&timeframe=1Min&start=2026-05-29&end=2026-05-29&limit=100&feed=indicative',
+--      'https://data.alpaca.markets/v1beta1/options/bars?symbols=SPY260529C00756000&timeframe=1Min&start=2026-05-29&end=2026-05-29&limit=100',
 --      'PK_YOUR_KEY','YOUR_SECRET');
 --    select fire_alpaca_get(
---      'https://data.alpaca.markets/v1beta1/options/quotes?symbols=SPY260529C00756000&start=2026-05-29&end=2026-05-29&limit=100&feed=indicative',
+--      'https://data.alpaca.markets/v1beta1/options/quotes?symbols=SPY260529C00756000&start=2026-05-29&end=2026-05-29&limit=100',
 --      'PK_YOUR_KEY','YOUR_SECRET');
 --    select fire_alpaca_get(
---      'https://data.alpaca.markets/v1beta1/options/trades?symbols=SPY260529C00756000&start=2026-05-29&end=2026-05-29&limit=100&feed=indicative',
+--      'https://data.alpaca.markets/v1beta1/options/trades?symbols=SPY260529C00756000&start=2026-05-29&end=2026-05-29&limit=100',
 --      'PK_YOUR_KEY','YOUR_SECRET');
 --
 --  (If your option_quotes has other symbols, grab one:
