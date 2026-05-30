@@ -39,10 +39,15 @@ export const DEFAULT_CROSS_PARAMS: CrossParams = {
 // Build the evaluator for one session (precomputes EMA/MACD over its closes;
 // `f.minute` indexes them). `tfMin` is the bar size so the time-stop stays in
 // real minutes across timeframes. Returned shape matches the shared Evaluate type.
+// `dayBias` is the higher-timeframe daily-trend context for this session:
+// +1 = SPY above its daily MA (favor calls), -1 = below (favor puts), 0 = off.
+// When set, entries against the daily trend are rejected ("don't fight the
+// higher timeframe").
 export function makeCrossover(
   closes: number[],
   p: CrossParams = DEFAULT_CROSS_PARAMS,
-  tfMin = 1
+  tfMin = 1,
+  dayBias = 0
 ): Evaluate {
   const ef = ema(closes, p.emaFast);
   const es = ema(closes, p.emaSlow);
@@ -74,6 +79,8 @@ export function makeCrossover(
 
     const x = crossDir(ef, es, i);
     if (x === 0) return null;
+    if (dayBias > 0 && x === -1) return null; // daily uptrend: no puts
+    if (dayBias < 0 && x === 1) return null; // daily downtrend: no calls
     if (p.useMacd) {
       const macdBull = md.macd[i] >= md.signal[i];
       if (x === 1 && !macdBull) return null;
