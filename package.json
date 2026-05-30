@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "backtest": "tsx engine/backtest.ts"
+    "backtest": "tsx engine/backtest.ts",
+    "sweep": "tsx engine/sweep.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

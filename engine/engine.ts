@@ -7,6 +7,7 @@ import type { Bar, Features, FundState, Quote, StrategistConfig } from "./types"
 
 const ATR_N = 14;
 const OPEN_RANGE_MIN = 30;
+const ER_N = 30; // efficiency-ratio window (minutes)
 const FEE_PER_CONTRACT = 0.65;
 const SLIPPAGE = 0.25; // fraction of the spread paid on entry/exit
 
@@ -31,6 +32,17 @@ export function computeFeatures(bars: Bar[], i: number): Features {
   }
   const atr = atrCount ? atrSum / atrCount : 0;
   const mom = i >= 3 ? b.close - bars[i - 3].close : 0;
+
+  // Kaufman efficiency ratio over the last ER_N bars: |net move| / path length.
+  // ~1 = clean directional trend, ~0 = choppy/range-bound.
+  let er = 0;
+  const n = Math.min(ER_N, i);
+  if (n > 0) {
+    let path = 0;
+    for (let j = i - n + 1; j <= i; j++) path += Math.abs(bars[j].close - bars[j - 1].close);
+    er = path > 0 ? Math.abs(b.close - bars[i - n].close) / path : 0;
+  }
+
   return {
     minute: i,
     // measured against this session's own length (real days vary; synthetic = 390)
@@ -41,6 +53,7 @@ export function computeFeatures(bars: Bar[], i: number): Features {
     openRangeLo: orLo,
     atr,
     mom,
+    er,
   };
 }
 

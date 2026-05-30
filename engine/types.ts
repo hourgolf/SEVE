@@ -53,6 +53,7 @@ export interface Features {
   openRangeLo: number | null;
   atr: number; // 1-min ATR proxy
   mom: number; // close - close[3] (signed momentum)
+  er: number; // efficiency ratio over ~30m (0 = chop, ~1 = clean trend)
 }
 
 // A strategist's intent (mirrors signals).

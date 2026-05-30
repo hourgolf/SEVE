@@ -18,7 +18,7 @@
 import { computeFeatures, feePerContract, fillPrice, riskGovernor } from "./engine";
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
-import { fadeEvaluate } from "./strategies/fade";
+import { DEFAULT_FADE_PARAMS, fadeEvaluate, type FadeParams } from "./strategies/fade";
 import type { Bar, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
 
 const BASE_MS = 1_780_000_000_000;
@@ -44,11 +44,12 @@ const findQuote = (chain: Quote[], strike: number, optType: "call" | "put") =>
 
 // One session through the engine. Pure: bars + day IV in, trades out. Shared by
 // the synthetic and real paths — the ONLY thing that differs is the bar source.
-function simulateSession(
+export function simulateSession(
   bars: Bar[],
   ivAnnual: number,
   cfg: StrategistConfig,
-  fund: FundState
+  fund: FundState,
+  params: FadeParams = DEFAULT_FADE_PARAMS
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -57,7 +58,7 @@ function simulateSession(
   for (let i = 0; i < bars.length; i++) {
     const f = computeFeatures(bars, i);
     const chain = priceChain(f.close, f.minutesToClose, ivAnnual);
-    const intent = fadeEvaluate(f, pos);
+    const intent = fadeEvaluate(f, pos, params);
 
     if (pos && intent && intent.kind === "exit") {
       const q = findQuote(chain, pos.strike, pos.optType);
