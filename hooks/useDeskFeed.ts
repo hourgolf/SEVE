@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useDeskState } from "@/hooks/useDeskState";
 import { buildSteps, channelPnl, fundPnl } from "@/lib/desk/derive";
@@ -48,8 +48,6 @@ function signalMessage(row: any): string {
 export function useDeskFeed(): DeskFeed {
   const { desk } = useDeskState();
   const totalCapital = desk.fund.total_capital_usd;
-  const capitalRef = useRef(totalCapital);
-  capitalRef.current = totalCapital;
 
   const [positions, setPositions] = useState<Position[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
@@ -134,8 +132,8 @@ export function useDeskFeed(): DeskFeed {
 
   const pnlByStrategist = useMemo(() => channelPnl(positions), [positions]);
   const fp = useMemo(
-    () => fundPnl(positions, capitalRef.current, latestNav),
-    [positions, latestNav]
+    () => fundPnl(positions, totalCapital, latestNav),
+    [positions, totalCapital, latestNav]
   );
   const steps = useMemo(() => buildSteps(signals), [signals]);
 

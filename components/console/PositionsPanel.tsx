@@ -27,18 +27,19 @@ export function PositionsPanel({
         <span className="t">Open Positions</span>
         <span className="x">{positions.length} legs</span>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th style={{ textAlign: "left" }}>PM</th>
-            <th style={{ textAlign: "left" }}>Contract</th>
-            <th>Qty</th>
-            <th>Entry</th>
-            <th>Mark</th>
-            <th>Unreal P&amp;L</th>
-          </tr>
-        </thead>
-        <tbody>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left" }}>PM</th>
+              <th style={{ textAlign: "left" }}>Contract</th>
+              <th>Qty</th>
+              <th>Entry</th>
+              <th>Mark</th>
+              <th>Unreal P&amp;L</th>
+            </tr>
+          </thead>
+          <tbody>
           {positions.length === 0 ? (
             <tr>
               <td colSpan={6} className="muted" style={{ textAlign: "center", padding: 20 }}>
@@ -73,8 +74,9 @@ export function PositionsPanel({
               </tr>
             ))
           )}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

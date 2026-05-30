@@ -77,6 +77,7 @@
   margin-bottom: 16px;
   padding-bottom: 14px;
   border-bottom: 2px solid var(--chassis-edge);
+  flex-wrap: wrap;
 }
 .chassis-brand .mark {
   font-family: var(--mono);
@@ -857,4 +858,41 @@
   color: var(--led-red);
   background: rgba(240, 86, 63, 0.12);
   border-color: rgba(240, 86, 63, 0.45);
+}
+
+/* ---------- mobile (≤560px): keep the chassis + LED within a phone width ---- */
+@media (max-width: 560px) {
+  .chassis {
+    padding: 13px;
+    border-radius: 11px;
+  }
+  .chassis-head {
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .chassis-brand .mark {
+    font-size: 17px;
+    line-height: 1.15;
+  }
+  .chassis-head-right {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .monitor-status {
+    flex-wrap: wrap;
+    gap: 10px 14px;
+  }
+  .seven-seg {
+    width: 17px;
+    height: 31px;
+  }
+  .led-window {
+    padding: 7px 9px;
+    gap: 3px;
+  }
+  .sample-badge,
+  .feed-badge {
+    font-size: 9px;
+    padding: 4px 7px;
+  }
 }

@@ -74,22 +74,24 @@ export function OptionChain({
           )}
         </span>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th className="calls" style={{ textAlign: "left" }}>Call Δ</th>
-            <th className="calls">Bid</th>
-            <th className="calls">Ask</th>
-            <th className="calls">Mid</th>
-            <th className="strike-col">Strike</th>
-            <th className="puts">Mid</th>
-            <th className="puts">Bid</th>
-            <th className="puts">Ask</th>
-            <th className="puts" style={{ textAlign: "right" }}>Put Δ</th>
-          </tr>
-        </thead>
-        <tbody>{rows}</tbody>
-      </table>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th className="calls" style={{ textAlign: "left" }}>Call Δ</th>
+              <th className="calls">Bid</th>
+              <th className="calls">Ask</th>
+              <th className="calls">Mid</th>
+              <th className="strike-col">Strike</th>
+              <th className="puts">Mid</th>
+              <th className="puts">Bid</th>
+              <th className="puts">Ask</th>
+              <th className="puts" style={{ textAlign: "right" }}>Put Δ</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
     </div>
   );
 }

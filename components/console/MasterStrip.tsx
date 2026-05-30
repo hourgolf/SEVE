@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Knob } from "@/components/console/hw/Knob";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { TransportButton } from "@/components/console/hw/TransportButton";
@@ -15,7 +15,7 @@ export interface MasterStripProps {
   fundPnl: { nav: number; dayPnl: number };
 }
 
-export function MasterStrip({ fund, fundPnl }: MasterStripProps) {
+function MasterStripImpl({ fund, fundPnl }: MasterStripProps) {
   const dispatch = useDeskDispatch();
   const [armed, setArmed] = useState(false);
   const [showNav, setShowNav] = useState(true);
@@ -87,3 +87,7 @@ export function MasterStrip({ fund, fundPnl }: MasterStripProps) {
     </div>
   );
 }
+
+// Memoized: a channel-knob drag re-renders Console each frame, but the master
+// strip's props (fund, fundPnl) are referentially stable then, so it skips.
+export const MasterStrip = memo(MasterStripImpl);

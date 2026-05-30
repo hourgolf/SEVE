@@ -4,7 +4,7 @@ import "./console.css";
 import { useMarketData } from "@/hooks/useMarketData";
 import { Chassis } from "@/components/console/Chassis";
 import { TopBar } from "@/components/TopBar";
-import { Sparkline } from "@/components/Sparkline";
+import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
 import { TapeHealth } from "@/components/TapeHealth";
 import { EventLog } from "@/components/EventLog";
@@ -26,7 +26,7 @@ export default function Page() {
 
         <div className="grid">
           <div className="col">
-            <Sparkline bars={data.bars} />
+            <IntradayChart bars={data.bars} />
             <OptionChain
               snapshot={data.snapshot}
               spot={data.spot}

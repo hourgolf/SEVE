@@ -88,7 +88,7 @@ export function useMarketData(): MarketData {
             .limit(200),
           sb
             .from("underlying_bars")
-            .select("ts,close")
+            .select("ts,open,high,low,close,volume")
             .order("ts", { ascending: false })
             .limit(60),
           sb

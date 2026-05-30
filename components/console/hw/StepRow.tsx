@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { PmColor, Step } from "@/lib/desk/types";
 
 const COLOR_VAR: Record<PmColor, string> = {
@@ -16,7 +17,7 @@ export interface StepRowProps {
 
 // The 16-step sequencer row — the console's showpiece. Each cell lights in a
 // strategist's color; `pulse` animates a recent hit.
-export function StepRow({ steps, onStep }: StepRowProps) {
+function StepRowImpl({ steps, onStep }: StepRowProps) {
   return (
     <div className="steprow">
       {steps.map((s, i) => {
@@ -37,3 +38,7 @@ export function StepRow({ steps, onStep }: StepRowProps) {
     </div>
   );
 }
+
+// Memoized: `steps` is a stable useMemo reference, so the tape doesn't re-render
+// on every channel-knob drag frame.
+export const StepRow = memo(StepRowImpl);
