@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabaseClient";
 import {
   modelChainGreeks,
@@ -14,8 +15,12 @@ import type {
   UnderlyingBar,
 } from "@/lib/types";
 
-// How often we poll (ms) — mirrors the reference HTML's 5s refresh.
-export const POLL_INTERVAL_MS = 5000;
+// Safety-net poll interval (ms). Realtime drives updates; this only covers
+// dropped subscriptions / missed events, so it can be slow.
+export const POLL_INTERVAL_MS = 10000;
+// Intraday bars fetched up front (~2 trading days of 1-min) so higher
+// timeframes (up to 1h) have enough candles. Realtime appends new bars after.
+const BARS_LIMIT = 780;
 // Snapshot older than this is "stale" (market closed / cron paused).
 const STALE_AFTER_MIN = 3;
 
@@ -88,9 +93,9 @@ export function useMarketData(): MarketData {
             .limit(200),
           sb
             .from("underlying_bars")
-            .select("ts,open,high,low,close,volume")
+            .select("ts,open,high,low,close,volume,vwap")
             .order("ts", { ascending: false })
-            .limit(60),
+            .limit(BARS_LIMIT),
           sb
             .from("events")
             .select("*")
@@ -215,9 +220,42 @@ export function useMarketData(): MarketData {
 
     poll();
     const id = setInterval(poll, POLL_INTERVAL_MS);
+
+    // Realtime: refetch (debounced) the instant new rows land, instead of
+    // waiting up to POLL_INTERVAL_MS. The poll above remains the safety net if
+    // the subscription never connects (publication not enabled) or drops.
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (debounce) return;
+      debounce = setTimeout(() => {
+        debounce = null;
+        poll();
+      }, 250);
+    };
+    let channel: RealtimeChannel | null = null;
+    try {
+      const sb = getSupabase();
+      channel = sb
+        .channel("monitor-feed")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "underlying_bars" }, trigger)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "option_quotes" }, trigger)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, trigger)
+        .subscribe();
+    } catch {
+      /* env missing — poll-only */
+    }
+
     return () => {
       mounted.current = false;
       clearInterval(id);
+      if (debounce) clearTimeout(debounce);
+      if (channel) {
+        try {
+          getSupabase().removeChannel(channel);
+        } catch {
+          /* ignore */
+        }
+      }
     };
   }, []);
 

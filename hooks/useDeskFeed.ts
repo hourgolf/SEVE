@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useDeskState } from "@/hooks/useDeskState";
 import { buildSteps, channelPnl, fundPnl } from "@/lib/desk/derive";
 import type { ChannelPnl, Position, Signal, Step } from "@/lib/desk/types";
 import type { EventLevel, OptionType } from "@/lib/types";
 
-const POLL_MS = 5000;
+const POLL_MS = 10000; // safety-net; Realtime drives the live updates
 const MAX_CURVE = 90;
 
 export type FeedStatus = "live" | "empty" | "error";
@@ -124,9 +125,40 @@ export function useDeskFeed(): DeskFeed {
 
     poll();
     const id = setInterval(poll, POLL_MS);
+
+    // Realtime refetch trigger (debounced); 10s poll remains the fallback.
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (debounce) return;
+      debounce = setTimeout(() => {
+        debounce = null;
+        poll();
+      }, 250);
+    };
+    let channel: RealtimeChannel | null = null;
+    try {
+      const sb = getSupabase();
+      channel = sb
+        .channel("desk-feed")
+        .on("postgres_changes", { event: "*", schema: "public", table: "positions" }, trigger)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "signals" }, trigger)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "equity_snapshots" }, trigger)
+        .subscribe();
+    } catch {
+      /* env missing — poll-only */
+    }
+
     return () => {
       mounted.current = false;
       clearInterval(id);
+      if (debounce) clearTimeout(debounce);
+      if (channel) {
+        try {
+          getSupabase().removeChannel(channel);
+        } catch {
+          /* ignore */
+        }
+      }
     };
   }, []);
 

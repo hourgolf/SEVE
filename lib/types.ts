@@ -35,6 +35,7 @@ export interface UnderlyingBar {
   low: number | null;
   close: number | null;
   volume: number | null;
+  vwap: number | null;
 }
 
 export interface MarketEvent {

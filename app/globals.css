@@ -381,6 +381,109 @@ svg.spark {
   background: var(--green);
   color: var(--bg);
 }
+.chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+/* timeframe segmented control */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.seg button {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 3px 7px;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.seg button:last-child {
+  border-right: none;
+}
+.seg button:hover {
+  color: var(--text);
+}
+.seg button.on {
+  background: var(--blue);
+  color: var(--bg);
+}
+.vwap-chip {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-bright);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.vwap-chip.on {
+  color: var(--amber);
+  border-color: rgba(255, 178, 36, 0.5);
+  background: rgba(255, 178, 36, 0.12);
+}
+/* chart hover crosshair + tooltip */
+.chart-wrap {
+  position: relative;
+  touch-action: none;
+}
+.chart-wrap .crosshair {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(233, 238, 240, 0.35);
+  pointer-events: none;
+}
+.chart-tip {
+  position: absolute;
+  top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  background: rgba(10, 15, 17, 0.92);
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  padding: 6px 8px;
+  pointer-events: none;
+  z-index: 2;
+}
+.chart-tip.right {
+  right: 8px;
+}
+.chart-tip.left {
+  left: 8px;
+}
+.chart-tip b {
+  color: var(--text);
+  font-weight: 600;
+}
+.chart-tip .tip-time {
+  color: var(--muted-2);
+  margin-bottom: 2px;
+}
+.chart-meta {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--muted);
+  text-align: right;
+  margin-top: 6px;
+}
 
 /* horizontal-scroll wrapper so wide tables don't overflow narrow screens */
 .table-scroll {

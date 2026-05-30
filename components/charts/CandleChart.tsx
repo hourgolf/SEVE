@@ -12,9 +12,11 @@ export interface Candle {
 
 export function CandleChart({
   bars,
-  height = 130,
+  vwap,
+  height = 150,
 }: {
   bars: Candle[];
+  vwap?: number[];
   height?: number;
 }) {
   const H = height;
@@ -29,13 +31,22 @@ export function CandleChart({
       />
     );
   }
-  const min = Math.min(...bars.map((b) => b.low));
-  const max = Math.max(...bars.map((b) => b.high));
+  const vw = vwap?.filter((v): v is number => v != null) ?? [];
+  const lows = bars.map((b) => b.low);
+  const highs = bars.map((b) => b.high);
+  const min = Math.min(...lows, ...(vw.length ? vw : []));
+  const max = Math.max(...highs, ...(vw.length ? vw : []));
   const N = bars.length;
   const slot = (VIEW_W - 2 * P) / N;
   const cx = (i: number) => P + i * slot + slot / 2;
   const bodyW = Math.max(1.5, Math.min(slot * 0.62, 14));
   const y = (v: number) => H - P - ((v - min) / (max - min || 1)) * (H - 2 * P);
+
+  let vwapD = "";
+  if (vwap && vwap.length === N) {
+    vwapD = `M ${cx(0)} ${y(vwap[0])}`;
+    for (let i = 1; i < N; i++) vwapD += ` L ${cx(i)} ${y(vwap[i])}`;
+  }
 
   return (
     <svg
@@ -44,6 +55,16 @@ export function CandleChart({
       viewBox={`0 0 ${VIEW_W} ${H}`}
       preserveAspectRatio="none"
     >
+      {vwapD && (
+        <path
+          d={vwapD}
+          fill="none"
+          stroke="#ffb224"
+          strokeWidth={1}
+          strokeDasharray="4 3"
+          opacity={0.7}
+        />
+      )}
       {bars.map((b, i) => {
         const up = b.close >= b.open;
         const c = up ? "#2fd573" : "#f0563f";

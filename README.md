@@ -69,6 +69,13 @@ when an operator is signed in. Three seam hooks own this:
    signed-in users SELECT + UPDATE `strategist_config` / `fund_state`.
 3. **Auth → Providers**: enable **Email** (magic link). **Auth → URL
    Configuration**: add your site + `http://localhost:3000` to redirect URLs.
+4. Run [`06_realtime.sql`](06_realtime.sql) — adds the watched tables to the
+   Realtime publication so the UI updates the instant rows land (it falls back
+   to a 10s poll if you skip this; nothing breaks).
+
+The chart supports line/candlestick views, a timeframe selector (1m–1h,
+client-side aggregation of the 1-min bars), a VWAP overlay, and a hover
+crosshair with an OHLC tooltip.
 
 Mute/solo/halt are **derived, never cross-mutated** — soloing one channel dims
 the others via a selector, so un-soloing instantly restores prior states.
