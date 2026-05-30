@@ -535,6 +535,77 @@ tr.atm td {
 tr.atm .strike-col {
   color: var(--green);
 }
+td.clk {
+  cursor: pointer;
+}
+tr:hover td.clk {
+  background: rgba(255, 255, 255, 0.03);
+}
+td.clk.sel {
+  background: rgba(59, 158, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(59, 158, 255, 0.4);
+}
+
+/* contract drill-down detail */
+.contract-detail .cd-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+}
+.contract-detail .cd-close:hover {
+  color: var(--text);
+}
+.cd-msg {
+  padding: 10px 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.cd-charthead {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.cd-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  margin-top: 10px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cd-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  background: var(--panel);
+}
+.cd-stat .cd-k {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cd-stat .cd-v {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+@media (max-width: 560px) {
+  .cd-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
 
 .stat {
   display: flex;

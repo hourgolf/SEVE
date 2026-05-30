@@ -13,6 +13,10 @@
 const RISK_FREE_RATE = 0.045; // ~4.5%; effect is tiny at 0DTE
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 const MIN_T = 1 / (365 * 24 * 60); // 1-minute floor (years) to avoid div-by-zero
+// Within ~6 min of expiry, time value vanishes and implied vol backed out of the
+// mid explodes (and is meaningless). Suppress the IV reading there (deltas still
+// compute fine). This also hides inflated IV from post-expiry/stale 0DTE quotes.
+const IV_RELIABLE_MIN_T = 6 / (365 * 24 * 60);
 
 export type OptType = "call" | "put";
 
@@ -178,12 +182,13 @@ export function modelChainGreeks(
 
     for (const leg of [legs.call, legs.put]) {
       if (!leg) continue;
-      out.set(
-        leg.key,
+      const g =
         sigma != null
           ? greeksFromSigma(leg.type, spot, strike, T, r, sigma)
-          : moneynessGreeks(leg.type, spot, strike)
-      );
+          : moneynessGreeks(leg.type, spot, strike);
+      // Drop the IV reading near/after expiry — it's not meaningful there.
+      if (T <= IV_RELIABLE_MIN_T) g.iv = null;
+      out.set(leg.key, g);
     }
   }
 

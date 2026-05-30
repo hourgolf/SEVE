@@ -1,17 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import "./console.css";
 import { useMarketData } from "@/hooks/useMarketData";
 import { Chassis } from "@/components/console/Chassis";
 import { TopBar } from "@/components/TopBar";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
+import { ContractDetail } from "@/components/ContractDetail";
 import { TapeHealth } from "@/components/TapeHealth";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 
 export default function Page() {
   const data = useMarketData();
+  const [selected, setSelected] = useState<string | null>(null);
 
   return (
     <div className="console-root">
@@ -31,7 +34,12 @@ export default function Page() {
               snapshot={data.snapshot}
               spot={data.spot}
               deltasModeled={data.deltasModeled}
+              selected={selected}
+              onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
             />
+            {selected && (
+              <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />
+            )}
           </div>
           <div className="col">
             <TapeHealth

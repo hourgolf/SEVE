@@ -1,17 +1,29 @@
 import { num2 } from "@/lib/format";
 import type { OptionQuote } from "@/lib/types";
 
+// IV is unreliable when modeled from a near-intrinsic deep-ITM mid (it blows up),
+// so only show plausible values (≤300%); otherwise "·".
+const ivPct = (v: number | null | undefined): string => {
+  if (v == null) return "·";
+  const n = Number(v);
+  return n > 0 && n <= 3 ? (n * 100).toFixed(1) : "·";
+};
+
 // Live option-chain board built from the most recent snapshot: calls left,
-// puts right, strike center, ATM row highlighted. Mirrors renderChain().
+// puts right, strike center, ATM row highlighted. Click a leg to drill in.
 export function OptionChain({
   snapshot,
   spot,
   deltasModeled = false,
+  selected = null,
+  onSelect,
 }: {
   snapshot: OptionQuote[];
   spot: number | null;
   /** When true, the front board's deltas were modeled (Alpaca had none — 0DTE). */
   deltasModeled?: boolean;
+  selected?: string | null;
+  onSelect?: (occSymbol: string) => void;
 }) {
   let rows: React.ReactNode;
   let meta = "—";
@@ -19,13 +31,12 @@ export function OptionChain({
   if (!snapshot.length) {
     rows = (
       <tr>
-        <td colSpan={9} className="muted" style={{ textAlign: "center", padding: 20 }}>
+        <td colSpan={11} className="muted" style={{ textAlign: "center", padding: 20 }}>
           no contracts yet
         </td>
       </tr>
     );
   } else {
-    // Nearest expiration = front (0DTE).
     const frontExp = [...snapshot.map((r) => r.expiration)].sort()[0];
     const front = snapshot.filter((r) => r.expiration === frontExp);
     const strikes = [...new Set(front.map((r) => Number(r.strike)))].sort(
@@ -40,17 +51,29 @@ export function OptionChain({
     rows = strikes.map((k) => {
       const c = front.find((r) => Number(r.strike) === k && r.opt_type === "call");
       const p = front.find((r) => Number(r.strike) === k && r.opt_type === "put");
+      const cSel = !!c && selected === c.occ_symbol;
+      const pSel = !!p && selected === p.occ_symbol;
+      const onC = c ? () => onSelect?.(c.occ_symbol) : undefined;
+      const onP = p ? () => onSelect?.(p.occ_symbol) : undefined;
+      const cCls = `calls clk${cSel ? " sel" : ""}`;
+      const pCls = `puts clk${pSel ? " sel" : ""}`;
+      // IV-from-mid is only trustworthy on the OTM wing (calls at/above spot,
+      // puts at/below); ITM legs are near-intrinsic and blow the solve up.
+      const cIv = spot == null || k >= spot - 0.5 ? ivPct(c?.iv) : "·";
+      const pIv = spot == null || k <= spot + 0.5 ? ivPct(p?.iv) : "·";
       return (
         <tr key={k} className={k === atm ? "atm" : undefined}>
-          <td className="calls" style={{ textAlign: "left" }}>{num2(c?.delta)}</td>
-          <td className="calls">{num2(c?.bid)}</td>
-          <td className="calls">{num2(c?.ask)}</td>
-          <td className="calls">{num2(c?.mid)}</td>
+          <td className={cCls} style={{ textAlign: "left" }} onClick={onC}>{cIv}</td>
+          <td className={cCls} onClick={onC}>{num2(c?.delta)}</td>
+          <td className={cCls} onClick={onC}>{num2(c?.bid)}</td>
+          <td className={cCls} onClick={onC}>{num2(c?.ask)}</td>
+          <td className={cCls} onClick={onC}>{num2(c?.mid)}</td>
           <td className="strike-col">{k.toFixed(0)}</td>
-          <td className="puts">{num2(p?.mid)}</td>
-          <td className="puts">{num2(p?.bid)}</td>
-          <td className="puts">{num2(p?.ask)}</td>
-          <td className="puts" style={{ textAlign: "right" }}>{num2(p?.delta)}</td>
+          <td className={pCls} onClick={onP}>{num2(p?.mid)}</td>
+          <td className={pCls} onClick={onP}>{num2(p?.bid)}</td>
+          <td className={pCls} onClick={onP}>{num2(p?.ask)}</td>
+          <td className={pCls} onClick={onP}>{num2(p?.delta)}</td>
+          <td className={pCls} style={{ textAlign: "right" }} onClick={onP}>{pIv}</td>
         </tr>
       );
     });
@@ -78,7 +101,8 @@ export function OptionChain({
         <table>
           <thead>
             <tr>
-              <th className="calls" style={{ textAlign: "left" }}>Call Δ</th>
+              <th className="calls" style={{ textAlign: "left" }}>Call IV</th>
+              <th className="calls">Δ</th>
               <th className="calls">Bid</th>
               <th className="calls">Ask</th>
               <th className="calls">Mid</th>
@@ -86,7 +110,8 @@ export function OptionChain({
               <th className="puts">Mid</th>
               <th className="puts">Bid</th>
               <th className="puts">Ask</th>
-              <th className="puts" style={{ textAlign: "right" }}>Put Δ</th>
+              <th className="puts">Δ</th>
+              <th className="puts" style={{ textAlign: "right" }}>Put IV</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
