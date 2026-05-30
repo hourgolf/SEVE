@@ -10,6 +10,7 @@
     "backtest": "tsx engine/backtest.ts",
     "sweep": "tsx engine/sweep.ts",
     "sweep:cross": "tsx engine/sweep-cross.ts",
+    "regime": "tsx engine/regime-test.ts",
     "backfill:options": "tsx scripts/backfill-options.ts"
   },
   "dependencies": {

@@ -249,7 +249,11 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Only run when invoked directly (not when sweep/regime modules import
+// simulateSession from here — otherwise this main() fires as a side effect).
+if (process.argv[1]?.endsWith("backtest.ts")) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
