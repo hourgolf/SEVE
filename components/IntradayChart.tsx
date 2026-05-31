@@ -49,6 +49,8 @@ export function IntradayChart({
   // Vertical mouse position over the chart (0 = top … 1 = bottom), for the
   // horizontal crosshair + the price tag that reads off the cursor.
   const [hoverY, setHoverY] = useState<number | null>(null);
+  // Press-and-hold shows a price bubble pinned at the crosshair intersection.
+  const [pressing, setPressing] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -129,9 +131,18 @@ export function IntradayChart({
     setHover(Math.min(N - 1, Math.max(0, Math.round(fx * (N - 1)))));
     setHoverY(fy);
   }
+  function onDown(e: React.PointerEvent) {
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    setPressing(true);
+    onMove(e);
+  }
+  function onUp() {
+    setPressing(false);
+  }
   function onLeave() {
     setHover(null);
     setHoverY(null);
+    setPressing(false);
   }
 
   const ledSpot = spot ?? (N ? closes[N - 1] : null);
@@ -164,7 +175,15 @@ export function IntradayChart({
         </span>
       </div>
       <div className="pbody">
-        <div className="chart-wrap" ref={wrapRef} onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={onLeave}>
+        <div
+          className="chart-wrap"
+          ref={wrapRef}
+          onPointerMove={onMove}
+          onPointerDown={onDown}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+          onPointerLeave={onLeave}
+        >
           {mode === "candles" ? (
             <CandleChart bars={candles} vwap={showVwap ? vwapArr : undefined} overlays={overlays} />
           ) : (
@@ -197,6 +216,18 @@ export function IntradayChart({
                 {scale.priceAt(hoverY * scale.H).toFixed(2)}
               </span>
             </>
+          )}
+          {/* press-and-hold: price bubble pinned at the crosshair intersection */}
+          {pressing && scale && hover != null && hoverY != null && (
+            <span
+              className={`cross-pop${hoverY < 0.22 ? " below" : ""}`}
+              style={{
+                left: `${(scale.cx(hover) / VIEW_W) * 100}%`,
+                top: `${hoverY * 100}%`,
+              }}
+            >
+              {scale.priceAt(hoverY * scale.H).toFixed(2)}
+            </span>
           )}
 
           {/* embedded live SPY price LED, lower-right */}

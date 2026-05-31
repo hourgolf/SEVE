@@ -99,26 +99,25 @@
 }
 .chassis-head-right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 12px;
+  align-items: center;
+  gap: 14px;
 }
-/* the header's secondary master section: operator chip stacked over the
-   compact (knob-less) master strip, right-aligned in the head */
-.head-master {
+/* section anchors + operator chip live in the header, right of the brand */
+.head-nav {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
-/* nav row: section anchors on the left, readout LEDs on the right */
+/* instrument band under the title: compact master + readout LEDs */
 .surface-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 4px;
+  gap: 16px 24px;
+  margin: 4px 0 6px;
 }
 .head-readouts {
   display: flex;

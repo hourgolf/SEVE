@@ -62,25 +62,25 @@ function Surface() {
       brand={<>$EVE<span> · DESK</span></>}
       sub="Get Money, Fuck Bitches."
       right={
-        <div className="head-master">
+        <div className="head-nav">
+          <nav className="surface-nav" aria-label="sections">
+            {SECTIONS.map((s) => (
+              <a key={s.id} href={`#${s.id}`}>
+                {s.label}
+              </a>
+            ))}
+          </nav>
           <span
             className={`write-chip${canWrite ? " on" : ""}`}
             title={canWrite ? "changes persist to the desk" : "sign in (top right) to save changes"}
           >
             {canWrite ? "● operator" : "○ read-only"}
           </span>
-          <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} compact />
         </div>
       }
     >
       <div className="surface-bar">
-        <nav className="surface-nav" aria-label="sections">
-          {SECTIONS.map((s) => (
-            <a key={s.id} href={`#${s.id}`}>
-              {s.label}
-            </a>
-          ))}
-        </nav>
+        <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} compact />
         <HeadReadouts
           fund={desk.fund}
           fundPnl={feed.fundPnl}

@@ -634,6 +634,26 @@ svg.spark {
   pointer-events: none;
   z-index: 3;
 }
+/* press-and-hold price bubble at the crosshair intersection */
+.cross-pop {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 9px));
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(10, 15, 17, 0.96);
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  padding: 3px 8px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 4;
+}
+.cross-pop.below {
+  transform: translate(-50%, 9px);
+}
+
 /* embedded live SPY price LED, lower-right of the chart (clear of the axis) */
 .chart-led {
   position: absolute;
