@@ -634,6 +634,38 @@ svg.spark {
   pointer-events: none;
   z-index: 3;
 }
+/* floating zoom control (pinch/drag also work) */
+.chart-zoom {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: flex;
+  gap: 4px;
+  z-index: 3;
+}
+.chart-zoom button {
+  width: 27px;
+  height: 27px;
+  border-radius: 6px;
+  border: 1px solid var(--border-bright);
+  background: rgba(10, 15, 17, 0.82);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.chart-zoom button:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+.chart-zoom button.dim {
+  opacity: 0.35;
+}
+
 /* press-and-hold price bubble at the crosshair intersection */
 .cross-pop {
   position: absolute;

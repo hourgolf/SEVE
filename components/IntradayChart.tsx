@@ -51,7 +51,12 @@ export function IntradayChart({
   const [hoverY, setHoverY] = useState<number | null>(null);
   // Press-and-hold shows a price bubble pinned at the crosshair intersection.
   const [pressing, setPressing] = useState(false);
+  // Zoom/pan window. count = bars shown (0 = fit all); offset = bars from the
+  // right edge (0 = latest). Pinch zooms, one-finger drag pans.
+  const [view, setView] = useState<{ count: number; offset: number }>({ count: 0, offset: 0 });
   const wrapRef = useRef<HTMLDivElement>(null);
+  const ptrs = useRef<Map<number, number>>(new Map()); // pointerId → clientX
+  const gst = useRef({ kind: "idle", startX: 0, startOffset: 0, startEff: 0, pinchDist: 1, startCount: 0 });
 
   useEffect(() => {
     const m = window.localStorage.getItem(MODE_KEY);
@@ -78,6 +83,7 @@ export function IntradayChart({
   const setTfPersist = (m: number) => {
     setTf(m);
     setHover(null);
+    setView({ count: 0, offset: 0 });
     try { window.localStorage.setItem(TF_KEY, String(m)); } catch {}
   };
 
@@ -93,62 +99,137 @@ export function IntradayChart({
   const md = useMemo(() => computeMacd(closes), [closes]);
   const N = agg.length;
 
+  // ---- zoom/pan window over the full aggregated series ----
+  const MIN_BARS = 12;
+  const eff = view.count === 0 ? N : Math.min(N, Math.max(MIN_BARS, view.count));
+  const offset = Math.min(Math.max(0, view.offset), Math.max(0, N - eff));
+  const visStart = Math.max(0, N - offset - eff);
+  const visEnd = N - offset;
+  const vN = visEnd - visStart;
+
+  const slice = <T,>(a: T[]) => a.slice(visStart, visEnd);
+  const vAgg = useMemo(() => slice(agg), [agg, visStart, visEnd]);
+  const vCloses = useMemo(() => slice(closes), [closes, visStart, visEnd]);
+  const vCandles = useMemo(() => slice(candles), [candles, visStart, visEnd]);
+  const vVwap = useMemo(() => slice(vwapArr), [vwapArr, visStart, visEnd]);
+  const vEmaFast = useMemo(() => slice(emaFast), [emaFast, visStart, visEnd]);
+  const vEmaSlow = useMemo(() => slice(emaSlow), [emaSlow, visStart, visEnd]);
+  const vMacd = useMemo(() => slice(md.macd), [md, visStart, visEnd]);
+  const vSignal = useMemo(() => slice(md.signal), [md, visStart, visEnd]);
+  const vHist = useMemo(() => slice(md.hist), [md, visStart, visEnd]);
+
   const overlays = useMemo<Overlay[]>(() => {
-    if (!showEma || N < 2) return [];
+    if (!showEma || vN < 2) return [];
     return [
-      { values: emaFast, color: EMA_FAST_COLOR },
-      { values: emaSlow, color: EMA_SLOW_COLOR },
+      { values: vEmaFast, color: EMA_FAST_COLOR },
+      { values: vEmaSlow, color: EMA_SLOW_COLOR },
     ];
-  }, [showEma, emaFast, emaSlow, N]);
+  }, [showEma, vEmaFast, vEmaSlow, vN]);
 
   // Price-domain extras (VWAP + EMA overlays) so the axis matches the chart.
   const extras = useMemo(() => {
-    const vw = showVwap ? vwapArr.filter((v): v is number => v != null) : [];
+    const vw = showVwap ? vVwap.filter((v): v is number => v != null) : [];
     const ov = overlays.flatMap((o) => o.values).filter((v): v is number => v != null);
     return [...vw, ...ov];
-  }, [showVwap, vwapArr, overlays]);
+  }, [showVwap, vVwap, overlays]);
 
   // The scale that mirrors the active chart's geometry — drives the crosshair,
   // the right-hand price axis and the cursor price tag.
   const scale = useMemo(() => {
-    if (mode === "candles" ? N < 1 : N < 2) return null;
+    if (mode === "candles" ? vN < 1 : vN < 2) return null;
     return mode === "candles"
-      ? candleScale(candles, extras, CHART_H)
-      : lineScale(closes, extras, CHART_H);
-  }, [mode, candles, closes, extras, N]);
+      ? candleScale(vCandles, extras, CHART_H)
+      : lineScale(vCloses, extras, CHART_H);
+  }, [mode, vCandles, vCloses, extras, vN]);
 
   const ticks = useMemo(
     () => (scale ? priceTicks(scale.min, scale.max) : []),
     [scale]
   );
 
-  function onMove(e: React.PointerEvent) {
-    const el = wrapRef.current;
-    if (!el || N < 1) return;
-    const rect = el.getBoundingClientRect();
-    const fx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    const fy = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-    setHover(Math.min(N - 1, Math.max(0, Math.round(fx * (N - 1)))));
-    setHoverY(fy);
+  // ---- gestures: crosshair / pan / pinch-zoom ----
+  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+  function zoomBy(factor: number, fracX = 0.5) {
+    if (N < 2) return;
+    setView((v) => {
+      const curEff = v.count === 0 ? N : clamp(v.count, MIN_BARS, N);
+      const newCount = clamp(Math.round(curEff * factor), MIN_BARS, N);
+      const curOffset = clamp(v.offset, 0, N - curEff);
+      const curStart = N - curOffset - curEff;
+      const anchor = curStart + fracX * curEff; // bar under the focus point
+      let newStart = clamp(Math.round(anchor - fracX * newCount), 0, N - newCount);
+      return { count: newCount >= N ? 0 : newCount, offset: N - newCount - newStart };
+    });
   }
+
+  function updateCrosshair(clientX: number, clientY: number) {
+    const el = wrapRef.current;
+    if (!el || vN < 1) return;
+    const r = el.getBoundingClientRect();
+    setHover(clamp(Math.round(((clientX - r.left) / r.width) * (vN - 1)), 0, vN - 1));
+    setHoverY(clamp((clientY - r.top) / r.height, 0, 1));
+  }
+
   function onDown(e: React.PointerEvent) {
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    setPressing(true);
-    onMove(e);
+    ptrs.current.set(e.pointerId, e.clientX);
+    if (ptrs.current.size >= 2) {
+      const xs = [...ptrs.current.values()];
+      gst.current = { kind: "pinch", startX: 0, startOffset: offset, startEff: eff, pinchDist: Math.abs(xs[0] - xs[1]) || 1, startCount: eff };
+      setHover(null); setHoverY(null); setPressing(false);
+    } else {
+      gst.current = { kind: "cross", startX: e.clientX, startOffset: offset, startEff: eff, pinchDist: 1, startCount: eff };
+      setPressing(true);
+      updateCrosshair(e.clientX, e.clientY);
+    }
   }
-  function onUp() {
-    setPressing(false);
+  function onMove(e: React.PointerEvent) {
+    if (ptrs.current.has(e.pointerId)) ptrs.current.set(e.pointerId, e.clientX);
+    const g = gst.current;
+    const w = wrapRef.current?.getBoundingClientRect().width ?? 1;
+    if (g.kind === "pinch" && ptrs.current.size >= 2) {
+      const xs = [...ptrs.current.values()];
+      const dist = Math.abs(xs[0] - xs[1]) || 1;
+      const mid = (xs[0] + xs[1]) / 2;
+      const r = wrapRef.current?.getBoundingClientRect();
+      const fracX = r ? clamp((mid - r.left) / r.width, 0, 1) : 0.5;
+      const target = clamp(Math.round(g.startCount * (g.pinchDist / dist)), MIN_BARS, N);
+      const factor = target / (g.startEff || 1);
+      g.startEff = target; g.startCount = target; g.pinchDist = dist;
+      zoomBy(factor, fracX);
+      return;
+    }
+    if (ptrs.current.size === 1) {
+      const dx = e.clientX - g.startX;
+      if (g.kind === "pan" || Math.abs(dx) > 6) {
+        g.kind = "pan";
+        setHover(null); setHoverY(null); setPressing(false);
+        const deltaBars = Math.round((dx * g.startEff) / w);
+        setView((v) => ({ count: v.count, offset: clamp(g.startOffset + deltaBars, 0, N - g.startEff) }));
+        return;
+      }
+      updateCrosshair(e.clientX, e.clientY);
+      return;
+    }
+    if (ptrs.current.size === 0) updateCrosshair(e.clientX, e.clientY);
+  }
+  function onUp(e: React.PointerEvent) {
+    ptrs.current.delete(e.pointerId);
+    if (ptrs.current.size === 0) { gst.current.kind = "idle"; setPressing(false); }
+    else gst.current.kind = "idle";
   }
   function onLeave() {
-    setHover(null);
-    setHoverY(null);
-    setPressing(false);
+    ptrs.current.clear();
+    gst.current.kind = "idle";
+    setHover(null); setHoverY(null); setPressing(false);
   }
 
   const ledSpot = spot ?? (N ? closes[N - 1] : null);
+  const zoomed = eff < N || offset > 0;
 
-  const hb = hover != null ? agg[hover] ?? null : null;
-  const prevBar = hover != null && hover > 0 ? agg[hover - 1] ?? null : null;
+  const hb = hover != null ? vAgg[hover] ?? null : null;
+  const prevBar = hover != null && hover > 0 ? vAgg[hover - 1] ?? null : null;
   const prevClose = prevBar?.close ?? hb?.open ?? 0;
   const chg = hb ? hb.close - prevClose : 0;
 
@@ -185,9 +266,9 @@ export function IntradayChart({
           onPointerLeave={onLeave}
         >
           {mode === "candles" ? (
-            <CandleChart bars={candles} vwap={showVwap ? vwapArr : undefined} overlays={overlays} />
+            <CandleChart bars={vCandles} vwap={showVwap ? vVwap : undefined} overlays={overlays} />
           ) : (
-            <LineChart values={closes} vwap={showVwap ? vwapArr : undefined} overlays={overlays} id="intraday" />
+            <LineChart values={vCloses} vwap={showVwap ? vVwap : undefined} overlays={overlays} id="intraday" />
           )}
 
           {/* right-hand price axis — always on, so price is readable at a glance */}
@@ -237,8 +318,15 @@ export function IntradayChart({
             </div>
           )}
 
+          {/* zoom control — pinch/drag also work; these are the discoverable + testable handles */}
+          <div className="chart-zoom" aria-label="zoom" onPointerDown={(e) => e.stopPropagation()}>
+            <button onClick={() => zoomBy(1 / 0.7)} aria-label="zoom out">−</button>
+            <button onClick={() => setView({ count: 0, offset: 0 })} aria-label="fit" className={zoomed ? "" : "dim"}>⤢</button>
+            <button onClick={() => zoomBy(0.7)} aria-label="zoom in">+</button>
+          </div>
+
           {hb && (
-            <div className={`chart-tip ${hover! > N / 2 ? "left" : "right"}`}>
+            <div className={`chart-tip ${hover! > vN / 2 ? "left" : "right"}`}>
               <span className="tip-time">{hhmm(hb.ts)}</span>
               <span>O <b>{hb.open.toFixed(2)}</b></span>
               <span>H <b>{hb.high.toFixed(2)}</b></span>
@@ -251,17 +339,17 @@ export function IntradayChart({
         {showVol && (
           <div className="subchart">
             <span className="subchart-label">VOL</span>
-            <VolumeBars bars={agg} />
+            <VolumeBars bars={vAgg} />
           </div>
         )}
         {showMacd && (
           <div className="subchart">
             <span className="subchart-label">MACD 12·26·9</span>
-            <MacdChart macd={md.macd} signal={md.signal} hist={md.hist} />
+            <MacdChart macd={vMacd} signal={vSignal} hist={vHist} />
           </div>
         )}
         <div className="chart-meta">
-          {N} × {TIMEFRAMES.find((t) => t.minutes === tf)?.label} bars
+          {zoomed ? `${vN} of ${N}` : N} × {TIMEFRAMES.find((t) => t.minutes === tf)?.label} bars
           {showEma && (
             <>
               {" · "}
