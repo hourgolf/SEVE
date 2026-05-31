@@ -147,6 +147,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                     pnl={feed.pnlByStrategist[s.slug]}
                     active={isActive(s.slug)}
                     ducked={anySolo && !s.config.soloed && !s.config.muted}
+                    mobile
                   />
                 </div>
               ))}
