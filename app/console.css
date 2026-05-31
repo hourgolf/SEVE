@@ -567,11 +567,33 @@
   gap: 12px;
   min-width: 230px;
 }
-/* header mirror: tighter, no knob — keeps the head compact */
+/* instrument-band mirror: NAV LED left, controls stacked to the right, so the
+   whole panel matches the height of the day-P&L / SPY LEDs beside it. */
 .master--compact {
-  min-width: 210px;
-  padding: 10px 14px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px 18px;
+  padding: 9px 16px 11px;
+  min-width: 0;
+}
+.master--compact .master-title {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  align-self: stretch;
+  font-size: 9px;
+  letter-spacing: 3px;
+}
+.master--compact .master-ctrls {
   gap: 9px;
+}
+/* the stacked transport + paper/kill controls */
+.master-ctrls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 .master-title {
   font-family: var(--mono);
@@ -656,6 +678,16 @@
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: #9a9a9a;
+}
+/* small glowing unit suffix on a 7-seg readout (e.g. the "K" on 100.0K) */
+.led-unit {
+  align-self: center;
+  margin-left: 4px;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1;
+  text-shadow: 0 0 6px currentColor;
 }
 
 /* ---------- transport buttons --------------------------------------------- */

@@ -29,17 +29,25 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
   const ledRaw = showNav
     ? String(fund.is_halted ? 0 : fundPnl.nav)
     : (fundPnl.dayPnl < 0 ? "-" : "") + Math.abs(fundPnl.dayPnl);
+  // Compact (header) NAV: abbreviated thousands, e.g. 100000 → "100.0" + "K".
+  const navK = ((fund.is_halted ? 0 : fundPnl.nav) / 1000).toFixed(1);
 
   return (
     <div className={`master${compact ? " master--compact" : ""}`}>
       <div className="master-title">MASTER</div>
 
-      <div className="master-led" onClick={() => setShowNav((v) => !v)} title="click to toggle NAV / day P&L">
+      {/* compact mirror always shows NAV (day P&L has its own LED beside it) */}
+      <div
+        className="master-led"
+        onClick={compact ? undefined : () => setShowNav((v) => !v)}
+        title={compact ? undefined : "click to toggle NAV / day P&L"}
+      >
         <LedDisplay
-          value={ledRaw}
-          digits={7}
+          value={compact ? navK : ledRaw}
+          digits={compact ? 5 : 7}
+          unit={compact ? "K" : undefined}
           color={fund.is_halted ? "var(--amber)" : "var(--led-red)"}
-          caption={showNav ? "fund nav $" : "day p&l $"}
+          caption={compact ? "fund nav $" : showNav ? "fund nav $" : "day p&l $"}
         />
       </div>
 
@@ -62,44 +70,46 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
         </div>
       )}
 
-      <div className="master-transport">
-        <TransportButton
-          label="START"
-          variant="start"
-          active={fund.running && !fund.is_halted}
-          onPress={() => dispatch({ type: "START" })}
-          disabled={fund.is_halted}
-        />
-        <TransportButton
-          label="STOP"
-          variant="stop"
-          active={!fund.running}
-          onPress={() => dispatch({ type: "STOP" })}
-        />
-      </div>
+      <div className="master-ctrls">
+        <div className="master-transport">
+          <TransportButton
+            label="START"
+            variant="start"
+            active={fund.running && !fund.is_halted}
+            onPress={() => dispatch({ type: "START" })}
+            disabled={fund.is_halted}
+          />
+          <TransportButton
+            label="STOP"
+            variant="stop"
+            active={!fund.running}
+            onPress={() => dispatch({ type: "STOP" })}
+          />
+        </div>
 
-      <div className="master-controls">
-        <GuardedToggle
-          mode={fund.mode}
-          onChange={(m) => {
-            dispatch({ type: "SET_MODE", mode: m });
-            persistFund({ mode: m });
-          }}
-        />
-        <KillSwitch
-          halted={fund.is_halted}
-          armed={armed}
-          onArm={() => setArmed((v) => !v)}
-          onFire={() => {
-            dispatch({ type: "KILL", reason: "manual kill switch" });
-            persistFund({ is_halted: true, halted_reason: "manual kill switch" });
-            setArmed(false);
-          }}
-          onReset={() => {
-            dispatch({ type: "RESET_HALT" });
-            persistFund({ is_halted: false, halted_reason: null });
-          }}
-        />
+        <div className="master-controls">
+          <GuardedToggle
+            mode={fund.mode}
+            onChange={(m) => {
+              dispatch({ type: "SET_MODE", mode: m });
+              persistFund({ mode: m });
+            }}
+          />
+          <KillSwitch
+            halted={fund.is_halted}
+            armed={armed}
+            onArm={() => setArmed((v) => !v)}
+            onFire={() => {
+              dispatch({ type: "KILL", reason: "manual kill switch" });
+              persistFund({ is_halted: true, halted_reason: "manual kill switch" });
+              setArmed(false);
+            }}
+            onReset={() => {
+              dispatch({ type: "RESET_HALT" });
+              persistFund({ is_halted: false, halted_reason: null });
+            }}
+          />
+        </div>
       </div>
     </div>
   );

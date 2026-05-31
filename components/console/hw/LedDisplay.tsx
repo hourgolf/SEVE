@@ -72,6 +72,7 @@ export interface LedDisplayProps {
   digits: number; // fixed width (right-aligned)
   color?: string;
   caption?: string;
+  unit?: string; // small glowing suffix (e.g. "K") — the 7-seg can't show letters
 }
 
 export function LedDisplay({
@@ -79,6 +80,7 @@ export function LedDisplay({
   digits,
   color = "var(--led-red)",
   caption,
+  unit,
 }: LedDisplayProps) {
   // Parse into digit cells; a '.' attaches as the decimal dot of the prior
   // cell rather than consuming a cell of its own.
@@ -96,6 +98,11 @@ export function LedDisplay({
         {shown.map((c, i) => (
           <SevenSeg key={i} char={c.char} dot={c.dot} color={color} />
         ))}
+        {unit && (
+          <span className="led-unit" style={{ color }}>
+            {unit}
+          </span>
+        )}
         <div className="led-glass" />
       </div>
       {caption && <div className="led-caption">{caption}</div>}
