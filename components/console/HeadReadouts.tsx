@@ -3,15 +3,20 @@
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import type { FundState } from "@/lib/desk/types";
 
-// A read-only mirror of the master strip, sized for the chassis head: run/mode/
-// halt state + a SPY-style LED for the day's fund P&L (green up, red down). The
-// full interactive master strip lives in section 02.
-export function MasterMini({
+// The inline readout cluster that sits in the nav bar: run/mode state pills +
+// two SPY-style 7-seg LEDs — the day fund P&L (green up / red down) and the SPY
+// spot (green if up on the day, red if down). Read-only; controls live in the
+// header master strip.
+export function HeadReadouts({
   fund,
   fundPnl,
+  spot,
+  spotUp,
 }: {
   fund: FundState;
   fundPnl: { nav: number; dayPnl: number };
+  spot: number | null;
+  spotUp: boolean | null;
 }) {
   const running = fund.running && !fund.is_halted;
   const runLabel = fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
@@ -19,20 +24,24 @@ export function MasterMini({
 
   const down = fundPnl.dayPnl < 0;
   const dayLed = (down ? "-" : "") + Math.abs(Math.round(fundPnl.dayPnl));
+  const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
+  // SPY LED: green when up on the day, red when down (or unknown).
+  const spyColor = spotUp ? "var(--pm-green)" : "var(--led-red)";
 
   return (
-    <div className="master-mini">
+    <div className="head-readouts">
       <div className="mm-state">
         <span className={`mm-pill mm-run ${runCls}`}>{runLabel}</span>
         <span className={`mm-pill mm-mode ${fund.mode}`}>
           {fund.mode === "live" ? "LIVE" : "PAPER"}
         </span>
       </div>
+      <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
       <LedDisplay
-        value={dayLed}
+        value={spot != null ? spot.toFixed(2) : "----"}
         digits={6}
-        color={down ? "var(--led-red)" : "var(--pm-green)"}
-        caption="day p&l $"
+        color={spyColor}
+        caption="spy $"
       />
     </div>
   );

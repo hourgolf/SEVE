@@ -99,8 +99,32 @@
 }
 .chassis-head-right {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+/* the header's secondary master section: operator chip stacked over the
+   compact (knob-less) master strip, right-aligned in the head */
+.head-master {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+/* nav row: section anchors on the left, readout LEDs on the right */
+.surface-bar {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 14px;
+  margin-bottom: 4px;
+}
+.head-readouts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
 }
 
 /* Monitor status cluster (lives in the chassis head, on cream) */
@@ -149,28 +173,14 @@
   font-weight: 700;
   color: var(--ink);
 }
-/* head cluster: market status + operator chip, wraps on narrow heads */
-.surface-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-/* condensed master mirror in the head: run/mode pills + day-P&L LED */
-.master-mini {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.master-mini .mm-state {
+/* run/mode state pills beside the readout LEDs in the nav bar */
+.head-readouts .mm-state {
   display: flex;
   flex-direction: column;
   gap: 5px;
   align-items: flex-start;
 }
-.master-mini .mm-pill {
+.head-readouts .mm-pill {
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
@@ -182,17 +192,17 @@
   background: rgba(255, 255, 255, 0.22);
   white-space: nowrap;
 }
-.master-mini .mm-run.on {
+.head-readouts .mm-run.on {
   color: #1f7a45;
   border-color: rgba(47, 213, 115, 0.5);
   background: rgba(47, 213, 115, 0.16);
 }
-.master-mini .mm-run.halt {
+.head-readouts .mm-run.halt {
   color: #fff;
   border-color: var(--stripe-red);
   background: var(--stripe-red);
 }
-.master-mini .mm-mode.live {
+.head-readouts .mm-mode.live {
   color: var(--stripe-red);
   border-color: rgba(197, 54, 42, 0.5);
   background: rgba(197, 54, 42, 0.12);
@@ -557,6 +567,12 @@
   align-items: center;
   gap: 12px;
   min-width: 230px;
+}
+/* header mirror: tighter, no knob — keeps the head compact */
+.master--compact {
+  min-width: 210px;
+  padding: 10px 14px;
+  gap: 9px;
 }
 .master-title {
   font-family: var(--mono);

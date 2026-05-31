@@ -4,7 +4,7 @@ import { NavBar } from "@/components/NavBar";
 import { AuthProvider } from "@/hooks/useAuth";
 
 export const metadata: Metadata = {
-  title: "SEVE — Live Market Monitor",
+  title: "$EVE — Live Market Monitor",
   description:
     "Read-only live window over the SEVE paper-trading desk: SPY 0DTE/1DTE option tape.",
 };

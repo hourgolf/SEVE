@@ -14,9 +14,11 @@ import type { FundState } from "@/lib/desk/types";
 export interface MasterStripProps {
   fund: FundState;
   fundPnl: { nav: number; dayPnl: number };
+  /** Header mirror: drop the capital knob, keep NAV + transport + paper/kill. */
+  compact?: boolean;
 }
 
-function MasterStripImpl({ fund, fundPnl }: MasterStripProps) {
+function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
   const dispatch = useDeskDispatch();
   const { persistFund } = useDeskWrite();
   const [armed, setArmed] = useState(false);
@@ -29,7 +31,7 @@ function MasterStripImpl({ fund, fundPnl }: MasterStripProps) {
     : (fundPnl.dayPnl < 0 ? "-" : "") + Math.abs(fundPnl.dayPnl);
 
   return (
-    <div className="master">
+    <div className={`master${compact ? " master--compact" : ""}`}>
       <div className="master-title">MASTER</div>
 
       <div className="master-led" onClick={() => setShowNav((v) => !v)} title="click to toggle NAV / day P&L">
@@ -41,22 +43,24 @@ function MasterStripImpl({ fund, fundPnl }: MasterStripProps) {
         />
       </div>
 
-      <div className="master-volume">
-        <Knob
-          value={fund.total_capital_usd}
-          min={0}
-          max={50000}
-          step={500}
-          onChange={(v) => dispatch({ type: "SET_FUND", patch: { total_capital_usd: v } })}
-          onCommit={(v) => persistFund({ total_capital_usd: v })}
-          size="lg"
-          label="Capital"
-          format={usd0}
-        />
-        <div className={`master-day ${fundPnl.dayPnl < 0 ? "neg" : "pos"}`}>
-          {signedUsd(fundPnl.dayPnl)} day
+      {!compact && (
+        <div className="master-volume">
+          <Knob
+            value={fund.total_capital_usd}
+            min={0}
+            max={50000}
+            step={500}
+            onChange={(v) => dispatch({ type: "SET_FUND", patch: { total_capital_usd: v } })}
+            onCommit={(v) => persistFund({ total_capital_usd: v })}
+            size="lg"
+            label="Capital"
+            format={usd0}
+          />
+          <div className={`master-day ${fundPnl.dayPnl < 0 ? "neg" : "pos"}`}>
+            {signedUsd(fundPnl.dayPnl)} day
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="master-transport">
         <TransportButton

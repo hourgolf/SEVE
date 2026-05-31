@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import "./console.css";
 import { useMarketData } from "@/hooks/useMarketData";
 import { useDeskState } from "@/hooks/useDeskState";
@@ -8,7 +8,7 @@ import { useDeskFeed } from "@/hooks/useDeskFeed";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { DeskProvider } from "@/components/console/DeskProvider";
 import { Chassis } from "@/components/console/Chassis";
-import { TopBar } from "@/components/TopBar";
+import { HeadReadouts } from "@/components/console/HeadReadouts";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
@@ -22,7 +22,6 @@ import { Bezel } from "@/components/console/hw/Bezel";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { SignalsTape } from "@/components/console/SignalsTape";
-import { MasterMini } from "@/components/console/MasterMini";
 
 // The whole desk on one TR-909 surface: LIVE market readout → strategy COMPOSER
 // → DESK book/P&L, all inside one cream chassis. (Formerly three routes.)
@@ -48,30 +47,47 @@ function Surface() {
   const { canWrite } = useDeskWrite();
   const [selected, setSelected] = useState<string | null>(null);
 
+  // SPY up/down on the day: spot vs the open of the session's first bar (UTC
+  // date == ET trading date during RTH). null until we have both.
+  const spotUp = useMemo<boolean | null>(() => {
+    const bars = data.bars;
+    if (!bars.length || data.spot == null) return null;
+    const day = bars[bars.length - 1].ts.slice(0, 10);
+    const open = bars.find((b) => b.ts.slice(0, 10) === day)?.open;
+    return open != null ? data.spot >= open : null;
+  }, [data.bars, data.spot]);
+
   return (
     <Chassis
-      brand={<>SEVE<span> · DESK</span></>}
-      sub="SPY · 0DTE / 1DTE · ALPACA → SUPABASE"
+      brand={<>$EVE<span> · DESK</span></>}
+      sub="Get Money, Fuck Bitches."
       right={
-        <div className="surface-status">
-          <TopBar status={data.status} spot={data.spot} updatedAt={data.updatedAt} />
-          <MasterMini fund={desk.fund} fundPnl={feed.fundPnl} />
+        <div className="head-master">
           <span
             className={`write-chip${canWrite ? " on" : ""}`}
             title={canWrite ? "changes persist to the desk" : "sign in (top right) to save changes"}
           >
             {canWrite ? "● operator" : "○ read-only"}
           </span>
+          <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} compact />
         </div>
       }
     >
-      <nav className="surface-nav" aria-label="sections">
-        {SECTIONS.map((s) => (
-          <a key={s.id} href={`#${s.id}`}>
-            {s.label}
-          </a>
-        ))}
-      </nav>
+      <div className="surface-bar">
+        <nav className="surface-nav" aria-label="sections">
+          {SECTIONS.map((s) => (
+            <a key={s.id} href={`#${s.id}`}>
+              {s.label}
+            </a>
+          ))}
+        </nav>
+        <HeadReadouts
+          fund={desk.fund}
+          fundPnl={feed.fundPnl}
+          spot={data.spot}
+          spotUp={spotUp}
+        />
+      </div>
 
       {data.error && (
         <ErrorBanner message={data.error} isAccessError={data.isAccessError} />

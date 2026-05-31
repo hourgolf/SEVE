@@ -7,7 +7,7 @@ import { AuthControl } from "@/components/AuthControl";
 export function NavBar() {
   return (
     <nav className="nav">
-      <span className="nav-brand">≣ SEVE</span>
+      <span className="nav-brand">≣ $EVE</span>
       <span className="nav-spacer" />
       <AuthControl />
     </nav>
