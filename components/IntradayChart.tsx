@@ -25,6 +25,8 @@ const EMA_FAST = 9;
 const EMA_SLOW = 21;
 const EMA_FAST_COLOR = "#45c4d6"; // cyan
 const EMA_SLOW_COLOR = "#c061ff"; // violet
+// Default visible window: the latest N bars (readable), not the whole history.
+const DEFAULT_VIEW = 80;
 
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -53,7 +55,7 @@ export function IntradayChart({
   const [pressing, setPressing] = useState(false);
   // Zoom/pan window. count = bars shown (0 = fit all); offset = bars from the
   // right edge (0 = latest). Pinch zooms, one-finger drag pans.
-  const [view, setView] = useState<{ count: number; offset: number }>({ count: 0, offset: 0 });
+  const [view, setView] = useState<{ count: number; offset: number }>({ count: DEFAULT_VIEW, offset: 0 });
   const wrapRef = useRef<HTMLDivElement>(null);
   const ptrs = useRef<Map<number, number>>(new Map()); // pointerId → clientX
   const gst = useRef({ kind: "idle", startX: 0, startOffset: 0, startEff: 0, pinchDist: 1, startCount: 0 });
@@ -83,7 +85,7 @@ export function IntradayChart({
   const setTfPersist = (m: number) => {
     setTf(m);
     setHover(null);
-    setView({ count: 0, offset: 0 });
+    setView({ count: DEFAULT_VIEW, offset: 0 });
     try { window.localStorage.setItem(TF_KEY, String(m)); } catch {}
   };
 

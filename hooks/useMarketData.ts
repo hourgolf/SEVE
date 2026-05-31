@@ -18,11 +18,23 @@ import type {
 // Safety-net poll interval (ms). Realtime drives updates; this only covers
 // dropped subscriptions / missed events, so it can be slow.
 export const POLL_INTERVAL_MS = 10000;
-// Intraday bars fetched up front (~2 trading days of 1-min) so higher
-// timeframes (up to 1h) have enough candles. Realtime appends new bars after.
-const BARS_LIMIT = 780;
+// History (1-min bars) loaded ONCE on mount — ~15 trading days, so higher
+// timeframes have months of candles to pan through. The repeating poll only
+// pulls the recent tail and merges it in, keeping live updates cheap.
+const HISTORY_LIMIT = 5850;
+const RECENT_BARS = 200;
 // Snapshot older than this is "stale" (market closed / cron paused).
 const STALE_AFTER_MIN = 3;
+
+// Both lists oldest→newest. The recent tail supersedes the overlapping end of
+// history (so the forming bar updates) and any newer bars are appended.
+function mergeBars(history: UnderlyingBar[], recent: UnderlyingBar[]): UnderlyingBar[] {
+  if (!recent.length) return history;
+  if (!history.length) return recent;
+  const cut = recent[0].ts;
+  const head = history.filter((b) => b.ts < cut);
+  return [...head, ...recent];
+}
 
 export interface MarketData {
   status: FeedStatus;
@@ -77,6 +89,8 @@ export function useMarketData(): MarketData {
   const [data, setData] = useState<MarketData>(INITIAL);
   // Avoid setState after unmount when a slow poll resolves late.
   const mounted = useRef(true);
+  // Deep history, loaded once; the poll merges its recent tail into this.
+  const historyBars = useRef<UnderlyingBar[]>([]);
 
   useEffect(() => {
     mounted.current = true;
@@ -95,7 +109,7 @@ export function useMarketData(): MarketData {
             .from("underlying_bars")
             .select("ts,open,high,low,close,volume,vwap")
             .order("ts", { ascending: false })
-            .limit(BARS_LIMIT),
+            .limit(RECENT_BARS),
           sb
             .from("events")
             .select("*")
@@ -109,8 +123,9 @@ export function useMarketData(): MarketData {
         if (readError) throw readError;
 
         const quotes = (quotesRes.data ?? []) as OptionQuote[];
-        const barsDesc = (barsRes.data ?? []) as UnderlyingBar[];
-        const bars = [...barsDesc].reverse(); // oldest → newest for the chart
+        const recentDesc = (barsRes.data ?? []) as UnderlyingBar[];
+        const recent = [...recentDesc].reverse(); // oldest → newest
+        const bars = mergeBars(historyBars.current, recent);
         const events = (eventsRes.data ?? []) as MarketEvent[];
 
         let status: FeedStatus = "stale";
@@ -218,7 +233,37 @@ export function useMarketData(): MarketData {
       }
     }
 
+    // One-time deep history; on success re-poll so the chart gets the full
+    // range. PostgREST caps a single request at ~1000 rows, so page with
+    // .range() (in parallel) to reach HISTORY_LIMIT. Silent poll-only fallback.
+    async function loadHistory() {
+      try {
+        const sb = getSupabase();
+        const PAGE = 1000;
+        const ranges: [number, number][] = [];
+        for (let from = 0; from < HISTORY_LIMIT; from += PAGE) {
+          ranges.push([from, Math.min(from + PAGE, HISTORY_LIMIT) - 1]);
+        }
+        const pages = await Promise.all(
+          ranges.map(([from, to]) =>
+            sb
+              .from("underlying_bars")
+              .select("ts,open,high,low,close,volume,vwap")
+              .order("ts", { ascending: false })
+              .range(from, to)
+          )
+        );
+        const desc = pages.flatMap((p) => (p.data ?? []) as UnderlyingBar[]);
+        if (!desc.length) return;
+        historyBars.current = desc.reverse(); // desc pages → oldest→newest
+        if (mounted.current) poll();
+      } catch {
+        /* poll-only */
+      }
+    }
+
     poll();
+    loadHistory();
     const id = setInterval(poll, POLL_INTERVAL_MS);
 
     // Realtime: refetch (debounced) the instant new rows land, instead of
