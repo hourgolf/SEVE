@@ -301,12 +301,46 @@ body {
   grid-template-columns: 1.55fr 1fr;
   gap: 14px;
 }
-/* The Live section is the hero readout — give its chart more room than the
-   secondary right column (tape health / event log). Desktop only; the base
-   .grid collapses to one column on narrow screens. */
+/* Gaps between a full-width element (chart / event log) and the grid beside it. */
+.live-body,
+.log-foot {
+  margin-top: 14px;
+}
+/* P&L equity area: stacks the curve/placeholder above the per-PM breakdown. */
+.pnl-equity {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The Live section is the hero readout: full-width chart over a wide book/chain
+   stack with the P&L column beside it. Desktop only — the base .grid collapses
+   to one column on narrow screens. */
 @media (min-width: 861px) {
   .grid--live {
-    grid-template-columns: 1.85fr 1fr;
+    grid-template-columns: 1.7fr 1fr;
+  }
+  /* Stretch the P&L panel to match the tall positions+chain stack, and let the
+     equity area grow so the breakdown sits at the bottom (no dead cream gap). */
+  .col--fill > .panel {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .col--fill > .panel > .pbody {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .col--fill .pnl-equity {
+    flex: 1 1 auto;
+  }
+  .col--fill .pnl-equity .chart-empty {
+    flex: 1 1 auto;
+  }
+  .col--fill .pnl-equity .chart-svg {
+    height: 100%;
   }
 }
 .col {
@@ -373,6 +407,7 @@ svg.spark {
   align-items: center;
   justify-content: center;
   width: 100%;
+  min-height: 90px;
   font-family: var(--mono);
   font-size: 10.5px;
   letter-spacing: 0.5px;

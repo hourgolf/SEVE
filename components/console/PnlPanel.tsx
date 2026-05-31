@@ -36,14 +36,14 @@ export function PnlPanel({
         <span className="x">NAV {usd0(fundPnl.nav)}</span>
       </div>
       <div className="pbody">
-        {hasCurve ? (
-          <LineChart values={equityValues} height={90} id="equity" />
-        ) : (
-          <div className="chart-empty" style={{ height: 90 }}>
-            awaiting equity history
-          </div>
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 8 }}>
+        <div className="pnl-equity">
+          {hasCurve ? (
+            <LineChart values={equityValues} height={90} id="equity" />
+          ) : (
+            <div className="chart-empty">awaiting equity history</div>
+          )}
+        </div>
+        <div className="pnl-rows" style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 8 }}>
           {strategists.map((s) => {
             const p = pnlByStrategist[s.slug];
             const day = p?.dayPnl ?? 0;
