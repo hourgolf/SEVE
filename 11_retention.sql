@@ -15,14 +15,14 @@ truncate table option_bars;
 create extension if not exists pg_cron;
 
 -- one-time catch-up of the existing option_quotes backlog
-delete from option_quotes where captured_at < now() - interval '2 days';
+delete from option_quotes where captured_at < now() - interval '7 days';
 
 -- daily job at 06:17 UTC (off-hours): trim each table to a rolling window
 select cron.unschedule('seve-retention')
 where exists (select 1 from cron.job where jobname = 'seve-retention');
 
 select cron.schedule('seve-retention', '17 6 * * *', $$
-  delete from option_quotes    where captured_at < now() - interval '2 days';
+  delete from option_quotes    where captured_at < now() - interval '7 days';
   delete from events           where created_at  < now() - interval '30 days';
   delete from equity_snapshots where captured_at < now() - interval '90 days';
 $$);
