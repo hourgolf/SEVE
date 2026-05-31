@@ -89,7 +89,7 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
         <KillSwitch
           halted={fund.is_halted}
           armed={armed}
-          onArm={() => setArmed(true)}
+          onArm={() => setArmed((v) => !v)}
           onFire={() => {
             dispatch({ type: "KILL", reason: "manual kill switch" });
             persistFund({ is_halted: true, halted_reason: "manual kill switch" });

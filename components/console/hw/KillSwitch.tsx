@@ -3,12 +3,13 @@
 export interface KillSwitchProps {
   halted: boolean;
   armed: boolean; // protective cover lifted?
-  onArm: () => void;
+  onArm: () => void; // toggles the cover open/closed (arm / disarm)
   onFire: () => void;
   onReset: () => void;
 }
 
-// Red guarded KILL switch. Lift the cover to arm, then strike to halt the desk.
+// Red guarded KILL switch. Click the cover to lift (arm) it; click again to
+// close (disarm). Strike KILL while armed to halt the desk.
 // (UI-first: flips local fund_state.is_halted only.)
 export function KillSwitch({ halted, armed, onArm, onFire, onReset }: KillSwitchProps) {
   if (halted) {
@@ -27,7 +28,7 @@ export function KillSwitch({ halted, armed, onArm, onFire, onReset }: KillSwitch
         type="button"
         className="kill-cover"
         onClick={onArm}
-        aria-label={armed ? "kill armed" : "lift cover to arm kill switch"}
+        aria-label={armed ? "close cover (disarm kill switch)" : "lift cover to arm kill switch"}
       >
         <span className="kill-cover-grip" />
       </button>
