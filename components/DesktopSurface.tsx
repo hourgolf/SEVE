@@ -78,7 +78,13 @@ export function DesktopSurface({
 
       {/* ---- 01 · LIVE DESK (chart hero → book + chain | P&L) ---------- */}
       <SectionLabel id="live" idx="01">Live Desk</SectionLabel>
-      <IntradayChart bars={data.bars} spot={data.spot} />
+      <IntradayChart
+        bars={data.bars}
+        spot={data.spot}
+        onLoadOlder={data.loadOlder}
+        loadingOlder={data.loadingOlder}
+        hasMoreHistory={!data.reachedHistoryStart}
+      />
       <div className="grid grid--live live-body">
         <div className="col">
           <PositionsPanel positions={feed.positions} strategists={desk.strategists} />

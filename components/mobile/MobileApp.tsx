@@ -104,7 +104,15 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               <button className={`m-tog${show.chain ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, chain: !s.chain }))}>CHAIN</button>
               <button className={`m-tog${show.pos ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, pos: !s.pos }))}>POSITIONS</button>
             </div>
-            {show.chart && <IntradayChart bars={data.bars} spot={data.spot} />}
+            {show.chart && (
+              <IntradayChart
+                bars={data.bars}
+                spot={data.spot}
+                onLoadOlder={data.loadOlder}
+                loadingOlder={data.loadingOlder}
+                hasMoreHistory={!data.reachedHistoryStart}
+              />
+            )}
             {show.chain && (
               <>
                 <OptionChain

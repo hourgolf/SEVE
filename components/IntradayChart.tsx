@@ -30,6 +30,15 @@ const DEFAULT_VIEW = 80;
 
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+// "May 30" — the date label for a session boundary on the x-axis.
+const dayLabel = (iso: string) =>
+  new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+// Local calendar-day key, so we can detect when the tape crosses into a new
+// trading session (where the date-axis ticks + dividers go).
+const dayKey = (iso: string) => {
+  const d = new Date(iso);
+  return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate();
+};
 
 // Monitor intraday chart: line/candles + timeframe + VWAP + EMA(9/21) overlay +
 // volume strip + MACD panel + hover crosshair. The indicators come from
@@ -37,9 +46,18 @@ const hhmm = (iso: string) =>
 export function IntradayChart({
   bars,
   spot,
+  onLoadOlder,
+  loadingOlder = false,
+  hasMoreHistory = false,
 }: {
   bars: UnderlyingBar[];
   spot?: number | null;
+  /** Pull an older chunk of history (the data hook prepends it). */
+  onLoadOlder?: () => void;
+  /** True while that fetch is in flight — drives the left-edge indicator. */
+  loadingOlder?: boolean;
+  /** False once the table's earliest bar is loaded — stops the lazy trigger. */
+  hasMoreHistory?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("line");
   const [tf, setTf] = useState<number>(1);
@@ -148,6 +166,42 @@ export function IntradayChart({
     () => (scale ? priceTicks(scale.min, scale.max) : []),
     [scale]
   );
+
+  // x-axis: when the visible window spans multiple sessions, put a divider +
+  // date at each new day (thinned so labels never collide). Within one session,
+  // fall back to ~5 evenly spaced time ticks. `anchor` keeps edge labels inside.
+  const xTicks = useMemo(() => {
+    if (!scale || vN < 2) return [];
+    const xf = (i: number) => scale.cx(i) / VIEW_W;
+    const anchor = (x: number) => (x < 0.06 ? "start" : x > 0.94 ? "end" : "mid");
+    const bounds: number[] = [];
+    for (let i = 0; i < vAgg.length; i++) {
+      if (i === 0 || dayKey(vAgg[i].ts) !== dayKey(vAgg[i - 1].ts)) bounds.push(i);
+    }
+    if (bounds.length >= 2) {
+      let lastLabelX = -Infinity;
+      return bounds.map((i) => {
+        const x = xf(i);
+        const showLabel = x - lastLabelX >= 0.12;
+        if (showLabel) lastLabelX = x;
+        return { i, x, label: showLabel ? dayLabel(vAgg[i].ts) : "", divider: i > 0, anchor: anchor(x) };
+      });
+    }
+    const count = Math.min(5, vN);
+    return Array.from({ length: count }, (_, k) => {
+      const i = Math.round((k * (vN - 1)) / (count - 1));
+      const x = xf(i);
+      return { i, x, label: hhmm(vAgg[i].ts), divider: false, anchor: anchor(x) };
+    });
+  }, [scale, vAgg, vN]);
+
+  // Lazy-load: the moment a pan reaches the oldest loaded bar (while zoomed in,
+  // so we're genuinely at the left edge), ask the hook for an older chunk.
+  useEffect(() => {
+    if (onLoadOlder && hasMoreHistory && !loadingOlder && eff < N && visStart === 0) {
+      onLoadOlder();
+    }
+  }, [onLoadOlder, hasMoreHistory, loadingOlder, eff, N, visStart]);
 
   // ---- gestures: crosshair / pan / pinch-zoom ----
   const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -288,6 +342,17 @@ export function IntradayChart({
             </div>
           )}
 
+          {/* session dividers: a faint vertical at each new trading day */}
+          {scale &&
+            xTicks.map((t) =>
+              t.divider ? (
+                <span key={`div${t.i}`} className="day-div" style={{ left: `${t.x * 100}%` }} />
+              ) : null
+            )}
+
+          {/* left-edge lazy-load indicator */}
+          {loadingOlder && <span className="loading-older">loading history…</span>}
+
           {/* crosshair: vertical snaps to the candle centre; horizontal tracks Y */}
           {scale && hover != null && (
             <span className="crosshair" style={{ left: `${(scale.cx(hover) / VIEW_W) * 100}%` }} />
@@ -338,6 +403,18 @@ export function IntradayChart({
             </div>
           )}
         </div>
+        {/* date / time axis — aligned to the price chart's columns */}
+        {scale && xTicks.length > 0 && (
+          <div className="x-axis" aria-hidden>
+            {xTicks.map((t) =>
+              t.label ? (
+                <span key={t.i} className={`x-tick x-${t.anchor}`} style={{ left: `${t.x * 100}%` }}>
+                  {t.label}
+                </span>
+              ) : null
+            )}
+          </div>
+        )}
         {showVol && (
           <div className="subchart">
             <span className="subchart-label">VOL</span>
