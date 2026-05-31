@@ -44,6 +44,10 @@ the `--pm-*`/`--knob-*`/`--led-*`/`--chassis` vars + the dark default text color
 One hook owns all reads; components are dumb/props-driven. Swap the hook to change
 the source without touching UI.
 - `hooks/useMarketData.ts` — Monitor (option_quotes / underlying_bars / events).
+  Loads ~15 trading days of 1-min bars ONCE on mount (paginated via `.range()`
+  past PostgREST's ~1000-row cap) + polls only the recent 200 bars and merges
+  them in (cheap live updates, deep history). The chart (`IntradayChart`) windows
+  this with pinch/drag zoom-pan over a default latest-80-bar view.
 - `hooks/useDeskState.ts` + `DeskProvider` — console config; hydrates once from DB
   (`lib/desk/load.ts`), falls back to `lib/desk/seed.ts`.
 - `hooks/useDeskFeed.ts` — Desk telemetry (positions / signals / equity_snapshots).
