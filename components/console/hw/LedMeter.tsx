@@ -1,7 +1,7 @@
 // Vertical segmented LED "volume" meter (mixer-style): green low → amber → red,
 // lit from the bottom up to the value. Pairs with a Knob on the mobile strips.
-export function LedMeter({ frac }: { frac: number }) {
-  const N = 9;
+export function LedMeter({ frac, count = 9 }: { frac: number; count?: number }) {
+  const N = count;
   const lit = Math.max(0, Math.min(N, Math.round(frac * N)));
   return (
     <div className="led-meter" aria-hidden>

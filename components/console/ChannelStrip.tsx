@@ -72,28 +72,28 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
 
         <div className="ch-knobrow">
           <div className="ch-kunit">
-            <LedMeter frac={config.capital_pct / 100} />
+            <LedMeter frac={config.capital_pct / 100} count={22} />
             <Knob value={config.capital_pct} min={0} max={100} step={1}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
               onCommit={(v) => persistConfig(id, { capital_pct: v })}
               size="md" color={cssColor} label="Level" format={pct} />
           </div>
           <div className="ch-kunit">
-            <LedMeter frac={config.aggression / 100} />
+            <LedMeter frac={config.aggression / 100} count={22} />
             <Knob value={config.aggression} min={0} max={100} step={1}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { aggression: v } })}
               onCommit={(v) => persistConfig(id, { aggression: v })}
               size="md" color={cssColor} label="Aggr" format={pct} />
           </div>
           <div className="ch-kunit">
-            <LedMeter frac={config.max_contracts / 10} />
+            <LedMeter frac={config.max_contracts / 10} count={22} />
             <Knob value={config.max_contracts} min={0} max={10} step={1}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { max_contracts: v } })}
               onCommit={(v) => persistConfig(id, { max_contracts: v })}
               size="md" color={cssColor} label="Max" />
           </div>
           <div className="ch-kunit">
-            <LedMeter frac={config.daily_stop_usd / 500} />
+            <LedMeter frac={config.daily_stop_usd / 500} count={22} />
             <Knob value={config.daily_stop_usd} min={0} max={500} step={10}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { daily_stop_usd: v } })}
               onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}

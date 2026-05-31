@@ -350,16 +350,12 @@ export function IntradayChart({
             <MacdChart macd={vMacd} signal={vSignal} hist={vHist} />
           </div>
         )}
-        <div className="chart-meta">
-          {zoomed ? `${vN} of ${N}` : N} × {TIMEFRAMES.find((t) => t.minutes === tf)?.label} bars
-          {showEma && (
-            <>
-              {" · "}
-              <span style={{ color: EMA_FAST_COLOR }}>EMA{EMA_FAST}</span>{" "}
-              <span style={{ color: EMA_SLOW_COLOR }}>EMA{EMA_SLOW}</span>
-            </>
-          )}
-        </div>
+        {showEma && (
+          <div className="chart-meta">
+            <span style={{ color: EMA_FAST_COLOR }}>EMA{EMA_FAST}</span>{" "}
+            <span style={{ color: EMA_SLOW_COLOR }}>EMA{EMA_SLOW}</span>
+          </div>
+        )}
       </div>
     </div>
   );
