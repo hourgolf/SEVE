@@ -593,6 +593,57 @@ svg.spark {
   background: rgba(233, 238, 240, 0.35);
   pointer-events: none;
 }
+.chart-wrap .crosshair-h {
+  top: auto;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 1px;
+}
+/* right-hand price axis */
+.price-axis {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.price-tick {
+  position: absolute;
+  right: 3px;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  background: rgba(10, 15, 17, 0.6);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+.price-cursor {
+  position: absolute;
+  right: 3px;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: #0a0f11;
+  background: rgba(233, 238, 240, 0.92);
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 3;
+}
+/* embedded live SPY price LED, lower-right of the chart (clear of the axis) */
+.chart-led {
+  position: absolute;
+  right: 44px;
+  bottom: 6px;
+  transform: scale(0.55);
+  transform-origin: bottom right;
+  pointer-events: none;
+  z-index: 2;
+}
 .chart-tip {
   position: absolute;
   top: 6px;
@@ -610,7 +661,7 @@ svg.spark {
   z-index: 2;
 }
 .chart-tip.right {
-  right: 8px;
+  right: 46px; /* clear the right-hand price axis */
 }
 .chart-tip.left {
   left: 8px;

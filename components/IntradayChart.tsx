@@ -5,9 +5,13 @@ import { LineChart, type Overlay } from "@/components/charts/LineChart";
 import { CandleChart, type Candle } from "@/components/charts/CandleChart";
 import { VolumeBars } from "@/components/charts/VolumeBars";
 import { MacdChart } from "@/components/charts/MacdChart";
+import { LedDisplay } from "@/components/console/hw/LedDisplay";
+import { lineScale, candleScale, priceTicks, VIEW_W } from "@/components/charts/scale";
 import { aggregateBars, TIMEFRAMES } from "@/lib/bars";
 import { ema, macd as computeMacd } from "@/lib/indicators";
 import type { UnderlyingBar } from "@/lib/types";
+
+const CHART_H = 150; // matches the SVG viewBox height in Line/CandleChart
 
 type Mode = "line" | "candles";
 const MODE_KEY = "seve-chart-mode";
@@ -28,7 +32,13 @@ const hhmm = (iso: string) =>
 // Monitor intraday chart: line/candles + timeframe + VWAP + EMA(9/21) overlay +
 // volume strip + MACD panel + hover crosshair. The indicators come from
 // lib/indicators — the same math the strategy engine uses.
-export function IntradayChart({ bars }: { bars: UnderlyingBar[] }) {
+export function IntradayChart({
+  bars,
+  spot,
+}: {
+  bars: UnderlyingBar[];
+  spot?: number | null;
+}) {
   const [mode, setMode] = useState<Mode>("line");
   const [tf, setTf] = useState<number>(1);
   const [showVwap, setShowVwap] = useState(true);
@@ -36,6 +46,9 @@ export function IntradayChart({ bars }: { bars: UnderlyingBar[] }) {
   const [showVol, setShowVol] = useState(false);
   const [showMacd, setShowMacd] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
+  // Vertical mouse position over the chart (0 = top … 1 = bottom), for the
+  // horizontal crosshair + the price tag that reads off the cursor.
+  const [hoverY, setHoverY] = useState<number | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,13 +99,42 @@ export function IntradayChart({ bars }: { bars: UnderlyingBar[] }) {
     ];
   }, [showEma, emaFast, emaSlow, N]);
 
+  // Price-domain extras (VWAP + EMA overlays) so the axis matches the chart.
+  const extras = useMemo(() => {
+    const vw = showVwap ? vwapArr.filter((v): v is number => v != null) : [];
+    const ov = overlays.flatMap((o) => o.values).filter((v): v is number => v != null);
+    return [...vw, ...ov];
+  }, [showVwap, vwapArr, overlays]);
+
+  // The scale that mirrors the active chart's geometry — drives the crosshair,
+  // the right-hand price axis and the cursor price tag.
+  const scale = useMemo(() => {
+    if (mode === "candles" ? N < 1 : N < 2) return null;
+    return mode === "candles"
+      ? candleScale(candles, extras, CHART_H)
+      : lineScale(closes, extras, CHART_H);
+  }, [mode, candles, closes, extras, N]);
+
+  const ticks = useMemo(
+    () => (scale ? priceTicks(scale.min, scale.max) : []),
+    [scale]
+  );
+
   function onMove(e: React.PointerEvent) {
     const el = wrapRef.current;
     if (!el || N < 1) return;
     const rect = el.getBoundingClientRect();
-    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    setHover(Math.min(N - 1, Math.max(0, Math.round(frac * (N - 1)))));
+    const fx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const fy = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+    setHover(Math.min(N - 1, Math.max(0, Math.round(fx * (N - 1)))));
+    setHoverY(fy);
   }
+  function onLeave() {
+    setHover(null);
+    setHoverY(null);
+  }
+
+  const ledSpot = spot ?? (N ? closes[N - 1] : null);
 
   const hb = hover != null ? agg[hover] ?? null : null;
   const prevBar = hover != null && hover > 0 ? agg[hover - 1] ?? null : null;
@@ -122,13 +164,48 @@ export function IntradayChart({ bars }: { bars: UnderlyingBar[] }) {
         </span>
       </div>
       <div className="pbody">
-        <div className="chart-wrap" ref={wrapRef} onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)}>
+        <div className="chart-wrap" ref={wrapRef} onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={onLeave}>
           {mode === "candles" ? (
             <CandleChart bars={candles} vwap={showVwap ? vwapArr : undefined} overlays={overlays} />
           ) : (
             <LineChart values={closes} vwap={showVwap ? vwapArr : undefined} overlays={overlays} id="intraday" />
           )}
-          {hb && N > 1 && <span className="crosshair" style={{ left: `${(hover! / (N - 1)) * 100}%` }} />}
+
+          {/* right-hand price axis — always on, so price is readable at a glance */}
+          {scale && (
+            <div className="price-axis" aria-hidden>
+              {ticks.map((p) => (
+                <span
+                  key={p}
+                  className="price-tick"
+                  style={{ top: `${(scale.y(p) / scale.H) * 100}%` }}
+                >
+                  {p.toFixed(2)}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* crosshair: vertical snaps to the candle centre; horizontal tracks Y */}
+          {scale && hover != null && (
+            <span className="crosshair" style={{ left: `${(scale.cx(hover) / VIEW_W) * 100}%` }} />
+          )}
+          {scale && hoverY != null && (
+            <>
+              <span className="crosshair crosshair-h" style={{ top: `${hoverY * 100}%` }} />
+              <span className="price-cursor" style={{ top: `${hoverY * 100}%` }}>
+                {scale.priceAt(hoverY * scale.H).toFixed(2)}
+              </span>
+            </>
+          )}
+
+          {/* embedded live SPY price LED, lower-right */}
+          {ledSpot != null && (
+            <div className="chart-led">
+              <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption="spy $" />
+            </div>
+          )}
+
           {hb && (
             <div className={`chart-tip ${hover! > N / 2 ? "left" : "right"}`}>
               <span className="tip-time">{hhmm(hb.ts)}</span>
