@@ -765,6 +765,42 @@ svg.spark {
 .x-tick.x-end {
   transform: translateX(-100%);
 }
+/* draggable position scrubber under the chart (jump anywhere incl. far left) */
+.chart-scrub {
+  position: relative;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: 4px;
+  background: rgba(10, 15, 17, 0.55);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  touch-action: none;
+  overflow: hidden;
+}
+.chart-scrub-thumb {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  min-width: 16px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(120, 132, 138, 0.55), rgba(70, 80, 86, 0.55));
+  border: 1px solid var(--border-bright);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
+}
+.chart-scrub:hover .chart-scrub-thumb {
+  background: linear-gradient(180deg, rgba(150, 162, 168, 0.6), rgba(90, 100, 106, 0.6));
+}
+.chart-scrub-load {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  pointer-events: none;
+}
 /* left-edge "loading older history" badge */
 .chart-wrap .loading-older {
   position: absolute;
@@ -789,6 +825,18 @@ svg.spark {
 }
 .table-scroll table {
   min-width: 480px;
+}
+/* positions: only 6 short columns — let it fit its container, no h-scroll */
+.table-scroll--fit {
+  overflow-x: visible;
+}
+.table-scroll--fit table {
+  min-width: 0;
+}
+.table-scroll--fit th,
+.table-scroll--fit td {
+  padding-left: 6px;
+  padding-right: 6px;
 }
 table {
   width: 100%;

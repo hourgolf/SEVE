@@ -73,14 +73,14 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
         <div className="ch-knobrow">
           <div className="ch-kunit">
             <LedMeter frac={config.capital_pct / 100} count={22} />
-            <Knob value={config.capital_pct} min={0} max={100} step={1}
+            <Knob value={config.capital_pct} min={0} max={100} step={5}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
               onCommit={(v) => persistConfig(id, { capital_pct: v })}
               size="md" color={cssColor} label="Level" format={pct} />
           </div>
           <div className="ch-kunit">
             <LedMeter frac={config.aggression / 100} count={22} />
-            <Knob value={config.aggression} min={0} max={100} step={1}
+            <Knob value={config.aggression} min={0} max={100} step={5}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { aggression: v } })}
               onCommit={(v) => persistConfig(id, { aggression: v })}
               size="md" color={cssColor} label="Aggr" format={pct} />
@@ -124,7 +124,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
           value={config.capital_pct}
           min={0}
           max={100}
-          step={1}
+          step={5}
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
           onCommit={(v) => persistConfig(id, { capital_pct: v })}
           size="md"
@@ -136,7 +136,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
           value={config.aggression}
           min={0}
           max={100}
-          step={1}
+          step={5}
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { aggression: v } })}
           onCommit={(v) => persistConfig(id, { aggression: v })}
           size="md"

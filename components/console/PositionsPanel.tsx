@@ -27,7 +27,7 @@ export function PositionsPanel({
         <span className="t">Open Positions</span>
         <span className="x">{positions.length} legs</span>
       </div>
-      <div className="table-scroll">
+      <div className="table-scroll table-scroll--fit">
         <table>
           <thead>
             <tr>

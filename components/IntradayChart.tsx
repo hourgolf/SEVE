@@ -77,6 +77,8 @@ export function IntradayChart({
   const wrapRef = useRef<HTMLDivElement>(null);
   const ptrs = useRef<Map<number, number>>(new Map()); // pointerId → clientX
   const gst = useRef({ kind: "idle", startX: 0, startOffset: 0, startEff: 0, pinchDist: 1, startCount: 0 });
+  const scrubRef = useRef<HTMLDivElement>(null);
+  const scrubbing = useRef(false);
 
   useEffect(() => {
     const m = window.localStorage.getItem(MODE_KEY);
@@ -281,6 +283,30 @@ export function IntradayChart({
     setHover(null); setHoverY(null); setPressing(false);
   }
 
+  // ---- scrubber: drag the position bar to jump anywhere in history ----
+  // Maps the pointer's x over the track to the window's centre, so pressing at
+  // the far left lands you at the oldest bar (which fires the lazy-load).
+  function scrubTo(clientX: number) {
+    const el = scrubRef.current;
+    if (!el || N < 2) return;
+    const r = el.getBoundingClientRect();
+    const f = clamp((clientX - r.left) / r.width, 0, 1);
+    const newStart = clamp(Math.round(f * N - eff / 2), 0, Math.max(0, N - eff));
+    setView((v) => ({ count: v.count, offset: Math.max(0, N - eff - newStart) }));
+  }
+  function scrubDown(e: React.PointerEvent) {
+    e.stopPropagation();
+    scrubbing.current = true;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    scrubTo(e.clientX);
+  }
+  function scrubMove(e: React.PointerEvent) {
+    if (scrubbing.current) { e.stopPropagation(); scrubTo(e.clientX); }
+  }
+  function scrubUp() {
+    scrubbing.current = false;
+  }
+
   const ledSpot = spot ?? (N ? closes[N - 1] : null);
   const zoomed = eff < N || offset > 0;
 
@@ -413,6 +439,27 @@ export function IntradayChart({
                 </span>
               ) : null
             )}
+          </div>
+        )}
+        {/* scrubber: a draggable position bar over the full series, so you can
+            jump straight to any point (incl. the oldest bar) without panning */}
+        {scale && eff < N && (
+          <div
+            className="chart-scrub"
+            ref={scrubRef}
+            onPointerDown={scrubDown}
+            onPointerMove={scrubMove}
+            onPointerUp={scrubUp}
+            onPointerCancel={scrubUp}
+            role="scrollbar"
+            aria-label="chart position"
+            aria-valuenow={Math.round((visStart / Math.max(1, N - eff)) * 100)}
+          >
+            <div
+              className="chart-scrub-thumb"
+              style={{ left: `${(visStart / N) * 100}%`, width: `${Math.max(7, (vN / N) * 100)}%` }}
+            />
+            {loadingOlder && <span className="chart-scrub-load">loading…</span>}
           </div>
         )}
         {showVol && (
