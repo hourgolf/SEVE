@@ -67,6 +67,22 @@ export function Knob({
   const angle = START + frac * SWEEP;
   const indicator = color ?? "#e6e4da";
 
+  // Mixer-style LED ring: a dim full-sweep track + a bright arc that fills from
+  // min → current value, so the level is obvious at a glance (and an accidental
+  // nudge is visible). Coords rounded for SSR/client hydration parity.
+  const RING_R = 45;
+  const polar = (theta: number) => {
+    const rad = ((theta - 90) * Math.PI) / 180;
+    return [round3(50 + RING_R * Math.cos(rad)), round3(50 + RING_R * Math.sin(rad))];
+  };
+  const [trkX0, trkY0] = polar(START);
+  const [trkX1, trkY1] = polar(START + SWEEP);
+  const trackPath = `M ${trkX0} ${trkY0} A ${RING_R} ${RING_R} 0 1 1 ${trkX1} ${trkY1}`;
+  const sweepDeg = frac * SWEEP;
+  const [filX1, filY1] = polar(angle);
+  const fillPath =
+    sweepDeg > 0.5 ? `M ${trkX0} ${trkY0} A ${RING_R} ${RING_R} 0 ${sweepDeg > 180 ? 1 : 0} 1 ${filX1} ${filY1}` : "";
+
   return (
     <div
       className={`knob knob-${size}${dragging ? " dragging" : ""}${disabled ? " disabled" : ""}`}
@@ -97,6 +113,18 @@ export function Knob({
               strokeLinecap="round"
             />
           ))}
+          {/* LED ring: dim track + glowing fill to the current value */}
+          <path d={trackPath} fill="none" stroke="rgba(255,255,255,0.09)" strokeWidth="3" strokeLinecap="round" />
+          {fillPath && (
+            <path
+              d={fillPath}
+              fill="none"
+              stroke="var(--ind)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              style={{ filter: "drop-shadow(0 0 3.5px var(--ind))" }}
+            />
+          )}
           {/* cap */}
           <circle cx="50" cy="50" r="36" fill="url(#knobMetal)" stroke="#0c0d0e" strokeWidth="1.5" />
           <circle cx="50" cy="50" r="36" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />

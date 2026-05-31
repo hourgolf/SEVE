@@ -124,17 +124,25 @@
   letter-spacing: 1px;
 }
 
-/* ---- scrolling screen ---- */
+/* ---- scrolling screen (cream 909 body; dark instrument panels float on it) ---- */
 .m-screen {
   flex: 1 1 auto;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   min-height: 0;
-  color: var(--text);
-  padding: 10px;
+  color: var(--ink);
+  background: var(--chassis-2);
+  padding: 11px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
+}
+/* dark panels get a cream edge so they read as inset instrument modules */
+.m-screen > .panel,
+.m-screen .m-steptape,
+.m-screen .master {
+  border: 1px solid var(--chassis-dark);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35), 0 3px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* segmented sub-nav (Live: chart / chain / positions) */
