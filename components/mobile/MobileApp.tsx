@@ -15,21 +15,37 @@ import { SignalsTape } from "@/components/console/SignalsTape";
 import { TapeHealth } from "@/components/TapeHealth";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { AuthControl } from "@/components/AuthControl";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
-type Tab = "live" | "desk" | "mix" | "master" | "log";
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "live", label: "Live", icon: "📈" },
-  { id: "desk", label: "Desk", icon: "💼" },
-  { id: "mix", label: "Mix", icon: "🎛" },
-  { id: "master", label: "Master", icon: "🎚" },
-  { id: "log", label: "Log", icon: "📟" },
+// ---- 909-flavoured inline-SVG tab icons (silkscreen line-art, no emoji) ----
+const sv = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+const IcLive = () => (
+  <svg viewBox="0 0 24 24" {...sv}><path d="M3 20V4M3 20h18" /><rect x="6" y="11" width="2.6" height="6" /><rect x="11" y="7" width="2.6" height="10" /><rect x="16" y="13" width="2.6" height="4" /></svg>
+);
+const IcDesk = () => (
+  <svg viewBox="0 0 24 24" {...sv}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>
+);
+const IcMix = () => (
+  <svg viewBox="0 0 24 24" {...sv}><path d="M7 4v16M17 4v16" /><circle cx="7" cy="9" r="2.3" /><circle cx="17" cy="15" r="2.3" /></svg>
+);
+const IcCog = () => (
+  <svg viewBox="0 0 24 24" {...sv}><circle cx="12" cy="12" r="3.2" /><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" /></svg>
+);
+
+type Tab = "live" | "desk" | "mix";
+const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
+  { id: "live", label: "Live", Icon: IcLive },
+  { id: "desk", label: "Desk", Icon: IcDesk },
+  { id: "mix", label: "Mix", Icon: IcMix },
 ];
 
 export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [tab, setTab] = useState<Tab>("live");
-  const [liveView, setLiveView] = useState<"chart" | "chain" | "pos">("chart");
+  // Live: additive view toggles (like indicator chips) — chart is the base.
+  const [show, setShow] = useState({ chart: true, chain: false, pos: false });
+  const [settings, setSettings] = useState(false);
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +54,6 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
     window.scrollTo(0, 0);
   };
 
-  // vitals
   const running = desk.fund.running && !desk.fund.is_halted;
   const runLabel = desk.fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
   const runCls = desk.fund.is_halted ? "halt" : running ? "on" : "off";
@@ -57,37 +72,40 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   return (
     <div className="m-app">
       <header className="m-vitals">
-        <div className="m-pills">
-          <span className={`m-pill m-run ${runCls}`}>{runLabel}</span>
-          <span className={`m-pill m-mode ${desk.fund.mode}`}>
-            {desk.fund.mode === "live" ? "LIVE" : "PAPER"}
-          </span>
+        <div className="m-vtop">
+          <span className="m-brand">$EVE<span> · DESK</span></span>
+          <button className="m-cog" onClick={() => setSettings(true)} aria-label="settings & log">
+            <IcCog />
+          </button>
         </div>
-        <div className="m-led">
-          <LedDisplay
-            value={data.spot != null ? data.spot.toFixed(2) : "----"}
-            digits={6}
-            color={spyColor}
-            caption="spy $"
-          />
-        </div>
-        <div className="m-led">
-          <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
+        <div className="m-vleds">
+          <div className="m-pills">
+            <span className={`m-pill m-run ${runCls}`}>{runLabel}</span>
+            <span className={`m-pill m-mode ${desk.fund.mode}`}>
+              {desk.fund.mode === "live" ? "LIVE" : "PAPER"}
+            </span>
+          </div>
+          <div className="m-led">
+            <LedDisplay value={data.spot != null ? data.spot.toFixed(2) : "----"} digits={6} color={spyColor} caption="spy $" />
+          </div>
+          <div className="m-led">
+            <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
+          </div>
         </div>
       </header>
 
-      <main className="m-screen">
+      <main className={`m-screen${tab === "mix" ? " m-screen--mix" : ""}`}>
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
 
         {tab === "live" && (
           <>
-            <div className="m-seg">
-              <button className={liveView === "chart" ? "on" : ""} onClick={() => setLiveView("chart")}>CHART</button>
-              <button className={liveView === "chain" ? "on" : ""} onClick={() => setLiveView("chain")}>CHAIN</button>
-              <button className={liveView === "pos" ? "on" : ""} onClick={() => setLiveView("pos")}>POSITIONS</button>
+            <div className="m-toggles">
+              <button className={`m-tog${show.chart ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, chart: !s.chart }))}>CHART</button>
+              <button className={`m-tog${show.chain ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, chain: !s.chain }))}>CHAIN</button>
+              <button className={`m-tog${show.pos ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, pos: !s.pos }))}>POSITIONS</button>
             </div>
-            {liveView === "chart" && <IntradayChart bars={data.bars} spot={data.spot} />}
-            {liveView === "chain" && (
+            {show.chart && <IntradayChart bars={data.bars} spot={data.spot} />}
+            {show.chain && (
               <>
                 <OptionChain
                   snapshot={data.snapshot}
@@ -95,13 +113,12 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                   deltasModeled={data.deltasModeled}
                   selected={selected}
                   onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
+                  compact
                 />
                 {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
               </>
             )}
-            {liveView === "pos" && (
-              <PositionsPanel positions={feed.positions} strategists={desk.strategists} />
-            )}
+            {show.pos && <PositionsPanel positions={feed.positions} strategists={desk.strategists} />}
           </>
         )}
 
@@ -113,12 +130,15 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               fundPnl={feed.fundPnl}
               equityCurve={feed.equityCurve}
             />
-            <PositionsPanel positions={feed.positions} strategists={desk.strategists} />
+            <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} />
+            <Bezel label="16-Step Tape · recent signals" className="tape m-steptape">
+              <StepRow steps={feed.steps} />
+            </Bezel>
           </>
         )}
 
         {tab === "mix" && (
-          <>
+          <div className="m-mix">
             <div className="m-deck" ref={deckRef} onScroll={onDeckScroll}>
               {desk.strategists.map((s) => (
                 <div className="m-slide" key={s.slug}>
@@ -136,20 +156,33 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 <i key={s.slug} className={i === slide ? "on" : ""} />
               ))}
             </div>
-          </>
+          </div>
         )}
+      </main>
 
-        {tab === "master" && (
-          <>
-            <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} />
-            <Bezel label="16-Step Tape · recent signals" className="tape">
-              <StepRow steps={feed.steps} />
-            </Bezel>
-          </>
-        )}
+      <nav className="m-tabs" aria-label="sections">
+        {TABS.map((t) => (
+          <button key={t.id} className={`m-tab${tab === t.id ? " on" : ""}`} onClick={() => goTab(t.id)} aria-pressed={tab === t.id}>
+            <span className="ic"><t.Icon /></span>
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-        {tab === "log" && (
-          <>
+      {settings && (
+        <div className="m-scrim" onClick={() => setSettings(false)}>
+          <div className="m-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="m-grab" />
+            <div className="m-sheet-head">
+              <span>Settings · Log</span>
+              <button className="m-sheet-x" onClick={() => setSettings(false)} aria-label="close">✕</button>
+            </div>
+            <div className="m-sheet-auth">
+              <AuthControl />
+              <span className={`write-chip${write.canWrite ? " on" : ""}`}>
+                {write.canWrite ? "● operator" : "○ read-only"}
+              </span>
+            </div>
             <SignalsTape signals={feed.signals} />
             <TapeHealth
               rowCount={data.rowCount}
@@ -158,23 +191,9 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               expirations={data.expirations}
             />
             <EventLog events={data.events} />
-          </>
-        )}
-      </main>
-
-      <nav className="m-tabs" aria-label="sections">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`m-tab${tab === t.id ? " on" : ""}`}
-            onClick={() => goTab(t.id)}
-            aria-pressed={tab === t.id}
-          >
-            <span className="ic">{t.icon}</span>
-            {t.label}
-          </button>
-        ))}
-      </nav>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

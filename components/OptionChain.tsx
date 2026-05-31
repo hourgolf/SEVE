@@ -17,6 +17,7 @@ export function OptionChain({
   deltasModeled = false,
   selected = null,
   onSelect,
+  compact = false,
 }: {
   snapshot: OptionQuote[];
   spot: number | null;
@@ -24,6 +25,8 @@ export function OptionChain({
   deltasModeled?: boolean;
   selected?: string | null;
   onSelect?: (occSymbol: string) => void;
+  /** Mobile: Δ + Mid only (calls | strike | puts), so it fits without scroll. */
+  compact?: boolean;
 }) {
   let rows: React.ReactNode;
   let meta = "—";
@@ -31,7 +34,7 @@ export function OptionChain({
   if (!snapshot.length) {
     rows = (
       <tr>
-        <td colSpan={11} className="muted" style={{ textAlign: "center", padding: 20 }}>
+        <td colSpan={compact ? 5 : 11} className="muted" style={{ textAlign: "center", padding: 20 }}>
           no contracts yet
         </td>
       </tr>
@@ -68,6 +71,17 @@ export function OptionChain({
       // puts at/below); ITM legs are near-intrinsic and blow the solve up.
       const cIv = spot == null || k >= spot - 0.5 ? ivPct(c?.iv) : "·";
       const pIv = spot == null || k <= spot + 0.5 ? ivPct(p?.iv) : "·";
+      if (compact) {
+        return (
+          <tr key={k} className={k === atm ? "atm" : undefined}>
+            <td className={cCls} style={{ textAlign: "left" }} onClick={onC}>{num2(c?.delta)}</td>
+            <td className={cCls} onClick={onC}>{num2(c?.mid)}</td>
+            <td className="strike-col">{k.toFixed(0)}</td>
+            <td className={pCls} onClick={onP}>{num2(p?.mid)}</td>
+            <td className={pCls} style={{ textAlign: "right" }} onClick={onP}>{num2(p?.delta)}</td>
+          </tr>
+        );
+      }
       return (
         <tr key={k} className={k === atm ? "atm" : undefined}>
           <td className={cCls} style={{ textAlign: "left" }} onClick={onC}>{cIv}</td>
@@ -104,22 +118,32 @@ export function OptionChain({
           )}
         </span>
       </div>
-      <div className="table-scroll">
+      <div className={`table-scroll${compact ? " table-fit" : ""}`}>
         <table>
           <thead>
-            <tr>
-              <th className="calls" style={{ textAlign: "left" }}>Call IV</th>
-              <th className="calls">Δ</th>
-              <th className="calls">Bid</th>
-              <th className="calls">Ask</th>
-              <th className="calls">Mid</th>
-              <th className="strike-col">Strike</th>
-              <th className="puts">Mid</th>
-              <th className="puts">Bid</th>
-              <th className="puts">Ask</th>
-              <th className="puts">Δ</th>
-              <th className="puts" style={{ textAlign: "right" }}>Put IV</th>
-            </tr>
+            {compact ? (
+              <tr>
+                <th className="calls" style={{ textAlign: "left" }}>Call Δ</th>
+                <th className="calls">Mid</th>
+                <th className="strike-col">Strike</th>
+                <th className="puts">Mid</th>
+                <th className="puts" style={{ textAlign: "right" }}>Put Δ</th>
+              </tr>
+            ) : (
+              <tr>
+                <th className="calls" style={{ textAlign: "left" }}>Call IV</th>
+                <th className="calls">Δ</th>
+                <th className="calls">Bid</th>
+                <th className="calls">Ask</th>
+                <th className="calls">Mid</th>
+                <th className="strike-col">Strike</th>
+                <th className="puts">Mid</th>
+                <th className="puts">Bid</th>
+                <th className="puts">Ask</th>
+                <th className="puts">Δ</th>
+                <th className="puts" style={{ textAlign: "right" }}>Put IV</th>
+              </tr>
+            )}
           </thead>
           <tbody>{rows}</tbody>
         </table>
