@@ -158,6 +158,46 @@
   justify-content: flex-end;
 }
 
+/* condensed master mirror in the head: run/mode pills + day-P&L LED */
+.master-mini {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.master-mini .mm-state {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+}
+.master-mini .mm-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--chassis-edge);
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.22);
+  white-space: nowrap;
+}
+.master-mini .mm-run.on {
+  color: #1f7a45;
+  border-color: rgba(47, 213, 115, 0.5);
+  background: rgba(47, 213, 115, 0.16);
+}
+.master-mini .mm-run.halt {
+  color: #fff;
+  border-color: var(--stripe-red);
+  background: var(--stripe-red);
+}
+.master-mini .mm-mode.live {
+  color: var(--stripe-red);
+  border-color: rgba(197, 54, 42, 0.5);
+  background: rgba(197, 54, 42, 0.12);
+}
+
 /* in-chassis section anchors — replace the old route tabs (one page now) */
 .surface-nav {
   display: flex;

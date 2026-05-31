@@ -22,6 +22,7 @@ import { Bezel } from "@/components/console/hw/Bezel";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { SignalsTape } from "@/components/console/SignalsTape";
+import { MasterMini } from "@/components/console/MasterMini";
 
 // The whole desk on one TR-909 surface: LIVE market readout → strategy COMPOSER
 // → DESK book/P&L, all inside one cream chassis. (Formerly three routes.)
@@ -54,6 +55,7 @@ function Surface() {
       right={
         <div className="surface-status">
           <TopBar status={data.status} spot={data.spot} updatedAt={data.updatedAt} />
+          <MasterMini fund={desk.fund} fundPnl={feed.fundPnl} />
           <span
             className={`write-chip${canWrite ? " on" : ""}`}
             title={canWrite ? "changes persist to the desk" : "sign in (top right) to save changes"}
@@ -124,7 +126,7 @@ function Surface() {
 
       {/* ---- 03 · LOG (signals + tape health → event log) ------------- */}
       <SectionLabel id="log" idx="03">Log</SectionLabel>
-      <div className="grid">
+      <div className="grid grid--live grid--even">
         <div className="col">
           <SignalsTape signals={feed.signals} />
         </div>

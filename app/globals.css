@@ -317,7 +317,12 @@ body {
    to one column on narrow screens. */
 @media (min-width: 861px) {
   .grid--live {
-    grid-template-columns: 1.7fr 1fr;
+    grid-template-columns: 1.5fr 1fr;
+  }
+  /* Equal-height columns: stretch each col's single panel to the row height so
+     side-by-side panels (e.g. signals tape / tape health) line up. */
+  .grid--even > .col > .panel {
+    flex: 1 1 auto;
   }
   /* Stretch the P&L panel to match the tall positions+chain stack, and let the
      equity area grow so the breakdown sits at the bottom (no dead cream gap). */

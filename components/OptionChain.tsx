@@ -48,7 +48,14 @@ export function OptionChain({
       strikes[0]
     );
 
-    rows = strikes.map((k) => {
+    // Only show the money: 5 strikes at/below spot + 5 above (a 10-strike
+    // window around the ATM), so the board stays short.
+    const shown = [
+      ...strikes.filter((k) => k <= ref).slice(-5),
+      ...strikes.filter((k) => k > ref).slice(0, 5),
+    ];
+
+    rows = shown.map((k) => {
       const c = front.find((r) => Number(r.strike) === k && r.opt_type === "call");
       const p = front.find((r) => Number(r.strike) === k && r.opt_type === "put");
       const cSel = !!c && selected === c.occ_symbol;
@@ -78,7 +85,7 @@ export function OptionChain({
       );
     });
 
-    meta = `exp ${frontExp} · ${strikes.length} strikes`;
+    meta = `exp ${frontExp} · ${shown.length} of ${strikes.length} strikes`;
   }
 
   return (
