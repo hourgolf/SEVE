@@ -14,8 +14,10 @@ export function SignalsTape({ signals }: { signals: Signal[] }) {
       <div className="pbody">
         <div className="log">
           {signals.length === 0 ? (
-            <div className="line">
-              <span className="msg muted">waiting for signals…</span>
+            <div className="empty-state">
+              <span className="es-dot" />
+              <span>listening for signals</span>
+              <span className="es-sub">live tape · nothing yet</span>
             </div>
           ) : (
             signals.map((s) => (

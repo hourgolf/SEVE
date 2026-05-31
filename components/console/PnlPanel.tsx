@@ -23,6 +23,11 @@ export function PnlPanel({
   equityCurve: { ts: string; equity: number }[];
 }) {
   const equityValues = equityCurve.map((p) => p.equity);
+  // A flat line (no trades yet → NAV constant) reads as a broken chart. Only
+  // draw the curve once there's genuine variation to show.
+  const hasCurve =
+    equityValues.length >= 2 &&
+    Math.max(...equityValues) !== Math.min(...equityValues);
 
   return (
     <div className="panel">
@@ -31,7 +36,13 @@ export function PnlPanel({
         <span className="x">NAV {usd0(fundPnl.nav)}</span>
       </div>
       <div className="pbody">
-        <LineChart values={equityValues} height={90} id="equity" />
+        {hasCurve ? (
+          <LineChart values={equityValues} height={90} id="equity" />
+        ) : (
+          <div className="chart-empty" style={{ height: 90 }}>
+            awaiting equity history
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 8 }}>
           {strategists.map((s) => {
             const p = pnlByStrategist[s.slug];

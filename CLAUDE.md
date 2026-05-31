@@ -8,16 +8,24 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## The three views (Next.js App Router, TypeScript, plain CSS, zero UI deps)
-- `/` **Monitor** — live SPY: red 7-seg LED spot, cand/ line chart with timeframe
-  (1m–1h) + VWAP + EMA(9/21) overlay + volume + MACD + hover crosshair, live
-  option chain (click a leg → `ContractDetail` drill-down), Tape Health, event log.
-- `/console` **Console** — skeuomorphic Roland TR-909: 4 strategist channel strips
-  (knobs/pads via `useDragValue`), master strip (kill switch, paper/live, START/STOP),
-  16-step tape. Drives `strategist_config` / `fund_state` (authenticated writes).
-- `/desk` **Desk** — positions, per-PM + fund P&L, equity curve, signals tape.
+## One page, three sections (Next.js App Router, TypeScript, plain CSS, zero UI deps)
+The whole desk is a **single route** (`/`, `app/page.tsx`) — one cream TR-909
+`Chassis` holding three stacked, silkscreen-labelled sections (anchor chips +
+`#live`/`#composer`/`#desk` ids let you jump between them). All three data hooks
+are called **once** in the page's `Surface` component (no duplicate realtime subs).
+- **01 · Live Market** — live SPY: red 7-seg LED spot, candle/line chart with
+  timeframe (1m–1h) + VWAP + EMA(9/21) overlay + volume + MACD + hover crosshair,
+  live option chain (click a leg → `ContractDetail` drill-down), Tape Health, event
+  log. Hero grid is `.grid--live` (wider chart than the secondary right column).
+- **02 · Strategy Composer** — skeuomorphic Roland TR-909: 4 strategist channel
+  strips (knobs/pads via `useDragValue`), master strip (kill switch, paper/live,
+  START/STOP), 16-step tape. Drives `strategist_config` / `fund_state` (auth writes).
+- **03 · Book & P&L** — positions, per-PM + fund P&L, equity curve, signals tape.
 
-All three share the cream **`Chassis`** wrapper (`app/console.css`, scoped under
+History: these were three routes (`/`, `/console`, `/desk`) until 2026-05-31, when
+they were merged into one surface for the true single-instrument 909 look (the old
+`Console.tsx` / `DeskScreen.tsx` chassis wrappers were deleted; `NavBar` is now just
+brand + auth). The cream chassis lives in `app/console.css` (scoped under
 `.console-root`); the dark data panels use `app/globals.css`. Fonts: IBM Plex Sans
 + JetBrains Mono.
 

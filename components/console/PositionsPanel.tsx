@@ -42,8 +42,12 @@ export function PositionsPanel({
           <tbody>
           {positions.length === 0 ? (
             <tr>
-              <td colSpan={6} className="muted" style={{ textAlign: "center", padding: 20 }}>
-                no open positions
+              <td colSpan={6}>
+                <div className="empty-state">
+                  <span className="es-dot" />
+                  <span>flat — no open positions</span>
+                  <span className="es-sub">desk is idle</span>
+                </div>
               </td>
             </tr>
           ) : (

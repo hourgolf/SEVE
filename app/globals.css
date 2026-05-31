@@ -26,6 +26,7 @@
 .nav {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   max-width: 1180px;
   margin: 0 auto 14px;
@@ -45,6 +46,7 @@
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--muted);
   text-decoration: none;
   padding: 7px 13px;
@@ -90,6 +92,7 @@
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.4px;
+  white-space: nowrap;
   color: var(--muted);
   background: var(--panel);
   border: 1px solid var(--border);
@@ -298,6 +301,14 @@ body {
   grid-template-columns: 1.55fr 1fr;
   gap: 14px;
 }
+/* The Live section is the hero readout — give its chart more room than the
+   secondary right column (tape health / event log). Desktop only; the base
+   .grid collapses to one column on narrow screens. */
+@media (min-width: 861px) {
+  .grid--live {
+    grid-template-columns: 1.85fr 1fr;
+  }
+}
 .col {
   display: flex;
   flex-direction: column;
@@ -313,8 +324,10 @@ body {
 }
 .phead {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1px 12px;
   padding: 11px 15px;
   border-bottom: 1px solid var(--border);
   background: var(--panel-2);
@@ -324,6 +337,9 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1.1px;
+  /* Explicit so the Desk's dark panels don't inherit the cream chassis's
+     near-black text colour (.console-root) and vanish against --panel-2. */
+  color: var(--text);
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -350,6 +366,56 @@ svg.spark {
 .chart-svg {
   width: 100%;
   display: block;
+}
+/* Placeholder shown in place of a chart/table before any data has arrived. */
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  border: 1px dashed var(--border-bright);
+  border-radius: 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 7px,
+    rgba(42, 58, 66, 0.18) 7px,
+    rgba(42, 58, 66, 0.18) 8px
+  );
+}
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 26px 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.empty-state .es-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  box-shadow: 0 0 7px var(--muted-2);
+  animation: es-pulse 2.4s ease-in-out infinite;
+}
+.empty-state .es-sub {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted-2);
+}
+@keyframes es-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 .phead-right {
   display: flex;
