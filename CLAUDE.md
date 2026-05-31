@@ -35,10 +35,19 @@ ONCE, then branches on `useIsMobile()` (820px): `<DesktopSurface>` (the one-page
 (`components/surfaceTypes.ts`) — neither layout re-subscribes. The mobile app
 (`components/mobile/MobileApp.tsx`, styles `app/mobile.css`) is a native-style
 shell: sticky cream vitals header (RUN/PAPER + SPY/day-P&L LEDs) · scrolling screen ·
-fixed 5-tab bottom bar (Live=chart+chain/pos toggle · Desk=P&L/book · Mix=swipe
-carousel of full ChannelStrips · Master=full MasterStrip+tape · Log). It reuses the
-exact same hardware components, so it must stay inside `.console-root` (which owns
-the `--pm-*`/`--knob-*`/`--led-*`/`--chassis` vars + the dark default text color).
+fixed **3-tab** bottom bar of inline-SVG 909 pads:
+- **Live** — full-width chart hero + CHART/CHAIN/POSITIONS *additive* toggle pads
+  (each appends its panel below, like indicator chips; chain & positions are
+  mobile-condensed so they fit with no horizontal scroll).
+- **Desk** — P&L/equity + the full **Master strip** + the 16-step tape as a 4×4 grid.
+- **Mix** — horizontal swipe carousel of full-height `ChannelStrip`s.
+The top-right **cog opens a Settings·Log sheet** (auth sign-in/out + signals /
+tape-health / event-log). Knobs render a mixer-style **LED glow ring** (fills with
+the value) — shared, so desktop gets it too. The shell reuses the exact same
+hardware components, so it must stay inside `.console-root` (which owns the
+`--pm-*`/`--knob-*`/`--led-*`/`--chassis` vars + the dark default text color). The
+document is scroll-locked under 820px (`overscroll-behavior:none`) so grabbing the
+header/tab bar can't rubber-band the app.
 
 ## Data seam (the architecture spine)
 One hook owns all reads; components are dumb/props-driven. Swap the hook to change
@@ -118,13 +127,28 @@ equity_snapshots/events.
 - A stray `TR-909_T_600_FNL_A.jpg` sits untracked in the repo root — leave it
   (it's the user's reference image; gitignored from commits implicitly by `git add -A` care).
 
-## NEXT SESSION: UI improvements (off-market day work)
-The user wants to fiddle with UI/UX while markets are closed. Likely areas:
-dashboard polish, the Desk visualizations (now that the worker will feed it),
-console interactions, mobile, the contract drill-down, chart indicators. Verify
-changes with the preview tool + screenshots; `npx tsc --noEmit` + `npm run build`
-clean before `git push`. The live worker + DB are healthy and self-sustaining —
-UI work won't disturb them.
+## NEXT SESSION: UI/UX tweaks (continuing the off-market polish)
+Recent sessions did a big UI arc: merged the 3 routes into one 909 surface,
+redesigned the header (`$EVE · DESK`, head master + day-P&L/SPY readout LEDs),
+built the **mobile phone app** (3-tab shell, see Responsive split), added **knob
+LED glow rings + a cream 909 re-theme**, and gave the chart **zoom/pan + ~15 days
+of history**. All shipped to `main` and live.
+
+Frontier is incremental tweaks — the user iterates fast via real-device
+screenshots, so keep the preview server up and screenshot at 390px (mobile) AND
+1280px (desktop) for every change. Known candidate areas / things mid-flight:
+- **Mobile fit & feel:** the "less dark / more cream / more 909 buttons" direction
+  is ongoing — keep pulling the aesthetic back toward the drum machine. Mix knobs
+  are horizontal with LED meters; the SPY/day-P&L captions and tap-target sizes
+  may still want tuning.
+- **Chart depth:** optional follow-ups noted — lazy-load older bars at the far-left
+  pan edge (table has 2+ yrs), and/or bump the 15-day default deeper.
+- The **Desk worker is still `DRY_RUN=true`** — once it trades, the Desk/P&L/equity
+  visualizations get real data and may deserve another visual pass.
+
+Workflow gotcha: **stop the preview dev server before `npm run build`** (they share
+`.next`; running both corrupts it — see the user memory note). `npx tsc --noEmit`
+is always safe. Verify clean tsc + build before `git push` (push auto-deploys).
 
 ## Conventions
 Plain CSS (no Tailwind), inline SVG (no chart libs), minimal deps, the data-seam
