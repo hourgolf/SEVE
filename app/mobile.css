@@ -1,0 +1,193 @@
+/* ===========================================================================
+   $EVE — phone app shell (rendered under .console-root, below 820px).
+   Persistent cream vitals header (sticky) · dark scrolling screen · fixed
+   bottom tab bar. Reuses the same hardware components as the desktop surface.
+   =========================================================================== */
+
+.m-app {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+}
+
+/* ---- persistent vitals header (cream, sticky) ---- */
+.m-vitals {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  border-bottom: 2px solid var(--chassis-edge);
+}
+.m-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+}
+.m-pill {
+  min-width: 54px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.32);
+  white-space: nowrap;
+}
+.m-run.on {
+  color: #1f7a45;
+  border-color: rgba(47, 213, 115, 0.55);
+  background: rgba(47, 213, 115, 0.22);
+}
+.m-run.halt {
+  color: #fff;
+  border-color: var(--stripe-red);
+  background: var(--stripe-red);
+}
+.m-mode.live {
+  color: var(--stripe-red);
+  border-color: rgba(197, 54, 42, 0.5);
+  background: rgba(197, 54, 42, 0.14);
+}
+.m-led {
+  flex: 1;
+  display: flex;
+}
+.m-led .led {
+  width: 100%;
+  gap: 3px;
+}
+.m-led .led-window {
+  width: 100%;
+  justify-content: flex-end;
+  padding: 5px 8px;
+  gap: 2px;
+}
+.m-led .seven-seg {
+  width: 17px;
+  height: 31px;
+}
+.m-led .led-caption {
+  font-size: 7px;
+  letter-spacing: 1px;
+}
+
+/* ---- scrolling screen ---- */
+.m-screen {
+  color: var(--text);
+  padding: 10px 10px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: calc(100dvh - 66px);
+}
+
+/* segmented sub-nav (Live: chart / chain / positions) */
+.m-seg {
+  display: flex;
+  gap: 5px;
+}
+.m-seg button {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 8px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-bright);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+.m-seg button.on {
+  background: var(--pm-green);
+  color: #06251a;
+  border-color: var(--pm-green);
+}
+
+/* ---- Mix carousel: swipe full strips ---- */
+.m-deck {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.m-deck::-webkit-scrollbar {
+  display: none;
+}
+.m-slide {
+  flex: 0 0 86%;
+  scroll-snap-align: center;
+}
+.m-slide > .channel {
+  width: 100%;
+  height: 100%;
+}
+.m-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding-top: 2px;
+}
+.m-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #33403f;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.m-dots i.on {
+  background: var(--pm-green);
+  box-shadow: 0 0 6px var(--pm-green);
+}
+
+/* ---- fixed bottom tab bar ---- */
+.m-tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  background: #0c1214;
+  border-top: 1px solid var(--border);
+  padding: 7px 4px max(9px, env(safe-area-inset-bottom));
+}
+.m-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.3px;
+  color: var(--muted-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.m-tab .ic {
+  font-size: 15px;
+  line-height: 1;
+  filter: grayscale(0.4);
+}
+.m-tab.on {
+  color: var(--pm-green);
+}
+.m-tab.on .ic {
+  filter: none;
+}
