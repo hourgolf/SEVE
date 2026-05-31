@@ -44,7 +44,7 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
       >
         <LedDisplay
           value={compact ? navK : ledRaw}
-          digits={compact ? 5 : 7}
+          digits={compact ? 4 : 7}
           unit={compact ? "K" : undefined}
           color={fund.is_halted ? "var(--amber)" : "var(--led-red)"}
           caption={compact ? "fund nav $" : showNav ? "fund nav $" : "day p&l $"}

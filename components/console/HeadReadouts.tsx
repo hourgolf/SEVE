@@ -29,7 +29,7 @@ export function HeadReadouts({
   const spyColor = spotUp ? "var(--pm-green)" : "var(--led-red)";
 
   return (
-    <div className="head-readouts">
+    <div className="readout-panel">
       <div className="mm-state">
         <span className={`mm-pill mm-run ${runCls}`}>{runLabel}</span>
         <span className={`mm-pill mm-mode ${fund.mode}`}>

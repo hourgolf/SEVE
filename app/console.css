@@ -113,17 +113,44 @@
 /* instrument band under the title: compact master + readout LEDs */
 .surface-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px 24px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
   margin: 4px 0 6px;
 }
-.head-readouts {
+/* on a wide desktop the band mirrors the Live Desk's 1.5fr / 1fr split: the
+   readout panel (wider) sits in the 1.5fr column, the master in the 1fr column
+   on the right — the TR-909 puts its master section on the right too. */
+@media (min-width: 1200px) {
+  .surface-bar {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    align-items: stretch;
+    gap: 24px;
+  }
+  .surface-bar > .readout-panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .surface-bar > .master {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+/* one dark panel (master style) wrapping the run/mode pills + the P&L and SPY
+   LEDs, so it reads as a single instrument matching the master's height. */
+.readout-panel {
   display: flex;
   align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
-  gap: 12px 16px;
+  gap: 10px 22px;
+  background: linear-gradient(180deg, #20140a, #160d06);
+  border: 1px solid #000;
+  border-top: 3px solid #3d3128;
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 9px 20px 11px;
 }
 
 /* Monitor status cluster (lives in the chassis head, on cream) */
@@ -173,38 +200,41 @@
   color: var(--ink);
 }
 /* run/mode state pills beside the readout LEDs in the nav bar */
-.head-readouts .mm-state {
+.readout-panel .mm-state {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  align-items: flex-start;
+  align-items: stretch; /* equal-width pills */
 }
-.head-readouts .mm-pill {
+/* pills now sit on the dark led-panel, so they're light-on-dark */
+.readout-panel .mm-pill {
+  min-width: 56px;
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1px;
+  text-align: center;
   padding: 3px 8px;
   border-radius: 5px;
-  border: 1px solid var(--chassis-edge);
-  color: var(--ink-soft);
-  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #8b8f8c;
+  background: rgba(255, 255, 255, 0.05);
   white-space: nowrap;
 }
-.head-readouts .mm-run.on {
-  color: #1f7a45;
-  border-color: rgba(47, 213, 115, 0.5);
-  background: rgba(47, 213, 115, 0.16);
+.readout-panel .mm-run.on {
+  color: #2fd573;
+  border-color: rgba(47, 213, 115, 0.55);
+  background: rgba(47, 213, 115, 0.18);
 }
-.head-readouts .mm-run.halt {
+.readout-panel .mm-run.halt {
   color: #fff;
   border-color: var(--stripe-red);
   background: var(--stripe-red);
 }
-.head-readouts .mm-mode.live {
-  color: var(--stripe-red);
-  border-color: rgba(197, 54, 42, 0.5);
-  background: rgba(197, 54, 42, 0.12);
+.readout-panel .mm-mode.live {
+  color: #ff6a4d;
+  border-color: rgba(240, 86, 63, 0.6);
+  background: rgba(240, 86, 63, 0.18);
 }
 
 /* in-chassis section anchors — replace the old route tabs (one page now) */
@@ -571,11 +601,11 @@
    whole panel matches the height of the day-P&L / SPY LEDs beside it. */
 .master--compact {
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px 18px;
-  padding: 9px 16px 11px;
+  justify-content: center;
+  gap: 6px 14px;
+  padding: 9px 14px 11px;
   min-width: 0;
 }
 .master--compact .master-title {
