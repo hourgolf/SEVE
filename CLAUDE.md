@@ -29,6 +29,17 @@ brand + auth). The cream chassis lives in `app/console.css` (scoped under
 `.console-root`); the dark data panels use `app/globals.css`. Fonts: IBM Plex Sans
 + JetBrains Mono.
 
+**Responsive split (2026-05-31):** `app/page.tsx`'s `Surface` calls all data hooks
+ONCE, then branches on `useIsMobile()` (820px): `<DesktopSurface>` (the one-page
+909 chassis) above, `<MobileApp>` (phone tab-shell) below. Shared `SurfaceProps`
+(`components/surfaceTypes.ts`) — neither layout re-subscribes. The mobile app
+(`components/mobile/MobileApp.tsx`, styles `app/mobile.css`) is a native-style
+shell: sticky cream vitals header (RUN/PAPER + SPY/day-P&L LEDs) · scrolling screen ·
+fixed 5-tab bottom bar (Live=chart+chain/pos toggle · Desk=P&L/book · Mix=swipe
+carousel of full ChannelStrips · Master=full MasterStrip+tape · Log). It reuses the
+exact same hardware components, so it must stay inside `.console-root` (which owns
+the `--pm-*`/`--knob-*`/`--led-*`/`--chassis` vars + the dark default text color).
+
 ## Data seam (the architecture spine)
 One hook owns all reads; components are dumb/props-driven. Swap the hook to change
 the source without touching UI.
