@@ -190,13 +190,16 @@ Deno.serve(async () => {
     const pendingSpyOpt = openOrders.some((o) => String(o.symbol).startsWith("SPY"));
     const holding = spyOptPos[0]; // single-position strategy
 
-    // equity snapshot (fund-level) every run
-    await sb.from("equity_snapshots").insert({
-      strategist_id: null,
-      net_liquidation: Number(account.equity),
-      cash: Number(account.cash),
-      unrealized_pnl: spyOptPos.reduce((a, p) => a + Number(p.unrealized_pl ?? 0), 0),
-    });
+    // equity snapshot (fund-level) — only on a fresh 15m bar (or while holding,
+    // to capture entry/exit P&L) to avoid one row every single minute.
+    if (freshBar || holding) {
+      await sb.from("equity_snapshots").insert({
+        strategist_id: null,
+        net_liquidation: Number(account.equity),
+        cash: Number(account.cash),
+        unrealized_pnl: spyOptPos.reduce((a, p) => a + Number(p.unrealized_pl ?? 0), 0),
+      });
+    }
 
     const guards = {
       dryRun: DRY_RUN,
