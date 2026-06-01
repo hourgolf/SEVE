@@ -45,9 +45,10 @@ Strike: ATM. One position at a time.
 ## 6. Inputs required
 1-min SPY OHLCV · ATR · relative volume · 0/1DTE chain.
 
-## Desk note (known limitation)
-The Grinder's 5-minute time-stop depends on the *real* entry time. The live worker
-currently reconstructs open positions with `entryMinute: 0`, so the time-stop fires
-on the next evaluation — which is why this channel turns over so fast. Persisting
-the entry timestamp is the fix (flagged in the worker handoff). For import, the
-`rel_vol` rule maps; momentum has no explicit spec kind (closest: `ma_cross`).
+## Desk note
+The Grinder's 5-minute time-stop depends on the *real* entry time. **Fixed in
+worker 2026-06-01c** — the worker now reconstructs `entryMinute` from the
+position's `opened_at`, so the time-stop measures actual hold time (it used to
+fire on the next evaluation, which is why this channel churned so fast). For
+import, the `rel_vol` rule maps; momentum has no explicit spec kind (closest:
+`ma_cross`).

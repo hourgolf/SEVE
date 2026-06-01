@@ -1,6 +1,7 @@
-// ⚑ WORKER VERSION: 2026-06-01b  (0DTE→1DTE roll · order resilience · channel
-//   independence · reconciliation). If the function deployed in Supabase does NOT
-//   show THIS version line at the top, the paste is stale — re-copy this file.
+// ⚑ WORKER VERSION: 2026-06-01c  (real entry-time time-stops · 0DTE→1DTE roll ·
+//   order resilience · channel independence · reconciliation). If the function
+//   deployed in Supabase does NOT show THIS version line at the top, the paste is
+//   stale — re-copy this file.
 // ============================================================================
 //  paper-trader — DISPATCHER DRAFT (multi-channel "one engine, two drivers").
 //
@@ -353,7 +354,18 @@ Deno.serve(async () => {
       // entryUnderlying ≈ strike: the worker enters ATM, so strike = round(spot
       // at entry), within ~$0.50 — fine for the ATR stops, and needs no extra
       // column (uses the existing positions schema as-is).
-      const pos: Pos | null = row ? { optType: row.opt_type, entryMinute: 0, entryUnderlying: Number(row.strike), peakFavorable: f.close } : null;
+      // Reconstruct the REAL entry bar index from opened_at (was hardcoded 0 — so
+      // time-stops measured from bar 0 and fired on the FIRST evaluation = churn,
+      // and no position could truly be held). A position opened before today's
+      // first bar (a 1DTE held overnight) resolves to index 0 → its time-stop trips
+      // at the next session's open and winds it down, which is what we want.
+      let entryMinute = i; // default: brand-new this run
+      if (row?.opened_at) {
+        const entryMs = Date.parse(String(row.opened_at));
+        const idx = bars.findIndex((b) => b.ts >= entryMs);
+        entryMinute = idx >= 0 ? idx : i;
+      }
+      const pos: Pos | null = row ? { optType: row.opt_type, entryMinute, entryUnderlying: Number(row.strike), peakFavorable: f.close } : null;
 
       // Build this channel's evaluator (spec evaluators precompute over `bars`).
       const evaluate: Evaluate = code ? code.evaluate : compiled!.build(bars);
