@@ -32,6 +32,12 @@
 //      whole netted Alpaca lot), and a desk row with no matching Alpaca position
 //      is RECONCILED closed (valued at the last quote) — fixes stuck "open" rows
 //      when one channel's exit flattened another holding the same contract.
+//    - CHANNEL INDEPENDENCE: every order carries a per-channel client_order_id
+//      (`slug-occ-min`). The old account-wide "already_open" guard is gone — a
+//      channel only checks ITS OWN orders, so two channels can hold the same
+//      contract independently (Alpaca nets the lot; each keeps its own book).
+//      Re-buy loop is still guarded per channel: a working order blocks a re-fire,
+//      and a filled-but-unrecorded position is reconstructed, not re-bought.
 // ============================================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -263,6 +269,9 @@ function aggregate(bars: Bar[], tf: number): Bar[] {
 }
 function etParts(ms: number) { const d = new Date(ms); const et = new Date(d.toLocaleString("en-US", { timeZone: "America/New_York" })); return { min: et.getHours() * 60 + et.getMinutes(), date: `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}` }; }
 
+// Alpaca order statuses that mean "still working" (not yet a fill/cancel).
+const WORKING_ORDER = new Set(["new", "accepted", "pending_new", "partially_filled", "held", "calculated", "accepted_for_bidding"]);
+
 Deno.serve(async () => {
   try {
     const { data: fund } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
@@ -276,7 +285,10 @@ Deno.serve(async () => {
     let positions: Record<string, unknown>[] = [];
     let positionsOk = true;
     try { positions = await aGet("/v2/positions"); } catch { positionsOk = false; }
-    const openOrders: Record<string, unknown>[] = await aGet("/v2/orders?status=open&limit=100").catch(() => []);
+    // All recent orders. Each is tagged with a per-CHANNEL client_order_id, so a
+    // channel only ever looks at its OWN orders (independence — no account-wide
+    // symbol guard, so two channels can hold the same contract).
+    const allOrders: Record<string, unknown>[] = await aGet("/v2/orders?status=all&limit=500&direction=desc").catch(() => []);
 
     // today's session 1m bars (oldest→newest), from market open
     const { data: rawBars } = await sb.from("underlying_bars").select("ts,open,high,low,close,volume,vwap").eq("symbol", "SPY").order("ts", { ascending: false }).limit(900);
@@ -361,7 +373,7 @@ Deno.serve(async () => {
         // so one channel's exit can't flatten another channel holding the SAME
         // 0DTE (the root cause of the stuck "open" rows).
         const sellQty = Math.max(1, Math.min(Math.round(Number(alp.qty)), Number(row.qty)));
-        if (!DRY_RUN) await aPost("/v2/orders", { symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day" });
+        if (!DRY_RUN) await aPost("/v2/orders", { symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` });
         // Per-channel realized P&L on its own qty (alp.unrealized_pl is the whole
         // netted lot — wrong when shared): (mark − entry) × qty × 100.
         const realized = (Number(alp.current_price ?? 0) - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
@@ -376,10 +388,26 @@ Deno.serve(async () => {
         const occ = occSymbol(todayET, strike, dir);
         let blocked = guardBlocked;
         if (!blocked && armBlocked) blocked = "not_armed"; // draft/disabled → no new entries
-        // Belt-and-suspenders: never double-buy a contract we already hold or
-        // have a working order for — even if our desk-row tracking failed. This
-        // alone breaks the silent re-buy loop regardless of any write failure.
-        if (!blocked && (positions.some((p) => String(p.symbol) === occ) || openOrders.some((o) => String(o.symbol) === occ))) blocked = "already_open";
+        // Per-CHANNEL idempotency (independence): look ONLY at THIS channel's own
+        // orders, tagged by a slug-prefixed client_order_id — never the shared
+        // account. So another channel holding `occ` does NOT block this one.
+        const myOrders = allOrders.filter((o) => String(o.client_order_id ?? "").startsWith(`${s.slug}-${occ}-`));
+        if (!blocked && myOrders.some((o) => WORKING_ORDER.has(String(o.status)))) blocked = "order_working";
+        // Re-buy-loop guard, per channel: if THIS channel's filled orders net to a
+        // long position in `occ` but there's no open desk row, the insert was lost
+        // last run — RECONSTRUCT the row from the fills instead of buying again.
+        if (!blocked) {
+          const filled = myOrders.filter((o) => String(o.status) === "filled");
+          const net = filled.reduce((q, o) => q + (String(o.side) === "buy" ? 1 : -1) * Number(o.filled_qty ?? 0), 0);
+          if (net > 0) {
+            const buys = filled.filter((o) => String(o.side) === "buy");
+            const totBuy = buys.reduce((q, o) => q + Number(o.filled_qty ?? 0), 0);
+            const avg = totBuy ? buys.reduce((s2, o) => s2 + Number(o.filled_avg_price ?? 0) * Number(o.filled_qty ?? 0), 0) / totBuy : 0;
+            await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg, current_mark: avg, unrealized_pnl: 0, status: "open" });
+            await journal("WARN", `${s.slug}: recovered ${net} ${occ} from filled orders (lost insert) — not re-buying`);
+            blocked = "reconstructed";
+          }
+        }
         // Stop knob (daily_stop_usd): halt NEW entries once this channel's REALIZED
         // P&L today is at/under its loss budget. Open positions keep managing their
         // own exits — this only stops ADDING risk. (Was a no-op before.)
@@ -403,7 +431,7 @@ Deno.serve(async () => {
         }
         await sb.from("signals").insert({ strategist_id: s.id, signal_type: intent.reason, underlying_price: f.close, direction: dir, acted_on: !blocked, blocked_reason: blocked, rationale: { occ, ask, qty, atr: Number(f.atr.toFixed(2)), er: Number(f.er.toFixed(2)), relVol: Number(f.relVol.toFixed(2)) } });
         if (!blocked && qty > 0 && !DRY_RUN) {
-          const o = await aPost("/v2/orders", { symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day" });
+          const o = await aPost("/v2/orders", { symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${occ}-${etMin}` });
           // CRITICAL: confirm the position row was recorded. A silent insert
           // failure here is what caused the re-buy loop — if it fails, journal
           // LOUD (the `already_open` guard above still prevents another buy).
