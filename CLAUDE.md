@@ -97,23 +97,59 @@ on demand). market-ingest (Deno edge fn, given) writes the live tape each minute
   after). Alpaca historical: stock bars + option **bars/trades** OK on free plan,
   but **no historical bid/ask** (so spread is modeled at 3%).
 
-## Live paper-trading worker — Phase B (CURRENT FRONTIER)
-`supabase/functions/paper-trader/index.ts` — self-contained Deno edge fn, cron'd
-every minute (Mon–Fri market hours). Trades the 15m EMA cross as the **`breakout`**
-strategist (so the Console's Breakout knobs + mute + kill switch control it).
-Stateless: reconstructs state from Alpaca paper (`paper-api.alpaca.markets`,
-`/v2/account|positions|orders`), places market orders, writes positions/signals/
-equity_snapshots/events.
-- **DEPLOYED + scheduled + verified** (call path works, writes equity). Currently
-  **`DRY_RUN=true`** (writes signals/equity, places NO orders). The function has
-  **Verify-JWT OFF** (internal cron worker) — that's why the cron's call succeeds.
-- **To go live (paper):** set the function secret `DRY_RUN=false` and redeploy.
-- Exits: opposite cross / premium stop (−50%) / 45m time-stop / EOD flatten.
-- Sizing: off Alpaca equity ($100k paper) × capital_pct × aggression, capped at
-  max_contracts. Note the $100k paper balance vs the $10k console master — capped
-  by max-contracts so size stays sane.
-- **Pending small redeploy:** equity now written only on a fresh 15m bar (15× fewer
-  rows) — paste the updated file into the dashboard to pick it up.
+## Live paper-trading worker — multi-channel dispatcher (LIVE)
+`supabase/functions/paper-trader/index.dispatcher.draft.ts` is the **canonical**
+worker now — a self-contained Deno edge fn, cron'd every minute (Mon–Fri market
+hours). It's a **multi-channel dispatcher**: it runs each enabled strategist's
+mandate strategy (the worker mirrors the logic in `engine/registry.ts`; the
+Grinder/`grind` scalper is the most active) and places single-leg SPY 0DTE market
+orders on Alpaca paper, writing positions/signals/equity_snapshots/events. Stateless
+— reconstructs state from Alpaca paper (`paper-api.alpaca.markets`,
+`/v2/account|positions|orders`); the Console's per-channel knobs + mute/solo + master
+kill switch gate it.
+- **Deploy by pasting that file into the Supabase Edge Function editor** (I have no
+  CLI). Verify-JWT is OFF (internal cron worker). After any edit, confirm the
+  DEPLOYED worker == this repo file.
+- **Status: DEPLOYED, currently `DRY_RUN=true`** (writes signals/equity, places NO
+  orders). The user killed it after a **runaway re-buy incident** — root cause: a
+  position INSERT used a non-existent `entry_underlying` column → silent supabase-js
+  failure → no desk row → the worker saw itself flat → re-bought every minute (~48
+  contracts). FIXED in the repo: (a) `already_open` guard (skip if an open
+  position/order for the OCC symbol exists), (b) INSERT `.error` check, (c) NO
+  `entry_underlying` column — uses `strike` as the ATM entry-underlying proxy (no
+  schema migration). **Lesson: never invoke the armed worker to "verify"; never add
+  DB columns the user has to chase — hand them copy-paste SQL or avoid the column.**
+- **To re-arm (paper):** redeploy the hardened repo file, dry-run-verify one cycle,
+  THEN set `DRY_RUN=false` and redeploy.
+- Sizing: budget = Alpaca equity ($100k paper) × capital_pct% × aggression%;
+  qty = floor(budget ÷ (ask×100)) capped at max_contracts (keeps size sane vs the
+  $10k console master). Exits: opposite signal / premium stop (−50%) / 45m time-stop
+  / EOD flatten. NOTE: the **Stop knob (`daily_stop_usd`) is NOT wired** into the
+  dispatcher yet — it currently has no effect.
+
+## Strategy channels & Add-Channel (CURRENT FRONTIER)
+Each channel runs its OWN mandate strategy (not one shared thesis). The goal: a user
+adds/removes channels by importing a strategy-thesis `.md`.
+- `engine/registry.ts` — `STRATEGY_REGISTRY` maps each slug to a `StrategyDef`
+  (`{slug,name,timeframeMin,warmupBars,mandate,build}`). The 4 channels:
+  breakout→ORB (`strategies/breakout.ts`), fade→VWAP reversion (`fade.ts`),
+  power→Power-Hour lean (`power.ts`, NEW), grind→scalper (`grind.ts`, NEW). power &
+  grind are **unbacktested first-draft theses.** Backtest any:
+  `npm run backtest -- --strat <slug>`.
+- **Add-Channel phase 1 (DONE, shipped):** paste/upload a thesis `.md` →
+  `lib/desk/strategySpec.ts` (`StrategySpec`/`Condition` types, `parseFrontmatter`,
+  `capabilityCheck`) gives an instant frontmatter preview + flags unsupported inputs;
+  `app/api/compile-strategy/route.ts` (server-side Anthropic Messages API via fetch,
+  forced tool-use → `StrategySpec`; degrades to `{needsKey:true}` with no key) does
+  the full LLM compile; `components/console/AddChannel.tsx` is the sheet (`+ Add
+  Channel` on the desktop composer SectionLabel; `.ac-*` styles in `app/console.css`).
+- **Capability reality:** the desk runs only **single-leg directional** strategies on
+  the features `computeFeatures` provides (ma_cross / vwap / opening_range / rel_vol /
+  rsi / time). It has NO: multi-leg orders (straddle/strangle/vertical/condor), NYSE
+  TICK, GEX/dealer-gamma, IV-rank, or event calendar. The user's 3 theses
+  (`Trading Thesis/`, extracted to `_extracted/`): #1 ORB ≈ runnable; #2 straddle &
+  #3 vertical need multi-leg + those feeds. The UI flags these so a channel is never
+  armed blind. See `docs/strategy-channels.md`.
 
 ## Operational gotchas (important)
 - **Secrets:** `.env.local` (gitignored) holds the anon key + (added for backfills)
@@ -127,24 +163,37 @@ equity_snapshots/events.
 - A stray `TR-909_T_600_FNL_A.jpg` sits untracked in the repo root — leave it
   (it's the user's reference image; gitignored from commits implicitly by `git add -A` care).
 
-## NEXT SESSION: UI/UX tweaks (continuing the off-market polish)
-Recent sessions did a big UI arc: merged the 3 routes into one 909 surface,
-redesigned the header (`$EVE · DESK`, head master + day-P&L/SPY readout LEDs),
-built the **mobile phone app** (3-tab shell, see Responsive split), added **knob
-LED glow rings + a cream 909 re-theme**, and gave the chart **zoom/pan + ~15 days
-of history**. All shipped to `main` and live.
+## NEXT SESSION: wire compiled channels live (Add-Channel phase 2)
+Add-Channel **phase 1** (import → frontmatter preview → LLM compile → capability
+flags) is shipped. So are: the SPY-LED day-direction fix (green/red vs **prior
+close**, not the pre-market print), the realized-P&L "Today's trades" view + Day-P&L
+LED counting realized+unrealized, the auth magic-link redirect fix (`/`) + locked
+master controls when anon, and the live `/api/spot` Alpaca price.
 
-Frontier is incremental tweaks — the user iterates fast via real-device
-screenshots, so keep the preview server up and screenshot at 390px (mobile) AND
-1280px (desktop) for every change. Known candidate areas / things mid-flight:
-- **Mobile fit & feel:** the "less dark / more cream / more 909 buttons" direction
-  is ongoing — keep pulling the aesthetic back toward the drum machine. Mix knobs
-  are horizontal with LED meters; the SPY/day-P&L captions and tap-target sizes
-  may still want tuning.
-- **Chart depth:** optional follow-ups noted — lazy-load older bars at the far-left
-  pan edge (table has 2+ yrs), and/or bump the 15-day default deeper.
-- The **Desk worker is still `DRY_RUN=true`** — once it trades, the Desk/P&L/equity
-  visualizations get real data and may deserve another visual pass.
+**One-time setup the user must do in the dashboards (I can't):**
+- **Vercel env:** add `ANTHROPIC_API_KEY` (+ optional `ANTHROPIC_MODEL`) to activate
+  the `.md` compile route. (ALPACA_KEY/SECRET already set — powers `/api/spot`.)
+- **Supabase Auth → URL Configuration:** Site URL = `https://seve-henna.vercel.app`
+  (magic-link 404'd before; redirect is fixed to `/`). Sign-in is required for the
+  KILL switch + knob persistence (anon = read-only, writes silently no-op).
+
+**Tasks, priority order:**
+1. **Add-Channel phase 2:** compiled spec → backtest-gate (engine on real
+   `option_bars`) → **Arm** → persist (new `strategists`/`strategist_config` + spec
+   rows) → render channels **dynamically** (de-hardcode `COLOR_BY_SLUG`/`ORDER` in
+   `lib/desk/load.ts` so N channels show) → write `specToEvaluate(spec)` (StrategySpec
+   → engine `Evaluate` for the SUPPORTED condition kinds) → wire armed channels into
+   the dispatcher worker. Add the **mobile** `+ Add Channel` trigger.
+2. **Wire the Stop knob** (`daily_stop_usd`) into the dispatcher — halt a channel at
+   its daily realized loss (currently a no-op).
+3. **Backtest power & grind on REAL fills:** backfill `option_bars`
+   (`npm run backfill:options …`, needs a temp INSERT policy) → `npm run backtest --
+   --source real --options real --strat power|grind` → tune the theses.
+4. **Bigger (unblocks theses #2/#3):** multi-leg option orders + the missing feeds
+   (GEX/dealer-gamma, NYSE TICK, event calendar, IV-rank).
+
+The user iterates fast via real-device screenshots — keep the preview server up and
+screenshot at 390px (mobile) AND 1280px (desktop) for every UI change.
 
 Workflow gotcha: **stop the preview dev server before `npm run build`** (they share
 `.next`; running both corrupts it — see the user memory note). `npx tsc --noEmit`
