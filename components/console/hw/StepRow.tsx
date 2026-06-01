@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { play909 } from "@/lib/audio/drum909";
 import type { PmColor, Step } from "@/lib/desk/types";
 
 const COLOR_VAR: Record<PmColor, string> = {
@@ -16,8 +17,18 @@ export interface StepRowProps {
 }
 
 // The 16-step sequencer row — the console's showpiece. Each cell lights in a
-// strategist's color; `pulse` animates a recent hit.
+// strategist's color as signals land; tapping a pad also plays its TR-909 voice
+// so the tape doubles as a playable drum machine. `pulse` animates a recent hit.
 function StepRowImpl({ steps, onStep }: StepRowProps) {
+  // Trigger on pointer-down for low latency; flash the pad without a re-render.
+  const hit = (e: React.PointerEvent<HTMLButtonElement>, i: number) => {
+    play909(i);
+    const el = e.currentTarget;
+    el.classList.remove("hit");
+    void el.offsetWidth; // restart the flash animation
+    el.classList.add("hit");
+    onStep?.(i);
+  };
   return (
     <div className="steprow">
       {steps.map((s, i) => {
@@ -28,7 +39,7 @@ function StepRowImpl({ steps, onStep }: StepRowProps) {
             key={i}
             className={`step${s.lit ? " lit" : ""}${s.pulse ? " pulse" : ""}`}
             style={{ ["--step" as string]: c }}
-            onClick={() => onStep?.(i)}
+            onPointerDown={(e) => hit(e, i)}
             aria-label={`step ${i + 1}`}
           >
             <span className="step-num">{i + 1}</span>

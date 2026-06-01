@@ -820,6 +820,20 @@
     box-shadow: 0 0 16px 2px transparent;
   }
 }
+/* tap-to-play: a quick light-up flash in the pad's colour when struck */
+.step.hit {
+  animation: stepHit 0.22s ease-out;
+}
+@keyframes stepHit {
+  0% {
+    background: linear-gradient(180deg, var(--step), color-mix(in srgb, var(--step) 60%, #000));
+    box-shadow: 0 0 16px 3px color-mix(in srgb, var(--step) 85%, transparent),
+      0 1px 0 rgba(255, 255, 255, 0.4) inset;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
 .step-num {
   position: absolute;
   top: 2px;
