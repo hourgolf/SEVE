@@ -20,9 +20,13 @@ const VWAP_KEY = "seve-chart-vwap";
 const EMA_KEY = "seve-chart-ema";
 const VOL_KEY = "seve-chart-vol";
 const MACD_KEY = "seve-chart-macd";
+const EMA_FAST_KEY = "seve-chart-ema-fast";
+const EMA_SLOW_KEY = "seve-chart-ema-slow";
 
-const EMA_FAST = 9;
-const EMA_SLOW = 21;
+const EMA_FAST_DEFAULT = 9;
+const EMA_SLOW_DEFAULT = 21;
+const EMA_MIN = 2;
+const EMA_MAX = 200;
 const EMA_FAST_COLOR = "#45c4d6"; // cyan
 const EMA_SLOW_COLOR = "#c061ff"; // violet
 // Default visible window: the latest N bars (readable), not the whole history.
@@ -65,6 +69,8 @@ export function IntradayChart({
   const [showEma, setShowEma] = useState(true);
   const [showVol, setShowVol] = useState(false);
   const [showMacd, setShowMacd] = useState(false);
+  const [emaFastP, setEmaFastP] = useState(EMA_FAST_DEFAULT);
+  const [emaSlowP, setEmaSlowP] = useState(EMA_SLOW_DEFAULT);
   const [hover, setHover] = useState<number | null>(null);
   // Vertical mouse position over the chart (0 = top … 1 = bottom), for the
   // horizontal crosshair + the price tag that reads off the cursor.
@@ -89,7 +95,24 @@ export function IntradayChart({
     if (window.localStorage.getItem(EMA_KEY) === "0") setShowEma(false);
     if (window.localStorage.getItem(VOL_KEY) === "1") setShowVol(true);
     if (window.localStorage.getItem(MACD_KEY) === "1") setShowMacd(true);
+    const ef = Number(window.localStorage.getItem(EMA_FAST_KEY));
+    if (ef >= EMA_MIN && ef <= EMA_MAX) setEmaFastP(ef);
+    const es = Number(window.localStorage.getItem(EMA_SLOW_KEY));
+    if (es >= EMA_MIN && es <= EMA_MAX) setEmaSlowP(es);
   }, []);
+
+  // Commit on blur: clamp the typed value into range and persist it.
+  const commitEma = (which: "fast" | "slow", raw: number) => {
+    const fallback = which === "fast" ? EMA_FAST_DEFAULT : EMA_SLOW_DEFAULT;
+    const v = Math.round(Math.min(EMA_MAX, Math.max(EMA_MIN, raw || fallback)));
+    if (which === "fast") {
+      setEmaFastP(v);
+      try { window.localStorage.setItem(EMA_FAST_KEY, String(v)); } catch {}
+    } else {
+      setEmaSlowP(v);
+      try { window.localStorage.setItem(EMA_SLOW_KEY, String(v)); } catch {}
+    }
+  };
 
   const persistToggle =
     (key: string, set: React.Dispatch<React.SetStateAction<boolean>>) => () =>
@@ -116,8 +139,11 @@ export function IntradayChart({
     [agg]
   );
   const vwapArr = useMemo(() => agg.map((b) => b.vwap), [agg]);
-  const emaFast = useMemo(() => ema(closes, EMA_FAST), [closes]);
-  const emaSlow = useMemo(() => ema(closes, EMA_SLOW), [closes]);
+  // Clamp for the math so a mid-edit value (e.g. "1" or empty) can't break ema().
+  const efN = Math.min(EMA_MAX, Math.max(EMA_MIN, emaFastP || EMA_FAST_DEFAULT));
+  const esN = Math.min(EMA_MAX, Math.max(EMA_MIN, emaSlowP || EMA_SLOW_DEFAULT));
+  const emaFast = useMemo(() => ema(closes, efN), [closes, efN]);
+  const emaSlow = useMemo(() => ema(closes, esN), [closes, esN]);
   const md = useMemo(() => computeMacd(closes), [closes]);
   const N = agg.length;
 
@@ -319,21 +345,17 @@ export function IntradayChart({
     <div className="panel">
       <div className="phead">
         <span className="t">SPY — Intraday</span>
-        <span className="phead-right chart-controls">
-          <button className={`ind-chip${showEma ? " on" : ""}`} onClick={persistToggle(EMA_KEY, setShowEma)} aria-pressed={showEma} title="EMA 9 / 21">EMA</button>
-          <button className={`ind-chip${showVwap ? " on" : ""}`} onClick={persistToggle(VWAP_KEY, setShowVwap)} aria-pressed={showVwap} title="VWAP">VWAP</button>
-          <button className={`ind-chip${showVol ? " on" : ""}`} onClick={persistToggle(VOL_KEY, setShowVol)} aria-pressed={showVol} title="Volume">VOL</button>
-          <button className={`ind-chip${showMacd ? " on" : ""}`} onClick={persistToggle(MACD_KEY, setShowMacd)} aria-pressed={showMacd} title="MACD 12/26/9">MACD</button>
+        <span className="phead-right chart-controls chart-controls--top">
+          <span className="chart-toggle" role="group" aria-label="chart type">
+            <button className={mode === "line" ? "on" : ""} onClick={() => setModePersist("line")} aria-pressed={mode === "line"}>LINE</button>
+            <button className={mode === "candles" ? "on" : ""} onClick={() => setModePersist("candles")} aria-pressed={mode === "candles"}>CANDLES</button>
+          </span>
           <span className="seg" role="group" aria-label="timeframe">
             {TIMEFRAMES.map((t) => (
               <button key={t.minutes} className={tf === t.minutes ? "on" : ""} onClick={() => setTfPersist(t.minutes)} aria-pressed={tf === t.minutes}>
                 {t.label}
               </button>
             ))}
-          </span>
-          <span className="chart-toggle" role="group" aria-label="chart type">
-            <button className={mode === "line" ? "on" : ""} onClick={() => setModePersist("line")} aria-pressed={mode === "line"}>LINE</button>
-            <button className={mode === "candles" ? "on" : ""} onClick={() => setModePersist("candles")} aria-pressed={mode === "candles"}>CANDLES</button>
           </span>
         </span>
       </div>
@@ -474,12 +496,46 @@ export function IntradayChart({
             <MacdChart macd={vMacd} signal={vSignal} hist={vHist} />
           </div>
         )}
-        {showEma && (
-          <div className="chart-meta">
-            <span style={{ color: EMA_FAST_COLOR }}>EMA{EMA_FAST}</span>{" "}
-            <span style={{ color: EMA_SLOW_COLOR }}>EMA{EMA_SLOW}</span>
-          </div>
-        )}
+        {/* indicator toggles live below the chart now; EMA carries editable
+            periods so 9/21 can become 8/21 or any custom pair */}
+        <div className="chart-controls chart-controls--bottom">
+          <span className="ind-chips">
+            <button className={`ind-chip${showEma ? " on" : ""}`} onClick={persistToggle(EMA_KEY, setShowEma)} aria-pressed={showEma} title="EMA overlay">EMA</button>
+            <button className={`ind-chip${showVwap ? " on" : ""}`} onClick={persistToggle(VWAP_KEY, setShowVwap)} aria-pressed={showVwap} title="VWAP">VWAP</button>
+            <button className={`ind-chip${showVol ? " on" : ""}`} onClick={persistToggle(VOL_KEY, setShowVol)} aria-pressed={showVol} title="Volume">VOL</button>
+            <button className={`ind-chip${showMacd ? " on" : ""}`} onClick={persistToggle(MACD_KEY, setShowMacd)} aria-pressed={showMacd} title="MACD 12/26/9">MACD</button>
+          </span>
+          {showEma && (
+            <span className="ema-cfg" title="EMA periods (fast / slow)">
+              <span className="ema-tag">EMA</span>
+              <input
+                className="ema-in"
+                style={{ color: EMA_FAST_COLOR }}
+                type="number"
+                inputMode="numeric"
+                min={EMA_MIN}
+                max={EMA_MAX}
+                value={emaFastP || ""}
+                aria-label="EMA fast period"
+                onChange={(e) => setEmaFastP(Math.floor(Number(e.target.value)) || 0)}
+                onBlur={(e) => commitEma("fast", Number(e.target.value))}
+              />
+              <span className="ema-sep">/</span>
+              <input
+                className="ema-in"
+                style={{ color: EMA_SLOW_COLOR }}
+                type="number"
+                inputMode="numeric"
+                min={EMA_MIN}
+                max={EMA_MAX}
+                value={emaSlowP || ""}
+                aria-label="EMA slow period"
+                onChange={(e) => setEmaSlowP(Math.floor(Number(e.target.value)) || 0)}
+                onBlur={(e) => commitEma("slow", Number(e.target.value))}
+              />
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

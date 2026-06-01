@@ -494,6 +494,62 @@ svg.spark {
   gap: 8px;
   justify-content: flex-end;
 }
+/* top row: chart-type (left) + timeframe (right), full width under the title */
+.chart-controls--top {
+  flex: 1 1 100%;
+  justify-content: space-between;
+}
+/* bottom row: indicator chips (left) + editable EMA periods (right) */
+.chart-controls--bottom {
+  justify-content: space-between;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+.ind-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* editable EMA periods (replaces the old static EMA9/EMA21 legend) */
+.ema-cfg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+}
+.ema-tag {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.ema-in {
+  width: 32px;
+  padding: 2px 2px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(10, 15, 17, 0.6);
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.ema-in:focus {
+  outline: none;
+  border-color: var(--text);
+}
+.ema-in::-webkit-outer-spin-button,
+.ema-in::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.ema-sep {
+  font-size: 10px;
+  color: var(--muted-2);
+}
 /* timeframe segmented control */
 .seg {
   display: inline-flex;
@@ -783,12 +839,13 @@ svg.spark {
   bottom: 1px;
   min-width: 16px;
   border-radius: 3px;
-  background: linear-gradient(180deg, rgba(120, 132, 138, 0.55), rgba(70, 80, 86, 0.55));
-  border: 1px solid var(--border-bright);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
+  /* cream 909 handle so it stands out against the dark track */
+  background: linear-gradient(180deg, #e7e5da, #c3c1b6);
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 .chart-scrub:hover .chart-scrub-thumb {
-  background: linear-gradient(180deg, rgba(150, 162, 168, 0.6), rgba(90, 100, 106, 0.6));
+  background: linear-gradient(180deg, #f3f1e7, #d2d0c4);
 }
 .chart-scrub-load {
   position: absolute;
