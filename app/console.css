@@ -563,6 +563,26 @@
   text-align: center;
   min-height: 24px;
 }
+/* lifecycle pill — a compiled channel is 'draft' until backtest-gated + armed */
+.ch-status {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  line-height: 1.4;
+}
+.ch-status--draft {
+  color: var(--led-amber, #ffb224);
+  background: color-mix(in srgb, var(--led-amber, #ffb224) 14%, transparent);
+}
+.ch-status--disabled {
+  color: #8d8b82;
+  background: rgba(141, 139, 130, 0.12);
+}
 .ch-knobs {
   display: flex;
   gap: 16px;
@@ -737,7 +757,49 @@
 .ac-dir { font-weight: 700; min-width: 34px; }
 .ac-dir.ac-call, .ac-dir.ac-both { color: var(--pm-green); }
 .ac-dir.ac-put { color: var(--led-red); }
-.ac-foot { margin-top: 8px; font-size: 10px; color: var(--muted-2); }
+.ac-foot { margin-top: 8px; font-size: 10px; color: var(--muted-2); line-height: 1.5; }
+.ac-foot code { background: rgba(255,255,255,0.08); padding: 0 4px; border-radius: 3px; font-family: var(--mono); font-size: 9.5px; }
+
+/* shared secondary button (backtest / draft / arm) */
+.ac-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-bright);
+  background: rgba(255,255,255,0.05);
+  color: var(--fg, #e8e6df);
+  cursor: pointer;
+}
+.ac-btn:disabled { opacity: 0.38; cursor: default; }
+
+.ac-gate { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ac-stats { margin-top: 10px; }
+.ac-stat-note { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted-2); margin-bottom: 6px; }
+.ac-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  font-size: 11.5px;
+  align-items: baseline;
+}
+.ac-grid span { color: var(--muted); }
+.ac-grid b { font-family: var(--mono); justify-self: end; }
+.ac-grid b.pos, .ac-mo.pos { color: var(--pm-green, #2fd573); }
+.ac-grid b.neg, .ac-mo.neg { color: var(--led-red, #ff5a52); }
+.ac-months { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.ac-mo { font-family: var(--mono); font-size: 9.5px; border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; }
+
+.ac-arm { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ac-accent { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
+.ac-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.ac-swatch.on { border-color: #fff; box-shadow: 0 0 6px currentColor; }
+.ac-arm-btns { display: flex; gap: 8px; margin-top: 10px; }
+.ac-armbtn { border-color: var(--pm-green, #2fd573); color: var(--pm-green, #2fd573); }
+.ac-armbtn:not(:disabled) { background: color-mix(in srgb, var(--pm-green, #2fd573) 14%, transparent); }
 /* not signed in → desk writes silently no-op, so lock + flag the controls
    (prevents a KILL/START that looks like it worked but never hit the DB) */
 .master-ctrls--locked .master-transport,

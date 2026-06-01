@@ -10,6 +10,11 @@ import type { EventLevel, OptionType } from "@/lib/types";
 // One of the four strategist accent colors (matches the schema seed).
 export type PmColor = "green" | "blue" | "amber" | "cyan";
 
+// Channel lifecycle: 'draft' = compiled/stored but never trades; 'armed' =
+// backtest-gated + live in the dispatcher; 'disabled' = parked. The dispatcher
+// only places orders for 'armed' channels.
+export type ChannelStatus = "draft" | "armed" | "disabled";
+
 // Mirrors strategist_config — the fader/knob/mute/solo positions.
 export interface StrategistConfig {
   capital_pct: number; // 0–100, % of fund this PM may deploy
@@ -28,6 +33,8 @@ export interface StrategistState {
   mandate: string;
   regime: string;
   color: PmColor;
+  // Lifecycle status — 'armed' channels trade; 'draft'/'disabled' do not.
+  status: ChannelStatus;
   config: StrategistConfig;
   // Factory defaults for this trader — what the channel's RESET restores. Carried
   // per-strategist so future pluggable traders ship their own default behaviour.

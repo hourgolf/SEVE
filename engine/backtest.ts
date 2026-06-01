@@ -15,6 +15,7 @@
 //                 modeled, so still not a final go/no-go number.
 // ============================================================================
 
+import { readFileSync } from "node:fs";
 import { computeFeatures, feePerContract, fillPrice, riskGovernor } from "./engine";
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
@@ -24,6 +25,8 @@ import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout
 import { DEFAULT_POWER_PARAMS, powerEvaluate } from "./strategies/power";
 import { DEFAULT_GRIND_PARAMS, grindEvaluate } from "./strategies/grind";
 import { makeCrossover } from "./strategies/crossover";
+import { specToStrategyDef, specPremiumExit, type CompiledStrategy } from "./specEvaluate";
+import type { StrategySpec } from "../lib/desk/strategySpec";
 import type { Bar, Evaluate, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
 
 const BASE_MS = 1_780_000_000_000;
@@ -55,7 +58,11 @@ export function simulateSession(
   fund: FundState,
   evaluate: Evaluate,
   chainAt: ChainProvider, // prices the chain at (spot, minutesToClose, tsMs)
-  gross = false // gross=true → fill at mid, no fees (signal-only P&L)
+  gross = false, // gross=true → fill at mid, no fees (signal-only P&L)
+  // Premium-based exits (option mark vs entry fill) — used by spec-compiled
+  // channels whose profit/stop are stated in % of premium, not underlying ATRs.
+  // Undefined → built-in strategies behave exactly as before.
+  premiumExit?: { profitPct?: number; stopPct?: number }
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -72,7 +79,18 @@ export function simulateSession(
           ? Math.max(pos.peakFavorable, f.close)
           : Math.min(pos.peakFavorable, f.close);
     }
-    const intent = evaluate(f, pos);
+    let intent = evaluate(f, pos);
+
+    // Premium profit/stop takes priority over the strategy's own exit when held.
+    if (pos && premiumExit && (!intent || intent.kind !== "exit")) {
+      const q = findQuote(chain, pos.strike, pos.optType);
+      if (q) {
+        if (premiumExit.profitPct != null && q.mid >= pos.entryPrice * (1 + premiumExit.profitPct / 100))
+          intent = { kind: "exit", reason: "target_premium" };
+        else if (premiumExit.stopPct != null && q.mid <= pos.entryPrice * (1 - premiumExit.stopPct / 100))
+          intent = { kind: "exit", reason: "stop_premium" };
+      }
+    }
 
     if (pos && intent && intent.kind === "exit") {
       const q = findQuote(chain, pos.strike, pos.optType);
@@ -116,7 +134,7 @@ export function simulateSession(
   return trades;
 }
 
-interface Metrics {
+export interface Metrics {
   nTrades: number;
   nDays: number;
   totalPnl: number;
@@ -128,7 +146,7 @@ interface Metrics {
   byReason: Record<string, number>;
 }
 
-function metrics(trades: Trade[], nDays: number): Metrics {
+export function metrics(trades: Trade[], nDays: number): Metrics {
   const n = trades.length;
   const wins = trades.filter((t) => t.pnl > 0);
   const losses = trades.filter((t) => t.pnl <= 0);
@@ -189,6 +207,17 @@ function argStr(name: string, def: string): string {
 async function main() {
   const source = argStr("source", "synthetic");
   const strat = argStr("strat", "fade");
+  // --spec <path>: load a compiled StrategySpec (the .md → JSON form) and run it
+  // through specToEvaluate — the SAME interpreter the live worker uses. This is
+  // the real-fills confirmation the Add-Channel gate surfaces before Arm.
+  const specPath = argStr("spec", "");
+  let specDef: CompiledStrategy | null = null;
+  let premiumExit: { profitPct?: number; stopPct?: number } | undefined;
+  if (specPath) {
+    const spec = JSON.parse(readFileSync(specPath, "utf8")) as StrategySpec;
+    specDef = specToStrategyDef(spec);
+    premiumExit = specPremiumExit(spec);
+  }
   // EMA Cross precomputes indicators over the session's closes, so its
   // evaluator is built per session; fade/breakout ignore the closes arg.
   const makeEval = (closes: number[]): Evaluate =>
@@ -201,10 +230,15 @@ async function main() {
           : strat === "grind"
             ? (f, pos) => grindEvaluate(f, pos, DEFAULT_GRIND_PARAMS)
             : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
+  // Per-session evaluator: a spec needs the bars (ET clock + precomputed series),
+  // built-ins need only the closes. One seam so both paths below stay identical.
+  const evalFor = (bars: Bar[]): Evaluate =>
+    specDef ? specDef.build(bars, specDef.timeframeMin) : makeEval(bars.map((b) => b.close));
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
-  const stratName =
-    strat === "cross" ? "EMA Cross (9/21 + MACD + vol)"
+  const stratName = specDef
+    ? `${specDef.name} (compiled spec)`
+    : strat === "cross" ? "EMA Cross (9/21 + MACD + vol)"
     : strat === "breakout" ? "The Breakout"
     : strat === "power" ? "Power Hour"
     : strat === "grind" ? "The Grinder"
@@ -240,7 +274,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      all.push(...simulateSession(s.bars, FADE, FUND, makeEval(s.bars.map((b) => b.close)), chainAt, gross));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit));
     }
     const optLabel = useRealOptions
       ? `REAL BARS + REAL option prices (modeled spread) · ${realDays}/${sessions.length} days had option data`
@@ -254,7 +288,7 @@ async function main() {
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
       const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-      all.push(...simulateSession(s.bars, FADE, FUND, makeEval(s.bars.map((b) => b.close)), chainAt, gross));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit));
     }
     report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }

@@ -27,8 +27,17 @@ export interface ChannelStripProps {
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
   const { persistConfig } = useDeskWrite();
-  const { id, slug, name, regime, color, config } = strategist;
+  const { id, slug, name, regime, color, status, config } = strategist;
   const cssColor = PM_VAR[color];
+
+  // Lifecycle pill — only shown for channels that are NOT live in the dispatcher
+  // (a compiled channel sits 'draft' until backtest-gated + armed).
+  const statusBadge =
+    status !== "armed" ? (
+      <span className={`ch-status ch-status--${status}`} title={`channel is ${status} — not trading`}>
+        {status}
+      </span>
+    ) : null;
 
   const day = pnl?.dayPnl ?? 0;
   // VU meter: signed fill, capped at ±$500 for the bar geometry.
@@ -103,6 +112,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
           <div className="ch-head">
             <span className={`ch-dot${active ? " on" : ""}`} />
             <div className="ch-name">{name}</div>
+            {statusBadge}
           </div>
           <div className="ch-regime">{regime}</div>
         </div>
@@ -154,6 +164,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
       <div className="ch-head">
         <span className={`ch-dot${active ? " on" : ""}`} />
         <div className="ch-name">{name}</div>
+        {statusBadge}
       </div>
       <div className="ch-regime">{regime}</div>
 

@@ -3,7 +3,22 @@
 import { useCallback } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { FundState, StrategistConfig } from "@/lib/desk/types";
+import type { ChannelStatus, FundState, PmColor, StrategistConfig } from "@/lib/desk/types";
+import type { StrategySpec } from "@/lib/desk/strategySpec";
+
+// A new compiled channel to persist (strategists row + its strategist_config).
+export interface NewChannelInput {
+  slug: string;
+  name: string;
+  mandate: string;
+  regime: string;
+  accent: PmColor;
+  sortOrder: number;
+  status: ChannelStatus;
+  spec: StrategySpec;
+  thesisMd: string;
+  config: StrategistConfig;
+}
 
 // Persists console changes to Supabase when the operator is signed in. Reads
 // stay anon; these UPDATEs require the `authenticated` write policies
@@ -44,5 +59,53 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund };
+  // Persist a newly-compiled channel: insert the strategists row, then its
+  // config row. If the config insert fails, roll back the orphan strategists
+  // row so a half-created channel never lingers. Returns the new id on success.
+  const createChannel = useCallback(
+    async (input: NewChannelInput): Promise<{ ok: boolean; id?: string; error?: string }> => {
+      if (!session) return { ok: false, error: "sign in to add a channel" };
+      try {
+        const sb = getSupabase();
+        const { data, error } = await sb
+          .from("strategists")
+          .insert({
+            slug: input.slug,
+            name: input.name,
+            mandate: input.mandate,
+            regime: input.regime,
+            accent: input.accent,
+            sort_order: input.sortOrder,
+            status: input.status,
+            spec_json: input.spec,
+            thesis_md: input.thesisMd,
+            is_active: true,
+          })
+          .select("id")
+          .single();
+        if (error || !data) return { ok: false, error: error?.message ?? "channel insert failed" };
+
+        const id = data.id as string;
+        const { error: cfgErr } = await sb.from("strategist_config").insert({
+          strategist_id: id,
+          capital_pct: input.config.capital_pct,
+          aggression: input.config.aggression,
+          max_contracts: input.config.max_contracts,
+          daily_stop_usd: input.config.daily_stop_usd,
+          muted: input.config.muted,
+          soloed: input.config.soloed,
+        });
+        if (cfgErr) {
+          await sb.from("strategists").delete().eq("id", id); // roll back the orphan
+          return { ok: false, error: `config insert failed: ${cfgErr.message}` };
+        }
+        return { ok: true, id };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "create failed" };
+      }
+    },
+    [session]
+  );
+
+  return { canWrite, persistConfig, persistFund, createChannel };
 }

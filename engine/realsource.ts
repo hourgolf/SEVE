@@ -63,7 +63,7 @@ function etParts(ms: number): { date: string; min: number } {
   return { date: `${p.year}-${p.month}-${p.day}`, min: hour * 60 + Number(p.minute) };
 }
 
-async function fetchAllBars(): Promise<RawBar[]> {
+async function fetchAllBars(sinceMs?: number): Promise<RawBar[]> {
   loadEnv();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -72,13 +72,17 @@ async function fetchAllBars(): Promise<RawBar[]> {
 
   const out: RawBar[] = [];
   const PAGE = 1000;
+  // sinceMs bounds the read to recent history (the inline backtest gate uses
+  // this — pulling 2+ years of 1-min bars into a serverless route is too slow).
+  const cutoffIso = sinceMs != null ? new Date(sinceMs).toISOString() : null;
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
+    let q = sb
       .from("underlying_bars")
       .select("ts,open,high,low,close,volume")
       .eq("symbol", "SPY")
-      .order("ts", { ascending: true })
-      .range(from, from + PAGE - 1);
+      .order("ts", { ascending: true });
+    if (cutoffIso) q = q.gte("ts", cutoffIso);
+    const { data, error } = await q.range(from, from + PAGE - 1);
     if (error) throw new Error("underlying_bars read: " + error.message);
     const rows = (data ?? []) as RawBar[];
     out.push(...rows);
@@ -102,8 +106,10 @@ function realizedIv(bars: Bar[]): number {
   return Math.min(0.6, Math.max(0.06, iv));
 }
 
-export async function loadRealSessions(): Promise<RealSession[]> {
-  const raw = await fetchAllBars();
+export async function loadRealSessions(opts?: { sinceDaysAgo?: number }): Promise<RealSession[]> {
+  const sinceMs =
+    opts?.sinceDaysAgo != null ? Date.now() - opts.sinceDaysAgo * 24 * 60 * 60 * 1000 : undefined;
+  const raw = await fetchAllBars(sinceMs);
 
   // group RTH bars by ET date
   const byDay = new Map<string, RawBar[]>();

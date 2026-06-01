@@ -54,3 +54,33 @@ export function crossDir(a: number[], b: number[], i: number): -1 | 0 | 1 {
   if (prev >= 0 && now < 0) return -1;
   return 0;
 }
+
+// Wilder's RSI over `period`. Returns a series the length of the input; values
+// before enough data are seeded toward 50 (neutral) so early bars don't fire.
+export function rsi(values: number[], period = 14): number[] {
+  const out: number[] = new Array(values.length).fill(50);
+  if (values.length < 2) return out;
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i < values.length; i++) {
+    const change = values[i] - values[i - 1];
+    const gain = Math.max(0, change);
+    const loss = Math.max(0, -change);
+    if (i <= period) {
+      // seed window: running mean of the first `period` changes
+      avgGain += gain / period;
+      avgLoss += loss / period;
+      if (i < period) {
+        out[i] = 50; // not enough data yet → neutral
+        continue;
+      }
+    } else {
+      // Wilder smoothing
+      avgGain = (avgGain * (period - 1) + gain) / period;
+      avgLoss = (avgLoss * (period - 1) + loss) / period;
+    }
+    const rs = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+    out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + rs);
+  }
+  return out;
+}

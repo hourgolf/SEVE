@@ -1,35 +1,98 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   parseFrontmatter,
   capabilityCheck,
   structureSupported,
   type StrategySpec,
 } from "@/lib/desk/strategySpec";
+import { useDeskWrite } from "@/hooks/useDeskWrite";
+import type { PmColor, StrategistConfig } from "@/lib/desk/types";
 
 // Add-Channel sheet: paste/upload a thesis .md → instant frontmatter preview →
-// "Compile" (server-side LLM) → StrategySpec + a capability check that flags
-// inputs/structures the desk can't execute yet (multi-leg, GEX, TICK, events).
-// Persist + backtest-gate + arm are the next phase.
-export function AddChannel({ onClose }: { onClose: () => void }) {
+// "Compile" (server-side LLM) → StrategySpec + capability check → "Backtest"
+// (inline modeled quick-check on real bars, plus the real-fills CLI command) →
+// "Arm" (persist as a live channel) or "Save draft" (stored, never trades).
+const PM_TOKENS: PmColor[] = ["green", "blue", "amber", "cyan"];
+const PM_VAR: Record<PmColor, string> = {
+  green: "var(--pm-green)",
+  blue: "var(--pm-blue)",
+  amber: "var(--pm-amber)",
+  cyan: "var(--pm-cyan)",
+};
+
+// Conservative starting mixer for a freshly-added channel (tune via the knobs).
+const NEW_CHANNEL_CONFIG: StrategistConfig = {
+  capital_pct: 10,
+  aggression: 40,
+  max_contracts: 4,
+  daily_stop_usd: 80,
+  muted: false,
+  soloed: false,
+};
+
+interface GateMetrics {
+  sessions: number; trades: number; tradesPerDay: number; winRate: number;
+  avgWin: number; avgLoss: number; expectancy: number; totalPnl: number;
+  maxDrawdown: number; byReason: Record<string, number>;
+}
+interface GateResult {
+  modeled: boolean; partial: boolean; unsupported: string[]; runnable: boolean;
+  span: string; metrics: GateMetrics;
+  robustness: { month: string; pnl: number; trades: number }[];
+  cliCommand: string;
+}
+
+const slugify = (s: string) =>
+  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(Math.round(v)).toLocaleString();
+
+export function AddChannel({
+  onClose,
+  existingSlugs = [],
+}: {
+  onClose: () => void;
+  existingSlugs?: string[];
+}) {
+  const { canWrite, createChannel } = useDeskWrite();
   const [md, setMd] = useState("");
   const [compiling, setCompiling] = useState(false);
   const [spec, setSpec] = useState<StrategySpec | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [needsKey, setNeedsKey] = useState(false);
 
+  const [gating, setGating] = useState(false);
+  const [gate, setGate] = useState<GateResult | null>(null);
+  const [gateErr, setGateErr] = useState<string | null>(null);
+
+  const [accent, setAccent] = useState<PmColor>("cyan");
+  const [arming, setArming] = useState(false);
+  const [armErr, setArmErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
   const fm = parseFrontmatter(md);
   const hasFm = Object.keys(fm).length > 0;
   const cap = spec ? capabilityCheck(spec) : null;
+
+  const slug = useMemo(
+    () => slugify(spec?.meta.strategyId || fm.strategy_id || fm.name || ""),
+    [spec, fm.strategy_id, fm.name]
+  );
+  const collision = !!slug && existingSlugs.includes(slug);
+  const name = spec?.meta.name || fm.name || slug || "untitled";
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (f) setMd(await f.text());
   }
 
+  function resetDownstream() {
+    setSpec(null); setGate(null); setGateErr(null); setArmErr(null); setDone(null);
+  }
+
   async function compile() {
-    setCompiling(true); setErr(null); setSpec(null); setNeedsKey(false);
+    setCompiling(true); setErr(null); setNeedsKey(false); resetDownstream();
     try {
       const r = await fetch("/api/compile-strategy", {
         method: "POST",
@@ -47,6 +110,53 @@ export function AddChannel({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function runBacktest() {
+    if (!spec) return;
+    setGating(true); setGateErr(null); setGate(null); setArmErr(null);
+    try {
+      const r = await fetch("/api/backtest-strategy", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ spec }),
+      });
+      const j = await r.json();
+      if (j.error) setGateErr(j.error);
+      else setGate(j as GateResult);
+    } catch (e) {
+      setGateErr(e instanceof Error ? e.message : "backtest failed");
+    } finally {
+      setGating(false);
+    }
+  }
+
+  async function persist(status: "armed" | "draft") {
+    if (!spec || !slug) return;
+    setArming(true); setArmErr(null);
+    const res = await createChannel({
+      slug,
+      name,
+      mandate: `Compiled spec — ${spec.meta.regime || spec.meta.direction || spec.meta.structure}`,
+      regime: spec.meta.regime || "",
+      accent,
+      sortOrder: 100 + existingSlugs.length,
+      status,
+      spec,
+      thesisMd: md,
+      config: NEW_CHANNEL_CONFIG,
+    });
+    setArming(false);
+    if (res.ok) {
+      setDone(`${name} ${status === "armed" ? "armed" : "saved as draft"} — reloading…`);
+      setTimeout(() => { onClose(); window.location.reload(); }, 1000);
+    } else {
+      setArmErr(res.error ?? "save failed");
+    }
+  }
+
+  const canArm = !!spec && !!cap?.runnable && !!gate && canWrite && !!slug && !collision && !arming && !done;
+  const canDraft = !!spec && canWrite && !!slug && !collision && !arming && !done;
+  const m = gate?.metrics;
+
   return (
     <div className="ac-scrim" onClick={onClose}>
       <div className="add-channel" onClick={(e) => e.stopPropagation()}>
@@ -63,12 +173,12 @@ export function AddChannel({ onClose }: { onClose: () => void }) {
         <textarea
           className="ac-md"
           value={md}
-          onChange={(e) => setMd(e.target.value)}
+          onChange={(e) => { setMd(e.target.value); }}
           placeholder={"---\nname: \"My Strategy\"\nstructure: single-leg\n...\n---\n\n## Thesis ..."}
           spellCheck={false}
         />
 
-        {hasFm && (
+        {hasFm && !spec && (
           <div className="ac-preview">
             <div className="ac-name">{fm.name || fm.strategy_id || "untitled"}</div>
             <div className="ac-tags">
@@ -85,7 +195,7 @@ export function AddChannel({ onClose }: { onClose: () => void }) {
 
         <div className="ac-actions">
           <button className="ac-compile" disabled={!md.trim() || compiling} onClick={compile}>
-            {compiling ? "Compiling…" : "Compile thesis"}
+            {compiling ? "Compiling…" : spec ? "Re-compile" : "Compile thesis"}
           </button>
         </div>
 
@@ -101,12 +211,14 @@ export function AddChannel({ onClose }: { onClose: () => void }) {
           <div className="ac-spec">
             <div className="ac-spec-head">
               Compiled · {spec.entries?.length ?? 0} entry rule(s), {spec.exits?.length ?? 0} exit(s)
+              {slug && <> · <code>{slug}</code></>}
             </div>
             <div className={cap.runnable ? "ac-ok" : "ac-warn"}>
               {cap.runnable
                 ? "✓ fully runnable on current data"
-                : `needs: ${cap.unsupported.join(" · ")}`}
+                : `needs: ${cap.unsupported.join(" · ")} — backtest/draft only`}
             </div>
+            {collision && <div className="ac-err">slug “{slug}” already exists — rename the thesis</div>}
             <ul className="ac-rules">
               {(spec.entries ?? []).map((e, i) => (
                 <li key={i}>
@@ -115,7 +227,73 @@ export function AddChannel({ onClose }: { onClose: () => void }) {
                 </li>
               ))}
             </ul>
-            <div className="ac-foot">Backtest + arm coming next — review the rules above for now.</div>
+
+            {/* ---- backtest gate ---- */}
+            <div className="ac-gate">
+              <button className="ac-btn" disabled={gating} onClick={runBacktest}>
+                {gating ? "Backtesting…" : gate ? "Re-run backtest" : "Run backtest gate"}
+              </button>
+              {gateErr && <div className="ac-err">{gateErr}</div>}
+              {m && (
+                <div className="ac-stats">
+                  <div className="ac-stat-note">
+                    modeled chains · {gate?.span}{gate?.partial ? " · subset only (unsupported rules skipped)" : ""}
+                  </div>
+                  <div className="ac-grid">
+                    <span>Expectancy/trade</span><b className={m.expectancy >= 0 ? "pos" : "neg"}>{usd(m.expectancy)}</b>
+                    <span>Total P&amp;L</span><b className={m.totalPnl >= 0 ? "pos" : "neg"}>{usd(m.totalPnl)}</b>
+                    <span>Win rate</span><b>{m.winRate}%</b>
+                    <span>Trades</span><b>{m.trades} ({m.tradesPerDay}/day)</b>
+                    <span>Max drawdown</span><b className="neg">{usd(m.maxDrawdown)}</b>
+                  </div>
+                  {gate && gate.robustness.length > 1 && (
+                    <div className="ac-months">
+                      {gate.robustness.map((r) => (
+                        <span key={r.month} className={`ac-mo ${r.pnl >= 0 ? "pos" : "neg"}`} title={`${r.trades} trades`}>
+                          {r.month.slice(2)} {usd(r.pnl)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {m.expectancy < 0 && (
+                    <div className="ac-warn">⚠ modeled edge is negative — confirm on real fills before arming</div>
+                  )}
+                  <div className="ac-foot">
+                    Real-fills confirmation (run locally, needs backfilled option_bars):<br />
+                    <code>{gate?.cliCommand}</code>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ---- accent + persist ---- */}
+            <div className="ac-arm">
+              <div className="ac-accent">
+                <span>accent</span>
+                {PM_TOKENS.map((t) => (
+                  <button
+                    key={t}
+                    className={`ac-swatch${accent === t ? " on" : ""}`}
+                    style={{ background: PM_VAR[t] }}
+                    onClick={() => setAccent(t)}
+                    aria-label={`accent ${t}`}
+                    title={t}
+                  />
+                ))}
+              </div>
+              <div className="ac-arm-btns">
+                <button className="ac-btn ac-draft" disabled={!canDraft} onClick={() => persist("draft")}>
+                  Save draft
+                </button>
+                <button className="ac-btn ac-armbtn" disabled={!canArm} onClick={() => persist("armed")}>
+                  {arming ? "Saving…" : "Arm channel"}
+                </button>
+              </div>
+              {!canWrite && <div className="ac-note">Sign in (top-right) to save or arm a channel.</div>}
+              {canWrite && !gate && cap.runnable && <div className="ac-foot">Run the backtest gate to enable Arm.</div>}
+              {armErr && <div className="ac-err">{armErr}</div>}
+              {done && <div className="ac-ok">{done}</div>}
+            </div>
           </div>
         )}
       </div>

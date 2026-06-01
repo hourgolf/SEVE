@@ -16,6 +16,7 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
     mandate: "Mean reversion — fades range extremes back to VWAP",
     regime: "range-bound / high-IV chop",
     color: "green",
+    status: "armed",
     config: {
       capital_pct: 30,
       aggression: 40,
@@ -32,6 +33,7 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
     mandate: "Momentum — rides opening-range expansion in the break's direction",
     regime: "trending / expansion / news days",
     color: "blue",
+    status: "armed",
     config: {
       capital_pct: 25,
       aggression: 62,
@@ -48,6 +50,7 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
     mandate: "0DTE gamma — directional lean in the final hour only",
     regime: "any tape, 15:00–16:00 ET only",
     color: "amber",
+    status: "armed",
     config: {
       capital_pct: 20,
       aggression: 75,
@@ -64,6 +67,7 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
     mandate: "Scalper — many small microstructure edges, quick in and out",
     regime: "liquid, normal-volatility intraday",
     color: "cyan",
+    status: "armed",
     config: {
       capital_pct: 15,
       aggression: 30,

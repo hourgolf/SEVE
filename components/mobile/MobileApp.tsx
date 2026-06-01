@@ -8,6 +8,7 @@ import { ContractDetail } from "@/components/ContractDetail";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
+import { AddChannel } from "@/components/console/AddChannel";
 import { MasterStrip } from "@/components/console/MasterStrip";
 import { StepRow } from "@/components/console/hw/StepRow";
 import { Bezel } from "@/components/console/hw/Bezel";
@@ -46,6 +47,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   // Live: additive view toggles (like indicator chips) — chart is the base.
   const [show, setShow] = useState({ chart: true, chain: false, pos: false });
   const [settings, setSettings] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
 
@@ -159,6 +161,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 <i key={s.slug} className={i === slide ? "on" : ""} />
               ))}
             </div>
+            <button className="m-addch" onClick={() => setAddOpen(true)}>+ Add Channel</button>
           </div>
         )}
       </main>
@@ -171,6 +174,10 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
           </button>
         ))}
       </nav>
+
+      {addOpen && (
+        <AddChannel onClose={() => setAddOpen(false)} existingSlugs={desk.strategists.map((s) => s.slug)} />
+      )}
 
       {settings && (
         <div className="m-scrim" onClick={() => setSettings(false)}>

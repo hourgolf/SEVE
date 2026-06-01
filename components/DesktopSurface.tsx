@@ -108,7 +108,12 @@ export function DesktopSurface({
         Strategy Composer
         <button className="add-channel-btn" onClick={() => setAddOpen(true)}>+ Add Channel</button>
       </SectionLabel>
-      {addOpen && <AddChannel onClose={() => setAddOpen(false)} />}
+      {addOpen && (
+        <AddChannel
+          onClose={() => setAddOpen(false)}
+          existingSlugs={desk.strategists.map((s) => s.slug)}
+        />
+      )}
       <div className="console-grid">
         <div className="channels">
           {desk.strategists.map((s) => (

@@ -18,6 +18,16 @@
 //    - strategies + computeFeatures are inlined here (paste-deploy has no bundler)
 //      but MIRROR engine/* — keep them in sync; the engine stays the backtest
 //      source of truth.
+//
+//  Add-Channel phase 2 additions (this revision):
+//    - reads `status` + `spec_json` from strategists. ONLY 'armed' channels place
+//      orders (draft/disabled are idle). status missing → treated as armed so the
+//      built-ins keep running pre-migration.  ⚠ run 13_add_channel.sql FIRST.
+//    - compiled-spec channels (no REGISTRY entry) run via compileSpec() — the
+//      inlined twin of engine/specEvaluate.ts (SUPPORTED conditions only; STRICT
+//      live posture: any unknown/unsupported condition makes the entry not fire).
+//    - the Stop knob (daily_stop_usd) now bites: a channel stops taking NEW
+//      entries once its REALIZED P&L today is at/under its loss budget.
 // ============================================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -133,6 +143,106 @@ const REGISTRY: Record<string, { evaluate: Evaluate; tf: number; warmup: number 
   grind:    { evaluate: grindEval,    tf: 1, warmup: 30 },
 };
 
+// ---- compiled-spec interpreter (mirrors engine/specEvaluate.ts) -------------
+// A channel added via the dashboard has no REGISTRY entry — it carries a compiled
+// StrategySpec (spec_json). This turns that spec into the SAME Evaluate the engine
+// produces, for the SUPPORTED condition vocabulary. Live posture is STRICT: any
+// unsupported/unknown condition makes the entry not fire (never trade an
+// unevaluated gate) — armed channels are capability-checked, so this is defensive.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Spec = any;
+function emaArr(vals: number[], p: number): number[] {
+  const out: number[] = []; const k = 2 / (p + 1); let prev = vals.length ? vals[0] : 0;
+  for (let i = 0; i < vals.length; i++) { prev = i === 0 ? vals[0] : vals[i] * k + prev * (1 - k); out.push(prev); }
+  return out;
+}
+function rsiArr(vals: number[], p: number): number[] {
+  const out = new Array(vals.length).fill(50); if (vals.length < 2) return out;
+  let ag = 0, al = 0;
+  for (let i = 1; i < vals.length; i++) {
+    const ch = vals[i] - vals[i - 1]; const g = Math.max(0, ch), l = Math.max(0, -ch);
+    if (i <= p) { ag += g / p; al += l / p; if (i < p) { out[i] = 50; continue; } }
+    else { ag = (ag * (p - 1) + g) / p; al = (al * (p - 1) + l) / p; }
+    out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  }
+  return out;
+}
+function xdir(a: number[], b: number[], i: number): number {
+  if (i < 1) return 0; const pr = a[i - 1] - b[i - 1], nw = a[i] - b[i];
+  if (pr <= 0 && nw > 0) return 1; if (pr >= 0 && nw < 0) return -1; return 0;
+}
+function parseET(s: string): number | null { const m = /^\s*(\d{1,2}):(\d{2})/.exec(s || ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }
+const SPEC_SUPPORTED = new Set(["ma_cross","vwap_side","vwap_dev","opening_range","or_width_min","rel_vol","rsi","time_before","time_between"]);
+
+interface CompiledSpec { build: (bars: Bar[]) => Evaluate; tf: number; warmup: number; premiumExit: { profitPct?: number; stopPct?: number }; }
+function compileSpec(spec: Spec): CompiledSpec {
+  const entries: Spec[] = spec?.entries ?? [];
+  let profitPct: number | undefined, stopPct: number | undefined, timeExit: number | null = null;
+  for (const e of (spec?.exits ?? [])) {
+    if (profitPct == null && typeof e.profitPct === "number") profitPct = e.profitPct;
+    if (stopPct == null && typeof e.stopPct === "number") stopPct = e.stopPct;
+    if (e.timeET) { const t = parseET(e.timeET); if (t != null) timeExit = timeExit == null ? t : Math.min(timeExit, t); }
+  }
+  let warmup = 30;
+  for (const e of entries) for (const c of (e.all ?? [])) {
+    if (c.kind === "ma_cross") warmup = Math.max(warmup, c.slow, c.fast);
+    else if (c.kind === "rsi") warmup = Math.max(warmup, c.period + 1);
+  }
+  const build = (bars: Bar[]): Evaluate => {
+    const closes = bars.map((b) => b.close);
+    const emaS = new Map<number, number[]>(), rsiS = new Map<number, number[]>();
+    for (const e of entries) for (const c of (e.all ?? [])) {
+      if (c.kind === "ma_cross") { if (!emaS.has(c.fast)) emaS.set(c.fast, emaArr(closes, c.fast)); if (!emaS.has(c.slow)) emaS.set(c.slow, emaArr(closes, c.slow)); }
+      else if (c.kind === "rsi" && !rsiS.has(c.period)) rsiS.set(c.period, rsiArr(closes, c.period));
+    }
+    const etMin = bars.map((b) => etParts(b.ts).min);
+    const cond = (c: Spec, f: Features, i: number): boolean => {
+      switch (c.kind) {
+        case "ma_cross": { const a = emaS.get(c.fast), b = emaS.get(c.slow); if (!a || !b) return false; return xdir(a, b, i) === (c.dir === "up" ? 1 : -1); }
+        case "vwap_side": return c.side === "above" ? f.close > f.vwap : f.close < f.vwap;
+        case "vwap_dev": { if (f.atr <= 0) return false; const d = (f.close - f.vwap) / f.atr; return c.cmp === ">" ? d >= c.atr : d <= -c.atr; }
+        case "opening_range": return c.side === "break_above" ? (f.openRangeHi != null && f.close > f.openRangeHi) : (f.openRangeLo != null && f.close < f.openRangeLo);
+        case "or_width_min": { if (f.openRangeHi == null || f.openRangeLo == null || f.close <= 0) return false; return ((f.openRangeHi - f.openRangeLo) / f.close) * 100 >= c.pct; }
+        case "rel_vol": return f.relVol >= c.min;
+        case "rsi": { const s = rsiS.get(c.period); if (!s) return false; return c.cmp === ">" ? s[i] > c.value : s[i] < c.value; }
+        case "time_before": { const t = parseET(c.et); return t != null && etMin[i] < t; }
+        case "time_between": { const a = parseET(c.startET), b = parseET(c.endET); return a != null && b != null && etMin[i] >= a && etMin[i] <= b; }
+        default: return false;
+      }
+    };
+    const entryHolds = (e: Spec, f: Features, i: number): boolean => {
+      const all = e.all ?? []; if (!all.length) return false;
+      for (const c of all) { if (!SPEC_SUPPORTED.has(c.kind)) return false; if (!cond(c, f, i)) return false; }
+      return true;
+    };
+    const infer = (e: Spec): OptType | null => {
+      for (const c of (e.all ?? [])) {
+        if (c.kind === "ma_cross") return c.dir === "up" ? "call" : "put";
+        if (c.kind === "vwap_side") return c.side === "above" ? "call" : "put";
+        if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
+      }
+      return null;
+    };
+    return (f: Features, pos: Pos | null): Intent => {
+      const i = f.minute;
+      if (pos) {
+        if (f.minutesToClose <= 1) return { kind: "exit", reason: "eod_flatten" };
+        if (timeExit != null && etMin[i] >= timeExit) return { kind: "exit", reason: "time_exit" };
+        return null;
+      }
+      if (i < warmup || f.atr <= 0) return null;
+      for (const e of entries) {
+        if (!entryHolds(e, f, i)) continue;
+        const dir: OptType | null = e.direction === "both" ? infer(e) : e.direction;
+        if (!dir) continue;
+        return { kind: "enter", direction: dir, reason: e.reason || "spec_entry" };
+      }
+      return null;
+    };
+  };
+  return { build, tf: 1, warmup, premiumExit: { profitPct, stopPct } };
+}
+
 // ---- helpers ---------------------------------------------------------------
 const aHdr = { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET };
 async function aGet(path: string) { const r = await fetch(PAPER + path, { headers: aHdr }); if (!r.ok) throw new Error(`${r.status} GET ${path}`); return r.json(); }
@@ -150,7 +260,9 @@ function etParts(ms: number) { const d = new Date(ms); const et = new Date(d.toL
 Deno.serve(async () => {
   try {
     const { data: fund } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
-    const { data: strategists } = await sb.from("strategists").select("id,slug,strategist_config(*)");
+    // status + spec_json drive the Add-Channel path (run 13_add_channel.sql BEFORE
+    // deploying this — otherwise these columns don't exist and the select errors).
+    const { data: strategists } = await sb.from("strategists").select("id,slug,status,spec_json,strategist_config(*)");
     const account = await aGet("/v2/account");
     const positions: Record<string, unknown>[] = await aGet("/v2/positions").catch(() => []);
     const openOrders: Record<string, unknown>[] = await aGet("/v2/orders?status=open&limit=100").catch(() => []);
@@ -168,12 +280,22 @@ Deno.serve(async () => {
     const out: Record<string, unknown>[] = [];
     for (const s of (strategists ?? [])) {
       const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
-      const def = REGISTRY[s.slug];
-      if (!def || !cfg) continue;                                   // no edge / no config → idle
+      if (!cfg) continue;                                           // no config → idle
+      // Resolve this channel's edge: a built-in CODE strategy (REGISTRY) or a
+      // COMPILED spec (spec_json from the row — the Add-Channel path).
+      const code = REGISTRY[s.slug];
+      const compiled = !code && s.spec_json ? compileSpec(s.spec_json) : null;
+      if (!code && !compiled) { out.push({ slug: s.slug, note: "no_edge" }); continue; }
+      const tf = code ? code.tf : compiled!.tf;
+      const warmup = code ? code.warmup : compiled!.warmup;
+      // ARM gate: only 'armed' channels place orders (draft/disabled stay idle).
+      // status missing (pre-13_add_channel.sql) → treat as armed so built-ins run.
+      const status = (s as { status?: string }).status ?? "armed";
+      if (status !== "armed") { out.push({ slug: s.slug, note: "not_armed" }); continue; }
       const guardBlocked = fund?.is_halted ? "halted" : cfg.muted ? "muted" : fund?.mode !== "paper" ? "not_paper" : null;
 
-      const bars = aggregate(session1m, def.tf);
-      if (bars.length < def.warmup) { out.push({ slug: s.slug, note: "warmup" }); continue; }
+      const bars = aggregate(session1m, tf);
+      if (bars.length < warmup) { out.push({ slug: s.slug, note: "warmup" }); continue; }
       const i = bars.length - 1;
       const last = bars[i];
       const { min: etMin } = etParts(last.ts);
@@ -189,7 +311,21 @@ Deno.serve(async () => {
       // column (uses the existing positions schema as-is).
       const pos: Pos | null = row ? { optType: row.opt_type, entryMinute: 0, entryUnderlying: Number(row.strike), peakFavorable: f.close } : null;
 
-      const intent = def.evaluate(f, pos);
+      // Build this channel's evaluator (spec evaluators precompute over `bars`).
+      const evaluate: Evaluate = code ? code.evaluate : compiled!.build(bars);
+      let intent = evaluate(f, pos);
+
+      // Premium profit/stop (compiled specs) — uses the REAL Alpaca option mark
+      // (the spec's % targets are on premium; the per-bar evaluator can't see it).
+      const premiumExit = compiled?.premiumExit;
+      if (pos && row && alp && premiumExit && (!intent || intent.kind !== "exit")) {
+        const entryPx = Number(row.avg_entry_price ?? 0);
+        const markPx = Number(alp.current_price ?? 0);
+        if (entryPx > 0 && markPx > 0) {
+          if (premiumExit.profitPct != null && markPx >= entryPx * (1 + premiumExit.profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
+          else if (premiumExit.stopPct != null && markPx <= entryPx * (1 - premiumExit.stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
+        }
+      }
       const canTrade = !guardBlocked;
 
       // ---- exit ----
@@ -209,6 +345,15 @@ Deno.serve(async () => {
         // have a working order for — even if our desk-row tracking failed. This
         // alone breaks the silent re-buy loop regardless of any write failure.
         if (!blocked && (positions.some((p) => String(p.symbol) === occ) || openOrders.some((o) => String(o.symbol) === occ))) blocked = "already_open";
+        // Stop knob (daily_stop_usd): halt NEW entries once this channel's REALIZED
+        // P&L today is at/under its loss budget. Open positions keep managing their
+        // own exits — this only stops ADDING risk. (Was a no-op before.)
+        if (!blocked && Number(cfg.daily_stop_usd) > 0) {
+          const { data: closed } = await sb.from("positions").select("realized_pnl,closed_at").eq("strategist_id", s.id).eq("status", "closed").order("closed_at", { ascending: false }).limit(100);
+          let realizedToday = 0;
+          for (const c of (closed ?? [])) if (c.closed_at && etParts(Date.parse(c.closed_at as string)).date === todayET) realizedToday += Number(c.realized_pnl ?? 0);
+          if (realizedToday <= -Number(cfg.daily_stop_usd)) blocked = "daily_stop";
+        }
         let qty = 0, ask = 0;
         if (!blocked) {
           const { data: q } = await sb.from("option_quotes").select("ask").eq("occ_symbol", occ).order("captured_at", { ascending: false }).limit(1).maybeSingle();
