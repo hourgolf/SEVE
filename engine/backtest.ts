@@ -21,6 +21,8 @@ import { loadRealSessions } from "./realsource";
 import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
 import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
 import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
+import { DEFAULT_POWER_PARAMS, powerEvaluate } from "./strategies/power";
+import { DEFAULT_GRIND_PARAMS, grindEvaluate } from "./strategies/grind";
 import { makeCrossover } from "./strategies/crossover";
 import type { Bar, Evaluate, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
 
@@ -194,10 +196,19 @@ async function main() {
       ? makeCrossover(closes)
       : strat === "breakout"
         ? (f, pos) => breakoutEvaluate(f, pos, DEFAULT_BREAKOUT_PARAMS)
-        : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
+        : strat === "power"
+          ? (f, pos) => powerEvaluate(f, pos, DEFAULT_POWER_PARAMS)
+          : strat === "grind"
+            ? (f, pos) => grindEvaluate(f, pos, DEFAULT_GRIND_PARAMS)
+            : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
-  const stratName = strat === "cross" ? "EMA Cross (9/21 + MACD + vol)" : strat === "breakout" ? "The Breakout" : "The Fade";
+  const stratName =
+    strat === "cross" ? "EMA Cross (9/21 + MACD + vol)"
+    : strat === "breakout" ? "The Breakout"
+    : strat === "power" ? "Power Hour"
+    : strat === "grind" ? "The Grinder"
+    : "The Fade";
   const stratLabel = stratName + costTag;
 
   if (source === "real") {
