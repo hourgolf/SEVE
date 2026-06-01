@@ -1,7 +1,8 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Chassis } from "@/components/console/Chassis";
+import { AddChannel } from "@/components/console/AddChannel";
 import { HeadReadouts } from "@/components/console/HeadReadouts";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
@@ -45,6 +46,7 @@ export function DesktopSurface({
   setSelected,
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
+  const [addOpen, setAddOpen] = useState(false);
   const { canWrite } = write;
 
   return (
@@ -102,7 +104,11 @@ export function DesktopSurface({
       </div>
 
       {/* ---- 02 · STRATEGY COMPOSER ----------------------------------- */}
-      <SectionLabel id="composer" idx="02">Strategy Composer</SectionLabel>
+      <SectionLabel id="composer" idx="02">
+        Strategy Composer
+        <button className="add-channel-btn" onClick={() => setAddOpen(true)}>+ Add Channel</button>
+      </SectionLabel>
+      {addOpen && <AddChannel onClose={() => setAddOpen(false)} />}
       <div className="console-grid">
         <div className="channels">
           {desk.strategists.map((s) => (

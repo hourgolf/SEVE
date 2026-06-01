@@ -660,6 +660,84 @@
   align-items: center;
   gap: 12px;
 }
+/* ---- Add Channel sheet (thesis import + compile) ---- */
+.add-channel-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-bright, #2a3a42);
+  background: rgba(10, 15, 17, 0.5);
+  color: var(--muted, #9aa);
+  cursor: pointer;
+}
+.add-channel-btn:hover { color: var(--text); border-color: var(--text); }
+.ac-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.add-channel {
+  width: min(560px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel, #0f1518);
+  border: 1px solid var(--border-bright, #2a3a42);
+  border-radius: 12px;
+  padding: 16px 18px 18px;
+  color: var(--text, #e6eef0);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.ac-head { display: flex; justify-content: space-between; align-items: center; }
+.ac-title { font-family: var(--mono); font-weight: 800; letter-spacing: 1px; text-transform: uppercase; font-size: 13px; }
+.ac-x { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; }
+.ac-sub { font-size: 11.5px; color: var(--muted); margin: 6px 0 12px; line-height: 1.5; }
+.ac-sub code, .ac-note code { background: rgba(255,255,255,0.08); padding: 0 4px; border-radius: 3px; font-family: var(--mono); }
+.ac-file { font-size: 11px; color: var(--muted); margin-bottom: 8px; display: block; }
+.ac-md {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  background: rgba(10, 15, 17, 0.7);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+.ac-preview { margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,0.02); }
+.ac-name { font-weight: 700; font-size: 13px; }
+.ac-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.ac-tag { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border: 1px solid var(--border-bright); border-radius: 5px; padding: 2px 6px; }
+.ac-gap { margin-top: 8px; font-size: 10.5px; color: var(--amber); }
+.ac-actions { margin-top: 14px; }
+.ac-compile {
+  font-family: var(--mono); font-weight: 700; letter-spacing: 0.5px; font-size: 12px;
+  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--green, #2fd573);
+  background: rgba(47, 213, 115, 0.15); color: var(--green, #2fd573); cursor: pointer;
+}
+.ac-compile:disabled { opacity: 0.4; cursor: default; }
+.ac-note { margin-top: 10px; font-size: 11px; color: var(--amber); background: rgba(255,178,36,0.1); border: 1px solid rgba(255,178,36,0.35); border-radius: 6px; padding: 7px 9px; }
+.ac-err { margin-top: 10px; font-size: 11px; color: var(--led-red); }
+.ac-spec { margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
+.ac-spec-head { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.ac-ok { margin-top: 4px; font-size: 11.5px; color: var(--green, #2fd573); }
+.ac-warn { margin-top: 4px; font-size: 11.5px; color: var(--amber); }
+.ac-rules { margin: 8px 0 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.ac-rules li { font-family: var(--mono); font-size: 10.5px; color: var(--muted); display: flex; gap: 8px; }
+.ac-dir { font-weight: 700; min-width: 34px; }
+.ac-dir.ac-call, .ac-dir.ac-both { color: var(--pm-green); }
+.ac-dir.ac-put { color: var(--led-red); }
+.ac-foot { margin-top: 8px; font-size: 10px; color: var(--muted-2); }
 /* not signed in → desk writes silently no-op, so lock + flag the controls
    (prevents a KILL/START that looks like it worked but never hit the DB) */
 .master-ctrls--locked .master-transport,
