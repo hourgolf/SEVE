@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabaseClient";
 import {
@@ -22,9 +22,6 @@ export const POLL_INTERVAL_MS = 10000;
 // timeframes have months of candles to pan through. The repeating poll only
 // pulls the recent tail and merges it in, keeping live updates cheap.
 const HISTORY_LIMIT = 5850;
-// One lazy-load chunk pulled when the user pans to the far-left edge — another
-// ~15 trading days of 1-min bars prepended to the deep history.
-const OLDER_LIMIT = 5850;
 const RECENT_BARS = 200;
 // Snapshot older than this is "stale" (market closed / cron paused).
 const STALE_AFTER_MIN = 3;
@@ -63,12 +60,9 @@ export interface MarketData {
   isAccessError: boolean;
   /** True when ≥1 delta in the snapshot was modeled (Alpaca had none — 0DTE). */
   deltasModeled: boolean;
-  /** True while an older-history chunk is being fetched (left-edge lazy load). */
-  loadingOlder: boolean;
-  /** True once a lazy-load returned fewer rows than asked — no older bars left. */
-  reachedHistoryStart: boolean;
-  /** Fetch the next chunk of older bars and prepend them (idempotent/guarded). */
-  loadOlder: () => void;
+  /** Daily OHLCV rollup (underlying_bars_daily view) for the long-range presets
+   *  (3M / 1Y / Max). ~580 rows back to early 2024; loaded once on mount. */
+  dailyBars: UnderlyingBar[];
 }
 
 const ACCESS_ERROR_RE =
@@ -87,9 +81,7 @@ const INITIAL: MarketData = {
   error: null,
   isAccessError: false,
   deltasModeled: false,
-  loadingOlder: false,
-  reachedHistoryStart: false,
-  loadOlder: () => {},
+  dailyBars: [],
 };
 
 /**
@@ -101,13 +93,9 @@ export function useMarketData(): MarketData {
   const [data, setData] = useState<MarketData>(INITIAL);
   // Avoid setState after unmount when a slow poll resolves late.
   const mounted = useRef(true);
-  // Deep history, loaded once (and extended leftward by loadOlder); the poll
-  // merges its recent tail into this. recentBars holds that tail so loadOlder
-  // can recompose the displayed series without waiting for the next poll.
+  // Deep intraday history (1-min bars), loaded once; the poll merges its recent
+  // tail into this. Serves the short-range presets (1D / 1W).
   const historyBars = useRef<UnderlyingBar[]>([]);
-  const recentBars = useRef<UnderlyingBar[]>([]);
-  const loadingOlder = useRef(false);
-  const reachedStart = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -142,7 +130,6 @@ export function useMarketData(): MarketData {
         const quotes = (quotesRes.data ?? []) as OptionQuote[];
         const recentDesc = (barsRes.data ?? []) as UnderlyingBar[];
         const recent = [...recentDesc].reverse(); // oldest → newest
-        recentBars.current = recent;
         const bars = mergeBars(historyBars.current, recent);
         const events = (eventsRes.data ?? []) as MarketEvent[];
 
@@ -281,8 +268,27 @@ export function useMarketData(): MarketData {
       }
     }
 
+    // Daily OHLCV rollup for the long-range presets — one cheap read (~580 rows,
+    // under the PostgREST cap). Silent fallback: long ranges just stay empty.
+    async function loadDaily() {
+      try {
+        const sb = getSupabase();
+        const { data: rows } = await sb
+          .from("underlying_bars_daily")
+          .select("ts,open,high,low,close,volume,vwap")
+          .order("ts", { ascending: true });
+        const daily = (rows ?? []) as UnderlyingBar[];
+        if (daily.length && mounted.current) {
+          setData((d) => ({ ...d, dailyBars: daily }));
+        }
+      } catch {
+        /* view missing / not granted — long ranges simply show nothing */
+      }
+    }
+
     poll();
     loadHistory();
+    loadDaily();
     const id = setInterval(poll, POLL_INTERVAL_MS);
 
     // Realtime: refetch (debounced) the instant new rows land, instead of
@@ -323,54 +329,5 @@ export function useMarketData(): MarketData {
     };
   }, []);
 
-  // Lazy-load: pull the next chunk of OLDER bars (those before the oldest one we
-  // already hold) and prepend them. Triggered by the chart when the user pans to
-  // the far-left edge. Guarded so overlapping pans don't double-fetch, and it
-  // recomposes the displayed series from history + the live recent tail.
-  const loadOlder = useCallback(async () => {
-    if (loadingOlder.current || reachedStart.current) return;
-    const hist = historyBars.current;
-    if (!hist.length) return;
-    loadingOlder.current = true;
-    setData((d) => ({ ...d, loadingOlder: true }));
-    try {
-      const sb = getSupabase();
-      const oldestTs = hist[0].ts;
-      const PAGE = 1000;
-      const ranges: [number, number][] = [];
-      for (let from = 0; from < OLDER_LIMIT; from += PAGE) {
-        ranges.push([from, Math.min(from + PAGE, OLDER_LIMIT) - 1]);
-      }
-      const pages = await Promise.all(
-        ranges.map(([from, to]) =>
-          sb
-            .from("underlying_bars")
-            .select("ts,open,high,low,close,volume,vwap")
-            .lt("ts", oldestTs)
-            .order("ts", { ascending: false })
-            .range(from, to)
-        )
-      );
-      const desc = pages.flatMap((p) => (p.data ?? []) as UnderlyingBar[]);
-      if (desc.length) {
-        const older = desc.reverse(); // desc pages → oldest→newest
-        historyBars.current = [...older, ...historyBars.current];
-      }
-      // Short page (or empty) ⇒ we've hit the start of the table.
-      if (desc.length < OLDER_LIMIT) reachedStart.current = true;
-      if (!mounted.current) return;
-      setData((d) => ({
-        ...d,
-        bars: mergeBars(historyBars.current, recentBars.current),
-        loadingOlder: false,
-        reachedHistoryStart: reachedStart.current,
-      }));
-    } catch {
-      if (mounted.current) setData((d) => ({ ...d, loadingOlder: false }));
-    } finally {
-      loadingOlder.current = false;
-    }
-  }, []);
-
-  return { ...data, loadOlder };
+  return data;
 }

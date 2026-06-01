@@ -16,6 +16,7 @@ const CHART_H = 150; // matches the SVG viewBox height in Line/CandleChart
 type Mode = "line" | "candles";
 const MODE_KEY = "seve-chart-mode";
 const TF_KEY = "seve-chart-tf";
+const RANGE_KEY = "seve-chart-range";
 const VWAP_KEY = "seve-chart-vwap";
 const EMA_KEY = "seve-chart-ema";
 const VOL_KEY = "seve-chart-vol";
@@ -29,19 +30,44 @@ const EMA_MIN = 2;
 const EMA_MAX = 200;
 const EMA_FAST_COLOR = "#45c4d6"; // cyan
 const EMA_SLOW_COLOR = "#c061ff"; // violet
-// Default visible window: the latest N bars (readable), not the whole history.
-const DEFAULT_VIEW = 80;
+
+// Range presets (Robinhood-style): each maps to a data source + default bar
+// interval + how much to show. Short ranges use the live 1-min feed; long ones
+// read the daily rollup view. `bars` = the default visible bar count (0 = all).
+const DAILY_TF = 1440;
+type RangeKey = "1D" | "1W" | "1M" | "3M" | "1Y" | "Max";
+const RANGES: Record<RangeKey, { src: "intraday" | "daily"; tf: number; minutes?: number; bars: number }> = {
+  "1D":  { src: "intraday", tf: 1,       minutes: 390,  bars: 390 },
+  "1W":  { src: "intraday", tf: 15,      minutes: 1950, bars: 130 },
+  "1M":  { src: "daily",    tf: DAILY_TF,                bars: 22 },
+  "3M":  { src: "daily",    tf: DAILY_TF,                bars: 66 },
+  "1Y":  { src: "daily",    tf: DAILY_TF,                bars: 252 },
+  "Max": { src: "daily",    tf: DAILY_TF,                bars: 0 },
+};
+const RANGE_KEYS = Object.keys(RANGES) as RangeKey[];
+// Intraday interval options for the desktop override (short ranges only).
+const INTRADAY_TFS = [1, 5, 15, 30, 60];
 
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-// "May 30" — the date label for a session boundary on the x-axis.
+// "May 30" — date label for a session/day tick on the x-axis.
 const dayLabel = (iso: string) =>
   new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+// "May" / "May '25" — month label for the long (daily) ranges.
+const monthLabel = (iso: string, withYear: boolean) => {
+  const d = new Date(iso);
+  const m = d.toLocaleDateString([], { month: "short" });
+  return withYear ? `${m} '${String(d.getFullYear()).slice(2)}` : m;
+};
 // Local calendar-day key, so we can detect when the tape crosses into a new
 // trading session (where the date-axis ticks + dividers go).
 const dayKey = (iso: string) => {
   const d = new Date(iso);
   return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate();
+};
+const monthKey = (iso: string) => {
+  const d = new Date(iso);
+  return d.getFullYear() * 12 + d.getMonth();
 };
 
 // Monitor intraday chart: line/candles + timeframe + VWAP + EMA(9/21) overlay +
@@ -49,22 +75,20 @@ const dayKey = (iso: string) => {
 // lib/indicators — the same math the strategy engine uses.
 export function IntradayChart({
   bars,
+  dailyBars = [],
   spot,
-  onLoadOlder,
-  loadingOlder = false,
-  hasMoreHistory = false,
+  mobile = false,
 }: {
   bars: UnderlyingBar[];
+  /** Daily OHLCV rollup for the long-range presets (3M / 1Y / Max). */
+  dailyBars?: UnderlyingBar[];
   spot?: number | null;
-  /** Pull an older chunk of history (the data hook prepends it). */
-  onLoadOlder?: () => void;
-  /** True while that fetch is in flight — drives the left-edge indicator. */
-  loadingOlder?: boolean;
-  /** False once the table's earliest bar is loaded — stops the lazy trigger. */
-  hasMoreHistory?: boolean;
+  /** Phone layout: hide the desktop-only interval override. */
+  mobile?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("line");
-  const [tf, setTf] = useState<number>(1);
+  const [range, setRange] = useState<RangeKey>("1D");
+  const [tf, setTf] = useState<number>(RANGES["1D"].tf);
   const [showVwap, setShowVwap] = useState(true);
   const [showEma, setShowEma] = useState(true);
   const [showVol, setShowVol] = useState(false);
@@ -79,7 +103,7 @@ export function IntradayChart({
   const [pressing, setPressing] = useState(false);
   // Zoom/pan window. count = bars shown (0 = fit all); offset = bars from the
   // right edge (0 = latest). Pinch zooms, one-finger drag pans.
-  const [view, setView] = useState<{ count: number; offset: number }>({ count: DEFAULT_VIEW, offset: 0 });
+  const [view, setView] = useState<{ count: number; offset: number }>({ count: RANGES["1D"].bars, offset: 0 });
   const wrapRef = useRef<HTMLDivElement>(null);
   const ptrs = useRef<Map<number, number>>(new Map()); // pointerId → clientX
   const gst = useRef({ kind: "idle", startX: 0, startOffset: 0, startEff: 0, pinchDist: 1, startCount: 0 });
@@ -87,8 +111,17 @@ export function IntradayChart({
   useEffect(() => {
     const m = window.localStorage.getItem(MODE_KEY);
     if (m === "candles" || m === "line") setMode(m);
-    const t = Number(window.localStorage.getItem(TF_KEY));
-    if (TIMEFRAMES.some((x) => x.minutes === t)) setTf(t);
+    const r = window.localStorage.getItem(RANGE_KEY) as RangeKey | null;
+    const rk: RangeKey = r && r in RANGES ? r : "1D";
+    setRange(rk);
+    // default interval for the range, then honour a persisted intraday override
+    let initialTf = RANGES[rk].tf;
+    if (RANGES[rk].src === "intraday") {
+      const t = Number(window.localStorage.getItem(TF_KEY));
+      if (INTRADAY_TFS.includes(t)) initialTf = t;
+    }
+    setTf(initialTf);
+    setView({ count: RANGES[rk].bars, offset: 0 });
     if (window.localStorage.getItem(VWAP_KEY) === "0") setShowVwap(false);
     if (window.localStorage.getItem(EMA_KEY) === "0") setShowEma(false);
     if (window.localStorage.getItem(VOL_KEY) === "1") setShowVol(true);
@@ -123,14 +156,32 @@ export function IntradayChart({
     setMode(m);
     try { window.localStorage.setItem(MODE_KEY, m); } catch {}
   };
+  // Pick a range preset: sets the data source + default interval + visible window.
+  const setRangePersist = (rk: RangeKey) => {
+    const cfg = RANGES[rk];
+    setRange(rk);
+    setTf(cfg.tf);
+    setHover(null);
+    setView({ count: cfg.bars, offset: 0 });
+    try { window.localStorage.setItem(RANGE_KEY, rk); } catch {}
+  };
+  // Desktop-only interval override (intraday ranges): re-aggregate + refit the
+  // range's calendar span at the new bar size.
   const setTfPersist = (m: number) => {
     setTf(m);
     setHover(null);
-    setView({ count: DEFAULT_VIEW, offset: 0 });
+    const mins = RANGES[range].minutes ?? 0;
+    setView({ count: mins ? Math.ceil(mins / m) : 0, offset: 0 });
     try { window.localStorage.setItem(TF_KEY, String(m)); } catch {}
   };
 
-  const agg = useMemo(() => aggregateBars(bars, tf), [bars, tf]);
+  const isDaily = RANGES[range].src === "daily";
+  // Daily bars are already one-per-day; aggregating them at the daily interval
+  // is a clean passthrough (and coerces the nullable view columns to numbers).
+  const agg = useMemo(
+    () => aggregateBars(isDaily ? dailyBars : bars, isDaily ? DAILY_TF : tf),
+    [isDaily, dailyBars, bars, tf]
+  );
   const closes = useMemo(() => agg.map((b) => b.close), [agg]);
   const candles = useMemo<Candle[]>(
     () => agg.map((b) => ({ open: b.open, high: b.high, low: b.low, close: b.close })),
@@ -193,41 +244,48 @@ export function IntradayChart({
     [scale]
   );
 
-  // x-axis: when the visible window spans multiple sessions, put a divider +
-  // date at each new day (thinned so labels never collide). Within one session,
-  // fall back to ~5 evenly spaced time ticks. `anchor` keeps edge labels inside.
+  // x-axis ticks, adapted to the visible span:
+  //  • daily ranges → divider + label at each new week (≤~6wk) or month, thinned
+  //  • intraday, multi-session → divider + date at each new trading day
+  //  • intraday, single session → ~5 evenly spaced HH:MM ticks
   const xTicks = useMemo(() => {
     if (!scale || vN < 2) return [];
     const xf = (i: number) => scale.cx(i) / VIEW_W;
     const anchor = (x: number) => (x < 0.06 ? "start" : x > 0.94 ? "end" : "mid");
-    const bounds: number[] = [];
-    for (let i = 0; i < vAgg.length; i++) {
-      if (i === 0 || dayKey(vAgg[i].ts) !== dayKey(vAgg[i - 1].ts)) bounds.push(i);
-    }
-    if (bounds.length >= 2) {
+    const boundaries = (keyOf: (ts: string) => number, label: (ts: string) => string, minGap = 0.12) => {
+      const bounds: number[] = [];
+      for (let i = 0; i < vAgg.length; i++) {
+        if (i === 0 || keyOf(vAgg[i].ts) !== keyOf(vAgg[i - 1].ts)) bounds.push(i);
+      }
       let lastLabelX = -Infinity;
       return bounds.map((i) => {
         const x = xf(i);
-        const showLabel = x - lastLabelX >= 0.12;
-        if (showLabel) lastLabelX = x;
-        return { i, x, label: showLabel ? dayLabel(vAgg[i].ts) : "", divider: i > 0, anchor: anchor(x) };
+        const show = x - lastLabelX >= minGap;
+        if (show) lastLabelX = x;
+        return { i, x, label: show ? label(vAgg[i].ts) : "", divider: i > 0, anchor: anchor(x) };
       });
+    };
+
+    if (isDaily) {
+      const spanDays = (Date.parse(vAgg[vN - 1].ts) - Date.parse(vAgg[0].ts)) / 86400000;
+      if (spanDays <= 45) {
+        const week = (ts: string) => Math.floor(Date.parse(ts) / (7 * 86400000));
+        return boundaries(week, (ts) => dayLabel(ts));
+      }
+      const withYear = spanDays > 300;
+      // year-tagged labels are wider — give them more breathing room
+      return boundaries(monthKey, (ts) => monthLabel(ts, withYear), withYear ? 0.17 : 0.12);
     }
+
+    const dayBounds = boundaries(dayKey, (ts) => dayLabel(ts));
+    if (dayBounds.length >= 2) return dayBounds;
     const count = Math.min(5, vN);
     return Array.from({ length: count }, (_, k) => {
       const i = Math.round((k * (vN - 1)) / (count - 1));
       const x = xf(i);
       return { i, x, label: hhmm(vAgg[i].ts), divider: false, anchor: anchor(x) };
     });
-  }, [scale, vAgg, vN]);
-
-  // Lazy-load: the moment a pan reaches the oldest loaded bar (while zoomed in,
-  // so we're genuinely at the left edge), ask the hook for an older chunk.
-  useEffect(() => {
-    if (onLoadOlder && hasMoreHistory && !loadingOlder && eff < N && visStart === 0) {
-      onLoadOlder();
-    }
-  }, [onLoadOlder, hasMoreHistory, loadingOlder, eff, N, visStart]);
+  }, [scale, vAgg, vN, isDaily]);
 
   // ---- gestures: crosshair / pan / pinch-zoom ----
   const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -307,9 +365,9 @@ export function IntradayChart({
     setHover(null); setHoverY(null); setPressing(false);
   }
 
-  // double-click / double-tap anywhere on the chart resets to the default view
+  // double-click / double-tap anywhere on the chart resets to the range's window
   function onDoubleClick() {
-    setView({ count: DEFAULT_VIEW, offset: 0 });
+    setView({ count: RANGES[range].bars, offset: 0 });
   }
 
   // Mouse-wheel zoom (desktop "squeeze"), focused on the cursor. Attached as a
@@ -340,18 +398,33 @@ export function IntradayChart({
   return (
     <div className="panel">
       <div className="phead">
-        <span className="t">SPY — Intraday</span>
+        <span className="t">SPY — {isDaily ? "Daily" : "Intraday"}</span>
         <span className="phead-right chart-controls chart-controls--top">
           <span className="chart-toggle" role="group" aria-label="chart type">
             <button className={mode === "line" ? "on" : ""} onClick={() => setModePersist("line")} aria-pressed={mode === "line"}>LINE</button>
             <button className={mode === "candles" ? "on" : ""} onClick={() => setModePersist("candles")} aria-pressed={mode === "candles"}>CANDLES</button>
           </span>
-          <span className="seg" role="group" aria-label="timeframe">
-            {TIMEFRAMES.map((t) => (
-              <button key={t.minutes} className={tf === t.minutes ? "on" : ""} onClick={() => setTfPersist(t.minutes)} aria-pressed={tf === t.minutes}>
-                {t.label}
-              </button>
-            ))}
+          <span className="chart-controls-right">
+            {/* desktop-only interval override, shown for the intraday ranges */}
+            {!mobile && !isDaily && (
+              <span className="seg seg--interval" role="group" aria-label="interval">
+                {INTRADAY_TFS.map((m) => {
+                  const label = TIMEFRAMES.find((t) => t.minutes === m)?.label ?? `${m}m`;
+                  return (
+                    <button key={m} className={tf === m ? "on" : ""} onClick={() => setTfPersist(m)} aria-pressed={tf === m}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </span>
+            )}
+            <span className="seg seg--range" role="group" aria-label="range">
+              {RANGE_KEYS.map((rk) => (
+                <button key={rk} className={range === rk ? "on" : ""} onClick={() => setRangePersist(rk)} aria-pressed={range === rk}>
+                  {rk}
+                </button>
+              ))}
+            </span>
           </span>
         </span>
       </div>
@@ -394,9 +467,6 @@ export function IntradayChart({
                 <span key={`div${t.i}`} className="day-div" style={{ left: `${t.x * 100}%` }} />
               ) : null
             )}
-
-          {/* left-edge lazy-load indicator */}
-          {loadingOlder && <span className="loading-older">loading history…</span>}
 
           {/* crosshair: vertical snaps to the candle centre; horizontal tracks Y */}
           {scale && hover != null && (

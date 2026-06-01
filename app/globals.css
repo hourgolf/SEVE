@@ -494,10 +494,28 @@ svg.spark {
   gap: 8px;
   justify-content: flex-end;
 }
-/* top row: chart-type (left) + timeframe (right), full width under the title */
+/* top row: chart-type (left) + range/interval (right), full width under title */
 .chart-controls--top {
   flex: 1 1 100%;
   justify-content: space-between;
+}
+.chart-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+/* range presets are the primary control (blue active, via base .seg) */
+/* secondary desktop interval override — dimmer + neutral active state */
+.seg--interval button {
+  font-size: 8.5px;
+  padding: 3px 6px;
+  color: var(--muted-2);
+}
+.seg--interval button.on {
+  background: rgba(233, 238, 240, 0.16);
+  color: var(--text);
 }
 /* bottom row: indicator chips (left) + editable EMA periods (right) */
 .chart-controls--bottom {
