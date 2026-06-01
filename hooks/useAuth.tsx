@@ -15,8 +15,10 @@ interface AuthValue {
   session: Session | null;
   email: string | null;
   ready: boolean;
-  /** Sends a magic link to `email`. Returns an error message or null. */
+  /** Sends a magic link + 6-digit code to `email`. Returns an error or null. */
   signIn: (email: string) => Promise<string | null>;
+  /** Verifies the emailed 6-digit code (no redirect — robust on mobile). */
+  verifyCode: (email: string, token: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
 
@@ -61,6 +63,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return error ? error.message : null;
         } catch (e) {
           return e instanceof Error ? e.message : "Sign-in failed";
+        }
+      },
+      async verifyCode(email: string, token: string) {
+        // No redirect / no PKCE verifier — Supabase validates the emailed code
+        // server-side and returns a session right here. This is why it works on
+        // mobile where the magic link opens in a different browser context.
+        try {
+          const sb = getSupabase();
+          const { error } = await sb.auth.verifyOtp({
+            email: email.trim(),
+            token: token.trim(),
+            type: "email",
+          });
+          return error ? error.message : null;
+        } catch (e) {
+          return e instanceof Error ? e.message : "Verification failed";
         }
       },
       async signOut() {

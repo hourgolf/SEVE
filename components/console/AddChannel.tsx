@@ -157,6 +157,21 @@ export function AddChannel({
   const canDraft = !!spec && canWrite && !!slug && !collision && !arming && !done;
   const m = gate?.metrics;
 
+  // Why ARM is disabled — surfaced at the button so it's never a mystery.
+  const armReason: string | null = done
+    ? null
+    : !canWrite
+      ? "Sign in to arm or save a channel."
+      : !spec
+        ? null
+        : collision
+          ? null // the slug-collision error already shows above
+          : cap && !cap.runnable
+            ? `Can't arm — needs ${cap.unsupported.join(" · ")}. Save it as a draft (won't trade), or drop those rules from the thesis.`
+            : !gate
+              ? "Run the backtest gate to enable Arm."
+              : null;
+
   return (
     <div className="ac-scrim" onClick={onClose}>
       <div className="add-channel" onClick={(e) => e.stopPropagation()}>
@@ -289,8 +304,9 @@ export function AddChannel({
                   {arming ? "Saving…" : "Arm channel"}
                 </button>
               </div>
-              {!canWrite && <div className="ac-note">Sign in (top-right) to save or arm a channel.</div>}
-              {canWrite && !gate && cap.runnable && <div className="ac-foot">Run the backtest gate to enable Arm.</div>}
+              {armReason && (
+                <div className={cap && !cap.runnable ? "ac-warn" : "ac-foot"}>{armReason}</div>
+              )}
               {armErr && <div className="ac-err">{armErr}</div>}
               {done && <div className="ac-ok">{done}</div>}
             </div>

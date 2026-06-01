@@ -123,6 +123,27 @@
 .auth-form input:focus {
   border-color: var(--green);
 }
+/* 6-digit code entry (mobile-friendly: roomy, spaced digits) */
+.auth-form input.auth-code {
+  width: 110px;
+  text-align: center;
+  letter-spacing: 4px;
+  font-size: 15px;
+  padding: 7px 9px;
+}
+.auth-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 10px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.auth-form {
+  flex-wrap: wrap;
+  align-items: center;
+}
 .auth-msg {
   color: var(--muted);
   font-size: 10px;
