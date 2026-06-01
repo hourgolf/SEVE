@@ -24,10 +24,11 @@ import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
 import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
 import { DEFAULT_POWER_PARAMS, powerEvaluate } from "./strategies/power";
 import { DEFAULT_GRIND_PARAMS, grindEvaluate } from "./strategies/grind";
+import { DEFAULT_STRADDLE_PARAMS, straddleEvaluate } from "./strategies/straddle";
 import { makeCrossover } from "./strategies/crossover";
 import { specToStrategyDef, specPremiumExit, type CompiledStrategy } from "./specEvaluate";
 import type { StrategySpec } from "../lib/desk/strategySpec";
-import type { Bar, Evaluate, FundState, Position, Quote, StrategistConfig, Trade } from "./types";
+import type { Bar, Evaluate, FundState, OptType, Position, Quote, StrategistConfig, Trade } from "./types";
 
 const BASE_MS = 1_780_000_000_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -73,7 +74,8 @@ export function simulateSession(
     const chain = chainAt(f.close, f.minutesToClose, bars[i].ts);
 
     // update trailing peak (best favorable underlying) before the strategy reads it
-    if (pos) {
+    // (single-leg only — a multi-leg structure is non-directional, no trail)
+    if (pos && !pos.legs) {
       pos.peakFavorable =
         pos.optType === "call"
           ? Math.max(pos.peakFavorable, f.close)
@@ -82,7 +84,8 @@ export function simulateSession(
     let intent = evaluate(f, pos);
 
     // Premium profit/stop takes priority over the strategy's own exit when held.
-    if (pos && premiumExit && (!intent || intent.kind !== "exit")) {
+    // (single-leg only — multi-leg exits are handled by the strategy itself.)
+    if (pos && !pos.legs && premiumExit && (!intent || intent.kind !== "exit")) {
       const q = findQuote(chain, pos.strike, pos.optType);
       if (q) {
         if (premiumExit.profitPct != null && q.mid >= pos.entryPrice * (1 + premiumExit.profitPct / 100))
@@ -93,10 +96,26 @@ export function simulateSession(
     }
 
     if (pos && intent && intent.kind === "exit") {
-      const q = findQuote(chain, pos.strike, pos.optType);
-      const exitPrice = q ? (gross ? q.mid : fillPrice("sell", q)) : 0;
-      const fee = gross ? 0 : feePerContract;
-      const pnl = (exitPrice - pos.entryPrice) * pos.qty * 100 - fee * pos.qty * 2;
+      let exitPrice: number, pnl: number;
+      if (pos.legs) {
+        // multi-leg: P&L is the sum of each leg (long = +(exit−entry), short =
+        // +(entry−exit)); fees per leg, both ways. exitPrice = net unit credit.
+        let net = 0, exitNet = 0;
+        for (const leg of pos.legs) {
+          const lq = findQuote(chain, leg.strike, leg.optType);
+          const px = lq ? (gross ? lq.mid : fillPrice(leg.side === "long" ? "sell" : "buy", lq)) : 0;
+          net += (leg.side === "long" ? px - leg.entryPrice : leg.entryPrice - px) * leg.qty * 100
+            - (gross ? 0 : feePerContract * leg.qty * 2);
+          exitNet += (leg.side === "long" ? px : -px) * leg.qty;
+        }
+        pnl = net;
+        exitPrice = pos.qty ? exitNet / pos.qty : 0;
+      } else {
+        const q = findQuote(chain, pos.strike, pos.optType);
+        exitPrice = q ? (gross ? q.mid : fillPrice("sell", q)) : 0;
+        const fee = gross ? 0 : feePerContract;
+        pnl = (exitPrice - pos.entryPrice) * pos.qty * 100 - fee * pos.qty * 2;
+      }
       dayPnl += pnl;
       trades.push({
         slug: pos.slug,
@@ -112,21 +131,46 @@ export function simulateSession(
       });
       pos = null;
     } else if (!pos && intent && intent.kind === "enter") {
-      const strike = Math.round(f.close);
-      const q = findQuote(chain, strike, intent.direction);
-      if (q) {
-        const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false);
-        if (r.ok) {
-          pos = {
-            slug: cfg.slug,
-            strike,
-            optType: intent.direction,
-            qty: r.qty,
-            entryPrice: fillPrice("buy", q),
-            entryMinute: i,
-            entryUnderlying: f.close,
-            peakFavorable: f.close,
-          };
+      if (intent.legs?.length) {
+        // MULTI-LEG: resolve each leg's strike off ATM, price it (long→ask, short→bid),
+        // size off the net debit. Skip if any leg is unquotable or the net isn't a debit.
+        const atm = Math.round(f.close);
+        const resolved: { strike: number; optType: OptType; side: "long" | "short"; ratio: number; px: number }[] = [];
+        let debit = 0, ok = true;
+        for (const ls of intent.legs) {
+          const lq = findQuote(chain, atm + ls.strikeOffset, ls.optType);
+          if (!lq) { ok = false; break; }
+          const px = ls.side === "long" ? fillPrice("buy", lq) : fillPrice("sell", lq);
+          resolved.push({ strike: atm + ls.strikeOffset, optType: ls.optType, side: ls.side, ratio: ls.ratio, px });
+          debit += (ls.side === "long" ? px : -px) * ls.ratio;
+        }
+        if (ok && debit > 0) {
+          const r = riskGovernor(cfg, fund, dayPnl, dayPnl, debit, false); // size off net debit
+          if (r.ok) {
+            pos = {
+              slug: cfg.slug, strike: atm, optType: "call", qty: r.qty,
+              entryPrice: debit, entryMinute: i, entryUnderlying: f.close, peakFavorable: f.close,
+              legs: resolved.map((l) => ({ strike: l.strike, optType: l.optType, side: l.side, qty: l.ratio * r.qty, entryPrice: l.px })),
+            };
+          }
+        }
+      } else if (intent.direction) {
+        const strike = Math.round(f.close);
+        const q = findQuote(chain, strike, intent.direction);
+        if (q) {
+          const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false);
+          if (r.ok) {
+            pos = {
+              slug: cfg.slug,
+              strike,
+              optType: intent.direction,
+              qty: r.qty,
+              entryPrice: fillPrice("buy", q),
+              entryMinute: i,
+              entryUnderlying: f.close,
+              peakFavorable: f.close,
+            };
+          }
         }
       }
     }
@@ -229,7 +273,9 @@ async function main() {
           ? (f, pos) => powerEvaluate(f, pos, DEFAULT_POWER_PARAMS)
           : strat === "grind"
             ? (f, pos) => grindEvaluate(f, pos, DEFAULT_GRIND_PARAMS)
-            : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
+            : strat === "straddle"
+              ? (f, pos) => straddleEvaluate(f, pos, DEFAULT_STRADDLE_PARAMS)
+              : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
   // Per-session evaluator: a spec needs the bars (ET clock + precomputed series),
   // built-ins need only the closes. One seam so both paths below stay identical.
   const evalFor = (bars: Bar[]): Evaluate =>
@@ -242,6 +288,7 @@ async function main() {
     : strat === "breakout" ? "The Breakout"
     : strat === "power" ? "Power Hour"
     : strat === "grind" ? "The Grinder"
+    : strat === "straddle" ? "Catalyst Straddle (multi-leg)"
     : "The Fade";
   const stratLabel = stratName + costTag;
 
