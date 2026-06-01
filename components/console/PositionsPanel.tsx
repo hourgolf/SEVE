@@ -44,7 +44,7 @@ export function PositionsPanel({
   const anyLive = positions.some((p) => live(p).isLive);
 
   return (
-    <div className="panel">
+    <div className="panel panel--909">
       <div className="phead">
         <span className="t">Open Positions</span>
         <span className="x">
