@@ -375,12 +375,19 @@ body {
   gap: 14px;
   min-width: 0; /* let grid children shrink so inner scroll/ellipsis works */
 }
+/* Every data panel is a recessed 909 "display screen": dark LCD body set into
+   the cream chassis (black molded edge + inset highlight + drop shadow), with a
+   molded plate header band carrying a silkscreen label. Add .panel--screws for
+   corner screws (instrument panels only — keeps dense panels clean). */
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  position: relative;
+  background: linear-gradient(180deg, #14181b, #0f1214); /* recessed dark LCD screen */
+  color: var(--text, #e9eef0); /* light default so uncolored cells read (.pos/.neg override) */
+  border: 1px solid #0a0a0b; /* black molded edge */
+  border-radius: 9px;
   overflow: hidden;
   min-width: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 3px 12px rgba(0, 0, 0, 0.55);
 }
 .phead {
   display: flex;
@@ -389,17 +396,19 @@ body {
   flex-wrap: wrap;
   gap: 1px 12px;
   padding: 11px 15px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-2);
+  border-bottom: 1px solid #000;
+  background: linear-gradient(180deg, var(--panel-plate, #2b2b2e), var(--panel-plate-2, #1d1d20)); /* molded band */
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
 }
 .phead .t {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1.1px;
-  /* Explicit so the Desk's dark panels don't inherit the cream chassis's
-     near-black text colour (.console-root) and vanish against --panel-2. */
-  color: var(--text);
+  letter-spacing: 1.2px;
+  /* Silkscreen label on the molded plate band — explicit light colour so the
+     dark panels don't inherit the cream chassis's near-black text. */
+  color: #d7d5cb;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -424,41 +433,16 @@ body {
   animation: pulse 1.6s ease-in-out infinite;
 }
 
-/* ---- 909 "display-screen" panel treatment ---------------------------------
-   Reframes a dark data panel as a recessed instrument screen set into the cream
-   chassis (molded plate edge + drop shadow + silkscreen header + corner screws),
-   instead of a free-floating dark-tech card. PROTOTYPE on Open Positions; once
-   approved, fold these declarations into base .panel so every panel inherits it.
-   Uses the 909 plate tokens (--panel-plate*) defined in console.css. */
-.panel--909 {
-  position: relative;
-  border: 1px solid #0a0a0b; /* black molded edge */
-  border-radius: 9px;
-  /* dark LCD "screen" body — data reads on this, like the original dark panel */
-  background: linear-gradient(180deg, #14181b, #0f1214);
-  /* light default text so uncolored cells read on the dark screen (they were
-     inheriting the cream chassis's dark --ink); .pos/.neg still override. */
-  color: var(--text, #e9eef0);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.06) inset, /* top molded highlight */
-    0 3px 12px rgba(0, 0, 0, 0.55); /* recessed into the chassis */
-}
-.panel--909 > .phead {
-  /* raised molded plate band (lighter than the screen) carrying the silkscreen */
-  background: linear-gradient(180deg, var(--panel-plate, #2b2b2e), var(--panel-plate-2, #1d1d20));
-  border-bottom: 1px solid #000;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+/* ---- .panel--screws: corner screws for "instrument" panels only -----------
+   The recessed 909 screen treatment now lives in base .panel (above), so every
+   panel gets it. Screws are opt-in here — applied only to the instrument panels
+   (Open Positions, P&L) so the dense tables (chain, log) stay clean. */
+.panel--screws > .phead {
   padding-left: 24px; /* clear the corner screws */
   padding-right: 24px;
 }
-.panel--909 > .phead .t {
-  color: #c6c4ba; /* silkscreen ink */
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
-  letter-spacing: 1.4px;
-}
-/* corner screws flanking the silkscreen header (matches the chassis .screw) */
-.panel--909::before,
-.panel--909::after {
+.panel--screws::before,
+.panel--screws::after {
   content: "";
   position: absolute;
   top: 11px;
@@ -469,8 +453,8 @@ body {
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.3);
   z-index: 1;
 }
-.panel--909::before { left: 9px; }
-.panel--909::after { right: 9px; }
+.panel--screws::before { left: 9px; }
+.panel--screws::after { right: 9px; }
 .phead-right {
   flex: 0 0 auto;
 }

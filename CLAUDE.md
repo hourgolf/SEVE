@@ -203,3 +203,11 @@ is always safe. Verify clean tsc + build before `git push` (push auto-deploys).
 Plain CSS (no Tailwind), inline SVG (no chart libs), minimal deps, the data-seam
 pattern, faithful 909 aesthetic, honest data labeling (modeled vs real). Commit
 messages end with the Co-Authored-By line. Branch is `main`; push deploys.
+
+**909 panel aesthetic (don't drift):** data panels use the base `.panel` — a
+recessed dark "display screen" (black molded edge + drop shadow + light text)
+with a molded plate `.phead` carrying a silkscreen label. NEVER build a flat
+dark-tech card. Add `.panel--screws` ONLY on instrument panels (Open Positions,
+P&L) — dense tables (chain, log, signals, tape-health) stay screwless to keep
+clean. Uncolored table cells inherit `.panel`'s light text; `.pos`/`.neg`
+override. The cream chassis lives in `console.css`; dark panels in `globals.css`.
