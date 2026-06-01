@@ -258,7 +258,7 @@ function compileSpec(spec: Spec): CompiledSpec {
 // ---- helpers ---------------------------------------------------------------
 const aHdr = { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET };
 async function aGet(path: string) { const r = await fetch(PAPER + path, { headers: aHdr }); if (!r.ok) throw new Error(`${r.status} GET ${path}`); return r.json(); }
-async function aPost(path: string, body: unknown) { const r = await fetch(PAPER + path, { method: "POST", headers: { ...aHdr, "content-type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) throw new Error(`${r.status} POST ${path}`); return r.json(); }
+async function aPost(path: string, body: unknown) { const r = await fetch(PAPER + path, { method: "POST", headers: { ...aHdr, "content-type": "application/json" }, body: JSON.stringify(body) }); const text = await r.text(); if (!r.ok) throw new Error(`${r.status} POST ${path}: ${text.slice(0, 300)}`); return text ? JSON.parse(text) : {}; }
 async function journal(level: string, message: string, meta?: unknown) { try { await sb.from("events").insert({ level, message, meta: meta ?? null }); } catch { /* */ } }
 function occSymbol(etDate: string, strike: number, type: OptType) { const [y, m, d] = etDate.split("-"); return `SPY${y.slice(2)}${m}${d}${type === "call" ? "C" : "P"}${String(Math.round(strike * 1000)).padStart(8, "0")}`; }
 function aggregate(bars: Bar[], tf: number): Bar[] {
@@ -373,12 +373,18 @@ Deno.serve(async () => {
         // so one channel's exit can't flatten another channel holding the SAME
         // 0DTE (the root cause of the stuck "open" rows).
         const sellQty = Math.max(1, Math.min(Math.round(Number(alp.qty)), Number(row.qty)));
-        if (!DRY_RUN) await aPost("/v2/orders", { symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` });
-        // Per-channel realized P&L on its own qty (alp.unrealized_pl is the whole
-        // netted lot — wrong when shared): (mark − entry) × qty × 100.
-        const realized = (Number(alp.current_price ?? 0) - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
-        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: Number(alp.current_price ?? 0), realized_pnl: realized }).eq("id", row.id);
-        await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} (${intent.reason})`);
+        try {
+          if (!DRY_RUN) await aPost("/v2/orders", { symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` });
+          // Per-channel realized P&L on its own qty (alp.unrealized_pl is the whole
+          // netted lot — wrong when shared): (mark − entry) × qty × 100.
+          const realized = (Number(alp.current_price ?? 0) - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
+          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: Number(alp.current_price ?? 0), realized_pnl: realized }).eq("id", row.id);
+          await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} (${intent.reason})`);
+        } catch (e) {
+          // One rejected order must NOT crash the whole run — journal the Alpaca
+          // reason and leave the row open to retry next minute.
+          await journal("WARN", `${s.slug}: exit ${row.occ_symbol} rejected — ${(e as Error).message}`);
+        }
       }
 
       // ---- entry ----
@@ -431,13 +437,19 @@ Deno.serve(async () => {
         }
         await sb.from("signals").insert({ strategist_id: s.id, signal_type: intent.reason, underlying_price: f.close, direction: dir, acted_on: !blocked, blocked_reason: blocked, rationale: { occ, ask, qty, atr: Number(f.atr.toFixed(2)), er: Number(f.er.toFixed(2)), relVol: Number(f.relVol.toFixed(2)) } });
         if (!blocked && qty > 0 && !DRY_RUN) {
-          const o = await aPost("/v2/orders", { symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${occ}-${etMin}` });
-          // CRITICAL: confirm the position row was recorded. A silent insert
-          // failure here is what caused the re-buy loop — if it fails, journal
-          // LOUD (the `already_open` guard above still prevents another buy).
-          const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty, avg_entry_price: ask, current_mark: ask, unrealized_pnl: 0, status: "open" });
-          if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
-          else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} (${intent.reason})`, { order_id: o.id });
+          try {
+            const o = await aPost("/v2/orders", { symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${occ}-${etMin}` });
+            // CRITICAL: confirm the position row was recorded. A silent insert
+            // failure here is what caused the re-buy loop — if it fails, journal
+            // LOUD (the per-channel guards above still prevent another buy).
+            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty, avg_entry_price: ask, current_mark: ask, unrealized_pnl: 0, status: "open" });
+            if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
+            else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} (${intent.reason})`, { order_id: o.id });
+          } catch (e) {
+            // Order rejected (e.g. Alpaca 422) — journal the reason, don't crash
+            // the run or insert a phantom position; just record the blocked signal.
+            await journal("WARN", `${s.slug}: buy ${occ} rejected — ${(e as Error).message}`);
+          }
         }
         out.push({ slug: s.slug, dir, blocked, qty });
       } else if (row && alp) {
