@@ -881,6 +881,22 @@ svg.spark {
   overflow-y: auto;
   overscroll-behavior: contain; /* don't rubber-band the page/app while scrolling */
   -webkit-overflow-scrolling: touch;
+  /* TR-909 scrollbar — matches the event log (.log): thin, dark, rounded */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) transparent;
+}
+.recent-trades .rt-list::-webkit-scrollbar {
+  width: 6px;
+}
+.recent-trades .rt-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.recent-trades .rt-list::-webkit-scrollbar-thumb {
+  background: var(--border-bright);
+  border-radius: 3px;
+}
+.recent-trades .rt-list::-webkit-scrollbar-thumb:hover {
+  background: var(--muted, #7d8a90);
 }
 .recent-trades .rt-row {
   display: flex;
