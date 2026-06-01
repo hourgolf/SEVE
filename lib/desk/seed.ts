@@ -4,10 +4,11 @@
 //  yet). When the data seam goes live, replace seedDesk() with a Supabase read.
 // ============================================================================
 
-import type { DeskState, StrategistState } from "@/lib/desk/types";
+import type { DeskState, StrategistConfig, StrategistState } from "@/lib/desk/types";
 
-// Maps the schema's hex accents to our PmColor tokens.
-const STRATEGISTS: StrategistState[] = [
+// Maps the schema's hex accents to our PmColor tokens. `defaults` is derived
+// from each strategist's seed config below (the factory default a RESET restores).
+const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
   {
     id: "",
     slug: "fade",
@@ -74,10 +75,21 @@ const STRATEGISTS: StrategistState[] = [
   },
 ];
 
+// Canonical default config per strategist slug — the seed values are the
+// factory defaults. Exposed so a DB-loaded desk can still resolve each trader's
+// defaults (the DB stores current values, not defaults).
+export const DEFAULT_CONFIG_BY_SLUG: Record<string, StrategistConfig> =
+  Object.fromEntries(STRATEGISTS.map((s) => [s.slug, { ...s.config }]));
+
 export function seedDesk(): DeskState {
   return {
-    // deep copy so the reducer never mutates this module-level constant
-    strategists: STRATEGISTS.map((s) => ({ ...s, config: { ...s.config } })),
+    // deep copy so the reducer never mutates this module-level constant;
+    // defaults snapshot the seed config so RESET restores the factory behaviour
+    strategists: STRATEGISTS.map((s) => ({
+      ...s,
+      config: { ...s.config },
+      defaults: { ...s.config },
+    })),
     fund: {
       total_capital_usd: 10000,
       master_daily_stop_usd: 300,

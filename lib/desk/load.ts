@@ -3,6 +3,7 @@
 // Returns null on any error (e.g. RLS not applied) → caller falls back to seed.
 
 import { getSupabase } from "@/lib/supabaseClient";
+import { DEFAULT_CONFIG_BY_SLUG } from "@/lib/desk/seed";
 import type { DeskState, PmColor, StrategistState } from "@/lib/desk/types";
 
 // Stable slug → accent + display order (matches the schema seed).
@@ -35,6 +36,14 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
           ? r.strategist_config[0]
           : r.strategist_config;
         if (!cfg) return null;
+        const config = {
+          capital_pct: Number(cfg.capital_pct),
+          aggression: Number(cfg.aggression),
+          max_contracts: Number(cfg.max_contracts),
+          daily_stop_usd: Number(cfg.daily_stop_usd),
+          muted: !!cfg.muted,
+          soloed: !!cfg.soloed,
+        };
         return {
           id: r.id,
           slug: r.slug,
@@ -42,14 +51,10 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
           mandate: r.mandate,
           regime: r.regime ?? "",
           color: COLOR_BY_SLUG[r.slug] ?? "green",
-          config: {
-            capital_pct: Number(cfg.capital_pct),
-            aggression: Number(cfg.aggression),
-            max_contracts: Number(cfg.max_contracts),
-            daily_stop_usd: Number(cfg.daily_stop_usd),
-            muted: !!cfg.muted,
-            soloed: !!cfg.soloed,
-          },
+          config,
+          // The DB stores current values, not defaults — resolve the factory
+          // defaults from the seed by slug (fallback: the loaded config itself).
+          defaults: DEFAULT_CONFIG_BY_SLUG[r.slug] ?? { ...config },
         };
       })
       .filter((s): s is StrategistState => s !== null)

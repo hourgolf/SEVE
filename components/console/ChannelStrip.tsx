@@ -34,6 +34,42 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
   // VU meter: signed fill, capped at ±$500 for the bar geometry.
   const mag = Math.min(1, Math.abs(day) / 500);
 
+  // Restore this channel's faders to the trader's factory defaults (knobs only —
+  // mute/solo are left as deliberate operational state). Guards an accidental
+  // no-op write when already at default.
+  const d = strategist.defaults;
+  const atDefault =
+    config.capital_pct === d.capital_pct &&
+    config.aggression === d.aggression &&
+    config.max_contracts === d.max_contracts &&
+    config.daily_stop_usd === d.daily_stop_usd;
+  const resetChannel = () => {
+    if (atDefault) return;
+    const patch = {
+      capital_pct: d.capital_pct,
+      aggression: d.aggression,
+      max_contracts: d.max_contracts,
+      daily_stop_usd: d.daily_stop_usd,
+    };
+    dispatch({ type: "SET_CONFIG", slug, patch });
+    persistConfig(id, patch);
+  };
+  const resetBtn = (
+    <button
+      type="button"
+      className={`ch-reset${atDefault ? " is-default" : ""}`}
+      onClick={resetChannel}
+      title={`reset ${name} to default settings`}
+      aria-label={`reset ${name} to default settings`}
+    >
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
+        strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <polyline points="1 4 1 10 7 10" />
+        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+      </svg>
+    </button>
+  );
+
   const pads = (
     <div className="ch-pads">
       <PadButton
@@ -62,6 +98,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
   if (mobile) {
     return (
       <div className={`channel channel--m pm-${color}${ducked ? " ducked" : ""}`}>
+        {resetBtn}
         <div className="ch-top">
           <div className="ch-head">
             <span className={`ch-dot${active ? " on" : ""}`} />
@@ -113,6 +150,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
     <div
       className={`channel pm-${color}${ducked ? " ducked" : ""}`}
     >
+      {resetBtn}
       <div className="ch-head">
         <span className={`ch-dot${active ? " on" : ""}`} />
         <div className="ch-name">{name}</div>

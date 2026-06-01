@@ -29,6 +29,9 @@ export interface StrategistState {
   regime: string;
   color: PmColor;
   config: StrategistConfig;
+  // Factory defaults for this trader — what the channel's RESET restores. Carried
+  // per-strategist so future pluggable traders ship their own default behaviour.
+  defaults: StrategistConfig;
 }
 
 // Mirrors fund_state — the master strip. `running` is a UI transport flag.

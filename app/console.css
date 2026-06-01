@@ -479,6 +479,7 @@
 
 /* ---------- channel strip ------------------------------------------------- */
 .channel {
+  position: relative;
   background: linear-gradient(180deg, var(--panel-plate), var(--panel-plate-2));
   border: 1px solid #000;
   border-top: 3px solid var(--pm);
@@ -494,6 +495,40 @@
 .channel.ducked {
   opacity: 0.4;
   filter: grayscale(0.5);
+}
+/* per-channel RESET — restores the trader's faders to factory defaults.
+   Tucked in the top-right corner so it's out of the knob-drag path. */
+.ch-reset {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border-bright, #2a3a42);
+  background: rgba(10, 15, 17, 0.5);
+  color: var(--muted, #7d8a90);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s, transform 0.06s;
+}
+.ch-reset:hover {
+  color: var(--pm);
+  border-color: var(--pm);
+}
+.ch-reset:active {
+  transform: rotate(-35deg);
+}
+/* already at default → dim + non-actionable, but still visible */
+.ch-reset.is-default {
+  opacity: 0.32;
+  cursor: default;
+}
+.ch-reset.is-default:hover {
+  color: var(--muted, #7d8a90);
+  border-color: var(--border-bright, #2a3a42);
 }
 .ch-head {
   display: flex;
