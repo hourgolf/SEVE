@@ -202,6 +202,10 @@ Deno.serve(async () => {
         const strike = Math.round(f.close);
         const occ = occSymbol(todayET, strike, dir);
         let blocked = guardBlocked;
+        // Belt-and-suspenders: never double-buy a contract we already hold or
+        // have a working order for — even if our desk-row tracking failed. This
+        // alone breaks the silent re-buy loop regardless of any write failure.
+        if (!blocked && (positions.some((p) => String(p.symbol) === occ) || openOrders.some((o) => String(o.symbol) === occ))) blocked = "already_open";
         let qty = 0, ask = 0;
         if (!blocked) {
           const { data: q } = await sb.from("option_quotes").select("ask").eq("occ_symbol", occ).order("captured_at", { ascending: false }).limit(1).maybeSingle();
@@ -217,8 +221,12 @@ Deno.serve(async () => {
         await sb.from("signals").insert({ strategist_id: s.id, signal_type: intent.reason, underlying_price: f.close, direction: dir, acted_on: !blocked, blocked_reason: blocked, rationale: { occ, ask, qty, atr: Number(f.atr.toFixed(2)), er: Number(f.er.toFixed(2)), relVol: Number(f.relVol.toFixed(2)) } });
         if (!blocked && qty > 0 && !DRY_RUN) {
           const o = await aPost("/v2/orders", { symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day" });
-          await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty, avg_entry_price: ask, entry_underlying: f.close, current_mark: ask, unrealized_pnl: 0, status: "open" });
-          await journal("EXEC", `${s.slug}: buy ${qty} ${occ} (${intent.reason})`, { order_id: o.id });
+          // CRITICAL: confirm the position row was recorded. A silent insert
+          // failure here is what caused the re-buy loop — if it fails, journal
+          // LOUD (the `already_open` guard above still prevents another buy).
+          const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty, avg_entry_price: ask, entry_underlying: f.close, current_mark: ask, unrealized_pnl: 0, status: "open" });
+          if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
+          else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} (${intent.reason})`, { order_id: o.id });
         }
         out.push({ slug: s.slug, dir, blocked, qty });
       } else if (row && alp) {
