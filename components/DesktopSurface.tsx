@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Chassis } from "@/components/console/Chassis";
 import { AddChannel } from "@/components/console/AddChannel";
 import { HeadReadouts } from "@/components/console/HeadReadouts";
@@ -49,6 +49,15 @@ export function DesktopSurface({
   const [addOpen, setAddOpen] = useState(false);
   const { canWrite } = write;
 
+  // occ_symbol → live mid from the chain, so open positions mark live (not the
+  // worker's once-a-minute write). Recomputes as the snapshot polls.
+  const liveMarks = useMemo(
+    () => Object.fromEntries(
+      data.snapshot.filter((q) => q.mid != null).map((q) => [q.occ_symbol, Number(q.mid)])
+    ),
+    [data.snapshot]
+  );
+
   return (
     <Chassis
       brand={<>$EVE<span> · DESK</span></>}
@@ -83,7 +92,7 @@ export function DesktopSurface({
       <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} />
       <div className="grid grid--live live-body">
         <div className="col">
-          <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} />
+          <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} />
           <OptionChain
             snapshot={data.snapshot}
             spot={data.spot}

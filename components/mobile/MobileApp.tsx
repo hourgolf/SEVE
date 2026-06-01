@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
@@ -50,6 +50,14 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const [addOpen, setAddOpen] = useState(false);
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
+
+  // occ_symbol → live mid (positions mark live off the chain, not the worker).
+  const liveMarks = useMemo(
+    () => Object.fromEntries(
+      data.snapshot.filter((q) => q.mid != null).map((q) => [q.occ_symbol, Number(q.mid)])
+    ),
+    [data.snapshot]
+  );
 
   const goTab = (t: Tab) => {
     setTab(t);
@@ -122,7 +130,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
               </>
             )}
-            {show.pos && <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} />}
+            {show.pos && <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} />}
           </>
         )}
 

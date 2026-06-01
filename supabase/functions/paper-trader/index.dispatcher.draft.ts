@@ -28,6 +28,10 @@
 //      live posture: any unknown/unsupported condition makes the entry not fire).
 //    - the Stop knob (daily_stop_usd) now bites: a channel stops taking NEW
 //      entries once its REALIZED P&L today is at/under its loss budget.
+//    - SAME-0DTE collision fix: exits sell only the CHANNEL'S own qty (not the
+//      whole netted Alpaca lot), and a desk row with no matching Alpaca position
+//      is RECONCILED closed (valued at the last quote) — fixes stuck "open" rows
+//      when one channel's exit flattened another holding the same contract.
 // ============================================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -264,7 +268,12 @@ Deno.serve(async () => {
     // deploying this — otherwise these columns don't exist and the select errors).
     const { data: strategists } = await sb.from("strategists").select("id,slug,status,spec_json,strategist_config(*)");
     const account = await aGet("/v2/account");
-    const positions: Record<string, unknown>[] = await aGet("/v2/positions").catch(() => []);
+    // Track whether the positions read SUCCEEDED — reconciliation (closing a desk
+    // row with no Alpaca match) must NEVER run on a transient API error, or it
+    // would wrongly flatten every channel's books at once.
+    let positions: Record<string, unknown>[] = [];
+    let positionsOk = true;
+    try { positions = await aGet("/v2/positions"); } catch { positionsOk = false; }
     const openOrders: Record<string, unknown>[] = await aGet("/v2/orders?status=open&limit=100").catch(() => []);
 
     // today's session 1m bars (oldest→newest), from market open
@@ -326,13 +335,34 @@ Deno.serve(async () => {
           else if (premiumExit.stopPct != null && markPx <= entryPx * (1 - premiumExit.stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
         }
       }
+      // ---- reconcile: desk row OPEN but Alpaca has no such position ----
+      // Happens when another channel holding the SAME 0DTE sold the netted lot,
+      // on expiry, or a manual close. Close the orphan so it stops showing open
+      // (valued at the last option quote — best-effort; the close already
+      // happened on Alpaca). Only when the positions read succeeded.
+      if (row && !alp && positionsOk) {
+        const { data: q } = await sb.from("option_quotes").select("mid,bid").eq("occ_symbol", row.occ_symbol).order("captured_at", { ascending: false }).limit(1).maybeSingle();
+        const mark = Number(q?.mid ?? q?.bid ?? 0); // no quote → assume worthless
+        const realized = (mark - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
+        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized }).eq("id", row.id);
+        await journal("WARN", `${s.slug}: reconciled ${row.occ_symbol} — no Alpaca position; booked ~$${realized.toFixed(0)} at last quote (estimate)`);
+        out.push({ slug: s.slug, note: "reconciled" });
+        continue;
+      }
       const canTrade = !guardBlocked;
 
       // ---- exit ----
       if (intent?.kind === "exit" && row && alp && canTrade) {
-        if (!DRY_RUN) await aPost("/v2/orders", { symbol: row.occ_symbol, qty: String(Math.round(Number(alp.qty))), side: "sell", type: "market", time_in_force: "day" });
-        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), realized_pnl: Number(alp.unrealized_pl ?? 0) }).eq("id", row.id);
-        await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} (${intent.reason})`);
+        // Sell ONLY this channel's contracts — not the whole netted Alpaca lot —
+        // so one channel's exit can't flatten another channel holding the SAME
+        // 0DTE (the root cause of the stuck "open" rows).
+        const sellQty = Math.max(1, Math.min(Math.round(Number(alp.qty)), Number(row.qty)));
+        if (!DRY_RUN) await aPost("/v2/orders", { symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day" });
+        // Per-channel realized P&L on its own qty (alp.unrealized_pl is the whole
+        // netted lot — wrong when shared): (mark − entry) × qty × 100.
+        const realized = (Number(alp.current_price ?? 0) - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
+        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: Number(alp.current_price ?? 0), realized_pnl: realized }).eq("id", row.id);
+        await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} (${intent.reason})`);
       }
 
       // ---- entry ----

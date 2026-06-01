@@ -25,7 +25,16 @@ export function getSupabase(): SupabaseClient {
   if (!url || !anonKey) throw new MissingEnvError();
   if (!client) {
     client = createClient(url, anonKey, {
-      auth: { persistSession: false },
+      // Magic-link sign-in (PKCE) needs the session AND the code-verifier to
+      // survive the redirect + page reload — persistSession:false lost the
+      // verifier, so the code exchange failed and sign-in bounced back logged
+      // out every time. Persist + detect-in-URL fixes the loop. Anon reads are
+      // unaffected (no session = anon, RLS still gates everything).
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
     });
   }
   return client;

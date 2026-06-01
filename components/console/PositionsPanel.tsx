@@ -18,21 +18,39 @@ export function PositionsPanel({
   positions,
   strategists,
   recentTrades = [],
+  liveMarks,
 }: {
   positions: Position[];
   strategists: StrategistState[];
   /** Today's closed trades (newest first) — so fast scalps are visible. */
   recentTrades?: Position[];
+  /** occ_symbol → live mid from the option chain. When present, Mark + Unreal
+   *  P&L are computed live off the chain instead of the worker's last write
+   *  (which only updates ~once a minute, and not at all for orphaned rows). */
+  liveMarks?: Record<string, number>;
 }) {
   const colorOf = (slug: string) =>
     PM_VAR[strategists.find((s) => s.slug === slug)?.color ?? "green"];
   const realizedToday = recentTrades.reduce((a, t) => a + (t.realized_pnl ?? 0), 0);
 
+  // Live mark for a position if the chain has a fresh quote; else the stored mark.
+  const live = (p: Position): { mark: number; unreal: number; isLive: boolean } => {
+    const m = liveMarks?.[p.occ_symbol];
+    if (m != null && Number.isFinite(m) && m > 0) {
+      return { mark: m, unreal: (m - p.avg_entry_price) * p.qty * 100, isLive: true };
+    }
+    return { mark: p.current_mark, unreal: p.unrealized_pnl, isLive: false };
+  };
+  const anyLive = positions.some((p) => live(p).isLive);
+
   return (
     <div className="panel">
       <div className="phead">
         <span className="t">Open Positions</span>
-        <span className="x">{positions.length} legs</span>
+        <span className="x">
+          {anyLive && <span className="live-dot" title="mark + P&L live from the option chain" />}
+          {positions.length} legs
+        </span>
       </div>
       <div className="table-scroll table-scroll--fit">
         <table>
@@ -58,7 +76,9 @@ export function PositionsPanel({
               </td>
             </tr>
           ) : (
-            positions.map((p) => (
+            positions.map((p) => {
+              const { mark, unreal } = live(p);
+              return (
               <tr key={p.id}>
                 <td style={{ textAlign: "left" }}>
                   <span
@@ -78,12 +98,13 @@ export function PositionsPanel({
                 </td>
                 <td>{p.qty > 0 ? `+${p.qty}` : p.qty}</td>
                 <td>{p.avg_entry_price.toFixed(2)}</td>
-                <td>{p.current_mark.toFixed(2)}</td>
-                <td className={p.unrealized_pnl < 0 ? "neg" : "pos"}>
-                  {signedUsd(p.unrealized_pnl)}
+                <td>{mark.toFixed(2)}</td>
+                <td className={unreal < 0 ? "neg" : "pos"}>
+                  {signedUsd(unreal)}
                 </td>
               </tr>
-            ))
+              );
+            })
           )}
           </tbody>
         </table>
