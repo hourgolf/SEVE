@@ -30,6 +30,7 @@ export function OptionChain({
 }) {
   let rows: React.ReactNode;
   let meta = "—";
+  let livePricing = false;
 
   if (!snapshot.length) {
     rows = (
@@ -58,9 +59,28 @@ export function OptionChain({
       ...strikes.filter((k) => k > ref).slice(0, 5),
     ];
 
+    // Delta-adjust each quote by the live spot's move since its snapshot, so the
+    // marks track the underlying between 1-min snapshots (first-order; the spread
+    // is preserved, delta is gamma-adjusted). IV is left as captured.
+    const snapU = front.find((r) => r.underlying_price != null)?.underlying_price ?? null;
+    livePricing = spot != null && snapU != null && Math.abs(spot - snapU) > 0.005;
+    const liveAdj = (q: OptionQuote | undefined): OptionQuote | undefined => {
+      if (!q || spot == null || q.underlying_price == null) return q;
+      const move = spot - q.underlying_price;
+      if (move === 0) return q;
+      const shift = (q.delta ?? 0) * move;
+      const px = (v: number | null) => (v == null ? v : Math.max(0, v + shift));
+      let delta = q.delta;
+      if (delta != null) {
+        delta = delta + (q.gamma ?? 0) * move;
+        delta = q.opt_type === "call" ? Math.min(1, Math.max(0, delta)) : Math.max(-1, Math.min(0, delta));
+      }
+      return { ...q, bid: px(q.bid), ask: px(q.ask), mid: px(q.mid), delta };
+    };
+
     rows = shown.map((k) => {
-      const c = front.find((r) => Number(r.strike) === k && r.opt_type === "call");
-      const p = front.find((r) => Number(r.strike) === k && r.opt_type === "put");
+      const c = liveAdj(front.find((r) => Number(r.strike) === k && r.opt_type === "call"));
+      const p = liveAdj(front.find((r) => Number(r.strike) === k && r.opt_type === "put"));
       const cSel = !!c && selected === c.occ_symbol;
       const pSel = !!p && selected === p.occ_symbol;
       const onC = c ? () => onSelect?.(c.occ_symbol) : undefined;
@@ -112,6 +132,14 @@ export function OptionChain({
         <span className="t">Live Option Chain</span>
         <span className="x">
           {meta}
+          {livePricing && (
+            <span
+              title="Marks track the live spot between 1-min snapshots (delta-adjusted; spread preserved)."
+              style={{ color: "var(--green, #2fd573)" }}
+            >
+              {" · live"}
+            </span>
+          )}
           {deltasModeled && snapshot.length > 0 && (
             <span
               title="Alpaca does not provide 0DTE greeks; these deltas are modeled (Black-Scholes from mid)."

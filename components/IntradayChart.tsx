@@ -176,11 +176,44 @@ export function IntradayChart({
   };
 
   const isDaily = RANGES[range].src === "daily";
+  // Live-edge: fold the live spot into the most recent candle so it grows in
+  // real time between the 1-min ingest snapshots. Intraday → append a forming
+  // candle for the current minute (until its real bar lands); daily → extend
+  // today's last candle. formingRef accumulates the minute's high/low.
+  const formingRef = useRef<{ min: number; open: number; high: number; low: number } | null>(null);
+  const liveSource = useMemo<UnderlyingBar[]>(() => {
+    const src = isDaily ? dailyBars : bars;
+    if (spot == null || !src.length) return src;
+    const last = src[src.length - 1];
+    // bar columns are nullable off PostgREST — fall back to spot for the math
+    const lastHigh = last.high ?? spot;
+    const lastLow = last.low ?? spot;
+    const lastClose = last.close ?? spot;
+    if (isDaily) {
+      const updated = { ...last, close: spot, high: Math.max(lastHigh, spot), low: Math.min(lastLow, spot) };
+      return [...src.slice(0, -1), updated];
+    }
+    const minuteStart = Math.floor(Date.now() / 60000) * 60000;
+    if (Date.parse(last.ts) >= minuteStart) return src; // real bar already covers now
+    const acc = formingRef.current;
+    if (!acc || acc.min !== minuteStart) {
+      formingRef.current = { min: minuteStart, open: lastClose, high: Math.max(lastClose, spot), low: Math.min(lastClose, spot) };
+    } else {
+      acc.high = Math.max(acc.high, spot);
+      acc.low = Math.min(acc.low, spot);
+    }
+    const a = formingRef.current!;
+    const forming: UnderlyingBar = {
+      ts: new Date(minuteStart).toISOString(),
+      open: a.open, high: a.high, low: a.low, close: spot, volume: 0, vwap: spot,
+    };
+    return [...src, forming];
+  }, [isDaily, dailyBars, bars, spot]);
   // Daily bars are already one-per-day; aggregating them at the daily interval
   // is a clean passthrough (and coerces the nullable view columns to numbers).
   const agg = useMemo(
-    () => aggregateBars(isDaily ? dailyBars : bars, isDaily ? DAILY_TF : tf),
-    [isDaily, dailyBars, bars, tf]
+    () => aggregateBars(liveSource, isDaily ? DAILY_TF : tf),
+    [liveSource, isDaily, tf]
   );
   const closes = useMemo(() => agg.map((b) => b.close), [agg]);
   const candles = useMemo<Candle[]>(
