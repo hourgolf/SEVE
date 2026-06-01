@@ -125,9 +125,9 @@
 }
 /* 6-digit code entry (mobile-friendly: roomy, spaced digits) */
 .auth-form input.auth-code {
-  width: 110px;
+  width: 150px; /* fits up to a 10-digit OTP */
   text-align: center;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
   font-size: 15px;
   padding: 7px 9px;
 }

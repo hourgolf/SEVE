@@ -37,7 +37,7 @@ export function AuthControl() {
     setBusy(false);
     if (err) { setMsg(err); return; }
     setSentTo(addr);
-    setMsg("✓ Sent. Enter the 6-digit code from the email (or tap the link).");
+    setMsg("✓ Sent. Enter the code from the email (or tap the link).");
   }
 
   async function verify(e: FormEvent) {
@@ -77,10 +77,10 @@ export function AuthControl() {
             inputMode="numeric"
             autoComplete="one-time-code"
             pattern="[0-9]*"
-            maxLength={6}
-            placeholder="123456"
+            maxLength={10}
+            placeholder="email code"
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
             autoFocus
           />
           <button className="auth-btn" type="submit" disabled={busy || code.length < 6}>
