@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "backtest": "tsx engine/backtest.ts",
+    "report": "tsx engine/report.ts",
     "sweep": "tsx engine/sweep.ts",
     "sweep:cross": "tsx engine/sweep-cross.ts",
     "regime": "tsx engine/regime-test.ts",
