@@ -299,10 +299,12 @@ Deno.serve(async () => {
       if (!code && !compiled) { out.push({ slug: s.slug, note: "no_edge" }); continue; }
       const tf = code ? code.tf : compiled!.tf;
       const warmup = code ? code.warmup : compiled!.warmup;
-      // ARM gate: only 'armed' channels place orders (draft/disabled stay idle).
+      // ARM gate: only 'armed' channels open NEW positions. A 'draft'/'disabled'
+      // channel (e.g. one the operator deleted) still MANAGES an open position —
+      // exits + reconcile run below so it winds down — it just can't enter.
       // status missing (pre-13_add_channel.sql) → treat as armed so built-ins run.
       const status = (s as { status?: string }).status ?? "armed";
-      if (status !== "armed") { out.push({ slug: s.slug, note: "not_armed" }); continue; }
+      const armBlocked = status !== "armed";
       const guardBlocked = fund?.is_halted ? "halted" : cfg.muted ? "muted" : fund?.mode !== "paper" ? "not_paper" : null;
 
       const bars = aggregate(session1m, tf);
@@ -373,6 +375,7 @@ Deno.serve(async () => {
         const strike = Math.round(f.close);
         const occ = occSymbol(todayET, strike, dir);
         let blocked = guardBlocked;
+        if (!blocked && armBlocked) blocked = "not_armed"; // draft/disabled → no new entries
         // Belt-and-suspenders: never double-buy a contract we already hold or
         // have a working order for — even if our desk-row tracking failed. This
         // alone breaks the silent re-buy loop regardless of any write failure.

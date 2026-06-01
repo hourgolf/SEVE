@@ -13,6 +13,8 @@ import type { DeskState, FundState, StrategistConfig } from "@/lib/desk/types";
 export type DeskAction =
   | { type: "HYDRATE"; state: DeskState }
   | { type: "SET_CONFIG"; slug: string; patch: Partial<StrategistConfig> }
+  | { type: "RENAME"; slug: string; name: string }
+  | { type: "REMOVE"; slug: string }
   | { type: "TOGGLE_MUTE"; slug: string }
   | { type: "TOGGLE_SOLO"; slug: string }
   | { type: "SET_FUND"; patch: Partial<FundState> }
@@ -35,6 +37,18 @@ export function deskReducer(state: DeskState, action: DeskAction): DeskState {
             ? { ...s, config: { ...s.config, ...action.patch } }
             : s
         ),
+      };
+    case "RENAME":
+      return {
+        ...state,
+        strategists: state.strategists.map((s) =>
+          s.slug === action.slug ? { ...s, name: action.name } : s
+        ),
+      };
+    case "REMOVE":
+      return {
+        ...state,
+        strategists: state.strategists.filter((s) => s.slug !== action.slug),
       };
     case "TOGGLE_MUTE":
       return {

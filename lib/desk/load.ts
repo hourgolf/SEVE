@@ -91,6 +91,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
         } as StrategistState & { _sort: number };
       })
       .filter((s): s is StrategistState & { _sort: number } => s !== null)
+      .filter((s) => s.status !== "disabled") // soft-deleted channels drop off the desk
       .sort((a, b) => {
         // sort_order asc; rows without one (-1 / 100) fall to the end, then name.
         const av = a._sort < 0 ? 999 : a._sort;

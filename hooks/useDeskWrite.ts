@@ -107,5 +107,48 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel };
+  const renameChannel = useCallback(
+    async (id: string, name: string): Promise<{ ok: boolean; error?: string }> => {
+      if (!session || !id || !name.trim()) return { ok: false, error: "sign in / empty name" };
+      try {
+        const { error } = await getSupabase()
+          .from("strategists")
+          .update({ name: name.trim() })
+          .eq("id", id);
+        return error ? { ok: false, error: error.message } : { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "rename failed" };
+      }
+    },
+    [session]
+  );
+
+  // Delete a channel. A channel with trade history (signals/positions FK) can't
+  // be hard-deleted without destroying that history, so we fall back to a soft
+  // disable (status:'disabled' → hidden + skipped by the worker). Either way it
+  // leaves the desk. Returns how it was removed.
+  const deleteChannel = useCallback(
+    async (id: string): Promise<{ ok: boolean; mode?: "deleted" | "disabled"; error?: string }> => {
+      if (!session || !id) return { ok: false, error: "sign in to remove a channel" };
+      try {
+        const sb = getSupabase();
+        const { error } = await sb.from("strategists").delete().eq("id", id);
+        if (!error) return { ok: true, mode: "deleted" };
+        // 23503 = FK violation (has signals/positions/orders history) → soft-disable
+        if ((error as { code?: string }).code === "23503") {
+          const { error: upErr } = await sb
+            .from("strategists")
+            .update({ status: "disabled", is_active: false })
+            .eq("id", id);
+          return upErr ? { ok: false, error: upErr.message } : { ok: true, mode: "disabled" };
+        }
+        return { ok: false, error: error.message };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "delete failed" };
+      }
+    },
+    [session]
+  );
+
+  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, deleteChannel };
 }

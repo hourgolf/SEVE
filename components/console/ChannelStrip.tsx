@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Knob } from "@/components/console/hw/Knob";
 import { LedMeter } from "@/components/console/hw/LedMeter";
 import { PadButton } from "@/components/console/hw/PadButton";
@@ -26,8 +26,76 @@ export interface ChannelStripProps {
 
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
-  const { persistConfig } = useDeskWrite();
+  const { persistConfig, renameChannel, deleteChannel, canWrite } = useDeskWrite();
   const { id, slug, name, regime, color, status, config } = strategist;
+
+  // Flip-card editor: rename + delete. Opens an overlay over the card.
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState(name);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [editErr, setEditErr] = useState<string | null>(null);
+
+  const openEdit = () => { setDraftName(name); setConfirmDel(false); setEditErr(null); setEditing(true); };
+  const saveName = async () => {
+    const nm = draftName.trim();
+    if (!nm || nm === name) return;
+    dispatch({ type: "RENAME", slug, name: nm });
+    const res = await renameChannel(id, nm);
+    if (!res.ok) setEditErr(res.error ?? "rename failed");
+  };
+  const doDelete = async () => {
+    const res = await deleteChannel(id);
+    if (res.ok) { setEditing(false); dispatch({ type: "REMOVE", slug }); }
+    else { setConfirmDel(false); setEditErr(res.error ?? "remove failed"); }
+  };
+
+  const editBtn = canWrite ? (
+    <button
+      type="button"
+      className="ch-edit-btn"
+      onClick={openEdit}
+      title={`edit ${name}`}
+      aria-label={`edit ${name}`}
+    >
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+        strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+      </svg>
+    </button>
+  ) : null;
+
+  const editOverlay = editing ? (
+    <div className="ch-edit">
+      <div className="ch-edit-head">Edit · <span className="ch-edit-slug">{slug}</span></div>
+      <label className="ch-edit-label">Name</label>
+      <input
+        className="ch-edit-input"
+        value={draftName}
+        onChange={(e) => setDraftName(e.target.value)}
+        spellCheck={false}
+        maxLength={40}
+        aria-label="channel name"
+      />
+      <button className="ch-edit-save" disabled={!draftName.trim() || draftName.trim() === name} onClick={saveName}>
+        Save name
+      </button>
+
+      <div className="ch-edit-danger">
+        {!confirmDel ? (
+          <button className="ch-edit-del" onClick={() => setConfirmDel(true)}>Delete channel</button>
+        ) : (
+          <div className="ch-edit-confirm">
+            <span>Remove {name}?</span>
+            <button className="ch-edit-del confirm" onClick={doDelete}>Yes, remove</button>
+            <button className="ch-edit-cancel" onClick={() => setConfirmDel(false)}>Cancel</button>
+          </div>
+        )}
+      </div>
+      {editErr && <div className="ch-edit-err">{editErr}</div>}
+      <button className="ch-edit-done" onClick={() => setEditing(false)}>Done</button>
+    </div>
+  ) : null;
   const cssColor = PM_VAR[color];
 
   // Lifecycle pill — only shown for channels that are NOT live in the dispatcher
@@ -108,6 +176,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
     return (
       <div className={`channel channel--m pm-${color}${ducked ? " ducked" : ""}`}>
         {resetBtn}
+        {editBtn}
         <div className="ch-top">
           <div className="ch-head">
             <span className={`ch-dot${active ? " on" : ""}`} />
@@ -152,6 +221,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
           <div className={`ch-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
           {pads}
         </div>
+        {editOverlay}
       </div>
     );
   }
@@ -161,6 +231,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
       className={`channel pm-${color}${ducked ? " ducked" : ""}`}
     >
       {resetBtn}
+      {editBtn}
       <div className="ch-head">
         <span className={`ch-dot${active ? " on" : ""}`} />
         <div className="ch-name">{name}</div>
@@ -253,6 +324,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
           title="solo this strategist"
         />
       </div>
+      {editOverlay}
     </div>
   );
 }
