@@ -119,7 +119,7 @@ export function PositionsPanel({
             </span>
           </div>
           <div className="rt-list">
-            {recentTrades.slice(0, 8).map((t) => (
+            {recentTrades.map((t) => (
               <div className="rt-row" key={t.id}>
                 <span className="rt-dot" style={{ background: colorOf(t.strategist_slug), boxShadow: `0 0 5px ${colorOf(t.strategist_slug)}` }} />
                 <span className="rt-sym">{t.strike.toFixed(0)}{t.opt_type === "call" ? "C" : "P"} ×{t.qty}</span>

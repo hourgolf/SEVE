@@ -876,6 +876,11 @@ svg.spark {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  /* show ~8 rows, scroll the rest (hover-wheel on desktop, touch on mobile) */
+  max-height: 168px;
+  overflow-y: auto;
+  overscroll-behavior: contain; /* don't rubber-band the page/app while scrolling */
+  -webkit-overflow-scrolling: touch;
 }
 .recent-trades .rt-row {
   display: flex;

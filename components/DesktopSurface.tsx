@@ -17,6 +17,7 @@ import { Bezel } from "@/components/console/hw/Bezel";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { SignalsTape } from "@/components/console/SignalsTape";
+import { computeLiveMarks } from "@/lib/desk/liveMarks";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
 // The whole desk on one TR-909 surface: LIVE market readout → strategy COMPOSER
@@ -49,14 +50,9 @@ export function DesktopSurface({
   const [addOpen, setAddOpen] = useState(false);
   const { canWrite } = write;
 
-  // occ_symbol → live mid from the chain, so open positions mark live (not the
-  // worker's once-a-minute write). Recomputes as the snapshot polls.
-  const liveMarks = useMemo(
-    () => Object.fromEntries(
-      data.snapshot.filter((q) => q.mid != null).map((q) => [q.occ_symbol, Number(q.mid)])
-    ),
-    [data.snapshot]
-  );
+  // occ_symbol → live option mark (delta-extrapolated off the fast spot tick), so
+  // open positions mark in real time, not once a minute. Recomputes each spot tick.
+  const liveMarks = useMemo(() => computeLiveMarks(data.snapshot, data.spot), [data.snapshot, data.spot]);
 
   return (
     <Chassis

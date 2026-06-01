@@ -17,6 +17,7 @@ import { TapeHealth } from "@/components/TapeHealth";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
+import { computeLiveMarks } from "@/lib/desk/liveMarks";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
 // ---- 909-flavoured inline-SVG tab icons (silkscreen line-art, no emoji) ----
@@ -51,13 +52,9 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
 
-  // occ_symbol → live mid (positions mark live off the chain, not the worker).
-  const liveMarks = useMemo(
-    () => Object.fromEntries(
-      data.snapshot.filter((q) => q.mid != null).map((q) => [q.occ_symbol, Number(q.mid)])
-    ),
-    [data.snapshot]
-  );
+  // occ_symbol → live option mark (delta-extrapolated off the fast spot tick), so
+  // open positions mark in real time, not once a minute.
+  const liveMarks = useMemo(() => computeLiveMarks(data.snapshot, data.spot), [data.snapshot, data.spot]);
 
   const goTab = (t: Tab) => {
     setTab(t);
