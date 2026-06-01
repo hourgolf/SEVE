@@ -85,6 +85,8 @@ export function IntradayChart({
   const gst = useRef({ kind: "idle", startX: 0, startOffset: 0, startEff: 0, pinchDist: 1, startCount: 0 });
   const scrubRef = useRef<HTMLDivElement>(null);
   const scrubbing = useRef(false);
+  const zoomRef = useRef<HTMLDivElement>(null);
+  const zoomingY = useRef(false);
 
   useEffect(() => {
     const m = window.localStorage.getItem(MODE_KEY);
@@ -333,8 +335,35 @@ export function IntradayChart({
     scrubbing.current = false;
   }
 
+  // ---- vertical zoom fader: drag up = zoom in, down = zoom out / fit ----
+  // Maps the pointer's y over the track to the bar count, anchored on the
+  // current view's centre so you zoom into what you're looking at.
+  function zoomYTo(clientY: number) {
+    const el = zoomRef.current;
+    if (!el || N < 2) return;
+    const r = el.getBoundingClientRect();
+    const f = clamp((clientY - r.top) / r.height, 0, 1); // 0 top (in) … 1 bottom (out)
+    const newCount = clamp(Math.round(MIN_BARS + f * (N - MIN_BARS)), MIN_BARS, N);
+    const center = (N - offset - eff) + eff / 2;
+    const newStart = clamp(Math.round(center - newCount / 2), 0, Math.max(0, N - newCount));
+    setView({ count: newCount >= N ? 0 : newCount, offset: Math.max(0, N - newCount - newStart) });
+  }
+  function zoomYDown(e: React.PointerEvent) {
+    e.stopPropagation();
+    zoomingY.current = true;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    zoomYTo(e.clientY);
+  }
+  function zoomYMove(e: React.PointerEvent) {
+    if (zoomingY.current) { e.stopPropagation(); zoomYTo(e.clientY); }
+  }
+  function zoomYUp() {
+    zoomingY.current = false;
+  }
+
   const ledSpot = spot ?? (N ? closes[N - 1] : null);
-  const zoomed = eff < N || offset > 0;
+  // thumb position: 0 (top) = max zoom-in, 1 (bottom) = fit-all
+  const zoomFrac = N > MIN_BARS ? clamp((eff - MIN_BARS) / (N - MIN_BARS), 0, 1) : 1;
 
   const hb = hover != null ? vAgg[hover] ?? null : null;
   const prevBar = hover != null && hover > 0 ? vAgg[hover - 1] ?? null : null;
@@ -433,12 +462,25 @@ export function IntradayChart({
             </div>
           )}
 
-          {/* zoom control — pinch/drag also work; these are the discoverable + testable handles */}
-          <div className="chart-zoom" aria-label="zoom" onPointerDown={(e) => e.stopPropagation()}>
-            <button onClick={() => zoomBy(1 / 0.7)} aria-label="zoom out">−</button>
-            <button onClick={() => setView({ count: 0, offset: 0 })} aria-label="fit" className={zoomed ? "" : "dim"}>⤢</button>
-            <button onClick={() => zoomBy(0.7)} aria-label="zoom in">+</button>
-          </div>
+          {/* vertical zoom fader — drag up to zoom in, down to fit (pinch/drag
+              gestures still work). Mirrors the x-axis scrubber. */}
+          {N > MIN_BARS && (
+            <div
+              className="chart-zoomslider"
+              ref={zoomRef}
+              onPointerDown={zoomYDown}
+              onPointerMove={zoomYMove}
+              onPointerUp={zoomYUp}
+              onPointerCancel={zoomYUp}
+              role="slider"
+              aria-label="zoom"
+              aria-valuenow={Math.round((1 - zoomFrac) * 100)}
+            >
+              <span className="zs-mark zs-plus" aria-hidden>+</span>
+              <span className="zs-mark zs-minus" aria-hidden>−</span>
+              <div className="chart-zoomslider-thumb" style={{ top: `${zoomFrac * 100}%` }} />
+            </div>
+          )}
 
           {hb && (
             <div className={`chart-tip ${hover! > vN / 2 ? "left" : "right"}`}>
