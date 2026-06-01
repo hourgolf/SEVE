@@ -77,12 +77,15 @@ export function IntradayChart({
   bars,
   dailyBars = [],
   spot,
+  spotUp = null,
   mobile = false,
 }: {
   bars: UnderlyingBar[];
   /** Daily OHLCV rollup for the long-range presets (3M / 1Y / Max). */
   dailyBars?: UnderlyingBar[];
   spot?: number | null;
+  /** Up on the day → green LED, down → red (matches the head SPY LED). */
+  spotUp?: boolean | null;
   /** Phone layout: hide the desktop-only interval override. */
   mobile?: boolean;
 }) {
@@ -529,7 +532,12 @@ export function IntradayChart({
           {/* embedded live SPY price LED, lower-right */}
           {ledSpot != null && (
             <div className="chart-led">
-              <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption="spy $" />
+              <LedDisplay
+                value={ledSpot.toFixed(2)}
+                digits={6}
+                caption="spy $"
+                color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"}
+              />
             </div>
           )}
 

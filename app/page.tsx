@@ -22,14 +22,18 @@ function Surface() {
   const isMobile = useIsMobile();
   const [selected, setSelected] = useState<string | null>(null);
 
-  // SPY up/down on the day: spot vs the open of the session's first bar (UTC
-  // date == ET trading date during RTH). null until we have both.
+  // SPY up/down on the day: spot vs the PRIOR session's close (the conventional
+  // day-change reference). Using today's first bar mis-colored it — that bar can
+  // be a noisy pre-market print well above the prior close. null until ready.
   const spotUp = useMemo<boolean | null>(() => {
     const bars = data.bars;
     if (!bars.length || data.spot == null) return null;
-    const day = bars[bars.length - 1].ts.slice(0, 10);
-    const open = bars.find((b) => b.ts.slice(0, 10) === day)?.open;
-    return open != null ? data.spot >= open : null;
+    const today = bars[bars.length - 1].ts.slice(0, 10);
+    let priorClose: number | null = null;
+    for (let i = bars.length - 1; i >= 0; i--) {
+      if (bars[i].ts.slice(0, 10) < today) { priorClose = bars[i].close; break; }
+    }
+    return priorClose != null ? data.spot >= priorClose : null;
   }, [data.bars, data.spot]);
 
   const props = { data, view, feed, write, spotUp, selected, setSelected };
