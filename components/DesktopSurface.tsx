@@ -81,7 +81,7 @@ export function DesktopSurface({
       <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} />
       <div className="grid grid--live live-body">
         <div className="col">
-          <PositionsPanel positions={feed.positions} strategists={desk.strategists} />
+          <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} />
           <OptionChain
             snapshot={data.snapshot}
             spot={data.spot}

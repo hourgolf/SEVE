@@ -10,16 +10,23 @@ const PM_VAR: Record<PmColor, string> = {
   cyan: "var(--pm-cyan)",
 };
 
+const hhmm = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+
 // Reuses the monitor's .panel / table CSS (globals.css).
 export function PositionsPanel({
   positions,
   strategists,
+  recentTrades = [],
 }: {
   positions: Position[];
   strategists: StrategistState[];
+  /** Today's closed trades (newest first) — so fast scalps are visible. */
+  recentTrades?: Position[];
 }) {
   const colorOf = (slug: string) =>
     PM_VAR[strategists.find((s) => s.slug === slug)?.color ?? "green"];
+  const realizedToday = recentTrades.reduce((a, t) => a + (t.realized_pnl ?? 0), 0);
 
   return (
     <div className="panel">
@@ -81,6 +88,27 @@ export function PositionsPanel({
           </tbody>
         </table>
       </div>
+
+      {recentTrades.length > 0 && (
+        <div className="recent-trades">
+          <div className="rt-head">
+            <span>Today&apos;s trades</span>
+            <span className={realizedToday < 0 ? "neg" : "pos"}>
+              realized {signedUsd(realizedToday)} · {recentTrades.length}
+            </span>
+          </div>
+          <div className="rt-list">
+            {recentTrades.slice(0, 8).map((t) => (
+              <div className="rt-row" key={t.id}>
+                <span className="rt-dot" style={{ background: colorOf(t.strategist_slug), boxShadow: `0 0 5px ${colorOf(t.strategist_slug)}` }} />
+                <span className="rt-sym">{t.strike.toFixed(0)}{t.opt_type === "call" ? "C" : "P"} ×{t.qty}</span>
+                <span className="rt-time">{hhmm(t.closed_at)}</span>
+                <span className={`rt-pnl ${(t.realized_pnl ?? 0) < 0 ? "neg" : "pos"}`}>{signedUsd(t.realized_pnl ?? 0)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

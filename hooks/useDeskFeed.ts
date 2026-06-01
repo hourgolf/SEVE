@@ -15,6 +15,8 @@ export type FeedStatus = "live" | "empty" | "error";
 
 export interface DeskFeed {
   positions: Position[];
+  /** Today's CLOSED trades (newest first) — for realized P&L + a fills view. */
+  recentTrades: Position[];
   pnlByStrategist: Record<string, ChannelPnl>;
   fundPnl: { nav: number; dayPnl: number };
   equityCurve: { ts: string; equity: number }[];
@@ -51,6 +53,7 @@ export function useDeskFeed(): DeskFeed {
   const totalCapital = desk.fund.total_capital_usd;
 
   const [positions, setPositions] = useState<Position[]>([]);
+  const [closedToday, setClosedToday] = useState<Position[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [curve, setCurve] = useState<{ ts: string; equity: number }[]>([]);
   const [latestNav, setLatestNav] = useState<number | null>(null);
@@ -63,7 +66,9 @@ export function useDeskFeed(): DeskFeed {
     async function poll() {
       try {
         const sb = getSupabase();
-        const [posRes, sigRes, eqRes] = await Promise.all([
+        const todayStart = new Date();
+        todayStart.setUTCHours(0, 0, 0, 0);
+        const [posRes, sigRes, eqRes, closedRes] = await Promise.all([
           sb
             .from("positions")
             .select("*, strategists(slug)")
@@ -80,11 +85,20 @@ export function useDeskFeed(): DeskFeed {
             .is("strategist_id", null)
             .order("captured_at", { ascending: false })
             .limit(MAX_CURVE),
+          // today's CLOSED trades — for realized day P&L + a recent-trades view,
+          // so fast scalps (open→close in minutes) don't vanish from the desk.
+          sb
+            .from("positions")
+            .select("*, strategists(slug)")
+            .eq("status", "closed")
+            .gte("closed_at", todayStart.toISOString())
+            .order("closed_at", { ascending: false })
+            .limit(200),
         ]);
         if (posRes.error || sigRes.error || eqRes.error) throw new Error("read denied");
         if (!mounted.current) return;
 
-        const pos: Position[] = ((posRes.data ?? []) as any[]).map((r) => ({
+        const mapPos = (r: any, status: "open" | "closed"): Position => ({
           id: r.id,
           strategist_slug: r.strategists?.slug ?? "unknown",
           occ_symbol: r.occ_symbol,
@@ -95,7 +109,12 @@ export function useDeskFeed(): DeskFeed {
           avg_entry_price: Number(r.avg_entry_price),
           current_mark: Number(r.current_mark ?? r.avg_entry_price),
           unrealized_pnl: Number(r.unrealized_pnl ?? 0),
-        }));
+          status,
+          realized_pnl: Number(r.realized_pnl ?? 0),
+          closed_at: r.closed_at ?? null,
+        });
+        const pos: Position[] = ((posRes.data ?? []) as any[]).map((r) => mapPos(r, "open"));
+        const closed: Position[] = ((closedRes.data ?? []) as any[]).map((r) => mapPos(r, "closed"));
 
         const sigs: Signal[] = ((sigRes.data ?? []) as any[]).map((r) => ({
           id: r.id,
@@ -112,10 +131,11 @@ export function useDeskFeed(): DeskFeed {
           .map((r) => ({ ts: r.captured_at, equity: Number(r.net_liquidation) }));
 
         setPositions(pos);
+        setClosedToday(closed);
         setSignals(sigs);
         setCurve(eq);
         setLatestNav(eq.length ? eq[eq.length - 1].equity : null);
-        setStatus(pos.length || sigs.length ? "live" : "empty");
+        setStatus(pos.length || closed.length || sigs.length ? "live" : "empty");
         setUpdatedAt(new Date().toISOString());
       } catch {
         if (!mounted.current) return;
@@ -162,15 +182,18 @@ export function useDeskFeed(): DeskFeed {
     };
   }, []);
 
-  const pnlByStrategist = useMemo(() => channelPnl(positions), [positions]);
+  // Day P&L = open (unrealized) + today's closed (realized).
+  const dayPositions = useMemo(() => [...positions, ...closedToday], [positions, closedToday]);
+  const pnlByStrategist = useMemo(() => channelPnl(dayPositions), [dayPositions]);
   const fp = useMemo(
-    () => fundPnl(positions, totalCapital, latestNav),
-    [positions, totalCapital, latestNav]
+    () => fundPnl(dayPositions, totalCapital, latestNav),
+    [dayPositions, totalCapital, latestNav]
   );
   const steps = useMemo(() => buildSteps(signals), [signals]);
 
   return {
     positions,
+    recentTrades: closedToday,
     pnlByStrategist,
     fundPnl: fp,
     equityCurve: curve,

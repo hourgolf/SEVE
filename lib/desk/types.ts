@@ -63,6 +63,11 @@ export interface Position {
   avg_entry_price: number;
   current_mark: number;
   unrealized_pnl: number;
+  // closed trades carry realized P&L; open ones carry unrealized. Day P&L sums
+  // realized (closed-today) + unrealized (open) so fast scalps still show up.
+  status?: "open" | "closed";
+  realized_pnl?: number;
+  closed_at?: string | null;
 }
 
 export interface ChannelPnl {

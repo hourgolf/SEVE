@@ -120,7 +120,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
               </>
             )}
-            {show.pos && <PositionsPanel positions={feed.positions} strategists={desk.strategists} />}
+            {show.pos && <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} />}
           </>
         )}
 

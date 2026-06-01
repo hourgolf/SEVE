@@ -6,13 +6,21 @@
 
 import type { ChannelPnl, PmColor, Position, Signal, Step } from "@/lib/desk/types";
 
+// A position's contribution to today's P&L: realized once closed, unrealized
+// while open. (A fast scalper is closed most of the time, so without the
+// realized side the day P&L would never move.)
+const dayContribution = (p: Position): number =>
+  p.status === "closed" ? p.realized_pnl ?? 0 : p.unrealized_pnl;
+
 export function channelPnl(positions: Position[]): Record<string, ChannelPnl> {
   const out: Record<string, ChannelPnl> = {};
   for (const p of positions) {
     const c = (out[p.strategist_slug] ??= { dayPnl: 0, openCount: 0, exposure: 0 });
-    c.dayPnl += p.unrealized_pnl;
-    c.openCount += 1;
-    c.exposure += Math.abs(p.qty) * p.current_mark * 100;
+    c.dayPnl += dayContribution(p);
+    if (p.status !== "closed") {
+      c.openCount += 1;
+      c.exposure += Math.abs(p.qty) * p.current_mark * 100;
+    }
   }
   for (const k of Object.keys(out)) out[k].dayPnl = Math.round(out[k].dayPnl);
   return out;
@@ -23,7 +31,7 @@ export function fundPnl(
   totalCapital: number,
   navOverride?: number | null
 ): { nav: number; dayPnl: number } {
-  const dayPnl = Math.round(positions.reduce((a, p) => a + p.unrealized_pnl, 0));
+  const dayPnl = Math.round(positions.reduce((a, p) => a + dayContribution(p), 0));
   const nav = navOverride != null ? Math.round(navOverride) : totalCapital + dayPnl;
   return { nav, dayPnl };
 }
