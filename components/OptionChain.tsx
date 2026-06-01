@@ -99,7 +99,11 @@ export function OptionChain({
       );
     });
 
-    meta = `exp ${frontExp} · ${shown.length} of ${strikes.length} strikes`;
+    // Mobile board is tight — show just the windowed count; desktop notes the
+    // total available (e.g. "10 of 18") since there's room.
+    meta = compact
+      ? `exp ${frontExp} · ${shown.length} strikes (±5)`
+      : `exp ${frontExp} · ${shown.length} of ${strikes.length} strikes`;
   }
 
   return (
