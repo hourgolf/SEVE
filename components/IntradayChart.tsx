@@ -83,10 +83,6 @@ export function IntradayChart({
   const wrapRef = useRef<HTMLDivElement>(null);
   const ptrs = useRef<Map<number, number>>(new Map()); // pointerId → clientX
   const gst = useRef({ kind: "idle", startX: 0, startOffset: 0, startEff: 0, pinchDist: 1, startCount: 0 });
-  const scrubRef = useRef<HTMLDivElement>(null);
-  const scrubbing = useRef(false);
-  const zoomRef = useRef<HTMLDivElement>(null);
-  const zoomingY = useRef(false);
 
   useEffect(() => {
     const m = window.localStorage.getItem(MODE_KEY);
@@ -311,59 +307,30 @@ export function IntradayChart({
     setHover(null); setHoverY(null); setPressing(false);
   }
 
-  // ---- scrubber: drag the position bar to jump anywhere in history ----
-  // Maps the pointer's x over the track to the window's centre, so pressing at
-  // the far left lands you at the oldest bar (which fires the lazy-load).
-  function scrubTo(clientX: number) {
-    const el = scrubRef.current;
-    if (!el || N < 2) return;
-    const r = el.getBoundingClientRect();
-    const f = clamp((clientX - r.left) / r.width, 0, 1);
-    const newStart = clamp(Math.round(f * N - eff / 2), 0, Math.max(0, N - eff));
-    setView((v) => ({ count: v.count, offset: Math.max(0, N - eff - newStart) }));
-  }
-  function scrubDown(e: React.PointerEvent) {
-    e.stopPropagation();
-    scrubbing.current = true;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    scrubTo(e.clientX);
-  }
-  function scrubMove(e: React.PointerEvent) {
-    if (scrubbing.current) { e.stopPropagation(); scrubTo(e.clientX); }
-  }
-  function scrubUp() {
-    scrubbing.current = false;
+  // double-click / double-tap anywhere on the chart resets to the default view
+  function onDoubleClick() {
+    setView({ count: DEFAULT_VIEW, offset: 0 });
   }
 
-  // ---- vertical zoom fader: drag up = zoom in, down = zoom out / fit ----
-  // Maps the pointer's y over the track to the bar count, anchored on the
-  // current view's centre so you zoom into what you're looking at.
-  function zoomYTo(clientY: number) {
-    const el = zoomRef.current;
-    if (!el || N < 2) return;
-    const r = el.getBoundingClientRect();
-    const f = clamp((clientY - r.top) / r.height, 0, 1); // 0 top (in) … 1 bottom (out)
-    const newCount = clamp(Math.round(MIN_BARS + f * (N - MIN_BARS)), MIN_BARS, N);
-    const center = (N - offset - eff) + eff / 2;
-    const newStart = clamp(Math.round(center - newCount / 2), 0, Math.max(0, N - newCount));
-    setView({ count: newCount >= N ? 0 : newCount, offset: Math.max(0, N - newCount - newStart) });
-  }
-  function zoomYDown(e: React.PointerEvent) {
-    e.stopPropagation();
-    zoomingY.current = true;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    zoomYTo(e.clientY);
-  }
-  function zoomYMove(e: React.PointerEvent) {
-    if (zoomingY.current) { e.stopPropagation(); zoomYTo(e.clientY); }
-  }
-  function zoomYUp() {
-    zoomingY.current = false;
-  }
+  // Mouse-wheel zoom (desktop "squeeze"), focused on the cursor. Attached as a
+  // native non-passive listener so we can preventDefault the page scroll; reads
+  // the latest zoomBy via a ref so it never goes stale.
+  const zoomByRef = useRef(zoomBy);
+  zoomByRef.current = zoomBy;
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const fracX = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      zoomByRef.current(e.deltaY > 0 ? 1 / 0.88 : 0.88, fracX);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   const ledSpot = spot ?? (N ? closes[N - 1] : null);
-  // thumb position: 0 (top) = max zoom-in, 1 (bottom) = fit-all
-  const zoomFrac = N > MIN_BARS ? clamp((eff - MIN_BARS) / (N - MIN_BARS), 0, 1) : 1;
 
   const hb = hover != null ? vAgg[hover] ?? null : null;
   const prevBar = hover != null && hover > 0 ? vAgg[hover - 1] ?? null : null;
@@ -397,6 +364,7 @@ export function IntradayChart({
           onPointerUp={onUp}
           onPointerCancel={onUp}
           onPointerLeave={onLeave}
+          onDoubleClick={onDoubleClick}
         >
           {mode === "candles" ? (
             <CandleChart bars={vCandles} vwap={showVwap ? vVwap : undefined} overlays={overlays} />
@@ -462,26 +430,6 @@ export function IntradayChart({
             </div>
           )}
 
-          {/* vertical zoom fader — drag up to zoom in, down to fit (pinch/drag
-              gestures still work). Mirrors the x-axis scrubber. */}
-          {N > MIN_BARS && (
-            <div
-              className="chart-zoomslider"
-              ref={zoomRef}
-              onPointerDown={zoomYDown}
-              onPointerMove={zoomYMove}
-              onPointerUp={zoomYUp}
-              onPointerCancel={zoomYUp}
-              role="slider"
-              aria-label="zoom"
-              aria-valuenow={Math.round((1 - zoomFrac) * 100)}
-            >
-              <span className="zs-mark zs-plus" aria-hidden>+</span>
-              <span className="zs-mark zs-minus" aria-hidden>−</span>
-              <div className="chart-zoomslider-thumb" style={{ top: `${zoomFrac * 100}%` }} />
-            </div>
-          )}
-
           {hb && (
             <div className={`chart-tip ${hover! > vN / 2 ? "left" : "right"}`}>
               <span className="tip-time">{hhmm(hb.ts)}</span>
@@ -503,27 +451,6 @@ export function IntradayChart({
                 </span>
               ) : null
             )}
-          </div>
-        )}
-        {/* scrubber: a draggable position bar over the full series, so you can
-            jump straight to any point (incl. the oldest bar) without panning */}
-        {scale && eff < N && (
-          <div
-            className="chart-scrub"
-            ref={scrubRef}
-            onPointerDown={scrubDown}
-            onPointerMove={scrubMove}
-            onPointerUp={scrubUp}
-            onPointerCancel={scrubUp}
-            role="scrollbar"
-            aria-label="chart position"
-            aria-valuenow={Math.round((visStart / Math.max(1, N - eff)) * 100)}
-          >
-            <div
-              className="chart-scrub-thumb"
-              style={{ left: `${(visStart / N) * 100}%`, width: `${Math.max(7, (vN / N) * 100)}%` }}
-            />
-            {loadingOlder && <span className="chart-scrub-load">loading…</span>}
           </div>
         )}
         {showVol && (

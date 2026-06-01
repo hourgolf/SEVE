@@ -690,38 +690,6 @@ svg.spark {
   pointer-events: none;
   z-index: 3;
 }
-/* floating zoom control (pinch/drag also work) */
-.chart-zoom {
-  position: absolute;
-  left: 6px;
-  bottom: 6px;
-  display: flex;
-  gap: 4px;
-  z-index: 3;
-}
-.chart-zoom button {
-  width: 27px;
-  height: 27px;
-  border-radius: 6px;
-  border: 1px solid var(--border-bright);
-  background: rgba(10, 15, 17, 0.82);
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.chart-zoom button:hover {
-  color: var(--text);
-  border-color: var(--text);
-}
-.chart-zoom button.dim {
-  opacity: 0.35;
-}
-
 /* press-and-hold price bubble at the crosshair intersection */
 .cross-pop {
   position: absolute;
@@ -772,7 +740,7 @@ svg.spark {
   right: 46px; /* clear the right-hand price axis */
 }
 .chart-tip.left {
-  left: 30px; /* clear the vertical zoom fader on the left edge */
+  left: 8px;
 }
 .chart-tip b {
   color: var(--text);
@@ -820,98 +788,6 @@ svg.spark {
 }
 .x-tick.x-end {
   transform: translateX(-100%);
-}
-/* draggable position scrubber under the chart (jump anywhere incl. far left) */
-.chart-scrub {
-  position: relative;
-  height: 14px;
-  margin-top: 4px;
-  border-radius: 4px;
-  background: rgba(10, 15, 17, 0.55);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  touch-action: none;
-  overflow: hidden;
-}
-.chart-scrub-thumb {
-  position: absolute;
-  top: 1px;
-  bottom: 1px;
-  min-width: 16px;
-  border-radius: 3px;
-  /* cream 909 handle so it stands out against the dark track */
-  background: linear-gradient(180deg, #e7e5da, #c3c1b6);
-  border: 1px solid rgba(0, 0, 0, 0.45);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-.chart-scrub:hover .chart-scrub-thumb {
-  background: linear-gradient(180deg, #f3f1e7, #d2d0c4);
-}
-.chart-scrub-load {
-  position: absolute;
-  left: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 0.3px;
-  color: var(--muted);
-  pointer-events: none;
-}
-/* vertical zoom fader on the left edge (replaces the +/⤢/− buttons) */
-.chart-zoomslider {
-  position: absolute;
-  left: 7px;
-  top: 10px;
-  bottom: 10px;
-  width: 15px;
-  border-radius: 8px;
-  background: rgba(10, 15, 17, 0.5);
-  border: 1px solid var(--border-bright);
-  z-index: 3;
-  cursor: ns-resize;
-  touch-action: none;
-}
-.chart-zoomslider-thumb {
-  position: absolute;
-  left: 1px;
-  right: 1px;
-  height: 24px;
-  transform: translateY(-50%);
-  border-radius: 6px;
-  /* cream 909 fader cap, matching the x-scrubber handle */
-  background: linear-gradient(180deg, #e7e5da, #c3c1b6);
-  border: 1px solid rgba(0, 0, 0, 0.45);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-/* a centre grip line on the fader cap */
-.chart-zoomslider-thumb::after {
-  content: "";
-  position: absolute;
-  left: 3px;
-  right: 3px;
-  top: 50%;
-  height: 1px;
-  transform: translateY(-50%);
-  background: rgba(0, 0, 0, 0.3);
-}
-.zs-mark {
-  position: absolute;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--muted-2);
-  pointer-events: none;
-}
-.zs-plus {
-  top: 3px;
-}
-.zs-minus {
-  bottom: 3px;
 }
 /* left-edge "loading older history" badge */
 .chart-wrap .loading-older {
