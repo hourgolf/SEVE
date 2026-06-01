@@ -18,6 +18,9 @@ import type {
 // Safety-net poll interval (ms). Realtime drives updates; this only covers
 // dropped subscriptions / missed events, so it can be slow.
 export const POLL_INTERVAL_MS = 10000;
+// The Supabase tape only refreshes once a minute (the ingest cadence), so the
+// spot LED gets a faster live tick from /api/spot (Alpaca IEX last trade).
+const SPOT_POLL_MS = 3000;
 // History (1-min bars) loaded ONCE on mount — ~15 trading days, so higher
 // timeframes have months of candles to pan through. The repeating poll only
 // pulls the recent tail and merges it in, keeping live updates cheap.
@@ -286,10 +289,28 @@ export function useMarketData(): MarketData {
       }
     }
 
+    // Fast live-spot tick: overrides the displayed spot between minute snapshots
+    // so the LED moves like a real ticker. No-ops (keeps the 1/min spot) if the
+    // route returns null — e.g. Alpaca keys not set in the deploy env.
+    async function pollSpot() {
+      try {
+        const res = await fetch("/api/spot", { cache: "no-store" });
+        if (!res.ok) return;
+        const j = (await res.json()) as { price?: number | null };
+        if (typeof j.price === "number" && mounted.current) {
+          setData((d) => ({ ...d, spot: j.price as number }));
+        }
+      } catch {
+        /* offline / route missing — fall back to the minute spot */
+      }
+    }
+
     poll();
     loadHistory();
     loadDaily();
+    pollSpot();
     const id = setInterval(poll, POLL_INTERVAL_MS);
+    const spotId = setInterval(pollSpot, SPOT_POLL_MS);
 
     // Realtime: refetch (debounced) the instant new rows land, instead of
     // waiting up to POLL_INTERVAL_MS. The poll above remains the safety net if
@@ -318,6 +339,7 @@ export function useMarketData(): MarketData {
     return () => {
       mounted.current = false;
       clearInterval(id);
+      clearInterval(spotId);
       if (debounce) clearTimeout(debounce);
       if (channel) {
         try {
