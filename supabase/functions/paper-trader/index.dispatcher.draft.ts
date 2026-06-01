@@ -1,3 +1,6 @@
+// ⚑ WORKER VERSION: 2026-06-01b  (0DTE→1DTE roll · order resilience · channel
+//   independence · reconciliation). If the function deployed in Supabase does NOT
+//   show THIS version line at the top, the paste is stale — re-copy this file.
 // ============================================================================
 //  paper-trader — DISPATCHER DRAFT (multi-channel "one engine, two drivers").
 //
