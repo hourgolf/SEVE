@@ -32,6 +32,11 @@
 //      whole netted Alpaca lot), and a desk row with no matching Alpaca position
 //      is RECONCILED closed (valued at the last quote) — fixes stuck "open" rows
 //      when one channel's exit flattened another holding the same contract.
+//    - 0DTE→1DTE ROLL: Alpaca rejects OPENING a 0DTE within ~15 min of close
+//      (the 422). Inside that cutoff, channels roll new entries to the next
+//      expiry (1DTE, resolved from the live chain) so the signal still fills; a
+//      1DTE+ position is then allowed to ride overnight (its own stops still fire
+//      and it can sell before close — only 0DTE gets the forced EOD flatten).
 //    - CHANNEL INDEPENDENCE: every order carries a per-channel client_order_id
 //      (`slug-occ-min`). The old account-wide "already_open" guard is gone — a
 //      channel only checks ITS OWN orders, so two channels can hold the same
@@ -297,6 +302,17 @@ Deno.serve(async () => {
     const todayET = etParts(nowMs).date;
     const session1m = all1m.filter((b) => etParts(b.ts).date === todayET);
 
+    // Alpaca rejects OPENING a 0DTE position within ~15 min of close — that was
+    // the 422. So inside the cutoff, channels roll new entries to the next expiry
+    // (1DTE) instead of losing the signal. Resolve that expiry from the live chain
+    // (the ingest captures today + the next session), so we never guess a holiday.
+    const OPEN_0DTE_CUTOFF_MIN = 16; // last ~15 min + 1 buffer
+    let next1DTE: string | null = null;
+    {
+      const { data: exps } = await sb.from("option_quotes").select("expiration").gt("expiration", todayET).order("expiration", { ascending: true }).limit(1);
+      next1DTE = ((exps ?? [])[0] as { expiration?: string } | undefined)?.expiration ?? null;
+    }
+
     // fund-level equity snapshot
     await sb.from("equity_snapshots").insert({ strategist_id: null, net_liquidation: Number(account.equity), cash: Number(account.cash), unrealized_pnl: positions.reduce((a, p) => a + Number(p.unrealized_pl ?? 0), 0) });
 
@@ -351,6 +367,13 @@ Deno.serve(async () => {
           else if (premiumExit.stopPct != null && markPx <= entryPx * (1 - premiumExit.stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
         }
       }
+      // A 1DTE+ position may ride OVERNIGHT — don't force the 0DTE EOD flatten on
+      // it. Its own stops/targets still fire (the strategy can still sell before
+      // the close); tomorrow it's managed as a 0DTE. Only forced-flatten 0DTE.
+      if (intent?.kind === "exit" && intent.reason === "eod_flatten" && row && String(row.expiration ?? todayET) > todayET) {
+        intent = null;
+      }
+
       // ---- reconcile: desk row OPEN but Alpaca has no such position ----
       // Happens when another channel holding the SAME 0DTE sold the netted lot,
       // on expiry, or a manual close. Close the orphan so it stops showing open
@@ -391,9 +414,15 @@ Deno.serve(async () => {
       if (intent?.kind === "enter" && !row) {
         const dir = intent.direction;
         const strike = Math.round(f.close);
-        const occ = occSymbol(todayET, strike, dir);
+        // Alpaca won't let us OPEN a 0DTE inside the close cutoff → roll the entry
+        // to the next expiry (1DTE) so the signal still gets acted on. Otherwise
+        // use today (0DTE). entryExpiry drives both the OCC symbol and the row.
+        const inCutoff = minutesToClose <= OPEN_0DTE_CUTOFF_MIN;
+        const entryExpiry = inCutoff ? next1DTE : todayET;
+        const occ = occSymbol(entryExpiry ?? todayET, strike, dir);
         let blocked = guardBlocked;
         if (!blocked && armBlocked) blocked = "not_armed"; // draft/disabled → no new entries
+        if (!blocked && !entryExpiry) blocked = "no_1dte_chain"; // in cutoff but no next expiry quoted
         // Per-CHANNEL idempotency (independence): look ONLY at THIS channel's own
         // orders, tagged by a slug-prefixed client_order_id — never the shared
         // account. So another channel holding `occ` does NOT block this one.
@@ -409,7 +438,7 @@ Deno.serve(async () => {
             const buys = filled.filter((o) => String(o.side) === "buy");
             const totBuy = buys.reduce((q, o) => q + Number(o.filled_qty ?? 0), 0);
             const avg = totBuy ? buys.reduce((s2, o) => s2 + Number(o.filled_avg_price ?? 0) * Number(o.filled_qty ?? 0), 0) / totBuy : 0;
-            await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg, current_mark: avg, unrealized_pnl: 0, status: "open" });
+            await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg, current_mark: avg, unrealized_pnl: 0, status: "open" });
             await journal("WARN", `${s.slug}: recovered ${net} ${occ} from filled orders (lost insert) — not re-buying`);
             blocked = "reconstructed";
           }
@@ -442,7 +471,7 @@ Deno.serve(async () => {
             // CRITICAL: confirm the position row was recorded. A silent insert
             // failure here is what caused the re-buy loop — if it fails, journal
             // LOUD (the per-channel guards above still prevent another buy).
-            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty, avg_entry_price: ask, current_mark: ask, unrealized_pnl: 0, status: "open" });
+            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty, avg_entry_price: ask, current_mark: ask, unrealized_pnl: 0, status: "open" });
             if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
             else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} (${intent.reason})`, { order_id: o.id });
           } catch (e) {
