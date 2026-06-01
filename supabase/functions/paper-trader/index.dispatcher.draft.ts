@@ -182,9 +182,11 @@ interface CompiledSpec { build: (bars: Bar[]) => Evaluate; tf: number; warmup: n
 function compileSpec(spec: Spec): CompiledSpec {
   const entries: Spec[] = spec?.entries ?? [];
   let profitPct: number | undefined, stopPct: number | undefined, timeExit: number | null = null;
+  // Magnitudes: a spec may state the stop as "-50" or "50"; downstream uses
+  // entry·(1 ± pct/100), so abs() keeps a "-50%" stop from inverting into a gain.
   for (const e of (spec?.exits ?? [])) {
-    if (profitPct == null && typeof e.profitPct === "number") profitPct = e.profitPct;
-    if (stopPct == null && typeof e.stopPct === "number") stopPct = e.stopPct;
+    if (profitPct == null && typeof e.profitPct === "number") profitPct = Math.abs(e.profitPct);
+    if (stopPct == null && typeof e.stopPct === "number") stopPct = Math.abs(e.stopPct);
     if (e.timeET) { const t = parseET(e.timeET); if (t != null) timeExit = timeExit == null ? t : Math.min(timeExit, t); }
   }
   let warmup = 30;

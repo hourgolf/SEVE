@@ -66,9 +66,12 @@ const SUPPORTED = new Set<Condition["kind"]>([
 // Premium profit/stop exits (need the option mark) — applied by the driver.
 export function specPremiumExit(spec: StrategySpec): { profitPct?: number; stopPct?: number } {
   const out: { profitPct?: number; stopPct?: number } = {};
+  // Normalize to MAGNITUDES: the compiler may emit a stop as "-50" (the thesis
+  // says "−50%") or "50". Downstream uses entry·(1 ± pct/100), so a negative
+  // stopPct would invert the stop into a profit threshold. abs() makes it robust.
   for (const e of spec.exits ?? []) {
-    if (out.profitPct == null && typeof e.profitPct === "number") out.profitPct = e.profitPct;
-    if (out.stopPct == null && typeof e.stopPct === "number") out.stopPct = e.stopPct;
+    if (out.profitPct == null && typeof e.profitPct === "number") out.profitPct = Math.abs(e.profitPct);
+    if (out.stopPct == null && typeof e.stopPct === "number") out.stopPct = Math.abs(e.stopPct);
   }
   return out;
 }
