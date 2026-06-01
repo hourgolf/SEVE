@@ -54,7 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const sb = getSupabase();
           const { error } = await sb.auth.signInWithOtp({
             email,
-            options: { emailRedirectTo: window.location.origin + "/console" },
+            // single-route app now — "/console" was merged into "/" (the old
+            // route 404'd the magic link and bounced sign-in in a loop).
+            options: { emailRedirectTo: window.location.origin + "/" },
           });
           return error ? error.message : null;
         } catch (e) {

@@ -20,7 +20,7 @@ export interface MasterStripProps {
 
 function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
   const dispatch = useDeskDispatch();
-  const { persistFund } = useDeskWrite();
+  const { canWrite, persistFund } = useDeskWrite();
   const [armed, setArmed] = useState(false);
   const [showNav, setShowNav] = useState(true);
 
@@ -70,7 +70,12 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
         </div>
       )}
 
-      <div className="master-ctrls">
+      <div className={`master-ctrls${canWrite ? "" : " master-ctrls--locked"}`}>
+        {!canWrite && (
+          <div className="master-lock" title="Desk controls (START/STOP, paper/live, KILL) only take effect when signed in — they write to the DB. Sign in via the top-right.">
+            ⊘ sign in to control the desk
+          </div>
+        )}
         <div className="master-transport">
           <TransportButton
             label="START"

@@ -660,6 +660,26 @@
   align-items: center;
   gap: 12px;
 }
+/* not signed in → desk writes silently no-op, so lock + flag the controls
+   (prevents a KILL/START that looks like it worked but never hit the DB) */
+.master-ctrls--locked .master-transport,
+.master-ctrls--locked .master-controls {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  pointer-events: none;
+}
+.master-lock {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--amber);
+  background: rgba(255, 178, 36, 0.12);
+  border: 1px solid rgba(255, 178, 36, 0.4);
+  border-radius: 6px;
+  padding: 3px 8px;
+  text-align: center;
+}
 .master-title {
   font-family: var(--mono);
   font-size: 11px;

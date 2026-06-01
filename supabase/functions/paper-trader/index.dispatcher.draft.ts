@@ -184,7 +184,10 @@ Deno.serve(async () => {
       const { data: rows } = await sb.from("positions").select("*").eq("strategist_id", s.id).eq("status", "open");
       const row = (rows ?? [])[0];
       const alp = row ? positions.find((p) => String(p.symbol) === String(row.occ_symbol)) : undefined;
-      const pos: Pos | null = row ? { optType: row.opt_type, entryMinute: 0, entryUnderlying: Number(row.entry_underlying ?? row.avg_entry_price), peakFavorable: f.close } : null;
+      // entryUnderlying ≈ strike: the worker enters ATM, so strike = round(spot
+      // at entry), within ~$0.50 — fine for the ATR stops, and needs no extra
+      // column (uses the existing positions schema as-is).
+      const pos: Pos | null = row ? { optType: row.opt_type, entryMinute: 0, entryUnderlying: Number(row.strike), peakFavorable: f.close } : null;
 
       const intent = def.evaluate(f, pos);
       const canTrade = !guardBlocked;
@@ -224,7 +227,7 @@ Deno.serve(async () => {
           // CRITICAL: confirm the position row was recorded. A silent insert
           // failure here is what caused the re-buy loop — if it fails, journal
           // LOUD (the `already_open` guard above still prevents another buy).
-          const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty, avg_entry_price: ask, entry_underlying: f.close, current_mark: ask, unrealized_pnl: 0, status: "open" });
+          const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: todayET, strike, opt_type: dir, qty, avg_entry_price: ask, current_mark: ask, unrealized_pnl: 0, status: "open" });
           if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
           else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} (${intent.reason})`, { order_id: o.id });
         }
