@@ -842,6 +842,25 @@
   font-size: 7px;
   color: rgba(0, 0, 0, 0.45);
 }
+/* 909-style voice label silkscreened on the pad face */
+.step-voice {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: rgba(0, 0, 0, 0.62);
+  pointer-events: none;
+}
+.step:nth-child(4n + 1) .step-voice {
+  color: rgba(30, 12, 4, 0.7);
+}
+.step.lit .step-voice {
+  color: rgba(0, 0, 0, 0.78);
+}
 
 /* ---------- bezel sub-panel ----------------------------------------------- */
 .bezel {

@@ -192,6 +192,18 @@ const KIT: Voice[] = [
 
 export const PAD_COUNT = KIT.length;
 
+// Short 909-style silkscreen labels, index-aligned with KIT above.
+export const VOICE_LABELS = [
+  "BD", "SD", "CP", "RS", "LT", "MT", "HT", "CB",
+  "CH", "OH", "CC", "RC", "CL", "SD", "BD", "CH",
+];
+
+// Full names for tooltips / accessibility, index-aligned with KIT.
+export const VOICE_NAMES = [
+  "Bass Drum", "Snare", "Clap", "Rim Shot", "Low Tom", "Mid Tom", "Hi Tom", "Cowbell",
+  "Closed Hat", "Open Hat", "Crash", "Ride", "Clave", "Snare", "Bass Drum", "Closed Hat",
+];
+
 /** Trigger the 909 voice mapped to pad `index` (0-based). No-op server-side. */
 export function play909(index: number): void {
   const a = audio();

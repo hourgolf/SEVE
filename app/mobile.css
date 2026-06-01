@@ -327,6 +327,10 @@
   top: 4px;
   left: 7px;
 }
+.m-app .m-steptape .step-voice {
+  font-size: 18px;
+  letter-spacing: 1px;
+}
 
 /* ---- Mix: strips fill the screen height ---- */
 .m-mix {

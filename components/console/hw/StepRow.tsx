@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { play909 } from "@/lib/audio/drum909";
+import { play909, VOICE_LABELS, VOICE_NAMES } from "@/lib/audio/drum909";
 import type { PmColor, Step } from "@/lib/desk/types";
 
 const COLOR_VAR: Record<PmColor, string> = {
@@ -40,9 +40,11 @@ function StepRowImpl({ steps, onStep }: StepRowProps) {
             className={`step${s.lit ? " lit" : ""}${s.pulse ? " pulse" : ""}`}
             style={{ ["--step" as string]: c }}
             onPointerDown={(e) => hit(e, i)}
-            aria-label={`step ${i + 1}`}
+            aria-label={`step ${i + 1} — ${VOICE_NAMES[i] ?? ""}`}
+            title={VOICE_NAMES[i]}
           >
             <span className="step-num">{i + 1}</span>
+            <span className="step-voice">{VOICE_LABELS[i]}</span>
           </button>
         );
       })}
