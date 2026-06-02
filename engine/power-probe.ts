@@ -25,8 +25,9 @@ import { simulateSession, metrics } from "./backtest";
 import { powerEvaluate, DEFAULT_POWER_PARAMS } from "./strategies/power";
 import { loadRealSessions } from "./realsource";
 import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
+import { loadDatabentoByDay, makeDatabentoChain } from "./databentosource";
 import { priceChain } from "./market";
-import { DEFAULT_COST_MODEL } from "./cost";
+import { DEFAULT_COST_MODEL, type CostModel } from "./cost";
 import type { Bar, Evaluate, FundState, StrategistConfig, Trade } from "./types";
 import type { Management } from "../lib/desk/strategySpec";
 
@@ -34,6 +35,7 @@ const CFG: StrategistConfig = { slug: "power", capital_pct: 30, aggression: 40, 
 const FUND: FundState = { total_capital_usd: 10000, master_daily_stop_usd: 300, is_halted: false };
 
 const powerEval: Evaluate = (f, pos) => powerEvaluate(f, pos, DEFAULT_POWER_PARAMS);
+const REAL_NBBO_COST: CostModel = { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" };
 
 // Minimal management blocks — NO scale-outs / trail / breakeven (the A/B says those
 // cap the tail). structuralStop:atr_adverse 1.0 == power's own stop; eodFlatten 3 ==
@@ -45,9 +47,9 @@ const M_RIDE_GATE: Management = { ...M_RIDE, costGate: { minMoveToCostRatio: 3.0
 
 type Sessions = Awaited<ReturnType<typeof loadRealSessions>>;
 
-function runSide(sessions: Sessions, chainOf: (s: Sessions[number]) => ChainProvider, mgmt?: Management): Trade[] {
+function runSide(sessions: Sessions, chainOf: (s: Sessions[number]) => ChainProvider, mgmt: Management | undefined, costModel: CostModel): Trade[] {
   const all: Trade[] = [];
-  for (const s of sessions) all.push(...simulateSession(s.bars, CFG, FUND, powerEval, chainOf(s), false, undefined, DEFAULT_COST_MODEL, mgmt));
+  for (const s of sessions) all.push(...simulateSession(s.bars, CFG, FUND, powerEval, chainOf(s), false, undefined, costModel, mgmt));
   return all;
 }
 
@@ -60,14 +62,21 @@ async function main() {
   const sessions = await loadRealSessions({ sinceDaysAgo });
   if (!sessions.length) { console.log("\nNo real sessions — backfill underlying_bars first.\n"); return; }
 
+  const oi = process.argv.indexOf("--options");
+  const optMode = oi >= 0 && process.argv[oi + 1] ? process.argv[oi + 1] : "databento"; // databento (real NBBO) | real | modeled
+  const dbento = optMode === "databento", useReal = optMode === "real";
   let byDay = new Map<string, unknown[]>();
-  try { byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET)) as Map<string, unknown[]>; }
-  catch (e) { console.log(`  (option_bars unavailable — ${(e as Error).message}; using modeled)`); }
+  if (dbento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET)) as unknown as Map<string, unknown[]>;
+  else if (useReal) { try { byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET)) as Map<string, unknown[]>; } catch (e) { console.log(`  (option_bars unavailable — ${(e as Error).message}; using modeled)`); } }
+  const COST = dbento ? REAL_NBBO_COST : DEFAULT_COST_MODEL;
   const realDays = sessions.filter((s) => (byDay.get(s.dateET)?.length ?? 0) > 0).length;
   const chainOf = (s: Sessions[number]): ChainProvider => {
     const c = byDay.get(s.dateET);
-    return c && c.length ? makeRealChain(c as Parameters<typeof makeRealChain>[0]) : (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
+    if (dbento && c && c.length) return makeDatabentoChain(c as Parameters<typeof makeDatabentoChain>[0]);
+    if (useReal && c && c.length) return makeRealChain(c as Parameters<typeof makeRealChain>[0]);
+    return (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
   };
+  const srcLabel = dbento ? `REAL NBBO · Databento (${realDays}/${sessions.length} days) + real spread` : useReal ? `REAL option_bars (${realDays}/${sessions.length} days) + modeled spread` : "modeled chains";
 
   const configs: [string, Management | undefined][] = [
     ["base", undefined],
@@ -77,12 +86,12 @@ async function main() {
     ["ride+gate", M_RIDE_GATE],
   ];
 
-  console.log(`\n  POWER probe · ${sessions.length} sessions · ${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · REAL option_bars (${realDays}/${sessions.length} days) + modeled spread, post-cost\n`);
+  console.log(`\n  POWER probe · ${sessions.length} sessions · ${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · ${srcLabel}, post-cost\n`);
   const head = ["config", "trades", "win%", "avgWin", "avgLoss", "exp$/t", "totalPnl", "maxDD"];
   console.log("  " + head[0].padEnd(16) + head[1].padStart(7) + head[2].padStart(7) + head[3].padStart(8) + head[4].padStart(8) + head[5].padStart(8) + head[6].padStart(10) + head[7].padStart(8));
   console.log("  " + "─".repeat(72));
   for (const [label, mgmt] of configs) {
-    const m = metrics(runSide(sessions, chainOf, mgmt), sessions.length);
+    const m = metrics(runSide(sessions, chainOf, mgmt, COST), sessions.length);
     console.log("  " + label.padEnd(16) + String(m.nTrades).padStart(7) + (m.winRate * 100).toFixed(1).padStart(7) + usd(m.avgWin).padStart(8) + usd(m.avgLoss).padStart(8) + usd(m.expectancy).padStart(8) + usd(m.totalPnl).padStart(10) + usd(m.maxDrawdown).padStart(8));
     console.log("    exits: " + JSON.stringify(m.byReason));
   }
