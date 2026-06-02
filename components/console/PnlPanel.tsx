@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
 import { signedUsd, usd0 } from "@/lib/format";
+import { useWindowedPnl, type PnlWindow } from "@/hooks/useWindowedPnl";
 import type { ChannelPnl, PmColor, StrategistState } from "@/lib/desk/types";
 
 const PM_VAR: Record<PmColor, string> = {
@@ -10,6 +12,13 @@ const PM_VAR: Record<PmColor, string> = {
   amber: "var(--pm-amber)",
   cyan: "var(--pm-cyan)",
 };
+
+const WINDOWS: { id: PnlWindow; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "week", label: "Week" },
+  { id: "month", label: "Month" },
+  { id: "all", label: "All" },
+];
 
 export function PnlPanel({
   strategists,
@@ -22,12 +31,21 @@ export function PnlPanel({
   fundPnl: { nav: number; dayPnl: number };
   equityCurve: { ts: string; equity: number }[];
 }) {
-  const equityValues = equityCurve.map((p) => p.equity);
-  // A flat line (no trades yet → NAV constant) reads as a broken chart. Only
-  // draw the curve once there's genuine variation to show.
+  // Timeframe toggle. "today" uses the live feed props (instant); week/month/all
+  // fetch windowed realized P&L (+ open unrealized) + a windowed NAV curve lazily.
+  const [win, setWin] = useState<PnlWindow>("today");
+  const windowed = useWindowedPnl(win);
+  const isToday = win === "today";
+  const loading = !isToday && (windowed?.loading ?? true);
+  const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();
+
+  const valFor = (slug: string): number =>
+    isToday ? (pnlByStrategist[slug]?.dayPnl ?? 0) : (windowed?.pnlBySlug[slug] ?? 0);
+  const fundVal = isToday ? fundPnl.dayPnl : (windowed?.fundPnl ?? 0);
+  const equityValues = isToday ? equityCurve.map((p) => p.equity) : (windowed?.curve ?? []);
+
   const hasCurve =
-    equityValues.length >= 2 &&
-    Math.max(...equityValues) !== Math.min(...equityValues);
+    equityValues.length >= 2 && Math.max(...equityValues) !== Math.min(...equityValues);
 
   return (
     <div className="panel panel--screws">
@@ -36,17 +54,23 @@ export function PnlPanel({
         <span className="x">NAV {usd0(fundPnl.nav)}</span>
       </div>
       <div className="pbody">
+        <div className="seg" style={{ marginBottom: 8 }} aria-label="P&L timeframe">
+          {WINDOWS.map((w) => (
+            <button key={w.id} className={win === w.id ? "on" : ""} onClick={() => setWin(w.id)} aria-pressed={win === w.id}>
+              {w.label}
+            </button>
+          ))}
+        </div>
         <div className="pnl-equity">
           {hasCurve ? (
             <LineChart values={equityValues} height={90} id="equity" />
           ) : (
-            <div className="chart-empty">awaiting equity history</div>
+            <div className="chart-empty">{loading ? "loading…" : isToday ? "awaiting equity history" : "no equity history in window"}</div>
           )}
         </div>
-        <div className="pnl-rows" style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 8 }}>
+        <div className="pnl-rows" style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 8, opacity: loading ? 0.5 : 1, transition: "opacity 0.15s" }}>
           {strategists.map((s) => {
-            const p = pnlByStrategist[s.slug];
-            const day = p?.dayPnl ?? 0;
+            const v = valFor(s.slug);
             return (
               <div className="stat" key={s.slug}>
                 <span className="k" style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -61,17 +85,15 @@ export function PnlPanel({
                   />
                   {s.name}
                 </span>
-                <span className={`v num ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</span>
+                <span className={`v num ${v < 0 ? "neg" : "pos"}`}>{signedUsd(v)}</span>
               </div>
             );
           })}
           <div className="stat" style={{ borderTop: "1px solid var(--border-bright)" }}>
             <span className="k" style={{ fontWeight: 600, color: "var(--text)" }}>
-              Fund (day)
+              Fund ({winLabel})
             </span>
-            <span className={`v num ${fundPnl.dayPnl < 0 ? "neg" : "pos"}`}>
-              {signedUsd(fundPnl.dayPnl)}
-            </span>
+            <span className={`v num ${fundVal < 0 ? "neg" : "pos"}`}>{signedUsd(fundVal)}</span>
           </div>
         </div>
       </div>
