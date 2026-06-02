@@ -4,6 +4,7 @@
 // the client falls back to a frontmatter-only preview.
 
 import { NextResponse } from "next/server";
+import { normalizeSpec, type StrategySpec } from "@/lib/desk/strategySpec";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ const SPEC_TOOL = {
             atLeast: { type: "number", description: "Confluence: require ≥N of the `all` conditions to hold (e.g. '≥2 of N features'). Omit for strict AND." },
             all: {
               type: "array",
-              description: "Conditions to enter (all must hold unless `atLeast` is set). Use these kinds: ma_cross{fast,slow,dir}, vwap_side{side}, vwap_dev{atr,cmp}, opening_range{minutes,side}, or_width_min{pct}, rel_vol{min}, rsi{period,cmp,value}, time_before{et}, time_between{startET,endET}, efficiency_ratio{op,value,lookback}, momentum_atr{op,value,lookback}, macd{fast,slow,signal,cmp:bull|bear}, level{ref:pdh|pdl|orb_hi|orb_lo,cmp:>|<|near,withinPct}, tick{cmp,value}, gamma_regime{require:POSITIVE|NEGATIVE|TRANSITION|NEGATIVE_OR_TRANSITION}, gamma_wall{wall}, iv_rank{cmp,value}, event_within{sessions}, unknown{note}.",
+              description: "Conditions to enter (all must hold unless `atLeast` is set). Use these kinds: ma_cross{fast,slow,dir:up|down}, vwap_side{side:above|below}, vwap_dev{atr,cmp:>|<}, opening_range{minutes,side:break_above|break_below}, or_width_min{pct}, rel_vol{min}, rsi{period,cmp:>|<,value}, time_before{et}, time_between{startET,endET}, efficiency_ratio{op:>=|<=,value,lookback}, momentum_atr{op:>=|<=,value,lookback}, macd{fast,slow,signal,cmp:bull|bear}, level{ref:pdh|pdl|orb_hi|orb_lo,cmp:>|<|near,withinPct}, tick{cmp,value}, gamma_regime{require:POSITIVE|NEGATIVE|TRANSITION|NEGATIVE_OR_TRANSITION}, gamma_wall{wall}, iv_rank{cmp,value}, event_within{sessions}, unknown{note}.",
               items: { type: "object", required: ["kind"], properties: { kind: { type: "string" } }, additionalProperties: true },
             },
           },
@@ -109,7 +110,12 @@ export async function POST(req: Request) {
     const j = await res.json();
     const toolUse = (j.content ?? []).find((b: { type: string }) => b.type === "tool_use");
     if (!toolUse) return NextResponse.json({ error: "no spec returned" }, { status: 502 });
-    return NextResponse.json({ spec: toolUse.input });
+    // Normalize before it leaves the server: coerce the LLM's common enum slips
+    // (e.g. opening_range side "above" → "break_above") and downgrade malformed
+    // conditions to `unknown`, so a bad compile flags as non-armable in the UI's
+    // capability check instead of silently arming a rule the worker will misread.
+    const { spec, repairs } = normalizeSpec(toolUse.input as StrategySpec);
+    return NextResponse.json({ spec, repairs });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

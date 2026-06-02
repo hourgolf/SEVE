@@ -1,9 +1,10 @@
-// ⚑ WORKER VERSION: 2026-06-01e  (cost gate now EXEMPTS power — real-fills probe
-//   showed the gate vetoes power's final-hour gamma-convex winners · premium
-//   catastrophic stop · real entry-time time-stops · 0DTE→1DTE roll · order
-//   resilience · channel independence · reconciliation). If the function deployed
-//   in Supabase does NOT show THIS version line at the top, the paste is stale —
-//   re-copy this file.
+// ⚑ WORKER VERSION: 2026-06-01f  (compiled-spec interpreter now FULL-PARITY with
+//   engine/specEvaluate.ts — efficiency_ratio · momentum_atr · macd · level
+//   (pdh/pdl/orb) · atLeast confluence, so an Add-Channel .md trades live exactly
+//   as it backtests · cost gate EXEMPTS power · premium catastrophic stop · real
+//   entry-time time-stops · 0DTE→1DTE roll · order resilience · channel
+//   independence · reconciliation). If the function deployed in Supabase does NOT
+//   show THIS version line at the top, the paste is stale — re-copy this file.
 // ============================================================================
 //  paper-trader — DISPATCHER DRAFT (multi-channel "one engine, two drivers").
 //
@@ -184,12 +185,15 @@ const REGISTRY: Record<string, { evaluate: Evaluate; tf: number; warmup: number 
   grind:    { evaluate: grindEval,    tf: 1, warmup: 30 },
 };
 
-// ---- compiled-spec interpreter (mirrors engine/specEvaluate.ts) -------------
+// ---- compiled-spec interpreter (FULL MIRROR of engine/specEvaluate.ts) ------
 // A channel added via the dashboard has no REGISTRY entry — it carries a compiled
 // StrategySpec (spec_json). This turns that spec into the SAME Evaluate the engine
-// produces, for the SUPPORTED condition vocabulary. Live posture is STRICT: any
-// unsupported/unknown condition makes the entry not fire (never trade an
-// unevaluated gate) — armed channels are capability-checked, so this is defensive.
+// produces, over the SAME supported vocabulary (ma_cross/vwap_side/vwap_dev/
+// opening_range/or_width_min/rel_vol/rsi/time_*/efficiency_ratio/momentum_atr/
+// macd/level) WITH `atLeast` confluence — so a backtest-gated spec trades live
+// IDENTICALLY. Live posture is STRICT: any unsupported/unknown condition makes the
+// entry not fire (never trade an unevaluated gate) — armed channels are
+// capability-checked, so this is defensive. KEEP IN SYNC with engine/specEvaluate.ts.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Spec = any;
 function emaArr(vals: number[], p: number): number[] {
@@ -213,9 +217,13 @@ function xdir(a: number[], b: number[], i: number): number {
   if (pr <= 0 && nw > 0) return 1; if (pr >= 0 && nw < 0) return -1; return 0;
 }
 function parseET(s: string): number | null { const m = /^\s*(\d{1,2}):(\d{2})/.exec(s || ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }
-const SPEC_SUPPORTED = new Set(["ma_cross","vwap_side","vwap_dev","opening_range","or_width_min","rel_vol","rsi","time_before","time_between"]);
+// Full parity with engine/specEvaluate.ts SUPPORTED — keep these in sync (the
+// capabilityCheck in lib/desk/strategySpec.ts is the arm gate; a kind it deems
+// armable MUST be runnable here, or a channel arms and silently never trades).
+const SPEC_SUPPORTED = new Set(["ma_cross","vwap_side","vwap_dev","opening_range","or_width_min","rel_vol","rsi","time_before","time_between","efficiency_ratio","momentum_atr","macd","level"]);
+const macdKey = (c: Spec) => `${c.fast}-${c.slow}-${c.signal}`;
 
-interface CompiledSpec { build: (bars: Bar[]) => Evaluate; tf: number; warmup: number; premiumExit: { profitPct?: number; stopPct?: number }; }
+interface CompiledSpec { build: (bars: Bar[], levels?: { pdh?: number; pdl?: number }) => Evaluate; tf: number; warmup: number; premiumExit: { profitPct?: number; stopPct?: number }; }
 function compileSpec(spec: Spec): CompiledSpec {
   const entries: Spec[] = spec?.entries ?? [];
   let profitPct: number | undefined, stopPct: number | undefined, timeExit: number | null = null;
@@ -230,13 +238,16 @@ function compileSpec(spec: Spec): CompiledSpec {
   for (const e of entries) for (const c of (e.all ?? [])) {
     if (c.kind === "ma_cross") warmup = Math.max(warmup, c.slow, c.fast);
     else if (c.kind === "rsi") warmup = Math.max(warmup, c.period + 1);
+    else if (c.kind === "momentum_atr") warmup = Math.max(warmup, (c.lookback ?? 3) + 1);
+    else if (c.kind === "macd") warmup = Math.max(warmup, c.slow + c.signal);
   }
-  const build = (bars: Bar[]): Evaluate => {
+  const build = (bars: Bar[], levels?: { pdh?: number; pdl?: number }): Evaluate => {
     const closes = bars.map((b) => b.close);
-    const emaS = new Map<number, number[]>(), rsiS = new Map<number, number[]>();
+    const emaS = new Map<number, number[]>(), rsiS = new Map<number, number[]>(), macdS = new Map<string, number[]>();
     for (const e of entries) for (const c of (e.all ?? [])) {
       if (c.kind === "ma_cross") { if (!emaS.has(c.fast)) emaS.set(c.fast, emaArr(closes, c.fast)); if (!emaS.has(c.slow)) emaS.set(c.slow, emaArr(closes, c.slow)); }
       else if (c.kind === "rsi" && !rsiS.has(c.period)) rsiS.set(c.period, rsiArr(closes, c.period));
+      else if (c.kind === "macd" && !macdS.has(macdKey(c))) { const fa = emaArr(closes, c.fast), sl = emaArr(closes, c.slow); const line = closes.map((_, i) => fa[i] - sl[i]); const sig = emaArr(line, c.signal); macdS.set(macdKey(c), line.map((v, i) => v - sig[i])); }
     }
     const etMin = bars.map((b) => etParts(b.ts).min);
     const cond = (c: Spec, f: Features, i: number): boolean => {
@@ -247,22 +258,33 @@ function compileSpec(spec: Spec): CompiledSpec {
         case "opening_range": return c.side === "break_above" ? (f.openRangeHi != null && f.close > f.openRangeHi) : (f.openRangeLo != null && f.close < f.openRangeLo);
         case "or_width_min": { if (f.openRangeHi == null || f.openRangeLo == null || f.close <= 0) return false; return ((f.openRangeHi - f.openRangeLo) / f.close) * 100 >= c.pct; }
         case "rel_vol": return f.relVol >= c.min;
+        case "efficiency_ratio": return c.op === ">=" ? f.er >= c.value : f.er <= c.value;
+        case "momentum_atr": { if (f.atr <= 0) return false; const lb = c.lookback ?? 3; const mom = i >= lb ? (closes[i] - closes[i - lb]) / f.atr : 0; return c.op === ">=" ? mom >= c.value : mom <= c.value; }
+        case "macd": { const h = macdS.get(macdKey(c)); if (!h) return false; return c.cmp === "bull" ? h[i] > 0 : h[i] < 0; }
+        case "level": { const lvl = c.ref === "orb_hi" ? f.openRangeHi : c.ref === "orb_lo" ? f.openRangeLo : c.ref === "pdh" ? levels?.pdh : levels?.pdl; if (lvl == null || f.close <= 0) return false; if (c.cmp === ">") return f.close > lvl; if (c.cmp === "<") return f.close < lvl; return (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); }
         case "rsi": { const s = rsiS.get(c.period); if (!s) return false; return c.cmp === ">" ? s[i] > c.value : s[i] < c.value; }
         case "time_before": { const t = parseET(c.et); return t != null && etMin[i] < t; }
         case "time_between": { const a = parseET(c.startET), b = parseET(c.endET); return a != null && b != null && etMin[i] >= a && etMin[i] <= b; }
         default: return false;
       }
     };
+    // Confluence: fire on ≥ `atLeast` of the conditions (capped at the count), else
+    // strict AND. STRICT live posture: an unsupported (feed-dependent) gate makes
+    // the entry NOT fire — never trade an unevaluated rule. Armed channels are
+    // capability-checked (zero unsupported), so this only guards a force-armed spec.
     const entryHolds = (e: Spec, f: Features, i: number): boolean => {
       const all = e.all ?? []; if (!all.length) return false;
-      for (const c of all) { if (!SPEC_SUPPORTED.has(c.kind)) return false; if (!cond(c, f, i)) return false; }
-      return true;
+      for (const c of all) if (!SPEC_SUPPORTED.has(c.kind)) return false;
+      let held = 0; for (const c of all) if (cond(c, f, i)) held++;
+      const need = e.atLeast != null ? Math.min(Math.max(1, e.atLeast), all.length) : all.length;
+      return held >= need;
     };
     const infer = (e: Spec): OptType | null => {
       for (const c of (e.all ?? [])) {
         if (c.kind === "ma_cross") return c.dir === "up" ? "call" : "put";
         if (c.kind === "vwap_side") return c.side === "above" ? "call" : "put";
         if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
+        if (c.kind === "momentum_atr") return c.op === ">=" ? "call" : "put";
       }
       return null;
     };
@@ -343,6 +365,22 @@ Deno.serve(async () => {
     const todayET = etParts(nowMs).date;
     const session1m = all1m.filter((b) => etParts(b.ts).date === todayET);
 
+    // Prior trading day's high/low — for compiled-spec `level` conditions
+    // (ref:pdh/pdl). all1m holds ~2+ sessions, so the day before today is covered.
+    let pdh: number | undefined, pdl: number | undefined;
+    {
+      const dayHL = new Map<string, { hi: number; lo: number }>();
+      for (const b of all1m) {
+        const d = etParts(b.ts).date;
+        const e = dayHL.get(d);
+        if (!e) dayHL.set(d, { hi: b.high, lo: b.low });
+        else { e.hi = Math.max(e.hi, b.high); e.lo = Math.min(e.lo, b.low); }
+      }
+      const priors = [...dayHL.keys()].filter((d) => d < todayET).sort();
+      const prior = priors.length ? dayHL.get(priors[priors.length - 1]) : undefined;
+      if (prior) { pdh = prior.hi; pdl = prior.lo; }
+    }
+
     // Alpaca rejects OPENING a 0DTE position within ~15 min of close — that was
     // the 422. So inside the cutoff, channels roll new entries to the next expiry
     // (1DTE) instead of losing the signal. Resolve that expiry from the live chain
@@ -404,8 +442,9 @@ Deno.serve(async () => {
       }
       const pos: Pos | null = row ? { optType: row.opt_type, entryMinute, entryUnderlying: Number(row.strike), peakFavorable: f.close } : null;
 
-      // Build this channel's evaluator (spec evaluators precompute over `bars`).
-      const evaluate: Evaluate = code ? code.evaluate : compiled!.build(bars);
+      // Build this channel's evaluator (spec evaluators precompute over `bars`;
+      // pass prior-day levels for `level` pdh/pdl conditions).
+      const evaluate: Evaluate = code ? code.evaluate : compiled!.build(bars, { pdh, pdl });
       let intent = evaluate(f, pos);
 
       // Premium profit/stop (compiled specs) — uses the REAL Alpaca option mark

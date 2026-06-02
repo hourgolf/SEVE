@@ -61,7 +61,7 @@ function parseET(hhmm: string): number | null {
 const SUPPORTED = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min",
   "rel_vol", "rsi", "time_before", "time_between",
-  "efficiency_ratio", "momentum_atr",
+  "efficiency_ratio", "momentum_atr", "macd", "level",
 ]);
 
 // Premium profit/stop exits (need the option mark) — applied by the driver.

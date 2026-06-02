@@ -154,6 +154,46 @@ export function validateManagement(m: Management | undefined, structure: LegStru
   return errs;
 }
 
+// Every condition kind the compiler is allowed to emit (the Condition union).
+const KNOWN_KINDS = new Set<string>([
+  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "rel_vol",
+  "rsi", "time_before", "time_between", "efficiency_ratio", "momentum_atr", "macd",
+  "level", "tick", "gamma_regime", "gamma_wall", "iv_rank", "event_within", "unknown",
+]);
+
+// Normalize a freshly-compiled spec: coerce the enum slips the LLM commonly makes
+// and downgrade any malformed / unrecognized condition to `unknown` — so a bad
+// compile shows up as a NON-ARMABLE gap in capabilityCheck rather than silently
+// arming a rule the engine/worker will misread (e.g. opening_range side "above",
+// which both interpreters fall through to the OPPOSITE break). Returns the cleaned
+// spec + a list of human-readable repairs for the UI to surface.
+export function normalizeSpec(spec: StrategySpec): { spec: StrategySpec; repairs: string[] } {
+  const repairs: string[] = [];
+  const fixCond = (raw: unknown): Condition => {
+    const c = raw as Record<string, unknown>;
+    if (!c || typeof c !== "object" || typeof c.kind !== "string") {
+      repairs.push("condition with no `kind` → unknown");
+      return { kind: "unknown", note: "missing kind" };
+    }
+    if (c.kind === "opening_range") {
+      const s = c.side;
+      if (s === "above" || s === "up" || s === "break_high") { repairs.push(`opening_range.side "${s}" → "break_above"`); c.side = "break_above"; }
+      else if (s === "below" || s === "down" || s === "break_low") { repairs.push(`opening_range.side "${s}" → "break_below"`); c.side = "break_below"; }
+      if (c.side !== "break_above" && c.side !== "break_below") {
+        repairs.push(`opening_range.side "${String(s)}" invalid → unknown`);
+        return { kind: "unknown", note: `opening_range.side ${String(s)}` };
+      }
+    }
+    if (!KNOWN_KINDS.has(c.kind)) {
+      repairs.push(`unrecognized kind "${c.kind}" → unknown`);
+      return { kind: "unknown", note: `unrecognized: ${c.kind}` };
+    }
+    return c as unknown as Condition;
+  };
+  const entries = (spec.entries ?? []).map((e) => ({ ...e, all: (e.all ?? []).map(fixCond) }));
+  return { spec: { ...spec, entries }, repairs };
+}
+
 export interface CapabilityReport {
   runnable: boolean; // can this be armed live on the supported subset?
   structureOk: boolean;
