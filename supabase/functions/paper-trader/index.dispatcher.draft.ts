@@ -1,10 +1,10 @@
-// ⚑ WORKER VERSION: 2026-06-01f  (compiled-spec interpreter now FULL-PARITY with
-//   engine/specEvaluate.ts — efficiency_ratio · momentum_atr · macd · level
-//   (pdh/pdl/orb) · atLeast confluence, so an Add-Channel .md trades live exactly
-//   as it backtests · cost gate EXEMPTS power · premium catastrophic stop · real
-//   entry-time time-stops · 0DTE→1DTE roll · order resilience · channel
-//   independence · reconciliation). If the function deployed in Supabase does NOT
-//   show THIS version line at the top, the paste is stale — re-copy this file.
+// ⚑ WORKER VERSION: 2026-06-01g  (per-channel ISOLATION — one channel's throw can
+//   no longer abort the whole dispatcher run · compiled-spec interpreter FULL-PARITY
+//   with engine/specEvaluate.ts: efficiency_ratio · momentum_atr · macd · level
+//   (pdh/pdl/orb) · atLeast confluence · cost gate EXEMPTS power · premium
+//   catastrophic stop · real entry-time time-stops · 0DTE→1DTE roll · order
+//   resilience · channel independence · reconciliation). If the function deployed in
+//   Supabase does NOT show THIS version line at the top, the paste is stale — re-copy.
 // ============================================================================
 //  paper-trader — DISPATCHER DRAFT (multi-channel "one engine, two drivers").
 //
@@ -397,6 +397,11 @@ Deno.serve(async () => {
 
     const out: Record<string, unknown>[] = [];
     for (const s of (strategists ?? [])) {
+     // Per-channel isolation: a throw in compileSpec/build/evaluate (e.g. a malformed
+     // armed spec_json) for ONE channel must NOT abort the whole run — every other
+     // channel would be skipped that minute. Journal it and move on. (Body kept at its
+     // original indent to keep the diff minimal; the try just brackets the iteration.)
+     try {
       const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
       if (!cfg) continue;                                           // no config → idle
       // Resolve this channel's edge: a built-in CODE strategy (REGISTRY) or a
@@ -605,6 +610,11 @@ Deno.serve(async () => {
         // mark-to-market the open desk row
         await sb.from("positions").update({ current_mark: Number(alp.current_price ?? 0), unrealized_pnl: Number(alp.unrealized_pl ?? 0) }).eq("id", row.id);
       }
+     } catch (chErr) {
+       // Isolate this channel's failure; the rest of the fleet still runs this minute.
+       await journal("WARN", `dispatcher: channel ${(s as { slug?: string }).slug ?? "?"} failed — ${(chErr as Error).message}`);
+       out.push({ slug: (s as { slug?: string }).slug, note: "error", error: (chErr as Error).message });
+     }
     }
     return Response.json({ ok: true, dryRun: DRY_RUN, channels: out });
   } catch (e) {
