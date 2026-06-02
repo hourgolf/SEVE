@@ -1,8 +1,9 @@
-// ⚑ WORKER VERSION: 2026-06-01d  (smart-layer guards: cost-gate entry veto +
-//   premium catastrophic stop · real entry-time time-stops · 0DTE→1DTE roll ·
-//   order resilience · channel independence · reconciliation). If the function
-//   deployed in Supabase does NOT show THIS version line at the top, the paste is
-//   stale — re-copy this file.
+// ⚑ WORKER VERSION: 2026-06-01e  (cost gate now EXEMPTS power — real-fills probe
+//   showed the gate vetoes power's final-hour gamma-convex winners · premium
+//   catastrophic stop · real entry-time time-stops · 0DTE→1DTE roll · order
+//   resilience · channel independence · reconciliation). If the function deployed
+//   in Supabase does NOT show THIS version line at the top, the paste is stale —
+//   re-copy this file.
 // ============================================================================
 //  paper-trader — DISPATCHER DRAFT (multi-channel "one engine, two drivers").
 //
@@ -67,6 +68,12 @@ const PAPER = "https://paper-api.alpaca.markets";
 // Both are tunable consts. The worker has BETTER data than the backtest: the live
 // option_quotes carry REAL bid+ask (+ a modeled delta) and features give ATR.
 const COST_GATE_RATIO = 3.0;          // block if expectedMove < RATIO × roundTripCost
+// Channels EXEMPT from the cost gate. The gate's expected-move (delta·ATR·100)
+// assumes a ~linear move, so it can't see GAMMA convexity — and a real-fills probe
+// (engine/power-probe.ts) showed it vetoes ~⅔ of power's final-hour entries, which
+// were net +$1.1k profitable (power base −$443 → +gate −$1500). The gate is right
+// for the scalper (grind) it was built for; power's edge IS the convex tail.
+const COST_GATE_EXEMPT = new Set(["power"]);
 const PREMIUM_STOP_PCT = 50;          // exit any open position marked ≤ −50% from entry
 const ATM_DELTA = 0.5;                // ATM 0DTE delta proxy when the quote carries none
 const TICK = 0.01;
@@ -521,12 +528,13 @@ Deno.serve(async () => {
           if (q?.delta != null && Number(q.delta) !== 0) delta = Math.abs(Number(q.delta)); // puts carry δ<0; magnitude is what we want
           if (!ask) blocked = "no_quote";
         }
-        // COST GATE (entry veto, ALL channels): the dominant 0DTE cost is the
-        // round-trip spread. Block an entry whose expected premium move on a ~1·ATR
-        // favorable move doesn't clear that cost by COST_GATE_RATIO. Uses the REAL
-        // bid/ask + the quote's delta (ATM 0.5 proxy when absent). Mirrors
-        // engine/manage.ts costGatePass — this is what cut grind's churn in the A/B.
-        if (!blocked) {
+        // COST GATE (entry veto): the dominant 0DTE cost is the round-trip spread.
+        // Block an entry whose expected premium move on a ~1·ATR favorable move
+        // doesn't clear that cost by COST_GATE_RATIO. Uses the REAL bid/ask + the
+        // quote's delta (ATM 0.5 proxy when absent). Mirrors engine/manage.ts
+        // costGatePass — this is what cut grind's churn in the A/B. EXEMPT for
+        // gamma-convex channels (see COST_GATE_EXEMPT) where it kills the edge.
+        if (!blocked && !COST_GATE_EXEMPT.has(s.slug)) {
           roundTrip = roundTripCostUsd(bid, ask);
           expectedMove = delta * Math.max(0, f.atr) * 100;
           if (expectedMove < COST_GATE_RATIO * roundTrip) blocked = "cost_gate";

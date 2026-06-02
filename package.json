@@ -11,6 +11,7 @@
     "report": "tsx engine/report.ts",
     "golden": "tsx engine/manage.golden.ts",
     "ab": "tsx engine/ab.ts",
+    "power-probe": "tsx engine/power-probe.ts",
     "sweep": "tsx engine/sweep.ts",
     "sweep:cross": "tsx engine/sweep-cross.ts",
     "regime": "tsx engine/regime-test.ts",
