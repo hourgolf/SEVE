@@ -116,6 +116,7 @@ export interface Position {
   entryUnderlying: number; // spot at entry (for the price stop)
   peakFavorable: number; // best favorable underlying since entry (trailing stop)
   legs?: PositionLeg[]; // present → multi-leg structure
+  entryEdgeUsd?: number; // entry-side spread+slippage cost ($, total over legs×qty)
 }
 
 // A completed round-trip (for metrics).
@@ -128,6 +129,7 @@ export interface Trade {
   exitPrice: number;
   entryTs: number;
   exitTs: number;
-  pnl: number; // $ (signed), net of fees
+  pnl: number; // $ (signed), net of cost
   exitReason: string;
+  cost?: number; // total round-trip transaction cost ($) for this trade
 }

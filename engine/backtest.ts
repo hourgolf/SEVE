@@ -16,7 +16,8 @@
 // ============================================================================
 
 import { readFileSync } from "node:fs";
-import { computeFeatures, feePerContract, fillPrice, riskGovernor } from "./engine";
+import { computeFeatures, riskGovernor } from "./engine";
+import { DEFAULT_COST_MODEL, fillWithCost, type CostModel } from "./cost";
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
 import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
@@ -63,7 +64,10 @@ export function simulateSession(
   // Premium-based exits (option mark vs entry fill) — used by spec-compiled
   // channels whose profit/stop are stated in % of premium, not underlying ATRs.
   // Undefined → built-in strategies behave exactly as before.
-  premiumExit?: { profitPct?: number; stopPct?: number }
+  premiumExit?: { profitPct?: number; stopPct?: number },
+  // Transaction-cost model (Brief P2). Applied per fill; `gross` overrides to
+  // mid fills with zero cost (signal-only). Default ≈ the engine's old implicit cost.
+  costModel: CostModel = DEFAULT_COST_MODEL
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -96,25 +100,29 @@ export function simulateSession(
     }
 
     if (pos && intent && intent.kind === "exit") {
-      let exitPrice: number, pnl: number;
+      let exitPrice: number, pnl: number, tradeCost: number;
+      const comm = gross ? 0 : costModel.commissionPerContract;
       if (pos.legs) {
         // multi-leg: P&L is the sum of each leg (long = +(exit−entry), short =
-        // +(entry−exit)); fees per leg, both ways. exitPrice = net unit credit.
-        let net = 0, exitNet = 0;
+        // +(entry−exit)); cost per leg, both sides. exitPrice = net unit credit.
+        let net = 0, exitNet = 0, exitEdge = 0;
         for (const leg of pos.legs) {
           const lq = findQuote(chain, leg.strike, leg.optType);
-          const px = lq ? (gross ? lq.mid : fillPrice(leg.side === "long" ? "sell" : "buy", lq)) : 0;
-          net += (leg.side === "long" ? px - leg.entryPrice : leg.entryPrice - px) * leg.qty * 100
-            - (gross ? 0 : feePerContract * leg.qty * 2);
-          exitNet += (leg.side === "long" ? px : -px) * leg.qty;
+          const ex = lq ? (gross ? { fill: lq.mid, edgeUsd: 0 } : fillWithCost(leg.side === "long" ? "sell" : "buy", lq, costModel)) : { fill: 0, edgeUsd: 0 };
+          net += (leg.side === "long" ? ex.fill - leg.entryPrice : leg.entryPrice - ex.fill) * leg.qty * 100 - comm * leg.qty * 2;
+          exitNet += (leg.side === "long" ? ex.fill : -ex.fill) * leg.qty;
+          exitEdge += ex.edgeUsd * leg.qty + comm * leg.qty * 2;
         }
         pnl = net;
         exitPrice = pos.qty ? exitNet / pos.qty : 0;
+        tradeCost = (pos.entryEdgeUsd ?? 0) + exitEdge;
       } else {
         const q = findQuote(chain, pos.strike, pos.optType);
-        exitPrice = q ? (gross ? q.mid : fillPrice("sell", q)) : 0;
-        const fee = gross ? 0 : feePerContract;
-        pnl = (exitPrice - pos.entryPrice) * pos.qty * 100 - fee * pos.qty * 2;
+        const ex = q ? (gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("sell", q, costModel)) : { fill: 0, edgeUsd: 0 };
+        exitPrice = ex.fill;
+        const commTotal = comm * pos.qty * 2;
+        pnl = (exitPrice - pos.entryPrice) * pos.qty * 100 - commTotal;
+        tradeCost = (pos.entryEdgeUsd ?? 0) + ex.edgeUsd * pos.qty + commTotal;
       }
       dayPnl += pnl;
       trades.push({
@@ -128,6 +136,7 @@ export function simulateSession(
         exitTs: bars[i].ts,
         pnl,
         exitReason: intent.reason,
+        cost: tradeCost,
       });
       pos = null;
     } else if (!pos && intent && intent.kind === "enter") {
@@ -135,14 +144,14 @@ export function simulateSession(
         // MULTI-LEG: resolve each leg's strike off ATM, price it (long→ask, short→bid),
         // size off the net debit. Skip if any leg is unquotable or the net isn't a debit.
         const atm = Math.round(f.close);
-        const resolved: { strike: number; optType: OptType; side: "long" | "short"; ratio: number; px: number }[] = [];
+        const resolved: { strike: number; optType: OptType; side: "long" | "short"; ratio: number; px: number; edgeUsd: number }[] = [];
         let debit = 0, ok = true;
         for (const ls of intent.legs) {
           const lq = findQuote(chain, atm + ls.strikeOffset, ls.optType);
           if (!lq) { ok = false; break; }
-          const px = ls.side === "long" ? fillPrice("buy", lq) : fillPrice("sell", lq);
-          resolved.push({ strike: atm + ls.strikeOffset, optType: ls.optType, side: ls.side, ratio: ls.ratio, px });
-          debit += (ls.side === "long" ? px : -px) * ls.ratio;
+          const fc = gross ? { fill: lq.mid, edgeUsd: 0 } : fillWithCost(ls.side === "long" ? "buy" : "sell", lq, costModel);
+          resolved.push({ strike: atm + ls.strikeOffset, optType: ls.optType, side: ls.side, ratio: ls.ratio, px: fc.fill, edgeUsd: fc.edgeUsd });
+          debit += (ls.side === "long" ? fc.fill : -fc.fill) * ls.ratio;
         }
         if (ok && debit > 0) {
           const r = riskGovernor(cfg, fund, dayPnl, dayPnl, debit, false); // size off net debit
@@ -150,6 +159,7 @@ export function simulateSession(
             pos = {
               slug: cfg.slug, strike: atm, optType: "call", qty: r.qty,
               entryPrice: debit, entryMinute: i, entryUnderlying: f.close, peakFavorable: f.close,
+              entryEdgeUsd: resolved.reduce((s, l) => s + l.edgeUsd * l.ratio * r.qty, 0),
               legs: resolved.map((l) => ({ strike: l.strike, optType: l.optType, side: l.side, qty: l.ratio * r.qty, entryPrice: l.px })),
             };
           }
@@ -160,15 +170,17 @@ export function simulateSession(
         if (q) {
           const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false);
           if (r.ok) {
+            const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);
             pos = {
               slug: cfg.slug,
               strike,
               optType: intent.direction,
               qty: r.qty,
-              entryPrice: fillPrice("buy", q),
+              entryPrice: en.fill,
               entryMinute: i,
               entryUnderlying: f.close,
               peakFavorable: f.close,
+              entryEdgeUsd: en.edgeUsd * r.qty,
             };
           }
         }
@@ -188,6 +200,8 @@ export interface Metrics {
   expectancy: number;
   maxDrawdown: number;
   byReason: Record<string, number>;
+  totalCost: number; // total transaction cost ($) across trades
+  costDrag: number | null; // totalCost / gross P&L (P&L before cost); null if gross≈0
 }
 
 export function metrics(trades: Trade[], nDays: number): Metrics {
@@ -205,6 +219,8 @@ export function metrics(trades: Trade[], nDays: number): Metrics {
   }
   const byReason: Record<string, number> = {};
   for (const t of trades) byReason[t.exitReason] = (byReason[t.exitReason] ?? 0) + 1;
+  const totalCost = trades.reduce((a, t) => a + (t.cost ?? 0), 0);
+  const grossPnl = total + totalCost; // P&L before cost
   return {
     nTrades: n,
     nDays,
@@ -215,6 +231,8 @@ export function metrics(trades: Trade[], nDays: number): Metrics {
     expectancy: n ? total / n : 0,
     maxDrawdown: maxDD,
     byReason,
+    totalCost,
+    costDrag: Math.abs(grossPnl) > 1e-6 ? totalCost / grossPnl : null,
   };
 }
 
@@ -233,7 +251,12 @@ function report(trades: Trade[], nDays: number, stratLabel: string, label: strin
   console.log(`  Avg win           ${usd(m.avgWin)}`);
   console.log(`  Avg loss          ${usd(m.avgLoss)}`);
   console.log(`  Expectancy/trade  ${usd(m.expectancy)}`);
-  console.log(`  Total P&L         ${usd(m.totalPnl)}`);
+  console.log(`  Total P&L         ${usd(m.totalPnl)}  (net of cost)`);
+  const grossPnl = m.totalPnl + m.totalCost;
+  const dragNote = grossPnl > 1e-6
+    ? `  ·  cost drag ${(m.costDrag! * 100).toFixed(1)}% of gross`
+    : `  ·  gross P&L ${usd(grossPnl)} (≤0 before cost — no edge to drag)`;
+  console.log(`  Total cost        ${usd(m.totalCost)}${dragNote}`);
   console.log(`  Max drawdown      ${usd(m.maxDrawdown)}`);
   console.log(`  Exit reasons      ${JSON.stringify(m.byReason)}`);
   console.log("══════════════════════════════════════════════════\n");
