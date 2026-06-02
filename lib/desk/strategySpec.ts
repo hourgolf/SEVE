@@ -214,7 +214,7 @@ export function capabilityCheck(spec: StrategySpec): CapabilityReport {
   // Management block: validate now; flag that the runtime executes in PR4.
   const isSmart = !!spec.management;
   const managementErrors = validateManagement(spec.management, spec.meta.structure);
-  if (isSmart && managementErrors.length === 0) gaps.push("smart management (runs in backtest; live-worker execution pending)");
+  if (isSmart && managementErrors.length === 0) gaps.push("smart management (scale-outs / breakeven / trail) — backtest-only, not run live; remove the management section to arm the entries");
 
   const unsupported = [...new Set(gaps)];
   return {
