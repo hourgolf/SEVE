@@ -1,4 +1,8 @@
-// ⚑ WORKER VERSION: 2026-06-01h  (compiled-spec warmup FLOOR lowered 30→15 bars, in
+// ⚑ WORKER VERSION: 2026-06-01i  (cost gate RECALIBRATED to real SPY-0DTE fills —
+//   slippage 1→0.25 tick (a market order fills ~at the NBBO; the old 1-tick was a
+//   backtest default that DOUBLED the cost on tight-spread setups and blocked ~90%
+//   on low-ATR days) + ATM δ proxy 0.5→0.55 (live MarketData.app Greeks) ·
+//   compiled-spec warmup FLOOR lowered 30→15 bars, in
 //   sync with engine WARMUP_FLOOR — faster/opening-period .md strategies no longer
 //   wait the full opening-range window (OR-based conditions still self-gate) ·
 //   per-channel ISOLATION — one channel's throw can no longer abort the whole run ·
@@ -79,9 +83,13 @@ const COST_GATE_RATIO = 3.0;          // block if expectedMove < RATIO × roundT
 // for the scalper (grind) it was built for; power's edge IS the convex tail.
 const COST_GATE_EXEMPT = new Set(["power"]);
 const PREMIUM_STOP_PCT = 50;          // exit any open position marked ≤ −50% from entry
-const ATM_DELTA = 0.5;                // ATM 0DTE delta proxy when the quote carries none
+const ATM_DELTA = 0.55;               // ATM 0DTE delta proxy (live MarketData.app: 758C δ≈0.567) when quote has none
 const TICK = 0.01;
-const SLIPPAGE_TICKS_PER_SIDE = 1;    // mirrors engine/cost.ts DEFAULT_COST_MODEL
+// Slippage the COST GATE assumes per side. A liquid SPY 0DTE market order fills ~at
+// the NBBO, so real slippage beyond the spread is ~0 — the old 1-tick ($1/side) was a
+// backtest default that DOUBLED the round-trip cost on 1¢-spread setups (the cheapest,
+// best ones) and blocked ~90% of entries on low-ATR days. 0.25 tick is a small buffer.
+const SLIPPAGE_TICKS_PER_SIDE = 0.25;
 const COMMISSION_PER_CONTRACT = 0.04; // Alpaca reg pass-through per side (not a commission)
 
 const sb = createClient(SB_URL, SB_SERVICE);
