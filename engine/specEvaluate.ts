@@ -18,7 +18,7 @@
 // ============================================================================
 
 import { ema, rsi, crossDir } from "../lib/indicators";
-import type { StrategySpec, Condition, SpecEntry } from "../lib/desk/strategySpec";
+import type { StrategySpec, Condition, SpecEntry, SpecLeg } from "../lib/desk/strategySpec";
 import type { Bar, Evaluate, Features, Intent, OptType, Position } from "./types";
 
 // Warmup floor (bars) before a compiled spec may fire. Lowered 30 → 15 so faster /
@@ -245,6 +245,17 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
   const warmup = computeWarmup(spec);
   const timeExit = timeExitMinute(spec);
   const entries = spec.entries ?? [];
+  // Multi-leg: a spec whose structure isn't single-leg emits intent.legs (the
+  // engine resolves them off ATM by strikeOffset). Map the spec's LegStructure to
+  // the engine's intent.structure label ("vertical-spread" → "vertical").
+  const structure = spec.meta.structure;
+  const multiLeg = structure !== "single-leg";
+  const engineStruct: NonNullable<Extract<Intent, { kind: "enter" }>["structure"]> =
+    structure === "vertical-spread" ? "vertical"
+    : structure === "straddle" ? "straddle"
+    : structure === "strangle" ? "strangle"
+    : structure === "iron-condor" ? "iron-condor"
+    : "single-leg";
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
@@ -262,9 +273,38 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
     if (f.atr <= 0) return null;
     for (const e of entries) {
       if (!entryHolds(e, ctx)) continue;
+      const reason = e.reason || `${spec.meta.strategyId}_entry`;
+      // Multi-leg: emit the leg geometry (defaulting each ratio to 1). Each leg's
+      // strike is anchored to a LEVEL (default ATM) + its offset; we resolve the
+      // anchor to its price here (where the level data lives) and convert to an
+      // ATM-relative strikeOffset, so the engine leg-resolution (round(spot)+offset)
+      // is unchanged. If an anchor can't be resolved (e.g. OR not set), skip the
+      // entry — never place a leg on a missing level.
+      if (multiLeg && e.legs?.length) {
+        const atm = Math.round(f.close);
+        const anchorPx = (a: SpecLeg["anchor"]): number | null => {
+          switch (a) {
+            case "vwap": return f.vwap > 0 ? f.vwap : null;
+            case "orb_hi": return f.openRangeHi;
+            case "orb_lo": return f.openRangeLo;
+            case "pdh": return levels?.pdh ?? null;
+            case "pdl": return levels?.pdl ?? null;
+            default: return f.close; // "atm"
+          }
+        };
+        const legs: { optType: OptType; side: "long" | "short"; strikeOffset: number; ratio: number }[] = [];
+        let resolvable = true;
+        for (const l of e.legs) {
+          const base = anchorPx(l.anchor);
+          if (base == null) { resolvable = false; break; }
+          legs.push({ optType: l.optType, side: l.side, strikeOffset: Math.round(base) + l.strikeOffset - atm, ratio: l.ratio ?? 1 });
+        }
+        if (!resolvable) continue; // anchor missing → try the next entry / no trade
+        return { kind: "enter", structure: engineStruct, legs, reason };
+      }
       const dir: OptType | null = e.direction === "both" ? inferDirection(e) : e.direction;
       if (!dir) continue; // "both" with no directional cue → skip
-      return { kind: "enter", direction: dir, reason: e.reason || `${spec.meta.strategyId}_entry` };
+      return { kind: "enter", direction: dir, reason };
     }
     return null;
   };

@@ -1,3 +1,16 @@
+// ⚑ WORKER VERSION: 2026-06-02b  (POWER giveback trail: once a power position has
+//   been up ≥+100%, lock gains by exiting on a >40% giveback of the peak gain —
+//   engaged only after +100% so it never clips power's early convexity (the early
+//   scale-outs the A/B rejected are NOT used). Peak premium reconstructed from
+//   option_quotes (no schema change). Backtested tail-safe on real NBBO
+//   (engine/power-probe.ts: +70% totalPnl, −23% DD). Power-only. Prior line below.)
+// ⚑ WORKER VERSION: 2026-06-02a  (STATE-PARITY FIX: per-minute position state is
+//   now rebuilt from the session bars to match the engine — entryUnderlying =
+//   actual close at the entry bar (was the rounded strike, ±$0.50 > grind's
+//   0.5–0.6·ATR stop → grind insta-exited within a minute), and peakFavorable =
+//   the running best/worst close since entry (was reset to the current close every
+//   run → breakout's 1.5·ATR trailing stop could NEVER fire → winners only exited
+//   on EOD/failed-break). No schema change. Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-01i  (cost gate RECALIBRATED to real SPY-0DTE fills —
 //   slippage 1→0.25 tick (a market order fills ~at the NBBO; the old 1-tick was a
 //   backtest default that DOUBLED the cost on tight-spread setups and blocked ~90%
@@ -83,6 +96,15 @@ const COST_GATE_RATIO = 3.0;          // block if expectedMove < RATIO × roundT
 // for the scalper (grind) it was built for; power's edge IS the convex tail.
 const COST_GATE_EXEMPT = new Set(["power"]);
 const PREMIUM_STOP_PCT = 50;          // exit any open position marked ≤ −50% from entry
+// POWER late-engaged giveback trail (backtested tail-safe — engine/power-probe.ts on
+// real NBBO): once a power position has EVER been up ≥ +100% (the option doubled),
+// LOCK gains by exiting if it gives back > 40% of its peak gain. Engaged ONLY after
+// +100% so it never clips power's early convexity — the early scale-outs the
+// smart-layer A/B rejected are deliberately NOT used. Power-only for now. The probe
+// (64 real-NBBO days): +70% totalPnl, −23% drawdown vs base, ~19% smaller avgWin.
+const POWER_TRAIL_CHANNELS = new Set(["power"]);
+const POWER_TRAIL_ENGAGE_MULT = 2.0;  // engage once the mark has reached entry × this (+100%)
+const POWER_TRAIL_GIVEBACK_PCT = 40;  // exit if it gives back > this % of the peak gain
 const ATM_DELTA = 0.55;               // ATM 0DTE delta proxy (live MarketData.app: 758C δ≈0.567) when quote has none
 const TICK = 0.01;
 // Slippage the COST GATE assumes per side. A liquid SPY 0DTE market order fills ~at
@@ -442,9 +464,6 @@ Deno.serve(async () => {
       const { data: rows } = await sb.from("positions").select("*").eq("strategist_id", s.id).eq("status", "open");
       const row = (rows ?? [])[0];
       const alp = row ? positions.find((p) => String(p.symbol) === String(row.occ_symbol)) : undefined;
-      // entryUnderlying ≈ strike: the worker enters ATM, so strike = round(spot
-      // at entry), within ~$0.50 — fine for the ATR stops, and needs no extra
-      // column (uses the existing positions schema as-is).
       // Reconstruct the REAL entry bar index from opened_at (was hardcoded 0 — so
       // time-stops measured from bar 0 and fired on the FIRST evaluation = churn,
       // and no position could truly be held). A position opened before today's
@@ -456,7 +475,29 @@ Deno.serve(async () => {
         const idx = bars.findIndex((b) => b.ts >= entryMs);
         entryMinute = idx >= 0 ? idx : i;
       }
-      const pos: Pos | null = row ? { optType: row.opt_type, entryMinute, entryUnderlying: Number(row.strike), peakFavorable: f.close } : null;
+      // STATE PARITY with the engine (was the cause of two live-only bugs):
+      //   • entryUnderlying was the ROUNDED strike — off by up to $0.50, LARGER
+      //     than grind's 0.5–0.6·ATR target/stop on 1-min ATR (~$0.08–0.24), so
+      //     grind booked target/stop on the entry-rounding within a minute (the
+      //     "holds ~1 min, tiny gain/loss" behavior). Use the actual close at the
+      //     entry bar instead.
+      //   • peakFavorable was reset to f.close every run → breakout's trail test
+      //     (close < peak − 1.5·ATR) was ALWAYS false → the trailing stop never
+      //     fired and winners only exited on EOD/failed-break. Rebuild the running
+      //     peak (best/worst close since entry) like simulateSession does.
+      // Both derive from the session bars + reconstructed entryMinute — NO schema
+      // change. (A position carried overnight resolves entryMinute→0, so these span
+      // this session's open onward — the engine also resets its peak per session.)
+      let entryUnderlying = Number(row?.strike ?? f.close);
+      let peakFavorable = f.close;
+      if (row && entryMinute >= 0 && entryMinute < bars.length) {
+        entryUnderlying = bars[entryMinute].close;
+        peakFavorable = bars[entryMinute].close;
+        for (let j = entryMinute; j <= i; j++) {
+          peakFavorable = row.opt_type === "call" ? Math.max(peakFavorable, bars[j].close) : Math.min(peakFavorable, bars[j].close);
+        }
+      }
+      const pos: Pos | null = row ? { optType: row.opt_type, entryMinute, entryUnderlying, peakFavorable } : null;
 
       // Build this channel's evaluator (spec evaluators precompute over `bars`;
       // pass prior-day levels for `level` pdh/pdl conditions).
@@ -494,6 +535,25 @@ Deno.serve(async () => {
         const markPx = Number(alp.current_price ?? 0);
         if (entryPx > 0 && markPx > 0 && markPx <= entryPx * (1 - PREMIUM_STOP_PCT / 100)) {
           intent = { kind: "exit", reason: "premium_stop" };
+        }
+      }
+
+      // ---- POWER giveback trail (lock gains after +100%) ----
+      // Tail-safe: engages only after the option doubled, then exits on a > 40%
+      // giveback of the peak GAIN. The peak premium is reconstructed from the
+      // option_quotes per-minute mark history (no schema change — same approach as
+      // the underlying-peak fix). Power-only; mirrors manage.ts premium_giveback
+      // with the engage-at-+100% trigger that power-probe found tail-safe.
+      if (pos && row && alp && POWER_TRAIL_CHANNELS.has(s.slug) && (!intent || intent.kind !== "exit")) {
+        const entryPx = Number(row.avg_entry_price ?? 0);
+        const markPx = Number(alp.current_price ?? 0);
+        if (entryPx > 0 && markPx > 0) {
+          const { data: pk } = await sb.from("option_quotes").select("mid").eq("occ_symbol", row.occ_symbol).gte("captured_at", row.opened_at).order("mid", { ascending: false }).limit(1).maybeSingle();
+          const peak = Math.max(markPx, Number(pk?.mid ?? 0));
+          if (peak >= entryPx * POWER_TRAIL_ENGAGE_MULT) {            // ever reached +100% → trail engaged
+            const givebackLevel = entryPx + (peak - entryPx) * (1 - POWER_TRAIL_GIVEBACK_PCT / 100);
+            if (markPx <= givebackLevel) intent = { kind: "exit", reason: "trail_giveback" };
+          }
         }
       }
 

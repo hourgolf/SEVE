@@ -76,3 +76,59 @@ export function makeDatabentoChain(contracts: Series[]): (spot: number, minutesT
     return quotes;
   };
 }
+
+// ── Multi-DTE cache (data/databento-mdte/) ──────────────────────────────────
+// Same record format, but a session-day file carries SEVERAL expirations (0..NDTE,
+// per `npm run backfill:databento -- --dte N`). Each contract series is tagged with
+// its expiration (parsed from the OCC symbol) so a held position resolves the right
+// contract across sessions. Used by engine/multidte.ts.
+const MDTE_DIR = "data/databento-mdte";
+interface MdteSeries extends Series { expiration: string; }
+
+// OCC "SPYyymmdd[CP]strike8" → expiration "20yy-mm-dd".
+function expFromOcc(occ: string): string {
+  return `20${occ.slice(3, 5)}-${occ.slice(5, 7)}-${occ.slice(7, 9)}`;
+}
+
+export function loadMultiDteByDay(dates: string[], dir = MDTE_DIR): Map<string, MdteSeries[]> {
+  const out = new Map<string, MdteSeries[]>();
+  for (const date of dates) {
+    const path = `${dir}/${date}.json`;
+    if (!existsSync(path)) continue;
+    let rows: Row[];
+    try { rows = JSON.parse(readFileSync(path, "utf8")) as Row[]; } catch { continue; }
+    const bySym = new Map<string, MdteSeries>();
+    for (const r of rows) {
+      if (r.bid == null || r.ask == null) continue;
+      let s = bySym.get(r.occ_symbol);
+      if (!s) { s = { strike: Number(r.strike), optType: r.opt_type, expiration: expFromOcc(r.occ_symbol), ts: [], bid: [], ask: [] }; bySym.set(r.occ_symbol, s); }
+      s.ts.push(Number(r.ts)); s.bid.push(Number(r.bid)); s.ask.push(Number(r.ask));
+    }
+    for (const s of bySym.values()) {
+      if (s.ts.length > 1 && s.ts[0] > s.ts[s.ts.length - 1]) {
+        const order = s.ts.map((_, i) => i).sort((a, b) => s.ts[a] - s.ts[b]);
+        s.ts = order.map((i) => s.ts[i]); s.bid = order.map((i) => s.bid[i]); s.ask = order.map((i) => s.ask[i]);
+      }
+    }
+    if (bySym.size) out.set(date, [...bySym.values()]);
+  }
+  return out;
+}
+
+// Multi-DTE chain provider: serves REAL bid/ask for ALL cached expirations at the
+// realistic fill time, each Quote tagged with .expiration (so the driver resolves
+// the held/target contract).
+export function makeMultiDteChain(contracts: MdteSeries[]): (tsMs: number) => Quote[] {
+  return (tsMs) => {
+    const at = tsMs + FILL_LAG_MS;
+    const quotes: Quote[] = [];
+    for (const c of contracts) {
+      const i = idxAtOrBefore(c.ts, at);
+      if (i < 0 || at - c.ts[i] > 180_000) continue;
+      const bid = c.bid[i], ask = c.ask[i];
+      if (!(ask > 0) || ask < bid) continue;
+      quotes.push({ strike: c.strike, optType: c.optType, bid, ask, mid: (bid + ask) / 2, expiration: c.expiration });
+    }
+    return quotes;
+  };
+}

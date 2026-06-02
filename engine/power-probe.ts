@@ -45,6 +45,17 @@ const M_LIVE: Management = { ...M_PREMSTOP, costGate: { minMoveToCostRatio: 3.0 
 const M_RIDE: Management = { risk: { defineR: "premium_stop", premiumStopPct: 50 }, eodFlattenMinToClose: 3 };
 const M_RIDE_GATE: Management = { ...M_RIDE, costGate: { minMoveToCostRatio: 3.0 } };
 
+// ── TAKE-PROFIT variants (the user's ask: lock big gains WITHOUT capping the
+// convex tail). R = 50% of premium, so atR=3 ≈ +150% premium, atR=4 ≈ +200%.
+// A scaleOut whose fraction rounds to ~0 contracts still fires its `then` action,
+// so we can ENGAGE a protection (breakeven / giveback trail) after a big gain
+// WITHOUT closing anything early. All on top of the LIVE base (M_PREMSTOP).
+const M_TP150: Management = { ...M_PREMSTOP, scaleOut: [{ atR: 3, fraction: 1.0 }] };                 // full close at +150% premium
+const M_TP200: Management = { ...M_PREMSTOP, scaleOut: [{ atR: 4, fraction: 1.0 }] };                 // full close at +200% premium
+const M_BE100: Management = { ...M_PREMSTOP, scaleOut: [{ atR: 2, fraction: 0.01, then: "move_stop_breakeven" }] }; // after +100%, never give back to a loss
+const M_TRAIL100_50: Management = { ...M_PREMSTOP, scaleOut: [{ atR: 2, fraction: 0.01, then: "engage_trail" }], trail: { mode: "premium_giveback", premiumGivebackPct: 50 } }; // after +100%, give back ≤50% of peak
+const M_TRAIL100_40: Management = { ...M_PREMSTOP, scaleOut: [{ atR: 2, fraction: 0.01, then: "engage_trail" }], trail: { mode: "premium_giveback", premiumGivebackPct: 40 } };
+
 type Sessions = Awaited<ReturnType<typeof loadRealSessions>>;
 
 function runSide(sessions: Sessions, chainOf: (s: Sessions[number]) => ChainProvider, mgmt: Management | undefined, costModel: CostModel): Trade[] {
@@ -80,10 +91,12 @@ async function main() {
 
   const configs: [string, Management | undefined][] = [
     ["base", undefined],
-    ["+premStop", M_PREMSTOP],
-    ["LIVE(gate+stop)", M_LIVE],
-    ["ride-tail", M_RIDE],
-    ["ride+gate", M_RIDE_GATE],
+    ["+premStop(LIVE-)", M_PREMSTOP],
+    ["+TP@150%", M_TP150],
+    ["+TP@200%", M_TP200],
+    ["+BE@100%", M_BE100],
+    ["+trail@100/50", M_TRAIL100_50],
+    ["+trail@100/40", M_TRAIL100_40],
   ];
 
   console.log(`\n  POWER probe · ${sessions.length} sessions · ${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · ${srcLabel}, post-cost\n`);

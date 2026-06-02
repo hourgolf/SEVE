@@ -13,6 +13,7 @@ import { MasterStrip } from "@/components/console/MasterStrip";
 import { StepRow } from "@/components/console/hw/StepRow";
 import { Bezel } from "@/components/console/hw/Bezel";
 import { SignalsTape } from "@/components/console/SignalsTape";
+import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { TapeHealth } from "@/components/TapeHealth";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -112,7 +113,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               <button className={`m-tog${show.pos ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, pos: !s.pos }))}>POSITIONS</button>
             </div>
             {show.chart && (
-              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} mobile />
+              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} mobile trades={feed.recentTrades} openPositions={feed.positions} />
             )}
             {show.chain && (
               <>
@@ -143,6 +144,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <Bezel label="16-Step Tape · recent signals" className="tape m-steptape">
               <StepRow steps={feed.steps} />
             </Bezel>
+            <DailyAutopsyPanel strategists={desk.strategists} />
           </>
         )}
 

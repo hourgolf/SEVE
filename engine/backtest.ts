@@ -37,6 +37,7 @@ function etMinuteOfDay(ms: number): number {
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
 import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
+import { loadDatabentoByDay, makeDatabentoChain } from "./databentosource";
 import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
 import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
 import { DEFAULT_POWER_PARAMS, powerEvaluate } from "./strategies/power";
@@ -67,6 +68,31 @@ const FUND: FundState = {
 
 const findQuote = (chain: Quote[], strike: number, optType: "call" | "put") =>
   chain.find((q) => q.strike === strike && q.optType === optType);
+
+// Defined max loss of a multi-leg structure, per ONE unit ($). Option expiry
+// payoff is piecewise-linear with kinks only at strikes, so the worst case sits
+// at a strike or an unbounded end — evaluate P&L at {0, each strike, far OTM} and
+// take the worst. netPerUnit is the SIGNED net premium per unit (>0 debit paid,
+// <0 credit received), per share. A truly undefined-risk structure (uncovered
+// short) returns a huge loss → riskGovernor sizes it to 0 (defended; capability
+// check's validateLegs already blocks naked shorts upstream).
+export function structureMaxLossUsd(
+  legs: { strike: number; optType: OptType; side: "long" | "short"; ratio: number }[],
+  netPerUnit: number
+): number {
+  const strikes = legs.map((l) => l.strike);
+  const probes = [0, ...strikes, Math.max(...strikes) * 2 + 10];
+  let minPnl = Infinity;
+  for (const S of probes) {
+    let payoff = 0;
+    for (const l of legs) {
+      const intrinsic = l.optType === "call" ? Math.max(0, S - l.strike) : Math.max(0, l.strike - S);
+      payoff += (l.side === "long" ? 1 : -1) * intrinsic * l.ratio;
+    }
+    minPnl = Math.min(minPnl, payoff - netPerUnit); // structure worth at expiry minus what you paid
+  }
+  return -minPnl * 100; // $ per unit (a loss is positive)
+}
 
 // One session through the engine. Pure: bars + day IV in, trades out. Shared by
 // the synthetic and real paths — the ONLY thing that differs is the bar source.
@@ -156,6 +182,33 @@ export function simulateSession(
       }
     }
 
+    // MULTI-LEG net-structure premium exit (mirror of the single-leg block, on the
+    // net per-unit value). DEBIT (entryPrice ≥ 0): profit/stop vs entry like a long.
+    // CREDIT (entryPrice < 0): profit = buy back for ≤ credit×(1−profit%); stop =
+    // cost to close ≥ credit×(1+stop%) (e.g. profit 50 / stop 100 = "+50% of credit
+    // / −2× credit"). Trigger off mid; the exit branch below fills with real cost.
+    if (pos && pos.legs && premiumExit && (!intent || intent.kind !== "exit")) {
+      let netClose = 0;
+      let priced = true;
+      for (const leg of pos.legs) {
+        const lq = findQuote(chain, leg.strike, leg.optType);
+        if (!lq) { priced = false; break; }
+        netClose += (leg.side === "long" ? lq.mid : -lq.mid) * (leg.qty / pos.qty); // per-unit liquidation value
+      }
+      if (priced) {
+        const entryNet = pos.entryPrice; // signed per-unit ( >0 debit · <0 credit )
+        if (entryNet >= 0) {
+          if (premiumExit.profitPct != null && netClose >= entryNet * (1 + premiumExit.profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
+          else if (premiumExit.stopPct != null && netClose <= entryNet * (1 - premiumExit.stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
+        } else {
+          const credit = -entryNet; // premium received per unit
+          const costToClose = -netClose; // what you'd pay to buy the structure back
+          if (premiumExit.profitPct != null && costToClose <= credit * (1 - premiumExit.profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
+          else if (premiumExit.stopPct != null && costToClose >= credit * (1 + premiumExit.stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
+        }
+      }
+    }
+
     if (pos && intent && intent.kind === "exit") {
       let exitPrice: number, pnl: number, tradeCost: number;
       const comm = gross ? 0 : costModel.commissionPerContract;
@@ -194,33 +247,40 @@ export function simulateSession(
         pnl,
         exitReason: intent.reason,
         cost: tradeCost,
-        riskUsd: 0.5 * pos.entryPrice * pos.qty * 100, // notional R = 50% of premium at risk
+        // R: multi-leg = the structure's DEFINED max loss; single-leg = 50% of premium.
+        riskUsd: pos.legs ? (pos.maxLossUsd ?? 0) * pos.qty : 0.5 * pos.entryPrice * pos.qty * 100,
       });
       pos = null;
     } else if (!pos && intent && intent.kind === "enter") {
       if (intent.legs?.length) {
         // MULTI-LEG: resolve each leg's strike off ATM, price it (long→ask, short→bid),
-        // size off the net debit. Skip if any leg is unquotable or the net isn't a debit.
+        // and size off the structure's DEFINED MAX LOSS (so credit spreads — net
+        // credit, not a debit — size correctly). Skip if any leg is unquotable or
+        // the structure has no bounded risk. `net` is the signed per-unit premium
+        // ( >0 debit paid · <0 credit received ).
         const atm = Math.round(f.close);
         const resolved: { strike: number; optType: OptType; side: "long" | "short"; ratio: number; px: number; edgeUsd: number }[] = [];
-        let debit = 0, ok = true;
+        let net = 0, ok = true;
         for (const ls of intent.legs) {
+          const ratio = ls.ratio ?? 1;
           const lq = findQuote(chain, atm + ls.strikeOffset, ls.optType);
           if (!lq) { ok = false; break; }
           const fc = gross ? { fill: lq.mid, edgeUsd: 0 } : fillWithCost(ls.side === "long" ? "buy" : "sell", lq, costModel);
-          resolved.push({ strike: atm + ls.strikeOffset, optType: ls.optType, side: ls.side, ratio: ls.ratio, px: fc.fill, edgeUsd: fc.edgeUsd });
-          debit += (ls.side === "long" ? fc.fill : -fc.fill) * ls.ratio;
+          resolved.push({ strike: atm + ls.strikeOffset, optType: ls.optType, side: ls.side, ratio, px: fc.fill, edgeUsd: fc.edgeUsd });
+          net += (ls.side === "long" ? fc.fill : -fc.fill) * ratio;
         }
-        if (ok && debit > 0) {
-          const r = riskGovernor(cfg, fund, dayPnl, dayPnl, debit, false); // size off net debit
-          if (r.ok) {
-            pos = {
-              slug: cfg.slug, strike: atm, optType: "call", qty: r.qty,
-              entryPrice: debit, entryMinute: i, entryUnderlying: f.close, peakFavorable: f.close,
-              entryEdgeUsd: resolved.reduce((s, l) => s + l.edgeUsd * l.ratio * r.qty, 0),
-              legs: resolved.map((l) => ({ strike: l.strike, optType: l.optType, side: l.side, qty: l.ratio * r.qty, entryPrice: l.px })),
-            };
-          }
+        const maxLossUsd = ok ? structureMaxLossUsd(resolved, net) : 0;
+        // size off max loss (per-unit $) → riskGovernor's entryAsk proxy = maxLoss/100.
+        const r = ok && maxLossUsd > 0 ? riskGovernor(cfg, fund, dayPnl, dayPnl, maxLossUsd / 100, false) : { ok: false as const, reason: "no_risk" };
+        if (r.ok) {
+          pos = {
+            slug: cfg.slug, strike: atm, optType: "call", qty: r.qty,
+            entryPrice: net, entryMinute: i, entryUnderlying: f.close, peakFavorable: f.close,
+            entryEdgeUsd: resolved.reduce((s, l) => s + l.edgeUsd * l.ratio * r.qty, 0),
+            legs: resolved.map((l) => ({ strike: l.strike, optType: l.optType, side: l.side, qty: l.ratio * r.qty, entryPrice: l.px })),
+            structure: intent.structure && intent.structure !== "single-leg" ? intent.structure : "straddle",
+            maxLossUsd,
+          };
         }
       } else if (intent.direction) {
         const strike = Math.round(f.close);
@@ -376,16 +436,25 @@ async function main() {
   const stratLabel = stratName + costTag;
 
   if (source === "real") {
-    const sessions = await loadRealSessions();
+    // --days N scopes to the last N calendar days (e.g. the Databento-cached
+    // window) so a real-options run isn't diluted by modeled-chain fallback days.
+    const sinceDaysAgo = argNum("days", 0);
+    const sessions = await loadRealSessions(sinceDaysAgo > 0 ? { sinceDaysAgo } : undefined);
     if (!sessions.length) {
       console.log("\nNo real sessions found — backfill underlying_bars first (07_backfill_bars.sql).\n");
       return;
     }
-    // --options real → price from real option_bars (forward-filled, modeled spread);
-    // otherwise model the chain with Black-Scholes off the day's realized IV.
-    const useRealOptions = argStr("options", "synthetic") === "real";
+    // --options databento → REAL NBBO from the local Databento cache (real bid/ask,
+    // real spread crossed). --options real → option_bars trade prices + modeled 3%
+    // spread. else → Black-Scholes modeled chains off the day's realized IV.
+    const optMode = argStr("options", "synthetic");
+    const useDatabento = optMode === "databento";
+    const useRealOptions = optMode === "real";
+    // Databento gives REAL bid/ask → cross the ACTUAL spread, not the 3% model.
+    const cost: CostModel = useDatabento ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL;
     let byDay = new Map();
-    if (useRealOptions) {
+    if (useDatabento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET));
+    else if (useRealOptions) {
       try {
         byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET));
       } catch (e) {
@@ -398,15 +467,20 @@ async function main() {
     for (const s of sessions) {
       const contracts = byDay.get(s.dateET);
       let chainAt: ChainProvider;
-      if (useRealOptions && contracts && contracts.length) {
+      if (useDatabento && contracts && contracts.length) {
+        chainAt = makeDatabentoChain(contracts as Parameters<typeof makeDatabentoChain>[0]);
+        realDays++;
+      } else if (useRealOptions && contracts && contracts.length) {
         chainAt = makeRealChain(contracts);
         realDays++;
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, cost, management));
     }
-    const optLabel = useRealOptions
+    const optLabel = useDatabento
+      ? `REAL NBBO · Databento cbbo-1m (${realDays}/${sessions.length} days) + real spread`
+      : useRealOptions
       ? `REAL BARS + REAL option prices (modeled spread) · ${realDays}/${sessions.length} days had option data`
       : "REAL BARS + modeled (Black-Scholes) option chains";
     const span = `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real SPY 1-min`;

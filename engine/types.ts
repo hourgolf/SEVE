@@ -24,6 +24,9 @@ export interface Quote {
   bid: number;
   ask: number;
   mid: number;
+  // Multi-DTE backtests serve several expirations at once; tagged so a leg/position
+  // resolves the right contract. Undefined for single-expiration (0DTE) chains.
+  expiration?: string;
 }
 
 // The operator's mixer settings (mirrors strategist_config).
@@ -113,10 +116,19 @@ export interface Position {
   qty: number; // contracts (long, +) / structures for multi-leg
   entryPrice: number; // per-contract fill (single) / net debit per unit (multi)
   entryMinute: number; // bar index at entry (for the time-stop)
+  entryTs?: number; // epoch ms at entry (multi-DTE: survives the per-session entryMinute reset)
   entryUnderlying: number; // spot at entry (for the price stop)
   peakFavorable: number; // best favorable underlying since entry (trailing stop)
   legs?: PositionLeg[]; // present → multi-leg structure
   entryEdgeUsd?: number; // entry-side spread+slippage cost ($, total over legs×qty)
+  // Multi-leg only: the structure label + its DEFINED max loss ($/structure). For
+  // a credit spread max loss = (wing width − net credit)×100; for a debit
+  // structure (straddle/debit vertical) it's the debit. Drives sizing (size off
+  // risk, not debit) and R (riskUsd = maxLossUsd × qty). entryPrice carries the
+  // SIGNED net premium per unit ( >0 debit paid · <0 credit received ).
+  structure?: "single-leg" | "straddle" | "strangle" | "vertical" | "iron-condor";
+  maxLossUsd?: number; // per-structure defined max loss ($)
+  expiration?: string; // the contract expiry (multi-DTE driver; held across sessions)
 }
 
 // A completed round-trip (for metrics).

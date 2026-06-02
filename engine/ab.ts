@@ -14,8 +14,8 @@
 
 import { simulateSession } from "./backtest";
 import { STRATEGY_REGISTRY } from "./registry";
-import { SMART_SPECS, basePairOf } from "./smart-specs";
-import { specToStrategyDef } from "./specEvaluate";
+import { SMART_SPECS, MULTILEG_SPECS, basePairOf } from "./smart-specs";
+import { specToStrategyDef, specPremiumExit } from "./specEvaluate";
 import { loadRealSessions } from "./realsource";
 import { priceChain } from "./market";
 import { DEFAULT_COST_MODEL, type CostModel } from "./cost";
@@ -79,10 +79,10 @@ function abMetrics(trades: Trade[]): ABMetrics {
 
 type Sessions = Awaited<ReturnType<typeof loadRealSessions>>;
 
-function runSide(sessions: Sessions, chainOf: (s: Sessions[number]) => ChainProvider, evalFor: (bars: Bar[]) => Evaluate, management: Management | undefined, costModel: CostModel): Trade[] {
+function runSide(sessions: Sessions, chainOf: (s: Sessions[number]) => ChainProvider, evalFor: (bars: Bar[]) => Evaluate, management: Management | undefined, costModel: CostModel, premiumExit?: { profitPct?: number; stopPct?: number }): Trade[] {
   const all: Trade[] = [];
   for (const s of sessions) {
-    all.push(...simulateSession(s.bars, CFG, FUND, evalFor(s.bars), chainOf(s), false, undefined, costModel, management));
+    all.push(...simulateSession(s.bars, CFG, FUND, evalFor(s.bars), chainOf(s), false, premiumExit, costModel, management));
   }
   return all;
 }
@@ -159,14 +159,18 @@ async function main() {
 
   for (const [base, smart] of pairs) {
     const baseDef = STRATEGY_REGISTRY[base];
-    const spec = SMART_SPECS[smart];
+    const spec = SMART_SPECS[smart] ?? MULTILEG_SPECS[smart];
     if (!baseDef || !spec) { console.log(`  (skip ${base}:${smart} — base or smart not found)`); continue; }
     const baseEval = (bars: Bar[]) => baseDef.build(bars, baseDef.timeframeMin);
     const smartDef = specToStrategyDef(spec);
     // full: smart entry + smart mgmt.  --mgmt-only: BASE entry + smart mgmt.
     const smartEval = mgmtOnly ? baseEval : (bars: Bar[]) => smartDef.build(bars, smartDef.timeframeMin);
+    // The smart/spec side honors its spec.exits (profit/stop) — needed for the
+    // multi-leg specs (no management block); existing *-smart specs have empty
+    // exits so this is a no-op for them (they exit via the management state machine).
+    const smartPx = specPremiumExit(spec);
     const bm = abMetrics(runSide(sessions, chainOf, baseEval, undefined, COST));
-    const sm = abMetrics(runSide(sessions, chainOf, smartEval, spec.management, COST));
+    const sm = abMetrics(runSide(sessions, chainOf, smartEval, spec.management, COST, smartPx));
     printPair(base, smart, bm, sm, mgmtOnly);
   }
   console.log("");

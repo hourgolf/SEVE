@@ -23,7 +23,12 @@ const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL, SB_ANON = process.env.NEXT_
 const AUTH = "Basic " + Buffer.from((KEY ?? "") + ":").toString("base64");
 const arg = (n: string, d: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : d; };
 const FROM = arg("from", "2026-03-01"), TO = arg("to", "2026-06-01"), WINDOW = Number(arg("window", "6"));
-const OUTDIR = "data/databento";
+// --dte N: also fetch contracts expiring up to N trading days AFTER each session
+// (so a position opened today in a 1–2DTE contract can be marked through expiry).
+// 0 = 0DTE only (the default single-expiration cache). When >0, defaults the
+// output to a SEPARATE dir so the validated 0DTE cache isn't clobbered.
+const DTE = Number(arg("dte", "0"));
+const OUTDIR = arg("outdir", DTE > 0 ? "data/databento-mdte" : "data/databento");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const ET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -69,17 +74,23 @@ async function main() {
   const sb = createClient(SB_URL, SB_ANON, { auth: { persistSession: false } });
   mkdirSync(OUTDIR, { recursive: true });
   const days = await dayRanges(sb);
-  console.log(`backfill-databento: ${days.length} trading days (${days[0]?.date} → ${days[days.length - 1]?.date}), ATM ±$${WINDOW}, 0DTE cbbo-1m → ${OUTDIR}/`);
+  const dteLabel = DTE > 0 ? `0–${DTE}DTE (next ${DTE} expiries)` : "0DTE";
+  console.log(`backfill-databento: ${days.length} trading days (${days[0]?.date} → ${days[days.length - 1]?.date}), range ±$${WINDOW}, ${dteLabel} cbbo-1m → ${OUTDIR}/`);
   let grand = 0;
-  for (const d of days) {
+  for (let i = 0; i < days.length; i++) {
+    const d = days[i];
     const loK = Math.floor(d.lo) - WINDOW, hiK = Math.ceil(d.hi) + WINDOW;
+    // expirations to fetch on this session day: today + the next DTE trading days
+    // (the days array IS the trading calendar, so index +dte skips weekends/holidays).
+    const exps: string[] = [];
+    for (let dte = 0; dte <= DTE; dte++) { const e = days[i + dte]?.date; if (e) exps.push(e); }
     const symbols: string[] = [];
-    for (let k = loK; k <= hiK; k++) { symbols.push(osi(d.date, k, "call"), osi(d.date, k, "put")); }
+    for (const exp of exps) for (let k = loK; k <= hiK; k++) { symbols.push(osi(exp, k, "call"), osi(exp, k, "put")); }
     try {
       const rows = await fetchDay(symbols, d.date);
       writeFileSync(`${OUTDIR}/${d.date}.json`, JSON.stringify(rows));
       grand += rows.length;
-      console.log(`  ${d.date}  strikes ${loK}-${hiK} (${symbols.length} syms) → ${rows.length} quote-bars`);
+      console.log(`  ${d.date}  strikes ${loK}-${hiK} × exp[${exps.join(",")}] (${symbols.length} syms) → ${rows.length} quote-bars`);
     } catch (e) {
       console.warn(`  ${d.date}: ${(e as Error).message}`);
     }

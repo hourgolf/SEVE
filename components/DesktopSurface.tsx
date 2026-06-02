@@ -17,6 +17,7 @@ import { Bezel } from "@/components/console/hw/Bezel";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { SignalsTape } from "@/components/console/SignalsTape";
+import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { computeLiveMarks } from "@/lib/desk/liveMarks";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
@@ -85,7 +86,7 @@ export function DesktopSurface({
 
       {/* ---- 01 · LIVE DESK (chart hero → book + chain | P&L) ---------- */}
       <SectionLabel id="live" idx="01">Live Desk</SectionLabel>
-      <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} />
+      <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} />
       <div className="grid grid--live live-body">
         <div className="col">
           <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} />
@@ -137,8 +138,9 @@ export function DesktopSurface({
         <StepRow steps={feed.steps} />
       </Bezel>
 
-      {/* ---- 03 · LOG (signals + tape health → event log) ------------- */}
+      {/* ---- 03 · LOG (autopsy → signals + tape health → event log) --- */}
       <SectionLabel id="log" idx="03">Log</SectionLabel>
+      <DailyAutopsyPanel strategists={desk.strategists} />
       <div className="grid grid--live grid--even">
         <div className="col">
           <SignalsTape signals={feed.signals} />

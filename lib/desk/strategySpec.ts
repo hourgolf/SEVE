@@ -89,6 +89,30 @@ export interface Management {
   costGate?: { minMoveToCostRatio: number }; // veto if expectedPremiumMove < ratio × roundTripCost
 }
 
+// One leg of a multi-leg structure (Brief: MULTI-LEG). Mirrors engine LegSpec
+// (engine/types.ts) 1:1 so specEvaluate maps a SpecEntry's legs straight to
+// intent.legs. Strikes are SIGNED $-offsets from the ATM strike at entry
+// (0 = ATM, +n = n strikes above spot, −n = below), so the geometry is described
+// once and resolved to real strikes live. `long` = bought (pays debit), `short`
+// = sold (collects credit). The engine sizes a defined-risk structure off its
+// MAX LOSS (width − net credit), not the debit, so credit spreads size correctly.
+// A leg's strike is anchored to a structural LEVEL plus a signed $-offset. Default
+// "atm" reproduces the plain ATM-relative offset; the others let a thesis sell/buy
+// against the level the tape should respect (OR boundary, VWAP, prior-day H/L) —
+// thesis #3's "edge multiplier." The anchor is resolved to an equivalent ATM
+// offset at signal time in specEvaluate (where the level data lives), so the engine
+// leg-resolution stays unchanged. orb_hi/orb_lo need the OR set (entry self-gates
+// on it); pdh/pdl need the prior-day levels (passed to the evaluator).
+export type LegAnchor = "atm" | "vwap" | "orb_hi" | "orb_lo" | "pdh" | "pdl";
+
+export interface SpecLeg {
+  optType: "call" | "put";
+  side: "long" | "short";
+  strikeOffset: number; // signed $-strikes from the anchor
+  ratio?: number; // qty multiplier vs the structure size (default 1)
+  anchor?: LegAnchor; // default "atm"
+}
+
 export interface SpecEntry {
   direction: "call" | "put" | "both";
   all: Condition[]; // conditions to enter
@@ -96,6 +120,10 @@ export interface SpecEntry {
   // Confluence count: require AT LEAST N of the (supported) conditions to hold
   // instead of all of them (e.g. "≥2 of N features"). Omit → all must hold.
   atLeast?: number;
+  // Multi-leg geometry. Present (and used) only when meta.structure is not
+  // "single-leg"; the entry then emits intent.legs instead of a single direction.
+  // For single-leg structures this is ignored (direction drives the trade).
+  legs?: SpecLeg[];
 }
 
 export interface StrategySpec {
@@ -154,6 +182,56 @@ export function validateManagement(m: Management | undefined, structure: LegStru
   return errs;
 }
 
+// Expected leg count per structure (single-leg carries none).
+const LEG_COUNT: Partial<Record<LegStructure, number>> = {
+  straddle: 2, strangle: 2, "vertical-spread": 2, "iron-condor": 4,
+};
+
+// Validate a multi-leg entry's geometry against its declared structure. Returns
+// precise errors (empty = valid). The load-bearing check is DEFINED RISK: every
+// SHORT leg must be covered by a LONG leg of the same type further out-of-the-
+// money (a higher-offset long call / lower-offset long put), so max loss is
+// bounded by the wing — the desk never sells naked premium. Offsets are signed
+// $-strikes from ATM (engine/types.ts LegSpec convention).
+export function validateLegs(structure: LegStructure, legs: SpecLeg[] | undefined): string[] {
+  const errs: string[] = [];
+  if (structure === "single-leg") return errs; // legs ignored for single-leg
+  const want = LEG_COUNT[structure];
+  if (!legs || !legs.length) return [`${structure} needs a legs[] geometry`];
+  if (want != null && legs.length !== want) errs.push(`${structure} needs exactly ${want} legs (got ${legs.length})`);
+  legs.forEach((l, i) => {
+    if (l.optType !== "call" && l.optType !== "put") errs.push(`leg[${i}].optType must be call|put`);
+    if (l.side !== "long" && l.side !== "short") errs.push(`leg[${i}].side must be long|short`);
+    if (typeof l.strikeOffset !== "number" || !isFinite(l.strikeOffset)) errs.push(`leg[${i}].strikeOffset must be a finite number`);
+    if (l.ratio != null && !(l.ratio > 0)) errs.push(`leg[${i}].ratio must be > 0`);
+  });
+  if (errs.length) return errs; // don't run the risk check on malformed legs
+  // Straddle/strangle = all long (debit, bounded by premium). Verticals/condors
+  // must define risk: each short leg covered by a further-OTM long of same type.
+  if (structure === "straddle" || structure === "strangle") {
+    if (legs.some((l) => l.side === "short")) errs.push(`${structure} legs must all be long (debit structure)`);
+    const hasCall = legs.some((l) => l.optType === "call"), hasPut = legs.some((l) => l.optType === "put");
+    if (!hasCall || !hasPut) errs.push(`${structure} needs one call and one put`);
+    if (structure === "strangle") {
+      const c = legs.find((l) => l.optType === "call"), p = legs.find((l) => l.optType === "put");
+      if (c && p && !(c.strikeOffset > p.strikeOffset)) errs.push("strangle call must be above the put (call offset > put offset)");
+    }
+  } else {
+    // Defined-risk coverage is only meaningful between legs on the SAME anchor
+    // (offsets are relative to it) — so a short is covered by a further-OTM long
+    // of the same optType AND anchor.
+    const anc = (l: SpecLeg) => l.anchor ?? "atm";
+    for (const s of legs.filter((l) => l.side === "short")) {
+      const covered = legs.some(
+        (l) => l.side === "long" && l.optType === s.optType && anc(l) === anc(s) &&
+          (s.optType === "call" ? l.strikeOffset > s.strikeOffset : l.strikeOffset < s.strikeOffset)
+      );
+      if (!covered) errs.push(`short ${s.optType} at ${anc(s)}${s.strikeOffset >= 0 ? "+" : ""}${s.strikeOffset} is uncovered (no further-OTM long ${s.optType} on the same anchor) — undefined risk`);
+    }
+  }
+  return errs;
+}
+
 // Every condition kind the compiler is allowed to emit (the Condition union).
 const KNOWN_KINDS = new Set<string>([
   "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "rel_vol",
@@ -200,16 +278,26 @@ export interface CapabilityReport {
   unsupported: string[]; // human-readable gaps (data feeds / structure / pending runtime)
   isSmart: boolean; // has a management block
   managementErrors: string[]; // schema-validation errors on the management block
+  legErrors: string[]; // geometry-validation errors on multi-leg entries (empty for single-leg)
 }
 
 export function capabilityCheck(spec: StrategySpec): CapabilityReport {
   const gaps: string[] = [];
   const structureOk = SUPPORTED_STRUCTURES.has(spec.meta.structure);
-  if (!structureOk) gaps.push(`${spec.meta.structure} orders (multi-leg not supported yet)`);
+  if (!structureOk) gaps.push(`${spec.meta.structure} orders (multi-leg routing — backtest-only, not run live yet)`);
   for (const e of spec.entries ?? []) {
     for (const c of e.all ?? []) {
       if (!SUPPORTED_KINDS.has(c.kind)) gaps.push(GAP_LABEL[c.kind] ?? c.kind);
     }
+  }
+  // Multi-leg geometry: validate every entry's legs against the declared structure
+  // (defined-risk check). Surfaced so a malformed multi-leg spec shows a precise
+  // geometry error, not just the blanket "not supported yet" gap.
+  const legErrors: string[] = [];
+  if (spec.meta.structure !== "single-leg") {
+    (spec.entries ?? []).forEach((e, i) => {
+      for (const err of validateLegs(spec.meta.structure, e.legs)) legErrors.push(`entry[${i}]: ${err}`);
+    });
   }
   // Management block: validate now; flag that the runtime executes in PR4.
   const isSmart = !!spec.management;
@@ -222,7 +310,8 @@ export function capabilityCheck(spec: StrategySpec): CapabilityReport {
     unsupported,
     isSmart,
     managementErrors,
-    runnable: unsupported.length === 0 && managementErrors.length === 0,
+    legErrors,
+    runnable: unsupported.length === 0 && managementErrors.length === 0 && legErrors.length === 0,
   };
 }
 

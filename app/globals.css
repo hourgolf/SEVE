@@ -1225,3 +1225,50 @@ td.clk.sel {
     margin-left: 0;
   }
 }
+
+/* ---------- Daily Autopsy panel (end-of-day report viewer) --------------- */
+.au-dates { margin-bottom: 10px; }
+.au-dates button { font-family: var(--mono); }
+.au-market { font-size: 12px; line-height: 1.5; color: var(--text); margin: 0 0 8px; }
+.au-fund {
+  display: flex; gap: 14px; font-family: var(--mono); font-size: 11px; color: var(--muted);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 10px;
+}
+.au-fund .pos { color: var(--green); }
+.au-fund .neg { color: var(--red); }
+
+.au-channels { display: flex; flex-direction: column; gap: 8px; }
+.au-ch { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.au-ch-head { display: flex; align-items: center; gap: 7px; }
+.au-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.au-name { font-weight: 600; font-size: 12px; color: var(--text); flex: 1; }
+.au-pnl { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.au-pnl.pos { color: var(--green); }
+.au-pnl.neg { color: var(--red); }
+.au-metrics { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.au-verdict { font-size: 11.5px; line-height: 1.45; color: #c4ccd0; margin-top: 5px; }
+.au-flaws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.au-flaw, .au-chip {
+  font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px;
+  padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-bright);
+}
+.au-sev-high { color: var(--red); border-color: color-mix(in srgb, var(--red) 50%, transparent); background: color-mix(in srgb, var(--red) 13%, transparent); }
+.au-sev-med { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); background: color-mix(in srgb, var(--amber) 12%, transparent); }
+.au-sev-low { color: var(--muted); }
+.au-dormant { font-family: var(--mono); font-size: 10.5px; color: var(--muted-2); padding-top: 2px; }
+
+.au-section { margin-top: 12px; }
+.au-sub {
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); margin-bottom: 7px; border-top: 1px solid var(--border); padding-top: 9px;
+}
+.au-finding { margin-bottom: 10px; }
+.au-finding-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.au-recur { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
+.au-resolved { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
+.au-ftype { font-size: 12px; color: var(--text); }
+.au-fch { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.au-ev { font-size: 11.5px; line-height: 1.45; color: #c4ccd0; margin-top: 4px; }
+.au-exp { font-size: 11px; line-height: 1.4; color: var(--blue); margin-top: 3px; }
+.au-actions { margin: 0; padding-left: 16px; }
+.au-actions li { font-size: 11.5px; line-height: 1.5; color: var(--text); margin-bottom: 4px; }
