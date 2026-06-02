@@ -22,12 +22,13 @@ import type { Position } from "@/lib/desk/types";
 type Mode = "line" | "candles";
 const MODE_KEY = "seve-chart-mode", TF_KEY = "seve-chart-tf", RANGE_KEY = "seve-chart-range";
 const VWAP_KEY = "seve-chart-vwap", EMA_KEY = "seve-chart-ema", VOL_KEY = "seve-chart-vol", MACD_KEY = "seve-chart-macd";
-const EMA_FAST_KEY = "seve-chart-ema-fast", EMA_SLOW_KEY = "seve-chart-ema-slow";
-const EMA_FAST_DEFAULT = 9, EMA_SLOW_DEFAULT = 21, EMA_MIN = 2, EMA_MAX = 200;
+const EMA_FAST_KEY = "seve-chart-ema-fast", EMA_SLOW_KEY = "seve-chart-ema-slow", EMA_THIRD_KEY = "seve-chart-ema-third";
+const TRADES_KEY = "seve-chart-trades";
+const EMA_FAST_DEFAULT = 9, EMA_SLOW_DEFAULT = 21, EMA_THIRD_DEFAULT = 50, EMA_MIN = 2, EMA_MAX = 200;
 
 const C = {
   bg: "#0f1619", text: "#6f828a", grid: "#161f23", border: "#2a3a42",
-  up: "#2fd573", down: "#f0563f", vwap: "#ffb224", emaFast: "#45c4d6", emaSlow: "#c061ff",
+  up: "#2fd573", down: "#f0563f", vwap: "#ffb224", emaFast: "#45c4d6", emaSlow: "#c061ff", emaThird: "#ff8f6b",
   area: "rgba(47,213,115,0.28)", areaBottom: "rgba(47,213,115,0.01)", areaLine: "#2fd573",
   macd: "#45c4d6", macdSig: "#ffb224",
 };
@@ -67,6 +68,8 @@ export function IntradayChart({
   const [showMacd, setShowMacd] = useState(false);
   const [emaFastP, setEmaFastP] = useState(EMA_FAST_DEFAULT);
   const [emaSlowP, setEmaSlowP] = useState(EMA_SLOW_DEFAULT);
+  const [emaThirdP, setEmaThirdP] = useState(EMA_THIRD_DEFAULT);
+  const [showTrades, setShowTrades] = useState(true);
 
   const elRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -76,6 +79,7 @@ export function IntradayChart({
   const vwapRef = useRef<ISeriesApi<"Line"> | null>(null);
   const fastRef = useRef<ISeriesApi<"Line"> | null>(null);
   const slowRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const thirdRef = useRef<ISeriesApi<"Line"> | null>(null);
   const macdRef = useRef<{ hist: ISeriesApi<"Histogram">; macd: ISeriesApi<"Line">; sig: ISeriesApi<"Line"> } | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markersOnRef = useRef<Mode | null>(null);
@@ -95,6 +99,8 @@ export function IntradayChart({
     if (g(MACD_KEY) === "1") setShowMacd(true);
     const ef = Number(g(EMA_FAST_KEY)); if (ef >= EMA_MIN && ef <= EMA_MAX) setEmaFastP(ef);
     const es = Number(g(EMA_SLOW_KEY)); if (es >= EMA_MIN && es <= EMA_MAX) setEmaSlowP(es);
+    const et = Number(g(EMA_THIRD_KEY)); if (et >= EMA_MIN && et <= EMA_MAX) setEmaThirdP(et);
+    if (g(TRADES_KEY) === "0") setShowTrades(false);
   }, []);
 
   const persist = (k: string, v: string) => { try { window.localStorage.setItem(k, v); } catch { /* */ } };
@@ -102,10 +108,12 @@ export function IntradayChart({
   const setModeP = (m: Mode) => { setMode(m); persist(MODE_KEY, m); };
   const setRangeP = (rk: RangeKey) => { setRange(rk); setTf(RANGES[rk].tf); persist(RANGE_KEY, rk); };
   const setTfP = (m: number) => { setTf(m); persist(TF_KEY, String(m)); };
-  const commitEma = (which: "fast" | "slow", raw: number) => {
-    const fb = which === "fast" ? EMA_FAST_DEFAULT : EMA_SLOW_DEFAULT;
+  const commitEma = (which: "fast" | "slow" | "third", raw: number) => {
+    const fb = which === "fast" ? EMA_FAST_DEFAULT : which === "slow" ? EMA_SLOW_DEFAULT : EMA_THIRD_DEFAULT;
     const v = Math.round(Math.min(EMA_MAX, Math.max(EMA_MIN, raw || fb)));
-    if (which === "fast") { setEmaFastP(v); persist(EMA_FAST_KEY, String(v)); } else { setEmaSlowP(v); persist(EMA_SLOW_KEY, String(v)); }
+    if (which === "fast") { setEmaFastP(v); persist(EMA_FAST_KEY, String(v)); }
+    else if (which === "slow") { setEmaSlowP(v); persist(EMA_SLOW_KEY, String(v)); }
+    else { setEmaThirdP(v); persist(EMA_THIRD_KEY, String(v)); }
   };
 
   const isDaily = RANGES[range].src === "daily";
@@ -130,6 +138,7 @@ export function IntradayChart({
   const agg = useMemo(() => aggregateBars(liveSource, isDaily ? DAILY_TF : tf), [liveSource, isDaily, tf]);
   const efN = Math.min(EMA_MAX, Math.max(EMA_MIN, emaFastP || EMA_FAST_DEFAULT));
   const esN = Math.min(EMA_MAX, Math.max(EMA_MIN, emaSlowP || EMA_SLOW_DEFAULT));
+  const etN = Math.min(EMA_MAX, Math.max(EMA_MIN, emaThirdP || EMA_THIRD_DEFAULT));
 
   // ---- create chart + base series once ----
   useEffect(() => {
@@ -147,7 +156,7 @@ export function IntradayChart({
     volRef.current = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol" });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
     const line = (color: string) => chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    vwapRef.current = line(C.vwap); fastRef.current = line(C.emaFast); slowRef.current = line(C.emaSlow);
+    vwapRef.current = line(C.vwap); fastRef.current = line(C.emaFast); slowRef.current = line(C.emaSlow); thirdRef.current = line(C.emaThird);
     chartRef.current = chart;
     return () => { chart.remove(); chartRef.current = null; macdRef.current = null; markersRef.current = null; markersOnRef.current = null; };
   }, []);
@@ -175,10 +184,11 @@ export function IntradayChart({
     vwapRef.current?.setData(showVwap ? rows.filter((r) => r.w != null).map((r) => ({ time: r.t, value: Number(r.w) })) : []);
     if (showEma) {
       const closes = rows.map((r) => r.c);
-      const ef = ema(closes, efN), es = ema(closes, esN);
+      const ef = ema(closes, efN), es = ema(closes, esN), et = ema(closes, etN);
       fastRef.current?.setData(rows.map((r, i) => ({ time: r.t, value: ef[i] })));
       slowRef.current?.setData(rows.map((r, i) => ({ time: r.t, value: es[i] })));
-    } else { fastRef.current?.setData([]); slowRef.current?.setData([]); }
+      thirdRef.current?.setData(rows.map((r, i) => ({ time: r.t, value: et[i] })));
+    } else { fastRef.current?.setData([]); slowRef.current?.setData([]); thirdRef.current?.setData([]); }
 
     // MACD pane (create lazily, remove when toggled off)
     if (showMacd) {
@@ -203,7 +213,7 @@ export function IntradayChart({
     if (markersOnRef.current !== mode) { markersRef.current = null; markersOnRef.current = mode; }
     const mk = markersRef.current ?? (markersRef.current = createSeriesMarkers(activeSeries, []));
     let markers: SeriesMarker<Time>[] = [];
-    if (!isDaily && rows.length) {
+    if (showTrades && !isDaily && rows.length) {
       const lo = rows[0].t as number, hi = rows[rows.length - 1].t as number;
       const inRange = (iso?: string | null) => { if (!iso) return false; const s = Math.floor(Date.parse(iso) / 1000); return s >= lo && s <= hi; };
       for (const p of [...trades, ...openPositions]) {
@@ -217,7 +227,7 @@ export function IntradayChart({
 
     // visible window for the range
     if (rows.length) chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, rows.length - (RANGES[range].bars || rows.length)), to: rows.length });
-  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, isDaily, range, trades, openPositions, mobile]);
+  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, isDaily, range, trades, openPositions, mobile]);
 
   const ledSpot = spot ?? (agg.length ? agg[agg.length - 1].close : null);
 
@@ -263,6 +273,7 @@ export function IntradayChart({
             <button className={`ind-chip${showVwap ? " on" : ""}`} onClick={toggle(VWAP_KEY, setShowVwap)} aria-pressed={showVwap} title="VWAP">VWAP</button>
             <button className={`ind-chip${showVol ? " on" : ""}`} onClick={toggle(VOL_KEY, setShowVol)} aria-pressed={showVol} title="Volume">VOL</button>
             <button className={`ind-chip${showMacd ? " on" : ""}`} onClick={toggle(MACD_KEY, setShowMacd)} aria-pressed={showMacd} title="MACD 12/26/9">MACD</button>
+            <button className={`ind-chip${showTrades ? " on" : ""}`} onClick={toggle(TRADES_KEY, setShowTrades)} aria-pressed={showTrades} title="Show trade entry/exit markers">TRADES</button>
           </span>
           {showEma && (
             <span className="ema-cfg" title="EMA periods (fast / slow)">
@@ -270,6 +281,8 @@ export function IntradayChart({
               <input className="ema-in" style={{ color: C.emaFast }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaFastP || ""} aria-label="EMA fast period" onChange={(e) => setEmaFastP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("fast", Number(e.target.value))} />
               <span className="ema-sep">/</span>
               <input className="ema-in" style={{ color: C.emaSlow }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaSlowP || ""} aria-label="EMA slow period" onChange={(e) => setEmaSlowP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("slow", Number(e.target.value))} />
+              <span className="ema-sep">/</span>
+              <input className="ema-in" style={{ color: C.emaThird }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaThirdP || ""} aria-label="EMA third period" onChange={(e) => setEmaThirdP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("third", Number(e.target.value))} />
             </span>
           )}
         </div>
