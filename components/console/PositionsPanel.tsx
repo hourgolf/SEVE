@@ -1,7 +1,28 @@
 "use client";
 
+import { useState } from "react";
 import { signedUsd } from "@/lib/format";
+import { useTradeInsight } from "@/hooks/useTradeInsight";
 import type { PmColor, Position, StrategistState } from "@/lib/desk/types";
+
+// Rationale → readable chips (only the features that are present).
+function tradeChips(r?: Record<string, unknown> | null): string[] {
+  if (!r) return [];
+  const num = (k: string) => (typeof r[k] === "number" && isFinite(r[k] as number) ? (r[k] as number) : undefined);
+  const out: string[] = [];
+  if (num("atr") != null) out.push(`ATR ${num("atr")!.toFixed(2)}`);
+  if (num("er") != null) out.push(`ER ${num("er")!.toFixed(2)}`);
+  if (num("relVol") != null) out.push(`vol ${num("relVol")!.toFixed(1)}×`);
+  if (num("delta") != null) out.push(`δ ${num("delta")!.toFixed(2)}`);
+  if (num("expectedMove") != null && num("roundTrip") != null) out.push(`move $${num("expectedMove")!.toFixed(0)} vs cost $${num("roundTrip")!.toFixed(0)}`);
+  return out;
+}
+const holdStr = (o?: string | null, c?: string | null): string => {
+  if (!o || !c) return "";
+  const m = Math.round((Date.parse(c) - Date.parse(o)) / 60000);
+  if (!isFinite(m) || m < 0) return "";
+  return m < 1 ? "<1m" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+};
 
 const PM_VAR: Record<PmColor, string> = {
   green: "var(--pm-green)",
@@ -42,6 +63,12 @@ export function PositionsPanel({
     return { mark: p.current_mark, unreal: p.unrealized_pnl, isLive: false };
   };
   const anyLive = positions.some((p) => live(p).isLive);
+
+  // Click-to-drill-down on a recent trade: one expanded at a time; its trigger +
+  // exit reason are fetched lazily (useTradeInsight); performance is from the row.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openTrade = recentTrades.find((t) => t.id === openId) ?? null;
+  const { insight, loading } = useTradeInsight(openTrade);
 
   return (
     <div className="panel panel--screws">
@@ -119,14 +146,53 @@ export function PositionsPanel({
             </span>
           </div>
           <div className="rt-list">
-            {recentTrades.map((t) => (
-              <div className="rt-row" key={t.id}>
-                <span className="rt-dot" style={{ background: colorOf(t.strategist_slug), boxShadow: `0 0 5px ${colorOf(t.strategist_slug)}` }} />
-                <span className="rt-sym">{t.strike.toFixed(0)}{t.opt_type === "call" ? "C" : "P"} ×{t.qty}</span>
-                <span className="rt-time">{hhmm(t.closed_at)}</span>
-                <span className={`rt-pnl ${(t.realized_pnl ?? 0) < 0 ? "neg" : "pos"}`}>{signedUsd(t.realized_pnl ?? 0)}</span>
-              </div>
-            ))}
+            {recentTrades.map((t) => {
+              const open = t.id === openId;
+              const entry = t.avg_entry_price, exit = t.current_mark, realized = t.realized_pnl ?? 0;
+              const retPct = entry > 0 ? ((exit - entry) / entry) * 100 : 0;
+              const risk = 0.5 * entry * Math.abs(t.qty) * 100;       // R = the −50% premium risk
+              const R = risk > 0 ? realized / risk : 0;
+              const chips = open ? tradeChips(insight?.trigger?.rationale) : [];
+              return (
+                <div key={t.id}>
+                  <button className={`rt-row${open ? " open" : ""}`} onClick={() => setOpenId(open ? null : t.id)} aria-expanded={open}>
+                    <span className="rt-dot" style={{ background: colorOf(t.strategist_slug), boxShadow: `0 0 5px ${colorOf(t.strategist_slug)}` }} />
+                    <span className="rt-sym">{t.strike.toFixed(0)}{t.opt_type === "call" ? "C" : "P"} ×{t.qty}</span>
+                    <span className="rt-time">{hhmm(t.closed_at)}</span>
+                    <span className={`rt-pnl ${realized < 0 ? "neg" : "pos"}`}>{signedUsd(realized)}</span>
+                    <span className="rt-caret">{open ? "▾" : "▸"}</span>
+                  </button>
+                  {open && (
+                    <div className="rt-detail">
+                      <div className="rtd-sec">
+                        <span className="rtd-lbl">trigger</span>
+                        {loading && !insight ? (
+                          <span className="rtd-dim">loading…</span>
+                        ) : insight?.trigger ? (
+                          <span className="rtd-line">
+                            <b className="rtd-sig">{insight.trigger.signal_type}</b>
+                            {insight.trigger.direction && <span className={`rtd-dir rtd-${insight.trigger.direction}`}>{insight.trigger.direction}</span>}
+                            {insight.trigger.underlying_price != null && <span className="rtd-dim">SPY ${insight.trigger.underlying_price.toFixed(2)}</span>}
+                          </span>
+                        ) : (
+                          <span className="rtd-dim">no matching signal in window</span>
+                        )}
+                        {chips.length > 0 && <span className="rtd-chips">{chips.map((c) => <span key={c} className="rtd-chip">{c}</span>)}</span>}
+                      </div>
+                      <div className="rtd-sec">
+                        <span className="rtd-lbl">result</span>
+                        <span className="rtd-line">
+                          <span className="rtd-perf">${entry.toFixed(2)} → ${exit.toFixed(2)}</span>
+                          {holdStr(t.opened_at, t.closed_at) && <span className="rtd-dim">held {holdStr(t.opened_at, t.closed_at)}</span>}
+                          {insight?.exitReason && <span className="rtd-exit">{insight.exitReason}</span>}
+                          <span className={realized < 0 ? "neg" : "pos"}>{signedUsd(realized)} · {retPct >= 0 ? "+" : ""}{retPct.toFixed(0)}% · {R >= 0 ? "+" : ""}{R.toFixed(1)}R</span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

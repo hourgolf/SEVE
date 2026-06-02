@@ -74,7 +74,21 @@ export interface Position {
   // realized (closed-today) + unrealized (open) so fast scalps still show up.
   status?: "open" | "closed";
   realized_pnl?: number;
+  opened_at?: string | null;
   closed_at?: string | null;
+}
+
+// Drill-down detail for one trade — what triggered it + how it exited. Fetched
+// lazily (on click) by useTradeInsight, NOT carried in the always-polled feed.
+export interface TradeInsight {
+  trigger: {
+    signal_type: string;
+    direction?: string | null;
+    underlying_price?: number;
+    rationale?: Record<string, unknown> | null; // {atr, er, relVol, delta, roundTrip, expectedMove, ask, bid, …}
+    created_at?: string;
+  } | null;
+  exitReason: string | null; // parsed from the EXEC exit event, e.g. "time_stop", "premium_stop"
 }
 
 export interface ChannelPnl {

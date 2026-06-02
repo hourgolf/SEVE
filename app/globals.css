@@ -936,7 +936,19 @@ svg.spark {
   gap: 8px;
   font-family: var(--mono);
   font-size: 11px;
+  width: 100%;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 2px 4px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
 }
+.recent-trades .rt-row:hover { background: rgba(255, 255, 255, 0.045); }
+.recent-trades .rt-row.open { background: rgba(255, 255, 255, 0.07); }
+.recent-trades .rt-caret { color: var(--muted-2); font-size: 9px; width: 10px; flex: 0 0 auto; text-align: center; }
 .recent-trades .rt-dot {
   width: 7px;
   height: 7px;
@@ -956,6 +968,31 @@ svg.spark {
   text-align: right;
   font-weight: 600;
 }
+/* trade drill-down (click a recent trade → trigger + result) */
+.recent-trades .rt-detail {
+  margin: 2px 4px 8px 18px;
+  padding: 7px 9px;
+  border-left: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rtd-sec { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rtd-lbl { color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; min-width: 50px; }
+.rtd-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rtd-sig { color: var(--text); font-weight: 600; }
+.rtd-dir { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+.rtd-call { background: rgba(47, 213, 115, 0.18); color: #2fd573; }
+.rtd-put { background: rgba(255, 107, 107, 0.18); color: #ff6b6b; }
+.rtd-dim { color: var(--muted-2); }
+.rtd-exit { color: #ffb224; }
+.rtd-perf { color: var(--text); }
+.rtd-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.rtd-chip { background: rgba(255, 255, 255, 0.06); color: var(--muted); padding: 1px 6px; border-radius: 3px; font-size: 9.5px; }
 /* horizontal-scroll wrapper so wide tables don't overflow narrow screens */
 .table-scroll {
   overflow-x: auto;

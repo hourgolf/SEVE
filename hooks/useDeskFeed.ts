@@ -111,6 +111,7 @@ export function useDeskFeed(): DeskFeed {
           unrealized_pnl: Number(r.unrealized_pnl ?? 0),
           status,
           realized_pnl: Number(r.realized_pnl ?? 0),
+          opened_at: r.opened_at ?? null,
           closed_at: r.closed_at ?? null,
         });
         const pos: Position[] = ((posRes.data ?? []) as any[]).map((r) => mapPos(r, "open"));
