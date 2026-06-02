@@ -2,14 +2,8 @@
 
 import { memo } from "react";
 import { play909, VOICE_LABELS, VOICE_NAMES } from "@/lib/audio/drum909";
-import type { PmColor, Step } from "@/lib/desk/types";
-
-const COLOR_VAR: Record<PmColor, string> = {
-  green: "var(--pm-green)",
-  blue: "var(--pm-blue)",
-  amber: "var(--pm-amber)",
-  cyan: "var(--pm-cyan)",
-};
+import type { Step } from "@/lib/desk/types";
+import { pmVar } from "@/lib/desk/colors";
 
 export interface StepRowProps {
   steps: Step[]; // expected length 16
@@ -32,7 +26,7 @@ function StepRowImpl({ steps, onStep }: StepRowProps) {
   return (
     <div className="steprow">
       {steps.map((s, i) => {
-        const c = s.color ? COLOR_VAR[s.color] : "var(--amber)";
+        const c = s.color ? pmVar(s.color) : "var(--amber)";
         return (
           <button
             type="button"

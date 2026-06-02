@@ -9,18 +9,12 @@ import {
 } from "@/lib/desk/strategySpec";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import type { PmColor, StrategistConfig } from "@/lib/desk/types";
+import { PM_COLORS, pmVar } from "@/lib/desk/colors";
 
 // Add-Channel sheet: paste/upload a thesis .md → instant frontmatter preview →
 // "Compile" (server-side LLM) → StrategySpec + capability check → "Backtest"
 // (inline modeled quick-check on real bars, plus the real-fills CLI command) →
 // "Arm" (persist as a live channel) or "Save draft" (stored, never trades).
-const PM_TOKENS: PmColor[] = ["green", "blue", "amber", "cyan"];
-const PM_VAR: Record<PmColor, string> = {
-  green: "var(--pm-green)",
-  blue: "var(--pm-blue)",
-  amber: "var(--pm-amber)",
-  cyan: "var(--pm-cyan)",
-};
 
 // Conservative starting mixer for a freshly-added channel (tune via the knobs).
 const NEW_CHANNEL_CONFIG: StrategistConfig = {
@@ -293,11 +287,11 @@ export function AddChannel({
             <div className="ac-arm">
               <div className="ac-accent">
                 <span>accent</span>
-                {PM_TOKENS.map((t) => (
+                {PM_COLORS.map((t) => (
                   <button
                     key={t}
                     className={`ac-swatch${accent === t ? " on" : ""}`}
-                    style={{ background: PM_VAR[t] }}
+                    style={{ background: pmVar(t) }}
                     onClick={() => setAccent(t)}
                     aria-label={`accent ${t}`}
                     title={t}

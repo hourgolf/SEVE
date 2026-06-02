@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useTradeInsight } from "@/hooks/useTradeInsight";
-import type { PmColor, Position, StrategistState } from "@/lib/desk/types";
+import type { Position, StrategistState } from "@/lib/desk/types";
+import { pmVar } from "@/lib/desk/colors";
 
 // Rationale → readable chips (only the features that are present).
 function tradeChips(r?: Record<string, unknown> | null): string[] {
@@ -22,13 +23,6 @@ const holdStr = (o?: string | null, c?: string | null): string => {
   const m = Math.round((Date.parse(c) - Date.parse(o)) / 60000);
   if (!isFinite(m) || m < 0) return "";
   return m < 1 ? "<1m" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
-};
-
-const PM_VAR: Record<PmColor, string> = {
-  green: "var(--pm-green)",
-  blue: "var(--pm-blue)",
-  amber: "var(--pm-amber)",
-  cyan: "var(--pm-cyan)",
 };
 
 const hhmm = (iso?: string | null) =>
@@ -51,7 +45,7 @@ export function PositionsPanel({
   liveMarks?: Record<string, number>;
 }) {
   const colorOf = (slug: string) =>
-    PM_VAR[strategists.find((s) => s.slug === slug)?.color ?? "green"];
+    pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
   const realizedToday = recentTrades.reduce((a, t) => a + (t.realized_pnl ?? 0), 0);
 
   // Live mark for a position if the chain has a fresh quote; else the stored mark.

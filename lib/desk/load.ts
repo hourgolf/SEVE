@@ -11,8 +11,7 @@ import { getSupabase } from "@/lib/supabaseClient";
 import { DEFAULT_CONFIG_BY_SLUG } from "@/lib/desk/seed";
 import type { ChannelStatus, DeskState, PmColor, StrategistState } from "@/lib/desk/types";
 
-const PM_TOKENS: PmColor[] = ["green", "blue", "amber", "cyan"];
-const PM_SET = new Set<string>(PM_TOKENS);
+import { PM_COLORS, PM_SET } from "@/lib/desk/colors";
 
 // Legacy fallbacks (used only when the row lacks accent / sort_order — i.e. the
 // DB predates 13_add_channel.sql). New channels carry their own columns.
@@ -75,7 +74,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
         const color: PmColor =
           hasNewCols && typeof r.accent === "string" && PM_SET.has(r.accent)
             ? (r.accent as PmColor)
-            : COLOR_BY_SLUG[r.slug] ?? PM_TOKENS[idx % PM_TOKENS.length];
+            : COLOR_BY_SLUG[r.slug] ?? PM_COLORS[idx % PM_COLORS.length];
         return {
           id: r.id,
           slug: r.slug,

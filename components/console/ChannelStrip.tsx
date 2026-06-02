@@ -7,14 +7,8 @@ import { PadButton } from "@/components/console/hw/PadButton";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pct, signedUsd, usd0 } from "@/lib/format";
-import type { ChannelPnl, PmColor, StrategistState } from "@/lib/desk/types";
-
-const PM_VAR: Record<PmColor, string> = {
-  green: "var(--pm-green)",
-  blue: "var(--pm-blue)",
-  amber: "var(--pm-amber)",
-  cyan: "var(--pm-cyan)",
-};
+import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
+import { pmVar } from "@/lib/desk/colors";
 
 export interface ChannelStripProps {
   strategist: StrategistState;
@@ -96,7 +90,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
       <button className="ch-edit-done" onClick={() => setEditing(false)}>Done</button>
     </div>
   ) : null;
-  const cssColor = PM_VAR[color];
+  const cssColor = pmVar(color);
 
   // Lifecycle pill — only shown for channels that are NOT live in the dispatcher
   // (a compiled channel sits 'draft' until backtest-gated + armed).

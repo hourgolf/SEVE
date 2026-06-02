@@ -31,29 +31,37 @@
   --stripe-red: #c5362a;
   --stripe-cream: #d9d7cc;
 
-  /* --- strategist accents (match schema colors) --- */
+  /* --- strategist accents — 12-token LED/909 palette (lib/desk/colors.ts) --- */
   --pm-green: #2fd573;
   --pm-blue: #3b9eff;
   --pm-amber: #ffb224;
   --pm-cyan: #45c4d6;
+  --pm-red: #f0563f;
+  --pm-orange: #ff8a3d;
+  --pm-yellow: #ffe14d;
+  --pm-lime: #a3e635;
+  --pm-teal: #2dd4bf;
+  --pm-indigo: #7c83ff;
+  --pm-violet: #b06bff;
+  --pm-magenta: #ff5fa8;
 
   color: var(--ink);
   font-family: var(--sans);
 }
 
 /* Map a PmColor token to its accent var. */
-.pm-green {
-  --pm: var(--pm-green);
-}
-.pm-blue {
-  --pm: var(--pm-blue);
-}
-.pm-amber {
-  --pm: var(--pm-amber);
-}
-.pm-cyan {
-  --pm: var(--pm-cyan);
-}
+.pm-green { --pm: var(--pm-green); }
+.pm-blue { --pm: var(--pm-blue); }
+.pm-amber { --pm: var(--pm-amber); }
+.pm-cyan { --pm: var(--pm-cyan); }
+.pm-red { --pm: var(--pm-red); }
+.pm-orange { --pm: var(--pm-orange); }
+.pm-yellow { --pm: var(--pm-yellow); }
+.pm-lime { --pm: var(--pm-lime); }
+.pm-teal { --pm: var(--pm-teal); }
+.pm-indigo { --pm: var(--pm-indigo); }
+.pm-violet { --pm: var(--pm-violet); }
+.pm-magenta { --pm: var(--pm-magenta); }
 
 /* ---------- console chassis ----------------------------------------------- */
 .chassis {
@@ -888,7 +896,7 @@
 .ac-mo { font-family: var(--mono); font-size: 9.5px; border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; }
 
 .ac-arm { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
-.ac-accent { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
+.ac-accent { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
 .ac-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .ac-swatch.on { border-color: #fff; box-shadow: 0 0 6px currentColor; }
 .ac-arm-btns { display: flex; gap: 8px; margin-top: 10px; }

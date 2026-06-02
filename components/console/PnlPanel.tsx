@@ -4,14 +4,8 @@ import { useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
 import { signedUsd, usd0 } from "@/lib/format";
 import { useWindowedPnl, type PnlWindow, type ChannelStat } from "@/hooks/useWindowedPnl";
-import type { ChannelPnl, PmColor, StrategistState } from "@/lib/desk/types";
-
-const PM_VAR: Record<PmColor, string> = {
-  green: "var(--pm-green)",
-  blue: "var(--pm-blue)",
-  amber: "var(--pm-amber)",
-  cyan: "var(--pm-cyan)",
-};
+import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
+import { pmVar } from "@/lib/desk/colors";
 
 const WINDOWS: { id: PnlWindow; label: string }[] = [
   { id: "today", label: "Today" },
@@ -82,8 +76,8 @@ export function PnlPanel({
                       width: 8,
                       height: 8,
                       borderRadius: "50%",
-                      background: PM_VAR[s.color],
-                      boxShadow: `0 0 6px ${PM_VAR[s.color]}`,
+                      background: pmVar(s.color),
+                      boxShadow: `0 0 6px ${pmVar(s.color)}`,
                     }}
                   />
                   {s.name}

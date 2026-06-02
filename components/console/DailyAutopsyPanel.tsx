@@ -3,11 +3,9 @@
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useDailyReports } from "@/hooks/useDailyReports";
-import type { PmColor, StrategistState } from "@/lib/desk/types";
+import type { StrategistState } from "@/lib/desk/types";
+import { pmVar } from "@/lib/desk/colors";
 
-const PM_VAR: Record<PmColor, string> = {
-  green: "var(--pm-green)", blue: "var(--pm-blue)", amber: "var(--pm-amber)", cyan: "var(--pm-cyan)",
-};
 const SEV_CLASS: Record<string, string> = { high: "au-sev-high", med: "au-sev-med", low: "au-sev-low" };
 const EXP_KEY = "seve-autopsy-expanded";
 const shortDate = (d: string) => d.slice(5); // "06-01"
@@ -26,7 +24,7 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggleExp = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
-  const colorOf = (slug: string) => PM_VAR[strategists.find((s) => s.slug === slug)?.color ?? "green"];
+  const colorOf = (slug: string) => pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
 
   const Frame = ({ children }: { children: React.ReactNode }) => (
     <div className="panel panel--screws">

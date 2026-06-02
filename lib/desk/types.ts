@@ -7,8 +7,11 @@
 
 import type { EventLevel, OptionType } from "@/lib/types";
 
-// One of the four strategist accent colors (matches the schema seed).
-export type PmColor = "green" | "blue" | "amber" | "cyan";
+// A strategist accent color — 12-token LED/909 palette (lib/desk/colors.ts owns
+// the ordered list; app/console.css owns the matching --pm-<token> vars + classes).
+export type PmColor =
+  | "green" | "blue" | "amber" | "cyan"
+  | "red" | "orange" | "yellow" | "lime" | "teal" | "indigo" | "violet" | "magenta";
 
 // Channel lifecycle: 'draft' = compiled/stored but never trades; 'armed' =
 // backtest-gated + live in the dispatcher; 'disabled' = parked. The dispatcher
