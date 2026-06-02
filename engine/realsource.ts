@@ -34,6 +34,8 @@ export interface RealSession {
   dateET: string; // YYYY-MM-DD
   bars: Bar[]; // RTH, cumulative-VWAP, oldest → newest
   ivAnnual: number; // realized-vol estimate for chain pricing
+  pdh?: number; // prior-day high (for `level` conditions); undefined on day 1
+  pdl?: number; // prior-day low
 }
 
 interface RawBar {
@@ -146,6 +148,14 @@ export async function loadRealSessions(opts?: { sinceDaysAgo?: number }): Promis
       };
     });
     sessions.push({ dateET: date, bars, ivAnnual: realizedIv(bars) });
+  }
+  // prior-day high/low for `level` conditions (pdh/pdl) — sessions are date-sorted
+  for (let i = 1; i < sessions.length; i++) {
+    const prev = sessions[i - 1].bars;
+    let hi = -Infinity, lo = Infinity;
+    for (const b of prev) { if (b.high > hi) hi = b.high; if (b.low < lo) lo = b.low; }
+    sessions[i].pdh = hi;
+    sessions[i].pdl = lo;
   }
   return sessions;
 }

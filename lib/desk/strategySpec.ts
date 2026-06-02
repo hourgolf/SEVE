@@ -42,6 +42,7 @@ export type Condition =
   | { kind: "efficiency_ratio"; op: ">=" | "<="; value: number; lookback?: number }
   | { kind: "momentum_atr"; op: ">=" | "<="; value: number; lookback?: number } // (close − close[lookback]) / ATR
   | { kind: "macd"; fast: number; slow: number; signal: number; cmp: "bull" | "bear" } // bull = histogram > 0
+  | { kind: "level"; ref: "pdh" | "pdl" | "orb_hi" | "orb_lo"; cmp: ">" | "<" | "near"; withinPct?: number } // price-level gate; near = within withinPct% of the level
   // ---- NOT yet supported (need a feed/infra we don't ingest) ----
   | { kind: "tick"; cmp: ">" | "<"; value: number } // NYSE TICK feed
   | { kind: "gamma_regime"; require: "POSITIVE" | "NEGATIVE" | "TRANSITION" | "NEGATIVE_OR_TRANSITION" } // GEX/dealer feed
@@ -109,7 +110,7 @@ export interface StrategySpec {
 const SUPPORTED_KINDS = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min",
   "rel_vol", "rsi", "time_before", "time_between",
-  "efficiency_ratio", "momentum_atr", "macd",
+  "efficiency_ratio", "momentum_atr", "macd", "level",
 ]);
 // Structures the (single-leg) worker can place today.
 const SUPPORTED_STRUCTURES = new Set<LegStructure>(["single-leg"]);

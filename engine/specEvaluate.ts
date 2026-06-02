@@ -30,7 +30,7 @@ export interface CompiledStrategy {
   timeframeMin: number;
   warmupBars: number;
   mandate: string;
-  build: (bars: Bar[], tfMin: number) => Evaluate;
+  build: (bars: Bar[], tfMin: number, levels?: { pdh?: number; pdl?: number }) => Evaluate;
 }
 
 // ---- ET wall-clock (portable: Intl works in Node + Deno) -------------------
@@ -121,6 +121,8 @@ interface Ctx {
   etMin: number[];
   closes: number[];
   macdSeries: Map<string, number[]>; // key `${fast}-${slow}-${signal}` → histogram
+  pdh?: number; // prior-day high (for `level` conditions)
+  pdl?: number;
 }
 
 const macdKey = (c: { fast: number; slow: number; signal: number }) => `${c.fast}-${c.slow}-${c.signal}`;
@@ -165,6 +167,16 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       if (!hist) return false;
       return c.cmp === "bull" ? hist[i] > 0 : hist[i] < 0;
     }
+    case "level": {
+      const lvl = c.ref === "orb_hi" ? f.openRangeHi
+        : c.ref === "orb_lo" ? f.openRangeLo
+        : c.ref === "pdh" ? ctx.pdh
+        : ctx.pdl;
+      if (lvl == null || f.close <= 0) return false;
+      if (c.cmp === ">") return f.close > lvl;
+      if (c.cmp === "<") return f.close < lvl;
+      return (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); // near
+    }
     case "rsi": {
       const series = ctx.rsiSeries.get(c.period);
       if (!series) return false;
@@ -203,7 +215,7 @@ function entryHolds(entry: SpecEntry, ctx: Ctx): boolean {
 }
 
 // Build the per-session Evaluate for a spec (precomputes EMA/RSI over closes).
-function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number): Evaluate {
+function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, levels?: { pdh?: number; pdl?: number }): Evaluate {
   const closes = bars.map((b) => b.close);
   const emaSeries = new Map<number, number[]>();
   const rsiSeries = new Map<number, number[]>();
@@ -230,7 +242,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number): Eva
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes, macdSeries };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {
@@ -260,6 +272,6 @@ export function specToStrategyDef(spec: StrategySpec): CompiledStrategy {
     timeframeMin: 1, // the desk's mandate edges all run on 1-min SPY bars
     warmupBars: computeWarmup(spec),
     mandate: spec.meta.regime || spec.meta.direction || "compiled spec",
-    build: (bars, tfMin) => makeSpecEvaluator(spec, bars, tfMin),
+    build: (bars, tfMin, levels) => makeSpecEvaluator(spec, bars, tfMin, levels),
   };
 }

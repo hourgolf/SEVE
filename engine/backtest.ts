@@ -361,8 +361,8 @@ async function main() {
               : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
   // Per-session evaluator: a spec needs the bars (ET clock + precomputed series),
   // built-ins need only the closes. One seam so both paths below stay identical.
-  const evalFor = (bars: Bar[]): Evaluate =>
-    specDef ? specDef.build(bars, specDef.timeframeMin) : makeEval(bars.map((b) => b.close));
+  const evalFor = (bars: Bar[], levels?: { pdh?: number; pdl?: number }): Evaluate =>
+    specDef ? specDef.build(bars, specDef.timeframeMin, levels) : makeEval(bars.map((b) => b.close));
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
   const stratName = specDef
@@ -404,7 +404,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management));
     }
     const optLabel = useRealOptions
       ? `REAL BARS + REAL option prices (modeled spread) · ${realDays}/${sessions.length} days had option data`
