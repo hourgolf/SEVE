@@ -13,6 +13,7 @@
     "ab": "tsx engine/ab.ts",
     "power-probe": "tsx engine/power-probe.ts",
     "health": "tsx scripts/health.ts",
+    "latency": "tsx scripts/latency.ts",
     "sweep": "tsx engine/sweep.ts",
     "sweep:cross": "tsx engine/sweep-cross.ts",
     "regime": "tsx engine/regime-test.ts",
