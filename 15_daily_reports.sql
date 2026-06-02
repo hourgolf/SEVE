@@ -20,12 +20,16 @@ create table if not exists daily_reports (
   updated_at   timestamptz not null default now()
 );
 
--- anon (publishable key) read-only — same posture as the other dashboard tables.
-grant usage on schema public to anon;
-grant select on public.daily_reports to anon;
+-- Read-only for BOTH roles: anon (signed-out) AND authenticated (the signed-in
+-- operator). The desk tables in 04/05 already grant both; daily_reports must too,
+-- or a signed-in operator gets "permission denied for table daily_reports".
+grant usage on schema public to anon, authenticated;
+grant select on public.daily_reports to anon, authenticated;
 alter table daily_reports enable row level security;
 drop policy if exists anon_read_daily_reports on public.daily_reports;
 create policy anon_read_daily_reports on public.daily_reports for select to anon using (true);
+drop policy if exists auth_read_daily_reports on public.daily_reports;
+create policy auth_read_daily_reports on public.daily_reports for select to authenticated using (true);
 
 -- keep updated_at fresh (set_updated_at() is defined in trading-desk-schema.sql).
 drop trigger if exists trg_daily_reports_updated on daily_reports;
