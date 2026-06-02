@@ -332,6 +332,14 @@ body {
   display: flex;
   flex-direction: column;
 }
+/* per-channel win-rate · trade-count, shown before the $ value in the P&L rows */
+.pnl-wr {
+  color: var(--muted-2);
+  font-size: 9px;
+  font-weight: 500;
+  margin-right: 7px;
+  letter-spacing: 0.02em;
+}
 
 /* The Live section is the hero readout: full-width chart over a wide book/chain
    stack with the P&L column beside it. Desktop only — the base .grid collapses

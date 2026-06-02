@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
 import { signedUsd, usd0 } from "@/lib/format";
-import { useWindowedPnl, type PnlWindow } from "@/hooks/useWindowedPnl";
+import { useWindowedPnl, type PnlWindow, type ChannelStat } from "@/hooks/useWindowedPnl";
 import type { ChannelPnl, PmColor, StrategistState } from "@/lib/desk/types";
 
 const PM_VAR: Record<PmColor, string> = {
@@ -39,8 +39,10 @@ export function PnlPanel({
   const loading = !isToday && (windowed?.loading ?? true);
   const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();
 
-  const valFor = (slug: string): number =>
-    isToday ? (pnlByStrategist[slug]?.dayPnl ?? 0) : (windowed?.pnlBySlug[slug] ?? 0);
+  const statFor = (slug: string): ChannelStat => {
+    if (isToday) { const p = pnlByStrategist[slug]; return { pnl: p?.dayPnl ?? 0, trades: p?.trades ?? 0, wins: p?.wins ?? 0 }; }
+    return windowed?.statsBySlug[slug] ?? { pnl: 0, trades: 0, wins: 0 };
+  };
   const fundVal = isToday ? fundPnl.dayPnl : (windowed?.fundPnl ?? 0);
   const equityValues = isToday ? equityCurve.map((p) => p.equity) : (windowed?.curve ?? []);
 
@@ -70,7 +72,8 @@ export function PnlPanel({
         </div>
         <div className="pnl-rows" style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 8, opacity: loading ? 0.5 : 1, transition: "opacity 0.15s" }}>
           {strategists.map((s) => {
-            const v = valFor(s.slug);
+            const st = statFor(s.slug);
+            const wr = st.trades > 0 ? Math.round((st.wins / st.trades) * 100) : null;
             return (
               <div className="stat" key={s.slug}>
                 <span className="k" style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -85,7 +88,10 @@ export function PnlPanel({
                   />
                   {s.name}
                 </span>
-                <span className={`v num ${v < 0 ? "neg" : "pos"}`}>{signedUsd(v)}</span>
+                <span className={`v num ${st.pnl < 0 ? "neg" : "pos"}`}>
+                  {wr != null && <span className="pnl-wr">{wr}% · {st.trades}t</span>}
+                  {signedUsd(st.pnl)}
+                </span>
               </div>
             );
           })}

@@ -95,6 +95,8 @@ export interface ChannelPnl {
   dayPnl: number; // realized + unrealized for the day
   openCount: number; // open positions
   exposure: number; // $ deployed
+  trades: number; // CLOSED trades counted in the window (for win-rate)
+  wins: number; // of those, how many were realized > 0
 }
 
 export interface Signal {

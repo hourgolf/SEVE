@@ -15,9 +15,12 @@ const dayContribution = (p: Position): number =>
 export function channelPnl(positions: Position[]): Record<string, ChannelPnl> {
   const out: Record<string, ChannelPnl> = {};
   for (const p of positions) {
-    const c = (out[p.strategist_slug] ??= { dayPnl: 0, openCount: 0, exposure: 0 });
+    const c = (out[p.strategist_slug] ??= { dayPnl: 0, openCount: 0, exposure: 0, trades: 0, wins: 0 });
     c.dayPnl += dayContribution(p);
-    if (p.status !== "closed") {
+    if (p.status === "closed") {
+      c.trades += 1;
+      if ((p.realized_pnl ?? 0) > 0) c.wins += 1;
+    } else {
       c.openCount += 1;
       c.exposure += Math.abs(p.qty) * p.current_mark * 100;
     }
