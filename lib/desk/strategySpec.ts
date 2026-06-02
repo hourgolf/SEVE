@@ -105,17 +105,13 @@ export interface StrategySpec {
 const SUPPORTED_KINDS = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min",
   "rel_vol", "rsi", "time_before", "time_between",
+  "efficiency_ratio", "momentum_atr", // wired into specToEvaluate in PR4
 ]);
-// Defined but not yet wired into specToEvaluate — runtime lands in smart PR4.
-// (These need code, not a data feed — distinct from the feed gaps below.)
-const PENDING_RUNTIME_KINDS = new Set<Condition["kind"]>(["efficiency_ratio", "momentum_atr"]);
 // Structures the (single-leg) worker can place today.
 const SUPPORTED_STRUCTURES = new Set<LegStructure>(["single-leg"]);
 
 // Friendly name for the gap so the UI can explain it.
 const GAP_LABEL: Partial<Record<Condition["kind"], string>> = {
-  efficiency_ratio: "efficiency-ratio signal (runtime: smart PR4)",
-  momentum_atr: "momentum/ATR signal (runtime: smart PR4)",
   tick: "NYSE TICK feed",
   gamma_regime: "GEX / dealer-gamma feed",
   gamma_wall: "GEX wall levels",
@@ -184,10 +180,6 @@ export function capabilityCheck(spec: StrategySpec): CapabilityReport {
     runnable: unsupported.length === 0 && managementErrors.length === 0,
   };
 }
-
-// Convenience for callers that ignore the pending-runtime gaps (which clear in
-// PR4) and only care about real, persistent gaps (feeds / structure).
-export const PENDING_RUNTIME_LABELS = [...PENDING_RUNTIME_KINDS].map((k) => GAP_LABEL[k]).filter(Boolean) as string[];
 
 // Dependency-free YAML-ish frontmatter parse — pulls the leading `--- ... ---`
 // block into key/value strings for an instant channel preview before compile.

@@ -61,6 +61,7 @@ function parseET(hhmm: string): number | null {
 const SUPPORTED = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min",
   "rel_vol", "rsi", "time_before", "time_between",
+  "efficiency_ratio", "momentum_atr",
 ]);
 
 // Premium profit/stop exits (need the option mark) — applied by the driver.
@@ -94,6 +95,7 @@ function computeWarmup(spec: StrategySpec): number {
     for (const c of e.all ?? []) {
       if (c.kind === "ma_cross") warm = Math.max(warm, c.slow, c.fast);
       else if (c.kind === "rsi") warm = Math.max(warm, c.period + 1);
+      else if (c.kind === "momentum_atr") warm = Math.max(warm, (c.lookback ?? 3) + 1);
     }
   }
   return warm;
@@ -105,6 +107,7 @@ function inferDirection(entry: SpecEntry): OptType | null {
     if (c.kind === "ma_cross") return c.dir === "up" ? "call" : "put";
     if (c.kind === "vwap_side") return c.side === "above" ? "call" : "put";
     if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
+    if (c.kind === "momentum_atr") return c.op === ">=" ? "call" : "put";
   }
   return null;
 }
@@ -115,6 +118,7 @@ interface Ctx {
   emaSeries: Map<number, number[]>;
   rsiSeries: Map<number, number[]>;
   etMin: number[];
+  closes: number[];
 }
 
 function condHolds(c: Condition, ctx: Ctx): boolean {
@@ -144,6 +148,14 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
     }
     case "rel_vol":
       return f.relVol >= c.min;
+    case "efficiency_ratio":
+      return c.op === ">=" ? f.er >= c.value : f.er <= c.value;
+    case "momentum_atr": {
+      if (f.atr <= 0) return false;
+      const lb = c.lookback ?? 3;
+      const mom = i >= lb ? (ctx.closes[i] - ctx.closes[i - lb]) / f.atr : 0;
+      return c.op === ">=" ? mom >= c.value : mom <= c.value;
+    }
     case "rsi": {
       const series = ctx.rsiSeries.get(c.period);
       if (!series) return false;
@@ -198,7 +210,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number): Eva
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {
