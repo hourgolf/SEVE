@@ -1,5 +1,8 @@
-// ⚑ WORKER VERSION: 2026-06-01g  (per-channel ISOLATION — one channel's throw can
-//   no longer abort the whole dispatcher run · compiled-spec interpreter FULL-PARITY
+// ⚑ WORKER VERSION: 2026-06-01h  (compiled-spec warmup FLOOR lowered 30→15 bars, in
+//   sync with engine WARMUP_FLOOR — faster/opening-period .md strategies no longer
+//   wait the full opening-range window (OR-based conditions still self-gate) ·
+//   per-channel ISOLATION — one channel's throw can no longer abort the whole run ·
+//   compiled-spec interpreter FULL-PARITY
 //   with engine/specEvaluate.ts: efficiency_ratio · momentum_atr · macd · level
 //   (pdh/pdl/orb) · atLeast confluence · cost gate EXEMPTS power · premium
 //   catastrophic stop · real entry-time time-stops · 0DTE→1DTE roll · order
@@ -234,7 +237,7 @@ function compileSpec(spec: Spec): CompiledSpec {
     if (stopPct == null && typeof e.stopPct === "number") stopPct = Math.abs(e.stopPct);
     if (e.timeET) { const t = parseET(e.timeET); if (t != null) timeExit = timeExit == null ? t : Math.min(timeExit, t); }
   }
-  let warmup = 30;
+  let warmup = 15; // warmup FLOOR (was 30) — sync with engine/specEvaluate.ts WARMUP_FLOOR.
   for (const e of entries) for (const c of (e.all ?? [])) {
     if (c.kind === "ma_cross") warmup = Math.max(warmup, c.slow, c.fast);
     else if (c.kind === "rsi") warmup = Math.max(warmup, c.period + 1);

@@ -21,7 +21,13 @@ import { ema, rsi, crossDir } from "../lib/indicators";
 import type { StrategySpec, Condition, SpecEntry } from "../lib/desk/strategySpec";
 import type { Bar, Evaluate, Features, Intent, OptType, Position } from "./types";
 
-const OPEN_RANGE_MIN = 30; // mirrors engine/engine.ts (computeFeatures' OR window)
+// Warmup floor (bars) before a compiled spec may fire. Lowered 30 → 15 so faster /
+// opening-period strategies aren't forced to wait the full 30-min opening range. NOTE
+// OR-based conditions still self-gate: computeFeatures sets the 30-min opening range
+// only at bar 29, so opening_range / or_width_min / level:orb_* stay false until then
+// regardless of this floor. Early relVol(20)/ER(30) are still half-formed — a spec
+// leaning on them before ~20 bars is noisier (the cost gate filters wide-spread opens).
+const WARMUP_FLOOR = 15;
 
 // A registry-shaped definition built from a spec (same contract as StrategyDef).
 export interface CompiledStrategy {
@@ -90,7 +96,7 @@ function timeExitMinute(spec: StrategySpec): number | null {
 
 // Warmup: opening range + the longest indicator lookback the spec needs.
 function computeWarmup(spec: StrategySpec): number {
-  let warm = OPEN_RANGE_MIN;
+  let warm = WARMUP_FLOOR;
   for (const e of spec.entries ?? []) {
     for (const c of e.all ?? []) {
       if (c.kind === "ma_cross") warm = Math.max(warm, c.slow, c.fast);
