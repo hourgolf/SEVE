@@ -96,6 +96,7 @@ function computeWarmup(spec: StrategySpec): number {
       if (c.kind === "ma_cross") warm = Math.max(warm, c.slow, c.fast);
       else if (c.kind === "rsi") warm = Math.max(warm, c.period + 1);
       else if (c.kind === "momentum_atr") warm = Math.max(warm, (c.lookback ?? 3) + 1);
+      else if (c.kind === "macd") warm = Math.max(warm, c.slow + c.signal);
     }
   }
   return warm;
@@ -119,7 +120,10 @@ interface Ctx {
   rsiSeries: Map<number, number[]>;
   etMin: number[];
   closes: number[];
+  macdSeries: Map<string, number[]>; // key `${fast}-${slow}-${signal}` → histogram
 }
+
+const macdKey = (c: { fast: number; slow: number; signal: number }) => `${c.fast}-${c.slow}-${c.signal}`;
 
 function condHolds(c: Condition, ctx: Ctx): boolean {
   const { f, i } = ctx;
@@ -156,6 +160,11 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       const mom = i >= lb ? (ctx.closes[i] - ctx.closes[i - lb]) / f.atr : 0;
       return c.op === ">=" ? mom >= c.value : mom <= c.value;
     }
+    case "macd": {
+      const hist = ctx.macdSeries.get(macdKey(c));
+      if (!hist) return false;
+      return c.cmp === "bull" ? hist[i] > 0 : hist[i] < 0;
+    }
     case "rsi": {
       const series = ctx.rsiSeries.get(c.period);
       if (!series) return false;
@@ -180,12 +189,17 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
 // (an all-unsupported entry never fires — see header note).
 function entryHolds(entry: SpecEntry, ctx: Ctx): boolean {
   let supported = 0;
+  let held = 0;
   for (const c of entry.all ?? []) {
     if (!SUPPORTED.has(c.kind)) continue; // ignore feed-dependent gate
     supported++;
-    if (!condHolds(c, ctx)) return false;
+    if (condHolds(c, ctx)) held++;
   }
-  return supported > 0;
+  if (supported === 0) return false;
+  // Confluence: ≥ atLeast of the supported conditions (capped at how many exist);
+  // omitted → strict AND (all must hold).
+  const need = entry.atLeast != null ? Math.min(Math.max(1, entry.atLeast), supported) : supported;
+  return held >= need;
 }
 
 // Build the per-session Evaluate for a spec (precomputes EMA/RSI over closes).
@@ -193,6 +207,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number): Eva
   const closes = bars.map((b) => b.close);
   const emaSeries = new Map<number, number[]>();
   const rsiSeries = new Map<number, number[]>();
+  const macdSeries = new Map<string, number[]>();
   for (const e of spec.entries ?? []) {
     for (const c of e.all ?? []) {
       if (c.kind === "ma_cross") {
@@ -200,6 +215,11 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number): Eva
         if (!emaSeries.has(c.slow)) emaSeries.set(c.slow, ema(closes, c.slow));
       } else if (c.kind === "rsi" && !rsiSeries.has(c.period)) {
         rsiSeries.set(c.period, rsi(closes, c.period));
+      } else if (c.kind === "macd" && !macdSeries.has(macdKey(c))) {
+        const fa = ema(closes, c.fast), sl = ema(closes, c.slow);
+        const line = closes.map((_, i) => fa[i] - sl[i]);
+        const sig = ema(line, c.signal);
+        macdSeries.set(macdKey(c), line.map((v, i) => v - sig[i])); // histogram
       }
     }
   }
@@ -210,7 +230,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number): Eva
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes, macdSeries };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {

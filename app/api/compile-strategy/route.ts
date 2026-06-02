@@ -37,9 +37,10 @@ const SPEC_TOOL = {
           properties: {
             direction: { type: "string", enum: ["call", "put", "both"] },
             reason: { type: "string" },
+            atLeast: { type: "number", description: "Confluence: require ≥N of the `all` conditions to hold (e.g. '≥2 of N features'). Omit for strict AND." },
             all: {
               type: "array",
-              description: "Conditions that must ALL hold to enter. Use these kinds: ma_cross{fast,slow,dir}, vwap_side{side}, vwap_dev{atr,cmp}, opening_range{minutes,side}, or_width_min{pct}, rel_vol{min}, rsi{period,cmp,value}, time_before{et}, time_between{startET,endET}, efficiency_ratio{op,value,lookback}, momentum_atr{op,value,lookback}, tick{cmp,value}, gamma_regime{require:POSITIVE|NEGATIVE|TRANSITION|NEGATIVE_OR_TRANSITION}, gamma_wall{wall}, iv_rank{cmp,value}, event_within{sessions}, unknown{note}.",
+              description: "Conditions to enter (all must hold unless `atLeast` is set). Use these kinds: ma_cross{fast,slow,dir}, vwap_side{side}, vwap_dev{atr,cmp}, opening_range{minutes,side}, or_width_min{pct}, rel_vol{min}, rsi{period,cmp,value}, time_before{et}, time_between{startET,endET}, efficiency_ratio{op,value,lookback}, momentum_atr{op,value,lookback}, macd{fast,slow,signal,cmp:bull|bear}, tick{cmp,value}, gamma_regime{require:POSITIVE|NEGATIVE|TRANSITION|NEGATIVE_OR_TRANSITION}, gamma_wall{wall}, iv_rank{cmp,value}, event_within{sessions}, unknown{note}.",
               items: { type: "object", required: ["kind"], properties: { kind: { type: "string" } }, additionalProperties: true },
             },
           },
@@ -70,7 +71,7 @@ const SYSTEM = `You compile options trading-strategy theses (markdown) into a st
 Rules:
 - Map every mechanical entry/exit rule to a condition. Use the EXACT kinds in the tool schema.
 - Use the documented feed-dependent kinds where the thesis calls for them (tick, gamma_regime, gamma_wall, iv_rank, event_within) — do not invent supported substitutes; the desk flags them as gaps itself.
-- Use efficiency_ratio / momentum_atr for ER and momentum gates (the built-ins' own signals).
+- Use efficiency_ratio / momentum_atr for ER and momentum gates, macd{fast,slow,signal,cmp} for MACD. For a "≥N of M confluence" rule, put the M conditions in \`all\` and set \`atLeast: N\`.
 - entries[].all are ENTRY GATES ONLY (market state: price/indicator/volume/time). Post-entry rules — stops, scale-outs, breakeven, trailing, cost gate, EOD-flatten — are MANAGEMENT: put them in the \`management\` block. NEVER emit them as entry conditions and never emit \`unknown\` for a cost gate / stop / scale rule.
 - structure: single-leg for one long call/put; straddle/vertical-spread/etc. for multi-leg.
 - "Smart" theses (those with a Management section: R-based stops, scale-outs, breakeven ratchet, trail, cost gate) → fill the optional \`management\` block faithfully from that section. A plain thesis with no such section → OMIT management entirely.

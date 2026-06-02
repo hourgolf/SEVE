@@ -38,9 +38,10 @@ export type Condition =
   | { kind: "rsi"; period: number; cmp: ">" | "<"; value: number }
   | { kind: "time_before"; et: string }
   | { kind: "time_between"; startET: string; endET: string }
-  // ---- engine signals: defined here (smart-layer PR3), RUNTIME wired in PR4 ----
+  // ---- engine signals (computeFeatures / precomputed indicators) ----
   | { kind: "efficiency_ratio"; op: ">=" | "<="; value: number; lookback?: number }
   | { kind: "momentum_atr"; op: ">=" | "<="; value: number; lookback?: number } // (close − close[lookback]) / ATR
+  | { kind: "macd"; fast: number; slow: number; signal: number; cmp: "bull" | "bear" } // bull = histogram > 0
   // ---- NOT yet supported (need a feed/infra we don't ingest) ----
   | { kind: "tick"; cmp: ">" | "<"; value: number } // NYSE TICK feed
   | { kind: "gamma_regime"; require: "POSITIVE" | "NEGATIVE" | "TRANSITION" | "NEGATIVE_OR_TRANSITION" } // GEX/dealer feed
@@ -89,8 +90,11 @@ export interface Management {
 
 export interface SpecEntry {
   direction: "call" | "put" | "both";
-  all: Condition[]; // ALL must hold to enter
+  all: Condition[]; // conditions to enter
   reason: string;
+  // Confluence count: require AT LEAST N of the (supported) conditions to hold
+  // instead of all of them (e.g. "≥2 of N features"). Omit → all must hold.
+  atLeast?: number;
 }
 
 export interface StrategySpec {
@@ -105,7 +109,7 @@ export interface StrategySpec {
 const SUPPORTED_KINDS = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min",
   "rel_vol", "rsi", "time_before", "time_between",
-  "efficiency_ratio", "momentum_atr", // wired into specToEvaluate in PR4
+  "efficiency_ratio", "momentum_atr", "macd",
 ]);
 // Structures the (single-leg) worker can place today.
 const SUPPORTED_STRUCTURES = new Set<LegStructure>(["single-leg"]);
