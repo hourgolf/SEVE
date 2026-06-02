@@ -38,13 +38,54 @@ export type Condition =
   | { kind: "rsi"; period: number; cmp: ">" | "<"; value: number }
   | { kind: "time_before"; et: string }
   | { kind: "time_between"; startET: string; endET: string }
+  // ---- engine signals: defined here (smart-layer PR3), RUNTIME wired in PR4 ----
+  | { kind: "efficiency_ratio"; op: ">=" | "<="; value: number; lookback?: number }
+  | { kind: "momentum_atr"; op: ">=" | "<="; value: number; lookback?: number } // (close − close[lookback]) / ATR
   // ---- NOT yet supported (need a feed/infra we don't ingest) ----
   | { kind: "tick"; cmp: ">" | "<"; value: number } // NYSE TICK feed
-  | { kind: "gamma_regime"; sign: "positive" | "negative" } // GEX/dealer feed
+  | { kind: "gamma_regime"; require: "POSITIVE" | "NEGATIVE" | "TRANSITION" | "NEGATIVE_OR_TRANSITION" } // GEX/dealer feed
   | { kind: "gamma_wall"; wall: "call" | "put"; note?: string } // GEX feed
   | { kind: "iv_rank"; cmp: "<" | ">"; value: number } // IV-rank history
   | { kind: "event_within"; sessions: number } // economic-event calendar
   | { kind: "unknown"; note: string };
+
+// ---- Management block (smart layer, Brief Part 3b) — optional. Defines how a
+// position is managed AFTER entry: R-based risk, scale-outs, breakeven ratchet,
+// adaptive trail, pyramiding, cost gate. PR3 = schema + validation only; the
+// runtime state machine that executes this lands in PR4. Specs without a
+// `management` block behave exactly as before (legacy exits honored).
+export type StructuralStop =
+  | { kind: "failed_break"; insideAtr: number }
+  | { kind: "atr_adverse"; atr: number };
+
+export interface Management {
+  risk: {
+    defineR: "premium_stop" | "atr";
+    premiumStopPct: number; // initial hard stop, % of entry premium
+    structuralStop?: StructuralStop; // thesis-invalidation stop on the underlying
+  };
+  scaleOut?: Array<{
+    atR: number; // trigger in R-multiples
+    fraction: number; // portion of current position to close (0..1]
+    then?: "move_stop_breakeven" | "engage_trail" | "none";
+  }>;
+  trail?: {
+    mode: "atr_chandelier" | "premium_giveback" | "hybrid";
+    atrChandelier?: { baseK: number; kMin: number; rTighten: number; timeTighten: number };
+    premiumGivebackPct?: number; // never give back > X% of peak unrealized premium
+  };
+  scaleIn?: {
+    enabled: boolean;
+    onlyAfterR?: number;
+    requireStopAtBreakeven?: boolean;
+    addFraction?: number;
+    forbidIfBelowEntryPremium: boolean; // MUST be true for single-leg long options
+  };
+  target?: { kind: "vwap_fraction"; fraction: number }; // e.g. exit at halfway-to-VWAP (fade-smart)
+  timeStop?: { minutesHeld?: number; thetaTightenAfter?: string }; // "13:30" tightens trail/giveback
+  eodFlattenMinToClose?: number;
+  costGate?: { minMoveToCostRatio: number }; // veto if expectedPremiumMove < ratio × roundTripCost
+}
 
 export interface SpecEntry {
   direction: "call" | "put" | "both";
@@ -57,6 +98,7 @@ export interface StrategySpec {
   entries: SpecEntry[];
   exits: { profitPct?: number; stopPct?: number; timeET?: string; note?: string }[];
   sizing: { riskPctOfAccount?: number; note?: string };
+  management?: Management; // smart layer (optional); legacy specs omit it
 }
 
 // Condition kinds the engine/worker can evaluate live today.
@@ -64,11 +106,16 @@ const SUPPORTED_KINDS = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min",
   "rel_vol", "rsi", "time_before", "time_between",
 ]);
+// Defined but not yet wired into specToEvaluate — runtime lands in smart PR4.
+// (These need code, not a data feed — distinct from the feed gaps below.)
+const PENDING_RUNTIME_KINDS = new Set<Condition["kind"]>(["efficiency_ratio", "momentum_atr"]);
 // Structures the (single-leg) worker can place today.
 const SUPPORTED_STRUCTURES = new Set<LegStructure>(["single-leg"]);
 
 // Friendly name for the gap so the UI can explain it.
 const GAP_LABEL: Partial<Record<Condition["kind"], string>> = {
+  efficiency_ratio: "efficiency-ratio signal (runtime: smart PR4)",
+  momentum_atr: "momentum/ATR signal (runtime: smart PR4)",
   tick: "NYSE TICK feed",
   gamma_regime: "GEX / dealer-gamma feed",
   gamma_wall: "GEX wall levels",
@@ -77,10 +124,41 @@ const GAP_LABEL: Partial<Record<Condition["kind"], string>> = {
   unknown: "unrecognized rule",
 };
 
+// Validate a management block (Brief Part 3c). Returns a list of precise errors
+// (empty = valid). Structure-aware: single-leg long options may not average down.
+export function validateManagement(m: Management | undefined, structure: LegStructure): string[] {
+  const errs: string[] = [];
+  if (!m) return errs;
+  if (m.risk?.defineR === "premium_stop" && !(m.risk.premiumStopPct > 0))
+    errs.push("risk.premiumStopPct must be > 0 when defineR is 'premium_stop'");
+  if (m.scaleOut) {
+    let sum = 0;
+    m.scaleOut.forEach((s, i) => {
+      if (!(s.fraction > 0 && s.fraction <= 1)) errs.push(`scaleOut[${i}].fraction must be in (0,1]`);
+      if (!(s.atR > 0)) errs.push(`scaleOut[${i}].atR must be > 0`);
+      sum += Number(s.fraction) || 0;
+    });
+    if (sum > 1 + 1e-9) errs.push(`scaleOut fractions sum to ${sum.toFixed(2)} (must be <= 1.0)`);
+  }
+  if (m.scaleIn?.enabled && structure === "single-leg" && m.scaleIn.forbidIfBelowEntryPremium !== true)
+    errs.push("scaleIn.forbidIfBelowEntryPremium must be true for single-leg (never average down long premium)");
+  if (m.trail) {
+    const modes = ["atr_chandelier", "premium_giveback", "hybrid"];
+    if (!modes.includes(m.trail.mode)) errs.push(`trail.mode '${m.trail.mode}' invalid (allowed: ${modes.join(" | ")})`);
+    if ((m.trail.mode === "atr_chandelier" || m.trail.mode === "hybrid") && !m.trail.atrChandelier)
+      errs.push("trail.atrChandelier required for mode atr_chandelier/hybrid");
+    if ((m.trail.mode === "premium_giveback" || m.trail.mode === "hybrid") && m.trail.premiumGivebackPct == null)
+      errs.push("trail.premiumGivebackPct required for mode premium_giveback/hybrid");
+  }
+  return errs;
+}
+
 export interface CapabilityReport {
   runnable: boolean; // can this be armed live on the supported subset?
   structureOk: boolean;
-  unsupported: string[]; // human-readable gaps (data feeds / structure)
+  unsupported: string[]; // human-readable gaps (data feeds / structure / pending runtime)
+  isSmart: boolean; // has a management block
+  managementErrors: string[]; // schema-validation errors on the management block
 }
 
 export function capabilityCheck(spec: StrategySpec): CapabilityReport {
@@ -92,9 +170,24 @@ export function capabilityCheck(spec: StrategySpec): CapabilityReport {
       if (!SUPPORTED_KINDS.has(c.kind)) gaps.push(GAP_LABEL[c.kind] ?? c.kind);
     }
   }
+  // Management block: validate now; flag that the runtime executes in PR4.
+  const isSmart = !!spec.management;
+  const managementErrors = validateManagement(spec.management, spec.meta.structure);
+  if (isSmart && managementErrors.length === 0) gaps.push("management runtime (smart PR4 — schema valid, not yet executed)");
+
   const unsupported = [...new Set(gaps)];
-  return { structureOk, unsupported, runnable: unsupported.length === 0 };
+  return {
+    structureOk,
+    unsupported,
+    isSmart,
+    managementErrors,
+    runnable: unsupported.length === 0 && managementErrors.length === 0,
+  };
 }
+
+// Convenience for callers that ignore the pending-runtime gaps (which clear in
+// PR4) and only care about real, persistent gaps (feeds / structure).
+export const PENDING_RUNTIME_LABELS = [...PENDING_RUNTIME_KINDS].map((k) => GAP_LABEL[k]).filter(Boolean) as string[];
 
 // Dependency-free YAML-ish frontmatter parse — pulls the leading `--- ... ---`
 // block into key/value strings for an instant channel preview before compile.

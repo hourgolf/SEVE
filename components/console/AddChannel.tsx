@@ -226,8 +226,12 @@ export function AddChannel({
           <div className="ac-spec">
             <div className="ac-spec-head">
               Compiled · {spec.entries?.length ?? 0} entry rule(s), {spec.exits?.length ?? 0} exit(s)
+              {cap.isSmart && <> · <span className="ac-tag">smart</span></>}
               {slug && <> · <code>{slug}</code></>}
             </div>
+            {cap.managementErrors.length > 0 && (
+              <div className="ac-err">management invalid: {cap.managementErrors.join(" · ")}</div>
+            )}
             <div className={cap.runnable ? "ac-ok" : "ac-warn"}>
               {cap.runnable
                 ? "✓ fully runnable on current data"
