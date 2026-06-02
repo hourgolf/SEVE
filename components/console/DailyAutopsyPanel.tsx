@@ -19,7 +19,7 @@ const topExit = (ex: Record<string, number>) => {
 // selector) in the 909 panel idiom. Strategists are passed only for the accent
 // colors / consistency with the rest of the desk.
 export function DailyAutopsyPanel({ strategists }: { strategists: StrategistState[] }) {
-  const { reports, loading } = useDailyReports(8);
+  const { reports, loading, error } = useDailyReports(8);
   const [idx, setIdx] = useState(0);
   const colorOf = (slug: string) => PM_VAR[strategists.find((s) => s.slug === slug)?.color ?? "green"];
 
@@ -31,6 +31,7 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
   );
 
   if (loading) return <Frame><div className="chart-empty">loading reports…</div></Frame>;
+  if (error) return <Frame><div className="chart-empty">couldn&apos;t load reports — {error}</div></Frame>;
   if (!reports.length) return <Frame><div className="chart-empty">no autopsy reports yet — generated a few minutes after each close</div></Frame>;
 
   const r = reports[Math.min(idx, reports.length - 1)];

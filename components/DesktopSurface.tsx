@@ -141,7 +141,7 @@ export function DesktopSurface({
       {/* ---- 03 · LOG (autopsy → signals + tape health → event log) --- */}
       <SectionLabel id="log" idx="03">Log</SectionLabel>
       <DailyAutopsyPanel strategists={desk.strategists} />
-      <div className="grid grid--live grid--even">
+      <div className="grid grid--live grid--even" style={{ marginTop: 14 }}>
         <div className="col">
           <SignalsTape signals={feed.signals} />
         </div>

@@ -52,27 +52,31 @@ export interface DailyReport {
   narrative: ReportNarrative | null;
 }
 
-export function useDailyReports(limit = 10): { reports: DailyReport[]; loading: boolean } {
+export function useDailyReports(limit = 10): { reports: DailyReport[]; loading: boolean; error: string | null } {
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       const sb = getSupabase();
-      const { data } = await sb
+      const { data, error } = await sb
         .from("daily_reports")
         .select("report_date,mode,digest,narrative")
         .order("report_date", { ascending: false })
         .limit(limit);
       if (!alive) return;
+      // Surface a read failure (RLS / missing table / network) instead of silently
+      // showing "no reports" — so an empty panel on a real error is diagnosable.
+      if (error) setError(error.message);
       setReports((data ?? []) as DailyReport[]);
       setLoading(false);
-    })().catch(() => {
-      if (alive) setLoading(false);
+    })().catch((e) => {
+      if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
     });
     return () => { alive = false; };
   }, [limit]);
 
-  return { reports, loading };
+  return { reports, loading, error };
 }
