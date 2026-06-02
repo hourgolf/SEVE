@@ -61,6 +61,7 @@ export function AddChannel({
   const [spec, setSpec] = useState<StrategySpec | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [needsKey, setNeedsKey] = useState(false);
+  const [repairs, setRepairs] = useState<string[]>([]);
 
   const [gating, setGating] = useState(false);
   const [gate, setGate] = useState<GateResult | null>(null);
@@ -88,7 +89,7 @@ export function AddChannel({
   }
 
   function resetDownstream() {
-    setSpec(null); setGate(null); setGateErr(null); setArmErr(null); setDone(null);
+    setSpec(null); setGate(null); setGateErr(null); setArmErr(null); setDone(null); setRepairs([]);
   }
 
   async function compile() {
@@ -102,7 +103,7 @@ export function AddChannel({
       const j = await r.json();
       if (j.needsKey) setNeedsKey(true);
       else if (j.error) setErr(j.error);
-      else setSpec(j.spec as StrategySpec);
+      else { setSpec(j.spec as StrategySpec); setRepairs(Array.isArray(j.repairs) ? j.repairs : []); }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "compile failed");
     } finally {
@@ -229,6 +230,9 @@ export function AddChannel({
               {cap.isSmart && <> · <span className="ac-tag">smart</span></>}
               {slug && <> · <code>{slug}</code></>}
             </div>
+            {repairs.length > 0 && (
+              <div className="ac-note">✓ auto-corrected on compile: {repairs.join(" · ")}</div>
+            )}
             {cap.managementErrors.length > 0 && (
               <div className="ac-err">management invalid: {cap.managementErrors.join(" · ")}</div>
             )}
