@@ -1,4 +1,5 @@
-// ⚑ WORKER VERSION: 2026-06-01c  (real entry-time time-stops · 0DTE→1DTE roll ·
+// ⚑ WORKER VERSION: 2026-06-01d  (smart-layer guards: cost-gate entry veto +
+//   premium catastrophic stop · real entry-time time-stops · 0DTE→1DTE roll ·
 //   order resilience · channel independence · reconciliation). If the function
 //   deployed in Supabase does NOT show THIS version line at the top, the paste is
 //   stale — re-copy this file.
@@ -57,6 +58,20 @@ const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const DRY_RUN = (Deno.env.get("DRY_RUN") ?? "true").toLowerCase() !== "false";
 const PAPER = "https://paper-api.alpaca.markets";
+
+// ---- smart-layer guards (mirror engine/cost.ts + engine/manage.ts) ----------
+// The A/B on REAL option_bars said: scale-outs/breakeven/trail HURT (they cap the
+// 0DTE convex tail), but two pieces help — so ONLY these two are wired live:
+//   (1) the COST GATE (entry veto; cut grind's churn 2263→125 positions), and
+//   (2) the PREMIUM CATASTROPHIC STOP (exit; caps losers the ATR stops miss).
+// Both are tunable consts. The worker has BETTER data than the backtest: the live
+// option_quotes carry REAL bid+ask (+ a modeled delta) and features give ATR.
+const COST_GATE_RATIO = 3.0;          // block if expectedMove < RATIO × roundTripCost
+const PREMIUM_STOP_PCT = 50;          // exit any open position marked ≤ −50% from entry
+const ATM_DELTA = 0.5;                // ATM 0DTE delta proxy when the quote carries none
+const TICK = 0.01;
+const SLIPPAGE_TICKS_PER_SIDE = 1;    // mirrors engine/cost.ts DEFAULT_COST_MODEL
+const COMMISSION_PER_CONTRACT = 0.04; // Alpaca reg pass-through per side (not a commission)
 
 const sb = createClient(SB_URL, SB_SERVICE);
 
@@ -278,6 +293,21 @@ function aggregate(bars: Bar[], tf: number): Bar[] {
 }
 function etParts(ms: number) { const d = new Date(ms); const et = new Date(d.toLocaleString("en-US", { timeZone: "America/New_York" })); return { min: et.getHours() * 60 + et.getMinutes(), date: `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}` }; }
 
+// Effective spread (premium $/share): REAL bid/ask when usable, else modeled at
+// 3% (floor $0.03). Mirrors engine/cost.ts effSpread.
+function effSpreadPremium(bid: number, ask: number): number {
+  if (ask > bid && bid > 0) return ask - bid;
+  const mid = (ask + bid) / 2 > 0 ? (ask + bid) / 2 : ask;
+  return Math.max(0.03, mid * 0.03);
+}
+// Round-trip cost ($/contract): both sides' half-spread + slippage + commission.
+// Mirrors engine/cost.ts roundTripCostUsd, but feeds it the worker's REAL bid/ask.
+function roundTripCostUsd(bid: number, ask: number): number {
+  const spread = effSpreadPremium(bid, ask);
+  const edgePerSideUsd = (spread / 2) * 100 + SLIPPAGE_TICKS_PER_SIDE * TICK * 100;
+  return edgePerSideUsd * 2 + COMMISSION_PER_CONTRACT * 2;
+}
+
 // Alpaca order statuses that mean "still working" (not yet a fill/cancel).
 const WORKING_ORDER = new Set(["new", "accepted", "pending_new", "partially_filled", "held", "calculated", "accepted_for_bidding"]);
 
@@ -389,6 +419,22 @@ Deno.serve(async () => {
         intent = null;
       }
 
+      // ---- PREMIUM CATASTROPHIC STOP (all channels) ----
+      // A hard backstop the built-ins' ATR/structural stops lack: if the option's
+      // REAL Alpaca mark has cratered ≥ PREMIUM_STOP_PCT% below entry, exit now —
+      // whatever the channel's own evaluator says. Applies to code AND compiled
+      // channels, and to a 1DTE held overnight (a cratered option is still
+      // cratered). A genuine exit already in `intent` (incl. a compiled spec's own
+      // tighter stop_premium) wins on its own — this only fires when nothing else
+      // would exit. From the A/B verdict: caps the losers the ATR stops miss.
+      if (pos && row && alp && (!intent || intent.kind !== "exit")) {
+        const entryPx = Number(row.avg_entry_price ?? 0);
+        const markPx = Number(alp.current_price ?? 0);
+        if (entryPx > 0 && markPx > 0 && markPx <= entryPx * (1 - PREMIUM_STOP_PCT / 100)) {
+          intent = { kind: "exit", reason: "premium_stop" };
+        }
+      }
+
       // ---- reconcile: desk row OPEN but Alpaca has no such position ----
       // Happens when another channel holding the SAME 0DTE sold the netted lot,
       // on expiry, or a manual close. Close the orphan so it stops showing open
@@ -467,11 +513,23 @@ Deno.serve(async () => {
           for (const c of (closed ?? [])) if (c.closed_at && etParts(Date.parse(c.closed_at as string)).date === todayET) realizedToday += Number(c.realized_pnl ?? 0);
           if (realizedToday <= -Number(cfg.daily_stop_usd)) blocked = "daily_stop";
         }
-        let qty = 0, ask = 0;
+        let qty = 0, ask = 0, bid = 0, delta = ATM_DELTA, roundTrip = 0, expectedMove = 0;
         if (!blocked) {
-          const { data: q } = await sb.from("option_quotes").select("ask").eq("occ_symbol", occ).order("captured_at", { ascending: false }).limit(1).maybeSingle();
+          const { data: q } = await sb.from("option_quotes").select("ask,bid,delta").eq("occ_symbol", occ).order("captured_at", { ascending: false }).limit(1).maybeSingle();
           ask = Number(q?.ask ?? 0);
+          bid = Number(q?.bid ?? 0);
+          if (q?.delta != null && Number(q.delta) !== 0) delta = Math.abs(Number(q.delta)); // puts carry δ<0; magnitude is what we want
           if (!ask) blocked = "no_quote";
+        }
+        // COST GATE (entry veto, ALL channels): the dominant 0DTE cost is the
+        // round-trip spread. Block an entry whose expected premium move on a ~1·ATR
+        // favorable move doesn't clear that cost by COST_GATE_RATIO. Uses the REAL
+        // bid/ask + the quote's delta (ATM 0.5 proxy when absent). Mirrors
+        // engine/manage.ts costGatePass — this is what cut grind's churn in the A/B.
+        if (!blocked) {
+          roundTrip = roundTripCostUsd(bid, ask);
+          expectedMove = delta * Math.max(0, f.atr) * 100;
+          if (expectedMove < COST_GATE_RATIO * roundTrip) blocked = "cost_gate";
         }
         if (!blocked) {
           // INDEPENDENT per-channel allocation: this channel's slice of fund equity
@@ -479,7 +537,7 @@ Deno.serve(async () => {
           qty = Math.max(0, Math.min(Math.floor(budget / (ask * 100)), Number(cfg.max_contracts)));
           if (qty === 0) blocked = "insufficient_capital";
         }
-        await sb.from("signals").insert({ strategist_id: s.id, signal_type: intent.reason, underlying_price: f.close, direction: dir, acted_on: !blocked, blocked_reason: blocked, rationale: { occ, ask, qty, atr: Number(f.atr.toFixed(2)), er: Number(f.er.toFixed(2)), relVol: Number(f.relVol.toFixed(2)) } });
+        await sb.from("signals").insert({ strategist_id: s.id, signal_type: intent.reason, underlying_price: f.close, direction: dir, acted_on: !blocked, blocked_reason: blocked, rationale: { occ, ask, bid, qty, delta: Number(delta.toFixed(3)), roundTrip: Number(roundTrip.toFixed(2)), expectedMove: Number(expectedMove.toFixed(2)), atr: Number(f.atr.toFixed(2)), er: Number(f.er.toFixed(2)), relVol: Number(f.relVol.toFixed(2)) } });
         if (!blocked && qty > 0 && !DRY_RUN) {
           try {
             const o = await aPost("/v2/orders", { symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${occ}-${etMin}` });
