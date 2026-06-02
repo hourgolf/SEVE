@@ -672,6 +672,7 @@
   cursor: pointer;
 }
 .ch-edit-save:disabled { opacity: 0.4; cursor: default; }
+.ch-edit-accent { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 4px; }
 .ch-edit-danger { margin-top: auto; }
 .ch-edit-del {
   width: 100%;

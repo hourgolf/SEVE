@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useTradeInsight } from "@/hooks/useTradeInsight";
+import { useTradeTriggers } from "@/hooks/useTradeTriggers";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
 
@@ -34,6 +35,7 @@ export function PositionsPanel({
   strategists,
   recentTrades = [],
   liveMarks,
+  onOpenTrade,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -43,9 +45,14 @@ export function PositionsPanel({
    *  P&L are computed live off the chain instead of the worker's last write
    *  (which only updates ~once a minute, and not at all for orphaned rows). */
   liveMarks?: Record<string, number>;
+  /** Expand/collapse of a Today's-trade row — the surface uses it to highlight
+   *  that fill on the chart (null when collapsed). */
+  onOpenTrade?: (trade: Position | null) => void;
 }) {
   const colorOf = (slug: string) =>
     pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
+  const nameOf = (slug: string) => strategists.find((s) => s.slug === slug)?.name ?? slug;
+  const triggers = useTradeTriggers(recentTrades);
   const realizedToday = recentTrades.reduce((a, t) => a + (t.realized_pnl ?? 0), 0);
 
   // Live mark for a position if the chain has a fresh quote; else the stored mark.
@@ -149,9 +156,21 @@ export function PositionsPanel({
               const chips = open ? tradeChips(insight?.trigger?.rationale) : [];
               return (
                 <div key={t.id}>
-                  <button className={`rt-row${open ? " open" : ""}`} onClick={() => setOpenId(open ? null : t.id)} aria-expanded={open}>
+                  <button
+                    className={`rt-row${open ? " open" : ""}`}
+                    onClick={() => { const next = open ? null : t.id; setOpenId(next); onOpenTrade?.(next ? t : null); }}
+                    aria-expanded={open}
+                  >
                     <span className="rt-dot" style={{ background: colorOf(t.strategist_slug), boxShadow: `0 0 5px ${colorOf(t.strategist_slug)}` }} />
                     <span className="rt-sym">{t.strike.toFixed(0)}{t.opt_type === "call" ? "C" : "P"} ×{t.qty}</span>
+                    <span className="rt-meta">
+                      <span className="rt-ch">{nameOf(t.strategist_slug)}</span>
+                      {triggers[`${t.strategist_slug}|${t.occ_symbol}`] && (
+                        <span className="rt-trig" title={triggers[`${t.strategist_slug}|${t.occ_symbol}`]}>
+                          {triggers[`${t.strategist_slug}|${t.occ_symbol}`].replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </span>
                     <span className="rt-time">{hhmm(t.closed_at)}</span>
                     <span className={`rt-pnl ${realized < 0 ? "neg" : "pos"}`}>{signedUsd(realized)}</span>
                     <span className="rt-caret">{open ? "▾" : "▸"}</span>

@@ -20,6 +20,7 @@ import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { computeLiveMarks } from "@/lib/desk/liveMarks";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import type { Position } from "@/lib/desk/types";
 
 // The whole desk on one TR-909 surface: LIVE market readout → strategy COMPOSER
 // → LOG, all inside one cream chassis. The desktop layout.
@@ -49,6 +50,7 @@ export function DesktopSurface({
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
+  const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const { canWrite } = write;
 
   // occ_symbol → live option mark (delta-extrapolated off the fast spot tick), so
@@ -86,10 +88,10 @@ export function DesktopSurface({
 
       {/* ---- 01 · LIVE DESK (chart hero → book + chain | P&L) ---------- */}
       <SectionLabel id="live" idx="01">Live Desk</SectionLabel>
-      <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} />
+      <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} />
       <div className="grid grid--live live-body">
         <div className="col">
-          <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} />
+          <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
           <OptionChain
             snapshot={data.snapshot}
             spot={data.spot}

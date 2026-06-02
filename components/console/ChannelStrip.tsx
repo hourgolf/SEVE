@@ -7,8 +7,8 @@ import { PadButton } from "@/components/console/hw/PadButton";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pct, signedUsd, usd0 } from "@/lib/format";
-import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
-import { pmVar } from "@/lib/desk/colors";
+import type { ChannelPnl, PmColor, StrategistState } from "@/lib/desk/types";
+import { PM_COLORS, pmVar } from "@/lib/desk/colors";
 
 export interface ChannelStripProps {
   strategist: StrategistState;
@@ -20,7 +20,7 @@ export interface ChannelStripProps {
 
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, renameChannel, deleteChannel, canWrite } = useDeskWrite();
+  const { persistConfig, renameChannel, setChannelAccent, deleteChannel, canWrite } = useDeskWrite();
   const { id, slug, name, regime, color, status, config } = strategist;
 
   // Flip-card editor: rename + delete. Opens an overlay over the card.
@@ -41,6 +41,12 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
     const res = await deleteChannel(id);
     if (res.ok) { setEditing(false); dispatch({ type: "REMOVE", slug }); }
     else { setConfirmDel(false); setEditErr(res.error ?? "remove failed"); }
+  };
+  const recolor = async (c: PmColor) => {
+    if (c === color) return;
+    dispatch({ type: "RECOLOR", slug, color: c }); // optimistic
+    const res = await setChannelAccent(id, c);
+    if (!res.ok) setEditErr(res.error ?? "recolor failed");
   };
 
   const editBtn = canWrite ? (
@@ -74,6 +80,21 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
       <button className="ch-edit-save" disabled={!draftName.trim() || draftName.trim() === name} onClick={saveName}>
         Save name
       </button>
+
+      <label className="ch-edit-label">Accent</label>
+      <div className="ch-edit-accent">
+        {PM_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            className={`ac-swatch${color === c ? " on" : ""}`}
+            style={{ background: pmVar(c), color: pmVar(c) }}
+            onClick={() => recolor(c)}
+            aria-label={`accent ${c}`}
+            title={c}
+          />
+        ))}
+      </div>
 
       <div className="ch-edit-danger">
         {!confirmDel ? (

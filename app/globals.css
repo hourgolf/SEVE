@@ -966,6 +966,34 @@ svg.spark {
 .recent-trades .rt-sym {
   color: var(--text);
   min-width: 78px;
+  flex: 0 0 auto;
+}
+/* channel + trigger fill the row's negative space; truncate before crowding time/P&L */
+.recent-trades .rt-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  overflow: hidden;
+}
+.recent-trades .rt-ch {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+}
+.recent-trades .rt-trig {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
 }
 .recent-trades .rt-time {
   color: var(--muted-2);

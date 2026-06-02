@@ -20,6 +20,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
 import { computeLiveMarks } from "@/lib/desk/liveMarks";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import type { Position } from "@/lib/desk/types";
 
 // ---- 909-flavoured inline-SVG tab icons (silkscreen line-art, no emoji) ----
 const sv = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -46,6 +47,7 @@ const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
 export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [tab, setTab] = useState<Tab>("live");
+  const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   // Live: additive view toggles (like indicator chips) — chart is the base.
   const [show, setShow] = useState({ chart: true, chain: false, pos: false });
   const [settings, setSettings] = useState(false);
@@ -113,7 +115,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               <button className={`m-tog${show.pos ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, pos: !s.pos }))}>POSITIONS</button>
             </div>
             {show.chart && (
-              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} mobile trades={feed.recentTrades} openPositions={feed.positions} />
+              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} mobile trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} />
             )}
             {show.chain && (
               <>
@@ -128,7 +130,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
               </>
             )}
-            {show.pos && <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} />}
+            {show.pos && <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />}
           </>
         )}
 

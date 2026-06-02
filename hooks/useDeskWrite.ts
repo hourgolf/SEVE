@@ -123,6 +123,21 @@ export function useDeskWrite() {
     [session]
   );
 
+  // Recolor a channel (accent token). Free-text column, so any of the 12 palette
+  // tokens is valid; the desk reducer updates the UI optimistically.
+  const setChannelAccent = useCallback(
+    async (id: string, accent: PmColor): Promise<{ ok: boolean; error?: string }> => {
+      if (!session || !id) return { ok: false, error: "sign in to recolor" };
+      try {
+        const { error } = await getSupabase().from("strategists").update({ accent }).eq("id", id);
+        return error ? { ok: false, error: error.message } : { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "recolor failed" };
+      }
+    },
+    [session]
+  );
+
   // Delete a channel. A channel with trade history (signals/positions FK) can't
   // be hard-deleted without destroying that history, so we fall back to a soft
   // disable (status:'disabled' → hidden + skipped by the worker). Either way it
@@ -150,5 +165,5 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, deleteChannel };
+  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, deleteChannel };
 }

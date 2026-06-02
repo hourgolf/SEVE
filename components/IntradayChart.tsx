@@ -48,7 +48,7 @@ const INTRADAY_TFS = [1, 5, 15, 30, 60];
 const tSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp;
 
 export function IntradayChart({
-  bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [],
+  bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
 }: {
   bars: UnderlyingBar[];
   dailyBars?: UnderlyingBar[];
@@ -58,6 +58,9 @@ export function IntradayChart({
   /** Today's closed trades + open positions → entry/exit markers (intraday only). */
   trades?: Position[];
   openPositions?: Position[];
+  /** A trade the operator opened in the Today's-trades list → emphasize its marker
+   *  and center the view on it (so the fill is shown on the chart). */
+  highlightTrade?: Position | null;
 }) {
   const [mode, setMode] = useState<Mode>("line");
   const [range, setRange] = useState<RangeKey>("1D");
@@ -83,6 +86,8 @@ export function IntradayChart({
   const macdRef = useRef<{ hist: ISeriesApi<"Histogram">; macd: ISeriesApi<"Line">; sig: ISeriesApi<"Line"> } | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markersOnRef = useRef<Mode | null>(null);
+  const lastRangeRef = useRef<RangeKey | null>(null); // only reset the window on a RANGE change
+  const pendingCenterRef = useRef<Position | null>(null); // center on this trade after the next setData
 
   // ---- persistence (restore on mount) ----
   useEffect(() => {
@@ -216,18 +221,43 @@ export function IntradayChart({
     if (showTrades && !isDaily && rows.length) {
       const lo = rows[0].t as number, hi = rows[rows.length - 1].t as number;
       const inRange = (iso?: string | null) => { if (!iso) return false; const s = Math.floor(Date.parse(iso) / 1000); return s >= lo && s <= hi; };
+      const hlKey = highlightTrade ? `${highlightTrade.occ_symbol}|${highlightTrade.opened_at}` : null;
       for (const p of [...trades, ...openPositions]) {
         const up = p.opt_type === "call";
-        if (inRange(p.opened_at)) markers.push({ time: tSec(p.opened_at!), position: up ? "belowBar" : "aboveBar", color: up ? C.up : C.down, shape: up ? "arrowUp" : "arrowDown", text: `${p.strike.toFixed(0)}${up ? "C" : "P"}` });
-        if (p.status === "closed" && inRange(p.closed_at)) { const win = (p.realized_pnl ?? 0) >= 0; markers.push({ time: tSec(p.closed_at!), position: up ? "aboveBar" : "belowBar", color: win ? C.up : C.down, shape: "circle", text: (win ? "+" : "") + Math.round(p.realized_pnl ?? 0) }); }
+        const sz = hlKey && `${p.occ_symbol}|${p.opened_at}` === hlKey ? 2.4 : 1; // emphasize the opened trade
+        if (inRange(p.opened_at)) markers.push({ time: tSec(p.opened_at!), position: up ? "belowBar" : "aboveBar", color: up ? C.up : C.down, shape: up ? "arrowUp" : "arrowDown", text: `${p.strike.toFixed(0)}${up ? "C" : "P"}`, size: sz });
+        if (p.status === "closed" && inRange(p.closed_at)) { const win = (p.realized_pnl ?? 0) >= 0; markers.push({ time: tSec(p.closed_at!), position: up ? "aboveBar" : "belowBar", color: win ? C.up : C.down, shape: "circle", text: (win ? "+" : "") + Math.round(p.realized_pnl ?? 0), size: sz }); }
       }
       markers = markers.sort((a, b) => (a.time as number) - (b.time as number));
     }
     mk.setMarkers(markers);
 
-    // visible window for the range
-    if (rows.length) chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, rows.length - (RANGES[range].bars || rows.length)), to: rows.length });
-  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, isDaily, range, trades, openPositions, mobile]);
+    // Default visible window — set ONLY when the range preset changes, not on every
+    // live data poll, so polls don't reset the user's zoom/pan or a trade-highlight
+    // centering. (A poll's setData preserves the current visible range on its own.)
+    if (rows.length && lastRangeRef.current !== range) {
+      chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, rows.length - (RANGES[range].bars || rows.length)), to: rows.length });
+      lastRangeRef.current = range;
+    }
+    // Center on a just-opened trade AFTER setData (so it can't be overridden), once.
+    if (pendingCenterRef.current && rows.length) {
+      const ht = pendingCenterRef.current;
+      const t0 = ht.opened_at ? Math.floor(Date.parse(ht.opened_at) / 1000) : null;
+      const t1 = ht.closed_at ? Math.floor(Date.parse(ht.closed_at) / 1000) : t0;
+      if (t0) { try { chart.timeScale().setVisibleRange({ from: (t0 - 1800) as UTCTimestamp, to: ((t1 ?? t0) + 1800) as UTCTimestamp }); } catch { /* off-screen */ } }
+      pendingCenterRef.current = null;
+    }
+  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, isDaily, range, trades, openPositions, highlightTrade, mobile]);
+
+  // ---- highlight a trade opened in the Today's-trades list: switch to intraday
+  // if needed, center the view on the fill, and scroll the chart into view ----
+  useEffect(() => {
+    if (!highlightTrade) { pendingCenterRef.current = null; return; }
+    if (isDaily) setRangeP("1D");           // intraday so the marker exists
+    setShowTrades(true);                     // ensure the marker is visible
+    pendingCenterRef.current = highlightTrade; // the data effect (re-run by the highlightTrade dep) centers after setData
+    elRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightTrade, isDaily]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ledSpot = spot ?? (agg.length ? agg[agg.length - 1].close : null);
 
