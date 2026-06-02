@@ -23,14 +23,18 @@ export interface CostModel {
   crossSpread: boolean; // true = pay half-spread each side
 }
 
-// Calibrated to ≈ the engine's previous implicit cost (3% spread, ~quarter-spread
-// slippage, $0.65 fee) so existing backtests don't lurch — but now explicit.
+// Calibrated to ALPACA's real options economics (the desk's broker): $0
+// commission + only small regulatory pass-throughs (OCC clearing ~$0.02, ORF
+// ~$0.027, + SEC/TAF on sells) ≈ $0.03–0.05/contract per side — NOT a $0.65
+// broker commission. The bid/ask SPREAD is the dominant cost; modeled at 3% here,
+// real bid/ask when option_bars provides it. (Live, the worker uses the actual
+// Alpaca fills, so spread+fees are real — this model only matters for backtests.)
 export const DEFAULT_COST_MODEL: CostModel = {
   spreadSource: "modeled",
   modeledSpreadPct: 0.03,
   modeledSpreadFloorUsd: 0.03,
   slippageTicksPerSide: 1,
-  commissionPerContract: 0.65,
+  commissionPerContract: 0.04, // Alpaca regulatory pass-through per side (not a commission)
   crossSpread: true,
 };
 

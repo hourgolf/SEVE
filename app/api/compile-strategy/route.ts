@@ -71,6 +71,7 @@ Rules:
 - Map every mechanical entry/exit rule to a condition. Use the EXACT kinds in the tool schema.
 - Use the documented feed-dependent kinds where the thesis calls for them (tick, gamma_regime, gamma_wall, iv_rank, event_within) — do not invent supported substitutes; the desk flags them as gaps itself.
 - Use efficiency_ratio / momentum_atr for ER and momentum gates (the built-ins' own signals).
+- entries[].all are ENTRY GATES ONLY (market state: price/indicator/volume/time). Post-entry rules — stops, scale-outs, breakeven, trailing, cost gate, EOD-flatten — are MANAGEMENT: put them in the \`management\` block. NEVER emit them as entry conditions and never emit \`unknown\` for a cost gate / stop / scale rule.
 - structure: single-leg for one long call/put; straddle/vertical-spread/etc. for multi-leg.
 - "Smart" theses (those with a Management section: R-based stops, scale-outs, breakeven ratchet, trail, cost gate) → fill the optional \`management\` block faithfully from that section. A plain thesis with no such section → OMIT management entirely.
 - Be faithful to the thesis; do not add rules it doesn't state. Always call emit_spec exactly once.`;
