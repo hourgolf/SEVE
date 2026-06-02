@@ -1272,3 +1272,23 @@ td.clk.sel {
 .au-exp { font-size: 11px; line-height: 1.4; color: var(--blue); margin-top: 3px; }
 .au-actions { margin: 0; padding-left: 16px; }
 .au-actions li { font-size: 11.5px; line-height: 1.5; color: var(--text); margin-bottom: 4px; }
+
+/* collapse / expand */
+.au-expand {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--muted); background: none; border: none; cursor: pointer; padding: 0;
+}
+.au-expand:hover { color: var(--text); }
+.au-market--clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.au-ch--compact { padding: 6px 10px; }
+.au-ch--compact .au-ch-head { flex-wrap: wrap; }
+.au-ch--compact .au-name { flex: none; }
+.au-ch--compact .au-pnl { margin-left: auto; }
+.au-flaws--inline { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.au-expand-foot {
+  display: block; width: 100%; margin-top: 10px; padding: 7px 10px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.4px; text-transform: uppercase;
+  color: var(--muted); background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; text-align: center;
+}
+.au-expand-foot:hover { color: var(--text); border-color: var(--border-bright); }
