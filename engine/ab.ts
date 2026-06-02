@@ -19,7 +19,7 @@ import { specToStrategyDef } from "./specEvaluate";
 import { loadRealSessions } from "./realsource";
 import { priceChain } from "./market";
 import { DEFAULT_COST_MODEL } from "./cost";
-import type { ChainProvider } from "./optionsource";
+import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
 import type { Bar, Evaluate, FundState, StrategistConfig, Trade } from "./types";
 import type { Management } from "../lib/desk/strategySpec";
 
@@ -74,11 +74,12 @@ function abMetrics(trades: Trade[]): ABMetrics {
   };
 }
 
-function runSide(sessions: Awaited<ReturnType<typeof loadRealSessions>>, evalFor: (bars: Bar[]) => Evaluate, management?: Management): Trade[] {
+type Sessions = Awaited<ReturnType<typeof loadRealSessions>>;
+
+function runSide(sessions: Sessions, chainOf: (s: Sessions[number]) => ChainProvider, evalFor: (bars: Bar[]) => Evaluate, management?: Management): Trade[] {
   const all: Trade[] = [];
   for (const s of sessions) {
-    const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-    all.push(...simulateSession(s.bars, CFG, FUND, evalFor(s.bars), chainAt, false, undefined, DEFAULT_COST_MODEL, management));
+    all.push(...simulateSession(s.bars, CFG, FUND, evalFor(s.bars), chainOf(s), false, undefined, DEFAULT_COST_MODEL, management));
   }
   return all;
 }
@@ -122,9 +123,28 @@ async function main() {
       ? [[pairArg.split(":")[0], pairArg.split(":")[1] || pairArg.split(":")[0] + "-smart"]]
       : [["power", "power-smart"]];
 
+  const oi = argv.indexOf("--options");
+  const useRealOptions = oi >= 0 && argv[oi + 1] === "real";
+
   const sessions = await loadRealSessions(sinceDaysAgo != null ? { sinceDaysAgo } : undefined);
   if (!sessions.length) { console.log("\nNo real sessions — backfill underlying_bars first.\n"); return; }
-  console.log(`\n  ${sessions.length} sessions · ${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · modeled chains, post-cost`);
+
+  // Real option chains from option_bars (forward-filled, modeled spread) when
+  // --options real; else Black-Scholes modeled. SAME chain both sides → fair A/B.
+  let byDay = new Map<string, unknown[]>();
+  if (useRealOptions) {
+    try { byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET)) as Map<string, unknown[]>; }
+    catch (e) { console.log(`  (option_bars unavailable — ${(e as Error).message}; using modeled)`); }
+  }
+  const realDays = sessions.filter((s) => (byDay.get(s.dateET)?.length ?? 0) > 0).length;
+  const chainOf = (s: Sessions[number]): ChainProvider => {
+    const contracts = byDay.get(s.dateET);
+    return useRealOptions && contracts && contracts.length
+      ? makeRealChain(contracts as Parameters<typeof makeRealChain>[0])
+      : (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
+  };
+  const chainLabel = useRealOptions ? `REAL option_bars (${realDays}/${sessions.length} days) + modeled spread` : "modeled (Black-Scholes) chains";
+  console.log(`\n  ${sessions.length} sessions · ${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · ${chainLabel}, post-cost`);
 
   for (const [base, smart] of pairs) {
     const baseDef = STRATEGY_REGISTRY[base];
@@ -134,8 +154,8 @@ async function main() {
     const smartDef = specToStrategyDef(spec);
     // full: smart entry + smart mgmt.  --mgmt-only: BASE entry + smart mgmt.
     const smartEval = mgmtOnly ? baseEval : (bars: Bar[]) => smartDef.build(bars, smartDef.timeframeMin);
-    const bm = abMetrics(runSide(sessions, baseEval));
-    const sm = abMetrics(runSide(sessions, smartEval, spec.management));
+    const bm = abMetrics(runSide(sessions, chainOf, baseEval));
+    const sm = abMetrics(runSide(sessions, chainOf, smartEval, spec.management));
     printPair(base, smart, bm, sm, mgmtOnly);
   }
   console.log("");

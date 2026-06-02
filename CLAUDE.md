@@ -163,7 +163,21 @@ adds/removes channels by importing a strategy-thesis `.md`.
 - A stray `TR-909_T_600_FNL_A.jpg` sits untracked in the repo root — leave it
   (it's the user's reference image; gitignored from commits implicitly by `git add -A` care).
 
-## NEXT SESSION: wire compiled channels live (Add-Channel phase 2)
+## NEXT SESSION: real-fills A/B for the smart layer → see docs/NEXT_SESSION_AB_REAL.md
+The **smart-layer brief is fully built** (6 PRs): `engine/cost.ts` (cost model +
+costDrag), the `management` block in `StrategySpec` (R-risk / scale-outs / breakeven
+/ trail / cost gate) with `validateManagement`, the tranched state machine
+`engine/manage.ts` (golden test: `npm run golden`), `engine/smart-specs.ts` (the four
+`*-smart` channels), and the A/B comparator `engine/ab.ts` (`npm run ab -- --all
+[--mgmt-only] [--options real]`). On MODELED chains the A/B proved the smart layer's
+**risk control** (drawdown −71/−109/−195 R; cost gate cut grind 2263→125 positions)
+but expectancyR is FLAT — BS has no convex tail. **Next: backfill real `option_bars`
+and re-run the A/B** (`docs/NEXT_SESSION_AB_REAL.md` has the exact SQL + commands).
+Smart channels run in the backtest but are NOT live-armable yet — wiring `manage.ts`
+into the `paper-trader` worker is the out-of-scope follow-on, only worth it if a
+smart variant wins on real fills.
+
+## (DONE) Add-Channel phase 2 — compiled channels live
 Add-Channel **phase 1** (import → frontmatter preview → LLM compile → capability
 flags) is shipped. So are: the SPY-LED day-direction fix (green/red vs **prior
 close**, not the pre-market print), the realized-P&L "Today's trades" view + Day-P&L
