@@ -12,6 +12,7 @@
     "golden": "tsx engine/manage.golden.ts",
     "ab": "tsx engine/ab.ts",
     "power-probe": "tsx engine/power-probe.ts",
+    "sides-probe": "tsx engine/sides-probe.ts",
     "health": "tsx scripts/health.ts",
     "latency": "tsx scripts/latency.ts",
     "sweep": "tsx engine/sweep.ts",
