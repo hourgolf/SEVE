@@ -17,7 +17,19 @@
 
 import type { OptType, Quote } from "./types";
 import type { Management } from "../lib/desk/strategySpec";
-import { fillWithCost, type CostModel, DEFAULT_COST_MODEL } from "./cost";
+import { fillWithCost, roundTripCostUsd, type CostModel, DEFAULT_COST_MODEL } from "./cost";
+
+const RTH_OPEN_MIN = 570; // 09:30 ET
+const SESSION_MIN = 390; // 09:30–16:00
+const ATM_DELTA = 0.5; // the backtest enters ATM 0DTE → delta ≈ 0.5
+
+// Cost gate (Brief P7): veto an entry whose expected premium move on a ~1·ATR
+// favorable move doesn't clear the round-trip cost by `ratio`. Keeps a scalper
+// from trading itself to death across the spread. true = OK to enter.
+export function costGatePass(quote: Quote, atr: number, ratio: number, costModel: CostModel = DEFAULT_COST_MODEL): boolean {
+  const expectedPremiumMoveUsd = ATM_DELTA * Math.max(0, atr) * 100; // $/contract
+  return expectedPremiumMoveUsd >= ratio * roundTripCostUsd(quote, costModel);
+}
 
 export interface ManagedState {
   optType: OptType;
@@ -147,8 +159,8 @@ export function stepManaged(
   // b) trail — ATR chandelier on the underlying
   if (!exitReason && trailing && (trail!.mode === "atr_chandelier" || trail!.mode === "hybrid") && trail!.atrChandelier && atr > 0) {
     const ch = trail!.atrChandelier;
-    const minSinceOpen = etMinOfDay - (s.entryMinute); // approx; intraday only
-    const k = clamp(ch.baseK - ch.rTighten * Math.max(0, unrealR) - ch.timeTighten * Math.max(0, minSinceOpen / 390), ch.kMin * kMinMul, ch.baseK);
+    const minSinceOpen = Math.max(0, etMinOfDay - RTH_OPEN_MIN); // time-of-day: theta tightens late
+    const k = clamp(ch.baseK - ch.rTighten * Math.max(0, unrealR) - ch.timeTighten * (minSinceOpen / SESSION_MIN), ch.kMin * kMinMul, ch.baseK);
     const level = s.optType === "call" ? s.peakUnderlying - k * atr : s.peakUnderlying + k * atr;
     if (s.optType === "call" ? underlying <= level : underlying >= level) exitReason = "trail_atr";
   }

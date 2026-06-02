@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     const byMonth: Record<string, { pnl: number; n: number }> = {};
     for (const s of sessions) {
       const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-      const trades = simulateSession(s.bars, GATE_CFG, GATE_FUND, def.build(s.bars, def.timeframeMin), chainAt, false, premiumExit);
+      const trades = simulateSession(s.bars, GATE_CFG, GATE_FUND, def.build(s.bars, def.timeframeMin), chainAt, false, premiumExit, undefined, spec.management);
       for (const t of trades) {
         const k = monthKey(t.entryTs);
         (byMonth[k] ??= { pnl: 0, n: 0 }).pnl += t.pnl;

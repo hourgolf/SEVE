@@ -18,6 +18,22 @@
 import { readFileSync } from "node:fs";
 import { computeFeatures, riskGovernor } from "./engine";
 import { DEFAULT_COST_MODEL, fillWithCost, type CostModel } from "./cost";
+import { openManaged, stepManaged, costGatePass, type ManagedState } from "./manage";
+import type { Management } from "../lib/desk/strategySpec";
+
+// Zero-cost model for `--gross` runs (mid fills, no spread/slippage/fees).
+const GROSS_COST: CostModel = { spreadSource: "modeled", modeledSpreadPct: 0, modeledSpreadFloorUsd: 0, slippageTicksPerSide: 0, commissionPerContract: 0, crossSpread: false };
+
+// ET minute-of-day for a bar timestamp (theta-tighten / cost-gate use it).
+const ET_HM = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+function etMinuteOfDay(ms: number): number {
+  let h = 0, m = 0;
+  for (const p of ET_HM.formatToParts(new Date(ms))) {
+    if (p.type === "hour") h = Number(p.value);
+    else if (p.type === "minute") m = Number(p.value);
+  }
+  return (h === 24 ? 0 : h) * 60 + m;
+}
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
 import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
@@ -67,15 +83,56 @@ export function simulateSession(
   premiumExit?: { profitPct?: number; stopPct?: number },
   // Transaction-cost model (Brief P2). Applied per fill; `gross` overrides to
   // mid fills with zero cost (signal-only). Default ≈ the engine's old implicit cost.
-  costModel: CostModel = DEFAULT_COST_MODEL
+  costModel: CostModel = DEFAULT_COST_MODEL,
+  // Smart-layer management block (Brief P4). When present, the position is run by
+  // the tranched state machine (manage.ts) instead of the simple single-leg exit.
+  management?: Management
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
+  let ms: ManagedState | null = null; // managed (smart) position
   let dayPnl = 0;
+  const cm = gross ? GROSS_COST : costModel;
+  const etMin = management ? bars.map((b) => etMinuteOfDay(b.ts)) : [];
 
   for (let i = 0; i < bars.length; i++) {
     const f = computeFeatures(bars, i);
     const chain = chainAt(f.close, f.minutesToClose, bars[i].ts);
+
+    // ---- SMART managed path (Brief P4): the state machine owns exits ----
+    if (management) {
+      if (ms) {
+        const q = findQuote(chain, ms.strike, ms.optType);
+        if (q) {
+          const r = stepManaged(ms, q, f.close, f.atr, etMin[i], f.minutesToClose, cm);
+          for (const p of r.partials) {
+            dayPnl += p.pnl;
+            trades.push({
+              slug: cfg.slug, strike: ms.strike, optType: ms.optType, qty: p.qty,
+              entryPrice: ms.entryPremium, exitPrice: p.exitPremium,
+              entryTs: bars[ms.entryMinute].ts, exitTs: bars[i].ts,
+              pnl: p.pnl, exitReason: p.reason, cost: p.costUsd,
+            });
+          }
+          if (r.closed) ms = null;
+        }
+      } else {
+        const intent = evaluate(f, null);
+        if (intent && intent.kind === "enter" && intent.direction) {
+          const strike = Math.round(f.close);
+          const q = findQuote(chain, strike, intent.direction);
+          const gateOk = !management.costGate || gross || costGatePass(q!, f.atr, management.costGate.minMoveToCostRatio, costModel);
+          if (q && gateOk) {
+            const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false);
+            if (r.ok) {
+              const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);
+              ms = openManaged(management, intent.direction, strike, r.qty, en.fill, f.close, i, f.atr, en.edgeUsd);
+            }
+          }
+        }
+      }
+      continue;
+    }
 
     // update trailing peak (best favorable underlying) before the strategy reads it
     // (single-leg only — a multi-leg structure is non-directional, no trail)
@@ -280,10 +337,12 @@ async function main() {
   const specPath = argStr("spec", "");
   let specDef: CompiledStrategy | null = null;
   let premiumExit: { profitPct?: number; stopPct?: number } | undefined;
+  let management: Management | undefined;
   if (specPath) {
     const spec = JSON.parse(readFileSync(specPath, "utf8")) as StrategySpec;
     specDef = specToStrategyDef(spec);
     premiumExit = specPremiumExit(spec);
+    management = spec.management; // smart spec → the state machine owns exits
   }
   // EMA Cross precomputes indicators over the session's closes, so its
   // evaluator is built per session; fade/breakout ignore the closes arg.
@@ -344,7 +403,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management));
     }
     const optLabel = useRealOptions
       ? `REAL BARS + REAL option prices (modeled spread) · ${realDays}/${sessions.length} days had option data`
@@ -358,7 +417,7 @@ async function main() {
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
       const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management));
     }
     report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }
