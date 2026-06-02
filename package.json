@@ -18,7 +18,8 @@
     "sweep:cross": "tsx engine/sweep-cross.ts",
     "regime": "tsx engine/regime-test.ts",
     "daily-gate": "tsx engine/daily-gate-test.ts",
-    "backfill:options": "tsx scripts/backfill-options.ts"
+    "backfill:options": "tsx scripts/backfill-options.ts",
+    "backfill:databento": "tsx scripts/backfill-databento.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

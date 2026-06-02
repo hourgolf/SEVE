@@ -18,13 +18,16 @@ import { SMART_SPECS, basePairOf } from "./smart-specs";
 import { specToStrategyDef } from "./specEvaluate";
 import { loadRealSessions } from "./realsource";
 import { priceChain } from "./market";
-import { DEFAULT_COST_MODEL } from "./cost";
+import { DEFAULT_COST_MODEL, type CostModel } from "./cost";
 import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
+import { loadDatabentoByDay, makeDatabentoChain } from "./databentosource";
 import type { Bar, Evaluate, FundState, StrategistConfig, Trade } from "./types";
 import type { Management } from "../lib/desk/strategySpec";
 
 const CFG: StrategistConfig = { slug: "ab", capital_pct: 30, aggression: 40, max_contracts: 6, daily_stop_usd: 90, muted: false, soloed: false };
 const FUND: FundState = { total_capital_usd: 10000, master_daily_stop_usd: 300, is_halted: false };
+// Databento gives REAL bid/ask → cross the ACTUAL spread, not the 3% model.
+const REAL_NBBO_COST: CostModel = { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" };
 
 interface ABMetrics {
   positions: number; winRate: number; expectancyR: number; profitFactor: number;
@@ -76,10 +79,10 @@ function abMetrics(trades: Trade[]): ABMetrics {
 
 type Sessions = Awaited<ReturnType<typeof loadRealSessions>>;
 
-function runSide(sessions: Sessions, chainOf: (s: Sessions[number]) => ChainProvider, evalFor: (bars: Bar[]) => Evaluate, management?: Management): Trade[] {
+function runSide(sessions: Sessions, chainOf: (s: Sessions[number]) => ChainProvider, evalFor: (bars: Bar[]) => Evaluate, management: Management | undefined, costModel: CostModel): Trade[] {
   const all: Trade[] = [];
   for (const s of sessions) {
-    all.push(...simulateSession(s.bars, CFG, FUND, evalFor(s.bars), chainOf(s), false, undefined, DEFAULT_COST_MODEL, management));
+    all.push(...simulateSession(s.bars, CFG, FUND, evalFor(s.bars), chainOf(s), false, undefined, costModel, management));
   }
   return all;
 }
@@ -124,26 +127,34 @@ async function main() {
       : [["power", "power-smart"]];
 
   const oi = argv.indexOf("--options");
-  const useRealOptions = oi >= 0 && argv[oi + 1] === "real";
+  const optMode = oi >= 0 && argv[oi + 1] ? argv[oi + 1] : "synthetic"; // synthetic | real | databento
 
   const sessions = await loadRealSessions(sinceDaysAgo != null ? { sinceDaysAgo } : undefined);
   if (!sessions.length) { console.log("\nNo real sessions — backfill underlying_bars first.\n"); return; }
 
-  // Real option chains from option_bars (forward-filled, modeled spread) when
-  // --options real; else Black-Scholes modeled. SAME chain both sides → fair A/B.
+  // Chain source (SAME both sides → fair A/B):
+  //   databento → REAL NBBO from the local cbbo-1m cache + REAL spread (honest fills)
+  //   real      → option_bars trade prices + modeled 3% spread
+  //   else      → Black-Scholes modeled chains
+  const dbento = optMode === "databento";
+  const useRealOptions = optMode === "real";
   let byDay = new Map<string, unknown[]>();
-  if (useRealOptions) {
+  if (dbento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET)) as unknown as Map<string, unknown[]>;
+  else if (useRealOptions) {
     try { byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET)) as Map<string, unknown[]>; }
     catch (e) { console.log(`  (option_bars unavailable — ${(e as Error).message}; using modeled)`); }
   }
+  const COST = dbento ? REAL_NBBO_COST : DEFAULT_COST_MODEL;
   const realDays = sessions.filter((s) => (byDay.get(s.dateET)?.length ?? 0) > 0).length;
   const chainOf = (s: Sessions[number]): ChainProvider => {
     const contracts = byDay.get(s.dateET);
-    return useRealOptions && contracts && contracts.length
-      ? makeRealChain(contracts as Parameters<typeof makeRealChain>[0])
-      : (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
+    if (dbento && contracts && contracts.length) return makeDatabentoChain(contracts as Parameters<typeof makeDatabentoChain>[0]);
+    if (useRealOptions && contracts && contracts.length) return makeRealChain(contracts as Parameters<typeof makeRealChain>[0]);
+    return (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
   };
-  const chainLabel = useRealOptions ? `REAL option_bars (${realDays}/${sessions.length} days) + modeled spread` : "modeled (Black-Scholes) chains";
+  const chainLabel = dbento ? `REAL NBBO · Databento cbbo-1m (${realDays}/${sessions.length} days) + real spread`
+    : useRealOptions ? `REAL option_bars (${realDays}/${sessions.length} days) + modeled spread`
+    : "modeled (Black-Scholes) chains";
   console.log(`\n  ${sessions.length} sessions · ${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · ${chainLabel}, post-cost`);
 
   for (const [base, smart] of pairs) {
@@ -154,8 +165,8 @@ async function main() {
     const smartDef = specToStrategyDef(spec);
     // full: smart entry + smart mgmt.  --mgmt-only: BASE entry + smart mgmt.
     const smartEval = mgmtOnly ? baseEval : (bars: Bar[]) => smartDef.build(bars, smartDef.timeframeMin);
-    const bm = abMetrics(runSide(sessions, chainOf, baseEval));
-    const sm = abMetrics(runSide(sessions, chainOf, smartEval, spec.management));
+    const bm = abMetrics(runSide(sessions, chainOf, baseEval, undefined, COST));
+    const sm = abMetrics(runSide(sessions, chainOf, smartEval, spec.management, COST));
     printPair(base, smart, bm, sm, mgmtOnly);
   }
   console.log("");

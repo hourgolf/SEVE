@@ -20,3 +20,6 @@ next-env.d.ts
 
 # local editor / agent tooling (not part of the app)
 .claude/
+
+# Databento research cache (transient, local-only — never warehoused in Supabase)
+data/
