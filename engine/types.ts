@@ -132,4 +132,5 @@ export interface Trade {
   pnl: number; // $ (signed), net of cost
   exitReason: string;
   cost?: number; // total round-trip transaction cost ($) for this trade
+  riskUsd?: number; // $ risk (R) for this fill — pnl/riskUsd = R-multiple
 }

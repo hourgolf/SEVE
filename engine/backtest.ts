@@ -111,7 +111,7 @@ export function simulateSession(
               slug: cfg.slug, strike: ms.strike, optType: ms.optType, qty: p.qty,
               entryPrice: ms.entryPremium, exitPrice: p.exitPremium,
               entryTs: bars[ms.entryMinute].ts, exitTs: bars[i].ts,
-              pnl: p.pnl, exitReason: p.reason, cost: p.costUsd,
+              pnl: p.pnl, exitReason: p.reason, cost: p.costUsd, riskUsd: p.riskUsd,
             });
           }
           if (r.closed) ms = null;
@@ -194,6 +194,7 @@ export function simulateSession(
         pnl,
         exitReason: intent.reason,
         cost: tradeCost,
+        riskUsd: 0.5 * pos.entryPrice * pos.qty * 100, // notional R = 50% of premium at risk
       });
       pos = null;
     } else if (!pos && intent && intent.kind === "enter") {

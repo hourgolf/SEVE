@@ -57,6 +57,7 @@ export interface PartialExit {
   atRtag: number | null; // R-multiple at this exit (for tail capture)
   costUsd: number; // total cost ($) attributed to this tranche
   pnl: number; // realized $ for this tranche, net of cost
+  riskUsd: number; // $ risk (R) for this tranche = R · qty · 100
 }
 
 const num = (v: unknown, d = 0) => (typeof v === "number" && isFinite(v) ? v : d);
@@ -118,7 +119,7 @@ export function stepManaged(
     const ex = fillWithCost("sell", quote, costModel);
     const cost = s.entryEdgeUsdPerC * q + ex.edgeUsd * q + comm * q * 2;
     const pnl = (ex.fill - s.entryPremium) * q * 100 - comm * q * 2; // edges already in fills
-    partials.push({ qty: q, exitPremium: ex.fill, reason, atRtag, costUsd: cost, pnl });
+    partials.push({ qty: q, exitPremium: ex.fill, reason, atRtag, costUsd: cost, pnl, riskUsd: s.R * q * 100 });
     s.remaining -= q;
   };
 

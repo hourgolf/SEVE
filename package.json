@@ -10,6 +10,7 @@
     "backtest": "tsx engine/backtest.ts",
     "report": "tsx engine/report.ts",
     "golden": "tsx engine/manage.golden.ts",
+    "ab": "tsx engine/ab.ts",
     "sweep": "tsx engine/sweep.ts",
     "sweep:cross": "tsx engine/sweep-cross.ts",
     "regime": "tsx engine/regime-test.ts",
