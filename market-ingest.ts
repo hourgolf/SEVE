@@ -17,8 +17,14 @@ const SB_URL        = Deno.env.get("SUPABASE_URL")!;
 const SB_SERVICE    = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const DATA = "https://data.alpaca.markets";
-const STOCK_FEED    = "iex";          // free tier; paid data subscribers -> "sip"
-const OPT_FEED      = "indicative";   // free/delayed; OPRA subscribers   -> "opra"
+// Feeds are ENV-DRIVEN so the real-time flip is a SECRET change, not a code re-paste
+// (and instantly reversible). Free tier defaults: stock=iex, options=indicative
+// (~15-min DELAYED). On Alpaca Algo Trader Plus, set the secrets:
+//   supabase secrets set STOCK_FEED=sip OPT_FEED=opra
+// → next cron tick serves real-time SIP bars + real-time OPRA NBBO. To revert,
+// unset them (or set back to iex/indicative). See docs/streaming-worker.md.
+const STOCK_FEED    = Deno.env.get("STOCK_FEED") ?? "iex";        // "sip"  on Algo Trader Plus (real-time)
+const OPT_FEED      = Deno.env.get("OPT_FEED")   ?? "indicative"; // "opra" on Algo Trader Plus (real-time NBBO)
 const STRIKE_WINDOW = 8;              // keep strikes within +/- this many $ of spot
 
 const H = {

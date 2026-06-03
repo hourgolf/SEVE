@@ -1,0 +1,23 @@
+{
+  "name": "seve-streaming-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SEVE streaming worker — the third engine driver (always-on Alpaca websocket, in-memory state, bar-close decisions). Imports engine/* directly.",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.22.3",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.3"
+  }
+}

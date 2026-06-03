@@ -1,0 +1,13 @@
+# Patterns are relative to the build context (the REPO ROOT). BuildKit reads this
+# file (named <dockerfile>.dockerignore) for `worker/Dockerfile`. Keeps local
+# node_modules / build caches / secrets out of the image context.
+node_modules
+worker/node_modules
+worker/dist
+.next
+out
+data
+**/.env
+**/.env.*
+**/*.tsbuildinfo
+.git
