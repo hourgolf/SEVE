@@ -1,3 +1,11 @@
+// ⚑ WORKER VERSION: 2026-06-03a  (RTH-ONLY session bars. market-ingest is now on the
+//   SIP feed, which streams ~30 PRE-MARKET bars (09:00–09:29 ET); the worker filtered
+//   session bars by ET date only, so those bars satisfied warmup BEFORE the open and
+//   corrupted the opening range / VWAP / ATR (confirmed live 2026-06-03: grind fired
+//   09:31 while the RTH-correct streaming worker stayed flat until ~09:45). Now filters
+//   session1m AND the pdh/pdl high/low to 09:30–16:00 ET (min 570–960) — parity with
+//   the streaming worker's buildSessionBars. If the deployed function does NOT show
+//   THIS line at the top, the paste is stale. Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-02b  (POWER giveback trail: once a power position has
 //   been up ≥+100%, lock gains by exiting on a >40% giveback of the peak gain —
 //   engaged only after +100% so it never clips power's early convexity (the early
@@ -396,7 +404,12 @@ Deno.serve(async () => {
     const all1m: Bar[] = (rawBars ?? []).filter((b: Record<string, number | null>) => b.close != null).reverse().map((b: Record<string, number | null>) => ({ ts: Date.parse(b.ts as unknown as string), open: Number(b.open ?? b.close), high: Number(b.high ?? b.close), low: Number(b.low ?? b.close), close: Number(b.close), volume: Number(b.volume ?? 0), vwap: Number(b.vwap ?? b.close) }));
     const nowMs = Date.now();
     const todayET = etParts(nowMs).date;
-    const session1m = all1m.filter((b) => etParts(b.ts).date === todayET);
+    // RTH-ONLY session bars (09:30–16:00 ET = minute 570–960). CRITICAL now that
+    // market-ingest is on the SIP feed, which streams PRE-MARKET bars too: without
+    // this filter those ~30 pre-market bars satisfy warmup BEFORE the open AND
+    // corrupt the opening range / VWAP / ATR. (The streaming worker already
+    // RTH-filters in buildSessionBars — this brings the cron to parity.)
+    const session1m = all1m.filter((b) => { const p = etParts(b.ts); return p.date === todayET && p.min >= 570 && p.min < 960; });
 
     // Prior trading day's high/low — for compiled-spec `level` conditions
     // (ref:pdh/pdl). all1m holds ~2+ sessions, so the day before today is covered.
@@ -404,7 +417,9 @@ Deno.serve(async () => {
     {
       const dayHL = new Map<string, { hi: number; lo: number }>();
       for (const b of all1m) {
-        const d = etParts(b.ts).date;
+        const p = etParts(b.ts);
+        if (p.min < 570 || p.min >= 960) continue; // RTH-only high/low (skip pre/post-market)
+        const d = p.date;
         const e = dayHL.get(d);
         if (!e) dayHL.set(d, { hi: b.high, lo: b.low });
         else { e.hi = Math.max(e.hi, b.high); e.lo = Math.min(e.lo, b.low); }
