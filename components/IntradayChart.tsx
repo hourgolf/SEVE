@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createChart, CandlestickSeries, AreaSeries, LineSeries, HistogramSeries,
   createSeriesMarkers, ColorType, CrosshairMode, LineStyle,
-  type IChartApi, type ISeriesApi, type ISeriesMarkersPluginApi, type SeriesMarker, type Time, type UTCTimestamp,
+  type IChartApi, type ISeriesApi, type ISeriesMarkersPluginApi, type IPriceLine, type SeriesMarker, type Time, type UTCTimestamp,
 } from "lightweight-charts";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { aggregateBars, TIMEFRAMES } from "@/lib/bars";
@@ -23,7 +23,7 @@ type Mode = "line" | "candles";
 const MODE_KEY = "seve-chart-mode", TF_KEY = "seve-chart-tf", RANGE_KEY = "seve-chart-range";
 const VWAP_KEY = "seve-chart-vwap", EMA_KEY = "seve-chart-ema", VOL_KEY = "seve-chart-vol", MACD_KEY = "seve-chart-macd";
 const EMA_FAST_KEY = "seve-chart-ema-fast", EMA_SLOW_KEY = "seve-chart-ema-slow", EMA_THIRD_KEY = "seve-chart-ema-third";
-const TRADES_KEY = "seve-chart-trades";
+const TRADES_KEY = "seve-chart-trades", LEVELS_KEY = "seve-chart-levels";
 const EMA_FAST_DEFAULT = 9, EMA_SLOW_DEFAULT = 21, EMA_THIRD_DEFAULT = 50, EMA_MIN = 2, EMA_MAX = 200;
 
 const C = {
@@ -31,6 +31,7 @@ const C = {
   up: "#2fd573", down: "#f0563f", vwap: "#ffb224", emaFast: "#45c4d6", emaSlow: "#c061ff", emaThird: "#ff8f6b",
   area: "rgba(47,213,115,0.28)", areaBottom: "rgba(47,213,115,0.01)", areaLine: "#2fd573",
   macd: "#45c4d6", macdSig: "#ffb224",
+  pdc: "#aab6bc", pdh: "#6fbf73", pdl: "#e0795f", orb: "#d9b54a", // level lines: prior close · prior-day high/low · opening range
 };
 
 const DAILY_TF = 1440;
@@ -46,6 +47,17 @@ const RANGES: Record<RangeKey, { src: "intraday" | "daily"; tf: number; bars: nu
 const RANGE_KEYS = Object.keys(RANGES) as RangeKey[];
 const INTRADAY_TFS = [1, 5, 15, 30, 60];
 const tSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp;
+
+// ET wall-clock parts (DST-correct) for level math (opening range / prior day).
+const ET_FMT = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+function etParts(ms: number): { date: string; min: number } {
+  let y = "", mo = "", d = "", h = 0, mi = 0;
+  for (const p of ET_FMT.formatToParts(new Date(ms))) {
+    if (p.type === "year") y = p.value; else if (p.type === "month") mo = p.value; else if (p.type === "day") d = p.value;
+    else if (p.type === "hour") h = Number(p.value) % 24; else if (p.type === "minute") mi = Number(p.value);
+  }
+  return { date: `${y}-${mo}-${d}`, min: h * 60 + mi };
+}
 
 export function IntradayChart({
   bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
@@ -73,6 +85,7 @@ export function IntradayChart({
   const [emaSlowP, setEmaSlowP] = useState(EMA_SLOW_DEFAULT);
   const [emaThirdP, setEmaThirdP] = useState(EMA_THIRD_DEFAULT);
   const [showTrades, setShowTrades] = useState(true);
+  const [showLevels, setShowLevels] = useState(true);
 
   const elRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -86,6 +99,7 @@ export function IntradayChart({
   const macdRef = useRef<{ hist: ISeriesApi<"Histogram">; macd: ISeriesApi<"Line">; sig: ISeriesApi<"Line"> } | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markersOnRef = useRef<Mode | null>(null);
+  const levelLinesRef = useRef<{ series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">; line: IPriceLine }[]>([]);
   const lastRangeRef = useRef<RangeKey | null>(null); // only reset the window on a RANGE change
   const pendingCenterRef = useRef<Position | null>(null); // center on this trade after the next setData
 
@@ -106,6 +120,7 @@ export function IntradayChart({
     const es = Number(g(EMA_SLOW_KEY)); if (es >= EMA_MIN && es <= EMA_MAX) setEmaSlowP(es);
     const et = Number(g(EMA_THIRD_KEY)); if (et >= EMA_MIN && et <= EMA_MAX) setEmaThirdP(et);
     if (g(TRADES_KEY) === "0") setShowTrades(false);
+    if (g(LEVELS_KEY) === "0") setShowLevels(false);
   }, []);
 
   const persist = (k: string, v: string) => { try { window.localStorage.setItem(k, v); } catch { /* */ } };
@@ -145,6 +160,31 @@ export function IntradayChart({
   const esN = Math.min(EMA_MAX, Math.max(EMA_MIN, emaSlowP || EMA_SLOW_DEFAULT));
   const etN = Math.min(EMA_MAX, Math.max(EMA_MIN, emaThirdP || EMA_THIRD_DEFAULT));
 
+  // ---- key levels for the LVL overlay — from the SAME Supabase tape ----
+  // prior close + prior-day high/low (dailyBars) and today's opening range
+  // (first 30 min RTH, 1-min bars). All rendered as horizontal price lines.
+  const levels = useMemo(() => {
+    let priorClose: number | null = null, pdh: number | null = null, pdl: number | null = null;
+    if (dailyBars.length >= 2) {
+      const prev = dailyBars[dailyBars.length - 2];
+      priorClose = prev.close ?? null; pdh = prev.high ?? null; pdl = prev.low ?? null;
+    }
+    let orbHi: number | null = null, orbLo: number | null = null;
+    if (bars.length) {
+      const todayET = etParts(Date.parse(bars[bars.length - 1].ts)).date;
+      for (let i = bars.length - 1; i >= 0; i--) {
+        const p = etParts(Date.parse(bars[i].ts));
+        if (p.date !== todayET) break;             // bars ascending → older session, stop
+        if (p.min >= 570 && p.min < 600) {         // 09:30–10:00 ET opening range
+          const h = bars[i].high ?? bars[i].close, l = bars[i].low ?? bars[i].close;
+          if (h != null) orbHi = orbHi == null ? h : Math.max(orbHi, h);
+          if (l != null) orbLo = orbLo == null ? l : Math.min(orbLo, l);
+        }
+      }
+    }
+    return { priorClose, pdh, pdl, orbHi, orbLo };
+  }, [bars, dailyBars]);
+
   // ---- create chart + base series once ----
   useEffect(() => {
     if (!elRef.current) return;
@@ -163,7 +203,7 @@ export function IntradayChart({
     const line = (color: string) => chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     vwapRef.current = line(C.vwap); fastRef.current = line(C.emaFast); slowRef.current = line(C.emaSlow); thirdRef.current = line(C.emaThird);
     chartRef.current = chart;
-    return () => { chart.remove(); chartRef.current = null; macdRef.current = null; markersRef.current = null; markersOnRef.current = null; };
+    return () => { chart.remove(); chartRef.current = null; macdRef.current = null; markersRef.current = null; markersOnRef.current = null; levelLinesRef.current = []; };
   }, []);
 
   // ---- feed data / overlays / markers / MACD pane ----
@@ -232,6 +272,24 @@ export function IntradayChart({
     }
     mk.setMarkers(markers);
 
+    // ---- key level lines (intraday only): PDC / PDH / PDL / opening range ----
+    // Rebuild each pass (cheap) so they track the active series + live data.
+    for (const { series, line } of levelLinesRef.current) { try { series.removePriceLine(line); } catch { /* */ } }
+    levelLinesRef.current = [];
+    if (showLevels && !isDaily) {
+      const tgt = activeSeries;
+      const add = (price: number | null, color: string, title: string, lineStyle: LineStyle) => {
+        if (price == null || !Number.isFinite(price)) return;
+        const line = tgt.createPriceLine({ price, color, lineWidth: 1, lineStyle, axisLabelVisible: true, title });
+        levelLinesRef.current.push({ series: tgt, line });
+      };
+      add(levels.priorClose, C.pdc, "PDC", LineStyle.Dashed);
+      add(levels.pdh, C.pdh, "PDH", LineStyle.Dotted);
+      add(levels.pdl, C.pdl, "PDL", LineStyle.Dotted);
+      add(levels.orbHi, C.orb, "ORH", LineStyle.Dashed);
+      add(levels.orbLo, C.orb, "ORL", LineStyle.Dashed);
+    }
+
     // Default visible window — set ONLY when the range preset changes, not on every
     // live data poll, so polls don't reset the user's zoom/pan or a trade-highlight
     // centering. (A poll's setData preserves the current visible range on its own.)
@@ -247,7 +305,7 @@ export function IntradayChart({
       if (t0) { try { chart.timeScale().setVisibleRange({ from: (t0 - 1800) as UTCTimestamp, to: ((t1 ?? t0) + 1800) as UTCTimestamp }); } catch { /* off-screen */ } }
       pendingCenterRef.current = null;
     }
-  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, isDaily, range, trades, openPositions, highlightTrade, mobile]);
+  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, showLevels, levels, isDaily, range, trades, openPositions, highlightTrade, mobile]);
 
   // ---- highlight a trade opened in the Today's-trades list: switch to intraday
   // if needed, center the view on the fill, and scroll the chart into view ----
@@ -304,6 +362,7 @@ export function IntradayChart({
             <button className={`ind-chip${showVol ? " on" : ""}`} onClick={toggle(VOL_KEY, setShowVol)} aria-pressed={showVol} title="Volume">VOL</button>
             <button className={`ind-chip${showMacd ? " on" : ""}`} onClick={toggle(MACD_KEY, setShowMacd)} aria-pressed={showMacd} title="MACD 12/26/9">MACD</button>
             <button className={`ind-chip${showTrades ? " on" : ""}`} onClick={toggle(TRADES_KEY, setShowTrades)} aria-pressed={showTrades} title="Show trade entry/exit markers">TRADES</button>
+            <button className={`ind-chip${showLevels ? " on" : ""}`} onClick={toggle(LEVELS_KEY, setShowLevels)} aria-pressed={showLevels} title="Key levels: prior close (PDC), prior-day high/low (PDH/PDL), opening range (ORH/ORL) — intraday">LVL</button>
           </span>
           {showEma && (
             <span className="ema-cfg" title="EMA periods (fast / slow)">
