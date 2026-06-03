@@ -52,11 +52,12 @@ export function OptionChain({
       strikes[0]
     );
 
-    // Only show the money: 5 strikes at/below spot + 5 above (a 10-strike
+    // Only show the money: WING strikes at/below spot + WING above (a tight
     // window around the ATM), so the board stays short.
+    const WING = 3;
     const shown = [
-      ...strikes.filter((k) => k <= ref).slice(-5),
-      ...strikes.filter((k) => k > ref).slice(0, 5),
+      ...strikes.filter((k) => k <= ref).slice(-WING),
+      ...strikes.filter((k) => k > ref).slice(0, WING),
     ];
 
     // Delta-adjust each quote by the live spot's move since its snapshot, so the
@@ -122,7 +123,7 @@ export function OptionChain({
     // Mobile board is tight — show just the windowed count; desktop notes the
     // total available (e.g. "10 of 18") since there's room.
     meta = compact
-      ? `exp ${frontExp} · ${shown.length} strikes (±5)`
+      ? `exp ${frontExp} · ${shown.length} strikes (±${WING})`
       : `exp ${frontExp} · ${shown.length} of ${strikes.length} strikes`;
   }
 

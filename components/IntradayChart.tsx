@@ -258,11 +258,13 @@ export function IntradayChart({
     if (markersOnRef.current !== mode) { markersRef.current = null; markersOnRef.current = mode; }
     const mk = markersRef.current ?? (markersRef.current = createSeriesMarkers(activeSeries, []));
     let markers: SeriesMarker<Time>[] = [];
-    if (showTrades && !isDaily && rows.length) {
+    // Drilling into a trade from the list lights up ONLY that position; with no
+    // drill-down, the TRADES toggle shows every fill.
+    if ((showTrades || highlightTrade) && !isDaily && rows.length) {
       const lo = rows[0].t as number, hi = rows[rows.length - 1].t as number;
       const inRange = (iso?: string | null) => { if (!iso) return false; const s = Math.floor(Date.parse(iso) / 1000); return s >= lo && s <= hi; };
       const hlKey = highlightTrade ? `${highlightTrade.occ_symbol}|${highlightTrade.opened_at}` : null;
-      for (const p of [...trades, ...openPositions]) {
+      for (const p of (highlightTrade ? [highlightTrade] : [...trades, ...openPositions])) {
         const up = p.opt_type === "call";
         const sz = hlKey && `${p.occ_symbol}|${p.opened_at}` === hlKey ? 2.4 : 1; // emphasize the opened trade
         if (inRange(p.opened_at)) markers.push({ time: tSec(p.opened_at!), position: up ? "belowBar" : "aboveBar", color: up ? C.up : C.down, shape: up ? "arrowUp" : "arrowDown", text: `${p.strike.toFixed(0)}${up ? "C" : "P"}`, size: sz });
@@ -297,24 +299,30 @@ export function IntradayChart({
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, rows.length - (RANGES[range].bars || rows.length)), to: rows.length });
       lastRangeRef.current = range;
     }
-    // Center on a just-opened trade AFTER setData (so it can't be overridden), once.
+    // Center on a highlighted trade AFTER setData (so it can't be overridden), once —
+    // but ONLY when the fill is outside the current visible window, so clicking a
+    // trade that's already on screen doesn't yank the chart around.
     if (pendingCenterRef.current && rows.length) {
       const ht = pendingCenterRef.current;
       const t0 = ht.opened_at ? Math.floor(Date.parse(ht.opened_at) / 1000) : null;
       const t1 = ht.closed_at ? Math.floor(Date.parse(ht.closed_at) / 1000) : t0;
-      if (t0) { try { chart.timeScale().setVisibleRange({ from: (t0 - 1800) as UTCTimestamp, to: ((t1 ?? t0) + 1800) as UTCTimestamp }); } catch { /* off-screen */ } }
+      if (t0) {
+        const vr = chart.timeScale().getVisibleRange();
+        const onScreen = vr != null && t0 >= (vr.from as number) && t0 <= (vr.to as number);
+        if (!onScreen) { try { chart.timeScale().setVisibleRange({ from: (t0 - 1800) as UTCTimestamp, to: ((t1 ?? t0) + 1800) as UTCTimestamp }); } catch { /* off-screen */ } }
+      }
       pendingCenterRef.current = null;
     }
   }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, showLevels, levels, isDaily, range, trades, openPositions, highlightTrade, mobile]);
 
-  // ---- highlight a trade opened in the Today's-trades list: switch to intraday
-  // if needed, center the view on the fill, and scroll the chart into view ----
+  // ---- highlight a trade drilled into from the Today's-trades list: switch to
+  // intraday if needed and (only if off-screen) center the chart on the fill. Lights
+  // up ONLY that position — the marker block keys off highlightTrade — and does NOT
+  // toggle the all-trades layer or scroll the page. ----
   useEffect(() => {
     if (!highlightTrade) { pendingCenterRef.current = null; return; }
     if (isDaily) setRangeP("1D");           // intraday so the marker exists
-    setShowTrades(true);                     // ensure the marker is visible
-    pendingCenterRef.current = highlightTrade; // the data effect (re-run by the highlightTrade dep) centers after setData
-    elRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    pendingCenterRef.current = highlightTrade; // the data effect centers (off-screen only) after setData
   }, [highlightTrade, isDaily]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ledSpot = spot ?? (agg.length ? agg[agg.length - 1].close : null);
