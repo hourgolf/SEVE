@@ -16,6 +16,7 @@
     "spread-probe": "tsx engine/spread-probe.ts",
     "mdte-probe": "tsx engine/mdte-probe.ts",
     "autopsy": "tsx engine/autopsy.ts",
+    "exit-study": "tsx scripts/exit-study.ts",
     "health": "tsx scripts/health.ts",
     "latency": "tsx scripts/latency.ts",
     "sweep": "tsx engine/sweep.ts",
