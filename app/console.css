@@ -505,10 +505,10 @@
   filter: grayscale(0.5);
 }
 /* per-channel RESET — restores the trader's faders to factory defaults.
-   Tucked in the top-right corner so it's out of the knob-drag path. */
+   Tucked in the bottom-right corner so it's out of the title + knob-drag path. */
 .ch-reset {
   position: absolute;
-  top: 7px;
+  bottom: 7px;
   right: 7px;
   z-index: 2;
   display: grid;
@@ -596,7 +596,7 @@
 .channel { perspective: 1000px; }
 .ch-edit-btn {
   position: absolute;
-  top: 7px;
+  bottom: 7px;
   left: 7px;
   z-index: 2;
   display: grid;
@@ -627,6 +627,12 @@
 @keyframes ch-flip-in {
   from { transform: rotateY(90deg); opacity: 0; }
   to { transform: rotateY(0); opacity: 1; }
+}
+/* flip BACK to the card front on Done (was unmounting instantly → a flash) */
+.ch-edit.closing { animation: ch-flip-out 0.3s ease forwards; }
+@keyframes ch-flip-out {
+  from { transform: rotateY(0); opacity: 1; }
+  to { transform: rotateY(90deg); opacity: 0; }
 }
 .ch-edit-head {
   font-family: var(--mono);
@@ -789,6 +795,7 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
+  margin-left: 18px;
   padding: 4px 10px;
   border-radius: 6px;
   border: 1px solid var(--border-bright, #2a3a42);

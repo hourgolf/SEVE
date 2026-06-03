@@ -25,11 +25,15 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
 
   // Flip-card editor: rename + delete. Opens an overlay over the card.
   const [editing, setEditing] = useState(false);
+  const [closing, setClosing] = useState(false); // play the flip-OUT before unmounting
   const [draftName, setDraftName] = useState(name);
   const [confirmDel, setConfirmDel] = useState(false);
   const [editErr, setEditErr] = useState<string | null>(null);
 
-  const openEdit = () => { setDraftName(name); setConfirmDel(false); setEditErr(null); setEditing(true); };
+  const openEdit = () => { setDraftName(name); setConfirmDel(false); setEditErr(null); setClosing(false); setEditing(true); };
+  // Flip back to the front (animate, THEN unmount) — keeps it mounted for the
+  // 0.3s ch-flip-out so it doesn't just flash away.
+  const closeEdit = () => { setClosing(true); window.setTimeout(() => { setEditing(false); setClosing(false); }, 300); };
   const saveName = async () => {
     const nm = draftName.trim();
     if (!nm || nm === name) return;
@@ -66,7 +70,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
   ) : null;
 
   const editOverlay = editing ? (
-    <div className="ch-edit">
+    <div className={`ch-edit${closing ? " closing" : ""}`}>
       <div className="ch-edit-head">Edit · <span className="ch-edit-slug">{slug}</span></div>
       <label className="ch-edit-label">Name</label>
       <input
@@ -108,7 +112,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
         )}
       </div>
       {editErr && <div className="ch-edit-err">{editErr}</div>}
-      <button className="ch-edit-done" onClick={() => setEditing(false)}>Done</button>
+      <button className="ch-edit-done" onClick={closeEdit}>Done</button>
     </div>
   ) : null;
   const cssColor = pmVar(color);
