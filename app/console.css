@@ -504,6 +504,45 @@
   opacity: 0.4;
   filter: grayscale(0.5);
 }
+/* ---- 909 cream channel strips — cream body, dark knobs, ivory pads, dark-ink
+   silkscreen labels; accent kept on the top-cap/dot/knob rings/SOLO. Scoped to
+   .channel so the MASTER strip + data panels stay dark. ---- */
+.channel {
+  background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  border-color: var(--chassis-edge);
+  border-top-color: var(--pm); /* keep the accent cap */
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 -2px 4px rgba(0, 0, 0, 0.12) inset,
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.channel .ch-name { color: var(--ink); }
+.channel .ch-regime { color: var(--ink-soft); }
+.channel .knob-label { color: var(--ink-soft); }
+.channel .knob-val { color: var(--ink); }
+/* P&L meter: a recessed dark slot in the cream body so the green/red fill glows;
+   value text deepened for contrast on cream */
+.channel .ch-meter-track {
+  background: #232321;
+  border-color: #000;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.channel .ch-pnl.pos { color: #1f9d57; }
+.channel .ch-pnl.neg { color: #d23a28; }
+/* lighter ivory MUTE/SOLO pads that sit in the cream body (lit state keeps its
+   accent glow via the later .pad.lit rule) */
+.channel .pad {
+  background: linear-gradient(180deg, #ece9de, #d2cfc4);
+  border-color: var(--chassis-edge);
+  color: var(--ink-soft);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.channel .ch-reset,
+.channel .ch-edit-btn {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: var(--chassis-edge);
+  color: var(--ink-soft);
+}
 /* per-channel RESET — restores the trader's faders to factory defaults.
    Tucked in the bottom-right corner so it's out of the title + knob-drag path. */
 .ch-reset {
