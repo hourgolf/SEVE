@@ -2,7 +2,9 @@
 # Build context MUST be the REPO ROOT (the worker imports ../engine + ../lib):
 #   Railway → service settings → Dockerfile path: worker/Dockerfile
 #   (Root Directory stays the repo root so engine/ and lib/ are in the context.)
-FROM node:20-slim
+# Node 22 (LTS) — has a native global WebSocket (Node <22 doesn't, which
+# @supabase/realtime-js requires; store.ts also passes `ws` as a belt-and-braces).
+FROM node:22-slim
 
 WORKDIR /app
 

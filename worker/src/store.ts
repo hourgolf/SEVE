@@ -9,8 +9,14 @@
 // ============================================================================
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
 import { config } from "./config.js";
 import { info, warn } from "./log.js";
+
+// supabase realtime-js needs a WebSocket implementation; Node <22 has no global
+// one (it throws on createClient). Provide `ws` explicitly so it works on any
+// Node version. Type extracted from createClient's own options so there's no `any`.
+type WSTransport = NonNullable<NonNullable<Parameters<typeof createClient>[2]>["realtime"]>["transport"];
 
 export interface ChannelConfig {
   id: string;
@@ -45,6 +51,7 @@ export interface PositionRow {
 
 const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServiceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
+  realtime: { transport: WebSocket as unknown as WSTransport },
 });
 
 export async function loadConfig(): Promise<{ fund: FundState | null; channels: ChannelConfig[] }> {
