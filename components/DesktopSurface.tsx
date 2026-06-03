@@ -87,26 +87,28 @@ export function DesktopSurface({
 
       {/* ---- 01 · LIVE DESK (chart hero → book + chain | P&L) ---------- */}
       <SectionLabel id="live" idx="01">Live Desk</SectionLabel>
-      <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} />
-      <div className="grid grid--live live-body">
-        <div className="col">
-          <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
-          <OptionChain
-            snapshot={data.snapshot}
-            spot={data.spot}
-            deltasModeled={data.deltasModeled}
-            selected={selected}
-            onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
-          />
-          {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
-        </div>
-        <div className="col col--fill">
-          <PnlPanel
-            strategists={desk.strategists}
-            pnlByStrategist={feed.pnlByStrategist}
-            fundPnl={feed.fundPnl}
-            equityCurve={feed.equityCurve}
-          />
+      <div className="market-section">
+        <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} />
+        <div className="grid grid--live live-body">
+          <div className="col">
+            <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
+            <OptionChain
+              snapshot={data.snapshot}
+              spot={data.spot}
+              deltasModeled={data.deltasModeled}
+              selected={selected}
+              onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
+            />
+            {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
+          </div>
+          <div className="col col--fill">
+            <PnlPanel
+              strategists={desk.strategists}
+              pnlByStrategist={feed.pnlByStrategist}
+              fundPnl={feed.fundPnl}
+              equityCurve={feed.equityCurve}
+            />
+          </div>
         </div>
       </div>
 
@@ -141,22 +143,24 @@ export function DesktopSurface({
 
       {/* ---- 03 · LOG (autopsy → signals + tape health → event log) --- */}
       <SectionLabel id="log" idx="03">Log</SectionLabel>
-      <DailyAutopsyPanel strategists={desk.strategists} />
-      <div className="grid grid--live grid--even" style={{ marginTop: 14 }}>
-        <div className="col">
-          <SignalsTape signals={feed.signals} />
+      <div className="log-section">
+        <DailyAutopsyPanel strategists={desk.strategists} />
+        <div className="grid grid--live grid--even" style={{ marginTop: 14 }}>
+          <div className="col">
+            <SignalsTape signals={feed.signals} />
+          </div>
+          <div className="col">
+            <TapeHealth
+              rowCount={data.rowCount}
+              lastIngestTs={data.lastIngestTs}
+              snapCount={data.snapshot.length}
+              expirations={data.expirations}
+            />
+          </div>
         </div>
-        <div className="col">
-          <TapeHealth
-            rowCount={data.rowCount}
-            lastIngestTs={data.lastIngestTs}
-            snapCount={data.snapshot.length}
-            expirations={data.expirations}
-          />
+        <div className="log-foot">
+          <EventLog events={data.events} />
         </div>
-      </div>
-      <div className="log-foot">
-        <EventLog events={data.events} />
       </div>
     </Chassis>
   );

@@ -1245,6 +1245,58 @@
   right: 6px;
 }
 
+/* ---- CREAM TREATMENT: 16-step tape Bezel + the §03 LOG panels --------------
+   The step pads are already cream/colored, so the tape just needs a cream body.
+   The log panels flip to a cream "printout" by REDEFINING the color tokens on
+   the scope (every cell reads --text/--muted/--green/--red), so all text turns
+   to ink at once instead of per-class. */
+.bezel.tape {
+  background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  border-color: var(--chassis-edge);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.bezel.tape .bezel-label { color: var(--ink-soft); }
+
+.log-section .panel,
+.market-section .grid .panel {
+  --text: #2a2a28;
+  --muted: #55534c;
+  --muted-2: #6e6c63;
+  --green: #1f9d57;
+  --red: #d23a28;
+  --amber: #b07d10;
+  --blue: #2b6fb8;
+  --panel-2: #d3d1c7; /* light row card (e.g. autopsy .au-ch) on cream */
+  --border: var(--chassis-edge);
+  background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  border-color: var(--chassis-edge);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+/* hardcoded light text the token-flip can't reach */
+.log-section .log .msg { color: var(--ink); }
+.log-section .au-verdict,
+.log-section .au-ev { color: var(--ink-soft); }
+.log-section .log .line { border-bottom-color: rgba(0, 0, 0, 0.08); }
+.log-section .phead,
+.market-section .grid .phead {
+  background: linear-gradient(180deg, #d9d7cd, #c5c3b8);
+  border-bottom-color: var(--chassis-edge);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+}
+.log-section .phead .t,
+.market-section .grid .phead .t { color: var(--ink); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4); }
+.log-section .phead .x,
+.market-section .grid .phead .x { color: var(--ink-soft); }
+/* option chain + tables on cream: the call/put tints + strike column + borders
+   are tuned for the dark panel, so deepen/relight them for the cream body */
+.market-section .grid .calls { color: #1f7d45; }
+.market-section .grid .puts { color: #b23a22; }
+.market-section .grid .strike-col { color: var(--ink); background: rgba(0, 0, 0, 0.06); }
+.market-section .grid td { border-bottom-color: rgba(0, 0, 0, 0.08); }
+.market-section .grid th { color: var(--ink-soft); border-bottom-color: var(--chassis-edge); }
+.market-section .grid tr.atm td { background: rgba(31, 157, 87, 0.13); }
+.market-section .grid tr:hover td.clk { background: rgba(0, 0, 0, 0.05); }
+
 /* ---------- guarded PAPER/LIVE toggle ------------------------------------- */
 .guarded {
   display: flex;

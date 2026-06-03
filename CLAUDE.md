@@ -228,3 +228,15 @@ cells inherit `.panel`'s light text; `.pos`/`.neg` override. The cream chassis l
 in `console.css`; dark panels in `globals.css`. The desktop 16-step tape is a **2×8
 grid of large pads that fill the console width** (`.steprow` repeat(8,1fr), `.step`
 ~92px); mobile keeps its own 4×4 via `.m-steptape` overrides.
+
+**CREAM TREATMENT (2026-06-02, desktop):** most of the desk is now cream 909 chassis,
+NOT dark — channel strips (`.channel`), the tape Bezel (`.bezel.tape`), the §03 LOG
+panels (`.log-section`), and the §01 data tables (`.market-section .grid` →
+Positions/Chain/P&L) all go cream via a token-flip: redefining `--text`/`--muted`/
+`--green`/`--red`/`--amber`/`--blue`/`--panel-2`/`--border` on the scoped `.panel` so
+every cell turns to ink at once (plus a few hardcoded light colors overridden:
+`.log .msg`, `.au-verdict/.au-ev`, chain `.calls/.puts/.strike-col`). **Deliberately
+left DARK** (the "screens"): the SPY chart (its own JS theme in `IntradayChart` C
+object — a cream candle chart was tried + rejected), the LED vitals (Day P&L/SPY/NAV),
+and the MASTER strip. So the cream override is SCOPED (`.log-section`/`.market-section
+.grid`/`.channel`/`.bezel.tape`) — don't make `.panel` cream globally.
