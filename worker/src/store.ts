@@ -55,11 +55,13 @@ const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServi
 });
 
 export async function loadConfig(): Promise<{ fund: FundState | null; channels: ChannelConfig[] }> {
-  const { data: fundRow } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
+  const { data: fundRow, error: fundErr } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
+  if (fundErr) warn(`store: fund_state read failed — ${fundErr.message}`);
   const { data: rows, error } = await sb
     .from("strategists")
     .select("id,slug,status,spec_json,strategist_config(*)");
   if (error) { warn(`store: strategists read failed — ${error.message}`); return { fund: null, channels: [] }; }
+  if (!fundRow) warn("store: fund_state id=1 not found (check SUPABASE_URL / service-role key point at the right project)");
 
   const channels: ChannelConfig[] = [];
   for (const r of (rows ?? []) as any[]) {
