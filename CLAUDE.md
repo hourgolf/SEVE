@@ -8,6 +8,49 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-03 (Day 3 close) — READ THIS FIRST
+Three deploy targets now: **Vercel** (auto on push), **Supabase edge fns** (PASTE-deploy
+— I hand the user the file), **Railway** (the streaming worker, auto on push).
+
+**LIVE + VERIFIED (Day 3):**
+- **Real-time data:** Alpaca **Algo Trader Plus** is ON. `market-ingest` flipped to
+  SIP+OPRA via env-driven secrets `STOCK_FEED=sip` / `OPT_FEED=opra` → the ~15-min
+  options delay is GONE. `/api/spot` LED on SIP (env `STOCK_FEED`). (data-vendors memory.)
+- **Cron `paper-trader` = LIVE paper-trading (`DRY_RUN=false`), version `2026-06-03b`** —
+  the SOLE live trader. Fixes this session: RTH-only session bars (SIP now streams ~30
+  pre-market bars that polluted warmup/ORB/VWAP), and **books P&L at the ACTUAL fill**
+  (was the mid → the desk over-reported P&L ~4×). Confirm the deployed banner == repo.
+- **Streaming worker (3rd engine driver) DEPLOYED on Railway, Phase A SHADOW** — imports
+  `engine/*` directly, holds SIP/OPRA + state in memory, decides each bar-close, places
+  NO orders, lockstep with the cron. Also runs the **shadow MANAGEMENT what-if**
+  (`worker/src/shadowManage.ts`). 1 replica only. (docs/streaming-worker.md.)
+- **Manual close:** `app/api/close-position` (auth-gated, service-role, books real fill)
+  + the ✕→✓ confirm button in Open Positions (desktop+mobile). Needs Vercel env
+  `SUPABASE_SERVICE_ROLE_KEY` (SET). Verified in prod.
+- **Console restyle:** 2×8 cream tape; cream channel strips / §03 log / §01 data tables;
+  no screws/subtitle; chart + LED vitals + master stay dark; SPY chart has the LVL overlay.
+
+**KEY FINDING (Day 3):** winners give back because exits watch the underlying/clock, not
+the premium peak (STRATEGY, not wiring — verified). Per-channel exit management
+(`engine/management.ts` `MANAGEMENT_BY_SLUG`, NOT global — `.md`-thesis home later) is
+drafted but **DAY-DEPENDENT** (06-03 +$1071 / 06-02 −$636 via `npm run manage-ab`) →
+matches the 63-session backtest → **NOT wired to any live trader**; it runs as the
+streaming-worker shadow what-if to accumulate evidence. Power + grind-base stay
+UNMANAGED (managing caps power's tail / bleeds grind cost). New tools:
+`npm run exit-study | giveback-study | manage-ab`.
+
+**PENDING / TO-DO:**
+- Verify at the **06-04 open**: (1) cron's booked P&L reconciles to the account
+  (`equity − last_equity`), (2) cron no longer fires pre-warmup (RTH fix), (3) shadow⇄cron
+  lockstep, (4) first `MGMT` shadow events land — query `events` where `message like
+  'stream-shadow: MGMT%'` (meta has `{managed,actual,delta,slug}`).
+- Accumulate ~2–4 weeks of MGMT deltas → decide per channel whether to wire management
+  into the cron live (then move each block into its `.md` thesis).
+- Stop knob (`daily_stop_usd`) still a no-op in the dispatcher. Capital/aggression knobs
+  inert (size pins to max_contracts) — open design.
+- Phase B (later): de-hardcode the 4 code channels → `.md` theses; streaming worker
+  becomes the SOLE trader (disable the `seve-paper-trader` cron at cutover).
+
 ## One page, three sections (Next.js App Router, TypeScript, plain CSS, zero UI deps)
 The whole desk is a **single route** (`/`, `app/page.tsx`) — one cream TR-909
 `Chassis` holding three stacked, silkscreen-labelled sections (anchor chips +
@@ -110,8 +153,9 @@ kill switch gate it.
 - **Deploy by pasting that file into the Supabase Edge Function editor** (I have no
   CLI). Verify-JWT is OFF (internal cron worker). After any edit, confirm the
   DEPLOYED worker == this repo file.
-- **Status: DEPLOYED, currently `DRY_RUN=true`** (writes signals/equity, places NO
-  orders). The user killed it after a **runaway re-buy incident** — root cause: a
+- **Status (UPDATED 2026-06-03): LIVE paper-trading (`DRY_RUN=false`), version
+  `2026-06-03b`** — see the SESSION HANDOFF up top. (Historical: it was killed early in
+  development after a **runaway re-buy incident**, then re-armed.) Root cause of that was a
   position INSERT used a non-existent `entry_underlying` column → silent supabase-js
   failure → no desk row → the worker saw itself flat → re-bought every minute (~48
   contracts). FIXED in the repo: (a) `already_open` guard (skip if an open
