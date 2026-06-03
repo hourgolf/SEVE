@@ -18,6 +18,7 @@
     "autopsy": "tsx engine/autopsy.ts",
     "exit-study": "tsx scripts/exit-study.ts",
     "giveback-study": "tsx scripts/giveback-study.ts",
+    "manage-ab": "tsx scripts/manage-ab.ts",
     "health": "tsx scripts/health.ts",
     "latency": "tsx scripts/latency.ts",
     "sweep": "tsx engine/sweep.ts",
