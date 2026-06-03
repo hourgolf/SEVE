@@ -16,6 +16,19 @@ import type { Bar } from "../../engine/types";
 
 const WS_BASE = "wss://stream.data.alpaca.markets/v2";
 
+// RTH (Mon–Fri 09:30–16:00 ET). Bars only stream during the session, so the
+// stale-socket watchdog must fire ONLY then — off-hours the socket is idle by
+// design (no bars), not dead, and forcing reconnects just churns (and risks
+// Alpaca's single-connection 406 on each reconnect).
+const ET_RTH = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+function isRthNow(): boolean {
+  const p: Record<string, string> = {};
+  for (const x of ET_RTH.formatToParts(new Date())) p[x.type] = x.value;
+  if (p.weekday === "Sat" || p.weekday === "Sun") return false;
+  const min = (Number(p.hour) % 24) * 60 + Number(p.minute);
+  return min >= 570 && min < 960;
+}
+
 interface RawBar { T: string; S: string; o: number; h: number; l: number; c: number; v: number; vw?: number; t: string; }
 
 export class StockBarStream {
@@ -38,8 +51,8 @@ export class StockBarStream {
     // Heartbeat / stale-socket watchdog: if no message for 90s during what should
     // be an active socket, force a reconnect (Alpaca pushes frequently).
     this.hbTimer = setInterval(() => {
-      if (this.alive && this.lastMsgMs && Date.now() - this.lastMsgMs > 90_000) {
-        warn("stream: no messages for >90s — forcing reconnect");
+      if (this.alive && isRthNow() && this.lastMsgMs && Date.now() - this.lastMsgMs > 90_000) {
+        warn("stream: no bars for >90s during RTH — forcing reconnect");
         this.ws?.terminate();
       }
     }, 30_000);
