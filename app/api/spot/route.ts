@@ -1,15 +1,17 @@
 // Live SPY price proxy — keeps the LED ticking between the 1-minute ingest
 // snapshots. Server-side so the Alpaca keys never reach the browser and there's
-// no CORS. Free plan → IEX last trade (updates every few seconds). Degrades to
-// { price: null } if the keys aren't set, so the client falls back to the
-// 1/min spot from Supabase.
+// no CORS. Algo Trader Plus → SIP last trade (real-time, updates every few
+// seconds); set a Vercel STOCK_FEED=iex var to revert. Degrades to
+// { price: null } on missing keys / a feed error, so the client falls back to
+// the 1/min spot from Supabase.
 
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+const FEED = process.env.STOCK_FEED ?? "sip";
 const TRADE_URL =
-  "https://data.alpaca.markets/v2/stocks/SPY/trades/latest?feed=iex";
+  `https://data.alpaca.markets/v2/stocks/SPY/trades/latest?feed=${FEED}`;
 
 // Tiny server-side cache so multiple tabs/clients don't hammer Alpaca's rate
 // limit — at most one upstream fetch per TTL window.
