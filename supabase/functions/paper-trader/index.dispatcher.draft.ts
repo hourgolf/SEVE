@@ -1,3 +1,11 @@
+// ⚑ WORKER VERSION: 2026-06-03b  (P&L BOOKS AT THE ACTUAL FILL, not the mid/mark.
+//   Root cause of the desk reporting ~4× its real account P&L: entries booked at
+//   the quoted ask, exits at alp.current_price (mid), and manual/orphan closes at
+//   the last quote mid — but real fills cross the spread (buy→ask, sell→bid). Now
+//   entries + exits poll the order for filled_avg_price (aOrderAndFill), and the
+//   reconcile path books at the actual filled SELL order (manual close via the
+//   Alpaca app) or the quote BID. The desk's Day-P&L LED / per-channel / autopsy
+//   now reconcile to the Alpaca account. Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-03a  (RTH-ONLY session bars. market-ingest is now on the
 //   SIP feed, which streams ~30 PRE-MARKET bars (09:00–09:29 ET); the worker filtered
 //   session bars by ET date only, so those bars satisfied warmup BEFORE the open and
@@ -354,6 +362,21 @@ const aHdr = { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECR
 async function aGet(path: string) { const r = await fetch(PAPER + path, { headers: aHdr }); if (!r.ok) throw new Error(`${r.status} GET ${path}`); return r.json(); }
 async function aPost(path: string, body: unknown) { const r = await fetch(PAPER + path, { method: "POST", headers: { ...aHdr, "content-type": "application/json" }, body: JSON.stringify(body) }); const text = await r.text(); if (!r.ok) throw new Error(`${r.status} POST ${path}: ${text.slice(0, 300)}`); return text ? JSON.parse(text) : {}; }
 async function journal(level: string, message: string, meta?: unknown) { try { await sb.from("events").insert({ level, message, meta: meta ?? null }); } catch { /* */ } }
+// Place an order, then poll briefly for the ACTUAL fill price (market orders fill
+// in ms). Booking at the real fill — not the mid/mark — is what makes the desk's
+// P&L reconcile to the Alpaca account (a sell crosses to the bid, a buy to the ask;
+// booking at mid systematically overstated P&L). Returns fill=0 if it didn't post
+// in time → caller falls back to the quote.
+async function aOrderAndFill(body: unknown): Promise<{ id: string; fill: number }> {
+  const o = await aPost("/v2/orders", body) as { id?: string; filled_avg_price?: number };
+  const id = String(o.id ?? "");
+  let fill = Number(o.filled_avg_price ?? 0);
+  for (let i = 0; i < 5 && id && fill <= 0; i++) {
+    await new Promise((r) => setTimeout(r, 300));
+    try { const g = await aGet(`/v2/orders/${id}`) as { filled_avg_price?: number }; if (Number(g.filled_avg_price) > 0) fill = Number(g.filled_avg_price); } catch { /* keep polling */ }
+  }
+  return { id, fill };
+}
 function occSymbol(etDate: string, strike: number, type: OptType) { const [y, m, d] = etDate.split("-"); return `SPY${y.slice(2)}${m}${d}${type === "call" ? "C" : "P"}${String(Math.round(strike * 1000)).padStart(8, "0")}`; }
 function aggregate(bars: Bar[], tf: number): Bar[] {
   if (tf <= 1) return bars;
@@ -578,11 +601,18 @@ Deno.serve(async () => {
       // (valued at the last option quote — best-effort; the close already
       // happened on Alpaca). Only when the positions read succeeded.
       if (row && !alp && positionsOk) {
-        const { data: q } = await sb.from("option_quotes").select("mid,bid").eq("occ_symbol", row.occ_symbol).order("captured_at", { ascending: false }).limit(1).maybeSingle();
-        const mark = Number(q?.mid ?? q?.bid ?? 0); // no quote → assume worthless
+        // Prefer the ACTUAL sell fill — a manual close via the Alpaca app (or a
+        // shared-OCC exit) leaves a filled SELL order for this contract. Book at
+        // that real price so the desk reconciles to the account. Fallbacks: the
+        // latest quote BID (a sell crosses to the bid — not the optimistic mid),
+        // then 0 (worthless). allOrders is newest-first, so [0] is the last fill.
+        const sellFill = allOrders.find((o) => String(o.symbol) === String(row.occ_symbol) && String(o.side) === "sell" && String(o.status) === "filled" && Number(o.filled_avg_price) > 0);
+        let mark = sellFill ? Number(sellFill.filled_avg_price) : 0;
+        let src = sellFill ? "actual fill" : "";
+        if (!mark) { const { data: q } = await sb.from("option_quotes").select("bid,mid").eq("occ_symbol", row.occ_symbol).order("captured_at", { ascending: false }).limit(1).maybeSingle(); mark = Number(q?.bid ?? q?.mid ?? 0); src = "last quote bid"; }
         const realized = (mark - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
         await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized }).eq("id", row.id);
-        await journal("WARN", `${s.slug}: reconciled ${row.occ_symbol} — no Alpaca position; booked ~$${realized.toFixed(0)} at last quote (estimate)`);
+        await journal("WARN", `${s.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${src}) — no Alpaca position; booked $${realized.toFixed(0)}`);
         out.push({ slug: s.slug, note: "reconciled" });
         continue;
       }
@@ -595,12 +625,16 @@ Deno.serve(async () => {
         // 0DTE (the root cause of the stuck "open" rows).
         const sellQty = Math.max(1, Math.min(Math.round(Number(alp.qty)), Number(row.qty)));
         try {
-          if (!DRY_RUN) await aPost("/v2/orders", { symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` });
+          // Book at the ACTUAL sell fill (crosses to the bid), not alp.current_price
+          // (the mid/mark) — booking at mid overstated realized P&L vs the account.
+          // DRY_RUN / fill-not-posted → fall back to the mark.
+          let exitPx = Number(alp.current_price ?? 0);
+          if (!DRY_RUN) { const r = await aOrderAndFill({ symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` }); if (r.fill > 0) exitPx = r.fill; }
           // Per-channel realized P&L on its own qty (alp.unrealized_pl is the whole
-          // netted lot — wrong when shared): (mark − entry) × qty × 100.
-          const realized = (Number(alp.current_price ?? 0) - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
-          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: Number(alp.current_price ?? 0), realized_pnl: realized }).eq("id", row.id);
-          await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} (${intent.reason})`);
+          // netted lot — wrong when shared): (fill − entry) × qty × 100.
+          const realized = (exitPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
+          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized }).eq("id", row.id);
+          await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} @ ${exitPx.toFixed(2)} (${intent.reason})`);
         } catch (e) {
           // One rejected order must NOT crash the whole run — journal the Alpaca
           // reason and leave the row open to retry next minute.
@@ -678,13 +712,16 @@ Deno.serve(async () => {
         await sb.from("signals").insert({ strategist_id: s.id, signal_type: intent.reason, underlying_price: f.close, direction: dir, acted_on: !blocked, blocked_reason: blocked, rationale: { occ, ask, bid, qty, delta: Number(delta.toFixed(3)), roundTrip: Number(roundTrip.toFixed(2)), expectedMove: Number(expectedMove.toFixed(2)), atr: Number(f.atr.toFixed(2)), er: Number(f.er.toFixed(2)), relVol: Number(f.relVol.toFixed(2)) } });
         if (!blocked && qty > 0 && !DRY_RUN) {
           try {
-            const o = await aPost("/v2/orders", { symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${occ}-${etMin}` });
+            // Book entry at the ACTUAL buy fill (poll the order), not the quoted
+            // ask — so the round-trip P&L matches the account. Fallback to ask.
+            const o = await aOrderAndFill({ symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${occ}-${etMin}` });
+            const entryPx = o.fill > 0 ? o.fill : ask;
             // CRITICAL: confirm the position row was recorded. A silent insert
             // failure here is what caused the re-buy loop — if it fails, journal
             // LOUD (the per-channel guards above still prevent another buy).
-            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty, avg_entry_price: ask, current_mark: ask, unrealized_pnl: 0, status: "open" });
+            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty, avg_entry_price: entryPx, current_mark: entryPx, unrealized_pnl: 0, status: "open" });
             if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
-            else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} (${intent.reason})`, { order_id: o.id });
+            else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} @ ${entryPx.toFixed(2)} (${intent.reason})`, { order_id: o.id });
           } catch (e) {
             // Order rejected (e.g. Alpaca 422) — journal the reason, don't crash
             // the run or insert a phantom position; just record the blocked signal.
