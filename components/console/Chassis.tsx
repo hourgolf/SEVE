@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 export interface ChassisProps {
   brand: ReactNode; // e.g. <>SEVE<span> · CONSOLE</span></>
-  sub: string;
+  sub?: string;
   right?: ReactNode; // status cluster / LED / badge
   children: ReactNode;
 }
@@ -18,7 +18,7 @@ export function Chassis({ brand, sub, right, children }: ChassisProps) {
       <div className="chassis-head">
         <div className="chassis-brand">
           <div className="mark">{brand}</div>
-          <div className="sub">{sub}</div>
+          {sub && <div className="sub">{sub}</div>}
         </div>
         <div className="chassis-head-right">
           {right}

@@ -12,7 +12,7 @@ export interface BezelProps {
 
 // A recessed dark sub-panel with optional corner screws and a section label —
 // the chassis grouping primitive.
-export function Bezel({ label, accent, children, screws = true, className }: BezelProps) {
+export function Bezel({ label, accent, children, screws = false, className }: BezelProps) {
   return (
     <div className={`bezel${className ? " " + className : ""}`}>
       {label && (

@@ -60,7 +60,6 @@ export function DesktopSurface({
   return (
     <Chassis
       brand={<>$EVE<span> · DESK</span></>}
-      sub="Get Money, Fuck Bitches."
       right={
         <div className="head-nav">
           <nav className="surface-nav" aria-label="sections">

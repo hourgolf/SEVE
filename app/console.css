@@ -1088,12 +1088,12 @@
 /* ---------- 16-step sequencer row ----------------------------------------- */
 .steprow {
   display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  gap: 5px;
+  grid-template-columns: repeat(8, 1fr); /* 2×8, pads stretch to fill the console */
+  gap: 10px;
 }
 .step {
   position: relative;
-  height: 34px;
+  height: 92px;
   border-radius: 5px;
   border: 1px solid #000;
   background: linear-gradient(180deg, #e7e5da, #c3c1b6);
@@ -1141,10 +1141,10 @@
 }
 .step-num {
   position: absolute;
-  top: 2px;
-  left: 4px;
+  top: 5px;
+  left: 7px;
   font-family: var(--mono);
-  font-size: 7px;
+  font-size: 9px;
   color: rgba(0, 0, 0, 0.45);
 }
 /* 909-style voice label silkscreened on the pad face */
@@ -1154,7 +1154,7 @@
   display: grid;
   place-items: center;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: rgba(0, 0, 0, 0.62);

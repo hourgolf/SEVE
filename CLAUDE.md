@@ -221,7 +221,10 @@ messages end with the Co-Authored-By line. Branch is `main`; push deploys.
 **909 panel aesthetic (don't drift):** data panels use the base `.panel` — a
 recessed dark "display screen" (black molded edge + drop shadow + light text)
 with a molded plate `.phead` carrying a silkscreen label. NEVER build a flat
-dark-tech card. Add `.panel--screws` ONLY on instrument panels (Open Positions,
-P&L) — dense tables (chain, log, signals, tape-health) stay screwless to keep
-clean. Uncolored table cells inherit `.panel`'s light text; `.pos`/`.neg`
-override. The cream chassis lives in `console.css`; dark panels in `globals.css`.
+dark-tech card. **Screws were removed console-wide (2026-06-02)** — `Bezel` defaults
+`screws={false}`, no panel uses `.panel--screws`, and the brand subtitle is gone; the
+`.screw`/`.bezel-screw`/`.panel--screws` CSS lingers but is unused. Uncolored table
+cells inherit `.panel`'s light text; `.pos`/`.neg` override. The cream chassis lives
+in `console.css`; dark panels in `globals.css`. The desktop 16-step tape is a **2×8
+grid of large pads that fill the console width** (`.steprow` repeat(8,1fr), `.step`
+~92px); mobile keeps its own 4×4 via `.m-steptape` overrides.

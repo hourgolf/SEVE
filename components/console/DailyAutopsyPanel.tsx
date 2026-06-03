@@ -27,7 +27,7 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
   const colorOf = (slug: string) => pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
 
   const Frame = ({ children }: { children: React.ReactNode }) => (
-    <div className="panel panel--screws">
+    <div className="panel">
       <div className="phead"><span className="t">Daily Autopsy</span><span className="x">end-of-day</span></div>
       <div className="pbody">{children}</div>
     </div>
@@ -45,7 +45,7 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
   const nActions = n?.topActions?.length ?? 0;
 
   return (
-    <div className="panel panel--screws">
+    <div className="panel">
       <div className="phead">
         <span className="t">Daily Autopsy</span>
         <button className="au-expand" onClick={toggleExp} aria-expanded={expanded} title={expanded ? "collapse" : "expand full detail"}>

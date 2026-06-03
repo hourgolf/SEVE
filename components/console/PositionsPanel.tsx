@@ -72,7 +72,7 @@ export function PositionsPanel({
   const { insight, loading } = useTradeInsight(openTrade);
 
   return (
-    <div className="panel panel--screws">
+    <div className="panel">
       <div className="phead">
         <span className="t">Open Positions</span>
         <span className="x">

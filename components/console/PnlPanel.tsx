@@ -44,7 +44,7 @@ export function PnlPanel({
     equityValues.length >= 2 && Math.max(...equityValues) !== Math.min(...equityValues);
 
   return (
-    <div className="panel panel--screws">
+    <div className="panel">
       <div className="phead">
         <span className="t">P&amp;L · Equity</span>
         <span className="x">NAV {usd0(fundPnl.nav)}</span>
