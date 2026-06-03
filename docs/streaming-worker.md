@@ -1,7 +1,24 @@
 # Streaming worker — the third engine driver (scope)
 
-Status: **SCOPED, not built.** Prereqs (Alpaca real-time sub + Railway account) are on
-the user. This is the long-term fix for the per-minute lag.
+Status: **Phase A (SHADOW) BUILT — lives in `worker/`** (committed 2026-06-02). It
+streams, decides, and LOGS intended signals; it places NO orders and writes no prod
+tables (`DRY_RUN=false` is refused in v1). Verified locally end-to-end (auth → seed
+→ boot decision cycle over all 8 channels) on the free iex ws + indicative
+snapshots, markets closed. Prereqs (Alpaca real-time sub + Railway account) are
+still on the user — both only gate *running it live*, not the build. Phase B (live
+orders + cron cutover) is the follow-on. This is the long-term fix for the
+per-minute lag.
+
+**Build-session decisions (the "open questions" below, resolved):** (1) bar source =
+Alpaca minute bars over the ws (trade stream = Phase C); (2) the worker is
+trading/decision-only — `market-ingest` keeps feeding the dashboard tape +
+option_quotes; (3) config = Supabase Realtime subscription + a 30s poll fallback.
+Option quotes in v1 come from a REST chain snapshot per bar-close (feed-selectable
+indicative→opra); the OPRA *websocket* push is a later latency optimization. Two
+deliberate corrections vs the cron path: cumulative SESSION vwap (matches
+`engine/realsource.ts`, the backtest) instead of Alpaca's per-minute vw, and reuse
+of `engine.computeFeatures` overriding only `minutesToClose` (the one bars-relative
+field). See `worker/README.md`.
 
 ## Why
 The live worker is a **per-minute cron**. Three lags stack up: (1) reaction lag — a move
