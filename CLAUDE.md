@@ -280,7 +280,19 @@ Positions/Chain/P&L) all go cream via a token-flip: redefining `--text`/`--muted
 `--green`/`--red`/`--amber`/`--blue`/`--panel-2`/`--border` on the scoped `.panel` so
 every cell turns to ink at once (plus a few hardcoded light colors overridden:
 `.log .msg`, `.au-verdict/.au-ev`, chain `.calls/.puts/.strike-col`). **Deliberately
-left DARK** (the "screens"): the SPY chart (its own JS theme in `IntradayChart` C
+left DARK** (the "screens" — these paint their OWN dark surface, so they stay dark even
+inside a cream frame): the SPY chart **CANVAS** (its own JS theme in `IntradayChart` C
 object — a cream candle chart was tried + rejected), the LED vitals (Day P&L/SPY/NAV),
-and the MASTER strip. So the cream override is SCOPED (`.log-section`/`.market-section
-.grid`/`.channel`/`.bezel.tape`) — don't make `.panel` cream globally.
+and the MASTER strip (`.master`).
+
+**Extended to the chart FRAME + MOBILE (2026-06-03):** the token-flip selector now also
+covers `.market-section > .panel` (the §01 chart's FRAME — header/body/border go cream
+while the canvas + spot LED stay dark) and `.m-app .panel` (EVERY mobile data panel:
+chart frame, chain, positions, greeks `.cd-stat`, P&L, autopsy, signals/event-log — so
+the phone matches the desktop cream). The mobile Settings·Log **sheet** (`.m-sheet`) is
+cream too (`app/mobile.css`). The hardcoded-light overrides (`.log .msg`,
+`.au-verdict/.au-ev`) + chain-color overrides are mirrored to `.m-app`. The greeks
+`.cd-stat` needed an explicit cream bg because it reads `var(--panel)` — the ONE token
+the flip does NOT redefine. Still DON'T make `.panel` cream globally (the nav/auth-btn +
+master must stay dark); the scope is `.log-section`/`.market-section .grid`/`.market-section
+> .panel`/`.channel`/`.bezel.tape`/`.m-app .panel`.

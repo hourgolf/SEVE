@@ -597,10 +597,14 @@ svg.spark {
   padding-top: 9px;
   border-top: 1px solid var(--border);
 }
+/* indicator toggles share the segmented-control language of .chart-toggle / .seg
+   (connected box, internal dividers, solid-fill active) so the chart's controls
+   read consistently. */
 .ind-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: inline-flex;
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  overflow: hidden;
 }
 /* editable EMA periods (replaces the old static EMA9/EMA21 legend) */
 .ema-cfg {
@@ -693,21 +697,23 @@ svg.spark {
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.5px;
-  padding: 3px 7px;
-  border-radius: 6px;
-  border: 1px solid var(--border-bright);
+  padding: 3px 8px;
+  border: none;
+  border-right: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  transition: color 0.12s, background 0.12s;
+}
+.ind-chip:last-child {
+  border-right: none;
 }
 .ind-chip:hover {
   color: var(--text);
 }
 .ind-chip.on {
-  color: var(--green);
-  border-color: rgba(47, 213, 115, 0.5);
-  background: rgba(47, 213, 115, 0.12);
+  background: var(--green);
+  color: var(--bg);
 }
 /* volume / MACD sub-panels under the price chart */
 .subchart {

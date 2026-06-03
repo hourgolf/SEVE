@@ -1258,7 +1258,9 @@
 .bezel.tape .bezel-label { color: var(--ink-soft); }
 
 .log-section .panel,
-.market-section .grid .panel {
+.market-section .grid .panel,
+.market-section > .panel,           /* §01 chart FRAME — canvas keeps its own dark JS theme */
+.m-app .panel {                     /* mobile: every data panel + the chart frame goes cream */
   --text: #2a2a28;
   --muted: #55534c;
   --muted-2: #6e6c63;
@@ -1273,29 +1275,55 @@
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 3px 12px rgba(0, 0, 0, 0.35);
 }
 /* hardcoded light text the token-flip can't reach */
-.log-section .log .msg { color: var(--ink); }
+.log-section .log .msg,
+.m-app .log .msg { color: var(--ink); }
 .log-section .au-verdict,
-.log-section .au-ev { color: var(--ink-soft); }
-.log-section .log .line { border-bottom-color: rgba(0, 0, 0, 0.08); }
+.log-section .au-ev,
+.m-app .au-verdict,
+.m-app .au-ev { color: var(--ink-soft); }
+.log-section .log .line,
+.m-app .log .line { border-bottom-color: rgba(0, 0, 0, 0.08); }
 .log-section .phead,
-.market-section .grid .phead {
+.market-section .grid .phead,
+.market-section > .panel .phead,
+.m-app .panel .phead {
   background: linear-gradient(180deg, #d9d7cd, #c5c3b8);
   border-bottom-color: var(--chassis-edge);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
 }
 .log-section .phead .t,
-.market-section .grid .phead .t { color: var(--ink); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4); }
+.market-section .grid .phead .t,
+.market-section > .panel .phead .t,
+.m-app .panel .phead .t { color: var(--ink); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4); }
 .log-section .phead .x,
-.market-section .grid .phead .x { color: var(--ink-soft); }
+.market-section .grid .phead .x,
+.market-section > .panel .phead .x,
+.m-app .panel .phead .x { color: var(--ink-soft); }
 /* option chain + tables on cream: the call/put tints + strike column + borders
    are tuned for the dark panel, so deepen/relight them for the cream body */
-.market-section .grid .calls { color: #1f7d45; }
-.market-section .grid .puts { color: #b23a22; }
-.market-section .grid .strike-col { color: var(--ink); background: rgba(0, 0, 0, 0.06); }
-.market-section .grid td { border-bottom-color: rgba(0, 0, 0, 0.08); }
-.market-section .grid th { color: var(--ink-soft); border-bottom-color: var(--chassis-edge); }
-.market-section .grid tr.atm td { background: rgba(31, 157, 87, 0.13); }
-.market-section .grid tr:hover td.clk { background: rgba(0, 0, 0, 0.05); }
+.market-section .grid .calls,
+.m-app .calls { color: #1f7d45; }
+.market-section .grid .puts,
+.m-app .puts { color: #b23a22; }
+.market-section .grid .strike-col,
+.m-app .strike-col { color: var(--ink); background: rgba(0, 0, 0, 0.06); }
+.market-section .grid td,
+.m-app .panel td { border-bottom-color: rgba(0, 0, 0, 0.08); }
+.market-section .grid th,
+.m-app .panel th { color: var(--ink-soft); border-bottom-color: var(--chassis-edge); }
+.market-section .grid tr.atm td,
+.m-app .panel tr.atm td { background: rgba(31, 157, 87, 0.13); }
+.market-section .grid tr:hover td.clk,
+.m-app .panel tr:hover td.clk { background: rgba(0, 0, 0, 0.05); }
+
+/* greeks drill-down: the cells read var(--panel) — the ONE token the flip skips —
+   so flip them to the cream row-card explicitly (desktop chain + mobile). */
+.market-section .grid .cd-stat,
+.m-app .cd-stat { background: var(--panel-2); }
+/* §01 chart FRAME on cream: the canvas + spot LED keep their own dark themes; only
+   the dark hardcoded EMA-period input needs relighting for the cream body. */
+.market-section > .panel .ema-in,
+.m-app .panel .ema-in { background: rgba(255, 255, 255, 0.5); color: var(--ink); border-color: var(--chassis-edge); }
 
 /* ---------- guarded PAPER/LIVE toggle ------------------------------------- */
 .guarded {

@@ -465,20 +465,22 @@
   width: 100%;
   max-height: 88dvh;
   overflow-y: auto;
-  background: linear-gradient(180deg, #161b1e, #0d1214);
+  /* cream chassis drawer — matches the desktop §03 cream log; content panels
+     inside cream via the .m-app .panel token-flip. */
+  background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
   border-top: 2px solid var(--chassis-edge);
   border-radius: 18px 18px 0 0;
   padding: 10px 12px calc(20px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 10px;
-  color: var(--text);
+  color: var(--ink);
 }
 .m-grab {
   width: 38px;
   height: 4px;
   border-radius: 3px;
-  background: #33403f;
+  background: rgba(0, 0, 0, 0.18);
   margin: 0 auto 2px;
 }
 .m-sheet-head {
@@ -489,12 +491,12 @@
   font-size: 11px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--text);
+  color: var(--ink);
 }
 .m-sheet-x {
   background: none;
   border: none;
-  color: var(--muted);
+  color: var(--ink-soft);
   font-size: 15px;
   cursor: pointer;
 }
@@ -504,8 +506,19 @@
   gap: 10px;
   flex-wrap: wrap;
   padding-bottom: 4px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--chassis-edge);
 }
+/* Sign in/out button reads on the cream drawer (base .auth-btn is dark for the nav) */
+.m-sheet .auth-btn {
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.5);
+  border-color: var(--chassis-edge);
+}
+.m-sheet .auth-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+.m-sheet .auth-email { color: var(--ink); }
 
 /* chart toolbar must wrap on the phone (was cut off on the right) */
 .m-app .chart-controls {
