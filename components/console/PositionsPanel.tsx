@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useTradeInsight } from "@/hooks/useTradeInsight";
 import { useTradeTriggers } from "@/hooks/useTradeTriggers";
+import { useDeskWrite } from "@/hooks/useDeskWrite";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
 
@@ -71,6 +72,22 @@ export function PositionsPanel({
   const openTrade = recentTrades.find((t) => t.id === openId) ?? null;
   const { insight, loading } = useTradeInsight(openTrade);
 
+  // Manual close (signed-in only). One ✕→✓ two-tap confirm to avoid fat-fingers;
+  // the row drops from `positions` on the next feed refresh after the sell books.
+  const { canWrite, closePosition } = useDeskWrite();
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [closeErr, setCloseErr] = useState<string | null>(null);
+  const doClose = async (id: string) => {
+    if (confirmId !== id) { setConfirmId(id); setCloseErr(null); return; } // first tap arms
+    setConfirmId(null);
+    setClosingId(id);
+    setCloseErr(null);
+    const res = await closePosition(id);
+    setClosingId(null);
+    if (!res.ok) setCloseErr(res.error ?? "close failed");
+  };
+
   return (
     <div className="panel">
       <div className="phead">
@@ -90,12 +107,13 @@ export function PositionsPanel({
               <th>Entry</th>
               <th>Mark</th>
               <th>Unreal P&amp;L</th>
+              {canWrite && <th aria-label="close" />}
             </tr>
           </thead>
           <tbody>
           {positions.length === 0 ? (
             <tr>
-              <td colSpan={6}>
+              <td colSpan={canWrite ? 7 : 6}>
                 <div className="empty-state">
                   <span className="es-dot" />
                   <span>flat — no open positions</span>
@@ -130,6 +148,22 @@ export function PositionsPanel({
                 <td className={unreal < 0 ? "neg" : "pos"}>
                   {signedUsd(unreal)}
                 </td>
+                {canWrite && (
+                  <td className="pos-act">
+                    {closingId === p.id ? (
+                      <span className="pos-closing" title="closing…">…</span>
+                    ) : (
+                      <button
+                        className={`pos-close${confirmId === p.id ? " armed" : ""}`}
+                        onClick={() => doClose(p.id)}
+                        title={confirmId === p.id ? "tap again to confirm market close" : "close position (market sell)"}
+                        aria-label={`close ${p.strike.toFixed(0)}${p.opt_type === "call" ? "C" : "P"}`}
+                      >
+                        {confirmId === p.id ? "✓" : "✕"}
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
               );
             })
@@ -137,6 +171,7 @@ export function PositionsPanel({
           </tbody>
         </table>
       </div>
+      {closeErr && <div className="pos-close-err">close failed — {closeErr}</div>}
 
       {recentTrades.length > 0 && (
         <div className="recent-trades">

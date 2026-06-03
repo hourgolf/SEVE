@@ -165,5 +165,26 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, deleteChannel };
+  // Manual close: market-sell an open position via the server route (which holds
+  // the Alpaca keys + service role). Sends the session token so the route can
+  // verify the operator is signed in. Returns the booked realized P&L on success.
+  const closePosition = useCallback(
+    async (id: string): Promise<{ ok: boolean; error?: string; realized?: number }> => {
+      if (!session) return { ok: false, error: "sign in to close" };
+      try {
+        const r = await fetch("/api/close-position", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ id }),
+        });
+        const j = await r.json().catch(() => ({}));
+        return r.ok && j.ok ? { ok: true, realized: j.realized } : { ok: false, error: j.error ?? `close failed (${r.status})` };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "close failed" };
+      }
+    },
+    [session]
+  );
+
+  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, deleteChannel, closePosition };
 }

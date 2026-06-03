@@ -1097,6 +1097,27 @@ td.clk {
 tr:hover td.clk {
   background: rgba(255, 255, 255, 0.03);
 }
+/* manual close button (signed-in only) — uses color tokens so it adapts to the
+   cream desktop positions panel AND the dark mobile one automatically */
+.pos-act { width: 1%; white-space: nowrap; text-align: center; padding-left: 2px; }
+.pos-close {
+  width: 22px; height: 20px; padding: 0;
+  border-radius: 5px;
+  border: 1px solid var(--border, #2a3a42);
+  background: transparent;
+  color: var(--muted, #7d8a90);
+  font-size: 11px; line-height: 1; cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+.pos-close:hover { color: var(--red, #f0563f); border-color: var(--red, #f0563f); }
+.pos-close.armed {
+  color: #fff;
+  background: var(--red, #f0563f);
+  border-color: var(--red, #f0563f);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--red, #f0563f) 60%, transparent);
+}
+.pos-closing { color: var(--muted, #7d8a90); font-size: 14px; }
+.pos-close-err { color: var(--red, #f0563f); font-size: 10px; font-family: var(--mono); padding: 6px 12px 0; }
 td.clk.sel {
   background: rgba(59, 158, 255, 0.16);
   box-shadow: inset 0 0 0 1px rgba(59, 158, 255, 0.4);
