@@ -4,7 +4,7 @@
 //  against REAL rows (and previously by the sample feed). No React, no I/O.
 // ============================================================================
 
-import type { ChannelPnl, PmColor, Position, Signal, Step } from "@/lib/desk/types";
+import type { ChannelPnl, PmColor, Position, Step } from "@/lib/desk/types";
 
 // A position's contribution to today's P&L: realized once closed, unrealized
 // while open. (A fast scalper is closed most of the time, so without the
@@ -46,12 +46,23 @@ const COLOR_OF: Record<string, PmColor> = {
   grind: "cyan",
 };
 
-// 16-step tape: each recent signal lights a step in its strategist's color,
-// newest at the right; the most recent pulses.
-export function buildSteps(signals: Signal[]): Step[] {
+// 16-step tape: a live ticker of the most recent positions OPENED, newest first.
+// Pad 1 (index 0) is the latest open and pulses; the tape fills toward pad 16,
+// which holds the oldest of the last 16. Each lit pad takes its channel's color
+// (same source as the "Today's trades" dots), with the 4 base channels as the
+// fallback so the tape is still colored before the strategist config hydrates.
+export function buildSteps(
+  positions: Position[],
+  colorBySlug: Record<string, PmColor> = {}
+): Step[] {
   const steps: Step[] = Array.from({ length: 16 }, () => ({ lit: false }));
-  signals.slice(0, 16).forEach((sig, i) => {
-    steps[15 - i] = { lit: true, color: COLOR_OF[sig.strategist_slug], pulse: i === 0 };
+  const recent = positions
+    .filter((p) => p.opened_at)
+    .slice()
+    .sort((a, b) => (a.opened_at! < b.opened_at! ? 1 : a.opened_at! > b.opened_at! ? -1 : 0));
+  recent.slice(0, 16).forEach((p, i) => {
+    const color = colorBySlug[p.strategist_slug] ?? COLOR_OF[p.strategist_slug] ?? "green";
+    steps[i] = { lit: true, color, pulse: i === 0 };
   });
   return steps;
 }

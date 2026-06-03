@@ -5,7 +5,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useDeskState } from "@/hooks/useDeskState";
 import { buildSteps, channelPnl, fundPnl } from "@/lib/desk/derive";
-import type { ChannelPnl, Position, Signal, Step } from "@/lib/desk/types";
+import type { ChannelPnl, PmColor, Position, Signal, Step } from "@/lib/desk/types";
 import type { EventLevel, OptionType } from "@/lib/types";
 
 const POLL_MS = 10000; // safety-net; Realtime drives the live updates
@@ -190,7 +190,15 @@ export function useDeskFeed(): DeskFeed {
     () => fundPnl(dayPositions, totalCapital, latestNav),
     [dayPositions, totalCapital, latestNav]
   );
-  const steps = useMemo(() => buildSteps(signals), [signals]);
+  // Channel colors for the tape — same slug→color map the "Today's trades" dots
+  // use, so a lit pad and its trade row always agree.
+  const colorBySlug = useMemo(() => {
+    const m: Record<string, PmColor> = {};
+    for (const s of desk.strategists) m[s.slug] = s.color;
+    return m;
+  }, [desk.strategists]);
+  // 16-step tape: the most recent positions OPENED, newest at pad 1 (pulsing).
+  const steps = useMemo(() => buildSteps(dayPositions, colorBySlug), [dayPositions, colorBySlug]);
 
   return {
     positions,
