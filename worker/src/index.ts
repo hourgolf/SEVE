@@ -19,6 +19,8 @@ import * as store from "./store.js";
 import { BarStore, ChainStore } from "./state.js";
 import { StockBarStream } from "./stream.js";
 import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type ShadowDecision } from "./decide.js";
+import { updateShadowManagement } from "./shadowManage.js";
+import { computeFeatures } from "../../engine/engine";
 import type { Bar } from "../../engine/types";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
@@ -96,6 +98,7 @@ async function cycle(trigger: string): Promise<void> {
     let account, alpacaPositions;
     try { [account, alpacaPositions] = await Promise.all([alpaca.getAccount(), alpaca.getPositions()]); }
     catch (e) { warn(`cycle(${trigger}): Alpaca read failed — ${(e as Error).message}; skip`); return; }
+    const openRowsArr = await store.getOpenPositions();
 
     const ctx: DecisionCtx = {
       sessionBars,
@@ -106,7 +109,7 @@ async function cycle(trigger: string): Promise<void> {
       minutesToClose: Math.max(0, RTH_CLOSE - barMin),
       next1DTE: chain.nextExpiryAfter(todayET),
       ...computeLevels(bars.all(), todayET),
-      openRows: new Map((await store.getOpenPositions()).map((r) => [r.strategist_id, r])),
+      openRows: new Map(openRowsArr.map((r) => [r.strategist_id, r])),
       alpacaByOcc: new Map(alpacaPositions.map((p) => [p.symbol, p])),
     };
 
@@ -116,6 +119,20 @@ async function cycle(trigger: string): Promise<void> {
       catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
     }
     report(trigger, lastSession, account.equity, decisions);
+
+    // Shadow MANAGEMENT what-if: run each managed channel's scale/BE/trail over
+    // the live positions on the real-time quote (logs managed-vs-actual; no orders).
+    try {
+      await updateShadowManagement({
+        rows: openRowsArr,
+        slugById: new Map(cfg.channels.map((c) => [c.id, c.slug])),
+        chain,
+        sessionBars,
+        atr: computeFeatures(sessionBars, sessionBars.length - 1).atr,
+        etMin: barMin,
+        minutesToClose: Math.max(0, RTH_CLOSE - barMin),
+      });
+    } catch (e) { warn(`shadow-management failed — ${(e as Error).message}`); }
   } catch (e) {
     // A cycle must never throw — it's fired forget-style from onBar, so an
     // unhandled rejection would otherwise take down the process.

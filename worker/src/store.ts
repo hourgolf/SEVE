@@ -91,6 +91,12 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
   return { fund, channels };
 }
 
+// A closed position's realized P&L (for the shadow-management A/B finalize).
+export async function getPositionById(id: string): Promise<{ realized_pnl: number; status: string } | null> {
+  const { data } = await sb.from("positions").select("realized_pnl,status").eq("id", id).maybeSingle();
+  return data ? { realized_pnl: Number((data as any).realized_pnl ?? 0), status: String((data as any).status) } : null;
+}
+
 export async function getOpenPositions(): Promise<PositionRow[]> {
   const { data } = await sb.from("positions").select("*").eq("status", "open");
   return ((data ?? []) as any[]).map((p) => ({
