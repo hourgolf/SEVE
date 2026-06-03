@@ -29,6 +29,26 @@ let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[] } = { f
 let reloadPending = false;
 let cycling = false;
 
+function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
+
+// Retry a transient async op with exponential backoff. Used for boot-time REST
+// calls so a flaky Alpaca/network moment doesn't crash-loop the container.
+async function retry<T>(label: string, fn: () => Promise<T>, attempts = 5, baseMs = 2000): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 1; i <= attempts; i++) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      if (i < attempts) {
+        const delay = Math.min(30_000, baseMs * 2 ** (i - 1));
+        warn(`${label}: attempt ${i}/${attempts} failed — ${(e as Error).message}; retry in ${delay}ms`);
+        await sleep(delay);
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function reloadConfig(): Promise<void> {
   const c = await store.loadConfig();
   if (c.fund) cfg = c;
@@ -49,7 +69,7 @@ async function refreshChain(): Promise<void> {
 
 async function seed(): Promise<void> {
   info("seed: backfilling bars + chain via REST");
-  bars.seed(await alpaca.backfillBars(config.symbol, 3));
+  bars.seed(await retry("seed bars", () => alpaca.backfillBars(config.symbol, 3)));
   const l = bars.latest();
   info(`seed: ${bars.length} bars (latest ${l ? new Date(l.ts).toISOString() : "—"}, spot ${l?.close ?? "?"})`);
   await refreshChain();
@@ -96,6 +116,10 @@ async function cycle(trigger: string): Promise<void> {
       catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
     }
     report(trigger, lastSession, account.equity, decisions);
+  } catch (e) {
+    // A cycle must never throw — it's fired forget-style from onBar, so an
+    // unhandled rejection would otherwise take down the process.
+    warn(`cycle(${trigger}) failed — ${(e as Error).message}`);
   } finally {
     cycling = false;
   }
@@ -144,9 +168,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  await reloadConfig();
+  // Boot is non-fatal: a transient config/seed failure must not crash-loop the
+  // container. Config self-heals via the realtime sub + 30s poll; bars self-heal
+  // via the websocket stream. So we log and carry on rather than exit.
+  try { await reloadConfig(); }
+  catch (e) { warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`); }
   info(`config: ${cfg.fund ? `fund cap $${cfg.fund.total_capital_usd} mode=${cfg.fund.mode} halted=${cfg.fund.is_halted}` : "fund MISSING"}, ${cfg.channels.length} channels [${cfg.channels.map((c) => `${c.slug}:${c.status}`).join(", ")}]`);
-  await seed();
+  try { await seed(); }
+  catch (e) { error(`seed failed after retries — continuing; the websocket will populate bars live (${(e as Error).message})`); }
 
   store.subscribeConfig(() => { reloadPending = true; });
   setInterval(() => { reloadPending = true; }, 30_000); // poll fallback if realtime is off
@@ -162,5 +191,16 @@ async function main(): Promise<void> {
     process.on(sig, () => { info(`shutdown (${sig})`); stream.stop(); process.exit(0); });
   }
 }
+
+// Last-resort safety nets. A stray promise rejection is logged but NOT fatal (the
+// worker keeps streaming); a genuine uncaught exception exits so Railway restarts
+// with clean state (boot is now retry-hardened, so a restart won't crash-loop).
+process.on("unhandledRejection", (reason) => {
+  warn(`unhandledRejection — ${reason instanceof Error ? reason.message : String(reason)}`);
+});
+process.on("uncaughtException", (e) => {
+  error(`uncaughtException — ${e.message}; exiting for a clean restart`);
+  process.exit(1);
+});
 
 main().catch((e) => { error(`fatal — ${(e as Error).message}`); process.exit(1); });
