@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useTradeInsight } from "@/hooks/useTradeInsight";
 import { useTradeTriggers } from "@/hooks/useTradeTriggers";
@@ -72,14 +72,25 @@ export function PositionsPanel({
   const openTrade = recentTrades.find((t) => t.id === openId) ?? null;
   const { insight, loading } = useTradeInsight(openTrade);
 
-  // Manual close (signed-in only). One ✕→✓ two-tap confirm to avoid fat-fingers;
-  // the row drops from `positions` on the next feed refresh after the sell books.
+  // Manual close (signed-in only). Tapping ✕ ARMS a confirm (✓ + a cancel ✕); you
+  // can always back out — explicit cancel, OR it auto-disarms after 4s. Only the
+  // explicit ✓ sells. The row drops from `positions` on the next feed refresh.
   const { canWrite, closePosition } = useDeskWrite();
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [closeErr, setCloseErr] = useState<string | null>(null);
-  const doClose = async (id: string) => {
-    if (confirmId !== id) { setConfirmId(id); setCloseErr(null); return; } // first tap arms
+  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearDisarm = () => { if (disarmTimer.current) { clearTimeout(disarmTimer.current); disarmTimer.current = null; } };
+  useEffect(() => () => clearDisarm(), []); // clear on unmount
+  const arm = (id: string) => {
+    setCloseErr(null);
+    setConfirmId(id);
+    clearDisarm();
+    disarmTimer.current = setTimeout(() => setConfirmId((cur) => (cur === id ? null : cur)), 4000);
+  };
+  const cancelClose = () => { clearDisarm(); setConfirmId(null); };
+  const confirmClose = async (id: string) => {
+    clearDisarm();
     setConfirmId(null);
     setClosingId(id);
     setCloseErr(null);
@@ -152,14 +163,19 @@ export function PositionsPanel({
                   <td className="pos-act">
                     {closingId === p.id ? (
                       <span className="pos-closing" title="closing…">…</span>
+                    ) : confirmId === p.id ? (
+                      <span className="pos-confirm">
+                        <button className="pos-close armed" onClick={() => confirmClose(p.id)} title="confirm market close" aria-label="confirm close">✓</button>
+                        <button className="pos-cancel" onClick={cancelClose} title="cancel" aria-label="cancel close">✕</button>
+                      </span>
                     ) : (
                       <button
-                        className={`pos-close${confirmId === p.id ? " armed" : ""}`}
-                        onClick={() => doClose(p.id)}
-                        title={confirmId === p.id ? "tap again to confirm market close" : "close position (market sell)"}
+                        className="pos-close"
+                        onClick={() => arm(p.id)}
+                        title="close position (market sell)"
                         aria-label={`close ${p.strike.toFixed(0)}${p.opt_type === "call" ? "C" : "P"}`}
                       >
-                        {confirmId === p.id ? "✓" : "✕"}
+                        ✕
                       </button>
                     )}
                   </td>
