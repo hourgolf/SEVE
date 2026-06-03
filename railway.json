@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "//": "Config for the SEVE streaming worker (worker/). Lives at the repo root so Railway auto-discovers it with the service Root Directory = repo root — which also makes engine/ + lib/ available to worker/Dockerfile's build context. Vercel (the dashboard's host) ignores this file.",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "worker/Dockerfile"
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

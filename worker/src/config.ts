@@ -40,8 +40,10 @@ export const config = {
   alpacaPaperHost: opt("ALPACA_PAPER_HOST", "https://paper-api.alpaca.markets"),
   alpacaDataHost: opt("ALPACA_DATA_HOST", "https://data.alpaca.markets"),
   // Stock-bar websocket feed: "iex" (free, runs NOW) → "sip" (real-time, on Algo
-  // Trader Plus). The ws host path differs per feed; resolved in stream.ts.
-  stockFeed: opt("STOCK_WS_FEED", "iex") as "iex" | "sip",
+  // Trader Plus). Same var name as market-ingest's STOCK_FEED, by design
+  // (STOCK_WS_FEED kept as a back-compat alias). The ws host path differs per
+  // feed; resolved in stream.ts.
+  stockFeed: (process.env.STOCK_FEED ?? process.env.STOCK_WS_FEED ?? "iex") as "iex" | "sip",
   // Option-quote REST snapshot feed: "indicative" (free, ~15-min delayed) →
   // "opra" (real-time NBBO, on Algo Trader Plus). v1 polls REST snapshots on
   // bar-close; the OPRA *websocket* push is a later latency optimization.

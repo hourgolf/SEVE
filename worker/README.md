@@ -63,10 +63,10 @@ latest bar; during market hours every closed minute bar triggers a fresh cycle.
    - **Root Directory:** repo root (so `engine/` + `lib/` are in the build context).
    - **Dockerfile path:** `worker/Dockerfile` (or let `worker/railway.json` set it).
 3. Variables: `ALPACA_KEY`, `ALPACA_SECRET`, `SUPABASE_URL`,
-   `SUPABASE_SERVICE_ROLE_KEY`, `STOCK_WS_FEED` (`iex`→`sip`), `OPT_FEED`
+   `SUPABASE_SERVICE_ROLE_KEY`, `STOCK_FEED` (`iex`→`sip`), `OPT_FEED`
    (`indicative`→`opra`), `DRY_RUN=true`, optional `SHADOW_WRITE_EVENTS=true`.
-4. **1 replica** (enforced in `railway.json`). Two instances = double orders in
-   Phase B — never scale this service.
+4. **1 replica** (set in the repo-root `railway.json`). Two instances = double
+   orders in Phase B — never scale this service.
 
 With the service role set, `SHADOW_WRITE_EVENTS=true` mirrors intents into the
 `events` table (tagged `stream-shadow:`) so you can compare them to the cron
