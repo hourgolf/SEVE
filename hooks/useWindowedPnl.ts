@@ -60,24 +60,32 @@ export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
       const openRes = await sb.from("positions").select("unrealized_pnl,strategists(slug)").eq("status", "open").limit(200);
       for (const r of (openRes.data ?? []) as Record<string, unknown>[]) bump(slugOf(r)).pnl += Number(r.unrealized_pnl ?? 0);
 
-      // fund NAV curve — prefer the daily rollup view (cheap, accurate for long windows)
-      let curve: number[] = [];
+      // fund NAV curve — prefer the daily rollup view (cheap, accurate for long windows).
+      // Keep the RAW series (not just the downsampled display copy) so the window-end /
+      // window-start NAVs used for the fund P&L are the true endpoints.
+      let curveRaw: number[] = [];
       try {
         let dq = sb.from("equity_daily").select("et_date,nav").order("et_date", { ascending: true });
         if (start) dq = dq.gte("et_date", start.slice(0, 10));
         const dRes = await dq;
         if (dRes.error) throw dRes.error;
-        curve = downsample(((dRes.data ?? []) as { nav: number }[]).map((r) => Number(r.nav)));
+        curveRaw = ((dRes.data ?? []) as { nav: number }[]).map((r) => Number(r.nav));
       } catch {
         let cq = sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null);
         if (start) cq = cq.gte("captured_at", start);
         const cRes = await cq.order("captured_at", { ascending: false }).limit(6000);
-        curve = downsample(((cRes.data ?? []) as { net_liquidation: number }[]).map((r) => Number(r.net_liquidation)).reverse());
+        curveRaw = ((cRes.data ?? []) as { net_liquidation: number }[]).map((r) => Number(r.net_liquidation)).reverse();
       }
+      const curve = downsample(curveRaw);
 
       if (!alive) return;
       for (const k of Object.keys(stats)) stats[k].pnl = Math.round(stats[k].pnl);
-      const fundPnl = Math.round(Object.values(stats).reduce((a, c) => a + c.pnl, 0));
+      // Fund P&L = account truth: NAV at window-end − NAV at window-start (matches the
+      // curve + the live account). Summed position realized over-reports (worker booking
+      // inflation on shared-OCC history) → use it only as a fallback when there's no NAV
+      // curve in the window. Per-channel rows stay position-derived (relative attribution).
+      const navDelta = curveRaw.length >= 2 ? Math.round(curveRaw[curveRaw.length - 1] - curveRaw[0]) : null;
+      const fundPnl = navDelta ?? Math.round(Object.values(stats).reduce((a, c) => a + c.pnl, 0));
       setData({ statsBySlug: stats, fundPnl, curve, loading: false });
     })().catch(() => { if (alive) setData((d) => (d ? { ...d, loading: false } : { statsBySlug: {}, fundPnl: 0, curve: [], loading: false })); });
     return () => { alive = false; };
