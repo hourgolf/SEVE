@@ -1,5 +1,11 @@
+"use client";
+
 // Pure inline-SVG line/area chart body (no panel chrome). Optional VWAP overlay.
-// Reused by the Monitor's intraday chart and the Desk's equity curve.
+// Reused by the contract drill-down (mid) and the Desk's equity curve. With
+// `hover`, it overlays a scrubbing crosshair + value/Δ/time tooltip (HTML, so it
+// stays crisp despite the non-uniform preserveAspectRatio="none" x-scale).
+
+import { useState } from "react";
 
 const VIEW_W = 600;
 
@@ -15,13 +21,30 @@ export function LineChart({
   overlays = [],
   height = 150,
   id = "line",
+  hover = false,
+  format,
+  formatDelta,
+  baseline,
+  labels,
 }: {
   values: number[];
   vwap?: number[];
   overlays?: Overlay[];
   height?: number;
   id?: string;
+  /** Enable the scrub crosshair + tooltip. */
+  hover?: boolean;
+  /** Tooltip value formatter (default: String). */
+  format?: (v: number) => string;
+  /** Tooltip Δ-vs-baseline formatter (e.g. signedUsd). */
+  formatDelta?: (d: number) => string;
+  /** If set, the tooltip shows value − baseline (colored), i.e. P&L since start. */
+  baseline?: number;
+  /** Optional x labels aligned to values (e.g. times), shown in the tooltip. */
+  labels?: string[];
 }) {
+  const [hi, setHi] = useState<number | null>(null);
+
   const H = height;
   const P = 6;
   if (values.length < 2) {
@@ -63,7 +86,7 @@ export function LineChart({
     return p;
   };
 
-  return (
+  const svg = (
     <svg
       className="chart-svg"
       style={{ height }}
@@ -101,5 +124,56 @@ export function LineChart({
       <path d={d} fill="none" stroke={c} strokeWidth={2} strokeLinejoin="round" />
       <circle cx={x(N - 1)} cy={y(values[N - 1])} r={3} fill={c} />
     </svg>
+  );
+
+  if (!hover) return svg;
+
+  // Pointer-x → nearest data index (account for the small P padding + the
+  // viewBox→container x-scale of preserveAspectRatio="none").
+  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const f = (e.clientX - rect.left) / rect.width;
+    const vbx = f * VIEW_W;
+    let i = Math.round((vbx - P) / ((VIEW_W - 2 * P) / (N - 1)));
+    i = Math.max(0, Math.min(N - 1, i));
+    setHi(i);
+  };
+
+  const fmt = format ?? ((v: number) => String(v));
+  let cursor = null as React.ReactNode;
+  if (hi != null) {
+    const fx = x(hi) / VIEW_W; // 0..1 across the container
+    const leftPct = fx * 100;
+    const topPct = (y(values[hi]) / H) * 100;
+    const tipT = fx < 0.16 ? "translateX(0)" : fx > 0.84 ? "translateX(-100%)" : "translateX(-50%)";
+    const delta = baseline != null ? values[hi] - baseline : null;
+    cursor = (
+      <>
+        <div className="lc-cross" style={{ left: `${leftPct}%` }} />
+        <div className="lc-dot" style={{ left: `${leftPct}%`, top: `${topPct}%`, background: c }} />
+        <div className="lc-tip" style={{ left: `${leftPct}%`, transform: tipT }}>
+          <span className="lc-tip-v">{fmt(values[hi])}</span>
+          {delta != null && (
+            <span className={delta >= 0 ? "pos" : "neg"}>
+              {formatDelta ? formatDelta(delta) : (delta >= 0 ? "+" : "") + fmt(delta)}
+            </span>
+          )}
+          {labels?.[hi] && <span className="lc-tip-t">{labels[hi]}</span>}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div
+      className="lc-wrap"
+      style={{ position: "relative", height }}
+      onPointerMove={onMove}
+      onPointerLeave={() => setHi(null)}
+    >
+      {svg}
+      {cursor}
+    </div>
   );
 }

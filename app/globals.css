@@ -332,6 +332,44 @@ body {
   display: flex;
   flex-direction: column;
 }
+/* scrub crosshair + tooltip for the equity LineChart (hover) */
+.lc-wrap { width: 100%; touch-action: pan-y; cursor: crosshair; }
+.lc-cross {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.28);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+}
+.lc-dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--chassis, #c9c7bd);
+  pointer-events: none;
+}
+.lc-tip {
+  position: absolute;
+  top: 1px;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--chassis-edge, rgba(0, 0, 0, 0.14));
+  pointer-events: none;
+  z-index: 2;
+}
+.lc-tip-v { font-weight: 700; color: var(--ink, #2a2a28); }
+.lc-tip-t { color: var(--ink-soft, #55534c); }
 /* per-channel win-rate · trade-count, shown before the $ value in the P&L rows */
 .pnl-wr {
   color: var(--muted-2);

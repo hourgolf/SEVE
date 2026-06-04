@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
-import { signedUsd, usd0 } from "@/lib/format";
+import { signedUsd, usd0, timeOfDay } from "@/lib/format";
 import { useWindowedPnl, type PnlWindow, type ChannelStat } from "@/hooks/useWindowedPnl";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
@@ -50,16 +50,27 @@ export function PnlPanel({
         <span className="x">NAV {usd0(fundPnl.nav)}</span>
       </div>
       <div className="pbody">
-        <div className="seg" style={{ marginBottom: 8 }} aria-label="P&L timeframe">
-          {WINDOWS.map((w) => (
-            <button key={w.id} className={win === w.id ? "on" : ""} onClick={() => setWin(w.id)} aria-pressed={win === w.id}>
-              {w.label}
-            </button>
-          ))}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <div className="seg" aria-label="P&L timeframe">
+            {WINDOWS.map((w) => (
+              <button key={w.id} className={win === w.id ? "on" : ""} onClick={() => setWin(w.id)} aria-pressed={win === w.id}>
+                {w.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="pnl-equity">
           {hasCurve ? (
-            <LineChart values={equityValues} height={90} id="equity" />
+            <LineChart
+              values={equityValues}
+              height={90}
+              id="equity"
+              hover
+              format={usd0}
+              formatDelta={signedUsd}
+              baseline={equityValues[0]}
+              labels={isToday ? equityCurve.map((p) => timeOfDay(p.ts)) : undefined}
+            />
           ) : (
             <div className="chart-empty">{loading ? "loading…" : isToday ? "awaiting equity history" : "no equity history in window"}</div>
           )}
