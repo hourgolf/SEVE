@@ -18,10 +18,10 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
     color: "green",
     status: "armed",
     config: {
-      capital_pct: 30,
-      aggression: 40,
-      max_contracts: 6,
-      daily_stop_usd: 90,
+      capital_pct: 200, // RISK $/trade (two-dial model — was a capital %)
+      aggression: 0,    // retired: sizing is risk-based now
+      max_contracts: 6, // hidden hard ceiling
+      daily_stop_usd: 300, // STOP $/day
       muted: false,
       soloed: false,
     },
@@ -35,10 +35,10 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
     color: "blue",
     status: "armed",
     config: {
-      capital_pct: 25,
-      aggression: 62,
-      max_contracts: 4,
-      daily_stop_usd: 80,
+      capital_pct: 200, // RISK $/trade
+      aggression: 0,
+      max_contracts: 4, // hidden hard ceiling
+      daily_stop_usd: 300, // STOP $/day
       muted: false,
       soloed: false,
     },
@@ -52,10 +52,10 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
     color: "amber",
     status: "armed",
     config: {
-      capital_pct: 20,
-      aggression: 75,
-      max_contracts: 3,
-      daily_stop_usd: 70,
+      capital_pct: 200, // RISK $/trade
+      aggression: 0,
+      max_contracts: 3, // hidden hard ceiling
+      daily_stop_usd: 300, // STOP $/day
       muted: false,
       soloed: false,
     },
@@ -69,10 +69,10 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
     color: "cyan",
     status: "armed",
     config: {
-      capital_pct: 15,
-      aggression: 30,
-      max_contracts: 8,
-      daily_stop_usd: 60,
+      capital_pct: 150, // RISK $/trade (grind scalps smaller / more often)
+      aggression: 0,
+      max_contracts: 8, // hidden hard ceiling
+      daily_stop_usd: 300, // STOP $/day
       muted: false,
       soloed: false,
     },

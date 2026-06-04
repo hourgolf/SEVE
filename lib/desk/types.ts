@@ -19,11 +19,16 @@ export type PmColor =
 export type ChannelStatus = "draft" | "armed" | "disabled";
 
 // Mirrors strategist_config — the fader/knob/mute/solo positions.
+// Two-dial model (2026-06-04): the operator-facing knobs are RISK $/trade + STOP
+// $/day. `capital_pct` is the LEGACY column name but now holds RISK $/trade (the worker
+// sizes risk-based: qty = riskUsd ÷ the −50% premium stop, capped by max_contracts).
+// `aggression` is retired (reserved for a future conviction scaler); `max_contracts`
+// is the hidden hard ceiling. No schema migration — just reinterpreted values.
 export interface StrategistConfig {
-  capital_pct: number; // 0–100, % of fund this PM may deploy
-  aggression: number; // 0–100 size lean per trade
-  max_contracts: number; // hard per-trade cap
-  daily_stop_usd: number; // per-PM loss budget (positive $)
+  capital_pct: number; // RISK $/trade (legacy column name — holds dollars, not a %)
+  aggression: number; // RETIRED — unused by sizing; kept for the column / future use
+  max_contracts: number; // hidden hard per-trade ceiling
+  daily_stop_usd: number; // STOP $/day — halts new entries at this realized loss (wired)
   muted: boolean;
   soloed: boolean;
 }

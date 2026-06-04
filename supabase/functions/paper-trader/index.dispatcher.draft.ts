@@ -1,3 +1,12 @@
+// ⚑ WORKER VERSION: 2026-06-04b  (TWO-DIAL SIZING. The capital_pct%×aggression% budget was
+//   inert — $100k×50%×50% = $25k ≫ a ~$700 position, so qty ALWAYS pinned to max_contracts
+//   (the size_pinned flaw) and the knobs did nothing. New model: **capital_pct now holds
+//   RISK $/trade** and sizing is risk-based — risk/contract = the −50% premium stop
+//   (0.5×ask×100), qty = riskUsd ÷ that, capped by max_contracts (the hidden ceiling).
+//   aggression is retired (unused). PREREQ: run `update strategist_config set
+//   capital_pct = 200, aggression = 0;` BEFORE/with this deploy, else qty=0 (it reads the
+//   old 50 as $50 risk → insufficient_capital). daily_stop_usd (STOP $/day) already wired.
+//   Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-04a  (SHARED-OCC BOOKING FIX. 06-03b stopped the mid-vs-fill
 //   overstatement, but the desk STILL booked ~4× the account (06-03: +$2,114 vs +$492).
 //   Root cause: when two mirror channels (e.g. power + power-smart) trade the SAME OCC,
@@ -751,9 +760,13 @@ Deno.serve(async () => {
           if (expectedMove < COST_GATE_RATIO * roundTrip) blocked = "cost_gate";
         }
         if (!blocked) {
-          // INDEPENDENT per-channel allocation: this channel's slice of fund equity
-          const budget = Number(account.equity) * (Number(cfg.capital_pct) / 100) * (Number(cfg.aggression) / 100);
-          qty = Math.max(0, Math.min(Math.floor(budget / (ask * 100)), Number(cfg.max_contracts)));
+          // RISK-BASED sizing (two-dial model): capital_pct now holds RISK $/trade. Risk
+          // per contract = the −50% premium stop = 0.5 × ask × 100. qty = riskUsd ÷ that,
+          // capped by max_contracts (hidden ceiling). Replaces the inert capital%×aggr%
+          // budget that pinned qty to max every time.
+          const riskUsd = Number(cfg.capital_pct);
+          const riskPerContract = 0.5 * ask * 100;
+          qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor(riskUsd / riskPerContract), Number(cfg.max_contracts))) : 0;
           if (qty === 0) blocked = "insufficient_capital";
         }
         await sb.from("signals").insert({ strategist_id: s.id, signal_type: intent.reason, underlying_price: f.close, direction: dir, acted_on: !blocked, blocked_reason: blocked, rationale: { occ, ask, bid, qty, delta: Number(delta.toFixed(3)), roundTrip: Number(roundTrip.toFixed(2)), expectedMove: Number(expectedMove.toFixed(2)), atr: Number(f.atr.toFixed(2)), er: Number(f.er.toFixed(2)), relVol: Number(f.relVol.toFixed(2)) } });
