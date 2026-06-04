@@ -16,10 +16,17 @@ Three deploy targets now: **Vercel** (auto on push), **Supabase edge fns** (PAST
 - **Real-time data:** Alpaca **Algo Trader Plus** is ON. `market-ingest` flipped to
   SIP+OPRA via env-driven secrets `STOCK_FEED=sip` / `OPT_FEED=opra` → the ~15-min
   options delay is GONE. `/api/spot` LED on SIP (env `STOCK_FEED`). (data-vendors memory.)
-- **Cron `paper-trader` = LIVE paper-trading (`DRY_RUN=false`), version `2026-06-03b`** —
-  the SOLE live trader. Fixes this session: RTH-only session bars (SIP now streams ~30
-  pre-market bars that polluted warmup/ORB/VWAP), and **books P&L at the ACTUAL fill**
-  (was the mid → the desk over-reported P&L ~4×). Confirm the deployed banner == repo.
+- **Cron `paper-trader` = LIVE paper-trading (`DRY_RUN=false`), version `2026-06-04a`
+  (deployed 2026-06-03 eve)** — the SOLE live trader. RTH-only session bars (SIP streams
+  pre-market bars that polluted warmup/ORB/VWAP). **P&L NOW BOOKS FROM MATCHED FILLS**
+  (`realizedToBook`): 06-03b's book-at-fill alone STILL over-reported ~4× (06-03 broker
+  proved it: desk +$2,114 vs account +$492) because shared-OCC mirror channels (power +
+  power-smart) net the lot and the reconcile/reconstruct churn re-rows one round-trip many
+  times, each re-booking the gain (P00755000: 17 rows/$1,169 vs broker $210). 04a books
+  realized = the channel's fill-net (slug-prefixed `client_order_id`) − already-booked for
+  that (channel,OCC) today → churn rows book $0, Σ desk realized == account. **VERIFY Day 4:
+  `sum(realized_pnl)` over the session ≈ Alpaca `equity − last_equity`.** Confirm the
+  deployed banner == `2026-06-04a`.
 - **Streaming worker (3rd engine driver) DEPLOYED on Railway, Phase A SHADOW** — imports
   `engine/*` directly, holds SIP/OPRA + state in memory, decides each bar-close, places
   NO orders, lockstep with the cron. Also runs the **shadow MANAGEMENT what-if**
