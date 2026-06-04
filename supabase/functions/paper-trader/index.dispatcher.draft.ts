@@ -1,3 +1,16 @@
+// ⚑ WORKER VERSION: 2026-06-04a  (SHARED-OCC BOOKING FIX. 06-03b stopped the mid-vs-fill
+//   overstatement, but the desk STILL booked ~4× the account (06-03: +$2,114 vs +$492).
+//   Root cause: when two mirror channels (e.g. power + power-smart) trade the SAME OCC,
+//   Alpaca NETS the lot and the reconcile/reconstruct churn creates many CLOSED rows per
+//   real round-trip, each re-booking the gain (P00755000: 17 desk rows/$1,169 vs broker
+//   $210; C00755000: 27 rows/+$162 vs broker −$144 — even the sign flipped). Fix: book
+//   realized from the channel's ACTUAL matched fills (tagged by the slug-prefixed
+//   client_order_id) MINUS what's already booked on prior closed rows for this
+//   (channel, OCC) today (realizedToBook). Cumulative booked == fill-derived realized, so
+//   churn rows book $0 and Σ desk realized == the Alpaca account — per-channel rows +
+//   autopsy now reflect reality too (the LED was already NAV-truth dashboard-side). NO
+//   order/entry/exit logic changed — only the realized_pnl VALUE. DRY_RUN keeps the
+//   simulated mark-based booking (no real fills to derive from). Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-03b  (P&L BOOKS AT THE ACTUAL FILL, not the mid/mark.
 //   Root cause of the desk reporting ~4× its real account P&L: entries booked at
 //   the quoted ask, exits at alp.current_price (mid), and manual/orphan closes at
@@ -378,6 +391,30 @@ async function aOrderAndFill(body: unknown): Promise<{ id: string; fill: number 
   return { id, fill };
 }
 function occSymbol(etDate: string, strike: number, type: OptType) { const [y, m, d] = etDate.split("-"); return `SPY${y.slice(2)}${m}${d}${type === "call" ? "C" : "P"}${String(Math.round(strike * 1000)).padStart(8, "0")}`; }
+// Realized $ to book on THIS close for a channel+OCC = the channel's ACTUAL fill-derived
+// realized (broker truth, matched by the slug-prefixed client_order_id) MINUS what's
+// already booked on prior closed rows for this (channel, OCC) today. Makes the CUMULATIVE
+// booked equal the fill-derived realized, so shared-OCC reconcile/reconstruct churn (many
+// closed rows for one netted round-trip) books $0 on the extra rows instead of re-counting
+// the gain (the ~4× over-report). `extraSell` folds in a sell placed THIS cycle that isn't
+// yet in the cycle-start allOrders snapshot. Live-only — DRY_RUN has no real fills.
+// deno-lint-ignore no-explicit-any
+async function realizedToBook(sb: any, strategistId: string, slug: string, occ: string, allOrders: Record<string, unknown>[], sinceIso: string, extraSell?: { qty: number; px: number }): Promise<number> {
+  let bq = 0, bc = 0, sq = 0, sp = 0;
+  for (const o of allOrders) {
+    if (String(o.status) !== "filled") continue;
+    if (!String(o.client_order_id ?? "").startsWith(`${slug}-${occ}-`)) continue;
+    const q = Number(o.filled_qty ?? 0), p = Number(o.filled_avg_price ?? 0);
+    if (String(o.side) === "buy") { bq += q; bc += q * p; } else { sq += q; sp += q * p; }
+  }
+  if (extraSell && extraSell.qty > 0 && extraSell.px > 0) { sq += extraSell.qty; sp += extraSell.qty * extraSell.px; }
+  // realized on the round-tripped (sold) qty at blended prices; any still-open qty stays unrealized
+  const target = sq > 0 && bq > 0 ? sq * (sp / sq - bc / bq) * 100 : 0;
+  const { data: prior } = await sb.from("positions").select("realized_pnl").eq("strategist_id", strategistId).eq("occ_symbol", occ).eq("status", "closed").gte("closed_at", sinceIso);
+  // deno-lint-ignore no-explicit-any
+  const booked = (prior ?? []).reduce((a: number, r: any) => a + Number(r.realized_pnl ?? 0), 0);
+  return Math.round((target - booked) * 100) / 100;
+}
 function aggregate(bars: Bar[], tf: number): Bar[] {
   if (tf <= 1) return bars;
   const out: Bar[] = []; let bk = -1;
@@ -427,6 +464,7 @@ Deno.serve(async () => {
     const all1m: Bar[] = (rawBars ?? []).filter((b: Record<string, number | null>) => b.close != null).reverse().map((b: Record<string, number | null>) => ({ ts: Date.parse(b.ts as unknown as string), open: Number(b.open ?? b.close), high: Number(b.high ?? b.close), low: Number(b.low ?? b.close), close: Number(b.close), volume: Number(b.volume ?? 0), vwap: Number(b.vwap ?? b.close) }));
     const nowMs = Date.now();
     const todayET = etParts(nowMs).date;
+    const sessionSince = `${todayET}T00:00:00Z`; // session start (RTH session shares the UTC date) — window for fill-net realized
     // RTH-ONLY session bars (09:30–16:00 ET = minute 570–960). CRITICAL now that
     // market-ingest is on the SIP feed, which streams PRE-MARKET bars too: without
     // this filter those ~30 pre-market bars satisfy warmup BEFORE the open AND
@@ -610,9 +648,14 @@ Deno.serve(async () => {
         let mark = sellFill ? Number(sellFill.filled_avg_price) : 0;
         let src = sellFill ? "actual fill" : "";
         if (!mark) { const { data: q } = await sb.from("option_quotes").select("bid,mid").eq("occ_symbol", row.occ_symbol).order("captured_at", { ascending: false }).limit(1).maybeSingle(); mark = Number(q?.bid ?? q?.mid ?? 0); src = "last quote bid"; }
-        const realized = (mark - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
+        // Book the FILL-DERIVED realized (idempotent vs prior closed rows for this
+        // channel+OCC) so shared-OCC churn can't re-book; `mark` is display-only now.
+        // (The sell already happened, so it's in allOrders — no extraSell needed.)
+        const realized = DRY_RUN
+          ? (mark - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
+          : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince);
         await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized }).eq("id", row.id);
-        await journal("WARN", `${s.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${src}) — no Alpaca position; booked $${realized.toFixed(0)}`);
+        await journal("WARN", `${s.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${src}) — no Alpaca position; booked $${realized.toFixed(0)} (fill-net)`);
         out.push({ slug: s.slug, note: "reconciled" });
         continue;
       }
@@ -632,7 +675,11 @@ Deno.serve(async () => {
           if (!DRY_RUN) { const r = await aOrderAndFill({ symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` }); if (r.fill > 0) exitPx = r.fill; }
           // Per-channel realized P&L on its own qty (alp.unrealized_pl is the whole
           // netted lot — wrong when shared): (fill − entry) × qty × 100.
-          const realized = (exitPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100;
+          // FILL-DERIVED realized (idempotent vs prior closed rows for this channel+OCC);
+          // this cycle's sell isn't in the cycle-start allOrders yet, so fold it in.
+          const realized = DRY_RUN
+            ? (exitPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
+            : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince, { qty: sellQty, px: exitPx });
           await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized }).eq("id", row.id);
           await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} @ ${exitPx.toFixed(2)} (${intent.reason})`);
         } catch (e) {
