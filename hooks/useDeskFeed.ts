@@ -9,7 +9,8 @@ import type { ChannelPnl, PmColor, Position, Signal, Step } from "@/lib/desk/typ
 import type { EventLevel, OptionType } from "@/lib/types";
 
 const POLL_MS = 10000; // safety-net; Realtime drives the live updates
-const MAX_CURVE = 90;
+const MAX_CURVE = 600; // ~1.25 RTH sessions of 1-min fund snapshots — enough to find the current session's open
+const SESSION_GAP_MS = 2 * 3600_000; // a gap this large between snapshots = a new trading session
 
 export type FeedStatus = "live" | "empty" | "error";
 
@@ -57,6 +58,7 @@ export function useDeskFeed(): DeskFeed {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [curve, setCurve] = useState<{ ts: string; equity: number }[]>([]);
   const [latestNav, setLatestNav] = useState<number | null>(null);
+  const [sessionOpenNav, setSessionOpenNav] = useState<number | null>(null);
   const [status, setStatus] = useState<FeedStatus>("empty");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
@@ -66,8 +68,10 @@ export function useDeskFeed(): DeskFeed {
     async function poll() {
       try {
         const sb = getSupabase();
-        const todayStart = new Date();
-        todayStart.setUTCHours(0, 0, 0, 0);
+        // Coarse lower bound for closed trades — wide enough to always include the
+        // current session even after the ET session crosses midnight UTC; the exact
+        // session start is applied in JS below (sessionStartMs).
+        const closedSince = new Date(Date.now() - 20 * 3600_000).toISOString();
         const [posRes, sigRes, eqRes, closedRes] = await Promise.all([
           sb
             .from("positions")
@@ -85,15 +89,15 @@ export function useDeskFeed(): DeskFeed {
             .is("strategist_id", null)
             .order("captured_at", { ascending: false })
             .limit(MAX_CURVE),
-          // today's CLOSED trades — for realized day P&L + a recent-trades view,
-          // so fast scalps (open→close in minutes) don't vanish from the desk.
+          // recent CLOSED trades (narrowed to the current session in JS) — for the
+          // realized day P&L + the recent-trades view, so fast scalps don't vanish.
           sb
             .from("positions")
             .select("*, strategists(slug)")
             .eq("status", "closed")
-            .gte("closed_at", todayStart.toISOString())
+            .gte("closed_at", closedSince)
             .order("closed_at", { ascending: false })
-            .limit(200),
+            .limit(400),
         ]);
         if (posRes.error || sigRes.error || eqRes.error) throw new Error("read denied");
         if (!mounted.current) return;
@@ -126,17 +130,36 @@ export function useDeskFeed(): DeskFeed {
           created_at: r.created_at,
         }));
 
-        const eq = ((eqRes.data ?? []) as any[])
+        // "Today" equity curve = the CURRENT trading session only. Take the fetched
+        // snapshots ascending, then drop everything before the last multi-hour gap,
+        // so the curve (and the crosshair's P&L baseline) anchors at the session OPEN.
+        // Gap-based (not a calendar filter) so it's robust to the ET session spanning
+        // midnight UTC: "today" P&L = now − open (e.g. +$492), not NAV − inception.
+        const eqAsc = ((eqRes.data ?? []) as any[])
           .slice()
           .reverse()
-          .map((r) => ({ ts: r.captured_at, equity: Number(r.net_liquidation) }));
+          .map((r) => ({ ts: r.captured_at as string, equity: Number(r.net_liquidation) }));
+        let sStart = 0;
+        for (let i = eqAsc.length - 1; i > 0; i--) {
+          if (Date.parse(eqAsc[i].ts) - Date.parse(eqAsc[i - 1].ts) > SESSION_GAP_MS) { sStart = i; break; }
+        }
+        const eq = eqAsc.slice(sStart);
+
+        // Narrow closed trades to the CURRENT session (same gap anchor as the curve)
+        // so the per-channel rows + Day P&L reflect today's session, not a UTC day
+        // (which would read $0 after the ET session crosses midnight UTC).
+        const sessionStartMs = eq.length ? Date.parse(eq[0].ts) : Date.now() - 16 * 3600_000;
+        const sessionClosed = closed.filter(
+          (p) => p.closed_at != null && Date.parse(p.closed_at) >= sessionStartMs
+        );
 
         setPositions(pos);
-        setClosedToday(closed);
+        setClosedToday(sessionClosed);
         setSignals(sigs);
         setCurve(eq);
         setLatestNav(eq.length ? eq[eq.length - 1].equity : null);
-        setStatus(pos.length || closed.length || sigs.length ? "live" : "empty");
+        setSessionOpenNav(eq.length ? eq[0].equity : null);
+        setStatus(pos.length || sessionClosed.length || sigs.length ? "live" : "empty");
         setUpdatedAt(new Date().toISOString());
       } catch {
         if (!mounted.current) return;
@@ -186,10 +209,16 @@ export function useDeskFeed(): DeskFeed {
   // Day P&L = open (unrealized) + today's closed (realized).
   const dayPositions = useMemo(() => [...positions, ...closedToday], [positions, closedToday]);
   const pnlByStrategist = useMemo(() => channelPnl(dayPositions), [dayPositions]);
-  const fp = useMemo(
-    () => fundPnl(dayPositions, totalCapital, latestNav),
-    [dayPositions, totalCapital, latestNav]
-  );
+  const fp = useMemo(() => {
+    const base = fundPnl(dayPositions, totalCapital, latestNav); // nav + position-derived dayPnl
+    // Fund day P&L = account truth (current NAV − session-open NAV), so the headline
+    // Day-P&L LED + "Fund (today)" row agree with the equity curve. The summed
+    // position realized_pnl over-reports (worker books ~4×; see the autopsy booking
+    // note) — use it only as a fallback when there's no NAV curve yet.
+    const navDay =
+      latestNav != null && sessionOpenNav != null ? Math.round(latestNav - sessionOpenNav) : null;
+    return { nav: base.nav, dayPnl: navDay ?? base.dayPnl };
+  }, [dayPositions, totalCapital, latestNav, sessionOpenNav]);
   // Channel colors for the tape — same slug→color map the "Today's trades" dots
   // use, so a lit pad and its trade row always agree.
   const colorBySlug = useMemo(() => {
