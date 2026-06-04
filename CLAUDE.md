@@ -53,8 +53,15 @@ UNMANAGED (managing caps power's tail / bleeds grind cost). New tools:
   'stream-shadow: MGMT%'` (meta has `{managed,actual,delta,slug}`).
 - Accumulate ~2–4 weeks of MGMT deltas → decide per channel whether to wire management
   into the cron live (then move each block into its `.md` thesis).
-- Stop knob (`daily_stop_usd`) still a no-op in the dispatcher. Capital/aggression knobs
-  inert (size pins to max_contracts) — open design.
+- **RESOLVED — TWO-DIAL KNOB MODEL (worker `2026-06-04b`):** the old capital%×aggression%
+  budget was inert ($100k×50%×50% ≫ a ~$700 position → qty always pinned to max =
+  `size_pinned`). Now the operator-facing knobs are **RISK $/trade + STOP $/day**:
+  `capital_pct` (legacy column name) holds **RISK $/trade**, sizing is risk-based
+  (qty = riskUsd ÷ 0.5×ask×100, capped by `max_contracts` = hidden ceiling); `aggression`
+  retired; `daily_stop_usd` (STOP) was already wired. Channel strips show **2 knobs** now.
+  **DEPLOY PREREQ: `update strategist_config set capital_pct=200, aggression=0;` BEFORE
+  pasting the worker** (else it reads the old 50 as $50 risk → 0 contracts). At RISK $200
+  channels size ~2–4 contracts (by premium) vs the old pinned 6.
 - Phase B (later): de-hardcode the 4 code channels → `.md` theses; streaming worker
   becomes the SOLE trader (disable the `seve-paper-trader` cron at cutover).
 
