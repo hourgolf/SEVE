@@ -1,3 +1,12 @@
+// ⚑ DAILY-AUTOPSY VERSION: 2026-06-04a  (DETERMINISTIC FINDINGS FLOOR. 02b REQUIRED the
+//   LLM to emit a systemFinding per flaw, but the model still under-emitted — 06-03 had 7
+//   deterministic flaws (power/power-smart insta_exit/exit_monoculture/size_pinned/
+//   gate_starved) but the LLM returned 0 systemFindings + 0 topActions, leaving the
+//   report's bottom section blank. Now ensureFindings() SYNTHESIZES a complete finding
+//   (known cause + experiment via FLAW_META, recurrence vs prior days) from each digest
+//   flaw and merges it with the LLM's (de-duped per channel+type); topActions backfilled
+//   from findings when empty. The LLM ENRICHES; it no longer ORIGINATES the ledger, so the
+//   findings section is complete every day regardless of the model. Prior line below.)
 // ⚑ DAILY-AUTOPSY VERSION: 2026-06-02b  (findings reliability: recurrence keys off
 //   the deterministic per-channel `flaws` (always present) not the LLM's own
 //   systemFindings; prompt now REQUIRES every deterministic flaw → a systemFinding
@@ -221,6 +230,45 @@ async function narrate(digest: Row, priorFindings: Row[]): Promise<Row | null> {
   return (j.content ?? []).find((b: Row) => b.type === "tool_use")?.input ?? null;
 }
 
+// Known cause + experiment per deterministic flaw type — so each digest flaw becomes a
+// COMPLETE systemFinding even when the LLM returns none. (The LLM's richer prose is kept.)
+const FLAW_META: Record<string, { category: string; severity: string; hypothesis: string; experiment: string }> = {
+  insta_exit:       { category: "system",   severity: "high", hypothesis: "Positions close ~1–2 min after entry — a premium/time stop or a shared-OCC reconcile is doing the exiting, not the thesis.", experiment: "Replay the channel's exits vs its own stop/time-stop on the per-minute premium path; confirm whether the close is the channel's logic or a reconcile." },
+  exit_monoculture: { category: "system",   severity: "med",  hypothesis: "One exit reason is ≥80% of closes — little active management; likely one guard (time/premium stop or reconcile) doing all the work.", experiment: "Break exits down by reason; if one dominates, widen the others or check for a shared-OCC reconcile masking real exits." },
+  size_pinned:      { category: "config",   severity: "low",  hypothesis: "Every entry == max_contracts — capital/aggression knobs aren't modulating size (budget ≫ premium, so qty pins to the cap).", experiment: "Lower max_contracts or raise premium sensitivity so capital_pct × aggression actually moves the contract count." },
+  gate_starved:     { category: "system",   severity: "med",  hypothesis: "<30% of signals act — a gate (cost-gate, no_quote, reconstructed, capital) is blocking most entries.", experiment: "Tally blocked_reason; if one reason dominates, recalibrate that gate (e.g. COST_GATE_RATIO) or fix the upstream cause." },
+  negative_day:     { category: "strategy", severity: "low",  hypothesis: "Net-negative realized over the session — the thesis may be mismatched to the regime.", experiment: "Cross-check the day's regime (efficiency/return) vs the channel's mandate; mute in the off-regime." },
+};
+
+// Guarantee a complete findings ledger: merge the LLM's systemFindings with one
+// synthesized from each deterministic digest flaw (de-duped per channel+type), and
+// backfill topActions from the findings when the LLM left them empty. Works with a
+// null narrative too (no LLM key → deterministic findings still populate).
+function ensureFindings(digest: Row, narrative: Row | null, priorFindings: Row[]): Row {
+  const base: Row = narrative ?? { marketSummary: "", channels: [], systemFindings: [], topActions: [] };
+  const llmFindings: Row[] = Array.isArray(base.systemFindings) ? base.systemFindings : [];
+  const covered = new Set<string>();
+  for (const f of llmFindings) for (const ch of (f.channels ?? [])) covered.add(`${ch}|${f.type}`);
+  const priorKeys = new Set<string>();
+  for (const p of priorFindings) for (const f of (p.flaws ?? [])) priorKeys.add(`${f.slug}|${f.type}`);
+  const synthesized: Row[] = [];
+  for (const c of (digest.channels ?? [])) {
+    for (const fl of (c.flaws ?? [])) {
+      if (covered.has(`${c.slug}|${fl.type}`)) continue;
+      covered.add(`${c.slug}|${fl.type}`);
+      const m = FLAW_META[String(fl.type)] ?? { category: "system", severity: String(fl.severity ?? "med"), hypothesis: "", experiment: "" };
+      synthesized.push({ type: fl.type, severity: fl.severity ?? m.severity, category: m.category, channels: [c.slug], evidence: `${c.slug}: ${fl.evidence}`, hypothesis: m.hypothesis, suggestedExperiment: m.experiment, recurrence: priorKeys.has(`${c.slug}|${fl.type}`) ? "recurring" : "new" });
+    }
+  }
+  const systemFindings = [...llmFindings, ...synthesized];
+  let topActions: string[] = Array.isArray(base.topActions) ? base.topActions : [];
+  if (!topActions.length && systemFindings.length) {
+    const seen = new Set<string>();
+    topActions = systemFindings.map((f) => String(f.suggestedExperiment || "")).filter((a) => a && !seen.has(a) && (seen.add(a), true)).slice(0, 5);
+  }
+  return { ...base, systemFindings, topActions };
+}
+
 function renderNarrative(skeleton: string, n: Row): string {
   const L = [skeleton, "", "─".repeat(60), "## Narrative", `\n**Market:** ${n.marketSummary}`];
   for (const c of (n.channels ?? [])) {
@@ -266,14 +314,17 @@ Deno.serve(async (req) => {
 
     const skeleton = renderSkeleton(digest);
     const narrative = await narrate(digest, priorFindings);
-    const markdown = narrative ? renderNarrative(skeleton, narrative) : skeleton;
+    // Guarantee a complete findings ledger from the deterministic digest flaws even when
+    // the LLM under-emits (06-03: 7 flaws, 0 LLM findings). The LLM enriches on top.
+    const enriched = ensureFindings(digest, narrative, priorFindings);
+    const markdown = renderNarrative(skeleton, enriched);
 
-    const { error } = await sb.from("daily_reports").upsert({ report_date: date, mode: digest.mode, digest, narrative, markdown, updated_at: new Date().toISOString() }, { onConflict: "report_date" });
+    const { error } = await sb.from("daily_reports").upsert({ report_date: date, mode: digest.mode, digest, narrative: enriched, markdown, updated_at: new Date().toISOString() }, { onConflict: "report_date" });
     if (error) throw new Error(`daily_reports upsert: ${error.message}`);
     // best-effort breadcrumb (level is the event_level enum — use INFO; never let
     // this fail the run after the report is already persisted).
-    try { await sb.from("events").insert({ level: "INFO", message: `daily-autopsy ${date}: ${digest.fund.trades} trades, ${digest.fund.channelsTraded} channels, $${digest.fund.dayRealized.toFixed(0)}${narrative ? "" : " (no LLM — set ANTHROPIC_API_KEY)"}`, meta: { date, channels: digest.channels.length } }); } catch { /* */ }
-    return Response.json({ ok: true, date, trades: digest.fund.trades, narrated: !!narrative });
+    try { await sb.from("events").insert({ level: "INFO", message: `daily-autopsy ${date}: ${digest.fund.trades} trades, ${digest.fund.channelsTraded} channels, $${digest.fund.dayRealized.toFixed(0)} · ${enriched.systemFindings.length} findings${narrative ? "" : " (no LLM — set ANTHROPIC_API_KEY)"}`, meta: { date, channels: digest.channels.length } }); } catch { /* */ }
+    return Response.json({ ok: true, date, trades: digest.fund.trades, narrated: !!narrative, findings: enriched.systemFindings.length });
   } catch (e) {
     try { await sb.from("events").insert({ level: "WARN", message: `daily-autopsy failed: ${(e as Error).message}` }); } catch { /* */ }
     return Response.json({ ok: false, error: (e as Error).message }, { status: 500 });
