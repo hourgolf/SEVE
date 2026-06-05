@@ -22,6 +22,7 @@ import { breakoutEvaluate, DEFAULT_BREAKOUT_PARAMS } from "./strategies/breakout
 import { fadeEvaluate, DEFAULT_FADE_PARAMS } from "./strategies/fade";
 import { powerEvaluate, DEFAULT_POWER_PARAMS } from "./strategies/power";
 import { grindEvaluate, DEFAULT_GRIND_PARAMS } from "./strategies/grind";
+import { grindV2Evaluate, DEFAULT_GRIND_V2_PARAMS, DEFAULT_GRIND_V3_PARAMS } from "./strategies/grind-v2";
 
 export interface StrategyDef {
   slug: string;
@@ -78,6 +79,29 @@ export const STRATEGY_REGISTRY: Record<string, StrategyDef> = {
     warmupBars: 30,
     mandate: "Scalper — many small microstructure edges, quick in and out.",
     build: () => (f, pos) => grindEvaluate(f, pos, DEFAULT_GRIND_PARAMS),
+  },
+
+  // Scalper v2 — data-driven rework: afternoon curfew + efficiency-ratio gate + a
+  // chandelier trail so winners run (vs grind's insta-exit). DRAFT — backtest first.
+  "grind-v2": {
+    slug: "grind-v2",
+    name: "The Grinder v2",
+    timeframeMin: 1,
+    warmupBars: 30,
+    mandate: "Scalper, timed+trailed — midday momentum bursts, curfew the afternoon, ride the runner.",
+    build: () => (f, pos) => grindV2Evaluate(f, pos, DEFAULT_GRIND_V2_PARAMS),
+  },
+
+  // Scalper v3 — v2's entry discipline (curfew + er-gate + bigger burst) with grind's
+  // FAST fixed-target exit. Backtest: best per-trade gross of the grind family; the v2
+  // trail backfired in chop. Still cost-walled ungated — validate live (gated). DRAFT.
+  "grind-v3": {
+    slug: "grind-v3",
+    name: "The Grinder v3",
+    timeframeMin: 1,
+    warmupBars: 30,
+    mandate: "Disciplined scalper — midday-only momentum bursts (trend-gated), fast fixed-target exit, afternoon curfew.",
+    build: () => (f, pos) => grindV2Evaluate(f, pos, DEFAULT_GRIND_V3_PARAMS),
   },
 };
 

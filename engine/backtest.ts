@@ -44,6 +44,7 @@ import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
 import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
 import { DEFAULT_POWER_PARAMS, powerEvaluate } from "./strategies/power";
 import { DEFAULT_GRIND_PARAMS, grindEvaluate } from "./strategies/grind";
+import { DEFAULT_GRIND_V2_PARAMS, DEFAULT_GRIND_V3_PARAMS, grindV2Evaluate } from "./strategies/grind-v2";
 import { DEFAULT_STRADDLE_PARAMS, straddleEvaluate } from "./strategies/straddle";
 import { makeCrossover } from "./strategies/crossover";
 import { specToStrategyDef, specPremiumExit, type CompiledStrategy } from "./specEvaluate";
@@ -462,6 +463,10 @@ async function main() {
           ? (f, pos) => powerEvaluate(f, pos, DEFAULT_POWER_PARAMS)
           : strat === "grind"
             ? (f, pos) => grindEvaluate(f, pos, DEFAULT_GRIND_PARAMS)
+            : strat === "grind-v2"
+            ? (f, pos) => grindV2Evaluate(f, pos, DEFAULT_GRIND_V2_PARAMS)
+            : strat === "grind-v3"
+            ? (f, pos) => grindV2Evaluate(f, pos, DEFAULT_GRIND_V3_PARAMS)
             : strat === "straddle"
               ? (f, pos) => straddleEvaluate(f, pos, DEFAULT_STRADDLE_PARAMS)
               : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
@@ -477,6 +482,8 @@ async function main() {
     : strat === "breakout" ? "The Breakout"
     : strat === "power" ? "Power Hour"
     : strat === "grind" ? "The Grinder"
+    : strat === "grind-v2" ? "The Grinder v2"
+    : strat === "grind-v3" ? "The Grinder v3 (disciplined scalp)"
     : strat === "straddle" ? "Catalyst Straddle (multi-leg)"
     : "The Fade";
   const stratLabel = stratName + costTag;
