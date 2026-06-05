@@ -1405,3 +1405,47 @@ td.clk.sel {
   border-radius: 6px; cursor: pointer; text-align: center;
 }
 .au-expand-foot:hover { color: var(--text); border-color: var(--border-bright); }
+
+/* ---- weekly autopsy (reuses the .au-* idiom; these add the weekly-only bits) ---- */
+.au-pair { margin-bottom: 0; }
+.au-pair > .col { min-width: 0; }
+.wk-extremes {
+  display: flex; gap: 16px; flex-wrap: wrap; margin: 4px 0 8px;
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+.wk-extremes b { color: var(--text); font-weight: 600; }
+.wk-extremes .pos { color: var(--green); } .wk-extremes .neg { color: var(--red); }
+.wk-regime {
+  display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0;
+}
+.wk-reg {
+  font-family: var(--mono); font-size: 10px; padding: 3px 7px; border-radius: 5px;
+  background: var(--panel-2); border: 1px solid var(--border); white-space: nowrap;
+}
+.wk-reg b { color: var(--text); } .wk-reg i { color: var(--muted); font-style: normal; }
+.wk-reg .pos { color: var(--green); } .wk-reg .neg { color: var(--red); }
+.wk-ee {
+  margin: 12px 0; padding: 10px; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--border);
+}
+.wk-ee-top { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-bottom: 8px; }
+.wk-ee-top b { font-weight: 700; }
+.wk-ee-note { font-size: 11px; color: var(--muted); font-style: italic; }
+.wk-runner {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 11px; padding: 3px 0;
+}
+.wk-arrow { color: var(--green); font-size: 13px; }
+.wk-runner-occ { color: var(--text); font-weight: 600; }
+.wk-runner-txt { color: var(--muted); }
+.wk-runner-txt .pos, .wk-ee .pos { color: var(--green); }
+.wk-runner-txt .neg, .wk-ee .neg, .wk-ee-top .neg { color: var(--red); }
+.wk-cap {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border);
+}
+.wk-byday {
+  display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0;
+  font-family: var(--mono); font-size: 10.5px;
+}
+.wk-byday .pos { color: var(--green); } .wk-byday .neg { color: var(--red); }

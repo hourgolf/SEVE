@@ -23,6 +23,7 @@ import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
+import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { computeLiveMarks } from "@/lib/desk/liveMarks";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
@@ -219,7 +220,10 @@ export function DesktopSurface({
       {/* ---- 03 · LOG (autopsy → signals + tape health → event log) --- */}
       <SectionLabel id="log" idx="03">Log</SectionLabel>
       <div className="log-section">
-        <DailyAutopsyPanel strategists={desk.strategists} />
+        <div className="grid grid--live grid--even au-pair">
+          <div className="col"><DailyAutopsyPanel strategists={desk.strategists} /></div>
+          <div className="col"><WeeklyAutopsyPanel strategists={desk.strategists} /></div>
+        </div>
         <div className="grid grid--live grid--even" style={{ marginTop: 14 }}>
           <div className="col">
             <SignalsTape signals={feed.signals} />
