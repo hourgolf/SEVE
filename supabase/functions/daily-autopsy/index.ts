@@ -1,3 +1,9 @@
+// ⚑ DAILY-AUTOPSY VERSION: 2026-06-04b  (EXIT-ATTRIBUTION FIX. fetchWindow's `.limit(5000)`
+//   was SILENTLY capped at 1000 by PostgREST max-rows; reading oldest-first from a ±36h
+//   window, the 1000th row landed ~midday, so afternoon exit EVENTS were dropped and
+//   afternoon trades read exitReason="unknown" (06-04: 29/39 unknown — the worker actually
+//   logged all 39 correctly). Now fetchWindow PAGINATES via .range() past the cap, fixing
+//   events + the same latent truncation in the positions/signals/bars fetches. Prior below.)
 // ⚑ DAILY-AUTOPSY VERSION: 2026-06-04a  (DETERMINISTIC FINDINGS FLOOR. 02b REQUIRED the
 //   LLM to emit a systemFinding per flaw, but the model still under-emitted — 06-03 had 7
 //   deterministic flaws (power/power-smart insta_exit/exit_monoculture/size_pinned/
@@ -64,9 +70,20 @@ type Row = Record<string, any>;
 async function fetchWindow(table: string, tsCol: string, cols: string, dayStartMs: number): Promise<Row[]> {
   const lo = new Date(dayStartMs - 36 * 3600_000).toISOString();
   const hi = new Date(dayStartMs + 36 * 3600_000).toISOString();
-  const { data, error } = await sb.from(table).select(cols).gte(tsCol, lo).lte(tsCol, hi).order(tsCol, { ascending: true }).limit(5000);
-  if (error) throw new Error(`${table}: ${error.message}`);
-  return (data ?? []) as Row[];
+  // PAGINATE past PostgREST's ~1000-row cap (which SILENTLY overrides .limit). Reading
+  // oldest-first from a ±36h window, a busy day's LATER rows fell off the end — events
+  // after the 1000th (~midday) were dropped, so afternoon exits read "unknown" in the
+  // autopsy even though the worker logged them. Loop .range() until a short page.
+  const PAGE = 1000;
+  const out: Row[] = [];
+  for (let from = 0; from < 50000; from += PAGE) {
+    const { data, error } = await sb.from(table).select(cols).gte(tsCol, lo).lte(tsCol, hi).order(tsCol, { ascending: true }).range(from, from + PAGE - 1);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    const rows = (data ?? []) as Row[];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
 }
 
 // Universal flaw detectors (mirror engine/autopsy.ts detectFlaws).
