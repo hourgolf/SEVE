@@ -50,6 +50,28 @@ entry selectivity** — and a trailing exit is "smart management" (not live-arma
 spec), so the **standard code channel is the best live QQQ breakout you can run.** Verdict:
 **keep `breakout-qqq`, delete `orb-qqq-tuned`.**
 
+## power: SPY vs QQQ (real fills, same window) — power belongs on SPY
+
+| metric | power-spy | power-qqq |
+|---|---|---|
+| trades | 189 | 182 |
+| win rate | 18.0% | 19.8% |
+| **gross (signal)** | **+$4,705** | **−$520** |
+| net P&L | −$1,488 | −$6,556 |
+| expectancy/trade | −$7.87 | −$36.02 |
+| max DD | $3,812 | $7,460 |
+
+power's final-hour 0DTE lean is **SPY-microstructure-specific** (pinning / dealer-gamma) — it does
+NOT transfer to QQQ. So the desk has a clean symmetry: **breakout → QQQ, power → SPY** are the two
+keepers, each on its own instrument; fade + grind are broken on both. Muting `power-qqq` was correct.
+
+**Live nuance:** `power` (slug "power") is in `COST_GATE_EXEMPT`, so **power-spy eats the full cost
+live** (no gate) → it nets ~−$1.5k, matching this backtest. It's the closest-to-viable channel of
+anything (gross +$4.7k dwarfs the field), but its cost ($6.2k) is the wall, and the exemption exists
+because the gate kills power's convex tail. Making it profitable = cut cost without clipping the
+tail — open research, not a knob. (`power-qqq`, slug "power-qqq", is NOT exempt — but it has no edge
+to protect anyway.)
+
 ## Action (run in the SQL editor)
 Keep only the channel with a real QQQ edge armed; mute the rest:
 ```sql
