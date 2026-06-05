@@ -1,3 +1,12 @@
+// ⚑ WORKER VERSION: 2026-06-05a  (UNDERLYING INITIAL STOP, config-gated. New per-channel
+//   strategist_config.underlying_stop_pct (0 = off): exit when the UNDERLYING moves X% against
+//   entry — a uniform loss stop vs the premium-noise −50% stop (which fires at a VARIABLE
+//   0.2–0.5% underlying move by option price). Uses the reconstructed entryUnderlying (NO
+//   schema change beyond the one config column). Fires before the premium stop, after profit
+//   trail/target. Also SHADOW-logs the tighter 0.15% (events `stream-shadow: US0.15…`) for a
+//   no-collision A/B vs the live 0.20%. INERT until the SQL sets underlying_stop_pct>0 on a
+//   channel (default 0 → Number(undefined ?? 0) = 0 → no-op everywhere else). Activated on
+//   orb-trend-rider / breakout-qqq / qqq-thrust-trail / breakout-smart-entries. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-04g  (MUTE NO LONGER TRAPS POSITIONS. The exit path was gated
 //   by canTrade (= !muted), so a MUTED channel couldn't close its open position — even the
 //   EOD flatten was blocked, so a muted 0DTE rode to expiry. Now EXITS run regardless of mute
@@ -175,6 +184,13 @@ const COST_GATE_RATIO = 3.0;          // block if expectedMove < RATIO × roundT
 // for the scalper (grind) it was built for; power's edge IS the convex tail.
 const COST_GATE_EXEMPT = new Set(["power"]);
 const PREMIUM_STOP_PCT = 50;          // exit any open position marked ≤ −50% from entry
+// UNDERLYING INITIAL STOP (per-channel via strategist_config.underlying_stop_pct; 0 = off).
+// Exit when the UNDERLYING has moved X% against the entry. A −50% premium stop fires at a
+// VARIABLE underlying move (~0.2–0.5% by option price); this is a uniform, premium-noise-free
+// loss stop. MAE study (06-01..05): a 0.20% stop preserved every ≥5min winner (max winner dip
+// 0.137%) and cut ~⅓ of losers early. SHADOW_US_STOP_PCT is the tighter 0.15% A/B — logged
+// (not acted) so we compare it against the live 0.20% without a colliding live channel.
+const SHADOW_US_STOP_PCT = 0.15;      // % of underlying — shadow-only (logged, never traded)
 // POWER late-engaged giveback trail (backtested tail-safe — engine/power-probe.ts on
 // real NBBO): once a power position has EVER been up ≥ +100% (the option doubled),
 // LOCK gains by exiting if it gives back > 40% of its peak gain. Engaged ONLY after
@@ -686,6 +702,25 @@ Deno.serve(async () => {
             ? f.close <= pos.peakFavorable - trailK * f.atr
             : f.close >= pos.peakFavorable + trailK * f.atr;
           if (inProfit && retraced) intent = { kind: "exit", reason: "trail_chandelier" };
+        }
+      }
+      // ---- UNDERLYING INITIAL STOP (config-gated; the primary loss stop) ----
+      // Fires BEFORE the premium stop below — a uniform underlying-distance stop instead
+      // of the premium-noise -50% stop. Uses the reconstructed entryUnderlying (no schema
+      // change). Profit exits (trail/target) above already won, so this only binds a
+      // LOSING position. Also SHADOW-logs the tighter 0.15% at its first crossing so we can
+      // A/B it against the live 0.20% with no colliding live channel (one-live-shadow-other).
+      if (pos && row && pos.entryUnderlying > 0 && (!intent || intent.kind !== "exit")) {
+        const usPct = Number(cfg.underlying_stop_pct ?? 0);
+        const adversePct = (pos.optType === "call" ? (pos.entryUnderlying - f.close) : (f.close - pos.entryUnderlying)) / pos.entryUnderlying * 100;
+        if (usPct > 0) {
+          // shadow: log ONCE at the minute adverse first crosses the tighter 0.15% (band [0.15, live))
+          const prevClose = entryMinute >= 0 && i > entryMinute ? bars[i - 1].close : f.close;
+          const prevAdv = (pos.optType === "call" ? (pos.entryUnderlying - prevClose) : (prevClose - pos.entryUnderlying)) / pos.entryUnderlying * 100;
+          if (SHADOW_US_STOP_PCT < usPct && prevAdv < SHADOW_US_STOP_PCT && adversePct >= SHADOW_US_STOP_PCT) {
+            await journal("INFO", `stream-shadow: US${SHADOW_US_STOP_PCT} ${s.slug} ${row.occ_symbol} would exit @ undl ${f.close.toFixed(2)} (adverse ${adversePct.toFixed(3)}%) mark ${Number(alp?.current_price ?? 0).toFixed(2)}`);
+          }
+          if (adversePct >= usPct) intent = { kind: "exit", reason: "underlying_stop" };
         }
       }
       if (pos && row && alp && premiumExit && (!intent || intent.kind !== "exit")) {
