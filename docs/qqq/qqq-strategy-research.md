@@ -109,5 +109,25 @@ premium stop.** Fewer, higher-quality morning trades (cost ↓) + the trail (tai
 - Caveats: 36 (SPY) / 88 (QQQ) trades is a SMALL sample in ONE chop regime; some config-selection
   risk. The live 5-session A/B (base vs v2, next week) is the real test. Deploy: `21_v2_trail_channels.sql`.
 
+## UPDATE (06-04 pt3): the GRIND hunt found the desk's BEST channel (qqq-thrust-trail)
+
+grind-the-scalper is dead (−$17k SPY / −$18k QQQ, 5% win — high-freq 0DTE scalping can't beat the
+spread; the recipe only rescues it to −$3.9k on SPY). BUT grind's momentum-thrust *entry* + an
+**efficiency-ratio TREND gate** + the chandelier trail is the strongest edge found:
+
+| channel (real fills, H1) | trades | win% | gross | **net** | exp/trade | DD |
+|---|---|---|---|---|---|---|
+| **qqq-thrust-trail (QQQ)** | 62 | 51.6% | +$10,058 | **+$7,473** ★ | +$120.54 | $2,166 |
+| same entry on SPY | — | — | −$3,429 | −$5,511 | — | — |
+
+- VWAP-aligned thrust + **efficiency_ratio ≥ 0.40 (the key — only trade a TRENDING tape, not chop)**
+  + rel-vol ≥ 1.8 + momentum ≥ 0.6·ATR + AM-only + 1.5·ATR chandelier. The ER gate is what separates
+  it from grind's noise-chasing scalp.
+- **QQQ-specific** (−$5,511 on SPY): QQQ trends intraday, SPY chops. Adds to the instrument-edge map —
+  breakout→QQQ, power→SPY, **trend-thrust→QQQ**. The whole config neighborhood is net-positive
+  (+$1.4k…+$7.5k across 5 nearby configs) → a real edge, not a fit.
+- **Verdict on grind:** RETIRE the scalper (mute on both tickers); repurpose its slot with
+  `qqq-thrust-trail`. Deploy alongside the other v2 channels (`21_v2_trail_channels.sql`).
+
 _(All specs hand-authored + backtested via `npm run backtest --spec … --underlying QQQ --source
 real --options real`. Reproduce: re-backfill QQQ option_bars per `qqq-desk-tracking.md`.)_
