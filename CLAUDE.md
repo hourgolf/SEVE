@@ -89,8 +89,18 @@ UNMANAGED (managing caps power's tail / bleeds grind cost). New tools:
   status='armed' where slug like '%-qqq'`). Exact slug wins; compiled `.md` channels are
   unaffected (arbitrary slugs find no REGISTRY hit). **NOTE:** the SPY-tuned params won't
   transfer 1:1 to QQQ (more volatile) and power/grind are unvalidated even on SPY → tomorrow's
-  live QQQ is OBSERVATION; the backtest (engine still SPY-hardcoded in `realsource.ts` — needs
-  the same symbol-param as the worker got + QQQ stock/option backfills) tells us what to retune.
+  live QQQ is OBSERVATION; the backtest tells us what to retune.
+- **QQQ BACKTEST READY (track 2 code DONE):** the engine + backfills are now ticker-parameterized
+  (default SPY, backward-compatible): `engine/realsource.ts` `.eq("symbol",sym)`,
+  `engine/optionsource.ts` filters `option_bars` by OCC prefix (no `underlying` col, but the
+  root IS the ticker), `engine/backtest.ts` takes `--underlying` (or infers from a `--strat`
+  suffix: `--strat breakout-qqq` → ORB on QQQ). `scripts/backfill-options.ts --underlying QQQ`
+  + `20_backfill_qqq_bars.sql` (generic `fire_bars(symbol,…)` + a `ingest_recent_bars` that
+  reads the ticker from each Alpaca response). **PENDING = the user's DATA runs:** (1) fire
+  `20_backfill_qqq_bars.sql` for QQQ stock history, (2) temp anon INSERT policy on option_bars
+  (no service-role key in .env.local), (3) `npm run backfill:options -- --underlying QQQ --tf 15
+  --from … --to …`, (4) `npm run backtest -- --strat <s>-qqq --source real --options real` per
+  channel. Then drop the temp policy + truncate option_bars (0.5 GB cap).
 - Phase B (later): de-hardcode the 4 code channels → `.md` theses; streaming worker
   becomes the SOLE trader (disable the `seve-paper-trader` cron at cutover).
 
