@@ -1,11 +1,12 @@
 // ============================================================================
 //  scripts/backfill-options.ts   ·   run: npm run backfill:options
 //
-//  Backfills REAL historical 0DTE SPY option bars (trade OHLC) from Alpaca into
+//  Backfills REAL historical 0DTE option bars (trade OHLC) from Alpaca into
 //  the option_bars table, so the backtest can fill at real prices instead of
-//  Black-Scholes guesses. Per trading day it reads that day's SPY range (from
-//  underlying_bars), enumerates the near-the-money strikes, expiry = that day
-//  (0DTE), fetches Alpaca option bars in batches, and upserts.
+//  Black-Scholes guesses. Per trading day it reads that day's range (from
+//  underlying_bars for --underlying), enumerates the near-the-money strikes,
+//  expiry = that day (0DTE), fetches Alpaca option bars in batches, and upserts.
+//  --underlying SPY (default) | QQQ — both are $1-strike, same OCC layout.
 //
 //  REQUIRES these in your shell env (NOT committed):
 //    SUPABASE_URL                (or NEXT_PUBLIC_SUPABASE_URL from .env.local)
@@ -47,6 +48,7 @@ function arg(name: string, def: string): string {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
+const UNDERLYING = arg("underlying", "SPY").toUpperCase(); // SPY (default) | QQQ
 const STRIKE_WINDOW = Number(arg("window", "4")); // extra $ beyond the day's range
 const OPT_TF = arg("tf", "1"); // option-bar timeframe (e.g. "1" or "15" min) — use 15 for long backfills to save storage
 const FROM = arg("from", "");
@@ -70,8 +72,10 @@ function etParts(ms: number): { date: string; min: number } {
 const occSymbol = (expISO: string, strike: number, type: "call" | "put") => {
   const [y, m, d] = expISO.split("-");
   const k = String(Math.round(strike * 1000)).padStart(8, "0");
-  return `SPY${y.slice(2)}${m}${d}${type === "call" ? "C" : "P"}${k}`;
+  return `${UNDERLYING}${y.slice(2)}${m}${d}${type === "call" ? "C" : "P"}${k}`;
 };
+// Parse an OCC symbol back to its parts — root is the (variable-length) ticker.
+const OCC_RE = new RegExp(`^${UNDERLYING}(\\d{6})([CP])(\\d{8})$`);
 
 const H = {
   "APCA-API-KEY-ID": ALPACA_KEY ?? "",
@@ -89,7 +93,7 @@ async function dayRanges(sb: ReturnType<typeof createClient>): Promise<DayRange[
     const { data, error } = await sb
       .from("underlying_bars")
       .select("ts,low,high")
-      .eq("symbol", "SPY")
+      .eq("symbol", UNDERLYING)
       .order("ts", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error("underlying_bars: " + error.message);
@@ -130,7 +134,7 @@ async function fetchOptionBars(symbols: string[], day: string) {
     const j = JSON.parse(txt);
     const bars: Record<string, any[]> = j.bars ?? {};
     for (const [sym, arr] of Object.entries(bars)) {
-      const mm = sym.match(/^SPY(\d{6})([CP])(\d{8})$/);
+      const mm = sym.match(OCC_RE);
       if (!mm) continue;
       const [, yymmdd, cp, strk] = mm;
       const expiration = `20${yymmdd.slice(0, 2)}-${yymmdd.slice(2, 4)}-${yymmdd.slice(4, 6)}`;
@@ -155,7 +159,7 @@ async function main() {
   const sb = createClient(SB_URL, SB_WRITE, { auth: { persistSession: false } });
 
   const days = await dayRanges(sb);
-  console.log(`backfill-options: ${days.length} trading days (${days[0]?.date} → ${days[days.length - 1]?.date}), strike window ±$${STRIKE_WINDOW}`);
+  console.log(`backfill-options [${UNDERLYING}]: ${days.length} trading days (${days[0]?.date} → ${days[days.length - 1]?.date}), strike window ±$${STRIKE_WINDOW}`);
 
   let grandTotal = 0;
   for (const d of days) {
