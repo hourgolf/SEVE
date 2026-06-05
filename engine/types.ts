@@ -119,6 +119,7 @@ export interface Position {
   entryTs?: number; // epoch ms at entry (multi-DTE: survives the per-session entryMinute reset)
   entryUnderlying: number; // spot at entry (for the price stop)
   peakFavorable: number; // best favorable underlying since entry (trailing stop)
+  peakPremium?: number; // best (highest) option mid since entry — drives the premium-giveback TRAIL
   legs?: PositionLeg[]; // present → multi-leg structure
   entryEdgeUsd?: number; // entry-side spread+slippage cost ($, total over legs×qty)
   // Multi-leg only: the structure label + its DEFINED max loss ($/structure). For

@@ -48,6 +48,7 @@ import { DEFAULT_STRADDLE_PARAMS, straddleEvaluate } from "./strategies/straddle
 import { makeCrossover } from "./strategies/crossover";
 import { specToStrategyDef, specPremiumExit, type CompiledStrategy } from "./specEvaluate";
 import type { StrategySpec } from "../lib/desk/strategySpec";
+import { specTrail } from "../lib/desk/strategySpec";
 import type { Bar, Evaluate, FundState, OptType, Position, Quote, StrategistConfig, Trade } from "./types";
 
 const BASE_MS = 1_780_000_000_000;
@@ -114,7 +115,13 @@ export function simulateSession(
   costModel: CostModel = DEFAULT_COST_MODEL,
   // Smart-layer management block (Brief P4). When present, the position is run by
   // the tranched state machine (manage.ts) instead of the simple single-leg exit.
-  management?: Management
+  management?: Management,
+  // Standalone armable TRAIL (the armable subset of management), from entry — no
+  // scale-out ladder. atrChandelierK: exit when the underlying retraces k·ATR from the
+  // peak favorable price (ignores premium noise — the right trail for 0DTE momentum,
+  // what breakout's code does). premiumGivebackPct: give back X% of peak premium gain.
+  // Mirrors the live worker so backtest == live.
+  trailExit?: { atrChandelierK?: number; premiumGivebackPct?: number }
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -174,13 +181,31 @@ export function simulateSession(
 
     // Premium profit/stop takes priority over the strategy's own exit when held.
     // (single-leg only — multi-leg exits are handled by the strategy itself.)
-    if (pos && !pos.legs && premiumExit && (!intent || intent.kind !== "exit")) {
+    if (pos && !pos.legs && (premiumExit || trailExit) && (!intent || intent.kind !== "exit")) {
       const q = findQuote(chain, pos.strike, pos.optType);
       if (q) {
-        if (premiumExit.profitPct != null && q.mid >= pos.entryPrice * (1 + premiumExit.profitPct / 100))
+        // ratchet the peak option mid (the trail's high-water mark)
+        pos.peakPremium = Math.max(pos.peakPremium ?? pos.entryPrice, q.mid);
+        if (premiumExit?.profitPct != null && q.mid >= pos.entryPrice * (1 + premiumExit.profitPct / 100))
           intent = { kind: "exit", reason: "target_premium" };
-        else if (premiumExit.stopPct != null && q.mid <= pos.entryPrice * (1 - premiumExit.stopPct / 100))
+        else if (premiumExit?.stopPct != null && q.mid <= pos.entryPrice * (1 - premiumExit.stopPct / 100))
           intent = { kind: "exit", reason: "stop_premium" };
+        // TRAIL: once the position has been in profit, exit when the mid retraces
+        // > givebackPct of the PEAK GAIN (giveback-of-gain, like manage.ts) — locks
+        // in a fraction of profit at ANY size, not only on huge winners.
+        // TRAIL (armable). Underlying ATR-chandelier FIRST (ignores premium noise —
+        // the right trail for 0DTE momentum): once in profit, exit when price retraces
+        // k·ATR from the peak favorable underlying. Else premium-giveback of peak gain.
+        else if (trailExit?.atrChandelierK != null && f.atr > 0) {
+          const inProfit = pos.optType === "call" ? f.close > pos.entryUnderlying : f.close < pos.entryUnderlying;
+          const retraced = pos.optType === "call"
+            ? f.close <= pos.peakFavorable - trailExit.atrChandelierK * f.atr
+            : f.close >= pos.peakFavorable + trailExit.atrChandelierK * f.atr;
+          if (inProfit && retraced) intent = { kind: "exit", reason: "trail_chandelier" };
+        } else if (trailExit?.premiumGivebackPct != null && pos.peakPremium != null && pos.peakPremium > pos.entryPrice) {
+          const givebackLevel = pos.entryPrice + (pos.peakPremium - pos.entryPrice) * (1 - trailExit.premiumGivebackPct / 100);
+          if (q.mid <= givebackLevel) intent = { kind: "exit", reason: "trail_giveback" };
+        }
       }
     }
 
@@ -300,6 +325,7 @@ export function simulateSession(
               entryMinute: i,
               entryUnderlying: f.close,
               peakFavorable: f.close,
+              peakPremium: en.fill, // seed the premium-giveback trail at the entry fill
               entryEdgeUsd: en.edgeUsd * r.qty,
             };
           }
@@ -408,11 +434,22 @@ async function main() {
   let specDef: CompiledStrategy | null = null;
   let premiumExit: { profitPct?: number; stopPct?: number } | undefined;
   let management: Management | undefined;
+  let trailExit: { atrChandelierK?: number; premiumGivebackPct?: number } | undefined;
   if (specPath) {
     const spec = JSON.parse(readFileSync(specPath, "utf8")) as StrategySpec;
     specDef = specToStrategyDef(spec);
     premiumExit = specPremiumExit(spec);
-    management = spec.management; // smart spec → the state machine owns exits
+    // ARMABLE trail (the live unlock): route it through the SIMPLE exit path (the same
+    // code the worker runs), NOT manage.ts's tranched state machine. The trail governs
+    // the upside, so drop the fixed profit cap and keep the stop.
+    const t = specTrail(spec.management);
+    if (t) {
+      trailExit = t;
+      premiumExit = { stopPct: premiumExit.stopPct };
+      management = undefined;
+    } else {
+      management = spec.management; // smart (tranched) spec → manage.ts owns exits
+    }
   }
   // EMA Cross precomputes indicators over the session's closes, so its
   // evaluator is built per session; fade/breakout ignore the closes arg.
@@ -485,7 +522,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, cost, management));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, cost, management, trailExit));
     }
     const optLabel = useDatabento
       ? `REAL NBBO · Databento cbbo-1m (${realDays}/${sessions.length} days) + real spread`
@@ -501,7 +538,7 @@ async function main() {
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
       const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management, trailExit));
     }
     report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }

@@ -1,3 +1,13 @@
+// ⚑ WORKER VERSION: 2026-06-04e  (ARMABLE TRAIL for compiled .md channels. An uploaded
+//   channel can now declare a live trailing exit — an underlying ATR-CHANDELIER (trail.mode
+//   atr_chandelier, baseK≈1.5): once in profit, exit when price retraces k·ATR from the peak
+//   favorable underlying. peakFavorable is reconstructed from session bars (STATELESS — no new
+//   column), the SAME trail breakout's code uses — the right exit for 0DTE momentum (real-fills:
+//   it flips the QQQ-momentum signal gross from −$1.8k fixed-exit to +$3.9k). Only the ARMABLE
+//   subset arms (chandelier + premium stop/target + cost gate); scale-outs / scale-in / vwap
+//   target stay backtest-only (`isArmableManagement`). The premium stop/target still apply (trail
+//   = winners, stop = losers). premium-giveback trail is NOT worker-supported yet (needs a peak
+//   premium column; it's noisier anyway). Per-channel + per-underlying via the .md. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-04d  (MULTI-INSTRUMENT CODE CLONES. A channel whose slug
 //   is `<base>-qqq` / `<base>-spy` now resolves to the SAME code strategy as `<base>`
 //   (breakout-qqq → ORB, grind-qqq → scalper, …) via a base-slug fallback in the
@@ -311,7 +321,25 @@ function parseET(s: string): number | null { const m = /^\s*(\d{1,2}):(\d{2})/.e
 const SPEC_SUPPORTED = new Set(["ma_cross","vwap_side","vwap_dev","opening_range","or_width_min","rel_vol","rsi","time_before","time_between","efficiency_ratio","momentum_atr","macd","level"]);
 const macdKey = (c: Spec) => `${c.fast}-${c.slow}-${c.signal}`;
 
-interface CompiledSpec { build: (bars: Bar[], levels?: { pdh?: number; pdl?: number }) => Evaluate; tf: number; warmup: number; premiumExit: { profitPct?: number; stopPct?: number }; }
+interface CompiledSpec { build: (bars: Bar[], levels?: { pdh?: number; pdl?: number }) => Evaluate; tf: number; warmup: number; premiumExit: { profitPct?: number; stopPct?: number }; trail?: { atrChandelierK?: number; premiumGivebackPct?: number }; }
+
+// Armable TRAIL from a spec's management block (mirror of lib/desk/strategySpec
+// specTrail + isArmableManagement). ONLY the subset the worker runs live: an
+// underlying ATR-chandelier and/or a premium-giveback. A block with scale-outs /
+// scale-in / a vwap-fraction target is NOT armable → no live trail (returns null).
+// deno-lint-ignore no-explicit-any
+function specTrailWorker(m: any): { atrChandelierK?: number; premiumGivebackPct?: number } | null {
+  if (!m) return null;
+  if (Array.isArray(m.scaleOut) && m.scaleOut.length > 0) return null;
+  if (m.scaleIn?.enabled) return null;
+  if (m.target) return null;
+  const t = m.trail;
+  if (!t) return null;
+  const out: { atrChandelierK?: number; premiumGivebackPct?: number } = {};
+  if ((t.mode === "atr_chandelier" || t.mode === "hybrid") && t.atrChandelier && t.atrChandelier.baseK > 0) out.atrChandelierK = t.atrChandelier.baseK;
+  if ((t.mode === "premium_giveback" || t.mode === "hybrid") && typeof t.premiumGivebackPct === "number" && t.premiumGivebackPct > 0) out.premiumGivebackPct = t.premiumGivebackPct;
+  return out.atrChandelierK != null || out.premiumGivebackPct != null ? out : null;
+}
 function compileSpec(spec: Spec): CompiledSpec {
   const entries: Spec[] = spec?.entries ?? [];
   let profitPct: number | undefined, stopPct: number | undefined, timeExit: number | null = null;
@@ -393,7 +421,9 @@ function compileSpec(spec: Spec): CompiledSpec {
       return null;
     };
   };
-  return { build, tf: 1, warmup, premiumExit: { profitPct, stopPct } };
+  // deno-lint-ignore no-explicit-any
+  const trail = specTrailWorker((spec as any)?.management) ?? undefined;
+  return { build, tf: 1, warmup, premiumExit: { profitPct, stopPct }, trail };
 }
 
 // ---- helpers ---------------------------------------------------------------
@@ -625,9 +655,25 @@ Deno.serve(async () => {
       const evaluate: Evaluate = code ? code.evaluate : compiled!.build(bars, { pdh: mkt.pdh, pdl: mkt.pdl });
       let intent = evaluate(f, pos);
 
-      // Premium profit/stop (compiled specs) — uses the REAL Alpaca option mark
-      // (the spec's % targets are on premium; the per-bar evaluator can't see it).
+      // TRAIL + premium profit/stop (compiled specs). The ARMABLE TRAIL (the live
+      // unlock): an underlying ATR-chandelier — once the position is in profit, exit
+      // when price retraces k·ATR from the peak FAVORABLE underlying. peakFavorable is
+      // reconstructed from session bars (stateless — no new column), the same trail
+      // breakout's code uses (the right exit for 0DTE momentum; premium-giveback is too
+      // noisy and isn't worker-supported in V1). It harvests the convex tail. The
+      // premium stop/target STILL apply (the trail governs winners; the stop guards
+      // losers) — a trail .md sets a high profitPct so the trail, not the cap, runs.
       const premiumExit = compiled?.premiumExit;
+      const trailK = compiled?.trail?.atrChandelierK;
+      if (pos && row && alp && (!intent || intent.kind !== "exit")) {
+        if (trailK != null && f.atr > 0) {
+          const inProfit = pos.optType === "call" ? f.close > pos.entryUnderlying : f.close < pos.entryUnderlying;
+          const retraced = pos.optType === "call"
+            ? f.close <= pos.peakFavorable - trailK * f.atr
+            : f.close >= pos.peakFavorable + trailK * f.atr;
+          if (inProfit && retraced) intent = { kind: "exit", reason: "trail_chandelier" };
+        }
+      }
       if (pos && row && alp && premiumExit && (!intent || intent.kind !== "exit")) {
         const entryPx = Number(row.avg_entry_price ?? 0);
         const markPx = Number(alp.current_price ?? 0);

@@ -110,6 +110,18 @@ UNMANAGED (managing caps power's tail / bleeds grind cost). New tools:
   (`update strategists set status='draft' where slug in ('fade-qqq','power-qqq','grind-qqq')`);
   power stays the SPY keeper. Docs: `docs/channels/breakout-qqq.md` (cost-disciplined ORB retune),
   `docs/qqq/qqq-desk-tracking.md` (verdict table + tracking). Memory: `qqq-spy-h1-2026-real-fills.md`.
+- **ARMABLE TRAILING EXITS (worker `2026-06-04e`, 06-04):** uploaded `.md` channels can now declare a
+  LIVE trailing exit. The armable subset = an **underlying ATR-chandelier** (`management.trail` mode
+  `atr_chandelier`, baseK≈1.5: once in profit, exit when price retraces k·ATR from the peak favorable
+  underlying — STATELESS via reconstructed `peakFavorable`, the same trail breakout's code uses) +
+  premium stop/target + cost gate. Scale-outs / scale-in / vwap-target stay backtest-only
+  (`isArmableManagement` in `lib/desk/strategySpec`; capabilityCheck only blocks Arm for those). Engine
+  mirror: `simulateSession(…, trailExit)` + `specTrail`; worker mirror: `specTrailWorker` +
+  `compiled.trail`. **Real-fills proof:** on QQQ momentum the chandelier flips gross −$1,774 (fixed
+  +250%) → **+$3,946**, out-grossing the hardcoded breakout (+$1,811), DD −18% — BUT net still −$5.6k
+  (the trail fixes the EXIT, not the cost wall / chop regime). **premium-giveback trail = WRONG for
+  0DTE** (premium too noisy; not worker-wired — would need a `peak_premium` column). Reference upload:
+  `docs/channels/orb-qqq-trail.md`. The mixer-vision unlock: an uploaded spec now arms a real trail.
 - Phase B (later): de-hardcode the 4 code channels → `.md` theses; streaming worker
   becomes the SOLE trader (disable the `seve-paper-trader` cron at cutover).
 

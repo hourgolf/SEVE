@@ -272,6 +272,42 @@ export function normalizeSpec(spec: StrategySpec): { spec: StrategySpec; repairs
   return { spec: { ...spec, entries }, repairs };
 }
 
+// The ARMABLE subset of management — what the LIVE worker can execute today:
+// a premium hard-stop, a premium-giveback TRAIL, the cost gate, theta-tighten,
+// EOD flatten. EXCLUDES the smart-layer tranching (scale-outs / scale-in /
+// vwap-fraction target), which the real-fills A/B showed CAPS the convex tail
+// (`smart-layer-real-fills-verdict.md`) → those stay backtest-only. A management
+// block using ONLY the armable subset can be ARMED; one with tranching cannot.
+export function isArmableManagement(m: Management | undefined): boolean {
+  if (!m) return true; // no management → trivially armable
+  if (m.scaleOut && m.scaleOut.length > 0) return false;
+  if (m.scaleIn?.enabled) return false;
+  if (m.target) return false; // vwap-fraction target = smart layer
+  return true;
+}
+
+// The live TRAIL config, IF the block is armable and declares a trail. This is THE
+// unlock: "ride the move, exit on giveback" — what harvests momentum's tail —
+// expressed so the engine backtest and the live worker run it identically. Two modes:
+//  • atrChandelierK — underlying ATR chandelier (exit when price retraces k·ATR from
+//    the peak FAVORABLE underlying). Ignores premium noise → the right trail for 0DTE
+//    momentum (this is what breakout's code does, k≈1.5). STATELESS (peak underlying
+//    reconstructs from session bars), so the worker needs no new column.
+//  • premiumGivebackPct — give back X% of PEAK premium GAIN. Simpler but noisy on 0DTE.
+// atr_chandelier wins on the data; premium_giveback offered for non-0DTE theses.
+export interface TrailConfig { atrChandelierK?: number; premiumGivebackPct?: number }
+export function specTrail(m: Management | undefined): TrailConfig | undefined {
+  if (!m || !isArmableManagement(m)) return undefined;
+  const t = m.trail;
+  if (!t) return undefined;
+  const out: TrailConfig = {};
+  if ((t.mode === "atr_chandelier" || t.mode === "hybrid") && t.atrChandelier && t.atrChandelier.baseK > 0)
+    out.atrChandelierK = t.atrChandelier.baseK;
+  if ((t.mode === "premium_giveback" || t.mode === "hybrid") && typeof t.premiumGivebackPct === "number" && t.premiumGivebackPct > 0)
+    out.premiumGivebackPct = t.premiumGivebackPct;
+  return out.atrChandelierK != null || out.premiumGivebackPct != null ? out : undefined;
+}
+
 export interface CapabilityReport {
   runnable: boolean; // can this be armed live on the supported subset?
   structureOk: boolean;
@@ -299,10 +335,13 @@ export function capabilityCheck(spec: StrategySpec): CapabilityReport {
       for (const err of validateLegs(spec.meta.structure, e.legs)) legErrors.push(`entry[${i}]: ${err}`);
     });
   }
-  // Management block: validate now; flag that the runtime executes in PR4.
+  // Management block. The ARMABLE subset (premium stop + premium-giveback TRAIL +
+  // cost gate + theta/EOD) runs live now — only the smart-layer TRANCHING
+  // (scale-outs / scale-in / vwap-target) is backtest-only and blocks Arm.
   const isSmart = !!spec.management;
   const managementErrors = validateManagement(spec.management, spec.meta.structure);
-  if (isSmart && managementErrors.length === 0) gaps.push("smart management (scale-outs / breakeven / trail) — backtest-only, not run live; remove the management section to arm the entries");
+  if (isSmart && managementErrors.length === 0 && !isArmableManagement(spec.management))
+    gaps.push("smart management (scale-outs / scale-in / vwap-target) — backtest-only, not run live; keep only a premium-giveback trail + stop to arm the entries");
 
   const unsupported = [...new Set(gaps)];
   return {

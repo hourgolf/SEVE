@@ -63,5 +63,27 @@ single-leg fixed-exit QQQ specs** (the ceiling is known). The next real progress
 shipping **(A) live trailing exits** — then re-run this exact research with give-back exits in the
 spec and see whether an uploaded QQQ momentum channel finally clears the code baseline.
 
+## UPDATE (06-04): live trailing exits SHIPPED — the unlock is real (gross), cost-bound (net)
+
+Built armable trailing exits (worker `2026-06-04e` + engine). Two trail modes; the data picked one:
+
+| QQQ momentum, real fills | win% | **gross** | net | max DD |
+|---|---|---|---|---|
+| fixed +250% target (no trail) | 26.5% | −$1,774 | −$6,433 | $12,068 |
+| premium-giveback trail (25–50%) | ~36% | −$6.7k to −$9.6k | worse | worse |
+| **underlying ATR-chandelier trail (1.5)** | 36.8% | **+$3,946** | −$5,574 | $9,969 |
+| breakout *code* baseline | 16% | +$1,811 | −$4,936 | — |
+
+- **Premium-giveback is the WRONG trail for 0DTE** — option premium is too noisy, it exits winners
+  early (gross −$6.7k). The **underlying ATR-chandelier** (what breakout's code uses) is right: it
+  ignores premium noise, rides the underlying, harvests the tail → **gross +$3,946, beating even the
+  hardcoded breakout**, and cuts drawdown 18%.
+- **But net is still cost-bound** (−$5.6k): this entry over-trades (250 trades, $9.5k cost). The trail
+  fixes the EXIT/signal; it doesn't fix the cost wall or the chop regime. A net-positive QQQ channel =
+  chandelier trail **+** a lower-frequency entry **+** a trending stretch.
+- **The unlock for the mixer vision is delivered:** an UPLOADED `.md` (chandelier trail) now arms live
+  and out-grosses the hardcoded channel. `docs/channels/orb-qqq-trail.md` is the reference upload.
+  Premium-giveback isn't worker-wired (needs a peak-premium column; it's worse anyway).
+
 _(All specs hand-authored + backtested via `npm run backtest --spec … --underlying QQQ --source
 real --options real`. Reproduce: re-backfill QQQ option_bars per `qqq-desk-tracking.md`.)_
