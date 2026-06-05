@@ -24,29 +24,29 @@ After the first 30 minutes set QQQ's opening range, a volume-backed break that h
 side trends. Enter an ATM 0DTE option in the break direction; then DON'T cap the winner — trail
 it on the underlying so the rare big-trend day pays for the many small stops.
 
-## Entries
+## Entries — SELECTIVE and AM-only (the cost-beating half of the recipe)
+The trail fixes the exit; trade FEWER, higher-quality morning breakouts to beat the cost wall.
 Buy a CALL when ALL of these hold:
 - price breaks above the 30-minute opening-range high
-- the opening-range width is at least 0.25% of price
+- the opening-range width is at least 0.50% of price
 - price is above VWAP
-- momentum over the last 5 bars is at least +0.3 ATR
-- relative volume is at least 1.3x the recent average
-- it is before 15:00 ET
+- momentum over the last 5 bars is at least +0.6 ATR
+- relative volume is at least 1.8x the recent average
+- **it is before 11:30 ET** (QQQ trends hardest in the first two hours)
 
-Buy a PUT when ALL of these hold:
-- price breaks below the 30-minute opening-range low
-- the opening-range width is at least 0.25% of price
-- price is below VWAP
-- momentum over the last 5 bars is at most -0.3 ATR
-- relative volume is at least 1.3x the recent average
-- it is before 15:00 ET
+Buy a PUT when ALL of these hold (mirror, below the OR low, momentum ≤ −0.6 ATR).
 
 ## Exits
 - **Trail the underlying with a 1.5·ATR chandelier**: once in profit, exit when price retraces
-  1.5 ATR from the peak favorable price. (This is the live trail — `management.trail`,
-  mode `atr_chandelier`, baseK 1.5.)
-- Hard stop at -50% of the option premium (loser guard — the trail handles winners).
-- No fixed profit target (let the trail run); flatten by 15:30 ET.
+  1.5 ATR from the peak favorable price. (Live trail — `management.trail` mode `atr_chandelier`,
+  baseK 1.5.) This IS the exit — it harvests the tail.
+- **No premium stop, no fixed target** — the −50% stop cuts recoverable losers (it made net
+  −$3.4k → −$1.4k to drop it). The chandelier governs winners; losers exit on the time/EOD flatten.
+- Flatten by 15:30 ET.
+
+> **Real-fills (H1-2026 chop):** 88 trades, 41% win, **net −$1,439** (gross +$2,116), DD $3,786 —
+> vs the live `breakout-qqq` code (−$4,936, DD $7,569). Near-breakeven in chop → net-positive in a
+> trend. This is the `orb-qqq-trail` channel (21_v2_trail_channels.sql).
 
 ## Management
 ```yaml

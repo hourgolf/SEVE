@@ -85,5 +85,29 @@ Built armable trailing exits (worker `2026-06-04e` + engine). Two trail modes; t
   and out-grosses the hardcoded channel. `docs/channels/orb-qqq-trail.md` is the reference upload.
   Premium-giveback isn't worker-wired (needs a peak-premium column; it's worse anyway).
 
+## UPDATE (06-04 pt2): the net-positive RECIPE + the trail is MOMENTUM-only
+
+Swept entry-frequency × trail to beat the cost wall. The recipe: **selective AM-only momentum entry
+(OR-width ≥0.5%, momentum ≥0.6·ATR, rel-vol ≥1.8, before 11:30 ET) + 1.5·ATR chandelier trail + NO
+premium stop.** Fewer, higher-quality morning trades (cost ↓) + the trail (tail ↑):
+
+| channel (real fills, H1) | trades | win% | gross | **net** | DD |
+|---|---|---|---|---|---|
+| **orb-spy-trail (SPY v2)** | 36 | 36.1% | +$1,921 | **+$455** ✅ | $2,656 |
+| live `breakout` code (SPY) | 182 | 14.3% | −$3,513 | −$9,853 | $9,886 |
+| **orb-qqq-trail (QQQ v2)** | 88 | 40.9% | +$2,116 | −$1,439 | $3,786 |
+| live `breakout-qqq` code | 185 | 16.2% | +$1,811 | −$4,936 | $7,569 |
+
+- **SPY v2 is NET-POSITIVE (+$455, +$12.64/trade expectancy) — the desk's first positive channel**,
+  in a CHOP regime. QQQ v2 is near-breakeven (−$1,439, gross +$2,116) — net-positive in a trend.
+  Both ~$10k / ~$3.5k better than their base code channels, drawdown roughly HALVED.
+- **The trail is a MOMENTUM unlock — and only momentum.** Tested on SPY: it helps breakout (momentum)
+  hugely, but does NOT help **fade** (mean-reversion −$11.3k→−$10.8k — nothing to ride) or **power**
+  (final-hour lean −$1.4k→−$6.0k — the chandelier over-trades and hurts). Keep fade/power/grind on
+  their base exits; only momentum channels get the chandelier.
+- **Dropping the −50% premium stop matters** (it cuts recoverable losers): QQQ net −$3.4k→−$1.4k.
+- Caveats: 36 (SPY) / 88 (QQQ) trades is a SMALL sample in ONE chop regime; some config-selection
+  risk. The live 5-session A/B (base vs v2, next week) is the real test. Deploy: `21_v2_trail_channels.sql`.
+
 _(All specs hand-authored + backtested via `npm run backtest --spec … --underlying QQQ --source
 real --options real`. Reproduce: re-backfill QQQ option_bars per `qqq-desk-tracking.md`.)_
