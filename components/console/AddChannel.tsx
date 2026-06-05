@@ -117,7 +117,7 @@ export function AddChannel({
       const r = await fetch("/api/backtest-strategy", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ spec }),
+        body: JSON.stringify({ spec, underlying }),
       });
       const j = await r.json();
       if (j.error) setGateErr(j.error);

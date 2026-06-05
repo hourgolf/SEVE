@@ -1,6 +1,7 @@
 // Backtest gate (inline quick-check). Runs a compiled StrategySpec through the
-// SAME engine the CLI uses, over recent REAL SPY 1-min sessions with MODELED
-// (Black-Scholes) option chains — fast, no option_bars dependency. Because the
+// SAME engine the CLI uses, over recent REAL 1-min sessions for the CHANNEL'S OWN
+// underlying (SPY default, QQQ live) with MODELED (Black-Scholes) option chains —
+// fast, no option_bars dependency. Because the
 // desk's hard rule is "real fills, not BS", this score is labeled modeled and
 // is a SOFT pass; the response also returns the exact `npm run backtest` command
 // for the real-option-fills confirmation the operator runs before Arm.
@@ -13,7 +14,7 @@ import { simulateSession, metrics } from "@/engine/backtest";
 import { priceChain } from "@/engine/market";
 import { loadRealSessions } from "@/engine/realsource";
 import { specToStrategyDef, specPremiumExit } from "@/engine/specEvaluate";
-import { capabilityCheck, type StrategySpec } from "@/lib/desk/strategySpec";
+import { capabilityCheck, SUPPORTED_UNDERLYINGS, type StrategySpec } from "@/lib/desk/strategySpec";
 import type { ChainProvider } from "@/engine/optionsource";
 import type { FundState, StrategistConfig, Trade } from "@/engine/types";
 
@@ -52,8 +53,15 @@ function monthKey(ms: number): string {
 
 export async function POST(req: Request) {
   let spec: StrategySpec;
+  let underlying = "SPY";
   try {
-    spec = (await req.json())?.spec as StrategySpec;
+    const body = await req.json();
+    spec = body?.spec as StrategySpec;
+    // Gate on the channel's OWN instrument (QQQ rollout): the caller passes it, else
+    // fall back to the spec's declared instrument, else SPY. Allowlisted so we only
+    // ever read a ticker the desk actually ingests bars for.
+    const raw = String(body?.underlying ?? spec?.meta?.instrument ?? "SPY").toUpperCase();
+    underlying = SUPPORTED_UNDERLYINGS.includes(raw) ? raw : "SPY";
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
@@ -64,9 +72,9 @@ export async function POST(req: Request) {
   const cap = capabilityCheck(spec);
 
   try {
-    const sessions = (await loadRealSessions({ sinceDaysAgo: SINCE_DAYS })).slice(-MAX_SESSIONS);
+    const sessions = (await loadRealSessions({ sinceDaysAgo: SINCE_DAYS, symbol: underlying })).slice(-MAX_SESSIONS);
     if (!sessions.length) {
-      return NextResponse.json({ error: "no real SPY sessions available to backtest" }, { status: 503 });
+      return NextResponse.json({ error: `no real ${underlying} sessions available to backtest` }, { status: 503 });
     }
     const def = specToStrategyDef(spec);
     const premiumExit = specPremiumExit(spec);
@@ -91,10 +99,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       modeled: true, // Black-Scholes chains — soft pass, confirm on real fills
+      underlying, // which ticker's real sessions backed this gate (QQQ rollout)
       partial: cap.unsupported.length > 0, // scored on the supported subset only
       unsupported: cap.unsupported,
       runnable: cap.runnable, // gate to Arm (no unsupported + single-leg)
-      span: `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET}`,
+      span: `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real ${underlying} 1-min`,
       metrics: {
         sessions: m.nDays,
         trades: m.nTrades,
@@ -109,7 +118,7 @@ export async function POST(req: Request) {
       },
       robustness,
       // The real-option-fills confirmation: save the spec JSON and run this.
-      cliCommand: `npm run backtest -- --source real --options real --spec <your-spec>.json`,
+      cliCommand: `npm run backtest -- --source real --options real --underlying ${underlying} --spec <your-spec>.json`,
     });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
