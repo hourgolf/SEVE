@@ -141,9 +141,11 @@ export function stepManaged(
   // ---- theta tighten: after thetaTightenAfter, choke the trail/giveback ----
   let kMinMul = 1, givebackMul = 1;
   const tt = s.m.timeStop?.thetaTightenAfter;
-  if (tt) {
+  // Guard: a compiled spec can carry a malformed thetaTightenAfter (not a clean
+  // "HH:MM" string) — never let that crash the run / the inline backtest gate.
+  if (typeof tt === "string" && tt.includes(":")) {
     const [hh, mm] = tt.split(":").map(Number);
-    if (etMinOfDay >= hh * 60 + (mm || 0)) { kMinMul = 0.6; givebackMul = 0.6; }
+    if (Number.isFinite(hh) && etMinOfDay >= hh * 60 + (mm || 0)) { kMinMul = 0.6; givebackMul = 0.6; }
   }
 
   // ---- binding exit on the REMAINDER: tightest of {trail, breakeven, structural, premium stop} ----

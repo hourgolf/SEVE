@@ -12,6 +12,13 @@ ab_pair: breakout
 
 # QQQ Breakout (ORB) — the one QQQ edge the data backs
 
+> **This file DOCUMENTS the live channel — do not import it.** `breakout-qqq` already runs
+> live as a **code** channel (worker base-slug resolver → ORB code on QQQ). Importing this `.md`
+> would collide on the slug and — because the slug base-resolves to the breakout *code* — the
+> worker would run the code and **ignore the spec** anyway. To run the cost-disciplined retune
+> below as a separate live **compiled** A/B channel, import **`orb-qqq-tuned.md`** (distinct
+> slug, no smart-management block → arms cleanly).
+
 > **Why this channel exists.** In the H1-2026 real-fills backtest (Jan–Jun, 106 sessions,
 > real `option_bars`) breakout is the **only** strategy with a *positive gross signal on QQQ*
 > (+$1.8k gross, vs SPY breakout −$3.5k). The edge is real; the problem is **cost** — the 3%
@@ -42,18 +49,18 @@ LONG PUT  when: the mirror below openRangeLow
 ```
 Strike: ATM 0DTE (1DTE inside the close cutoff). Direction only — never both sides.
 
-## 4. Management (cost is the killer — this block is the point)
-```yaml
-risk:
-  defineR: premium_stop
-  premiumStopPct: 50                            # hard −50% premium stop
-costGate:
-  minMoveToCostRatio: 3.0                        # VETO entry unless expected 1·ATR premium move >= 3× round-trip cost
-exits:
-  profitPct: 90                                  # QQQ moves more than SPY — let the winner run past SPY's +75
-  timeStop: "13:30 theta-tighten"
-  eodFlattenMinToClose: 35                       # never hold 0DTE into the close
-```
+## 4. Exits & cost (prose — NOT a smart-management block)
+- **Take profit at +90% premium** (QQQ moves more than SPY — let it run past SPY's +75).
+- **Stop at −50% premium** (hard premium stop).
+- **Flatten by 15:30 ET** — never hold 0DTE into the close.
+- **Cost gate is already live** — the worker vetoes any entry whose expected 1·ATR premium move
+  is < 3× the round-trip cost (`COST_GATE_RATIO = 3.0`; breakout is not exempt). You do NOT
+  declare it in a thesis; it applies automatically.
+
+> ⚠️ Do not add a `## Management` block with scale-outs / breakeven / trail to a channel you
+> intend to ARM. Per the real-fills verdict (`smart-layer-real-fills-verdict.md`) those are
+> **backtest-only** — the compiler flags any `management` block as "smart, can't arm". The lean
+> exits above + the auto cost gate are the live-supported subset.
 
 ## 5. Live status & how it maps
 - Lives today as the **code channel `breakout-qqq`** (worker base-slug resolver → ORB code on
