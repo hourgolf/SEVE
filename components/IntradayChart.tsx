@@ -16,6 +16,7 @@ import {
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { aggregateBars, TIMEFRAMES } from "@/lib/bars";
 import { ema, macd as computeMacd } from "@/lib/indicators";
+import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 import type { UnderlyingBar } from "@/lib/types";
 import type { Position } from "@/lib/desk/types";
 
@@ -61,12 +62,17 @@ function etParts(ms: number): { date: string; min: number } {
 
 export function IntradayChart({
   bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
+  symbol = "SPY", onSymbolChange,
 }: {
   bars: UnderlyingBar[];
   dailyBars?: UnderlyingBar[];
   spot?: number | null;
   spotUp?: boolean | null;
   mobile?: boolean;
+  /** §01 instrument label (SPY/QQQ) — titles the chart + the spot LED caption. */
+  symbol?: string;
+  /** When provided, renders the SPY/QQQ toggle in the chart header. */
+  onSymbolChange?: (s: string) => void;
   /** Today's closed trades + open positions → entry/exit markers (intraday only). */
   trades?: Position[];
   openPositions?: Position[];
@@ -330,8 +336,15 @@ export function IntradayChart({
   return (
     <div className="panel">
       <div className="phead">
-        <span className="t">SPY — {isDaily ? "Daily" : "Intraday"}</span>
+        <span className="t">{symbol} — {isDaily ? "Daily" : "Intraday"}</span>
         <span className="phead-right chart-controls chart-controls--top">
+          {onSymbolChange && (
+            <span className="chart-toggle sym-toggle" role="group" aria-label="instrument">
+              {SUPPORTED_UNDERLYINGS.map((sy) => (
+                <button key={sy} className={symbol === sy ? "on" : ""} onClick={() => onSymbolChange(sy)} aria-pressed={symbol === sy}>{sy}</button>
+              ))}
+            </span>
+          )}
           <span className="chart-toggle" role="group" aria-label="chart type">
             <button className={mode === "line" ? "on" : ""} onClick={() => setModeP("line")} aria-pressed={mode === "line"}>LINE</button>
             <button className={mode === "candles" ? "on" : ""} onClick={() => setModeP("candles")} aria-pressed={mode === "candles"}>CANDLES</button>
@@ -359,7 +372,7 @@ export function IntradayChart({
           <div ref={elRef} style={{ height: mobile ? 260 : (showMacd ? 360 : 300), width: "100%" }} />
           {ledSpot != null && (
             <div className="chart-led">
-              <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption="spy $" color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"} />
+              <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption={`${symbol.toLowerCase()} $`} color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"} />
             </div>
           )}
         </div>

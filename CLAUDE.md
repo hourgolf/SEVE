@@ -63,17 +63,23 @@ UNMANAGED (managing caps power's tail / bleeds grind cost). New tools:
   pasting the worker** (else it reads the old 50 as $50 risk → 0 contracts). At RISK $200
   channels size ~2–4 contracts (by premium) vs the old pinned 6.
 - **QQQ MULTI-INSTRUMENT ROLLOUT (worker `2026-06-04c`):** each channel trades its OWN
-  `strategists.underlying` (SPY default, QQQ live). 5-step plan — **steps 1–3 DONE:**
+  `strategists.underlying` (SPY default, QQQ live). 5-step plan — **steps 1–4 DONE:**
   (1) `market-ingest` v3 writes SPY+QQQ tapes (env `UNDERLYINGS`, per-ticker isolated);
   (2) per-channel `underlying` column + `.md` frontmatter `underlying:` + Add-Channel/
   ChannelStrip ticker chip + 3-tier graceful load (`17_strategist_underlying.sql` RUN);
   (3) worker parameterized — `occSymbol(sym,…)`, `.eq("symbol",sym)`, position `underlying:sym`,
   bars/levels/expiry built once per distinct ticker (`buildMarket`→`marketByUnderlying`),
   a channel with no session bars skips `no_market`. Cost gate / ATM-δ / $1-strike rounding
-  transfer as-is (QQQ is $1-strike, OPRA-fed, same OCC layout). **PENDING:** step 4 = SPY/QQQ
-  chart toggle (`useMarketData`/`/api/spot`/OptionChain); step 5 = backfill QQQ `option_bars`
-  for the backtest gate. To point a channel at QQQ: `update strategists set underlying='QQQ'
-  where slug='…';` (the `.md` `underlying:` does it for new channels). Futures = shelved.
+  transfer as-is (QQQ is $1-strike, OPRA-fed, same OCC layout);
+  (4) **§01 SPY/QQQ chart toggle** — `useMarketData(symbol)` filters EVERY read by ticker
+  (`.eq("symbol",…)`/`.eq("underlying",…)`) + `/api/spot?symbol=` (allowlisted, per-sym cache)
+  + the chart/chain/spot-LED follow a `symbol` state lifted to `Surface` (amber `.sym-toggle`
+  in the IntradayChart header, desktop + mobile). **NOTE this also FIXED a step-1 regression:**
+  the unfiltered reads were interleaving SPY+QQQ bars; **RUN `18_daily_bars_by_symbol.sql`**
+  (recreates `underlying_bars_daily` grouped by symbol — the old view mixed both tickers into
+  one bogus daily candle). **PENDING:** step 5 = backfill QQQ `option_bars` for the backtest
+  gate. To point a channel at QQQ: `update strategists set underlying='QQQ' where slug='…';`
+  (the `.md` `underlying:` does it for new channels). Futures = shelved.
 - Phase B (later): de-hardcode the 4 code channels → `.md` theses; streaming worker
   becomes the SOLE trader (disable the `seve-paper-trader` cron at cutover).
 

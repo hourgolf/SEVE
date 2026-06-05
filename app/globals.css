@@ -598,6 +598,14 @@ svg.spark {
   background: var(--green);
   color: var(--bg);
 }
+/* instrument (SPY/QQQ) toggle — same segmented language as chart-type, but an
+   amber on-state + a hair of right margin so it reads as the INSTRUMENT picker,
+   not a second LINE/CANDLES control. */
+.sym-toggle { margin-right: 2px; }
+.sym-toggle button.on {
+  background: var(--amber);
+  color: var(--bg);
+}
 .chart-controls {
   display: flex;
   flex-wrap: wrap;

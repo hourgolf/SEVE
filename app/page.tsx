@@ -15,7 +15,10 @@ import { MobileApp } from "@/components/mobile/MobileApp";
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
 // tab-shell. The data-seam pattern means neither layout re-subscribes.
 function Surface() {
-  const data = useMarketData();
+  // §01 market instrument (SPY default, QQQ live). One state drives the single
+  // market hook + the chart/chain/spot toggle — the desk (§02/§03) is per-channel.
+  const [symbol, setSymbol] = useState("SPY");
+  const data = useMarketData(symbol);
   const view = useDeskState();
   const feed = useDeskFeed();
   const write = useDeskWrite();
@@ -36,7 +39,7 @@ function Surface() {
     return priorClose != null ? data.spot >= priorClose : null;
   }, [data.bars, data.spot]);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol };
   return isMobile ? <MobileApp {...props} /> : <DesktopSurface {...props} />;
 }
 

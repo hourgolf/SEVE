@@ -18,6 +18,7 @@ export function OptionChain({
   selected = null,
   onSelect,
   compact = false,
+  symbol = "SPY",
 }: {
   snapshot: OptionQuote[];
   spot: number | null;
@@ -27,6 +28,8 @@ export function OptionChain({
   onSelect?: (occSymbol: string) => void;
   /** Mobile: Δ + Mid only (calls | strike | puts), so it fits without scroll. */
   compact?: boolean;
+  /** Instrument label for the header (SPY/QQQ). */
+  symbol?: string;
 }) {
   let rows: React.ReactNode;
   let meta = "—";
@@ -130,7 +133,7 @@ export function OptionChain({
   return (
     <div className="panel">
       <div className="phead">
-        <span className="t">Live Option Chain</span>
+        <span className="t">Live {symbol} Chain</span>
         <span className="x">
           {meta}
           {livePricing && (

@@ -47,6 +47,8 @@ export function DesktopSurface({
   spotUp,
   selected,
   setSelected,
+  symbol,
+  setSymbol,
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
@@ -80,7 +82,7 @@ export function DesktopSurface({
     >
       <div className="surface-bar">
         <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} compact />
-        <HeadReadouts fund={desk.fund} fundPnl={feed.fundPnl} spot={data.spot} spotUp={spotUp} />
+        <HeadReadouts fund={desk.fund} fundPnl={feed.fundPnl} spot={data.spot} spotUp={spotUp} symbol={symbol} />
       </div>
 
       {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
@@ -88,7 +90,7 @@ export function DesktopSurface({
       {/* ---- 01 · LIVE DESK (chart hero → book + chain | P&L) ---------- */}
       <SectionLabel id="live" idx="01">Live Desk</SectionLabel>
       <div className="market-section">
-        <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} />
+        <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
         <div className="grid grid--live live-body">
           <div className="col">
             <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
@@ -98,6 +100,7 @@ export function DesktopSurface({
               deltasModeled={data.deltasModeled}
               selected={selected}
               onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
+              symbol={symbol}
             />
             {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
           </div>

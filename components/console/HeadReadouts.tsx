@@ -12,11 +12,14 @@ export function HeadReadouts({
   fundPnl,
   spot,
   spotUp,
+  symbol = "SPY",
 }: {
   fund: FundState;
   fundPnl: { nav: number; dayPnl: number };
   spot: number | null;
   spotUp: boolean | null;
+  /** Instrument the §01 spot LED is showing (follows the chart toggle). */
+  symbol?: string;
 }) {
   const running = fund.running && !fund.is_halted;
   const runLabel = fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
@@ -41,7 +44,7 @@ export function HeadReadouts({
         value={spot != null ? spot.toFixed(2) : "----"}
         digits={6}
         color={spyColor}
-        caption="spy $"
+        caption={`${symbol.toLowerCase()} $`}
       />
     </div>
   );

@@ -14,4 +14,7 @@ export interface SurfaceProps {
   spotUp: boolean | null;
   selected: string | null;
   setSelected: Dispatch<SetStateAction<string | null>>;
+  /** §01 market instrument (SPY default, QQQ); the chart/chain/spot follow it. */
+  symbol: string;
+  setSymbol: Dispatch<SetStateAction<string>>;
 }

@@ -44,7 +44,7 @@ const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
   { id: "mix", label: "Mix", Icon: IcMix },
 ];
 
-export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected }: SurfaceProps) {
+export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [tab, setTab] = useState<Tab>("live");
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
@@ -96,7 +96,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             </span>
           </div>
           <div className="m-led">
-            <LedDisplay value={data.spot != null ? data.spot.toFixed(2) : "----"} digits={6} color={spyColor} caption="spy $" />
+            <LedDisplay value={data.spot != null ? data.spot.toFixed(2) : "----"} digits={6} color={spyColor} caption={`${symbol.toLowerCase()} $`} />
           </div>
           <div className="m-led">
             <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
@@ -115,7 +115,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               <button className={`m-tog${show.pos ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, pos: !s.pos }))}>POSITIONS</button>
             </div>
             {show.chart && (
-              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} mobile trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} />
+              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} mobile trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
             )}
             {show.chain && (
               <>
@@ -126,6 +126,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                   selected={selected}
                   onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
                   compact
+                  symbol={symbol}
                 />
                 {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
               </>
