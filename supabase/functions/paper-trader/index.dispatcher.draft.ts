@@ -1,3 +1,11 @@
+// ⚑ WORKER VERSION: 2026-06-04f  (PER-CHANNEL UNREALIZED. The open-position desk row
+//   booked Alpaca's NETTED unrealized_pl — so when several channels held the SAME OCC
+//   (the mirror clustering: breakout + grind + orb-spy-trail all long SPY-748P), every
+//   row showed the same number, unreconciled with its own entry (BREAK entry 1.23 and
+//   GRIND entry 1.48 both showed +$24). Now unrealized = (mark − THIS row's avg_entry)
+//   × its qty × 100. DISPLAY-ONLY — no decision reads unrealized_pnl (exits use the live
+//   mark, daily_stop uses realized, the fund equity snapshot still sums Alpaca's net).
+//   Nothing about entries/exits/sizing/realized changed. Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-04e  (ARMABLE TRAIL for compiled .md channels. An uploaded
 //   channel can now declare a live trailing exit — an underlying ATR-CHANDELIER (trail.mode
 //   atr_chandelier, baseK≈1.5): once in profit, exit when price retraces k·ATR from the peak
@@ -872,8 +880,15 @@ Deno.serve(async () => {
         }
         out.push({ slug: s.slug, dir, blocked, qty });
       } else if (row && alp) {
-        // mark-to-market the open desk row
-        await sb.from("positions").update({ current_mark: Number(alp.current_price ?? 0), unrealized_pnl: Number(alp.unrealized_pl ?? 0) }).eq("id", row.id);
+        // mark-to-market the open desk row. Compute unrealized PER CHANNEL —
+        // (mark − THIS channel's entry) × its qty — NOT alp.unrealized_pl, which is
+        // the NETTED lot when several channels hold the same OCC (so every mirror row
+        // showed the same wrong number, unreconciled with its own entry). The mark is
+        // shared/correct; entry+qty are per-channel. Display-only — no decision reads
+        // unrealized_pnl (exits use the mark; the fund snapshot still uses Alpaca's net).
+        const markPx = Number(alp.current_price ?? 0);
+        const unreal = Math.round((markPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 10000) / 100;
+        await sb.from("positions").update({ current_mark: markPx, unrealized_pnl: unreal }).eq("id", row.id);
       }
      } catch (chErr) {
        // Isolate this channel's failure; the rest of the fleet still runs this minute.

@@ -110,6 +110,14 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
 
   useEffect(() => {
     mounted.current = true;
+    // PER-EFFECT cancellation: `mounted` (a shared ref) can't distinguish "unmounted"
+    // from "symbol changed" — on a SPY↔QQQ toggle the cleanup runs then the new effect
+    // sets mounted.current=true again, so an in-flight request from the OLD symbol would
+    // still pass the `mounted` guard and write its bars/spot into the NEW symbol's chart
+    // (the phantom candle). This local flag is captured per effect run; the old effect's
+    // cleanup sets ITS cancelled=true, so its late responses are dropped.
+    let cancelled = false;
+    const live = () => mounted.current && !cancelled;
     // Switching instruments: drop the previous ticker's history + visible bars so
     // a stale SPY candle never bleeds into a QQQ poll (mergeBars keys off ts only).
     historyBars.current = [];
@@ -210,7 +218,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
 
         const expirations = new Set(quotes.map((r) => r.expiration)).size;
 
-        if (!mounted.current) return;
+        if (!live()) return;
         setData((prev) => ({
           ...prev,
           status,
@@ -246,7 +254,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
           rawMessage.trim() === "" || rawMessage === "[object Object]"
             ? "Read rejected (likely an invalid API key or missing RLS policy)."
             : rawMessage;
-        if (!mounted.current) return;
+        if (!live()) return;
         setData((prev) => ({
           ...prev,
           status: "err",
@@ -280,7 +288,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         const desc = pages.flatMap((p) => (p.data ?? []) as UnderlyingBar[]);
         if (!desc.length) return;
         historyBars.current = desc.reverse(); // desc pages → oldest→newest
-        if (mounted.current) poll();
+        if (live()) poll();
       } catch {
         /* poll-only */
       }
@@ -297,7 +305,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
           .eq("symbol", symbol)
           .order("ts", { ascending: true });
         const daily = (rows ?? []) as UnderlyingBar[];
-        if (daily.length && mounted.current) {
+        if (daily.length && live()) {
           setData((d) => ({ ...d, dailyBars: daily }));
         }
       } catch {
@@ -313,7 +321,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         const res = await fetch(`/api/spot?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" });
         if (!res.ok) return;
         const j = (await res.json()) as { price?: number | null };
-        if (typeof j.price === "number" && mounted.current) {
+        if (typeof j.price === "number" && live()) {
           setData((d) => ({ ...d, spot: j.price as number }));
         }
       } catch {
@@ -354,6 +362,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
 
     return () => {
       mounted.current = false;
+      cancelled = true; // drop any in-flight responses from THIS (old-symbol) effect
       clearInterval(id);
       clearInterval(spotId);
       if (debounce) clearTimeout(debounce);
