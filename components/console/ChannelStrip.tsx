@@ -21,7 +21,7 @@ export interface ChannelStripProps {
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
   const { persistConfig, renameChannel, setChannelAccent, deleteChannel, canWrite } = useDeskWrite();
-  const { id, slug, name, regime, color, status, config } = strategist;
+  const { id, slug, underlying, name, regime, color, status, config } = strategist;
 
   // Flip-card editor: rename + delete. Opens an overlay over the card.
   const [editing, setEditing] = useState(false);
@@ -200,6 +200,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
           <div className="ch-head">
             <span className={`ch-dot${active ? " on" : ""}`} />
             <div className="ch-name">{name}</div>
+            <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
             {statusBadge}
           </div>
           <div className="ch-regime">{regime}</div>
@@ -240,6 +241,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
       <div className="ch-head">
         <span className={`ch-dot${active ? " on" : ""}`} />
         <div className="ch-name">{name}</div>
+        <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
         {statusBadge}
       </div>
       <div className="ch-regime">{regime}</div>

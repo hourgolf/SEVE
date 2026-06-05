@@ -5,6 +5,8 @@ import {
   parseFrontmatter,
   capabilityCheck,
   structureSupported,
+  resolveUnderlying,
+  SUPPORTED_UNDERLYINGS,
   type StrategySpec,
 } from "@/lib/desk/strategySpec";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
@@ -69,6 +71,9 @@ export function AddChannel({
   const fm = parseFrontmatter(md);
   const hasFm = Object.keys(fm).length > 0;
   const cap = spec ? capabilityCheck(spec) : null;
+  // Which market this channel trades (the .md declares it via `underlying:` / `instrument:`).
+  const underlying = resolveUnderlying(fm, spec);
+  const underlyingOk = SUPPORTED_UNDERLYINGS.includes(underlying);
 
   const slug = useMemo(
     () => slugify(spec?.meta.strategyId || fm.strategy_id || fm.name || ""),
@@ -129,6 +134,7 @@ export function AddChannel({
     setArming(true); setArmErr(null);
     const res = await createChannel({
       slug,
+      underlying,
       name,
       mandate: `Compiled spec — ${spec.meta.regime || spec.meta.direction || spec.meta.structure}`,
       regime: spec.meta.regime || "",
@@ -148,7 +154,7 @@ export function AddChannel({
     }
   }
 
-  const canArm = !!spec && !!cap?.runnable && !!gate && canWrite && !!slug && !collision && !arming && !done;
+  const canArm = !!spec && !!cap?.runnable && underlyingOk && !!gate && canWrite && !!slug && !collision && !arming && !done;
   const canDraft = !!spec && canWrite && !!slug && !collision && !arming && !done;
   const m = gate?.metrics;
 
@@ -163,9 +169,11 @@ export function AddChannel({
           ? null // the slug-collision error already shows above
           : cap && !cap.runnable
             ? `Can't arm — needs ${cap.unsupported.join(" · ")}. Save it as a draft (won't trade), or drop those rules from the thesis.`
-            : !gate
-              ? "Run the backtest gate to enable Arm."
-              : null;
+            : !underlyingOk
+              ? `Can't arm — ${underlying} has no live data feed (supported: ${SUPPORTED_UNDERLYINGS.join(", ")}). Add it to market-ingest first, or save as a draft.`
+              : !gate
+                ? "Run the backtest gate to enable Arm."
+                : null;
 
   return (
     <div className="ac-scrim" onClick={onClose}>
@@ -192,11 +200,15 @@ export function AddChannel({
           <div className="ac-preview">
             <div className="ac-name">{fm.name || fm.strategy_id || "untitled"}</div>
             <div className="ac-tags">
+              <span className="ac-tag ac-tag--ticker">{underlying}</span>
               {fm.structure && <span className="ac-tag">{fm.structure}</span>}
               {fm.direction && <span className="ac-tag">{fm.direction}</span>}
               {fm.dte_range && <span className="ac-tag">DTE {fm.dte_range}</span>}
               {fm.regime && <span className="ac-tag">{fm.regime}</span>}
             </div>
+            {!underlyingOk && (
+              <div className="ac-gap">⚠ {underlying} has no live data feed — supported: {SUPPORTED_UNDERLYINGS.join(", ")}</div>
+            )}
             {fm.structure && !structureSupported(fm.structure) && (
               <div className="ac-gap">⚠ {fm.structure} is multi-leg — not executable yet (backtest-only)</div>
             )}
@@ -220,7 +232,7 @@ export function AddChannel({
         {spec && cap && (
           <div className="ac-spec">
             <div className="ac-spec-head">
-              Compiled · {spec.entries?.length ?? 0} entry rule(s), {spec.exits?.length ?? 0} exit(s)
+              Compiled · <span className="ac-tag ac-tag--ticker">{underlying}</span> · {spec.entries?.length ?? 0} entry rule(s), {spec.exits?.length ?? 0} exit(s)
               {cap.isSmart && <> · <span className="ac-tag">smart</span></>}
               {slug && <> · <code>{slug}</code></>}
             </div>

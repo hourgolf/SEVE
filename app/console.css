@@ -622,6 +622,19 @@
   border: 1px solid currentColor;
   line-height: 1.4;
 }
+/* the market a channel trades (SPY / QQQ / …) — subtle cream chip next to the name */
+.ch-ticker {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--ink-soft);
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--chassis-edge);
+  line-height: 1.4;
+}
 .ch-status--draft {
   color: var(--led-amber, #ffb224);
   background: color-mix(in srgb, var(--led-amber, #ffb224) 14%, transparent);

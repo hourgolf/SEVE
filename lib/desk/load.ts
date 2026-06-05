@@ -25,7 +25,8 @@ const ORDER = ["fade", "breakout", "power", "grind"];
 
 const CONFIG_COLS =
   "strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed)";
-const NEW_COLS = `id,slug,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`;
+const NEW_COLS = `id,slug,underlying,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`;
+const NEW_COLS_NOUL = `id,slug,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`; // DB predates `underlying`
 const LEGACY_COLS = `id,slug,name,mandate,regime,${CONFIG_COLS}`;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -42,7 +43,10 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
     let stratRows: any[] | null = null;
     let hasNewCols = true;
     {
-      const res = await sb.from("strategists").select(NEW_COLS);
+      // 3-tier: with `underlying` → without it (DB predates the column, accent/order
+      // still preserved → no color regression) → legacy (pre-13_add_channel.sql).
+      let res = await sb.from("strategists").select(NEW_COLS);
+      if (res.error) res = await sb.from("strategists").select(NEW_COLS_NOUL);
       if (res.error) {
         hasNewCols = false;
         const legacy = await sb.from("strategists").select(LEGACY_COLS);
@@ -78,6 +82,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
         return {
           id: r.id,
           slug: r.slug,
+          underlying: typeof r.underlying === "string" && r.underlying ? String(r.underlying).toUpperCase() : "SPY",
           name: r.name,
           mandate: r.mandate,
           regime: r.regime ?? "",

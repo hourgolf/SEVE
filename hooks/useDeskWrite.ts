@@ -9,6 +9,7 @@ import type { StrategySpec } from "@/lib/desk/strategySpec";
 // A new compiled channel to persist (strategists row + its strategist_config).
 export interface NewChannelInput {
   slug: string;
+  underlying: string; // the ticker this channel trades (SPY, QQQ, …)
   name: string;
   mandate: string;
   regime: string;
@@ -71,6 +72,7 @@ export function useDeskWrite() {
           .from("strategists")
           .insert({
             slug: input.slug,
+            underlying: input.underlying,
             name: input.name,
             mandate: input.mandate,
             regime: input.regime,

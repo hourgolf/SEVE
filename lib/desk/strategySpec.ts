@@ -335,3 +335,20 @@ export function parseFrontmatter(md: string): Record<string, string> {
 export function structureSupported(structure: string): boolean {
   return SUPPORTED_STRUCTURES.has(structure as LegStructure);
 }
+
+// Underlyings the desk has live data for. MUST stay in sync with market-ingest's
+// UNDERLYINGS env (else a channel could arm for a ticker with no chain/bars). A
+// thesis declares its market with `underlying: QQQ` in the frontmatter; an
+// unsupported ticker is a capability gap (flagged like the data-feed gaps).
+export const SUPPORTED_UNDERLYINGS = ["SPY", "QQQ"];
+
+// Resolve a channel's underlying ticker: prefer the explicit `underlying:` key,
+// else scan the `instrument:` string / compiled meta for a supported ticker,
+// else default SPY. Always uppercased.
+export function resolveUnderlying(fm: Record<string, string>, spec?: StrategySpec | null): string {
+  const explicit = (fm.underlying || "").toUpperCase().trim();
+  if (explicit) return explicit;
+  const s = (fm.instrument || spec?.meta.instrument || "").toUpperCase();
+  for (const t of SUPPORTED_UNDERLYINGS) if (s.includes(t)) return t;
+  return "SPY";
+}

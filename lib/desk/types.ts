@@ -37,6 +37,7 @@ export interface StrategistConfig {
 export interface StrategistState {
   id: string; // strategists.id (uuid) — target for strategist_config writes
   slug: string;
+  underlying: string; // the ticker this channel trades (SPY default; QQQ, …) — strategists.underlying
   name: string;
   mandate: string;
   regime: string;

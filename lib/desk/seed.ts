@@ -11,6 +11,7 @@ import type { DeskState, StrategistConfig, StrategistState } from "@/lib/desk/ty
 const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
   {
     id: "",
+    underlying: "SPY",
     slug: "fade",
     name: "The Fade",
     mandate: "Mean reversion — fades range extremes back to VWAP",
@@ -28,6 +29,7 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
   },
   {
     id: "",
+    underlying: "SPY",
     slug: "breakout",
     name: "The Breakout",
     mandate: "Momentum — rides opening-range expansion in the break's direction",
@@ -45,6 +47,7 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
   },
   {
     id: "",
+    underlying: "SPY",
     slug: "power",
     name: "Power Hour",
     mandate: "0DTE gamma — directional lean in the final hour only",
@@ -62,6 +65,7 @@ const STRATEGISTS: Omit<StrategistState, "defaults">[] = [
   },
   {
     id: "",
+    underlying: "SPY",
     slug: "grind",
     name: "The Grinder",
     mandate: "Scalper — many small microstructure edges, quick in and out",
