@@ -1,3 +1,9 @@
+// ⚑ WORKER VERSION: 2026-06-04g  (MUTE NO LONGER TRAPS POSITIONS. The exit path was gated
+//   by canTrade (= !muted), so a MUTED channel couldn't close its open position — even the
+//   EOD flatten was blocked, so a muted 0DTE rode to expiry. Now EXITS run regardless of mute
+//   (only the KILL switch / non-paper freezes them); ENTRIES stay gated by mute. A muted
+//   channel winds down its position like draft/disabled does. Found live: two muted grind
+//   channels held SPY 0DTE 15–22 min (a scalp exits in ~5). Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-04f  (PER-CHANNEL UNREALIZED. The open-position desk row
 //   booked Alpaca's NETTED unrealized_pl — so when several channels held the SAME OCC
 //   (the mirror clustering: breakout + grind + orb-spy-trail all long SPY-748P), every
@@ -758,10 +764,15 @@ Deno.serve(async () => {
         out.push({ slug: s.slug, note: "reconciled" });
         continue;
       }
-      const canTrade = !guardBlocked;
+      const canTrade = !guardBlocked; // ENTRIES gated by mute / halt / not-paper
+      // EXITS must wind down regardless of MUTE — a muted channel still MANAGES its open
+      // position to close (matching draft/disabled, which already exit). The bug: mute fell
+      // under canTrade, so it blocked the exit AND the EOD flatten → a muted 0DTE was trapped
+      // and rode to expiry. Now only the KILL switch (halted) or a non-paper mode freezes exits.
+      const canExit = guardBlocked !== "halted" && guardBlocked !== "not_paper";
 
       // ---- exit ----
-      if (intent?.kind === "exit" && row && alp && canTrade) {
+      if (intent?.kind === "exit" && row && alp && canExit) {
         // Sell ONLY this channel's contracts — not the whole netted Alpaca lot —
         // so one channel's exit can't flatten another channel holding the SAME
         // 0DTE (the root cause of the stuck "open" rows).
