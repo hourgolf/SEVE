@@ -1,3 +1,5 @@
+// ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05b  (regime ledger now carries SPY + QQQ per day, from
+//   the daily digest's market/marketQQQ — pairs with daily-autopsy 2026-06-05a. Prior below.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05a  (first cut — condenses the week's daily_reports
 //   into one weekly report: fund roll-up + per-channel weekly metrics + regime ledger +
 //   EXIT-EFFICIENCY (MFE / "left on the table") + Stage-2 LLM synthesis, upserted to
@@ -47,7 +49,10 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   const mode = rows[rows.length - 1].mode ?? "paper";
   const digests: Any[] = rows.map((r) => r.digest);
 
-  const regimeLedger = digests.filter((d) => d.market).map((d) => ({ date: d.date, instrument: "SPY", returnPct: d.market.returnPct, efficiency: d.market.efficiency, note: d.market.note }));
+  const regimeLedger = digests.flatMap((d: Any) => [
+    d.market ? { date: d.date, instrument: "SPY", returnPct: d.market.returnPct, efficiency: d.market.efficiency, note: d.market.note } : null,
+    d.marketQQQ ? { date: d.date, instrument: "QQQ", returnPct: d.marketQQQ.returnPct, efficiency: d.marketQQQ.efficiency, note: d.marketQQQ.note } : null,
+  ].filter(Boolean));
 
   const byDayFund = digests.map((d) => ({ date: d.date, pnl: Math.round(d.fund.dayRealized), trades: d.fund.trades }));
   const realized = byDayFund.reduce((a, d) => a + d.pnl, 0);

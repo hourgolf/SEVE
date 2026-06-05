@@ -1424,6 +1424,7 @@ td.clk.sel {
   background: var(--panel-2); border: 1px solid var(--border); white-space: nowrap;
 }
 .wk-reg b { color: var(--text); } .wk-reg i { color: var(--muted); font-style: normal; }
+.wk-inst { color: var(--muted); font-style: normal; font-weight: 600; letter-spacing: 0.3px; }
 .wk-reg .pos { color: var(--green); } .wk-reg .neg { color: var(--red); }
 .wk-ee {
   margin: 12px 0; padding: 10px; border-radius: 7px;

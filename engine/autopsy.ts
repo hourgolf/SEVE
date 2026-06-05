@@ -60,9 +60,11 @@ interface ChannelDigest {
   flaws: { type: string; severity: "low" | "med" | "high"; evidence: string }[];
   trades: TradeView[];
 }
+type MarketRegime = { open: number; close: number; high: number; low: number; returnPct: number; rangePct: number; efficiency: number; note: string };
 interface Digest {
   date: string; mode: string;
-  market: { open: number; close: number; high: number; low: number; returnPct: number; rangePct: number; efficiency: number; note: string } | null;
+  market: MarketRegime | null;        // SPY (default-ticker rows)
+  marketQQQ?: MarketRegime | null;    // QQQ (present once the QQQ tape is live)
   fund: { dayRealized: number; trades: number; winRate: number; channelsTraded: number };
   channels: ChannelDigest[];
 }
@@ -73,12 +75,20 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 const riskUsd = (entryPrice: number, qty: number) => 0.5 * entryPrice * Math.abs(qty) * 100; // desk R = 50%-premium proxy (matches PositionsPanel)
 
 async function fetchWindow<T>(sb: SupabaseClient, table: string, tsCol: string, cols: string, dayStartMs: number): Promise<T[]> {
-  // coarse UTC window covering the ET day ±1d (refined to the exact ET date by the caller)
+  // coarse UTC window covering the ET day ±1d (refined to the exact ET date by the caller).
+  // PAGINATE via .range() — PostgREST silently caps at 1000 rows, and SPY+QQQ bars over a
+  // ±36h window blow past that, so a flat .limit() truncated to early-morning (mirrors the
+  // edge fn's 2026-06-04b fix).
   const lo = new Date(dayStartMs - 36 * 3600_000).toISOString();
   const hi = new Date(dayStartMs + 36 * 3600_000).toISOString();
-  const { data, error } = await sb.from(table).select(cols).gte(tsCol, lo).lte(tsCol, hi).order(tsCol, { ascending: true }).limit(5000);
-  if (error) throw new Error(`${table}: ${error.message}`);
-  return (data ?? []) as T[];
+  const out: T[] = []; const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb.from(table).select(cols).gte(tsCol, lo).lte(tsCol, hi).order(tsCol, { ascending: true }).range(from, from + PAGE - 1);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    const rows = (data ?? []) as T[]; out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
 }
 
 // Universal, strategy-agnostic flaw detectors. They report FACTS + a structural
@@ -151,19 +161,23 @@ async function buildDigest(sb: SupabaseClient, date: string): Promise<Digest> {
     const arr = sigByKey.get(k) ?? []; arr.push(s); sigByKey.set(k, arr);
   }
 
-  // market regime from underlying_bars (RTH)
-  const bars = (await fetchWindow<{ ts: string; open: number; high: number; low: number; close: number }>(sb, "underlying_bars", "ts", "ts,open,high,low,close", dayStartMs))
+  // market regime from underlying_bars (RTH) — PER SYMBOL. The tape carries SPY + QQQ
+  // at the same timestamps; an unfiltered read interleaves them into a Frankenstein
+  // candle (SPY's open vs QQQ's close), so split by symbol and compute each separately.
+  const allBars = (await fetchWindow<{ ts: string; open: number; high: number; low: number; close: number; symbol: string }>(sb, "underlying_bars", "ts", "ts,open,high,low,close,symbol", dayStartMs))
     .filter((b) => { const ms = Date.parse(b.ts); return etDate(ms) === date && etMin(ms) >= 570 && etMin(ms) <= 960; });
-  let market: Digest["market"] = null;
-  if (bars.length > 2) {
+  const computeMarket = (bars: typeof allBars): MarketRegime | null => {
+    if (bars.length <= 2) return null;
     const open = Number(bars[0].open ?? bars[0].close), close = Number(bars[bars.length - 1].close);
     const high = Math.max(...bars.map((b) => Number(b.high))), low = Math.min(...bars.map((b) => Number(b.low)));
     let path = 0; for (let i = 1; i < bars.length; i++) path += Math.abs(Number(bars[i].close) - Number(bars[i - 1].close));
     const eff = path > 0 ? Math.abs(close - open) / path : 0;
     const retPct = open > 0 ? ((close - open) / open) * 100 : 0;
     const note = eff >= 0.4 ? (retPct >= 0 ? "clean uptrend" : "clean downtrend") : Math.abs(retPct) < 0.2 ? "rangebound chop" : retPct >= 0 ? "choppy drift up" : "choppy drift down";
-    market = { open, close, high, low, returnPct: retPct, rangePct: open > 0 ? ((high - low) / open) * 100 : 0, efficiency: eff, note };
-  }
+    return { open, close, high, low, returnPct: retPct, rangePct: open > 0 ? ((high - low) / open) * 100 : 0, efficiency: eff, note };
+  };
+  const market = computeMarket(allBars.filter((b) => (b.symbol ?? "SPY") === "SPY"));
+  const marketQQQ = computeMarket(allBars.filter((b) => b.symbol === "QQQ"));
 
   // per-channel
   const channels: ChannelDigest[] = [];
@@ -208,7 +222,7 @@ async function buildDigest(sb: SupabaseClient, date: string): Promise<Digest> {
   const traded = channels.filter((c) => c.metrics.nTrades > 0);
   const allTrades = traded.flatMap((c) => c.trades);
   const fundDigest = { dayRealized: allTrades.reduce((a, t) => a + t.pnl, 0), trades: allTrades.length, winRate: allTrades.length ? allTrades.filter((t) => t.pnl > 0).length / allTrades.length : 0, channelsTraded: traded.length };
-  return { date, mode, market, fund: fundDigest, channels };
+  return { date, mode, market, marketQQQ, fund: fundDigest, channels };
 }
 
 // ---- deterministic markdown skeleton (useful even without the LLM) ---------
@@ -216,7 +230,8 @@ function renderSkeleton(d: Digest): string {
   const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
   const L: string[] = [];
   L.push(`# SEVE daily autopsy — ${d.date}  (${d.mode})`);
-  if (d.market) L.push(`\n**Market:** SPY ${d.market.open.toFixed(2)} → ${d.market.close.toFixed(2)} (${d.market.returnPct >= 0 ? "+" : ""}${d.market.returnPct.toFixed(2)}%), range ${d.market.rangePct.toFixed(2)}%, efficiency ${d.market.efficiency.toFixed(2)} — _${d.market.note}_`);
+  if (d.market) L.push(`\n**Market (SPY):** ${d.market.open.toFixed(2)} → ${d.market.close.toFixed(2)} (${d.market.returnPct >= 0 ? "+" : ""}${d.market.returnPct.toFixed(2)}%), range ${d.market.rangePct.toFixed(2)}%, efficiency ${d.market.efficiency.toFixed(2)} — _${d.market.note}_`);
+  if (d.marketQQQ) L.push(`**Market (QQQ):** ${d.marketQQQ.open.toFixed(2)} → ${d.marketQQQ.close.toFixed(2)} (${d.marketQQQ.returnPct >= 0 ? "+" : ""}${d.marketQQQ.returnPct.toFixed(2)}%), range ${d.marketQQQ.rangePct.toFixed(2)}%, efficiency ${d.marketQQQ.efficiency.toFixed(2)} — _${d.marketQQQ.note}_`);
   L.push(`\n**Fund:** ${d.fund.trades} trades across ${d.fund.channelsTraded} channels · realized ${usd(d.fund.dayRealized)} · win ${(d.fund.winRate * 100).toFixed(0)}%`);
   for (const c of d.channels) {
     const m = c.metrics;
@@ -233,7 +248,8 @@ function renderSkeleton(d: Digest): string {
 
 // ---- Stage 2: LLM narration (used by the edge fn; local only if key present) ---
 const NARRATE_SYSTEM = `You are SEVE's daily trading-desk autopsy analyst. You receive a DETERMINISTIC digest of one paper-trading day — the numbers are ground truth; never recompute or invent figures, cite the ones given.
-For EACH channel: (1) state its INTENT (from mandate + signal types), (2) read its CONVICTION from the entry rationale features (atr/er/relVol/delta, and expectedMove vs roundTrip = the cost-gate margin), (3) say what went RIGHT and WRONG vs the market regime, (4) a one-line verdict.
+The digest carries TWO market regimes: \`market\` (SPY) and \`marketQQQ\` (QQQ, present once QQQ channels are live — it can differ materially from SPY). In marketSummary cover BOTH when QQQ is present, and judge each channel against ITS OWN underlying's regime (slugs ending -qqq, or QQQ-rooted OCCs, are QQQ; everything else is SPY).
+For EACH channel: (1) state its INTENT (from mandate + signal types), (2) read its CONVICTION from the entry rationale features (atr/er/relVol/delta, and expectedMove vs roundTrip = the cost-gate margin), (3) say what went RIGHT and WRONG vs its underlying's regime, (4) a one-line verdict.
 Then SYSTEM FINDINGS: diagnose flaws, and crucially DISTINGUISH a STRATEGY flaw (the thesis is wrong for the regime) from a SYSTEM/EXECUTION bug (e.g. a channel that never takes profit, exits within a minute, a trailing stop that never fires, sizing that's always max_contracts). Map the deterministic flaw flags to the specific cause using each channel's mandate. A "reconciled" exit means the channel's OWN logic did NOT close the position — the cause is AMBIGUOUS (a manual close on the broker, a same-OCC collision, or expiry); flag it as not-driven-by-the-channel, do NOT assert which. Propose ONE concrete, falsifiable experiment per finding.
 CRITICAL OUTPUT RULES: every deterministic flaw in any channel's \`flaws\` array MUST become a systemFinding (map it to its specific cause via the mandate); never drop one. ALWAYS return 3–5 concrete topActions. Empty systemFindings/topActions is only acceptable when there were genuinely zero flaws AND zero trades.
 You DIAGNOSE only — never tell the operator to auto-apply changes to live trading. Be specific and concise.`;

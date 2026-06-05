@@ -37,7 +37,7 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 interface DayMarket { open: number; close: number; high: number; low: number; returnPct: number; rangePct: number; efficiency: number; note: string }
 interface DayTrade { occ: string; dir: "call" | "put"; qty: number; entryPrice: number; exitPrice: number; pnl: number; holdMin: number; R: number; exitReason: string | null; signalType: string | null }
 interface DayChannel { slug: string; name: string; mandate: string; status: string; metrics: { nTrades: number; wins: number; winRate: number; realizedPnl: number; avgWin: number; avgLoss: number; avgR: number; medianHoldMin: number }; exitReasons: Record<string, number>; flaws: { type: string; severity: string; evidence: string }[]; trades: DayTrade[] }
-interface DayDigest { date: string; mode: string; market: DayMarket | null; fund: { dayRealized: number; trades: number; winRate: number; channelsTraded: number }; channels: DayChannel[] }
+interface DayDigest { date: string; mode: string; market: DayMarket | null; marketQQQ?: DayMarket | null; fund: { dayRealized: number; trades: number; winRate: number; channelsTraded: number }; channels: DayChannel[] }
 
 // ---- weekly shapes ---------------------------------------------------------
 interface ChannelWeek {
@@ -85,7 +85,10 @@ async function buildWeekly(sb: SupabaseClient, weekEnd: string): Promise<WeeklyD
   const digests = rows.map((r) => r.digest);
 
   // ---- regime ledger (per day) ----
-  const regimeLedger = digests.filter((d) => d.market).map((d) => ({ date: d.date, instrument: "SPY", returnPct: d.market!.returnPct, efficiency: d.market!.efficiency, note: d.market!.note }));
+  const regimeLedger = digests.flatMap((d) => [
+    d.market ? { date: d.date, instrument: "SPY", returnPct: d.market.returnPct, efficiency: d.market.efficiency, note: d.market.note } : null,
+    d.marketQQQ ? { date: d.date, instrument: "QQQ", returnPct: d.marketQQQ.returnPct, efficiency: d.marketQQQ.efficiency, note: d.marketQQQ.note } : null,
+  ].filter((x): x is { date: string; instrument: string; returnPct: number; efficiency: number; note: string } => !!x));
 
   // ---- fund weekly (realized + NAV-truth) ----
   const byDayFund = digests.map((d) => ({ date: d.date, pnl: Math.round(d.fund.dayRealized), trades: d.fund.trades }));

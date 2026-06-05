@@ -78,8 +78,8 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
         {/* regime ledger */}
         <div className="wk-regime">
           {d.regimeLedger.map((rg) => (
-            <span key={rg.date} className="wk-reg" title={rg.note}>
-              <b>{md(rg.date)}</b> <span className={rg.returnPct < 0 ? "neg" : "pos"}>{rg.returnPct >= 0 ? "+" : ""}{rg.returnPct.toFixed(2)}%</span> <i>eff {rg.efficiency.toFixed(2)}</i>
+            <span key={`${rg.date}-${rg.instrument}`} className="wk-reg" title={rg.note}>
+              <b>{md(rg.date)}</b> <em className="wk-inst">{rg.instrument}</em> <span className={rg.returnPct < 0 ? "neg" : "pos"}>{rg.returnPct >= 0 ? "+" : ""}{rg.returnPct.toFixed(2)}%</span> <i>eff {rg.efficiency.toFixed(2)}</i>
             </span>
           ))}
         </div>
