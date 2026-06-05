@@ -11,10 +11,14 @@
 --  • One UTC day == one trading session for both SPY and QQQ (RTH 14:30–21:00 UTC).
 --  • Backward-compatible: SPY reads keep working; the client just adds .eq("symbol", …).
 --
---  Run once in the Supabase SQL editor (it CREATE OR REPLACEs the existing view).
+--  Run once in the Supabase SQL editor. NOTE: we DROP then CREATE (not CREATE OR
+--  REPLACE) — Postgres won't let REPLACE add `symbol` as the new FIRST column
+--  ("cannot change name of view column ts to symbol"); a drop sidesteps that.
 -- ============================================================================
 
-create or replace view public.underlying_bars_daily
+drop view if exists public.underlying_bars_daily;
+
+create view public.underlying_bars_daily
 with (security_invoker = true) as
 select
   symbol,
