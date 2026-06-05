@@ -80,6 +80,17 @@ UNMANAGED (managing caps power's tail / bleeds grind cost). New tools:
   one bogus daily candle). **PENDING:** step 5 = backfill QQQ `option_bars` for the backtest
   gate. To point a channel at QQQ: `update strategists set underlying='QQQ' where slug='…';`
   (the `.md` `underlying:` does it for new channels). Futures = shelved.
+- **QQQ CODE-CLONE DESK (worker `2026-06-04d`):** a parallel QQQ desk — `breakout-qqq /
+  fade-qqq / power-qqq / grind-qqq`, each running the SAME code strategy as its SPY twin
+  via a **base-slug resolver** in the worker (`REGISTRY[slug] ?? REGISTRY[slug.replace(
+  /-(qqq|spy)$/i,"")]`) on QQQ bars/chain (per `underlying`, 04c). So a multi-instrument
+  desk = just INSERTing rows, no per-channel code. `19_qqq_channels.sql` clones the 4 SPY
+  rows + configs onto QQQ as **DRAFT** (nothing trades until armed: `update strategists set
+  status='armed' where slug like '%-qqq'`). Exact slug wins; compiled `.md` channels are
+  unaffected (arbitrary slugs find no REGISTRY hit). **NOTE:** the SPY-tuned params won't
+  transfer 1:1 to QQQ (more volatile) and power/grind are unvalidated even on SPY → tomorrow's
+  live QQQ is OBSERVATION; the backtest (engine still SPY-hardcoded in `realsource.ts` — needs
+  the same symbol-param as the worker got + QQQ stock/option backfills) tells us what to retune.
 - Phase B (later): de-hardcode the 4 code channels → `.md` theses; streaming worker
   becomes the SOLE trader (disable the `seve-paper-trader` cron at cutover).
 

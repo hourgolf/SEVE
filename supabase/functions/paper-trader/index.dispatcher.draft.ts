@@ -1,3 +1,10 @@
+// ⚑ WORKER VERSION: 2026-06-04d  (MULTI-INSTRUMENT CODE CLONES. A channel whose slug
+//   is `<base>-qqq` / `<base>-spy` now resolves to the SAME code strategy as `<base>`
+//   (breakout-qqq → ORB, grind-qqq → scalper, …) via a base-slug fallback in the
+//   REGISTRY lookup — so you spin up a QQQ desk by just INSERTing strategist rows
+//   (19_qqq_channels.sql clones the 4 SPY channels onto QQQ as DRAFT), no per-channel
+//   code. The underlying is already routed per s.underlying (04c). Exact slug still
+//   wins; compiled .md channels are unaffected. Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-04c  (MULTI-INSTRUMENT. Each channel now trades its OWN
 //   underlying — `strategists.underlying` (SPY default, QQQ live; run 17_strategist_underlying.sql
 //   BEFORE this deploy or the select errors). The 3 hardcoded SPY literals are parameterized:
@@ -548,7 +555,12 @@ Deno.serve(async () => {
       if (!mkt || !mkt.session1m.length) { out.push({ slug: s.slug, note: "no_market", underlying: sym }); continue; }
       // Resolve this channel's edge: a built-in CODE strategy (REGISTRY) or a
       // COMPILED spec (spec_json from the row — the Add-Channel path).
-      const code = REGISTRY[s.slug];
+      // Base-slug resolve (multi-instrument code clones): a channel named
+      // `<base>-qqq` / `<base>-spy` runs the SAME code strategy as `<base>` (e.g.
+      // breakout-qqq → ORB) — only the underlying differs, and that's already routed
+      // per s.underlying. Exact slug wins; a compiled .md channel (arbitrary slug)
+      // still finds no REGISTRY hit and falls through to its spec_json.
+      const code = REGISTRY[s.slug] ?? REGISTRY[s.slug.replace(/-(qqq|spy)$/i, "")];
       const compiled = !code && s.spec_json ? compileSpec(s.spec_json) : null;
       if (!code && !compiled) { out.push({ slug: s.slug, note: "no_edge" }); continue; }
       const tf = code ? code.tf : compiled!.tf;
