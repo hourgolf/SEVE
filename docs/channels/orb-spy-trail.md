@@ -35,8 +35,12 @@ Buy a CALL when ALL of these hold:
 Buy a PUT on the mirror (below the OR low, below VWAP, momentum ≤ −0.6 ATR, rel-vol ≥ 1.8, < 11:30).
 
 ## Exits
-- **1.5·ATR underlying chandelier trail** (`management.trail` mode `atr_chandelier`, baseK 1.5):
-  once in profit, exit when price retraces 1.5 ATR from the peak favorable price. This is the exit.
+- **0.75·ATR underlying chandelier trail** (`management.trail` mode `atr_chandelier`, baseK **0.75**):
+  once in profit, exit when price retraces 0.75 ATR from the peak favorable price. This is the exit.
+  > **baseK retuned 1.5 → 0.75 (06-05, real-fills k-sweep).** SPY breakout wants a TIGHT trail: at
+  > k=0.75 net jumped **$635 → $3,323 (5.2×)** with LOWER drawdown ($2.7k → $1.7k) — the 1.5 leash
+  > gave back too much of each winner. (Opposite of QQQ thrust, which keeps k=1.5 — net-best there.
+  > Trail-k is strategy-specific, so per-channel fixed-k beats one adaptive rule.)
 - **No premium stop, no fixed target** — let the trail run; losers exit on the time/EOD flatten.
 - Flatten by 15:30 ET.
 
