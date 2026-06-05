@@ -1409,6 +1409,7 @@ td.clk.sel {
 /* ---- weekly autopsy (reuses the .au-* idiom; these add the weekly-only bits) ---- */
 .au-pair { margin-bottom: 0; }
 .au-pair > .col { min-width: 0; }
+@media (min-width: 861px) { .au-pair.grid--live { grid-template-columns: 1fr 1fr; } } /* even 50/50 for the two roll-ups */
 .wk-extremes {
   display: flex; gap: 16px; flex-wrap: wrap; margin: 4px 0 8px;
   font-family: var(--mono); font-size: 11px; color: var(--muted);
