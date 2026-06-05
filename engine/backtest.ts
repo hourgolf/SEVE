@@ -41,6 +41,7 @@ import { loadRealSessions } from "./realsource";
 import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
 import { loadDatabentoByDay, makeDatabentoChain } from "./databentosource";
 import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
+import { DEFAULT_FADE_V2_PARAMS, fadeV2Evaluate } from "./strategies/fade-v2";
 import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
 import { DEFAULT_POWER_PARAMS, powerEvaluate } from "./strategies/power";
 import { DEFAULT_GRIND_PARAMS, grindEvaluate } from "./strategies/grind";
@@ -467,6 +468,8 @@ async function main() {
             ? (f, pos) => grindV2Evaluate(f, pos, DEFAULT_GRIND_V2_PARAMS)
             : strat === "grind-v3"
             ? (f, pos) => grindV2Evaluate(f, pos, DEFAULT_GRIND_V3_PARAMS)
+            : strat === "fade-v2"
+            ? (f, pos) => fadeV2Evaluate(f, pos, DEFAULT_FADE_V2_PARAMS)
             : strat === "straddle"
               ? (f, pos) => straddleEvaluate(f, pos, DEFAULT_STRADDLE_PARAMS)
               : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
@@ -484,6 +487,7 @@ async function main() {
     : strat === "grind" ? "The Grinder"
     : strat === "grind-v2" ? "The Grinder v2"
     : strat === "grind-v3" ? "The Grinder v3 (disciplined scalp)"
+    : strat === "fade-v2" ? "The Fade v2 (VWAP reversion)"
     : strat === "straddle" ? "Catalyst Straddle (multi-leg)"
     : "The Fade";
   const stratLabel = stratName + costTag;
