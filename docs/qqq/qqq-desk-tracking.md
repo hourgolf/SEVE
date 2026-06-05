@@ -22,6 +22,34 @@ Caveat: the backtest is **ungated**. The live worker's cost gate (3× round-trip
 most of grind/fade's churn, so live (paper) bleed is milder than the table — but the gate caps
 loss, it doesn't create edge.
 
+## Head-to-head: standard `breakout-qqq` vs `orb-qqq-tuned` (real fills, same window)
+
+Tested the cost-disciplined retune (stricter entries: rel-vol 1.5 / OR-width 0.30% / momentum
+0.40·ATR, fixed +90%/−50% exits) against the standard ORB code. **The tuned version lost on
+every axis that matters:**
+
+| metric | breakout-qqq (code) | orb-qqq-tuned (spec) |
+|---|---|---|
+| trades | 185 | 156 |
+| win rate | 16.2% | **32.7%** |
+| **gross (signal)** | **+$1,811** | **−$3,919** |
+| net P&L | −$4,936 | −$9,946 |
+| expectancy/trade | −$26.68 | −$63.76 |
+| max DD | $7,569 | $11,745 |
+| exits | trail_stop ×181 | target ×39 / stop ×91 / time ×26 |
+
+**Why higher win rate → worse result:** the standard code exits on a **trailing stop** (rides the
+move), so it harvests the convex right tail that breakout's gross edge *is*. The tuned spec
+replaced that with **fixed +90% target / −50% stop** — capping winners at +90% while the −50%
+stops pile up (91 vs 39). Better entries couldn't offset losing the tail: the fixed exits turned a
+**+$1.8k gross edge into −$3.9k**. Selectivity raised the hit-rate but clipped the payoff that pays
+for everything.
+
+**Lesson:** for a convex/momentum channel, the **exit (trailing, tail-harvest) matters more than
+entry selectivity** — and a trailing exit is "smart management" (not live-armable as a compiled
+spec), so the **standard code channel is the best live QQQ breakout you can run.** Verdict:
+**keep `breakout-qqq`, delete `orb-qqq-tuned`.**
+
 ## Action (run in the SQL editor)
 Keep only the channel with a real QQQ edge armed; mute the rest:
 ```sql
