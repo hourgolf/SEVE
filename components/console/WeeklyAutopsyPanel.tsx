@@ -64,6 +64,7 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
           <span>{md(d.weekStart)}–{md(d.weekEnd)} · {d.days.length}d · {d.fund.trades} trades</span>
           <span className={d.fund.realized < 0 ? "neg" : "pos"}>{signedUsd(d.fund.realized)}</span>
           {d.fund.navDelta != null && <span className={d.fund.navDelta < 0 ? "neg" : "pos"}>NAV {signedUsd(d.fund.navDelta)}</span>}
+          {d.fund.maxDrawdown != null && <span className="neg" title="intraday peak-to-trough drawdown">maxDD −${Math.abs(d.fund.maxDrawdown).toFixed(0)}</span>}
           <span>win {pct(d.fund.winRate)}</span>
         </div>
         {d.fund.bestDay && d.fund.worstDay && (

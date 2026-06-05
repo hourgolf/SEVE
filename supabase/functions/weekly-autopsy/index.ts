@@ -1,3 +1,7 @@
+// ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05c  (NAV-truth fix: the equity_snapshots read was capped
+//   at PostgREST's 1000 rows (no pagination), so the curve truncated to the first ~2 days and
+//   NAV-truth read flat/negative (06-05 showed -$218 vs the real +$6,402). Now paginates the
+//   full week + reports intraday peak-to-trough maxDrawdown. Prior below.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05b  (regime ledger now carries SPY + QQQ per day, from
 //   the daily digest's market/marketQQQ — pairs with daily-autopsy 2026-06-05a. Prior below.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05a  (first cut — condenses the week's daily_reports
@@ -60,9 +64,18 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   const bestDay = byDayFund.length ? byDayFund.reduce((b, d) => (d.pnl > b.pnl ? d : b)) : null;
   const worstDay = byDayFund.length ? byDayFund.reduce((b, d) => (d.pnl < b.pnl ? d : b)) : null;
   const startIso = new Date(Date.parse(`${days[0]}T00:00:00Z`) - 12 * 3600_000).toISOString();
-  const { data: snaps } = await sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).gte("captured_at", startIso).order("captured_at", { ascending: true }).limit(5000);
+  // PAGINATE — PostgREST caps at 1000 rows; ~480 snaps/day blew past it, truncating the
+  // curve to the first ~2 days (NAV looked flat/negative). Read all + intraday max drawdown.
+  const snapRows: Any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).gte("captured_at", startIso).order("captured_at", { ascending: true }).range(from, from + 999);
+    const rows = (data ?? []) as Any[];
+    snapRows.push(...rows);
+    if (rows.length < 1000) break;
+  }
   const byDayNav = new Map<string, number>();
-  for (const s of (snaps ?? []) as Any[]) { const d = etDate(Date.parse(s.captured_at)); if (days.includes(d)) byDayNav.set(d, Number(s.net_liquidation)); }
+  let peak = -Infinity, maxDrawdown = 0;
+  for (const s of snapRows) { const d = etDate(Date.parse(s.captured_at)); if (!days.includes(d)) continue; const nav = Number(s.net_liquidation); byDayNav.set(d, nav); if (nav > peak) peak = nav; if (peak - nav > maxDrawdown) maxDrawdown = peak - nav; }
   const equityCurve = days.filter((d) => byDayNav.has(d)).map((d) => ({ date: d, nav: Math.round(byDayNav.get(d)!) }));
   const navDelta = equityCurve.length >= 2 ? Math.round(equityCurve[equityCurve.length - 1].nav - equityCurve[0].nav) : null;
 
@@ -118,13 +131,13 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   const worstCaptureChannels = channels.filter((c) => c.exitEfficiency.mfeUpside > 200).sort((a, b) => a.exitEfficiency.captureRatio - b.exitEfficiency.captureRatio).slice(0, 5).map((c) => ({ slug: c.slug, captureRatio: c.exitEfficiency.captureRatio, left: Math.round(c.exitEfficiency.mfeUpside - c.exitEfficiency.captured) }));
   const redThatRanGreen = channels.map((c) => c.exitEfficiency.biggestRunner ? { slug: c.slug, ...c.exitEfficiency.biggestRunner } : null).filter((x) => x && x.actual <= 0 && x.couldHave > 0).sort((a, b) => b.couldHave - a.couldHave).slice(0, 6);
 
-  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, fund: { realized, navDelta, trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen } };
+  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen } };
 }
 
 function renderSkeleton(w: Any): string {
   const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
   const L: string[] = [`# SEVE WEEKLY autopsy — ${w.weekStart} → ${w.weekEnd}  (${w.mode}, ${w.days.length} sessions)`];
-  L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
+  L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · maxDD ${usd(-(w.fund.maxDrawdown ?? 0))} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
   if (w.fund.bestDay && w.fund.worstDay) L.push(`- best ${w.fund.bestDay.date} ${usd(w.fund.bestDay.pnl)} · worst ${w.fund.worstDay.date} ${usd(w.fund.worstDay.pnl)}`);
   L.push(`\n**Regime ledger:**`); for (const r of w.regimeLedger) L.push(`- ${r.date}: ${r.note} (${r.returnPct >= 0 ? "+" : ""}${r.returnPct.toFixed(2)}%, eff ${r.efficiency.toFixed(2)})`);
   L.push(`\n**Exit efficiency (left on the table):** total upside left ${usd(w.exitEfficiency.totalUpsideLeft)}`);

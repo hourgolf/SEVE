@@ -31,7 +31,7 @@ export interface WeeklyChannelDigest {
 }
 export interface WeeklyDigest {
   weekStart: string; weekEnd: string; mode: string; days: string[];
-  fund: { realized: number; navDelta: number | null; trades: number; winRate: number; bestDay: { date: string; pnl: number } | null; worstDay: { date: string; pnl: number } | null; equityCurve: { date: string; nav: number }[] };
+  fund: { realized: number; navDelta: number | null; maxDrawdown?: number; trades: number; winRate: number; bestDay: { date: string; pnl: number } | null; worstDay: { date: string; pnl: number } | null; equityCurve: { date: string; nav: number }[] };
   regimeLedger: { date: string; instrument: string; returnPct: number; efficiency: number; note: string }[];
   channels: WeeklyChannelDigest[];
   exitEfficiency: { totalUpsideLeft: number; worstCaptureChannels: { slug: string; captureRatio: number; left: number }[]; redThatRanGreen: WeeklyRunner[] };

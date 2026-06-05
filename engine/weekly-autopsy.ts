@@ -50,7 +50,7 @@ interface ChannelWeek {
 }
 interface WeeklyDigest {
   weekStart: string; weekEnd: string; mode: string; days: string[];
-  fund: { realized: number; navDelta: number | null; trades: number; winRate: number; bestDay: { date: string; pnl: number } | null; worstDay: { date: string; pnl: number } | null; equityCurve: { date: string; nav: number }[] };
+  fund: { realized: number; navDelta: number | null; maxDrawdown: number; trades: number; winRate: number; bestDay: { date: string; pnl: number } | null; worstDay: { date: string; pnl: number } | null; equityCurve: { date: string; nav: number }[] };
   regimeLedger: { date: string; instrument: string; returnPct: number; efficiency: number; note: string }[];
   channels: ChannelWeek[];
   exitEfficiency: { totalUpsideLeft: number; worstCaptureChannels: { slug: string; captureRatio: number; left: number }[]; redThatRanGreen: { slug: string; occ: string; date: string; actual: number; couldHave: number }[] };
@@ -96,11 +96,20 @@ async function buildWeekly(sb: SupabaseClient, weekEnd: string): Promise<WeeklyD
   const totalTrades = digests.reduce((a, d) => a + d.fund.trades, 0);
   const bestDay = byDayFund.length ? byDayFund.reduce((b, d) => (d.pnl > b.pnl ? d : b)) : null;
   const worstDay = byDayFund.length ? byDayFund.reduce((b, d) => (d.pnl < b.pnl ? d : b)) : null;
-  // NAV-truth equity curve: one fund snapshot per day (the last of each ET day)
+  // NAV-truth equity curve: last fund snapshot per ET day + intraday peak-to-trough
+  // drawdown. PAGINATE — PostgREST caps at 1000 rows and ~480 snaps/day blows past it,
+  // so a flat .limit() truncated the curve to the first ~2 days (NAV looked flat/negative).
   const startIso = new Date(Date.parse(`${days[0]}T00:00:00Z`) - 12 * 3600_000).toISOString();
-  const { data: snaps } = await sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).gte("captured_at", startIso).order("captured_at", { ascending: true }).limit(5000);
+  const snapRows: { net_liquidation: number; captured_at: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).gte("captured_at", startIso).order("captured_at", { ascending: true }).range(from, from + 999);
+    const rows = (data ?? []) as { net_liquidation: number; captured_at: string }[];
+    snapRows.push(...rows);
+    if (rows.length < 1000) break;
+  }
   const byDayNav = new Map<string, number>();
-  for (const s of (snaps ?? []) as { net_liquidation: number; captured_at: string }[]) { const d = etDate(Date.parse(s.captured_at)); if (days.includes(d)) byDayNav.set(d, Number(s.net_liquidation)); }
+  let peak = -Infinity, maxDrawdown = 0;
+  for (const s of snapRows) { const d = etDate(Date.parse(s.captured_at)); if (!days.includes(d)) continue; const nav = Number(s.net_liquidation); byDayNav.set(d, nav); if (nav > peak) peak = nav; if (peak - nav > maxDrawdown) maxDrawdown = peak - nav; }
   const equityCurve = days.filter((d) => byDayNav.has(d)).map((d) => ({ date: d, nav: Math.round(byDayNav.get(d)!) }));
   const navDelta = equityCurve.length >= 2 ? Math.round(equityCurve[equityCurve.length - 1].nav - equityCurve[0].nav) : null;
 
@@ -153,7 +162,7 @@ async function buildWeekly(sb: SupabaseClient, weekEnd: string): Promise<WeeklyD
 
   return {
     weekStart: days[0], weekEnd: days[days.length - 1], mode, days,
-    fund: { realized, navDelta, trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve },
+    fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve },
     regimeLedger, channels,
     exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen },
   };
@@ -164,7 +173,7 @@ function renderSkeleton(w: WeeklyDigest): string {
   const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
   const L: string[] = [];
   L.push(`# SEVE WEEKLY autopsy — ${w.weekStart} → ${w.weekEnd}  (${w.mode}, ${w.days.length} sessions)`);
-  L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
+  L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · maxDD ${usd(-w.fund.maxDrawdown)} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
   if (w.fund.bestDay && w.fund.worstDay) L.push(`- best day ${w.fund.bestDay.date} ${usd(w.fund.bestDay.pnl)} · worst ${w.fund.worstDay.date} ${usd(w.fund.worstDay.pnl)}`);
   L.push(`\n**Regime ledger:**`);
   for (const r of w.regimeLedger) L.push(`- ${r.date}: ${r.note} (${r.returnPct >= 0 ? "+" : ""}${r.returnPct.toFixed(2)}%, eff ${r.efficiency.toFixed(2)})`);
