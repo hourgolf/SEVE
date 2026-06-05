@@ -1,3 +1,13 @@
+// ⚑ WORKER VERSION: 2026-06-04c  (MULTI-INSTRUMENT. Each channel now trades its OWN
+//   underlying — `strategists.underlying` (SPY default, QQQ live; run 17_strategist_underlying.sql
+//   BEFORE this deploy or the select errors). The 3 hardcoded SPY literals are parameterized:
+//   the OCC prefix (occSymbol(sym,…)), the bars query (.eq("symbol", sym)), and the position
+//   row's `underlying`. Bars/levels/next-expiry are built ONCE PER DISTINCT TICKER (buildMarket
+//   → marketByUnderlying), reused across same-ticker channels, so a QQQ channel reads QQQ bars +
+//   the QQQ chain + writes QQQ00…C OCCs. A channel whose ticker has no session bars yet skips
+//   with note:"no_market" (never trades blind). The cost gate / ATM-δ proxy / $1 strike rounding
+//   transfer as-is (QQQ is $1-strike, OPRA-fed, same OCC format). market-ingest (step 1) already
+//   writes the SPY+QQQ tapes. Prior line below.)
 // ⚑ WORKER VERSION: 2026-06-04b  (TWO-DIAL SIZING. The capital_pct%×aggression% budget was
 //   inert — $100k×50%×50% = $25k ≫ a ~$700 position, so qty ALWAYS pinned to max_contracts
 //   (the size_pinned flaw) and the knobs did nothing. New model: **capital_pct now holds
@@ -399,7 +409,9 @@ async function aOrderAndFill(body: unknown): Promise<{ id: string; fill: number 
   }
   return { id, fill };
 }
-function occSymbol(etDate: string, strike: number, type: OptType) { const [y, m, d] = etDate.split("-"); return `SPY${y.slice(2)}${m}${d}${type === "call" ? "C" : "P"}${String(Math.round(strike * 1000)).padStart(8, "0")}`; }
+// OCC symbol for ANY underlying (QQQ rollout): SPY/QQQ/… share the same OCC layout
+// (ROOT + YYMMDD + C/P + strike×1000, 8-padded). The root is the channel's ticker.
+function occSymbol(sym: string, etDate: string, strike: number, type: OptType) { const [y, m, d] = etDate.split("-"); return `${sym}${y.slice(2)}${m}${d}${type === "call" ? "C" : "P"}${String(Math.round(strike * 1000)).padStart(8, "0")}`; }
 // Realized $ to book on THIS close for a channel+OCC = the channel's ACTUAL fill-derived
 // realized (broker truth, matched by the slug-prefixed client_order_id) MINUS what's
 // already booked on prior closed rows for this (channel, OCC) today. Makes the CUMULATIVE
@@ -450,12 +462,46 @@ function roundTripCostUsd(bid: number, ask: number): number {
 // Alpaca order statuses that mean "still working" (not yet a fill/cancel).
 const WORKING_ORDER = new Set(["new", "accepted", "pending_new", "partially_filled", "held", "calculated", "accepted_for_bidding"]);
 
+// Per-underlying market context (MULTI-INSTRUMENT). Built ONCE per distinct ticker
+// in use, then reused across same-ticker channels — so SPY and QQQ channels each
+// read their own bars / prior-day levels / next-session expiry. Mirrors the single
+// SPY block this replaced; the only change is the symbol is a parameter.
+interface MarketCtx { all1m: Bar[]; session1m: Bar[]; pdh?: number; pdl?: number; next1DTE: string | null }
+async function buildMarket(sym: string, todayET: string): Promise<MarketCtx> {
+  // today's session 1m bars (oldest→newest), from market open, for THIS underlying
+  const { data: rawBars } = await sb.from("underlying_bars").select("ts,open,high,low,close,volume,vwap").eq("symbol", sym).order("ts", { ascending: false }).limit(900);
+  const all1m: Bar[] = (rawBars ?? []).filter((b: Record<string, number | null>) => b.close != null).reverse().map((b: Record<string, number | null>) => ({ ts: Date.parse(b.ts as unknown as string), open: Number(b.open ?? b.close), high: Number(b.high ?? b.close), low: Number(b.low ?? b.close), close: Number(b.close), volume: Number(b.volume ?? 0), vwap: Number(b.vwap ?? b.close) }));
+  // RTH-ONLY session bars (09:30–16:00 ET = minute 570–960). SIP streams pre-market
+  // bars that would satisfy warmup early AND corrupt the opening range / VWAP / ATR.
+  const session1m = all1m.filter((b) => { const p = etParts(b.ts); return p.date === todayET && p.min >= 570 && p.min < 960; });
+  // Prior trading day's high/low — for compiled-spec `level` conditions (ref:pdh/pdl).
+  let pdh: number | undefined, pdl: number | undefined;
+  {
+    const dayHL = new Map<string, { hi: number; lo: number }>();
+    for (const b of all1m) {
+      const p = etParts(b.ts);
+      if (p.min < 570 || p.min >= 960) continue; // RTH-only high/low
+      const e = dayHL.get(p.date);
+      if (!e) dayHL.set(p.date, { hi: b.high, lo: b.low });
+      else { e.hi = Math.max(e.hi, b.high); e.lo = Math.min(e.lo, b.low); }
+    }
+    const priors = [...dayHL.keys()].filter((d) => d < todayET).sort();
+    const prior = priors.length ? dayHL.get(priors[priors.length - 1]) : undefined;
+    if (prior) { pdh = prior.hi; pdl = prior.lo; }
+  }
+  // Next session's expiry FOR THIS UNDERLYING (the 1DTE roll inside the close cutoff).
+  // SPY & QQQ both have daily expirations, but resolve per-ticker so we never guess.
+  const { data: exps } = await sb.from("option_quotes").select("expiration").eq("underlying", sym).gt("expiration", todayET).order("expiration", { ascending: true }).limit(1);
+  const next1DTE = ((exps ?? [])[0] as { expiration?: string } | undefined)?.expiration ?? null;
+  return { all1m, session1m, pdh, pdl, next1DTE };
+}
+
 Deno.serve(async () => {
   try {
     const { data: fund } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
     // status + spec_json drive the Add-Channel path (run 13_add_channel.sql BEFORE
     // deploying this — otherwise these columns don't exist and the select errors).
-    const { data: strategists } = await sb.from("strategists").select("id,slug,status,spec_json,strategist_config(*)");
+    const { data: strategists } = await sb.from("strategists").select("id,slug,underlying,status,spec_json,strategist_config(*)");
     const account = await aGet("/v2/account");
     // Track whether the positions read SUCCEEDED — reconciliation (closing a desk
     // row with no Alpaca match) must NEVER run on a transient API error, or it
@@ -468,47 +514,19 @@ Deno.serve(async () => {
     // symbol guard, so two channels can hold the same contract).
     const allOrders: Record<string, unknown>[] = await aGet("/v2/orders?status=all&limit=500&direction=desc").catch(() => []);
 
-    // today's session 1m bars (oldest→newest), from market open
-    const { data: rawBars } = await sb.from("underlying_bars").select("ts,open,high,low,close,volume,vwap").eq("symbol", "SPY").order("ts", { ascending: false }).limit(900);
-    const all1m: Bar[] = (rawBars ?? []).filter((b: Record<string, number | null>) => b.close != null).reverse().map((b: Record<string, number | null>) => ({ ts: Date.parse(b.ts as unknown as string), open: Number(b.open ?? b.close), high: Number(b.high ?? b.close), low: Number(b.low ?? b.close), close: Number(b.close), volume: Number(b.volume ?? 0), vwap: Number(b.vwap ?? b.close) }));
     const nowMs = Date.now();
     const todayET = etParts(nowMs).date;
     const sessionSince = `${todayET}T00:00:00Z`; // session start (RTH session shares the UTC date) — window for fill-net realized
-    // RTH-ONLY session bars (09:30–16:00 ET = minute 570–960). CRITICAL now that
-    // market-ingest is on the SIP feed, which streams PRE-MARKET bars too: without
-    // this filter those ~30 pre-market bars satisfy warmup BEFORE the open AND
-    // corrupt the opening range / VWAP / ATR. (The streaming worker already
-    // RTH-filters in buildSessionBars — this brings the cron to parity.)
-    const session1m = all1m.filter((b) => { const p = etParts(b.ts); return p.date === todayET && p.min >= 570 && p.min < 960; });
 
-    // Prior trading day's high/low — for compiled-spec `level` conditions
-    // (ref:pdh/pdl). all1m holds ~2+ sessions, so the day before today is covered.
-    let pdh: number | undefined, pdl: number | undefined;
-    {
-      const dayHL = new Map<string, { hi: number; lo: number }>();
-      for (const b of all1m) {
-        const p = etParts(b.ts);
-        if (p.min < 570 || p.min >= 960) continue; // RTH-only high/low (skip pre/post-market)
-        const d = p.date;
-        const e = dayHL.get(d);
-        if (!e) dayHL.set(d, { hi: b.high, lo: b.low });
-        else { e.hi = Math.max(e.hi, b.high); e.lo = Math.min(e.lo, b.low); }
-      }
-      const priors = [...dayHL.keys()].filter((d) => d < todayET).sort();
-      const prior = priors.length ? dayHL.get(priors[priors.length - 1]) : undefined;
-      if (prior) { pdh = prior.hi; pdl = prior.lo; }
-    }
-
-    // Alpaca rejects OPENING a 0DTE position within ~15 min of close — that was
-    // the 422. So inside the cutoff, channels roll new entries to the next expiry
-    // (1DTE) instead of losing the signal. Resolve that expiry from the live chain
-    // (the ingest captures today + the next session), so we never guess a holiday.
+    // MULTI-INSTRUMENT (QQQ rollout, step 3): build market context ONCE per distinct
+    // underlying among the channels (SPY default), reused across same-ticker channels.
+    // Each ctx holds that ticker's RTH session bars / prior-day H-L / next-session expiry.
+    // Alpaca rejects OPENING a 0DTE within ~15 min of close (the 422) → inside the cutoff
+    // channels roll the entry to ctx.next1DTE, resolved per-ticker from the live chain.
     const OPEN_0DTE_CUTOFF_MIN = 16; // last ~15 min + 1 buffer
-    let next1DTE: string | null = null;
-    {
-      const { data: exps } = await sb.from("option_quotes").select("expiration").gt("expiration", todayET).order("expiration", { ascending: true }).limit(1);
-      next1DTE = ((exps ?? [])[0] as { expiration?: string } | undefined)?.expiration ?? null;
-    }
+    const underlyings = [...new Set((strategists ?? []).map((s) => String((s as { underlying?: string }).underlying ?? "SPY").toUpperCase()))];
+    const marketByUnderlying = new Map<string, MarketCtx>();
+    for (const sym of underlyings) marketByUnderlying.set(sym, await buildMarket(sym, todayET));
 
     // fund-level equity snapshot
     await sb.from("equity_snapshots").insert({ strategist_id: null, net_liquidation: Number(account.equity), cash: Number(account.cash), unrealized_pnl: positions.reduce((a, p) => a + Number(p.unrealized_pl ?? 0), 0) });
@@ -522,6 +540,12 @@ Deno.serve(async () => {
      try {
       const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
       if (!cfg) continue;                                           // no config → idle
+      // MULTI-INSTRUMENT: this channel's market. Default SPY for legacy rows. If the
+      // ticker has no session bars yet (e.g. QQQ not ingested this session), skip —
+      // never trade blind on an empty tape.
+      const sym = String((s as { underlying?: string }).underlying ?? "SPY").toUpperCase();
+      const mkt = marketByUnderlying.get(sym);
+      if (!mkt || !mkt.session1m.length) { out.push({ slug: s.slug, note: "no_market", underlying: sym }); continue; }
       // Resolve this channel's edge: a built-in CODE strategy (REGISTRY) or a
       // COMPILED spec (spec_json from the row — the Add-Channel path).
       const code = REGISTRY[s.slug];
@@ -537,7 +561,7 @@ Deno.serve(async () => {
       const armBlocked = status !== "armed";
       const guardBlocked = fund?.is_halted ? "halted" : cfg.muted ? "muted" : fund?.mode !== "paper" ? "not_paper" : null;
 
-      const bars = aggregate(session1m, tf);
+      const bars = aggregate(mkt.session1m, tf);
       if (bars.length < warmup) { out.push({ slug: s.slug, note: "warmup" }); continue; }
       const i = bars.length - 1;
       const last = bars[i];
@@ -586,7 +610,7 @@ Deno.serve(async () => {
 
       // Build this channel's evaluator (spec evaluators precompute over `bars`;
       // pass prior-day levels for `level` pdh/pdl conditions).
-      const evaluate: Evaluate = code ? code.evaluate : compiled!.build(bars, { pdh, pdl });
+      const evaluate: Evaluate = code ? code.evaluate : compiled!.build(bars, { pdh: mkt.pdh, pdl: mkt.pdl });
       let intent = evaluate(f, pos);
 
       // Premium profit/stop (compiled specs) — uses the REAL Alpaca option mark
@@ -706,8 +730,8 @@ Deno.serve(async () => {
         // to the next expiry (1DTE) so the signal still gets acted on. Otherwise
         // use today (0DTE). entryExpiry drives both the OCC symbol and the row.
         const inCutoff = minutesToClose <= OPEN_0DTE_CUTOFF_MIN;
-        const entryExpiry = inCutoff ? next1DTE : todayET;
-        const occ = occSymbol(entryExpiry ?? todayET, strike, dir);
+        const entryExpiry = inCutoff ? mkt.next1DTE : todayET;
+        const occ = occSymbol(sym, entryExpiry ?? todayET, strike, dir);
         let blocked = guardBlocked;
         if (!blocked && armBlocked) blocked = "not_armed"; // draft/disabled → no new entries
         if (!blocked && !entryExpiry) blocked = "no_1dte_chain"; // in cutoff but no next expiry quoted
@@ -726,7 +750,7 @@ Deno.serve(async () => {
             const buys = filled.filter((o) => String(o.side) === "buy");
             const totBuy = buys.reduce((q, o) => q + Number(o.filled_qty ?? 0), 0);
             const avg = totBuy ? buys.reduce((s2, o) => s2 + Number(o.filled_avg_price ?? 0) * Number(o.filled_qty ?? 0), 0) / totBuy : 0;
-            await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg, current_mark: avg, unrealized_pnl: 0, status: "open" });
+            await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg, current_mark: avg, unrealized_pnl: 0, status: "open" });
             await journal("WARN", `${s.slug}: recovered ${net} ${occ} from filled orders (lost insert) — not re-buying`);
             blocked = "reconstructed";
           }
@@ -779,7 +803,7 @@ Deno.serve(async () => {
             // CRITICAL: confirm the position row was recorded. A silent insert
             // failure here is what caused the re-buy loop — if it fails, journal
             // LOUD (the per-channel guards above still prevent another buy).
-            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: "SPY", expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty, avg_entry_price: entryPx, current_mark: entryPx, unrealized_pnl: 0, status: "open" });
+            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty, avg_entry_price: entryPx, current_mark: entryPx, unrealized_pnl: 0, status: "open" });
             if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
             else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} @ ${entryPx.toFixed(2)} (${intent.reason})`, { order_id: o.id });
           } catch (e) {
