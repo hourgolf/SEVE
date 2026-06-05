@@ -1,3 +1,8 @@
+// ⚑ WORKER VERSION: 2026-06-05b  (GRIND-V3 registered — the disciplined-scalper rework
+//   (grindV3Eval): trend-gated (er≥0.35) bigger-burst entries, AM-start + 14:00 afternoon
+//   curfew, grind's FAST fixed-target exit (NO trail — it backfired in chop, H1 backtest).
+//   Resolved by exact slug `grind-v3` in REGISTRY. Trades only once a strategists row +
+//   config exist (25_grind_v3_channel.sql) and status='armed'. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-05a  (UNDERLYING INITIAL STOP, config-gated. New per-channel
 //   strategist_config.underlying_stop_pct (0 = off): exit when the UNDERLYING moves X% against
 //   entry — a uniform loss stop vs the premium-noise −50% stop (which fires at a VARIABLE
@@ -304,13 +309,35 @@ function grindEval(f: Features, pos: Pos | null): Intent {
   if (f.mom <= -P.momTrigger * f.atr) return { kind: "enter", direction: "put", reason: "grind_down" };
   return null;
 }
+// Disciplined scalper (backtested grind-v3, H1-2026 real fills): grind's entry but
+// TREND-GATED (er ≥ erMin), a bigger burst (momTrigger), an AM-start + 14:00 AFTERNOON
+// CURFEW (entryEnd), and grind's FAST fixed-target exit — NO trail (the chandelier
+// backfired in chop: runners revert). Entry discipline keeps grind's positive gross edge
+// while cutting trades ~⅓. Mirrors engine/strategies/grind-v2.ts DEFAULT_GRIND_V3_PARAMS.
+function grindV3Eval(f: Features, pos: Pos | null): Intent {
+  const P = { momTrigger: 0.8, volMin: 1.2, erMin: 0.35, entryStart: 5, entryEnd: 270, targetAtr: 0.6, stopAtr: 0.5, timeStop: 5, flatten: 10 };
+  if (pos) {
+    if (f.minutesToClose <= P.flatten) return { kind: "exit", reason: "eod_flatten" };
+    if (f.minute - pos.entryMinute >= P.timeStop) return { kind: "exit", reason: "time_stop" };
+    if (pos.optType === "call") { if (f.close >= pos.entryUnderlying + P.targetAtr * f.atr) return { kind: "exit", reason: "target" }; if (f.close <= pos.entryUnderlying - P.stopAtr * f.atr) return { kind: "exit", reason: "stop" }; }
+    else { if (f.close <= pos.entryUnderlying - P.targetAtr * f.atr) return { kind: "exit", reason: "target" }; if (f.close >= pos.entryUnderlying + P.stopAtr * f.atr) return { kind: "exit", reason: "stop" }; }
+    return null;
+  }
+  if (f.minute < P.entryStart || f.minute >= P.entryEnd) return null;          // AM start + 14:00 ET curfew
+  if (f.minutesToClose <= P.flatten || f.atr <= 0 || f.relVol < P.volMin) return null;
+  if (f.er < P.erMin) return null;                                             // skip chop
+  if (f.mom >= P.momTrigger * f.atr) return { kind: "enter", direction: "call", reason: "grind_up" };
+  if (f.mom <= -P.momTrigger * f.atr) return { kind: "enter", direction: "put", reason: "grind_down" };
+  return null;
+}
 
 // slug → { evaluate, timeframeMin, warmupBars }  (mirrors engine/registry.ts)
 const REGISTRY: Record<string, { evaluate: Evaluate; tf: number; warmup: number }> = {
-  breakout: { evaluate: breakoutEval, tf: 1, warmup: 30 },
-  fade:     { evaluate: fadeEval,     tf: 1, warmup: 30 },
-  power:    { evaluate: powerEval,    tf: 1, warmup: 30 },
-  grind:    { evaluate: grindEval,    tf: 1, warmup: 30 },
+  breakout:   { evaluate: breakoutEval, tf: 1, warmup: 30 },
+  fade:       { evaluate: fadeEval,     tf: 1, warmup: 30 },
+  power:      { evaluate: powerEval,    tf: 1, warmup: 30 },
+  grind:      { evaluate: grindEval,    tf: 1, warmup: 30 },
+  "grind-v3": { evaluate: grindV3Eval,  tf: 1, warmup: 30 },
 };
 
 // ---- compiled-spec interpreter (FULL MIRROR of engine/specEvaluate.ts) ------
