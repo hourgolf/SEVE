@@ -11,6 +11,11 @@ import { TapeHealth } from "@/components/TapeHealth";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useDeskDispatch } from "@/hooks/useDeskState";
+import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { MasterStrip } from "@/components/console/MasterStrip";
 import { StepRow } from "@/components/console/hw/StepRow";
 import { Bezel } from "@/components/console/hw/Bezel";
@@ -39,6 +44,39 @@ function SectionLabel({ id, idx, children }: { id: string; idx: string; children
   );
 }
 
+// One draggable channel card. useSortable provides the transform + the drag-handle
+// listeners; we hand the listeners to the grip ONLY (so the knobs stay interactive)
+// and attach the transform to the grid-cell wrapper. `disabled` (anon) = no drag.
+function SortableChannel(props: {
+  strategist: StrategistState;
+  pnl: ChannelPnl | undefined;
+  active: boolean;
+  ducked: boolean;
+  disabled: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: props.strategist.slug,
+    disabled: props.disabled,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="ch-sortable">
+      <ChannelStrip
+        strategist={props.strategist}
+        pnl={props.pnl}
+        active={props.active}
+        ducked={props.ducked}
+        dragHandle={props.disabled ? undefined : { ...attributes, ...listeners }}
+        dragging={isDragging}
+      />
+    </div>
+  );
+}
+
 export function DesktopSurface({
   data,
   view,
@@ -54,6 +92,28 @@ export function DesktopSurface({
   const [addOpen, setAddOpen] = useState(false);
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const { canWrite } = write;
+
+  // ---- drag-to-reorder + group-by (operator only; persists sort_order) ----
+  const dispatch = useDeskDispatch();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const channelOrder = desk.strategists.map((s) => s.slug);
+  const persistOrder = (order: string[]) => {
+    dispatch({ type: "REORDER", order }); // optimistic
+    const byId = new Map(desk.strategists.map((s) => [s.slug, s.id]));
+    void write.reorderChannels(order.map((sl) => byId.get(sl)).filter((x): x is string => !!x));
+  };
+  const onDragEnd = (e: DragEndEvent) => {
+    const from = channelOrder.indexOf(String(e.active.id));
+    const to = e.over ? channelOrder.indexOf(String(e.over.id)) : -1;
+    if (from < 0 || to < 0 || from === to) return;
+    persistOrder(arrayMove(channelOrder, from, to));
+  };
+  const groupBy = (key: "underlying" | "regime") =>
+    persistOrder(
+      [...desk.strategists]
+        .sort((a, b) => String(a[key] || "").localeCompare(String(b[key] || "")) || a.name.localeCompare(b.name))
+        .map((s) => s.slug)
+    );
 
   // occ_symbol → live option mark (delta-extrapolated off the fast spot tick), so
   // open positions mark in real time, not once a minute. Recomputes each spot tick.
@@ -118,6 +178,13 @@ export function DesktopSurface({
       {/* ---- 02 · STRATEGY COMPOSER ----------------------------------- */}
       <SectionLabel id="composer" idx="02">
         Strategy Composer
+        {canWrite && (
+          <span className="group-by" title="auto-arrange the channels, then nudge by hand">
+            <span className="gb-label">group</span>
+            <button type="button" onClick={() => groupBy("underlying")}>ticker</button>
+            <button type="button" onClick={() => groupBy("regime")}>regime</button>
+          </span>
+        )}
         <button className="add-channel-btn" onClick={() => setAddOpen(true)}>+ Add Channel</button>
       </SectionLabel>
       {addOpen && (
@@ -127,17 +194,22 @@ export function DesktopSurface({
         />
       )}
       <div className="console-grid">
-        <div className="channels">
-          {desk.strategists.map((s) => (
-            <ChannelStrip
-              key={s.slug}
-              strategist={s}
-              pnl={feed.pnlByStrategist[s.slug]}
-              active={isActive(s.slug)}
-              ducked={anySolo && !s.config.soloed && !s.config.muted}
-            />
-          ))}
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={channelOrder} strategy={rectSortingStrategy}>
+            <div className="channels">
+              {desk.strategists.map((s) => (
+                <SortableChannel
+                  key={s.slug}
+                  strategist={s}
+                  pnl={feed.pnlByStrategist[s.slug]}
+                  active={isActive(s.slug)}
+                  ducked={anySolo && !s.config.soloed && !s.config.muted}
+                  disabled={!canWrite}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
         <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} />
       </div>
       <Bezel label="16-Step Tape · recent signals" className="tape">

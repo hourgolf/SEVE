@@ -16,9 +16,13 @@ export interface ChannelStripProps {
   active: boolean; // effectively trading right now
   ducked: boolean; // dimmed because another channel is soloed
   mobile?: boolean; // phone: 4 knobs in a row, each with an LED volume meter
+  /** dnd-kit drag handle props (listeners + attributes) — desktop composer only.
+   *  Spread onto the grip so ONLY the grip starts a drag (knobs stay interactive). */
+  dragHandle?: Record<string, unknown>;
+  dragging?: boolean; // lifted while being dragged
 }
 
-function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelStripProps) {
+function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
   const { persistConfig, renameChannel, setChannelAccent, deleteChannel, canWrite } = useDeskWrite();
   const { id, slug, underlying, name, regime, color, status, config } = strategist;
@@ -234,8 +238,23 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile }: ChannelSt
 
   return (
     <div
-      className={`channel pm-${color}${ducked ? " ducked" : ""}`}
+      className={`channel pm-${color}${ducked ? " ducked" : ""}${dragging ? " ch-dragging" : ""}`}
     >
+      {dragHandle && (
+        <button
+          type="button"
+          className="ch-grip"
+          {...dragHandle}
+          title="drag to reorder"
+          aria-label={`drag ${name} to reorder`}
+        >
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden>
+            <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+            <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+            <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+          </svg>
+        </button>
+      )}
       {resetBtn}
       {editBtn}
       <div className="ch-head">

@@ -18,6 +18,7 @@ export type DeskAction =
   | { type: "REMOVE"; slug: string }
   | { type: "TOGGLE_MUTE"; slug: string }
   | { type: "TOGGLE_SOLO"; slug: string }
+  | { type: "REORDER"; order: string[] } // new display order, by slug
   | { type: "SET_FUND"; patch: Partial<FundState> }
   | { type: "SET_MODE"; mode: "paper" | "live" }
   | { type: "START" }
@@ -76,6 +77,17 @@ export function deskReducer(state: DeskState, action: DeskAction): DeskState {
             : s
         ),
       };
+    case "REORDER": {
+      // Reorder the channel list to match `order` (slugs). Optimistic; the new
+      // sort_order is persisted by useDeskWrite.reorderChannels in parallel.
+      const rank = new Map(action.order.map((slug, i) => [slug, i]));
+      return {
+        ...state,
+        strategists: [...state.strategists].sort(
+          (a, b) => (rank.get(a.slug) ?? 999) - (rank.get(b.slug) ?? 999)
+        ),
+      };
+    }
     case "SET_FUND":
       return { ...state, fund: { ...state.fund, ...action.patch } };
     case "SET_MODE":

@@ -644,6 +644,66 @@
   background: rgba(141, 139, 130, 0.12);
 }
 
+/* ---- drag-to-reorder (desktop composer) ---- */
+/* The sortable wrapper IS the grid cell; the .channel stretches to fill it. */
+.ch-sortable { display: flex; }
+.ch-sortable > .channel { flex: 1; }
+/* Pin the ticker chip to a FIXED top-right corner so it never shifts with the
+   channel name's length (mobile keeps it inline). Mirror: the grip top-left. */
+.channels .ch-head { padding: 0 22px; }
+.channels .ch-ticker { position: absolute; top: 7px; right: 8px; z-index: 3; }
+/* drag handle — only the grip starts a card drag, so the knobs stay interactive. */
+.ch-grip {
+  position: absolute;
+  top: 7px;
+  left: 8px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  opacity: 0.5;
+  cursor: grab;
+  touch-action: none; /* dnd-kit owns the pointer once the grip is grabbed */
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.ch-grip:hover { opacity: 1; color: var(--ink); background: rgba(0, 0, 0, 0.07); }
+.ch-grip:active { cursor: grabbing; }
+.channel.ch-dragging {
+  opacity: 0.96;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--pm);
+}
+
+/* group-by chip in the §02 header — auto-arrange, then nudge by hand */
+.group-by { display: inline-flex; align-items: center; gap: 5px; margin-left: 14px; }
+.group-by .gb-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted, #7d8a90);
+}
+.group-by button {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border-bright, #2a3a42);
+  background: rgba(10, 15, 17, 0.4);
+  color: var(--muted, #7d8a90);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.group-by button:hover { color: var(--text, #cdd6da); border-color: var(--text, #cdd6da); }
+
 /* ---- channel edit (flip-card): rename + delete ---- */
 .channel { perspective: 1000px; }
 .ch-edit-btn {

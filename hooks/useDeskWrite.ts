@@ -188,5 +188,24 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, deleteChannel, closePosition };
+  // Persist a new channel display order: write sort_order = position for each id.
+  // The desk reducer already reordered optimistically; this makes it durable.
+  const reorderChannels = useCallback(
+    async (orderedIds: string[]): Promise<{ ok: boolean; error?: string }> => {
+      if (!session) return { ok: false, error: "sign in to reorder" };
+      try {
+        const sb = getSupabase();
+        const results = await Promise.all(
+          orderedIds.map((id, i) => sb.from("strategists").update({ sort_order: i }).eq("id", id))
+        );
+        const err = results.find((r) => r.error)?.error;
+        return err ? { ok: false, error: err.message } : { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "reorder failed" };
+      }
+    },
+    [session]
+  );
+
+  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, deleteChannel, closePosition, reorderChannels };
 }
