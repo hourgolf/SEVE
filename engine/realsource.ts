@@ -65,7 +65,7 @@ function etParts(ms: number): { date: string; min: number } {
   return { date: `${p.year}-${p.month}-${p.day}`, min: hour * 60 + Number(p.minute) };
 }
 
-async function fetchAllBars(sinceMs?: number): Promise<RawBar[]> {
+async function fetchAllBars(sinceMs?: number, symbol = "SPY"): Promise<RawBar[]> {
   loadEnv();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -81,7 +81,7 @@ async function fetchAllBars(sinceMs?: number): Promise<RawBar[]> {
     let q = sb
       .from("underlying_bars")
       .select("ts,open,high,low,close,volume")
-      .eq("symbol", "SPY")
+      .eq("symbol", symbol)
       .order("ts", { ascending: true });
     if (cutoffIso) q = q.gte("ts", cutoffIso);
     const { data, error } = await q.range(from, from + PAGE - 1);
@@ -108,10 +108,10 @@ function realizedIv(bars: Bar[]): number {
   return Math.min(0.6, Math.max(0.06, iv));
 }
 
-export async function loadRealSessions(opts?: { sinceDaysAgo?: number }): Promise<RealSession[]> {
+export async function loadRealSessions(opts?: { sinceDaysAgo?: number; symbol?: string }): Promise<RealSession[]> {
   const sinceMs =
     opts?.sinceDaysAgo != null ? Date.now() - opts.sinceDaysAgo * 24 * 60 * 60 * 1000 : undefined;
-  const raw = await fetchAllBars(sinceMs);
+  const raw = await fetchAllBars(sinceMs, opts?.symbol ?? "SPY");
 
   // group RTH bars by ET date
   const byDay = new Map<string, RawBar[]>();

@@ -5,6 +5,8 @@
 //    npm run backtest                 # synthetic sessions (default, 60 days)
 //    npm run backtest -- --days 120 --seed 3
 //    npm run backtest -- --source real   # REAL backfilled SPY sessions
+//    npm run backtest -- --source real --strat breakout-qqq   # QQQ (suffix infers
+//                                         # ticker); or --strat breakout --underlying QQQ
 //
 //  DATA HONESTY:
 //   • synthetic → validates engine + strategy SHAPE end-to-end; NOT a real edge.
@@ -391,7 +393,14 @@ function argStr(name: string, def: string): string {
 
 async function main() {
   const source = argStr("source", "synthetic");
-  const strat = argStr("strat", "fade");
+  const stratRaw = argStr("strat", "fade");
+  // Multi-instrument (QQQ rollout): --strat may carry a ticker suffix mirroring the
+  // live channels (breakout-qqq → ORB on QQQ). Strip it for the strategy lookup and,
+  // when --underlying isn't given explicitly, infer the ticker from the suffix. So
+  // `--strat breakout-qqq` alone backtests ORB on QQQ; --underlying overrides.
+  const stratSuffix = /-(qqq|spy)$/i.exec(stratRaw)?.[1]?.toUpperCase();
+  const strat = stratRaw.replace(/-(qqq|spy)$/i, "");
+  const underlying = argStr("underlying", stratSuffix ?? "SPY").toUpperCase();
   // --spec <path>: load a compiled StrategySpec (the .md → JSON form) and run it
   // through specToEvaluate — the SAME interpreter the live worker uses. This is
   // the real-fills confirmation the Add-Channel gate surfaces before Arm.
@@ -439,9 +448,9 @@ async function main() {
     // --days N scopes to the last N calendar days (e.g. the Databento-cached
     // window) so a real-options run isn't diluted by modeled-chain fallback days.
     const sinceDaysAgo = argNum("days", 0);
-    const sessions = await loadRealSessions(sinceDaysAgo > 0 ? { sinceDaysAgo } : undefined);
+    const sessions = await loadRealSessions({ symbol: underlying, ...(sinceDaysAgo > 0 ? { sinceDaysAgo } : {}) });
     if (!sessions.length) {
-      console.log("\nNo real sessions found — backfill underlying_bars first (07_backfill_bars.sql).\n");
+      console.log(`\nNo real ${underlying} sessions found — backfill underlying_bars for ${underlying} first.\n`);
       return;
     }
     // --options databento → REAL NBBO from the local Databento cache (real bid/ask,
@@ -456,7 +465,7 @@ async function main() {
     if (useDatabento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET));
     else if (useRealOptions) {
       try {
-        byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET));
+        byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET), underlying);
       } catch (e) {
         console.log(`  (option_bars unavailable — ${(e as Error).message}; falling back to modeled chains)`);
       }
@@ -483,7 +492,7 @@ async function main() {
       : useRealOptions
       ? `REAL BARS + REAL option prices (modeled spread) · ${realDays}/${sessions.length} days had option data`
       : "REAL BARS + modeled (Black-Scholes) option chains";
-    const span = `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real SPY 1-min`;
+    const span = `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real ${underlying} 1-min`;
     report(all, sessions.length, stratLabel, optLabel, span);
   } else {
     const days = argNum("days", 60);

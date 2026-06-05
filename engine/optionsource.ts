@@ -59,7 +59,7 @@ interface RawOB {
 // Load option_bars grouped by expiration date (= the 0DTE session), fetching
 // PER DAY (filtered by the indexed `expiration`) — offset-paging the whole
 // 1M+ row table times out, but a single day (~11k rows, small offsets) is fast.
-export async function loadOptionBarsByDay(dates: string[]): Promise<Map<string, Series[]>> {
+export async function loadOptionBarsByDay(dates: string[], underlying = "SPY"): Promise<Map<string, Series[]>> {
   loadEnv();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -68,6 +68,11 @@ export async function loadOptionBarsByDay(dates: string[]): Promise<Map<string, 
 
   const PAGE = 1000;
   const out = new Map<string, Series[]>();
+  // option_bars has no `underlying` column, but the OCC root IS the ticker, so a
+  // prefix match isolates one instrument's contracts. Without it, once QQQ bars are
+  // backfilled a SPY and QQQ contract at the same strike/expiry would both land in
+  // the chain (the chain keys on strike, not ticker) and cross-contaminate fills.
+  const occPrefix = `${underlying}%`;
 
   for (const date of dates) {
     const contracts = new Map<string, Series>();
@@ -76,6 +81,7 @@ export async function loadOptionBarsByDay(dates: string[]): Promise<Map<string, 
         .from("option_bars")
         .select("occ_symbol,ts,strike,opt_type,close,expiration")
         .eq("expiration", date)
+        .like("occ_symbol", occPrefix)
         .order("ts", { ascending: true })
         .range(from, from + PAGE - 1);
       if (error) throw new Error("option_bars read: " + error.message);
