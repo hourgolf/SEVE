@@ -25,6 +25,7 @@
     "sweep:cross": "tsx engine/sweep-cross.ts",
     "regime": "tsx engine/regime-test.ts",
     "daily-gate": "tsx engine/daily-gate-test.ts",
+    "backfill:bars": "tsx scripts/backfill-bars.ts",
     "backfill:options": "tsx scripts/backfill-options.ts",
     "backfill:databento": "tsx scripts/backfill-databento.ts"
   },
