@@ -101,6 +101,15 @@ UNMANAGED (managing caps power's tail / bleeds grind cost). New tools:
   (no service-role key in .env.local), (3) `npm run backfill:options -- --underlying QQQ --tf 15
   --from … --to …`, (4) `npm run backtest -- --strat <s>-qqq --source real --options real` per
   channel. Then drop the temp policy + truncate option_bars (0.5 GB cap).
+- **QQQ BACKTEST VERDICT (06-04, DONE — real fills, H1-2026):** ran all 4 strategies on real
+  bars+`option_bars` for BOTH tickers (Jan–Jun, 106 sessions). **ALL 8 net-negative** → it's
+  **regime (chop) + cost, NOT a QQQ-transfer failure** (SPY equally red same window). Gross-signal
+  layer: **breakout's edge is QQQ-specific (+$1.8k gross), power's is SPY-specific (+$4.7k)**; fade
+  broken both; grind cost-doomed both (1000–1700% drag, 5% win). Backtest is UNGATED → live cost
+  gate makes real bleed milder. **Decision: keep `breakout-qqq` armed, MUTE fade/power/grind-qqq**
+  (`update strategists set status='draft' where slug in ('fade-qqq','power-qqq','grind-qqq')`);
+  power stays the SPY keeper. Docs: `docs/channels/breakout-qqq.md` (cost-disciplined ORB retune),
+  `docs/qqq/qqq-desk-tracking.md` (verdict table + tracking). Memory: `qqq-spy-h1-2026-real-fills.md`.
 - Phase B (later): de-hardcode the 4 code channels → `.md` theses; streaming worker
   becomes the SOLE trader (disable the `seve-paper-trader` cron at cutover).
 
