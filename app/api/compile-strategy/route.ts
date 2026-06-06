@@ -9,7 +9,7 @@ import { normalizeSpec, type StrategySpec } from "@/lib/desk/strategySpec";
 export const dynamic = "force-dynamic";
 
 const API = "https://api.anthropic.com/v1/messages";
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";  // current Sonnet (4-5 is now legacy)
 
 // The StrategySpec shape, as a tool schema the model must fill (mirrors
 // lib/desk/strategySpec.ts). Conditions use a fixed `kind` vocabulary.
