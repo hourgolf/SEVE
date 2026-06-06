@@ -271,7 +271,7 @@ const NARRATE_TOOL = {
 async function narrate(digest: Digest): Promise<unknown | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
-  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";  // current Sonnet (4-5 is now legacy)
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },

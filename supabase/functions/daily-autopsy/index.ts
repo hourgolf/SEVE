@@ -1,3 +1,6 @@
+// ⚑ DAILY-AUTOPSY VERSION: 2026-06-06a  (model bump: default Sonnet claude-sonnet-4-5 → the
+//   current claude-sonnet-4-6 (4-5 is now legacy; same $3/$15 tier, strictly better). Daily
+//   stays on Sonnet by design — the weekly is the Opus one. ANTHROPIC_MODEL env still overrides.)
 // ⚑ DAILY-AUTOPSY VERSION: 2026-06-05a  (SYMBOL-SPLIT MARKET + QQQ REGIME. The market read
 //   was UNFILTERED — once the QQQ tape went live, underlying_bars carried SPY+QQQ at the same
 //   timestamps and the calc Frankensteined SPY's 9:30 open with QQQ's 16:00 close (06-05 read
@@ -57,7 +60,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-4-5";
+const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-4-6";  // current Sonnet (4-5 is now legacy)
 const sb = createClient(SB_URL, SB_SERVICE);
 
 // ---- ET wall-clock helpers -------------------------------------------------
