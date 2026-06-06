@@ -145,21 +145,27 @@ export function IntradayChart({
   const isDaily = RANGES[range].src === "daily";
 
   // ---- live-edge: fold the live spot into the forming bar ----
-  const formingRef = useRef<{ min: number; open: number; high: number; low: number } | null>(null);
+  // `sym` in the accumulator so a SPY↔QQQ toggle RESETS the forming bar — otherwise the prior
+  // ticker's accumulated high/low carries into the new ticker's candle within the same minute
+  // (the cross-symbol wick: a SPY chart spiking to QQQ's price and vice versa).
+  const formingRef = useRef<{ min: number; sym: string; open: number; high: number; low: number } | null>(null);
   const liveSource = useMemo<UnderlyingBar[]>(() => {
     const src = isDaily ? dailyBars : bars;
     if (spot == null || !src.length) return src;
     const last = src[src.length - 1];
     const lc = last.close ?? spot, lh = last.high ?? spot, ll = last.low ?? spot;
     if (isDaily) return [...src.slice(0, -1), { ...last, close: spot, high: Math.max(lh, spot), low: Math.min(ll, spot) }];
+    // drop a spot wildly off the last 1-min close (a glitch /api/spot tick or a mid-toggle
+    // stale value) — a >2% move in under a minute isn't real, so don't let it set high/low.
+    if (lc > 0 && Math.abs(spot - lc) / lc > 0.02) return src;
     const minStart = Math.floor(Date.now() / 60000) * 60000;
     if (Date.parse(last.ts) >= minStart) return src;
     const acc = formingRef.current;
-    if (!acc || acc.min !== minStart) formingRef.current = { min: minStart, open: lc, high: Math.max(lc, spot), low: Math.min(lc, spot) };
+    if (!acc || acc.min !== minStart || acc.sym !== symbol) formingRef.current = { min: minStart, sym: symbol, open: lc, high: Math.max(lc, spot), low: Math.min(lc, spot) };
     else { acc.high = Math.max(acc.high, spot); acc.low = Math.min(acc.low, spot); }
     const a = formingRef.current!;
     return [...src, { ts: new Date(minStart).toISOString(), open: a.open, high: a.high, low: a.low, close: spot, volume: 0, vwap: spot }];
-  }, [isDaily, dailyBars, bars, spot]);
+  }, [isDaily, dailyBars, bars, spot, symbol]);
 
   const agg = useMemo(() => aggregateBars(liveSource, isDaily ? DAILY_TF : tf), [liveSource, isDaily, tf]);
   const efN = Math.min(EMA_MAX, Math.max(EMA_MIN, emaFastP || EMA_FAST_DEFAULT));
