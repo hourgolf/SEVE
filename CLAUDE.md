@@ -8,7 +8,75 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## SESSION HANDOFF — 2026-06-03 (Day 3 close) — READ THIS FIRST
+## SESSION HANDOFF — 2026-06-06 — READ THIS FIRST
+Everything below is LIVE + git is clean (main == origin/main). Next task = **mobile chart
+quick-fixes** (user is doing them). Prior handoffs kept below for history.
+
+**DEPLOY STATE (all deployed + verified):**
+- **Worker `2026-06-05c`** (paper-trader, pasted): adds (a) config-gated **UNDERLYING INITIAL
+  STOP** — new `strategist_config.underlying_stop_pct` (0=off); exits when the underlying
+  moves X% against the reconstructed `entryUnderlying`, fires before the premium stop; **0.20%
+  LIVE on `orb-trend-rider`/`breakout-qqq`/`qqq-thrust-trail`/`breakout-smart-entries`**, and a
+  tighter **0.15% SHADOW** logged to events as `stream-shadow: US0.15…` (not traded — the A/B);
+  (b) **`grind-v3`** (disciplined scalper: er-gate + 14:00 afternoon curfew + grind's fast
+  fixed-target exit, NO trail); (c) **`power-final30`** (final-30-min momentum lean, no VWAP gate).
+- **SQL run:** `24_underlying_stop.sql`, `25_grind_v3_channel.sql` (grind-v3 ARMED — ⚠️ its RISK
+  landed at **$500**, not the intended $150 — dashboard knobs reset it), `26_power_final30_channel.sql`
+  (power-final30 ARMED + base **`power` MUTED**).
+- **Edge fns:** daily-autopsy **`2026-06-06a`** (Sonnet **claude-sonnet-4-6**), weekly-autopsy
+  **`2026-06-05d`** (Opus **claude-opus-4-8** via `ANTHROPIC_MODEL_WEEKLY`). compile-strategy route
+  also bumped to 4-6 (Vercel auto). **`claude-sonnet-4-5` is now LEGACY** (current = 4-6).
+- **Live roster (armed+unmuted):** breakout · breakout-qqq · orb-spy-trail · orb-qqq-trail ·
+  orb-trend-rider · qqq-thrust-trail · breakout-smart-entries · grind-v3 · power-final30.
+  **MUTED:** power, power-smart-entries, grind, grind-smart-entries. **DELETED:** fade.
+
+**KEY FINDINGS (this session — full detail in memory/):**
+- **Autopsy was Frankensteining SPY+QQQ** (unfiltered `underlying_bars` read = SPY's open + QQQ's
+  close → fake "SPY −6.2%") and NAV-truth was truncated at PostgREST's 1000-row cap. BOTH FIXED
+  (per-symbol market split + `.range()` pagination). Weekly now reports SPY+QQQ regimes + `maxDrawdown`.
+- **Real account week (06-01..05): NAV +$6,303, maxDD −$2,823 (−2.6%), peak capital ~$5,044.**
+  Cash-to-run ≈ $8–10k mechanical floor (sizes by fixed RISK-$, not % of account).
+- **MAE study → the 0.20% underlying stop**: it preserved every ≥5min winner (max winner dip 0.137%)
+  while cutting ~⅓ of losers; the −50% premium stop fires at a VARIABLE 0.2–0.5% underlying move by
+  option price. grind/power are gross-positive but cost-walled UNGATED; the live cost gate is what
+  makes them ~breakeven.
+- **⚠️ FADE-VWAP BUG (worker, latent — deliberately NOT fixed):** the worker reads
+  `underlying_bars.vwap` (a PER-BAR vwap ≈ close) AS the session VWAP. fade needs a
+  `close − vwap > 1.5·ATR` stretch → unreachable → fade never fired once in its life. It also
+  silently degrades `power`'s `close>vwap` gate (→ noise) and any compiled `vwap_side`/`vwap_dev`
+  channel. Left as-is because the disabled gate is a *feature* for power this week (counter-VWAP late
+  leans win). fade DELETED (fade-v2 pure-VWAP-reversion also no edge). **If you fix it:** compute
+  cumulative session VWAP in the worker's `buildMarket` (mirror `engine/realsource.ts` ~L147) and
+  re-validate power (it loses its accidental edge).
+
+**MOBILE REWORK (the session's big UI thread — all on Vercel):**
+- Seam = shared data/logic (hooks) + native shells. NEW `hooks/useChannelOrdering.ts` (reorder/
+  group-by, used by both surfaces). Chart cross-symbol spike fixed (`IntradayChart` forming-bar
+  resets on symbol toggle + 2% bad-tick guard).
+- **Mix tab REDESIGNED** (`components/mobile/MobileApp.tsx` + `MixerPads.tsx` + `ChannelStrip`
+  `compact`/`onExpand` props + `app/mobile.css`): **4 compact cards/page, swipe to next 4**; TAP a
+  card → full strip with big knobs in a sheet; a **master mixer** = small sortable colored pads
+  (tap=jump to that channel's page, hold=drag-reorder); **+Add Channel is the last grid card**.
+  Compact card: dot+title LEFT / P&L+ticker RIGHT, non-interactive indicator knob, green→red
+  risk/stop meters, black $ amounts. P2 touch polish (coarse-pointer knobs less twitchy, bigger
+  targets, chart interval selector now on mobile, fiddly EMA inputs hidden on phone). Dead carousel
+  CSS swept. **Target device = iPhone 17 Pro = 402×874 px** (NOT 390).
+
+**CHART-NEXT (the next session's task):** mobile chart quick-fixes. Chart = `components/IntradayChart.tsx`
+(shared desktop+mobile via the `mobile` prop); mobile chart CSS lives in `app/mobile.css`
+(`.m-app .chart-controls` + the P2 block). On mobile the chart is the Live tab's base panel
+(CHART/CHAIN/POSITIONS additive toggles in `MobileApp`). The chart is `lightweight-charts` (see the
+charting memory). **Pull `main` first.**
+
+**OPEN / TODO (next session):**
+- **grind-v3 RISK = $500** (should be ~$150 small-validation) — decide + set.
+- **Lone add-page**: 12 channels = a multiple of 4, so +Add sits alone on page 4 (clean 120px card,
+  empty below). Optional: suppress that page when the last channel page is full.
+- **Validate Monday→Friday in the Opus weekly**: underlying_stop fills + `stream-shadow: US0.15`
+  deltas, grind-v3 vs muted base grind, power-final30 vs muted base power → keep/retune; consider
+  widening the underlying stop to more channels.
+
+## SESSION HANDOFF — 2026-06-03 (Day 3 close)
 Three deploy targets now: **Vercel** (auto on push), **Supabase edge fns** (PASTE-deploy
 — I hand the user the file), **Railway** (the streaming worker, auto on push).
 
