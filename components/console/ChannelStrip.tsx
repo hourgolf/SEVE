@@ -217,11 +217,15 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         title={`${name} — tap to adjust`}
       >
         <div className="mc-head">
-          <span className={`ch-dot${active ? " on" : ""}`} />
-          <div className="ch-name">{name}</div>
-          {statusBadge}
-          <div className={`mc-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
-          <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
+          <div className="mc-head-l">
+            <span className={`ch-dot${active ? " on" : ""}`} />
+            <div className="ch-name">{name}</div>
+            {statusBadge}
+          </div>
+          <div className="mc-head-r">
+            <div className={`mc-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
+            <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
+          </div>
         </div>
         <div className="mc-row">
           {/* indicator knob — non-interactive (pointer-events:none); a "tap to adjust" cue

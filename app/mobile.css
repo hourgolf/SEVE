@@ -621,15 +621,18 @@
 /* compact channel card — overview only (no draggable knobs); tap to expand */
 .channel--mc {
   flex: 1 1 0; min-height: 88px; max-height: 150px;
-  display: flex; flex-direction: column; justify-content: space-between; gap: 8px;
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 11px;
   padding: 12px 16px; cursor: pointer;
 }
 .channel--mc:active { transform: scale(0.992); }
 .channel--mc.ch-on { box-shadow: inset 0 0 0 1.5px var(--pm); }
-.mc-head { display: flex; align-items: center; gap: 9px; padding-bottom: 7px; border-bottom: 1px solid rgba(0, 0, 0, 0.08); }
+/* header: dot+title pinned LEFT, P&L+ticker pinned RIGHT (no divider) */
+.mc-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+.mc-head-l { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.mc-head-r { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .mc-head .ch-name { font-size: 15px; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.channel--mc .ch-ticker { font-size: 9.5px; padding: 3px 8px; flex: 0 0 auto; }   /* bigger pill, rightmost */
-.mc-pnl { margin-left: auto; font-family: var(--mono); font-size: 15px; font-weight: 700; }
+.channel--mc .ch-ticker { font-size: 9.5px; padding: 3px 8px; flex: 0 0 auto; }
+.mc-pnl { font-family: var(--mono); font-size: 15px; font-weight: 700; }
 .mc-pnl.pos { color: #1f9d57; }   /* legible dark green (matches desktop on cream) */
 .mc-pnl.neg { color: #d23a28; }
 .mc-row { display: flex; align-items: center; gap: 13px; }
@@ -640,9 +643,9 @@
 .mc-bar { flex: 1 1 auto; min-width: 32px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.16); overflow: hidden; }
 .mc-fill { display: block; height: 100%; border-radius: 4px; }
 .mc-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.5px; color: var(--muted); width: 30px; flex: 0 0 auto; }
-.mc-val { font-family: var(--mono); font-size: 12px; color: var(--text); width: 46px; text-align: right; flex: 0 0 auto; }
+.mc-val { font-family: var(--mono); font-size: 12px; color: #222; width: 46px; text-align: right; flex: 0 0 auto; }   /* black amounts on cream */
 .mc-pads { display: flex; gap: 8px; flex: 0 0 auto; }
-.mc-pads .pad { min-width: 56px; min-height: 48px; }   /* enlarged mute/solo */
+.mc-pads .pad { min-width: 50px; min-height: 42px; }   /* mute/solo — sized down so they clear the bottom border */
 
 /* master mixer — small sortable colored pads (tap = jump, hold = reorder) */
 .mx-mixer { flex: 0 0 auto; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
