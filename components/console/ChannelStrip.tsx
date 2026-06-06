@@ -20,9 +20,13 @@ export interface ChannelStripProps {
    *  Spread onto the grip so ONLY the grip starts a drag (knobs stay interactive). */
   dragHandle?: Record<string, unknown>;
   dragging?: boolean; // lifted while being dragged
+  /** Mobile grid: render the condensed overview card (no draggable knobs — values as
+   *  read-only meters). Tapping the card body calls onExpand to open the full strip. */
+  compact?: boolean;
+  onExpand?: () => void;
 }
 
-function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging }: ChannelStripProps) {
+function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging, compact, onExpand }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
   const { persistConfig, renameChannel, setChannelAccent, deleteChannel, canWrite } = useDeskWrite();
   const { id, slug, underlying, name, regime, color, status, config } = strategist;
@@ -194,6 +198,38 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
       />
     </div>
   );
+
+  // Mobile GRID card — condensed overview (no draggable knobs; Risk/Stop as read-only
+  // LED meters + values). Tapping the body expands to the full strip; the mute/solo pads
+  // stop propagation so they stay tappable without expanding.
+  if (mobile && compact) {
+    return (
+      <div
+        className={`channel channel--mc pm-${color}${ducked ? " ducked" : ""}${active ? " ch-on" : ""}`}
+        role="button"
+        tabIndex={0}
+        onClick={onExpand}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onExpand?.(); } }}
+        title={`${name} — tap to adjust`}
+      >
+        <div className="mc-head">
+          <span className={`ch-dot${active ? " on" : ""}`} />
+          <div className="ch-name">{name}</div>
+          <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
+          {statusBadge}
+          <div className={`mc-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
+        </div>
+        <div className="mc-row">
+          <div className="mc-meters">
+            <div className="mc-meter"><span className="mc-lbl">RISK</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.capital_pct / 5)}%` }} /></span><span className="mc-val">{usd0(config.capital_pct)}</span></div>
+            <div className="mc-meter"><span className="mc-lbl">STOP</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.daily_stop_usd / 5)}%` }} /></span><span className="mc-val">{usd0(config.daily_stop_usd)}</span></div>
+          </div>
+          <div className="mc-pads" onClick={(e) => e.stopPropagation()}>{pads}</div>
+        </div>
+        {editOverlay}
+      </div>
+    );
+  }
 
   if (mobile) {
     return (

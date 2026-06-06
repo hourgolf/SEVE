@@ -580,3 +580,68 @@
 /* Position close — bigger ✕ / ✓ confirm targets (were small table-cell buttons). */
 .m-app .pos-close, .m-app .pos-cancel { min-width: 34px; min-height: 30px; font-size: 15px; line-height: 1; }
 .m-app .pos-confirm { gap: 8px; }
+
+/* ============================================================================
+   MIX REDESIGN — 4-per-page channel grid + sortable master-mixer pads.
+   ============================================================================ */
+
+/* swipe pager: full-width pages, each a column of up-to-4 compact cards */
+.m-grid {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 0;
+}
+.m-grid::-webkit-scrollbar { display: none; }
+.m-page {
+  flex: 0 0 100%; scroll-snap-align: start;
+  display: flex; flex-direction: column; gap: 8px;
+  padding-right: 2px;
+}
+
+.m-pagedots { display: flex; justify-content: center; gap: 7px; padding: 3px 0 1px; }
+.m-pagedots i { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.m-pagedots i.on { background: var(--amber); }
+
+/* compact channel card — overview only (no draggable knobs); tap to expand */
+.channel--mc {
+  flex: 1 1 0; min-height: 96px;
+  display: flex; flex-direction: column; justify-content: center; gap: 8px;
+  padding: 10px 12px; cursor: pointer;
+}
+.channel--mc:active { transform: scale(0.992); }
+.channel--mc.ch-on { box-shadow: inset 0 0 0 1.5px var(--pm); }
+.mc-head { display: flex; align-items: center; gap: 7px; }
+.mc-head .ch-name { font-size: 12.5px; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-pnl { margin-left: auto; font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+.mc-pnl.pos { color: var(--pm-green); } .mc-pnl.neg { color: var(--led-red); }
+.mc-row { display: flex; align-items: center; gap: 12px; }
+.mc-meters { display: flex; flex-direction: column; gap: 5px; flex: 1 1 auto; min-width: 0; }
+.mc-meter { display: flex; align-items: center; gap: 7px; }
+.mc-bar { flex: 1 1 auto; min-width: 34px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.mc-fill { display: block; height: 100%; background: var(--pm); border-radius: 3px; }
+.mc-lbl { font-family: var(--mono); font-size: 8px; letter-spacing: 0.5px; color: var(--muted); width: 26px; flex: 0 0 auto; }
+.mc-val { font-family: var(--mono); font-size: 10.5px; color: var(--text); width: 38px; text-align: right; flex: 0 0 auto; }
+.mc-pads { display: flex; gap: 6px; flex: 0 0 auto; transform: scale(0.82); transform-origin: right center; }
+
+/* master mixer — small sortable colored pads (tap = jump, hold = reorder) */
+.mx-mixer { flex: 0 0 auto; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
+.mx-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.mx-title { font-family: var(--mono); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.mx-gb { display: inline-flex; align-items: center; gap: 5px; }
+.mx-gb-lbl { font-family: var(--mono); font-size: 8px; text-transform: uppercase; color: var(--muted); }
+.mx-gb button { font-family: var(--mono); font-size: 10px; padding: 5px 9px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+.mx-pads { display: flex; flex-wrap: wrap; gap: 7px; }
+.mx-pad {
+  width: 42px; height: 36px; border-radius: 8px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+  color: #0d0e0f; background: var(--pad); border: 1px solid rgba(0,0,0,0.28);
+  display: grid; place-items: center; cursor: pointer; touch-action: none;
+  opacity: 0.66; transition: opacity 0.12s, box-shadow 0.12s;
+}
+.mx-pad.on { opacity: 1; box-shadow: 0 0 0 2px var(--pad), 0 0 9px var(--pad); }
+.mx-pad.muted { opacity: 0.3; filter: grayscale(0.55); }
+.mx-pad.solo { box-shadow: inset 0 0 0 2px #fff; }
+.mx-pad.dragging { opacity: 0.95; z-index: 5; }
+
+/* expanded edit sheet — reuse the settings sheet chrome; the full strip sits inside */
+.m-editsheet .channel--m { width: 100%; padding-top: 6px; }

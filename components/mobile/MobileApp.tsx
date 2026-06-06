@@ -21,6 +21,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
 import { computeLiveMarks } from "@/lib/desk/liveMarks";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
+import { MixerPads } from "@/components/mobile/MixerPads";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
@@ -48,8 +49,9 @@ const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
 
 export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
-  const { groupBy, move, canWrite } = useChannelOrdering(desk.strategists, write);
-  const [rearrange, setRearrange] = useState(false); // Mix-tab reorder mode (native, not DnD)
+  const { groupBy, persist, canWrite } = useChannelOrdering(desk.strategists, write);
+  const [expanded, setExpanded] = useState<string | null>(null); // Mix: channel open for full-knob editing
+  const PER_PAGE = 4; // channels per swipe page in the Mix grid
   const [tab, setTab] = useState<Tab>("live");
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   // Live: additive view toggles (like indicator chips) — chart is the base.
@@ -79,9 +81,19 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   function onDeckScroll() {
     const el = deckRef.current;
     if (!el) return;
-    const per = el.scrollWidth / desk.strategists.length || 1;
-    setSlide(Math.round(el.scrollLeft / per));
+    setSlide(Math.round(el.scrollLeft / (el.clientWidth || 1))); // page-based now (4 channels/page)
   }
+  // tap a mixer pad → scroll the grid to that channel's page
+  const jumpToChannel = (slug: string) => {
+    const i = desk.strategists.findIndex((s) => s.slug === slug);
+    if (i < 0) return;
+    const el = deckRef.current;
+    if (el) el.scrollTo({ left: Math.floor(i / PER_PAGE) * el.clientWidth, behavior: "smooth" });
+  };
+  // chunk channels into pages of PER_PAGE for the swipe grid
+  const pages: typeof desk.strategists[] = [];
+  for (let i = 0; i < desk.strategists.length; i += PER_PAGE) pages.push(desk.strategists.slice(i, i + PER_PAGE));
+  const pageSlugs = (pages[slide] ?? []).map((s) => s.slug); // highlight the current page's pads
 
   return (
     <div className="m-app">
@@ -158,44 +170,38 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
 
         {tab === "mix" && (
           <div className="m-mix">
-            {canWrite && (
-              <div className="m-mix-tools">
-                <span className="m-gb">
-                  <span className="m-gb-label">group</span>
-                  <button type="button" onClick={() => groupBy("underlying")}>ticker</button>
-                  <button type="button" onClick={() => groupBy("regime")}>regime</button>
-                </span>
-                <button type="button" className={`m-rearrange${rearrange ? " on" : ""}`} aria-pressed={rearrange} onClick={() => setRearrange((v) => !v)}>
-                  {rearrange ? "✓ done" : "↔ rearrange"}
-                </button>
-              </div>
-            )}
-            <div className="m-deck" ref={deckRef} onScroll={onDeckScroll}>
-              {desk.strategists.map((s, i) => (
-                <div className="m-slide" key={s.slug}>
-                  {rearrange && canWrite && (
-                    <div className="m-move">
-                      <button type="button" onClick={() => move(s.slug, -1)} disabled={i === 0} aria-label="move earlier">◀</button>
-                      <span className="m-move-pos">{i + 1}/{desk.strategists.length}</span>
-                      <button type="button" onClick={() => move(s.slug, 1)} disabled={i === desk.strategists.length - 1} aria-label="move later">▶</button>
-                    </div>
-                  )}
-                  <ChannelStrip
-                    strategist={s}
-                    pnl={feed.pnlByStrategist[s.slug]}
-                    active={isActive(s.slug)}
-                    ducked={anySolo && !s.config.soloed && !s.config.muted}
-                    mobile
-                  />
+            {/* channel grid — 4 compact strips per page, swipe to the next 4 */}
+            <div className="m-grid" ref={deckRef} onScroll={onDeckScroll}>
+              {pages.map((page, pi) => (
+                <div className="m-page" key={pi}>
+                  {page.map((s) => (
+                    <ChannelStrip
+                      key={s.slug}
+                      strategist={s}
+                      pnl={feed.pnlByStrategist[s.slug]}
+                      active={isActive(s.slug)}
+                      ducked={anySolo && !s.config.soloed && !s.config.muted}
+                      mobile
+                      compact
+                      onExpand={() => setExpanded(s.slug)}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
-            <div className="m-dots">
-              {desk.strategists.map((s, i) => (
-                <i key={s.slug} className={i === slide ? "on" : ""} />
-              ))}
+            <div className="m-pagedots">
+              {pages.map((_, i) => <i key={i} className={i === slide ? "on" : ""} />)}
             </div>
             <button className="m-addch" onClick={() => setAddOpen(true)}>+ Add Channel</button>
+            {/* master mixer — all channels as small sortable pads (tap=jump, hold=reorder) */}
+            <MixerPads
+              strategists={desk.strategists}
+              focusedSlugs={pageSlugs}
+              onJump={jumpToChannel}
+              persist={persist}
+              groupBy={groupBy}
+              canWrite={canWrite}
+            />
           </div>
         )}
       </main>
@@ -238,6 +244,31 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
           </div>
         </div>
       )}
+
+      {/* Expanded channel — the full strip with draggable knobs, opened from a compact
+          grid card (tap-to-expand). Tap the scrim or ✕ to close. */}
+      {expanded && (() => {
+        const s = desk.strategists.find((x) => x.slug === expanded);
+        if (!s) return null;
+        return (
+          <div className="m-scrim" onClick={() => setExpanded(null)}>
+            <div className="m-sheet m-editsheet" onClick={(e) => e.stopPropagation()}>
+              <div className="m-grab" />
+              <div className="m-sheet-head">
+                <span>{s.name}</span>
+                <button className="m-sheet-x" onClick={() => setExpanded(null)} aria-label="close">✕</button>
+              </div>
+              <ChannelStrip
+                strategist={s}
+                pnl={feed.pnlByStrategist[s.slug]}
+                active={isActive(s.slug)}
+                ducked={anySolo && !s.config.soloed && !s.config.muted}
+                mobile
+              />
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
