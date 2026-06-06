@@ -203,8 +203,8 @@ const TOOL = { name: "emit_weekly", description: "Return the narrated weekly aut
 
 async function narrate(digest: WeeklyDigest): Promise<Record<string, unknown> | null> {
   const key = process.env.ANTHROPIC_API_KEY; if (!key) return null;
-  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
-  const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify({ model, max_tokens: 4096, tools: [TOOL], tool_choice: { type: "tool", name: "emit_weekly" }, system: [{ type: "text", text: SYS, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: `Weekly digest:\n\n${JSON.stringify(digest)}` }] }) });
+  const model = process.env.ANTHROPIC_MODEL_WEEKLY ?? "claude-opus-4-8"; // weekly = Opus (see edge fn); daily stays Sonnet
+  const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify({ model, max_tokens: 8192, tools: [TOOL], tool_choice: { type: "tool", name: "emit_weekly" }, system: [{ type: "text", text: SYS, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: `Weekly digest:\n\n${JSON.stringify(digest)}` }] }) });
   if (!res.ok) { console.error(`  (LLM failed: ${res.status} ${(await res.text()).slice(0, 200)})`); return null; }
   const j = await res.json();
   return (j.content ?? []).find((b: { type: string }) => b.type === "tool_use")?.input ?? null;

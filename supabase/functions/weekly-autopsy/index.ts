@@ -1,3 +1,7 @@
+// ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05d  (the weekly synthesis now runs on OPUS (claude-opus-4-8)
+//   — once a week, decision-driving, latency-insensitive, ~1.67x Sonnet cost = trivial; stronger
+//   reasoning for the cross-day synthesis + ranked suggestions. Decoupled from the daily (still
+//   Sonnet) via ANTHROPIC_MODEL_WEEKLY override; max_tokens 4096→8192 for Opus's room. Prior below.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05c  (NAV-truth fix: the equity_snapshots read was capped
 //   at PostgREST's 1000 rows (no pagination), so the curve truncated to the first ~2 days and
 //   NAV-truth read flat/negative (06-05 showed -$218 vs the real +$6,402). Now paginates the
@@ -31,7 +35,11 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-4-5";
+// The WEEKLY synthesis runs on Opus — once a week, decision-driving, latency-insensitive,
+// so the ~1.67x cost over Sonnet is trivial and the stronger reasoning earns its keep on the
+// cross-day/cross-channel synthesis + ranked suggestions. Decoupled from the daily's
+// ANTHROPIC_MODEL (which stays Sonnet) via a weekly-specific override. (Daily = Sonnet.)
+const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL_WEEKLY") ?? "claude-opus-4-8";
 const sb = createClient(SB_URL, SB_SERVICE);
 
 const ET = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -161,7 +169,7 @@ const TOOL = { name: "emit_weekly", description: "Return the narrated weekly aut
 
 async function narrate(digest: Any): Promise<Any | null> {
   if (!ANTHROPIC_KEY) return null;
-  const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 4096, tools: [TOOL], tool_choice: { type: "tool", name: "emit_weekly" }, system: [{ type: "text", text: SYS, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: `Weekly digest:\n\n${JSON.stringify(digest)}` }] }) });
+  const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 8192, tools: [TOOL], tool_choice: { type: "tool", name: "emit_weekly" }, system: [{ type: "text", text: SYS, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: `Weekly digest:\n\n${JSON.stringify(digest)}` }] }) });
   if (!res.ok) { console.error(`LLM ${res.status}: ${(await res.text()).slice(0, 200)}`); return null; }
   const j = await res.json();
   return (j.content ?? []).find((b: Any) => b.type === "tool_use")?.input ?? null;
