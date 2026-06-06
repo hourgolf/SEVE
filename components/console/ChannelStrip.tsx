@@ -219,11 +219,16 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         <div className="mc-head">
           <span className={`ch-dot${active ? " on" : ""}`} />
           <div className="ch-name">{name}</div>
-          <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
           {statusBadge}
           <div className={`mc-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
+          <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
         </div>
         <div className="mc-row">
+          {/* indicator knob — non-interactive (pointer-events:none); a "tap to adjust" cue
+              that mirrors the channel color + risk fill. Tapping it falls through to expand. */}
+          <div className="mc-knob" aria-hidden="true">
+            <Knob value={config.capital_pct} min={0} max={500} onChange={() => {}} color={cssColor} size="sm" />
+          </div>
           <div className="mc-meters">
             <div className="mc-meter"><span className="mc-lbl">RISK</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.capital_pct / 5)}%`, background: meterColor(config.capital_pct / 500) }} /></span><span className="mc-val">{usd0(config.capital_pct)}</span></div>
             <div className="mc-meter"><span className="mc-lbl">STOP</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.daily_stop_usd / 5)}%`, background: meterColor(config.daily_stop_usd / 500) }} /></span><span className="mc-val">{usd0(config.daily_stop_usd)}</span></div>
