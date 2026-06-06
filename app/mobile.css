@@ -585,18 +585,32 @@
    MIX REDESIGN — 4-per-page channel grid + sortable master-mixer pads.
    ============================================================================ */
 
-/* swipe pager: full-width pages, each a column of up-to-4 compact cards */
+/* swipe pager: full-width pages, each a column of up-to-4 compact cards. touch-action
+   pan-x + overflow-y hidden = horizontal swipe only (no vertical "give" on the cards). */
 .m-grid {
   flex: 1 1 auto; min-height: 0;
-  display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+  display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 0;
+  touch-action: pan-x; overscroll-behavior: contain;
 }
 .m-grid::-webkit-scrollbar { display: none; }
 .m-page {
-  flex: 0 0 100%; scroll-snap-align: start;
+  flex: 0 0 100%; height: 100%; scroll-snap-align: start;
   display: flex; flex-direction: column; gap: 8px;
   padding-right: 2px;
 }
+/* add-channel as the final grid card (dashed) — fills its slot like a real card */
+.m-addcard {
+  flex: 1 1 0; min-height: 96px;
+  display: grid; place-items: center;
+  border-style: dashed !important; border-width: 1.5px;
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--muted); cursor: pointer;
+}
+.m-addcard:active { transform: scale(0.992); }
+/* the Mix tab is a fixed, self-contained mixer — no vertical page scroll/bounce */
+.m-screen--mix { overflow: hidden; }
 
 .m-pagedots { display: flex; justify-content: center; gap: 7px; padding: 3px 0 1px; }
 .m-pagedots i { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
@@ -604,7 +618,7 @@
 
 /* compact channel card — overview only (no draggable knobs); tap to expand */
 .channel--mc {
-  flex: 1 1 0; min-height: 96px;
+  flex: 1 1 0; min-height: 96px; max-height: 200px;
   display: flex; flex-direction: column; justify-content: center; gap: 8px;
   padding: 10px 12px; cursor: pointer;
 }

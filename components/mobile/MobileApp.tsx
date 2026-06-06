@@ -90,10 +90,13 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
     const el = deckRef.current;
     if (el) el.scrollTo({ left: Math.floor(i / PER_PAGE) * el.clientWidth, behavior: "smooth" });
   };
-  // chunk channels into pages of PER_PAGE for the swipe grid
-  const pages: typeof desk.strategists[] = [];
-  for (let i = 0; i < desk.strategists.length; i += PER_PAGE) pages.push(desk.strategists.slice(i, i + PER_PAGE));
-  const pageSlugs = (pages[slide] ?? []).map((s) => s.slug); // highlight the current page's pads
+  // chunk channels (+ a trailing "add" card) into pages of PER_PAGE for the swipe grid —
+  // the add-channel lives in the last grid slot so the cards stretch to fill the page.
+  type GridItem = typeof desk.strategists[number] | "add";
+  const gridItems: GridItem[] = [...desk.strategists, "add"];
+  const pages: GridItem[][] = [];
+  for (let i = 0; i < gridItems.length; i += PER_PAGE) pages.push(gridItems.slice(i, i + PER_PAGE));
+  const pageSlugs = (pages[slide] ?? []).filter((it): it is typeof desk.strategists[number] => it !== "add").map((s) => s.slug);
 
   return (
     <div className="m-app">
@@ -174,25 +177,33 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <div className="m-grid" ref={deckRef} onScroll={onDeckScroll}>
               {pages.map((page, pi) => (
                 <div className="m-page" key={pi}>
-                  {page.map((s) => (
-                    <ChannelStrip
-                      key={s.slug}
-                      strategist={s}
-                      pnl={feed.pnlByStrategist[s.slug]}
-                      active={isActive(s.slug)}
-                      ducked={anySolo && !s.config.soloed && !s.config.muted}
-                      mobile
-                      compact
-                      onExpand={() => setExpanded(s.slug)}
-                    />
-                  ))}
+                  {page.map((it) => {
+                    if (it === "add") {
+                      return (
+                        <button key="add" type="button" className="channel channel--mc m-addcard" onClick={() => setAddOpen(true)}>
+                          <span>+ ADD CHANNEL</span>
+                        </button>
+                      );
+                    }
+                    return (
+                      <ChannelStrip
+                        key={it.slug}
+                        strategist={it}
+                        pnl={feed.pnlByStrategist[it.slug]}
+                        active={isActive(it.slug)}
+                        ducked={anySolo && !it.config.soloed && !it.config.muted}
+                        mobile
+                        compact
+                        onExpand={() => setExpanded(it.slug)}
+                      />
+                    );
+                  })}
                 </div>
               ))}
             </div>
             <div className="m-pagedots">
               {pages.map((_, i) => <i key={i} className={i === slide ? "on" : ""} />)}
             </div>
-            <button className="m-addch" onClick={() => setAddOpen(true)}>+ Add Channel</button>
             {/* master mixer — all channels as small sortable pads (tap=jump, hold=reorder) */}
             <MixerPads
               strategists={desk.strategists}

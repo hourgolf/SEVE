@@ -26,6 +26,10 @@ export interface ChannelStripProps {
   onExpand?: () => void;
 }
 
+// Compact-card Risk/Stop meter fill: a GLOBAL green→red heat by AMOUNT (not the channel's
+// swatch) — low = green (safe), high = red (hot). hue 130 (green) → 0 (red).
+const meterColor = (f: number) => `hsl(${Math.round(130 * (1 - Math.max(0, Math.min(1, f))))} 72% 48%)`;
+
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging, compact, onExpand }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
   const { persistConfig, renameChannel, setChannelAccent, deleteChannel, canWrite } = useDeskWrite();
@@ -221,8 +225,8 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         </div>
         <div className="mc-row">
           <div className="mc-meters">
-            <div className="mc-meter"><span className="mc-lbl">RISK</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.capital_pct / 5)}%` }} /></span><span className="mc-val">{usd0(config.capital_pct)}</span></div>
-            <div className="mc-meter"><span className="mc-lbl">STOP</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.daily_stop_usd / 5)}%` }} /></span><span className="mc-val">{usd0(config.daily_stop_usd)}</span></div>
+            <div className="mc-meter"><span className="mc-lbl">RISK</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.capital_pct / 5)}%`, background: meterColor(config.capital_pct / 500) }} /></span><span className="mc-val">{usd0(config.capital_pct)}</span></div>
+            <div className="mc-meter"><span className="mc-lbl">STOP</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.daily_stop_usd / 5)}%`, background: meterColor(config.daily_stop_usd / 500) }} /></span><span className="mc-val">{usd0(config.daily_stop_usd)}</span></div>
           </div>
           <div className="mc-pads" onClick={(e) => e.stopPropagation()}>{pads}</div>
         </div>
