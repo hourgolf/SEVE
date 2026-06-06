@@ -480,6 +480,20 @@
 .m-app .chart-toggle button,
 .m-app .ind-chips button,
 .m-app .seg button { min-height: 30px; }
+/* trim the indicator chips' side padding just enough that the LINE/CANDLES toggle
+   (now in the bottom row) shares the row with them instead of wrapping below. */
+.m-app .ind-chips button { padding-left: 6px; padding-right: 6px; }
+
+/* Header controls: SPY/QQQ stays left; stack duration (top) over candle-interval
+   (bottom), pinned to the right edge (was a single wrapping row). Top-align the row
+   so SPY/QQQ lines up with the top (duration) toggle, not the middle of the stack. */
+.m-app .chart-controls--top { align-items: flex-start; }
+.m-app .chart-controls-right {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
 
 /* Option chain (compact = mobile only) — taller rows = a finger-friendly tap per strike. */
 .m-app .table-fit td, .m-app .table-fit th { padding-top: 7px; padding-bottom: 7px; }

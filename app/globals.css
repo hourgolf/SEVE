@@ -625,23 +625,32 @@ svg.spark {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-/* range presets are the primary control (blue active, via base .seg) */
-/* secondary desktop interval override — dimmer + neutral active state */
+/* range presets are the primary control (blue active, via base .seg); the interval
+   is dimmer when idle but gets a distinct RED active state so it never reads as a
+   second blue duration control. The extra `.seg` raises specificity above the base
+   `.seg button.on` (which is blue and declared later) so the red actually wins. */
 .seg--interval button {
   font-size: 8.5px;
   padding: 3px 6px;
   color: var(--muted-2);
 }
-.seg--interval button.on {
-  background: rgba(233, 238, 240, 0.16);
-  color: var(--text);
+.seg.seg--interval button.on {
+  background: var(--red);
+  color: var(--bg);
 }
-/* bottom row: indicator chips (left) + editable EMA periods (right) */
+/* bottom row: indicator chips (left) + EMA periods & LINE/CANDLES toggle (right) */
 .chart-controls--bottom {
   justify-content: space-between;
   margin-top: 9px;
   padding-top: 9px;
   border-top: 1px solid var(--border);
+}
+/* right-justified cluster in the bottom row (EMA period inputs + line/candle toggle) */
+.chart-foot-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 /* indicator toggles share the segmented-control language of .chart-toggle / .seg
    (connected box, internal dividers, solid-fill active) so the chart's controls

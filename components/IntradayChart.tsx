@@ -351,11 +351,13 @@ export function IntradayChart({
               ))}
             </span>
           )}
-          <span className="chart-toggle" role="group" aria-label="chart type">
-            <button className={mode === "line" ? "on" : ""} onClick={() => setModeP("line")} aria-pressed={mode === "line"}>LINE</button>
-            <button className={mode === "candles" ? "on" : ""} onClick={() => setModeP("candles")} aria-pressed={mode === "candles"}>CANDLES</button>
-          </span>
+          {/* duration (top) over candle-interval (bottom), stacked + right-justified on mobile */}
           <span className="chart-controls-right">
+            <span className="seg seg--range" role="group" aria-label="range">
+              {RANGE_KEYS.map((rk) => (
+                <button key={rk} className={range === rk ? "on" : ""} onClick={() => setRangeP(rk)} aria-pressed={range === rk}>{rk}</button>
+              ))}
+            </span>
             {!isDaily && (
               <span className="seg seg--interval" role="group" aria-label="interval">
                 {INTRADAY_TFS.map((m) => (
@@ -365,11 +367,6 @@ export function IntradayChart({
                 ))}
               </span>
             )}
-            <span className="seg seg--range" role="group" aria-label="range">
-              {RANGE_KEYS.map((rk) => (
-                <button key={rk} className={range === rk ? "on" : ""} onClick={() => setRangeP(rk)} aria-pressed={range === rk}>{rk}</button>
-              ))}
-            </span>
           </span>
         </span>
       </div>
@@ -391,16 +388,24 @@ export function IntradayChart({
             <button className={`ind-chip${showTrades ? " on" : ""}`} onClick={toggle(TRADES_KEY, setShowTrades)} aria-pressed={showTrades} title="Show trade entry/exit markers">TRADES</button>
             <button className={`ind-chip${showLevels ? " on" : ""}`} onClick={toggle(LEVELS_KEY, setShowLevels)} aria-pressed={showLevels} title="Key levels: prior close (PDC), prior-day high/low (PDH/PDL), opening range (ORH/ORL) — intraday">LVL</button>
           </span>
-          {showEma && (
-            <span className="ema-cfg" title="EMA periods (fast / slow)">
-              <span className="ema-tag">EMA</span>
-              <input className="ema-in" style={{ color: C.emaFast }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaFastP || ""} aria-label="EMA fast period" onChange={(e) => setEmaFastP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("fast", Number(e.target.value))} />
-              <span className="ema-sep">/</span>
-              <input className="ema-in" style={{ color: C.emaSlow }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaSlowP || ""} aria-label="EMA slow period" onChange={(e) => setEmaSlowP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("slow", Number(e.target.value))} />
-              <span className="ema-sep">/</span>
-              <input className="ema-in" style={{ color: C.emaThird }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaThirdP || ""} aria-label="EMA third period" onChange={(e) => setEmaThirdP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("third", Number(e.target.value))} />
+          {/* right-justified: editable EMA periods (desktop) + the LINE/CANDLES toggle,
+              dropped here from the header so it sits beside the indicator chips, but separated. */}
+          <span className="chart-foot-right">
+            {showEma && (
+              <span className="ema-cfg" title="EMA periods (fast / slow)">
+                <span className="ema-tag">EMA</span>
+                <input className="ema-in" style={{ color: C.emaFast }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaFastP || ""} aria-label="EMA fast period" onChange={(e) => setEmaFastP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("fast", Number(e.target.value))} />
+                <span className="ema-sep">/</span>
+                <input className="ema-in" style={{ color: C.emaSlow }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaSlowP || ""} aria-label="EMA slow period" onChange={(e) => setEmaSlowP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("slow", Number(e.target.value))} />
+                <span className="ema-sep">/</span>
+                <input className="ema-in" style={{ color: C.emaThird }} type="number" inputMode="numeric" min={EMA_MIN} max={EMA_MAX} value={emaThirdP || ""} aria-label="EMA third period" onChange={(e) => setEmaThirdP(Math.floor(Number(e.target.value)) || 0)} onBlur={(e) => commitEma("third", Number(e.target.value))} />
+              </span>
+            )}
+            <span className="chart-toggle" role="group" aria-label="chart type">
+              <button className={mode === "line" ? "on" : ""} onClick={() => setModeP("line")} aria-pressed={mode === "line"}>LINE</button>
+              <button className={mode === "candles" ? "on" : ""} onClick={() => setModeP("candles")} aria-pressed={mode === "candles"}>CANDLES</button>
             </span>
-          )}
+          </span>
         </div>
       </div>
     </div>

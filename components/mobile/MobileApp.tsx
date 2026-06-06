@@ -76,7 +76,10 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const down = feed.fundPnl.dayPnl < 0;
   const dayLed = (down ? "-" : "") + Math.abs(Math.round(feed.fundPnl.dayPnl));
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
-  const spyColor = spotUp ? "var(--pm-green)" : "var(--led-red)";
+  // Header headline = fund NAV (total) + day P&L — both colored by the day's direction
+  // (green up / red down), now that the desk trades SPY *and* QQQ and a lone SPY price
+  // belongs to the chart, not the global vitals.
+  const navLed = String(Math.round(feed.fundPnl.nav));
 
   function onDeckScroll() {
     const el = deckRef.current;
@@ -115,7 +118,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             </span>
           </div>
           <div className="m-led">
-            <LedDisplay value={data.spot != null ? data.spot.toFixed(2) : "----"} digits={6} color={spyColor} caption={`${symbol.toLowerCase()} $`} />
+            <LedDisplay value={navLed} digits={6} color={dayColor} caption="fund $" />
           </div>
           <div className="m-led">
             <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
