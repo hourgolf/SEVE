@@ -49,7 +49,7 @@ const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
 
 export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
-  const { groupBy, persist, canWrite } = useChannelOrdering(desk.strategists, write);
+  const { persist, canWrite } = useChannelOrdering(desk.strategists, write);
   const [expanded, setExpanded] = useState<string | null>(null); // Mix: channel open for full-knob editing
   const PER_PAGE = 4; // channels per swipe page in the Mix grid
   const [tab, setTab] = useState<Tab>("live");
@@ -210,7 +210,6 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               focusedSlugs={pageSlugs}
               onJump={jumpToChannel}
               persist={persist}
-              groupBy={groupBy}
               canWrite={canWrite}
             />
           </div>

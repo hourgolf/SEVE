@@ -36,13 +36,12 @@ function Pad({ s, focused, sortable, onJump }: { s: StrategistState; focused: bo
 // channel; press-and-hold → drag to reorder (persists via the shared ordering hook).
 // Reorder + group-by are operator-gated; tap-to-jump always works.
 export function MixerPads({
-  strategists, focusedSlugs, onJump, persist, groupBy, canWrite,
+  strategists, focusedSlugs, onJump, persist, canWrite,
 }: {
   strategists: StrategistState[];
   focusedSlugs: string[];
   onJump: (slug: string) => void;
   persist: (order: string[]) => void;
-  groupBy: (key: "underlying" | "regime") => void;
   canWrite: boolean;
 }) {
   const order = strategists.map((s) => s.slug);
@@ -61,13 +60,6 @@ export function MixerPads({
     <div className="mx-mixer">
       <div className="mx-bar">
         <span className="mx-title">Mixer</span>
-        {canWrite && (
-          <span className="mx-gb">
-            <span className="mx-gb-lbl">group</span>
-            <button type="button" onClick={() => groupBy("underlying")}>ticker</button>
-            <button type="button" onClick={() => groupBy("regime")}>regime</button>
-          </span>
-        )}
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={order} strategy={horizontalListSortingStrategy}>
