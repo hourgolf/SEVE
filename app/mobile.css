@@ -188,89 +188,6 @@
   border-color: var(--pm-green);
 }
 
-/* ---- Mix carousel: swipe full strips ---- */
-.m-deck {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-}
-.m-deck::-webkit-scrollbar {
-  display: none;
-}
-.m-slide {
-  flex: 0 0 86%;
-  scroll-snap-align: center;
-}
-.m-slide > .channel {
-  width: 100%;
-  height: 100%;
-}
-
-/* Mix-tab ordering: group-by chips + native rearrange mode (mobile equivalent of the
-   desktop drag-reorder — big touch targets instead of dnd). */
-.m-mix-tools {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; margin-bottom: 10px;
-}
-.m-gb { display: inline-flex; align-items: center; gap: 6px; }
-.m-gb-label {
-  font-family: var(--mono); font-size: 9px; letter-spacing: 0.5px;
-  text-transform: uppercase; color: var(--muted);
-}
-.m-gb button, .m-rearrange {
-  font-family: var(--mono); font-size: 11px; padding: 7px 12px; border-radius: 7px;
-  background: var(--panel-2); border: 1px solid var(--border); color: var(--text); cursor: pointer;
-}
-.m-gb button:active, .m-rearrange:active { transform: scale(0.96); }
-.m-rearrange.on { background: var(--amber); border-color: var(--amber); color: #1a1205; font-weight: 600; }
-.m-move {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; margin-bottom: 8px;
-}
-.m-move button {
-  font-size: 15px; line-height: 1; min-width: 46px; height: 38px; border-radius: 8px;
-  background: var(--amber); border: 1px solid var(--amber); color: #1a1205; cursor: pointer;
-}
-.m-move button:disabled { opacity: 0.32; background: var(--panel-2); border-color: var(--border); color: var(--muted); }
-.m-move-pos { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-.m-dots {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  padding-top: 2px;
-}
-.m-dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #33403f;
-  transition: background 0.15s, box-shadow 0.15s;
-}
-.m-dots i.on {
-  background: var(--pm-green);
-  box-shadow: 0 0 6px var(--pm-green);
-}
-.m-addch {
-  display: block;
-  width: 100%;
-  margin-top: 14px;
-  padding: 12px;
-  border-radius: 9px;
-  border: 1px dashed var(--border-bright, #2a3a42);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text, #e6eef0);
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
 /* ---- bottom tab bar (cream 909 body, icons in drum-machine pads) ---- */
 .m-tabs {
   flex: 0 0 auto;
@@ -383,16 +300,6 @@
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-}
-.m-mix .m-deck {
-  flex: 1 1 auto;
-  align-items: stretch;
-  min-height: 0;
-}
-.m-slide > .channel {
-  width: 100%;
-  height: 100%;
-  justify-content: space-between;
 }
 
 /* mobile channel strip: label top · knobs centre · mute/solo bottom */
@@ -651,9 +558,6 @@
 .mx-mixer { flex: 0 0 auto; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
 .mx-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
 .mx-title { font-family: var(--mono); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
-.mx-gb { display: inline-flex; align-items: center; gap: 5px; }
-.mx-gb-lbl { font-family: var(--mono); font-size: 8px; text-transform: uppercase; color: var(--muted); }
-.mx-gb button { font-family: var(--mono); font-size: 10px; padding: 5px 9px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
 .mx-pads { display: flex; flex-wrap: wrap; gap: 7px; }
 .mx-pad {
   width: 42px; height: 36px; border-radius: 8px;
