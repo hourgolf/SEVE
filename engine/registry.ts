@@ -20,7 +20,7 @@
 import type { Bar, Evaluate } from "./types";
 import { breakoutEvaluate, DEFAULT_BREAKOUT_PARAMS } from "./strategies/breakout";
 import { fadeEvaluate, DEFAULT_FADE_PARAMS } from "./strategies/fade";
-import { powerEvaluate, DEFAULT_POWER_PARAMS } from "./strategies/power";
+import { powerEvaluate, DEFAULT_POWER_PARAMS, DEFAULT_POWER_MOM30 } from "./strategies/power";
 import { grindEvaluate, DEFAULT_GRIND_PARAMS } from "./strategies/grind";
 import { grindV2Evaluate, DEFAULT_GRIND_V2_PARAMS, DEFAULT_GRIND_V3_PARAMS } from "./strategies/grind-v2";
 
@@ -69,6 +69,18 @@ export const STRATEGY_REGISTRY: Record<string, StrategyDef> = {
     warmupBars: 30,
     mandate: "0DTE gamma — directional lean in the final hour only.",
     build: () => (f, pos) => powerEvaluate(f, pos, DEFAULT_POWER_PARAMS),
+  },
+
+  // Power Hour, retuned — the FINAL 30 MIN only, pure momentum lean (no VWAP gate). The
+  // window sweep (real fills H1) flipped power's gross from −$8.4k (60m) to +$8.9k (30m):
+  // the 15:00–15:30 half was dragging it negative. DRAFT — the live A/B vs base power.
+  "power-final30": {
+    slug: "power-final30",
+    name: "Power Final 30",
+    timeframeMin: 1,
+    warmupBars: 30,
+    mandate: "0DTE gamma — momentum lean in the FINAL 30 MIN only, hard flatten by the bell.",
+    build: () => (f, pos) => powerEvaluate(f, pos, DEFAULT_POWER_MOM30),
   },
 
   // Scalper — many small microstructure momentum bursts, quick in and out.

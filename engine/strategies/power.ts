@@ -14,6 +14,7 @@ export interface PowerParams {
   momConfirm: number; // |mom| ≥ momConfirm·ATR to confirm the lean
   stopAtr: number; // adverse underlying move (in ATRs) that stops us out
   flattenBeforeClose: number; // force flat this many minutes before the close
+  noVwap?: boolean; // drop the VWAP side-gate → pure momentum lean (matches live)
 }
 
 export const DEFAULT_POWER_PARAMS: PowerParams = {
@@ -22,6 +23,17 @@ export const DEFAULT_POWER_PARAMS: PowerParams = {
   stopAtr: 1.0,
   flattenBeforeClose: 3,
 };
+
+// Tightened-window variants (this week's cross-tab: the first half of power hour,
+// 15:00–15:30, was a net loser; the edge is the final 30 min). Same params, shorter
+// active window. Backtested vs the 60-min default before any live wiring.
+export const DEFAULT_POWER_FINAL35: PowerParams = { ...DEFAULT_POWER_PARAMS, windowMin: 35 };
+export const DEFAULT_POWER_FINAL30: PowerParams = { ...DEFAULT_POWER_PARAMS, windowMin: 30 };
+// VWAP-off (momentum-only) variants — match how LIVE power trades (per-bar VWAP bug ≈
+// no gate) and isolate the WINDOW change. These are the ones that map to live wiring.
+export const DEFAULT_POWER_MOM60: PowerParams = { ...DEFAULT_POWER_PARAMS, windowMin: 60, noVwap: true };
+export const DEFAULT_POWER_MOM35: PowerParams = { ...DEFAULT_POWER_PARAMS, windowMin: 35, noVwap: true };
+export const DEFAULT_POWER_MOM30: PowerParams = { ...DEFAULT_POWER_PARAMS, windowMin: 30, noVwap: true };
 
 export function powerEvaluate(
   f: Features,
@@ -43,8 +55,11 @@ export function powerEvaluate(
   if (f.minutesToClose <= p.flattenBeforeClose) return null; // too close to the bell
   if (f.atr <= 0) return null;
 
-  const bull = f.close > f.vwap && f.mom > p.momConfirm * f.atr;
-  const bear = f.close < f.vwap && f.mom < -p.momConfirm * f.atr;
+  // `noVwap` drops the VWAP side-gate (which live runs with ≈off due to the per-bar
+  // VWAP bug, AND which the H1 backtest shows removes power's counter-VWAP edge) →
+  // a pure momentum lean into the close, matching how live power actually trades.
+  const bull = (p.noVwap || f.close > f.vwap) && f.mom > p.momConfirm * f.atr;
+  const bear = (p.noVwap || f.close < f.vwap) && f.mom < -p.momConfirm * f.atr;
 
   if (bull) return { kind: "enter", direction: "call", reason: "power_hour_long" };
   if (bear) return { kind: "enter", direction: "put", reason: "power_hour_short" };
