@@ -1,3 +1,8 @@
+// ⚑ WORKER VERSION: 2026-06-05c  (POWER-FINAL30 registered — power retuned to the FINAL 30
+//   MIN + a pure momentum lean (no VWAP gate). Window sweep (H1 real fills) flipped power's
+//   gross −$8.4k (60m) → +$8.9k (30m); 15:00–15:30 was dragging it negative. Trades once a
+//   strategists row + config exist (26_power_final30_channel.sql) — that file also MUTES base
+//   `power` to avoid same-OCC collision in the final half-hour. Exact slug `power-final30`. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-05b  (GRIND-V3 registered — the disciplined-scalper rework
 //   (grindV3Eval): trend-gated (er≥0.35) bigger-burst entries, AM-start + 14:00 afternoon
 //   curfew, grind's FAST fixed-target exit (NO trail — it backfired in chop, H1 backtest).
@@ -295,6 +300,24 @@ function powerEval(f: Features, pos: Pos | null): Intent {
   if (f.close < f.vwap && f.mom < -P.momConfirm * f.atr) return { kind: "enter", direction: "put", reason: "power_hour_short" };
   return null;
 }
+// Power Hour, retuned (backtested H1 real fills): the FINAL 30 MIN only + a pure
+// MOMENTUM lean (no VWAP gate). The window sweep flipped power's gross from −$8.4k
+// (60m) to +$8.9k (30m) — 15:00–15:30 was dragging it negative; the edge is the last
+// half-hour. (No VWAP gate matches base power's live behaviour — the per-bar VWAP bug
+// already makes f.vwap ≈ close, so the gate was ~off anyway.) Mirrors DEFAULT_POWER_MOM30.
+function powerFinal30Eval(f: Features, pos: Pos | null): Intent {
+  const P = { windowMin: 30, momConfirm: 0.25, stopAtr: 1.0, flatten: 3 };
+  if (pos) {
+    if (f.minutesToClose <= P.flatten) return { kind: "exit", reason: "eod_flatten" };
+    if (pos.optType === "call" && f.close < pos.entryUnderlying - P.stopAtr * f.atr) return { kind: "exit", reason: "stop" };
+    if (pos.optType === "put" && f.close > pos.entryUnderlying + P.stopAtr * f.atr) return { kind: "exit", reason: "stop" };
+    return null;
+  }
+  if (f.minutesToClose > P.windowMin || f.minutesToClose <= P.flatten || f.atr <= 0) return null;
+  if (f.mom > P.momConfirm * f.atr) return { kind: "enter", direction: "call", reason: "power_hour_long" };
+  if (f.mom < -P.momConfirm * f.atr) return { kind: "enter", direction: "put", reason: "power_hour_short" };
+  return null;
+}
 function grindEval(f: Features, pos: Pos | null): Intent {
   const P = { momTrigger: 0.5, volMin: 1.1, targetAtr: 0.6, stopAtr: 0.5, timeStop: 5, flatten: 10 };
   if (pos) {
@@ -336,6 +359,7 @@ const REGISTRY: Record<string, { evaluate: Evaluate; tf: number; warmup: number 
   breakout:   { evaluate: breakoutEval, tf: 1, warmup: 30 },
   fade:       { evaluate: fadeEval,     tf: 1, warmup: 30 },
   power:      { evaluate: powerEval,    tf: 1, warmup: 30 },
+  "power-final30": { evaluate: powerFinal30Eval, tf: 1, warmup: 30 },
   grind:      { evaluate: grindEval,    tf: 1, warmup: 30 },
   "grind-v3": { evaluate: grindV3Eval,  tf: 1, warmup: 30 },
 };
