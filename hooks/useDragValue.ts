@@ -44,6 +44,15 @@ export function useDragValue(opts: UseDragValueOpts) {
   const latest = useRef(value);
   latest.current = value;
 
+  // Touch (coarse pointer) needs MORE travel per sweep — a finger is far less precise
+  // than a mouse, so the same px/value sensitivity feels twitchy. ~45% longer drag for
+  // the full range makes landing a value far easier on a phone.
+  const fullRange = useRef(pixelsForFullRange);
+  fullRange.current =
+    typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
+      ? Math.round(pixelsForFullRange * 1.45)
+      : pixelsForFullRange;
+
   const clampSnap = useCallback(
     (v: number) => {
       const snapped = min + Math.round((v - min) / step) * step;
@@ -75,7 +84,7 @@ export function useDragValue(opts: UseDragValueOpts) {
       const fine = e.shiftKey ? 6 : 1;
       const deltaPx = a.y - e.clientY; // up = increase
       const next = clampSnap(
-        a.value + (deltaPx / (pixelsForFullRange * fine)) * (max - min)
+        a.value + (deltaPx / (fullRange.current * fine)) * (max - min)
       );
       if (next !== latest.current) {
         latest.current = next;

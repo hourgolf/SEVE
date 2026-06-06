@@ -556,3 +556,27 @@
   flex-basis: 100%;
   row-gap: 7px;
 }
+
+/* ============================================================================
+   P2 — touch-ergonomics polish (target: iPhone 17 Pro, 402px). The shared
+   components are desktop-first; these enlarge the TOUCH targets on the phone only.
+   ============================================================================ */
+
+/* Knobs — bigger well + cap (the channel strips use the md knob). Pairs with the
+   coarse-pointer travel boost in useDragValue (~45% more drag = far less twitchy). */
+.m-app .knob-md .knob-well { width: 68px; height: 68px; }
+.m-app .knob-md .knob-cap { width: 58px; height: 58px; }
+
+/* Chart toolbar — taller tap targets; hide the fiddly EMA period inputs on the phone
+   (the EMA *toggle* stays in the indicator chips; periods keep their 9/21/50 defaults). */
+.m-app .ema-cfg { display: none; }
+.m-app .chart-toggle button,
+.m-app .ind-chips button,
+.m-app .seg button { min-height: 30px; }
+
+/* Option chain (compact = mobile only) — taller rows = a finger-friendly tap per strike. */
+.m-app .table-fit td, .m-app .table-fit th { padding-top: 7px; padding-bottom: 7px; }
+
+/* Position close — bigger ✕ / ✓ confirm targets (were small table-cell buttons). */
+.m-app .pos-close, .m-app .pos-cancel { min-width: 34px; min-height: 30px; font-size: 15px; line-height: 1; }
+.m-app .pos-confirm { gap: 8px; }
