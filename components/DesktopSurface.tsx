@@ -14,7 +14,7 @@ import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useDeskDispatch } from "@/hooks/useDeskState";
+import { useChannelOrdering } from "@/hooks/useChannelOrdering";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { MasterStrip } from "@/components/console/MasterStrip";
 import { StepRow } from "@/components/console/hw/StepRow";
@@ -95,26 +95,16 @@ export function DesktopSurface({
   const { canWrite } = write;
 
   // ---- drag-to-reorder + group-by (operator only; persists sort_order) ----
-  const dispatch = useDeskDispatch();
+  // Logic lives in the shared useChannelOrdering hook (mobile uses it too); desktop just
+  // drives `persist` from dnd-kit's drag end.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const channelOrder = desk.strategists.map((s) => s.slug);
-  const persistOrder = (order: string[]) => {
-    dispatch({ type: "REORDER", order }); // optimistic
-    const byId = new Map(desk.strategists.map((s) => [s.slug, s.id]));
-    void write.reorderChannels(order.map((sl) => byId.get(sl)).filter((x): x is string => !!x));
-  };
+  const { order: channelOrder, persist, groupBy } = useChannelOrdering(desk.strategists, write);
   const onDragEnd = (e: DragEndEvent) => {
     const from = channelOrder.indexOf(String(e.active.id));
     const to = e.over ? channelOrder.indexOf(String(e.over.id)) : -1;
     if (from < 0 || to < 0 || from === to) return;
-    persistOrder(arrayMove(channelOrder, from, to));
+    persist(arrayMove(channelOrder, from, to));
   };
-  const groupBy = (key: "underlying" | "regime") =>
-    persistOrder(
-      [...desk.strategists]
-        .sort((a, b) => String(a[key] || "").localeCompare(String(b[key] || "")) || a.name.localeCompare(b.name))
-        .map((s) => s.slug)
-    );
 
   // occ_symbol → live option mark (delta-extrapolated off the fast spot tick), so
   // open positions mark in real time, not once a minute. Recomputes each spot tick.

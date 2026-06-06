@@ -356,7 +356,7 @@ export function IntradayChart({
             <button className={mode === "candles" ? "on" : ""} onClick={() => setModeP("candles")} aria-pressed={mode === "candles"}>CANDLES</button>
           </span>
           <span className="chart-controls-right">
-            {!mobile && !isDaily && (
+            {!isDaily && (
               <span className="seg seg--interval" role="group" aria-label="interval">
                 {INTRADAY_TFS.map((m) => (
                   <button key={m} className={tf === m ? "on" : ""} onClick={() => setTfP(m)} aria-pressed={tf === m}>
