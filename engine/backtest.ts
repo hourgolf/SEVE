@@ -17,7 +17,7 @@
 //                 modeled, so still not a final go/no-go number.
 // ============================================================================
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { computeFeatures, riskGovernor } from "./engine";
 import { DEFAULT_COST_MODEL, fillWithCost, type CostModel } from "./cost";
 import { openManaged, stepManaged, costGatePass, type ManagedState } from "./manage";
@@ -536,6 +536,10 @@ async function main() {
     let realDays = 0;
 
     const all: Trade[] = [];
+    // Per-session P&L log (one row per trading day, incl. flat no-trade days) — the
+    // input the Monte Carlo resampler bootstraps. Built here so the backtest stays the
+    // single source of truth for trade generation (montecarlo.ts never re-simulates).
+    const perDay: { date: string; pnl: number; trades: number }[] = [];
     for (const s of sessions) {
       const contracts = byDay.get(s.dateET);
       let chainAt: ChainProvider;
@@ -548,7 +552,9 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, cost, management, trailExit));
+      const dayTrades = simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, cost, management, trailExit);
+      all.push(...dayTrades);
+      perDay.push({ date: s.dateET, pnl: Math.round(dayTrades.reduce((a, t) => a + t.pnl, 0) * 100) / 100, trades: dayTrades.length });
     }
     const optLabel = useDatabento
       ? `REAL NBBO · Databento cbbo-1m (${realDays}/${sessions.length} days) + real spread`
@@ -557,6 +563,11 @@ async function main() {
       : "REAL BARS + modeled (Black-Scholes) option chains";
     const span = `${sessions[0].dateET} → ${sessions[sessions.length - 1].dateET} · real ${underlying} 1-min`;
     report(all, sessions.length, stratLabel, optLabel, span);
+    const emitPath = argStr("emit-trades", "");
+    if (emitPath) {
+      writeFileSync(emitPath, JSON.stringify({ strat: stratRaw, underlying, source, options: optMode, span, perDay }));
+      console.log(`  ↳ emitted ${perDay.length}-session P&L log → ${emitPath}`);
+    }
   } else {
     const days = argNum("days", 60);
     const seed = argNum("seed", 1);

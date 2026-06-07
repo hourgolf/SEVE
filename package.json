@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "backtest": "tsx engine/backtest.ts",
+    "montecarlo": "tsx engine/montecarlo.ts",
     "report": "tsx engine/report.ts",
     "golden": "tsx engine/manage.golden.ts",
     "ab": "tsx engine/ab.ts",
