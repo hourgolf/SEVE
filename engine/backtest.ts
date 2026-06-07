@@ -525,7 +525,7 @@ async function main() {
     // Databento gives REAL bid/ask → cross the ACTUAL spread, not the 3% model.
     const cost: CostModel = useDatabento ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL;
     let byDay = new Map();
-    if (useDatabento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET));
+    if (useDatabento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET), underlying);
     else if (useRealOptions) {
       try {
         byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET), underlying);

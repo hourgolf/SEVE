@@ -24,10 +24,13 @@ function idxAtOrBefore(ts: number[], tsMs: number): number {
 
 // Load the local Databento cache grouped by ET session date (= the 0DTE expiration
 // the file is named for). Missing files (days never backfilled) are skipped.
-export function loadDatabentoByDay(dates: string[]): Map<string, Series[]> {
+// `underlying` selects the per-ticker cache dir, mirroring backfill-databento.ts's
+// OUTDIR convention (SPY → data/databento, QQQ → data/databento-qqq).
+export function loadDatabentoByDay(dates: string[], underlying = "SPY"): Map<string, Series[]> {
+  const dir = DIR + (underlying.toUpperCase() === "SPY" ? "" : "-" + underlying.toLowerCase());
   const out = new Map<string, Series[]>();
   for (const date of dates) {
-    const path = `${DIR}/${date}.json`;
+    const path = `${dir}/${date}.json`;
     if (!existsSync(path)) continue;
     let rows: Row[];
     try { rows = JSON.parse(readFileSync(path, "utf8")) as Row[]; } catch { continue; }
