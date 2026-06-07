@@ -97,10 +97,17 @@ study → ONE actionable channel (**BREAK(ALT V3)**, drafted, READY-TO-ARM) and 
     PROFIT); 2026→2025 breakout −$5,460→−$2,125, power −$5,768→−$2,304 (HALVES the loss). In-sample MC:
     halves drawdowns, P(lose) ~90%→~50%, both to ~breakeven. **The FIRST regime lever that survives
     OOS** (ER never did). go-days beat no-go in all 4 cases.
-  - **CAVEATS:** only 2 windows so far; does NOT overcome a structurally bad regime (gated 2025 stays
-    −EV — low-spot cost wall too deep; the gate reduces DAMAGE, doesn't manufacture edge); it's a
-    SESSION-level gate → wiring live = a worker change (compute drift+persistence at 10:30, gate
-    breakout/ORB/power for the rest of the session). **DON'T wire until OOS-hardened on ≥2 more windows.**
+  - **HARDENED → TEMPERED (4-window leave-one-out, 2024-trend / 2025-trend / chop / 2026-mixed):** the
+    2-window result OVER-SOLD it. Gated beats ungated in ALL 4 OOS windows (aggregate breakout
+    −$15,436→−$3,959, power −$13,693→−$2,560) and go-days beat no-go in **7 of 8** holds (direction is
+    right). BUT it only flips to actual PROFIT in the 2026 window; elsewhere it just LOSES LESS — and
+    much of that is MECHANICAL (gate trades ~half the days, channels are −EV, so fewer days = less
+    loss). Genuine predictive edge is strong only in 2026 + 24-trend-power; weak in 25-trend/chop;
+    INVERTED for power in the chop window. Verdict: **a real but MODEST, conservative risk-reducer that
+    does NOT overcome a structurally bad regime — NOT a profit lever. DON'T wire it live.** The live
+    cost gate already does some "trade less on bad setups" work. Park unless a refined signal/threshold
+    (per-channel tuning, better features) lifts the edge meaningfully. The hardening (C) did its job —
+    stopped a premature wire.
 - **Data:** added SPY Databento **May-Aug 2025** (the OOS trend window) to `data/databento` (~116MB).
 
 **METHODOLOGY CAVEATS (don't re-litigate):** backtest is **UNGATED** (the live cost gate softens
@@ -121,10 +128,11 @@ catalog/sizes directly. Local `data/databento*` (gitignored, ~860MB, re-fetchabl
 = the 1DTE+ cache (kept for future multi-leg/reversal work).
 
 **OPEN / TODO (next session):**
-- **HARDEN THE MORNING REGIME GATE (the active thread → C):** backfill ≥2 more OOS windows (varied
-  regimes/spot levels — e.g. 2024-05/08 trend, 2025-11/2026-02 chop), re-run the leave-one-out gate
-  OOS test. If it holds, SPEC the worker change (compute morning net-drift + VWAP-persistence at 10:30,
-  gate breakout/ORB/power for the rest of the session). **DON'T wire to the live worker until hardened.**
+- **MORNING REGIME GATE — HARDENED (4 windows) → DO NOT WIRE.** The 4-window leave-one-out tempered the
+  2-window result: real but MODEST (reduces loss in all 4 OOS holds, but only flips to PROFIT in 2026;
+  elsewhere much of the gain is the mechanical "trade fewer −EV days"). NOT a profit lever — don't wire
+  to the worker. Only revisit if a refined signal/threshold (per-channel tuning, better features than
+  drift+persistence) lifts the edge. Backfilled SPY databento 2024-05/08 + 2025-11/2026-02 for this.
 - **BREAK(ALT V3) is ARMED** (user ran `27_breakout_alt_v3.sql`) — watch the live A/B vs BREAK(ALT);
   if V3 leads across a trending stretch too, retire base BREAK.
 - **13-channel head-to-head:** worker is channel-INDEPENDENT (per-channel `client_order_id`, no
