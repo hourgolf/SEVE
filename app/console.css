@@ -686,23 +686,25 @@
   font-size: 9px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--muted, #7d8a90);
+  color: var(--ink-soft, #55534c);
 }
+/* readable ink-on-cream chip (was dark-context grey, muddy on the chassis); sized to
+   match .add-channel-btn so group/ticker/regime/add read as one matched control set. */
 .group-by button {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 5px;
-  border: 1px solid var(--border-bright, #2a3a42);
-  background: rgba(10, 15, 17, 0.4);
-  color: var(--muted, #7d8a90);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--chassis-edge, #8f8d82);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink-soft, #55534c);
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
-.group-by button:hover { color: var(--text, #cdd6da); border-color: var(--text, #cdd6da); }
+.group-by button:hover { color: var(--ink, #2a2a28); border-color: var(--ink-soft, #55534c); background: rgba(255, 255, 255, 0.72); }
 
 /* ---- channel edit (flip-card): rename + delete ---- */
 .channel { perspective: 1000px; }
@@ -910,12 +912,12 @@
   margin-left: 18px;
   padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid var(--border-bright, #2a3a42);
-  background: rgba(10, 15, 17, 0.5);
-  color: var(--muted, #9aa);
+  border: 1px solid var(--chassis-edge, #8f8d82);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink-soft, #55534c);
   cursor: pointer;
 }
-.add-channel-btn:hover { color: var(--text); border-color: var(--text); }
+.add-channel-btn:hover { color: var(--ink, #2a2a28); border-color: var(--ink-soft, #55534c); background: rgba(255, 255, 255, 0.72); }
 .ac-scrim {
   position: fixed;
   inset: 0;
