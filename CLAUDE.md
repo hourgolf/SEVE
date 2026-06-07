@@ -70,6 +70,39 @@ study → ONE actionable channel (**BREAK(ALT V3)**, drafted, READY-TO-ARM) and 
   orb-trend-rider** near-zero edge but WORST tail DD (−$11.5k p95) → de-risk; power-final30 / grind-v3
   / QQQ-Break-ORB weakest (P(lose) 92-100%, **but UNGATED**).
 
+**EXIT-MGMT + MORNING REGIME GATE (later this session):**
+- **New backtest flags:** `--trail <k>` layers an underlying ATR-chandelier (peak−k·ATR, fires
+  only on a "hold" bar once in profit) onto ANY strat without forking it; `--trail-until <min>`
+  gates it to `minutesToClose > min` — a CLOCK-PHASED exit (protect early, ride the final stretch).
+  montecarlo threads both + now uses a **pid-suffixed temp file** (same-strat exit-variant sweeps
+  no longer collide on `seve-mc-<strat>.json` — that bug silently returned a prior variant's emit).
+- **Power exit is REGIME-DEPENDENT — DON'T wire a fixed trail:** ride-to-close vs ATR-chandelier —
+  trail WINS in chop (Mar26 p50 +$1,998→+$2,485), ride WINS in every trend window. The clock-phased
+  exit (trail k=2.5 until the final 20 min, then ride the MOC surge — power-hour volume RAMPS
+  3.4k→4.8k→13.8k/min across the 3 phases) is the BEST chop exit (p50 +$2,543, P(lose) 17%, Sharpe
+  2.54) but ties the plain trail in trend. **Ride-to-close stays the robust regime-agnostic default**;
+  the phased trail is a chop-ONLY tool with no way to know it's a chop day ex-ante — UNTIL the gate ↓.
+- **MORNING REGIME GATE — the breakthrough (OOS-VALIDATED, NOT YET WIRED):** the desk's perennial
+  "regime-aware allocation" lever, finally with a signal that holds out-of-sample.
+  - **efficiency-ratio FAILS** as a regime classifier — intraday SPY is choppy nearly EVERY day
+    (full-day 1-min ER 0.04–0.07 across all buckets → no intraday-trend variation to detect;
+    corr(morning-ER, day-ER)=0.28). The signal everyone reaches for is the wrong one.
+  - **What WORKS: morning NET DRIFT (|open→10:30 move|, spot-normalized) + VWAP PERSISTENCE (frac of
+    the first hour price holds one side of cumulative VWAP)**, both knowable by ~10:30. High-drift
+    mornings flip breakout +EV (+$27, 31% win vs −$60/−$102); high-persistence → power-ride +$39 /
+    breakout +$7. corr modest (0.19–0.24) but the BUCKETS flip strategies positive.
+  - **The GATE = skip the chop mornings** (combined drift+persistence percentile score < 0.5 → no-go,
+    don't trade that session). **OUT-OF-SAMPLE (fit threshold on one window, apply blind to the other,
+    BOTH directions):** 2025→2026 breakout −$1,229→**+$1,841**, power +$763→**+$2,687** (flips to
+    PROFIT); 2026→2025 breakout −$5,460→−$2,125, power −$5,768→−$2,304 (HALVES the loss). In-sample MC:
+    halves drawdowns, P(lose) ~90%→~50%, both to ~breakeven. **The FIRST regime lever that survives
+    OOS** (ER never did). go-days beat no-go in all 4 cases.
+  - **CAVEATS:** only 2 windows so far; does NOT overcome a structurally bad regime (gated 2025 stays
+    −EV — low-spot cost wall too deep; the gate reduces DAMAGE, doesn't manufacture edge); it's a
+    SESSION-level gate → wiring live = a worker change (compute drift+persistence at 10:30, gate
+    breakout/ORB/power for the rest of the session). **DON'T wire until OOS-hardened on ≥2 more windows.**
+- **Data:** added SPY Databento **May-Aug 2025** (the OOS trend window) to `data/databento` (~116MB).
+
 **METHODOLOGY CAVEATS (don't re-litigate):** backtest is **UNGATED** (the live cost gate softens
 grind/power toward breakeven — the −$5-6k is worst-case, NOT live P&L); **monthly efficiency-ratio
 ≠ intraday 0DTE regime** (these strategies care about per-session character, not multi-week drift —
@@ -88,12 +121,19 @@ catalog/sizes directly. Local `data/databento*` (gitignored, ~860MB, re-fetchabl
 = the 1DTE+ cache (kept for future multi-leg/reversal work).
 
 **OPEN / TODO (next session):**
-- **ARM BREAK(ALT V3):** run `27_breakout_alt_v3.sql` → live paper A/B vs BREAK(ALT) this week; watch
-  Desk P&L; if V3 leads across a trending stretch too, retire base BREAK.
-- **power/grind:** let the live A/B decide — backtest can't rank them. Don't swap.
+- **HARDEN THE MORNING REGIME GATE (the active thread → C):** backfill ≥2 more OOS windows (varied
+  regimes/spot levels — e.g. 2024-05/08 trend, 2025-11/2026-02 chop), re-run the leave-one-out gate
+  OOS test. If it holds, SPEC the worker change (compute morning net-drift + VWAP-persistence at 10:30,
+  gate breakout/ORB/power for the rest of the session). **DON'T wire to the live worker until hardened.**
+- **BREAK(ALT V3) is ARMED** (user ran `27_breakout_alt_v3.sql`) — watch the live A/B vs BREAK(ALT);
+  if V3 leads across a trending stretch too, retire base BREAK.
+- **13-channel head-to-head:** worker is channel-INDEPENDENT (per-channel `client_order_id`, no
+  account-wide guard → two channels hold the same OCC, realized P&L attributed per channel), so an
+  unmute-everything live A/B is clean. Leave base `grind` DISABLED (Sharpe −46, structurally cost-doomed).
+  Read it as per-channel realized daily P&L (Desk → Week).
+- **power/grind:** let the live A/B decide — backtest can't rank them. Don't swap on backtest.
 - **grind-v3 RISK = $500** (should be ~$150 small-validation) — still unresolved from the prior handoff.
-- Optional: proper **regime study** = classify SESSIONS by intraday character (not monthly ER) + control
-  spot-level cost. Optional: `drop index idx_bars_symbol_ts` (~14MB).
+- Optional: `drop index idx_bars_symbol_ts` (~14MB).
 - **Mobile** improvements were shelved mid-session (chart quick-fixes done; the rest deferred).
 
 ## SESSION HANDOFF — 2026-06-06
