@@ -25,6 +25,7 @@ export function LineChart({
   format,
   formatDelta,
   baseline,
+  segmentDelta = false,
   labels,
 }: {
   values: number[];
@@ -36,10 +37,14 @@ export function LineChart({
   hover?: boolean;
   /** Tooltip value formatter (default: String). */
   format?: (v: number) => string;
-  /** Tooltip Δ-vs-baseline formatter (e.g. signedUsd). */
+  /** Tooltip Δ formatter (e.g. signedUsd). */
   formatDelta?: (d: number) => string;
   /** If set, the tooltip shows value − baseline (colored), i.e. P&L since start. */
   baseline?: number;
+  /** Show the Δ vs the PREVIOUS point (value − values[i−1]) instead of vs baseline —
+   *  e.g. a daily equity curve where each point's Δ is that day's P&L, not the
+   *  cumulative run since the window opened. Overrides `baseline` when true. */
+  segmentDelta?: boolean;
   /** Optional x labels aligned to values (e.g. times), shown in the tooltip. */
   labels?: string[];
 }) {
@@ -147,7 +152,9 @@ export function LineChart({
     const leftPct = fx * 100;
     const topPct = (y(values[hi]) / H) * 100;
     const tipT = fx < 0.16 ? "translateX(0)" : fx > 0.84 ? "translateX(-100%)" : "translateX(-50%)";
-    const delta = baseline != null ? values[hi] - baseline : null;
+    const delta = segmentDelta
+      ? (hi > 0 ? values[hi] - values[hi - 1] : null) // that point's own move (e.g. the day's P&L)
+      : (baseline != null ? values[hi] - baseline : null); // cumulative since the window start
     cursor = (
       <>
         <div className="lc-cross" style={{ left: `${leftPct}%` }} />

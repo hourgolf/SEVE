@@ -26,3 +26,12 @@ export const signedUsd = (v: number | null | undefined): string => {
   const sign = n < 0 ? "−" : "+";
   return `${sign}$${Math.abs(Math.round(n)).toLocaleString()}`;
 };
+
+// "2026-06-04" → "Jun 4". Parses the date-only string by parts (no `new Date()`)
+// so a UTC-midnight string can't drift to the prior day in a western timezone.
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const shortDate = (ymd: string): string => {
+  const [, m, d] = ymd.split("-");
+  const mi = Number(m) - 1;
+  return mi >= 0 && mi < 12 ? `${MON[mi]} ${Number(d)}` : ymd;
+};

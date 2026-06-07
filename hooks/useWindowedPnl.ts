@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { shortDate, timeOfDay } from "@/lib/format";
 
 export type PnlWindow = "today" | "week" | "month" | "all";
 
@@ -10,6 +11,7 @@ export interface WindowedPnl {
   statsBySlug: Record<string, ChannelStat>; // realized (closed in window) + open unrealized + win/trade counts
   fundPnl: number;
   curve: number[]; // fund NAV over the window (daily rollup when available, else downsampled minutes)
+  curveLabels: string[]; // x labels aligned 1:1 with `curve` (dates for the daily rollup, times for minutes)
   loading: boolean;
 }
 
@@ -19,11 +21,6 @@ const startISO = (w: PnlWindow): string | null => {
   if (w === "week") d.setDate(d.getDate() - 7);
   else if (w === "month") d.setDate(d.getDate() - 30);
   return d.toISOString();
-};
-const downsample = (v: number[], n = 160): number[] => {
-  if (v.length <= n) return v;
-  const stride = Math.ceil(v.length / n);
-  return v.filter((_, i) => i % stride === 0);
 };
 const slugOf = (r: Record<string, unknown>): string => ((r.strategists as { slug?: string } | null)?.slug ?? "unknown");
 
@@ -39,7 +36,7 @@ export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
   useEffect(() => {
     if (window === "today") { setData(null); return; }
     let alive = true;
-    setData((d) => ({ statsBySlug: d?.statsBySlug ?? {}, fundPnl: d?.fundPnl ?? 0, curve: d?.curve ?? [], loading: true }));
+    setData((d) => ({ statsBySlug: d?.statsBySlug ?? {}, fundPnl: d?.fundPnl ?? 0, curve: d?.curve ?? [], curveLabels: d?.curveLabels ?? [], loading: true }));
     (async () => {
       const sb = getSupabase();
       const start = startISO(window);
@@ -64,19 +61,28 @@ export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
       // Keep the RAW series (not just the downsampled display copy) so the window-end /
       // window-start NAVs used for the fund P&L are the true endpoints.
       let curveRaw: number[] = [];
+      let labelsRaw: string[] = [];
       try {
         let dq = sb.from("equity_daily").select("et_date,nav").order("et_date", { ascending: true });
         if (start) dq = dq.gte("et_date", start.slice(0, 10));
         const dRes = await dq;
         if (dRes.error) throw dRes.error;
-        curveRaw = ((dRes.data ?? []) as { nav: number }[]).map((r) => Number(r.nav));
+        const rows = (dRes.data ?? []) as { et_date: string; nav: number }[];
+        curveRaw = rows.map((r) => Number(r.nav));
+        labelsRaw = rows.map((r) => shortDate(r.et_date)); // "Jun 4" — one point per session
       } catch {
         let cq = sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null);
         if (start) cq = cq.gte("captured_at", start);
         const cRes = await cq.order("captured_at", { ascending: false }).limit(6000);
-        curveRaw = ((cRes.data ?? []) as { net_liquidation: number }[]).map((r) => Number(r.net_liquidation)).reverse();
+        const rows = ((cRes.data ?? []) as { net_liquidation: number; captured_at: string }[]).reverse();
+        curveRaw = rows.map((r) => Number(r.net_liquidation));
+        labelsRaw = rows.map((r) => timeOfDay(r.captured_at));
       }
-      const curve = downsample(curveRaw);
+      // sample curve + labels with the SAME stride so they stay index-aligned
+      const stride = curveRaw.length <= 160 ? 1 : Math.ceil(curveRaw.length / 160);
+      const sample = <T,>(arr: T[]): T[] => (stride <= 1 ? arr : arr.filter((_, i) => i % stride === 0));
+      const curve = sample(curveRaw);
+      const curveLabels = sample(labelsRaw);
 
       if (!alive) return;
       for (const k of Object.keys(stats)) stats[k].pnl = Math.round(stats[k].pnl);
@@ -86,8 +92,8 @@ export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
       // curve in the window. Per-channel rows stay position-derived (relative attribution).
       const navDelta = curveRaw.length >= 2 ? Math.round(curveRaw[curveRaw.length - 1] - curveRaw[0]) : null;
       const fundPnl = navDelta ?? Math.round(Object.values(stats).reduce((a, c) => a + c.pnl, 0));
-      setData({ statsBySlug: stats, fundPnl, curve, loading: false });
-    })().catch(() => { if (alive) setData((d) => (d ? { ...d, loading: false } : { statsBySlug: {}, fundPnl: 0, curve: [], loading: false })); });
+      setData({ statsBySlug: stats, fundPnl, curve, curveLabels, loading: false });
+    })().catch(() => { if (alive) setData((d) => (d ? { ...d, loading: false } : { statsBySlug: {}, fundPnl: 0, curve: [], curveLabels: [], loading: false })); });
     return () => { alive = false; };
   }, [window]);
 

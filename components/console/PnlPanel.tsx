@@ -69,7 +69,11 @@ export function PnlPanel({
               format={usd0}
               formatDelta={signedUsd}
               baseline={equityValues[0]}
-              labels={isToday ? equityCurve.map((p) => timeOfDay(p.ts)) : undefined}
+              // Today: Δ vs the open (running intraday P&L). Week/Month/All: the curve is
+              // a daily NAV rollup, so Δ vs the prior point = that DAY's P&L (matches the
+              // Day-P&L LED + daily autopsy), not the cumulative run since the window start.
+              segmentDelta={!isToday}
+              labels={isToday ? equityCurve.map((p) => timeOfDay(p.ts)) : windowed?.curveLabels}
             />
           ) : (
             <div className="chart-empty">{loading ? "loading…" : isToday ? "awaiting equity history" : "no equity history in window"}</div>
