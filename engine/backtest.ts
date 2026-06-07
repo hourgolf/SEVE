@@ -123,7 +123,7 @@ export function simulateSession(
   // peak favorable price (ignores premium noise — the right trail for 0DTE momentum,
   // what breakout's code does). premiumGivebackPct: give back X% of peak premium gain.
   // Mirrors the live worker so backtest == live.
-  trailExit?: { atrChandelierK?: number; premiumGivebackPct?: number }
+  trailExit?: { atrChandelierK?: number; premiumGivebackPct?: number; untilMin?: number }
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -198,7 +198,7 @@ export function simulateSession(
         // TRAIL (armable). Underlying ATR-chandelier FIRST (ignores premium noise —
         // the right trail for 0DTE momentum): once in profit, exit when price retraces
         // k·ATR from the peak favorable underlying. Else premium-giveback of peak gain.
-        else if (trailExit?.atrChandelierK != null && f.atr > 0) {
+        else if (trailExit?.atrChandelierK != null && f.atr > 0 && (trailExit.untilMin == null || f.minutesToClose > trailExit.untilMin)) {
           const inProfit = pos.optType === "call" ? f.close > pos.entryUnderlying : f.close < pos.entryUnderlying;
           const retraced = pos.optType === "call"
             ? f.close <= pos.peakFavorable - trailExit.atrChandelierK * f.atr
@@ -436,7 +436,7 @@ async function main() {
   let specDef: CompiledStrategy | null = null;
   let premiumExit: { profitPct?: number; stopPct?: number } | undefined;
   let management: Management | undefined;
-  let trailExit: { atrChandelierK?: number; premiumGivebackPct?: number } | undefined;
+  let trailExit: { atrChandelierK?: number; premiumGivebackPct?: number; untilMin?: number } | undefined;
   if (specPath) {
     const spec = JSON.parse(readFileSync(specPath, "utf8")) as StrategySpec;
     specDef = specToStrategyDef(spec);
@@ -492,7 +492,11 @@ async function main() {
   // e.g. test a trailing exit on built-in `power` vs its ride-to-close default. The
   // strategy's own exits still take precedence; the trail only fires on a "hold" bar.
   const trailK = argNum("trail", 0);
-  if (trailK > 0) trailExit = { atrChandelierK: trailK };
+  // --trail-until <min>: only apply the trail while minutesToClose > this — i.e. PROTECT
+  // gains through the quiet early phase, then hand off to ride-to-close for the final
+  // volume surge (a CLOCK-phased exit; the phase is deterministic, no regime detection).
+  const trailUntil = argNum("trail-until", 0);
+  if (trailK > 0) trailExit = { atrChandelierK: trailK, ...(trailUntil > 0 ? { untilMin: trailUntil } : {}) };
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
   const stratName = specDef
