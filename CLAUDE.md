@@ -8,7 +8,95 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## SESSION HANDOFF — 2026-06-06 — READ THIS FIRST
+## SESSION HANDOFF — 2026-06-07 — READ THIS FIRST
+LIVE + pushed (`main == origin/main`, clean). This session: (1) mobile chart/P&L UI fixes,
+(2) a Supabase storage audit, (3) a **bootstrap Monte Carlo toolchain** + a real-fills roster
+study → ONE actionable channel (**BREAK(ALT V3)**, drafted, READY-TO-ARM) and a hard lesson:
+**the backtest cannot rank the marginal power/grind channels — validate them LIVE.**
+
+**SHIPPED (Vercel auto-deploys; commits on `main`):**
+- **Mobile chart** (`cd440b1`): LINE/CANDLES moved to the bottom row beside the indicator chips;
+  duration (top) over candle-interval (bottom), right-justified; **interval active = red** (`--red`
+  — fixed a latent source-order CSS bug so it's distinct from blue duration, desktop too); SPY/QQQ
+  top-aligns with the duration row; **mobile vitals LEFT LED = FUND $ (NAV)** not SPY price,
+  green/red by day direction (SPY price still on the chart's embedded LED).
+- **P&L·Equity hover** (`c631cb6`): Week/Month/All hover Δ now shows **that day's P&L** (segment Δ
+  vs prior point) + a **date label**, not the cumulative-since-window-start it showed before (which
+  made Fri read the whole week). Today keeps running-since-open. `LineChart` gained `segmentDelta`;
+  `useWindowedPnl` returns `curveLabels`.
+
+**NEW RESEARCH TOOLCHAIN (`25f14b2` `107c127` `c00a330` `924e1ca`):**
+- **`npm run montecarlo -- --strat <slug>`** (`engine/montecarlo.ts`) — bootstrap Monte Carlo over a
+  channel's REAL-fill daily P&L. Block bootstrap default (B=5 sessions, preserves regime clustering;
+  `--mode iid` to contrast), 10k paths. Prints terminal-P&L dist (p5/p50/p95), P(period<0), max-DD
+  dist, P(daily-stop breach), a percentile cone. Flags: `--from/--to --days --underlying --spec --n
+  --block --horizon --stop --capital --seed --json --in`. Sources trades by shelling to the backtest
+  with new **`--emit-trades <path>`** (backtest stays the single trade generator; MC never re-sims).
+  `--in <log>` reuses an emitted log.
+- **`npm run mc-roster`** (`scripts/mc-roster.ts`) — auto-discovers the armed+unmuted roster from the
+  DB, routes built-in (`--strat`) vs compiled (`--spec`, by the worker base-slug rule), auto-detects
+  real-vs-modeled fills per ticker (Databento cache present?), MCs each over a FIXED window, prints a
+  ranked SPY/QQQ table. Reproducible weekly re-run.
+- **backtest `--from/--to`** — pin a FIXED ET-date window (reproducible; `--days` anchors to
+  `Date.now()` and drifts the boundary session between runs).
+- **Databento `--underlying`** (`c00a330`) — `backfill-databento.ts` + `databentosource.ts`
+  parameterized per ticker (was SPY-hardcoded: osi root, underlying_bars filter, OCC prefix, dir).
+  `npm run backfill:databento -- --underlying QQQ` → `data/databento-qqq/`. Real QQQ NBBO now
+  available (was modeled-only).
+
+**MC FINDINGS (real Databento NBBO):**
+- **BREAK(ALT) (`breakout-smart-entries`) = the desk's ONE robust edge** — only clearly +EV channel
+  (p50 +$1,842, P(lose) 33%, Sharpe 0.83). Ablation: **`rel_vol≥1.3` is load-bearing** (drop it →
+  −$47/trade; bare OR-break is a coin flip +$1/trade); **`efficiency_ratio≥0.45` kept as DRAWDOWN
+  control** (dropping it raises median but blows p95 DD −$7.3k→−$10.8k); **`vwap_side` is REDUNDANT**
+  (removing it is byte-identical → the live-worker VWAP bug doesn't hurt this channel); fixed
+  +100%/−50% bracket > base's trailing stop.
+- **BREAK(ALT V3) DRAFTED + READY-TO-ARM (`509e007`, `27_breakout_alt_v3.sql`)** = BREAK(ALT) minus
+  the `momentum_atr` gate (MC: pure over-filtering → Pareto-better: p50 +$4,151, P(lose) 20%, p95 DD
+  −$6,949, Sharpe 1.54). The SQL clones BREAK(ALT)'s settings (RISK $500 / STOP $500 / underlying-stop)
+  for a fair live A/B, armed+unmuted, compiled-spec channel (no worker change). **⚠ NOT YET RUN — the
+  USER runs the SQL to arm it.** `docs/channels/breakout-alt-v3.md`.
+- **THE POWER/GRIND FAMILY IS UNRANKABLE ON BACKTEST** (the session's hardest lesson). Across 3 regime
+  windows the best→worst ordering COMPLETELY SCRAMBLES, all mostly negative (p50):
+  - CHOP Mar26:        power **+$1,998** · final30 −$3,284 · grind-v3 −$2,049 · grind-smart −$3,159
+  - TREND AprMay26:    power −$830 · final30 −$1,389 · grind-v3 −$3,856 · grind-smart −$1,401
+  - TREND-OOS MayAug25: power −$5,808 · final30 −$5,202 · grind-v3 **−$4,625** · grind-smart −$6,380
+  Last session's ordering (final30≈base, v3>smart) reproduces in MayAug25; THIS session's
+  (base>final30, smart>v3) in Mar-Jun. BOTH real, NEITHER stable → **backtest can't settle these;
+  validate LIVE** (vindicates the existing arm-and-observe design). DON'T swap power/grind on backtest
+  evidence. (An "arm base power" idea was floated and RETRACTED — its apparent edge was March-chop luck.)
+- Roster (Mar-Jun 2026, real fills): BREAK(ALT) only clear +EV; **QQQ-ORB-trail mildly +** (p50 +$662,
+  Sharpe 0.44, real QQQ fills); **base BREAK dominated by ALT** (retire candidate); **ORB(base)/
+  orb-trend-rider** near-zero edge but WORST tail DD (−$11.5k p95) → de-risk; power-final30 / grind-v3
+  / QQQ-Break-ORB weakest (P(lose) 92-100%, **but UNGATED**).
+
+**METHODOLOGY CAVEATS (don't re-litigate):** backtest is **UNGATED** (the live cost gate softens
+grind/power toward breakeven — the −$5-6k is worst-case, NOT live P&L); **monthly efficiency-ratio
+≠ intraday 0DTE regime** (these strategies care about per-session character, not multi-week drift —
+the "trend windows" picked by monthly ER were the wrong axis); **spot-level cost confound** (2025 SPY
+~$600 is relatively more cost-walled than 2026 ~$720); each MC result is ONE window; the bootstrap
+quantifies WITHIN-window sequence risk and is BLIND to regime shift.
+
+**SUPABASE STORAGE AUDIT:** DB **145 MB / 500 MB** (user truncated `option_bars` → freed ~50MB; it was
+a leftover research backfill that policy says to truncate). Drivers: `underlying_bars` 63MB (NO
+retention, 2024→now — FEEDS `--source real` backtests, so don't prune carelessly), `option_quotes`
+60MB (7d-bounded). `idx_bars_symbol_ts` (14MB) is **redundant** with the unique `(symbol,ts)` key →
+optional `drop index` reclaims ~14MB. **Only cap risk = research backfills (option_bars) — truncate
+after use.** **Supabase MCP is now on the SEVE account** (was `matt@multifresh.com`) → can query
+catalog/sizes directly. Local `data/databento*` (gitignored, ~860MB, re-fetchable ~$0.20/window,
+`DATABENTO_API_KEY` present): SPY Mar-Jun 2026 + May-Aug 2025; QQQ Mar-Jun 2026; bulk `databento-mdte/`
+= the 1DTE+ cache (kept for future multi-leg/reversal work).
+
+**OPEN / TODO (next session):**
+- **ARM BREAK(ALT V3):** run `27_breakout_alt_v3.sql` → live paper A/B vs BREAK(ALT) this week; watch
+  Desk P&L; if V3 leads across a trending stretch too, retire base BREAK.
+- **power/grind:** let the live A/B decide — backtest can't rank them. Don't swap.
+- **grind-v3 RISK = $500** (should be ~$150 small-validation) — still unresolved from the prior handoff.
+- Optional: proper **regime study** = classify SESSIONS by intraday character (not monthly ER) + control
+  spot-level cost. Optional: `drop index idx_bars_symbol_ts` (~14MB).
+- **Mobile** improvements were shelved mid-session (chart quick-fixes done; the rest deferred).
+
+## SESSION HANDOFF — 2026-06-06
 Everything below is LIVE + git is clean (main == origin/main). Next task = **mobile chart
 quick-fixes** (user is doing them). Prior handoffs kept below for history.
 
