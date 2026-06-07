@@ -511,7 +511,13 @@ async function main() {
     // --days N scopes to the last N calendar days (e.g. the Databento-cached
     // window) so a real-options run isn't diluted by modeled-chain fallback days.
     const sinceDaysAgo = argNum("days", 0);
-    const sessions = await loadRealSessions({ symbol: underlying, ...(sinceDaysAgo > 0 ? { sinceDaysAgo } : {}) });
+    let sessions = await loadRealSessions({ symbol: underlying, ...(sinceDaysAgo > 0 ? { sinceDaysAgo } : {}) });
+    // --from / --to: pin a FIXED ET-date window (reproducible — unlike --days, which
+    // anchors to Date.now() and so can clip the boundary session between runs). Use a
+    // wide --days (≥ the window) to bound the fetch, then --from/--to for exact edges.
+    const fromD = argStr("from", ""), toD = argStr("to", "");
+    if (fromD) sessions = sessions.filter((s) => s.dateET >= fromD);
+    if (toD) sessions = sessions.filter((s) => s.dateET <= toD);
     if (!sessions.length) {
       console.log(`\nNo real ${underlying} sessions found — backfill underlying_bars for ${underlying} first.\n`);
       return;

@@ -62,7 +62,7 @@ function loadLog(): Emit {
   const options = argStr("options", "databento");
   const tmp = join(tmpdir(), `seve-mc-${strat.replace(/[^a-z0-9-]/gi, "_")}.json`);
   const args = ["engine/backtest.ts", "--strat", strat, "--source", source, "--options", options, "--emit-trades", tmp];
-  for (const p of ["days", "underlying", "spec"] as const) { const v = argStr(p, ""); if (v) args.push(`--${p}`, v); }
+  for (const p of ["days", "from", "to", "underlying", "spec"] as const) { const v = argStr(p, ""); if (v) args.push(`--${p}`, v); }
   if (process.argv.includes("--gross")) args.push("--gross");
   if (!jsonMode) console.log(`▶ sourcing trades from the backtest:\n  tsx ${args.join(" ")}`);
   try {

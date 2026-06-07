@@ -9,6 +9,7 @@
     "lint": "next lint",
     "backtest": "tsx engine/backtest.ts",
     "montecarlo": "tsx engine/montecarlo.ts",
+    "mc-roster": "tsx scripts/mc-roster.ts",
     "report": "tsx engine/report.ts",
     "golden": "tsx engine/manage.golden.ts",
     "ab": "tsx engine/ab.ts",
