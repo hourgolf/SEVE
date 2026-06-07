@@ -487,6 +487,12 @@ async function main() {
   // built-ins need only the closes. One seam so both paths below stay identical.
   const evalFor = (bars: Bar[], levels?: { pdh?: number; pdl?: number }): Evaluate =>
     specDef ? specDef.build(bars, specDef.timeframeMin, levels) : makeEval(bars.map((b) => b.close));
+  // --trail <k>: layer an underlying ATR-chandelier trail (exit when price retraces
+  // k·ATR from the peak favorable underlying, ONLY once in profit) onto ANY strat —
+  // e.g. test a trailing exit on built-in `power` vs its ride-to-close default. The
+  // strategy's own exits still take precedence; the trail only fires on a "hold" bar.
+  const trailK = argNum("trail", 0);
+  if (trailK > 0) trailExit = { atrChandelierK: trailK };
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
   const stratName = specDef
