@@ -40,6 +40,14 @@ const argNum = (name: string, def: number): number => {
 interface DayPnl { date: string; pnl: number; trades: number }
 interface Emit { strat: string; underlying?: string; source?: string; options?: string; span?: string; perDay: DayPnl[] }
 
+// --json → emit a single machine-readable summary line (and suppress the sourced
+// backtest's stdout) so a roster runner can aggregate many channels.
+const jsonMode = process.argv.includes("--json");
+
+// Absolute path to the local tsx binary — so the backtest re-spawn works whether we
+// were launched via `npm run` (node_modules/.bin on PATH) or a bare `node`/spawn (not).
+const TSX_BIN = join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+
 // ---- get the per-session P&L log (from --in, else run the backtest to a temp file) ----
 function loadLog(): Emit {
   const inPath = argStr("in", "");
@@ -56,9 +64,10 @@ function loadLog(): Emit {
   const args = ["engine/backtest.ts", "--strat", strat, "--source", source, "--options", options, "--emit-trades", tmp];
   for (const p of ["days", "underlying", "spec"] as const) { const v = argStr(p, ""); if (v) args.push(`--${p}`, v); }
   if (process.argv.includes("--gross")) args.push("--gross");
-  console.log(`▶ sourcing trades from the backtest:\n  tsx ${args.join(" ")}`);
+  if (!jsonMode) console.log(`▶ sourcing trades from the backtest:\n  tsx ${args.join(" ")}`);
   try {
-    execFileSync("tsx", args, { stdio: "inherit" });
+    // json mode → swallow the backtest's stdout (keep stderr) so only our summary prints
+    execFileSync(TSX_BIN, args, { stdio: jsonMode ? ["ignore", "ignore", "inherit"] : "inherit" });
   } catch {
     console.error("\nmontecarlo: backtest run failed. Run it yourself with --emit-trades, then pass --in:\n" +
       `  npm run backtest -- --strat ${strat} --source ${source} --options ${options} --emit-trades ${tmp}\n` +
@@ -153,6 +162,21 @@ function main() {
   terms.sort((a, b) => a - b); dds.sort((a, b) => a - b);
   const pNeg = terms.filter((t) => t < 0).length / N;
   const pBreach = stopUsd > 0 ? breaches.filter((b) => b > 0).length / N : null;
+
+  // ---- machine-readable summary (for a roster runner) ----
+  if (jsonMode) {
+    console.log(JSON.stringify({
+      strat: log.strat, underlying: log.underlying ?? null, options: log.options ?? null, span: log.span ?? null,
+      mode, block: B, n: N, horizon: H, nDays, tradedDays: tradedDays.length, trades: totalTrades,
+      realizedTotal: Math.round(totalPnl), realizedMaxDD: Math.round(realized.maxDD),
+      winDayPct: +(winDays / nDays).toFixed(3), perDayMean: Math.round(perDayMean), sharpe: +sharpe.toFixed(2),
+      p5: Math.round(pctile(terms, 0.05)), p25: Math.round(pctile(terms, 0.25)), p50: Math.round(pctile(terms, 0.5)),
+      p75: Math.round(pctile(terms, 0.75)), p95: Math.round(pctile(terms, 0.95)), mean: Math.round(mean(terms)),
+      pNeg: +pNeg.toFixed(3), medMaxDD: Math.round(pctile(dds, 0.5)), p95MaxDD: Math.round(pctile(dds, 0.95)),
+      pBreach: pBreach == null ? null : +pBreach.toFixed(3),
+    }));
+    return;
+  }
 
   // ---- report ----
   const W = 64, bar = "═".repeat(W);
