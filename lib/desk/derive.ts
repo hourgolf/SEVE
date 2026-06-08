@@ -8,15 +8,22 @@ import type { ChannelPnl, PmColor, Position, Step } from "@/lib/desk/types";
 
 // A position's contribution to today's P&L: realized once closed, unrealized
 // while open. (A fast scalper is closed most of the time, so without the
-// realized side the day P&L would never move.)
-const dayContribution = (p: Position): number =>
-  p.status === "closed" ? p.realized_pnl ?? 0 : p.unrealized_pnl;
+// realized side the day P&L would never move.) When a `liveMarks` map is given,
+// an OPEN position is marked off the live mark — the SAME formula the Open
+// Positions panel uses — so the per-channel rows track it instead of lagging on
+// the worker's stored unrealized_pnl. Falls back to that stored value otherwise.
+const dayContribution = (p: Position, liveMarks?: Record<string, number>): number => {
+  if (p.status === "closed") return p.realized_pnl ?? 0;
+  const m = liveMarks?.[p.occ_symbol];
+  if (m != null && Number.isFinite(m) && m > 0) return (m - p.avg_entry_price) * p.qty * 100;
+  return p.unrealized_pnl;
+};
 
-export function channelPnl(positions: Position[]): Record<string, ChannelPnl> {
+export function channelPnl(positions: Position[], liveMarks?: Record<string, number>): Record<string, ChannelPnl> {
   const out: Record<string, ChannelPnl> = {};
   for (const p of positions) {
     const c = (out[p.strategist_slug] ??= { dayPnl: 0, openCount: 0, exposure: 0, trades: 0, wins: 0 });
-    c.dayPnl += dayContribution(p);
+    c.dayPnl += dayContribution(p, liveMarks);
     if (p.status === "closed") {
       c.trades += 1;
       if ((p.realized_pnl ?? 0) > 0) c.wins += 1;

@@ -25,6 +25,7 @@ import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
+import { channelPnl } from "@/lib/desk/derive";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
@@ -111,6 +112,9 @@ export function DesktopSurface({
   // Live marks for ALL open positions (both tickers) — independent of the selected
   // chart, so the unselected ticker's positions don't freeze. (was chart-bound)
   const liveMarks = usePositionMarks(feed.positions);
+  // Per-channel P&L re-derived off the SAME live marks, so the Equity rows + channel
+  // strips track the Open Positions panel instead of lagging on stored unrealized_pnl.
+  const livePnl = channelPnl(feed.positions, liveMarks);
 
   return (
     <Chassis
@@ -160,7 +164,7 @@ export function DesktopSurface({
           <div className="col col--fill">
             <PnlPanel
               strategists={desk.strategists}
-              pnlByStrategist={feed.pnlByStrategist}
+              pnlByStrategist={livePnl}
               fundPnl={feed.fundPnl}
               equityCurve={feed.equityCurve}
             />
@@ -194,7 +198,7 @@ export function DesktopSurface({
                 <SortableChannel
                   key={s.slug}
                   strategist={s}
-                  pnl={feed.pnlByStrategist[s.slug]}
+                  pnl={livePnl[s.slug]}
                   active={isActive(s.slug)}
                   ducked={anySolo && !s.config.soloed && !s.config.muted}
                   disabled={!canWrite}

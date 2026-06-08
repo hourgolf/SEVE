@@ -20,6 +20,7 @@ import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
+import { channelPnl } from "@/lib/desk/derive";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
 import { MixerPads } from "@/components/mobile/MixerPads";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -65,6 +66,9 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   // of the selected chart — so the unselected ticker's positions mark in real time
   // instead of freezing on the worker's ~1-min cadence. (was chart-bound)
   const liveMarks = usePositionMarks(feed.positions);
+  // per-channel P&L off the SAME live marks → Equity rows + channel strips track the
+  // Open Positions panel instead of lagging on the worker's stored unrealized_pnl.
+  const livePnl = channelPnl(feed.positions, liveMarks);
 
   const goTab = (t: Tab) => {
     setTab(t);
@@ -162,7 +166,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
           <>
             <PnlPanel
               strategists={desk.strategists}
-              pnlByStrategist={feed.pnlByStrategist}
+              pnlByStrategist={livePnl}
               fundPnl={feed.fundPnl}
               equityCurve={feed.equityCurve}
             />
@@ -193,7 +197,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                       <ChannelStrip
                         key={it.slug}
                         strategist={it}
-                        pnl={feed.pnlByStrategist[it.slug]}
+                        pnl={livePnl[it.slug]}
                         active={isActive(it.slug)}
                         ducked={anySolo && !it.config.soloed && !it.config.muted}
                         mobile
@@ -274,7 +278,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               </div>
               <ChannelStrip
                 strategist={s}
-                pnl={feed.pnlByStrategist[s.slug]}
+                pnl={livePnl[s.slug]}
                 active={isActive(s.slug)}
                 ducked={anySolo && !s.config.soloed && !s.config.muted}
                 mobile
