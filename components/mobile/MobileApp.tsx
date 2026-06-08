@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
@@ -19,7 +19,7 @@ import { TapeHealth } from "@/components/TapeHealth";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
-import { computeLiveMarks } from "@/lib/desk/liveMarks";
+import { usePositionMarks } from "@/hooks/usePositionMarks";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
 import { MixerPads } from "@/components/mobile/MixerPads";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -61,9 +61,10 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
 
-  // occ_symbol → live option mark (delta-extrapolated off the fast spot tick), so
-  // open positions mark in real time, not once a minute.
-  const liveMarks = useMemo(() => computeLiveMarks(data.snapshot, data.spot), [data.snapshot, data.spot]);
+  // occ_symbol → live option mark for ALL open positions (both tickers), independent
+  // of the selected chart — so the unselected ticker's positions mark in real time
+  // instead of freezing on the worker's ~1-min cadence. (was chart-bound)
+  const liveMarks = usePositionMarks(feed.positions);
 
   const goTab = (t: Tab) => {
     setTab(t);

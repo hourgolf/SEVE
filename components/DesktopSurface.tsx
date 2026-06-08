@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Chassis } from "@/components/console/Chassis";
 import { AddChannel } from "@/components/console/AddChannel";
 import { HeadReadouts } from "@/components/console/HeadReadouts";
@@ -24,7 +24,7 @@ import { PnlPanel } from "@/components/console/PnlPanel";
 import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
-import { computeLiveMarks } from "@/lib/desk/liveMarks";
+import { usePositionMarks } from "@/hooks/usePositionMarks";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
@@ -108,7 +108,9 @@ export function DesktopSurface({
 
   // occ_symbol → live option mark (delta-extrapolated off the fast spot tick), so
   // open positions mark in real time, not once a minute. Recomputes each spot tick.
-  const liveMarks = useMemo(() => computeLiveMarks(data.snapshot, data.spot), [data.snapshot, data.spot]);
+  // Live marks for ALL open positions (both tickers) — independent of the selected
+  // chart, so the unselected ticker's positions don't freeze. (was chart-bound)
+  const liveMarks = usePositionMarks(feed.positions);
 
   return (
     <Chassis
