@@ -8,7 +8,41 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## SESSION HANDOFF — 2026-06-07 — READ THIS FIRST
+## SESSION HANDOFF — 2026-06-08 — READ THIS FIRST
+LIVE A/B week underway: **13 channels armed+unmuted** (base grind disabled). Prior handoffs below.
+Two UI fixes shipped this session: cross-ticker position-mark freeze (`hooks/usePositionMarks.ts` —
+marks ALL open positions off their own ticker's quote+spot, chart-independent) and per-channel Equity
+P&L now uses the SAME live marks as Open Positions (`channelPnl(positions, liveMarks)`); plus the
+composer group/add-channel button contrast+size fix.
+
+**LIVE A/B — Day 1 (Mon 06-08): NAV +$792.** BUT the day **peaked +$2,560 at 15:26** and gave back
+~$1,770 into the close — the GIVEBACK, not the close, is the lesson. POWERHOUR(base) channel-of-day
++$893 (the 15:01 741P final-hour put lean peaked +$1,189, banked +$694); QQQ trio all rode the SAME
+720C up-break (+$657 combined); BREAK(base) +$384; **BREAK(ALT)/V3 took ZERO trades** (selective —
+V3 STILL has no live data point); GRIND(ALT) −$780 + ORB(base) −$492 (the known weak/high-tail hands).
+
+**EXIT-REFINEMENT MODELING AGENDA — the "what could have been" (MODEL next session, NO live changes yet):**
+1. **Breakeven-once-in-profit stop** — the day's biggest avoidable leak was **green→red round-trips**:
+   ORB 741P +$168→−$492, POWERHOUR(ALT) 739P +$336→−$216, POWERHOUR(base) 739C +$273→−$82 ≈ **~$1,200
+   of swing**. Moving the stop to entry once up ~+30% would've saved these WITHOUT capping upside — it is
+   DIFFERENT from the profit-target/trailing the MC already killed (those cap the convex tail; a breakeven
+   stop does NOT). **The MC never isolated breakeven-once-in-profit — model it** (needs a backtest
+   `--breakeven` flag, or model off the emitted trades' peak series). Realistic: flips today +$792 → ~+$2,000,
+   tail intact.
+2. **Late-leans gate** — power OVER-TRADES the whipsawy final 20 min: after the 15:26 peak it kept opening
+   NEW wrong-way leans (739P/739C/740C → −$216/−$82/−$80/−$40). Model a one-and-done / tighter late-session
+   re-entry gate.
+3. **1DTE flatten BUG (confirmed vs intent):** the late-day 1DTE (opened past the 15:45 ET / 12:45 PST
+   cutoff) is meant to swing the high-volume last 20 min and **CLOSE SAME-DAY** — it is NOT closing. The
+   eod-flatten keys `minutesToClose` off the CONTRACT expiry (e.g. 06-09), which at the session bell is ~a
+   day out, so the ≤3-min flatten never fires that day → it CARRIES OVERNIGHT. (2 stuck overnight Mon:
+   PowerFinal30 739P + POWERHOUR 739C, both 06-09.) **Fix = flatten by the SESSION close, not the contract
+   expiry** (worker change — not yet applied).
+- **DON'T cap the big riders:** the giveback on POWERHOUR 741P (+$1,189→+$694) and the QQQ trio
+  (~+$1,240→+$657) is the convex-tail PREMIUM — the MC verdict (don't profit-target/trail) stands. Only the
+  Bucket-A round-trips are the avoidable target.
+
+## SESSION HANDOFF — 2026-06-07
 LIVE + pushed (`main == origin/main`, clean). This session: (1) mobile chart/P&L UI fixes,
 (2) a Supabase storage audit, (3) a **bootstrap Monte Carlo toolchain** + a real-fills roster
 study → ONE actionable channel (**BREAK(ALT V3)**, drafted, READY-TO-ARM) and a hard lesson:
