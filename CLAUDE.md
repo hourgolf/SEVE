@@ -32,12 +32,19 @@ V3 STILL has no live data point); GRIND(ALT) −$780 + ORB(base) −$492 (the kn
 2. **Late-leans gate** — power OVER-TRADES the whipsawy final 20 min: after the 15:26 peak it kept opening
    NEW wrong-way leans (739P/739C/740C → −$216/−$82/−$80/−$40). Model a one-and-done / tighter late-session
    re-entry gate.
-3. **1DTE flatten BUG (confirmed vs intent):** the late-day 1DTE (opened past the 15:45 ET / 12:45 PST
-   cutoff) is meant to swing the high-volume last 20 min and **CLOSE SAME-DAY** — it is NOT closing. The
-   eod-flatten keys `minutesToClose` off the CONTRACT expiry (e.g. 06-09), which at the session bell is ~a
-   day out, so the ≤3-min flatten never fires that day → it CARRIES OVERNIGHT. (2 stuck overnight Mon:
-   PowerFinal30 739P + POWERHOUR 739C, both 06-09.) **Fix = flatten by the SESSION close, not the contract
-   expiry** (worker change — not yet applied).
+3. **1DTE flatten BUG — FIXED (worker `2026-06-08a`, repo; ⚠ PENDING PASTE-DEPLOY):** the late-day 1DTE
+   (opened past the 15:45 ET / 12:45 PST cutoff) is meant to swing the high-volume last 20 min and
+   **CLOSE SAME-DAY** — it was NOT closing. ROOT CAUSE (corrected — the prior note misdiagnosed it):
+   `minutesToClose` IS session-based (`16*60 − etMin`), so the `eod_flatten` intent DID fire at the bell;
+   a GUARD one step later nulled it for EVERY row whose contract expires after today
+   (`String(row.expiration) > todayET → intent = null`). That guard meant to protect "genuine overnight
+   swings," but NONE exist — every 1DTE here is a cutoff roll meant to close same-day → they all carried
+   overnight. (2 stuck overnight Mon: PowerFinal30 739P + POWERHOUR 739C, both 06-09.) **FIX:** only exempt
+   a position OPENED IN A PRIOR SESSION (`etParts(opened_at).date !== todayET`); a 1DTE opened THIS session
+   now force-flattens at this session's bell. Applied to `index.dispatcher.draft.ts` (banner `2026-06-08a`,
+   **user pastes into Supabase**) + mirrored in the Railway streaming shadow `worker/src/decide.ts` (parity,
+   auto-deploys on push). NOTE: forward-looking only — the 2 already-stuck 06-09 positions become 0DTE Tue
+   and flatten at Tue's CLOSE normally; closing them at the Tue OPEN is a manual call.
 - **DON'T cap the big riders:** the giveback on POWERHOUR 741P (+$1,189→+$694) and the QQQ trio
   (~+$1,240→+$657) is the convex-tail PREMIUM — the MC verdict (don't profit-target/trail) stands. Only the
   Bucket-A round-trips are the avoidable target.

@@ -169,8 +169,15 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     if (profitPct != null && mark >= entryPx * (1 + profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
     else if (stopPct != null && mark <= entryPx * (1 - stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
   }
-  // A 1DTE+ position may ride overnight — don't force the 0DTE EOD flatten.
-  if (intent?.kind === "exit" && intent.reason === "eod_flatten" && row && String(row.expiration ?? ctx.todayET) > ctx.todayET) intent = null;
+  // Flatten by the SESSION close, not the contract expiry. A late-day signal inside
+  // the 0DTE open cutoff rolls to a 1DTE (next1DTE) — that roll swings the final 20 min
+  // and is meant to CLOSE SAME-DAY, not carry overnight. So only exempt a position held
+  // from a PRIOR session (a genuine multi-day hold); a 1DTE opened THIS session still
+  // force-flattens at this session's bell. (Mirrors the cron worker 2026-06-08a fix.)
+  if (intent?.kind === "exit" && intent.reason === "eod_flatten" && row && String(row.expiration ?? ctx.todayET) > ctx.todayET) {
+    const openedET = row.opened_at ? etParts(Date.parse(row.opened_at)).date : ctx.todayET;
+    if (openedET !== ctx.todayET) intent = null; // opened a PRIOR session → genuine overnight hold
+  }
 
   // Premium catastrophic stop (all channels) — the backstop the ATR stops miss.
   if (pos && row && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0 && mark <= entryPx * (1 - policy.PREMIUM_STOP_PCT / 100)) {

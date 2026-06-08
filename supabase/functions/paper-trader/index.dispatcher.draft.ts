@@ -1,3 +1,10 @@
+// ⚑ WORKER VERSION: 2026-06-08a  (1DTE FLATTEN BY SESSION CLOSE. A late-day signal inside the
+//   0DTE open cutoff rolls to a 1DTE (next1DTE) because Alpaca won't open a 0DTE that late;
+//   that roll is meant to swing the final 20 min and CLOSE SAME-DAY. The eod-flatten guard was
+//   nulling the flatten for EVERY expiration>today row, so those late rolls CARRIED OVERNIGHT
+//   (2026-06-08: PowerFinal30 739P + POWERHOUR 739C both stuck to 06-09). Fix: only exempt a
+//   position OPENED IN A PRIOR SESSION (a genuine multi-day hold — none today); a 1DTE opened
+//   THIS session now force-flattens at this session's bell. Keys off opened_at's ET date. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-05c  (POWER-FINAL30 registered — power retuned to the FINAL 30
 //   MIN + a pure momentum lean (no VWAP gate). Window sweep (H1 real fills) flipped power's
 //   gross −$8.4k (60m) → +$8.9k (30m); 15:00–15:30 was dragging it negative. Trades once a
@@ -782,11 +789,22 @@ Deno.serve(async () => {
           else if (premiumExit.stopPct != null && markPx <= entryPx * (1 - premiumExit.stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
         }
       }
-      // A 1DTE+ position may ride OVERNIGHT — don't force the 0DTE EOD flatten on
-      // it. Its own stops/targets still fire (the strategy can still sell before
-      // the close); tomorrow it's managed as a 0DTE. Only forced-flatten 0DTE.
+      // EOD flatten for a position whose contract expires AFTER today (a 1DTE).
+      // Every 1DTE here is a LATE-DAY ROLL: a signal fired inside the 0DTE open
+      // cutoff (last ~15 min, OPEN_0DTE_CUTOFF_MIN), so the entry rolled to
+      // next1DTE because Alpaca won't open a 0DTE that late. That roll is meant to
+      // swing the high-volume final 20 min and CLOSE SAME-DAY — NOT carry overnight.
+      // So flatten by the SESSION close, not the contract expiry: if it was opened
+      // THIS session, let the eod_flatten fire. Only a position held from a PRIOR
+      // session (a genuine multi-day hold — none exist today, but keep the door
+      // open) is exempt and managed as a 0DTE on its own expiry day. Its own
+      // stops/targets still fire either way (handled above).
+      //   Bug before: this nulled the flatten for ALL expiration>today rows, so the
+      //   late rolls carried overnight (e.g. 2026-06-08 PowerFinal30 739P + POWERHOUR
+      //   739C both stuck open to their 06-09 expiry).
       if (intent?.kind === "exit" && intent.reason === "eod_flatten" && row && String(row.expiration ?? todayET) > todayET) {
-        intent = null;
+        const openedET = row.opened_at ? etParts(Date.parse(String(row.opened_at))).date : todayET;
+        if (openedET !== todayET) intent = null; // opened a PRIOR session → genuine overnight hold, don't force-flatten today
       }
 
       // ---- PREMIUM CATASTROPHIC STOP (all channels) ----
