@@ -161,7 +161,14 @@ export function IntradayChart({
     const minStart = Math.floor(Date.now() / 60000) * 60000;
     if (Date.parse(last.ts) >= minStart) return src;
     const acc = formingRef.current;
-    if (!acc || acc.min !== minStart || acc.sym !== symbol) formingRef.current = { min: minStart, sym: symbol, open: lc, high: Math.max(lc, spot), low: Math.min(lc, spot) };
+    // Re-seed on a new minute / symbol toggle — AND when the accumulator's open has gone
+    // STALE vs the current last-close (>2%). On a SPY↔QQQ toggle the `symbol` prop flips a
+    // render BEFORE `bars`/`spot` refetch, so the sym-reset seeds `open` from the OLD ticker's
+    // price; once the new ticker's bars arrive (same sym, same minute) the plain reset no longer
+    // fires and that stale open folds with the new spot into a 738→700 cross-symbol wick. The
+    // staleness re-seed discards it. (Within a real minute acc.open≈lc, so this never false-fires.)
+    const accStale = !!acc && lc > 0 && Math.abs(acc.open - lc) / lc > 0.02;
+    if (!acc || acc.min !== minStart || acc.sym !== symbol || accStale) formingRef.current = { min: minStart, sym: symbol, open: lc, high: Math.max(lc, spot), low: Math.min(lc, spot) };
     else { acc.high = Math.max(acc.high, spot); acc.low = Math.min(acc.low, spot); }
     const a = formingRef.current!;
     return [...src, { ts: new Date(minStart).toISOString(), open: a.open, high: a.high, low: a.low, close: spot, volume: 0, vwap: spot }];
