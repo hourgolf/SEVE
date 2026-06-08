@@ -22,16 +22,34 @@ composer group/add-channel button contrast+size fix.
 V3 STILL has no live data point); GRIND(ALT) −$780 + ORB(base) −$492 (the known weak/high-tail hands).
 
 **EXIT-REFINEMENT MODELING AGENDA — the "what could have been" (MODEL next session, NO live changes yet):**
-1. **Breakeven-once-in-profit stop** — the day's biggest avoidable leak was **green→red round-trips**:
-   ORB 741P +$168→−$492, POWERHOUR(ALT) 739P +$336→−$216, POWERHOUR(base) 739C +$273→−$82 ≈ **~$1,200
-   of swing**. Moving the stop to entry once up ~+30% would've saved these WITHOUT capping upside — it is
-   DIFFERENT from the profit-target/trailing the MC already killed (those cap the convex tail; a breakeven
-   stop does NOT). **The MC never isolated breakeven-once-in-profit — model it** (needs a backtest
-   `--breakeven` flag, or model off the emitted trades' peak series). Realistic: flips today +$792 → ~+$2,000,
-   tail intact.
-2. **Late-leans gate** — power OVER-TRADES the whipsawy final 20 min: after the 15:26 peak it kept opening
-   NEW wrong-way leans (739P/739C/740C → −$216/−$82/−$80/−$40). Model a one-and-done / tighter late-session
-   re-entry gate.
+1. **Breakeven-once-in-profit stop — MODELED → DON'T WIRE (resolved this session).** The thesis (stop→entry
+   once up ~+30% saves the green→red round-trips WITHOUT capping the tail; hypothetical +$792→+$2,000) does
+   NOT survive systematic backtesting. BUILT (kept as tools): backtest `--breakeven <pct>` (+`--breakeven-lock`,
+   layers onto ANY strat like `--trail`), threaded through montecarlo, + `npm run breakeven-probe`
+   (engine/breakeven-probe.ts). Why it was never isolated before: power-probe only ever engaged breakeven at
+   **+100%** (tail protection) — never the LOW threshold the thesis needs. 5-window real-NBBO sweep (be30):
+   **power HURTS in 4/5 windows** (CHOP-MIX −$4,018), **power-final30 a wash** (2 help / 2 hurt), **breakout a
+   NO-OP** (its own exits get out first; the live "ORB 741P" round-trip is a trail-config ORB, not built-in
+   breakout). MC smoking gun: in TREND it **CAPS the upside** (AprMay26 p95 +$858→+$372) — **refutes "tail
+   intact"** (winner retraces to entry → breakeven exit → trend resumes without you); in CHOP it helps
+   (Mar26 p50 −$3,284→−$2,586, lower DD) but never flips to profit (100% P(lose)). A **chop-only tool with no
+   ex-ante regime signal** — same fate as the trail + the morning regime gate. Verdict: keep ride-to-close +
+   −50% prem stop as the robust default; don't add breakeven to the worker. Full writeup: memory
+   `breakeven-stop-verdict.md`.
+2. **Late-leans gate — MODELED → DON'T WIRE (resolved this session).** Thesis: power over-trades the
+   whipsawy final 20 min (after the 15:26 peak it kept opening wrong-way leans 739P/739C/740C →
+   −$216/−$82/−$80/−$40); cap late re-entries (one-and-done). BUILT (kept as tools): backtest
+   `--late-cutoff <min>` + `--late-max <n>` (final-min entry cap, layers onto any strat), threaded through
+   montecarlo, + `npm run late-gate-probe` (reports **exp$/trade**, the mechanical-vs-real tell). 5-window
+   real-NBBO verdict: the benefit is a **MECHANICAL MIRAGE** — the one-and-done shows big P&L "gains" in the
+   loss-heavy windows (MayAug25 power f60·1 +$13k) but **per-trade expectancy is FLAT-to-WORSE** (MayAug25
+   −$54.0→−$54.1/t unchanged = 100% from cutting average trades; 2024 f60·1 −$29→−$76/t = KEPT the worst
+   leans) and it **HURTS the one +EV window** (Mar26 −$3,438). It's just "fewer trades on a structurally −EV
+   book," not a real edge that targets bad leans. ALSO the WRONG instrument: 06-08 over-trading was partly
+   **CROSS-channel** (POWERHOUR base + ALT each leaning the same minutes — 739C/739P were DIFFERENT channels),
+   which a per-channel cap can't fix → a ROSTER issue (de-dup the power channels), not an entry gate; and the
+   live cost gate already suppresses marginal late entries. Validate-live, not backtest. Full writeup: memory
+   `late-leans-gate-verdict.md`.
 3. **1DTE flatten BUG — FIXED (worker `2026-06-08a`, repo; ⚠ PENDING PASTE-DEPLOY):** the late-day 1DTE
    (opened past the 15:45 ET / 12:45 PST cutoff) is meant to swing the high-volume last 20 min and
    **CLOSE SAME-DAY** — it was NOT closing. ROOT CAUSE (corrected — the prior note misdiagnosed it):

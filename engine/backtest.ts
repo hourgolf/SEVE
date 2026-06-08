@@ -123,12 +123,25 @@ export function simulateSession(
   // peak favorable price (ignores premium noise — the right trail for 0DTE momentum,
   // what breakout's code does). premiumGivebackPct: give back X% of peak premium gain.
   // Mirrors the live worker so backtest == live.
-  trailExit?: { atrChandelierK?: number; premiumGivebackPct?: number; untilMin?: number }
+  trailExit?: { atrChandelierK?: number; premiumGivebackPct?: number; untilMin?: number },
+  // BREAKEVEN-once-in-profit stop. Once the option has EVER traded up ≥ engagePct
+  // above entry, the stop ratchets to entry (× 1+lockPct). It exits a position that
+  // went green then gave it all back at ~breakeven instead of a full stop-out — but
+  // does NOT cap a runner that never retraces (so the convex tail is untouched, the
+  // way a profit-target / trail is NOT). Premium-mark based, single-leg only.
+  breakevenExit?: { engagePct: number; lockPct?: number },
+  // LATE-LEANS GATE (entry discipline, not exit). In the final `cutoffMin` minutes,
+  // allow at most `maxEntries` NEW entries per session — a one-and-done (maxEntries 1)
+  // / tighter re-entry cap that stops power over-trading the whipsawy close (the
+  // 06-08 leak: after the peak it kept opening wrong-way leans). Counts only entries
+  // OPENED inside the window; an entry opened earlier and still held is untouched.
+  lateGate?: { cutoffMin: number; maxEntries: number }
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
   let ms: ManagedState | null = null; // managed (smart) position
   let dayPnl = 0;
+  let lateEntries = 0; // entries opened inside the late-leans gate window (this session)
   const cm = gross ? GROSS_COST : costModel;
   const etMin = management ? bars.map((b) => etMinuteOfDay(b.ts)) : [];
 
@@ -183,10 +196,10 @@ export function simulateSession(
 
     // Premium profit/stop takes priority over the strategy's own exit when held.
     // (single-leg only — multi-leg exits are handled by the strategy itself.)
-    if (pos && !pos.legs && (premiumExit || trailExit) && (!intent || intent.kind !== "exit")) {
+    if (pos && !pos.legs && (premiumExit || trailExit || breakevenExit) && (!intent || intent.kind !== "exit")) {
       const q = findQuote(chain, pos.strike, pos.optType);
       if (q) {
-        // ratchet the peak option mid (the trail's high-water mark)
+        // ratchet the peak option mid (the trail's / breakeven's high-water mark)
         pos.peakPremium = Math.max(pos.peakPremium ?? pos.entryPrice, q.mid);
         if (premiumExit?.profitPct != null && q.mid >= pos.entryPrice * (1 + premiumExit.profitPct / 100))
           intent = { kind: "exit", reason: "target_premium" };
@@ -207,6 +220,16 @@ export function simulateSession(
         } else if (trailExit?.premiumGivebackPct != null && pos.peakPremium != null && pos.peakPremium > pos.entryPrice) {
           const givebackLevel = pos.entryPrice + (pos.peakPremium - pos.entryPrice) * (1 - trailExit.premiumGivebackPct / 100);
           if (q.mid <= givebackLevel) intent = { kind: "exit", reason: "trail_giveback" };
+        }
+        // BREAKEVEN-once-in-profit (checked AFTER the premium stop so a violent
+        // gap-through still fills at the real worse mark, not a fictitious entry).
+        // Arms once peakPremium reached entry×(1+engagePct); then exits at the first
+        // bar the mark falls back to entry×(1+lockPct). Independent of premiumExit —
+        // works on a built-in strat whose only other exits are its own ATR/EOD rules.
+        if ((!intent || intent.kind !== "exit") && breakevenExit && pos.peakPremium != null
+            && pos.peakPremium >= pos.entryPrice * (1 + breakevenExit.engagePct / 100)
+            && q.mid <= pos.entryPrice * (1 + (breakevenExit.lockPct ?? 0) / 100)) {
+          intent = { kind: "exit", reason: "breakeven_stop" };
         }
       }
     }
@@ -238,6 +261,11 @@ export function simulateSession(
       }
     }
 
+    // Late-leans gate: once maxEntries NEW entries have opened inside the final
+    // cutoffMin this session, block further entries (the over-trading fix). wasFlat
+    // lets us increment the counter only when a position is actually opened this bar.
+    const wasFlat = !pos;
+    const lateBlocked = !!lateGate && f.minutesToClose <= lateGate.cutoffMin && lateEntries >= lateGate.maxEntries;
     if (pos && intent && intent.kind === "exit") {
       let exitPrice: number, pnl: number, tradeCost: number;
       const comm = gross ? 0 : costModel.commissionPerContract;
@@ -280,7 +308,7 @@ export function simulateSession(
         riskUsd: pos.legs ? (pos.maxLossUsd ?? 0) * pos.qty : 0.5 * pos.entryPrice * pos.qty * 100,
       });
       pos = null;
-    } else if (!pos && intent && intent.kind === "enter") {
+    } else if (!pos && intent && intent.kind === "enter" && !lateBlocked) {
       if (intent.legs?.length) {
         // MULTI-LEG: resolve each leg's strike off ATM, price it (long→ask, short→bid),
         // and size off the structure's DEFINED MAX LOSS (so credit spreads — net
@@ -334,6 +362,7 @@ export function simulateSession(
         }
       }
     }
+    if (wasFlat && pos && lateGate && f.minutesToClose <= lateGate.cutoffMin) lateEntries++;
   }
   return trades;
 }
@@ -497,6 +526,20 @@ async function main() {
   // volume surge (a CLOCK-phased exit; the phase is deterministic, no regime detection).
   const trailUntil = argNum("trail-until", 0);
   if (trailK > 0) trailExit = { atrChandelierK: trailK, ...(trailUntil > 0 ? { untilMin: trailUntil } : {}) };
+  // --breakeven <pct>: once the option is up ≥ pct% over entry, ratchet the stop to
+  // entry — convert a green→red round-trip into ~breakeven WITHOUT capping the tail
+  // (differs from --trail / a profit target, which cap the convex upside). Layers
+  // onto ANY strat. --breakeven-lock <pct> locks at entry×(1+pct) instead of flat
+  // entry (default 0 = true breakeven). Off when --breakeven is absent / ≤ 0.
+  const breakevenPct = argNum("breakeven", 0);
+  const breakevenLock = argNum("breakeven-lock", 0);
+  const breakevenExit = breakevenPct > 0 ? { engagePct: breakevenPct, lockPct: breakevenLock } : undefined;
+  // --late-cutoff <min> + --late-max <n>: LATE-LEANS GATE. In the final <min> minutes,
+  // cap NEW entries at <n> per session (one-and-done = --late-max 1). Off when
+  // --late-cutoff is absent / ≤ 0. Default max = 1 (the one-and-done the thesis names).
+  const lateCutoff = argNum("late-cutoff", 0);
+  const lateMax = argNum("late-max", 1);
+  const lateGate = lateCutoff > 0 ? { cutoffMin: lateCutoff, maxEntries: Math.max(0, lateMax) } : undefined;
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
   const stratName = specDef
@@ -568,7 +611,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      const dayTrades = simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, cost, management, trailExit);
+      const dayTrades = simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate);
       all.push(...dayTrades);
       perDay.push({ date: s.dateET, pnl: Math.round(dayTrades.reduce((a, t) => a + t.pnl, 0) * 100) / 100, trades: dayTrades.length });
     }
@@ -591,7 +634,7 @@ async function main() {
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
       const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management, trailExit));
+      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management, trailExit, breakevenExit, lateGate));
     }
     report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }

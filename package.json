@@ -14,6 +14,8 @@
     "golden": "tsx engine/manage.golden.ts",
     "ab": "tsx engine/ab.ts",
     "power-probe": "tsx engine/power-probe.ts",
+    "breakeven-probe": "tsx engine/breakeven-probe.ts",
+    "late-gate-probe": "tsx engine/late-gate-probe.ts",
     "sides-probe": "tsx engine/sides-probe.ts",
     "spread-probe": "tsx engine/spread-probe.ts",
     "mdte-probe": "tsx engine/mdte-probe.ts",
