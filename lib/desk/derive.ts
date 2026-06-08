@@ -46,6 +46,35 @@ export function fundPnl(
   return { nav, dayPnl };
 }
 
+// How much the OPEN positions' unrealized P&L moves when marked off the LIVE marks
+// vs the worker's stored unrealized_pnl. The fund-level nav/dayPnl (useDeskFeed) is
+// account-truth (latestNav − sessionOpenNav), baked at the worker's ~1-min snapshot
+// marks; adding this delta lets the headline NAV + Day-P&L LED track live spot WITHOUT
+// touching the realized side (which must stay account-truth — see useDeskFeed's navDay
+// note). Closed positions contribute 0. Same first-order mark the Open Positions panel +
+// channelPnl use, so the headline agrees with them. 0 when no live marks yet.
+export function liveFundAdjust(positions: Position[], liveMarks?: Record<string, number>): number {
+  if (!liveMarks) return 0;
+  let adj = 0;
+  for (const p of positions) {
+    if (p.status !== "open") continue;
+    const m = liveMarks[p.occ_symbol];
+    if (m != null && Number.isFinite(m) && m > 0) adj += (m - p.avg_entry_price) * p.qty * 100 - p.unrealized_pnl;
+  }
+  return adj;
+}
+
+// Fund nav + day P&L re-marked to LIVE: account-truth base + the open-position live delta.
+export function liveFundPnl(
+  base: { nav: number; dayPnl: number },
+  positions: Position[],
+  liveMarks?: Record<string, number>
+): { nav: number; dayPnl: number } {
+  const adj = liveFundAdjust(positions, liveMarks);
+  if (!adj) return base;
+  return { nav: Math.round(base.nav + adj), dayPnl: Math.round(base.dayPnl + adj) };
+}
+
 const COLOR_OF: Record<string, PmColor> = {
   fade: "green",
   breakout: "blue",

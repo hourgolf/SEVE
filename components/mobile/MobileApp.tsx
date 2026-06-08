@@ -20,7 +20,7 @@ import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
-import { channelPnl } from "@/lib/desk/derive";
+import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
 import { MixerPads } from "@/components/mobile/MixerPads";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -69,6 +69,9 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   // per-channel P&L off the SAME live marks → Equity rows + channel strips track the
   // Open Positions panel instead of lagging on the worker's stored unrealized_pnl.
   const livePnl = channelPnl(feed.positions, liveMarks);
+  // Fund NAV + Day-P&L re-marked to the SAME live marks, so the headline vitals LEDs
+  // track live spot instead of lagging on the worker's ~1-min equity snapshot.
+  const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
 
   const goTab = (t: Tab) => {
     setTab(t);
@@ -78,13 +81,13 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const running = desk.fund.running && !desk.fund.is_halted;
   const runLabel = desk.fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
   const runCls = desk.fund.is_halted ? "halt" : running ? "on" : "off";
-  const down = feed.fundPnl.dayPnl < 0;
-  const dayLed = (down ? "-" : "") + Math.abs(Math.round(feed.fundPnl.dayPnl));
+  const down = liveFund.dayPnl < 0;
+  const dayLed = (down ? "-" : "") + Math.abs(Math.round(liveFund.dayPnl));
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
   // Header headline = fund NAV (total) + day P&L — both colored by the day's direction
   // (green up / red down), now that the desk trades SPY *and* QQQ and a lone SPY price
   // belongs to the chart, not the global vitals.
-  const navLed = String(Math.round(feed.fundPnl.nav));
+  const navLed = String(Math.round(liveFund.nav));
 
   function onDeckScroll() {
     const el = deckRef.current;
@@ -167,10 +170,10 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <PnlPanel
               strategists={desk.strategists}
               pnlByStrategist={livePnl}
-              fundPnl={feed.fundPnl}
+              fundPnl={liveFund}
               equityCurve={feed.equityCurve}
             />
-            <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} />
+            <MasterStrip fund={desk.fund} fundPnl={liveFund} />
             <Bezel label="16-Step Tape · recent signals" className="tape m-steptape">
               <StepRow steps={feed.steps} />
             </Bezel>

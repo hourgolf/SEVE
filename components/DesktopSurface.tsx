@@ -25,7 +25,7 @@ import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
-import { channelPnl } from "@/lib/desk/derive";
+import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
@@ -115,6 +115,9 @@ export function DesktopSurface({
   // Per-channel P&L re-derived off the SAME live marks, so the Equity rows + channel
   // strips track the Open Positions panel instead of lagging on stored unrealized_pnl.
   const livePnl = channelPnl(feed.positions, liveMarks);
+  // Fund NAV + Day-P&L re-marked to the SAME live marks (account-truth base + the
+  // open-position live delta) so the head readout + master strip track live spot too.
+  const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
 
   return (
     <Chassis
@@ -138,8 +141,8 @@ export function DesktopSurface({
       }
     >
       <div className="surface-bar">
-        <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} compact />
-        <HeadReadouts fund={desk.fund} fundPnl={feed.fundPnl} spot={data.spot} spotUp={spotUp} symbol={symbol} />
+        <MasterStrip fund={desk.fund} fundPnl={liveFund} compact />
+        <HeadReadouts fund={desk.fund} fundPnl={liveFund} spot={data.spot} spotUp={spotUp} symbol={symbol} />
       </div>
 
       {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
@@ -165,7 +168,7 @@ export function DesktopSurface({
             <PnlPanel
               strategists={desk.strategists}
               pnlByStrategist={livePnl}
-              fundPnl={feed.fundPnl}
+              fundPnl={liveFund}
               equityCurve={feed.equityCurve}
             />
           </div>
@@ -207,7 +210,7 @@ export function DesktopSurface({
             </div>
           </SortableContext>
         </DndContext>
-        <MasterStrip fund={desk.fund} fundPnl={feed.fundPnl} />
+        <MasterStrip fund={desk.fund} fundPnl={liveFund} />
       </div>
       <Bezel label="16-Step Tape · recent signals" className="tape">
         <StepRow steps={feed.steps} />
