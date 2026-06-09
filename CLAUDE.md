@@ -28,6 +28,24 @@ five new research probes.** Full writeup: memory `tier2-conservative-targets-ver
    the gate (only ~$1.1k clipped from one window). All channels now cost-gated. Power roster NOT consolidated
    (operator kept all 3 power channels armed for the live A/B). NOTE: this paste also shipped the prior
    pending 06-08a/b/c (1DTE same-day flatten + manual-exit twins/push).
+3. **P&L "Realized" over-report DIAGNOSED + manual close-position FIX (pushed → live).** The desk's
+   "TODAY'S TRADES · REALIZED" + per-channel rows OVER-report vs the account (06-09: desk +$7.6k vs account
+   NAV +$3.7k). Trust **Fund(today) = NAV-delta** (the headline already uses it); per-channel rows are
+   relative attribution. Cause = shared-OCC: 4-6 channels net into one Alpaca lot, desk books per-row.
+   Dominant leak was the **manual close-position API** booking `(fill−entry)×pos.qty` off a mark on the FULL
+   row qty (54 manual closes = +$3.4k phantom). FIXED (`app/api/close-position/route.ts`): book on the
+   actually-sold `sellQty`, $0 if the lot's already gone. Memory `pnl-realized-inflation-fix.md`.
+4. **SHARED-OCC EXIT TRAP + LEDGER ACCURACY — Worker `2026-06-09b` + `2026-06-09c` DEPLOYED.** The real bug
+   behind the stuck ORB 726P (+$700→−$700, couldn't exit): when channels share an OCC, Alpaca nets one lot;
+   a sibling (often a manual ✕-close) drains it, then a channel's exit sell is REJECTED (403 cash-secured
+   put) and the OLD code looped the rejected sell EVERY minute → rode to expiry trapped. **NOT the ustop
+   removal** (the stop fired; the sell was rejected). **09b:** sell only `min(held,row)`; if can't sell,
+   reconcile-close at fill-net (never loop). **09c (de-dup, after operator REJECTED strike-nudging [agility]
+   + 17 separate accounts [infeasible]):** keep same ATM strike / one account, make the per-channel ledger
+   accurate so each sells only its own share — (1) entry records ACTUAL filled qty (not intended) → kills
+   Σ(rows)>Alpaca-net drift; (2) per-OCC `remainingByOcc` counter for within-cycle sell coordination. Honest
+   limit: a sell still reduces the shared lot, so non-interference depends on ledger accuracy (1+2 + 09b floor);
+   truly-impossible needs separate OCCs/accounts (rejected). Manual twins KEPT (operator's manual edge is real).
 
 **KEY VERDICTS (don't re-litigate — all real-NBBO, 5 windows):**
 - **RIDE the convex-edge channels (BREAK ALT/V3); don't target/scale/trail them.** They're +EV live with the
