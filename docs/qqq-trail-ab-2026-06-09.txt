@@ -1,0 +1,28 @@
+
+> seve-live-market-monitor@0.1.0 qqq-trail-ab
+> tsx engine/qqq-trail-ab.ts --days 800
+
+
+  QQQ-Break-ORB · armable-exit A/B · 64 real-NBBO sessions · entry = builtin breakout · gated 3.0 · maxC 4
+  native = builtin chandelier(k1.5)+failed-break+eod · chand·kN = armable pure ATR-chandelier · gb35 = premium-giveback (NOT armable, reference)
+
+  ── ustop 0 ──
+                      native    chand0.5   chand0.75    chand1.0    chand1.5   gb35(ref)
+  exp$/t               -55.6       -28.2       -27.0       -31.4       -51.2       -15.3
+  win%·n             26w·107     45w·111     45w·103      47w·95      45w·92     39w·114
+  total$               -5953       -3132       -2777       -2986       -4709       -1740
+  CHOP Mar26           -3430       -2026       -1520       -1884       -2344        -910
+  TREND AprMay26       -2479        -877        -976       -1086       -2133        -593
+
+  ── ustop 0.20% (live) ──
+                      native    chand0.5   chand0.75    chand1.0    chand1.5   gb35(ref)
+  exp$/t               -54.5       -29.5       -21.8       -17.9       -42.5       -23.1
+  win%·n             26w·107     44w·113     44w·104      47w·96      41w·94     38w·116
+  total$               -5829       -3328       -2269       -1719       -3998       -2681
+  CHOP Mar26           -3430       -1438        -932       -1240       -2136       -1398
+  TREND AprMay26       -2355       -1661       -1056        -462       -1630       -1045
+
+  READ: the DEPLOYABLE win = best chand·kN vs native. If chand ≈ native, the armable chandelier adds
+  nothing (builtin already chandeliers) → QQQ's managed-exit gain lives in gb35 (premium-giveback),
+  which the stateless worker can't arm without a peak_premium column. Compare ustop 0 vs 0.20 too.
+

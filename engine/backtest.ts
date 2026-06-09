@@ -135,7 +135,15 @@ export function simulateSession(
   // / tighter re-entry cap that stops power over-trading the whipsawy close (the
   // 06-08 leak: after the peak it kept opening wrong-way leans). Counts only entries
   // OPENED inside the window; an entry opened earlier and still held is untouched.
-  lateGate?: { cutoffMin: number; maxEntries: number }
+  lateGate?: { cutoffMin: number; maxEntries: number },
+  // UNDERLYING INITIAL STOP (config-gated; mirrors the live worker). Exit when the
+  // underlying moves underlyingStopPct% against entryUnderlying — fires BEFORE the
+  // premium stop. 0/undefined = off. Applies to BOTH the simple and managed paths.
+  underlyingStopPct?: number,
+  // ENTRY COST GATE (the live worker's COST_GATE_RATIO). Veto an entry whose expected
+  // ~1·ATR premium move doesn't clear the round-trip cost by minMoveToCostRatio.
+  // Single-leg simple path (the managed path uses management.costGate). undefined = off.
+  entryCostGate?: { minMoveToCostRatio: number }
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -154,7 +162,7 @@ export function simulateSession(
       if (ms) {
         const q = findQuote(chain, ms.strike, ms.optType);
         if (q) {
-          const r = stepManaged(ms, q, f.close, f.atr, etMin[i], f.minutesToClose, cm);
+          const r = stepManaged(ms, q, f.close, f.atr, etMin[i], f.minutesToClose, cm, underlyingStopPct ?? 0);
           for (const p of r.partials) {
             dayPnl += p.pnl;
             trades.push({
@@ -171,7 +179,9 @@ export function simulateSession(
         if (intent && intent.kind === "enter" && intent.direction) {
           const strike = Math.round(f.close);
           const q = findQuote(chain, strike, intent.direction);
-          const gateOk = !management.costGate || gross || costGatePass(q!, f.atr, management.costGate.minMoveToCostRatio, costModel);
+          // guard: only run the cost gate when the strike is actually quotable (a missing
+          // quote must skip the entry, not crash costGatePass on an undefined quote).
+          const gateOk = !!q && (!management.costGate || gross || costGatePass(q, f.atr, management.costGate.minMoveToCostRatio, costModel));
           if (q && gateOk) {
             const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false);
             if (r.ok) {
@@ -196,13 +206,17 @@ export function simulateSession(
 
     // Premium profit/stop takes priority over the strategy's own exit when held.
     // (single-leg only — multi-leg exits are handled by the strategy itself.)
-    if (pos && !pos.legs && (premiumExit || trailExit || breakevenExit) && (!intent || intent.kind !== "exit")) {
+    if (pos && !pos.legs && (premiumExit || trailExit || breakevenExit || (underlyingStopPct && underlyingStopPct > 0)) && (!intent || intent.kind !== "exit")) {
       const q = findQuote(chain, pos.strike, pos.optType);
       if (q) {
         // ratchet the peak option mid (the trail's / breakeven's high-water mark)
         pos.peakPremium = Math.max(pos.peakPremium ?? pos.entryPrice, q.mid);
         if (premiumExit?.profitPct != null && q.mid >= pos.entryPrice * (1 + premiumExit.profitPct / 100))
           intent = { kind: "exit", reason: "target_premium" };
+        // underlying initial stop — fires before the premium stop (loss stop only).
+        else if (underlyingStopPct && underlyingStopPct > 0 && pos.entryUnderlying > 0
+            && ((pos.optType === "call" ? pos.entryUnderlying - f.close : f.close - pos.entryUnderlying) / pos.entryUnderlying) * 100 >= underlyingStopPct)
+          intent = { kind: "exit", reason: "underlying_stop" };
         else if (premiumExit?.stopPct != null && q.mid <= pos.entryPrice * (1 - premiumExit.stopPct / 100))
           intent = { kind: "exit", reason: "stop_premium" };
         // TRAIL: once the position has been in profit, exit when the mid retraces
@@ -342,7 +356,7 @@ export function simulateSession(
       } else if (intent.direction) {
         const strike = Math.round(f.close);
         const q = findQuote(chain, strike, intent.direction);
-        if (q) {
+        if (q && (!entryCostGate || gross || costGatePass(q, f.atr, entryCostGate.minMoveToCostRatio, costModel))) {
           const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false);
           if (r.ok) {
             const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);

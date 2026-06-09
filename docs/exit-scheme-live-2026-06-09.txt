@@ -1,0 +1,60 @@
+
+> seve-live-market-monitor@0.1.0 exit-scheme-probe
+> tsx engine/exit-scheme-probe.ts --days 800 --live
+
+
+  EXIT-SCHEME head-to-head · real-NBBO · −50% hard stop on all · LIVE (cost gate 3 + 0.20% underlying stop)
+  SPY 313 sessions · QQQ 64 sessions · sizing pinned to max_contracts (6; QQQ 4)
+  scale·gNN = OPERATOR: half off @ +50% → trail (give back NN% of peak) + breakeven floor; trail·g35 = trail-only (no scale)
+
+  ══ ORB(base)  [orb-trend-rider · SPY · live=+75% · ustop 0.2] ══
+  window                  ride   fix(live)     +100/BE   trail·g35   scale·g35   scale·g20
+  POOLED total$          -8236      -23320      -22367      -18093      -11874      -13588
+    win% · pos         23w·328     34w·540     20w·603     45w·550     46w·550     45w·578
+  CHOP Mar26              +498       -7804       -7312       -8315       -8261       -8878
+  TREND AprMay26         +2044        -928       -1847       +1271       +2378       +2260
+  TREND-OOS MA25         -8994       -9715       -6673       -5362       -3001       -2619
+  TREND 24                +517        +572       +1649        +324       +2907       +3344
+  CHOP-MIX 25-26         -3328       -6121       -8373       -6748       -6634       -8543
+
+  ══ QQQ-Break-ORB  [breakout-qqq · QQQ · builtin ORB · live=+90% · ustop 0.2] ══
+  window                  ride   fix(live)     +100/BE   trail·g35   scale·g35   scale·g20
+  POOLED total$          -5829       -5498       -5509       -1075        -153       -1079
+    win% · pos         26w·107     26w·109     26w·108      48w·84      48w·84      46w·90
+  CHOP Mar26             -3430       -3238       -3110        -827        -205         -71
+  TREND AprMay26         -2355       -2215       -2355         -15        +231        -829
+
+  ══ POWERHOUR(ALT)  [power-smart-entries · SPY · live=+100% · ustop 0] ══
+  window                  ride   fix(live)     +100/BE   trail·g35   scale·g35   scale·g20
+  POOLED total$         -18794      -19207      -19093      -15075      -14787      -16171
+    win% · pos         24w·241     26w·277     20w·314     37w·294     38w·294     38w·309
+  CHOP Mar26              -120        +816        -268        +906        +870        -581
+  TREND AprMay26         -1452       -2732       -2464       -1119       -1326       -1329
+  TREND-OOS MA25         -6736       -6450       -4977       -4690       -3940       -3236
+  TREND 24               -5199       -4827       -3809       -3448       -3280       -3533
+  CHOP-MIX 25-26         -5287       -6013       -7574       -6725       -7112       -7493
+
+  ══ BREAK(ALT)  [breakout-smart-entries · SPY · live=+100% · ustop 0.2] ══
+  window                  ride   fix(live)     +100/BE   trail·g35   scale·g35   scale·g20
+  POOLED total$          +1242       -4722       -9174       -4592       -4208       -5816
+    win% · pos         31w·143     35w·167     21w·168     45w·159     45w·159     44w·165
+  CHOP Mar26             -4568       -2162       -3380       -3549       -3126       -3018
+  TREND AprMay26         -3206       +1460        -526        -201        +162         +83
+  TREND-OOS MA25         +1302        -326        -362       +1349       +2315       +2821
+  TREND 24                 +72       -1328       -1286       -1411       -1675       -1462
+  CHOP-MIX 25-26         +7702       -2305       -3596        -720       -1824       -4180
+
+  ══ BREAK(ALT-V3)  [breakout-alt-v3 · SPY · live=+100% · ustop 0.2] ══
+  window                  ride   fix(live)     +100/BE   trail·g35   scale·g35   scale·g20
+  POOLED total$          +4815       -1182       -9646       -4362       -4041       -5734
+    win% · pos         31w·162     36w·193     21w·194     45w·186     45w·186     43w·194
+  CHOP Mar26             -2703         -77       -2990       -4077       -3543       -3621
+  TREND AprMay26         -1421       +2729        +569       +1944       +1752       +1812
+  TREND-OOS MA25         +2291        +235        -569       +1058       +2186       +2332
+  TREND 24                +323         +28       -1034       -1123       -1387       -1174
+  CHOP-MIX 25-26         +6385       -4037       -5598       -2103       -2988       -5021
+
+  READ: trail·g35→scale·g35 isolates the SCALE-OUT; ride→trail·g35 isolates the exit-ENGINE (manage vs native).
+  scale WINS only if total$ beats ride AND holds across windows. Convex-tail channels (BREAK ALT/V3): expect
+  ride to win (scaling caps the tail). Tail-less weak channels: expect scale to reduce loss (risk control).
+

@@ -1,0 +1,42 @@
+
+> seve-live-market-monitor@0.1.0 power-roster
+> tsx engine/power-roster-probe.ts --days 800
+
+
+  POWER ROSTER · gate decision + consolidation · 313 real-NBBO SPY sessions · ride+(−50% stop) · ustop 0
+  builtins VWAP-OFF (live proxy) + native exits; ALT = live spec entry (vwap_side degraded live — caveat)
+
+  ══ POWERHOUR(base)  [power · MOM60 · live gate-EXEMPT] ══
+  window                UNGATED        GATED   gate Δ
+  POOLED total$          -32531       -15348   +17183
+  exp$/t · win·n  -23.7·15w·1373-24.8·18w·619
+  CHOP Mar26              +3279        +2134   -1145
+  TREND AprMay26          -3437        -2436   +1001
+  TREND-OOS MA25         -14862        -6509   +8353
+  TREND 24               -12595        -5280   +7315
+  CHOP-MIX 25-26          -4969        -3257   +1712
+
+  ══ Power-Final30  [power-final30 · MOM30 · gated] ══
+  window                UNGATED        GATED   gate Δ
+  POOLED total$          -24675       -10530   +14145
+  exp$/t · win·n  -25.3·19w·976-23.4·22w·450
+  CHOP Mar26              -5756        -4924   +832
+  TREND AprMay26          -2123        -1277   +846
+  TREND-OOS MA25          -8310        -1984   +6326
+  TREND 24                 -953        +2205   +3158
+  CHOP-MIX 25-26          -7779        -4550   +3229
+
+  ══ POWERHOUR(ALT)  [power-smart-entries · spec · gated] ══
+  window                UNGATED        GATED   gate Δ
+  POOLED total$          -23789       -18794   +4996
+  exp$/t · win·n  -46.6·27w·511-78.0·24w·241
+  CHOP Mar26              -1071         -120   +951
+  TREND AprMay26           -586        -1452   -866
+  TREND-OOS MA25          -9966        -6736   +3230
+  TREND 24                -4440        -5199   -759
+  CHOP-MIX 25-26          -7444        -5287   +2157
+
+  READ #1 (gate): if GATED beats UNGATED broadly AND keeps the positive windows, the cost-gate
+  exemption on `power` is UNJUSTIFIED → gate it. If gating erases a big positive (convex) window,
+  the exemption stands. #2 (keep): least-negative gated channel is the consolidation keeper.
+

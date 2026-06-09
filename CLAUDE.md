@@ -8,7 +8,50 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## SESSION HANDOFF — 2026-06-08 — READ THIS FIRST
+## SESSION HANDOFF — 2026-06-09 — READ THIS FIRST
+Exit-management deep-dive on the live roster (operator-driven). Investigated conservative take-profits →
+exit schemes → the underlying stop → the QQQ trail → the power family. **Net: two LIVE changes shipped, plus
+five new research probes.** Full writeup: memory `tier2-conservative-targets-verdict.md`. Prior handoffs below.
+
+**LIVE CHANGES SHIPPED THIS SESSION:**
+1. **Underlying stop ZEROED on the 3 ride channels** (`strategist_config.underlying_stop_pct` 0.20 → 0 on
+   `breakout-smart-entries`, `breakout-alt-v3`, `orb-trend-rider` — config-only, applied via SQL, no deploy).
+   The `npm run ustop-sweep` finding: the 0.20% underlying stop was HURTING these momentum/ride channels
+   (whipsaws them out in chop + caps the convex tail). ustop 0 is best — backtest: BREAK(ALT) +1242→+6701,
+   V3 +4815→+10016, ORB -8236→-2918. The −50% premium stop + cost gate + $500 daily-stop remain as backstops.
+   ⚠ CORRECTION to a mid-session claim: the COST GATE is the helpful control, NOT the underlying stop.
+   Rollback: `update strategist_config c set underlying_stop_pct=0.20 from strategists s where
+   c.strategist_id=s.id and s.slug in ('breakout-smart-entries','breakout-alt-v3','orb-trend-rider');`
+2. **Worker `2026-06-09a` DEPLOYED** (power gate-exemption removed: `COST_GATE_EXEMPT = new Set<string>()`).
+   `npm run power-roster` refuted the exemption — gating HALVES power(base)'s bleed (−$32.5k→−$15.3k) by
+   curbing its re-lean-every-bar over-trading (1373→619 entries) while the high-ATR convex tail still passes
+   the gate (only ~$1.1k clipped from one window). All channels now cost-gated. Power roster NOT consolidated
+   (operator kept all 3 power channels armed for the live A/B). NOTE: this paste also shipped the prior
+   pending 06-08a/b/c (1DTE same-day flatten + manual-exit twins/push).
+
+**KEY VERDICTS (don't re-litigate — all real-NBBO, 5 windows):**
+- **RIDE the convex-edge channels (BREAK ALT/V3); don't target/scale/trail them.** They're +EV live with the
+  cost gate; every take-profit/scale/breakeven/trail CAPS the tail (the edge is one big window, CHOP-MIX
+  25-26 +$8k). V3 ride is the desk's only clearly +EV config. The original conservative-take-profit agenda
+  (+30/40/50) = the mechanical mirage; +100/BE was the WORST scheme tested on every channel.
+- **The scale+BE+trail scheme (operator's) only helps the tail-less weak channels** (best on QQQ-Break-ORB,
+  ≈breakeven) — and ~85% of that is the managed EXIT-ENGINE, not the scale-out.
+- **QQQ-Break-ORB** runs the builtin bare ORB (base-slug); its dormant spec_json entry is WORSE (refuted).
+  The deployable lever is a tighter ARMABLE chandelier (k=1.0, not the builtin's 1.5): −5829→−1719 (~breakeven).
+  NOT shipped (needs a worker change to attach a trail to builtin channels, or a compiled rebuild) — parked.
+- **The power family is the desk's biggest bleeder** (base/final30/ALT all −EV, correlated final-hour leans).
+  Gate-exemption removed (above). Consolidation (mute base+ALT, keep Final30 = least-bad) offered but DEFERRED
+  to the live A/B. Builtins run VWAP-OFF live (the per-bar VWAP bug); ALT's vwap_side is degraded live too.
+
+**ENGINE CHANGES (additive, default-off — existing backtests byte-identical; golden test passes):**
+- `simulateSession(…, underlyingStopPct?, entryCostGate?)` + `stepManaged(…, underlyingStopPct)` — mirror the
+  worker's 0.20% underlying stop + COST_GATE_RATIO so probes can model live conditions.
+- Fixed a latent crash: the managed entry called `costGatePass(q!)` before the `if(q)` guard → an undefined
+  QQQ quote crashed once `management.costGate` was set.
+- NEW probes: `npm run tier2-probe | exit-scheme-probe [--live --daily-stop] | ustop-sweep | qqq-trail-ab |
+  power-roster` (outputs saved under `docs/*-2026-06-09.txt`).
+
+## SESSION HANDOFF — 2026-06-08
 LIVE A/B week underway: **13 channels armed+unmuted** (base grind disabled). Prior handoffs below.
 Two UI fixes shipped this session: cross-ticker position-mark freeze (`hooks/usePositionMarks.ts` —
 marks ALL open positions off their own ticker's quote+spot, chart-independent) and per-channel Equity

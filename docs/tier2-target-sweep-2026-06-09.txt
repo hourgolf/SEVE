@@ -1,0 +1,112 @@
+
+> seve-live-market-monitor@0.1.0 tier2-probe
+> tsx engine/tier2-target-probe.ts --days 800
+
+
+  TIER 2 · conservative take-profit sweep · real-NBBO · −50% stop · RISK $100/t (×5 for live)
+  SPY 313 sessions · QQQ 64 sessions · targets: ride / +100 / +75 / +50 / +40 / +30
+  per cell where shown: exp$/t · hit% · win%·w · n     [ride = ride-to-close; "live" marks the channel's current target]
+
+  ══ ORB(base)  [orb-trend-rider · SPY · spec] ══
+                                            ↑live                                       
+                   ride        +100%         +75%         +50%         +40%         +30%
+  exp$/t          -26.8        -28.3        -27.5        -23.7        -22.7        -30.4
+  hit%                —          26%          34%          44%          49%          54%
+  win%              26w          33w          39w          45w          50w          55w
+  n                 385          623          724          921         1013         1161
+  total$         -10325       -17639       -19899       -21788       -23015       -35251
+  ── per-window  total$  (mechanical loss-reduction shows here) ──
+  CHOP Mar26         +531        -4482        -5578        -7982        -8088        -9990
+  TREND AprMay26         -563        -1612        -1987         +759          +44        -3324
+  TREND-OOS MA25       -12018        -8775        -9932       -11508        -9775       -14224
+  TREND 24          +67          -68        -2177        +1841         +156        -3815
+  CHOP-MIX 25-26         +819        -3125         -509        -5104        -5672        -4218
+  ── per-window  exp$/t·n  (the REAL tell — does per-trade EV rise across windows?) ──
+  CHOP Mar26       +12·43       -71·63       -79·71       -88·91      -81·100      -88·113
+  TREND AprMay26       -12·48       -19·84       -22·89       +6·119       +0·145      -20·163
+  TREND-OOS MA25     -119·101      -61·144      -59·167      -54·213      -43·228      -55·258
+  TREND 24        +1·73       -1·130      -14·153       +9·194       +1·219      -15·247
+  CHOP-MIX 25-26       +7·118      -16·197       -2·236      -17·296      -18·313      -11·372
+
+  ══ QQQ-Break-ORB  [breakout-qqq · QQQ · builtin ORB] ══
+                                                                                        
+                   ride        +100%         +75%         +50%         +40%         +30%
+  exp$/t          -53.1        -39.7        -37.3        -31.3        -41.0        -45.9
+  hit%                —           3%           7%          16%          21%          24%
+  win%              27w          28w          27w          28w          27w          26w
+  n                 146          149          153          160          167          171
+  total$          -7749        -5921        -5701        -5014        -6841        -7857
+  ── per-window  total$  (mechanical loss-reduction shows here) ──
+  CHOP Mar26        -4835        -3888        -3708        -4075        -4910        -5241
+  TREND AprMay26        -3003        -2121        -2345         -949        -1910        -2614
+  ── per-window  exp$/t·n  (the REAL tell — does per-trade EV rise across windows?) ──
+  CHOP Mar26      -101·48       -78·50       -74·50       -78·52       -89·55       -94·56
+  TREND AprMay26       -32·95       -22·96      -23·100       -9·103      -18·107      -24·110
+
+  ══ POWERHOUR(ALT)  [power-smart-entries · SPY · spec] ══
+                               ↑live                                                    
+                   ride        +100%         +75%         +50%         +40%         +30%
+  exp$/t          -46.6        -46.1        -44.6        -36.5        -36.3        -38.3
+  hit%                —          18%          25%          36%          40%          46%
+  win%              27w          30w          33w          40w          43w          47w
+  n                 511          587          643          752          807          901
+  total$         -23789       -27084       -28710       -27481       -29256       -34512
+  ── per-window  total$  (mechanical loss-reduction shows here) ──
+  CHOP Mar26        -1071         -232         -699          -74         -503        -1057
+  TREND AprMay26         -586        -2100        -3678        -2958        -3957        -3788
+  TREND-OOS MA25        -9966       -10238        -8978        -7427        -7828        -8454
+  TREND 24        -4440        -6364        -5689        -6166        -7215        -9016
+  CHOP-MIX 25-26        -7444        -7866        -9383       -10573        -9471       -11914
+  ── per-window  exp$/t·n  (the REAL tell — does per-trade EV rise across windows?) ──
+  CHOP Mar26       -25·43        -4·58       -12·56        -1·67        -7·72       -13·84
+  TREND AprMay26        -8·70       -28·76       -42·87      -30·100      -37·106      -32·117
+  TREND-OOS MA25      -80·125      -72·142      -58·155      -40·185      -40·195      -38·225
+  TREND 24      -32·138      -40·159      -32·177      -32·195      -34·213      -38·240
+  CHOP-MIX 25-26      -56·133      -52·150      -57·166      -52·203      -43·219      -51·233
+
+  ══ BREAK(ALT)  [breakout-smart-entries · SPY · spec] ══
+                               ↑live                                                    
+                   ride        +100%         +75%         +50%         +40%         +30%
+  exp$/t           -5.2        -24.5        -34.0        -30.4        -26.5        -36.2
+  hit%                —          24%          30%          40%          45%          49%
+  win%              31w          34w          37w          44w          48w          51w
+  n                 257          308          322          351          368          384
+  total$          -1347        -7534       -10937       -10668        -9759       -13912
+  ── per-window  total$  (mechanical loss-reduction shows here) ──
+  CHOP Mar26         -920         +213        -1360        -3107        -2717         -174
+  TREND AprMay26        -4815         -821        -1422        -1999        -1491        -1462
+  TREND-OOS MA25        -1834        -3387        -4528        -1430        -1120        -4265
+  TREND 24        -1600        -1020        -2469        -1771         -801        -1865
+  CHOP-MIX 25-26        +8092        -2248         -887        -2091        -3623        -6139
+  ── per-window  exp$/t·n  (the REAL tell — does per-trade EV rise across windows?) ──
+  CHOP Mar26       -57·16       +12·18       -68·20      -141·22      -118·23        -7·24
+  TREND AprMay26      -150·32       -23·36       -38·37       -50·40       -35·43       -32·46
+  TREND-OOS MA25       -26·71       -42·81       -54·84       -16·91       -12·95       -44·98
+  TREND 24       -23·70       -12·87       -27·93      -17·102       -7·107      -17·111
+  CHOP-MIX 25-26      +123·66       -27·84       -10·86       -22·94       -37·98      -60·103
+
+  ══ BREAK(ALT-V3)  [breakout-alt-v3 · SPY · spec] ══
+                               ↑live                                                    
+                   ride        +100%         +75%         +50%         +40%         +30%
+  exp$/t          +13.7         -7.2        -16.4        -24.2        -24.4        -33.1
+  hit%                —          25%          32%          41%          46%          50%
+  win%              31w          35w          38w          44w          48w          52w
+  n                 282          346          365          399          421          434
+  total$          +3876        -2491        -5992        -9654       -10288       -14344
+  ── per-window  total$  (mechanical loss-reduction shows here) ──
+  CHOP Mar26         +356        +1710          -12        -3749        -3491        -1146
+  TREND AprMay26        -3442         -595        -1346        -3477        -2604        -3090
+  TREND-OOS MA25        -2209        -2295        -3250         -188        -1433        -3731
+  TREND 24         +877        +1541         -240          +38        +1253         -381
+  CHOP-MIX 25-26        +8564        -2582         -873        -2006        -3880        -5863
+  ── per-window  exp$/t·n  (the REAL tell — does per-trade EV rise across windows?) ──
+  CHOP Mar26       +18·20       +71·24        -0·26      -129·29      -116·30       -37·31
+  TREND AprMay26       -88·39       -13·45       -28·48       -68·51       -46·56       -54·57
+  TREND-OOS MA25       -28·78       -24·94       -34·96       -2·105      -13·110      -34·111
+  TREND 24       +12·72       +17·90        -2·99       +0·108      +11·114       -3·118
+  CHOP-MIX 25-26      +121·71       -28·91        -9·94      -19·104      -36·108      -51·114
+
+  READ: a conservative target is a KEEPER only if exp$/t RISES (pooled AND across multiple windows) vs ride/live.
+  If total$ rises but exp$/t is flat-to-worse, it's the mechanical mirage (fewer trades on a −EV book), not edge.
+  If exp$/t PEAKS at ride/+100 (convex tail), keep the channel aspirational and RIDE it.
+

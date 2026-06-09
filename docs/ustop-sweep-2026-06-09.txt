@@ -1,0 +1,137 @@
+
+> seve-live-market-monitor@0.1.0 ustop-sweep
+> tsx engine/ustop-sweep-probe.ts --days 800
+
+
+  UNDERLYING-STOP sweep · RIDE exit (−50% stop, no take-profit) · cost gate 3.0 (live) · real NBBO
+  SPY 313 sessions · QQQ 64 sessions · sizing = max_contracts (6; QQQ 4)
+  #2: compare QQQ-Break(BUILTIN) vs QQQ-Break(SPEC) at matched ustop
+
+  ══ ORB(base)  [SPY·spec] ══
+                                                       ↑live              
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   -10.0         -30.4         -25.1         -21.8
+  win% · n               26w·291       21w·365       23w·328       25w·309
+  total$                   -2918        -11093         -8236         -6751
+  ── per-window total$ ──
+  CHOP Mar26                +982         +1345          +498          +818
+  TREND AprMay26           +1949          +566         +2044         +2153
+  TREND-OOS MA25           -8853         -9393         -8994         -8968
+  TREND 24                 +2394          +280          +517         +1144
+  CHOP-MIX 25-26            -415         -4916         -3328         -2924
+
+  ══ QQQ-Break(BUILTIN)  [QQQ·bareORB] ══
+                                                       ↑live              
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   -55.6         -52.7         -54.5         -55.6
+  win% · n               26w·107       26w·107       26w·107       26w·107
+  total$                   -5953         -5637         -5829         -5953
+  ── per-window total$ ──
+  CHOP Mar26               -3430         -3342         -3430         -3430
+  TREND AprMay26           -2479         -2251         -2355         -2479
+
+  ══ QQQ-Break(SPEC)  [QQQ·spec] ══
+                                                       ↑live              
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   -74.0         -43.4         -54.0         -63.4
+  win% · n               24w·119       20w·147       23w·132       24w·125
+  total$                   -8800         -6381         -7124         -7920
+  ── per-window total$ ──
+  CHOP Mar26               -2895          -523          -585         -1698
+  TREND AprMay26           -6737         -6690         -7371         -7054
+
+  ══ POWERHOUR(ALT)  [SPY·spec] ══
+                           ↑live                                          
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   -78.0         -77.5         -75.3         -77.3
+  win% · n               24w·241       22w·248       24w·240       24w·241
+  total$                  -18794        -19229        -18061        -18632
+  ── per-window total$ ──
+  CHOP Mar26                -120          +732          +648          -120
+  TREND AprMay26           -1452         -1452         -1452         -1452
+  TREND-OOS MA25           -6736         -6460         -6688         -6736
+  TREND 24                 -5199         -6258         -5283         -5037
+  CHOP-MIX 25-26           -5287         -5791         -5287         -5287
+
+  ══ POWERHOUR(base)  [SPY·builtin · gate-EXEMPT] ══
+                           ↑live                                          
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   -36.2         -36.2         -36.2         -36.2
+  win% · n              15w·1204      15w·1204      15w·1204      15w·1204
+  total$                  -43598        -43598        -43598        -43598
+  ── per-window total$ ──
+  CHOP Mar26               +1699         +1699         +1699         +1699
+  TREND AprMay26           -1769         -1769         -1769         -1769
+  TREND-OOS MA25          -16996        -16996        -16996        -16996
+  TREND 24                -11013        -11013        -11013        -11013
+  CHOP-MIX 25-26          -15301        -15301        -15301        -15301
+
+  ══ Power-Final30  [SPY·builtin] ══
+                           ↑live                                          
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   -42.2         -42.2         -42.2         -42.2
+  win% · n               23w·353       23w·353       23w·353       23w·353
+  total$                  -14899        -14899        -14899        -14899
+  ── per-window total$ ──
+  CHOP Mar26               -2474         -2474         -2474         -2474
+  TREND AprMay26             +12           +12           +12           +12
+  TREND-OOS MA25           -4649         -4649         -4649         -4649
+  TREND 24                  -363          -363          -363          -363
+  CHOP-MIX 25-26           -7425         -7425         -7425         -7425
+
+  ══ BREAK(ALT)  [SPY·spec] ══
+                                                       ↑live              
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   +47.9          +5.4          +8.7         +30.3
+  win% · n               34w·140       29w·145       31w·143       33w·141
+  total$                   +6701          +782         +1242         +4267
+  ── per-window total$ ──
+  CHOP Mar26                -409         -4508         -4568          -289
+  TREND AprMay26           -3908         -2888         -3206         -3734
+  TREND-OOS MA25            +534          +930         +1302          +936
+  TREND 24                 +1998         +1212           +72          -180
+  CHOP-MIX 25-26           +8546         +6097         +7702         +7594
+
+  ══ BREAK(ALT-V3)  [SPY·spec] ══
+                                                       ↑live              
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   +63.0         +27.3         +29.7         +49.7
+  win% · n               34w·159       30w·165       31w·162       33w·160
+  total$                  +10016         +4511         +4815         +7954
+  ── per-window total$ ──
+  CHOP Mar26               +1090         -2608         -2703         +1402
+  TREND AprMay26           -1793         -1073         -1421         -1601
+  TREND-OOS MA25           +1523         +1918         +2291         +1925
+  TREND 24                 +2249         +1463          +323           +71
+  CHOP-MIX 25-26           +7008         +4871         +6385         +6217
+
+  ══ BREAK(base)  [SPY·builtin] ══
+                           ↑live                                          
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   -45.6         -44.2         -44.3         -45.6
+  win% · n               28w·350       28w·350       28w·350       28w·350
+  total$                  -15948        -15468        -15516        -15948
+  ── per-window total$ ──
+  CHOP Mar26               -3128         -3080         -3128         -3128
+  TREND AprMay26           -1363         -1363         -1363         -1363
+  TREND-OOS MA25           -3217         -3217         -3217         -3217
+  TREND 24                 -5214         -4782         -4782         -5214
+  CHOP-MIX 25-26           -3272         -3272         -3272         -3272
+
+  ══ GRIND-v3  [SPY·builtin] ══
+                           ↑live                                          
+                         ustop 0         0.15%         0.20%         0.25%
+  exp$/t                   -20.9         -20.9         -20.9         -20.9
+  win% · n               45w·880       45w·880       45w·880       45w·880
+  total$                  -18425        -18425        -18425        -18425
+  ── per-window total$ ──
+  CHOP Mar26               -4190         -4190         -4190         -4190
+  TREND AprMay26           -3786         -3786         -3786         -3786
+  TREND-OOS MA25           -2168         -2168         -2168         -2168
+  TREND 24                 -4184         -4184         -4184         -4184
+  CHOP-MIX 25-26           -4168         -4168         -4168         -4168
+
+  READ #1: pick the ustop where pooled exp$/t peaks AND per-window total$ improves broadly. On the
+  +EV edge channels (BREAK ALT/V3) the ustop must not DROP exp$/t (loss-only → tail intact).
+  READ #2: if QQQ-Break(SPEC) beats (BUILTIN) at matched ustop, rename breakout-qqq off the base-slug.
+

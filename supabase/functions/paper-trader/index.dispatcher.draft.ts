@@ -1,3 +1,11 @@
+// ⚑ WORKER VERSION: 2026-06-09a  (POWER GATE EXEMPTION REMOVED. `power` (POWERHOUR base) was the
+//   ONLY channel exempt from the cost gate, on the thesis that gating vetoes its convex tail. A
+//   5-window real-NBBO roster probe (engine/power-roster-probe.ts) REFUTED that: gating HALVES
+//   base's worst-case bleed (−$32.5k → −$15.3k) by curbing its re-lean-EVERY-bar over-trading
+//   (1373 → 619 entries) and clips only ~$1.1k from the single positive window (CHOP Mar26) — the
+//   big high-ATR final-hour moves that carry the tail PASS the gate; only the small-move churn is
+//   cut. So COST_GATE_EXEMPT is now EMPTY — all channels are cost-gated. De-risks base WITHOUT
+//   muting it (keeps the live A/B intact). Additive: only `power` changes behaviour. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-08c  (MANUAL-EXIT ALERTS — Phase 2 web push. On a `-manual` twin
 //   ENTRY the worker POSTs the app's /api/push-send (secret-gated by PUSH_SEND_SECRET) so the
 //   operator gets a push to go own the exit. INERT until PUSH_SEND_SECRET is set on BOTH the
@@ -211,12 +219,14 @@ const PAPER = "https://paper-api.alpaca.markets";
 // Both are tunable consts. The worker has BETTER data than the backtest: the live
 // option_quotes carry REAL bid+ask (+ a modeled delta) and features give ATR.
 const COST_GATE_RATIO = 3.0;          // block if expectedMove < RATIO × roundTripCost
-// Channels EXEMPT from the cost gate. The gate's expected-move (delta·ATR·100)
-// assumes a ~linear move, so it can't see GAMMA convexity — and a real-fills probe
-// (engine/power-probe.ts) showed it vetoes ~⅔ of power's final-hour entries, which
-// were net +$1.1k profitable (power base −$443 → +gate −$1500). The gate is right
-// for the scalper (grind) it was built for; power's edge IS the convex tail.
-const COST_GATE_EXEMPT = new Set(["power"]);
+// Channels EXEMPT from the cost gate. EMPTY as of 2026-06-09 — the `power` exemption
+// was REMOVED. The earlier exemption (citing engine/power-probe.ts: gate vetoes power's
+// convex tail) was REFUTED by a 5-window real-NBBO roster probe (engine/power-roster-
+// probe.ts): gating HALVES power(base)'s worst-case bleed (−$32.5k → −$15.3k) by curbing
+// its re-lean-EVERY-bar over-trading (1373 → 619 entries) and clips only ~$1.1k from the
+// one positive window — the big high-ATR final-hour moves that carry the tail PASS the
+// gate (expectedMove ∝ ATR), so only the small-move churn is cut. All channels now gated.
+const COST_GATE_EXEMPT = new Set<string>();
 const PREMIUM_STOP_PCT = 50;          // exit any open position marked ≤ −50% from entry
 // UNDERLYING INITIAL STOP (per-channel via strategist_config.underlying_stop_pct; 0 = off).
 // Exit when the UNDERLYING has moved X% against the entry. A −50% premium stop fires at a
@@ -1001,8 +1011,8 @@ Deno.serve(async () => {
         // Block an entry whose expected premium move on a ~1·ATR favorable move
         // doesn't clear that cost by COST_GATE_RATIO. Uses the REAL bid/ask + the
         // quote's delta (ATM 0.5 proxy when absent). Mirrors engine/manage.ts
-        // costGatePass — this is what cut grind's churn in the A/B. EXEMPT for
-        // gamma-convex channels (see COST_GATE_EXEMPT) where it kills the edge.
+        // costGatePass — this is what cut grind's churn in the A/B. COST_GATE_EXEMPT is
+        // now EMPTY (the `power` exemption was removed 2026-06-09 — see its definition).
         if (!blocked && !COST_GATE_EXEMPT.has(s.slug)) {
           roundTrip = roundTripCostUsd(bid, ask);
           expectedMove = delta * Math.max(0, f.atr) * 100;

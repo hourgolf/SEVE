@@ -99,7 +99,8 @@ export function stepManaged(
   atr: number,
   etMinOfDay: number,
   minutesToClose: number,
-  costModel: CostModel = DEFAULT_COST_MODEL
+  costModel: CostModel = DEFAULT_COST_MODEL,
+  underlyingStopPct = 0 // config-gated underlying initial stop (mirrors the live worker); 0 = off
 ): { partials: PartialExit[]; closed: boolean } {
   const partials: PartialExit[] = [];
   if (s.remaining <= 0) return { partials, closed: true };
@@ -179,6 +180,13 @@ export function stepManaged(
       const lvl = s.optType === "call" ? s.entryUnderlying - ss.insideAtr * atr : s.entryUnderlying + ss.insideAtr * atr;
       if (s.optType === "call" ? underlying <= lvl : underlying >= lvl) exitReason = "structural";
     }
+  }
+  // d2) underlying initial stop (config-gated; mirrors the live worker). Fires BEFORE
+  // the premium stop, on an adverse underlying move from entry — a loss stop only
+  // (profit-protect trail/breakeven above already bound any winner).
+  if (!exitReason && underlyingStopPct > 0 && s.entryUnderlying > 0) {
+    const adversePct = ((s.optType === "call" ? s.entryUnderlying - underlying : underlying - s.entryUnderlying) / s.entryUnderlying) * 100;
+    if (adversePct >= underlyingStopPct) exitReason = "underlying_stop";
   }
   // e) premium hard stop (the catastrophic backstop)
   if (!exitReason && premium <= s.premiumStopLevel) exitReason = "premium_stop";
