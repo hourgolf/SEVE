@@ -34,11 +34,16 @@ interface QuoteRow { occ_symbol: string; mid: number | null; delta: number | nul
 export function usePositionMarks(positions: Position[]): Record<string, number> {
   const [marks, setMarks] = useState<Record<string, number>>({});
   // stable dependency: the set of held OCCs (re-poll only when it changes)
-  const occKey = positions.filter((p) => p.status === "open").map((p) => p.occ_symbol).sort().join(",");
+  const open = positions.filter((p) => p.status === "open");
+  const occKey = open.map((p) => p.occ_symbol).sort().join(",");
+  // strike + type per held OCC — to SYNTHESIZE a delta when the feed omits greeks
+  // (option_quotes.delta is frequently null), so the mark still tracks the live spot.
+  const metaKey = open.map((p) => `${p.occ_symbol}|${p.strike}|${p.opt_type}`).sort().join(",");
 
   useEffect(() => {
     const occs = occKey ? occKey.split(",") : [];
     if (!occs.length) { setMarks({}); return; }
+    const meta = new Map(metaKey.split(",").filter(Boolean).map((e) => { const [occ, k, t] = e.split("|"); return [occ, { strike: Number(k), optType: t }] as const; }));
     let alive = true;
     const sb = getSupabase();
 
@@ -64,9 +69,22 @@ export function usePositionMarks(positions: Position[]): Record<string, number> 
           if (r.mid == null) continue;
           let mark = Number(r.mid);
           const s = spot[r.underlying] ?? null;
-          if (s != null && r.delta != null && r.underlying_price != null) {
-            mark = Math.max(0, mark + Number(r.delta) * (s - Number(r.underlying_price)));
+          const undl = r.underlying_price != null ? Number(r.underlying_price) : null;
+          // Effective delta: the feed's if present, else a 0DTE moneyness PROXY (greeks
+          // are frequently null). ATM ≈ ±0.5, scaled over ~$7 of moneyness; sign by
+          // call/put. Rough but the point is RESPONSIVENESS — the mark then moves with
+          // the live spot every poll instead of freezing on the 1-min option tape.
+          let d: number | null = r.delta != null ? Number(r.delta) : null;
+          if (d == null && undl != null) {
+            const m = meta.get(occ);
+            if (m) {
+              const ref = s ?? undl;
+              const moneyIn = m.optType === "call" ? ref - m.strike : m.strike - ref;
+              const mag = Math.min(0.97, Math.max(0.03, 0.5 + moneyIn / 7));
+              d = m.optType === "call" ? mag : -mag;
+            }
           }
+          if (s != null && d != null && undl != null) mark = Math.max(0, mark + d * (s - undl));
           out[occ] = mark;
         }
         if (alive) setMarks(out);
@@ -76,9 +94,9 @@ export function usePositionMarks(positions: Position[]): Record<string, number> 
     }
 
     poll();
-    const id = setInterval(poll, 4000);
+    const id = setInterval(poll, 3000);
     return () => { alive = false; clearInterval(id); };
-  }, [occKey]);
+  }, [occKey, metaKey]);
 
   return marks;
 }
