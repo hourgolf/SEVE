@@ -46,19 +46,35 @@ export async function POST(req: Request) {
   const qty = Math.max(1, Math.round(Number(pos.qty)));
   const aHdr = { "APCA-API-KEY-ID": AK, "APCA-API-SECRET-KEY": AS, "content-type": "application/json" };
 
-  // ---- place the market sell on Alpaca paper ----
-  let orderId = "";
+  // Cap the sell to what Alpaca ACTUALLY holds for this OCC. Manual-exit twins (and the
+  // power mirrors) SHARE their OCC with the base machine channel — same entry, one netted
+  // Alpaca lot — so after the base exits its share, Alpaca's net is below this desk row's
+  // qty. Selling the full row qty would open a SHORT put → "insufficient buying power for
+  // cash-secured put". If Alpaca holds none, the lot's already closed → just book this row
+  // at the last mark (no order). Mirrors the worker's min(alpacaQty, rowQty) exit.
+  let heldQty = qty;
   try {
-    const r = await fetch(`${PAPER}/v2/orders`, {
-      method: "POST",
-      headers: aHdr,
-      body: JSON.stringify({ symbol: occ, qty: String(qty), side: "sell", type: "market", time_in_force: "day", client_order_id: `manual-${occ}-${Date.now()}` }),
-    });
-    const txt = await r.text();
-    if (!r.ok) return NextResponse.json({ ok: false, error: `alpaca rejected: ${txt.slice(0, 200)}` }, { status: 502 });
-    orderId = (txt ? JSON.parse(txt)?.id : "") ?? "";
-  } catch (e) {
-    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "order failed" }, { status: 502 });
+    const pr = await fetch(`${PAPER}/v2/positions/${encodeURIComponent(occ)}`, { headers: aHdr });
+    if (pr.status === 404) heldQty = 0;
+    else if (pr.ok) heldQty = Math.abs(Math.round(Number((await pr.json())?.qty ?? 0)));
+  } catch { /* fall through using the desk qty */ }
+  const sellQty = Math.min(qty, heldQty);
+
+  // ---- place the market sell on Alpaca paper (only if a lot is actually held) ----
+  let orderId = "";
+  if (sellQty > 0) {
+    try {
+      const r = await fetch(`${PAPER}/v2/orders`, {
+        method: "POST",
+        headers: aHdr,
+        body: JSON.stringify({ symbol: occ, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `manual-${occ}-${Date.now()}` }),
+      });
+      const txt = await r.text();
+      if (!r.ok) return NextResponse.json({ ok: false, error: `alpaca rejected: ${txt.slice(0, 200)}` }, { status: 502 });
+      orderId = (txt ? JSON.parse(txt)?.id : "") ?? "";
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "order failed" }, { status: 502 });
+    }
   }
 
   // ---- brief poll for the actual fill (market orders fill fast) ----
