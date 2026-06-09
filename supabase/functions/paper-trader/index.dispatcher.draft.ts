@@ -1,3 +1,14 @@
+// ⚑ WORKER VERSION: 2026-06-09d  (ANTI-GHOST RECONSTRUCT GATE. The re-buy/reconstruct guard resurrected
+//   a row whenever a channel's filled orders net long with no open desk row — meant for a genuinely lost
+//   insert. But a channel whose SHARED contracts were sold by a sibling (a rejected own exit, or a pre-fix
+//   manual close tagged `manual-…` it couldn't see) ALSO nets long with no row → it kept re-creating GHOST
+//   rows at the stale entry EVERY cycle (06-09: orb 735P booked $0 on a +90% mover; grind-manual 736C/735P
+//   phantom −387/−480, showed scary fake unrealized then reconciled to ~$0). GATE: reconstruct ONLY if
+//   Alpaca holds UNCOVERED contracts (held − qty already claimed by OTHER channels' open rows); else the
+//   position is gone → don't ghost, don't re-buy (blocked=`liquidated_elsewhere`). Preserves the re-buy
+//   SAFETY: when Alpaca DOES hold the contracts it still reconstructs and never buys. Needs a cycle-start
+//   `openRowQtyByOcc` (Σ open-row qty per OCC). Catches BOTH the manual-prefix ghost and the auto-channel
+//   rejected-sell ghost. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-09c  (SHARED-OCC LEDGER ACCURACY — de-dup without shifting strikes or
 //   splitting accounts. Channels keep trading the SAME ATM OCC on ONE account; we make the per-channel
 //   ledger mirror Alpaca's netted lot so each channel only ever sells ITS OWN share and can't starve a
@@ -721,6 +732,18 @@ Deno.serve(async () => {
     const remainingByOcc = new Map<string, number>();
     for (const p of positions) remainingByOcc.set(String(p.symbol), Math.abs(Math.round(Number(p.qty ?? 0))));
 
+    // RECONSTRUCT GATE input (anti-ghost): Σ open desk-row qty per OCC across ALL channels.
+    // The reconstruct/re-buy guard resurrects a row when a channel's filled orders net long
+    // with no open row (a genuinely lost insert). But a channel whose shared contracts were
+    // SOLD BY A SIBLING (rejected own exit, or a pre-fix manual close it can't see) ALSO nets
+    // long with no row → it kept resurrecting GHOST rows at the stale entry. Gate: only
+    // reconstruct if Alpaca holds UNCOVERED contracts (held − already-claimed-by-open-rows).
+    const openRowQtyByOcc = new Map<string, number>();
+    {
+      const { data: allOpen } = await sb.from("positions").select("occ_symbol,qty").eq("status", "open");
+      for (const r of (allOpen ?? [])) openRowQtyByOcc.set(String(r.occ_symbol), (openRowQtyByOcc.get(String(r.occ_symbol)) ?? 0) + Math.abs(Math.round(Number(r.qty ?? 0))));
+    }
+
     const out: Record<string, unknown>[] = [];
     for (const s of (strategists ?? [])) {
      // Per-channel isolation: a throw in compileSpec/build/evaluate (e.g. a malformed
@@ -1038,12 +1061,27 @@ Deno.serve(async () => {
           const filled = myOrders.filter((o) => String(o.status) === "filled");
           const net = filled.reduce((q, o) => q + (String(o.side) === "buy" ? 1 : -1) * Number(o.filled_qty ?? 0), 0);
           if (net > 0) {
-            const buys = filled.filter((o) => String(o.side) === "buy");
-            const totBuy = buys.reduce((q, o) => q + Number(o.filled_qty ?? 0), 0);
-            const avg = totBuy ? buys.reduce((s2, o) => s2 + Number(o.filled_avg_price ?? 0) * Number(o.filled_qty ?? 0), 0) / totBuy : 0;
-            await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg, current_mark: avg, unrealized_pnl: 0, status: "open" });
-            await journal("WARN", `${s.slug}: recovered ${net} ${occ} from filled orders (lost insert) — not re-buying`);
-            blocked = "reconstructed";
+            // ANTI-GHOST GATE: reconstruct ONLY if Alpaca actually holds UNCOVERED contracts
+            // for this OCC (held − already claimed by OTHER channels' open rows). If the
+            // contracts are gone (sold by a sibling / pre-fix manual close / rejected exit),
+            // net stays long forever with nothing behind it → the old code resurrected a GHOST
+            // row at the stale entry every cycle (orb 735P / grind-manual 736C). Then neither
+            // reconstruct NOR re-buy a liquidated position. Preserves the re-buy SAFETY: when
+            // Alpaca DOES hold the contracts (true lost insert) it still reconstructs, never buys.
+            const alpHeld = Math.abs(Math.round(Number((positions.find((p) => String(p.symbol) === occ))?.qty ?? 0)));
+            const uncovered = alpHeld - (openRowQtyByOcc.get(occ) ?? 0); // this channel has no open row
+            if (uncovered >= net) {
+              const buys = filled.filter((o) => String(o.side) === "buy");
+              const totBuy = buys.reduce((q, o) => q + Number(o.filled_qty ?? 0), 0);
+              const avg = totBuy ? buys.reduce((s2, o) => s2 + Number(o.filled_avg_price ?? 0) * Number(o.filled_qty ?? 0), 0) / totBuy : 0;
+              await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg, current_mark: avg, unrealized_pnl: 0, status: "open" });
+              await journal("WARN", `${s.slug}: recovered ${net} ${occ} from filled orders (lost insert) — not re-buying`);
+              openRowQtyByOcc.set(occ, (openRowQtyByOcc.get(occ) ?? 0) + net); // it now claims these
+              blocked = "reconstructed";
+            } else {
+              // contracts liquidated elsewhere — don't ghost, don't re-buy the dead position.
+              blocked = "liquidated_elsewhere";
+            }
           }
         }
         // Stop knob (daily_stop_usd): halt NEW entries once this channel's REALIZED
