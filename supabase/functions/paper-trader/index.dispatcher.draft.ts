@@ -1,3 +1,13 @@
+// ⚑ WORKER VERSION: 2026-06-09b  (SHARED-OCC EXIT TRAP FIXED. When several channels hold the SAME
+//   OCC, Alpaca NETS them into one lot; once a sibling (often a -manual twin's ✕-close) drains it, a
+//   channel's exit sell was REJECTED (403 40310000 "insufficient buying power for cash-secured put"
+//   = would open a naked short) and the OLD code did Math.max(1, …) + "leave open to retry" → it
+//   looped a rejected sell EVERY minute and the position rode to EXPIRY trapped (06-09 ORB 726P:
+//   +$700→−$700, never able to exit). FIX: sell only min(heldQty, rowQty) (no forced ≥1); if nothing
+//   is held, or the sell is rejected with the cash-secured/insufficient error, RECONCILE the row
+//   closed at its fill-net (realizedToBook; $0 if a sibling sold the shared lot) instead of looping.
+//   Channels now always go flat when their exit fires. Fund stays NAV-true; per-channel attribution
+//   on shared OCCs stays approximate (the netting limit). Prior below.)
 // ⚑ WORKER VERSION: 2026-06-09a  (POWER GATE EXEMPTION REMOVED. `power` (POWERHOUR base) was the
 //   ONLY channel exempt from the cost gate, on the thesis that gating vetoes its convex tail. A
 //   5-window real-NBBO roster probe (engine/power-roster-probe.ts) REFUTED that: gating HALVES
@@ -931,29 +941,51 @@ Deno.serve(async () => {
 
       // ---- exit ----
       if (intent?.kind === "exit" && row && alp && canExit) {
-        // Sell ONLY this channel's contracts — not the whole netted Alpaca lot —
-        // so one channel's exit can't flatten another channel holding the SAME
-        // 0DTE (the root cause of the stuck "open" rows).
-        const sellQty = Math.max(1, Math.min(Math.round(Number(alp.qty)), Number(row.qty)));
-        try {
-          // Book at the ACTUAL sell fill (crosses to the bid), not alp.current_price
-          // (the mid/mark) — booking at mid overstated realized P&L vs the account.
-          // DRY_RUN / fill-not-posted → fall back to the mark.
-          let exitPx = Number(alp.current_price ?? 0);
-          if (!DRY_RUN) { const r = await aOrderAndFill({ symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` }); if (r.fill > 0) exitPx = r.fill; }
-          // Per-channel realized P&L on its own qty (alp.unrealized_pl is the whole
-          // netted lot — wrong when shared): (fill − entry) × qty × 100.
-          // FILL-DERIVED realized (idempotent vs prior closed rows for this channel+OCC);
-          // this cycle's sell isn't in the cycle-start allOrders yet, so fold it in.
-          const realized = DRY_RUN
-            ? (exitPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
-            : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince, { qty: sellQty, px: exitPx });
-          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized }).eq("id", row.id);
-          await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} @ ${exitPx.toFixed(2)} (${intent.reason})`);
-        } catch (e) {
-          // One rejected order must NOT crash the whole run — journal the Alpaca
-          // reason and leave the row open to retry next minute.
-          await journal("WARN", `${s.slug}: exit ${row.occ_symbol} rejected — ${(e as Error).message}`);
+        // Sell ONLY what Alpaca ACTUALLY holds for this OCC, capped to this channel's
+        // row qty. On a SHARED/netted OCC a sibling channel can drain the lot first;
+        // selling more than is held opens a naked short put (Alpaca 403 40310000
+        // "insufficient options buying power for cash-secured put"). The OLD code did
+        // Math.max(1, …) → it always tried to sell ≥1 even when 0 was held, so a
+        // drained position looped a rejected sell EVERY minute and rode to expiry
+        // trapped (the +$700→−$700 ORB round-trip that couldn't exit at any point).
+        const heldQty = Math.max(0, Math.round(Number(alp.qty)));
+        const sellQty = Math.min(heldQty, Number(row.qty));
+        // Close the row at its FILL-NET realized (its own slug-prefixed buys/sells; $0
+        // if a sibling sold the shared lot) when we can't/shouldn't place a sell — so a
+        // trapped position is freed instead of looping. Fund stays NAV-true either way.
+        const reconcileClose = async (why: string) => {
+          const realized = DRY_RUN ? 0 : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince);
+          const { data: q } = await sb.from("option_quotes").select("bid,mid").eq("occ_symbol", row.occ_symbol).order("captured_at", { ascending: false }).limit(1).maybeSingle();
+          const mark = Number(q?.bid ?? q?.mid ?? alp.current_price ?? 0);
+          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized }).eq("id", row.id);
+          await journal("WARN", `${s.slug}: ${row.occ_symbol} ${why} — reconciled closed @ ${mark.toFixed(2)} (booked $${realized.toFixed(0)} fill-net)`);
+        };
+        if (sellQty <= 0) {
+          // Nothing left to sell (a sibling drained the netted lot) → free the row now.
+          await reconcileClose(`shared lot drained (Alpaca holds ${heldQty})`);
+        } else {
+          try {
+            // Book at the ACTUAL sell fill (crosses to the bid), not alp.current_price
+            // (the mid/mark) — booking at mid overstated realized P&L vs the account.
+            // DRY_RUN / fill-not-posted → fall back to the mark.
+            let exitPx = Number(alp.current_price ?? 0);
+            if (!DRY_RUN) { const r = await aOrderAndFill({ symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` }); if (r.fill > 0) exitPx = r.fill; }
+            // FILL-DERIVED realized (idempotent vs prior closed rows for this channel+OCC);
+            // this cycle's sell isn't in the cycle-start allOrders yet, so fold it in.
+            const realized = DRY_RUN
+              ? (exitPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
+              : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince, { qty: sellQty, px: exitPx });
+            await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized }).eq("id", row.id);
+            await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} @ ${exitPx.toFixed(2)} (${intent.reason})`);
+          } catch (e) {
+            // A "can't sell, would go short" rejection = the shared-OCC race (snapshot
+            // said held, a sibling drained it this cycle). Reconcile closed at fill-net
+            // instead of looping the rejected sell to expiry. Other (transient) errors
+            // leave the row open to retry next minute.
+            const msg = (e as Error).message;
+            if (/insufficient|cash.?secured|not enough|40310000/i.test(msg)) await reconcileClose(`sell rejected (${msg.slice(0, 50)})`);
+            else await journal("WARN", `${s.slug}: exit ${row.occ_symbol} rejected — ${msg}`);
+          }
         }
       }
 
