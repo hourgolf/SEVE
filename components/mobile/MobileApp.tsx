@@ -8,6 +8,7 @@ import { ContractDetail } from "@/components/ContractDetail";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { ManVsMachine } from "@/components/console/ManVsMachine";
+import { PushToggle } from "@/components/console/PushToggle";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { AddChannel } from "@/components/console/AddChannel";
 import { MasterStrip } from "@/components/console/MasterStrip";
@@ -256,6 +257,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 {write.canWrite ? "● operator" : "○ read-only"}
               </span>
             </div>
+            <PushToggle />
             <SignalsTape signals={feed.signals} />
             <TapeHealth
               rowCount={data.rowCount}

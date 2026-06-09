@@ -1,3 +1,8 @@
+// ⚑ WORKER VERSION: 2026-06-08c  (MANUAL-EXIT ALERTS — Phase 2 web push. On a `-manual` twin
+//   ENTRY the worker POSTs the app's /api/push-send (secret-gated by PUSH_SEND_SECRET) so the
+//   operator gets a push to go own the exit. INERT until PUSH_SEND_SECRET is set on BOTH the
+//   worker (Supabase secret) and Vercel. Includes the 2026-06-08b manual-exit gate below — this
+//   is the single paste for the whole experiment. Never throws on a push failure. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-08b  (MANUAL-EXIT TWINS — man-vs-machine A/B. A `<base>-manual`
 //   channel runs the base strategy's ENTRIES (base-slug resolver strips `-manual`; a compiled
 //   twin runs its cloned spec_json) but the HUMAN owns the EXITS: every programmed exit intent
@@ -192,6 +197,10 @@ const ALPACA_SECRET = Deno.env.get("ALPACA_SECRET") ?? "";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const DRY_RUN = (Deno.env.get("DRY_RUN") ?? "true").toLowerCase() !== "false";
+// Manual-exit alerts (Phase 2 web push): POST to the Vercel app's /api/push-send when a
+// `-manual` twin opens a position. INERT until PUSH_SEND_SECRET is set (matches Vercel).
+const PUSH_SECRET = Deno.env.get("PUSH_SEND_SECRET") ?? "";
+const APP_URL = Deno.env.get("APP_URL") ?? "https://seve-henna.vercel.app";
 const PAPER = "https://paper-api.alpaca.markets";
 
 // ---- smart-layer guards (mirror engine/cost.ts + engine/manage.ts) ----------
@@ -527,6 +536,12 @@ const aHdr = { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECR
 async function aGet(path: string) { const r = await fetch(PAPER + path, { headers: aHdr }); if (!r.ok) throw new Error(`${r.status} GET ${path}`); return r.json(); }
 async function aPost(path: string, body: unknown) { const r = await fetch(PAPER + path, { method: "POST", headers: { ...aHdr, "content-type": "application/json" }, body: JSON.stringify(body) }); const text = await r.text(); if (!r.ok) throw new Error(`${r.status} POST ${path}: ${text.slice(0, 300)}`); return text ? JSON.parse(text) : {}; }
 async function journal(level: string, message: string, meta?: unknown) { try { await sb.from("events").insert({ level, message, meta: meta ?? null }); } catch { /* */ } }
+// Fire a manual-exit alert (web push) via the app's secret-gated /api/push-send. No-op
+// without PUSH_SEND_SECRET; never throws (a push failure must not break a trade cycle).
+async function firePush(title: string, body: string) {
+  if (!PUSH_SECRET) return;
+  try { await fetch(`${APP_URL}/api/push-send`, { method: "POST", headers: { "content-type": "application/json", "x-push-secret": PUSH_SECRET }, body: JSON.stringify({ title, body, tag: "seve-manual", url: "/" }) }); } catch { /* */ }
+}
 // Place an order, then poll briefly for the ACTUAL fill price (market orders fill
 // in ms). Booking at the real fill — not the mid/mark — is what makes the desk's
 // P&L reconcile to the Alpaca account (a sell crosses to the bid, a buy to the ask;
@@ -634,7 +649,7 @@ Deno.serve(async () => {
     const { data: fund } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
     // status + spec_json drive the Add-Channel path (run 13_add_channel.sql BEFORE
     // deploying this — otherwise these columns don't exist and the select errors).
-    const { data: strategists } = await sb.from("strategists").select("id,slug,underlying,status,spec_json,strategist_config(*)");
+    const { data: strategists } = await sb.from("strategists").select("id,slug,name,underlying,status,spec_json,strategist_config(*)");
     const account = await aGet("/v2/account");
     // Track whether the positions read SUCCEEDED — reconciliation (closing a desk
     // row with no Alpaca match) must NEVER run on a transient API error, or it
@@ -1015,7 +1030,11 @@ Deno.serve(async () => {
             // LOUD (the per-channel guards above still prevent another buy).
             const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty, avg_entry_price: entryPx, current_mark: entryPx, unrealized_pnl: 0, status: "open" });
             if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
-            else await journal("EXEC", `${s.slug}: buy ${qty} ${occ} @ ${entryPx.toFixed(2)} (${intent.reason})`, { order_id: o.id });
+            else {
+              await journal("EXEC", `${s.slug}: buy ${qty} ${occ} @ ${entryPx.toFixed(2)} (${intent.reason})`, { order_id: o.id });
+              // MANUAL-EXIT twin: ping the operator to go own the exit (Phase 2 web push).
+              if (isManual) await firePush(`✋ ${s.name ?? s.slug}`, `opened ${strike}${dir === "call" ? "C" : "P"} ×${qty} — your exit`);
+            }
           } catch (e) {
             // Order rejected (e.g. Alpaca 422) — journal the reason, don't crash
             // the run or insert a phantom position; just record the blocked signal.
