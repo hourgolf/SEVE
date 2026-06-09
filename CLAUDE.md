@@ -46,6 +46,18 @@ five new research probes.** Full writeup: memory `tier2-conservative-targets-ver
    Σ(rows)>Alpaca-net drift; (2) per-OCC `remainingByOcc` counter for within-cycle sell coordination. Honest
    limit: a sell still reduces the shared lot, so non-interference depends on ledger accuracy (1+2 + 09b floor);
    truly-impossible needs separate OCCs/accounts (rejected). Manual twins KEPT (operator's manual edge is real).
+5. **GHOST-RESURRECTION fixes — manual close-position slug-tag (Vercel, live) + Worker `2026-06-09d` DEPLOYED.**
+   Two more shared-OCC manifestations: (a) a manual ✕-close showed a position "opening" instantly deep red at a
+   STALE entry, and (b) auto channels (orb 735P) booked $0 on a +90% mover. ROOT: a channel whose contracts
+   were sold by a SIBLING (rejected own exit, or a manual close tagged `manual-<occ>-` the worker couldn't see)
+   has a filled buy with NO matching sell → net stays long → the reconstruct/re-buy guard RESURRECTED a ghost
+   row at the stale entry every cycle. FIXES: (a) close-position API now tags its sell `<slug>-<occ>-` so the
+   worker nets it (no manual ghost, correct realizedToBook); (b) **09d** gates the reconstruct — only resurrect
+   if Alpaca holds UNCOVERED contracts (held − other channels' open rows, via cycle-start `openRowQtyByOcc`);
+   else don't ghost/re-buy (`liquidated_elsewhere`). Preserves the runaway-rebuy safety. **FULL SHARED-OCC
+   DEFENSE STACK now live: 09b (no exit loop) + 09c (ledger accuracy + within-cycle sell coord) + close-position
+   slug-tag + sellQty + 09d (no ghost).** Memory `pnl-realized-inflation-fix.md`. WATCH: no "recovered … lost
+   insert" lines following a close = working.
 
 **KEY VERDICTS (don't re-litigate — all real-NBBO, 5 windows):**
 - **RIDE the convex-edge channels (BREAK ALT/V3); don't target/scale/trail them.** They're +EV live with the
