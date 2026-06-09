@@ -70,7 +70,10 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const liveMarks = usePositionMarks(feed.positions);
   // per-channel P&L off the SAME live marks → Equity rows + channel strips track the
   // Open Positions panel instead of lagging on the worker's stored unrealized_pnl.
-  const livePnl = channelPnl(feed.positions, liveMarks);
+  // Full day per-channel P&L: today's CLOSED (realized) + OPEN (unrealized, live marks).
+  // feed.positions is open-only — without recentTrades a flat desk reads $0 per channel
+  // while the fund (whole-day) shows the realized total.
+  const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
   // Fund NAV + Day-P&L re-marked to the SAME live marks, so the headline vitals LEDs
   // track live spot instead of lagging on the worker's ~1-min equity snapshot.
   const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);

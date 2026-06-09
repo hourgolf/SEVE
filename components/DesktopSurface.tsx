@@ -116,7 +116,10 @@ export function DesktopSurface({
   const liveMarks = usePositionMarks(feed.positions);
   // Per-channel P&L re-derived off the SAME live marks, so the Equity rows + channel
   // strips track the Open Positions panel instead of lagging on stored unrealized_pnl.
-  const livePnl = channelPnl(feed.positions, liveMarks);
+  // Full day per-channel P&L: today's CLOSED (realized) + OPEN (unrealized, off the live
+  // marks). feed.positions is open-only, so include feed.recentTrades or a flat desk reads
+  // $0 per channel while the fund (which uses the whole day) shows the realized total.
+  const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
   // Fund NAV + Day-P&L re-marked to the SAME live marks (account-truth base + the
   // open-position live delta) so the head readout + master strip track live spot too.
   const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
