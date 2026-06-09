@@ -1,3 +1,12 @@
+// ⚑ WORKER VERSION: 2026-06-09c  (SHARED-OCC LEDGER ACCURACY — de-dup without shifting strikes or
+//   splitting accounts. Channels keep trading the SAME ATM OCC on ONE account; we make the per-channel
+//   ledger mirror Alpaca's netted lot so each channel only ever sells ITS OWN share and can't starve a
+//   sibling. (1) Entry now records the ACTUAL filled qty (aOrderAndFill returns filled_qty), not the
+//   intended qty — kills the Σ(rows) > Alpaca-net drift that trapped the last channel to exit. (2) A
+//   per-OCC `remainingByOcc` counter, seeded from Alpaca and decremented as channels sell (and bumped on
+//   buys) WITHIN a cycle, so same-cycle siblings exit off the LIVE leftover, not the stale snapshot.
+//   09b reconcile stays as the floor. Fund still NAV-true; per-channel attribution now tracks the real
+//   fills. No strategy/strike/roster change. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-09b  (SHARED-OCC EXIT TRAP FIXED. When several channels hold the SAME
 //   OCC, Alpaca NETS them into one lot; once a sibling (often a -manual twin's ✕-close) drains it, a
 //   channel's exit sell was REJECTED (403 40310000 "insufficient buying power for cash-secured put"
@@ -567,15 +576,16 @@ async function firePush(title: string, body: string) {
 // P&L reconcile to the Alpaca account (a sell crosses to the bid, a buy to the ask;
 // booking at mid systematically overstated P&L). Returns fill=0 if it didn't post
 // in time → caller falls back to the quote.
-async function aOrderAndFill(body: unknown): Promise<{ id: string; fill: number }> {
-  const o = await aPost("/v2/orders", body) as { id?: string; filled_avg_price?: number };
+async function aOrderAndFill(body: unknown): Promise<{ id: string; fill: number; filledQty: number }> {
+  const o = await aPost("/v2/orders", body) as { id?: string; filled_avg_price?: number; filled_qty?: number };
   const id = String(o.id ?? "");
   let fill = Number(o.filled_avg_price ?? 0);
+  let filledQty = Number(o.filled_qty ?? 0); // ACTUAL contracts filled (de-dup: the desk row must mirror this, not the intended qty)
   for (let i = 0; i < 5 && id && fill <= 0; i++) {
     await new Promise((r) => setTimeout(r, 300));
-    try { const g = await aGet(`/v2/orders/${id}`) as { filled_avg_price?: number }; if (Number(g.filled_avg_price) > 0) fill = Number(g.filled_avg_price); } catch { /* keep polling */ }
+    try { const g = await aGet(`/v2/orders/${id}`) as { filled_avg_price?: number; filled_qty?: number }; if (Number(g.filled_avg_price) > 0) { fill = Number(g.filled_avg_price); filledQty = Number(g.filled_qty ?? filledQty); } } catch { /* keep polling */ }
   }
-  return { id, fill };
+  return { id, fill, filledQty };
 }
 // OCC symbol for ANY underlying (QQQ rollout): SPY/QQQ/… share the same OCC layout
 // (ROOT + YYMMDD + C/P + strike×1000, 8-padded). The root is the channel's ticker.
@@ -702,6 +712,14 @@ Deno.serve(async () => {
 
     // fund-level equity snapshot
     await sb.from("equity_snapshots").insert({ strategist_id: null, net_liquidation: Number(account.equity), cash: Number(account.cash), unrealized_pnl: positions.reduce((a, p) => a + Number(p.unrealized_pl ?? 0), 0) });
+
+    // SHARED-OCC SELL COORDINATION (de-dup Fix 2): a per-OCC running count of Alpaca's
+    // held qty. When several channels exit the SAME netted lot in ONE cycle, each sells
+    // only its share off the LIVE remaining (decremented as we go) instead of the stale
+    // cycle-start snapshot — so a sibling can't over-draw and starve another channel
+    // (with 2026-06-09b's reconcile as the floor). Seeded from Alpaca's positions.
+    const remainingByOcc = new Map<string, number>();
+    for (const p of positions) remainingByOcc.set(String(p.symbol), Math.abs(Math.round(Number(p.qty ?? 0))));
 
     const out: Record<string, unknown>[] = [];
     for (const s of (strategists ?? [])) {
@@ -948,7 +966,10 @@ Deno.serve(async () => {
         // Math.max(1, …) → it always tried to sell ≥1 even when 0 was held, so a
         // drained position looped a rejected sell EVERY minute and rode to expiry
         // trapped (the +$700→−$700 ORB round-trip that couldn't exit at any point).
-        const heldQty = Math.max(0, Math.round(Number(alp.qty)));
+        // Use the LIVE per-OCC remaining (de-dup Fix 2): if a sibling already sold this
+        // netted lot earlier THIS cycle, remaining reflects it → we never over-draw. Falls
+        // back to the cycle-start snapshot qty if the OCC isn't mapped.
+        const heldQty = remainingByOcc.get(String(row.occ_symbol)) ?? Math.max(0, Math.round(Number(alp.qty)));
         const sellQty = Math.min(heldQty, Number(row.qty));
         // Close the row at its FILL-NET realized (its own slug-prefixed buys/sells; $0
         // if a sibling sold the shared lot) when we can't/shouldn't place a sell — so a
@@ -976,6 +997,9 @@ Deno.serve(async () => {
               ? (exitPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
               : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince, { qty: sellQty, px: exitPx });
             await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized }).eq("id", row.id);
+            // de-dup Fix 2: drop this OCC's remaining by what we just sold so a sibling
+            // exiting the same lot later this cycle sees the true leftover.
+            remainingByOcc.set(String(row.occ_symbol), Math.max(0, heldQty - sellQty));
             await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} @ ${exitPx.toFixed(2)} (${intent.reason})`);
           } catch (e) {
             // A "can't sell, would go short" rejection = the shared-OCC race (snapshot
@@ -1067,15 +1091,24 @@ Deno.serve(async () => {
             // ask — so the round-trip P&L matches the account. Fallback to ask.
             const o = await aOrderAndFill({ symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${occ}-${etMin}` });
             const entryPx = o.fill > 0 ? o.fill : ask;
+            // Record the ACTUAL filled qty (de-dup Fix 1) so the desk row mirrors what
+            // Alpaca really holds — else Σ(shared rows) drifts ABOVE the netted lot and the
+            // last channel to exit gets starved (the trap class). Fall back to the intended
+            // qty only when the fill qty couldn't be read (the re-buy guard reconstructs
+            // from the actual fills next cycle).
+            const fillQty = o.filledQty > 0 ? o.filledQty : qty;
             // CRITICAL: confirm the position row was recorded. A silent insert
             // failure here is what caused the re-buy loop — if it fails, journal
             // LOUD (the per-channel guards above still prevent another buy).
-            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty, avg_entry_price: entryPx, current_mark: entryPx, unrealized_pnl: 0, status: "open" });
+            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty: fillQty, avg_entry_price: entryPx, current_mark: entryPx, unrealized_pnl: 0, status: "open" });
             if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
             else {
-              await journal("EXEC", `${s.slug}: buy ${qty} ${occ} @ ${entryPx.toFixed(2)} (${intent.reason})`, { order_id: o.id });
+              await journal("EXEC", `${s.slug}: buy ${fillQty} ${occ} @ ${entryPx.toFixed(2)} (${intent.reason})`, { order_id: o.id });
+              // de-dup Fix 2: a buy adds to the shared lot — keep remaining in sync so a
+              // sibling exiting this OCC later this cycle sees the larger leftover.
+              remainingByOcc.set(occ, (remainingByOcc.get(occ) ?? 0) + fillQty);
               // MANUAL-EXIT twin: ping the operator to go own the exit (Phase 2 web push).
-              if (isManual) await firePush(`✋ ${s.name ?? s.slug}`, `opened ${strike}${dir === "call" ? "C" : "P"} ×${qty} — your exit`);
+              if (isManual) await firePush(`✋ ${s.name ?? s.slug}`, `opened ${strike}${dir === "call" ? "C" : "P"} ×${fillQty} — your exit`);
             }
           } catch (e) {
             // Order rejected (e.g. Alpaca 422) — journal the reason, don't crash
