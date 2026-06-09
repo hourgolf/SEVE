@@ -7,6 +7,7 @@ import { useTradeTriggers } from "@/hooks/useTradeTriggers";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
+import { isManualChannel } from "@/lib/desk/manual";
 
 // Rationale → readable chips (only the features that are present).
 function tradeChips(r?: Record<string, unknown> | null): string[] {
@@ -152,6 +153,12 @@ export function PositionsPanel({
                 <td style={{ textAlign: "left" }}>
                   {p.strike.toFixed(0)}
                   {p.opt_type === "call" ? "C" : "P"}
+                  {isManualChannel(p.strategist_slug) && (
+                    <span
+                      title="manual-exit twin — yours to close"
+                      style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, color: "var(--amber, #d9b54a)", letterSpacing: 0.3, verticalAlign: "middle" }}
+                    >✋MAN</span>
+                  )}
                 </td>
                 <td>{p.qty > 0 ? `+${p.qty}` : p.qty}</td>
                 <td>{p.avg_entry_price.toFixed(2)}</td>

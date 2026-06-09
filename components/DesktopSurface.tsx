@@ -21,6 +21,7 @@ import { StepRow } from "@/components/console/hw/StepRow";
 import { Bezel } from "@/components/console/hw/Bezel";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
+import { ManVsMachine } from "@/components/console/ManVsMachine";
 import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
@@ -171,6 +172,7 @@ export function DesktopSurface({
               fundPnl={liveFund}
               equityCurve={feed.equityCurve}
             />
+            <ManVsMachine strategists={desk.strategists} pnl={livePnl} />
           </div>
         </div>
       </div>

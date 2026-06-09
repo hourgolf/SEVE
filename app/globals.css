@@ -1460,3 +1460,11 @@ td.clk.sel {
   font-family: var(--mono); font-size: 10.5px;
 }
 .wk-byday .pos { color: var(--green); } .wk-byday .neg { color: var(--red); }
+
+/* Man-vs-Machine scorecard (manual-exit A/B) */
+.mvm { margin-top: 10px; }
+.mvm-tbl { width: 100%; border-collapse: collapse; font-family: var(--mono); }
+.mvm-tbl th { text-align: right; font-weight: 600; opacity: 0.55; padding: 3px 8px; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px; }
+.mvm-tbl td { text-align: right; padding: 4px 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.mvm-tot td { border-top: 1px solid var(--border); font-weight: 700; padding-top: 6px; }
+.mvm-note { font-size: 9px; opacity: 0.5; padding: 6px 8px 2px; font-family: var(--mono); }

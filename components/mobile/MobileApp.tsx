@@ -7,6 +7,7 @@ import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
+import { ManVsMachine } from "@/components/console/ManVsMachine";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { AddChannel } from "@/components/console/AddChannel";
 import { MasterStrip } from "@/components/console/MasterStrip";
@@ -173,6 +174,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               fundPnl={liveFund}
               equityCurve={feed.equityCurve}
             />
+            <ManVsMachine strategists={desk.strategists} pnl={livePnl} />
             <MasterStrip fund={desk.fund} fundPnl={liveFund} />
             <Bezel label="16-Step Tape · recent signals" className="tape m-steptape">
               <StepRow steps={feed.steps} />

@@ -1,3 +1,11 @@
+// ⚑ WORKER VERSION: 2026-06-08b  (MANUAL-EXIT TWINS — man-vs-machine A/B. A `<base>-manual`
+//   channel runs the base strategy's ENTRIES (base-slug resolver strips `-manual`; a compiled
+//   twin runs its cloned spec_json) but the HUMAN owns the EXITS: every programmed exit intent
+//   (stop/trail/target/eod/catastrophic) is dropped so the position rides until the operator
+//   closes it — EXCEPT a hard bell backstop (minutesToClose ≤ MANUAL_BACKSTOP_MIN ≈15:57) that
+//   force-flattens so a 0DTE/1DTE can't expire/assign. Additive + ISOLATED — only `-manual`
+//   slugs change behaviour; the 13 live channels are byte-identical. Entries untouched. Twins
+//   armed via SQL (clone strategist+config, copy spec_json for compiled). Prior below.)
 // ⚑ WORKER VERSION: 2026-06-08a  (1DTE FLATTEN BY SESSION CLOSE. A late-day signal inside the
 //   0DTE open cutoff rolls to a 1DTE (next1DTE) because Alpaca won't open a 0DTE that late;
 //   that roll is meant to swing the final 20 min and CLOSE SAME-DAY. The eod-flatten guard was
@@ -649,6 +657,10 @@ Deno.serve(async () => {
     // Alpaca rejects OPENING a 0DTE within ~15 min of close (the 422) → inside the cutoff
     // channels roll the entry to ctx.next1DTE, resolved per-ticker from the live chain.
     const OPEN_0DTE_CUTOFF_MIN = 16; // last ~15 min + 1 buffer
+    // MANUAL-EXIT twins (`<base>-manual`, man-vs-machine A/B): the human owns exits, but
+    // a hard backstop force-flattens at minutesToClose ≤ this (≈15:57 ET) so a 0DTE/1DTE
+    // can't expire/assign if the operator misses it.
+    const MANUAL_BACKSTOP_MIN = 3;
     const underlyings = [...new Set((strategists ?? []).map((s) => String((s as { underlying?: string }).underlying ?? "SPY").toUpperCase()))];
     const marketByUnderlying = new Map<string, MarketCtx>();
     for (const sym of underlyings) marketByUnderlying.set(sym, await buildMarket(sym, todayET));
@@ -678,7 +690,10 @@ Deno.serve(async () => {
       // breakout-qqq → ORB) — only the underlying differs, and that's already routed
       // per s.underlying. Exact slug wins; a compiled .md channel (arbitrary slug)
       // still finds no REGISTRY hit and falls through to its spec_json.
-      const code = REGISTRY[s.slug] ?? REGISTRY[s.slug.replace(/-(qqq|spy)$/i, "")];
+      // base-slug fallback: strip a `-manual` twin suffix (and the ticker suffix) so a
+      // built-in twin (power-manual → power) resolves; a compiled twin (qqq-thrust-trail-
+      // manual) misses REGISTRY and runs via its CLONED spec_json below — same as its base.
+      const code = REGISTRY[s.slug] ?? REGISTRY[s.slug.replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "")];
       const compiled = !code && s.spec_json ? compileSpec(s.spec_json) : null;
       if (!code && !compiled) { out.push({ slug: s.slug, note: "no_edge" }); continue; }
       const tf = code ? code.tf : compiled!.tf;
@@ -874,6 +889,20 @@ Deno.serve(async () => {
       // under canTrade, so it blocked the exit AND the EOD flatten → a muted 0DTE was trapped
       // and rode to expiry. Now only the KILL switch (halted) or a non-paper mode freezes exits.
       const canExit = guardBlocked !== "halted" && guardBlocked !== "not_paper";
+
+      // ---- MANUAL-EXIT twin (man-vs-machine A/B) ----
+      // A `<base>-manual` channel takes the base strategy's ENTRIES (resolved above) but
+      // the HUMAN owns the exits: DROP every programmed exit intent (stop / trail / target /
+      // eod_flatten / catastrophic) so the position rides until the operator closes it via the
+      // close-position button. The ONE forced exit is a hard bell backstop near the close so a
+      // 0DTE/1DTE can't expire/assign if missed. Distinct reason `manual_eod_backstop` so the
+      // 1DTE-flatten guard above can't null it. Entries are untouched (the machine still picks
+      // them) — only the exit policy differs, which is the whole experiment.
+      const isManual = /-manual$/i.test(s.slug);
+      if (isManual && row) {
+        if (minutesToClose <= MANUAL_BACKSTOP_MIN) intent = { kind: "exit", reason: "manual_eod_backstop" };
+        else if (intent?.kind === "exit") intent = null;
+      }
 
       // ---- exit ----
       if (intent?.kind === "exit" && row && alp && canExit) {
