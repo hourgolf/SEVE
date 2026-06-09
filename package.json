@@ -18,6 +18,7 @@
     "late-gate-probe": "tsx engine/late-gate-probe.ts",
     "fill-probe": "tsx engine/fill-probe.ts",
     "mfe-probe": "tsx engine/mfe-probe.ts",
+    "scalp-edge-probe": "tsx engine/scalp-edge-probe.ts",
     "sides-probe": "tsx engine/sides-probe.ts",
     "spread-probe": "tsx engine/spread-probe.ts",
     "mdte-probe": "tsx engine/mdte-probe.ts",
