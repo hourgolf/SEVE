@@ -582,7 +582,14 @@ async function main() {
     const useDatabento = optMode === "databento";
     const useRealOptions = optMode === "real";
     // Databento gives REAL bid/ask → cross the ACTUAL spread, not the 3% model.
-    const cost: CostModel = useDatabento ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL;
+    // --fill-cross <0..1>: fraction of the half-spread paid per side (1 = market order
+    // crossing the full spread [default], 0 = passive limit at mid). Bounds how much a
+    // channel's edge is execution-quality (a scalper working limits) vs strategy.
+    const fillCross = process.argv.includes("--fill-cross") ? argNum("fill-cross", 1) : undefined;
+    const cost: CostModel = {
+      ...(useDatabento ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL),
+      ...(fillCross != null ? { spreadCrossFrac: fillCross } : {}),
+    };
     let byDay = new Map();
     if (useDatabento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET), underlying);
     else if (useRealOptions) {

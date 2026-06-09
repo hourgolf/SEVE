@@ -21,6 +21,13 @@ export interface CostModel {
   slippageTicksPerSide: number; // ticks paid per side (e.g. 1)
   commissionPerContract: number; // $/contract per side (e.g. 0.65)
   crossSpread: boolean; // true = pay half-spread each side
+  // Fraction of the half-spread actually paid per side (0..1). 1 = a marketable
+  // order crossing the full spread (the pessimistic default — matches crossSpread:true);
+  // 0 = a passive limit filled at mid (the optimistic, no-fill-risk bound); ~0.25–0.5
+  // ≈ a scalper working the bid/ask for price improvement. Lets us bound how much a
+  // channel's edge depends on EXECUTION quality vs the strategy itself. Defaults to
+  // crossSpread (1 if true, 0 if false) when unset, so existing behaviour is unchanged.
+  spreadCrossFrac?: number;
 }
 
 // Calibrated to ALPACA's real options economics (the desk's broker): $0
@@ -54,7 +61,10 @@ export function fillWithCost(
   m: CostModel = DEFAULT_COST_MODEL
 ): { fill: number; edgeUsd: number } {
   const spread = effSpread(q, m);
-  const half = m.crossSpread ? spread / 2 : 0;
+  // Per-side spread cost = half-spread × the cross fraction. spreadCrossFrac wins
+  // when set; else fall back to the binary crossSpread (1 if crossing, else 0).
+  const frac = m.spreadCrossFrac ?? (m.crossSpread ? 1 : 0);
+  const half = (spread / 2) * Math.max(0, Math.min(1, frac));
   const slip = m.slippageTicksPerSide * TICK;
   const edge = half + slip; // premium/share paid as cost this side
   const fill = side === "buy" ? q.mid + edge : Math.max(0, q.mid - edge);
