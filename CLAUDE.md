@@ -67,6 +67,20 @@ V3 STILL has no live data point); GRIND(ALT) −$780 + ORB(base) −$492 (the kn
   (~+$1,240→+$657) is the convex-tail PREMIUM — the MC verdict (don't profit-target/trail) stands. Only the
   Bucket-A round-trips are the avoidable target.
 
+**FILL-QUALITY + RAPID-SCALP INVESTIGATION (resolved — "are we over-modeling / over-taxing scalping?"):**
+Operator asked whether BS/MC engrained a long-range lens that misses the rapid in/out take-profit nature of
+0DTE. 3 real-NBBO probes say no — there's no hidden scalp edge. **#1** `npm run fill-probe` (cost.ts
+`spreadCrossFrac` + backtest `--fill-cross`, MC-threaded): real 0DTE spread is TIGHT (~$7/trade round-trip —
+the "cost-doomed by spread" narrative came from MODELED 3% spreads); entries are **~zero-edge GROSS** (grind
+−$0.4/t coin flip) → fills aren't the wall, entry edge is. **#2** `npm run mfe-probe`: the intra-trade pop is
+real (~40% of leans pop +15%, lifts win% 15→39%) but a take-profit never flips a coin-flip entry +EV. **#3**
+`npm run scalp-edge-probe`: on **BREAK(ALT)** (the one real edge) the edge IS the convex tail — +100% bracket
++$2,271 in Mar26, tightening caps it (+15% → −$56); pooled "looks" better tight only via the mechanical
+loss-reduction on losing windows (same mirage as breakeven/late-gate). Verdict: rapid take-profit is the WRONG
+SHAPE — edges are convex, not scalp; ride with a fixed bracket. Caveat: single-leg + market-order fills only —
+a mean-reverting scalp edge could live in an untraded structure (spreads / limit-order MM), a NEW instrument.
+Full writeup: memory `fill-and-scalp-verdict.md`.
+
 ## SESSION HANDOFF — 2026-06-07
 LIVE + pushed (`main == origin/main`, clean). This session: (1) mobile chart/P&L UI fixes,
 (2) a Supabase storage audit, (3) a **bootstrap Monte Carlo toolchain** + a real-fills roster
