@@ -77,9 +77,15 @@ real (~40% of leans pop +15%, lifts win% 15→39%) but a take-profit never flips
 `npm run scalp-edge-probe`: on **BREAK(ALT)** (the one real edge) the edge IS the convex tail — +100% bracket
 +$2,271 in Mar26, tightening caps it (+15% → −$56); pooled "looks" better tight only via the mechanical
 loss-reduction on losing windows (same mirage as breakeven/late-gate). Verdict: rapid take-profit is the WRONG
-SHAPE — edges are convex, not scalp; ride with a fixed bracket. Caveat: single-leg + market-order fills only —
-a mean-reverting scalp edge could live in an untraded structure (spreads / limit-order MM), a NEW instrument.
-Full writeup: memory `fill-and-scalp-verdict.md`.
+SHAPE — edges are convex, not scalp; ride with a fixed bracket. **OPEN DOOR (premium-selling) — RESOLVED**
+(`npm run theta-probe`): the untested non-directional angle. The vol-risk-premium is **REAL** (naked short ATM
+0DTE straddle nets +$5..+$84/day across regimes — the market overprices the implied move) BUT the tradeable
+defined-risk **iron fly is BREAKEVEN**: you must close the ATM body daily (SPY physical settle → assignment) and
+that ATM 0DTE spread eats the theta (fly·REAL ≈ +$1/day; MC 291 days Sharpe 0.16, P(lose) 42.5%). The "+EV
+held-to-expiry" was an artifact of free body settlement. ROOT (unifies the whole investigation): **the 0DTE
+bid/ask spread on the legs you're forced to trade is the binding cost** — directional AND premium-selling alike.
+One revisit lever: limit-order execution on the liquid ATM body close (needs limit + multi-leg infra + tick
+data). Don't build as-is. Full writeup: memory `fill-and-scalp-verdict.md`.
 
 ## SESSION HANDOFF — 2026-06-07
 LIVE + pushed (`main == origin/main`, clean). This session: (1) mobile chart/P&L UI fixes,
