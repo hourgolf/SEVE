@@ -87,6 +87,23 @@ bid/ask spread on the legs you're forced to trade is the binding cost** — dire
 One revisit lever: limit-order execution on the liquid ATM body close (needs limit + multi-leg infra + tick
 data). Don't build as-is. Full writeup: memory `fill-and-scalp-verdict.md`.
 
+**NEXT-SESSION AGENDA — CONSERVATIVE take-profits on the Tier 2 channels (operator thesis 06-09):**
+The live "Tier 2" channels run ASPIRATIONAL premium targets — `orb-trend-rider` +75%, `breakout-qqq`
++90%, `power-smart-entries`/`breakout-smart-entries`[BREAK(ALT)]/`breakout-alt-v3` +100%. Operator's
+point (correct, and data-backed): a **+30–50% move is the realistic "big winner," +75–100% is a unicorn**
+— so those targets RARELY fire. The session's `npm run mfe-probe` MFE-survival curve confirms it: only
+**~11% of lean trades ever pop +100%, ~21% reach +50%, ~30% reach +30%** → a +100% target fires ~1-in-9,
+so for the other 8 it NEVER triggers and the channel **effectively rides to close** = gives back every
+sub-target gain (Tier-2 ≈ Tier-1 in practice). AGENDA: sweep **conservative targets (+30/+40/+50)** on
+each Tier 2 channel; report **hit% + per-window EV + per-trade expectancy** (the mechanical-vs-real tell).
+Build on the existing tools — `npm run scalp-edge-probe` already sweeps +100/75/50/30/15 on BREAK(ALT)/V3,
+`npm run mfe-probe` gives the hit% (= MFE survival). **KEY TENSION to resolve, likely a PER-CHANNEL SPLIT:**
+scalp-edge-probe showed the genuine breakout EDGE *is* the convex tail (BREAK(ALT) Mar26 +100% = +$2,271,
+tightening to +15% = −$56 — the tight target CAPS what pays), so **ride the real-edge channels
+(BREAK(ALT)/V3); bank the weaker Tier 2 with no real tail** (ORB-base, QQQ-Break-ORB, POWERHOUR-ALT). The
+earlier intermediate-target (+30/+50) numbers were single-window + noisy → needs the multi-window sweep +
+hit-rate before trusting. Don't apply a blanket conservative target. See `fill-and-scalp-verdict.md`.
+
 ## SESSION HANDOFF — 2026-06-07
 LIVE + pushed (`main == origin/main`, clean). This session: (1) mobile chart/P&L UI fixes,
 (2) a Supabase storage audit, (3) a **bootstrap Monte Carlo toolchain** + a real-fills roster
