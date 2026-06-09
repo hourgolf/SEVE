@@ -93,7 +93,13 @@ export async function POST(req: Request) {
   }
 
   const entry = Number(pos.avg_entry_price ?? 0);
-  const realized = (fill - entry) * Number(pos.qty) * 100;
+  // Book ONLY the contracts ACTUALLY sold (sellQty), at the real sell fill — never the
+  // full row qty. On a shared/netted OCC (manual twins + their base machine channel hold
+  // ONE Alpaca lot) the row qty can exceed what Alpaca still holds for us; booking pos.qty
+  // there re-counts a gain the channel that actually sold the netted lot already booked
+  // (this was the desk reporting ~2x the account). If nothing was sold (lot already closed
+  // by another channel), book $0 — the realized belongs to whoever actually sold it.
+  const realized = sellQty > 0 ? (fill - entry) * sellQty * 100 : 0;
 
   // ---- book the row closed (status-guarded → idempotent) ----
   const { error: upErr } = await sb
@@ -105,9 +111,9 @@ export async function POST(req: Request) {
 
   await sb.from("events").insert({
     level: "EXEC",
-    message: `manual: close ${occ} ×${qty} @ ${fill.toFixed(2)} (realized ${realized >= 0 ? "+" : ""}$${realized.toFixed(0)})`,
-    meta: { order_id: orderId, by: userData.user.email ?? null },
+    message: `manual: close ${occ} ×${sellQty}${sellQty < qty ? `/${qty}` : ""} @ ${fill.toFixed(2)} (realized ${realized >= 0 ? "+" : ""}$${realized.toFixed(0)})`,
+    meta: { order_id: orderId, by: userData.user.email ?? null, sold: sellQty, row_qty: qty },
   });
 
-  return NextResponse.json({ ok: true, occ, qty, fill, realized: Math.round(realized) });
+  return NextResponse.json({ ok: true, occ, qty, sold: sellQty, fill, realized: Math.round(realized) });
 }
