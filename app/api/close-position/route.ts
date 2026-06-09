@@ -44,6 +44,14 @@ export async function POST(req: Request) {
 
   const occ = String(pos.occ_symbol);
   const qty = Math.max(1, Math.round(Number(pos.qty)));
+  // Tag the sell with the CHANNEL's slug-prefixed client_order_id (`<slug>-<occ>-…`) — the
+  // SAME scheme the worker uses — so the worker's per-channel order matching SEES this manual
+  // sell and nets it against the channel's buy. With the old `manual-<occ>-…` prefix the worker
+  // couldn't see the sell, so its re-buy guard kept RESURRECTING the already-closed position as a
+  // ghost row at the stale entry ("recovered … lost insert") and mis-booked the realized. Falls
+  // back to `manual` only if the strategist can't be resolved.
+  const { data: strat } = await sb.from("strategists").select("slug").eq("id", pos.strategist_id).maybeSingle();
+  const slug = String(strat?.slug ?? "manual");
   const aHdr = { "APCA-API-KEY-ID": AK, "APCA-API-SECRET-KEY": AS, "content-type": "application/json" };
 
   // Cap the sell to what Alpaca ACTUALLY holds for this OCC. Manual-exit twins (and the
@@ -67,7 +75,7 @@ export async function POST(req: Request) {
       const r = await fetch(`${PAPER}/v2/orders`, {
         method: "POST",
         headers: aHdr,
-        body: JSON.stringify({ symbol: occ, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `manual-${occ}-${Date.now()}` }),
+        body: JSON.stringify({ symbol: occ, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${slug}-${occ}-${Date.now()}` }),
       });
       const txt = await r.text();
       if (!r.ok) return NextResponse.json({ ok: false, error: `alpaca rejected: ${txt.slice(0, 200)}` }, { status: 502 });
