@@ -862,6 +862,36 @@ svg.spark {
   transform: translate(-50%, 9px);
 }
 
+/* "→ LIVE" jump chip — appears when panned off the live edge or the price axis
+   was manually scaled; top-right, clear of the price axis + crosshair tip. */
+.chart-live-jump {
+  position: absolute;
+  top: 8px;
+  right: 64px;
+  z-index: 5;
+  background: #16242b;
+  color: #45c4d6;
+  border: 1px solid #2a3a42;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.chart-live-jump:hover {
+  color: #9be3ee;
+  border-color: #45c4d6;
+}
+@media (pointer: coarse) {
+  .chart-live-jump {
+    padding: 9px 12px;
+    font-size: 11px;
+  }
+}
+
 /* embedded live SPY price LED, lower-right of the chart (clear of the axis) */
 .chart-led {
   position: absolute;

@@ -12,7 +12,9 @@ import {
   createChart, CandlestickSeries, AreaSeries, LineSeries, HistogramSeries,
   createSeriesMarkers, ColorType, CrosshairMode, LineStyle,
   type IChartApi, type ISeriesApi, type ISeriesMarkersPluginApi, type IPriceLine, type SeriesMarker, type Time, type UTCTimestamp,
+  type ISeriesPrimitive, type SeriesAttachedParameter, type IPrimitivePaneView, type IPrimitivePaneRenderer,
 } from "lightweight-charts";
+import type { CanvasRenderingTarget2D } from "fancy-canvas";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { aggregateBars, TIMEFRAMES } from "@/lib/bars";
 import { ema, macd as computeMacd } from "@/lib/indicators";
@@ -33,6 +35,8 @@ const C = {
   area: "rgba(47,213,115,0.28)", areaBottom: "rgba(47,213,115,0.01)", areaLine: "#2fd573",
   macd: "#45c4d6", macdSig: "#ffb224",
   pdc: "#aab6bc", pdh: "#6fbf73", pdl: "#e0795f", orb: "#d9b54a", // level lines: prior close · prior-day high/low · opening range
+  hod: "#57b97f", lod: "#d9755b", // today's running high/low (solid, vs dotted prior-day)
+  sessSep: "rgba(170,182,188,0.22)", sessPre: "rgba(111,130,138,0.10)", // session separators + premarket tint
 };
 
 const DAILY_TF = 1440;
@@ -50,14 +54,79 @@ const INTRADAY_TFS = [1, 5, 15, 30, 60];
 const tSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp;
 
 // ET wall-clock parts (DST-correct) for level math (opening range / prior day).
+// Memoized per minute — the session layer calls this for EVERY loaded bar on each
+// data pass (up to ~6k 1-min rows), and Intl.formatToParts is the expensive bit.
 const ET_FMT = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+const ET_CACHE = new Map<number, { date: string; min: number }>();
 function etParts(ms: number): { date: string; min: number } {
+  const key = Math.floor(ms / 60000);
+  const hit = ET_CACHE.get(key);
+  if (hit) return hit;
   let y = "", mo = "", d = "", h = 0, mi = 0;
   for (const p of ET_FMT.formatToParts(new Date(ms))) {
     if (p.type === "year") y = p.value; else if (p.type === "month") mo = p.value; else if (p.type === "day") d = p.value;
     else if (p.type === "hour") h = Number(p.value) % 24; else if (p.type === "minute") mi = Number(p.value);
   }
-  return { date: `${y}-${mo}-${d}`, min: h * 60 + mi };
+  const v = { date: `${y}-${mo}-${d}`, min: h * 60 + mi };
+  if (ET_CACHE.size > 30000) ET_CACHE.clear();
+  ET_CACHE.set(key, v);
+  return v;
+}
+
+// ---- session layer: day separators + premarket shading ----
+// lightweight-charts has no built-in vertical lines/zones, so this custom series
+// primitive paints (a) a 1px separator at each session's 09:30 ET bar when the
+// loaded data spans >1 session and (b) a faint tint over pre-09:30 bars — both
+// UNDER the candles (zOrder "bottom"). Times are bar times; timeToCoordinate
+// returns null off-viewport, so spans clamp to the pane edges.
+class SessionLayer implements ISeriesPrimitive<Time> {
+  private chart: IChartApi | null = null;
+  private requestUpdate: (() => void) | null = null;
+  private seps: UTCTimestamp[] = [];
+  private shades: Array<{ from: UTCTimestamp; to: UTCTimestamp }> = [];
+  private readonly view: IPrimitivePaneView;
+
+  constructor() {
+    const renderer: IPrimitivePaneRenderer = {
+      draw: (target: CanvasRenderingTarget2D) => {
+        const chart = this.chart;
+        if (!chart || (!this.seps.length && !this.shades.length)) return;
+        const ts = chart.timeScale();
+        const vr = ts.getVisibleRange();
+        target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hpr }) => {
+          ctx.fillStyle = C.sessPre;
+          for (const s of this.shades) {
+            const x0m = ts.timeToCoordinate(s.from);
+            const x1m = ts.timeToCoordinate(s.to);
+            if (x0m === null && x1m === null) {
+              // both ends off-screen — shade everything only if the viewport sits INSIDE the span
+              if (vr && (vr.from as number) >= (s.from as number) && (vr.to as number) <= (s.to as number)) {
+                ctx.fillRect(0, 0, bitmapSize.width, bitmapSize.height);
+              }
+              continue;
+            }
+            const x0 = x0m === null ? 0 : x0m * hpr;
+            const x1 = x1m === null ? bitmapSize.width : x1m * hpr;
+            if (x1 >= x0) ctx.fillRect(Math.max(0, x0), 0, Math.max(2, x1 - x0), bitmapSize.height);
+          }
+          ctx.fillStyle = C.sessSep;
+          for (const t of this.seps) {
+            const xm = ts.timeToCoordinate(t);
+            if (xm === null) continue;
+            ctx.fillRect(Math.round(xm * hpr), 0, Math.max(1, Math.round(hpr)), bitmapSize.height);
+          }
+        });
+      },
+    };
+    this.view = { zOrder: () => "bottom", renderer: () => renderer };
+  }
+
+  attached(p: SeriesAttachedParameter<Time>) { this.chart = p.chart; this.requestUpdate = p.requestUpdate; }
+  detached() { this.chart = null; this.requestUpdate = null; }
+  paneViews(): readonly IPrimitivePaneView[] { return [this.view]; }
+  setSessions(seps: UTCTimestamp[], shades: Array<{ from: UTCTimestamp; to: UTCTimestamp }>) {
+    this.seps = seps; this.shades = shades; this.requestUpdate?.();
+  }
 }
 
 export function IntradayChart({
@@ -108,6 +177,20 @@ export function IntradayChart({
   const levelLinesRef = useRef<{ series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">; line: IPriceLine }[]>([]);
   const lastRangeRef = useRef<RangeKey | null>(null); // only reset the window on a RANGE change
   const pendingCenterRef = useRef<Position | null>(null); // center on this trade after the next setData
+  const [showJump, setShowJump] = useState(false); // "→ LIVE" chip: panned away / manual price scale
+  const rowsLenRef = useRef(0); // rows count from the LAST data pass (live-edge + view-save math)
+  const lastSymbolRef = useRef(symbol);
+  const viewBySymbolRef = useRef<Record<string, { fromT: number; toT: number }>>({}); // per-symbol zoom memory (TIME-anchored — survives history prepends)
+  // Restore this symbol's view when its rows land. `sawEmpty` gates the apply:
+  // useMarketData clears bars between symbols, so the first rows>0 pass AFTER an
+  // empty pass is the new symbol's data — applying any earlier would anchor the
+  // restore against the OLD symbol's still-rendered rows. `tries` caps the wait
+  // for deep history (the fast 200-bar poll lands ~1s before the paginated
+  // 15-day history; restoring against the poll snapshot and letting the prepend
+  // re-anchor it was the original sin here — hence TIME anchoring + coverage gate).
+  const pendingSymRestoreRef = useRef<{ sym: string; sawEmpty: boolean; tries: number } | null>(null);
+  const sessionLayerRef = useRef<SessionLayer | null>(null);
+  const sessionHostRef = useRef<ISeriesApi<"Candlestick"> | ISeriesApi<"Area"> | null>(null);
 
   // ---- persistence (restore on mount) ----
   useEffect(() => {
@@ -189,19 +272,24 @@ export function IntradayChart({
       priorClose = prev.close ?? null; pdh = prev.high ?? null; pdl = prev.low ?? null;
     }
     let orbHi: number | null = null, orbLo: number | null = null;
+    let hod: number | null = null, lod: number | null = null;
     if (bars.length) {
       const todayET = etParts(Date.parse(bars[bars.length - 1].ts)).date;
       for (let i = bars.length - 1; i >= 0; i--) {
         const p = etParts(Date.parse(bars[i].ts));
         if (p.date !== todayET) break;             // bars ascending → older session, stop
+        const h = bars[i].high ?? bars[i].close, l = bars[i].low ?? bars[i].close;
         if (p.min >= 570 && p.min < 600) {         // 09:30–10:00 ET opening range
-          const h = bars[i].high ?? bars[i].close, l = bars[i].low ?? bars[i].close;
           if (h != null) orbHi = orbHi == null ? h : Math.max(orbHi, h);
           if (l != null) orbLo = orbLo == null ? l : Math.min(orbLo, l);
         }
+        if (p.min >= 570 && p.min < 960) {         // today's running RTH high/low
+          if (h != null) hod = hod == null ? h : Math.max(hod, h);
+          if (l != null) lod = lod == null ? l : Math.min(lod, l);
+        }
       }
     }
-    return { priorClose, pdh, pdl, orbHi, orbLo };
+    return { priorClose, pdh, pdl, orbHi, orbLo, hod, lod };
   }, [bars, dailyBars]);
 
   // ---- create chart + base series once ----
@@ -221,14 +309,45 @@ export function IntradayChart({
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
     const line = (color: string) => chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     vwapRef.current = line(C.vwap); fastRef.current = line(C.emaFast); slowRef.current = line(C.emaSlow); thirdRef.current = line(C.emaThird);
+    sessionLayerRef.current = new SessionLayer();
+    // "→ LIVE" affordance: show when panned away from the live edge OR the price
+    // axis was manually scaled (a drag silently latches autoScale off — the
+    // "candles vanished" failure mode).
+    const onRange = () => {
+      const lr = chart.timeScale().getVisibleLogicalRange();
+      const away = !!lr && rowsLenRef.current > 0 && lr.to < rowsLenRef.current - 3;
+      const manual = chart.priceScale("right").options().autoScale === false;
+      setShowJump(away || manual);
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
     chartRef.current = chart;
-    return () => { chart.remove(); chartRef.current = null; macdRef.current = null; markersRef.current = null; markersOnRef.current = null; levelLinesRef.current = []; };
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __seveChart?: IChartApi }).__seveChart = chart; // dev console probe
+    return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
+      chart.remove(); chartRef.current = null; macdRef.current = null; markersRef.current = null; markersOnRef.current = null; levelLinesRef.current = [];
+      sessionLayerRef.current = null; sessionHostRef.current = null;
+    };
   }, []);
 
   // ---- feed data / overlays / markers / MACD pane ----
   useEffect(() => {
     const chart = chartRef.current, candle = candleRef.current, area = areaRef.current;
     if (!chart || !candle || !area) return;
+
+    // ---- SPY↔QQQ switch: save the outgoing symbol's view as a WALL-CLOCK window
+    // (times survive both the bar-clear and the late history prepend; SPY/QQQ share
+    // the same session grid), re-arm price autoscale (a manual axis drag latches it
+    // OFF, which left QQQ's candles stranded outside SPY's price window), and queue
+    // the incoming symbol's restore.
+    if (lastSymbolRef.current !== symbol) {
+      const vr = chart.timeScale().getVisibleRange();
+      if (vr && rowsLenRef.current > 0) {
+        viewBySymbolRef.current[lastSymbolRef.current] = { fromT: vr.from as number, toT: vr.to as number };
+      }
+      chart.priceScale("right").applyOptions({ autoScale: true });
+      pendingSymRestoreRef.current = { sym: symbol, sawEmpty: false, tries: 0 };
+      lastSymbolRef.current = symbol;
+    }
 
     // dedupe + ascending by second-resolution time
     const seen = new Set<number>();
@@ -309,6 +428,36 @@ export function IntradayChart({
       add(levels.pdl, C.pdl, "PDL", LineStyle.Dotted);
       add(levels.orbHi, C.orb, "ORH", LineStyle.Dashed);
       add(levels.orbLo, C.orb, "ORL", LineStyle.Dashed);
+      add(levels.hod, C.hod, "HOD", LineStyle.Solid);
+      add(levels.lod, C.lod, "LOD", LineStyle.Solid);
+    }
+
+    // ---- session separators + premarket shading (intraday only) ----
+    // The primitive rides the ACTIVE series (line/candles), so re-home it on a
+    // mode flip; marks rebuild each pass from the rows' ET dates (cheap — etParts
+    // is minute-memoized).
+    if (sessionLayerRef.current) {
+      if (sessionHostRef.current !== activeSeries) {
+        try { sessionHostRef.current?.detachPrimitive(sessionLayerRef.current); } catch { /* detached with series */ }
+        activeSeries.attachPrimitive(sessionLayerRef.current);
+        sessionHostRef.current = activeSeries;
+      }
+      const seps: UTCTimestamp[] = [];
+      const shades: Array<{ from: UTCTimestamp; to: UTCTimestamp }> = [];
+      if (!isDaily && rows.length) {
+        let lastDate = "";
+        let preFrom: UTCTimestamp | null = null, preTo: UTCTimestamp | null = null, opened = false;
+        const flushPre = () => { if (preFrom != null && preTo != null) shades.push({ from: preFrom, to: preTo }); preFrom = preTo = null; };
+        for (const r of rows) {
+          const p = etParts((r.t as number) * 1000);
+          if (p.date !== lastDate) { flushPre(); lastDate = p.date; opened = false; }
+          if (p.min < 570) { if (preFrom == null) preFrom = r.t; preTo = r.t; }
+          else if (!opened) { seps.push(r.t); opened = true; }
+        }
+        flushPre();
+      }
+      // a lone session needs no separator; the premarket tint is useful even on 1D
+      sessionLayerRef.current.setSessions(seps.length > 1 ? seps : [], shades);
     }
 
     // Default visible window — set ONLY when the range preset changes, not on every
@@ -317,6 +466,32 @@ export function IntradayChart({
     if (rows.length && lastRangeRef.current !== range) {
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, rows.length - (RANGES[range].bars || rows.length)), to: rows.length });
       lastRangeRef.current = range;
+    }
+    // Symbol restore: bring back the incoming symbol's saved wall-clock window, or
+    // snap to the live edge when it has none. Applies only after the bar-clear
+    // (sawEmpty) AND once the loaded history reaches back to the saved window —
+    // the fast poll lands ~200 recent bars a beat before the deep history, and a
+    // restore anchored on that snapshot gets dragged to the live edge by the
+    // prepend. `tries` caps the wait so a saved window older than the loaded
+    // history can't stall the restore forever.
+    const pendingSym = pendingSymRestoreRef.current;
+    if (pendingSym && pendingSym.sym === symbol) {
+      if (!rows.length) {
+        pendingSym.sawEmpty = true;
+      } else if (pendingSym.sawEmpty) {
+        pendingSym.tries++;
+        const saved = viewBySymbolRef.current[symbol];
+        const coverageOk = !saved || (rows[0].t as number) <= saved.fromT || pendingSym.tries > 6;
+        if (coverageOk) {
+          if (saved) {
+            try { chart.timeScale().setVisibleRange({ from: saved.fromT as UTCTimestamp, to: saved.toT as UTCTimestamp }); } catch { /* window outside data */ }
+          } else {
+            chart.timeScale().scrollToRealTime();
+          }
+          chart.priceScale("right").applyOptions({ autoScale: true });
+          pendingSymRestoreRef.current = null;
+        }
+      }
     }
     // Center on a highlighted trade AFTER setData (so it can't be overridden), once —
     // but ONLY when the fill is outside the current visible window, so clicking a
@@ -332,7 +507,17 @@ export function IntradayChart({
       }
       pendingCenterRef.current = null;
     }
-  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, showLevels, levels, isDaily, range, trades, openPositions, highlightTrade, mobile]);
+
+    // Live-edge bookkeeping + keep the "→ LIVE" chip honest on data passes too
+    // (a vertical-only price-axis drag never fires the logical-range subscription).
+    rowsLenRef.current = rows.length;
+    {
+      const lr = chart.timeScale().getVisibleLogicalRange();
+      const away = !!lr && rows.length > 0 && lr.to < rows.length - 3;
+      const manual = chart.priceScale("right").options().autoScale === false;
+      setShowJump(away || manual);
+    }
+  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, showLevels, levels, isDaily, range, trades, openPositions, highlightTrade, mobile, symbol]);
 
   // ---- highlight a trade drilled into from the Today's-trades list: switch to
   // intraday if needed and (only if off-screen) center the chart on the fill. Lights
@@ -345,6 +530,15 @@ export function IntradayChart({
   }, [highlightTrade, isDaily]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ledSpot = spot ?? (agg.length ? agg[agg.length - 1].close : null);
+
+  // "→ LIVE": snap back to the latest bar and re-arm price autoscale.
+  const jumpLive = () => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.priceScale("right").applyOptions({ autoScale: true });
+    chart.timeScale().scrollToRealTime();
+    setShowJump(false);
+  };
 
   return (
     <div className="panel">
@@ -385,6 +579,9 @@ export function IntradayChart({
               <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption={`${symbol.toLowerCase()} $`} color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"} />
             </div>
           )}
+          {showJump && (
+            <button className="chart-live-jump" onClick={jumpLive} aria-label="Jump to the latest bar" title="Jump to the latest bar + re-arm autoscale">→ LIVE</button>
+          )}
         </div>
         <div className="chart-controls chart-controls--bottom">
           <span className="ind-chips">
@@ -393,7 +590,7 @@ export function IntradayChart({
             <button className={`ind-chip${showVol ? " on" : ""}`} onClick={toggle(VOL_KEY, setShowVol)} aria-pressed={showVol} title="Volume">VOL</button>
             <button className={`ind-chip${showMacd ? " on" : ""}`} onClick={toggle(MACD_KEY, setShowMacd)} aria-pressed={showMacd} title="MACD 12/26/9">MACD</button>
             <button className={`ind-chip${showTrades ? " on" : ""}`} onClick={toggle(TRADES_KEY, setShowTrades)} aria-pressed={showTrades} title="Show trade entry/exit markers">TRADES</button>
-            <button className={`ind-chip${showLevels ? " on" : ""}`} onClick={toggle(LEVELS_KEY, setShowLevels)} aria-pressed={showLevels} title="Key levels: prior close (PDC), prior-day high/low (PDH/PDL), opening range (ORH/ORL) — intraday">LVL</button>
+            <button className={`ind-chip${showLevels ? " on" : ""}`} onClick={toggle(LEVELS_KEY, setShowLevels)} aria-pressed={showLevels} title="Key levels: prior close (PDC), prior-day high/low (PDH/PDL), opening range (ORH/ORL), today's high/low (HOD/LOD) — intraday">LVL</button>
           </span>
           {/* right-justified: editable EMA periods (desktop) + the LINE/CANDLES toggle,
               dropped here from the header so it sits beside the indicator chips, but separated. */}
