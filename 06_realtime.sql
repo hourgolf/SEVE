@@ -20,7 +20,13 @@ declare
     'events',
     'positions',
     'signals',
-    'equity_snapshots'
+    'equity_snapshots',
+    -- desk CONFIG tables — so mute/solo/kill/status/knob changes sync across devices
+    -- (DeskProvider subscribes to these; without them a mute on mobile won't show on
+    -- desktop until a reload). Realtime honors RLS, so the anon SELECT policies gate it.
+    'strategists',
+    'strategist_config',
+    'fund_state'
   ];
 begin
   foreach t in array tables loop
