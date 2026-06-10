@@ -58,6 +58,15 @@ five new research probes.** Full writeup: memory `tier2-conservative-targets-ver
    DEFENSE STACK now live: 09b (no exit loop) + 09c (ledger accuracy + within-cycle sell coord) + close-position
    slug-tag + sellQty + 09d (no ghost).** Memory `pnl-realized-inflation-fix.md`. WATCH: no "recovered … lost
    insert" lines following a close = working.
+6. **CROSS-DEVICE CONFIG SYNC (Vercel, pushed → live).** Bug: mute/solo/kill/knob on mobile didn't reflect on
+   desktop until a reload — the config is GLOBAL in the DB (writes always persisted) but `DeskProvider` hydrated
+   ONCE on mount with no listener, AND `06_realtime.sql` didn't publish the config tables. FIX: (a) `DeskProvider`
+   now subscribes to realtime on `strategist_config`/`strategists`/`fund_state` → debounced, idempotent
+   re-hydrate (re-reads DB truth, own-echo is a no-op); (b) `06_realtime.sql` adds those 3 tables to the
+   `supabase_realtime` publication — **already applied to the live DB** (no SQL to run). Covers the MASTER strip
+   too (KILL/START-STOP/paper-live sync live across devices). Graceful fallback: writes persist + reload picks
+   them up if realtime drops. One surface (`PositionsPanel`, `useDeskWrite`, `useDeskFeed`) is shared desktop+
+   mobile, so all of today's fixes are inherently on both — only the desk-config SYNC needed wiring.
 
 **KEY VERDICTS (don't re-litigate — all real-NBBO, 5 windows):**
 - **RIDE the convex-edge channels (BREAK ALT/V3); don't target/scale/trail them.** They're +EV live with the
