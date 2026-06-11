@@ -107,6 +107,13 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
   // Deep intraday history (1-min bars), loaded once; the poll merges its recent
   // tail into this. Serves the short-range presets (1D / 1W).
   const historyBars = useRef<UnderlyingBar[]>([]);
+  // When the fast /api/spot tick last delivered a live trade price. The main
+  // poll's spot (minute-ingest underlying_price — up to ~60s stale) must NOT
+  // overwrite a healthy live tick: doing so made the displayed price snap
+  // BACKWARDS 30-50¢ every poll cycle on a moving tape (live tick forward,
+  // minute snapshot back). Main-poll spot is the FALLBACK, used only when the
+  // fast path has been quiet for >15s.
+  const fastSpotAt = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -222,7 +229,9 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         setData((prev) => ({
           ...prev,
           status,
-          spot,
+          // Live-tick precedence: keep the fast /api/spot price while that path
+          // is healthy; the minute-derived spot only fills in when it's not.
+          spot: Date.now() - fastSpotAt.current < 15_000 && prev.spot != null ? prev.spot : spot,
           lastIngestTs,
           snapshot,
           bars,
@@ -322,6 +331,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         if (!res.ok) return;
         const j = (await res.json()) as { price?: number | null };
         if (typeof j.price === "number" && live()) {
+          fastSpotAt.current = Date.now(); // live path healthy → main poll yields
           setData((d) => ({ ...d, spot: j.price as number }));
         }
       } catch {
