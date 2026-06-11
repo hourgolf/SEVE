@@ -61,10 +61,13 @@ export function loadDatabentoByDay(dates: string[], underlying = "SPY"): Map<str
 const FILL_LAG_MS = 60_000;
 
 // Build a chain provider from one day's contracts — serves REAL bid/ask at the
-// realistic fill time (tsMs + one bar).
-export function makeDatabentoChain(contracts: Series[]): (spot: number, minutesToClose: number, tsMs: number) => Quote[] {
+// realistic fill time (tsMs + one bar). `fillLagMs` is overridable for latency
+// studies (fill-lag-probe): bars are stamped at their START, so tsMs+60s = the
+// NBBO at the instant the bar's close is knowable = a zero-added-latency fill.
+// Larger values model cron/ingest delay; below 60s would be look-ahead.
+export function makeDatabentoChain(contracts: Series[], fillLagMs: number = FILL_LAG_MS): (spot: number, minutesToClose: number, tsMs: number) => Quote[] {
   return (_spot, _mtc, tsMs) => {
-    const at = tsMs + FILL_LAG_MS;
+    const at = tsMs + fillLagMs;
     const quotes: Quote[] = [];
     for (const c of contracts) {
       const i = idxAtOrBefore(c.ts, at);
