@@ -54,22 +54,20 @@ Top-3: power-smart-entries +1151 (⚠ CUT-LISTED, see below), BREAK(ALT) +828, V
 manual ✕-close → the tag bar appears and the tap lands `manual:<tag>` on the row; (3) tomorrow's
 day-report coverage section stays ✓ clean; (4) STREAM light green, `stream-2026-06-11a` beating.
 
-**OPERATOR DECISIONS (pending the word — both reversible):**
-- **Item 5 — arm V3+ALT entries→14:00** (5/5-window PASS, +94/t on V3; one `time_before` edit
-  in each spec_json). The 06-11 receipts agree: both channels' wins today were 13:30 entries.
-  SQL (VERIFIED read-only: the pattern matches exactly 2× per channel = the two entry sides;
-  the 15:25 exit flatten is a different key, untouched):
-  `update strategists set spec_json = replace(spec_json::text, '"et": "15:25", "kind": "time_before"', '"et": "14:00", "kind": "time_before"')::jsonb where slug in ('breakout-alt-v3','breakout-smart-entries');`
-  Rollback = the same statement with the two strings swapped.
-- **Item 6 — roster cuts 17→~8**: power×3, base breakout, breakout-qqq, orb-spy-trail,
-  grind-smart, orb-trend-rider. Today's receipts CUT BOTH WAYS: five of the cut list went
-  −$1,834 (orb-trend-rider −695, grind-smart −426, power −385, orb-spy-trail −304, breakout
-  −24), but **power-smart-entries was the DAY'S BEST channel (+1,151, 2/2)** and breakout-qqq
-  +231 — the cut list as a whole netted only −$452 today. One green day doesn't outweigh the
-  multi-window backtests + live bleed that built the list, but whether power-smart-entries
-  (and breakout-qqq) ride to month-end before the axe is squarely the operator's call.
-  SQL (mute = draft, the established pattern; exits still wind down; re-arm = status='armed';
-  pull any slug out per the operator's keep calls):
+**OPERATOR DECISIONS (resolved same evening — operator's word given in-session):**
+- **Item 5 — ARMED ✓: V3+ALT entries→14:00.** Operator chose "arm both". Applied via MCP +
+  VERIFIED: both spec_jsons carry 2 `time_before` entry conditions at 14:00, zero at 15:25,
+  the 15:25 exit flatten (`timeET`) intact, both channels still `armed`. Cron-owned → live
+  next cycle, no deploy needed. The desk's FIRST armed entry-side config (5/5-window PASS).
+  Rollback: `update strategists set spec_json = replace(spec_json::text, '"et": "14:00", "kind": "time_before"', '"et": "15:25", "kind": "time_before"')::jsonb where slug in ('breakout-alt-v3','breakout-smart-entries');`
+  WATCH: V3/ALT take NO entries after 14:00 ET (signals blocked `time_before`), morning
+  entries unchanged.
+- **Item 6 — roster cuts: OPERATOR CHOSE WAIT FOR MONTH-END.** No cuts tonight; the live A/B
+  runs through the month boundary as originally planned. Context that informed it: today's
+  receipts cut both ways — five of the list went −$1,834 (orb-trend-rider −695, grind-smart
+  −426, power −385, orb-spy-trail −304, breakout −24), but **power-smart-entries was the
+  DAY'S BEST channel (+1,151, 2/2)** and breakout-qqq +231. When the word comes, the SQL
+  (mute = draft; exits still wind down; re-arm = status='armed'; pull slugs per keep calls):
   `update strategists set status='draft' where slug in ('power','power-smart-entries','power-final30','breakout','breakout-qqq','orb-spy-trail','grind-smart-entries','orb-trend-rider');`
 
 ## SESSION HANDOFF — 2026-06-11 (B1 LIVE DAY) — prior
