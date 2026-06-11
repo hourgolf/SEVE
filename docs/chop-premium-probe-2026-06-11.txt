@@ -1,0 +1,34 @@
+
+> seve-live-market-monitor@0.1.0 chop-premium-probe
+> tsx engine/chop-premium-probe.ts
+
+
+  CHOP-PREMIUM probe · short ±$5 iron fly @ 13:00 ET · real-NBBO · 291 sessions · per-contract $
+  fly·REAL = close ATM body @15:50 ask + OTM wings settle (honest tradeable) · fly·EXP = all settle (optimistic ceiling)
+  GATE: predicted-chop = 10:30 score < 0.5 (drift + VWAP-persistence pctile) · ORACLE: realized whipsaw legs ≥ 5
+
+  ══ fly·REAL (honest) ══
+  ALL days (always-on baseline)   291d      +$1/day  worst   -$437   63% win  Σ    +$312
+  predicted-chop (gate <0.5)      154d      +$5/day  worst   -$391   61% win  Σ    +$731
+  predicted-trend (gate ≥0.5)     137d      -$3/day  worst   -$437   64% win  Σ    -$418
+  realized-chop ≥5 legs (oracle)   25d     +$20/day  worst   -$170   68% win  Σ    +$507
+  realized-trend ≤2 legs (oracle)  235d      +$2/day  worst   -$437   63% win  Σ    +$487
+
+  ══ fly·EXP (ceiling) ══
+  ALL days (always-on baseline)   291d     +$26/day  worst   -$342   66% win  Σ   +$7535
+  predicted-chop (gate <0.5)      154d     +$33/day  worst   -$278   66% win  Σ   +$5067
+  predicted-trend (gate ≥0.5)     137d     +$18/day  worst   -$342   67% win  Σ   +$2469
+  realized-chop ≥5 legs (oracle)   25d      +$6/day  worst   -$276   52% win  Σ    +$161
+  realized-trend ≤2 legs (oracle)  235d     +$30/day  worst   -$342   69% win  Σ   +$7081
+
+  per-window predicted-chop fly·REAL (the deployable arm):
+    CHOP Mar26         9d     +$41/day  Σ    +$368  78% win
+    TREND AprMay26    21d      -$7/day  Σ    -$154  48% win
+    TREND-OOS MA25    45d      +$3/day  Σ    +$142  67% win
+    TREND 24          50d      +$7/day  Σ    +$373  62% win
+    CHOP-MIX 25-26    29d      +$0/day  Σ      +$2  55% win
+
+  ROUTER HIT RATE: 10:30 gate catches 9/25 realized-chop days (36%).
+  READ: rescue = predicted-chop > 0 & > baseline & > predicted-trend. Weak-signal = oracle ≫ but gate ≈ baseline.
+  Door-closed = realized-chop ≤ 0 (entry-spread wall beats the credit even on known-chop days → only stand-down).
+

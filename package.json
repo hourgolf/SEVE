@@ -37,6 +37,7 @@
     "qqq-v3-probe": "tsx engine/qqq-v3-probe.ts",
     "level-gate-probe": "tsx engine/level-gate-probe.ts",
     "confirm-delay-probe": "tsx engine/confirm-delay-probe.ts",
+    "chop-premium-probe": "tsx engine/chop-premium-probe.ts",
     "chop-router-probe": "tsx engine/chop-router-probe.ts",
     "export-bars": "tsx scripts/export-bars.ts",
     "verify-bars-archive": "tsx scripts/verify-bars-archive.ts",
