@@ -8,9 +8,62 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## SESSION HANDOFF — 2026-06-11 (B1 LIVE DAY) — READ THIS FIRST
+## SESSION HANDOFF — 2026-06-11 EVENING (CHANGE LIST EXECUTED) — READ THIS FIRST
+**The after-market change list (items 1-4) is DONE + DEPLOYED (commit `b5cde0a`): cron v55
+`2026-06-11a` (sentinel-verified), Railway worker `stream-2026-06-11a` (heartbeat verified
+beating), Vercel pushed, migration `31_close_reason.sql` APPLIED via MCP.** Items 5-6 (arm
+V3/ALT →14:00 + roster cuts) are PENDING THE OPERATOR'S WORD. Item 7 = the probe queue
+(unchanged, needs Databento refresh first).
+
+**DAY REPORT 06-11 (saved `docs/day-report-2026-06-11.txt`) — B1 VERDICT: PASS.**
+NAV +$1,207, Σ attribution +$1,211 (Δ$4 — books clean). grind-v3 via the STREAM: 4 round-trips
++$347, fast target exits at 1-2m holds (the ~10s premium sweep banking +41%/+28% pops the cron
+band would have quantized away), stops honored, no doubles, no ghosts. NOTE: grind-v3's RISK
+knob is **$350** (not the $150 the prior handoff recorded — qty ×3/×4 matches $350 exactly, so
+sizing was CORRECT vs config; the knob itself moved). Lockout cost quantified: **21 rejected
+0DTE opens 15:32–15:43** (power-manual ×8, power-smart ×8, grind-manual ×5) — entries resumed
+15:46 only because cutoff-16 finally rolled them to 1DTE. Day shape: SPY +1.32% / QQQ +2.51%
+trend with whipsaw legs; 13:30 CALL cluster +$2,271 (one bet ×5), 13:04 PUT cluster −$687;
+winners = the keep-list (power-smart +1151, ALT +828, V3 +744), bottom-5 = the cut-list
+(orb-trend-rider −695, grind-smart −426, power −385, orb-spy-trail −304, orb-qqq-trail −226).
+Overshoots: 2 stops closed −67/−70% vs −50% design (the known $315/mo cron-quantization tail).
+
+**SHIPPED TONIGHT (all live):**
+1. **`OPEN_0DTE_CUTOFF_MIN` 16→31** (cron + `worker/src/config.ts`) — entries inside the last
+   ~30 min roll to 1DTE; the 06-08a same-day flatten still closes them at the bell.
+2. **TERMINAL-STATUS FILL POLL** (cron `aOrderAndFill` + worker `orderAndFill` + the manual
+   close route) — kills the partial-fill class: poll to a TERMINAL order status, CANCEL the
+   working remainder after ~3s, book the FINAL `filled_qty`. Entries skip the row on a
+   known-0-fill (no ghost); exits book the ACTUAL sold qty and leave the row open to retry on
+   a known-0-fill (no phantom close). The route also books actual-sold (was booking sellQty).
+3. **day-report COVERAGE section** — per-OCC account fills vs desk rows + live held-vs-open-rows
+   audit (needs ALPACA_KEY/SECRET in .env.local — present). 06-11 re-run: ✓ clean 16 OCCs
+   (the morning incident doesn't flag because the operator's SQL reconstruction already
+   restored the row; live it would have read "account bought 2 / desk rows opened 1").
+4. **`close_reason` dataset (31_close_reason.sql APPLIED)** — every exit now stamps durable
+   attribution: machine reason (stop_premium/eod_flatten/…), `reconciled`, `manual` for an
+   operator close, refined to `manual:<tag>` by the NEW post-close tag chips in PositionsPanel
+   (target/reversal/risk/stall — they appear AFTER the fill books, zero friction before;
+   desktop+mobile, shared component). day-report gained a PARTICIPATION section (taken =
+   operator closed · skipped = bell backstop) — the operator-selection dataset. First read:
+   **16/16 twin closes taken today** (he engaged everything; zero backstops). Trade drill-down
+   now shows close_reason (✋-prefixed when manual).
+
+**MORNING WATCH (06-12 open):** (1) entries 15:29+ ET roll to 1DTE with ZERO 422s; (2) first
+manual ✕-close → the tag bar appears and the tap lands `manual:<tag>` on the row; (3) tomorrow's
+day-report coverage section stays ✓ clean; (4) STREAM light green, `stream-2026-06-11a` beating.
+
+**OPERATOR DECISIONS (pending the word — both reversible):**
+- **Item 5 — arm V3+ALT entries→14:00** (5/5-window PASS, +94/t on V3; one `time_before` edit
+  in each spec_json). The 06-11 receipts agree: both channels' wins today were 13:30 entries.
+- **Item 6 — roster cuts 17→~8**: power×3, base breakout, breakout-qqq, orb-spy-trail,
+  grind-smart, orb-trend-rider. Today's tape: the cut six (sans breakout-qqq +231) went
+  −$2,036 combined while the keep-list made the day. breakout-qqq's +231 is the one
+  counter-receipt — operator's call whether it survives to month-end.
+
+## SESSION HANDOFF — 2026-06-11 (B1 LIVE DAY) — prior
 **Next session opens with: (1) `npm run day-report -- --date 2026-06-11` (same-week constraint!),
-(2) execute the AFTER-MARKET CHANGE LIST below.** The Railway stream executor ran its first live day
+(2) execute the AFTER-MARKET CHANGE LIST below.** [DONE 06-11 evening — see the section above.] The Railway stream executor ran its first live day
 (grind-v3, $150); heartbeat + cron `stream_owned` deferral worked; full execution validation = the
 day report. THREE INCIDENTS, all diagnosed, two fixed live:
 - **Partial-fill race (NEW BUG CLASS, fix pending tonight):** grind-manual buy filled ×2 but
