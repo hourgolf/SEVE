@@ -149,6 +149,14 @@ async function cycle(trigger: string): Promise<void> {
           remainingByOcc: seedRemaining(alpacaPositions),
           openRowQty,
         };
+        // STALE-BAR ORDER GUARD: a boot/restart cycle decides on the last KNOWN
+        // bar — after an overnight restart that's yesterday's close, and a market
+        // order placed then would QUEUE for the next open at an unknowable price.
+        // Orders (entries AND exits) require a fresh decision bar; reconcile and
+        // mark-to-market are DB-only and always safe. Live bars arrive every
+        // minute, so 3 min of slack never blocks a real session cycle.
+        const barFresh = Date.now() - lastSession.ts < 180_000;
+        if (!barFresh) info("live pass: decision bar is stale (boot/off-hours) — orders suppressed, bookkeeping only");
         const bySlug = new Map(cfg.channels.map((c) => [c.slug, c]));
         for (const d of decisions) {
           const ch = bySlug.get(d.slug);
@@ -156,8 +164,8 @@ async function cycle(trigger: string): Promise<void> {
           const row = ctx.openRows.get(ch.id);
           try {
             if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
-            else if (d.action === "exit" && row && !d.blocked) await executeExit(d, row, exec);
-            else if (d.action === "enter") await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+            else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec);
+            else if (d.action === "enter" && barFresh) await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
             else if (d.action === "hold" && row) {
               const alp = ctx.alpacaByOcc.get(row.occ_symbol);
               if (alp) {

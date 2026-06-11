@@ -31,6 +31,8 @@
     "nakamoto-repro": "tsx engine/nakamoto/repro.ts",
     "nakamoto-phase2": "tsx engine/nakamoto/phase2.ts",
     "fill-lag-probe": "tsx engine/fill-lag-probe.ts",
+    "cron:diff": "tsx --env-file=.env.local scripts/cron-deploy.ts",
+    "cron:deploy": "tsx --env-file=.env.local scripts/cron-deploy.ts --deploy",
     "sides-probe": "tsx engine/sides-probe.ts",
     "spread-probe": "tsx engine/spread-probe.ts",
     "mdte-probe": "tsx engine/mdte-probe.ts",
