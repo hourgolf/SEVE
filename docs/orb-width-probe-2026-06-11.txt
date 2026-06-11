@@ -1,0 +1,16 @@
+
+  ══ A. WINDOW LENGTH ══
+  The OR window is HARDCODED at 30 min in computeFeatures (engine.ts OPEN_RANGE_MIN); the spec's
+  opening_range `minutes` is DECORATIVE — never plumbed through. So 15/30/45/60 are identical and a
+  real window sweep needs an engine change (parameterize OPEN_RANGE_MIN through simulateSession).
+  The productive lever is the WIDTH that the (any) window produces — tested below.
+
+  ══ B. OR-WIDTH buckets (30-min window, 300 trades by width tercile) ══
+  bucket               n   exp$/t   win%   avgWidth   capture(OR÷dayRange)   pooled$
+  narrow (≤0.36%)      100    -17.3   23%     0.30%                 37%      -1728
+  medium               100    +53.2   26%     0.43%                 46%      +5322
+  wide (≥0.50%)        100    +32.6   32%     0.66%                 48%      +3264
+
+  READ: critique holds if exp$/t falls narrow→wide AND wide-bucket capture is high (the morning ate the
+  day's range → no runway past the break). Fix = an or_width_max ceiling, or a vol-defined (constant-width) OR.
+
