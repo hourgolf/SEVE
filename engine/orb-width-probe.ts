@@ -38,16 +38,16 @@ const NBBO: CostModel = { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" };
 const GATE = { minMoveToCostRatio: 3.0 };
 const CFG: StrategistConfig = { slug: "orb", capital_pct: 100, aggression: 100, max_contracts: 6, daily_stop_usd: 1e9, muted: false, soloed: false };
 
-// Live ORB entries (orb-trend-rider / orb-spy-trail spec) — `minutes` parameterized.
-const orbEntries = (minutes: number): StrategySpec["entries"] => [
-  { direction: "call", reason: "orb_up", all: [{ kind: "opening_range", side: "break_above", minutes }, { kind: "or_width_min", pct: 0.25 }, { kind: "vwap_side", side: "above" }, { kind: "momentum_atr", op: ">=", value: 0.3, lookback: 5 }, { kind: "rel_vol", min: 1.3 }, { kind: "time_before", et: "15:00" }] },
-  { direction: "put", reason: "orb_dn", all: [{ kind: "opening_range", side: "break_below", minutes }, { kind: "or_width_min", pct: 0.25 }, { kind: "vwap_side", side: "below" }, { kind: "momentum_atr", op: "<=", value: -0.3, lookback: 5 }, { kind: "rel_vol", min: 1.3 }, { kind: "time_before", et: "15:00" }] },
+// Live ORB entries (orb-trend-rider / orb-spy-trail spec) — `minutes` + or_width_min floor parameterized.
+const orbEntries = (minutes: number, floor = 0.25): StrategySpec["entries"] => [
+  { direction: "call", reason: "orb_up", all: [{ kind: "opening_range", side: "break_above", minutes }, { kind: "or_width_min", pct: floor }, { kind: "vwap_side", side: "above" }, { kind: "momentum_atr", op: ">=", value: 0.3, lookback: 5 }, { kind: "rel_vol", min: 1.3 }, { kind: "time_before", et: "15:00" }] },
+  { direction: "put", reason: "orb_dn", all: [{ kind: "opening_range", side: "break_below", minutes }, { kind: "or_width_min", pct: floor }, { kind: "vwap_side", side: "below" }, { kind: "momentum_atr", op: "<=", value: -0.3, lookback: 5 }, { kind: "rel_vol", min: 1.3 }, { kind: "time_before", et: "15:00" }] },
 ];
-const mkSpec = (minutes: number): StrategySpec => ({
+const mkSpec = (minutes: number, floor = 0.25): StrategySpec => ({
   meta: { name: `orb${minutes}`, regime: "directional", dteRange: [0, 1], direction: "directional", structure: "single-leg", instrument: "SPX", strategyId: `orb${minutes}` } as StrategySpec["meta"],
-  exits: [{ timeET: "15:30" }], entries: orbEntries(minutes), sizing: {},
+  exits: [{ timeET: "15:30" }], entries: orbEntries(minutes, floor), sizing: {},
 });
-const evalFor = (minutes: number) => { const def = specToStrategyDef(mkSpec(minutes)); return (s: RealSession) => def.build(s.bars as Bar[], def.timeframeMin, { pdh: s.pdh, pdl: s.pdl }); };
+const evalFor = (minutes: number, floor = 0.25) => { const def = specToStrategyDef(mkSpec(minutes, floor)); return (s: RealSession) => def.build(s.bars as Bar[], def.timeframeMin, { pdh: s.pdh, pdl: s.pdl }); };
 
 const WINDOWS = [
   { name: "CHOP Mar26", from: "2026-03-01", to: "2026-03-31" },
@@ -109,8 +109,25 @@ async function main() {
     const cap = set.reduce((a, x) => a + x.capture, 0) / set.length;
     console.log(`  ${label.padEnd(20)} ${String(set.length).padStart(3)}  ${`${sgn(exp)}${exp.toFixed(1)}`.padStart(7)}  ${win.toFixed(0).padStart(3)}%   ${avgW.toFixed(2).padStart(6)}%   ${(100 * cap).toFixed(0).padStart(16)}%   ${`${sgn(pnl)}${Math.round(pnl)}`.padStart(8)}`);
   }
-  console.log(`\n  READ: critique holds if exp$/t falls narrow→wide AND wide-bucket capture is high (the morning ate the`);
-  console.log(`  day's range → no runway past the break). Fix = an or_width_max ceiling, or a vol-defined (constant-width) OR.\n`);
+  // ---- C. or_width_min FLOOR sweep (the deployable lever) ----
+  // Section B says NARROW ORs are the bleed → raise the floor (live = 0.25%). Sweep it
+  // and require the 5-window bar (helps/neutral in ≥4 of 5 AND lifts pooled exp$/t).
+  console.log(`\n  ══ C. or_width_min FLOOR sweep (live = 0.25%) ══`);
+  console.log(`  floor    exp$/t    n   win%     pooled$` + WINDOWS.map((w) => w.name.slice(0, 11).padStart(13)).join(""));
+  for (const floor of [0.25, 0.30, 0.35, 0.40, 0.45, 0.50]) {
+    const mk = evalFor(30, floor);
+    const all = run(mk, real);
+    const m = metrics(all, real.length);
+    const exp = all.length ? m.totalPnl / all.length : 0;
+    const winPct = all.length ? (100 * all.filter((t) => t.pnl > 0).length) / all.length : 0;
+    const per = WINDOWS.map((w) => Math.round(metrics(run(mk, real.filter((s) => s.dateET >= w.from && s.dateET <= w.to)), 1).totalPnl));
+    console.log(`  ${floor.toFixed(2)}%   ${`${sgn(exp)}${exp.toFixed(1)}`.padStart(7)} ${String(all.length).padStart(4)}  ${winPct.toFixed(0).padStart(3)}%  ${`${sgn(m.totalPnl)}${Math.round(m.totalPnl)}`.padStart(9)}` + per.map((p) => `${sgn(p)}${p}`.padStart(13)).join(""));
+  }
+  console.log(`\n  VERDICT: the mechanism is real (narrow ORs bleed, capture rises narrow→wide) but the FLOOR fails the`);
+  console.log(`  bar — 0.35% is the EV peak (+34/t) yet helps only 3/5 windows (HURTS the MA25 −$9k sink + AprMay) and`);
+  console.log(`  is non-monotonic (0.30 dips, 0.35 spikes = overfit-prone); total barely moves (+$6.9k→+$7.0k, just`);
+  console.log(`  fewer trades). ORB's real bleed is the MA25 trend-OOS regime, which NO width floor touches → don't`);
+  console.log(`  wire a floor change; width is a good diagnosis, not a deployable edge. (ORB stays a roster decision.)\n`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -1,4 +1,10 @@
 
+> seve-live-market-monitor@0.1.0 orb-width-probe
+> tsx engine/orb-width-probe.ts
+
+
+  ORB-WIDTH probe · live ORB ride (−50% stop · cost gate) · real NBBO · 320 SPY sessions
+
   ══ A. WINDOW LENGTH ══
   The OR window is HARDCODED at 30 min in computeFeatures (engine.ts OPEN_RANGE_MIN); the spec's
   opening_range `minutes` is DECORATIVE — never plumbed through. So 15/30/45/60 are identical and a
@@ -11,6 +17,16 @@
   medium               100    +53.2   26%     0.43%                 46%      +5322
   wide (≥0.50%)        100    +32.6   32%     0.66%                 48%      +3264
 
-  READ: critique holds if exp$/t falls narrow→wide AND wide-bucket capture is high (the morning ate the
-  day's range → no runway past the break). Fix = an or_width_max ceiling, or a vol-defined (constant-width) OR.
+  ══ C. or_width_min FLOOR sweep (live = 0.25%) ══
+  floor    exp$/t    n   win%     pooled$   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+  0.25%     +22.9  300   27%      +6858         +982        +1949        -8853        +2394         -415
+  0.30%     +13.2  248   27%      +3277          -73        +1595        -7937        +2104         -526
+  0.35%     +34.1  206   29%      +7023        +1710        +1172        -9418        +3193        +2251
+  0.40%     +24.3  169   28%      +4101        +2155         -373        -7324        +4000        -2472
+  0.45%      +6.6  146   29%       +962        +2641        -1055        -4944        +2261        -6056
+  0.50%     -17.0  108   30%      -1840        +4415         +687        -3997         +144        -6265
+
+  READ: the operator's mechanism is real (capture rises narrow→wide) but the CONCLUSION inverts —
+  NARROW ORs bleed (weak break = chop proxy), wide stay +EV (trend days). Lever = RAISE the floor (C),
+  not a wide ceiling. Pick the floor that lifts pooled exp$/t AND holds ≥4/5 windows (not just the peak).
 
