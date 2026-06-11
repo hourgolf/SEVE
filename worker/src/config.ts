@@ -84,7 +84,17 @@ export const config = {
   // Off by default to keep prod tables un-polluted; needs the service role.
   shadowWriteEvents: flag("SHADOW_WRITE_EVENTS", false),
 
-  symbol: opt("SYMBOL", "SPY"),
+  // Symbols this instance owns. SINGLE Alpaca data websocket per account/feed
+  // (the 406 single-connection limit) → one socket subscribed to ALL of these,
+  // routed by bar.S. Each symbol keeps its own in-memory bars + chain; the cron's
+  // executor gate uses ONE 'stream' heartbeat, so this instance must reliably
+  // handle EVERY symbol it lists (a silently-unhandled symbol whose channels are
+  // flagged 'stream' would strand — cron defers on the fresh heartbeat while the
+  // worker no-ops it). Default SPY,QQQ (QQQ shadow-runs until its channels flip).
+  // SYMBOL (singular) kept as a back-compat alias for the first symbol.
+  symbols: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ")
+    .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean),
+  symbol: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ").split(",")[0].trim().toUpperCase(),
   // How many strikes (± $) around spot to keep quoted in the NTM window.
   strikeWindow: Number(opt("STRIKE_WINDOW", "8")),
   // Trailing 1-min bars to seed/hold in memory (≈ 2+ sessions for pdh/pdl).
@@ -92,7 +102,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-11a";
+export const WORKER_VERSION = "stream-2026-06-11b";
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

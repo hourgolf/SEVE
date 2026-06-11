@@ -40,8 +40,8 @@ export class StockBarStream {
   private hbTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
-    private readonly symbol: string,
-    private readonly onBar: (bar: Bar) => void,
+    private readonly symbols: string[],
+    private readonly onBar: (symbol: string, bar: Bar) => void,
     private readonly onReconnect: () => void,
   ) {}
 
@@ -100,8 +100,8 @@ export class StockBarStream {
         if (m.msg === "connected") {
           this.ws?.send(JSON.stringify({ action: "auth", key: config.alpacaKey, secret: config.alpacaSecret }));
         } else if (m.msg === "authenticated") {
-          info("stream: authenticated — subscribing bars");
-          this.ws?.send(JSON.stringify({ action: "subscribe", bars: [this.symbol] }));
+          info(`stream: authenticated — subscribing bars ${this.symbols.join(",")}`);
+          this.ws?.send(JSON.stringify({ action: "subscribe", bars: this.symbols }));
         }
         break;
       case "subscription":
@@ -118,8 +118,8 @@ export class StockBarStream {
         break;
       case "b": {
         const b = m as RawBar;
-        if (b.S !== this.symbol) return;
-        this.onBar({
+        if (!this.symbols.includes(b.S)) return;
+        this.onBar(b.S, {
           ts: Date.parse(b.t),
           open: Number(b.o), high: Number(b.h), low: Number(b.l), close: Number(b.c),
           volume: Number(b.v ?? 0), vwap: Number(b.vw ?? b.c),

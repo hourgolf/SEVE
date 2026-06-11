@@ -17,7 +17,7 @@ import { specToStrategyDef, specPremiumExit } from "../../engine/specEvaluate";
 import { roundTripCostUsd as engineRoundTrip, type CostModel } from "../../engine/cost";
 import type { Bar, Evaluate, Features, OptType, Position } from "../../engine/types";
 import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
-import { config, policy } from "./config.js";
+import { policy } from "./config.js";
 import { etParts, occSymbol, type AlpacaPosition } from "./alpaca.js";
 import { peakMidSince, realizedTodayByChannel, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
@@ -260,7 +260,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     const strike = Math.round(f.close);
     const inCutoff = ctx.minutesToClose <= policy.OPEN_0DTE_CUTOFF_MIN;
     const entryExpiry = inCutoff ? ctx.next1DTE : ctx.todayET;
-    const occ = occSymbol(config.symbol, entryExpiry ?? ctx.todayET, strike, dir);
+    // OCC root = the CHANNEL's ticker (multi-symbol), not a global — else a QQQ
+    // channel would build a SPY OCC. ctx.chain/sessionBars/pdh/pdl are already this
+    // channel's symbol (the cycle builds one ctx per symbol).
+    const occ = occSymbol(ch.underlying, entryExpiry ?? ctx.todayET, strike, dir);
 
     let blocked: string | null = entryGuard;
     if (!blocked && ch.status !== "armed") blocked = "not_armed";

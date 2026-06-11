@@ -31,14 +31,18 @@ const RTH_OPEN = 570, RTH_CLOSE = 960;
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
 const liveMode = (): boolean => !config.dryRun && config.liveTrading && config.hasServiceRole;
-// A channel this instance EXECUTES: stream-owned + this worker's underlying
-// (v1 is single-symbol; QQQ channels migrate in Phase B3 with a second symbol).
-const ownedBy = (c: store.ChannelConfig): boolean => c.executor === "stream" && c.underlying === config.symbol.toUpperCase();
+// A channel this instance EXECUTES: stream-owned + one of THIS worker's symbols.
+// Multi-symbol (B3): one instance holds N symbols, each with its own bars/chain,
+// behind ONE 'stream' heartbeat — so it must reliably handle every symbol it lists.
+const SYMBOLS = config.symbols;
+const ownedBy = (c: store.ChannelConfig): boolean => c.executor === "stream" && SYMBOLS.includes(c.underlying.toUpperCase());
 // Running peak option mid per open position (power giveback + sweep state).
 const peakMidByKey = new Map<string, number>();
 
-const bars = new BarStore(config.barHistory);
-const chain = new ChainStore();
+// Per-symbol in-memory state (one BarStore + ChainStore each); OCCs are globally
+// unique (the ticker is in the OCC root) so account-wide reads stay shared.
+const barsBySym = new Map<string, BarStore>(SYMBOLS.map((s) => [s, new BarStore(config.barHistory)]));
+const chainBySym = new Map<string, ChainStore>(SYMBOLS.map((s) => [s, new ChainStore()]));
 let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[] } = { fund: null, channels: [] };
 let reloadPending = false;
 let cycling = false;
@@ -69,25 +73,32 @@ async function reloadConfig(): Promise<void> {
   else warn("config: reload returned no fund_state — keeping previous");
 }
 
-async function refreshChain(): Promise<void> {
-  const spot = bars.latest()?.close ?? 0;
-  if (!spot) return;
+async function refreshChain(sym: string): Promise<void> {
+  const chain = chainBySym.get(sym);
+  const spot = barsBySym.get(sym)?.latest()?.close ?? 0;
+  if (!chain || !spot) return;
   const today = alpaca.etParts(Date.now()).date;
   const toDate = alpaca.etParts(Date.now() + 5 * 24 * 3600 * 1000).date; // captures 0DTE + next session(s)
   try {
-    chain.update(await alpaca.snapshotChain(config.symbol, spot, today, toDate));
+    chain.update(await alpaca.snapshotChain(sym, spot, today, toDate));
   } catch (e) {
-    warn(`chain: snapshot failed (feed=${config.optFeed}) — ${(e as Error).message}; keeping prior (${chain.size})`);
+    warn(`chain[${sym}]: snapshot failed (feed=${config.optFeed}) — ${(e as Error).message}; keeping prior (${chain.size})`);
   }
 }
 
 async function seed(): Promise<void> {
-  info("seed: backfilling bars + chain via REST");
-  bars.seed(await retry("seed bars", () => alpaca.backfillBars(config.symbol, 3)));
-  const l = bars.latest();
-  info(`seed: ${bars.length} bars (latest ${l ? new Date(l.ts).toISOString() : "—"}, spot ${l?.close ?? "?"})`);
-  await refreshChain();
-  info(`seed: chain ${chain.size} contracts (feed=${config.optFeed})`);
+  info(`seed: backfilling bars + chain via REST for ${SYMBOLS.join(",")}`);
+  for (const sym of SYMBOLS) {
+    const bars = barsBySym.get(sym)!;
+    // Per-symbol seed is independent — a flaky one symbol must not abort the others.
+    try {
+      bars.seed(await retry(`seed bars ${sym}`, () => alpaca.backfillBars(sym, 3)));
+      const l = bars.latest();
+      info(`seed[${sym}]: ${bars.length} bars (latest ${l ? new Date(l.ts).toISOString() : "—"}, spot ${l?.close ?? "?"})`);
+      await refreshChain(sym);
+      info(`seed[${sym}]: chain ${chainBySym.get(sym)!.size} contracts (feed=${config.optFeed})`);
+    } catch (e) { error(`seed[${sym}] failed — ${(e as Error).message}; the websocket will populate bars live`); }
+  }
 }
 
 async function cycle(trigger: string): Promise<void> {
@@ -97,77 +108,76 @@ async function cycle(trigger: string): Promise<void> {
     if (reloadPending) { reloadPending = false; await reloadConfig(); }
     if (!cfg.fund) { warn(`cycle(${trigger}): missing config — skip`); return; }
 
-    // Decide on the last RTH *session* bar (buildSessionBars RTH-filters, so a
-    // stray after-hours bar can't be the decision bar). minutesToClose + the gate
-    // key off it, keeping them consistent with what the strategies actually see.
     const todayET = alpaca.etParts(Date.now()).date;
-    const sessionBars = buildSessionBars(bars.all(), todayET);
-    const lastSession = sessionBars[sessionBars.length - 1];
-    if (!lastSession) { info(`cycle(${trigger}): no RTH bars for ${todayET} yet — skip`); return; }
-    const barMin = alpaca.etParts(lastSession.ts).min;
-
-    await refreshChain();
+    // ACCOUNT-WIDE reads, shared across symbols (positions/orders span every ticker;
+    // OCCs are globally unique so one set of maps is correct for all symbols).
     let account, alpacaPositions;
     try { [account, alpacaPositions] = await Promise.all([alpaca.getAccount(), alpaca.getPositions()]); }
     catch (e) { warn(`cycle(${trigger}): Alpaca read failed — ${(e as Error).message}; skip`); return; }
     const openRowsArr = await store.getOpenPositions();
+    const openRows = new Map(openRowsArr.map((r) => [r.strategist_id, r]));
+    const alpacaByOcc = new Map(alpacaPositions.map((p) => [p.symbol, p]));
+    const byId = new Map(cfg.channels.map((c) => [c.id, c]));
 
-    const ctx: DecisionCtx = {
-      sessionBars,
-      chain,
-      fund: cfg.fund,
-      equity: account.equity,
-      todayET,
-      minutesToClose: Math.max(0, RTH_CLOSE - barMin),
-      next1DTE: chain.nextExpiryAfter(todayET),
-      ...computeLevels(bars.all(), todayET),
-      openRows: new Map(openRowsArr.map((r) => [r.strategist_id, r])),
-      alpacaByOcc: new Map(alpacaPositions.map((p) => [p.symbol, p])),
-    };
-
-    const decisions: ShadowDecision[] = [];
-    for (const ch of cfg.channels) {
-      try { decisions.push(await decideChannel(ch, ctx)); }
-      catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
-    }
-    report(trigger, lastSession, account.equity, decisions);
-
-    // ---- PHASE B: EXECUTE the decisions for channels this worker OWNS ----
-    // (executor='stream' + this symbol). Everything else stays shadow-logged —
-    // the lockstep comparison against the cron continues for free.
-    if (liveMode()) {
+    const live = liveMode();
+    let allOrders: alpaca.AlpacaOrder[] = [];
+    let openRowQty = new Map<string, number>();
+    let remainingByOcc = new Map<string, number>();
+    if (live) {
       await store.heartbeat(`${WORKER_VERSION} cycle`);
-      try {
-        const [allOrders, openRowQty] = await Promise.all([alpaca.getOrders(), store.openRowQtyByOcc()]);
-        const exec: ExecCtx = {
-          chain,
-          todayET,
-          etMin: barMin,
-          sinceIso: `${todayET}T00:00:00Z`,
-          allOrders,
-          alpacaByOcc: ctx.alpacaByOcc,
-          remainingByOcc: seedRemaining(alpacaPositions),
-          openRowQty,
-        };
-        // STALE-BAR ORDER GUARD: a boot/restart cycle decides on the last KNOWN
-        // bar — after an overnight restart that's yesterday's close, and a market
-        // order placed then would QUEUE for the next open at an unknowable price.
-        // Orders (entries AND exits) require a fresh decision bar; reconcile and
-        // mark-to-market are DB-only and always safe. Live bars arrive every
-        // minute, so 3 min of slack never blocks a real session cycle.
+      try { [allOrders, openRowQty] = await Promise.all([alpaca.getOrders(), store.openRowQtyByOcc()]); }
+      catch (e) { warn(`cycle(${trigger}): order/row read failed — ${(e as Error).message}; bookkeeping only`); }
+      remainingByOcc = seedRemaining(alpacaPositions);
+    }
+
+    // Per-symbol pass: each symbol decides on ITS last RTH session bar against ITS
+    // own bars/chain (a stale symbol can't suppress a fresh one — own freshness).
+    const decisions: ShadowDecision[] = [];
+    for (const sym of SYMBOLS) {
+      const bars = barsBySym.get(sym)!;
+      const sessionBars = buildSessionBars(bars.all(), todayET);
+      const lastSession = sessionBars[sessionBars.length - 1];
+      if (!lastSession) continue; // this symbol has no RTH bars yet
+      const barMin = alpaca.etParts(lastSession.ts).min;
+      const minutesToClose = Math.max(0, RTH_CLOSE - barMin);
+      await refreshChain(sym);
+      const chain = chainBySym.get(sym)!;
+
+      const ctx: DecisionCtx = {
+        sessionBars, chain, fund: cfg.fund, equity: account.equity, todayET,
+        minutesToClose, next1DTE: chain.nextExpiryAfter(todayET),
+        ...computeLevels(bars.all(), todayET),
+        openRows, alpacaByOcc,
+      };
+      const symChannels = cfg.channels.filter((c) => c.underlying.toUpperCase() === sym);
+      const symDecisions: ShadowDecision[] = [];
+      for (const ch of symChannels) {
+        try { symDecisions.push(await decideChannel(ch, ctx)); }
+        catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
+      }
+      decisions.push(...symDecisions);
+
+      // ---- PHASE B: EXECUTE the decisions for channels this worker OWNS ----
+      // (executor='stream' + a symbol we hold). Everything else stays shadow-logged.
+      if (live) {
+        // STALE-BAR ORDER GUARD (per symbol): a boot/restart decides on the last
+        // KNOWN bar — after an overnight restart that's yesterday's close, and a
+        // market order placed then would queue for the next open at an unknowable
+        // price. Orders need a fresh decision bar; reconcile + mark are always safe.
         const barFresh = Date.now() - lastSession.ts < 180_000;
-        if (!barFresh) info("live pass: decision bar is stale (boot/off-hours) — orders suppressed, bookkeeping only");
-        const bySlug = new Map(cfg.channels.map((c) => [c.slug, c]));
-        for (const d of decisions) {
+        if (!barFresh) info(`live pass[${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
+        const exec: ExecCtx = { chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+        const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
+        for (const d of symDecisions) {
           const ch = bySlug.get(d.slug);
           if (!ch || !ownedBy(ch)) continue;
-          const row = ctx.openRows.get(ch.id);
+          const row = openRows.get(ch.id);
           try {
             if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
             else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec);
             else if (d.action === "enter" && barFresh) await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
             else if (d.action === "hold" && row) {
-              const alp = ctx.alpacaByOcc.get(row.occ_symbol);
+              const alp = alpacaByOcc.get(row.occ_symbol);
               if (alp) {
                 const unreal = Math.round((alp.current_price - row.avg_entry_price) * row.qty * 10000) / 100;
                 await store.markPositionRow(row.id, alp.current_price, unreal);
@@ -175,23 +185,23 @@ async function cycle(trigger: string): Promise<void> {
             }
           } catch (e) { warn(`execute ${d.slug} failed — ${(e as Error).message}`); }
         }
-        await store.insertEquitySnapshot(account.equity, account.cash, alpacaPositions.reduce((a, p) => a + p.unrealized_pl, 0));
-      } catch (e) { warn(`live execution pass failed — ${(e as Error).message}`); }
-    }
+      }
 
-    // Shadow MANAGEMENT what-if: run each managed channel's scale/BE/trail over
-    // the live positions on the real-time quote (logs managed-vs-actual; no orders).
-    try {
-      await updateShadowManagement({
-        rows: openRowsArr,
-        slugById: new Map(cfg.channels.map((c) => [c.id, c.slug])),
-        chain,
-        sessionBars,
-        atr: computeFeatures(sessionBars, sessionBars.length - 1).atr,
-        etMin: barMin,
-        minutesToClose: Math.max(0, RTH_CLOSE - barMin),
-      });
-    } catch (e) { warn(`shadow-management failed — ${(e as Error).message}`); }
+      // Shadow MANAGEMENT what-if (per symbol): scale/BE/trail over THIS symbol's
+      // live positions on its real-time quote (logs managed-vs-actual; no orders).
+      try {
+        const symRows = openRowsArr.filter((r) => byId.get(r.strategist_id)?.underlying.toUpperCase() === sym);
+        if (symRows.length) await updateShadowManagement({
+          rows: symRows,
+          slugById: new Map(symChannels.map((c) => [c.id, c.slug])),
+          chain, sessionBars,
+          atr: computeFeatures(sessionBars, sessionBars.length - 1).atr,
+          etMin: barMin, minutesToClose,
+        });
+      } catch (e) { warn(`shadow-management[${sym}] failed — ${(e as Error).message}`); }
+    }
+    report(trigger, account.equity, decisions);
+    if (live) { try { await store.insertEquitySnapshot(account.equity, account.cash, alpacaPositions.reduce((a, p) => a + p.unrealized_pl, 0)); } catch (e) { warn(`equity snapshot failed — ${(e as Error).message}`); } }
   } catch (e) {
     // A cycle must never throw — it's fired forget-style from onBar, so an
     // unhandled rejection would otherwise take down the process.
@@ -201,11 +211,9 @@ async function cycle(trigger: string): Promise<void> {
   }
 }
 
-function report(trigger: string, last: Bar, equity: number, ds: ShadowDecision[]): void {
-  const m = alpaca.etParts(last.ts).min;
-  const t = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+function report(trigger: string, equity: number, ds: ShadowDecision[]): void {
   const act = ds.filter((d) => d.action === "enter" || d.action === "exit" || d.action === "reconcile");
-  shadow(`bar ${t}ET (${trigger}) spot ${last.close} equity $${Math.round(equity)} — ${ds.length} ch, ${act.length} actionable`);
+  shadow(`cycle (${trigger}) equity $${Math.round(equity)} — ${ds.length} ch [${SYMBOLS.join("+")}], ${act.length} actionable`);
   for (const d of ds) {
     if (d.action === "enter") {
       const verb = d.blocked ? `BLOCKED(${d.blocked})` : `WOULD BUY ×${d.qty}`;
@@ -240,20 +248,20 @@ async function fastExitSweep(): Promise<void> {
     const byId = new Map(owned.map((c) => [c.id, c]));
     const rows = (await store.getOpenPositions()).filter((r) => byId.has(r.strategist_id));
     if (!rows.length) return;
-    await refreshChain();
+    // refresh only the chains for symbols that have owned open positions
+    const activeSyms = new Set(rows.map((r) => byId.get(r.strategist_id)!.underlying.toUpperCase()));
+    for (const sym of activeSyms) await refreshChain(sym);
     const [positions, allOrders] = await Promise.all([alpaca.getPositions(), alpaca.getOrders()]);
     const todayET = alpaca.etParts(Date.now()).date;
-    const exec: ExecCtx = {
-      chain, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`,
-      allOrders,
-      alpacaByOcc: new Map(positions.map((p) => [p.symbol, p])),
-      remainingByOcc: seedRemaining(positions),
-      openRowQty: await store.openRowQtyByOcc(),
-    };
+    const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
+    const remainingByOcc = seedRemaining(positions);
+    const openRowQty = await store.openRowQtyByOcc();
     for (const r of rows) {
       const ch = byId.get(r.strategist_id)!;
-      const mid = chain.byOcc(r.occ_symbol)?.mid ?? 0;
+      const chain = chainBySym.get(ch.underlying.toUpperCase());
+      const mid = chain?.byOcc(r.occ_symbol)?.mid ?? 0;
       if (!(mid > 0)) continue;
+      const exec: ExecCtx = { chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
       const key = entryKey(r.strategist_id, r.occ_symbol);
       const peak = Math.max(peakMidByKey.get(key) ?? r.avg_entry_price, mid);
       peakMidByKey.set(key, peak);
@@ -276,12 +284,15 @@ async function fastExitSweep(): Promise<void> {
   }
 }
 
-function onBar(bar: Bar): void {
-  const isNew = bars.upsert(bar);
+function onBar(symbol: string, bar: Bar): void {
+  const store = barsBySym.get(symbol);
+  if (!store) return; // a symbol we don't own (shouldn't happen — sub is scoped)
+  const isNew = store.upsert(bar);
   // Only a NEW *RTH* closed bar triggers a decision (after-hours bars update
-  // state but don't re-run the strategies).
+  // state but don't re-run the strategies). The cycle re-evaluates ALL symbols —
+  // cheap (in-memory decide) and keeps minutesToClose fresh across the roster.
   const m = alpaca.etParts(bar.ts).min;
-  if (isNew && m >= RTH_OPEN && m < RTH_CLOSE) void cycle("bar-close");
+  if (isNew && m >= RTH_OPEN && m < RTH_CLOSE) void cycle(`bar-close ${symbol}`);
 }
 async function onReconnect(): Promise<void> {
   warn("stream: reconnected — reseeding state from REST");
@@ -308,7 +319,7 @@ async function main(): Promise<void> {
     warn("LIVE_TRADING=true but DRY_RUN=true — staying in SHADOW (set DRY_RUN=false to complete the two-key turn).");
   }
   if (liveMode()) {
-    info(`◉ LIVE EXECUTOR — trading executor='stream' channels on ${config.symbol}; heartbeat → worker_heartbeat('stream'); fast exits every ${config.fastExitSec}s`);
+    info(`◉ LIVE EXECUTOR — trading executor='stream' channels on ${SYMBOLS.join(",")}; heartbeat → worker_heartbeat('stream'); fast exits every ${config.fastExitSec}s`);
   }
 
   // Boot is non-fatal: a transient config/seed failure must not crash-loop the
@@ -327,7 +338,7 @@ async function main(): Promise<void> {
   // useful when booting mid-session); thereafter every bar-close drives it.
   await cycle("boot");
 
-  const stream = new StockBarStream(config.symbol, onBar, onReconnect);
+  const stream = new StockBarStream(SYMBOLS, onBar, onReconnect);
   stream.start();
 
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
