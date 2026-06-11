@@ -1190,6 +1190,30 @@ tr:hover td.clk {
 }
 /* manual close button (signed-in only) — uses color tokens so it adapts to the
    cream desktop positions panel AND the dark mobile one automatically */
+/* per-position decision context (PositionsPanel second line): time-in-trade,
+   ret%, peak/giveback (amber ≥50% = the manual-exit tell), stop level. */
+.pos-main td { border-bottom: 0; padding-bottom: 2px; }
+.pos-ctx td { padding: 0 8px 7px; }
+.ctx-line { display: flex; flex-wrap: wrap; gap: 10px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.02em; color: var(--muted); }
+.ctx-bit { white-space: nowrap; }
+.ctx-hot { color: var(--amber); font-weight: 700; }
+.ctx-dim { opacity: 0.75; }
+
+/* OPS · PRE-FLIGHT — stream/cron liveness + executor split + risk-at-stake */
+.ops-pf { margin-bottom: 14px; flex: none; } /* flex:none — the mobile sheet's flex column must not squeeze it */
+.pf-body { padding: 9px 11px; display: flex; flex-direction: column; gap: 7px; }
+.pf-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-family: var(--mono); font-size: 10px; }
+.pf-label { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); letter-spacing: 0.08em; font-weight: 700; }
+.pf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); opacity: 0.45; flex: none; }
+.pf-ok { background: var(--green); opacity: 1; box-shadow: 0 0 6px var(--green); }
+.pf-warn { background: var(--amber); opacity: 1; box-shadow: 0 0 6px var(--amber); }
+.pf-bad { background: var(--red); opacity: 1; box-shadow: 0 0 6px var(--red); animation: pf-blink 1.2s steps(2) infinite; }
+@keyframes pf-blink { 50% { opacity: 0.35; } }
+.pf-val { color: var(--text); text-align: right; }
+.pf-val-dim { color: var(--muted); }
+.pf-val-warn { color: var(--amber); }
+.pf-val-bad { color: var(--red); font-weight: 700; }
+
 .pos-act { width: 1%; white-space: nowrap; text-align: center; padding-left: 2px; }
 .pos-close {
   width: 22px; height: 20px; padding: 0;

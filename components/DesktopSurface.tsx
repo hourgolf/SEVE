@@ -8,6 +8,7 @@ import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
 import { TapeHealth } from "@/components/TapeHealth";
+import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
@@ -235,6 +236,7 @@ export function DesktopSurface({
             <SignalsTape signals={feed.signals} />
           </div>
           <div className="col">
+            <OpsPreflight strategists={desk.strategists} />
             <TapeHealth
               rowCount={data.rowCount}
               lastIngestTs={data.lastIngestTs}

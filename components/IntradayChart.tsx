@@ -466,6 +466,13 @@ export function IntradayChart({
     if (rows.length && lastRangeRef.current !== range) {
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, rows.length - (RANGES[range].bars || rows.length)), to: rows.length });
       lastRangeRef.current = range;
+    } else if (rows.length && rowsLenRef.current > 0 && rows.length - rowsLenRef.current > 300 && !pendingSymRestoreRef.current) {
+      // Deep history just PREPENDED: the paginated 15-day load lands a beat after
+      // the fast ~200-bar poll, so the mount-time default window was computed
+      // against the poll snapshot (the "1D shows half a session" quirk). Re-anchor
+      // the preset default against the full count. Can't fire mid-session (live
+      // bars append singly) and the symbol-restore path above takes precedence.
+      chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, rows.length - (RANGES[range].bars || rows.length)), to: rows.length });
     }
     // Symbol restore: bring back the incoming symbol's saved wall-clock window, or
     // snap to the live edge when it has none. Applies only after the bar-clear

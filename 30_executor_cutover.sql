@@ -33,3 +33,6 @@ alter table worker_heartbeat enable row level security;
 do $$ begin
   create policy worker_heartbeat_read on worker_heartbeat for select using (true);
 exception when duplicate_object then null; end $$;
+-- RLS policy alone isn't enough for a NEW table — the roles also need the
+-- table-level grant (the dashboard's Ops·Pre-flight panel reads this as anon).
+grant select on public.worker_heartbeat to anon, authenticated;

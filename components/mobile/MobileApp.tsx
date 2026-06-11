@@ -18,6 +18,7 @@ import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { TapeHealth } from "@/components/TapeHealth";
+import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
@@ -261,6 +262,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               </span>
             </div>
             <PushToggle />
+            <OpsPreflight strategists={desk.strategists} />
             <SignalsTape signals={feed.signals} />
             <TapeHealth
               rowCount={data.rowCount}

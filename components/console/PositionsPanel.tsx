@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useTradeInsight } from "@/hooks/useTradeInsight";
 import { useTradeTriggers } from "@/hooks/useTradeTriggers";
+import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
@@ -31,6 +32,13 @@ const holdStr = (o?: string | null, c?: string | null): string => {
 const hhmm = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
 
+const inTradeStr = (opened?: string | null): string => {
+  if (!opened) return "";
+  const m = Math.round((Date.now() - Date.parse(opened)) / 60000);
+  if (!isFinite(m) || m < 0) return "";
+  return m < 1 ? "<1m in" : m < 60 ? `${m}m in` : `${Math.floor(m / 60)}h ${m % 60}m in`;
+};
+
 // Reuses the monitor's .panel / table CSS (globals.css).
 export function PositionsPanel({
   positions,
@@ -56,6 +64,9 @@ export function PositionsPanel({
   const nameOf = (slug: string) => strategists.find((s) => s.slug === slug)?.name ?? slug;
   const triggers = useTradeTriggers(recentTrades);
   const realizedToday = recentTrades.reduce((a, t) => a + (t.realized_pnl ?? 0), 0);
+  // Peak premium since entry per held contract — feeds the giveback read below
+  // (the number the operator's manual exits actually run on).
+  const peaks = usePositionPeaks(positions, liveMarks);
 
   // Live mark for a position if the chain has a fresh quote; else the stored mark.
   const live = (p: Position): { mark: number; unreal: number; isLive: boolean } => {
@@ -136,8 +147,19 @@ export function PositionsPanel({
           ) : (
             positions.map((p) => {
               const { mark, unreal } = live(p);
+              // Decision context: where the trade IS in its lifecycle. ret% off
+              // entry; peak/giveback when it has been in profit (giveback ≥50%
+              // of the peak gain lights amber — the manual-exit trigger); the
+              // −50% catastrophic stop level for distance-at-a-glance.
+              const entry = p.avg_entry_price;
+              const retPct = entry > 0 && mark > 0 ? ((mark - entry) / entry) * 100 : null;
+              const peak = peaks[p.occ_symbol] ?? 0;
+              const peakPct = entry > 0 && peak > entry ? ((peak - entry) / entry) * 100 : null;
+              const gavePct = peakPct != null && mark < peak ? Math.min(999, ((peak - mark) / (peak - entry)) * 100) : null;
+              const stopPx = entry * 0.5;
               return (
-              <tr key={p.id}>
+              <Fragment key={p.id}>
+              <tr className="pos-main">
                 <td style={{ textAlign: "left" }}>
                   <span
                     style={{
@@ -188,6 +210,26 @@ export function PositionsPanel({
                   </td>
                 )}
               </tr>
+              <tr className="pos-ctx">
+                <td colSpan={canWrite ? 7 : 6}>
+                  <span className="ctx-line">
+                    {inTradeStr(p.opened_at) && <span className="ctx-bit">{inTradeStr(p.opened_at)}</span>}
+                    {retPct != null && (
+                      <span className={`ctx-bit ${retPct < 0 ? "neg" : "pos"}`}>{retPct >= 0 ? "+" : ""}{retPct.toFixed(0)}%</span>
+                    )}
+                    {peakPct != null && (
+                      <span className="ctx-bit" title="peak premium since entry">peak +{peakPct.toFixed(0)}%</span>
+                    )}
+                    {gavePct != null && gavePct >= 5 && (
+                      <span className={`ctx-bit${gavePct >= 50 ? " ctx-hot" : ""}`} title="share of the peak gain given back — ≥50% is the manual-exit tell">
+                        gave {gavePct.toFixed(0)}%
+                      </span>
+                    )}
+                    <span className="ctx-bit ctx-dim" title="−50% catastrophic premium stop level">stop {stopPx.toFixed(2)}</span>
+                  </span>
+                </td>
+              </tr>
+              </Fragment>
               );
             })
           )}
@@ -200,8 +242,11 @@ export function PositionsPanel({
         <div className="recent-trades">
           <div className="rt-head">
             <span>Today&apos;s trades</span>
-            <span className={realizedToday < 0 ? "neg" : "pos"}>
-              realized {signedUsd(realizedToday)} · {recentTrades.length}
+            <span
+              className={realizedToday < 0 ? "neg" : "pos"}
+              title="Σ per-channel fill-net realized = ATTRIBUTION. Channels sharing a netted contract make per-channel rows approximate — Fund (today) on the NAV is the headline truth."
+            >
+              attribution {signedUsd(realizedToday)} · {recentTrades.length}
             </span>
           </div>
           <div className="rt-list">
