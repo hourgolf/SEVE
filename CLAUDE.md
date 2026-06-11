@@ -23,10 +23,11 @@ knob is **$350** (not the $150 the prior handoff recorded — qty ×3/×4 matche
 sizing was CORRECT vs config; the knob itself moved). Lockout cost quantified: **21 rejected
 0DTE opens 15:32–15:43** (power-manual ×8, power-smart ×8, grind-manual ×5) — entries resumed
 15:46 only because cutoff-16 finally rolled them to 1DTE. Day shape: SPY +1.32% / QQQ +2.51%
-trend with whipsaw legs; 13:30 CALL cluster +$2,271 (one bet ×5), 13:04 PUT cluster −$687;
-winners = the keep-list (power-smart +1151, ALT +828, V3 +744), bottom-5 = the cut-list
-(orb-trend-rider −695, grind-smart −426, power −385, orb-spy-trail −304, orb-qqq-trail −226).
-Overshoots: 2 stops closed −67/−70% vs −50% design (the known $315/mo cron-quantization tail).
+trend with whipsaw legs; 13:30 CALL cluster +$2,271 (one bet ×5), 13:04 PUT cluster −$687.
+Top-3: power-smart-entries +1151 (⚠ CUT-LISTED, see below), BREAK(ALT) +828, V3 +744. Bottom-5
+−$2,036: orb-trend-rider −695, grind-smart −426, power −385, orb-spy-trail −304, orb-qqq-trail
+−226 (that last one is KEEP-list — the rest are cuts). Overshoots: 2 stops closed −67/−70% vs
+−50% design (the known $315/mo cron-quantization tail).
 
 **SHIPPED TONIGHT (all live):**
 1. **`OPEN_0DTE_CUTOFF_MIN` 16→31** (cron + `worker/src/config.ts`) — entries inside the last
@@ -56,10 +57,20 @@ day-report coverage section stays ✓ clean; (4) STREAM light green, `stream-202
 **OPERATOR DECISIONS (pending the word — both reversible):**
 - **Item 5 — arm V3+ALT entries→14:00** (5/5-window PASS, +94/t on V3; one `time_before` edit
   in each spec_json). The 06-11 receipts agree: both channels' wins today were 13:30 entries.
+  SQL (VERIFIED read-only: the pattern matches exactly 2× per channel = the two entry sides;
+  the 15:25 exit flatten is a different key, untouched):
+  `update strategists set spec_json = replace(spec_json::text, '"et": "15:25", "kind": "time_before"', '"et": "14:00", "kind": "time_before"')::jsonb where slug in ('breakout-alt-v3','breakout-smart-entries');`
+  Rollback = the same statement with the two strings swapped.
 - **Item 6 — roster cuts 17→~8**: power×3, base breakout, breakout-qqq, orb-spy-trail,
-  grind-smart, orb-trend-rider. Today's tape: the cut six (sans breakout-qqq +231) went
-  −$2,036 combined while the keep-list made the day. breakout-qqq's +231 is the one
-  counter-receipt — operator's call whether it survives to month-end.
+  grind-smart, orb-trend-rider. Today's receipts CUT BOTH WAYS: five of the cut list went
+  −$1,834 (orb-trend-rider −695, grind-smart −426, power −385, orb-spy-trail −304, breakout
+  −24), but **power-smart-entries was the DAY'S BEST channel (+1,151, 2/2)** and breakout-qqq
+  +231 — the cut list as a whole netted only −$452 today. One green day doesn't outweigh the
+  multi-window backtests + live bleed that built the list, but whether power-smart-entries
+  (and breakout-qqq) ride to month-end before the axe is squarely the operator's call.
+  SQL (mute = draft, the established pattern; exits still wind down; re-arm = status='armed';
+  pull any slug out per the operator's keep calls):
+  `update strategists set status='draft' where slug in ('power','power-smart-entries','power-final30','breakout','breakout-qqq','orb-spy-trail','grind-smart-entries','orb-trend-rider');`
 
 ## SESSION HANDOFF — 2026-06-11 (B1 LIVE DAY) — prior
 **Next session opens with: (1) `npm run day-report -- --date 2026-06-11` (same-week constraint!),
