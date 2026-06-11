@@ -1,0 +1,13 @@
+-- 31: close_reason — durable per-row exit attribution (2026-06-11).
+-- ALREADY APPLIED to the live DB via the Supabase MCP (migration `close_reason`) —
+-- this file is the repo record; running it again is a harmless no-op.
+--
+-- Machine exits stamp their reason (stop_premium / target_premium / eod_flatten /
+-- manual_eod_backstop / reconciled / …); the manual close API stamps 'manual', and
+-- the post-close tag chips refine it to 'manual:<tag>' (target/reversal/risk/stall).
+-- The journal (events) carries the same info but expires in 30d — this column is the
+-- durable operator-selection dataset (taken-vs-skipped + why) the scalp-twin verdict
+-- asked for: a `-manual` twin row with close_reason like 'manual%' = the operator
+-- ENGAGED (taken); close_reason = 'manual_eod_backstop' = he let the bell backstop
+-- flatten it (skipped). day-report aggregates this as PARTICIPATION.
+alter table positions add column if not exists close_reason text;

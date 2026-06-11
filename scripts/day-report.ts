@@ -34,6 +34,7 @@ interface Trade {
   entry: number; exit: number; pnl: number; openedAt: string; closedAt: string;
   peak: number | null; mfePct: number | null; gavePct: number | null; reason: string;
   manual: boolean;
+  closeReason: string | null; // durable column (31_close_reason.sql) — authoritative once stamped
 }
 
 async function main() {
@@ -75,7 +76,7 @@ async function main() {
 
   // ---- trades -------------------------------------------------------------------
   const { data: posRaw } = await sb.from("positions")
-    .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,strategists(slug)")
+    .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,strategists(slug)")
     .eq("status", "closed").gte("closed_at", `${DATE}T13:00:00Z`).lte("closed_at", `${DATE}T22:00:00Z`)
     .order("opened_at");
   const { data: evRaw } = await sb.from("events").select("message,created_at")
@@ -102,7 +103,10 @@ async function main() {
     trades.push({
       id: p.id, slug, cp: p.opt_type, strike: Number(p.strike), qty, occ: p.occ_symbol,
       entry, exit, pnl, openedAt: p.opened_at, closedAt: p.closed_at,
-      peak, mfePct, gavePct, reason, manual: /-manual$/i.test(slug),
+      peak, mfePct, gavePct,
+      reason: p.close_reason ?? reason, // column beats journal-parse once stamped
+      manual: /-manual$/i.test(slug),
+      closeReason: p.close_reason ?? null,
     });
   }
 
@@ -110,6 +114,72 @@ async function main() {
   const tot = trades.reduce((a, t) => a + t.pnl, 0);
   console.log(`\nNAV truth: ${navDelta == null ? "n/a" : sgn(navDelta)} · Σ attribution ${sgn(tot)} (auto ${sgn(auto.reduce((a, t) => a + t.pnl, 0))}, manual ${sgn(trades.filter((t) => t.manual).reduce((a, t) => a + t.pnl, 0))}) · ${trades.length} trades`);
   if (navDelta != null && Math.abs(navDelta - tot) > 300) console.log(`  ⚠ attribution drifts ${sgn(tot - navDelta)} from NAV (open positions / shared-OCC residue?)`);
+
+  // ---- coverage: account fills vs desk rows (the uncovered-contract detector) ----
+  // The 06-11 incident surfaced only as a +$58 NAV-vs-attribution gap: a partial-fill
+  // poll recorded qty 1 on a ×2 buy and the extra contract rode UNMANAGED. This makes
+  // the check explicit and daily: per OCC, Alpaca's filled orders today vs the desk's
+  // recorded rows, plus a live held-vs-open-rows audit. Needs ALPACA_KEY/SECRET
+  // (read-only paper endpoints) — degrades to a skip note without them.
+  const AK = process.env.ALPACA_KEY, AS = process.env.ALPACA_SECRET;
+  if (!AK || !AS) {
+    console.log(`\ncoverage: skipped (no ALPACA_KEY/ALPACA_SECRET in env)`);
+  } else {
+    try {
+      const aHdr = { "APCA-API-KEY-ID": AK, "APCA-API-SECRET-KEY": AS };
+      const PAPER = "https://paper-api.alpaca.markets";
+      // day's terminal orders, paginated by sliding `until` (endpoint caps at 500/page)
+      const orders: Array<{ symbol: string; side: string; filled_qty: string; submitted_at: string }> = [];
+      let until = `${DATE}T22:00:00Z`;
+      for (let page = 0; page < 6; page++) {
+        const r = await fetch(`${PAPER}/v2/orders?status=closed&limit=500&direction=desc&after=${DATE}T13:00:00Z&until=${until}`, { headers: aHdr });
+        if (!r.ok) throw new Error(`alpaca orders ${r.status}`);
+        const batch = await r.json() as typeof orders;
+        orders.push(...batch);
+        if (batch.length < 500) break;
+        until = batch[batch.length - 1].submitted_at;
+      }
+      const acct = new Map<string, { b: number; s: number }>();
+      for (const o of orders) {
+        const q = Number(o.filled_qty);
+        if (!(q > 0)) continue;
+        const a = acct.get(o.symbol) ?? { b: 0, s: 0 };
+        if (o.side === "buy") a.b += q; else a.s += q;
+        acct.set(o.symbol, a);
+      }
+      // desk buys: Σ row qty opened today per OCC (every channel — rows mirror fills)
+      const { data: openedRaw } = await sb.from("positions").select("occ_symbol,qty")
+        .gte("opened_at", `${DATE}T13:00:00Z`).lte("opened_at", `${DATE}T22:00:00Z`);
+      const deskBought = new Map<string, number>();
+      for (const p of (openedRaw ?? []) as Array<{ occ_symbol: string; qty: number }>) {
+        deskBought.set(p.occ_symbol, (deskBought.get(p.occ_symbol) ?? 0) + Number(p.qty));
+      }
+      // live audit: what Alpaca holds NOW vs Σ open desk rows ("check coverage")
+      const pr = await fetch(`${PAPER}/v2/positions`, { headers: aHdr });
+      const alpPos = pr.ok ? (await pr.json() as Array<{ symbol: string; qty: string }>) : [];
+      const { data: openRows } = await sb.from("positions").select("occ_symbol,qty").eq("status", "open");
+      const openByOcc = new Map<string, number>();
+      for (const p of (openRows ?? []) as Array<{ occ_symbol: string; qty: number }>) {
+        openByOcc.set(p.occ_symbol, (openByOcc.get(p.occ_symbol) ?? 0) + Number(p.qty));
+      }
+      const issues: string[] = [];
+      for (const [occ, a] of acct) {
+        const rows = deskBought.get(occ) ?? 0;
+        if (a.b !== rows) issues.push(`${occ}: account bought ${a.b} / desk rows opened ${rows} → ${a.b > rows ? `+${a.b - rows} UNCOVERED at entry (partial-fill class)` : `${rows - a.b} over-recorded (ghost qty)`}`);
+        if (a.b !== a.s) issues.push(`${occ}: EOD net ${a.b - a.s > 0 ? "+" : ""}${a.b - a.s} (buys ${a.b} / sells ${a.s}) — carried overnight, expired on book, or a prior-day carry closed today`);
+      }
+      for (const ap of alpPos) {
+        const held = Math.abs(Math.round(Number(ap.qty)));
+        const rows = openByOcc.get(ap.symbol) ?? 0;
+        if (held !== rows) issues.push(`${ap.symbol}: Alpaca holds ${held} / open desk rows ${rows} → ${held > rows ? "UNCOVERED — close or reconstruct" : "ghost rows"}`);
+      }
+      console.log(`\ncoverage (account vs rows)`);
+      if (issues.length) for (const i of issues) console.log(`  ⚠ ${i}`);
+      else console.log(`  ✓ clean: ${acct.size} OCC(s) — account buys == desk rows opened, EOD flat, held == open rows`);
+    } catch (e) {
+      console.log(`\ncoverage: check failed (${(e as Error).message})`);
+    }
+  }
 
   // ---- per-trade table ------------------------------------------------------------
   console.log(`\ntime        channel                 trade        entry→peak→exit      P&L     MFE   gave   hold  exit`);
@@ -166,6 +236,36 @@ async function main() {
     const p = ts.reduce((a, t) => a + t.pnl, 0);
     const w = ts.filter((t) => t.pnl > 0).length;
     console.log(`  ${slug.padEnd(24)} ${String(ts.length).padStart(2)}t  ${w}/${ts.length} win  ${sgn(p).padStart(7)}`);
+  }
+
+  // ---- participation (the operator-selection dataset, close_reason 31) -------------
+  // Manual twins: the machine enters and pushes "your exit"; the operator either
+  // ENGAGES (closes it himself → close_reason 'manual'/'manual:<tag>', or a
+  // "manual: close" journal line for pre-column rows) or SKIPS (the 15:57 bell
+  // backstop flattens it → manual_eod_backstop). Selection is his compilable half —
+  // this is the dataset that lets it inform machine entry filters.
+  const manualTrades = trades.filter((t) => t.manual);
+  if (manualTrades.length) {
+    console.log(`\nparticipation (manual twins — taken = operator closed · skipped = bell backstop)`);
+    const manualCloseEv = (t: Trade) => events.some((e) =>
+      /manual: close /.test(e.message) && e.message.includes(t.occ)
+      && Math.abs(Date.parse(e.created_at) - Date.parse(t.closedAt)) < 180_000);
+    const kind = (t: Trade): "taken" | "skipped" | "other" => {
+      if (t.closeReason?.startsWith("manual:") || t.closeReason === "manual" || manualCloseEv(t)) return "taken";
+      if (t.closeReason === "manual_eod_backstop" || t.reason === "manual_eod_backstop") return "skipped";
+      return "other"; // reconciled / sibling-drained / unknown
+    };
+    const byTwin = new Map<string, Trade[]>();
+    for (const t of manualTrades) byTwin.set(t.slug, [...(byTwin.get(t.slug) ?? []), t]);
+    for (const [slug, ts] of byTwin) {
+      const grp: Record<"taken" | "skipped" | "other", Trade[]> = { taken: [], skipped: [], other: [] };
+      for (const t of ts) grp[kind(t)].push(t);
+      const fmt = (g: Trade[]) => `${g.length}t ${sgn(g.reduce((a, x) => a + x.pnl, 0))}`;
+      const tags = ts.map((t) => t.closeReason?.match(/^manual:(.+)$/)?.[1]).filter(Boolean);
+      console.log(`  ${slug.padEnd(24)} taken ${fmt(grp.taken).padEnd(11)} skipped ${fmt(grp.skipped).padEnd(11)}${grp.other.length ? ` other ${fmt(grp.other)}` : ""}${tags.length ? `  tags: ${tags.join(",")}` : ""}`);
+    }
+    const overrides = auto.filter((t) => t.closeReason === "manual" || t.closeReason?.startsWith("manual:"));
+    if (overrides.length) console.log(`  operator overrides on AUTO channels: ${overrides.length} (${[...new Set(overrides.map((t) => t.slug))].join(", ")})`);
   }
   console.log("");
 }

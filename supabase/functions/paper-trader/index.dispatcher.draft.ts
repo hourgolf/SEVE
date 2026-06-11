@@ -1,3 +1,14 @@
+// ⚑ WORKER VERSION: 2026-06-11a  (B1 LIVE-DAY FIXES. (1) OPEN_0DTE_CUTOFF_MIN 16→31 — Alpaca WIDENED
+//   the 0DTE open-lockout ~15→~30 min ("contract expires soon" 422s from 15:33 ET on 06-11, 27 min
+//   before close) → every 15:30-15:44 entry was REJECTED instead of rolling to 1DTE. Entries inside
+//   the last ~30 min now roll to next1DTE (the 2026-06-08a same-day flatten still closes them at the
+//   bell). (2) TERMINAL-STATUS FILL POLL — aOrderAndFill exited on the FIRST filled_avg_price>0
+//   observation, which can capture a PARTIAL fill (06-11 grind-manual ×2: poll caught qty 1 of 2 →
+//   desk row said 1 → the ✕-close sold 1 → 1 contract rode UNMANAGED; surfaced only as a
+//   Fund-vs-attribution +$58 gap). Now: poll to a TERMINAL order status, CANCEL the working remainder
+//   after the budget, re-read the FINAL filled_qty. Entries skip the row insert on a known-0-fill
+//   (no ghost); exits book the ACTUAL sold qty and leave the row open to retry on a known-0-fill.
+//   Mirrored in the Railway worker (stream-2026-06-11a). Prior below.)
 // ⚑ WORKER VERSION: 2026-06-10a  (PHASE-B EXECUTOR COORDINATION. Each strategist row now carries
 //   `executor` ('cron' default | 'stream') — 30_executor_cutover.sql, ALREADY APPLIED. A channel
 //   marked 'stream' is traded by the Railway streaming worker, which upserts worker_heartbeat
@@ -584,6 +595,7 @@ function compileSpec(spec: Spec): CompiledSpec {
 const aHdr = { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET };
 async function aGet(path: string) { const r = await fetch(PAPER + path, { headers: aHdr }); if (!r.ok) throw new Error(`${r.status} GET ${path}`); return r.json(); }
 async function aPost(path: string, body: unknown) { const r = await fetch(PAPER + path, { method: "POST", headers: { ...aHdr, "content-type": "application/json" }, body: JSON.stringify(body) }); const text = await r.text(); if (!r.ok) throw new Error(`${r.status} POST ${path}: ${text.slice(0, 300)}`); return text ? JSON.parse(text) : {}; }
+async function aDelete(path: string) { const r = await fetch(PAPER + path, { method: "DELETE", headers: aHdr }); if (!r.ok) throw new Error(`${r.status} DELETE ${path}`); }
 async function journal(level: string, message: string, meta?: unknown) { try { await sb.from("events").insert({ level, message, meta: meta ?? null }); } catch { /* */ } }
 // Fire a manual-exit alert (web push) via the app's secret-gated /api/push-send. No-op
 // without PUSH_SEND_SECRET; never throws (a push failure must not break a trade cycle).
@@ -591,21 +603,35 @@ async function firePush(title: string, body: string) {
   if (!PUSH_SECRET) return;
   try { await fetch(`${APP_URL}/api/push-send`, { method: "POST", headers: { "content-type": "application/json", "x-push-secret": PUSH_SECRET }, body: JSON.stringify({ title, body, tag: "seve-manual", url: "/" }) }); } catch { /* */ }
 }
-// Place an order, then poll briefly for the ACTUAL fill price (market orders fill
-// in ms). Booking at the real fill — not the mid/mark — is what makes the desk's
-// P&L reconcile to the Alpaca account (a sell crosses to the bid, a buy to the ask;
+// Place an order, then poll for the ACTUAL fill price (market orders fill in ms).
+// Booking at the real fill — not the mid/mark — is what makes the desk's P&L
+// reconcile to the Alpaca account (a sell crosses to the bid, a buy to the ask;
 // booking at mid systematically overstated P&L). Returns fill=0 if it didn't post
 // in time → caller falls back to the quote.
-async function aOrderAndFill(body: unknown): Promise<{ id: string; fill: number; filledQty: number }> {
-  const o = await aPost("/v2/orders", body) as { id?: string; filled_avg_price?: number; filled_qty?: number };
+// 2026-06-11a PARTIAL-FILL FIX: the old loop exited on the FIRST filled_avg_price>0
+// observation — a `partially_filled` snapshot satisfies that with filled_qty BELOW
+// the requested qty, so the desk row under-recorded and the remainder rode UNMANAGED
+// (the 06-11 grind-manual ×2 incident). Now: poll until the order reaches a TERMINAL
+// status; if it's still working after ~3s, CANCEL the remainder, then keep reading
+// until terminal — the returned filledQty is FINAL, nothing can fill after we book.
+const TERMINAL_ORDER_STATUS = new Set(["filled", "canceled", "expired", "rejected", "done_for_day", "stopped", "replaced"]);
+async function aOrderAndFill(body: unknown): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
+  const o = await aPost("/v2/orders", body) as { id?: string; status?: string; filled_avg_price?: number; filled_qty?: number };
   const id = String(o.id ?? "");
+  let status = String(o.status ?? "");
   let fill = Number(o.filled_avg_price ?? 0);
   let filledQty = Number(o.filled_qty ?? 0); // ACTUAL contracts filled (de-dup: the desk row must mirror this, not the intended qty)
-  for (let i = 0; i < 5 && id && fill <= 0; i++) {
+  for (let i = 0; i < 13 && id && !TERMINAL_ORDER_STATUS.has(status); i++) {
+    if (i === 10) { try { await aDelete(`/v2/orders/${id}`); } catch { /* it may have just gone terminal — the reads below settle it */ } }
     await new Promise((r) => setTimeout(r, 300));
-    try { const g = await aGet(`/v2/orders/${id}`) as { filled_avg_price?: number; filled_qty?: number }; if (Number(g.filled_avg_price) > 0) { fill = Number(g.filled_avg_price); filledQty = Number(g.filled_qty ?? filledQty); } } catch { /* keep polling */ }
+    try {
+      const g = await aGet(`/v2/orders/${id}`) as { status?: string; filled_avg_price?: number; filled_qty?: number };
+      status = String(g.status ?? status);
+      if (Number(g.filled_avg_price) > 0) fill = Number(g.filled_avg_price);
+      filledQty = Number(g.filled_qty ?? filledQty);
+    } catch { /* keep polling */ }
   }
-  return { id, fill, filledQty };
+  return { id, fill, filledQty, status };
 }
 // OCC symbol for ANY underlying (QQQ rollout): SPY/QQQ/… share the same OCC layout
 // (ROOT + YYMMDD + C/P + strike×1000, 8-padded). The root is the channel's ticker.
@@ -727,9 +753,11 @@ Deno.serve(async () => {
     // MULTI-INSTRUMENT (QQQ rollout, step 3): build market context ONCE per distinct
     // underlying among the channels (SPY default), reused across same-ticker channels.
     // Each ctx holds that ticker's RTH session bars / prior-day H-L / next-session expiry.
-    // Alpaca rejects OPENING a 0DTE within ~15 min of close (the 422) → inside the cutoff
+    // Alpaca rejects OPENING a 0DTE near the close (the 422) → inside the cutoff
     // channels roll the entry to ctx.next1DTE, resolved per-ticker from the live chain.
-    const OPEN_0DTE_CUTOFF_MIN = 16; // last ~15 min + 1 buffer
+    // 2026-06-11: Alpaca WIDENED the lockout ~15→~30 min (422s from 15:33 ET, 27 min out) —
+    // 16 rolled too late and every 15:30-15:44 entry was rejected, not rolled.
+    const OPEN_0DTE_CUTOFF_MIN = 31; // last ~30 min + 1 buffer (was 16 pre-06-11)
     // MANUAL-EXIT twins (`<base>-manual`, man-vs-machine A/B): the human owns exits, but
     // a hard backstop force-flattens at minutesToClose ≤ this (≈15:57 ET) so a 0DTE/1DTE
     // can't expire/assign if the operator misses it.
@@ -978,7 +1006,7 @@ Deno.serve(async () => {
         const realized = DRY_RUN
           ? (mark - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
           : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince);
-        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized }).eq("id", row.id);
+        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id);
         await journal("WARN", `${s.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${src}) — no Alpaca position; booked $${realized.toFixed(0)} (fill-net)`);
         out.push({ slug: s.slug, note: "reconciled" });
         continue;
@@ -1025,7 +1053,7 @@ Deno.serve(async () => {
           const realized = DRY_RUN ? 0 : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince);
           const { data: q } = await sb.from("option_quotes").select("bid,mid").eq("occ_symbol", row.occ_symbol).order("captured_at", { ascending: false }).limit(1).maybeSingle();
           const mark = Number(q?.bid ?? q?.mid ?? alp.current_price ?? 0);
-          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized }).eq("id", row.id);
+          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id);
           await journal("WARN", `${s.slug}: ${row.occ_symbol} ${why} — reconciled closed @ ${mark.toFixed(2)} (booked $${realized.toFixed(0)} fill-net)`);
         };
         if (sellQty <= 0) {
@@ -1037,17 +1065,32 @@ Deno.serve(async () => {
             // (the mid/mark) — booking at mid overstated realized P&L vs the account.
             // DRY_RUN / fill-not-posted → fall back to the mark.
             let exitPx = Number(alp.current_price ?? 0);
-            if (!DRY_RUN) { const r = await aOrderAndFill({ symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` }); if (r.fill > 0) exitPx = r.fill; }
-            // FILL-DERIVED realized (idempotent vs prior closed rows for this channel+OCC);
-            // this cycle's sell isn't in the cycle-start allOrders yet, so fold it in.
-            const realized = DRY_RUN
-              ? (exitPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
-              : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince, { qty: sellQty, px: exitPx });
-            await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized }).eq("id", row.id);
-            // de-dup Fix 2: drop this OCC's remaining by what we just sold so a sibling
-            // exiting the same lot later this cycle sees the true leftover.
-            remainingByOcc.set(String(row.occ_symbol), Math.max(0, heldQty - sellQty));
-            await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${sellQty} @ ${exitPx.toFixed(2)} (${intent.reason})`);
+            let soldQty = sellQty; // ACTUAL contracts sold (terminal-final, 2026-06-11a)
+            let unfilled = false;
+            if (!DRY_RUN) {
+              const r = await aOrderAndFill({ symbol: row.occ_symbol, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${s.slug}-${row.occ_symbol}-${etMin}-x` });
+              if (r.fill > 0) exitPx = r.fill;
+              if (r.filledQty > 0) soldQty = r.filledQty; // partial→canceled: book what REALLY sold; the 09d reconstruct re-rows the leftover next cycle
+              else if (TERMINAL_ORDER_STATUS.has(r.status)) unfilled = true; // terminal with 0 sold — nothing happened
+            }
+            if (unfilled) {
+              // Known-terminal sell with NOTHING sold (pre-fix this booked a phantom close
+              // at the mark while the contracts stayed held). Row stays open; retry next cycle.
+              await journal("WARN", `${s.slug}: exit ${row.occ_symbol} ended unfilled — row stays open to retry`);
+            } else {
+              // FILL-DERIVED realized (idempotent vs prior closed rows for this channel+OCC);
+              // this cycle's sell isn't in the cycle-start allOrders yet, so fold it in.
+              const realized = DRY_RUN
+                ? (exitPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
+                : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince, { qty: soldQty, px: exitPx });
+              // close_reason (31_close_reason.sql): durable exit attribution — the journal
+              // says the same but events expire (30d); the column is the dataset.
+              await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized, close_reason: intent.reason }).eq("id", row.id);
+              // de-dup Fix 2: drop this OCC's remaining by what we just sold so a sibling
+              // exiting the same lot later this cycle sees the true leftover.
+              remainingByOcc.set(String(row.occ_symbol), Math.max(0, heldQty - soldQty));
+              await journal("EXEC", `${s.slug}: exit ${row.occ_symbol} ×${soldQty} @ ${exitPx.toFixed(2)} (${intent.reason})`);
+            }
           } catch (e) {
             // A "can't sell, would go short" rejection = the shared-OCC race (snapshot
             // said held, a sibling drained it this cycle). Reconcile closed at fill-net
@@ -1156,22 +1199,27 @@ Deno.serve(async () => {
             const entryPx = o.fill > 0 ? o.fill : ask;
             // Record the ACTUAL filled qty (de-dup Fix 1) so the desk row mirrors what
             // Alpaca really holds — else Σ(shared rows) drifts ABOVE the netted lot and the
-            // last channel to exit gets starved (the trap class). Fall back to the intended
-            // qty only when the fill qty couldn't be read (the re-buy guard reconstructs
-            // from the actual fills next cycle).
-            const fillQty = o.filledQty > 0 ? o.filledQty : qty;
-            // CRITICAL: confirm the position row was recorded. A silent insert
-            // failure here is what caused the re-buy loop — if it fails, journal
-            // LOUD (the per-channel guards above still prevent another buy).
-            const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty: fillQty, avg_entry_price: entryPx, current_mark: entryPx, unrealized_pnl: 0, status: "open" });
-            if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
-            else {
-              await journal("EXEC", `${s.slug}: buy ${fillQty} ${occ} @ ${entryPx.toFixed(2)} (${intent.reason})`, { order_id: o.id });
-              // de-dup Fix 2: a buy adds to the shared lot — keep remaining in sync so a
-              // sibling exiting this OCC later this cycle sees the larger leftover.
-              remainingByOcc.set(occ, (remainingByOcc.get(occ) ?? 0) + fillQty);
-              // MANUAL-EXIT twin: ping the operator to go own the exit (Phase 2 web push).
-              if (isManual) await firePush(`✋ ${s.name ?? s.slug}`, `opened ${strike}${dir === "call" ? "C" : "P"} ×${fillQty} — your exit`);
+            // last channel to exit gets starved (the trap class). The terminal-status poll
+            // (2026-06-11a) makes filledQty FINAL: 0 on a known-terminal order means NOTHING
+            // filled → no row (pre-fix this inserted the INTENDED qty = a ghost). Fall back
+            // to the intended qty only when the status couldn't be read at all.
+            const fillQty = o.filledQty > 0 ? o.filledQty : (TERMINAL_ORDER_STATUS.has(o.status) ? 0 : qty);
+            if (fillQty <= 0) {
+              await journal("WARN", `${s.slug}: buy ${occ} ended ${o.status || "unfilled"} ×0 — no contracts, no row`, { order_id: o.id });
+            } else {
+              // CRITICAL: confirm the position row was recorded. A silent insert
+              // failure here is what caused the re-buy loop — if it fails, journal
+              // LOUD (the per-channel guards above still prevent another buy).
+              const { error: posErr } = await sb.from("positions").insert({ strategist_id: s.id, occ_symbol: occ, underlying: sym, expiration: entryExpiry ?? todayET, strike, opt_type: dir, qty: fillQty, avg_entry_price: entryPx, current_mark: entryPx, unrealized_pnl: 0, status: "open" });
+              if (posErr) await journal("WARN", `${s.slug}: ORDER FILLED but position insert FAILED (${posErr.message}) — reconcile manually`, { occ, order_id: o.id });
+              else {
+                await journal("EXEC", `${s.slug}: buy ${fillQty} ${occ} @ ${entryPx.toFixed(2)} (${intent.reason})`, { order_id: o.id });
+                // de-dup Fix 2: a buy adds to the shared lot — keep remaining in sync so a
+                // sibling exiting this OCC later this cycle sees the larger leftover.
+                remainingByOcc.set(occ, (remainingByOcc.get(occ) ?? 0) + fillQty);
+                // MANUAL-EXIT twin: ping the operator to go own the exit (Phase 2 web push).
+                if (isManual) await firePush(`✋ ${s.name ?? s.slug}`, `opened ${strike}${dir === "call" ? "C" : "P"} ×${fillQty} — your exit`);
+              }
             }
           } catch (e) {
             // Order rejected (e.g. Alpaca 422) — journal the reason, don't crash

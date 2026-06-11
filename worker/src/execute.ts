@@ -86,7 +86,7 @@ export async function executeExit(
   const reconcileClose = async (why: string) => {
     const realized = await realizedToBook(row.strategist_id, d.slug, occ, ctx.allOrders, ctx.sinceIso);
     const mark = liveBid || (alp?.current_price ?? 0);
-    await store.closePositionRow(row.id, mark, realized);
+    await store.closePositionRow(row.id, mark, realized, "reconciled");
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
     await store.journal("WARN", `${d.slug}: ${occ} ${why} — reconciled closed @ ${mark.toFixed(2)} (booked $${realized.toFixed(0)} fill-net)`);
   };
@@ -102,11 +102,20 @@ export async function executeExit(
       client_order_id: `${d.slug}-${occ}-${ctx.etMin}-x`,
     });
     if (r.fill > 0) exitPx = r.fill;
-    const realized = await realizedToBook(row.strategist_id, d.slug, occ, ctx.allOrders, ctx.sinceIso, { qty: sellQty, px: exitPx });
-    await store.closePositionRow(row.id, exitPx, realized);
-    ctx.remainingByOcc.set(occ, Math.max(0, heldQty - sellQty)); // 09c fix 2
+    if (r.filledQty <= 0 && alpaca.TERMINAL_ORDER_STATUS.has(r.status)) {
+      // 2026-06-11a: known-terminal sell with NOTHING sold — don't book a phantom
+      // close at the mark while the contracts stay held. Row stays open; retry next bar.
+      await store.journal("WARN", `${d.slug}: exit ${occ} ended unfilled — row stays open to retry`);
+      return;
+    }
+    // Book the ACTUAL sold qty (terminal-final): a partial→canceled sell realizes only
+    // what crossed; the 09d reconstruct re-rows any leftover contracts next cycle.
+    const soldQty = r.filledQty > 0 ? r.filledQty : sellQty;
+    const realized = await realizedToBook(row.strategist_id, d.slug, occ, ctx.allOrders, ctx.sinceIso, { qty: soldQty, px: exitPx });
+    await store.closePositionRow(row.id, exitPx, realized, d.reason);
+    ctx.remainingByOcc.set(occ, Math.max(0, heldQty - soldQty)); // 09c fix 2
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
-    await store.journal("EXEC", `${d.slug}: exit ${occ} ×${sellQty} @ ${exitPx.toFixed(2)} (${d.reason})`);
+    await store.journal("EXEC", `${d.slug}: exit ${occ} ×${soldQty} @ ${exitPx.toFixed(2)} (${d.reason})`);
   } catch (e) {
     const msg = (e as Error).message;
     if (/insufficient|cash.?secured|not enough|40310000/i.test(msg)) await reconcileClose(`sell rejected (${msg.slice(0, 50)})`);
@@ -120,7 +129,7 @@ export async function executeReconcile(d: ShadowDecision, row: store.PositionRow
   const sellFill = ctx.allOrders.find((o) => o.symbol === row.occ_symbol && o.side === "sell" && o.status === "filled" && o.filled_avg_price > 0);
   const mark = sellFill?.filled_avg_price ?? (ctx.chain.byOcc(row.occ_symbol)?.bid ?? 0);
   const realized = await realizedToBook(row.strategist_id, d.slug, row.occ_symbol, ctx.allOrders, ctx.sinceIso);
-  await store.closePositionRow(row.id, mark, realized);
+  await store.closePositionRow(row.id, mark, realized, "reconciled");
   entryStateByKey.delete(entryKey(row.strategist_id, row.occ_symbol));
   await store.journal("WARN", `${d.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${sellFill ? "actual fill" : "live bid"}) — no Alpaca position; booked $${realized.toFixed(0)} (fill-net)`);
 }
@@ -176,7 +185,13 @@ export async function executeEntry(
     });
     const ask = (d.detail?.ask as number) ?? 0;
     const entryPx = o.fill > 0 ? o.fill : ask;
-    const fillQty = o.filledQty > 0 ? o.filledQty : qty; // 09c fix 1: row mirrors the REAL fill
+    // 09c fix 1: row mirrors the REAL fill. 2026-06-11a: terminal-final 0 = nothing
+    // filled → no row (a ghost otherwise); intended-qty fallback only if status unknown.
+    const fillQty = o.filledQty > 0 ? o.filledQty : (alpaca.TERMINAL_ORDER_STATUS.has(o.status) ? 0 : qty);
+    if (fillQty <= 0) {
+      await store.journal("WARN", `${d.slug}: buy ${occ} ended ${o.status || "unfilled"} ×0 — no contracts, no row`, { order_id: o.id });
+      return;
+    }
     const err = await store.insertPosition({
       strategist_id: ch.id, occ_symbol: occ, underlying: ch.underlying,
       expiration: (d.detail?.expiry as string) ?? ctx.todayET, strike, opt_type: dir, qty: fillQty, avg_entry_price: entryPx,

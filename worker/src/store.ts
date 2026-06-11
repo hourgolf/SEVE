@@ -207,9 +207,12 @@ export async function insertPosition(row: {
   return error ? error.message : null;
 }
 
-export async function closePositionRow(id: string, mark: number, realized: number): Promise<void> {
+export async function closePositionRow(id: string, mark: number, realized: number, reason?: string): Promise<void> {
+  // close_reason (31_close_reason.sql): durable per-row exit attribution — machine
+  // reasons here, `manual`/`manual:<tag>` from the close-position API. The journal
+  // carries the same info but events expire (30d); this column is the dataset.
   const { error } = await sb.from("positions")
-    .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized })
+    .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: reason ?? null })
     .eq("id", id);
   if (error) warn(`store: close update failed — ${error.message}`);
 }

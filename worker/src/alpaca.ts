@@ -31,6 +31,11 @@ async function post(host: string, path: string, payload: unknown): Promise<any> 
   return body ? JSON.parse(body) : {};
 }
 
+async function del(host: string, path: string): Promise<void> {
+  const r = await fetch(host + path, { method: "DELETE", headers: H });
+  if (!r.ok) throw new Error(`${r.status} DELETE ${path.split("?")[0]}`);
+}
+
 // ---- paper account / positions / orders ------------------------------------
 export interface AlpacaAccount { equity: number; cash: number; }
 export interface AlpacaPosition { symbol: string; qty: number; avg_entry_price: number; current_price: number; unrealized_pl: number; }
@@ -76,25 +81,38 @@ export async function getOrders(limit = 500): Promise<AlpacaOrder[]> {
   return (res as any[]).map(mapOrder);
 }
 
-/** Place an order, then poll briefly for the ACTUAL fill (market orders fill in
- *  ms). Booking at the real fill — not the mid — is what makes the desk's P&L
+/** Terminal order states — filled_qty is FINAL once one of these is reached. */
+export const TERMINAL_ORDER_STATUS = new Set(["filled", "canceled", "expired", "rejected", "done_for_day", "stopped", "replaced"]);
+
+/** Place an order, then poll for the ACTUAL fill (market orders fill in ms).
+ *  Booking at the real fill — not the mid — is what makes the desk's P&L
  *  reconcile to the account (cron parity: aOrderAndFill). fill=0 → caller falls
- *  back to the quote. */
+ *  back to the quote.
+ *  2026-06-11a PARTIAL-FILL FIX (cron parity): the old loop exited on the FIRST
+ *  filled_avg_price>0 — a `partially_filled` snapshot satisfies that with
+ *  filled_qty below the requested qty, so the desk row under-recorded and the
+ *  remainder rode UNMANAGED (the 06-11 incident). Now: poll to a TERMINAL status;
+ *  still working after ~3s → CANCEL the remainder, then read until terminal —
+ *  the returned filledQty is FINAL, nothing can fill after the desk books. */
 export async function orderAndFill(body: {
   symbol: string; qty: string; side: "buy" | "sell"; type: "market"; time_in_force: "day"; client_order_id: string;
-}): Promise<{ id: string; fill: number; filledQty: number }> {
+}): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
   const o = await post(config.alpacaPaperHost, "/v2/orders", body);
   const id = String(o.id ?? "");
+  let status = String(o.status ?? "");
   let fill = Number(o.filled_avg_price ?? 0);
   let filledQty = Number(o.filled_qty ?? 0);
-  for (let i = 0; i < 5 && id && fill <= 0; i++) {
+  for (let i = 0; i < 13 && id && !TERMINAL_ORDER_STATUS.has(status); i++) {
+    if (i === 10) { try { await del(config.alpacaPaperHost, `/v2/orders/${id}`); } catch { /* may have just gone terminal — the reads below settle it */ } }
     await new Promise((r) => setTimeout(r, 300));
     try {
       const g = await get(config.alpacaPaperHost, `/v2/orders/${id}`);
-      if (Number(g.filled_avg_price) > 0) { fill = Number(g.filled_avg_price); filledQty = Number(g.filled_qty ?? filledQty); }
+      status = String(g.status ?? status);
+      if (Number(g.filled_avg_price) > 0) fill = Number(g.filled_avg_price);
+      filledQty = Number(g.filled_qty ?? filledQty);
     } catch { /* keep polling */ }
   }
-  return { id, fill, filledQty };
+  return { id, fill, filledQty, status };
 }
 
 // ---- underlying bars (data host) — seed the rolling window on startup -------

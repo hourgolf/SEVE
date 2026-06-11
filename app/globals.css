@@ -1233,6 +1233,35 @@ tr:hover td.clk {
 }
 .pos-closing { color: var(--muted, #7d8a90); font-size: 14px; }
 .pos-close-err { color: var(--red, #f0563f); font-size: 10px; font-family: var(--mono); padding: 6px 12px 0; }
+/* post-close tag chips (close_reason) — appear AFTER the fill books, never before */
+.pos-tagbar {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  padding: 7px 12px 2px;
+  font-size: 10px; font-family: var(--mono);
+}
+.pos-tagbar .tb-lbl { color: var(--muted, #7d8a90); margin-right: 3px; }
+.pos-tagbar .tb-chip {
+  padding: 3px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--border, #2a3a42);
+  background: transparent;
+  color: var(--text, #cfd8dc);
+  font: inherit; font-size: 9.5px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.pos-tagbar .tb-chip:hover { color: var(--amber, #d9b54a); border-color: var(--amber, #d9b54a); }
+.pos-tagbar .tb-chip:disabled { opacity: 0.5; cursor: default; }
+.pos-tagbar .tb-x {
+  margin-left: auto;
+  width: 20px; height: 18px; padding: 0;
+  border-radius: 5px;
+  border: 1px solid var(--border, #2a3a42);
+  background: transparent;
+  color: var(--muted, #7d8a90);
+  font-size: 10px; line-height: 1; cursor: pointer;
+}
+.pos-tagbar .tb-x:hover { color: var(--text, #cfd8dc); }
 /* armed confirm: ✓ (sell) + ✕ (cancel/back out) side by side */
 .pos-confirm { display: inline-flex; gap: 4px; }
 .pos-cancel {

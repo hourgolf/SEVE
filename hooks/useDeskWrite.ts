@@ -188,6 +188,27 @@ export function useDeskWrite() {
     [session]
   );
 
+  // Post-close tag (close-reason chips, 31_close_reason.sql): refine an operator
+  // close to 'manual:<tag>'. The close already booked — tagging is optional context,
+  // so failures are soft (the row just stays 'manual').
+  const tagClose = useCallback(
+    async (id: string, tag: string): Promise<{ ok: boolean; error?: string }> => {
+      if (!session) return { ok: false, error: "sign in to tag" };
+      try {
+        const r = await fetch("/api/close-position", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ id, tag }),
+        });
+        const j = await r.json().catch(() => ({}));
+        return r.ok && j.ok ? { ok: true } : { ok: false, error: j.error ?? `tag failed (${r.status})` };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "tag failed" };
+      }
+    },
+    [session]
+  );
+
   // Persist a new channel display order: write sort_order = position for each id.
   // The desk reducer already reordered optimistically; this makes it durable.
   const reorderChannels = useCallback(
@@ -207,5 +228,5 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, deleteChannel, closePosition, reorderChannels };
+  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, deleteChannel, closePosition, tagClose, reorderChannels };
 }

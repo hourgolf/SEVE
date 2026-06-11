@@ -85,6 +85,9 @@ export interface Position {
   realized_pnl?: number;
   opened_at?: string | null;
   closed_at?: string | null;
+  // Durable exit attribution (31_close_reason.sql): machine reason (stop_premium /
+  // eod_flatten / …), 'manual' for an operator close, 'manual:<tag>' once tagged.
+  close_reason?: string | null;
 }
 
 // Drill-down detail for one trade — what triggered it + how it exited. Fetched

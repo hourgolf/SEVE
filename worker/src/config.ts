@@ -92,9 +92,9 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-10a";
+export const WORKER_VERSION = "stream-2026-06-11a";
 
-// ---- Policy constants (parity with the cron dispatcher 2026-06-10a) ---------
+// ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
   COST_GATE_RATIO: 3.0,
   // EMPTY since cron 2026-06-09a: the power exemption was refuted by the roster
@@ -105,7 +105,7 @@ export const policy = {
   POWER_TRAIL_ENGAGE_MULT: 2.0, // engage once mark ≥ entry × this (+100%)
   POWER_TRAIL_GIVEBACK_PCT: 40, // exit if it gives back > this % of peak gain
   ATM_DELTA: 0.55, // ATM 0DTE delta proxy when the quote carries none
-  OPEN_0DTE_CUTOFF_MIN: 16, // inside last ~15 min, roll new entries to 1DTE
+  OPEN_0DTE_CUTOFF_MIN: 31, // inside last ~30 min, roll to 1DTE (Alpaca widened the lockout ~15→~30min, 06-11 422s)
   MANUAL_BACKSTOP_MIN: 3, // `-manual` twins: forced bell backstop (human owns exits)
   // Cost-gate cost model (fed REAL bid/ask → engine/cost.ts roundTripCostUsd).
   SLIPPAGE_TICKS_PER_SIDE: 0.25,

@@ -1,0 +1,77 @@
+
+> seve-live-market-monitor@0.1.0 day-report
+> tsx --env-file=.env.local scripts/day-report.ts --date 2026-06-11
+
+
+DAY REPORT — 2026-06-11 (ET)
+
+SPY: open 728.81 → close 738.45 (1.32%) · range 2.08% · 6 reversal leg(s) ≥0.3%  ⚠ WHIPSAW
+QQQ: open 699.63 → close 717.19 (2.51%) · range 3.23% · 15 reversal leg(s) ≥0.3%  ⚠ WHIPSAW
+
+NAV truth: +1207 · Σ attribution +1211 (auto +1241, manual -30) · 34 trades
+
+coverage (account vs rows)
+  ✓ clean: 16 OCC(s) — account buys == desk rows opened, EOD flat, held == open rows
+
+time        channel                 trade        entry→peak→exit      P&L     MFE   gave   hold  exit
+10:00–10:18  grind-manual ✋         730P×1       2.96→4.38→4.45         +149   +48%      —   18m  —
+10:00–10:10  grind-manual ✋         730P×1       2.96→2.81→3.20          +24    -5%      —   11m  —
+10:24–10:44  grind-manual ✋         730C×2       2.59→2.73→2.23          -72    +5%   367%   21m  —
+10:56–11:41  orb-trend-rider        726P×2       2.60→3.60→1.24         -272   +38%   237%   45m  stop_premium
+10:57–11:41  orb-spy-trail          726P×2       2.77→3.60→1.25         -304   +30%   284%   44m  premium_stop
+10:58–10:59  grind-manual ✋         726P×2       2.65→  ? →3.21         +112      —      —    1m  —
+10:59–11:01  grind-manual ✋         725P×2       2.68→2.79→3.02          +68    +4%      —    2m  —
+10:59–11:16  orb-qqq-trail          696P×1       3.91→4.29→1.65         -226   +10%   695%   17m  premium_stop
+12:35–12:35  grind-manual ✋         729C×3       2.27→  ? →2.39          +36      —      —    1m  —
+12:53–12:57  grind-manual ✋         727P×3       1.88→1.99→1.96          +24    +6%    27%    4m  —
+13:04–13:11  breakout               726P×3       2.12→2.08→1.52         -180    -2%      —    7m  failed_break
+13:04–13:06  grind-v3               726P×3       2.12→2.08→1.84          -84    -2%      —    2m  stop
+13:04–13:26  breakout-manual ✋      726P×3       2.09→2.13→1.51         -174    +2%  1757%   22m  —
+13:04–13:26  grind-manual ✋         726P×3       2.06→2.13→1.50         -168    +3%   962%   22m  —
+13:04–13:29  orb-trend-rider        726P×3       2.09→2.13→0.68         -423    +2%  4129%   25m  stop_premium
+13:05–13:29  grind-smart-entries    726P×3       2.04→2.13→0.62         -426    +4%  1771%   24m  stop_premium
+13:08–13:09  grind-v3               727C×3       1.81→1.66→1.62          -57    -9%      —    1m  stop
+13:30–13:51  breakout               733C×4       1.69→3.92→2.08         +156  +132%    83%   21m  trail_stop
+13:30–13:31  grind-v3               733C×4       1.76→2.49→2.54         +312   +41%      —    1m  target
+13:30–13:51  breakout-qqq           707C×3       2.50→5.97→3.27         +231  +139%    78%   21m  trail_stop
+13:30–13:44  breakout-alt-v3        733C×4       1.83→3.73→3.69         +744  +104%     2%   14m  target_premium
+13:30–13:45  breakout-smart-entries 733C×4       1.86→3.92→3.93         +828  +111%      —   15m  target_premium
+13:32–13:33  grind-v3               733C×4       1.70→2.17→2.14         +176   +28%     6%    1m  target
+15:01–15:06  power                  736C×5       1.31→1.32→1.02         -145    +1%  3000%    5m  stop
+15:01–15:01  power-manual ✋         736C×5       1.33→  ? →1.50          +85      —      —    1m  —
+15:01–15:31  power-smart-entries    736C×5       1.38→3.65→3.51        +1065  +165%     6%   30m  target_premium
+15:01–15:14  grind-manual ✋         736C×5       1.39→1.66→1.68         +145   +19%      —   13m  —
+15:06–15:06  power-manual ✋         736P×5       1.20→  ? →1.38          +91      —      —    0m  —
+15:07–15:11  power                  735P×6       0.99→0.80→0.59         -240   -20%      —    4m  stop
+15:07–15:28  power-manual ✋         735P×6       0.99→0.80→0.16         -498   -20%      —   21m  —
+15:46–15:52  power-manual ✋         739P×2       3.54→4.20→4.08         +108   +19%    18%    6m  —
+15:46–15:56  power-smart-entries    739P×2       3.57→4.20→4.00          +86   +18%    32%   10m  time_exit
+15:47–15:52  grind-manual ✋         738P×2       3.31→3.70→3.69          +76   +12%     3%    6m  —
+15:54–15:55  power-manual ✋         738C×1       3.94→3.81→3.58          -36    -3%      —    2m  —
+
+FLAGS
+  green→red (MFE ≥+20% → closed ≤0): 2 trades · $940 given back from peaks  ← orb-trend-rider, orb-spy-trail
+  CLUSTER 13:04 PUT: 3 channels entered together (breakout, grind-v3, orb-trend-rider) → Σ -687  ← one bet ×3
+  CLUSTER 13:30 CALL: 5 channels entered together (breakout, grind-v3, breakout-qqq, breakout-alt-v3, breakout-smart-entries) → Σ +2271  ← one bet ×5
+  OVERSHOOT orb-trend-rider 726P: closed -67% vs −50% design
+  OVERSHOOT grind-smart-entries 726P: closed -70% vs −50% design
+  DAILY-STOP latched: orb-trend-rider, power, grind-smart-entries
+
+channel rollup (auto)
+  power-smart-entries       2t  2/2 win    +1151
+  breakout-smart-entries    1t  1/1 win     +828
+  breakout-alt-v3           1t  1/1 win     +744
+  grind-v3                  4t  2/4 win     +347
+  breakout-qqq              1t  1/1 win     +231
+  breakout                  2t  1/2 win      -24
+  orb-qqq-trail             1t  0/1 win     -226
+  orb-spy-trail             1t  0/1 win     -304
+  power                     2t  0/2 win     -385
+  grind-smart-entries       1t  0/1 win     -426
+  orb-trend-rider           2t  0/2 win     -695
+
+participation (manual twins — taken = operator closed · skipped = bell backstop)
+  grind-manual             taken 10t +394    skipped 0t +0      
+  breakout-manual          taken 1t -174     skipped 0t +0      
+  power-manual             taken 5t -250     skipped 0t +0      
+

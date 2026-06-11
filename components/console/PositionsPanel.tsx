@@ -87,10 +87,17 @@ export function PositionsPanel({
   // Manual close (signed-in only). Tapping ✕ ARMS a confirm (✓ + a cancel ✕); you
   // can always back out — explicit cancel, OR it auto-disarms after 4s. Only the
   // explicit ✓ sells. The row drops from `positions` on the next feed refresh.
-  const { canWrite, closePosition } = useDeskWrite();
+  const { canWrite, closePosition, tagClose } = useDeskWrite();
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [closeErr, setCloseErr] = useState<string | null>(null);
+  // Close-reason chips (31_close_reason.sql): offered AFTER a successful close —
+  // the fill is already booked, so tagging adds zero friction to the exit itself.
+  // Untagged stays 'manual'; a tap refines it to 'manual:<tag>'. The vocabulary is
+  // the exit-study's: target (banked the pop) / reversal (tape turned) / risk
+  // (defensive cut) / stall (no follow-through).
+  const [tagPrompt, setTagPrompt] = useState<{ id: string; label: string } | null>(null);
+  const [tagging, setTagging] = useState(false);
   const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearDisarm = () => { if (disarmTimer.current) { clearTimeout(disarmTimer.current); disarmTimer.current = null; } };
   useEffect(() => () => clearDisarm(), []); // clear on unmount
@@ -106,9 +113,18 @@ export function PositionsPanel({
     setConfirmId(null);
     setClosingId(id);
     setCloseErr(null);
+    const p = positions.find((x) => x.id === id); // capture before the row leaves the feed
     const res = await closePosition(id);
     setClosingId(null);
     if (!res.ok) setCloseErr(res.error ?? "close failed");
+    else setTagPrompt({ id, label: p ? `${p.strike.toFixed(0)}${p.opt_type === "call" ? "C" : "P"}` : "position" });
+  };
+  const applyTag = async (tag: string) => {
+    if (!tagPrompt) return;
+    setTagging(true);
+    await tagClose(tagPrompt.id, tag); // soft-fail: untagged rows just stay 'manual'
+    setTagging(false);
+    setTagPrompt(null);
   };
 
   return (
@@ -237,6 +253,15 @@ export function PositionsPanel({
         </table>
       </div>
       {closeErr && <div className="pos-close-err">close failed — {closeErr}</div>}
+      {tagPrompt && (
+        <div className="pos-tagbar">
+          <span className="tb-lbl">{tagPrompt.label} closed — why?</span>
+          {(["target", "reversal", "risk", "stall"] as const).map((t) => (
+            <button key={t} className="tb-chip" disabled={tagging} onClick={() => applyTag(t)}>{t}</button>
+          ))}
+          <button className="tb-x" onClick={() => setTagPrompt(null)} title="skip — stays untagged" aria-label="dismiss tag chips">✕</button>
+        </div>
+      )}
 
       {recentTrades.length > 0 && (
         <div className="recent-trades">
@@ -300,7 +325,13 @@ export function PositionsPanel({
                         <span className="rtd-line">
                           <span className="rtd-perf">${entry.toFixed(2)} → ${exit.toFixed(2)}</span>
                           {holdStr(t.opened_at, t.closed_at) && <span className="rtd-dim">held {holdStr(t.opened_at, t.closed_at)}</span>}
-                          {insight?.exitReason && <span className="rtd-exit">{insight.exitReason}</span>}
+                          {(t.close_reason || insight?.exitReason) && (
+                            <span className="rtd-exit">
+                              {t.close_reason
+                                ? (t.close_reason.startsWith("manual") ? `✋ ${t.close_reason.replace(/^manual:?/, "") || "manual"}` : t.close_reason)
+                                : insight!.exitReason}
+                            </span>
+                          )}
                           <span className={realized < 0 ? "neg" : "pos"}>{signedUsd(realized)} · {retPct >= 0 ? "+" : ""}{retPct.toFixed(0)}% · {R >= 0 ? "+" : ""}{R.toFixed(1)}R</span>
                         </span>
                       </div>
