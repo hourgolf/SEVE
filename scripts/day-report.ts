@@ -83,6 +83,17 @@ async function main() {
     .gte("created_at", `${DATE}T13:00:00Z`).lte("created_at", `${DATE}T22:00:00Z`);
   const events = (evRaw ?? []) as Array<{ message: string; created_at: string }>;
 
+  // Per-channel executor + arm state (W2 migration: which executor OWNS each channel).
+  // NOTE: this is CURRENT config, not the config at trade time — accurate for a
+  // same-day report (the normal use), approximate when re-running an old date.
+  const { data: stratRaw } = await sb.from("strategists").select("slug,executor,status,strategist_config(muted)");
+  const execBySlug = new Map<string, { executor: string; armed: boolean; muted: boolean }>();
+  for (const s of (stratRaw ?? []) as any[]) {
+    const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
+    execBySlug.set(s.slug, { executor: String(s.executor ?? "cron"), armed: s.status === "armed", muted: !!cfg?.muted });
+  }
+  const execOf = (slug: string) => execBySlug.get(slug)?.executor ?? "cron";
+
   const trades: Trade[] = [];
   for (const p of (posRaw ?? []) as any[]) {
     const slug = p.strategists?.slug ?? "?";
@@ -235,8 +246,19 @@ async function main() {
   for (const [slug, ts] of [...bySlug.entries()].sort((a, b) => b[1].reduce((x, t) => x + t.pnl, 0) - a[1].reduce((x, t) => x + t.pnl, 0))) {
     const p = ts.reduce((a, t) => a + t.pnl, 0);
     const w = ts.filter((t) => t.pnl > 0).length;
-    console.log(`  ${slug.padEnd(24)} ${String(ts.length).padStart(2)}t  ${w}/${ts.length} win  ${sgn(p).padStart(7)}`);
+    console.log(`  ${slug.padEnd(24)} ${`[${execOf(slug)}]`.padEnd(8)} ${String(ts.length).padStart(2)}t  ${w}/${ts.length} win  ${sgn(p).padStart(7)}`);
   }
+  // EXECUTOR SPLIT (W2 migration validation): where did the day's trades run? After
+  // the cutover the stream line should carry the migrated roster; a stream channel
+  // you EXPECTED to trade sitting in the 0-trade list = a cron→stream handoff miss.
+  const splitOf = (exec: string) => {
+    const ts = auto.filter((t) => execOf(t.slug) === exec);
+    return `${new Set(ts.map((t) => t.slug)).size}ch ${ts.length}t ${sgn(ts.reduce((a, x) => a + x.pnl, 0))}`;
+  };
+  console.log(`  ── executors: stream ${splitOf("stream")} · cron ${splitOf("cron")}`);
+  const traded = new Set(auto.map((t) => t.slug));
+  const silentStream = [...execBySlug.entries()].filter(([slug, m]) => m.executor === "stream" && m.armed && !m.muted && !traded.has(slug)).map(([slug]) => slug);
+  if (silentStream.length) console.log(`  ── stream armed+unmuted · 0 trades: ${silentStream.join(", ")}  (selectivity, or a handoff miss — eyeball vs the worker log)`);
 
   // ---- participation (the operator-selection dataset, close_reason 31) -------------
   // Manual twins: the machine enters and pushes "your exit"; the operator either
