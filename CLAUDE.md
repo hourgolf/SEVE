@@ -8,6 +8,59 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — READ THIS FIRST
+**W2 = move channels off the cron onto the Railway stream executor (operator's word:
+"migrate all even QQQ"). DONE TONIGHT: all 9 armed SPY MACHINE channels flipped to
+`executor='stream'` (joining grind-v3 → 10 on stream); the worker is now MULTI-SYMBOL
+(`stream-2026-06-11b`, commit `188c593`, heartbeat verified beating 6s fresh).** The cron
+(v55) defers them via the fresh `'stream'` heartbeat — NO cron redeploy (it reads the
+per-channel `executor` flag). Desk was flat (EOD) so the switch stranded nothing.
+
+**ON STREAM (10):** breakout, breakout-alt-v3, breakout-smart-entries, grind-smart-entries,
+grind-v3, orb-spy-trail, orb-trend-rider, power, power-final30, power-smart-entries.
+**STILL ON CRON (7):** breakout-qqq, orb-qqq-trail, qqq-thrust-trail (QQQ machine — SHADOW
+GATE, below); breakout-manual, grind-manual, power-manual, qqq-thrust-trail-manual (manual
+twins — need the worker entry-push, below).
+
+**MULTI-SYMBOL WORKER (the B3 enabler):** was single-symbol (`ownedBy` required
+`underlying===config.symbol`). Now: `config.symbols` (default `SYMBOLS=SPY,QQQ`); ONE Alpaca
+data socket (the 406 single-connection limit) subscribed to all symbols, `onBar` routes by
+`bar.S`; per-symbol `BarStore`/`ChainStore` maps; `cycle()` does account-wide reads ONCE
+(positions/orders/openRows — OCCs are globally unique so the netting maps are shared) then
+loops symbols with a per-symbol ctx + own bar-freshness; `occSymbol` uses `ch.underlying`.
+STRICT generalization — one symbol == today's behavior, so the live SPY/grind-v3 path is
+preserved. Worker typecheck clean; runs via `tsx` (no build step).
+
+**⚠ QQQ SHADOW GATE (why QQQ execution is NOT flipped yet):** the cron's executor gate keys
+off a SINGLE `'stream'` heartbeat. If the worker is alive for SPY but silently can't handle
+QQQ (bad sub / chain miss), the cron would DEFER QQQ channels (heartbeat fresh) while the
+worker no-ops them → STRANDED QQQ positions. So QQQ execution flips ONLY after one clean
+shadow open proves the worker handles QQQ — the same shadow-before-live gate grind-v3 passed.
+The worker SHADOW-decides QQQ every cycle now (QQQ channels stay `executor='cron'` → cron
+keeps executing them, zero gap) — tomorrow's open is the proof.
+
+**MORNING WATCH (06-12 open) — W2 validation, IN ORDER:**
+1. **Railway boot log** must read `subscribing bars SPY,QQQ` + `seed[QQQ]: N bars`. If it
+   says SPY only, Railway has `SYMBOL=SPY` pinned → **set `SYMBOLS=SPY,QQQ`** (takes
+   precedence) + redeploy. (SPY migration is UNAFFECTED either way — the worker owns SPY.)
+2. At open: cron logs `stream_owned` skips for all 10 SPY stream channels; worker logs
+   `stream:` execs/fills for them. First-ever MULTI-channel stream session.
+3. The 10 SPY channels book CLEAN — `npm run day-report -- --date 2026-06-12` coverage ✓ +
+   NAV-vs-attribution reconciles (watch stream-vs-stream shared-OCC netting, e.g. V3+ALT on
+   the same 13:30 break OCC — the one path grind-v3-alone never exercised).
+4. Worker SHADOW-decides QQQ channels in the logs, matching the cron's actual QQQ fills =
+   the green light to flip QQQ.
+
+**NEXT-SESSION W2 TAIL (after a clean 06-12):** (a) flip QQQ machine channels to stream
+(`update strategists set executor='stream' where slug in ('breakout-qqq','orb-qqq-trail','qqq-thrust-trail');`)
+once shadow-proven; (b) add the manual-twin entry-push to the worker (`firePush` mirror of
+the cron's, needs `APP_URL`+`PUSH_SECRET` env on Railway) then migrate the 4 manual twins —
+without it a migrated twin loses the proactive "✋ your exit" ping (exits still work: manual
+close route is executor-agnostic, bell backstop catches a miss). ROLLBACK any channel:
+`update strategists set executor='cron' where slug='…';` (cron resumes it within a cycle).
+W3 = narrow ingest (option_quotes 94MB/7d now the dominant table); W4 = unschedule the cron
+trader (full cutover) once the whole roster is stream-proven.
+
 ## SESSION HANDOFF — 2026-06-11 EVENING (CHANGE LIST EXECUTED) — READ THIS FIRST
 **The after-market change list (items 1-4) is DONE + DEPLOYED (commit `b5cde0a`): cron v55
 `2026-06-11a` (sentinel-verified), Railway worker `stream-2026-06-11a` (heartbeat verified
