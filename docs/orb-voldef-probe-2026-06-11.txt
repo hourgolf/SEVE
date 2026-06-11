@@ -1,0 +1,19 @@
+
+> seve-live-market-monitor@0.1.0 orb-voldef-probe
+> tsx engine/orb-voldef-probe.ts
+
+
+  ORB VOL-DEFINED OR · custom breakout (live gates · −50% stop · cost gate) · real NBBO · 320 SPY sessions
+  fixed-WIDTH freezes hi/lo when the range first reaches W% (time floats); skip if never by 90 min.
+
+  variant               exp$/t    n   win%   estMin  skip%     pooled$   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+  TIME-30 (≈live ORB)    +18.7  360   27%       —      —      +6727         +245        +2285       -10175        +2542         +110
+  TIME-15                 -4.5  436   26%       —      —      -1973         -432         -417       -13600         -132         -408
+  WIDTH-0.30%             +4.2  376   25%      27    13%      +1584         -709        -4495       -11665        +4062        +2041
+  WIDTH-0.40%             +3.6  302   25%      35    30%      +1073        -3156         +182       -10794        +4570        +1637
+  WIDTH-0.50%            -34.5  240   26%      39    48%      -8275        +1763        -1842       -15302        +1176        -2203
+  WIDTH-0.60%            -26.4  169   27%      45    61%      -4467         -676        -1102        -6915        +2275        -5876
+
+  READ: a WIDTH row earns a build only if it beats TIME-30 on pooled exp$/t AND holds ≥4/5 windows.
+  High skip% + early estMin = it only fires on already-volatile days = the trend-day filter, not a better OR.
+

@@ -39,6 +39,7 @@
     "confirm-delay-probe": "tsx engine/confirm-delay-probe.ts",
     "chop-premium-probe": "tsx engine/chop-premium-probe.ts",
     "orb-width-probe": "tsx engine/orb-width-probe.ts",
+    "orb-voldef-probe": "tsx engine/orb-voldef-probe.ts",
     "chop-router-probe": "tsx engine/chop-router-probe.ts",
     "export-bars": "tsx scripts/export-bars.ts",
     "verify-bars-archive": "tsx scripts/verify-bars-archive.ts",
