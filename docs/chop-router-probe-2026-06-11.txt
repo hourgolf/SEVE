@@ -1,0 +1,28 @@
+
+> seve-live-market-monitor@0.1.0 chop-router-probe
+> tsx engine/chop-router-probe.ts
+
+
+  CHOP-ROUTER probe · Nakamoto reversal book (phase2, real NBBO) × day-shape · 313 joined sessions
+  Always-on verdict stands (NO EDGE pooled). Question: is the P&L CHOP-CONDITIONAL, and is 10:30 routing enough?
+
+  JOIN 1 — ORACLE (realized whipsaw legs; end-of-day knowledge = ceiling):
+    trendy (≤2 legs)            253d   1633t  $  -3050  -12.1/day
+    mixed (3-4 legs)             34d    188t  $  -1120  -32.9/day
+    choppy (≥5 legs)             26d     91t  $  -6255  -240.6/day
+
+  JOIN 2 — EX-ANTE 10:30 gate score (no-go <0.5 = predicted chop; in-sample percentiles — hypothesis only):
+    no-go days (route HERE)     169d    950t  $ -30415  -180.0/day
+    go days (trend book runs)   144d    962t  $  19990  +138.8/day
+
+    per window (no-go vs go $):
+      2024-TREND       no-go  52d $ -6230   go  33d $  3465
+      2025-TREND-OOS   no-go  45d $-11000   go  39d $ -5190
+      CHOPMIX-25-26    no-go  39d $ -4715   go  41d $ 12490
+      MAR26-CHOP       no-go  11d $ -6505   go  11d $  5145
+      APRMAY26-TREND   no-go  22d $ -1965   go  20d $  4080
+
+  ROUTER HIT RATE: 10:30 no-go catches 10/26 realized-choppy days (38%).
+  READ: interest = choppy-day $/day ≫ trendy-day $/day (Join 1) AND no-go $/day > 0 (Join 2).
+  Next step if it prints: per-window OOS threshold fit (the original gate protocol) before any build.
+
