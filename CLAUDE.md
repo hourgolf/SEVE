@@ -93,6 +93,14 @@ level-gate-probe | confirm-delay-probe`; memory `probe-queue-2026-06-11.md`):**
   live-runs-HOT (breakout 52% win vs 34% model · power 56 vs 19, +$20 vs −$4/ct ·
   power-smart 62 vs 28) — model omits the giveback trail + daily latch, stretch favored
   leans. Month-end input, not action; power-smart counter-receipt #2.
+- **Chop-router (brainstorm composition): REFUTED.** `npm run chop-router-probe` joins the
+  Nakamoto phase2 daily P&L with day shape + the 10:30 gate score (313 sessions): the
+  reversal book loses on EVERY day shape and 20× WORSE on whipsaw days (−$240.6/day at
+  ≥5 legs vs −$12.1 trendy); its CHOPMIX-25-26 green was earned on that window's GO days
+  (+$12,490 go vs −$4,715 no-go). Chop steamrolls BOTH directional shapes → the chop book
+  must be SHORT-PREMIUM (theta fly, blocked on the Phase-B limit/multi-leg doors) or
+  STAND-DOWN sizing, not a cleverer directional entry. Don't resurrect level-reversals
+  for chop.
 
 **RAILWAY FULL-STREAM COUNTERFACTUAL (06-11): net ≈ −$100±150 — execution P&L is NOT the
 B2 case.** Quote paths prove both quantization events were GAPS, not drifts: 736C bid
