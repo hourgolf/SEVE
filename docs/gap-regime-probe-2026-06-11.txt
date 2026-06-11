@@ -1,0 +1,25 @@
+
+> seve-live-market-monitor@0.1.0 gap-regime-probe
+> tsx engine/gap-regime-probe.ts
+
+
+  GAP-REGIME probe · 320 SPY sessions (real NBBO) · gap = (open − prior RTH close)/prior close
+
+  ══ A. DIAGNOSTIC — how blind, does it matter? ══
+  median |gap|        0.26%   ·   median first-30 ATR 0.05%
+  |gap| > first-30 ATR on 298/320 days (93%) — the overnight move the ATR can't see exceeded the intraday vol it does
+  corr(gap, intraday return) = -0.09   (>0 = gap-and-go · <0 = gap-fill · ≈0 = gap is noise for direction)
+
+  ══ B. breakout-family P&L by signed gap (real NBBO ride) ══
+  channel         gap-down ≤−0.25%    flat −0.25..+0.25%        gap-up ≥+0.25%
+  ORB               -4/t 99t 26%        -90/t 102t 25%        +166/t 99t 29%
+  ALT              +36/t 28t 29%         -79/t 47t 28%        +407/t 39t 41%
+  V3              +138/t 33t 30%         -75/t 54t 28%        +387/t 40t 40%
+
+  ══ C. ALT on gap days (|gap|≥0.25%): trade WITH the gap vs AGAINST it ══
+  with-gap (gap-and-go):  +226/t · 32t · 41% win
+  against-gap (fade):     +275/t · 35t · 31% win
+
+  READ: flat across B + corr≈0 ⇒ gap is noise, session-to-session is correct. A bucket or with/against
+  split that separates ⇒ a gap feature (true-range ATR, or a gap-direction gate) is worth a probe.
+
