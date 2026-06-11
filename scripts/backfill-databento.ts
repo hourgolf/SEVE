@@ -15,6 +15,7 @@
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { archivedDays, readArchivedDay } from "../engine/realsource";
 
 function loadEnv() { for (const line of readFileSync(".env.local", "utf8").split("\n")) { const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim(); } }
 loadEnv();
@@ -44,11 +45,30 @@ const osi = (expISO: string, strike: number, type: "call" | "put") => { const [y
 interface DayRange { date: string; lo: number; hi: number }
 async function dayRanges(sb: ReturnType<typeof createClient>): Promise<DayRange[]> {
   const acc = new Map<string, { lo: number; hi: number }>();
+  const fold = (ts: string, low: unknown, high: unknown) => {
+    if (low == null || high == null) return;
+    const { date, min } = etParts(Date.parse(ts));
+    if (min < 570 || min >= 960) return;
+    const c = acc.get(date); const lo = Number(low), hi = Number(high);
+    if (!c) acc.set(date, { lo, hi }); else { c.lo = Math.min(c.lo, lo); c.hi = Math.max(c.hi, hi); }
+  };
+  // W1 ingest wind-down: history comes from the local archive (the DB holds only
+  // a rolling window post 32_bars_retention.sql); the last archived day defers
+  // to the DB. Without an archive this is the original full-table scan.
+  const days = archivedDays(UNDERLYING);
+  let floorIso: string | null = null;
+  if (days.length > 1) {
+    for (const d of days.slice(0, -1)) for (const r of readArchivedDay(UNDERLYING, d)) fold(r.ts, r.low, r.high);
+    const lastRows = readArchivedDay(UNDERLYING, days[days.length - 1]);
+    if (lastRows.length) floorIso = lastRows[0].ts;
+  }
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await sb.from("underlying_bars").select("ts,low,high").eq("symbol", UNDERLYING).order("ts", { ascending: true }).range(from, from + 999);
+    let q = sb.from("underlying_bars").select("ts,low,high").eq("symbol", UNDERLYING).order("ts", { ascending: true });
+    if (floorIso) q = q.gte("ts", floorIso);
+    const { data, error } = await q.range(from, from + 999);
     if (error) throw new Error("underlying_bars: " + error.message);
     const rows = (data ?? []) as { ts: string; low: number; high: number }[];
-    for (const r of rows) { const { date, min } = etParts(Date.parse(r.ts)); if (min < 570 || min >= 960) continue; const c = acc.get(date); const lo = Number(r.low), hi = Number(r.high); if (!c) acc.set(date, { lo, hi }); else { c.lo = Math.min(c.lo, lo); c.hi = Math.max(c.hi, hi); } }
+    for (const r of rows) fold(r.ts, r.low, r.high);
     if (rows.length < 1000) break;
   }
   return [...acc.entries()].map(([date, r]) => ({ date, ...r })).filter((d) => d.date >= FROM && d.date <= TO).sort((a, b) => a.date.localeCompare(b.date));

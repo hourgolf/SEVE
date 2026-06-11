@@ -7,7 +7,7 @@
 //  have no historical option chains: "real bars + modeled options".
 // ============================================================================
 
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import type { Bar } from "./types";
 
@@ -47,6 +47,24 @@ interface RawBar {
   volume: number | null;
 }
 
+// ── W1 ingest wind-down: local bars archive ─────────────────────────────────
+// The 1-min tape is archived per ET day under data/bars-archive/<SYM>/
+// (scripts/export-bars.ts, verbatim DB rows) so the DB can hold only a rolling
+// window (32_bars_retention.sql). History reads go ARCHIVE-FIRST; the DB serves
+// only days from the archive's last day onward (the last archived day is always
+// deferred to the DB — a partial export can never shadow fresher rows). With no
+// archive directory the DB path is byte-identical to the original. Disable with
+// SEVE_BARS_ARCHIVE=0 (the golden verify uses this to compare both paths).
+export function archiveDir(symbol: string): string { return `data/bars-archive/${symbol}`; }
+export function archivedDays(symbol: string): string[] {
+  const dir = archiveDir(symbol);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).map((f) => f.slice(0, 10)).sort();
+}
+export function readArchivedDay(symbol: string, date: string): RawBar[] {
+  return JSON.parse(readFileSync(`${archiveDir(symbol)}/${date}.json`, "utf8")) as RawBar[];
+}
+
 // ET wall-clock parts for an epoch-ms instant (DST-correct via Intl).
 const etFmt = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -73,17 +91,41 @@ async function fetchAllBars(sinceMs?: number, symbol = "SPY"): Promise<RawBar[]>
   const sb = createClient(url, key, { auth: { persistSession: false } });
 
   const out: RawBar[] = [];
+  const cutoffMs = sinceMs ?? null;
+
+  // ---- archive-first: serve history from disk, defer the last day to the DB ----
+  let dbFloorIso: string | null = null;
+  if (process.env.SEVE_BARS_ARCHIVE !== "0") {
+    const days = archivedDays(symbol);
+    if (days.length > 1) {
+      const lastDay = days[days.length - 1]; // deferred to the DB (may be partial)
+      for (const d of days.slice(0, -1)) {
+        for (const r of readArchivedDay(symbol, d)) {
+          // exact parity with the DB path's ts >= cutoff filter
+          if (cutoffMs != null && Date.parse(r.ts) < cutoffMs) continue;
+          out.push(r);
+        }
+      }
+      // DB tail = everything from the last archived day onward (its first row's
+      // ts is the earliest instant of that ET day in the corpus).
+      const lastRows = readArchivedDay(symbol, lastDay);
+      if (lastRows.length) dbFloorIso = lastRows[0].ts;
+    }
+  }
+
   const PAGE = 1000;
   // sinceMs bounds the read to recent history (the inline backtest gate uses
   // this — pulling 2+ years of 1-min bars into a serverless route is too slow).
-  const cutoffIso = sinceMs != null ? new Date(sinceMs).toISOString() : null;
+  const cutoffIso = cutoffMs != null ? new Date(cutoffMs).toISOString() : null;
+  // the DB floor (archive handoff) and the caller's cutoff compose: take the later.
+  const floorIso = dbFloorIso && cutoffIso ? (dbFloorIso > cutoffIso ? dbFloorIso : cutoffIso) : (dbFloorIso ?? cutoffIso);
   for (let from = 0; ; from += PAGE) {
     let q = sb
       .from("underlying_bars")
       .select("ts,open,high,low,close,volume")
       .eq("symbol", symbol)
       .order("ts", { ascending: true });
-    if (cutoffIso) q = q.gte("ts", cutoffIso);
+    if (floorIso) q = q.gte("ts", floorIso);
     const { data, error } = await q.range(from, from + PAGE - 1);
     if (error) throw new Error("underlying_bars read: " + error.message);
     const rows = (data ?? []) as RawBar[];

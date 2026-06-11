@@ -112,6 +112,28 @@ stream actually proved today: grind-v3's 1-2m fast-target exits + the first CROS
 shared-OCC netting (stream grind-v3 vs 5 cron channels on 733C/726P, books Δ$4). B2 =
 reliability + state; order per runbook — after month-end cuts, ALT then V3 last.
 
+**W1 INGEST WIND-DOWN — EXECUTED + VERIFIED (same evening, operator's word):** the DB is no
+longer the tape's archive. (1) **Full 1-min history exported** to `data/bars-archive/<SYM>/`
+(`npm run export-bars`, per-ET-day JSON, verbatim rows; SPY 222,205 + QQQ 46,398 rows, counts
+exact vs DB; gitignored; worst-case reconstructable from Alpaca via backfill-bars). (2)
+**`engine/realsource.ts` + both backfill scripts read ARCHIVE-FIRST** (DB serves only the tail
+from the last archived day; `SEVE_BARS_ARCHIVE=0` disables; no archive = original behavior).
+**GOLDEN-VERIFIED** (`npm run verify-bars-archive`): pre-prune both paths byte-identical
+(570/111 sessions, Σclose to the cent); post-prune overlap-identity + depth invariants PASS;
+`qqq-v3-probe` re-run BYTE-IDENTICAL post-prune. (3) **Daily candles persisted**
+(`daily_bars_hist`, 682/682 identical to the old view's output) + **`underlying_bars_daily`
+view = live-window ∪ hist** → the chart's 3M/1Y/Max keep FULL depth forever (preview-verified,
+Max renders 2024-02→now). (4) **Retention live** (`32_bars_retention.sql` APPLIED via MCP;
+`seve-retention` cron now also upserts daily candles + trims 1-min >60d nightly). (5) **Pruned
++ VACUUM FULL: underlying_bars 65MB → 7.5MB · DB total 130MB** (was ~170). ⚠ NEVER re-run
+`07_backfill_bars.sql`/`20_backfill_qqq_bars.sql` for history (they'd refill the pruned
+window); run `npm run export-bars` at least every ~7 weeks (DB covers 60d, so the archive can
+lag that long safely) and before any research that needs the freshest days from disk.
+RATIONALE (operator, in-session): reliability + state + data consistency + storage runway —
+and channels must succeed/fail on their signal, not on executor luck (the attribution-noise
+argument; see the Railway counterfactual above). W2 = B2 channel migration after month-end
+cuts; W3 = narrow ingest (option_quotes 94MB/7d is now the dominant table); W4 = full cutover.
+
 ## SESSION HANDOFF — 2026-06-11 (B1 LIVE DAY) — prior
 **Next session opens with: (1) `npm run day-report -- --date 2026-06-11` (same-week constraint!),
 (2) execute the AFTER-MARKET CHANGE LIST below.** [DONE 06-11 evening — see the section above.] The Railway stream executor ran its first live day

@@ -22,6 +22,7 @@
 
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { archivedDays, readArchivedDay } from "../engine/realsource";
 
 function loadEnvLocal() {
   try {
@@ -107,6 +108,20 @@ async function dayRanges(sb: ReturnType<typeof createClient>): Promise<DayRange[
       else { cur.lo = Math.min(cur.lo, lo); cur.hi = Math.max(cur.hi, hi); }
     }
     if (rows.length < PAGE) break;
+  }
+  // W1 ingest wind-down: the DB holds only a rolling window now — merge per-day
+  // ranges from the local archive for history (last archived day defers to DB).
+  const archDays = archivedDays(UNDERLYING);
+  for (const d of archDays.slice(0, -1)) {
+    if (acc.has(d)) continue; // DB already covered it
+    let lo = Infinity, hi = -Infinity;
+    for (const r of readArchivedDay(UNDERLYING, d)) {
+      if (r.low == null || r.high == null) continue;
+      const { min } = etParts(Date.parse(r.ts));
+      if (min < 570 || min >= 960) continue;
+      lo = Math.min(lo, Number(r.low)); hi = Math.max(hi, Number(r.high));
+    }
+    if (isFinite(lo)) acc.set(d, { lo, hi });
   }
   return [...acc.entries()]
     .map(([date, r]) => ({ date, ...r }))
