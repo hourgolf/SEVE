@@ -20,6 +20,17 @@ async function get(host: string, path: string): Promise<any> {
   return body ? JSON.parse(body) : {};
 }
 
+async function post(host: string, path: string, payload: unknown): Promise<any> {
+  const r = await fetch(host + path, {
+    method: "POST",
+    headers: { ...H, "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await r.text();
+  if (!r.ok) throw new Error(`${r.status} POST ${path.split("?")[0]} → ${body.slice(0, 200)}`);
+  return body ? JSON.parse(body) : {};
+}
+
 // ---- paper account / positions / orders ------------------------------------
 export interface AlpacaAccount { equity: number; cash: number; }
 export interface AlpacaPosition { symbol: string; qty: number; avg_entry_price: number; current_price: number; unrealized_pl: number; }
@@ -41,6 +52,49 @@ export async function getPositions(): Promise<AlpacaPosition[]> {
 export interface MarketClock { is_open: boolean; next_open: string; next_close: string; timestamp: string; }
 export async function getClock(): Promise<MarketClock> {
   return get(config.alpacaPaperHost, "/v2/clock");
+}
+
+// ---- orders (Phase B execution) ---------------------------------------------
+export interface AlpacaOrder {
+  id: string; client_order_id: string; symbol: string; side: string; status: string;
+  filled_qty: number; filled_avg_price: number;
+}
+const mapOrder = (o: any): AlpacaOrder => ({
+  id: String(o.id ?? ""),
+  client_order_id: String(o.client_order_id ?? ""),
+  symbol: String(o.symbol ?? ""),
+  side: String(o.side ?? ""),
+  status: String(o.status ?? ""),
+  filled_qty: Number(o.filled_qty ?? 0),
+  filled_avg_price: Number(o.filled_avg_price ?? 0),
+});
+
+/** Recent orders, newest first — the per-channel ledger source (client_order_id
+ *  prefixes). Mirrors the cron's cycle-start snapshot. */
+export async function getOrders(limit = 500): Promise<AlpacaOrder[]> {
+  const res = await get(config.alpacaPaperHost, `/v2/orders?status=all&limit=${limit}&direction=desc`);
+  return (res as any[]).map(mapOrder);
+}
+
+/** Place an order, then poll briefly for the ACTUAL fill (market orders fill in
+ *  ms). Booking at the real fill — not the mid — is what makes the desk's P&L
+ *  reconcile to the account (cron parity: aOrderAndFill). fill=0 → caller falls
+ *  back to the quote. */
+export async function orderAndFill(body: {
+  symbol: string; qty: string; side: "buy" | "sell"; type: "market"; time_in_force: "day"; client_order_id: string;
+}): Promise<{ id: string; fill: number; filledQty: number }> {
+  const o = await post(config.alpacaPaperHost, "/v2/orders", body);
+  const id = String(o.id ?? "");
+  let fill = Number(o.filled_avg_price ?? 0);
+  let filledQty = Number(o.filled_qty ?? 0);
+  for (let i = 0; i < 5 && id && fill <= 0; i++) {
+    await new Promise((r) => setTimeout(r, 300));
+    try {
+      const g = await get(config.alpacaPaperHost, `/v2/orders/${id}`);
+      if (Number(g.filled_avg_price) > 0) { fill = Number(g.filled_avg_price); filledQty = Number(g.filled_qty ?? filledQty); }
+    } catch { /* keep polling */ }
+  }
+  return { id, fill, filledQty };
 }
 
 // ---- underlying bars (data host) — seed the rolling window on startup -------

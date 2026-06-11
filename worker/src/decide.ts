@@ -16,11 +16,12 @@ import { getStrategy } from "../../engine/registry";
 import { specToStrategyDef, specPremiumExit } from "../../engine/specEvaluate";
 import { roundTripCostUsd as engineRoundTrip, type CostModel } from "../../engine/cost";
 import type { Bar, Evaluate, Features, OptType, Position } from "../../engine/types";
-import type { StrategySpec } from "../../lib/desk/strategySpec";
+import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { config, policy } from "./config.js";
 import { etParts, occSymbol, type AlpacaPosition } from "./alpaca.js";
 import { peakMidSince, realizedTodayByChannel, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
+import { entryStateByKey, entryKey } from "./execute.js";
 
 // RTH in ET minutes-since-midnight: 09:30 (570) → 16:00 (960).
 const RTH_OPEN = 570;
@@ -99,9 +100,12 @@ export function computeLevels(all: Bar[], todayET: string): { pdh?: number; pdl?
 }
 
 // ---- per-channel evaluator (registry OR compiled spec) ---------------------
-interface Built { evaluate: Evaluate; warmup: number; tf: number; premiumExit?: { profitPct?: number; stopPct?: number }; }
+interface Built { evaluate: Evaluate; warmup: number; tf: number; premiumExit?: { profitPct?: number; stopPct?: number }; trailK?: number; }
 function buildEvaluator(ch: ChannelConfig, ctx: DecisionCtx): Built | null {
-  const code = getStrategy(ch.slug);
+  // Base-slug resolve (cron parity): `<base>-manual` and `<base>-qqq/spy` twins run
+  // the base CODE strategy; a compiled .md channel finds no registry hit and falls
+  // through to its spec_json.
+  const code = getStrategy(ch.slug) ?? getStrategy(ch.slug.replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, ""));
   if (code) return { evaluate: code.build(ctx.sessionBars, code.timeframeMin), warmup: code.warmupBars, tf: code.timeframeMin };
   if (ch.spec_json) {
     const spec = ch.spec_json as StrategySpec;
@@ -111,6 +115,9 @@ function buildEvaluator(ch: ChannelConfig, ctx: DecisionCtx): Built | null {
       warmup: def.warmupBars,
       tf: def.timeframeMin,
       premiumExit: specPremiumExit(spec),
+      // The ARMABLE TRAIL (underlying ATR-chandelier) — the one trail mode the live
+      // path supports; premium-giveback stays backtest-only (cron parity).
+      trailK: specTrail(spec.management)?.atrChandelierK,
     };
   }
   return null;
@@ -156,12 +163,41 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
 
   const row = ctx.openRows.get(ch.id);
   const alp = row ? ctx.alpacaByOcc.get(row.occ_symbol) : undefined;
-  const pos = row ? reconstructPos(ch.slug, row, bars, i) : null;
+  let pos = row ? reconstructPos(ch.slug, row, bars, i) : null;
+  // Stateful win (Phase B): a position WE opened live carries its REAL entry
+  // context in memory — prefer it over the reconstruction, and keep the
+  // favorable-peak running off the latest close. Restarts fall back to the
+  // reconstruction above (cron parity), so this is strictly an upgrade.
+  if (pos && row) {
+    const st = entryStateByKey.get(entryKey(row.strategist_id, row.occ_symbol));
+    if (st) {
+      st.peakFavorable = row.opt_type === "call" ? Math.max(st.peakFavorable, f.close) : Math.min(st.peakFavorable, f.close);
+      pos = { ...pos, entryUnderlying: st.entryUnderlying, peakFavorable: st.peakFavorable };
+    }
+  }
 
   let intent = built.evaluate(f, pos);
 
   const mark = row ? (ctx.chain.byOcc(row.occ_symbol)?.mid ?? alp?.current_price ?? 0) : 0;
   const entryPx = row?.avg_entry_price ?? 0;
+
+  // ARMABLE TRAIL (compiled specs): underlying ATR-chandelier — once in profit,
+  // exit when price retraces k·ATR from the peak favorable underlying (cron parity).
+  if (pos && row && built.trailK != null && f.atr > 0 && (!intent || intent.kind !== "exit")) {
+    const inProfit = pos.optType === "call" ? f.close > pos.entryUnderlying : f.close < pos.entryUnderlying;
+    const retraced = pos.optType === "call"
+      ? f.close <= pos.peakFavorable - built.trailK * f.atr
+      : f.close >= pos.peakFavorable + built.trailK * f.atr;
+    if (inProfit && retraced) intent = { kind: "exit", reason: "trail_chandelier" };
+  }
+
+  // UNDERLYING INITIAL STOP (config-gated, cron 2026-06-05c parity): exit when the
+  // underlying moves underlying_stop_pct% against the entry. Fires before the
+  // premium stop; 0 = off. Uses the REAL entryUnderlying when we opened live.
+  if (pos && row && ch.underlying_stop_pct > 0 && pos.entryUnderlying > 0 && (!intent || intent.kind !== "exit")) {
+    const adversePct = (pos.optType === "call" ? (pos.entryUnderlying - f.close) : (f.close - pos.entryUnderlying)) / pos.entryUnderlying * 100;
+    if (adversePct >= ch.underlying_stop_pct) intent = { kind: "exit", reason: "underlying_stop" };
+  }
 
   // Premium profit/stop for compiled specs (needs the option mark).
   if (pos && row && built.premiumExit && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
@@ -194,15 +230,27 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     }
   }
 
-  // Reconcile: desk row open but Alpaca flat (shadow only flags — no write).
+  // Reconcile: desk row open but Alpaca flat (the executor closes it at fill-net).
   if (row && !alp) return { ...base, action: "reconcile", reason: "orphan_position", occ: row.occ_symbol, detail: { mark } };
 
-  const guardBlocked = ctx.fund.is_halted ? "halted" : ch.muted ? "muted" : ctx.fund.mode !== "paper" ? "not_paper" : null;
+  // MANUAL-EXIT twin (cron 2026-06-08b parity): the human owns the exits — drop
+  // every programmed exit intent; the ONE forced exit is the bell backstop.
+  const isManual = /-manual$/i.test(ch.slug);
+  if (isManual && row) {
+    if (ctx.minutesToClose <= policy.MANUAL_BACKSTOP_MIN) intent = { kind: "exit", reason: "manual_eod_backstop" };
+    else if (intent?.kind === "exit") intent = null;
+  }
+
+  // Guard split (cron parity): mute blocks ENTRIES but a muted channel still
+  // manages its open position to close — only the KILL switch or a non-paper
+  // mode freezes exits (the muted-0DTE-trapped-to-expiry bug).
+  const entryGuard = ctx.fund.is_halted ? "halted" : ch.muted ? "muted" : ctx.fund.mode !== "paper" ? "not_paper" : null;
+  const exitFrozen = ctx.fund.is_halted ? "halted" : ctx.fund.mode !== "paper" ? "not_paper" : null;
 
   // ---- exit ----
   if (intent?.kind === "exit" && row && alp) {
     const realized = (mark - entryPx) * row.qty * 100;
-    return { ...base, action: "exit", reason: intent.reason, occ: row.occ_symbol, qty: row.qty, blocked: guardBlocked, detail: { mark: round2(mark), entryPx: round2(entryPx), realizedEst: Math.round(realized) } };
+    return { ...base, action: "exit", reason: intent.reason, occ: row.occ_symbol, qty: row.qty, blocked: exitFrozen, detail: { mark: round2(mark), entryPx: round2(entryPx), realizedEst: Math.round(realized) } };
   }
 
   // ---- entry ----
@@ -214,7 +262,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     const entryExpiry = inCutoff ? ctx.next1DTE : ctx.todayET;
     const occ = occSymbol(config.symbol, entryExpiry ?? ctx.todayET, strike, dir);
 
-    let blocked: string | null = guardBlocked;
+    let blocked: string | null = entryGuard;
     if (!blocked && ch.status !== "armed") blocked = "not_armed";
     if (!blocked && !entryExpiry) blocked = "no_1dte_chain";
     if (!blocked && ch.daily_stop_usd > 0) {
@@ -237,13 +285,17 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       if (expectedMove < policy.COST_GATE_RATIO * roundTrip) blocked = "cost_gate";
     }
     if (!blocked) {
-      const budget = ctx.equity * (ch.capital_pct / 100) * (ch.aggression / 100);
-      qty = Math.max(0, Math.min(Math.floor(budget / (ask * 100)), ch.max_contracts));
+      // RISK-BASED sizing (two-dial model, cron 2026-06-04b parity): capital_pct
+      // holds RISK $/trade; risk per contract = the −50% premium stop = 0.5·ask·100;
+      // qty = risk ÷ that, capped by max_contracts. (Replaces the inert
+      // capital%×aggression% budget that pinned qty to max.)
+      const riskPerContract = 0.5 * ask * 100;
+      qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor(ch.capital_pct / riskPerContract), ch.max_contracts)) : 0;
       if (qty === 0) blocked = "insufficient_capital";
     }
     return {
       ...base, action: "enter", reason: intent.reason, direction: dir, occ, qty, blocked,
-      detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2) },
+      detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close) },
     };
   }
 

@@ -1,13 +1,39 @@
 # Streaming worker — the third engine driver (scope)
 
-Status: **Phase A (SHADOW) BUILT — lives in `worker/`** (committed 2026-06-02). It
-streams, decides, and LOGS intended signals; it places NO orders and writes no prod
-tables (`DRY_RUN=false` is refused in v1). Verified locally end-to-end (auth → seed
-→ boot decision cycle over all 8 channels) on the free iex ws + indicative
-snapshots, markets closed. Prereqs (Alpaca real-time sub + Railway account) are
-still on the user — both only gate *running it live*, not the build. Phase B (live
-orders + cron cutover) is the follow-on. This is the long-term fix for the
-per-minute lag.
+Status: **Phase B EXECUTION BUILT (`stream-2026-06-10a`) — per-channel cutover, OFF
+by default.** The worker can now place real orders, but ONLY for channels whose
+`strategists.executor='stream'` (30_executor_cutover.sql, applied) AND only after
+the TWO-KEY turn on Railway env: `DRY_RUN=false` + `LIVE_TRADING=true` (+ service
+role). Out of the box nothing changes: every channel defaults `executor='cron'`,
+Railway env stays `DRY_RUN=true`, so the deploy is inert shadow exactly as Phase A.
+
+## Phase B cutover runbook (per-channel, reversible)
+1. **B0 (this deploy, inert):** push → Railway redeploys shadow. Cron `2026-06-10a`
+   (paste/MCP-deploy) adds the executor gate: stream-owned channels are skipped
+   while `worker_heartbeat('stream')` is fresh (<5 min), and fall back to
+   **EXIT-ONLY failover** (never entries) when it's stale — a dead Railway box
+   can't strand an open 0DTE.
+2. **B1 (first channel):** set Railway env `DRY_RUN=false LIVE_TRADING=true`, then
+   `update strategists set executor='stream' where slug='grind-v3';` (small RISK,
+   trades often = fastest validation). Watch: heartbeat rows, `stream:` events,
+   fills booking fill-net, cron logging `stream_owned` skips. Rollback at ANY
+   moment: set executor back to 'cron' (cron resumes within a cycle).
+3. **B2:** migrate the SPY roster tier-by-tier (probation channels first, the
+   proven BREAK(ALT)/V3 last).
+4. **B3:** add QQQ support (second symbol/stream or a second instance with
+   `SYMBOL=QQQ` — the `ownedBy` guard already scopes each instance to its symbol),
+   then migrate QQQ channels.
+5. **B4 (full cutover):** `select cron.unschedule('seve-paper-trader');`, flip
+   `WRITE_EQUITY_SNAPSHOTS=true` on Railway (snapshot writer moves over). KEEP
+   `market-ingest` — the dashboard tape doesn't move.
+
+What the executor adds over the cron (same defense stack, transcribed 1:1 —
+fill-net booking 04a, actual-filled-qty 09c, sell-min + reconcile-close 09b,
+anti-ghost reconstruct gate 09d): **stateful entry context** (real entryUnderlying
+/ peak, no reconstruction drift), **fast premium exits** (stop/target/giveback
+checked every `FAST_EXIT_SEC` ≈10s on the live chain instead of once a minute),
+and **cycle reliability** (no missed minutes — the fill-lag probe showed the 180s
+missed-cycle cliff is where latency actually costs money).
 
 **Build-session decisions (the "open questions" below, resolved):** (1) bar source =
 Alpaca minute bars over the ws (trade stream = Phase C); (2) the worker is

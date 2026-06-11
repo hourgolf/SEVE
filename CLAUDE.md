@@ -8,6 +8,32 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-10 — READ THIS FIRST
+Four threads: (1) **Nakamoto strategy audit COMPLETE** — his "Level Reversal+Breakout" ported
+(`engine/nakamoto/`, golden 4,818 checks vs his verbatim python ALL PASS; all 32 live trades
+reproduced) then judged on OUR stack: **NO EDGE** (313 sessions real NBBO: −$10.4k, −$5/t; zero-spread
+−$3.9k → his kit's accounting flips the sign; WR 23–29% vs 28.6% bracket breakeven; confidence score
+carries NO signal). Don't import entries. Memory `nakamoto-backtest-kit-assessment.md`. (2) **Chart UX
+batch SHIPPED** (commit `c253463`): SPY↔QQQ switch re-arms autoscale + restores per-symbol view
+(wall-clock-anchored), → LIVE chip, HOD/LOD on LVL, session separators + premarket tint (custom
+primitive). Known quirk: 1D default window ≈200 bars (poll-vs-history race, pre-existing, ~3-line fix).
+(3) **FILL-LAG VERDICT** (`npm run fill-lag-probe`, memory `fill-lag-verdict.md`): latency is NOT the
+prize — proven edges lose only $67–475 to the cron band over 313 sessions; the 180s missed-cycle CLIFF
+is the real cost (reliability > speed); **the bleeders IMPROVE with lag** (power +$413, QQQ-Break
++$2.3k at 120s = adversely-selected entries — speed makes them WORSE). Live exits already fill at
+design (25 stops avg −50.0% exactly; $315/mo tail). (4) **PHASE B EXECUTION BUILT** (worker
+`stream-2026-06-10a`, inert until turned on): the Railway worker can now place orders for channels
+with `strategists.executor='stream'` (30_executor_cutover.sql APPLIED via MCP) behind a TWO-KEY env
+turn (`DRY_RUN=false` + `LIVE_TRADING=true`); full cron defense stack transcribed (fill-net booking
+04a, actual-qty 09c, sell-min+reconcile 09b, anti-ghost 09d) + stateful entry context + fast premium
+exits (~10s) + `worker_heartbeat`. Cron draft → **`2026-06-10a`** (executor gate: skip stream channels
+while heartbeat fresh; EXIT-ONLY failover when stale) — **⚠ PENDING PASTE-DEPLOY** (verified deployed
+09d == repo HEAD byte-identical pre-edit, so the paste is exactly the +26-line gate). Cutover runbook:
+`docs/streaming-worker.md` (B1 = flip `grind-v3` first). ALSO: consultant review in chat — roster
+17 armed is over-diversified; tier the risk (V3/ALT + manual twins up, power family cut at month-end);
+DB 173MB (export-then-prune plan); manual grind twin is +$1.9k/57 trades live (the operator's edge is
+real and measurable). Prior handoffs below.
+
 ## SESSION HANDOFF — 2026-06-09 — READ THIS FIRST
 Exit-management deep-dive on the live roster (operator-driven). Investigated conservative take-profits →
 exit schemes → the underlying stop → the QQQ trail → the power family. **Net: two LIVE changes shipped, plus

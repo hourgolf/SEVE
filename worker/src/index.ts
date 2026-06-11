@@ -12,7 +12,7 @@
 //  orders. Railway: 1 replica, restart-on-crash, sole order-placer.
 // ============================================================================
 
-import { config } from "./config.js";
+import { config, policy, WORKER_VERSION } from "./config.js";
 import { info, warn, error, shadow } from "./log.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
@@ -20,10 +20,22 @@ import { BarStore, ChainStore } from "./state.js";
 import { StockBarStream } from "./stream.js";
 import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type ShadowDecision } from "./decide.js";
 import { updateShadowManagement } from "./shadowManage.js";
+import { executeEntry, executeExit, executeReconcile, premiumExitReason, seedRemaining, entryKey, type ExecCtx } from "./execute.js";
 import { computeFeatures } from "../../engine/engine";
+import { specPremiumExit } from "../../engine/specEvaluate";
+import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
+
+// Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
+// two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
+const liveMode = (): boolean => !config.dryRun && config.liveTrading && config.hasServiceRole;
+// A channel this instance EXECUTES: stream-owned + this worker's underlying
+// (v1 is single-symbol; QQQ channels migrate in Phase B3 with a second symbol).
+const ownedBy = (c: store.ChannelConfig): boolean => c.executor === "stream" && c.underlying === config.symbol.toUpperCase();
+// Running peak option mid per open position (power giveback + sweep state).
+const peakMidByKey = new Map<string, number>();
 
 const bars = new BarStore(config.barHistory);
 const chain = new ChainStore();
@@ -120,6 +132,45 @@ async function cycle(trigger: string): Promise<void> {
     }
     report(trigger, lastSession, account.equity, decisions);
 
+    // ---- PHASE B: EXECUTE the decisions for channels this worker OWNS ----
+    // (executor='stream' + this symbol). Everything else stays shadow-logged —
+    // the lockstep comparison against the cron continues for free.
+    if (liveMode()) {
+      await store.heartbeat(`${WORKER_VERSION} cycle`);
+      try {
+        const [allOrders, openRowQty] = await Promise.all([alpaca.getOrders(), store.openRowQtyByOcc()]);
+        const exec: ExecCtx = {
+          chain,
+          todayET,
+          etMin: barMin,
+          sinceIso: `${todayET}T00:00:00Z`,
+          allOrders,
+          alpacaByOcc: ctx.alpacaByOcc,
+          remainingByOcc: seedRemaining(alpacaPositions),
+          openRowQty,
+        };
+        const bySlug = new Map(cfg.channels.map((c) => [c.slug, c]));
+        for (const d of decisions) {
+          const ch = bySlug.get(d.slug);
+          if (!ch || !ownedBy(ch)) continue;
+          const row = ctx.openRows.get(ch.id);
+          try {
+            if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
+            else if (d.action === "exit" && row && !d.blocked) await executeExit(d, row, exec);
+            else if (d.action === "enter") await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+            else if (d.action === "hold" && row) {
+              const alp = ctx.alpacaByOcc.get(row.occ_symbol);
+              if (alp) {
+                const unreal = Math.round((alp.current_price - row.avg_entry_price) * row.qty * 10000) / 100;
+                await store.markPositionRow(row.id, alp.current_price, unreal);
+              }
+            }
+          } catch (e) { warn(`execute ${d.slug} failed — ${(e as Error).message}`); }
+        }
+        await store.insertEquitySnapshot(account.equity, account.cash, alpacaPositions.reduce((a, p) => a + p.unrealized_pl, 0));
+      } catch (e) { warn(`live execution pass failed — ${(e as Error).message}`); }
+    }
+
     // Shadow MANAGEMENT what-if: run each managed channel's scale/BE/trail over
     // the live positions on the real-time quote (logs managed-vs-actual; no orders).
     try {
@@ -161,6 +212,62 @@ function report(trigger: string, last: Bar, equity: number, ds: ShadowDecision[]
   }
 }
 
+// ---- PHASE B: fast EXIT sweep -------------------------------------------------
+// Between bar closes (every FAST_EXIT_SEC) check the PREMIUM-side exits for
+// stream-owned open positions on the LIVE chain: catastrophic stop, compiled
+// stop/target, power giveback, the manual-twin bell backstop. Underlying-side
+// exits (ustop / chandelier / strategy intents) stay on the bar-close cycle —
+// they're defined on bars. This is the structural latency win over the minute
+// cron: a crossed stop fires within seconds, not at the next minute boundary.
+async function fastExitSweep(): Promise<void> {
+  if (!liveMode() || cycling) return;
+  const nowMin = alpaca.etParts(Date.now()).min;
+  if (nowMin < RTH_OPEN || nowMin >= RTH_CLOSE) return;
+  const owned = cfg.channels.filter(ownedBy);
+  if (!owned.length || !cfg.fund) return;
+  cycling = true;
+  try {
+    await store.heartbeat(`${WORKER_VERSION} sweep`);
+    if (cfg.fund.is_halted || cfg.fund.mode !== "paper") return; // exits frozen (kill switch)
+    const byId = new Map(owned.map((c) => [c.id, c]));
+    const rows = (await store.getOpenPositions()).filter((r) => byId.has(r.strategist_id));
+    if (!rows.length) return;
+    await refreshChain();
+    const [positions, allOrders] = await Promise.all([alpaca.getPositions(), alpaca.getOrders()]);
+    const todayET = alpaca.etParts(Date.now()).date;
+    const exec: ExecCtx = {
+      chain, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`,
+      allOrders,
+      alpacaByOcc: new Map(positions.map((p) => [p.symbol, p])),
+      remainingByOcc: seedRemaining(positions),
+      openRowQty: await store.openRowQtyByOcc(),
+    };
+    for (const r of rows) {
+      const ch = byId.get(r.strategist_id)!;
+      const mid = chain.byOcc(r.occ_symbol)?.mid ?? 0;
+      if (!(mid > 0)) continue;
+      const key = entryKey(r.strategist_id, r.occ_symbol);
+      const peak = Math.max(peakMidByKey.get(key) ?? r.avg_entry_price, mid);
+      peakMidByKey.set(key, peak);
+      const pe = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
+      const reason = premiumExitReason({
+        row: r, slug: ch.slug, premiumExit: pe,
+        isPowerTrail: policy.POWER_TRAIL_CHANNELS.has(ch.slug),
+        isManual: /-manual$/i.test(ch.slug),
+        minutesToClose: Math.max(0, RTH_CLOSE - nowMin),
+      }, mid, peak);
+      if (!reason) continue;
+      info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (mid ${mid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)})`);
+      await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec);
+      peakMidByKey.delete(key);
+    }
+  } catch (e) {
+    warn(`fast-exit sweep failed — ${(e as Error).message}`);
+  } finally {
+    cycling = false;
+  }
+}
+
 function onBar(bar: Bar): void {
   const isNew = bars.upsert(bar);
   // Only a NEW *RTH* closed bar triggers a decision (after-hours bars update
@@ -174,15 +281,26 @@ async function onReconnect(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  info("SEVE streaming worker — Phase A · SHADOW (the third engine driver)");
+  info(`SEVE streaming worker ${WORKER_VERSION} — the third engine driver`);
   const writeMode = config.hasServiceRole
     ? (config.shadowWriteEvents ? "events" : "none (service role, events off)")
     : "none (anon, read-only)";
-  info(`feeds: stock=${config.stockFeed} opt=${config.optFeed} · dryRun=${config.dryRun} · writes=${writeMode}`);
+  info(`feeds: stock=${config.stockFeed} opt=${config.optFeed} · dryRun=${config.dryRun} · liveTrading=${config.liveTrading} · writes=${writeMode}`);
 
-  if (!config.dryRun) {
-    error("DRY_RUN=false is NOT supported in v1 — Phase A is shadow-only. Live order placement is Phase B (see README). Refusing to start.");
+  // Phase B posture — the TWO-KEY turn. Going live requires DRY_RUN=false AND
+  // LIVE_TRADING=true AND the service role, together; a partial flip refuses to
+  // start rather than guessing. Even fully live, this instance only ever places
+  // orders for channels with strategists.executor='stream' on ITS symbol — the
+  // cron keeps everything else, and defers via the worker_heartbeat dead-man.
+  if (!config.dryRun && !(config.liveTrading && config.hasServiceRole)) {
+    error("DRY_RUN=false requires LIVE_TRADING=true AND the service role (the two-key turn). Refusing to start.");
     process.exit(1);
+  }
+  if (config.liveTrading && config.dryRun) {
+    warn("LIVE_TRADING=true but DRY_RUN=true — staying in SHADOW (set DRY_RUN=false to complete the two-key turn).");
+  }
+  if (liveMode()) {
+    info(`◉ LIVE EXECUTOR — trading executor='stream' channels on ${config.symbol}; heartbeat → worker_heartbeat('stream'); fast exits every ${config.fastExitSec}s`);
   }
 
   // Boot is non-fatal: a transient config/seed failure must not crash-loop the
@@ -203,6 +321,9 @@ async function main(): Promise<void> {
 
   const stream = new StockBarStream(config.symbol, onBar, onReconnect);
   stream.start();
+
+  // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
+  setInterval(() => { void fastExitSweep(); }, Math.max(5, config.fastExitSec) * 1000);
 
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
     process.on(sig, () => { info(`shutdown (${sig})`); stream.stop(); process.exit(0); });

@@ -1,3 +1,12 @@
+// ⚑ WORKER VERSION: 2026-06-10a  (PHASE-B EXECUTOR COORDINATION. Each strategist row now carries
+//   `executor` ('cron' default | 'stream') — 30_executor_cutover.sql, ALREADY APPLIED. A channel
+//   marked 'stream' is traded by the Railway streaming worker, which upserts worker_heartbeat
+//   (id='stream') every ~10s while live. THIS worker's contract for stream-owned channels:
+//   heartbeat FRESH (<5 min) → skip the channel entirely (the stream is the sole order-placer —
+//   two executors on one channel = double orders); heartbeat STALE → EXIT-ONLY FAILOVER: manage
+//   exits/reconcile so a dead Railway box can never strand an open 0DTE, but NEVER open a new
+//   position (blocked=`stream_owned`). With every row defaulting to 'cron' this version is a
+//   no-op until a channel is explicitly migrated. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-09d  (ANTI-GHOST RECONSTRUCT GATE. The re-buy/reconstruct guard resurrected
 //   a row whenever a channel's filled orders net long with no open desk row — meant for a genuinely lost
 //   insert. But a channel whose SHARED contracts were sold by a sibling (a rejected own exit, or a pre-fix
@@ -690,7 +699,15 @@ Deno.serve(async () => {
     const { data: fund } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
     // status + spec_json drive the Add-Channel path (run 13_add_channel.sql BEFORE
     // deploying this — otherwise these columns don't exist and the select errors).
-    const { data: strategists } = await sb.from("strategists").select("id,slug,name,underlying,status,spec_json,strategist_config(*)");
+    const { data: strategists } = await sb.from("strategists").select("id,slug,name,underlying,status,spec_json,executor,strategist_config(*)");
+    // PHASE-B (2026-06-10a): is the streaming worker alive? Fresh beat (<5 min) →
+    // stream-owned channels are ENTIRELY its business this run. Stale/missing →
+    // exit-only failover below (never entries). Read once per run.
+    let streamFresh = false;
+    try {
+      const { data: hb } = await sb.from("worker_heartbeat").select("beat_at").eq("id", "stream").maybeSingle();
+      streamFresh = !!hb && (Date.now() - Date.parse(String((hb as { beat_at?: string }).beat_at ?? 0))) < 5 * 60_000;
+    } catch { /* table missing → treat as stale (cron keeps managing everything) */ }
     const account = await aGet("/v2/account");
     // Track whether the positions read SUCCEEDED — reconciliation (closing a desk
     // row with no Alpaca match) must NEVER run on a transient API error, or it
@@ -753,6 +770,13 @@ Deno.serve(async () => {
      try {
       const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
       if (!cfg) continue;                                           // no config → idle
+      // PHASE-B executor gate (2026-06-10a): a 'stream'-owned channel is the Railway
+      // worker's to trade. Heartbeat fresh → not ours at all this run (skipping is what
+      // makes double-execution impossible). Heartbeat stale → fall through in EXIT-ONLY
+      // failover: exits/reconcile/mark-to-market still run, entries are hard-blocked below.
+      const streamOwned = String((s as { executor?: string }).executor ?? "cron") === "stream";
+      if (streamOwned && streamFresh) { out.push({ slug: s.slug, note: "stream_owned" }); continue; }
+      if (streamOwned) await journal("WARN", `${s.slug}: stream heartbeat STALE — cron exit-only failover this cycle`);
       // MULTI-INSTRUMENT: this channel's market. Default SPY for legacy rows. If the
       // ticker has no session bars yet (e.g. QQQ not ingested this session), skip —
       // never trade blind on an empty tape.
@@ -1047,6 +1071,7 @@ Deno.serve(async () => {
         const entryExpiry = inCutoff ? mkt.next1DTE : todayET;
         const occ = occSymbol(sym, entryExpiry ?? todayET, strike, dir);
         let blocked = guardBlocked;
+        if (!blocked && streamOwned) blocked = "stream_owned"; // failover = exits only; the stream owns entries
         if (!blocked && armBlocked) blocked = "not_armed"; // draft/disabled → no new entries
         if (!blocked && !entryExpiry) blocked = "no_1dte_chain"; // in cutoff but no next expiry quoted
         // Per-CHANNEL idempotency (independence): look ONLY at THIS channel's own
