@@ -8,6 +8,54 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-11 (B1 LIVE DAY) — READ THIS FIRST
+**Next session opens with: (1) `npm run day-report -- --date 2026-06-11` (same-week constraint!),
+(2) execute the AFTER-MARKET CHANGE LIST below.** The Railway stream executor ran its first live day
+(grind-v3, $150); heartbeat + cron `stream_owned` deferral worked; full execution validation = the
+day report. THREE INCIDENTS, all diagnosed, two fixed live:
+- **Partial-fill race (NEW BUG CLASS, fix pending tonight):** grind-manual buy filled ×2 but
+  `aOrderAndFill` polled a partial state → desk row recorded qty 1 → operator's ✕-close sold 1 →
+  **1 uncovered contract rode unmanaged** (caught via Fund-vs-attribution gap +$58; row restored by
+  operator-authorized SQL reconstruction; closed manually). Root cause: fill poll exits on first
+  `filled_avg_price>0`, can capture partials. FIX (tonight): poll to TERMINAL status + re-read final
+  filled_qty in BOTH cron `aOrderAndFill` AND `worker/src/alpaca.ts orderAndFill` (same transcribed
+  pattern). On-demand audit exists: "check coverage" = Alpaca positions vs Σ open rows per OCC.
+- **Spot display two-writer bug — FIXED+SHIPPED (`8870e0f`):** main poll's minute-ingest spot stomped
+  the fast /api/spot live tick every cycle → price snapped backwards 30-50¢ every ~4s (operator
+  caught it side-by-side vs TradingView). Now live-tick precedence; minute spot = fallback >15s quiet.
+- **Alpaca WIDENED the 0DTE open-lockout ~15min → ~30min** ("contract expires soon, unable to open
+  new positions" 422s from 15:33 ET — 27 min before close). Our `OPEN_0DTE_CUTOFF_MIN=16` rolls to
+  1DTE too late → ALL 15:30-15:44 entries rejected (cron channels + manual twins; exits unaffected;
+  account stayed flat — rejected ≠ filled, zero coverage risk). FIX (tonight): cutoff 16→31 in the
+  cron draft + `worker/src/config.ts` policy, deploy via `npm run cron:deploy -- --yes` (pipeline
+  CERTIFIED: revision-sentinel verify, v54 deployed via it).
+
+**RESEARCH (committed `9dad6cc`, memory `entry-window-verdict.md`): the first entry-side config wins
+to PASS the 5-window bar.** `hour-edge-probe`: V3/ALT edge = the 10:xx first-leg (V3 +$9.6k of
++$10.0k); **14:xx entries negative family-wide** (mechanism: ride needs RUNWAY — tail-capped by the
+15:25 flatten). `entry-window-probe` validation: **ALT entries→14:00 PASSES 5/5 windows
+(+$6.7k→+$8.6k); V3 →14:00 PASSES (+$10.0k→+$11.5k, +94/t)**. ORB midday rescue REFUTED (Mar26 chop
+mirage) → cut list stands; power has NO rescue hour (482/522 trades bleed in its own window);
+QQQ-Break red every hour. V3 morning-only footnote: all-5-windows-positive, half the trades, same
+total (operator risk-preference alt, NOT armed). Also: cost-model Q&A — fees 4¢/side (Alpaca reg
+pass-throughs), slippage 1 tick/side ON TOP of crossing real NBBO, live fill audit validates the
+model; `spreadCrossFrac` exists for limit-order math but DON'T flip it until the stream's
+marketable-limit ladder MEASURES real capture (Nakamoto's fill-at-trigger optimism = the cautionary
+receipt).
+
+**AFTER-MARKET CHANGE LIST (tonight, in order):**
+1. `OPEN_0DTE_CUTOFF_MIN` 16→31 (cron draft + worker policy) → cron:deploy + git push (Railway).
+2. Terminal-status fill poll (cron aOrderAndFill + worker orderAndFill) — kills the partial-fill class.
+3. day-report: add account-vs-rows coverage-drift flag.
+4. Close-reason tagging (tag-AFTER-fill chips, never friction before) + taken-vs-skipped participation
+   logging — the operator-selection dataset (the scalp-twin verdict says selection is his compilable half).
+5. ON OPERATOR'S WORD: arm V3+ALT entries→14:00 (one `time_before` edit in each spec_json, reversible).
+6. Roster cuts (operator inclined, evidence final): power×3, base breakout, breakout-qqq, orb-spy-trail,
+   grind-smart, orb-trend-rider → 17→~8 channels. Sooner than month-end is on the table.
+7. Probe queue: QQQ-V3 port (refresh QQQ Databento ~$0.20 first), level-context gating
+   (engine/nakamoto/levels.ts validated infra), confirmation-delay on adversely-selected entries,
+   `npm run mfe-drift` first real run (refresh SPY Databento too — cache ends 06-01).
+
 ## SESSION HANDOFF — 2026-06-10 — READ THIS FIRST
 Four threads: (1) **Nakamoto strategy audit COMPLETE** — his "Level Reversal+Breakout" ported
 (`engine/nakamoto/`, golden 4,818 checks vs his verbatim python ALL PASS; all 32 live trades
