@@ -70,6 +70,40 @@ day-report coverage section stays ✓ clean; (4) STREAM light green, `stream-202
   (mute = draft; exits still wind down; re-arm = status='armed'; pull slugs per keep calls):
   `update strategists set status='draft' where slug in ('power','power-smart-entries','power-final30','breakout','breakout-qqq','orb-spy-trail','grind-smart-entries','orb-trend-rider');`
 
+**PROBE QUEUE RESULTS (same evening, after the change list — Databento refreshed →06-10
+both tickers ~$0.40; outputs `docs/*-2026-06-11.txt`; new tools `npm run qqq-v3-probe |
+level-gate-probe | confirm-delay-probe`; memory `probe-queue-2026-06-11.md`):**
+- **QQQ-V3 port: NO TRANSFER — don't port, don't buy OOS windows.** 71 sessions Mar→Jun26
+  real NBBO: QQQ V3(→14:00) −$23.5/t pooled −$1,035 (AprMay26 −$5,819) vs SPY V3 +$131/t
+  +$4,585 SAME stretch. QQQ morning-only +$2,489 = one hot Jun split (mirage shape).
+  Incumbent builtin ORB −$8,817 re-confirms the breakout-qqq cut. Bonus: SPY →14:00 beats
+  →15:25 in-stretch — corroborates last night's arm.
+- **Level-context gating: REFUTED on the keep-list.** 320 sessions, nakamoto warmupLevels
+  (pre-session, no look-ahead), pre-registered G1 room-to-run 0.10/0.20% + G2 at-level
+  ±0.05%: EVERY gate lowers V3/ALT pooled (V3 +$15,995→+$8.8k/+$9.3k/+$5.8k), ORB flips
+  negative. Rides want structure CROSSINGS, not avoidance; the $5 grid blankets the tape.
+  Same grave as breakeven/late-gate/regime-gate. Closes "Nakamoto's lever = levels" for
+  our channels.
+- **Confirmation-delay: first entry filter to BEAT its mechanical control — still not
+  wire-worthy.** power(base): persist-2m −$10.8k vs delay-veto-2m −$18.6k vs baseline
+  −$27.6k → the persistence re-check is a REAL filter (+$7.8k over pure lag, n 537→353)
+  but stays −EV 4/5 windows = harm reduction for a cut-listed channel. QQQ-Break: no
+  filter signal. Don't wire either.
+- **mfe-drift first real run:** 10/13 LOW-SAMPLE (expected, 11 live days); 3 DRIFTs all
+  live-runs-HOT (breakout 52% win vs 34% model · power 56 vs 19, +$20 vs −$4/ct ·
+  power-smart 62 vs 28) — model omits the giveback trail + daily latch, stretch favored
+  leans. Month-end input, not action; power-smart counter-receipt #2.
+
+**RAILWAY FULL-STREAM COUNTERFACTUAL (06-11): net ≈ −$100±150 — execution P&L is NOT the
+B2 case.** Quote paths prove both quantization events were GAPS, not drifts: 736C bid
+2.15→3.61 in ONE minute through the +100% target (the cron's late exit banked ~$250-375
+MORE than a 10s sweep would have); 726P 1.30→0.63 through the −50% stops (sweep recaptures
+only ~$190 of the $230 overshoot). Lockout 422s = same broker wall both executors; clusters
+= signal-level, executor-independent; bleeders get WORSE with speed (fill-lag). What the
+stream actually proved today: grind-v3's 1-2m fast-target exits + the first CROSS-EXECUTOR
+shared-OCC netting (stream grind-v3 vs 5 cron channels on 733C/726P, books Δ$4). B2 =
+reliability + state; order per runbook — after month-end cuts, ALT then V3 last.
+
 ## SESSION HANDOFF — 2026-06-11 (B1 LIVE DAY) — prior
 **Next session opens with: (1) `npm run day-report -- --date 2026-06-11` (same-week constraint!),
 (2) execute the AFTER-MARKET CHANGE LIST below.** [DONE 06-11 evening — see the section above.] The Railway stream executor ran its first live day

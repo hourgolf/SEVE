@@ -1,0 +1,24 @@
+
+> seve-live-market-monitor@0.1.0 confirm-delay-probe
+> tsx engine/confirm-delay-probe.ts
+
+
+  CONFIRMATION-DELAY probe · adversely-selected entries · real NBBO · ride −50% stop · cost gate 3.0
+  READ: persist ≫ delay-veto at same k = real filter edge; persist ≈ delay-veto = lag again (refuted).
+
+  POWERHOUR(base) SPY — 320 sessions
+    variant             exp$/t   n   win%     pooled$    CHOP Mar26  TREND AprMay  TREND-OOS MA      TREND 24  CHOP-MIX 25-
+    baseline (k=0)       -51.3  537   17%     -27561         +2430         -2684         -8526         -6307        -11685
+    persist k=1          -44.8  443   18%     -19830          +754          -352         -6638         -4567         -7340
+    persist k=2          -30.6  353   18%     -10789         +2992          +877         -5174         -3614         -4119
+    persist k=3          -49.6  251   21%     -12438         -1302         +1294         -3638         -3816         -3983
+    delay-veto k=2       -35.0  531   20%     -18573         +1023         -2989         -5330         -4916         -6824
+
+  QQQ-Break(builtin) — 71 sessions
+    variant             exp$/t   n   win%     pooled$         Mar26      AprMay26         Jun26
+    baseline (k=0)       -46.7  122   28%      -5694         -3430         -2355           +91
+    persist k=1          -52.9   52   37%      -2749          -857         -1420          -472
+    persist k=2          -75.4   22   32%      -1659          -538           +64         -1185
+    persist k=3         -188.7   10   20%      -1887          -829            -1         -1057
+    delay-veto k=2       -27.4  146   28%      -4001          -910         -2997           -94
+

@@ -1,0 +1,24 @@
+
+> seve-live-market-monitor@0.1.0 qqq-v3-probe
+> tsx engine/qqq-v3-probe.ts
+
+
+  QQQ-V3 PORT PROBE · one covered stretch — a PORT GATE, not an arm ticket
+
+  QQQ — 71 sessions (2026-03-02 → 2026-06-10, real NBBO, ride −50% stop, cost gate 3.0)
+  variant                   exp$/t   n   win%     pooled$      Mar26   AprMay26      Jun26
+  V3 as-armed (→14:00)      -23.5   44   20%      -1035       +797      -5819      +3987
+  V3 original (→15:25)      -27.8   55   22%      -1526       -166      -7219      +5859
+  V3 morning-only →11:00   +165.9   15   20%      +2489      -2792        -10      +5291
+  builtin ORB (incumbent)    -72.3  122   28%      -8817      -5145      -3718        +46
+
+  SPY — 71 sessions (2026-03-02 → 2026-06-10, real NBBO, ride −50% stop, cost gate 3.0)
+  variant                   exp$/t   n   win%     pooled$      Mar26   AprMay26      Jun26
+  V3 as-armed (→14:00)     +131.0   35   31%      +4585      +1758      -1874      +4702
+  V3 original (→15:25)      +92.4   46   33%      +4250      +1090      -1793      +4953
+  V3 morning-only →11:00   +428.8   13   38%      +5574      +2499      +1366      +1709
+  builtin ORB (incumbent)    -41.8  112   34%      -4680      -3128      -1363       -189
+
+  READ: port interest = QQQ V3 ≥ +EV pooled AND ≥2/3 splits green AND beats the
+  incumbent builtin ORB. Arming would still need the bought-data 5-window bar.
+

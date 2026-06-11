@@ -1,0 +1,103 @@
+
+> seve-live-market-monitor@0.1.0 mfe-drift
+> tsx --env-file=.env.local scripts/mfe-drift.ts
+
+
+  MFE-DRIFT monitor · live = last 14d (~11 trading days) vs model = last 60 Databento-covered sessions
+  13 armed auto channels (manual twins excluded) · detection only — feeds the month-end promote/cut ladder, NEVER auto-tunes
+
+  loading model data for QQQ…
+  loading model data for SPY…
+  ▶ breakout-qqq
+  ▶ orb-qqq-trail
+  ▶ qqq-thrust-trail
+  ▶ breakout
+  ▶ breakout-smart-entries
+  ▶ breakout-alt-v3
+  ▶ grind-v3
+  ▶ grind-smart-entries
+  ▶ orb-trend-rider
+  ▶ orb-spy-trail
+  ▶ power-final30
+  ▶ power-smart-entries
+  ▶ power
+  channel                   u     live n(pk)     t/d L|M   MFEmed L|M   win% L|M   hold L|M   give L|M     $/ct L|M  verdict
+  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  breakout-qqq              QQQ       12(12)     1.1|1.7    +44%|+10%      50|28     12m|6m    76%|68%     +$9|−$11  LOW-SAMPLE ⚠
+  orb-qqq-trail             QQQ         5(5)     0.5|0.8    +92%|+25%      80|57    17m|16m    42%|62%    +$110|−$1  LOW-SAMPLE ⚠
+  qqq-thrust-trail          QQQ         4(4)     0.4|0.6    +19%|+14%      25|37    15m|12m   105%|57%    −$41|−$16  LOW-SAMPLE ⚠
+  breakout                  SPY       21(18)     1.9|1.6    +26%|+15%      52|34     13m|6m    83%|73%     +$30|−$6  DRIFT
+  breakout-smart-entries    SPY         9(8)     0.8|0.5    +41%|+51%      44|44    35m|70m     15%|2%    +$11|+$23  LOW-SAMPLE
+  breakout-alt-v3           SPY         6(6)     0.5|0.5    +24%|+51%      33|45     9m|53m    16%|27%    +$13|+$23  LOW-SAMPLE ⚠
+  grind-v3                  SPY       15(15)     1.4|3.7     +16%|+2%      33|45      3m|2m      7%|5%     +$10|−$3  LOW-SAMPLE ⚠
+  grind-smart-entries       SPY       19(15)     1.7|2.2    +38%|+34%      42|44    18m|14m      3%|3%      −$9|+$1  LOW-SAMPLE
+  orb-trend-rider           SPY       18(17)     1.6|2.1    +38%|+55%      33|46    27m|42m    100%|3%     −$12|+$7  LOW-SAMPLE ⚠
+  orb-spy-trail             SPY         3(3)     0.3|0.3    +30%|+23%      33|42    44m|17m   158%|63%    −$44|−$29  LOW-SAMPLE ⚠
+  power-final30 (muted)     SPY         4(4)     0.4|1.8      +4%|+3%       0|18      5m|4m      —|96%     −$82|−$5  LOW-SAMPLE ⚠
+  power-smart-entries       SPY       26(12)     2.4|1.2    +30%|+25%      62|28     4m|17m    56%|87%     +$14|−$8  DRIFT
+  power                     SPY       39(19)     3.5|1.9     +19%|+7%      56|19      4m|5m   52%|118%     +$20|−$4  DRIFT
+
+  exit-reason mix (live → model):
+  breakout-qqq               L: trail 89% · target 11% (9/12 tagged)
+                             M: trail 97% · stop 2% · time 1% (100t · 2026-03-17→2026-06-10)
+                             ⚠ MFE med +44% live vs +10% model (Δ>15pts)
+                             ⚠ WIN 50% live vs 28% model (Δ>10pts)
+  orb-qqq-trail              L: trail 75% · stop 25% (4/5 tagged)
+                             M: trail 71% · stop 29% (51t · 2026-03-17→2026-06-10)
+                             ⚠ MFE med +92% live vs +25% model (Δ>15pts)
+                             ⚠ WIN 80% live vs 57% model (Δ>10pts)
+  qqq-thrust-trail           L: stop 50% · trail 50% (2/4 tagged)
+                             M: trail 57% · stop 43% (35t · 2026-03-17→2026-06-10)
+                             ⚠ WIN 25% live vs 37% model (Δ>10pts)
+  breakout                   L: trail 63% · other 21% · stop 11% · time 5% (19/21 tagged)
+                             M: trail 96% · time 3% · stop 1% (93t · 2026-03-17→2026-06-10)
+                             ⚠ WIN 52% live vs 34% model (Δ>10pts)
+                             ⚠ HOLD 13m live vs 6m model (>2x)
+                             ⚠ EXIT MIX shifted: 'trail' 63% live vs 96% model
+  breakout-smart-entries     L: stop 33% · time 22% · target 22% · other 22% (9/9 tagged)
+                             M: stop 52% · target 41% · time 7% (27t · 2026-03-17→2026-06-10)
+  breakout-alt-v3            L: other 50% · stop 17% · time 17% · target 17% (6/6 tagged)
+                             M: stop 52% · target 39% · time 10% (31t · 2026-03-17→2026-06-10)
+                             ⚠ MFE med +24% live vs +51% model (Δ>15pts)
+                             ⚠ WIN 33% live vs 45% model (Δ>10pts)
+                             ⚠ HOLD 9m live vs 53m model (>2x)
+                             ⚠ EXIT MIX flipped: live exits mostly 'other', model mostly 'stop'
+  grind-v3                   L: stop 40% · target 27% · other 20% · time 13% (15/15 tagged)
+                             M: stop 52% · target 44% · time 4% (223t · 2026-03-17→2026-06-10)
+                             ⚠ WIN 33% live vs 45% model (Δ>10pts)
+  grind-smart-entries        L: stop 53% · target 33% · other 13% (15/19 tagged)
+                             M: stop 52% · target 43% · time 5% (134t · 2026-03-17→2026-06-10)
+  orb-trend-rider            L: other 38% · stop 31% · target 25% · time 6% (16/18 tagged)
+                             M: stop 50% · target 44% · time 6% (128t · 2026-03-17→2026-06-10)
+                             ⚠ MFE med +38% live vs +55% model (Δ>15pts)
+                             ⚠ WIN 33% live vs 46% model (Δ>10pts)
+                             ⚠ GIVEBACK med 100% live vs 3% model (Δ>25pts)
+                             ⚠ EXIT MIX flipped: live exits mostly 'other', model mostly 'stop'
+  orb-spy-trail              L: stop 67% · trail 33% (3/3 tagged)
+                             M: trail 58% · stop 42% (19t · 2026-03-17→2026-06-10)
+                             ⚠ HOLD 44m live vs 17m model (>2x)
+  power-final30              L: stop 67% · time 33% (3/4 tagged)
+                             M: stop 63% · time 37% (109t · 2026-03-17→2026-06-10)
+                             ⚠ entry RATE 0.36/d live vs 1.82/d model
+                             ⚠ WIN 0% live vs 18% model (Δ>10pts)
+  power-smart-entries        L: other 52% · stop 26% · target 13% · time 9% (23/26 tagged)
+                             M: stop 56% · time 23% · target 21% (71t · 2026-03-17→2026-06-10)
+                             ⚠ WIN 62% live vs 28% model (Δ>10pts)
+                             ⚠ HOLD 4m live vs 17m model (>2x)
+                             ⚠ GIVEBACK med 56% live vs 87% model (Δ>25pts)
+                             ⚠ EXIT MIX flipped: live exits mostly 'other', model mostly 'stop'
+  power                      L: stop 53% · other 39% · trail 6% · time 3% (36/39 tagged)
+                             M: stop 68% · time 32% (114t · 2026-03-17→2026-06-10)
+                             ⚠ WIN 56% live vs 19% model (Δ>10pts)
+                             ⚠ GIVEBACK med 52% live vs 118% model (Δ>25pts)
+
+  CAVEATS — read before acting:
+  · model window ends 2026-06-10 (local Databento cache) — the live week is NOT in the model window;
+    a flag can be regime, not drift (06-09..11 = two −1.2% days + a 20-leg whipsaw). Refresh: npm run backfill:databento [-- --underlying QQQ].
+  · live MFE/giveback need option_quotes (7-DAY retention, no nightly export exists) — 'pk' counts trades with peak coverage; run this weekly.
+  · live exit reasons parse the worker journal in events (30d): '—' = no matching journal line (bucketed 'other').
+  · $/ct = P&L per CONTRACT per trade (live sizes RISK-$ 1-4 lots; model sizes max_contracts — totals aren't comparable, per-contract is).
+  · model omits the live daily-stop latch + power's +100%-engage giveback trail; live week may truncate after a latch.
+  · DETECTION ONLY: divergence feeds the month-end promote/cut verdict (human). Do NOT retune targets/trails from this output
+    (tier2-conservative-targets / breakeven-stop / late-leans-gate verdicts: exit auto-tuning from realized distributions is the mirage).
+

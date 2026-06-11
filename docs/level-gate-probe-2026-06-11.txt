@@ -1,0 +1,23 @@
+
+> seve-live-market-monitor@0.1.0 level-gate-probe
+> tsx engine/level-gate-probe.ts
+
+
+  LEVEL-GATE probe · nakamoto warmup levels (pre-session, no look-ahead) · real NBBO · ride −50% stop · cost gate 3.0
+  320 sessions levelled (0 skipped: <30 prior dailies at the corpus head) · V3/ALT carry the ARMED →14:00 window
+  ARM BAR: helps/neutral in ≥4 of 5 windows AND lifts pooled exp$/t.
+
+  channel·variant                exp$/t   n   blk     pooled$    CHOP Mar26  TREND AprMay  TREND-OOS MA      TREND 24  CHOP-MIX 25-
+  V3  baseline (as-live)       +125.9  127     0     +15995         +1758         -1874         +1642         +1951         +7816
+  V3  G1a room-to-run 0.10%     +77.3  114   129      +8807          -774         -3740         +2214         +1537         +8797
+  V3  G1b room-to-run 0.20%    +108.6   86   288      +9337         +1202         -2298         +1928         +2188         +4608
+  V3  G2 at-level ±0.05%       +112.1   52   504      +5831         -1876          -945         +1021          +742         +4574
+  ALT baseline (as-live)       +115.3  114     0     +13145          -203         -3319          +809         +1951         +9205
+  ALT G1a room-to-run 0.10%     +88.7  101   113      +8958         -2734         -2928         +1380         +1537        +10930
+  ALT G1b room-to-run 0.20%    +106.1   74   242      +7848          -759         -2069         +1095         +2188         +5684
+  ALT G2 at-level ±0.05%       +123.6   46   400      +5684          -849         -2913         +1021          +508         +5601
+  ORB baseline (as-live)        +22.9  300     0      +6858          +982         +1949         -8853         +2394          -415
+  ORB G1a room-to-run 0.10%     -12.0  287   468      -3450         +1240          -312         -8725          -210         -4973
+  ORB G1b room-to-run 0.20%     -33.1  254  1343      -8414         +4311          -395         -7856         -1949        -11911
+  ORB G2 at-level ±0.05%        -16.0  201  2626      -3216          +346         +2640         -5747         -2369         -3056
+
