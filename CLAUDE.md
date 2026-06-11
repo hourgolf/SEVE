@@ -34,6 +34,29 @@ while heartbeat fresh; EXIT-ONLY failover when stale) — **⚠ PENDING PASTE-DE
 DB 173MB (export-then-prune plan); manual grind twin is +$1.9k/57 trades live (the operator's edge is
 real and measurable). Prior handoffs below.
 
+**LATE-NIGHT ADDENDUM (same session): B1 IS ARMED + new ops/analysis stack.** (1) Cron `2026-06-10a`
+deployed (v54) — now via **`npm run cron:diff` / `cron:deploy`** (scripts/cron-deploy.ts, Supabase
+Management API, `SUPABASE_ACCESS_TOKEN` in .env.local; revision-sentinel verify because the API serves
+transpiled ESZIP — paste workflow RETIRED). (2) **Railway worker LIVE-armed** (DRY_RUN=false +
+LIVE_TRADING=true set) with **grind-v3 executor='stream' at $150 risk** (knob fixed from $500) — the
+B1 validation channel; stale-bar order guard added (restarts can't act on old bars); heartbeat
+verified beating. Day-1 watch: STREAM light green on OPS·PRE-FLIGHT at the open, `stream:` events,
+fill-net booking, `stream_owned` cron skips; kill test after first clean round-trip. (3) **Desk UI
+batch shipped**: OPS·PRE-FLIGHT panel (stream/cron/exec/risk lights, desktop §03 + mobile sheet),
+position rows get peak/giveback context line (amber ≥50% gave), "attribution" relabel, chart 1D
+window fix. (4) **`npm run day-report [-- --date …]`** = deterministic daily forensics (tape shape/
+whipsaw flag, NAV-vs-attribution, per-trade entry→peak→exit + MFE/giveback/exit-reason, cluster/
+re-lean/latch flags) — replaces the LLM autopsy as numbers backbone; run SAME-WEEK (needs 7d quotes).
+06-10 verdict: −$3.1k day = $3,775 given back from peaks on 6 green→red trades on a 20-leg QQQ
+whipsaw; 11:12 P731 cluster = one bet ×5-6 channels (correlation, not direction, was the loss).
+(5) **Operator manual-exit study + `npm run scalp-twin-probe`**: his exits have REAL 15-min timing
+skill (+$1.5-2.6k saved vs holding 15m; 11/11 on breakout-manual) but cut $13k+ of 30-min tail; the
+CODIFIED policy (grind entries + fast target/time exits, 8 variants) bleeds −$18..−$23/t across ALL
+5 windows (~7k trades each) vs his +$33/t live → **the operator is UNCOMPILABLE at minute granularity
+— the manual book is a legitimate channel (selection + intra-minute timing), not helicopter
+parenting.** Next instrumentation: close-reason tag + participation logging (signals taken vs
+skipped) so his SELECTION can inform machine entry filters.
+
 ## SESSION HANDOFF — 2026-06-09 — READ THIS FIRST
 Exit-management deep-dive on the live roster (operator-driven). Investigated conservative take-profits →
 exit schemes → the underlying stop → the QQQ trail → the power family. **Net: two LIVE changes shipped, plus

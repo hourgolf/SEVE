@@ -31,6 +31,7 @@
     "nakamoto-repro": "tsx engine/nakamoto/repro.ts",
     "nakamoto-phase2": "tsx engine/nakamoto/phase2.ts",
     "fill-lag-probe": "tsx engine/fill-lag-probe.ts",
+    "scalp-twin-probe": "tsx engine/scalp-twin-probe.ts",
     "day-report": "tsx --env-file=.env.local scripts/day-report.ts",
     "cron:diff": "tsx --env-file=.env.local scripts/cron-deploy.ts",
     "cron:deploy": "tsx --env-file=.env.local scripts/cron-deploy.ts --deploy",
