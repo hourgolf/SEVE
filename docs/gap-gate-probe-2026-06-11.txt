@@ -1,0 +1,29 @@
+
+> seve-live-market-monitor@0.1.0 gap-gate-probe
+> tsx engine/gap-gate-probe.ts
+
+
+  GAP-GATE verification · breakout family · real NBBO · 320 SPY sessions
+
+  ══ A. 5-WINDOW robustness — gate: trade only when |gap| ≥ thr ══
+  ALT:   gate     exp$/t    n   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+            all   +115.3  114          -20         -237          +30          +89         +256
+         ≥0.15%   +151.3   87          +32         -244          -15         +194         +318
+         ≥0.25%   +251.6   67          +32         -297          +36         +334         +532
+         ≥0.35%   +297.9   52          +32         -213         +281         +213         +460
+
+  V3:   gate     exp$/t    n   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+            all   +125.9  127         +135         -110          +57          +89         +191
+         ≥0.15%   +167.0   95         +188         -117          -28         +194         +285
+         ≥0.25%   +274.7   73         +234          -87          +36         +334         +459
+         ≥0.35%   +367.4   55         +234         +136         +281         +213         +499
+
+  ══ B. INDEPENDENCE vs OR width (pooled ALT+V3+ORB, 541 trades) ══
+  corr(|gap|, OR-width) = 0.42   (high ⇒ proxies; low ⇒ independent) · width split at median 0.33%
+  2×2 exp$/t (n):            narrow OR (<0.33%)        wide OR (≥0.33%)
+  flat |gap|<0.25%                 +24/t (67)         -136/t (136)
+  gappy |gap|≥0.25%                +96/t (71)         +173/t (267)
+
+  READ: gap is REAL+independent if (A) a gate holds ≥4/5 windows + lifts exp$/t AND (B) gappy>flat
+  within BOTH width columns. Redundant if the 2×2 gap rows converge once width is fixed (corr high).
+
