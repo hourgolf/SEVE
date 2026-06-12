@@ -74,7 +74,9 @@
     "weekly-autopsy": "tsx engine/weekly-autopsy.ts",
     "backfill:bars": "tsx scripts/backfill-bars.ts",
     "backfill:options": "tsx scripts/backfill-options.ts",
-    "backfill:databento": "tsx scripts/backfill-databento.ts"
+    "backfill:databento": "tsx scripts/backfill-databento.ts",
+    "fomc-resolution-probe": "tsx engine/fomc-resolution-probe.ts",
+    "cross-gap-probe": "tsx engine/cross-gap-probe.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

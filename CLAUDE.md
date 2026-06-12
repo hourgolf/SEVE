@@ -48,6 +48,24 @@ known benign edge: market holidays page ~09:40). `firePush` gained a tag param s
 replace the ✋ twin pings. Courses 3–5 parked: chart entry-lines/VWAP bands · the declutter sweep
 (do WITH the operator at the screen) · multi-account/paper-lab cockpit.
 
+**LATE-NIGHT RESEARCH COOK (operator's "COOOK!!", same evening — 2 bench probes, memory updated):**
+- **FOMC resolution trade (`npm run fomc-resolution-probe`, NEW): PAPER-LAB CANDIDATE, collecting.**
+  18 in-corpus FOMC days: mechanism real (60% continuation on ≥0.10% statement moves, +0.21%
+  avg follow-through); **follow@14:30 +$678/t, 60% win (n=5** — cost gate blocked the other 5;
+  ⚠ 2024-12-18 alone = 71% of the P&L); **FADE is DEAD (0% win)** — inversion filed; the edge
+  decays monotonically with delay (14:30 +376/t → 15:00 −189/t) = it lives in the resume minute.
+  Anecdote-grade BY CONSTRUCTION — nothing arms; **re-run after every live FOMC (Wednesday 06-17
+  adds day 19)**; graduates only if the one-day concentration dissolves as n grows.
+- **ma_cross × gap compose (`npm run cross-gap-probe`, NEW): REFUTED at the pre-registered bar.**
+  Gate lifts pooled exp$/t +17.2→+58.5 and helps 4/5 windows — but **ex-CHOP-MIX the gated book
+  is still red** (−$1,457; fingerprint #1 fires) = the third "filter the crossover into health"
+  refutation. **Don't build tf>1 worker support for it.** Residue: the gap SIGNAL re-validated on
+  yet another shape (flat-open crossover −17/t vs gap-day +73/t) — gap_min stays armed where it
+  earns (V3/ALT); future momentum candidates get gap-gated FIRST before anything fancier.
+  Probe fix en route: aggregate() stamps 15m buckets at their START ts → probes must remap to the
+  bucket's LAST 1m ts or option fills look ahead ~15min (cross-gap-probe does; pattern for any
+  future tf>1 probe).
+
 **VALIDATION RECEIPTS (morning watch, all green):** (1) gap_min FAIL-CLOSED CHECK PASSED —
 stream rationales carried `gap: 0.424` from the open; V3 traded THROUGH the open gate at 11:22
 (−$315 stop_premium at −51.5% vs design −50% — the stream's stop precision on a live loss;
@@ -101,7 +119,9 @@ worker logs (+75%/giveback/latch pages land on the phone);
 (3) Monday's gap = Monday open vs FRIDAY close (weekend news lands in the gap — by design);
 (4) BAR_HISTORY 2400 = full Friday session in memory (pdh/pdl + gap refs intact all day).
 **WEDNESDAY 06-17: first live FOMC stand-down, 13:50–14:30 — the whole machine roster is now
-covered (twins exempt by design).**
+covered (twins exempt by design); the worker pages "⚑ event stand-down" when the flatten fires.
+POST-CLOSE: re-run `npm run fomc-resolution-probe` (the live day = dataset day 19 for the
+paper-lab candidate) — and eyeball 14:30→15:25 on the day report against the resolution thesis.**
 
 **PB-RIDE DRAFTED (operator's word, same evening — commit `a608c36`, worker `stream-2026-06-12b`):**
 the resurrected pullback is now a REGISTRY builtin (`engine/strategies/pullback.ts`, 1:1 port,

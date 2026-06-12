@@ -1,0 +1,41 @@
+
+> seve-live-market-monitor@0.1.0 fomc-resolution-probe
+> tsx engine/fomc-resolution-probe.ts
+
+
+  FOMC-RESOLUTION probe · 585 SPY sessions · 18 FOMC days in-corpus · 18 with NBBO chains
+  resolution = sign(14:00→14:30 move) · entries at the stand-down resume · ride exits (−50% stop · 15:25 flatten) · gate 3.0
+
+  ══ MECHANISM (underlying, n=18) — does 14:00→14:30 continue into 14:30→15:25? ══
+  all days:        continuation 10/18 (56%) · avg |statement move| 0.17% · avg signed follow-through +0.142%
+  |move| ≥ 0.10%:  continuation 6/10 (60%) · avg signed follow-through +0.206%
+
+  ══ OPTION P&L (real NBBO, live-faithful) — per variant × resolution threshold ══
+  variant          thr     n   win%   avg$/t    total$   stop%
+  FOLLOW @14:30      any     8    50%     +376     +3008    38%
+  FOLLOW @14:30   ≥0.10%     5    60%     +678     +3388    20%
+  FOLLOW @14:45      any    16    44%      +76     +1210    44%
+  FOLLOW @14:45   ≥0.10%     9    44%      +79      +710    44%
+  FOLLOW @15:00      any    17    24%     -189     -3206    47%
+  FOLLOW @15:00   ≥0.10%    10    30%     -131     -1307    50%
+  FADE   @14:30      any     8    13%     -285     -2278    75%
+  FADE   @14:30   ≥0.10%     5     0%     -432     -2162    80%
+
+  ══ PER-DAY RECEIPTS — FOLLOW @14:30, |move| ≥ 0.10% (the headline variant) ══
+  date         move%    cont%   dir    pnl$   exit
+  2024-03-20  + 0.24  + 0.47   call    +702  flatten_1525
+  2024-05-01  + 0.20  + 0.75   call    gate  blocked/no-fill
+  2024-06-12  + 0.22  -0.22   call    gate  blocked/no-fill
+  2024-07-31  + 0.33  -0.19   call    gate  blocked/no-fill
+  2024-09-18  -0.22  -0.21   put     -120  flatten_1525
+  2024-12-18  -0.72  -0.90   put    +2412  flatten_1525
+  2025-05-07  -0.33  + 0.19   put     -708  stop_premium
+  2025-06-18  -0.23  -0.11   put     gate  blocked/no-fill
+  2026-03-18  -0.14  -0.52   put    +1104  flatten_1525
+  2026-04-29  -0.15  + 0.31   put     gate  blocked/no-fill
+
+  READ (pre-registered): N≈18 = ANECDOTE-GRADE — no arm off this probe, ever.
+  Paper-lab candidate IF: mechanism continuation ≥ ~60% on meaningful moves AND the headline
+  variant is positive with win% above the 28.6% bracket-breakeven. Mixed = park (re-run after
+  each live FOMC adds a day). Anti-edge (fade wins instead) = file the inversion, stay flat.
+

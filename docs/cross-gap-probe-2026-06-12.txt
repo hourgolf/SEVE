@@ -1,0 +1,32 @@
+
+> seve-live-market-monitor@0.1.0 cross-gap-probe
+> tsx engine/cross-gap-probe.ts
+
+
+  CROSS×GAP probe · 15m EMA(12/26) crossover (locked defaults, tfMin=15) · real NBBO · 308 sessions across 5 windows
+  gate: trade only when |overnight gap| ≥ thr · −50% prem stop · cost gate 3.0 · ustop 0 · no-look-ahead 15m ts
+
+  ══ A. 5-WINDOW GAUNTLET — total$ by gap floor (exp$/t·n beneath) ══
+  window                 baseline   |gap|≥0.15   |gap|≥0.25   |gap|≥0.35
+  CHOP Mar26               -1498        -1227        -1227        -1227
+                        -187.2·8     -204.5·6     -204.5·6     -204.5·6
+  TREND AprMay26            +390        +1129         -279         -631
+                        +30.0·13    +102.6·11      -46.5·6     -210.5·3
+  TREND-OOS MA25           -4269        -2864        -1457        -1168
+                       -133.4·32    -168.5·17    -132.5·11     -146.0·8
+  TREND 24                  +931        +1505         +430         -319
+                        +42.3·22    +107.5·14      +85.9·5     -159.5·2
+  CHOP-MIX 25-26           +6063        +5081        +5162        +4035
+                       +319.1·19    +362.9·14     +645.3·8     +576.4·7
+  POOLED                   +1617        +3624        +2629         +690
+                        +17.2·94     +58.5·62     +73.0·36     +26.5·26
+
+  ══ B. WHAT THE 0.25 GATE SPLITS (the gap-regime read, on crossover trades) ══
+  flat-open trades       -17.4·58   (the bleed the gate removes — expect negative)
+  gap-day trades         +73.0·36   (what the gate keeps — expect better)
+
+  READ (pre-registered): PASS = pooled exp$/t up vs baseline AND ≥4/5 windows helped/neutral
+  AND not CHOP-MIX-carried. PASS → the compose earns a paper-lab seat and tf>1 worker support
+  gets a work item. FAIL → third refutation of "filter the crossover into health" — the 15m
+  crossover stays a research exhibit, and gap_min's value stays where it's armed (V3/ALT).
+
