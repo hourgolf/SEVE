@@ -37,10 +37,11 @@ ALERTS** — worker `stream-2026-06-12c` (new `worker/src/alerts.ts`): pushes vi
 /api/push-send (tag `seve-alert`) on **+75% crossing · ≥50% giveback of a ≥+30% peak (the panel's
 amber, pushed live) · daily-stop latch · event stand-down flatten · insufficient_capital (the
 pb-ride Monday watch!) · kill-switch halt transition**. In-memory once-per-ET-day dedup per
-(kind,scope); informational only — NEVER an exit path. **⚠ INERT until Railway env is set:
-`APP_URL=https://seve-henna.vercel.app` + `PUSH_SECRET=<same value as the app's PUSH_SEND_SECRET>`**
-(until then alerts log to worker stdout — fail-safe; setting them also unblocks the twin
-entry-push migration item). (3) **CRON v56 `2026-06-12a` DEPLOYED (sentinel-verified): STREAM-STALE
+(kind,scope); informational only — NEVER an exit path. **Railway env SET (operator, same
+evening): `APP_URL` + `PUSH_SECRET` (recovered from the 06-08 session transcript — the
+`openssl rand -hex 24` value matching Vercel's hidden `PUSH_SEND_SECRET`); TEST PUSH DELIVERED
+through the production route (`sent:1`, landed on the phone). Alerts ARMED for Monday; this also
+unblocks the twin entry-push migration item.** (3) **CRON v56 `2026-06-12a` DEPLOYED (sentinel-verified): STREAM-STALE
 PAGE** — the cron pages "⚠ STREAM STALE" when the worker heartbeat crosses 5m (stateless
 one-cycle-window dedup; re-pages at 1h/2h; an 09:00 ET first-run check catches weekend deaths;
 known benign edge: market holidays page ~09:40). `firePush` gained a tag param so alerts don't
