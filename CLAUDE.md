@@ -67,7 +67,13 @@ in-corpus FOMC days covered): 2pm spike 2.82× localized; FOMC gaps 0.175% < cal
 literal blind spot — and most FOMC mornings read flat-open, so the armed gap_min already stands
 V3/ALT down); ALT/V3's complete FOMC population = 7 trades, −694/t avg. **First live stand-down:
 2026-06-17 (next Wed).** ⚠ the CRON has no stand-down — flip the QQQ machine to stream before 06-17
-(expected after the 06-12 shadow proof) or it trades FOMC unprotected. EN-ROUTE FIND+FIX: the entire
+(expected after the 06-12 shadow proof) or it trades FOMC unprotected. **PER-CHANNEL posture (worker
+`e`, `33_event_policy.sql` APPLIED, operator's architecture catch):** `strategist_config.event_policy`
+— 'standdown' default (all 17 channels) | 'ignore' = per-channel opt-out for future event-native
+theses (FOMC straddle, earnings vol); the worker honors it on both flatten + entry block. Events are
+SYMBOL-SCOPED (`MarketEvent.symbols`, absent = market-wide like FOMC; a future NVDA-earnings event
+lists ["QQQ"]) — so event reactions are channel- and symbol-specific, never hardwired global. QQQ
+channels inherit the stand-down automatically when their executor flips to stream. EN-ROUTE FIND+FIX: the entire
 2024-09 month was MISSING from the bars archive (a silent 07_backfill_bars failure, outside every
 regime window) → NEW `npm run repair-bars-archive` (fills holes direct from Alpaca; post-W1 old bars
 must never route through the 60d-retention DB); 2024-09 repaired (20 days).
