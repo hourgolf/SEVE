@@ -69,13 +69,22 @@ the resurrected pullback is now a REGISTRY builtin (`engine/strategies/pullback.
 `npm run pb-selftest` PASS — trade-identical to the winning probe, 250t/$4,632) behind a NEW
 per-channel **`entry_dte` policy** (`34_entry_dte.sql` APPLIED: 0=today+cutoff-roll default;
 1=always next session's expiry — pb-ride's edge IS the time value; same-day flatten unchanged).
-Channel row `pb-ride` (`35_pb_ride_channel.sql` APPLIED): **status='draft' (trades NOTHING)**,
-executor=stream, RISK $150/STOP $300/4 contracts, entry_dte=1 (LOAD-BEARING — 0DTE variant
-refuted), event_policy standdown. Thesis doc `docs/channels/pb-ride.md`. PB-scalp stays buried.
-**Arm = `update strategists set status='armed' where slug='pb-ride';` — operator's word only.**
+Channel row `pb-ride` (`35_pb_ride_channel.sql` APPLIED): executor=stream, entry_dte=1
+(LOAD-BEARING — 0DTE variant refuted), event_policy standdown. Thesis doc
+`docs/channels/pb-ride.md`. PB-scalp stays buried.
 
-PENDING OPERATOR: arm pb-ride (when ready), manual-twin entry-push → twin migration, month-end
-cuts (clean-era attribution is the agreed yardstick).
+**PB-RIDE ARMED (operator's word, same evening): live Monday 06-15 on the stream.** SIZING FIX
+en route: the draft's $150 risk knob couldn't clear ONE 1DTE contract (risk/contract = 0.5×ask
+×100 ≈ $200-275 at 1DTE ATM → qty 0 → silent `insufficient_capital` no-trade). **RISK $300 /
+STOP $450** = minimum-size (~1 contract/trade, ~1.5-2 stops/day bounded). MONDAY WATCH addition:
+pb-ride's first live signals — if `blocked: insufficient_capital` appears in signals, the ask
+ran past $6 and the risk knob needs a nudge (visible + fail-safe). Its trades enter NEXT-session
+expiry and flatten same-day (entry_dte=1 + the 06-08a rule). QQQ port gate probed same evening
+(`npm run pb-qqq-probe`, QQQ 1DTE chains bought → data/databento-mdte-qqq) — verdict in
+docs/pb-qqq-probe-2026-06-12.txt.
+
+PENDING OPERATOR: manual-twin entry-push → twin migration, month-end cuts (clean-era
+attribution is the agreed yardstick).
 
 ## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — prior
 **W2 = move channels off the cron onto the Railway stream executor (operator's word:

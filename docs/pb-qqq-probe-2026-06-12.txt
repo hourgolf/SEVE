@@ -1,0 +1,20 @@
+
+> seve-live-market-monitor@0.1.0 pb-qqq-probe
+> tsx engine/pb-qqq-probe.ts
+
+
+  PB-QQQ port gate · the armed pb-ride builtin on QQQ · real NBBO · ONE covered stretch (not an arm ticket)
+
+  QQQ — 70 sessions with 0+1DTE coverage (2026-03-02 → 2026-06-10)
+    dte   exp$/t    n   win%  stop%     pooled$      Mar26   AprMay26      Jun26
+    0DTE     -2.4  131   23%    75%       -315      -8916      -8300     +16901
+    1DTE    -10.7   83   37%    33%       -892       -764     -11421     +11293
+
+  SPY — 63 sessions with 0+1DTE coverage (2026-03-02 → 2026-06-10)
+    dte   exp$/t    n   win%  stop%     pooled$      Mar26   AprMay26      Jun26
+    0DTE    -63.4  114   23%    72%      -7231      -3795      -3436         +0
+    1DTE    +56.3   68   44%    18%      +3825      +3677       +148         +0
+
+  READ: port interest = QQQ@1DTE +EV pooled AND ≥2/3 splits green AND the 1DTE>0DTE ordering holds on QQQ
+  as it did on SPY. Anything less joins the QQQ-V3 no-transfer verdict. Arming needs bought OOS windows.
+

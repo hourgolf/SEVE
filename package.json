@@ -47,6 +47,7 @@
     "band-squeeze-probe": "tsx engine/band-squeeze-probe.ts",
     "one-dte-probe": "tsx engine/one-dte-probe.ts",
     "pb-selftest": "tsx engine/pb-selftest.ts",
+    "pb-qqq-probe": "tsx engine/pb-qqq-probe.ts",
     "gap-min-selftest": "tsx engine/gap-min-selftest.ts",
     "calendar-probe": "tsx engine/calendar-probe.ts",
     "chop-router-probe": "tsx engine/chop-router-probe.ts",
