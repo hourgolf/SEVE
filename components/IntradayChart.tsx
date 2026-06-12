@@ -26,7 +26,7 @@ type Mode = "line" | "candles";
 const MODE_KEY = "seve-chart-mode", TF_KEY = "seve-chart-tf", RANGE_KEY = "seve-chart-range";
 const VWAP_KEY = "seve-chart-vwap", EMA_KEY = "seve-chart-ema", VOL_KEY = "seve-chart-vol", MACD_KEY = "seve-chart-macd";
 const EMA_FAST_KEY = "seve-chart-ema-fast", EMA_SLOW_KEY = "seve-chart-ema-slow", EMA_THIRD_KEY = "seve-chart-ema-third";
-const TRADES_KEY = "seve-chart-trades", LEVELS_KEY = "seve-chart-levels";
+const TRADES_KEY = "seve-chart-trades", LEVELS_KEY = "seve-chart-levels", BANDS_KEY = "seve-chart-bands";
 const EMA_FAST_DEFAULT = 9, EMA_SLOW_DEFAULT = 21, EMA_THIRD_DEFAULT = 50, EMA_MIN = 2, EMA_MAX = 200;
 
 const C = {
@@ -161,6 +161,7 @@ export function IntradayChart({
   const [emaThirdP, setEmaThirdP] = useState(EMA_THIRD_DEFAULT);
   const [showTrades, setShowTrades] = useState(true);
   const [showLevels, setShowLevels] = useState(true);
+  const [showBands, setShowBands] = useState(false); // VWAP ±σ bands (default off)
 
   const elRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -175,6 +176,8 @@ export function IntradayChart({
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markersOnRef = useRef<Mode | null>(null);
   const levelLinesRef = useRef<{ series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">; line: IPriceLine }[]>([]);
+  const bandRefs = useRef<ISeriesApi<"Line">[]>([]); // VWAP ±1σ/±2σ (4 thin lines)
+  const posLinesRef = useRef<{ series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">; line: IPriceLine }[]>([]); // open-position entry lines
   const lastRangeRef = useRef<RangeKey | null>(null); // only reset the window on a RANGE change
   const pendingCenterRef = useRef<Position | null>(null); // center on this trade after the next setData
   const [showJump, setShowJump] = useState(false); // "→ LIVE" chip: panned away / manual price scale
@@ -210,6 +213,7 @@ export function IntradayChart({
     const et = Number(g(EMA_THIRD_KEY)); if (et >= EMA_MIN && et <= EMA_MAX) setEmaThirdP(et);
     if (g(TRADES_KEY) === "0") setShowTrades(false);
     if (g(LEVELS_KEY) === "0") setShowLevels(false);
+    if (g(BANDS_KEY) === "1") setShowBands(true);
   }, []);
 
   const persist = (k: string, v: string) => { try { window.localStorage.setItem(k, v); } catch { /* */ } };
@@ -309,6 +313,9 @@ export function IntradayChart({
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
     const line = (color: string) => chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     vwapRef.current = line(C.vwap); fastRef.current = line(C.emaFast); slowRef.current = line(C.emaSlow); thirdRef.current = line(C.emaThird);
+    // VWAP σ-bands: ±1σ (brighter) and ±2σ (fainter) around the session VWAP —
+    // thin amber companions to the VWAP line, empty until the ±σ chip is on.
+    bandRefs.current = ["rgba(255,178,36,0.55)", "rgba(255,178,36,0.55)", "rgba(255,178,36,0.28)", "rgba(255,178,36,0.28)"].map((c) => line(c));
     sessionLayerRef.current = new SessionLayer();
     // "→ LIVE" affordance: show when panned away from the live edge OR the price
     // axis was manually scaled (a drag silently latches autoScale off — the
@@ -364,7 +371,36 @@ export function IntradayChart({
       candle.setData([]);
     }
     volRef.current?.setData(showVol ? rows.map((r) => ({ time: r.t, value: r.v, color: r.c >= r.o ? "rgba(47,213,115,0.32)" : "rgba(240,86,63,0.32)" })) : []);
-    vwapRef.current?.setData(showVwap ? rows.filter((r) => r.w != null).map((r) => ({ time: r.t, value: Number(r.w) })) : []);
+    // TRUE session VWAP — cumulative Σ(pv)/Σv per ET day (the per-bar `vwap` field is
+    // the within-bar average: the right WEIGHT, never the session line itself). The old
+    // line plotted that raw per-bar value, which hugs the close — the display-side twin
+    // of the worker's known vwap quirk; fixed here. ±σ bands are volume-weighted stdev
+    // around the running VWAP (intraday only; daily rows carry no vwap).
+    {
+      const vRows: { time: Time; value: number }[] = [];
+      const b1: { time: Time; value: number }[] = [], b1n: { time: Time; value: number }[] = [];
+      const b2: { time: Time; value: number }[] = [], b2n: { time: Time; value: number }[] = [];
+      if ((showVwap || showBands) && !isDaily) {
+        let day = "", sv = 0, svw = 0, svw2 = 0;
+        for (const r of rows) {
+          const d = etParts((r.t as number) * 1000).date;
+          if (d !== day) { day = d; sv = 0; svw = 0; svw2 = 0; }
+          const w = r.w != null ? Number(r.w) : r.c;
+          if (r.v > 0 && Number.isFinite(w)) { sv += r.v; svw += r.v * w; svw2 += r.v * w * w; }
+          if (sv <= 0) continue;
+          const V = svw / sv;
+          vRows.push({ time: r.t, value: V });
+          if (showBands) {
+            const sd = Math.sqrt(Math.max(0, svw2 / sv - V * V));
+            b1.push({ time: r.t, value: V + sd }); b1n.push({ time: r.t, value: V - sd });
+            b2.push({ time: r.t, value: V + 2 * sd }); b2n.push({ time: r.t, value: V - 2 * sd });
+          }
+        }
+      }
+      vwapRef.current?.setData(showVwap ? vRows : []);
+      const [u1, l1, u2, l2] = bandRefs.current;
+      u1?.setData(b1); l1?.setData(b1n); u2?.setData(b2); l2?.setData(b2n);
+    }
     if (showEma) {
       const closes = rows.map((r) => r.c);
       const ef = ema(closes, efN), es = ema(closes, esN), et = ema(closes, etN);
@@ -430,6 +466,30 @@ export function IntradayChart({
       add(levels.orbLo, C.orb, "ORL", LineStyle.Dashed);
       add(levels.hod, C.hod, "HOD", LineStyle.Solid);
       add(levels.lod, C.lod, "LOD", LineStyle.Solid);
+    }
+
+    // ---- OPEN-POSITION entry lines (intraday): the underlying at entry — the
+    // ride/giveback reference — direction-colored, labeled with the contract.
+    // Rides the TRADES toggle: the marker shows WHEN you got in, the line shows
+    // WHERE the tape was. Underlying-at-entry = the bar at opened_at (exact);
+    // strike is the ATM fallback (the desk's entry-underlying proxy).
+    for (const { series, line } of posLinesRef.current) { try { series.removePriceLine(line); } catch { /* removed with series */ } }
+    posLinesRef.current = [];
+    if (showTrades && !isDaily && rows.length) {
+      for (const p of openPositions) {
+        // ticker = the OCC root (SPY260612C00741000 → SPY) — Position carries no underlying field
+        if ((p.occ_symbol.match(/^([A-Z]+)\d/)?.[1] ?? "SPY").toUpperCase() !== symbol) continue;
+        let price: number | null = null;
+        if (p.opened_at) {
+          const ts = Math.floor(Date.parse(p.opened_at) / 1000);
+          for (let i = rows.length - 1; i >= 0; i--) { if ((rows[i].t as number) <= ts) { price = rows[i].c; break; } }
+        }
+        if (price == null && Number.isFinite(p.strike)) price = p.strike;
+        if (price == null) continue;
+        const up = p.opt_type === "call";
+        const line = activeSeries.createPriceLine({ price, color: up ? C.up : C.down, lineWidth: 1, lineStyle: LineStyle.SparseDotted, axisLabelVisible: true, title: `${up ? "▲" : "▼"}${p.strike.toFixed(0)}${up ? "C" : "P"}×${p.qty}` });
+        posLinesRef.current.push({ series: activeSeries, line });
+      }
     }
 
     // ---- session separators + premarket shading (intraday only) ----
@@ -524,7 +584,7 @@ export function IntradayChart({
       const manual = chart.priceScale("right").options().autoScale === false;
       setShowJump(away || manual);
     }
-  }, [agg, mode, showVwap, showEma, showVol, showMacd, efN, esN, etN, showTrades, showLevels, levels, isDaily, range, trades, openPositions, highlightTrade, mobile, symbol]);
+  }, [agg, mode, showVwap, showBands, showEma, showVol, showMacd, efN, esN, etN, showTrades, showLevels, levels, isDaily, range, trades, openPositions, highlightTrade, mobile, symbol]);
 
   // ---- highlight a trade drilled into from the Today's-trades list: switch to
   // intraday if needed and (only if off-screen) center the chart on the fill. Lights
@@ -593,7 +653,8 @@ export function IntradayChart({
         <div className="chart-controls chart-controls--bottom">
           <span className="ind-chips">
             <button className={`ind-chip${showEma ? " on" : ""}`} onClick={toggle(EMA_KEY, setShowEma)} aria-pressed={showEma} title="EMA overlay">EMA</button>
-            <button className={`ind-chip${showVwap ? " on" : ""}`} onClick={toggle(VWAP_KEY, setShowVwap)} aria-pressed={showVwap} title="VWAP">VWAP</button>
+            <button className={`ind-chip${showVwap ? " on" : ""}`} onClick={toggle(VWAP_KEY, setShowVwap)} aria-pressed={showVwap} title="Session VWAP (cumulative, volume-weighted)">VWAP</button>
+            <button className={`ind-chip${showBands ? " on" : ""}`} onClick={toggle(BANDS_KEY, setShowBands)} aria-pressed={showBands} title="VWAP ±1σ / ±2σ bands (volume-weighted, per session) — intraday">±σ</button>
             <button className={`ind-chip${showVol ? " on" : ""}`} onClick={toggle(VOL_KEY, setShowVol)} aria-pressed={showVol} title="Volume">VOL</button>
             <button className={`ind-chip${showMacd ? " on" : ""}`} onClick={toggle(MACD_KEY, setShowMacd)} aria-pressed={showMacd} title="MACD 12/26/9">MACD</button>
             <button className={`ind-chip${showTrades ? " on" : ""}`} onClick={toggle(TRADES_KEY, setShowTrades)} aria-pressed={showTrades} title="Show trade entry/exit markers">TRADES</button>
