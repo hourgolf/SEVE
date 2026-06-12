@@ -57,6 +57,21 @@ keeps executing them, zero gap) — tomorrow's open is the proof.
    **V3/ALT are SILENTLY HALTED → run the gap_min ROLLBACK** (in `gap-regime-verdict.md`). The desk
    takes many entries across 10 stream channels daily, so there WILL be a rationale to inspect.
 
+**CALENDAR AWARENESS — FOMC 2PM STAND-DOWN BUILT + LIVE (commit `cdf2923`, worker
+`stream-2026-06-11d`).** `engine/market-events.ts` = FOMC decision dates 2024–2026 VERIFIED vs the
+official Fed calendar (the reconstructed set had missed 3 dates); fail-safe (stale table = no events
+= normal trading). Worker policy: on FOMC days inside [13:50, 14:30) flatten stream-owned holdings
+(`event_flatten`; manual twins exempt) + block entries (`event_window`); `EVENT_STANDDOWN=0`
+env-disables. Probe re-run on verified dates + COMPLETE data (bought the 8 missing FOMC days; all 18
+in-corpus FOMC days covered): 2pm spike 2.82× localized; FOMC gaps 0.175% < calm 0.280% (gap_min's
+literal blind spot — and most FOMC mornings read flat-open, so the armed gap_min already stands
+V3/ALT down); ALT/V3's complete FOMC population = 7 trades, −694/t avg. **First live stand-down:
+2026-06-17 (next Wed).** ⚠ the CRON has no stand-down — flip the QQQ machine to stream before 06-17
+(expected after the 06-12 shadow proof) or it trades FOMC unprotected. EN-ROUTE FIND+FIX: the entire
+2024-09 month was MISSING from the bars archive (a silent 07_backfill_bars failure, outside every
+regime window) → NEW `npm run repair-bars-archive` (fills holes direct from Alpaca; post-W1 old bars
+must never route through the 60d-retention DB); 2024-09 repaired (20 days).
+
 **GAP_MIN — BUILT + ARMED on V3+ALT (commits `c224d03`/this — the night's research payoff).** The
 overnight gap is a verified ex-ante regime signal (memory `gap-regime-verdict.md`): flat-open days
 bleed, gap days pay for the breakout family; PASSES the 5-window bar AND is independent of OR width
