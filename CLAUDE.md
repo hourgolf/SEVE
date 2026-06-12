@@ -50,20 +50,24 @@ keeps executing them, zero gap) — tomorrow's open is the proof.
    the same 13:30 break OCC — the one path grind-v3-alone never exercised).
 4. Worker SHADOW-decides QQQ channels in the logs, matching the cron's actual QQQ fills =
    the green light to flip QQQ.
-5. **gap_min PRE-ARM CHECK:** a stream entry's signal rationale now carries `detail.gap` (worker
-   `stream-2026-06-11c`). Confirm it's NON-NULL (`select rationale->>'gap' from signals where …`)
-   — that's the prerequisite to arming gap_min (it's fail-closed; a missing gap would silently
-   halt an armed channel).
+5. **⚠ gap_min FAIL-CLOSED CHECK (CRITICAL — V3/ALT are now gap-gated):** every stream entry's
+   rationale carries `detail.gap` (worker `c`). Query `select rationale->>'gap' from signals where
+   acted_on and created_at::date='2026-06-12'` for ANY stream channel. NON-NULL → the worker computes
+   gap → V3/ALT gating is sound. NULL / no stream entries showing it → worker can't compute gap →
+   **V3/ALT are SILENTLY HALTED → run the gap_min ROLLBACK** (in `gap-regime-verdict.md`). The desk
+   takes many entries across 10 stream channels daily, so there WILL be a rationale to inspect.
 
-**GAP_MIN — BUILT + VALIDATED (commit `c224d03`, NOT armed — the night's research payoff).** The
+**GAP_MIN — BUILT + ARMED on V3+ALT (commits `c224d03`/this — the night's research payoff).** The
 overnight gap is a verified ex-ante regime signal (memory `gap-regime-verdict.md`): flat-open days
 bleed, gap days pay for the breakout family; PASSES the 5-window bar AND is independent of OR width
 (the first lead all session to survive). Built as a live `gap_min` condition (`|open−priorClose|/
 priorClose ≥ pct`), threaded the pdh/pdl path, registered in every vocab list, worker computes it in
 computeLevels. `npm run gap-min-selftest` reproduces the probe EXACTLY (ALT gap_min 0.25 → +252/t).
-**Arming V3/ALT is the operator's call, GATED on the pre-arm check above** — arm SQL + rollback +
-the fail-closed warning in `gap-regime-verdict.md`. Worker version bumped `b`→`c` (gap is additive —
-computed + logged, used by NO armed channel yet; the QQQ shadow gate from W2 is unchanged).
+**ARMED gap_min 0.25 on breakout-alt-v3 + breakout-smart-entries (operator's word)** — both carry it
+on both entry sides + the 14:00 window, verified; live via the stream worker next cycle. Armed BEFORE
+the live gap-observability check could run (off-hours) — bounded risk (fail-closed = missed entries
+not bad trades; one-SQL rollback) accepted; #5 above is the morning confirm-or-rollback. Worker `c`
+(gap additive: computed + in every entry rationale). QQQ shadow gate from W2 unchanged.
 
 **NEXT-SESSION W2 TAIL (after a clean 06-12):** (a) flip QQQ machine channels to stream
 (`update strategists set executor='stream' where slug in ('breakout-qqq','orb-qqq-trail','qqq-thrust-trail');`)
