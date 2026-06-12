@@ -95,6 +95,14 @@ export const config = {
   symbols: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ")
     .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean),
   symbol: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ").split(",")[0].trim().toUpperCase(),
+  // ---- Operator alerts ("the desk summons you", 2026-06-12) ----
+  // POSTs to the app's /api/push-send — the SAME route + secret the cron's ✋
+  // manual-twin ping uses (x-push-secret = the app's PUSH_SEND_SECRET). Both
+  // unset → alerts log to stdout only (fail-safe: missing env never blocks
+  // trading, you just don't get paged).
+  appUrl: opt("APP_URL", ""),
+  pushSecret: process.env.PUSH_SECRET ?? process.env.PUSH_SEND_SECRET ?? "",
+
   // How many strikes (± $) around spot to keep quoted in the NTM window.
   strikeWindow: Number(opt("STRIKE_WINDOW", "8")),
   // Trailing 1-min bars to seed/hold in memory. ⚠ sized for EXTENDED-hours flow:
@@ -107,7 +115,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-12b";
+export const WORKER_VERSION = "stream-2026-06-12c";
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
@@ -133,4 +141,11 @@ export const policy = {
   EVENT_STANDDOWN: flag("EVENT_STANDDOWN", true),
   EVENT_FLATTEN_MIN_BEFORE: 10,
   EVENT_RESUME_MIN_AFTER: 30,
+  // OPERATOR ALERT thresholds (alerts.ts — informational pages, NEVER an exit
+  // path): a ripper crossing +CROSS% of entry premium; a meaningful peak
+  // (≥ MIN_PEAK%) giving back ≥ FRAC of the move — the same 50%-giveback amber
+  // the positions panel shows, now pushed to the phone while it's happening.
+  ALERT_CROSS_PCT: 75,
+  ALERT_GIVEBACK_FRAC: 0.5,
+  ALERT_GIVEBACK_MIN_PEAK_PCT: 30,
 } as const;

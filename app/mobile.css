@@ -587,3 +587,9 @@
 
 /* expanded edit sheet — reuse the settings sheet chrome; the full strip sits inside */
 .m-editsheet .channel--m { width: 100%; padding-top: 6px; }
+
+/* ---- the 86'd shelf (2026-06-12) — benched channels under the mixer pads; tap
+   opens the full strip sheet (inspect / re-arm). Not sortable, so touch scrolls. */
+.mx-bench { flex: 0 0 auto; border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 8px; }
+.mx-pad.bench { opacity: 0.38; filter: grayscale(0.65); touch-action: auto; }
+.mx-pad.bench:active { opacity: 0.8; }

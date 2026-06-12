@@ -32,7 +32,7 @@ const meterColor = (f: number) => `hsl(${Math.round(130 * (1 - Math.max(0, Math.
 
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging, compact, onExpand }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, renameChannel, setChannelAccent, deleteChannel, canWrite } = useDeskWrite();
+  const { persistConfig, renameChannel, setChannelAccent, setChannelStatus, deleteChannel, canWrite } = useDeskWrite();
   const { id, slug, underlying, name, regime, color, status, config } = strategist;
 
   // Flip-card editor: rename + delete. Opens an overlay over the card.
@@ -57,6 +57,14 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
     const res = await deleteChannel(id);
     if (res.ok) { setEditing(false); dispatch({ type: "REMOVE", slug }); }
     else { setConfirmDel(false); setEditErr(res.error ?? "remove failed"); }
+  };
+  // Bench ⇄ re-arm (the 86'd shelf): draft = no entries, open positions wind down.
+  // Optimistic; on a failed write the status snaps back.
+  const toggleBench = async () => {
+    const next = status === "armed" ? "draft" : "armed";
+    dispatch({ type: "SET_STATUS", slug, status: next });
+    const res = await setChannelStatus(id, next);
+    if (!res.ok) { dispatch({ type: "SET_STATUS", slug, status }); setEditErr(res.error ?? "status change failed"); }
   };
   const recolor = async (c: PmColor) => {
     if (c === color) return;
@@ -111,6 +119,15 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           />
         ))}
       </div>
+
+      <label className="ch-edit-label">Lifecycle</label>
+      <button
+        className="ch-edit-bench"
+        onClick={toggleBench}
+        title={status === "armed" ? "bench: stop entries; open positions wind down" : "re-arm: channel trades again next cycle"}
+      >
+        {status === "armed" ? "86 it (bench)" : "Re-arm channel"}
+      </button>
 
       <div className="ch-edit-danger">
         {!confirmDel ? (

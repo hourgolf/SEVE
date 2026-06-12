@@ -1612,3 +1612,33 @@
     padding: 4px 7px;
   }
 }
+
+/* ---- The 86'd shelf (bench rail, 2026-06-12) — culled/draft channels collapse off
+   the working surface into small pads under the channels grid. Greyed while benched
+   (their accent returns on hover/open); tap → inspect the full strip / re-arm. ---- */
+.channels-col { min-width: 0; display: flex; flex-direction: column; }
+.bench { margin-top: 14px; border-top: 1px dashed rgba(0, 0, 0, 0.22); padding-top: 9px; }
+.bench-bar { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.bench-title { font-family: var(--mono); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-soft, #55534c); }
+.bench-hint { font-family: var(--mono); font-size: 9px; color: var(--ink-soft, #55534c); opacity: 0.7; }
+.bench-pads { display: flex; flex-wrap: wrap; gap: 8px; }
+.bench-pad {
+  width: 46px; height: 32px; border-radius: 7px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+  color: #0d0e0f; background: var(--pad); border: 1px solid rgba(0, 0, 0, 0.3);
+  display: grid; place-items: center; cursor: pointer;
+  opacity: 0.42; filter: grayscale(0.65);
+  transition: opacity 0.12s, filter 0.12s, box-shadow 0.12s;
+}
+.bench-pad:hover { opacity: 0.75; filter: grayscale(0.3); }
+.bench-pad.on { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--pad); }
+.bench-open { margin-top: 10px; max-width: 360px; }
+
+/* lifecycle button on the strip's flip-card editor (bench ⇄ re-arm) */
+.ch-edit-bench {
+  font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.4px; padding: 7px 10px; border-radius: 6px;
+  border: 1px solid var(--border-bright); background: rgba(255, 255, 255, 0.05);
+  color: var(--amber, #e8a13c); cursor: pointer; align-self: flex-start;
+}
+.ch-edit-bench:hover { background: rgba(255, 255, 255, 0.1); }

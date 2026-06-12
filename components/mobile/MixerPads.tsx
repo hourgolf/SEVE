@@ -8,7 +8,8 @@ import type { StrategistState } from "@/lib/desk/types";
 
 // 2–3 char code from the channel name (initials, else first chars) for the small pad.
 // Strip punctuation first so e.g. "Trend QQQ (trailed)" → TQT, not "TQ(".
-function padCode(s: StrategistState): string {
+// Exported: the bench rail (86'd shelf) renders the same codes on both surfaces.
+export function padCode(s: StrategistState): string {
   const parts = s.name.replace(/[^a-zA-Z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
   const initials = parts.map((w) => w[0]).join("");
   return (initials.length >= 2 ? initials : parts[0] || s.slug).slice(0, 3).toUpperCase();

@@ -20,11 +20,32 @@ nothing stranded) **+ qqq-thrust-trail `underlying_stop_pct` 0.20→0** (QQQ pai
 orb-qqq-trail). **ARMED MACHINE ROSTER = 7, all stream:** breakout-alt-v3 · breakout-smart-entries
 (the momentum_atr A/B pair, month-end folds the loser) · grind-v3 · power-smart-entries
 (PROBATION — clean-era yardstick at month-end; model-red/live-green, the family's last stand) ·
-orb-qqq-trail · qqq-thrust-trail (QQQ pair, month-end clock) · pb-ride (1DTE debut). 4 manual
-twins stay armed+MUTED (operator muted them himself 06-12 15:20 ET — no twin entries until he
-unmutes; exits/backstop intact). Full menu + recipes + epitaphs + projections (menu beat the full
-roster +$4,441 on this week's replay; cut model-drag ≈ −$650…−$940/wk; worst-regime tail cut ~4×):
+orb-qqq-trail · qqq-thrust-trail (QQQ pair, month-end clock) · pb-ride (1DTE debut). 4 manual twins: operator
+muted them 15:20 ET, then **RE-ENGAGED (unmuted) all 4 at 18:13 ET — twins are LIVE Monday**.
+Full menu + recipes + epitaphs + projections (menu beat the full roster +$4,441 on this week's
+replay; cut model-drag ≈ −$650…−$940/wk; worst-regime tail cut ~4×):
 **docs/roster-menu-2026-06-15.md**. Rollback any: `update strategists set status='armed' where slug='…';`
+— or from the UI now: the strip flip-editor's Lifecycle button (the 86'd shelf, below).
+
+**KITCHEN CLEANUP SHIPPED (same evening, post-cull — the 06-10 consultant UI thread, courses 1+2):**
+(1) **THE 86'D SHELF** — draft channels no longer render full strips: desktop §02 + mobile Mix
+collapse them to small grey bench pads under a `BENCH · 86'D` rail (tap → full strip to inspect /
+re-arm). NEW `useDeskWrite.setChannelStatus` + a Lifecycle "86 it (bench) / Re-arm" button on the
+strip's flip-editor — the cull/rollback SQL is now one auth-gated tap. Preview-verified both
+breakpoints: 11 armed strips + 7 bench pads; mobile Mix 5 pages → 3. (2) **"THE DESK SUMMONS YOU"
+ALERTS** — worker `stream-2026-06-12c` (new `worker/src/alerts.ts`): pushes via the app's
+/api/push-send (tag `seve-alert`) on **+75% crossing · ≥50% giveback of a ≥+30% peak (the panel's
+amber, pushed live) · daily-stop latch · event stand-down flatten · insufficient_capital (the
+pb-ride Monday watch!) · kill-switch halt transition**. In-memory once-per-ET-day dedup per
+(kind,scope); informational only — NEVER an exit path. **⚠ INERT until Railway env is set:
+`APP_URL=https://seve-henna.vercel.app` + `PUSH_SECRET=<same value as the app's PUSH_SEND_SECRET>`**
+(until then alerts log to worker stdout — fail-safe; setting them also unblocks the twin
+entry-push migration item). (3) **CRON v56 `2026-06-12a` DEPLOYED (sentinel-verified): STREAM-STALE
+PAGE** — the cron pages "⚠ STREAM STALE" when the worker heartbeat crosses 5m (stateless
+one-cycle-window dedup; re-pages at 1h/2h; an 09:00 ET first-run check catches weekend deaths;
+known benign edge: market holidays page ~09:40). `firePush` gained a tag param so alerts don't
+replace the ✋ twin pings. Courses 3–5 parked: chart entry-lines/VWAP bands · the declutter sweep
+(do WITH the operator at the screen) · multi-account/paper-lab cockpit.
 
 **VALIDATION RECEIPTS (morning watch, all green):** (1) gap_min FAIL-CLOSED CHECK PASSED —
 stream rationales carried `gap: 0.424` from the open; V3 traded THROUGH the open gate at 11:22
@@ -73,7 +94,9 @@ grinding). The ⚑ FOMC-ahead line + executor split (stream 11ch/21t · cron 0 a
 **MONDAY WATCH (06-15):** (1) NO pre-open WARN flood (the idle beat's first live morning);
 (2) first QQQ STREAM session — worker `stream:` fills on the QQQ PAIR (orb-qqq-trail +
 qqq-thrust-trail; breakout-qqq culled), cron defers; (2b) the 7 culled channels take ZERO
-entries + day-report coverage stays ✓; (2c) twins are MUTED — zero twin entries expected;
+entries + day-report coverage stays ✓; (2c) twins RE-ENGAGED (operator unmuted all 4 at 18:13
+ET) — twin entries + ✋ exit pings expected; (2d) if Railway env was set: first `alert:` lines in
+worker logs (+75%/giveback/latch pages land on the phone);
 (3) Monday's gap = Monday open vs FRIDAY close (weekend news lands in the gap — by design);
 (4) BAR_HISTORY 2400 = full Friday session in memory (pdh/pdl + gap refs intact all day).
 **WEDNESDAY 06-17: first live FOMC stand-down, 13:50–14:30 — the whole machine roster is now

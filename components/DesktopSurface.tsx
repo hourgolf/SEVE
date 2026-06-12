@@ -29,6 +29,8 @@ import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
 import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
+import { padCode } from "@/components/mobile/MixerPads";
+import { pmVar } from "@/lib/desk/colors";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
@@ -98,11 +100,19 @@ export function DesktopSurface({
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const { canWrite } = write;
 
+  // The 86'd shelf: only ARMED channels get full strips; benched (draft) channels
+  // collapse to small pads on a rail below — tap one to inspect / re-arm. Keeps a
+  // 7-channel working surface after a cull instead of a graveyard of dead strips.
+  const armed = desk.strategists.filter((s) => s.status === "armed");
+  const benched = desk.strategists.filter((s) => s.status !== "armed");
+  const [benchOpen, setBenchOpen] = useState<string | null>(null);
+
   // ---- drag-to-reorder + group-by (operator only; persists sort_order) ----
   // Logic lives in the shared useChannelOrdering hook (mobile uses it too); desktop just
-  // drives `persist` from dnd-kit's drag end.
+  // drives `persist` from dnd-kit's drag end. Ordering covers the ARMED grid only —
+  // bench pads keep their stored sort_order for when they return.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const { order: channelOrder, persist, groupBy } = useChannelOrdering(desk.strategists, write);
+  const { order: channelOrder, persist, groupBy } = useChannelOrdering(armed, write);
   const onDragEnd = (e: DragEndEvent) => {
     const from = channelOrder.indexOf(String(e.active.id));
     const to = e.over ? channelOrder.indexOf(String(e.over.id)) : -1;
@@ -202,22 +212,55 @@ export function DesktopSurface({
         />
       )}
       <div className="console-grid">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={channelOrder} strategy={rectSortingStrategy}>
-            <div className="channels">
-              {desk.strategists.map((s) => (
-                <SortableChannel
-                  key={s.slug}
-                  strategist={s}
-                  pnl={livePnl[s.slug]}
-                  active={isActive(s.slug)}
-                  ducked={anySolo && !s.config.soloed && !s.config.muted}
-                  disabled={!canWrite}
-                />
-              ))}
+        <div className="channels-col">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext items={channelOrder} strategy={rectSortingStrategy}>
+              <div className="channels">
+                {armed.map((s) => (
+                  <SortableChannel
+                    key={s.slug}
+                    strategist={s}
+                    pnl={livePnl[s.slug]}
+                    active={isActive(s.slug)}
+                    ducked={anySolo && !s.config.soloed && !s.config.muted}
+                    disabled={!canWrite}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+          {benched.length > 0 && (
+            <div className="bench">
+              <div className="bench-bar">
+                <span className="bench-title">Bench · 86&apos;d</span>
+                <span className="bench-hint">no entries; open positions wind down — tap to inspect / re-arm</span>
+              </div>
+              <div className="bench-pads">
+                {benched.map((s) => (
+                  <button
+                    key={s.slug}
+                    type="button"
+                    className={`bench-pad${benchOpen === s.slug ? " on" : ""}`}
+                    style={{ ["--pad" as string]: pmVar(s.color) }}
+                    onClick={() => setBenchOpen((cur) => (cur === s.slug ? null : s.slug))}
+                    title={`${s.name} — ${s.status}`}
+                  >
+                    {padCode(s)}
+                  </button>
+                ))}
+              </div>
+              {benchOpen && (() => {
+                const s = benched.find((x) => x.slug === benchOpen);
+                if (!s) return null;
+                return (
+                  <div className="bench-open">
+                    <ChannelStrip strategist={s} pnl={livePnl[s.slug]} active={false} ducked={false} />
+                  </div>
+                );
+              })()}
             </div>
-          </SortableContext>
-        </DndContext>
+          )}
+        </div>
         <MasterStrip fund={desk.fund} fundPnl={liveFund} />
       </div>
       <Bezel label="16-Step Tape · recent signals" className="tape">

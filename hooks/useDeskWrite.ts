@@ -140,6 +140,22 @@ export function useDeskWrite() {
     [session]
   );
 
+  // Bench ⇄ re-arm a channel (the 86'd shelf). status='draft' = no entries; the
+  // workers still wind down any open position (exits/reconcile run for draft).
+  // This is the UI form of the cull/rollback SQL — one tap, reversible.
+  const setChannelStatus = useCallback(
+    async (id: string, status: ChannelStatus): Promise<{ ok: boolean; error?: string }> => {
+      if (!session || !id) return { ok: false, error: "sign in to change status" };
+      try {
+        const { error } = await getSupabase().from("strategists").update({ status }).eq("id", id);
+        return error ? { ok: false, error: error.message } : { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "status change failed" };
+      }
+    },
+    [session]
+  );
+
   // Delete a channel. A channel with trade history (signals/positions FK) can't
   // be hard-deleted without destroying that history, so we fall back to a soft
   // disable (status:'disabled' → hidden + skipped by the worker). Either way it
@@ -228,5 +244,5 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, deleteChannel, closePosition, tagClose, reorderChannels };
+  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, setChannelStatus, deleteChannel, closePosition, tagClose, reorderChannels };
 }

@@ -1,3 +1,13 @@
+// ⚑ WORKER VERSION: 2026-06-12a  (STREAM-STALE PAGE — "the desk summons you", cron side. The
+//   Railway worker can't report its own death, so the executor-gate heartbeat check now PAGES the
+//   operator (firePush → /api/push-send, tag "seve-alert") when the stream heartbeat goes stale:
+//   once as the age crosses 5m (fires only inside ONE ~60s cron-cycle window past the mark =
+//   stateless dedup), again at 1h and 2h while it stays down, plus a first-run-of-day check
+//   (09:00 ET) that catches a worker already LONG dead (weekend/overnight death — the age never
+//   "crosses" 5m inside a run window then). firePush gains an optional tag param so alert pushes
+//   don't REPLACE the ✋ manual-exit pings (web-push same-tag = replace). EXIT-ONLY failover
+//   behavior UNCHANGED — the page is informational, never gates an order. Known benign edge:
+//   market holidays (cron runs, worker pre-open beat ends 09:35) page stale ~09:40. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-11a  (B1 LIVE-DAY FIXES. (1) OPEN_0DTE_CUTOFF_MIN 16→31 — Alpaca WIDENED
 //   the 0DTE open-lockout ~15→~30 min ("contract expires soon" 422s from 15:33 ET on 06-11, 27 min
 //   before close) → every 15:30-15:44 entry was REJECTED instead of rolling to 1DTE. Entries inside
@@ -597,11 +607,13 @@ async function aGet(path: string) { const r = await fetch(PAPER + path, { header
 async function aPost(path: string, body: unknown) { const r = await fetch(PAPER + path, { method: "POST", headers: { ...aHdr, "content-type": "application/json" }, body: JSON.stringify(body) }); const text = await r.text(); if (!r.ok) throw new Error(`${r.status} POST ${path}: ${text.slice(0, 300)}`); return text ? JSON.parse(text) : {}; }
 async function aDelete(path: string) { const r = await fetch(PAPER + path, { method: "DELETE", headers: aHdr }); if (!r.ok) throw new Error(`${r.status} DELETE ${path}`); }
 async function journal(level: string, message: string, meta?: unknown) { try { await sb.from("events").insert({ level, message, meta: meta ?? null }); } catch { /* */ } }
-// Fire a manual-exit alert (web push) via the app's secret-gated /api/push-send. No-op
+// Fire an operator alert (web push) via the app's secret-gated /api/push-send. No-op
 // without PUSH_SEND_SECRET; never throws (a push failure must not break a trade cycle).
-async function firePush(title: string, body: string) {
+// `tag` separates notification streams (web-push REPLACES same-tag): "seve-manual" =
+// the ✋ twin exit pings; "seve-alert" = desk alerts (e.g. the stream-stale page).
+async function firePush(title: string, body: string, tag = "seve-manual") {
   if (!PUSH_SECRET) return;
-  try { await fetch(`${APP_URL}/api/push-send`, { method: "POST", headers: { "content-type": "application/json", "x-push-secret": PUSH_SECRET }, body: JSON.stringify({ title, body, tag: "seve-manual", url: "/" }) }); } catch { /* */ }
+  try { await fetch(`${APP_URL}/api/push-send`, { method: "POST", headers: { "content-type": "application/json", "x-push-secret": PUSH_SECRET }, body: JSON.stringify({ title, body, tag, url: "/" }) }); } catch { /* */ }
 }
 // Place an order, then poll for the ACTUAL fill price (market orders fill in ms).
 // Booking at the real fill — not the mid/mark — is what makes the desk's P&L
@@ -732,7 +744,21 @@ Deno.serve(async () => {
     let streamFresh = false;
     try {
       const { data: hb } = await sb.from("worker_heartbeat").select("beat_at").eq("id", "stream").maybeSingle();
-      streamFresh = !!hb && (Date.now() - Date.parse(String((hb as { beat_at?: string }).beat_at ?? 0))) < 5 * 60_000;
+      const hbAge = hb ? Date.now() - Date.parse(String((hb as { beat_at?: string }).beat_at ?? 0)) : NaN;
+      streamFresh = Number.isFinite(hbAge) && hbAge < 5 * 60_000;
+      // STREAM-STALE PAGE (2026-06-12a): the worker can't report its own death — the cron
+      // detects it here, so the cron pages. Stateless dedup: fire only while the age sits
+      // inside ONE ~60s cron-cycle window past each mark (5m = just died; 1h / 2h = still
+      // down), so each crossing pages exactly once. The first-run-of-day check (09:00 ET)
+      // catches a worker already LONG dead (weekend death never "crosses" 5m mid-session).
+      // Informational only — the EXIT-ONLY failover below never waits on a push.
+      const inWin = (mark: number) => Number.isFinite(hbAge) && hbAge >= mark && hbAge < mark + 60_000;
+      const nowMinET = etParts(Date.now()).min;
+      const longDeadAtOpen = nowMinET === 540 && (!Number.isFinite(hbAge) || hbAge >= 121 * 60_000);
+      if (inWin(5 * 60_000) || inWin(60 * 60_000) || inWin(120 * 60_000) || longDeadAtOpen) {
+        const ageTxt = Number.isFinite(hbAge) ? `${Math.round(hbAge / 60_000)}m old` : "never seen";
+        await firePush("⚠ STREAM STALE", `Railway worker heartbeat ${ageTxt} — cron exit-only failover on stream channels`, "seve-alert");
+      }
     } catch { /* table missing → treat as stale (cron keeps managing everything) */ }
     const account = await aGet("/v2/account");
     // Track whether the positions read SUCCEEDED — reconciliation (closing a desk

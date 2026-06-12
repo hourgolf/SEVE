@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { DeskState, FundState, PmColor, StrategistConfig } from "@/lib/desk/types";
+import type { ChannelStatus, DeskState, FundState, PmColor, StrategistConfig } from "@/lib/desk/types";
 
 // ============================================================================
 //  Desk state — the write seam. Today the reducer mutates LOCAL state only.
@@ -15,6 +15,7 @@ export type DeskAction =
   | { type: "SET_CONFIG"; slug: string; patch: Partial<StrategistConfig> }
   | { type: "RENAME"; slug: string; name: string }
   | { type: "RECOLOR"; slug: string; color: PmColor }
+  | { type: "SET_STATUS"; slug: string; status: ChannelStatus } // bench (draft) ⇄ re-arm
   | { type: "REMOVE"; slug: string }
   | { type: "TOGGLE_MUTE"; slug: string }
   | { type: "TOGGLE_SOLO"; slug: string }
@@ -52,6 +53,13 @@ export function deskReducer(state: DeskState, action: DeskAction): DeskState {
         ...state,
         strategists: state.strategists.map((s) =>
           s.slug === action.slug ? { ...s, color: action.color } : s
+        ),
+      };
+    case "SET_STATUS":
+      return {
+        ...state,
+        strategists: state.strategists.map((s) =>
+          s.slug === action.slug ? { ...s, status: action.status } : s
         ),
       };
     case "REMOVE":

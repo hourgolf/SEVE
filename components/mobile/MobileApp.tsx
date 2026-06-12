@@ -25,7 +25,8 @@ import { AuthControl } from "@/components/AuthControl";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
 import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
-import { MixerPads } from "@/components/mobile/MixerPads";
+import { MixerPads, padCode } from "@/components/mobile/MixerPads";
+import { pmVar } from "@/lib/desk/colors";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
@@ -53,7 +54,11 @@ const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
 
 export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
-  const { persist, canWrite } = useChannelOrdering(desk.strategists, write);
+  // The 86'd shelf: armed channels fill the Mix grid + mixer pads; benched (draft)
+  // channels collapse to grey pads below — tap to open the full strip / re-arm.
+  const armed = desk.strategists.filter((s) => s.status === "armed");
+  const benched = desk.strategists.filter((s) => s.status !== "armed");
+  const { persist, canWrite } = useChannelOrdering(armed, write);
   const [expanded, setExpanded] = useState<string | null>(null); // Mix: channel open for full-knob editing
   const PER_PAGE = 4; // channels per swipe page in the Mix grid
   const [tab, setTab] = useState<Tab>("live");
@@ -100,17 +105,17 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
     if (!el) return;
     setSlide(Math.round(el.scrollLeft / (el.clientWidth || 1))); // page-based now (4 channels/page)
   }
-  // tap a mixer pad → scroll the grid to that channel's page
+  // tap a mixer pad → scroll the grid to that channel's page (armed grid only)
   const jumpToChannel = (slug: string) => {
-    const i = desk.strategists.findIndex((s) => s.slug === slug);
+    const i = armed.findIndex((s) => s.slug === slug);
     if (i < 0) return;
     const el = deckRef.current;
     if (el) el.scrollTo({ left: Math.floor(i / PER_PAGE) * el.clientWidth, behavior: "smooth" });
   };
-  // chunk channels (+ a trailing "add" card) into pages of PER_PAGE for the swipe grid —
-  // the add-channel lives in the last grid slot so the cards stretch to fill the page.
+  // chunk ARMED channels (+ a trailing "add" card) into pages of PER_PAGE for the swipe
+  // grid — the add-channel lives in the last grid slot so the cards stretch to fill the page.
   type GridItem = typeof desk.strategists[number] | "add";
-  const gridItems: GridItem[] = [...desk.strategists, "add"];
+  const gridItems: GridItem[] = [...armed, "add"];
   const pages: GridItem[][] = [];
   for (let i = 0; i < gridItems.length; i += PER_PAGE) pages.push(gridItems.slice(i, i + PER_PAGE));
   const pageSlugs = (pages[slide] ?? []).filter((it): it is typeof desk.strategists[number] => it !== "add").map((s) => s.slug);
@@ -222,14 +227,36 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <div className="m-pagedots">
               {pages.map((_, i) => <i key={i} className={i === slide ? "on" : ""} />)}
             </div>
-            {/* master mixer — all channels as small sortable pads (tap=jump, hold=reorder) */}
+            {/* master mixer — armed channels as small sortable pads (tap=jump, hold=reorder) */}
             <MixerPads
-              strategists={desk.strategists}
+              strategists={armed}
               focusedSlugs={pageSlugs}
               onJump={jumpToChannel}
               persist={persist}
               canWrite={canWrite}
             />
+            {/* the 86'd shelf — benched channels as grey pads; tap → full strip sheet */}
+            {benched.length > 0 && (
+              <div className="mx-bench">
+                <div className="mx-bar">
+                  <span className="mx-title">Bench · 86&apos;d</span>
+                </div>
+                <div className="mx-pads">
+                  {benched.map((s) => (
+                    <button
+                      key={s.slug}
+                      type="button"
+                      className="mx-pad bench"
+                      style={{ ["--pad" as string]: pmVar(s.color) }}
+                      onClick={() => setExpanded(s.slug)}
+                      title={`${s.name} — ${s.status}`}
+                    >
+                      {padCode(s)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -291,7 +318,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               <ChannelStrip
                 strategist={s}
                 pnl={livePnl[s.slug]}
-                active={isActive(s.slug)}
+                active={s.status === "armed" && isActive(s.slug)}
                 ducked={anySolo && !s.config.soloed && !s.config.muted}
                 mobile
               />
