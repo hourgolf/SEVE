@@ -18,6 +18,7 @@
 // ============================================================================
 
 import { createClient } from "@supabase/supabase-js";
+import { upcomingEvents, tableHorizonDays } from "../engine/market-events";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
@@ -39,6 +40,19 @@ interface Trade {
 
 async function main() {
   console.log(`\nDAY REPORT — ${DATE} (ET)\n`);
+
+  // ---- catalyst calendar (market-events.ts): what's ahead + table freshness ----
+  // The events table is hand-maintained code (a stale table fails SAFE — no
+  // stand-down), so the report is the instrumented reminder: it announces the
+  // coming week's events and nags when the horizon thins (Fed posts ~1yr ahead).
+  const ahead = upcomingEvents(DATE, 7);
+  for (const e of ahead) {
+    const when = e.date === DATE ? "TODAY" : e.date;
+    console.log(`⚑ ${e.kind.toUpperCase()} ${when} — ${e.label}${e.minET != null ? " · worker stand-down 13:50–14:30 ET (stream channels)" : ""}`);
+  }
+  const horizon = tableHorizonDays(DATE);
+  if (horizon < 120) console.log(`⚠ market-events table horizon: ${horizon}d — fetch the next year's Fed schedule and extend engine/market-events.ts`);
+  if (ahead.length || horizon < 120) console.log("");
 
   // ---- tape shape (per underlying traded today) -------------------------------
   const { data: barsRaw } = await sb.from("underlying_bars").select("symbol,ts,close")

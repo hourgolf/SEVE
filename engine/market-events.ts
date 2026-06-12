@@ -64,3 +64,22 @@ export function inEventWindow(dateET: string, minNow: number, minsBefore: number
   const evt = intradayEventMin(dateET);
   return evt != null && minNow >= evt - minsBefore && minNow < evt + minsAfter;
 }
+
+/** Events within the next `days` calendar days of `fromDateET` (inclusive) —
+ *  the operator-facing "what's coming" feed (day-report prints it). */
+export function upcomingEvents(fromDateET: string, days: number): MarketEvent[] {
+  const from = Date.parse(`${fromDateET}T00:00:00Z`);
+  const to = from + days * 86400_000;
+  return MARKET_EVENTS.filter((e) => { const t = Date.parse(`${e.date}T00:00:00Z`); return t >= from && t <= to; });
+}
+
+/** Days of calendar runway left in the table from `fromDateET`. The table is
+ *  hand-maintained (the Fed posts each year's schedule ~a year ahead) — when
+ *  this thins below ~120d, fetch the next year's dates and extend. A stale
+ *  table fails SAFE (no events = no stand-down), so this is the ONLY reminder. */
+export function tableHorizonDays(fromDateET: string): number {
+  let maxDate = "";
+  for (const e of MARKET_EVENTS) if (e.date > maxDate) maxDate = e.date;
+  if (!maxDate) return 0;
+  return Math.floor((Date.parse(`${maxDate}T00:00:00Z`) - Date.parse(`${fromDateET}T00:00:00Z`)) / 86400_000);
+}
