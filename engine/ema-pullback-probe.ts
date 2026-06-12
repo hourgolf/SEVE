@@ -59,7 +59,7 @@ const WINDOWS = [
 const sgn = (v: number) => (v >= 0 ? "+" : "");
 
 interface Pre { e9: number[]; e21: number[]; atr: number[]; stretchC: number[]; stretchP: number[] }
-function precompute(s: RealSession): Pre {
+export function precompute(s: RealSession): Pre {
   const closes = s.bars.map((b) => b.close);
   const e9 = ema(closes, 9), e21 = ema(closes, 21);
   const atr: number[] = [], stretchC: number[] = [], stretchP: number[] = [];
@@ -77,7 +77,7 @@ function precompute(s: RealSession): Pre {
 // Pullback-continuation evaluator. `scalp` toggles the exit family; `needVol`
 // the bounce-volume condition. State (per session closure): none needed beyond
 // the precomputed arrays — stretch history is read from the arrays directly.
-const makeEval = (pre: Pre, scalp: boolean, needVol: boolean) => (f: Parameters<Evaluate>[0], pos: Parameters<Evaluate>[1]): Intent => {
+export const makeEval = (pre: Pre, scalp: boolean, needVol: boolean) => (f: Parameters<Evaluate>[0], pos: Parameters<Evaluate>[1]): Intent => {
   const i = f.minute;
   // ---- exits ----
   if (pos) {
@@ -150,4 +150,6 @@ async function main() {
   console.log(`  pattern is fade-bait at 0DTE granularity — bury it with the receipts.\n`);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Run only when executed directly — one-dte-probe imports makeEval/precompute,
+// and a bare main() call would re-run this whole probe as an import side effect.
+if (process.argv[1]?.includes("ema-pullback-probe")) main().catch((e) => { console.error(e); process.exit(1); });
