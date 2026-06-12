@@ -13,6 +13,19 @@ durable context for a new session. Read it first.
 stream post-close (desk flat) → 13 machine channels on stream, 4 manual twins on cron.**
 Worker `stream-2026-06-12a` deployed + beating (commit `106a3c3`).
 
+**⚑ ROSTER CULL EXECUTED (operator's word "run it chef", same evening, via MCP — supersedes the
+13-channel count above): 7 channels → draft** — power, power-final30, breakout, breakout-qqq,
+orb-spy-trail, orb-trend-rider, grind-smart-entries (draft still winds down exits; desk was flat,
+nothing stranded) **+ qqq-thrust-trail `underlying_stop_pct` 0.20→0** (QQQ pair alignment with
+orb-qqq-trail). **ARMED MACHINE ROSTER = 7, all stream:** breakout-alt-v3 · breakout-smart-entries
+(the momentum_atr A/B pair, month-end folds the loser) · grind-v3 · power-smart-entries
+(PROBATION — clean-era yardstick at month-end; model-red/live-green, the family's last stand) ·
+orb-qqq-trail · qqq-thrust-trail (QQQ pair, month-end clock) · pb-ride (1DTE debut). 4 manual
+twins stay armed+MUTED (operator muted them himself 06-12 15:20 ET — no twin entries until he
+unmutes; exits/backstop intact). Full menu + recipes + epitaphs + projections (menu beat the full
+roster +$4,441 on this week's replay; cut model-drag ≈ −$650…−$940/wk; worst-regime tail cut ~4×):
+**docs/roster-menu-2026-06-15.md**. Rollback any: `update strategists set status='armed' where slug='…';`
+
 **VALIDATION RECEIPTS (morning watch, all green):** (1) gap_min FAIL-CLOSED CHECK PASSED —
 stream rationales carried `gap: 0.424` from the open; V3 traded THROUGH the open gate at 11:22
 (−$315 stop_premium at −51.5% vs design −50% — the stream's stop precision on a live loss;
@@ -58,7 +71,9 @@ grinding). The ⚑ FOMC-ahead line + executor split (stream 11ch/21t · cron 0 a
   (data/databento-mdte = full corpus).
 
 **MONDAY WATCH (06-15):** (1) NO pre-open WARN flood (the idle beat's first live morning);
-(2) first QQQ STREAM session — worker `stream:` fills on the QQQ trio, cron defers;
+(2) first QQQ STREAM session — worker `stream:` fills on the QQQ PAIR (orb-qqq-trail +
+qqq-thrust-trail; breakout-qqq culled), cron defers; (2b) the 7 culled channels take ZERO
+entries + day-report coverage stays ✓; (2c) twins are MUTED — zero twin entries expected;
 (3) Monday's gap = Monday open vs FRIDAY close (weekend news lands in the gap — by design);
 (4) BAR_HISTORY 2400 = full Friday session in memory (pdh/pdl + gap refs intact all day).
 **WEDNESDAY 06-17: first live FOMC stand-down, 13:50–14:30 — the whole machine roster is now
@@ -83,8 +98,9 @@ expiry and flatten same-day (entry_dte=1 + the 06-08a rule). QQQ port gate probe
 (`npm run pb-qqq-probe`, QQQ 1DTE chains bought → data/databento-mdte-qqq) — verdict in
 docs/pb-qqq-probe-2026-06-12.txt.
 
-PENDING OPERATOR: manual-twin entry-push → twin migration, month-end cuts (clean-era
-attribution is the agreed yardstick).
+PENDING OPERATOR: manual-twin entry-push → twin migration + twin re-engage decision (twins
+muted by his hand 06-12). Month-end cuts: PULLED FORWARD — the 06-12 cull above; still on the
+month-end clean-era clock: power-smart-entries (probation), the ALT-vs-V3 fold, the QQQ pair.
 
 ## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — prior
 **W2 = move channels off the cron onto the Railway stream executor (operator's word:

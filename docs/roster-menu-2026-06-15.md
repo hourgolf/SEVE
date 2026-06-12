@@ -2,8 +2,10 @@
 
 The operator asked for the post-everything synthesis: every probe, every verdict, every live
 receipt rolled into one preferred roster for the week of 06-15, with head-to-head pairs where a
-second recipe is justified and a cull list for the rest. Nothing in this doc is applied — the
-SQL at the bottom waits on the operator's word.
+second recipe is justified and a cull list for the rest. **EXECUTED 2026-06-12 evening on the
+operator's word ("run it chef")** — the cull + the QQQ ustop alignment are applied via MCP and
+verified: armed roster = the 7 menu channels (all stream) + 4 muted twins; desk flat, nothing
+stranded.
 
 ## Live receipts used (DB, per-channel realized attribution)
 
@@ -112,12 +114,12 @@ stop. Rollback any: `update strategists set status='armed' where slug='…';`
 | **grind-smart-entries** | Clean era −$791. The smart layer was flat-EV on real fills from day one (smart-layer verdict); grind-v3 is this family's validated form. |
 
 ```sql
--- THE CULL (operator's word; mute = draft; exits wind down; rollback = status='armed')
+-- THE CULL — APPLIED 2026-06-12 evening (draft = exits wind down; rollback = status='armed')
 update strategists set status='draft'
  where slug in ('power','power-final30','breakout','breakout-qqq',
                 'orb-spy-trail','orb-trend-rider','grind-smart-entries');
 
--- OPTIONAL (QQQ pair alignment): zero qqq-thrust-trail's underlying stop to match orb-qqq-trail
+-- APPLIED 2026-06-12 (QQQ pair alignment): zero qqq-thrust-trail's underlying stop to match orb-qqq-trail
 update strategist_config c set underlying_stop_pct=0
   from strategists s where c.strategist_id=s.id and s.slug='qqq-thrust-trail';
 ```
