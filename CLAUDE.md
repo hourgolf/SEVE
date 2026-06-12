@@ -8,7 +8,64 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — READ THIS FIRST
+## SESSION HANDOFF — 2026-06-12 EVENING (VALIDATION DAY PASSED · QQQ FLIPPED) — READ THIS FIRST
+**W2 IS COMPLETE. The 06-12 validation day PASSED every gate, and the QQQ trio flipped to
+stream post-close (desk flat) → 13 machine channels on stream, 4 manual twins on cron.**
+Worker `stream-2026-06-12a` deployed + beating (commit `106a3c3`).
+
+**VALIDATION RECEIPTS (morning watch, all green):** (1) gap_min FAIL-CLOSED CHECK PASSED —
+stream rationales carried `gap: 0.424` from the open; V3 traded THROUGH the open gate at 11:22
+(−$315 stop_premium at −51.5% vs design −50% — the stream's stop precision on a live loss;
+in-distribution, the gate is a regime bet not a win guarantee). (2) First MULTI-CHANNEL stream
+session: 21 auto trades / 11 channels, coverage ✓ clean 13 OCCs, books Δ$172 on a churny day.
+(3) QQQ SHADOW PROOF EXACT: cron filled orb-qqq-trail QQQ719C ×1 @ 10:53:01; worker shadow
+ENTER same contract/qty at 10:53:02 → trio flipped post-close (rollback: executor='cron').
+(4) Stream-vs-stream shared-OCC exercised live (two ORBs on 742C; spy-trail trail-exit ×2 then
+the operator's route-close of trend-rider's 2 from the half-drained lot) — zero ghosts/
+rejections/reconciles. (5) Late entries 15:36 FILLED (the cutoff-31 roll working; zero 422s vs
+yesterday's 21). (6) close_reason/participation dataset rich on day one: 7 tagged closes
+(reversal×5, risk×2, target), 13 taken vs 1 skipped (power-manual 742C hit the bell backstop
+−$84 — the first 'skipped' datapoint), 4 operator overrides on autos.
+
+**SHIPPED TONIGHT (worker `2026-06-12a`):** pre-open idle heartbeat 08:55–09:35 (kills the
+310-line "stream heartbeat STALE" WARN flood the cron's gate printed 09:00–09:30 every
+morning) + **BAR_HISTORY 900→2400** (the 900 cap was RTH-sized but SIP streams extended-hours
+bars → the window held <1 calendar day, silently truncating prior-session pdh/pdl and — by
+Monday afternoons — the gap's prior-close reference; found via the operator's weekend question).
+
+**DAY REPORT 06-12 (saved docs/day-report-2026-06-12.txt): NAV −$2,834** — a whipsaw chop day
+(SPY +0.23% close-to-close after a +0.42% gap; gap days are trend-PRONE not trend-guaranteed).
+Cut-list receipts stacked: orb-trend-rider −448 (incl. a 111-min ER-0.01 entry + a re-lean),
+power −421 + daily-stop latch, power-smart −420. grind-v3 +22 (3/4 win — the scalper keeps
+grinding). The ⚑ FOMC-ahead line + executor split (stream 11ch/21t · cron 0 autos) + gap-watch
+(ALT 0 trades = selectivity, its momentum gate) all rendered in one report.
+
+**RESEARCH (5 probes today — the generative directive in action, memory updated):**
+- **ema-stretch:** channels are EMA-band-BLIND and the data says keep it — "don't chase"
+  INVERTS (near-band breakouts are the weak ones; ≥3-ATR stretched = +235/t). 3rd
+  entry-geometry refutation. V3 as-armed printed **+$20,053/+275 per t** (strongest yet).
+- **ema-pullback (new shape): KILLED at 0DTE** (single-window mirage + cost-walled scalp).
+- **band-squeeze (new shape): KILLED** — midday coils don't pay; the ORB's 9:30 anchor is
+  load-bearing. Cross-candidate fingerprints filed (CHOP-MIX-only profit = rising tide; 1-min
+  volume confirms SUBTRACT; scalp exits structurally cost-walled).
+- **one-dte (operator's walk-thought), 5-window VERDICT:** whipsaw-survival mechanism REAL
+  (stop-rate halves everywhere) but **KEEPERS STAY 0DTE** — survival costs the convex tail
+  (V3 Δ−$4,711, losing exactly the trend windows; the breakeven/trail regime signature).
+  **RESURRECTION: PB-ride@1DTE flips to +$4,632, 4/5 windows positive** — 0DTE gamma was the
+  pullback's murder weapon, not the entry. First generative candidate to survive a bar;
+  **paper-lab-draft-eligible ON THE OPERATOR'S WORD** (needs an `entry_dte` per-channel policy,
+  small build — the 1DTE roll plumbing exists). 1DTE chains now bought for ALL 5 windows
+  (data/databento-mdte = full corpus).
+
+**MONDAY WATCH (06-15):** (1) NO pre-open WARN flood (the idle beat's first live morning);
+(2) first QQQ STREAM session — worker `stream:` fills on the QQQ trio, cron defers;
+(3) Monday's gap = Monday open vs FRIDAY close (weekend news lands in the gap — by design);
+(4) BAR_HISTORY 2400 = full Friday session in memory (pdh/pdl + gap refs intact all day).
+**WEDNESDAY 06-17: first live FOMC stand-down, 13:50–14:30 — the whole machine roster is now
+covered (twins exempt by design).** PENDING OPERATOR: PB-ride@1DTE draft (his word), manual-twin
+entry-push → twin migration, month-end cuts (clean-era attribution is the agreed yardstick).
+
+## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — prior
 **W2 = move channels off the cron onto the Railway stream executor (operator's word:
 "migrate all even QQQ"). DONE TONIGHT: all 9 armed SPY MACHINE channels flipped to
 `executor='stream'` (joining grind-v3 → 10 on stream); the worker is now MULTI-SYMBOL

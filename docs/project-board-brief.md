@@ -33,13 +33,14 @@ per workstream, at a glance, for one operator + one AI pair.
 
 **Lane: Validation week (now → 06-17) — ACTIVE**
 - done · 10 SPY machine channels live on the stream executor
-- done · gap_min armed on V3 + ALT (first verified entry-side edge)
+- done · gap_min armed on V3 + ALT — LIVE-CONFIRMED 06-12 (gap 0.424 in rationales; V3 traded the open gate)
 - done · FOMC 2pm stand-down live, per-channel posture, symbol-scoped events
-- next · 06-12 9:31 ET gap fail-closed query (rollback gap_min if null)
-- next · 06-12 first multi-channel stream session books clean (coverage ✓)
-- next · QQQ shadow proof → flip 3 QQQ machine channels to stream
+- done · 06-12 validation day PASSED (coverage ✓ 13 OCCs, books Δ$172, 21 stream trades/11 channels)
+- done · QQQ shadow proof (entry lockstep exact) → trio FLIPPED to stream 06-12 close → 13 stream / 4 twins cron
+- done · pre-open heartbeat + BAR_HISTORY 2400 (worker stream-2026-06-12a)
+- next · 06-15 first QQQ stream session + first quiet pre-open (no WARN flood)
 - next · manual-twin entry-push on the worker → migrate 4 twins
-- HARD DATE · 06-17 first live FOMC stand-down (QQQ must be on stream by then)
+- HARD DATE · 06-17 first live FOMC stand-down — whole machine roster covered ✓
 
 **Lane: Executor consolidation — QUEUED**
 - W3 narrow ingest (option_quotes 94 MB/7d dominant table)
@@ -66,11 +67,14 @@ per workstream, at a glance, for one operator + one AI pair.
 - live interlocks: clone-promote flow, account budgets, edit-lock, red chassis
 
 **Lane: Research track — PROBE-GATED, ongoing**
+- done · ema-stretch (band-blindness protective — 3rd geometry refutation; V3 as-armed +$20k print)
+- done · ema-pullback + band-squeeze (new shapes, both KILLED at 0DTE; fingerprints filed)
+- done · one-dte 5-window verdict (keepers STAY 0DTE — convexity > survival, quantified)
+- DECISION · PB-ride@1DTE resurrection (+$4.6k, 4/5 windows) — paper-lab draft on operator's word
 - gap_min live validation → extend beyond V3/ALT if clean
 - chop classifier v2 (realized-vs-implied morning move; +$20/day oracle ceiling)
-- FOMC tuned edges (post-2:30 resolution re-entry; presser window 2:30–3:15)
-- event admission queue (FOMC minutes, Treasury auctions, ISM — each must pass
-  the localized-vol-spike probe before joining the calendar)
+- FOMC tuned edges (post-2:30 resolution re-entry; presser window 2:30–3:15) — data owned
+- event admission queue (FOMC minutes, Treasury auctions, ISM — probe-gated admission)
 
 ## Style notes (if matching the desk)
 
