@@ -37,14 +37,22 @@ export function alertClear(kind: string, scope: string): void {
   fired.delete(`${kind}:${scope}`);
 }
 
-async function send(title: string, body: string): Promise<void> {
+/** The ✋ manual-twin ping — fires on EVERY twin entry (no dedup: each open is a
+ *  fresh "your exit" obligation). Tag matches the cron's firePush so a migrated
+ *  twin's pings group with the historical ones on the phone. This is the piece
+ *  whose absence blocked the twin stream-migration (cron parity). */
+export function pushManual(title: string, body: string): void {
+  void send(title, body, "seve-manual");
+}
+
+async function send(title: string, body: string, tag = "seve-alert"): Promise<void> {
   info(`alert: ${title} — ${body}${enabled ? "" : " (push off: APP_URL/PUSH_SECRET unset)"}`);
   if (!enabled) return;
   try {
     await fetch(`${config.appUrl}/api/push-send`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-push-secret": config.pushSecret },
-      body: JSON.stringify({ title, body, tag: "seve-alert", url: "/" }),
+      body: JSON.stringify({ title, body, tag, url: "/" }),
     });
   } catch (e) {
     warn(`alert push failed — ${(e as Error).message}`);

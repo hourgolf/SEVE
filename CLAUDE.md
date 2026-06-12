@@ -152,9 +152,25 @@ expiry and flatten same-day (entry_dte=1 + the 06-08a rule). QQQ port gate probe
 (`npm run pb-qqq-probe`, QQQ 1DTE chains bought → data/databento-mdte-qqq) — verdict in
 docs/pb-qqq-probe-2026-06-12.txt.
 
-PENDING OPERATOR: manual-twin entry-push → twin migration + twin re-engage decision (twins
-muted by his hand 06-12). Month-end cuts: PULLED FORWARD — the 06-12 cull above; still on the
-month-end clean-era clock: power-smart-entries (probation), the ALT-vs-V3 fold, the QQQ pair.
+**NIGHT-CAP CHORES (same evening, "time to lean = time to clean"):** (1) **TWIN ✋ ENTRY-PUSH
+BUILT — worker `stream-2026-06-12d`** (`pushManual` in alerts.ts, tag seve-manual, fires on every
+`-manual` entry fill in executeEntry — cron parity). **The twin stream-migration is now FULLY
+unblocked; flip SQL ready, PENDING OPERATOR'S WORD on timing** (recommended: after Monday's open
+proves the QQQ pair + alert paths live): `update strategists set executor='stream' where slug
+like '%-manual';` (rollback per-slug to 'cron'). (2) **W3 QUOTES EXPORT BUILT + FIRST RUN
+VERIFIED EXACT** — `npm run export-quotes` (scripts/export-quotes.ts): option_quotes per ET day
+→ data/quotes-archive/<day>.json.gz (keyset-paginated on id — OFFSET pagination times out on
+this table); all 6 in-DB days archived, row counts match the DB exactly (~3.5MB gz/day). **⚠ NEW
+WEEKLY RITUAL: run export-quotes alongside export-bars at least every ~5 days — retention prunes
+quotes at 7d and they are NOT reconstructable** (unlike bars). (3) OTP login bug confirmed dead
+(AuthControl maxLength=10 fits Supabase's 8-digit codes). (4) `drop index idx_bars_symbol_ts`
+(~14MB, redundant with the unique (symbol,ts) key — the 06-07 optional) BLOCKED by tool
+permissions as unauthorized prod DDL — one SQL on the operator's word.
+
+PENDING OPERATOR: twin migration timing (entry-push now built — see above). Month-end cuts:
+PULLED FORWARD — the 06-12 cull; still on the month-end clean-era clock: power-smart-entries
+(probation), the ALT-vs-V3 fold, the QQQ pair. Optional: Databento refresh →06-12 (~$0.40, adds
+this week's two wild days to the research corpus before the next probe batch).
 
 ## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — prior
 **W2 = move channels off the cron onto the Railway stream executor (operator's word:

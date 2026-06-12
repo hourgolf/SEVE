@@ -21,6 +21,7 @@
 
 import { config, policy } from "./config.js";
 import { info } from "./log.js";
+import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
 import type { ChainStore } from "./state.js";
@@ -205,6 +206,9 @@ export async function executeEntry(
     ctx.remainingByOcc.set(occ, (ctx.remainingByOcc.get(occ) ?? 0) + fillQty); // 09c fix 2
     ctx.openRowQty.set(occ, (ctx.openRowQty.get(occ) ?? 0) + fillQty);
     await store.journal("EXEC", `${d.slug}: buy ${fillQty} ${occ} @ ${entryPx.toFixed(2)} (${d.reason})`, { order_id: o.id });
+    // ✋ manual twin: the human owns the exit — page him the moment the machine opens
+    // the position (cron-parity firePush; the piece that unblocks twin stream-migration).
+    if (/-manual$/i.test(d.slug)) pushManual(`✋ ${ch.name || d.slug}`, `opened ${strike}${dir === "call" ? "C" : "P"} ×${fillQty} — your exit`);
   } catch (e) {
     await store.journal("WARN", `${d.slug}: buy ${occ} rejected — ${(e as Error).message}`);
   }

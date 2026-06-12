@@ -76,7 +76,8 @@
     "backfill:options": "tsx scripts/backfill-options.ts",
     "backfill:databento": "tsx scripts/backfill-databento.ts",
     "fomc-resolution-probe": "tsx engine/fomc-resolution-probe.ts",
-    "cross-gap-probe": "tsx engine/cross-gap-probe.ts"
+    "cross-gap-probe": "tsx engine/cross-gap-probe.ts",
+    "export-quotes": "tsx scripts/export-quotes.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
