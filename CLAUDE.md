@@ -50,6 +50,20 @@ keeps executing them, zero gap) — tomorrow's open is the proof.
    the same 13:30 break OCC — the one path grind-v3-alone never exercised).
 4. Worker SHADOW-decides QQQ channels in the logs, matching the cron's actual QQQ fills =
    the green light to flip QQQ.
+5. **gap_min PRE-ARM CHECK:** a stream entry's signal rationale now carries `detail.gap` (worker
+   `stream-2026-06-11c`). Confirm it's NON-NULL (`select rationale->>'gap' from signals where …`)
+   — that's the prerequisite to arming gap_min (it's fail-closed; a missing gap would silently
+   halt an armed channel).
+
+**GAP_MIN — BUILT + VALIDATED (commit `c224d03`, NOT armed — the night's research payoff).** The
+overnight gap is a verified ex-ante regime signal (memory `gap-regime-verdict.md`): flat-open days
+bleed, gap days pay for the breakout family; PASSES the 5-window bar AND is independent of OR width
+(the first lead all session to survive). Built as a live `gap_min` condition (`|open−priorClose|/
+priorClose ≥ pct`), threaded the pdh/pdl path, registered in every vocab list, worker computes it in
+computeLevels. `npm run gap-min-selftest` reproduces the probe EXACTLY (ALT gap_min 0.25 → +252/t).
+**Arming V3/ALT is the operator's call, GATED on the pre-arm check above** — arm SQL + rollback +
+the fail-closed warning in `gap-regime-verdict.md`. Worker version bumped `b`→`c` (gap is additive —
+computed + logged, used by NO armed channel yet; the QQQ shadow gate from W2 is unchanged).
 
 **NEXT-SESSION W2 TAIL (after a clean 06-12):** (a) flip QQQ machine channels to stream
 (`update strategists set executor='stream' where slug in ('breakout-qqq','orb-qqq-trail','qqq-thrust-trail');`)
