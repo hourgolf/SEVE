@@ -143,6 +143,57 @@ final-hour lean on probation (power-smart) · two QQQ trails · 1DTE pullback di
 4. **Chop premium fly** — still the best "make chop pay" candidate (+$20/day on known-chop);
    blocked on the chop classifier + multi-leg/limit doors (Phase-B W-list).
 
+## PROJECTIONS — menu vs current roster (added on operator request, same evening)
+
+### 1. Live replay, 06-08→06-12 (the all-13 era; machine book only, twins excluded)
+Menu = the 7 keepers' actual fills; current = keepers + the cut group. Attribution is relative,
+but the clean-era days reconcile to NAV almost exactly (06-11 Δ$4, 06-12 Δ$172).
+
+| day        | current (13) | menu (7) | cut group | menu Δ |
+|------------|-------------:|---------:|----------:|-------:|
+| Mon 06-08  |         +517 |     +554 |       −37 |    +37 |
+| Tue 06-09  |       +2,915 |   +1,641 |    +1,274 | −1,274 |
+| Wed 06-10  |       −2,598 |     −107 |    −2,491 | +2,491 |
+| Thu 06-11  |       +1,241 |   +2,844 |    −1,603 | +1,603 |
+| Fri 06-12  |       −2,273 |     −689 |    −1,584 | +1,584 |
+| **Σ week** |     **−198** | **+4,243** | **−4,441** | **+4,441** |
+
+Menu wins 4 of 5 days; the cut group's one green day (06-09, +$1,274) is dwarfed by its bleed.
+Partial circularity disclosure: clean-era receipts informed the menu — BUT the cut list itself
+is the 06-09/06-11 standing list (named BEFORE Thu/Fri): on 06-11+06-12 the pre-named cuts went
+−$3,187 while the menu group went +$2,155. That two-day stretch is genuine out-of-sample
+validation of the cull.
+
+### 2. Forward model — 5-window real-NBBO pooled (probe corpus, ~62 weeks of sessions)
+Model-valid seats (consistent one-dte verdict run, as-armed configs):
+
+| seat                  | pooled 5-window | per-week ≈ | worst window (MA25) |
+|-----------------------|----------------:|-----------:|--------------------:|
+| V3 (as-armed)         |        +$15,291 |      +$247 |                +645 |
+| ALT (as-armed)        |        +$12,096 |      +$195 |                +645 |
+| pb-ride @1DTE         |         +$4,632 |       +$75 |              −1,471 |
+| **menu model core**   |    **+$32,019** |  **+$517** |            **−181** |
+
+Cut group, model (gated/live-faithful runs; sizing varies by probe — signs and windows are the
+signal): power −$15,348 · BREAK base −$15,948 · ORB family −$1.8k…−$10k (every variant red
+pooled) · breakout-qqq −$5,829 (64 sessions) · grind-smart all-windows-negative (MC) ·
+orb-spy-trail ≈0-to-red. **Cut drag ≈ −$650…−$940/week** (model) vs the −$888/day it actually
+ran this week. Worst-window stress (MA25): menu model core ≈ flat (−$181) vs the cut group's
+≈ −$25k extra bleed — the cull is mostly a tail-removal operation.
+
+### 3. The honest asterisks
+- **grind-v3 and power-smart are model-RED / live-GREEN** — the two seats where live receipts
+  override the model. Mechanisms: grind-v3's edge is the stream's ~10s premium sweep (bar-close
+  models quantize it away; proven 06-11); the power family is formally unrankable by backtest
+  (orderings scramble across windows — the 06-07 lesson). Model says power-smart MA25 −$6,736 =
+  the menu's worst-case seat; that's exactly why it's on probation with the clean-era yardstick,
+  not tenured. A pure-model menu would cut it (8th cut) and project higher still.
+- **QQQ pair**: thin (orb-qqq-trail +$2,470 live but n=6; thrust 1-4 live, n=5). Month-end clock.
+- Projected machine stop-exposure halves: 13×$350 ≈ $4.6k/day worst case → $2.55k/day.
+
+**Bottom line: identical upside capture (every +EV print is kept), minus a measured
+−$650…−$940/wk model drag (−$4.4k actual this week), with the worst-regime tail cut ~4×.**
+
 ## Monday watch (06-15) — unchanged from the handoff, plus the cull
 
 No pre-open WARN flood (idle beat's first morning) · first QQQ stream session (worker `stream:`
