@@ -3,23 +3,23 @@
 > tsx engine/calendar-probe.ts
 
 
-  CALENDAR probe · 564 SPY sessions · FOMC 15d · NFP(1st-Fri) 26d
-  ⚠ FOMC dates reconstructed from memory (2026 estimated) — verify vs the Fed calendar before trusting.
+  CALENDAR probe · 584 SPY sessions · FOMC 18d · NFP(1st-Fri) 27d
+  FOMC dates VERIFIED vs the official Fed calendar (engine/market-events.ts, fetched 2026-06-11).
 
   ══ A. INTRADAY VOL SIGNATURE — mean 1-min range (% of px) ══
                        14:00–14:30 (2pm)   11:00–11:30 (control)   ratio 2pm÷ctrl
-  FOMC days                    0.055%              0.023%          2.40×
-  non-FOMC days                0.026%              0.033%          0.81×
+  FOMC days                    0.063%              0.022%          2.82×
+  non-FOMC days                0.027%              0.033%          0.80×
 
   ══ B. |GAP| BY EVENT (median) — does the OPEN know? ══
-  FOMC (2pm event)   0.214%   · expect ≈ calm (overnight gap unrelated to the 2pm event)
-  NFP  (8:30 event)  0.493%   · expect > calm (pre-open → gaps → gap_min already owns it)
-  calm days          0.282%
+  FOMC (2pm event)   0.175%   · expect ≈ calm (overnight gap unrelated to the 2pm event)
+  NFP  (8:30 event)  0.395%   · expect > calm (pre-open → gaps → gap_min already owns it)
+  calm days          0.280%
 
   ══ C. ALT+V3 (no gap_min) on FOMC days · real NBBO · THIN n, directional ══
   non-FOMC days        +141/t (235)
-  FOMC days (all)      -678/t (6)
-  FOMC · held thru 2pm -690/t (4)   (the flatten-before-2pm test)
+  FOMC days (all)      -694/t (7)
+  FOMC · held thru 2pm -710/t (5)   (the flatten-before-2pm test)
   FOMC · not held 2pm  -654/t (2)
 
   READ: A shows a 2pm spike on FOMC (signature real) → B shows FOMC gaps like calm (gap_min blind to it)

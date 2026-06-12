@@ -102,7 +102,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-11c";
+export const WORKER_VERSION = "stream-2026-06-11d";
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
@@ -120,4 +120,12 @@ export const policy = {
   // Cost-gate cost model (fed REAL bid/ask → engine/cost.ts roundTripCostUsd).
   SLIPPAGE_TICKS_PER_SIDE: 0.25,
   COMMISSION_PER_CONTRACT: 0.04,
+  // EVENT STAND-DOWN (calendar-awareness, 2026-06-11): around a scheduled INTRADAY
+  // binary (FOMC 14:00 statement — verified 2.40× localized vol spike, invisible to
+  // gap_min), flatten holdings and block new entries. Window = [event−BEFORE,
+  // event+AFTER) = 13:50→14:30 for FOMC (the probed spike window). Risk-OFF only:
+  // fail-safe is a missed 40 min on ~8 days/yr. EVENT_STANDDOWN=0/false disables.
+  EVENT_STANDDOWN: flag("EVENT_STANDDOWN", true),
+  EVENT_FLATTEN_MIN_BEFORE: 10,
+  EVENT_RESUME_MIN_AFTER: 30,
 } as const;

@@ -18,6 +18,7 @@ import { roundTripCostUsd as engineRoundTrip, type CostModel } from "../../engin
 import type { Bar, Evaluate, Features, OptType, Position } from "../../engine/types";
 import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { policy } from "./config.js";
+import { inEventWindow } from "../../engine/market-events";
 import { etParts, occSymbol, type AlpacaPosition } from "./alpaca.js";
 import { peakMidSince, realizedTodayByChannel, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
@@ -229,6 +230,16 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     intent = { kind: "exit", reason: "premium_stop" };
   }
 
+  // EVENT STAND-DOWN flatten (calendar-awareness, market-events.ts): a scheduled
+  // intraday binary (FOMC 14:00) is not a tape signal — don't hold a directional
+  // 0DTE through the verified 2.40× spike window. Manual twins exempt (the human
+  // owns their exits; the bell backstop still stands).
+  if (pos && row && policy.EVENT_STANDDOWN && !/-manual$/i.test(ch.slug)
+      && (!intent || intent.kind !== "exit")
+      && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER)) {
+    intent = { kind: "exit", reason: "event_flatten" };
+  }
+
   // Power giveback trail (lock gains after +100%; power-only).
   if (pos && row && policy.POWER_TRAIL_CHANNELS.has(ch.slug) && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
     const histPeak = row.opened_at ? await peakMidSince(row.occ_symbol, row.opened_at) : 0;
@@ -277,6 +288,12 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     let blocked: string | null = entryGuard;
     if (!blocked && ch.status !== "armed") blocked = "not_armed";
     if (!blocked && !entryExpiry) blocked = "no_1dte_chain";
+    // EVENT STAND-DOWN entry block (all channels incl. twins — a machine entry
+    // into the FOMC window is a machine decision either way).
+    if (!blocked && policy.EVENT_STANDDOWN
+        && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER)) {
+      blocked = "event_window";
+    }
     if (!blocked && ch.daily_stop_usd > 0) {
       const realizedToday = await realizedTodayByChannel(ch.id, ctx.todayET);
       if (realizedToday <= -ch.daily_stop_usd) blocked = "daily_stop";

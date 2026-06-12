@@ -46,6 +46,7 @@
     "calendar-probe": "tsx engine/calendar-probe.ts",
     "chop-router-probe": "tsx engine/chop-router-probe.ts",
     "export-bars": "tsx scripts/export-bars.ts",
+    "repair-bars-archive": "tsx scripts/repair-bars-archive.ts",
     "verify-bars-archive": "tsx scripts/verify-bars-archive.ts",
     "day-report": "tsx --env-file=.env.local scripts/day-report.ts",
     "mfe-drift": "tsx --env-file=.env.local scripts/mfe-drift.ts",

@@ -15,8 +15,8 @@
 //   C. CHANNEL P&L — ALT/V3 (no gap_min) on FOMC vs non-FOMC, and trades HELD
 //      THROUGH 2:00 vs not. Thin n (few FOMC days have option fills) → directional.
 //
-//  ⚠ FOMC dates are RECONSTRUCTED FROM MEMORY (2026 estimated) — verify vs the
-//  official Fed calendar before trusting. NFP = first Friday rule (~90% right).
+//  FOMC dates: VERIFIED vs the official Fed calendar (see engine/market-events.ts;
+//  fetched 2026-06-11). NFP = first-Friday rule (~90% right) — diagnostic only.
 //
 //    npm run calendar-probe
 // ============================================================================
@@ -35,12 +35,9 @@ const NBBO: CostModel = { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" };
 const GATE = { minMoveToCostRatio: 3.0 };
 const CFG: StrategistConfig = { slug: "cal", capital_pct: 100, aggression: 100, max_contracts: 6, daily_stop_usd: 1e9, muted: false, soloed: false };
 
-// FOMC decision dates (2:00 PM ET announcement). RECONSTRUCTED — verify before trust.
-const FOMC = new Set<string>([
-  "2024-06-12", "2024-07-31", "2024-09-18", "2024-11-07", "2024-12-18",
-  "2025-01-29", "2025-03-19", "2025-05-07", "2025-06-18", "2025-07-30", "2025-09-17", "2025-10-29", "2025-12-10",
-  "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
-]);
+// FOMC decision dates — VERIFIED vs the official Fed calendar (engine/market-events.ts).
+import { MARKET_EVENTS } from "./market-events";
+const FOMC = new Set<string>(MARKET_EVENTS.filter((e) => e.kind === "fomc").map((e) => e.date));
 
 const etMinOf = (ms: number): number => {
   const et = new Date(new Date(ms).toLocaleString("en-US", { timeZone: "America/New_York" }));
@@ -83,7 +80,7 @@ async function main() {
   const nfpDays = corpus.filter((s) => isFirstFriday(s.dateET));
 
   console.log(`\n  CALENDAR probe · ${corpus.length} SPY sessions · FOMC ${fomcDays.length}d · NFP(1st-Fri) ${nfpDays.length}d`);
-  console.log(`  ⚠ FOMC dates reconstructed from memory (2026 estimated) — verify vs the Fed calendar before trusting.\n`);
+  console.log(`  FOMC dates VERIFIED vs the official Fed calendar (engine/market-events.ts, fetched 2026-06-11).\n`);
 
   // ---- A. intraday vol signature: 14:00–14:30 (2pm FOMC) vs 11:00–11:30 control ----
   const EVT = [840, 870], CTRL = [660, 690];
