@@ -70,7 +70,7 @@ per workstream, at a glance, for one operator + one AI pair.
 - done · ema-stretch (band-blindness protective — 3rd geometry refutation; V3 as-armed +$20k print)
 - done · ema-pullback + band-squeeze (new shapes, both KILLED at 0DTE; fingerprints filed)
 - done · one-dte 5-window verdict (keepers STAY 0DTE — convexity > survival, quantified)
-- DECISION · PB-ride@1DTE resurrection (+$4.6k, 4/5 windows) — paper-lab draft on operator's word
+- done · PB-ride@1DTE DRAFTED (operator's word 06-12): builtin + entry_dte policy, golden-proven, status=draft — arming is a future operator action
 - gap_min live validation → extend beyond V3/ALT if clean
 - chop classifier v2 (realized-vs-implied morning move; +$20/day oracle ceiling)
 - FOMC tuned edges (post-2:30 resolution re-entry; presser window 2:30–3:15) — data owned

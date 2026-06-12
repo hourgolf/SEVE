@@ -62,8 +62,20 @@ grinding). The ⚑ FOMC-ahead line + executor split (stream 11ch/21t · cron 0 a
 (3) Monday's gap = Monday open vs FRIDAY close (weekend news lands in the gap — by design);
 (4) BAR_HISTORY 2400 = full Friday session in memory (pdh/pdl + gap refs intact all day).
 **WEDNESDAY 06-17: first live FOMC stand-down, 13:50–14:30 — the whole machine roster is now
-covered (twins exempt by design).** PENDING OPERATOR: PB-ride@1DTE draft (his word), manual-twin
-entry-push → twin migration, month-end cuts (clean-era attribution is the agreed yardstick).
+covered (twins exempt by design).**
+
+**PB-RIDE DRAFTED (operator's word, same evening — commit `a608c36`, worker `stream-2026-06-12b`):**
+the resurrected pullback is now a REGISTRY builtin (`engine/strategies/pullback.ts`, 1:1 port,
+`npm run pb-selftest` PASS — trade-identical to the winning probe, 250t/$4,632) behind a NEW
+per-channel **`entry_dte` policy** (`34_entry_dte.sql` APPLIED: 0=today+cutoff-roll default;
+1=always next session's expiry — pb-ride's edge IS the time value; same-day flatten unchanged).
+Channel row `pb-ride` (`35_pb_ride_channel.sql` APPLIED): **status='draft' (trades NOTHING)**,
+executor=stream, RISK $150/STOP $300/4 contracts, entry_dte=1 (LOAD-BEARING — 0DTE variant
+refuted), event_policy standdown. Thesis doc `docs/channels/pb-ride.md`. PB-scalp stays buried.
+**Arm = `update strategists set status='armed' where slug='pb-ride';` — operator's word only.**
+
+PENDING OPERATOR: arm pb-ride (when ready), manual-twin entry-push → twin migration, month-end
+cuts (clean-era attribution is the agreed yardstick).
 
 ## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — prior
 **W2 = move channels off the cron onto the Railway stream executor (operator's word:
