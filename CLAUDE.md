@@ -45,8 +45,18 @@ unblocks the twin entry-push migration item.** (3) **CRON v56 `2026-06-12a` DEPL
 PAGE** — the cron pages "⚠ STREAM STALE" when the worker heartbeat crosses 5m (stateless
 one-cycle-window dedup; re-pages at 1h/2h; an 09:00 ET first-run check catches weekend deaths;
 known benign edge: market holidays page ~09:40). `firePush` gained a tag param so alerts don't
-replace the ✋ twin pings. Courses 3–5 parked: chart entry-lines/VWAP bands · the declutter sweep
-(do WITH the operator at the screen) · multi-account/paper-lab cockpit.
+replace the ✋ twin pings. **COURSES 3+4 SHIPPED (same night, operator approved all 4 declutter
+items): (3) CHART —** TRUE session VWAP (the old line plotted the PER-BAR vwap ≈ close — the
+display twin of the worker's vwap quirk, fixed display-side only; worker untouched), new `±σ`
+chip (VWAP ±1σ/2σ volume-weighted bands, default off), and OPEN-POSITION ENTRY LINES (dotted,
+direction-colored, at the underlying-at-entry from the fill-time bar, strike fallback, labeled
+`▲741C×2`, rides the TRADES chip — first visual test = Monday's first position). **(4) §03
+DECLUTTER —** `DAY · BOOKS` trust strip atop §03 (DAY P&L (NAV) · ATTRIBUTION Σ · BOOKS Δ
+toned ok/warn/bad · trades · top mover; verified live: Δ −$172 == the 06-12 day-report books
+delta); autopsy rows of benched channels grey out + carry an amber `86'd` chip (a week-old KEEP
+on a culled channel can't read as policy); OPS·PRE-FLIGHT absorbed Tape Health as a 5th TAPE
+light (component deleted); Signals Tape collapses consecutive identical signals into one ×N row.
+Course 5 parked: multi-account/paper-lab cockpit (trigger = real money).
 
 **LATE-NIGHT RESEARCH COOK (operator's "COOOK!!", same evening — 2 bench probes, memory updated):**
 - **FOMC resolution trade (`npm run fomc-resolution-probe`, NEW): PAPER-LAB CANDIDATE, collecting.**
