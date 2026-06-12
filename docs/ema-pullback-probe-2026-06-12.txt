@@ -1,0 +1,21 @@
+
+> seve-live-market-monitor@0.1.0 ema-pullback-probe
+> tsx engine/ema-pullback-probe.ts
+
+
+  EMA PULLBACK-CONTINUATION probe · NEW shape (generative residue of ema-stretch) · real NBBO · 328 SPY sessions
+  trend=ribbon stack · pullback=touch ≤0.5·ATR of EMA21 after ≥2·ATR stretch (30b) · bounce=with-trend close · 10:00→14:00
+  ITERATION BAR: +EV pooled AND ≥3/5 windows green → paper-lab draft. Arming would need the full 5-window bar.
+
+  variant                exp$/t    n   win%     pooled$   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+  PB-ride                 +16.8  380   28%      +6400        -3795        -3436         -231        -5643        +7266
+  PB-ride +vol            -80.8  221   24%     -17860        -3988        -7292        -5898        -3123        +2686
+  PB-scalp                -20.2 1167   48%     -23614        -7076        -2454        -3259        -1411        -9441
+  PB-scalp +vol           -20.7  339   49%      -7027        -1696        -1365        -1703         -113        -2208
+  PB-ride · gap days      +25.8  231   28%      +5967        -1842        -3241          +61        -5157        +3490
+  PB-scalp · gap days     -21.0  741   47%     -15531        -6409        -1576         -826         -842        -6780
+
+  Generative residue: if the SHAPE works but an exit family doesn't, the surviving family is the draft;
+  if gap-day rows dominate, the draft inherits gap_min from birth. If all rows die, the band-respect
+  pattern is fade-bait at 0DTE granularity — bury it with the receipts.
+
