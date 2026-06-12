@@ -1,0 +1,20 @@
+
+> seve-live-market-monitor@0.1.0 band-squeeze-probe
+> tsx engine/band-squeeze-probe.ts
+
+
+  BAND-SQUEEZE probe · generative candidate #2 · real NBBO · 328 SPY sessions
+  coil = |EMA9−EMA21| ≤ 0.25·ATR for 10 bars · release = width breaks out, ribbon-ordered, |mom| ≥ 0.3·ATR · 10:00→14:00
+  ITERATION BAR: +EV pooled AND ≥3/5 windows green → paper-lab draft. Expect death; cheap kills are the point.
+
+  variant                exp$/t    n   win%     pooled$   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+  SQZ-ride                +71.6   98   32%      +7021        -1846        -1832        -3060        -1105        +8507
+  SQZ-ride +vol          -187.8   33   21%      -6196         +460        -2007         -151        -1105         -408
+  SQZ-scalp               -30.0  124   47%      -3726        -1590        -1270         -397         -229         +335
+  SQZ-scalp +vol          -77.6   34   26%      -2638         -573         -723         -391         -115         -384
+  SQZ-ride · gap days      +6.6   61   28%       +403        -1419        -1894        -1901        -1105          -33
+  SQZ-ride+vol · gap     -288.0   23   22%      -6623         +460        -1682         +341        -1105        -3297
+
+  Generative residue: a surviving exit family = the draft shape; gap-day dominance = inherits gap_min;
+  all dead = midday coils don't pay at 0DTE — the ORB anchor (the open's information) was load-bearing.
+

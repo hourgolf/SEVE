@@ -44,6 +44,7 @@
     "gap-gate-probe": "tsx engine/gap-gate-probe.ts",
     "ema-stretch-probe": "tsx engine/ema-stretch-probe.ts",
     "ema-pullback-probe": "tsx engine/ema-pullback-probe.ts",
+    "band-squeeze-probe": "tsx engine/band-squeeze-probe.ts",
     "gap-min-selftest": "tsx engine/gap-min-selftest.ts",
     "calendar-probe": "tsx engine/calendar-probe.ts",
     "chop-router-probe": "tsx engine/chop-router-probe.ts",
