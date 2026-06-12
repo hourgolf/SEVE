@@ -344,6 +344,17 @@ async function main(): Promise<void> {
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
   setInterval(() => { void fastExitSweep(); }, Math.max(5, config.fastExitSec) * 1000);
 
+  // PRE-OPEN IDLE BEAT: the cron wakes at 09:00 ET but bars (hence cycles/sweeps)
+  // start at 09:30 — the heartbeat read stale every morning and the cron's
+  // executor gate WARN-flooded "stream heartbeat STALE" per channel per minute
+  // (310 lines on 06-12). Beat once a minute through 08:55–09:35 so the gate
+  // reads FRESH from the cron's first cycle. Harmless on weekends (no cron).
+  setInterval(() => {
+    if (!liveMode()) return;
+    const m = alpaca.etParts(Date.now()).min;
+    if (m >= RTH_OPEN - 35 && m < RTH_OPEN + 5) void store.heartbeat(`${WORKER_VERSION} pre-open`);
+  }, 60_000);
+
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
     process.on(sig, () => { info(`shutdown (${sig})`); stream.stop(); process.exit(0); });
   }

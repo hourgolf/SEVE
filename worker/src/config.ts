@@ -97,12 +97,17 @@ export const config = {
   symbol: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ").split(",")[0].trim().toUpperCase(),
   // How many strikes (± $) around spot to keep quoted in the NTM window.
   strikeWindow: Number(opt("STRIKE_WINDOW", "8")),
-  // Trailing 1-min bars to seed/hold in memory (≈ 2+ sessions for pdh/pdl).
-  barHistory: Number(opt("BAR_HISTORY", "900")),
+  // Trailing 1-min bars to seed/hold in memory. ⚠ sized for EXTENDED-hours flow:
+  // SIP streams pre/post-market bars into the store (only cycle triggers are
+  // RTH-gated), so a calendar day ≈ 960 bars — the old 900 default held barely
+  // ONE day and silently truncated the prior session's pdh/pdl window and the
+  // gap's prior-close reference by Monday afternoons (found 2026-06-12). 2400 ≈
+  // 2.5 calendar days incl. extended hours = full prior session always present.
+  barHistory: Number(opt("BAR_HISTORY", "2400")),
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-11e";
+export const WORKER_VERSION = "stream-2026-06-12a";
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
