@@ -62,6 +62,13 @@ const specEval = (entries: StrategySpec["entries"], timeET: string) => {
   return (s: RealSession) => def.build(s.bars as Bar[], def.timeframeMin, { pdh: s.pdh, pdl: s.pdl, gap: s.gap });
 };
 const sgn = (v: number) => (v >= 0 ? "+" : "");
+const WINDOWS = [
+  { name: "CHOP Mar26", from: "2026-03-01", to: "2026-03-31" },
+  { name: "TREND AprMay26", from: "2026-04-01", to: "2026-05-31" },
+  { name: "TREND-OOS MA25", from: "2025-05-01", to: "2025-08-31" },
+  { name: "TREND 24", from: "2024-05-01", to: "2024-08-31" },
+  { name: "CHOP-MIX 25-26", from: "2025-11-01", to: "2026-02-28" },
+];
 
 async function main() {
   const sessions = await loadRealSessions({ symbol: "SPY", sinceDaysAgo: 900 });
@@ -90,11 +97,12 @@ async function main() {
     set.flatMap((s) => simulateSession(s.bars, CFG, FUND, mk(s), chainFor(s, dte === 0 ? s.dateET : nextOf.get(s.dateET)!), false, { stopPct: 50 }, NBBO, undefined, undefined, undefined, undefined, 0, GATE));
 
   console.log(`\n  ONE-DTE probe · same strategies + risk caps, 1DTE contracts · real NBBO (multi-DTE cache) · ${real.length} sessions`);
-  console.log(`  span ${real[0]?.dateET} → ${real[real.length - 1]?.dateET} — ⚠ ONE regime stretch (pulse check, not the 5-window bar)`);
+  console.log(`  span ${real[0]?.dateET} → ${real[real.length - 1]?.dateET} — full 5-regime-window corpus (the verdict run)`);
   console.log(`  thesis metric = premium_stop rate: time value should let 1DTE SURVIVE the whipsaw the 0DTE stops out on.\n`);
-  console.log(`  channel               dte   exp$/t    n   win%  stop%  time/eod%     pooled$`);
+  console.log(`  channel               dte   exp$/t    n   win%  stop%  eod%     pooled$` + WINDOWS.map((w) => w.name.slice(0, 11).padStart(13)).join(""));
   for (const [name, mk] of CH) {
     const rows: string[] = [];
+    const perW: Record<number, number[]> = { 0: [], 1: [] };
     let t0: Trade[] = [], t1: Trade[] = [];
     for (const dte of [0, 1] as const) {
       const all = run(mk, dte, real);
@@ -104,11 +112,14 @@ async function main() {
       const winPct = all.length ? (100 * all.filter((t) => t.pnl > 0).length) / all.length : 0;
       const stopPct = all.length ? (100 * all.filter((t) => /stop/i.test(t.exitReason)).length) / all.length : 0;
       const eodPct = all.length ? (100 * all.filter((t) => /eod|time|flatten/i.test(t.exitReason)).length) / all.length : 0;
-      rows.push(`  ${(dte === 0 ? name : "").padEnd(20)} ${dte}DTE  ${`${sgn(exp)}${exp.toFixed(1)}`.padStart(7)} ${String(all.length).padStart(4)}  ${winPct.toFixed(0).padStart(3)}%  ${stopPct.toFixed(0).padStart(4)}%  ${eodPct.toFixed(0).padStart(8)}%  ${`${sgn(tot)}${Math.round(tot)}`.padStart(9)}`);
+      const per = WINDOWS.map((w) => Math.round(run(mk, dte, real.filter((s) => s.dateET >= w.from && s.dateET <= w.to)).reduce((a, t) => a + t.pnl, 0)));
+      perW[dte] = per;
+      rows.push(`  ${(dte === 0 ? name : "").padEnd(20)} ${dte}DTE  ${`${sgn(exp)}${exp.toFixed(1)}`.padStart(7)} ${String(all.length).padStart(4)}  ${winPct.toFixed(0).padStart(3)}%  ${stopPct.toFixed(0).padStart(4)}%  ${eodPct.toFixed(0).padStart(3)}%  ${`${sgn(tot)}${Math.round(tot)}`.padStart(9)}` + per.map((p) => `${sgn(p)}${p}`.padStart(13)).join(""));
     }
     console.log(rows.join("\n"));
     const d = t1.reduce((a, t) => a + t.pnl, 0) - t0.reduce((a, t) => a + t.pnl, 0);
-    console.log(`  ${"".padEnd(20)} Δ1−0  ${`${sgn(d)}${Math.round(d)}`.padStart(7)} pooled\n`);
+    const dW = perW[1].map((v, i) => v - perW[0][i]);
+    console.log(`  ${"".padEnd(20)} Δ1−0  ${`${sgn(d)}${Math.round(d)}`.padStart(7)} pooled · windows improved: ${dW.filter((x) => x > 0).length}/5` + "".padEnd(13) + dW.map((p) => `${sgn(p)}${p}`.padStart(13)).join("") + "\n");
   }
   console.log(`  READ: thesis lives if 1DTE stop% drops AND Δ pooled > 0 on the keepers. Watch grind-v3 (5-min holds`);
   console.log(`  shouldn't care about theta but DO care about gamma — if its target rate collapses, time value diluted`);

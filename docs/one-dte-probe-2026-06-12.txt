@@ -1,0 +1,34 @@
+
+> seve-live-market-monitor@0.1.0 one-dte-probe
+> tsx engine/one-dte-probe.ts
+
+
+  ONE-DTE probe · same strategies + risk caps, 1DTE contracts · real NBBO (multi-DTE cache) · 308 sessions
+  span 2024-05-01 → 2026-05-29 — full 5-regime-window corpus (the verdict run)
+  thesis metric = premium_stop rate: time value should let 1DTE SURVIVE the whipsaw the 0DTE stops out on.
+
+  channel               dte   exp$/t    n   win%  stop%  eod%     pooled$   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+  V3 (as-armed)        0DTE   +221.6   69   35%    62%   38%     +15291        +2575         -784         +645        +3673        +9182
+                       1DTE   +182.4   58   41%    33%   67%     +10580        +4783        -1359        +1132        +1305        +4719
+                       Δ1−0    -4711 pooled · windows improved: 2/5                     +2208         -575         +487        -2368        -4463
+
+  ALT (as-armed)       0DTE   +192.0   63   35%    62%   38%     +12096         +290        -2079         +645        +3673        +9567
+                       1DTE   +152.3   52   42%    33%   67%      +7919        +2630        -3453        +1403        +1305        +6034
+                       Δ1−0    -4177 pooled · windows improved: 2/5                     +2340        -1374         +758        -2368        -3533
+
+  ORB (as-live)        0DTE     -6.3  285   27%    67%   33%      -1799         +982        +1949        -8433        +3163         +540
+                       1DTE    -14.9  218   40%    32%   68%      -3249        +2531         +565        -9591        +2038        +1209
+                       Δ1−0    -1450 pooled · windows improved: 2/5                     +1549        -1384        -1158        -1125         +669
+
+  grind-v3 (builtin)   0DTE    -20.9  870   45%    56%    5%     -18217        -4190        -3786        -2208        -4038        -3994
+                       1DTE    -24.8  766   45%    56%    5%     -19022        -4026        -3027        -2044        -3420        -6504
+                       Δ1−0     -805 pooled · windows improved: 4/5                      +164         +759         +164         +618        -2510
+
+  PB-ride (killed)     0DTE    -11.5  361   27%    67%   33%      -4139        -3795        -3436         +141        -5301        +8251
+                       1DTE    +18.5  250   42%    30%   70%      +4632        +3677         +148        -1471        +1144        +1133
+                       Δ1−0    +8771 pooled · windows improved: 3/5                     +7472        +3584        -1612        +6445        -7118
+
+  READ: thesis lives if 1DTE stop% drops AND Δ pooled > 0 on the keepers. Watch grind-v3 (5-min holds
+  shouldn't care about theta but DO care about gamma — if its target rate collapses, time value diluted
+  the very pop it scalps). Full 5-window verdict once the 1DTE windows finish downloading.
+
