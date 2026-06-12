@@ -1557,3 +1557,20 @@ td.clk.sel {
 .push-toggle.on { color: var(--green); border-color: var(--green); }
 .push-toggle:disabled { cursor: default; opacity: 0.65; }
 .m-sheet .push-toggle { width: 100%; margin-top: 8px; padding: 9px; text-align: center; }
+
+/* ---- §03 declutter batch (2026-06-12) ---- */
+/* benched (86'd) channels inside autopsy reports — history, not current policy */
+.au-ch--benched { opacity: 0.55; filter: grayscale(0.35); }
+.au-chip.au-benched { color: var(--amber, #e8a13c); border: 1px solid currentColor; background: transparent; }
+/* signals-tape collapsed-repeat counter */
+.sig-xn { margin-left: 7px; font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--amber, #e8a13c); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; }
+/* DAY · BOOKS — the numbers-first trust strip atop §03 */
+.dbk-row { display: flex; flex-wrap: wrap; gap: 8px 26px; align-items: flex-end; }
+.dbk-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dbk-k { font-family: var(--mono); font-size: 9px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); }
+.dbk-v { font-family: var(--mono); font-size: 15px; font-weight: 700; white-space: nowrap; }
+.dbk-v.pos { color: var(--green); }
+.dbk-v.neg { color: var(--red); }
+.dbk-v.dbk-d-ok { color: var(--green); }
+.dbk-v.dbk-d-warn { color: var(--amber); }
+.dbk-v.dbk-d-bad { color: var(--red); }

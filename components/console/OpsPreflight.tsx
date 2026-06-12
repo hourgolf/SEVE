@@ -34,7 +34,14 @@ function Row({ label, tone, value, hint }: { label: string; tone: Tone; value: s
   );
 }
 
-export function OpsPreflight({ strategists }: { strategists: StrategistState[] }) {
+export interface TapeVitals {
+  rowCount: number;
+  lastIngestTs: string | null;
+  snapCount: number;
+  expirations: number;
+}
+
+export function OpsPreflight({ strategists, tape }: { strategists: StrategistState[]; tape?: TapeVitals }) {
   const ops = useOpsStatus();
   const rth = inRth();
 
@@ -62,6 +69,17 @@ export function OpsPreflight({ strategists }: { strategists: StrategistState[] }
   const riskSum = active.reduce((a, s) => a + (s.config.capital_pct || 0), 0);
   const stopSum = active.reduce((a, s) => a + (s.config.daily_stop_usd || 0), 0);
 
+  // TAPE light (absorbed Tape Health — one panel = the whole morning ritual):
+  // ingest freshness is the live signal; rows/contracts/expirations ride the hint+value.
+  let tTone: Tone = "dim", tVal = "—";
+  if (tape) {
+    const age = tape.lastIngestTs ? Math.max(0, Math.round((Date.now() - Date.parse(tape.lastIngestTs)) / 1000)) : null;
+    if (age == null) { tTone = rth ? "bad" : "dim"; tVal = "no ingest"; }
+    else if (age < 180) { tTone = "ok"; tVal = `ingest ${fmtAge(age)} ago · ${tape.snapCount || "—"} contracts · ${tape.expirations || "—"} exp`; }
+    else if (rth) { tTone = "bad"; tVal = `ingest STALLED · ${fmtAge(age)}`; }
+    else { tTone = "dim"; tVal = `idle · ${fmtAge(age)} · ${tape.snapCount || "—"} contracts`; }
+  }
+
   return (
     <div className="panel ops-pf">
       <div className="phead">
@@ -83,6 +101,14 @@ export function OpsPreflight({ strategists }: { strategists: StrategistState[] }
           value={`${active.length} armed · $${Math.round(riskSum).toLocaleString()}/trade · stops $${Math.round(stopSum).toLocaleString()}`}
           hint="Σ RISK-$ per trade + Σ daily stops over armed, unmuted channels"
         />
+        {tape && (
+          <Row
+            label="TAPE"
+            tone={tTone}
+            value={tVal}
+            hint={`market-ingest vitals — ${tape.rowCount.toLocaleString()} rows in option_quotes (7d window)`}
+          />
+        )}
       </div>
     </div>
   );

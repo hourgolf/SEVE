@@ -7,8 +7,8 @@ import { HeadReadouts } from "@/components/console/HeadReadouts";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
-import { TapeHealth } from "@/components/TapeHealth";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
+import { DayBooksStrip } from "@/components/console/DayBooksStrip";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
@@ -267,10 +267,17 @@ export function DesktopSurface({
         <StepRow steps={feed.steps} />
       </Bezel>
 
-      {/* ---- 03 · LOG (autopsy → signals + tape health → event log) --- */}
+      {/* ---- 03 · LOG (day·books strip → autopsy → signals + ops → event log) --- */}
       <SectionLabel id="log" idx="03">Log</SectionLabel>
       <div className="log-section">
-        <div className="grid grid--live grid--even au-pair">
+        <DayBooksStrip
+          strategists={desk.strategists}
+          pnl={livePnl}
+          fund={liveFund}
+          closedToday={feed.recentTrades.length}
+          openCount={feed.positions.length}
+        />
+        <div className="grid grid--live grid--even au-pair" style={{ marginTop: 14 }}>
           <div className="col"><DailyAutopsyPanel strategists={desk.strategists} /></div>
           <div className="col"><WeeklyAutopsyPanel strategists={desk.strategists} /></div>
         </div>
@@ -279,12 +286,9 @@ export function DesktopSurface({
             <SignalsTape signals={feed.signals} />
           </div>
           <div className="col">
-            <OpsPreflight strategists={desk.strategists} />
-            <TapeHealth
-              rowCount={data.rowCount}
-              lastIngestTs={data.lastIngestTs}
-              snapCount={data.snapshot.length}
-              expirations={data.expirations}
+            <OpsPreflight
+              strategists={desk.strategists}
+              tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
             />
           </div>
         </div>

@@ -24,6 +24,9 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggleExp = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
   const colorOf = (slug: string) => pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
+  // Benched (86'd) channels: grey + chip — a week-old KEEP/WATCH verdict must not
+  // read as current roster policy after a cull (autopsies are history, not roster).
+  const benched = new Set(strategists.filter((s) => s.status !== "armed").map((s) => s.slug));
 
   const Frame = ({ children }: { children: React.ReactNode }) => (
     <div className="panel">
@@ -106,10 +109,11 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
             const cn = n?.channels?.find((x) => x.slug === c.slug);
             const m = c.metrics, cap = c.exitEfficiency.captureRatio;
             return (
-              <div className={`au-ch${expanded ? "" : " au-ch--compact"}`} key={c.slug}>
+              <div className={`au-ch${expanded ? "" : " au-ch--compact"}${benched.has(c.slug) ? " au-ch--benched" : ""}`} key={c.slug}>
                 <div className="au-ch-head">
                   <span className="au-dot" style={{ background: colorOf(c.slug), boxShadow: `0 0 5px ${colorOf(c.slug)}` }} />
                   <span className="au-name">{c.name}</span>
+                  {benched.has(c.slug) && <span className="au-chip au-benched" title="benched (draft) — no entries; this verdict predates the cull">86&apos;d</span>}
                   {cn?.verdict && <span className={`au-chip ${VERDICT_CLASS[cn.verdict] ?? "au-sev-low"}`}>{cn.verdict}</span>}
                   <span className="wk-cap" title="exit capture — share of the available move realized">cap {pct(cap)}</span>
                   <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(m.realizedPnl)}</span>

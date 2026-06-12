@@ -25,6 +25,9 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggleExp = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
   const colorOf = (slug: string) => pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
+  // Benched (86'd) channels: grey the row + chip it, so a report written when the
+  // channel was live can't read as current policy (autopsies are history, not roster).
+  const benched = new Set(strategists.filter((s) => s.status !== "armed").map((s) => s.slug));
 
   const Frame = ({ children }: { children: React.ReactNode }) => (
     <div className="panel">
@@ -75,10 +78,11 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
             const cn = n?.channels?.find((x) => x.slug === c.slug);
             const m = c.metrics;
             return (
-              <div className={`au-ch${expanded ? "" : " au-ch--compact"}`} key={c.slug}>
+              <div className={`au-ch${expanded ? "" : " au-ch--compact"}${benched.has(c.slug) ? " au-ch--benched" : ""}`} key={c.slug}>
                 <div className="au-ch-head">
                   <span className="au-dot" style={{ background: colorOf(c.slug), boxShadow: `0 0 5px ${colorOf(c.slug)}` }} />
                   <span className="au-name">{c.name}</span>
+                  {benched.has(c.slug) && <span className="au-chip au-benched" title="benched (draft) — no entries; this report predates the cull">86&apos;d</span>}
                   {!expanded && c.flaws.length > 0 && (
                     <span className="au-flaws au-flaws--inline">
                       {c.flaws.map((f) => <span key={f.type} className={`au-flaw ${SEV_CLASS[f.severity] ?? "au-sev-low"}`}>{f.type}</span>)}
