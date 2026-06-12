@@ -42,6 +42,7 @@
     "orb-voldef-probe": "tsx engine/orb-voldef-probe.ts",
     "gap-regime-probe": "tsx engine/gap-regime-probe.ts",
     "gap-gate-probe": "tsx engine/gap-gate-probe.ts",
+    "gap-min-selftest": "tsx engine/gap-min-selftest.ts",
     "chop-router-probe": "tsx engine/chop-router-probe.ts",
     "export-bars": "tsx scripts/export-bars.ts",
     "verify-bars-archive": "tsx scripts/verify-bars-archive.ts",

@@ -61,6 +61,7 @@ export interface DecisionCtx {
   next1DTE: string | null;
   pdh?: number;
   pdl?: number;
+  gap?: number; // signed overnight gap % (for `gap_min`); undefined when no prior session in memory
   openRows: Map<string, PositionRow>; // strategist_id → open desk row
   alpacaByOcc: Map<string, AlpacaPosition>; // occ → Alpaca position
 }
@@ -84,19 +85,27 @@ export function buildSessionBars(all: Bar[], todayET: string): Bar[] {
   });
 }
 
-// Prior trading day's RTH high/low (for compiled-spec `level` pdh/pdl conditions).
-export function computeLevels(all: Bar[], todayET: string): { pdh?: number; pdl?: number } {
-  const byDay = new Map<string, { hi: number; lo: number }>();
-  for (const b of all) {
+// Prior trading day's RTH high/low (for `level` pdh/pdl) + the overnight gap (for
+// `gap_min`). gap = (today's first RTH bar open − prior session's last RTH close) /
+// prior close · 100. Needs the prior session in the in-memory window (the worker
+// seeds 3 days on boot, so it's present after startup); when it isn't, gap is
+// undefined → a gap_min-gated channel stands down (fail-closed, self-heals next day).
+export function computeLevels(all: Bar[], todayET: string): { pdh?: number; pdl?: number; gap?: number } {
+  const byDay = new Map<string, { hi: number; lo: number; firstOpen: number; lastClose: number }>();
+  const sorted = [...all].filter((b) => { const p = etParts(b.ts); return p.min >= RTH_OPEN && p.min < RTH_CLOSE; }).sort((a, b) => a.ts - b.ts);
+  for (const b of sorted) {
     const p = etParts(b.ts);
-    if (p.min < RTH_OPEN || p.min >= RTH_CLOSE) continue;
     const e = byDay.get(p.date);
-    if (!e) byDay.set(p.date, { hi: b.high, lo: b.low });
-    else { e.hi = Math.max(e.hi, b.high); e.lo = Math.min(e.lo, b.low); }
+    if (!e) byDay.set(p.date, { hi: b.high, lo: b.low, firstOpen: b.open, lastClose: b.close });
+    else { e.hi = Math.max(e.hi, b.high); e.lo = Math.min(e.lo, b.low); e.lastClose = b.close; } // sorted → last wins
   }
   const priors = [...byDay.keys()].filter((d) => d < todayET).sort();
   const prior = priors.length ? byDay.get(priors[priors.length - 1]) : undefined;
-  return prior ? { pdh: prior.hi, pdl: prior.lo } : {};
+  if (!prior) return {};
+  const out: { pdh?: number; pdl?: number; gap?: number } = { pdh: prior.hi, pdl: prior.lo };
+  const today = byDay.get(todayET);
+  if (today && prior.lastClose > 0) out.gap = ((today.firstOpen - prior.lastClose) / prior.lastClose) * 100;
+  return out;
 }
 
 // ---- per-channel evaluator (registry OR compiled spec) ---------------------
@@ -111,7 +120,7 @@ function buildEvaluator(ch: ChannelConfig, ctx: DecisionCtx): Built | null {
     const spec = ch.spec_json as StrategySpec;
     const def = specToStrategyDef(spec);
     return {
-      evaluate: def.build(ctx.sessionBars, def.timeframeMin, { pdh: ctx.pdh, pdl: ctx.pdl }),
+      evaluate: def.build(ctx.sessionBars, def.timeframeMin, { pdh: ctx.pdh, pdl: ctx.pdl, gap: ctx.gap }),
       warmup: def.warmupBars,
       tf: def.timeframeMin,
       premiumExit: specPremiumExit(spec),
@@ -298,7 +307,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     }
     return {
       ...base, action: "enter", reason: intent.reason, direction: dir, occ, qty, blocked,
-      detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close) },
+      detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), gap: ctx.gap != null ? +ctx.gap.toFixed(3) : null, expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close) },
     };
   }
 

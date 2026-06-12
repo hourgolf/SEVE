@@ -36,6 +36,7 @@ export interface RealSession {
   ivAnnual: number; // realized-vol estimate for chain pricing
   pdh?: number; // prior-day high (for `level` conditions); undefined on day 1
   pdl?: number; // prior-day low
+  gap?: number; // signed overnight gap % = (open − prior session close)/prior close · 100 (for `gap_min`)
 }
 
 interface RawBar {
@@ -191,13 +192,17 @@ export async function loadRealSessions(opts?: { sinceDaysAgo?: number; symbol?: 
     });
     sessions.push({ dateET: date, bars, ivAnnual: realizedIv(bars) });
   }
-  // prior-day high/low for `level` conditions (pdh/pdl) — sessions are date-sorted
+  // prior-day high/low (pdh/pdl) + overnight gap — sessions are date-sorted, so
+  // sessions[i-1] is the prior trading session.
   for (let i = 1; i < sessions.length; i++) {
     const prev = sessions[i - 1].bars;
     let hi = -Infinity, lo = Infinity;
     for (const b of prev) { if (b.high > hi) hi = b.high; if (b.low < lo) lo = b.low; }
     sessions[i].pdh = hi;
     sessions[i].pdl = lo;
+    const priorClose = prev[prev.length - 1].close;
+    const open = sessions[i].bars[0].open;
+    if (priorClose > 0) sessions[i].gap = ((open - priorClose) / priorClose) * 100;
   }
   return sessions;
 }

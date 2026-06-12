@@ -34,6 +34,7 @@ export type Condition =
   | { kind: "vwap_dev"; atr: number; cmp: ">" | "<" }
   | { kind: "opening_range"; minutes: number; side: "break_above" | "break_below" }
   | { kind: "or_width_min"; pct: number }
+  | { kind: "gap_min"; pct: number } // overnight gap regime: |open − priorClose|/priorClose ≥ pct% (gap = catalyst; flat-open = chop-prone). Magnitude only — gap direction is noise.
   | { kind: "rel_vol"; min: number }
   | { kind: "rsi"; period: number; cmp: ">" | "<"; value: number }
   | { kind: "time_before"; et: string }
@@ -136,7 +137,7 @@ export interface StrategySpec {
 
 // Condition kinds the engine/worker can evaluate live today.
 const SUPPORTED_KINDS = new Set<Condition["kind"]>([
-  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min",
+  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
   "efficiency_ratio", "momentum_atr", "macd", "level",
 ]);
@@ -234,7 +235,7 @@ export function validateLegs(structure: LegStructure, legs: SpecLeg[] | undefine
 
 // Every condition kind the compiler is allowed to emit (the Condition union).
 const KNOWN_KINDS = new Set<string>([
-  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "rel_vol",
+  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "gap_min", "rel_vol",
   "rsi", "time_before", "time_between", "efficiency_ratio", "momentum_atr", "macd",
   "level", "tick", "gamma_regime", "gamma_wall", "iv_rank", "event_within", "unknown",
 ]);

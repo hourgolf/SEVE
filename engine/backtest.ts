@@ -528,7 +528,7 @@ async function main() {
               : (f, pos) => fadeEvaluate(f, pos, DEFAULT_FADE_PARAMS);
   // Per-session evaluator: a spec needs the bars (ET clock + precomputed series),
   // built-ins need only the closes. One seam so both paths below stay identical.
-  const evalFor = (bars: Bar[], levels?: { pdh?: number; pdl?: number }): Evaluate =>
+  const evalFor = (bars: Bar[], levels?: { pdh?: number; pdl?: number; gap?: number }): Evaluate =>
     specDef ? specDef.build(bars, specDef.timeframeMin, levels) : makeEval(bars.map((b) => b.close));
   // --trail <k>: layer an underlying ATR-chandelier trail (exit when price retraces
   // k·ATR from the peak favorable underlying, ONLY once in profit) onto ANY strat —
@@ -632,7 +632,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      const dayTrades = simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate);
+      const dayTrades = simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl, gap: s.gap }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate);
       all.push(...dayTrades);
       perDay.push({ date: s.dateET, pnl: Math.round(dayTrades.reduce((a, t) => a + t.pnl, 0) * 100) / 100, trades: dayTrades.length });
     }

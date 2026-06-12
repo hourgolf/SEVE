@@ -36,7 +36,7 @@ export interface CompiledStrategy {
   timeframeMin: number;
   warmupBars: number;
   mandate: string;
-  build: (bars: Bar[], tfMin: number, levels?: { pdh?: number; pdl?: number }) => Evaluate;
+  build: (bars: Bar[], tfMin: number, levels?: { pdh?: number; pdl?: number; gap?: number }) => Evaluate;
 }
 
 // ---- ET wall-clock (portable: Intl works in Node + Deno) -------------------
@@ -65,7 +65,7 @@ function parseET(hhmm: string): number | null {
 // Condition kinds this interpreter can actually evaluate (the rest are feed-
 // dependent and ignored — see capabilityCheck in lib/desk/strategySpec.ts).
 const SUPPORTED = new Set<Condition["kind"]>([
-  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min",
+  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
   "efficiency_ratio", "momentum_atr", "macd", "level",
 ]);
@@ -129,6 +129,7 @@ interface Ctx {
   macdSeries: Map<string, number[]>; // key `${fast}-${slow}-${signal}` → histogram
   pdh?: number; // prior-day high (for `level` conditions)
   pdl?: number;
+  gap?: number; // signed overnight gap % ((open − priorClose)/priorClose·100); session constant (for `gap_min`)
 }
 
 const macdKey = (c: { fast: number; slow: number; signal: number }) => `${c.fast}-${c.slow}-${c.signal}`;
@@ -158,6 +159,11 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       if (f.openRangeHi == null || f.openRangeLo == null || f.close <= 0) return false;
       return ((f.openRangeHi - f.openRangeLo) / f.close) * 100 >= c.pct;
     }
+    case "gap_min":
+      // overnight gap regime (gap-gate-verdict): trade only on days with a catalyst-sized
+      // gap; flat-open days are chop-prone and bleed. MAGNITUDE (direction is noise). A
+      // session constant → gates the whole day. No gap data (first session) ⇒ false (stand down).
+      return ctx.gap != null && Math.abs(ctx.gap) >= c.pct;
     case "rel_vol":
       return f.relVol >= c.min;
     case "efficiency_ratio":
@@ -221,7 +227,7 @@ function entryHolds(entry: SpecEntry, ctx: Ctx): boolean {
 }
 
 // Build the per-session Evaluate for a spec (precomputes EMA/RSI over closes).
-function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, levels?: { pdh?: number; pdl?: number }): Evaluate {
+function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, levels?: { pdh?: number; pdl?: number; gap?: number }): Evaluate {
   const closes = bars.map((b) => b.close);
   const emaSeries = new Map<number, number[]>();
   const rsiSeries = new Map<number, number[]>();
@@ -259,7 +265,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {
