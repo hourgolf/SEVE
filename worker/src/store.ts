@@ -37,6 +37,10 @@ export interface ChannelConfig {
   // flatten + block entries in a scheduled-event window; 'ignore' = the channel's
   // thesis owns the event (future event-native strategies opt out here).
   event_policy: "standdown" | "ignore";
+  // Per-channel entry DTE (34_entry_dte.sql): 0 = today's expiry + cutoff roll
+  // (default); 1 = ALWAYS the next session's expiry (pb-ride — its edge IS the
+  // 1DTE time value). Same-day flatten unchanged either way.
+  entry_dte: number;
 }
 export interface FundState {
   total_capital_usd: number;
@@ -91,6 +95,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       muted: !!cfg.muted,
       soloed: !!cfg.soloed,
       event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
+      entry_dte: Math.max(0, Math.min(1, Number(cfg.entry_dte ?? 0))),
     });
   }
   const fund: FundState | null = fundRow

@@ -281,7 +281,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     if (!dir) return { ...base, action: "skip", reason: "multileg_unsupported" }; // multi-leg specs aren't live-armable (memory)
     const strike = Math.round(f.close);
     const inCutoff = ctx.minutesToClose <= policy.OPEN_0DTE_CUTOFF_MIN;
-    const entryExpiry = inCutoff ? ctx.next1DTE : ctx.todayET;
+    // entry_dte=1 (34_entry_dte.sql): the channel ALWAYS buys the next session's
+    // expiry (pb-ride — the 0DTE variant is refuted; the edge is the time value).
+    // Default 0 = today + the cutoff roll. Same-day flatten applies either way.
+    const entryExpiry = ch.entry_dte >= 1 || inCutoff ? ctx.next1DTE : ctx.todayET;
     // OCC root = the CHANNEL's ticker (multi-symbol), not a global — else a QQQ
     // channel would build a SPY OCC. ctx.chain/sessionBars/pdh/pdl are already this
     // channel's symbol (the cycle builds one ctx per symbol).

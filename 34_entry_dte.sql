@@ -1,0 +1,13 @@
+-- ============================================================================
+--  34_entry_dte.sql · per-channel entry DTE (2026-06-12)
+--  ALREADY APPLIED via the Supabase MCP (migration `entry_dte`) — repo record.
+--
+--  0 (default) = today's expiry with the late-day cutoff roll (existing behavior,
+--  all current channels). 1 = ALWAYS enter the next session's expiry — the
+--  one-dte-probe verdict: the keepers stay 0DTE (convexity > survival, V3
+--  Δ−$4,711), but the resurrected pullback (pb-ride) trades its edge ON the 1DTE
+--  time value (+$4,632, 4/5 windows; the 0DTE variant is refuted). The same-day
+--  flatten rule (06-08a) is unchanged — a 1DTE entered today still closes today.
+--  Honored by the stream worker only (the cron owns just the manual twins).
+-- ============================================================================
+alter table strategist_config add column if not exists entry_dte int not null default 0;

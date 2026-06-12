@@ -23,6 +23,7 @@ import { fadeEvaluate, DEFAULT_FADE_PARAMS } from "./strategies/fade";
 import { powerEvaluate, DEFAULT_POWER_PARAMS, DEFAULT_POWER_MOM30 } from "./strategies/power";
 import { grindEvaluate, DEFAULT_GRIND_PARAMS } from "./strategies/grind";
 import { grindV2Evaluate, DEFAULT_GRIND_V2_PARAMS, DEFAULT_GRIND_V3_PARAMS } from "./strategies/grind-v2";
+import { buildPullback } from "./strategies/pullback";
 
 export interface StrategyDef {
   slug: string;
@@ -114,6 +115,19 @@ export const STRATEGY_REGISTRY: Record<string, StrategyDef> = {
     warmupBars: 30,
     mandate: "Disciplined scalper — midday-only momentum bursts (trend-gated), fast fixed-target exit, afternoon curfew.",
     build: () => (f, pos) => grindV2Evaluate(f, pos, DEFAULT_GRIND_V3_PARAMS),
+  },
+
+  // Pullback-continuation (PB-ride) — generative-inventory survivor (2026-06-12):
+  // killed at 0DTE (gamma = 67% premium-stop rate), resurrected at 1DTE (+$4,632,
+  // 4/5 windows positive). ⚠ REQUIRES strategist_config.entry_dte=1 — the 0DTE
+  // variant is REFUTED; the edge IS the time value. Paper-lab DRAFT; arm bar unchanged.
+  "pb-ride": {
+    slug: "pb-ride",
+    name: "Pullback Rider (1DTE)",
+    timeframeMin: 1,
+    warmupBars: 30,
+    mandate: "Trend pullback-continuation — ribbon-stacked trend, band-tag retrace, with-trend bounce entry on 1DTE time value; ride with the catastrophic stop.",
+    build: (bars, tfMin) => buildPullback(bars, tfMin),
   },
 };
 
