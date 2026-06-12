@@ -1,0 +1,39 @@
+
+> seve-live-market-monitor@0.1.0 ema-stretch-probe
+> tsx engine/ema-stretch-probe.ts
+
+
+  EMA-STRETCH probe · entry distance from the EMA band, in ATR units · real NBBO · 328 SPY sessions
+  stretch = directional (close − EMA21)/ATR at the entry bar (positive = chasing in trade direction)
+
+  ══ A. DIAGNOSTIC — pooled exp$/t by entry stretch (hypothesis-generator) ══
+  V3 (as-armed)   <1 ATR -354/t (2)  ·  1–2 ATR +1196/t (3)  ·  2–3 ATR +320/t (14)  ·  ≥3 ATR (chasing) +235/t (54)
+                  ribbon-aligned +284/t (72)  ·  counter-ribbon -378/t (1)
+  ALT (as-armed)  <1 ATR —  ·  1–2 ATR —  ·  2–3 ATR +320/t (14)  ·  ≥3 ATR (chasing) +234/t (53)
+                  ribbon-aligned +252/t (67)  ·  counter-ribbon —/t (0)
+  ORB (as-live)   <1 ATR -130/t (14)  ·  1–2 ATR -7/t (54)  ·  2–3 ATR -15/t (90)  ·  ≥3 ATR (chasing) +73/t (144)
+                  ribbon-aligned +27/t (282)  ·  counter-ribbon -38/t (20)
+
+  ══ B. GATES (pre-registered) — the arm bar: ≥4/5 windows helped/neutral AND pooled exp$/t up AND total holds ══
+  V3 (as-armed)
+    variant                 exp$/t    n     pooled$   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+    baseline                +274.7   73     +20053        +2575         -784         +645        +3673        +9182
+    G1a chase>1.5 blocked    -74.9   15      -1123        +2866         +455        -1063         -378        -2288
+    G1b chase>2.0 blocked   +196.3   19      +3729        +3184         +166        -1501         -378        +2973
+    G2 ribbon-aligned only  +283.8   72     +20431        +2575         -406         +645        +3673        +9182
+  ALT (as-armed)
+    variant                 exp$/t    n     pooled$   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+    baseline                +251.6   67     +16858         +290        -2079         +645        +3673        +9567
+    G1a chase>1.5 blocked     +0.0    0         +0           +0           +0           +0           +0           +0
+    G1b chase>2.0 blocked  +2729.5    2      +5459           +0         -288           +0           +0        +5748
+    G2 ribbon-aligned only  +251.6   67     +16858         +290        -2079         +645        +3673        +9567
+  ORB (as-live)
+    variant                 exp$/t    n     pooled$   CHOP Mar26  TREND AprMa  TREND-OOS M     TREND 24  CHOP-MIX 25
+    baseline                 +22.7  302      +6863         +982        +1949        -8853        +2394         -415
+    G1a chase>1.5 blocked     +9.2  187      +1716        +6250         +311        -3116        -1565        -5908
+    G1b chase>2.0 blocked    -21.7  228      -4945        +5109        +2397       -10564          +24        -8380
+    G2 ribbon-aligned only   +23.4  296      +6914         -278        +1949        -8991        +3481         +469
+
+  READ: the operator's eye is right if exp$/t DEGRADES with stretch (A) and a gate passes the full bar (B).
+  The level-gate prior says the stretched entries ARE the momentum — refuted unless the data says otherwise.
+
