@@ -232,11 +232,13 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
 
   // EVENT STAND-DOWN flatten (calendar-awareness, market-events.ts): a scheduled
   // intraday binary (FOMC 14:00) is not a tape signal — don't hold a directional
-  // 0DTE through the verified 2.40× spike window. Manual twins exempt (the human
-  // owns their exits; the bell backstop still stands).
-  if (pos && row && policy.EVENT_STANDDOWN && !/-manual$/i.test(ch.slug)
+  // 0DTE through the verified 2.40× spike window. PER-CHANNEL posture
+  // (33_event_policy.sql): event_policy='ignore' opts a channel out (an
+  // event-native thesis owns its events); manual twins exempt (the human owns
+  // their exits; the bell backstop still stands). Events are symbol-scoped.
+  if (pos && row && policy.EVENT_STANDDOWN && ch.event_policy !== "ignore" && !/-manual$/i.test(ch.slug)
       && (!intent || intent.kind !== "exit")
-      && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER)) {
+      && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
     intent = { kind: "exit", reason: "event_flatten" };
   }
 
@@ -288,10 +290,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     let blocked: string | null = entryGuard;
     if (!blocked && ch.status !== "armed") blocked = "not_armed";
     if (!blocked && !entryExpiry) blocked = "no_1dte_chain";
-    // EVENT STAND-DOWN entry block (all channels incl. twins — a machine entry
-    // into the FOMC window is a machine decision either way).
-    if (!blocked && policy.EVENT_STANDDOWN
-        && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER)) {
+    // EVENT STAND-DOWN entry block (incl. twins — a machine entry into the FOMC
+    // window is a machine decision either way). event_policy='ignore' opts out.
+    if (!blocked && policy.EVENT_STANDDOWN && ch.event_policy !== "ignore"
+        && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
       blocked = "event_window";
     }
     if (!blocked && ch.daily_stop_usd > 0) {

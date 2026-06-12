@@ -1,0 +1,21 @@
+-- ============================================================================
+--  33_event_policy.sql · per-channel event posture (calendar-awareness)
+--  ALREADY APPLIED to the live DB via the Supabase MCP (migration `event_policy`,
+--  2026-06-11) — this file is the repo record; re-running is a harmless no-op.
+--
+--  The FOMC stand-down (worker stream-2026-06-11d) shipped as a worker-wide
+--  blanket — the right DEFAULT (every current channel is a directional 0DTE ride
+--  that verifiably bleeds through FOMC: −694/t complete-population) but the wrong
+--  CEILING for the strategy-mixer architecture: a future event-native channel
+--  (FOMC straddle, earnings vol play) must be able to opt OUT per channel without
+--  stripping protection from the rides.
+--
+--    'standdown' (default) — flatten holdings + block entries inside the event
+--                            window (manual twins keep their exit exemption).
+--    'ignore'              — trade through; the channel's thesis owns the event.
+--
+--  To let a channel trade events:
+--    update strategist_config c set event_policy='ignore'
+--    from strategists s where c.strategist_id=s.id and s.slug='<slug>';
+-- ============================================================================
+alter table strategist_config add column if not exists event_policy text not null default 'standdown';

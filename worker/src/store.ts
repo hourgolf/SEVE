@@ -33,6 +33,10 @@ export interface ChannelConfig {
   underlying_stop_pct: number;  // 0 = off (config-gated underlying initial stop)
   muted: boolean;
   soloed: boolean;
+  // Per-channel event posture (33_event_policy.sql): 'standdown' (default) =
+  // flatten + block entries in a scheduled-event window; 'ignore' = the channel's
+  // thesis owns the event (future event-native strategies opt out here).
+  event_policy: "standdown" | "ignore";
 }
 export interface FundState {
   total_capital_usd: number;
@@ -86,6 +90,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       underlying_stop_pct: Number(cfg.underlying_stop_pct ?? 0),
       muted: !!cfg.muted,
       soloed: !!cfg.soloed,
+      event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
     });
   }
   const fund: FundState | null = fundRow

@@ -25,6 +25,10 @@ export interface MarketEvent {
   minET: number | null; // event minute-of-day ET (840 = 14:00); null = all-day
   kind: "fomc";
   label: string;
+  // Tickers the event targets; ABSENT = market-wide (FOMC). A future earnings-
+  // class event would list its blast radius (e.g. NVDA print → ["QQQ"]) so only
+  // channels on those underlyings react — events are scoped, never global-only.
+  symbols?: string[];
 }
 
 const FOMC_DECISION_DATES: string[] = [
@@ -46,22 +50,27 @@ export const MARKET_EVENTS: MarketEvent[] = FOMC_DECISION_DATES.map((date) => ({
 const byDate = new Map<string, MarketEvent[]>();
 for (const e of MARKET_EVENTS) byDate.set(e.date, [...(byDate.get(e.date) ?? []), e]);
 
-/** All events on an ET date (empty array = calm day). */
-export function eventsOn(dateET: string): MarketEvent[] {
-  return byDate.get(dateET) ?? [];
+/** All events on an ET date (empty array = calm day). With `symbol`, only
+ *  market-wide events + events whose `symbols` list includes it. */
+export function eventsOn(dateET: string, symbol?: string): MarketEvent[] {
+  const all = byDate.get(dateET) ?? [];
+  if (!symbol) return all;
+  return all.filter((e) => !e.symbols || e.symbols.includes(symbol.toUpperCase()));
 }
 
-/** Minute-of-day (ET) of the first INTRADAY event on the date, or null. */
-export function intradayEventMin(dateET: string): number | null {
-  for (const e of eventsOn(dateET)) if (e.minET != null) return e.minET;
+/** Minute-of-day (ET) of the first INTRADAY event on the date (optionally scoped
+ *  to a symbol), or null. */
+export function intradayEventMin(dateET: string, symbol?: string): number | null {
+  for (const e of eventsOn(dateET, symbol)) if (e.minET != null) return e.minET;
   return null;
 }
 
-/** Is `minNow` inside the stand-down window around an intraday event on `dateET`?
- *  Window = [event − minsBefore, event + minsAfter). The validated case: FOMC
- *  14:00, flatten/block 13:50 → 14:30 (the probed 2.40× spike window). */
-export function inEventWindow(dateET: string, minNow: number, minsBefore: number, minsAfter: number): boolean {
-  const evt = intradayEventMin(dateET);
+/** Is `minNow` inside the stand-down window around an intraday event on `dateET`
+ *  (optionally scoped to a symbol)? Window = [event − minsBefore, event +
+ *  minsAfter). The validated case: FOMC 14:00, flatten/block 13:50 → 14:30 (the
+ *  probed spike window). */
+export function inEventWindow(dateET: string, minNow: number, minsBefore: number, minsAfter: number, symbol?: string): boolean {
+  const evt = intradayEventMin(dateET, symbol);
   return evt != null && minNow >= evt - minsBefore && minNow < evt + minsAfter;
 }
 
