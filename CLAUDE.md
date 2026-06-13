@@ -169,8 +169,13 @@ permissions as unauthorized prod DDL — one SQL on the operator's word.
 
 PENDING OPERATOR: twin migration timing (entry-push now built — see above). Month-end cuts:
 PULLED FORWARD — the 06-12 cull; still on the month-end clean-era clock: power-smart-entries
-(probation), the ALT-vs-V3 fold, the QQQ pair. Optional: Databento refresh →06-12 (~$0.40, adds
-this week's two wild days to the research corpus before the next probe batch).
+(probation), the ALT-vs-V3 fold, the QQQ pair.
+
+**DATA REFRESH (operator's word, same night):** bars archive exported →06-12 (both tickers) +
+**Databento NBBO refreshed →06-11** (SPY 23,098 + QQQ 28,736 quote-bars; pennies). **⚠ 06-12
+NBBO is EMBARGOED** — Databento historical OPRA serves only >~T+1 (403 `license_not_found_
+unauthorized` past 2026-06-12T13:30Z); **fetch it before Monday's mfe-drift run:**
+`npm run backfill:databento -- --from 2026-06-12 --to 2026-06-12 --underlying SPY` (and QQQ).
 
 ## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — prior
 **W2 = move channels off the cron onto the Railway stream executor (operator's word:
