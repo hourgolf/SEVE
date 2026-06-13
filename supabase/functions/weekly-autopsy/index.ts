@@ -1,3 +1,11 @@
+// ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13c  (EXIT-LOGGING TEMPORAL GUARD — the 2026-06-13b report
+//   correctly read the data but cried "system bug: fix exit logging" because close_reason shipped
+//   06-11 eve and 4/5 of the week predates it (06-12 = 34/34 stamped, prior days 0). The autopsy
+//   had no notion of WHEN a feature shipped. FIX: the digest now self-calibrates an anchor =
+//   earliest stamped exit in the table; each channel carries exitLogging.status ('ok'|'legacy'=
+//   pre-feature NULLs, expected|'gap'=NULLs AFTER the feature = real regression) + a desk-wide
+//   exitLoggingHealth{since,channelsWithGap}; SYS prompt flags a logging bug ONLY for status=
+//   'gap'. Generalizes to any future mid-window feature ship — no magic date. Prior below.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13b  (DOCTRINE + ROSTER-AWARE rewrite — the prior report read
 //   impressive but half-trap: it ranked channels by MFE "capture" (an inflated upper bound the
 //   desk's research has repeatedly FALSIFIED), scolded SCALPERS for not capturing intraday peaks
@@ -114,8 +122,15 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   const { data: stratRows } = await sb.from("strategists").select("id,slug,status");
   const slugToId = new Map(((stratRows ?? []) as Any[]).map((r) => [r.slug, String(r.id)]));
   const liveStatusBySlug = new Map(((stratRows ?? []) as Any[]).map((r) => [r.slug, String(r.status ?? "armed")]));
-  const { data: allPos } = await sb.from("positions").select("strategist_id,occ_symbol,opt_type,qty,avg_entry_price,realized_pnl,opened_at,closed_at").eq("status", "closed").gte("closed_at", `${days[0]}T00:00:00Z`).limit(5000);
+  const { data: allPos } = await sb.from("positions").select("strategist_id,occ_symbol,opt_type,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason").eq("status", "closed").gte("closed_at", `${days[0]}T00:00:00Z`).limit(5000);
   const weekPos = ((allPos ?? []) as Any[]).filter((p) => p.closed_at && days.includes(etDate(Date.parse(p.closed_at))));
+
+  // close_reason TEMPORAL GUARD (so the report never again misreads pre-instrumentation
+  // history as a live "logging bug" — the 06-12 false alarm). Anchor = the EARLIEST stamped
+  // exit anywhere in the table (self-calibrating, no magic date). A NULL exit BEFORE this is
+  // legacy/pre-feature (not a bug); a NULL AFTER it is a genuine logging GAP worth flagging.
+  const { data: firstStamp } = await sb.from("positions").select("closed_at").not("close_reason", "is", null).neq("close_reason", "").order("closed_at", { ascending: true }).limit(1).maybeSingle();
+  const closeReasonSince = (firstStamp as Any)?.closed_at ? Date.parse((firstStamp as Any).closed_at) : null;
 
   // intrinsic-MFE source: the week's underlying_bars (SPY+QQQ), indexed by symbol→day→{lo,hi}
   const { data: bars } = await sb.from("underlying_bars").select("symbol,ts,high,low").gte("ts", startIso).order("ts", { ascending: true }).limit(20000);
@@ -152,6 +167,12 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
       if (couldHave > 0 && (!biggestRunner || couldHave - actual > biggestRunner.couldHave - biggestRunner.actual)) biggestRunner = { occ: p.occ_symbol, actual, couldHave, date: day };
     }
     const captureRatio = mfeUpside > 0 ? Number((captured / mfeUpside).toFixed(2)) : 1;
+    // Exit-logging health (temporal guard): split this channel's NULL-reason closes into
+    // legacy (closed before close_reason went live = expected) vs gap (closed AFTER = a real
+    // logging regression). status 'gap' is the only one the LLM should call a SYSTEM bug.
+    const nullCloses = chPos.filter((p) => !p.close_reason);
+    const gapNull = closeReasonSince == null ? 0 : nullCloses.filter((p) => Date.parse(p.closed_at) >= closeReasonSince).length;
+    const exitLogging = { status: gapNull > 0 ? "gap" : nullCloses.length ? "legacy" : "ok", gapNull, legacyNull: nullCloses.length - gapNull, total: chPos.length };
     const medHold = Number(median(allTrades.map((t: Any) => t.holdMin)).toFixed(1));
     // SCALP flag: a fast fixed-target / curfew exit by DESIGN — capture-vs-intrinsic-peak
     // is a meaningless grade for these (the mandate never aims at the peak). Detected by
@@ -160,7 +181,7 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
     const scalp = medHold < 5 || /scalp|grind/i.test(String(meta.mandate ?? ""));
     channels.push({
       slug, name: meta.name, mandate: meta.mandate, status: meta.status,
-      liveStatus: liveStatusBySlug.get(slug) ?? meta.status, scalp,
+      liveStatus: liveStatusBySlug.get(slug) ?? meta.status, scalp, exitLogging,
       metrics: { nTrades: allTrades.length, wins: wins.length, winRate: allTrades.length ? Number((wins.length / allTrades.length).toFixed(3)) : 0, realizedPnl: Math.round(allTrades.reduce((a: number, t: Any) => a + t.pnl, 0)), avgWin: Math.round(mean(wins.map((t: Any) => t.pnl))), avgLoss: Math.round(mean(losses.map((t: Any) => t.pnl))), avgR: Number(mean(allTrades.map((t: Any) => t.R)).toFixed(2)), medianHoldMin: medHold, bestTrade: Math.round(Math.max(0, ...allTrades.map((t: Any) => t.pnl))), worstTrade: Math.round(Math.min(0, ...allTrades.map((t: Any) => t.pnl))) },
       byDay, exitReasons, recurringFlaws,
       exitEfficiency: { trades: chPos.length, mfeUpside, captured, captureRatio, biggestRunner },
@@ -175,8 +196,11 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   const worstCaptureChannels = nonScalp.filter((c) => c.exitEfficiency.mfeUpside > 200).sort((a, b) => a.exitEfficiency.captureRatio - b.exitEfficiency.captureRatio).slice(0, 5).map((c) => ({ slug: c.slug, captureRatio: c.exitEfficiency.captureRatio, left: Math.round(c.exitEfficiency.mfeUpside - c.exitEfficiency.captured) }));
   const redThatRanGreen = channels.map((c) => c.exitEfficiency.biggestRunner ? { slug: c.slug, scalp: c.scalp, ...c.exitEfficiency.biggestRunner } : null).filter((x) => x && x.actual <= 0 && x.couldHave > 0).sort((a, b) => b.couldHave - a.couldHave).slice(0, 6);
   const roster = { armed: [...liveStatusBySlug.entries()].filter(([, s]) => s === "armed").map(([sl]) => sl), benched: [...liveStatusBySlug.entries()].filter(([, s]) => s !== "armed").map(([sl]) => sl) };
+  // Desk-wide exit-logging health: close_reason live-since date + the channels (if any) with
+  // POST-feature NULL closes (the only real "logging bug" signal; legacy NULLs are expected).
+  const exitLoggingHealth = { since: closeReasonSince ? etDate(closeReasonSince) : null, channelsWithGap: channels.filter((c) => c.exitLogging.status === "gap").map((c) => ({ slug: c.slug, gapNull: c.exitLogging.gapNull })) };
 
-  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, roster, fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen } };
+  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, roster, exitLoggingHealth, fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen } };
 }
 
 function renderSkeleton(w: Any): string {
@@ -206,7 +230,9 @@ DESK DOCTRINE — these are SETTLED findings from months of multi-window real-NB
 • The desk deliberately RIDES the convex tail on its edge channels. "Tighten the target/trail to capture more" is a MECHANICAL MIRAGE that this desk has falsified repeatedly (it caps the tail and kills the edge). Do NOT recommend tighter exits to raise capture. The ONLY real exit signal is a GREEN→RED GIVEBACK: a trade that was meaningfully in profit and still exited red (see redThatRanGreen) — call those out specifically; everything else labeled "leak" is regime noise.
 • ONE WEEK IS NOISE for ranking the marginal channels — they scramble across regimes. Frame per-channel notes as "THIS WEEK'S EXPRESSION," not a durable verdict. Use verdict='mute' ONLY for a channel already failing on multi-window/live evidence, and NEVER recommend muting/cutting a channel whose \`liveStatus\` is already 'draft' or 'disabled' — it is ALREADY BENCHED; note that instead of re-recommending it. Respect digest.roster (armed vs benched) — your audience already culled the benched set.
 
-Synthesize: (1) the week's character (regime ledger + which edges showed up in which regime); (2) GENUINE exit problems = green→red givebacks + asymmetric win/loss distributions (avgLoss ≫ avgWin even at high win-rate) — NOT capture-vs-peak; (3) recurring flaws (same flaw multiple days = systemic); (4) SYSTEM/EXECUTION bugs called out SEPARATELY from strategy (e.g. 100% 'unknown' exit reasons = blind logging, a bug not a flaw); (5) per-channel weekly EXPRESSION with a verdict that respects liveStatus.
+• EXIT-LOGGING is TEMPORALLY GUARDED — do NOT call 'unknown'/NULL exit reasons a logging bug on your own. Trust the digest: each channel carries \`exitLogging.status\` ('ok' | 'legacy' = NULLs predate the close_reason feature, EXPECTED, NOT a bug | 'gap' = NULLs recorded AFTER the feature went live, a REAL regression). digest.exitLoggingHealth gives the live-since date + the channels with a genuine gap. Flag a SYSTEM logging bug ONLY for status='gap' channels; if every NULL is 'legacy', state plainly that exit logging is healthy and the blanks are pre-instrumentation history (the feature shipped mid-window) — never make it an engineering item.
+
+Synthesize: (1) the week's character (regime ledger + which edges showed up in which regime); (2) GENUINE exit problems = green→red givebacks + asymmetric win/loss distributions (avgLoss ≫ avgWin even at high win-rate) — NOT capture-vs-peak; (3) recurring flaws (same flaw multiple days = systemic); (4) SYSTEM/EXECUTION bugs called out SEPARATELY from strategy — but for exit-logging obey the temporal guard above (legacy NULLs are NOT a bug); (5) per-channel weekly EXPRESSION with a verdict that respects liveStatus.
 Then KEY LEARNINGS (3-6) and a RANKED list of concrete, falsifiable SUGGESTIONS that obey the doctrine. DIAGNOSE only — never auto-apply to live. Specific and concise.`;
 const TOOL = { name: "emit_weekly", description: "Return the narrated weekly autopsy.", input_schema: { type: "object", required: ["weekSummary", "channels", "keyLearnings", "suggestions"], properties: { weekSummary: { type: "string" }, channels: { type: "array", items: { type: "object", required: ["slug", "verdict", "exitQuality", "note"], properties: { slug: { type: "string" }, verdict: { type: "string", enum: ["keep", "retune", "mute", "watch"] }, exitQuality: { type: "string" }, note: { type: "string" } } } }, keyLearnings: { type: "array", items: { type: "string" } }, suggestions: { type: "array", items: { type: "object", required: ["action", "rationale", "priority"], properties: { action: { type: "string" }, rationale: { type: "string" }, priority: { type: "string", enum: ["high", "med", "low"] } } } } } } };
 
