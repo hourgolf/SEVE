@@ -215,10 +215,17 @@ reads "BREAK(ALT)", "GRIND(MANUAL) ✋", "Power Final 30" etc., zero slugs. (2) 
 paste): same fix (SYS rule + render maps slug→name in channel headers / finding evidence / finding
 channel tags; slug kept in channels[].slug + systemFindings[].channels[] as the join key). Paste
 `supabase/functions/daily-autopsy/index.ts` into the dashboard editor (Verify-JWT stays OFF) before
-Monday's close so Monday's daily uses names. NOT YET DONE (local-only, lower priority): the engine
-CLI mirrors `engine/autopsy.ts` + `engine/weekly-autopsy.ts` (`npm run autopsy`/`weekly`) still
-print `(slug)` and carry the OLD pre-doctrine SYS — they need a broader sync to the edge fns, not
-just naming.
+Monday's close so Monday's daily uses names. (4) **daily-autopsy PASTE-DEPLOYED by
+operator → v12 live** (verified: deployed content == repo, banner 2026-06-13a). (5) **CLI MIRRORS
+RETIRED (operator's word "retire the duplicates")** — `engine/autopsy.ts` + `engine/weekly-autopsy.ts`
+were a drifting ~300-line re-implementation; replaced with THIN READ-ONLY CLIENTS that print the
+canonical stored report (`daily_reports`/`weekly_reports.markdown`) the edge fn generated.
+`npm run autopsy`/`weekly-autopsy` now: default = print latest; `--date`/`--weekEnd` = a specific
+one; `--regen` = POST the edge fn to (re)build first; `--json` = raw digest+narrative. ONE source
+of truth (the edge fns), zero future drift. Verified: weekly client prints v8 unified-naming
+report; `npm run autopsy -- --date 2026-06-12 --regen` rebuilt via v12 → clean names. Edge fn
+header comments updated ("Mirrors…" → "THE CANONICAL GENERATOR"). The anti-drift note for future:
+the edge fns are the source of truth; never re-create a parallel local aggregator.
 
 **DATA REFRESH (operator's word, same night):** bars archive exported →06-12 (both tickers) +
 **Databento NBBO refreshed →06-11** (SPY 23,098 + QQQ 28,736 quote-bars; pennies). **⚠ 06-12

@@ -46,8 +46,9 @@
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05a  (first cut — condenses the week's daily_reports
 //   into one weekly report: fund roll-up + per-channel weekly metrics + regime ledger +
 //   EXIT-EFFICIENCY (MFE / "left on the table") + Stage-2 LLM synthesis, upserted to
-//   weekly_reports. Mirrors engine/weekly-autopsy.ts; intrinsic-only MFE (from
-//   underlying_bars — always present, no option_bars dependency).)
+//   weekly_reports. THE CANONICAL WEEKLY GENERATOR (engine/weekly-autopsy.ts was
+//   RETIRED 2026-06-13 → a thin read-only client of this fn); intrinsic-only MFE
+//   (from underlying_bars — always present, no option_bars dependency).)
 // ============================================================================
 //  weekly-autopsy — the desk's end-of-WEEK report generator.
 //

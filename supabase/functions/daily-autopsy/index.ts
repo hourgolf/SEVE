@@ -38,10 +38,9 @@
 // ============================================================================
 //  daily-autopsy — the desk's end-of-day report generator.
 //
-//  Mirrors engine/autopsy.ts (the local `npm run autopsy` dev tool) — paste-deploy
-//  has no bundler, so the aggregator is INLINED here; keep the two in sync (this is
-//  read-only analysis, lower-stakes than the trading worker, but the flaw-detector
-//  thresholds + digest shape should match). It:
+//  THE CANONICAL DAILY GENERATOR. (2026-06-13: the old engine/autopsy.ts local
+//  re-implementation was RETIRED — it kept drifting out of sync; `npm run autopsy`
+//  is now a thin read-only client that prints THIS function's stored report.) It:
 //    1. picks the ET trading day (today after close, or body.date for a manual run),
 //    2. pulls that day's positions / signals / events / underlying_bars (service-role),
 //    3. correlates each closed trade → its acted ENTRY signal (intent + conviction)
