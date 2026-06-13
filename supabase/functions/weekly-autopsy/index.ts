@@ -1,3 +1,14 @@
+// ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13b  (DOCTRINE + ROSTER-AWARE rewrite — the prior report read
+//   impressive but half-trap: it ranked channels by MFE "capture" (an inflated upper bound the
+//   desk's research has repeatedly FALSIFIED), scolded SCALPERS for not capturing intraday peaks
+//   (their fast-target exit is the design), made confident keep/mute verdicts off ONE chop week,
+//   and recommended muting channels already benched. FIXES: (1) each channel carries `scalp` +
+//   `liveStatus`; the capture leak board (worstCaptureChannels/totalUpsideLeft) EXCLUDES scalpers;
+//   redThatRanGreen (genuine green→red giveback) stays all-channel = the one real exit signal.
+//   (2) digest.roster (armed vs benched) so the LLM stops re-recommending the cull. (3) SYS prompt
+//   now carries the DESK DOCTRINE (MFE is an upper bound, ride the convex tail, don't chase
+//   capture, one week is noise, respect liveStatus). (4) dedup the LLM's channel list (killed the
+//   06-12 "DUPLICATE-GUARD" rows). Body-only change; verify-JWT stays OFF. Prior below.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13a  (VERIFY-JWT OFF — RESOLVED 06-13. ROOT CAUSE: the 06-06
 //   redeploy left this function's verify_jwt ON; its Friday cron passes a SERVICE_ROLE bearer
 //   that the edge gateway then 401'd (daily-autopsy + paper-trader run verify-JWT OFF, so they
@@ -97,9 +108,12 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   const equityCurve = days.filter((d) => byDayNav.has(d)).map((d) => ({ date: d, nav: Math.round(byDayNav.get(d)!) }));
   const navDelta = equityCurve.length >= 2 ? Math.round(equityCurve[equityCurve.length - 1].nav - equityCurve[0].nav) : null;
 
-  // slug→id + the week's closed positions (attribute MFE per channel by strategist_id)
-  const { data: stratRows } = await sb.from("strategists").select("id,slug");
+  // slug→id + LIVE lifecycle status (so the report is roster-aware: don't recommend
+  // muting a channel that's already benched, and frame verdicts against today's roster
+  // not the status frozen into last week's daily digests).
+  const { data: stratRows } = await sb.from("strategists").select("id,slug,status");
   const slugToId = new Map(((stratRows ?? []) as Any[]).map((r) => [r.slug, String(r.id)]));
+  const liveStatusBySlug = new Map(((stratRows ?? []) as Any[]).map((r) => [r.slug, String(r.status ?? "armed")]));
   const { data: allPos } = await sb.from("positions").select("strategist_id,occ_symbol,opt_type,qty,avg_entry_price,realized_pnl,opened_at,closed_at").eq("status", "closed").gte("closed_at", `${days[0]}T00:00:00Z`).limit(5000);
   const weekPos = ((allPos ?? []) as Any[]).filter((p) => p.closed_at && days.includes(etDate(Date.parse(p.closed_at))));
 
@@ -138,18 +152,31 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
       if (couldHave > 0 && (!biggestRunner || couldHave - actual > biggestRunner.couldHave - biggestRunner.actual)) biggestRunner = { occ: p.occ_symbol, actual, couldHave, date: day };
     }
     const captureRatio = mfeUpside > 0 ? Number((captured / mfeUpside).toFixed(2)) : 1;
+    const medHold = Number(median(allTrades.map((t: Any) => t.holdMin)).toFixed(1));
+    // SCALP flag: a fast fixed-target / curfew exit by DESIGN — capture-vs-intrinsic-peak
+    // is a meaningless grade for these (the mandate never aims at the peak). Detected by
+    // sub-5-min median hold or an explicit scalp/grind mandate; excluded from the capture
+    // leak board below so the "$ left on the table" headline stops being scalper noise.
+    const scalp = medHold < 5 || /scalp|grind/i.test(String(meta.mandate ?? ""));
     channels.push({
       slug, name: meta.name, mandate: meta.mandate, status: meta.status,
-      metrics: { nTrades: allTrades.length, wins: wins.length, winRate: allTrades.length ? Number((wins.length / allTrades.length).toFixed(3)) : 0, realizedPnl: Math.round(allTrades.reduce((a: number, t: Any) => a + t.pnl, 0)), avgWin: Math.round(mean(wins.map((t: Any) => t.pnl))), avgLoss: Math.round(mean(losses.map((t: Any) => t.pnl))), avgR: Number(mean(allTrades.map((t: Any) => t.R)).toFixed(2)), medianHoldMin: Number(median(allTrades.map((t: Any) => t.holdMin)).toFixed(1)), bestTrade: Math.round(Math.max(0, ...allTrades.map((t: Any) => t.pnl))), worstTrade: Math.round(Math.min(0, ...allTrades.map((t: Any) => t.pnl))) },
+      liveStatus: liveStatusBySlug.get(slug) ?? meta.status, scalp,
+      metrics: { nTrades: allTrades.length, wins: wins.length, winRate: allTrades.length ? Number((wins.length / allTrades.length).toFixed(3)) : 0, realizedPnl: Math.round(allTrades.reduce((a: number, t: Any) => a + t.pnl, 0)), avgWin: Math.round(mean(wins.map((t: Any) => t.pnl))), avgLoss: Math.round(mean(losses.map((t: Any) => t.pnl))), avgR: Number(mean(allTrades.map((t: Any) => t.R)).toFixed(2)), medianHoldMin: medHold, bestTrade: Math.round(Math.max(0, ...allTrades.map((t: Any) => t.pnl))), worstTrade: Math.round(Math.min(0, ...allTrades.map((t: Any) => t.pnl))) },
       byDay, exitReasons, recurringFlaws,
       exitEfficiency: { trades: chPos.length, mfeUpside, captured, captureRatio, biggestRunner },
     });
   }
-  const totalUpsideLeft = channels.reduce((a, c) => a + Math.max(0, c.exitEfficiency.mfeUpside - c.exitEfficiency.captured), 0);
-  const worstCaptureChannels = channels.filter((c) => c.exitEfficiency.mfeUpside > 200).sort((a, b) => a.exitEfficiency.captureRatio - b.exitEfficiency.captureRatio).slice(0, 5).map((c) => ({ slug: c.slug, captureRatio: c.exitEfficiency.captureRatio, left: Math.round(c.exitEfficiency.mfeUpside - c.exitEfficiency.captured) }));
-  const redThatRanGreen = channels.map((c) => c.exitEfficiency.biggestRunner ? { slug: c.slug, ...c.exitEfficiency.biggestRunner } : null).filter((x) => x && x.actual <= 0 && x.couldHave > 0).sort((a, b) => b.couldHave - a.couldHave).slice(0, 6);
+  // Capture leak board EXCLUDES scalpers (their fast-target exit is the design, not a leak)
+  // — this stops grind-* dominating a "$X left on the table" headline that's a mirage for
+  // them. redThatRanGreen (the GENUINE giveback signal: a trade that went green then exited
+  // RED) stays across all channels — that's a real exit failure regardless of mandate.
+  const nonScalp = channels.filter((c) => !c.scalp);
+  const totalUpsideLeft = nonScalp.reduce((a, c) => a + Math.max(0, c.exitEfficiency.mfeUpside - c.exitEfficiency.captured), 0);
+  const worstCaptureChannels = nonScalp.filter((c) => c.exitEfficiency.mfeUpside > 200).sort((a, b) => a.exitEfficiency.captureRatio - b.exitEfficiency.captureRatio).slice(0, 5).map((c) => ({ slug: c.slug, captureRatio: c.exitEfficiency.captureRatio, left: Math.round(c.exitEfficiency.mfeUpside - c.exitEfficiency.captured) }));
+  const redThatRanGreen = channels.map((c) => c.exitEfficiency.biggestRunner ? { slug: c.slug, scalp: c.scalp, ...c.exitEfficiency.biggestRunner } : null).filter((x) => x && x.actual <= 0 && x.couldHave > 0).sort((a, b) => b.couldHave - a.couldHave).slice(0, 6);
+  const roster = { armed: [...liveStatusBySlug.entries()].filter(([, s]) => s === "armed").map(([sl]) => sl), benched: [...liveStatusBySlug.entries()].filter(([, s]) => s !== "armed").map(([sl]) => sl) };
 
-  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen } };
+  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, roster, fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen } };
 }
 
 function renderSkeleton(w: Any): string {
@@ -158,7 +185,7 @@ function renderSkeleton(w: Any): string {
   L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · maxDD ${usd(-(w.fund.maxDrawdown ?? 0))} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
   if (w.fund.bestDay && w.fund.worstDay) L.push(`- best ${w.fund.bestDay.date} ${usd(w.fund.bestDay.pnl)} · worst ${w.fund.worstDay.date} ${usd(w.fund.worstDay.pnl)}`);
   L.push(`\n**Regime ledger:**`); for (const r of w.regimeLedger) L.push(`- ${r.date}: ${r.note} (${r.returnPct >= 0 ? "+" : ""}${r.returnPct.toFixed(2)}%, eff ${r.efficiency.toFixed(2)})`);
-  L.push(`\n**Exit efficiency (left on the table):** total upside left ${usd(w.exitEfficiency.totalUpsideLeft)}`);
+  L.push(`\n**Exit efficiency** — green→red givebacks (the real signal) + upper-bound capture, scalpers excluded; non-scalp upside left ${usd(w.exitEfficiency.totalUpsideLeft)}`);
   for (const r of w.exitEfficiency.redThatRanGreen) L.push(`- ⤴ \`${r.slug}\` ${r.occ} (${r.date}): exited ${usd(r.actual)} but ran to ${usd(r.couldHave)} — red trade, green runner`);
   for (const c of w.exitEfficiency.worstCaptureChannels) L.push(`- 📉 \`${c.slug}\` captured ${(c.captureRatio * 100).toFixed(0)}% (${usd(c.left)} left)`);
   for (const c of w.channels) {
@@ -173,8 +200,14 @@ function renderSkeleton(w: Any): string {
 }
 
 const SYS = `You are SEVE's WEEKLY trading-desk autopsy analyst. You receive a deterministic weekly digest condensing a paper-trading week (the numbers are GROUND TRUTH — never recompute or invent, cite what's given).
-Synthesize the WEEK: (1) the week's character (regime ledger + which channel edges showed up in which regime), (2) EXIT EFFICIENCY — where exits left money on the table (low capture ratio, red trades that were green runners) vs exited well; tie it to whether a channel's trail/stop is too tight or too loose for the regime; note the MFE is a best-case upper bound (peaks revert in chop, not fully capturable). (3) recurring flaws (same flaw multiple days = systemic). (4) per-channel weekly verdict.
-Then KEY LEARNINGS (3-6 durable takeaways) and a RANKED list of concrete, falsifiable SUGGESTIONS. Distinguish STRATEGY flaws from SYSTEM/EXECUTION bugs. DIAGNOSE only — never auto-apply to live. Specific and concise.`;
+
+DESK DOCTRINE — these are SETTLED findings from months of multi-window real-NBBO research. Apply them; do NOT re-derive or contradict them:
+• MFE / "upside left on the table" is an INFLATED UPPER BOUND — intraday peaks revert and are NOT fully capturable, especially in chop. A low capture ratio is NOT a verdict by itself. The capture board (worstCaptureChannels / totalUpsideLeft) already EXCLUDES scalp-mandate channels (each channel carries a \`scalp\` flag) — never scold a scalper for low capture; its fast fixed-target exit IS the design.
+• The desk deliberately RIDES the convex tail on its edge channels. "Tighten the target/trail to capture more" is a MECHANICAL MIRAGE that this desk has falsified repeatedly (it caps the tail and kills the edge). Do NOT recommend tighter exits to raise capture. The ONLY real exit signal is a GREEN→RED GIVEBACK: a trade that was meaningfully in profit and still exited red (see redThatRanGreen) — call those out specifically; everything else labeled "leak" is regime noise.
+• ONE WEEK IS NOISE for ranking the marginal channels — they scramble across regimes. Frame per-channel notes as "THIS WEEK'S EXPRESSION," not a durable verdict. Use verdict='mute' ONLY for a channel already failing on multi-window/live evidence, and NEVER recommend muting/cutting a channel whose \`liveStatus\` is already 'draft' or 'disabled' — it is ALREADY BENCHED; note that instead of re-recommending it. Respect digest.roster (armed vs benched) — your audience already culled the benched set.
+
+Synthesize: (1) the week's character (regime ledger + which edges showed up in which regime); (2) GENUINE exit problems = green→red givebacks + asymmetric win/loss distributions (avgLoss ≫ avgWin even at high win-rate) — NOT capture-vs-peak; (3) recurring flaws (same flaw multiple days = systemic); (4) SYSTEM/EXECUTION bugs called out SEPARATELY from strategy (e.g. 100% 'unknown' exit reasons = blind logging, a bug not a flaw); (5) per-channel weekly EXPRESSION with a verdict that respects liveStatus.
+Then KEY LEARNINGS (3-6) and a RANKED list of concrete, falsifiable SUGGESTIONS that obey the doctrine. DIAGNOSE only — never auto-apply to live. Specific and concise.`;
 const TOOL = { name: "emit_weekly", description: "Return the narrated weekly autopsy.", input_schema: { type: "object", required: ["weekSummary", "channels", "keyLearnings", "suggestions"], properties: { weekSummary: { type: "string" }, channels: { type: "array", items: { type: "object", required: ["slug", "verdict", "exitQuality", "note"], properties: { slug: { type: "string" }, verdict: { type: "string", enum: ["keep", "retune", "mute", "watch"] }, exitQuality: { type: "string" }, note: { type: "string" } } } }, keyLearnings: { type: "array", items: { type: "string" } }, suggestions: { type: "array", items: { type: "object", required: ["action", "rationale", "priority"], properties: { action: { type: "string" }, rationale: { type: "string" }, priority: { type: "string", enum: ["high", "med", "low"] } } } } } } };
 
 async function narrate(digest: Any): Promise<Any | null> {
@@ -205,6 +238,12 @@ Deno.serve(async (req) => {
     }
     const digest = await buildWeekly(weekEnd);
     const narrative = await narrate(digest);
+    // Dedup the LLM's per-channel list by slug (it occasionally emits a channel twice —
+    // the "DUPLICATE-GUARD" rows in the 06-12 run). Keep the first, drop repeats.
+    if (narrative?.channels && Array.isArray(narrative.channels)) {
+      const seen = new Set<string>();
+      narrative.channels = narrative.channels.filter((c: Any) => c?.slug && !seen.has(c.slug) && (seen.add(c.slug), true));
+    }
     const markdown = renderSkeleton(digest) + (narrative ? "\n" + renderNarrative(narrative) : "");
     const { error } = await sb.from("weekly_reports").upsert({ week_end: digest.weekEnd, week_start: digest.weekStart, mode: digest.mode, digest, narrative, markdown }, { onConflict: "week_end" });
     if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
