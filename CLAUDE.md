@@ -187,6 +187,22 @@ recurs. Same rule already implicit for daily-autopsy + paper-trader. Diagnostic 
 "cron fn ran but no row": check edge-function logs for 401/4xx (the cron run-details will lie
 "succeeded"), then compare `verify_jwt` across sibling cron fns.
 
+**WEEKLY-AUTOPSY GENERATOR REWRITE (2026-06-13, operator review "does this help a human?"):** the
+report read impressive but half-trap. Deployed `weekly-autopsy` **v7 (banner 2026-06-13c)** in
+three passes (all verify-JWT OFF, MCP deploy + smoke-test + {weekEnd} regenerate of 06-12 each
+time): (b) **DOCTRINE + ROSTER-AWARE** — SYS prompt now carries the desk's settled findings (MFE
+is an inflated upper bound, ride the convex tail, don't chase capture, one week is noise); digest
+adds per-channel `scalp` (capture board excludes scalpers — killed the "$60k grind-manual leak"
+mirage) + `liveStatus` + `roster` (stops it re-recommending the cull); LLM channel list de-duped.
+(c) **EXIT-LOGGING TEMPORAL GUARD** — the v13b report cried "system bug: fix exit logging" but it
+was a FALSE ALARM: `close_reason` shipped 06-11 eve so 4/5 of the week predates it (06-12 = 34/34
+stamped, prior days 0/195 — NOT a bug, investigated to the row). Guard: digest self-calibrates an
+anchor = earliest stamped exit, tags each channel `exitLogging.status` (ok/legacy/gap) +
+`exitLoggingHealth`; the LLM flags a logging bug ONLY for `gap` (post-feature NULLs). Generalizes
+to any future mid-window feature ship. **close_reason is HEALTHY** — the regenerated 06-12 report
+now states that plainly. Repo file = full source of record; deployed = condensed (logic-identical,
+banner trimmed for the inline MCP paste). ⚠ paste-redeploys must keep Verify-JWT OFF.
+
 **DATA REFRESH (operator's word, same night):** bars archive exported →06-12 (both tickers) +
 **Databento NBBO refreshed →06-11** (SPY 23,098 + QQQ 28,736 quote-bars; pennies). **⚠ 06-12
 NBBO is EMBARGOED** — Databento historical OPRA serves only >~T+1 (403 `license_not_found_
