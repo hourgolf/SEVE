@@ -737,7 +737,16 @@
   padding: 14px;
   animation: ch-flip-in 0.32s ease;
   transform-origin: center;
+  /* The editor grew past the strip height (live-config rows) → its tail used to spill
+     behind the strips below, hiding Done. Make it a SELF-CONTAINED scroll panel: it never
+     exceeds the card box, and the content scrolls so every control (incl. Done) is reachable. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+/* a faint top/bottom fade so it reads as a scrollable panel (the live-config + lifecycle
+   rows scroll into view; Done sits at the bottom of the scroll). */
+.ch-edit::-webkit-scrollbar { width: 7px; }
+.ch-edit::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 4px; }
 @keyframes ch-flip-in {
   from { transform: rotateY(90deg); opacity: 0; }
   to { transform: rotateY(0); opacity: 1; }
