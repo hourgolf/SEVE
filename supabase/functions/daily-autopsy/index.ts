@@ -1,3 +1,8 @@
+// ⚑ DAILY-AUTOPSY VERSION: 2026-06-13a  (UNIFIED NAMING — the report refers to every channel by
+//   the operator's chosen display name (e.g. "BREAK(ALT)") in all prose, never the slug
+//   ("breakout-smart-entries"); slug stays the internal join key (channels[].slug,
+//   systemFindings[].channels[]). SYS OUTPUT NAMING rule + render maps slug→name in the channel
+//   headers, finding evidence, and finding channel tags. Matches weekly-autopsy 2026-06-13d. Prior below.)
 // ⚑ DAILY-AUTOPSY VERSION: 2026-06-06a  (model bump: default Sonnet claude-sonnet-4-5 → the
 //   current claude-sonnet-4-6 (4-5 is now legacy; same $3/$15 tier, strictly better). Daily
 //   stays on Sonnet by design — the weekly is the Opus one. ANTHROPIC_MODEL env still overrides.)
@@ -216,7 +221,7 @@ function renderSkeleton(d: Row): string {
   L.push(`\n**Fund:** ${d.fund.trades} trades across ${d.fund.channelsTraded} channels · realized ${usd(d.fund.dayRealized)} · win ${(d.fund.winRate * 100).toFixed(0)}%`);
   for (const c of d.channels) {
     const m = c.metrics;
-    L.push(`\n## ${c.name} (\`${c.slug}\`) — ${c.status}`); L.push(`_${c.mandate}_`);
+    L.push(`\n## ${c.name} — ${c.status}`); L.push(`_${c.mandate}_`);
     if (!m.nTrades) { L.push(`- no trades · signals ${c.activity.signals} (acted ${c.activity.acted}, blocked ${JSON.stringify(c.activity.blocked)})`); continue; }
     L.push(`- trades **${m.nTrades}** · win **${(m.winRate * 100).toFixed(0)}%** · realized **${usd(m.realizedPnl)}** · avgWin ${usd(m.avgWin)} / avgLoss ${usd(m.avgLoss)} · avgR ${m.avgR.toFixed(2)} · median hold **${m.medianHoldMin.toFixed(1)}m**`);
     L.push(`- exits: ${JSON.stringify(c.exitReasons)}`);
@@ -231,7 +236,8 @@ The digest carries TWO market regimes: \`market\` (SPY) and \`marketQQQ\` (QQQ, 
 For EACH channel: (1) state its INTENT (from mandate + signal types), (2) read its CONVICTION from the entry rationale features (atr/er/relVol/delta, and expectedMove vs roundTrip = the cost-gate margin), (3) say what went RIGHT and WRONG vs its underlying's regime, (4) a one-line verdict.
 Then SYSTEM FINDINGS: diagnose flaws and DISTINGUISH a STRATEGY flaw (thesis wrong for the regime) from a SYSTEM/EXECUTION bug (a channel that never takes profit, exits within a minute, a trailing stop that never fires, sizing always at max_contracts). A "reconciled" exit means the channel's OWN logic did NOT close the position — the cause is AMBIGUOUS (a manual close on the broker, a same-OCC collision with another channel, or expiry); flag it as not-driven-by-the-channel, do NOT assert which. Map the deterministic flaw flags to the specific cause using each channel's mandate. Use the prior-days findings to note RECURRENCE (chronic vs new vs resolved). Propose ONE concrete falsifiable experiment per finding.
 CRITICAL OUTPUT RULES: every deterministic flaw in any channel's \`flaws\` array MUST become a systemFinding — map it to its specific cause via the mandate, and mark recurrence "new"/"recurring"/"resolved" vs the prior-days findings. NEVER drop a flagged flaw because it recurs (a recurring flaw is the MOST important to surface). ALWAYS return 3–5 concrete topActions. Empty systemFindings or topActions is only acceptable when there were genuinely zero flaws AND zero trades.
-You DIAGNOSE only — never tell the operator to auto-apply changes to live trading. Be specific and concise.`;
+You DIAGNOSE only — never tell the operator to auto-apply changes to live trading. Be specific and concise.
+OUTPUT NAMING: in ALL prose (marketSummary, each channel's intent/conviction/wentRight/wentWrong/verdict, and every finding's evidence/hypothesis/suggestedExperiment, and topActions) refer to channels by their display \`name\` (the operator's chosen label given per channel — e.g. "BREAK(ALT)", not "breakout-smart-entries"). EXCEPTION — machine keys stay slugs: channels[].slug and systemFindings[].channels[] must remain the EXACT slug so the system can join.`;
 
 const NARRATE_TOOL = {
   name: "emit_autopsy",
@@ -290,7 +296,7 @@ function ensureFindings(digest: Row, narrative: Row | null, priorFindings: Row[]
       if (covered.has(`${c.slug}|${fl.type}`)) continue;
       covered.add(`${c.slug}|${fl.type}`);
       const m = FLAW_META[String(fl.type)] ?? { category: "system", severity: String(fl.severity ?? "med"), hypothesis: "", experiment: "" };
-      synthesized.push({ type: fl.type, severity: fl.severity ?? m.severity, category: m.category, channels: [c.slug], evidence: `${c.slug}: ${fl.evidence}`, hypothesis: m.hypothesis, suggestedExperiment: m.experiment, recurrence: priorKeys.has(`${c.slug}|${fl.type}`) ? "recurring" : "new" });
+      synthesized.push({ type: fl.type, severity: fl.severity ?? m.severity, category: m.category, channels: [c.slug], evidence: `${c.name}: ${fl.evidence}`, hypothesis: m.hypothesis, suggestedExperiment: m.experiment, recurrence: priorKeys.has(`${c.slug}|${fl.type}`) ? "recurring" : "new" });
     }
   }
   const systemFindings = [...llmFindings, ...synthesized];
@@ -302,16 +308,17 @@ function ensureFindings(digest: Row, narrative: Row | null, priorFindings: Row[]
   return { ...base, systemFindings, topActions };
 }
 
-function renderNarrative(skeleton: string, n: Row): string {
+function renderNarrative(skeleton: string, n: Row, nameBySlug: Record<string, string>): string {
+  const nm = (s: string) => nameBySlug[s] ?? s;
   const L = [skeleton, "", "─".repeat(60), "## Narrative", `\n**Market:** ${n.marketSummary}`];
   for (const c of (n.channels ?? [])) {
-    L.push(`\n### \`${c.slug}\``, `- **Intent:** ${c.intent}`, `- **Conviction:** ${c.conviction}`);
+    L.push(`\n### ${nm(c.slug)}`, `- **Intent:** ${c.intent}`, `- **Conviction:** ${c.conviction}`);
     if (c.wentRight?.length) L.push(`- **Right:** ${c.wentRight.join("; ")}`);
     if (c.wentWrong?.length) L.push(`- **Wrong:** ${c.wentWrong.join("; ")}`);
     L.push(`- **Verdict:** ${c.verdict}`);
   }
   L.push(`\n### System findings`);
-  for (const f of (n.systemFindings ?? [])) L.push(`- **[${f.category}/${f.severity}/${f.recurrence}] ${f.type}** (${(f.channels ?? []).join(",")}): ${f.evidence}\n  - hypothesis: ${f.hypothesis}\n  - experiment: ${f.suggestedExperiment}`);
+  for (const f of (n.systemFindings ?? [])) L.push(`- **[${f.category}/${f.severity}/${f.recurrence}] ${f.type}** (${(f.channels ?? []).map(nm).join(",")}): ${f.evidence}\n  - hypothesis: ${f.hypothesis}\n  - experiment: ${f.suggestedExperiment}`);
   L.push(`\n### Top actions`);
   for (const a of (n.topActions ?? [])) L.push(`- ${a}`);
   return L.join("\n");
@@ -350,7 +357,8 @@ Deno.serve(async (req) => {
     // Guarantee a complete findings ledger from the deterministic digest flaws even when
     // the LLM under-emits (06-03: 7 flaws, 0 LLM findings). The LLM enriches on top.
     const enriched = ensureFindings(digest, narrative, priorFindings);
-    const markdown = renderNarrative(skeleton, enriched);
+    const nameBySlug: Record<string, string> = Object.fromEntries((digest.channels ?? []).map((c: Row) => [c.slug, c.name]));
+    const markdown = renderNarrative(skeleton, enriched, nameBySlug);
 
     const { error } = await sb.from("daily_reports").upsert({ report_date: date, mode: digest.mode, digest, narrative: enriched, markdown, updated_at: new Date().toISOString() }, { onConflict: "report_date" });
     if (error) throw new Error(`daily_reports upsert: ${error.message}`);

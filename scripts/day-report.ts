@@ -31,7 +31,7 @@ const sgn = (v: number) => (v >= 0 ? "+" : "") + Math.round(v);
 const pct = (v: number | null) => (v == null ? "  —" : `${v >= 0 ? "+" : ""}${Math.round(v)}%`);
 
 interface Trade {
-  id: string; slug: string; cp: "call" | "put"; strike: number; qty: number; occ: string;
+  id: string; slug: string; name: string; cp: "call" | "put"; strike: number; qty: number; occ: string;
   entry: number; exit: number; pnl: number; openedAt: string; closedAt: string;
   peak: number | null; mfePct: number | null; gavePct: number | null; reason: string;
   manual: boolean;
@@ -90,7 +90,7 @@ async function main() {
 
   // ---- trades -------------------------------------------------------------------
   const { data: posRaw } = await sb.from("positions")
-    .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,strategists(slug)")
+    .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,strategists(slug,name)")
     .eq("status", "closed").gte("closed_at", `${DATE}T13:00:00Z`).lte("closed_at", `${DATE}T22:00:00Z`)
     .order("opened_at");
   const { data: evRaw } = await sb.from("events").select("message,created_at")
@@ -111,6 +111,7 @@ async function main() {
   const trades: Trade[] = [];
   for (const p of (posRaw ?? []) as any[]) {
     const slug = p.strategists?.slug ?? "?";
+    const name = p.strategists?.name ?? slug; // operator's display label (slug stays the internal key)
     const entry = Number(p.avg_entry_price), qty = Number(p.qty), pnl = Number(p.realized_pnl ?? 0);
     const exit = entry + (qty > 0 ? pnl / (qty * 100) : 0);
     const { data: pk } = await sb.from("option_quotes").select("mid").eq("occ_symbol", p.occ_symbol)
@@ -126,7 +127,7 @@ async function main() {
       && /exit|reconcil/i.test(e.message));
     const reason = ev?.message.match(/\(([a-z_0-9]+)\)\s*$/i)?.[1] ?? (ev && /reconcil/i.test(ev.message) ? "reconciled" : "—");
     trades.push({
-      id: p.id, slug, cp: p.opt_type, strike: Number(p.strike), qty, occ: p.occ_symbol,
+      id: p.id, slug, name, cp: p.opt_type, strike: Number(p.strike), qty, occ: p.occ_symbol,
       entry, exit, pnl, openedAt: p.opened_at, closedAt: p.closed_at,
       peak, mfePct, gavePct,
       reason: p.close_reason ?? reason, // column beats journal-parse once stamped
@@ -211,7 +212,7 @@ async function main() {
   for (const t of trades) {
     const hold = Math.round((Date.parse(t.closedAt) - Date.parse(t.openedAt)) / 60000);
     console.log(
-      `${hhmm(t.openedAt)}–${hhmm(t.closedAt)}  ${(t.slug + (t.manual ? " ✋" : "")).padEnd(22)} ${(t.strike.toFixed(0) + (t.cp === "call" ? "C" : "P") + "×" + t.qty).padEnd(12)} ` +
+      `${hhmm(t.openedAt)}–${hhmm(t.closedAt)}  ${(t.name + (t.manual ? " ✋" : "")).padEnd(22)} ${(t.strike.toFixed(0) + (t.cp === "call" ? "C" : "P") + "×" + t.qty).padEnd(12)} ` +
       `${t.entry.toFixed(2)}→${t.peak != null ? t.peak.toFixed(2) : "  ? "}→${t.exit.toFixed(2)}`.padEnd(20) +
       ` ${sgn(t.pnl).padStart(6)}  ${pct(t.mfePct).padStart(5)} ${(t.gavePct != null ? Math.round(t.gavePct) + "%" : "—").padStart(6)} ${String(hold).padStart(4)}m  ${t.reason}`,
     );
@@ -222,7 +223,7 @@ async function main() {
   // green→red: was up ≥20%, closed ≤ 0
   const g2r = auto.filter((t) => (t.mfePct ?? 0) >= 20 && t.pnl <= 0);
   const left = g2r.reduce((a, t) => a + (t.peak! - t.exit) * t.qty * 100, 0);
-  console.log(`  green→red (MFE ≥+20% → closed ≤0): ${g2r.length} trades · $${Math.round(left).toLocaleString()} given back from peaks${g2r.length ? "  ← " + g2r.map((t) => t.slug).join(", ") : ""}`);
+  console.log(`  green→red (MFE ≥+20% → closed ≤0): ${g2r.length} trades · $${Math.round(left).toLocaleString()} given back from peaks${g2r.length ? "  ← " + g2r.map((t) => t.name).join(", ") : ""}`);
   // entry clusters: same minute + same side across ≥3 channels
   const clusters = new Map<string, Trade[]>();
   for (const t of auto) {
