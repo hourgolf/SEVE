@@ -8,7 +8,44 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## SESSION HANDOFF — 2026-06-12 EVENING (VALIDATION DAY PASSED · QQQ FLIPPED) — READ THIS FIRST
+## SESSION HANDOFF — 2026-06-13 WEEKEND (PRE-MONDAY HARDENING + CHANNEL UI + COCKPIT FOUNDATION) — READ FIRST
+**Saturday build, market closed, desk flat. Monday 06-15 is the new 7-channel roster's first live
+day — everything below was built/verified to NOT touch Monday's trader behavior.**
+
+**ALERT FIXES (pre-Monday correctness review — worker `stream-2026-06-13a` live + beating, cron v57
+sentinel-verified):** an independent review of the new push-alert system cleared the trade-safety
+paths and caught 3 real low-severity bugs, all fixed: (1) `send()`/`firePush` had NO fetch timeout
+→ added `AbortSignal.timeout(5000)` (worker fire-and-forget; cron is AWAITED so a hang could stall
+a trade-minute). (2) daily_stop/insufficient_capital/event alerts fired on stale-bar BOOT cycles →
+phantom pages on every restart; now gated on `barFresh`. (3) cross/giveback dedup keyed on
+(strategist_id, occ) → a same-day re-entry into the same strike was suppressed; re-keyed on the
+position row id.
+
+**PRE-FLIGHT (Monday) = GREEN.** 7 machine on stream + gap_min/→14:00 on V3/ALT + pb-ride 1DTE
+$400/$450 ustop0 + QQQ pair ustop-aligned + 4 twins on cron UNMUTED + event-standdown on the
+machine roster (twins exempt). One inert note: `qqq-thrust-trail-manual` still carries ustop 0.20
+(harmless — human owns twin exits; zero it at the twin→stream migration).
+
+**CHANNEL CONTROLS + LIGHTS SHIPPED (`feaef61`, both breakpoints verified):** the strip grew (1)
+read-only LIGHTS on the face — executor (cron/stream) · 1DTE · uS% · evt:ignore · ●in-trade · STOP
+(at daily-stop) — the live state of an "aware" channel at a glance (PB RIDER shows stream/1DTE; the
+QQQ twin surfaces its uS 0.2%). (2) auth-gated CONTROLS in the flip-editor — executor cron⇄stream,
+entry DTE 0⇄1, event-policy stand-down⇄ignore, u-stop %, max-contracts — full channel tuning, no
+SQL. Threaded `underlying_stop_pct`/`event_policy`/`entry_dte`/`executor` through types→load→state→write.
+
+**MULTI-ACCOUNT COCKPIT P1+P2 (`60ac32f`, design = docs/multi-account-cockpit-design.md):** P1
+(`36_accounts_foundation.sql` APPLIED) = additive `accounts` table + `strategists.account_id`;
+existing channels migrated to a `paper-main` account from fund_state. ⚠ NEW-TABLE GOTCHA: this
+project's default privileges do NOT auto-grant SELECT to anon — had to `grant select on accounts to
+anon` explicitly (RLS policy alone was moot; the dashboard read returned empty until the grant).
+P2 = `useAccounts` + `AccountSwitcher` (badge for 1 acct, segmented selector for 2+, live=red) in
+both headers; the composer scopes its roster to the selected account. Verified with a temp 2nd
+account (switcher became a selector, scoped the composer), then removed. **⚠ THE ENGINE DOES NOT
+USE account_id YET** — all channels still trade under paper-main; the worker account-LOOP (P3) +
+live-$ (P4) are deliberately HELD until after Monday's clean open (don't refactor the live trader
+before its biggest validation). P3/P4 plan + 4 open questions in the design doc.
+
+## SESSION HANDOFF — 2026-06-12 EVENING (VALIDATION DAY PASSED · QQQ FLIPPED)
 **W2 IS COMPLETE. The 06-12 validation day PASSED every gate, and the QQQ trio flipped to
 stream post-close (desk flat) → 13 machine channels on stream, 4 manual twins on cron.**
 Worker `stream-2026-06-12a` deployed + beating (commit `106a3c3`).
