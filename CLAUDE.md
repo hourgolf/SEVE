@@ -171,6 +171,22 @@ PENDING OPERATOR: twin migration timing (entry-push now built — see above). Mo
 PULLED FORWARD — the 06-12 cull; still on the month-end clean-era clock: power-smart-entries
 (probation), the ALT-vs-V3 fold, the QQQ pair.
 
+**WEEKLY-AUTOPSY OUTAGE — FOUND + FIXED (2026-06-13):** the 06-12 weekly report never generated
+(operator caught it). ROOT CAUSE: one of the 06-06 edge-fn redeploys silently flipped
+`weekly-autopsy`'s `verify_jwt` ON; its Friday cron (`seve-weekly-autopsy`, `15 20,21 * * 5`)
+passes a SERVICE_ROLE bearer that the edge gateway 401'd (daily-autopsy + paper-trader run
+verify-JWT OFF → spared; anon passes either way, service_role didn't). SILENT because the cron's
+`net.http_post` logs "succeeded" on ENQUEUE, not on the function's 401. Worked 06-05 (pre-redeploy),
+broke the next Friday. FIX: (1) BACKFILLED the missing report via `curl -X POST …/weekly-autopsy
+-d '{"weekEnd":"2026-06-12"}'` (the body param skips the Friday-only self-gate; anon bearer → 200;
+Opus narrative, ~73s) — week 06-08→06-12 now in `weekly_reports` (+$1,795 realized / −$2,031 NAV /
+229 trades). (2) operator toggled `verify_jwt` OFF in the dashboard (confirmed: no-auth POST → 200
++ get_edge_function `verify_jwt:false`). **⚠ DEPLOY GOTCHA: weekly-autopsy is paste-deployed — any
+future dashboard redeploy MUST keep "Verify JWT" OFF** (the editor defaults it ON), else this
+recurs. Same rule already implicit for daily-autopsy + paper-trader. Diagnostic recipe for any
+"cron fn ran but no row": check edge-function logs for 401/4xx (the cron run-details will lie
+"succeeded"), then compare `verify_jwt` across sibling cron fns.
+
 **DATA REFRESH (operator's word, same night):** bars archive exported →06-12 (both tickers) +
 **Databento NBBO refreshed →06-11** (SPY 23,098 + QQQ 28,736 quote-bars; pennies). **⚠ 06-12
 NBBO is EMBARGOED** — Databento historical OPRA serves only >~T+1 (403 `license_not_found_
