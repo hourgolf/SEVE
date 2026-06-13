@@ -1664,3 +1664,17 @@
 .cfg-seg button { font-family: var(--mono); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; padding: 3px 7px; background: transparent; color: var(--muted); border: none; cursor: pointer; }
 .cfg-seg button.on { background: var(--amber, #e8a13c); color: #1a1407; }
 .cfg-num { width: 58px; font-family: var(--mono); font-size: 11px; text-align: right; padding: 3px 6px; border-radius: 5px; border: 1px solid var(--border-bright); background: rgba(255, 255, 255, 0.05); color: var(--text, #e6eef0); }
+
+/* ---- account switcher (multi-account cockpit, 2026-06-13) — header chip/selector.
+   One account → a static badge; 2+ → a segmented selector. 'live' accounts go red. ---- */
+.acct-badge { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.4px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border-bright, rgba(160,150,130,0.4)); color: inherit; white-space: nowrap; }
+.acct-badge .acct-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pm-green, #2fd573); box-shadow: 0 0 5px var(--pm-green, #2fd573); flex: 0 0 auto; }
+.acct-mode { font-size: 8px; opacity: 0.62; margin-left: 1px; }
+.acct-badge.acct-live { color: var(--led-red, #f0563f); border-color: var(--led-red, #f0563f); }
+.acct-badge.acct-live .acct-dot { background: var(--led-red, #f0563f); box-shadow: 0 0 5px var(--led-red, #f0563f); }
+.acct-switch { display: inline-flex; border: 1px solid var(--border-bright, rgba(160,150,130,0.4)); border-radius: 6px; overflow: hidden; }
+.acct-opt { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 3px 8px; background: transparent; color: var(--muted); border: none; cursor: pointer; }
+.acct-opt.on { background: var(--amber, #e8a13c); color: #1a1407; }
+.acct-opt.acct-live { color: var(--led-red, #f0563f); }
+.acct-opt.acct-live.on { background: var(--led-red, #f0563f); color: #fff; }
+.acct-live-tag { margin-left: 2px; font-weight: 800; }

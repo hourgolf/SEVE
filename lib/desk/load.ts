@@ -25,8 +25,8 @@ const ORDER = ["fade", "breakout", "power", "grind"];
 
 const CONFIG_COLS =
   "strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed,underlying_stop_pct,event_policy,entry_dte)";
-const NEW_COLS = `id,slug,underlying,executor,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`;
-const NEW_COLS_NOUL = `id,slug,executor,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`; // DB predates `underlying`
+const NEW_COLS = `id,slug,underlying,executor,account_id,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`;
+const NEW_COLS_NOUL = `id,slug,executor,account_id,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`; // DB predates `underlying`
 const LEGACY_COLS = `id,slug,name,mandate,regime,${CONFIG_COLS}`;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -93,6 +93,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
           color,
           status: hasNewCols ? normStatus(r.status) : "armed",
           executor: r.executor === "stream" ? "stream" : "cron",
+          account_id: r.account_id ?? null,
           config,
           // sort key stashed for the sort below (kept off the public type).
           _sort: hasNewCols && r.sort_order != null ? Number(r.sort_order) : ORDER.indexOf(r.slug),

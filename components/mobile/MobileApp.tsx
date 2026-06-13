@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
@@ -25,6 +25,8 @@ import { AuthControl } from "@/components/AuthControl";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
 import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
+import { useAccounts } from "@/hooks/useAccounts";
+import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { MixerPads, padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -54,10 +56,15 @@ const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
 
 export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
+  // Multi-account: scope the roster to the selected account (one today → no-op filter).
+  const { accounts } = useAccounts();
+  const [acctId, setAcctId] = useState<string | null>(null);
+  useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
+  const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
   // The 86'd shelf: armed channels fill the Mix grid + mixer pads; benched (draft)
   // channels collapse to grey pads below — tap to open the full strip / re-arm.
-  const armed = desk.strategists.filter((s) => s.status === "armed");
-  const benched = desk.strategists.filter((s) => s.status !== "armed");
+  const armed = accountChannels.filter((s) => s.status === "armed");
+  const benched = accountChannels.filter((s) => s.status !== "armed");
   const { persist, canWrite } = useChannelOrdering(armed, write);
   const [expanded, setExpanded] = useState<string | null>(null); // Mix: channel open for full-knob editing
   const PER_PAGE = 4; // channels per swipe page in the Mix grid
@@ -125,6 +132,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
       <header className="m-vitals">
         <div className="m-vtop">
           <span className="m-brand">$EVE<span> · DESK</span></span>
+          <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
           <button className="m-cog" onClick={() => setSettings(true)} aria-label="settings & log">
             <IcCog />
           </button>

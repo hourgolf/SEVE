@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Chassis } from "@/components/console/Chassis";
 import { AddChannel } from "@/components/console/AddChannel";
 import { HeadReadouts } from "@/components/console/HeadReadouts";
@@ -9,6 +9,8 @@ import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { DayBooksStrip } from "@/components/console/DayBooksStrip";
+import { AccountSwitcher } from "@/components/console/AccountSwitcher";
+import { useAccounts } from "@/hooks/useAccounts";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
@@ -100,11 +102,18 @@ export function DesktopSurface({
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const { canWrite } = write;
 
+  // Multi-account: the desk scopes its roster to the selected account. One account today
+  // (paper-main) → a no-op filter; the moment a second account exists the switcher routes.
+  const { accounts } = useAccounts();
+  const [acctId, setAcctId] = useState<string | null>(null);
+  useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
+  const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
+
   // The 86'd shelf: only ARMED channels get full strips; benched (draft) channels
   // collapse to small pads on a rail below — tap one to inspect / re-arm. Keeps a
   // 7-channel working surface after a cull instead of a graveyard of dead strips.
-  const armed = desk.strategists.filter((s) => s.status === "armed");
-  const benched = desk.strategists.filter((s) => s.status !== "armed");
+  const armed = accountChannels.filter((s) => s.status === "armed");
+  const benched = accountChannels.filter((s) => s.status !== "armed");
   const [benchOpen, setBenchOpen] = useState<string | null>(null);
 
   // ---- drag-to-reorder + group-by (operator only; persists sort_order) ----
@@ -140,6 +149,7 @@ export function DesktopSurface({
       brand={<>$EVE<span> · DESK</span></>}
       right={
         <div className="head-nav">
+          <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
           <nav className="surface-nav" aria-label="sections">
             {SECTIONS.map((s) => (
               <a key={s.id} href={`#${s.id}`}>

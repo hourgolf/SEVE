@@ -52,10 +52,23 @@ export interface StrategistState {
   // Which engine places this channel's orders ('cron' minute worker | 'stream' Railway
   // worker). Editable from the strip; optional = back-compat (default 'cron').
   executor?: "cron" | "stream";
+  // Which account this channel belongs to (multi-account cockpit, 36_accounts_foundation).
+  // Optional = back-compat; the desk filters the visible roster by the selected account.
+  account_id?: string | null;
   config: StrategistConfig;
   // Factory defaults for this trader — what the channel's RESET restores. Carried
   // per-strategist so future pluggable traders ship their own default behaviour.
   defaults: StrategistConfig;
+}
+
+// Mirrors the `accounts` table (multi-account cockpit). One broker login the desk drives.
+export interface Account {
+  id: string;
+  name: string;
+  mode: "paper" | "live";
+  is_active: boolean;
+  accent: PmColor | string;
+  sort_order: number;
 }
 
 // Mirrors fund_state — the master strip. `running` is a UI transport flag.
