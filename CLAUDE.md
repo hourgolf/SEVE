@@ -203,6 +203,23 @@ to any future mid-window feature ship. **close_reason is HEALTHY** — the regen
 now states that plainly. Repo file = full source of record; deployed = condensed (logic-identical,
 banner trimmed for the inline MCP paste). ⚠ paste-redeploys must keep Verify-JWT OFF.
 
+**UNIFIED CHANNEL NAMING (2026-06-13, operator: "breakout-smart-entries vs BREAK(ALT) is
+confusing — reference the chosen name across the system"):** the autopsy LLM was the lone violator
+(UI strips/positions/man-vs-machine already resolve slug→name). Rule now: **`name` is the single
+human-facing label; `slug` stays an invisible internal key** (order IDs, worker resolution, your
+SQL). Done: (1) **weekly-autopsy v8 (2026-06-13d) DEPLOYED + regenerated** — SYS OUTPUT NAMING
+rule; rendered narrative + exit lists + skeleton headers resolve slug→name; verified the prose now
+reads "BREAK(ALT)", "GRIND(MANUAL) ✋", "Power Final 30" etc., zero slugs. (2) **day-report CLI**
+(`scripts/day-report.ts`) prints names (selects `strategists(slug,name)`). (3) **daily-autopsy
+(2026-06-13a) — COMMITTED, ⚠ NEEDS PASTE-DEPLOY** (365-line file, too big for a safe inline MCP
+paste): same fix (SYS rule + render maps slug→name in channel headers / finding evidence / finding
+channel tags; slug kept in channels[].slug + systemFindings[].channels[] as the join key). Paste
+`supabase/functions/daily-autopsy/index.ts` into the dashboard editor (Verify-JWT stays OFF) before
+Monday's close so Monday's daily uses names. NOT YET DONE (local-only, lower priority): the engine
+CLI mirrors `engine/autopsy.ts` + `engine/weekly-autopsy.ts` (`npm run autopsy`/`weekly`) still
+print `(slug)` and carry the OLD pre-doctrine SYS — they need a broader sync to the edge fns, not
+just naming.
+
 **DATA REFRESH (operator's word, same night):** bars archive exported →06-12 (both tickers) +
 **Databento NBBO refreshed →06-11** (SPY 23,098 + QQQ 28,736 quote-bars; pennies). **⚠ 06-12
 NBBO is EMBARGOED** — Databento historical OPRA serves only >~T+1 (403 `license_not_found_
