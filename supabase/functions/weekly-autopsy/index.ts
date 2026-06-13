@@ -1,3 +1,9 @@
+// ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13d  (UNIFIED NAMING — the report now refers to every channel
+//   by the operator's chosen display NAME (e.g. "BREAK(ALT)") everywhere a human reads it, never
+//   the slug ("breakout-smart-entries"), which was the confusing two-name split. SYS prompt has an
+//   OUTPUT NAMING rule; the rendered narrative + the exit lists resolve slug→name; the slug stays
+//   the internal join key in channels[].slug only. Markdown channel header dropped the (slug)
+//   parenthetical. Prior below.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13c  (EXIT-LOGGING TEMPORAL GUARD — the 2026-06-13b report
 //   correctly read the data but cried "system bug: fix exit logging" because close_reason shipped
 //   06-11 eve and 4/5 of the week predates it (06-12 = 34/34 stamped, prior days 0). The autopsy
@@ -205,15 +211,18 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
 
 function renderSkeleton(w: Any): string {
   const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
+  // Channels are referenced by the operator's chosen NAME everywhere a human reads them;
+  // the slug stays an internal key. nm resolves slug→name for the exit lists below.
+  const nm: Record<string, string> = Object.fromEntries(((w.channels ?? []) as Any[]).map((c) => [c.slug, c.name]));
   const L: string[] = [`# SEVE WEEKLY autopsy — ${w.weekStart} → ${w.weekEnd}  (${w.mode}, ${w.days.length} sessions)`];
   L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · maxDD ${usd(-(w.fund.maxDrawdown ?? 0))} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
   if (w.fund.bestDay && w.fund.worstDay) L.push(`- best ${w.fund.bestDay.date} ${usd(w.fund.bestDay.pnl)} · worst ${w.fund.worstDay.date} ${usd(w.fund.worstDay.pnl)}`);
   L.push(`\n**Regime ledger:**`); for (const r of w.regimeLedger) L.push(`- ${r.date}: ${r.note} (${r.returnPct >= 0 ? "+" : ""}${r.returnPct.toFixed(2)}%, eff ${r.efficiency.toFixed(2)})`);
   L.push(`\n**Exit efficiency** — green→red givebacks (the real signal) + upper-bound capture, scalpers excluded; non-scalp upside left ${usd(w.exitEfficiency.totalUpsideLeft)}`);
-  for (const r of w.exitEfficiency.redThatRanGreen) L.push(`- ⤴ \`${r.slug}\` ${r.occ} (${r.date}): exited ${usd(r.actual)} but ran to ${usd(r.couldHave)} — red trade, green runner`);
-  for (const c of w.exitEfficiency.worstCaptureChannels) L.push(`- 📉 \`${c.slug}\` captured ${(c.captureRatio * 100).toFixed(0)}% (${usd(c.left)} left)`);
+  for (const r of w.exitEfficiency.redThatRanGreen) L.push(`- ⤴ ${nm[r.slug] ?? r.slug} ${r.occ} (${r.date}): exited ${usd(r.actual)} but ran to ${usd(r.couldHave)} — red trade, green runner`);
+  for (const c of w.exitEfficiency.worstCaptureChannels) L.push(`- 📉 ${nm[c.slug] ?? c.slug} captured ${(c.captureRatio * 100).toFixed(0)}% (${usd(c.left)} left)`);
   for (const c of w.channels) {
-    const m = c.metrics; L.push(`\n## ${c.name} (\`${c.slug}\`) — ${c.status}`); L.push(`_${c.mandate}_`);
+    const m = c.metrics; L.push(`\n## ${c.name} — ${c.status}`); L.push(`_${c.mandate}_`);
     if (!m.nTrades) { L.push(`- no trades this week`); continue; }
     L.push(`- trades **${m.nTrades}** · win **${(m.winRate * 100).toFixed(0)}%** · realized **${usd(m.realizedPnl)}** · avgWin ${usd(m.avgWin)}/avgLoss ${usd(m.avgLoss)} · avgR ${m.avgR.toFixed(2)} · median hold ${m.medianHoldMin}m`);
     L.push(`- best ${usd(m.bestTrade)}/worst ${usd(m.worstTrade)} · exits ${JSON.stringify(c.exitReasons)} · by day ${c.byDay.map((d: Any) => `${d.date.slice(5)} ${usd(d.pnl)}`).join(" · ")}`);
@@ -233,7 +242,9 @@ DESK DOCTRINE — these are SETTLED findings from months of multi-window real-NB
 • EXIT-LOGGING is TEMPORALLY GUARDED — do NOT call 'unknown'/NULL exit reasons a logging bug on your own. Trust the digest: each channel carries \`exitLogging.status\` ('ok' | 'legacy' = NULLs predate the close_reason feature, EXPECTED, NOT a bug | 'gap' = NULLs recorded AFTER the feature went live, a REAL regression). digest.exitLoggingHealth gives the live-since date + the channels with a genuine gap. Flag a SYSTEM logging bug ONLY for status='gap' channels; if every NULL is 'legacy', state plainly that exit logging is healthy and the blanks are pre-instrumentation history (the feature shipped mid-window) — never make it an engineering item.
 
 Synthesize: (1) the week's character (regime ledger + which edges showed up in which regime); (2) GENUINE exit problems = green→red givebacks + asymmetric win/loss distributions (avgLoss ≫ avgWin even at high win-rate) — NOT capture-vs-peak; (3) recurring flaws (same flaw multiple days = systemic); (4) SYSTEM/EXECUTION bugs called out SEPARATELY from strategy — but for exit-logging obey the temporal guard above (legacy NULLs are NOT a bug); (5) per-channel weekly EXPRESSION with a verdict that respects liveStatus.
-Then KEY LEARNINGS (3-6) and a RANKED list of concrete, falsifiable SUGGESTIONS that obey the doctrine. DIAGNOSE only — never auto-apply to live. Specific and concise.`;
+Then KEY LEARNINGS (3-6) and a RANKED list of concrete, falsifiable SUGGESTIONS that obey the doctrine. DIAGNOSE only — never auto-apply to live. Specific and concise.
+
+OUTPUT NAMING: refer to every channel by its display \`name\` (the operator's chosen label, given per channel in the digest — e.g. "BREAK(ALT)", not "breakout-smart-entries") in ALL prose: weekSummary, every channel note, keyLearnings, and suggestions. The slug is an internal key — keep it ONLY in your channels[].slug output field (so the UI can match), never in prose.`;
 const TOOL = { name: "emit_weekly", description: "Return the narrated weekly autopsy.", input_schema: { type: "object", required: ["weekSummary", "channels", "keyLearnings", "suggestions"], properties: { weekSummary: { type: "string" }, channels: { type: "array", items: { type: "object", required: ["slug", "verdict", "exitQuality", "note"], properties: { slug: { type: "string" }, verdict: { type: "string", enum: ["keep", "retune", "mute", "watch"] }, exitQuality: { type: "string" }, note: { type: "string" } } } }, keyLearnings: { type: "array", items: { type: "string" } }, suggestions: { type: "array", items: { type: "object", required: ["action", "rationale", "priority"], properties: { action: { type: "string" }, rationale: { type: "string" }, priority: { type: "string", enum: ["high", "med", "low"] } } } } } } };
 
 async function narrate(digest: Any): Promise<Any | null> {
@@ -243,9 +254,9 @@ async function narrate(digest: Any): Promise<Any | null> {
   const j = await res.json();
   return (j.content ?? []).find((b: Any) => b.type === "tool_use")?.input ?? null;
 }
-function renderNarrative(n: Any): string {
+function renderNarrative(n: Any, nameBySlug: Record<string, string>): string {
   const L: string[] = ["", "─".repeat(60), "## LLM weekly synthesis", "", `**Week:** ${n.weekSummary}`];
-  for (const c of (n.channels ?? [])) L.push(`\n### \`${c.slug}\` — **${c.verdict}**\n- exit quality: ${c.exitQuality}\n- ${c.note}`);
+  for (const c of (n.channels ?? [])) L.push(`\n### ${nameBySlug[c.slug] ?? c.slug} — **${c.verdict}**\n- exit quality: ${c.exitQuality}\n- ${c.note}`);
   L.push(`\n### Key learnings`); for (const k of (n.keyLearnings ?? [])) L.push(`- ${k}`);
   L.push(`\n### Ranked suggestions`); for (const s of (n.suggestions ?? [])) L.push(`- **[${s.priority}]** ${s.action} — _${s.rationale}_`);
   return L.join("\n");
@@ -270,7 +281,8 @@ Deno.serve(async (req) => {
       const seen = new Set<string>();
       narrative.channels = narrative.channels.filter((c: Any) => c?.slug && !seen.has(c.slug) && (seen.add(c.slug), true));
     }
-    const markdown = renderSkeleton(digest) + (narrative ? "\n" + renderNarrative(narrative) : "");
+    const nameBySlug: Record<string, string> = Object.fromEntries(((digest.channels ?? []) as Any[]).map((c) => [c.slug, c.name]));
+    const markdown = renderSkeleton(digest) + (narrative ? "\n" + renderNarrative(narrative, nameBySlug) : "");
     const { error } = await sb.from("weekly_reports").upsert({ week_end: digest.weekEnd, week_start: digest.weekStart, mode: digest.mode, digest, narrative, markdown }, { onConflict: "week_end" });
     if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
     return Response.json({ ok: true, weekEnd: digest.weekEnd, narrated: !!narrative });
