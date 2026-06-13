@@ -109,6 +109,62 @@ export function useDeskWrite() {
     [session]
   );
 
+  // DUPLICATE a channel — clone the strategists row + its config under a fresh numeric slug
+  // (`<base>-2`, `-3`, … off the source's base, so siblings group), as a DRAFT so it never
+  // trades until the operator arms it. The whole point: stand up an A/B variant (0DTE vs 1DTE,
+  // a different u-stop) in two taps, tweak the copy, arm both. Built-in clones resolve to their
+  // base strategy via the worker's `-N`-stripping base-slug resolver; compiled clones carry the
+  // copied spec_json. The realtime sub re-hydrates the desk → the copy appears on the bench.
+  const duplicateChannel = useCallback(
+    async (sourceId: string): Promise<{ ok: boolean; slug?: string; name?: string; error?: string }> => {
+      if (!session || !sourceId) return { ok: false, error: "sign in to duplicate" };
+      try {
+        const sb = getSupabase();
+        const { data: src, error: e1 } = await sb
+          .from("strategists")
+          .select("slug,underlying,name,mandate,regime,accent,executor,account_id,spec_json,thesis_md,sort_order,strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,underlying_stop_pct,event_policy,entry_dte)")
+          .eq("id", sourceId)
+          .single();
+        if (e1 || !src) return { ok: false, error: e1?.message ?? "source channel not found" };
+        const s = src as Record<string, any>;
+        const cfg = (Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config) ?? {};
+        // next free `<base>-N` (base = source slug minus any trailing -N, so copies of copies group)
+        const base = String(s.slug).replace(/-\d+$/, "");
+        const { data: allRows } = await sb.from("strategists").select("slug");
+        const taken = new Set(((allRows ?? []) as Array<{ slug: string }>).map((r) => r.slug));
+        let n = 2; while (taken.has(`${base}-${n}`)) n++;
+        const slug = `${base}-${n}`;
+        const name = `${s.name} (copy)`;
+        const { data: ins, error: e2 } = await sb
+          .from("strategists")
+          .insert({
+            slug, underlying: s.underlying, name, mandate: s.mandate, regime: s.regime,
+            accent: s.accent, executor: s.executor ?? "cron", account_id: s.account_id ?? null,
+            spec_json: s.spec_json ?? null, thesis_md: s.thesis_md ?? null,
+            sort_order: (Number(s.sort_order) || 0) + 1, status: "draft", is_active: true,
+          })
+          .select("id")
+          .single();
+        if (e2 || !ins) return { ok: false, error: e2?.message ?? "duplicate insert failed" };
+        const newId = (ins as { id: string }).id;
+        const { error: e3 } = await sb.from("strategist_config").insert({
+          strategist_id: newId,
+          capital_pct: Number(cfg.capital_pct) || 200, aggression: Number(cfg.aggression) || 0,
+          max_contracts: Number(cfg.max_contracts) || 6, daily_stop_usd: Number(cfg.daily_stop_usd) || 500,
+          muted: false, soloed: false,
+          underlying_stop_pct: cfg.underlying_stop_pct != null ? Number(cfg.underlying_stop_pct) : 0,
+          event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
+          entry_dte: cfg.entry_dte != null ? Number(cfg.entry_dte) : 0,
+        });
+        if (e3) { await sb.from("strategists").delete().eq("id", newId); return { ok: false, error: `config clone failed: ${e3.message}` }; }
+        return { ok: true, slug, name };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "duplicate failed" };
+      }
+    },
+    [session]
+  );
+
   const renameChannel = useCallback(
     async (id: string, name: string): Promise<{ ok: boolean; error?: string }> => {
       if (!session || !id || !name.trim()) return { ok: false, error: "sign in / empty name" };
@@ -260,5 +316,5 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, deleteChannel, closePosition, tagClose, reorderChannels };
+  return { canWrite, persistConfig, persistFund, createChannel, duplicateChannel, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, deleteChannel, closePosition, tagClose, reorderChannels };
 }

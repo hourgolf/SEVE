@@ -1687,3 +1687,14 @@
 .acct-opt.acct-live { color: var(--led-red, #f0563f); }
 .acct-opt.acct-live.on { background: var(--led-red, #f0563f); color: #fff; }
 .acct-live-tag { margin-left: 2px; font-weight: 800; }
+
+/* ---- duplicate-channel (A/B primitive) controls in the flip-editor (2026-06-13) ---- */
+.ch-edit-life { display: flex; gap: 8px; flex-wrap: wrap; }
+.ch-edit-dup {
+  font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.4px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border-bright);
+  background: rgba(255, 255, 255, 0.05); color: var(--blue, #45c4d6); cursor: pointer;
+}
+.ch-edit-dup:hover { background: rgba(255, 255, 255, 0.1); }
+.ch-edit-dup:disabled { opacity: 0.5; cursor: default; }
+.ch-edit-ok { font-family: var(--mono); font-size: 10px; color: var(--green, #2fd573); line-height: 1.45; }

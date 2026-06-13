@@ -1,3 +1,8 @@
+// ⚑ WORKER VERSION: 2026-06-13b  (DUPLICATE-CHANNEL RESOLVER — the base-slug resolver now strips a
+//   trailing -N (`<base>-2`,`-3`) BEFORE the -manual/-qqq|spy strips, so a DUPLICATED channel (the
+//   new A/B primitive: clone → tweak DTE/U-stop → arm both) resolves to its source strategy.
+//   Provably safe: no current built-in slug ends in -<digits>, so this only ever touches new
+//   duplicates (which start as drafts). Mirrors worker stream-2026-06-13b. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-13a  (PUSH TIMEOUT — firePush is AWAITED in the trade path, so a
 //   half-open socket to /api/push-send could stall a cron cycle to the platform wall-clock; added
 //   AbortSignal.timeout(5000). Mirror of the worker stream-2026-06-13a fix (fire-and-forget there).
@@ -850,10 +855,11 @@ Deno.serve(async () => {
       // breakout-qqq → ORB) — only the underlying differs, and that's already routed
       // per s.underlying. Exact slug wins; a compiled .md channel (arbitrary slug)
       // still finds no REGISTRY hit and falls through to its spec_json.
-      // base-slug fallback: strip a `-manual` twin suffix (and the ticker suffix) so a
-      // built-in twin (power-manual → power) resolves; a compiled twin (qqq-thrust-trail-
-      // manual) misses REGISTRY and runs via its CLONED spec_json below — same as its base.
-      const code = REGISTRY[s.slug] ?? REGISTRY[s.slug.replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "")];
+      // base-slug fallback: a DUPLICATE (`<base>-2`,`-3` — the A/B primitive) strips its trailing
+      // -N first; then a `-manual` twin suffix (and the ticker suffix) so a built-in twin
+      // (power-manual → power) resolves; a compiled twin/clone misses REGISTRY and runs via its
+      // CLONED spec_json below. Provably safe — no built-in slug ends in -<digits>.
+      const code = REGISTRY[s.slug] ?? REGISTRY[s.slug.replace(/-\d+$/, "").replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "")];
       const compiled = !code && s.spec_json ? compileSpec(s.spec_json) : null;
       if (!code && !compiled) { out.push({ slug: s.slug, note: "no_edge" }); continue; }
       const tf = code ? code.tf : compiled!.tf;

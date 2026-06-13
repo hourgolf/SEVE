@@ -32,7 +32,7 @@ const meterColor = (f: number) => `hsl(${Math.round(130 * (1 - Math.max(0, Math.
 
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging, compact, onExpand }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, deleteChannel, canWrite } = useDeskWrite();
+  const { persistConfig, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, duplicateChannel, deleteChannel, canWrite } = useDeskWrite();
   const { id, slug, underlying, name, regime, color, status, config } = strategist;
   const executor = strategist.executor ?? "cron";
   const ustop = config.underlying_stop_pct ?? 0;
@@ -45,6 +45,8 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
   const [draftName, setDraftName] = useState(name);
   const [confirmDel, setConfirmDel] = useState(false);
   const [editErr, setEditErr] = useState<string | null>(null);
+  const [editMsg, setEditMsg] = useState<string | null>(null); // success feedback (duplicate)
+  const [dupBusy, setDupBusy] = useState(false);
 
   const openEdit = () => { setDraftName(name); setConfirmDel(false); setEditErr(null); setClosing(false); setEditing(true); };
   // Flip back to the front (animate, THEN unmount) — keeps it mounted for the
@@ -75,6 +77,15 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
     dispatch({ type: "RECOLOR", slug, color: c }); // optimistic
     const res = await setChannelAccent(id, c);
     if (!res.ok) setEditErr(res.error ?? "recolor failed");
+  };
+  // Duplicate → a DRAFT clone (the A/B primitive). The realtime sub brings the copy onto the
+  // bench; the operator then tweaks the copy (DTE / U-stop) and arms both for the head-to-head.
+  const doDuplicate = async () => {
+    setEditErr(null); setEditMsg(null); setDupBusy(true);
+    const res = await duplicateChannel(id);
+    setDupBusy(false);
+    if (res.ok) setEditMsg(`✓ ${res.name} — drafted on the bench. Tweak DTE / U-stop, then arm both.`);
+    else setEditErr(res.error ?? "duplicate failed");
   };
   // Live-attribute setters (the new strip controls). Each is optimistic (dispatch) +
   // an auth-gated persist; both the cron and stream worker read these every cycle.
@@ -183,13 +194,23 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
       </div>
 
       <label className="ch-edit-label">Lifecycle</label>
-      <button
-        className="ch-edit-bench"
-        onClick={toggleBench}
-        title={status === "armed" ? "bench: stop entries; open positions wind down" : "re-arm: channel trades again next cycle"}
-      >
-        {status === "armed" ? "86 it (bench)" : "Re-arm channel"}
-      </button>
+      <div className="ch-edit-life">
+        <button
+          className="ch-edit-bench"
+          onClick={toggleBench}
+          title={status === "armed" ? "bench: stop entries; open positions wind down" : "re-arm: channel trades again next cycle"}
+        >
+          {status === "armed" ? "86 it (bench)" : "Re-arm channel"}
+        </button>
+        <button
+          className="ch-edit-dup"
+          onClick={doDuplicate}
+          disabled={dupBusy}
+          title="clone this channel as a draft — for an A/B variant (e.g. 0DTE vs 1DTE, a different U-stop)"
+        >
+          {dupBusy ? "Duplicating…" : "Duplicate"}
+        </button>
+      </div>
 
       <div className="ch-edit-danger">
         {!confirmDel ? (
@@ -203,6 +224,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         )}
       </div>
       {editErr && <div className="ch-edit-err">{editErr}</div>}
+      {editMsg && <div className="ch-edit-ok">{editMsg}</div>}
       <button className="ch-edit-done" onClick={closeEdit}>Done</button>
     </div>
   ) : null;
