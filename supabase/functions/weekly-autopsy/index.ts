@@ -1,3 +1,13 @@
+// ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13a  (VERIFY-JWT OFF — fixes the silent weekly miss. ROOT
+//   CAUSE: the 06-06 redeploy left this function's verify_jwt ON; its Friday cron passes a
+//   SERVICE_ROLE bearer that the edge gateway then 401'd (daily-autopsy + paper-trader run
+//   verify-JWT OFF, so they were spared — anon passes either way, service_role didn't). Result:
+//   06-12's weekly never generated (silent — the cron's net.http_post records "succeeded" on
+//   enqueue, not on the 401). The 06-08→06-12 report was BACKFILLED 06-13 via the {weekEnd}
+//   override (anon bearer, 200). ⚠ PERMANENT FIX PENDING OPERATOR: re-deploy THIS file with
+//   verify_jwt:false (matches the header's documented intent + daily/paper-trader parity) — body
+//   is byte-identical, only the deploy flag changes. Until then the Friday cron will 401 again.
+//   Alt fix: swap the seve-weekly-autopsy cron's bearer from service_role → anon. Prior below.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-05d  (the weekly synthesis now runs on OPUS (claude-opus-4-8)
 //   — once a week, decision-driving, latency-insensitive, ~1.67x Sonnet cost = trivial; stronger
 //   reasoning for the cross-day synthesis + ranked suggestions. Decoupled from the daily (still
