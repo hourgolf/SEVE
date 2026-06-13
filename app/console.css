@@ -1642,3 +1642,25 @@
   color: var(--amber, #e8a13c); cursor: pointer; align-self: flex-start;
 }
 .ch-edit-bench:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* ---- channel state LIGHTS (2026-06-13) — read-only chips on the strip face showing the
+   dynamic state of a live channel: which executor, 0/1DTE, u-stop, event posture, in-trade,
+   at-stop. They sit in the cream strip scope, so the --green/--red/etc tokens are ink. ---- */
+.ch-lights { display: flex; flex-wrap: wrap; gap: 4px; padding: 1px 22px 3px; }
+.channel--m .ch-lights, .channel--mc .ch-lights { padding-left: 0; padding-right: 0; }
+.chl { font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; border: 1px solid currentColor; line-height: 1.45; white-space: nowrap; }
+.chl-exec.chl-stream { color: var(--blue); }
+.chl-exec.chl-cron { color: var(--ink-soft, #6b6960); }
+.chl-dte { color: var(--violet, #8a5cf6); }
+.chl-us, .chl-evt { color: var(--amber, #b8791e); }
+.chl-live { color: var(--green); }
+.chl-stop { color: var(--red); background: rgba(240, 86, 63, 0.1); }
+
+/* ---- live-config controls in the flip-card editor (dark overlay context) ---- */
+.ch-edit-cfg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
+.cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cfg-k { font-family: var(--mono); font-size: 10px; color: var(--text, #e6eef0); }
+.cfg-seg { display: inline-flex; border: 1px solid var(--border-bright); border-radius: 6px; overflow: hidden; flex: 0 0 auto; }
+.cfg-seg button { font-family: var(--mono); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; padding: 3px 7px; background: transparent; color: var(--muted); border: none; cursor: pointer; }
+.cfg-seg button.on { background: var(--amber, #e8a13c); color: #1a1407; }
+.cfg-num { width: 58px; font-family: var(--mono); font-size: 11px; text-align: right; padding: 3px 6px; border-radius: 5px; border: 1px solid var(--border-bright); background: rgba(255, 255, 255, 0.05); color: var(--text, #e6eef0); }

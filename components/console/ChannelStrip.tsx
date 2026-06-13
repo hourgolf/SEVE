@@ -32,8 +32,12 @@ const meterColor = (f: number) => `hsl(${Math.round(130 * (1 - Math.max(0, Math.
 
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging, compact, onExpand }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, renameChannel, setChannelAccent, setChannelStatus, deleteChannel, canWrite } = useDeskWrite();
+  const { persistConfig, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, deleteChannel, canWrite } = useDeskWrite();
   const { id, slug, underlying, name, regime, color, status, config } = strategist;
+  const executor = strategist.executor ?? "cron";
+  const ustop = config.underlying_stop_pct ?? 0;
+  const dte = config.entry_dte ?? 0;
+  const eventPolicy = config.event_policy ?? "standdown";
 
   // Flip-card editor: rename + delete. Opens an overlay over the card.
   const [editing, setEditing] = useState(false);
@@ -72,6 +76,29 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
     const res = await setChannelAccent(id, c);
     if (!res.ok) setEditErr(res.error ?? "recolor failed");
   };
+  // Live-attribute setters (the new strip controls). Each is optimistic (dispatch) +
+  // an auth-gated persist; both the cron and stream worker read these every cycle.
+  const flipExecutor = async () => {
+    const next = executor === "stream" ? "cron" : "stream";
+    dispatch({ type: "SET_EXECUTOR", slug, executor: next });
+    const res = await setChannelExecutor(id, next);
+    if (!res.ok) { dispatch({ type: "SET_EXECUTOR", slug, executor }); setEditErr(res.error ?? "executor change failed"); }
+  };
+  const setCfg = (patch: Partial<typeof config>) => { dispatch({ type: "SET_CONFIG", slug, patch }); persistConfig(id, patch); };
+
+  // ---- STATUS LIGHTS (read-only observability) — the dynamic state of a live channel.
+  const inTrade = (pnl?.openCount ?? 0) > 0;
+  const atStop = config.daily_stop_usd > 0 && (pnl?.dayPnl ?? 0) <= -config.daily_stop_usd;
+  const lights = (
+    <div className="ch-lights" aria-label="channel state">
+      <span className={`chl chl-exec chl-${executor}`} title={`orders placed by the ${executor} worker`}>{executor}</span>
+      {dte === 1 && <span className="chl chl-dte" title="enters next-session (1DTE) expiry">1DTE</span>}
+      {ustop > 0 && <span className="chl chl-us" title={`underlying stop ${ustop}%`}>uS {ustop}%</span>}
+      {eventPolicy === "ignore" && <span className="chl chl-evt" title="ignores scheduled-event stand-downs (event-native)">evt:ignore</span>}
+      {inTrade && <span className="chl chl-live" title={`${pnl?.openCount} open position(s)`}>● in trade</span>}
+      {atStop && <span className="chl chl-stop" title="day P&L at/through the STOP — entries halted">STOP</span>}
+    </div>
+  );
 
   const editBtn = canWrite ? (
     <button
@@ -118,6 +145,41 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
             title={c}
           />
         ))}
+      </div>
+
+      <label className="ch-edit-label">Live config</label>
+      <div className="ch-edit-cfg">
+        <div className="cfg-row">
+          <span className="cfg-k" title="which engine places this channel's orders">Executor</span>
+          <span className="cfg-seg">
+            <button className={executor === "cron" ? "on" : ""} onClick={() => executor !== "cron" && flipExecutor()}>cron</button>
+            <button className={executor === "stream" ? "on" : ""} onClick={() => executor !== "stream" && flipExecutor()}>stream</button>
+          </span>
+        </div>
+        <div className="cfg-row">
+          <span className="cfg-k" title="0DTE = today's expiry (+cutoff roll); 1DTE = next session's expiry">Entry DTE</span>
+          <span className="cfg-seg">
+            <button className={dte === 0 ? "on" : ""} onClick={() => dte !== 0 && setCfg({ entry_dte: 0 })}>0DTE</button>
+            <button className={dte === 1 ? "on" : ""} onClick={() => dte !== 1 && setCfg({ entry_dte: 1 })}>1DTE</button>
+          </span>
+        </div>
+        <div className="cfg-row">
+          <span className="cfg-k" title="scheduled-event (FOMC) posture: stand down vs trade through">Events</span>
+          <span className="cfg-seg">
+            <button className={eventPolicy === "standdown" ? "on" : ""} onClick={() => eventPolicy !== "standdown" && setCfg({ event_policy: "standdown" })}>stand-down</button>
+            <button className={eventPolicy === "ignore" ? "on" : ""} onClick={() => eventPolicy !== "ignore" && setCfg({ event_policy: "ignore" })}>ignore</button>
+          </span>
+        </div>
+        <div className="cfg-row">
+          <span className="cfg-k" title="underlying stop %: exit when the underlying moves this % against entry (0 = off)">U-stop %</span>
+          <input className="cfg-num" type="number" inputMode="decimal" min={0} max={2} step={0.05} value={ustop}
+            onChange={(e) => setCfg({ underlying_stop_pct: Math.max(0, Math.min(2, Number(e.target.value) || 0)) })} aria-label="underlying stop percent" />
+        </div>
+        <div className="cfg-row">
+          <span className="cfg-k" title="hidden hard ceiling on contracts per trade">Max contracts</span>
+          <input className="cfg-num" type="number" inputMode="numeric" min={1} max={50} step={1} value={config.max_contracts}
+            onChange={(e) => setCfg({ max_contracts: Math.max(1, Math.min(50, Math.floor(Number(e.target.value)) || 1)) })} aria-label="max contracts" />
+        </div>
       </div>
 
       <label className="ch-edit-label">Lifecycle</label>
@@ -274,6 +336,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
             {statusBadge}
           </div>
           <div className="ch-regime">{regime}</div>
+        {lights}
         </div>
 
         <div className="ch-knobrow">
@@ -330,6 +393,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         {statusBadge}
       </div>
       <div className="ch-regime">{regime}</div>
+      {lights}
 
       <div className="ch-knobs">
         <Knob

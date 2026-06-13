@@ -31,6 +31,11 @@ export interface StrategistConfig {
   daily_stop_usd: number; // STOP $/day — halts new entries at this realized loss (wired)
   muted: boolean;
   soloed: boolean;
+  // Live channel attributes now exposed as strip controls (optional = back-compat with
+  // the seed; load.ts fills them from the DB, the UI reads with defaults).
+  underlying_stop_pct?: number; // 0 = off; exits when the underlying moves X% against entry
+  event_policy?: "standdown" | "ignore"; // scheduled-event (FOMC) posture
+  entry_dte?: number; // 0 = today's expiry + cutoff roll; 1 = always next session's expiry
 }
 
 // A strategist + its live config (strategists ⋈ strategist_config).
@@ -44,6 +49,9 @@ export interface StrategistState {
   color: PmColor;
   // Lifecycle status — 'armed' channels trade; 'draft'/'disabled' do not.
   status: ChannelStatus;
+  // Which engine places this channel's orders ('cron' minute worker | 'stream' Railway
+  // worker). Editable from the strip; optional = back-compat (default 'cron').
+  executor?: "cron" | "stream";
   config: StrategistConfig;
   // Factory defaults for this trader — what the channel's RESET restores. Carried
   // per-strategist so future pluggable traders ship their own default behaviour.

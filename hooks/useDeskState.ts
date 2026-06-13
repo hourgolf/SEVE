@@ -16,6 +16,7 @@ export type DeskAction =
   | { type: "RENAME"; slug: string; name: string }
   | { type: "RECOLOR"; slug: string; color: PmColor }
   | { type: "SET_STATUS"; slug: string; status: ChannelStatus } // bench (draft) ⇄ re-arm
+  | { type: "SET_EXECUTOR"; slug: string; executor: "cron" | "stream" }
   | { type: "REMOVE"; slug: string }
   | { type: "TOGGLE_MUTE"; slug: string }
   | { type: "TOGGLE_SOLO"; slug: string }
@@ -60,6 +61,13 @@ export function deskReducer(state: DeskState, action: DeskAction): DeskState {
         ...state,
         strategists: state.strategists.map((s) =>
           s.slug === action.slug ? { ...s, status: action.status } : s
+        ),
+      };
+    case "SET_EXECUTOR":
+      return {
+        ...state,
+        strategists: state.strategists.map((s) =>
+          s.slug === action.slug ? { ...s, executor: action.executor } : s
         ),
       };
     case "REMOVE":

@@ -156,6 +156,22 @@ export function useDeskWrite() {
     [session]
   );
 
+  // Flip a channel's EXECUTOR (cron ⇄ stream). The minute cron and the Railway stream
+  // worker both read this flag every cycle (no deploy needed); rollback is the reverse
+  // flip. This is the live migration control, now one auth-gated tap from the strip.
+  const setChannelExecutor = useCallback(
+    async (id: string, executor: "cron" | "stream"): Promise<{ ok: boolean; error?: string }> => {
+      if (!session || !id) return { ok: false, error: "sign in to change executor" };
+      try {
+        const { error } = await getSupabase().from("strategists").update({ executor }).eq("id", id);
+        return error ? { ok: false, error: error.message } : { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "executor change failed" };
+      }
+    },
+    [session]
+  );
+
   // Delete a channel. A channel with trade history (signals/positions FK) can't
   // be hard-deleted without destroying that history, so we fall back to a soft
   // disable (status:'disabled' → hidden + skipped by the worker). Either way it
@@ -244,5 +260,5 @@ export function useDeskWrite() {
     [session]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, setChannelStatus, deleteChannel, closePosition, tagClose, reorderChannels };
+  return { canWrite, persistConfig, persistFund, createChannel, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, deleteChannel, closePosition, tagClose, reorderChannels };
 }
