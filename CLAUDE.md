@@ -26,6 +26,20 @@ $400/$450 ustop0 + QQQ pair ustop-aligned + 4 twins on cron UNMUTED + event-stan
 machine roster (twins exempt). One inert note: `qqq-thrust-trail-manual` still carries ustop 0.20
 (harmless — human owns twin exits; zero it at the twin→stream migration).
 
+**CHANNEL EDITOR FOLLOW-UPS (same session):** (a) **EDITOR SCROLL FIX (`1a55d7d`)** — the new
+live-config rows made the flip-editor (`.ch-edit`, `position:absolute inset:0`) overflow behind the
+strips below, hiding Done. A `:has()` float was tried but the grid + dnd-kit stacking contexts kept
+a lower row painting over the tail (verified twice) → fix = `overflow-y:auto` (card-bounded scroll
+panel; can't overflow behind a neighbour). A centered-modal editor (portal + scrim, kills the
+stacking issue, unifies desktop+mobile) was MOCKED UP but DEFERRED on operator's word. (b)
+**DUPLICATE-CHANNEL button (`6b14505`) — the A/B primitive:** `useDeskWrite.duplicateChannel` clones
+strategists + config under `<base>-2,-3…` as a DRAFT (copies spec_json/executor/account_id + all
+knobs incl. entry_dte/ustop/event_policy); realtime brings the copy to the bench → tweak DTE/U-stop
+→ arm both. ⚠ RESOLVER EXTENDED (worker `stream-2026-06-13b` + cron v58): the base-slug resolver now
+strips a trailing `-N` BEFORE -manual/-qqq|spy, so a duplicated BUILT-IN (pb-ride-2 → pb-ride) runs
+its source strategy. Provably safe — ZERO current slugs end in -<digits> (verified), so it only ever
+touches new drafts. Smoke-tested clone-of-spec + clone-of-builtin, then removed.
+
 **CHANNEL CONTROLS + LIGHTS SHIPPED (`feaef61`, both breakpoints verified):** the strip grew (1)
 read-only LIGHTS on the face — executor (cron/stream) · 1DTE · uS% · evt:ignore · ●in-trade · STOP
 (at daily-stop) — the live state of an "aware" channel at a glance (PB RIDER shows stream/1DTE; the
