@@ -49,10 +49,13 @@ async function send(title: string, body: string, tag = "seve-alert"): Promise<vo
   info(`alert: ${title} — ${body}${enabled ? "" : " (push off: APP_URL/PUSH_SECRET unset)"}`);
   if (!enabled) return;
   try {
+    // 5s timeout — this is an external call on the live trading process; a half-open
+    // socket must never leave a dangling request hanging (callers are fire-and-forget).
     await fetch(`${config.appUrl}/api/push-send`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-push-secret": config.pushSecret },
       body: JSON.stringify({ title, body, tag, url: "/" }),
+      signal: AbortSignal.timeout(5000),
     });
   } catch (e) {
     warn(`alert push failed — ${(e as Error).message}`);

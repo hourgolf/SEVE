@@ -184,12 +184,17 @@ async function cycle(trigger: string): Promise<void> {
           if (!ch || !ownedBy(ch)) continue;
           // "The desk summons you" — page the operator on the decision-level moments
           // (informational; once per day per key; never alters the execution below).
-          if (d.action === "exit" && d.reason === "event_flatten")
-            alertOnce(todayET, "event", "standdown", "⚑ event stand-down", `${d.slug} flattening ${d.occ ?? ""} — entries blocked through the window`);
-          if (d.action === "enter" && d.blocked === "daily_stop")
-            alertOnce(todayET, "latch", d.slug, `⛔ ${d.slug} daily stop latched`, `realized ≤ −$${Math.round(ch.daily_stop_usd)} — its entries are done for the day`);
-          if (d.action === "enter" && d.blocked === "insufficient_capital")
-            alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
+          // Gated on barFresh: a boot/stale-bar cycle re-decides on yesterday's bar and
+          // would emit phantom "daily stop / sized-to-zero" pages for decisions it is NOT
+          // acting on — only page when the decision is fresh (i.e. the worker is acting).
+          if (barFresh) {
+            if (d.action === "exit" && d.reason === "event_flatten")
+              alertOnce(todayET, "event", "standdown", "⚑ event stand-down", `${d.slug} flattening ${d.occ ?? ""} — entries blocked through the window`);
+            if (d.action === "enter" && d.blocked === "daily_stop")
+              alertOnce(todayET, "latch", d.slug, `⛔ ${d.slug} daily stop latched`, `realized ≤ −$${Math.round(ch.daily_stop_usd)} — its entries are done for the day`);
+            if (d.action === "enter" && d.blocked === "insufficient_capital")
+              alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
+          }
           const row = openRows.get(ch.id);
           try {
             if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
@@ -291,11 +296,13 @@ async function fastExitSweep(): Promise<void> {
       if (entryPx > 0) {
         const retPct = ((mid - entryPx) / entryPx) * 100;
         const peakPct = ((peak - entryPx) / entryPx) * 100;
+        // dedup scope = the POSITION ROW id (not the OCC) so a same-day re-entry into the
+        // same strike (e.g. two ORB legs on 742C) pages on its OWN +75%/giveback, not once.
         if (retPct >= policy.ALERT_CROSS_PCT)
-          alertOnce(todayET, "cross", key, `▲ ${ch.slug} +${Math.round(retPct)}%`,
+          alertOnce(todayET, "cross", r.id, `▲ ${ch.slug} +${Math.round(retPct)}%`,
             `${r.occ_symbol} ×${r.qty} — entry $${entryPx.toFixed(2)} → $${mid.toFixed(2)}. Ride or bank?`);
         if (peakPct >= policy.ALERT_GIVEBACK_MIN_PEAK_PCT && peak - mid >= policy.ALERT_GIVEBACK_FRAC * (peak - entryPx))
-          alertOnce(todayET, "giveback", key, `▼ ${ch.slug} giving it back`,
+          alertOnce(todayET, "giveback", r.id, `▼ ${ch.slug} giving it back`,
             `${r.occ_symbol} peaked +${Math.round(peakPct)}%, now ${retPct >= 0 ? "+" : ""}${Math.round(retPct)}% — ${Math.round(((peak - mid) / (peak - entryPx)) * 100)}% of the move gone`);
       }
       const pe = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;

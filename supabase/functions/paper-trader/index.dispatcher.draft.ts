@@ -1,3 +1,7 @@
+// ⚑ WORKER VERSION: 2026-06-13a  (PUSH TIMEOUT — firePush is AWAITED in the trade path, so a
+//   half-open socket to /api/push-send could stall a cron cycle to the platform wall-clock; added
+//   AbortSignal.timeout(5000). Mirror of the worker stream-2026-06-13a fix (fire-and-forget there).
+//   Found by the pre-Monday correctness review. No behavior change otherwise. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-12a  (STREAM-STALE PAGE — "the desk summons you", cron side. The
 //   Railway worker can't report its own death, so the executor-gate heartbeat check now PAGES the
 //   operator (firePush → /api/push-send, tag "seve-alert") when the stream heartbeat goes stale:
@@ -613,7 +617,9 @@ async function journal(level: string, message: string, meta?: unknown) { try { a
 // the ✋ twin exit pings; "seve-alert" = desk alerts (e.g. the stream-stale page).
 async function firePush(title: string, body: string, tag = "seve-manual") {
   if (!PUSH_SECRET) return;
-  try { await fetch(`${APP_URL}/api/push-send`, { method: "POST", headers: { "content-type": "application/json", "x-push-secret": PUSH_SECRET }, body: JSON.stringify({ title, body, tag, url: "/" }) }); } catch { /* */ }
+  // 5s timeout — firePush is AWAITED in the trade path; a half-open socket to push-send
+  // must never stall the cron cycle past the platform wall-clock. Errors stay swallowed.
+  try { await fetch(`${APP_URL}/api/push-send`, { method: "POST", headers: { "content-type": "application/json", "x-push-secret": PUSH_SECRET }, body: JSON.stringify({ title, body, tag, url: "/" }), signal: AbortSignal.timeout(5000) }); } catch { /* */ }
 }
 // Place an order, then poll for the ACTUAL fill price (market orders fill in ms).
 // Booking at the real fill — not the mid/mark — is what makes the desk's P&L
