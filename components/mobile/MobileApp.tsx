@@ -67,6 +67,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const benched = accountChannels.filter((s) => s.status !== "armed");
   const { persist, canWrite } = useChannelOrdering(armed, write);
   const [expanded, setExpanded] = useState<string | null>(null); // Mix: channel open for full-knob editing
+  const [benchOpen, setBenchOpen] = useState(false); // 86'd shelf: collapsed by default so it doesn't steal carousel height
   const PER_PAGE = 4; // channels per swipe page in the Mix grid
   const [tab, setTab] = useState<Tab>("live");
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
@@ -250,26 +251,36 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               persist={persist}
               canWrite={canWrite}
             />
-            {/* the 86'd shelf — benched channels as grey pads; tap → full strip sheet */}
+            {/* the 86'd shelf — benched channels as grey pads. COLLAPSED by default to a slim
+                bar (it otherwise stole ~50px from the channel carousel, clipping the 4th card);
+                tap the bar to reveal the pads, tap a pad → full strip sheet. */}
             {benched.length > 0 && (
-              <div className="mx-bench">
-                <div className="mx-bar">
-                  <span className="mx-title">Bench · 86&apos;d</span>
-                </div>
-                <div className="mx-pads">
-                  {benched.map((s) => (
-                    <button
-                      key={s.slug}
-                      type="button"
-                      className="mx-pad bench"
-                      style={{ ["--pad" as string]: pmVar(s.color) }}
-                      onClick={() => setExpanded(s.slug)}
-                      title={`${s.name} — ${s.status}`}
-                    >
-                      {padCode(s)}
-                    </button>
-                  ))}
-                </div>
+              <div className={`mx-bench${benchOpen ? " open" : ""}`}>
+                <button
+                  type="button"
+                  className="mx-bench-toggle"
+                  onClick={() => setBenchOpen((o) => !o)}
+                  aria-expanded={benchOpen}
+                >
+                  <span className="mx-title">Bench · 86&apos;d · {benched.length}</span>
+                  <span className="mx-bench-chev" aria-hidden>{benchOpen ? "▾" : "▸"}</span>
+                </button>
+                {benchOpen && (
+                  <div className="mx-pads">
+                    {benched.map((s) => (
+                      <button
+                        key={s.slug}
+                        type="button"
+                        className="mx-pad bench"
+                        style={{ ["--pad" as string]: pmVar(s.color) }}
+                        onClick={() => setExpanded(s.slug)}
+                        title={`${s.name} — ${s.status}`}
+                      >
+                        {padCode(s)}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

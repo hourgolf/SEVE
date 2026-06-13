@@ -43,6 +43,16 @@
   align-items: center;
   justify-content: space-between;
 }
+/* the account switcher sits in the CREAM vitals header on mobile (it inherits the dark
+   surface's light --text everywhere else) → ink it so the badge/segments are legible;
+   the 'live' alarm state keeps its red. */
+.m-vitals .acct-badge:not(.acct-live),
+.m-vitals .acct-opt:not(.acct-live) { color: var(--ink); }
+.m-vitals .acct-badge:not(.acct-live) { border-color: var(--chassis-edge); }
+/* match the 30px settings cog so the badge + cog read as one aligned header band */
+.m-vitals .acct-badge,
+.m-vitals .acct-switch { height: 30px; border-radius: 8px; }
+.m-vitals .acct-badge { padding: 0 11px; }
 .m-brand {
   font-family: var(--mono);
   font-weight: 700;
@@ -78,7 +88,10 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  justify-content: center;
+  /* top-align so RUN's top meets the LED window's top and (RUN + gap + PAPER = the window
+     height) PAPER's bottom meets the window's bottom — the stack spans the LED box, not its
+     vertically-centered middle. */
+  justify-content: flex-start;
 }
 .m-pill {
   min-width: 54px;
@@ -529,7 +542,7 @@
   border-style: dashed !important; border-width: 1.5px;
   background: rgba(255, 255, 255, 0.03);
   font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.6px;
-  text-transform: uppercase; color: var(--muted); cursor: pointer;
+  text-transform: uppercase; color: var(--ink-soft); cursor: pointer;   /* cream ink (was dark --muted → ~2:1 on cream) */
 }
 .m-addcard:active { transform: scale(0.992); }
 /* the Mix tab is a fixed, self-contained mixer — no vertical page scroll/bounce */
@@ -563,7 +576,7 @@
 .mc-meter { display: flex; align-items: center; gap: 9px; }
 .mc-bar { flex: 1 1 auto; min-width: 32px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.16); overflow: hidden; }
 .mc-fill { display: block; height: 100%; border-radius: 4px; }
-.mc-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.5px; color: var(--muted); width: 30px; flex: 0 0 auto; }
+.mc-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.5px; color: var(--ink-soft); width: 30px; flex: 0 0 auto; }   /* cream ink (was the dark global --muted → ~2.1:1 on cream) */
 .mc-val { font-family: var(--mono); font-size: 12px; color: #222; width: 46px; text-align: right; flex: 0 0 auto; }   /* black amounts on cream */
 .mc-pads { display: flex; gap: 8px; flex: 0 0 auto; }
 .mc-pads .pad { min-width: 50px; min-height: 42px; }   /* mute/solo — sized down so they clear the bottom border */
@@ -571,7 +584,7 @@
 /* master mixer — small sortable colored pads (tap = jump, hold = reorder) */
 .mx-mixer { flex: 0 0 auto; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
 .mx-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
-.mx-title { font-family: var(--mono); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.mx-title { font-family: var(--mono); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-soft); }   /* cream ink (was dark --muted → ~1.9:1 on cream) */
 .mx-pads { display: flex; flex-wrap: wrap; gap: 7px; }
 .mx-pad {
   width: 42px; height: 36px; border-radius: 8px;
@@ -590,6 +603,14 @@
 
 /* ---- the 86'd shelf (2026-06-12) — benched channels under the mixer pads; tap
    opens the full strip sheet (inspect / re-arm). Not sortable, so touch scrolls. */
-.mx-bench { flex: 0 0 auto; border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 8px; }
+/* 86'd shelf — COLLAPSIBLE: a slim full-width toggle bar by default (reclaims the ~50px the
+   pad rows used to steal from the channel carousel); the pads reveal only when open. */
+.mx-bench { flex: 0 0 auto; border-top: 1px dashed var(--border); margin-top: 6px; }
+.mx-bench-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 6px 2px; background: transparent; border: none; cursor: pointer;
+}
+.mx-bench-chev { font-size: 10px; color: var(--ink-soft); flex: 0 0 auto; }
+.mx-bench.open .mx-pads { padding-top: 6px; }
 .mx-pad.bench { opacity: 0.38; filter: grayscale(0.65); touch-action: auto; }
 .mx-pad.bench:active { opacity: 0.8; }

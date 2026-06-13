@@ -730,7 +730,25 @@
   inset: 0;
   z-index: 6;
   border-radius: inherit;
-  background: #15191c;
+  /* CREAM 909 treatment: the flip-card back now matches the strip's cream chassis instead
+     of a dark slab. Redefine the color tokens on the scope (same token-flip pattern as the
+     §03 log panels + the channel strips) so every label/value/border turns to ink at once;
+     a few hardcoded fields below (inputs, the lit segment) get a light/vivid treatment the
+     token-flip can't reach. --border-bright is remapped to the chassis edge so every input
+     and segmented control picks up the soft cream border for free. */
+  --text: #2a2a28;
+  --muted: #55534c;
+  --muted-2: #6e6c63;
+  /* DEEP accent set (not the standard cream palette): the outlined action buttons + err/ok
+     text need ~3:1 on cream, and these match the channel-state LIGHTS exactly so the strip,
+     its editor, and its lights share one legible accent system. */
+  --green: #1c7a44;
+  --red: #be3326;
+  --amber: #855f0c;
+  --blue: #2862a6;
+  --border-bright: var(--chassis-edge);
+  background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 4px 14px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -746,7 +764,7 @@
 /* a faint top/bottom fade so it reads as a scrollable panel (the live-config + lifecycle
    rows scroll into view; Done sits at the bottom of the scroll). */
 .ch-edit::-webkit-scrollbar { width: 7px; }
-.ch-edit::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 4px; }
+.ch-edit::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.22); border-radius: 4px; }
 @keyframes ch-flip-in {
   from { transform: rotateY(90deg); opacity: 0; }
   to { transform: rotateY(0); opacity: 1; }
@@ -764,7 +782,9 @@
   letter-spacing: 0.5px;
   color: var(--muted);
 }
-.ch-edit-slug { color: var(--pm); }
+/* the slug reads in ink (like the strip's own .ch-name) — the per-channel accent is too
+   faint on cream and varies wildly by channel (e.g. violet ~1.6:1). */
+.ch-edit-slug { color: var(--ink); font-weight: 700; }
 .ch-edit-label {
   font-family: var(--mono);
   font-size: 9px;
@@ -774,17 +794,19 @@
 }
 .ch-edit-input {
   width: 100%;
-  background: rgba(10, 15, 17, 0.7);
+  background: rgba(255, 255, 255, 0.6);
   border: 1px solid var(--border-bright);
   border-radius: 7px;
-  color: var(--text, #e6eef0);
+  color: var(--text, #2a2a28);
   font-family: var(--mono);
   font-size: 13px;
   padding: 7px 9px;
   outline: none;
 }
-.ch-edit-input:focus { border-color: var(--pm); }
+.ch-edit-input:focus { border-color: var(--ink-soft); }
 .ch-edit-save,
+.ch-edit-bench,
+.ch-edit-dup,
 .ch-edit-del,
 .ch-edit-done,
 .ch-edit-cancel {
@@ -796,25 +818,39 @@
   padding: 7px 10px;
   border-radius: 6px;
   border: 1px solid var(--border-bright);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text, #e6eef0);
+  background: rgba(255, 255, 255, 0.45);
+  color: var(--text, #2a2a28);
   cursor: pointer;
 }
 .ch-edit-save:disabled { opacity: 0.4; cursor: default; }
 .ch-edit-accent { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 4px; }
 .ch-edit-danger { margin-top: auto; }
-.ch-edit-del {
+/* The four full-width outlined action buttons — bench / duplicate / delete / done — now
+   share ONE look (transparent body, colored 1px outline + bold colored label), differing
+   only by hue, so the lifecycle pair reads identically to the danger/done pair. Colors use
+   the flippable tokens, so on the cream scope above they resolve to the ink-friendly
+   variants (legible on cream); hover is a uniform wash of each button's own hue. */
+.ch-edit-bench,
+.ch-edit-dup,
+.ch-edit-del,
+.ch-edit-done {
   width: 100%;
-  border-color: var(--led-red, #ff5a52);
-  color: var(--led-red, #ff5a52);
   background: transparent;
 }
-.ch-edit-del.confirm { background: color-mix(in srgb, var(--led-red, #ff5a52) 16%, transparent); }
+.ch-edit-bench:hover,
+.ch-edit-dup:hover,
+.ch-edit-del:hover,
+.ch-edit-done:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+.ch-edit-bench { border-color: var(--amber); color: var(--amber); }
+.ch-edit-dup { border-color: var(--blue); color: var(--blue); }
+.ch-edit-dup:disabled { opacity: 0.5; cursor: default; background: transparent; }
+.ch-edit-del { border-color: var(--red); color: var(--red); }
+.ch-edit-del.confirm { background: color-mix(in srgb, var(--red) 16%, transparent); }
 .ch-edit-confirm { display: flex; flex-direction: column; gap: 6px; }
-.ch-edit-confirm > span { color: var(--text, #e6eef0); font-size: 11px; }
+.ch-edit-confirm > span { color: var(--text, #2a2a28); font-size: 11px; }
 .ch-edit-cancel { border-color: var(--border-bright); color: var(--muted); }
-.ch-edit-err { color: var(--led-red, #ff5a52); font-size: 10px; font-family: var(--mono); }
-.ch-edit-done { border-color: var(--pm-green, #2fd573); color: var(--pm-green, #2fd573); }
+.ch-edit-err { color: var(--red, #d23a28); font-size: 10px; font-family: var(--mono); }
+.ch-edit-done { border-color: var(--green); color: var(--green); }
 .ch-knobs {
   display: flex;
   gap: 16px;
@@ -1137,6 +1173,9 @@
   text-transform: uppercase;
   color: #9a9a9a;
 }
+/* the chart's spot-LED caption sits on the CREAM chart frame (not a dark LED slot like the
+   master/readout captions), where the #9a9a9a grey was only ~1.5:1 — deepen to cream ink. */
+.chart-led .led-caption { color: var(--ink-soft); }
 /* small glowing unit suffix on a 7-seg readout (e.g. the "K" on 100.0K) */
 .led-unit {
   align-self: center;
@@ -1643,36 +1682,34 @@
 .bench-pad.on { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--pad); }
 .bench-open { margin-top: 10px; max-width: 360px; }
 
-/* lifecycle button on the strip's flip-card editor (bench ⇄ re-arm) */
-.ch-edit-bench {
-  font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.4px; padding: 7px 10px; border-radius: 6px;
-  border: 1px solid var(--border-bright); background: rgba(255, 255, 255, 0.05);
-  color: var(--amber, #e8a13c); cursor: pointer; align-self: flex-start;
-}
-.ch-edit-bench:hover { background: rgba(255, 255, 255, 0.1); }
+/* (the lifecycle bench button is styled with the unified outlined-action group above) */
 
 /* ---- channel state LIGHTS (2026-06-13) — read-only chips on the strip face showing the
    dynamic state of a live channel: which executor, 0/1DTE, u-stop, event posture, in-trade,
-   at-stop. They sit in the cream strip scope, so the --green/--red/etc tokens are ink. ---- */
+   at-stop. NOTE: the .channel scope does NOT redefine the color tokens, so var(--blue/--green/
+   --amber/...) here would be the BRIGHT global LED values — near-invisible on cream (the amber
+   uS chip measured 1.04:1). These 8px chips need DEEP ink-toned hues for legibility, set
+   explicitly below (~3:1 on cream; the 1px currentColor border adds further definition). ---- */
 .ch-lights { display: flex; flex-wrap: wrap; gap: 4px; padding: 1px 22px 3px; }
 .channel--m .ch-lights, .channel--mc .ch-lights { padding-left: 0; padding-right: 0; }
 .chl { font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; border: 1px solid currentColor; line-height: 1.45; white-space: nowrap; }
-.chl-exec.chl-stream { color: var(--blue); }
+.chl-exec.chl-stream { color: #2862a6; }
 .chl-exec.chl-cron { color: var(--ink-soft, #6b6960); }
-.chl-dte { color: var(--violet, #8a5cf6); }
-.chl-us, .chl-evt { color: var(--amber, #b8791e); }
-.chl-live { color: var(--green); }
-.chl-stop { color: var(--red); background: rgba(240, 86, 63, 0.1); }
+.chl-dte { color: #6a37b5; }
+.chl-us, .chl-evt { color: #855f0c; }
+.chl-live { color: #1c7a44; }
+.chl-stop { color: #be3326; background: rgba(190, 51, 38, 0.12); }
 
-/* ---- live-config controls in the flip-card editor (dark overlay context) ---- */
+/* ---- live-config controls in the flip-card editor (cream scope, tokens flipped above) ---- */
 .ch-edit-cfg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
 .cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.cfg-k { font-family: var(--mono); font-size: 10px; color: var(--text, #e6eef0); }
+.cfg-k { font-family: var(--mono); font-size: 10px; color: var(--text, #2a2a28); }
 .cfg-seg { display: inline-flex; border: 1px solid var(--border-bright); border-radius: 6px; overflow: hidden; flex: 0 0 auto; }
 .cfg-seg button { font-family: var(--mono); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; padding: 3px 7px; background: transparent; color: var(--muted); border: none; cursor: pointer; }
-.cfg-seg button.on { background: var(--amber, #e8a13c); color: #1a1407; }
-.cfg-num { width: 58px; font-family: var(--mono); font-size: 11px; text-align: right; padding: 3px 6px; border-radius: 5px; border: 1px solid var(--border-bright); background: rgba(255, 255, 255, 0.05); color: var(--text, #e6eef0); }
+/* the lit (active) segment keeps a vivid amber fill — NOT the flipped/dimmed --amber — so it
+   reads as a lit chip against cream, with near-black text for contrast. */
+.cfg-seg button.on { background: #e0a43c; color: #1a1407; }
+.cfg-num { width: 58px; font-family: var(--mono); font-size: 11px; text-align: right; padding: 3px 6px; border-radius: 5px; border: 1px solid var(--border-bright); background: rgba(255, 255, 255, 0.6); color: var(--text, #2a2a28); }
 
 /* ---- account switcher (multi-account cockpit, 2026-06-13) — header chip/selector.
    One account → a static badge; 2+ → a segmented selector. 'live' accounts go red. ---- */
@@ -1688,13 +1725,8 @@
 .acct-opt.acct-live.on { background: var(--led-red, #f0563f); color: #fff; }
 .acct-live-tag { margin-left: 2px; font-weight: 800; }
 
-/* ---- duplicate-channel (A/B primitive) controls in the flip-editor (2026-06-13) ---- */
-.ch-edit-life { display: flex; gap: 8px; flex-wrap: wrap; }
-.ch-edit-dup {
-  font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.4px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border-bright);
-  background: rgba(255, 255, 255, 0.05); color: var(--blue, #45c4d6); cursor: pointer;
-}
-.ch-edit-dup:hover { background: rgba(255, 255, 255, 0.1); }
-.ch-edit-dup:disabled { opacity: 0.5; cursor: default; }
-.ch-edit-ok { font-family: var(--mono); font-size: 10px; color: var(--green, #2fd573); line-height: 1.45; }
+/* ---- duplicate-channel (A/B primitive) controls in the flip-editor (2026-06-13) ----
+   bench + duplicate now stack full-width so they read like the delete/done buttons below;
+   their colored-outline look comes from the unified outlined-action group above. ---- */
+.ch-edit-life { display: flex; flex-direction: column; gap: 8px; }
+.ch-edit-ok { font-family: var(--mono); font-size: 10px; color: var(--green, #1f9d57); line-height: 1.45; }
