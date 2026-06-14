@@ -38,6 +38,7 @@
     "level-gate-probe": "tsx engine/level-gate-probe.ts",
     "confirm-delay-probe": "tsx engine/confirm-delay-probe.ts",
     "chop-premium-probe": "tsx engine/chop-premium-probe.ts",
+    "implied-move-probe": "tsx engine/implied-move-probe.ts",
     "orb-width-probe": "tsx engine/orb-width-probe.ts",
     "orb-voldef-probe": "tsx engine/orb-voldef-probe.ts",
     "gap-regime-probe": "tsx engine/gap-regime-probe.ts",
@@ -76,6 +77,7 @@
     "backfill:options": "tsx scripts/backfill-options.ts",
     "backfill:databento": "tsx scripts/backfill-databento.ts",
     "fomc-resolution-probe": "tsx engine/fomc-resolution-probe.ts",
+    "fomc-costgate-probe": "tsx engine/fomc-costgate-probe.ts",
     "cross-gap-probe": "tsx engine/cross-gap-probe.ts",
     "export-quotes": "tsx scripts/export-quotes.ts"
   },
