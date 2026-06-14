@@ -1490,6 +1490,14 @@ td.clk.sel {
 .au-ch--compact .au-name { flex: none; }
 .au-ch--compact .au-pnl { margin-left: auto; }
 .au-flaws--inline { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+/* collapsed autopsy — top-movers summary line that stands in for the full channel list */
+.au-movers { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; padding: 1px 0 2px; }
+.au-mover { display: inline-flex; align-items: center; gap: 5px; }
+.au-mv-ar { font-size: 9px; line-height: 1; }
+.au-mv-ar.pos { color: var(--green); }
+.au-mv-ar.neg { color: var(--red); }
+.au-mv-name { font-weight: 600; font-size: 12px; color: var(--text); }
+.au-mv-count { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-left: auto; }
 .au-expand-foot {
   display: block; width: 100%; margin-top: 10px; padding: 7px 10px;
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.4px; text-transform: uppercase;

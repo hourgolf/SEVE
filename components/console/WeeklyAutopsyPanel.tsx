@@ -43,6 +43,9 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
   const d = r.digest, n = r.narrative;
   const ee = d.exitEfficiency;
   const traded = (d.channels ?? []).filter((c) => c.metrics.nTrades > 0).sort((a, b) => b.metrics.realizedPnl - a.metrics.realizedPnl);
+  // collapsed view: top movers only (traded is already sorted desc by realized P&L)
+  const wkBest = traded[0], wkWorst = traded.length > 1 ? traded[traded.length - 1] : undefined;
+  const nLearn = n?.keyLearnings?.length ?? 0, nSug = n?.suggestions?.length ?? 0;
 
   return (
     <div className="panel">
@@ -79,7 +82,8 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
 
         {n?.weekSummary && <p className={`au-market${expanded ? "" : " au-market--clamp"}`}>{n.weekSummary}</p>}
 
-        {/* regime ledger */}
+        {/* regime ledger (detail — expanded only) */}
+        {expanded && (
         <div className="wk-regime">
           {d.regimeLedger.map((rg) => (
             <span key={`${rg.date}-${rg.instrument}`} className="wk-reg" title={rg.note}>
@@ -87,12 +91,13 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
             </span>
           ))}
         </div>
+        )}
 
         {/* HEADLINE — exit efficiency / left on the table */}
         <div className="wk-ee">
           <div className="au-sub">Exit efficiency — left on the table</div>
           <div className="wk-ee-top">best-case upside unrealized this week: <b className="neg">{signedUsd(-ee.totalUpsideLeft)}</b></div>
-          {ee.redThatRanGreen.slice(0, expanded ? 6 : 3).map((rr) => (
+          {expanded && ee.redThatRanGreen.slice(0, 6).map((rr) => (
             <div className="wk-runner" key={`${rr.slug}-${rr.occ}`}>
               <span className="wk-arrow">⤴</span>
               <span className="au-dot" style={{ background: colorOf(rr.slug), boxShadow: `0 0 5px ${colorOf(rr.slug)}` }} />
@@ -103,7 +108,8 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
           {!ee.redThatRanGreen.length && <div className="wk-ee-note">no red trades left a big green runner — exits roughly tracked the moves</div>}
         </div>
 
-        {/* per-channel roll-up */}
+        {/* per-channel roll-up (expanded); collapsed shows top movers only */}
+        {expanded && (
         <div className="au-channels">
           {traded.map((c) => {
             const cn = n?.channels?.find((x) => x.slug === c.slug);
@@ -139,10 +145,31 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
             );
           })}
         </div>
+        )}
 
-        {!expanded && ((n?.keyLearnings?.length ?? 0) > 0 || (n?.suggestions?.length ?? 0) > 0) && (
+        {!expanded && (wkBest || wkWorst) && (
+          <div className="au-movers">
+            {wkBest && (
+              <span className="au-mover">
+                <span className="au-dot" style={{ background: colorOf(wkBest.slug), boxShadow: `0 0 5px ${colorOf(wkBest.slug)}` }} />
+                <span className="au-mv-ar pos">▲</span><span className="au-mv-name">{wkBest.name}</span>
+                <span className="au-pnl pos">{signedUsd(wkBest.metrics.realizedPnl)}</span>
+              </span>
+            )}
+            {wkWorst && (
+              <span className="au-mover">
+                <span className="au-dot" style={{ background: colorOf(wkWorst.slug), boxShadow: `0 0 5px ${colorOf(wkWorst.slug)}` }} />
+                <span className="au-mv-ar neg">▼</span><span className="au-mv-name">{wkWorst.name}</span>
+                <span className="au-pnl neg">{signedUsd(wkWorst.metrics.realizedPnl)}</span>
+              </span>
+            )}
+            <span className="au-mv-count">{traded.length} ch</span>
+          </div>
+        )}
+
+        {!expanded && (
           <button className="au-expand-foot" onClick={toggleExp}>
-            ▾ {n?.keyLearnings?.length ?? 0} learning{(n?.keyLearnings?.length ?? 0) === 1 ? "" : "s"} · {n?.suggestions?.length ?? 0} suggestion{(n?.suggestions?.length ?? 0) === 1 ? "" : "s"} — expand
+            ▾ {traded.length} channel{traded.length === 1 ? "" : "s"}{nLearn ? ` · ${nLearn} learning${nLearn === 1 ? "" : "s"}` : ""}{nSug ? ` · ${nSug} suggestion${nSug === 1 ? "" : "s"}` : ""} — expand
           </button>
         )}
 

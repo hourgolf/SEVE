@@ -46,6 +46,10 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
   const dormant = (d.channels ?? []).filter((c) => c.metrics.nTrades === 0);
   const nFindings = n?.systemFindings?.length ?? 0;
   const nActions = n?.topActions?.length ?? 0;
+  // collapsed view shows only the day's top movers (best/worst by realized P&L), not the
+  // full channel list — the list is the bulk of the panel's height.
+  const sorted = [...traded].sort((a, b) => b.metrics.realizedPnl - a.metrics.realizedPnl);
+  const best = sorted[0], worst = sorted.length > 1 ? sorted[sorted.length - 1] : undefined;
 
   return (
     <div className="panel">
@@ -73,6 +77,7 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
           </div>
         )}
 
+        {expanded && (
         <div className="au-channels">
           {traded.map((c) => {
             const cn = n?.channels?.find((x) => x.slug === c.slug);
@@ -110,10 +115,31 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
             <div className="au-dormant">dormant: {dormant.map((c) => c.name).join(" · ")}</div>
           )}
         </div>
+        )}
 
-        {!expanded && (nFindings > 0 || nActions > 0) && (
+        {!expanded && (best || worst) && (
+          <div className="au-movers">
+            {best && (
+              <span className="au-mover">
+                <span className="au-dot" style={{ background: colorOf(best.slug), boxShadow: `0 0 5px ${colorOf(best.slug)}` }} />
+                <span className="au-mv-ar pos">▲</span><span className="au-mv-name">{best.name}</span>
+                <span className="au-pnl pos">{signedUsd(best.metrics.realizedPnl)}</span>
+              </span>
+            )}
+            {worst && (
+              <span className="au-mover">
+                <span className="au-dot" style={{ background: colorOf(worst.slug), boxShadow: `0 0 5px ${colorOf(worst.slug)}` }} />
+                <span className="au-mv-ar neg">▼</span><span className="au-mv-name">{worst.name}</span>
+                <span className="au-pnl neg">{signedUsd(worst.metrics.realizedPnl)}</span>
+              </span>
+            )}
+            <span className="au-mv-count">{traded.length} ch{dormant.length ? ` · ${dormant.length} dormant` : ""}</span>
+          </div>
+        )}
+
+        {!expanded && (
           <button className="au-expand-foot" onClick={toggleExp}>
-            ▾ {nFindings} finding{nFindings === 1 ? "" : "s"} · {nActions} action{nActions === 1 ? "" : "s"} — expand detail
+            ▾ {traded.length} channel{traded.length === 1 ? "" : "s"}{nFindings ? ` · ${nFindings} finding${nFindings === 1 ? "" : "s"}` : ""}{nActions ? ` · ${nActions} action${nActions === 1 ? "" : "s"}` : ""} — expand
           </button>
         )}
 
