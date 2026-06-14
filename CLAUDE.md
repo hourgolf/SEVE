@@ -8,6 +8,55 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-14 WEEKEND (TWIN STREAM-MIGRATION DONE → CRON IS FAILOVER-ONLY) — READ FIRST
+**Market closed, desk flat (0 open positions verified). The 4 manual twins flipped cron→stream, so
+the cron now trades NOTHING as primary — its only remaining roles are the exit-only failover
+(dead-man switch for the single Railway replica) + stream-stale paging.**
+
+**TWIN MIGRATION EXECUTED (operator's word "flip the twins now", via MCP):** `update strategists set
+executor='stream' where slug like '%-manual'` — breakout-manual · grind-manual · power-manual ·
+qqq-thrust-trail-manual all → stream (armed, unmuted). Also zeroed `qqq-thrust-trail-manual`
+underlying_stop_pct 0.20→0 (the long-noted inert flag — the worker already drops it via the `-manual`
+exit-drop at `decide.ts:265`, but zeroing clears the misleading "uS 0.2%" strip light). **NO DEPLOY** —
+both cron and worker read `executor` per-cycle → takes effect Monday's open. Pre-flight gates verified
+BEFORE flipping (the QQQ-shadow-gate discipline): (a) worker resolves all 4 — breakout/grind/power-
+manual → builtins via the `decide.ts:120` base-slug strip (`-manual` stripped), qqq-thrust-trail-manual
+→ its OWN `spec_json` (has_spec=true, confirmed); (b) desk flat (0 open rows); (c) entry-push `✋`
+(`execute.ts:211`) + bell backstop (`MANUAL_BACKSTOP_MIN`) + event-flatten exemption (`decide.ts:241`)
+all built. **ROLLBACK any/all (next cycle):** `update strategists set executor='cron' where slug like
+'%-manual';`
+
+**MONDAY 06-15 WATCH (twins):** worker logs `stream:` fills + the `✋ …your exit` push on each twin
+entry; cron logs `stream_owned` skips for the 4. ⚠ `qqq-thrust-trail-manual` rides Monday's FIRST live
+QQQ-stream session (alongside the QQQ machine pair) — the one twin path stream-armed but not yet
+live-proven; watch it fills clean. The "uS 0.2%" light is gone from its strip.
+
+**THE CRON IS NOW FAILOVER-ONLY** (no channel runs on it as primary; `grind` base is on cron but
+`disabled` = inert). Retirement path (the open architecture question): keep the stripped exit-only cron
+as the watchdog for the single-replica worker, OR make the worker resilient (2nd replica / external
+flatten-on-death) and THEN unschedule the cron (W4). Don't fully kill it while the worker is a single
+point of failure.
+
+**ALSO SHIPPED THIS SESSION (all on `main`, deployed):**
+- **Autopsy panels collapsed to a glanceable headline + top movers** (`0d5f889`): daily/weekly default
+  to market gist + fund line + ▲best/▼worst channel + an "N channels · M findings — expand" foot; the
+  full channel roll-up / regime ledger / exit-efficiency runners / findings gate behind expand (state
+  persisted per-user). Desktop 344px collapsed (was the full 13/17-row list); mobile Daily 274 / Weekly 420.
+- **Two new probes** (`e2716c4`, from the ultracode probe slate): `npm run fomc-costgate-probe` — the live
+  cost-gate 3.0 is the GLOBAL OPTIMUM of the sweep (+678/t, maximizes win%+total, min stops); leave-one-out
+  (drop 2024-12-18, 71%) → +244/t survives at the live gate but +14/t noise at gate 0 (residual edge needs
+  the gate ON). `npm run implied-move-probe` — reproduces the +$507 oracle ceiling + 36% drift-recall (build
+  trust-check); **DOOR-CHECK: the chop-fly's realized-chop ceiling is +$20/day and wider wings / hold-to-
+  settle make it WORSE → structurally unliftable, DOOR-BLOCKED.** CLASSIFIER: realized÷implied IS a better
+  detector (48% vs 36% recall, +$12 vs +$5/day, holds ex-CHOP-MIX, catches 5 chop days drift misses —
+  confound passes). **Reframe: detection was improvable but was never the binding constraint — the iron-fly
+  exit/wing structure is. Inverts the prior [[chop-day-strategy-verdict]].**
+- **Mobile header + contrast + bench + cream editor** (`f692744`): flip-editor → cream-909 with unified
+  full-width outlined buttons (86/dup/del/done); channel state-lights were painting bright LED tokens on
+  cream (uS amber 1.04:1 invisible) → deepened to ~3:1; mobile account badge / mixer labels → cream ink; the
+  86'd bench shelf is a collapsible slim bar (was clipping the 4th card); RUN/PAPER pills + paper-main badge
+  aligned to the LED window / settings cog.
+
 ## SESSION HANDOFF — 2026-06-13 WEEKEND (PRE-MONDAY HARDENING + CHANNEL UI + COCKPIT FOUNDATION) — READ FIRST
 **Saturday build, market closed, desk flat. Monday 06-15 is the new 7-channel roster's first live
 day — everything below was built/verified to NOT touch Monday's trader behavior.**
@@ -22,9 +71,9 @@ phantom pages on every restart; now gated on `barFresh`. (3) cross/giveback dedu
 position row id.
 
 **PRE-FLIGHT (Monday) = GREEN.** 7 machine on stream + gap_min/→14:00 on V3/ALT + pb-ride 1DTE
-$400/$450 ustop0 + QQQ pair ustop-aligned + 4 twins on cron UNMUTED + event-standdown on the
-machine roster (twins exempt). One inert note: `qqq-thrust-trail-manual` still carries ustop 0.20
-(harmless — human owns twin exits; zero it at the twin→stream migration).
+$400/$450 ustop0 + QQQ pair ustop-aligned + 4 twins UNMUTED + event-standdown on the
+machine roster (twins exempt). ⚑ SUPERSEDED 2026-06-14 (top handoff): the 4 twins MIGRATED to stream
+and `qqq-thrust-trail-manual` ustop 0.20→0 — they're now stream-executed Monday, not cron.
 
 **CHANNEL EDITOR FOLLOW-UPS (same session):** (a) **EDITOR SCROLL FIX (`1a55d7d`)** — the new
 live-config rows made the flip-editor (`.ch-edit`, `position:absolute inset:0`) overflow behind the
@@ -206,9 +255,8 @@ docs/pb-qqq-probe-2026-06-12.txt.
 **NIGHT-CAP CHORES (same evening, "time to lean = time to clean"):** (1) **TWIN ✋ ENTRY-PUSH
 BUILT — worker `stream-2026-06-12d`** (`pushManual` in alerts.ts, tag seve-manual, fires on every
 `-manual` entry fill in executeEntry — cron parity). **The twin stream-migration is now FULLY
-unblocked; flip SQL ready, PENDING OPERATOR'S WORD on timing** (recommended: after Monday's open
-proves the QQQ pair + alert paths live): `update strategists set executor='stream' where slug
-like '%-manual';` (rollback per-slug to 'cron'). (2) **W3 QUOTES EXPORT BUILT + FIRST RUN
+unblocked; flip SQL ready** → **EXECUTED 2026-06-14 (see top handoff): `update strategists set
+executor='stream' where slug like '%-manual';` ran (rollback per-slug to 'cron').** (2) **W3 QUOTES EXPORT BUILT + FIRST RUN
 VERIFIED EXACT** — `npm run export-quotes` (scripts/export-quotes.ts): option_quotes per ET day
 → data/quotes-archive/<day>.json.gz (keyset-paginated on id — OFFSET pagination times out on
 this table); all 6 in-DB days archived, row counts match the DB exactly (~3.5MB gz/day). **⚠ NEW
@@ -218,7 +266,7 @@ quotes at 7d and they are NOT reconstructable** (unlike bars). (3) OTP login bug
 (~14MB, redundant with the unique (symbol,ts) key — the 06-07 optional) BLOCKED by tool
 permissions as unauthorized prod DDL — one SQL on the operator's word.
 
-PENDING OPERATOR: twin migration timing (entry-push now built — see above). Month-end cuts:
+PENDING OPERATOR: ~~twin migration timing~~ DONE 2026-06-14 (twins on stream — top handoff). Month-end cuts:
 PULLED FORWARD — the 06-12 cull; still on the month-end clean-era clock: power-smart-entries
 (probation), the ALT-vs-V3 fold, the QQQ pair.
 
