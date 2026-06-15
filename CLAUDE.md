@@ -9,6 +9,25 @@ durable context for a new session. Read it first.
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
 ## SESSION HANDOFF — 2026-06-15 MONDAY OPEN (CHOP-DETECTOR REPURPOSE → ORB RESURRECTION CANDIDATE) — READ FIRST
+**⚑ NEXT-SESSION BUILD (operator greenlit, deferred to a fresh session) — the OVERRIDE COUNTERFACTUAL /
+"did the human beat the ride" scorecard.** Operator manually closed both PB trades 06-15 (pb-ride +$428
+`manual:reversal`, pb-ride-2 +$320 `manual:target`); I claimed "we lose the data" — WRONG. The decision +
+reason ARE on the row (`positions.close_reason`), the day-report already reconstructs peak/MFE/giveback from
+`option_quotes`, and the quotes keep flowing after a close. **I reconstructed ride-to-close from `option_quotes`
+(captured_at/mid, 7d retention → run SAME-WEEK; −50% stop = mid ≤ 0.5×entry, native flatten ~15:25 ET = 19:25
+UTC in EDT): pb-ride ride-to-close = −$52 (drifted below entry by the flatten), pb-ride-2 = −$214 (gave it ALL
+back to the −50% stop — the 0DTE gamma murder weapon, LIVE). So the operator's overrides BEAT ride-to-close by
+~$1,014 today (+$748 vs −$266).** THE GAP: `worker/src/shadowManage.ts` runs a managed-vs-actual what-if but
+DELIBERATELY SKIPS ride channels ("unmanaged — intentionally not tracked", ~line 49) — so the ride channels,
+where overrides matter most, get NO shadow, and the "ride wins" verdict (a backtest prior) is never tested
+against live overrides. **BUILD: (1) day-report counterfactual column — per closed trade, reconstruct
+ride-to-close (hold to native flatten / −50% stop) AND the managed-exit from option_quotes, show Δ vs actual;
+(2) an accumulating override SCORECARD (does the operator's manual close systematically beat ride-to-close over
+N trades — the LIVE scalp-twin, vs the one-off backtest study); (3) optionally extend shadowManage to track
+ride channels' ride-vs-override delta live.** Frame: ride-to-close is a hypothesis the tape keeps testing, not
+dogma — one giveback day (today) doesn't overturn the distribution where the convex tail pays, but the running
+tally is the only honest arbiter. Today's numbers are the anchor to verify the reconstruction.
+
 **Open-day config (via MCP, desk flat at the bell):** (1) **pb-ride mute was BACKWARDS** — `pb-ride`
 (validated 1DTE) was muted and `pb-ride-2` (the *refuted* 0DTE) was live → **swapped**: pb-ride live,
 pb-ride-2 muted. (2) **grind-v3-2 unmuted** → `grind-v3` (0DTE) + `grind-v3-2` (1DTE) now run a CLEAN
