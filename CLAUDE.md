@@ -39,9 +39,18 @@ pctile 0.40-0.60 × reads 9:35/9:45; maxDD HALVED −$16.8k→−$7.8k. 4/5 wind
 the gate is ORB-SPECIFIC** — across strategy types it BENEFITS only the spec-ORB (+$111/t, 5/5); base-ORB
 builtin neutral (+$15/t but stays −EV), grind-v3 scalper neutral (+$3/t — chop-agnostic), power lean HARMED
 (−$24/t, 1/5 — its 15:00+ trades vs a 9:35 read = horizon mismatch), V3/ALT HARMED (over-filters selective
-momentum). It's a precision tool for the under-filtered chop-averse bleeder, NOT a roster lever. Generative
-residue: pb-ride is chop-LOVING → an INVERTED gate (stand down on TREND) might help it (untested, 1DTE);
-QQQ-ORB port untested (needs QQQ straddle). (1) if it graduates: build the `implied-chop` gate as
+momentum). It's a precision tool for the under-filtered chop-averse bleeder, NOT a roster lever. **Generative
+residue RESOLVED (ultracode workflow, `npm run pbride-invgate-probe` / `qqq-orb-gate-probe`):** (a) pb-ride
+INVERTED gate (trade only predicted-chop) **REFUTED** — sanity-matched EXACTLY (+$18.5/t anchor) so trusted,
+then the inverted gate DESTROYS it (+$18.5→−$18.1/t, 1/5 windows; amputates the CHOP Mar26 +136→−94 window
+the thesis was built on; the 9:35/10:30 classifier is a regime-LABEL not a same-day signal). Keep pb-ride
+ungated. (b) QQQ-ORB port: directionally MIRRORS SPY (ungated −$103→gated +$9/t, lift +$112, DD halved, not
+a mirage) **BUT UN-OOS-ABLE** — QQQ has NO pre-2026 history in the pipeline (underlying archive starts
+2026-01, option NBBO 2026-03; the Databento backfill anchors on the 60d-retained DB) → only 2/5 windows
+exist, the ex-CHOP-MIX check can't run. NOT buyable (no underlying to anchor old strikes). → **COLLECT-FORWARD**
+(QQQ is live on stream; a real cross-regime OOS accrues over months) + the tier2 caveat (probe used spec-ORB
+but QQQ live runs the BUILTIN bare ORB — QQQ's disease is the entry). Takeaway: the gate's edge is the
+chop-AVERSE directional-bleeder SHAPE (ORB-family), not chop-detection in the abstract. (1) if it graduates: build the `implied-chop` gate as
 worker/engine vocab (compute the 9:35 open-straddle implied move + realized-1hr → imScore; a `chop_max`
 condition mirroring `gap_min`; 3-list parity per the add-channel-vocab discipline) — reusable on any weak
 channel. (2) arm a gated-ORB clone in the paper-lab (P3) or as a tiny duplicate, live-observe. (3)
