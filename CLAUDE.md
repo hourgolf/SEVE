@@ -32,7 +32,16 @@ TREND +96 — beats rescue-the-worst), and ADDITIVE to gap (im+gap +$108 > gap-o
 sweep. **⚠ IN-SAMPLE (full-corpus percentile) = hypothesis-grade — needs the OOS per-window threshold
 fit before it's real.** ORB RESURRECTION PLAN: (0) OOS validation = leave-one-out threshold fit across
 the 5 windows + threshold/straddle-minute sensitivity + the tail-DD check (the DD is *why* ORB was
-benched — does the gate fix it?); fail OOS → park. (1) if it graduates: build the `implied-chop` gate as
+benched — does the gate fix it?); fail OOS → park. **→ STAGE 0 PASSED 2026-06-15 (`npm run
+chop-ride-oos-probe`): OOS gate better on 5/5 held-out windows, pooled −$14→+$97/t; plateau across
+pctile 0.40-0.60 × reads 9:35/9:45; maxDD HALVED −$16.8k→−$7.8k. 4/5 windows +EV gated (MA25 still
+−$116/t); trades ~half as often. GRADUATED → Stage 1.** ⚠ **GENERALITY (`npm run chop-gate-roster-probe`):
+the gate is ORB-SPECIFIC** — across strategy types it BENEFITS only the spec-ORB (+$111/t, 5/5); base-ORB
+builtin neutral (+$15/t but stays −EV), grind-v3 scalper neutral (+$3/t — chop-agnostic), power lean HARMED
+(−$24/t, 1/5 — its 15:00+ trades vs a 9:35 read = horizon mismatch), V3/ALT HARMED (over-filters selective
+momentum). It's a precision tool for the under-filtered chop-averse bleeder, NOT a roster lever. Generative
+residue: pb-ride is chop-LOVING → an INVERTED gate (stand down on TREND) might help it (untested, 1DTE);
+QQQ-ORB port untested (needs QQQ straddle). (1) if it graduates: build the `implied-chop` gate as
 worker/engine vocab (compute the 9:35 open-straddle implied move + realized-1hr → imScore; a `chop_max`
 condition mirroring `gap_min`; 3-list parity per the add-channel-vocab discipline) — reusable on any weak
 channel. (2) arm a gated-ORB clone in the paper-lab (P3) or as a tiny duplicate, live-observe. (3)
