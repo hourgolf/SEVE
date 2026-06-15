@@ -35,7 +35,24 @@ the 5 windows + threshold/straddle-minute sensitivity + the tail-DD check (the D
 benched — does the gate fix it?); fail OOS → park. **→ STAGE 0 PASSED 2026-06-15 (`npm run
 chop-ride-oos-probe`): OOS gate better on 5/5 held-out windows, pooled −$14→+$97/t; plateau across
 pctile 0.40-0.60 × reads 9:35/9:45; maxDD HALVED −$16.8k→−$7.8k. 4/5 windows +EV gated (MA25 still
-−$116/t); trades ~half as often. GRADUATED → Stage 1.** ⚠ **GENERALITY (`npm run chop-gate-roster-probe`):
+−$116/t); trades ~half as often. GRADUATED → Stage 1.** **⚑ STAGE 1 RE-VALIDATION (06-15, `npm run
+orb-gate-live-probe` / `orb-gate-tune-probe`) — the Stage-0 +$97/t was LOOK-AHEAD-INFLATED:** realized-to-
+10:00 (causal — before any ORB entry) drops it to 3/5 OOS / +$29/t (FAIL). Timing-only 10:15 doesn't recover;
+only a ROLLING-60 causal-median threshold @10:00 clears the LETTER (4/5, +$17/t, maxDD −27%) — but MARGINAL:
+only 3/5 windows truly +EV, MA25 is a mechanical rescue-the-worst (still −$119/t), TREND-24/2024 is HARMED
+(+$63→−$112, gate is era-ASYMMETRIC), and the rolling-median's era-tracking is UNTESTABLE on the disjoint
+5-window corpus (3-9mo gaps → each window opens on stale cross-regime data). **→ DO NOT ARM, DON'T BUILD the
+`implied_move_min` vocab yet; COLLECT-FORWARD (data accrues automatically — re-run the tune once the live
+corpus spans a CONTINUOUS regime transition; build only on live confirmation; may never clear).** **EXIT-MGMT
+THREAD (`npm run pbride-exit-probe` / `exit-scheme-probe --live`, operator's "bank winners / don't let them
+turn into losers"): pb-ride is a RIDE channel** — ride +$4,632 vs BE+30 +$102 vs scale −$5,407 (sanity-anchored
++$4,632; BE whipsaws the pullback out, scale caps the CHOP-Mar26 convex tail). Re-entry is ALREADY MODELED
+(`backtest.ts:325` re-enters when flat), so the convex-vs-tail-less split is real: RIDE the convex (BREAK
+ALT/V3 +$7-10k, pb-ride, ORB-base); only QQQ-Break-ORB wants PROTECT (ride −$5.1k→scale +$3.8k) **BUT scale-out
+is NOT armable** (`isArmableManagement` rejects it; worker only runs the atr_chandelier trail — a tighter
+chandelier can't replicate banking-half, best K −$3.8k, refuted). POWERHOUR(ALT) = −EV cut. Takeaway: the
+operator's instinct is right for tail-less, wrong for convex; pb-ride's giveback is the PRICE of its tail —
+DOWN-SIZE it if the variance stings, don't gate/scale it. ⚠ **GENERALITY (`npm run chop-gate-roster-probe`):
 the gate is ORB-SPECIFIC** — across strategy types it BENEFITS only the spec-ORB (+$111/t, 5/5); base-ORB
 builtin neutral (+$15/t but stays −EV), grind-v3 scalper neutral (+$3/t — chop-agnostic), power lean HARMED
 (−$24/t, 1/5 — its 15:00+ trades vs a 9:35 read = horizon mismatch), V3/ALT HARMED (over-filters selective
