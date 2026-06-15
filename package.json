@@ -39,6 +39,7 @@
     "confirm-delay-probe": "tsx engine/confirm-delay-probe.ts",
     "chop-premium-probe": "tsx engine/chop-premium-probe.ts",
     "implied-move-probe": "tsx engine/implied-move-probe.ts",
+    "chop-ride-gate-probe": "tsx engine/chop-ride-gate-probe.ts",
     "orb-width-probe": "tsx engine/orb-width-probe.ts",
     "orb-voldef-probe": "tsx engine/orb-voldef-probe.ts",
     "gap-regime-probe": "tsx engine/gap-regime-probe.ts",

@@ -8,6 +8,37 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-15 MONDAY OPEN (CHOP-DETECTOR REPURPOSE → ORB RESURRECTION CANDIDATE) — READ FIRST
+**Open-day config (via MCP, desk flat at the bell):** (1) **pb-ride mute was BACKWARDS** — `pb-ride`
+(validated 1DTE) was muted and `pb-ride-2` (the *refuted* 0DTE) was live → **swapped**: pb-ride live,
+pb-ride-2 muted. (2) **grind-v3-2 unmuted** → `grind-v3` (0DTE) + `grind-v3-2` (1DTE) now run a CLEAN
+live DTE A/B — collision-free because a 0DTE and 1DTE option are *different OCCs* (expiry is in the
+symbol), so no shared-lot netting (the A/B-isolation rule: shared-OCC only confounds a SAME-contract
+A/B; the fix for same-DTE knob A/Bs is separate accounts = cockpit P3, still held). (3) ⚠ **MASTER
+DAILY STOP** was $300 with per-channel risk raised to $500 → desk would HALT after one stop-out; raise
+PENDING the operator's explicit $ (the classifier blocks an agent-chosen value). ⚠ **NO master-stop
+UI control exists on the page** — `fund_state.master_daily_stop_usd` is SQL/seed-only; a master STOP
+knob wired to it is an open small build.
+
+**CHOP-DETECTOR REPURPOSE — `npm run chop-ride-gate-probe` (NEW):** the implied-move chop detector
+(48% recall, real) was door-blocked for the fly; this tests it as a stand-down gate on the directional
+RIDES. **Channel-specific verdict:** on the ARMED rides (V3/ALT) the implied gate is HARMFUL — it strips
+their winners (over-filtering an already-selective channel, the 4th "filter the breakout into health"
+refutation); the **gap gate is the clear winner there (V3 +$93→+$222/t, ALT +$77→+$192/t) → `gap_min`
+VINDICATED, leave V3/ALT as armed.** But on **ORB (benched bleeder) the implied gate RESCUES it and
+passes ALL FOUR kill-lanes:** exp$/t −$14→+$59 alone / +$108 with gap (real selection, not the mirage),
+holds ex-CHOP-MIX (+$164/t, stronger), helps the WINNER windows (per-window Δ: CHOP +399, TREND-24 +402,
+TREND +96 — beats rescue-the-worst), and ADDITIVE to gap (im+gap +$108 > gap-only +$31). A rare clean
+sweep. **⚠ IN-SAMPLE (full-corpus percentile) = hypothesis-grade — needs the OOS per-window threshold
+fit before it's real.** ORB RESURRECTION PLAN: (0) OOS validation = leave-one-out threshold fit across
+the 5 windows + threshold/straddle-minute sensitivity + the tail-DD check (the DD is *why* ORB was
+benched — does the gate fix it?); fail OOS → park. (1) if it graduates: build the `implied-chop` gate as
+worker/engine vocab (compute the 9:35 open-straddle implied move + realized-1hr → imScore; a `chop_max`
+condition mirroring `gap_min`; 3-list parity per the add-channel-vocab discipline) — reusable on any weak
+channel. (2) arm a gated-ORB clone in the paper-lab (P3) or as a tiny duplicate, live-observe. (3)
+promote if DD-controlled + EV holds, else cut. Second time the implied-move signal proved real-but-
+elsewhere (fly door closed → ORB) — a good detector still hunting the right book. Links [[chop-day-strategy-verdict]].
+
 ## SESSION HANDOFF — 2026-06-14 WEEKEND (TWIN STREAM-MIGRATION DONE → CRON IS FAILOVER-ONLY) — READ FIRST
 **Market closed, desk flat (0 open positions verified). The 4 manual twins flipped cron→stream, so
 the cron now trades NOTHING as primary — its only remaining roles are the exit-only failover
