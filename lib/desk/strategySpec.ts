@@ -31,6 +31,10 @@ export type Condition =
   // ---- supported (engine/computeFeatures can evaluate these today) ----
   | { kind: "ma_cross"; fast: number; slow: number; dir: "up" | "down" }
   | { kind: "vwap_side"; side: "above" | "below" }
+  // persistent TREND-ALIGNMENT state (every bar, unlike ma_cross's one-shot cross event): block
+  // counter-trend entries. ref "ema9_21" = the EMA9>EMA21 ribbon (pb-ride's exact filter, default);
+  // "ema21"/"ema50" = close vs that EMA. Computed EMA → faithful live (no vwap-bug dependency).
+  | { kind: "trend_align"; side: "up" | "down"; ref?: "ema9_21" | "ema21" | "ema50" }
   | { kind: "vwap_dev"; atr: number; cmp: ">" | "<" }
   | { kind: "opening_range"; minutes: number; side: "break_above" | "break_below" }
   | { kind: "or_width_min"; pct: number }
@@ -137,7 +141,7 @@ export interface StrategySpec {
 
 // Condition kinds the engine/worker can evaluate live today.
 const SUPPORTED_KINDS = new Set<Condition["kind"]>([
-  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "gap_min",
+  "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
   "efficiency_ratio", "momentum_atr", "macd", "level",
 ]);
@@ -235,7 +239,7 @@ export function validateLegs(structure: LegStructure, legs: SpecLeg[] | undefine
 
 // Every condition kind the compiler is allowed to emit (the Condition union).
 const KNOWN_KINDS = new Set<string>([
-  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "gap_min", "rel_vol",
+  "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min", "rel_vol",
   "rsi", "time_before", "time_between", "efficiency_ratio", "momentum_atr", "macd",
   "level", "tick", "gamma_regime", "gamma_wall", "iv_rank", "event_within", "unknown",
 ]);

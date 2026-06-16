@@ -65,7 +65,7 @@ function parseET(hhmm: string): number | null {
 // Condition kinds this interpreter can actually evaluate (the rest are feed-
 // dependent and ignored — see capabilityCheck in lib/desk/strategySpec.ts).
 const SUPPORTED = new Set<Condition["kind"]>([
-  "ma_cross", "vwap_side", "vwap_dev", "opening_range", "or_width_min", "gap_min",
+  "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
   "efficiency_ratio", "momentum_atr", "macd", "level",
 ]);
@@ -100,6 +100,7 @@ function computeWarmup(spec: StrategySpec): number {
   for (const e of spec.entries ?? []) {
     for (const c of e.all ?? []) {
       if (c.kind === "ma_cross") warm = Math.max(warm, c.slow, c.fast);
+      else if (c.kind === "trend_align") warm = Math.max(warm, c.ref === "ema50" ? 50 : 21);
       else if (c.kind === "rsi") warm = Math.max(warm, c.period + 1);
       else if (c.kind === "momentum_atr") warm = Math.max(warm, (c.lookback ?? 3) + 1);
       else if (c.kind === "macd") warm = Math.max(warm, c.slow + c.signal);
@@ -113,6 +114,7 @@ function inferDirection(entry: SpecEntry): OptType | null {
   for (const c of entry.all ?? []) {
     if (c.kind === "ma_cross") return c.dir === "up" ? "call" : "put";
     if (c.kind === "vwap_side") return c.side === "above" ? "call" : "put";
+    if (c.kind === "trend_align") return c.side === "up" ? "call" : "put";
     if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
     if (c.kind === "momentum_atr") return c.op === ">=" ? "call" : "put";
   }
@@ -145,6 +147,17 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
     }
     case "vwap_side":
       return c.side === "above" ? f.close > f.vwap : f.close < f.vwap;
+    case "trend_align": {
+      // persistent trend STATE (every bar). ribbon (default) = EMA9 vs EMA21 (pb-ride's filter);
+      // ema21/ema50 = close vs that EMA. Computed EMA → faithful live (no vwap-bug). Fail-closed.
+      const up = c.side === "up";
+      if (c.ref === "ema21" || c.ref === "ema50") {
+        const e = ctx.emaSeries.get(c.ref === "ema21" ? 21 : 50);
+        return e ? (up ? f.close > e[ctx.i] : f.close < e[ctx.i]) : false;
+      }
+      const e9 = ctx.emaSeries.get(9), e21 = ctx.emaSeries.get(21);
+      return e9 && e21 ? (up ? e9[ctx.i] > e21[ctx.i] : e9[ctx.i] < e21[ctx.i]) : false;
+    }
     case "vwap_dev": {
       if (f.atr <= 0) return false;
       const dev = (f.close - f.vwap) / f.atr; // signed deviation, in ATRs
@@ -237,6 +250,9 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
       if (c.kind === "ma_cross") {
         if (!emaSeries.has(c.fast)) emaSeries.set(c.fast, ema(closes, c.fast));
         if (!emaSeries.has(c.slow)) emaSeries.set(c.slow, ema(closes, c.slow));
+      } else if (c.kind === "trend_align") {
+        // seed the EMA periods this ref needs (reuses emaSeries): ribbon → 9 & 21; else the one EMA
+        for (const n of c.ref === "ema21" ? [21] : c.ref === "ema50" ? [50] : [9, 21]) if (!emaSeries.has(n)) emaSeries.set(n, ema(closes, n));
       } else if (c.kind === "rsi" && !rsiSeries.has(c.period)) {
         rsiSeries.set(c.period, rsi(closes, c.period));
       } else if (c.kind === "macd" && !macdSeries.has(macdKey(c))) {

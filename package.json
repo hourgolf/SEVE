@@ -93,7 +93,8 @@
     "fomc-costgate-probe": "tsx engine/fomc-costgate-probe.ts",
     "cross-gap-probe": "tsx engine/cross-gap-probe.ts",
     "export-quotes": "tsx scripts/export-quotes.ts",
-    "grind-entry-probe": "tsx --env-file=.env.local engine/grind-entry-probe.ts"
+    "grind-entry-probe": "tsx --env-file=.env.local engine/grind-entry-probe.ts",
+    "trend-align-selftest": "tsx --env-file=.env.local engine/trend-align-selftest.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
