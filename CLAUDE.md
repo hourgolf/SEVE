@@ -8,6 +8,30 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-15 LATE (NEXT-GEN: CONVICTION-SIZING KEYSTONE BUILT) — READ FIRST
+**Operator's next-gen direction: the desk is still flat-RISK single-leg ("buy a decent entry, hope it runs
+to offset the runner we let burn") — make conviction + market conditions inform SIZING + scaling.** Key
+insight: the cost gate already computes a continuous conviction signal (EV-margin = expectedMove/roundTrip)
+and THROWS IT AWAY after a binary veto. A workflow produced a **9-item ranked roadmap** (memory
+`conviction-sizing-roadmap.md`); the **KEYSTONE is BUILT** (offline, zero live-trader risk):
+- **#1 `npm run build-training-store`** (`scripts/build-training-store.ts`) — the (entry features → realized
+  outcome) dataset the desk never had. Joins closed `positions` → `acted_on` entry `signals` by
+  (strategist_id, rationale.occ, opened_at±window) — **THERE IS NO FK** — extracts er/relVol/gap/atr/
+  expectedMove/roundTrip, computes R = realized_pnl/(0.5·entry·qty·100), flags `joinAmbiguous`. → data/training/.
+- **#2 SizingModel hook** — `engine/engine.ts` riskGovernor gained optional `convictionScalar=1` (riskBudget×scalar,
+  guarded fail-closed); `engine/sizing.ts` (rules|linear specs, clamp [0.5,2.0]); `engine/backtest.ts`
+  `--sizing-model static|json:<path>|inline` threads it through simulateSession (15th param, all 3 call sites,
+  session-gap injected). **Every conviction idea now rides the existing --options quotes / benched-sim /
+  montecarlo harness as a validatable experiment.** ✅ VERIFIED no-flag == `--sizing-model static` BYTE-IDENTICAL
+  (the critical no-regression property — riskGovernor feeds every probe); default-1.5 → exactly 1.5× size.
+  Adversarial review: engine-regression 0 / sizing-module 0 confirmed (1 LOW doc-note fix, done).
+- **⚠ DATA REALITY (carry into the fit):** 465 closed / 423 matched (91%) but only **25 feature-complete**
+  (gap+evMargin logged only since 06-11/stream) + **26 join-ambiguous** → the rich-feature fit is DATA-STARVED
+  today; accrues as stream days pile up. **Next experiment = #3 gap-magnitude sizing on V3/ALT** (the one armed
+  signal, least overfitting). NOT live: every model graduates through the paper-lab (#8, cockpit P3) beside its
+  flat twin — never arm on backtest alone. Sizing is MULTIPLICATIVE on a convex-tail book → every model must
+  pass a montecarlo TAIL check, not just pooled mean. All research/engine tooling — does NOT touch the worker.
+
 ## SESSION HANDOFF — 2026-06-15 MONDAY OPEN (CHOP-DETECTOR REPURPOSE → ORB RESURRECTION CANDIDATE) — READ FIRST
 **✅ OVERRIDE COUNTERFACTUAL / "did the human beat the ride" scorecard — BUILT 2026-06-15 (all 4 items).**
 Reconstructs ride-to-close from `option_quotes` (the stream keeps flowing AFTER an early manual close;

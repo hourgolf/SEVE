@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { computeFeatures, riskGovernor } from "./engine";
 import { DEFAULT_COST_MODEL, fillWithCost, type CostModel } from "./cost";
+import { buildSizingModel, scalarFor, loadSizingSpec, featuresForSizing, type SizingFeatures } from "./sizing";
 import { openManaged, stepManaged, costGatePass, type ManagedState } from "./manage";
 import type { Management } from "../lib/desk/strategySpec";
 
@@ -143,7 +144,11 @@ export function simulateSession(
   // ENTRY COST GATE (the live worker's COST_GATE_RATIO). Veto an entry whose expected
   // ~1·ATR premium move doesn't clear the round-trip cost by minMoveToCostRatio.
   // Single-leg simple path (the managed path uses management.costGate). undefined = off.
-  entryCostGate?: { minMoveToCostRatio: number }
+  entryCostGate?: { minMoveToCostRatio: number },
+  // CONVICTION SIZING (engine/sizing.ts): per-bar feature record → RISK multiplier, applied at
+  // every riskGovernor call. undefined → scalar 1.0 (flat RISK, byte-identical). The caller bakes
+  // in session-level features (gap) + the clamp, so this is a ready scalar function.
+  sizingModel?: (f: SizingFeatures) => number,
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -183,7 +188,7 @@ export function simulateSession(
           // quote must skip the entry, not crash costGatePass on an undefined quote).
           const gateOk = !!q && (!management.costGate || gross || costGatePass(q, f.atr, management.costGate.minMoveToCostRatio, costModel));
           if (q && gateOk) {
-            const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false);
+            const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false, sizingModel ? sizingModel(featuresForSizing(f)) : 1);
             if (r.ok) {
               const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);
               ms = openManaged(management, intent.direction, strike, r.qty, en.fill, f.close, i, f.atr, en.edgeUsd);
@@ -342,7 +347,7 @@ export function simulateSession(
         }
         const maxLossUsd = ok ? structureMaxLossUsd(resolved, net) : 0;
         // size off max loss (per-unit $) → riskGovernor's entryAsk proxy = maxLoss/100.
-        const r = ok && maxLossUsd > 0 ? riskGovernor(cfg, fund, dayPnl, dayPnl, maxLossUsd / 100, false) : { ok: false as const, reason: "no_risk" };
+        const r = ok && maxLossUsd > 0 ? riskGovernor(cfg, fund, dayPnl, dayPnl, maxLossUsd / 100, false, sizingModel ? sizingModel(featuresForSizing(f)) : 1) : { ok: false as const, reason: "no_risk" };
         if (r.ok) {
           pos = {
             slug: cfg.slug, strike: atm, optType: "call", qty: r.qty,
@@ -357,7 +362,7 @@ export function simulateSession(
         const strike = Math.round(f.close);
         const q = findQuote(chain, strike, intent.direction);
         if (q && (!entryCostGate || gross || costGatePass(q, f.atr, entryCostGate.minMoveToCostRatio, costModel))) {
-          const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false);
+          const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false, sizingModel ? sizingModel(featuresForSizing(f)) : 1);
           if (r.ok) {
             const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);
             pos = {
@@ -580,6 +585,12 @@ async function main() {
   // stop — a spec's own stop wins.
   const premStopPct = argNum("prem-stop", 0);
   if (premStopPct > 0) premiumExit = premiumExit ? (premiumExit.stopPct == null ? { ...premiumExit, stopPct: premStopPct } : premiumExit) : { stopPct: premStopPct };
+  // --sizing-model static|json:<path>|<inline-json>: CONVICTION sizing (engine/sizing.ts). Default
+  // (absent/static/unparseable) → no model → scalar 1.0 → byte-identical flat RISK. The built model
+  // is wrapped per session to inject session-level gap + apply the fail-closed clamp.
+  const builtSizing = buildSizingModel(loadSizingSpec(argStr("sizing-model", "")));
+  const sizingFor = (sessionGap: number | undefined) =>
+    builtSizing ? (sf: SizingFeatures) => scalarFor(builtSizing, { ...sf, gap: sessionGap ?? 0 }) : undefined;
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
   const stratName = specDef
@@ -673,7 +684,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      const dayTrades = simulateSession(s.bars, cfgRun, fundRun, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl, gap: s.gap }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate, ustopPct, entryCostGate);
+      const dayTrades = simulateSession(s.bars, cfgRun, fundRun, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl, gap: s.gap }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate, ustopPct, entryCostGate, sizingFor(s.gap));
       all.push(...dayTrades);
       perDay.push({ date: s.dateET, pnl: Math.round(dayTrades.reduce((a, t) => a + t.pnl, 0) * 100) / 100, trades: dayTrades.length });
     }
@@ -698,7 +709,7 @@ async function main() {
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
       const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-      all.push(...simulateSession(s.bars, cfgRun, fundRun, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management, trailExit, breakevenExit, lateGate, ustopPct, entryCostGate));
+      all.push(...simulateSession(s.bars, cfgRun, fundRun, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management, trailExit, breakevenExit, lateGate, ustopPct, entryCostGate, sizingFor(undefined)));
     }
     report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }

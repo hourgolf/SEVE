@@ -95,7 +95,11 @@ export function riskGovernor(
   dayPnlStrategist: number,
   dayPnlFund: number,
   entryAsk: number,
-  anySolo: boolean
+  anySolo: boolean,
+  // CONVICTION scalar (engine/sizing.ts): multiplies the risk budget so setup quality sizes the
+  // position. Default 1.0 = flat RISK (byte-identical to before). Already clamped upstream
+  // (scalarFor); guarded here so a non-finite/≤0 value can never zero or invert size.
+  convictionScalar = 1,
 ): RiskResult {
   if (fund.is_halted) return { ok: false, reason: "fund_halted" };
   if (cfg.muted) return { ok: false, reason: "muted" };
@@ -105,8 +109,9 @@ export function riskGovernor(
   if (dayPnlStrategist <= -cfg.daily_stop_usd)
     return { ok: false, reason: "daily_stop" };
 
+  const scalar = Number.isFinite(convictionScalar) && convictionScalar > 0 ? convictionScalar : 1;
   const effectiveCapital = fund.total_capital_usd * (cfg.capital_pct / 100);
-  const riskBudget = effectiveCapital * (cfg.aggression / 100);
+  const riskBudget = effectiveCapital * (cfg.aggression / 100) * scalar;
   const costPerContract = entryAsk * 100;
   if (costPerContract <= 0) return { ok: false, reason: "no_quote" };
   let qty = Math.floor(riskBudget / costPerContract);
