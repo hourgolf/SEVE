@@ -33,6 +33,8 @@ export interface LedgerEntry {
   ride: number;               // reconstructed ride-to-close P&L (hold to flatten / −50% stop)
   delta: number;              // actual − ride  (>0 ⇒ the override beat riding)
   stopHit: boolean;           // the ride would have hit the −50% premium stop
+  actualHoldMin?: number;     // operator's hold (open→actual close), min — exit-timing analysis
+  rideHoldMin?: number | null; // the ride's would-be hold (open→−50% stop / flatten), min
   recordedAt: string;         // when this reconstruction was captured (ISO)
 }
 

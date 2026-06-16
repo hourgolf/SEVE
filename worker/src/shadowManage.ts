@@ -131,7 +131,11 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
     if (!r || !r.rideOk) continue;                 // OCC drifted off the tracked chain — incomplete path
     const actualPnl = Number(actual.realized_pnl ?? 0);
     const delta = actualPnl - r.ride;              // >0 ⇒ the override BEAT ride-to-close
+    const openMs = Date.parse(rt.openedAt);
+    // exit-timing (run #4): operator's hold vs the ride's would-be hold — feeds the auto-arbiter once N grows
+    const actualHoldMin = actual.closed_at ? Math.round((Date.parse(actual.closed_at) - openMs) / 60000) : null;
+    const rideHoldMin = r.rideExitMs != null ? Math.round((r.rideExitMs - openMs) / 60000) : null;
     info(`ride-shadow ${rt.slug} ${rt.occ} OVERRIDE — ride ${sgn(r.ride)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`);
-    void writeShadowEvent(`RIDE ${rt.slug} ${rt.occ} — ride ${sgn(r.ride)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`, { slug: rt.slug, occ: rt.occ, ride: Math.round(r.ride), actual: Math.round(actualPnl), delta: Math.round(actualPnl) - Math.round(r.ride), stopHit: r.rideStop, override: true });
+    void writeShadowEvent(`RIDE ${rt.slug} ${rt.occ} — ride ${sgn(r.ride)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`, { slug: rt.slug, occ: rt.occ, ride: Math.round(r.ride), actual: Math.round(actualPnl), delta: Math.round(actualPnl) - Math.round(r.ride), stopHit: r.rideStop, actualHoldMin, rideHoldMin, override: true });
   }
 }

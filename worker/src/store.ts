@@ -110,9 +110,9 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
 }
 
 // A closed position's realized P&L (for the shadow-management A/B finalize).
-export async function getPositionById(id: string): Promise<{ realized_pnl: number; status: string; close_reason: string | null } | null> {
-  const { data } = await sb.from("positions").select("realized_pnl,status,close_reason").eq("id", id).maybeSingle();
-  return data ? { realized_pnl: Number((data as any).realized_pnl ?? 0), status: String((data as any).status), close_reason: (data as any).close_reason ?? null } : null;
+export async function getPositionById(id: string): Promise<{ realized_pnl: number; status: string; close_reason: string | null; closed_at: string | null } | null> {
+  const { data } = await sb.from("positions").select("realized_pnl,status,close_reason,closed_at").eq("id", id).maybeSingle();
+  return data ? { realized_pnl: Number((data as any).realized_pnl ?? 0), status: String((data as any).status), close_reason: (data as any).close_reason ?? null, closed_at: (data as any).closed_at ?? null } : null;
 }
 
 // Ride-to-close reconstruction — PARITY with scripts/day-report.ts reconstructRide (keep
@@ -120,7 +120,7 @@ export async function getPositionById(id: string): Promise<{ realized_pnl: numbe
 // premium stop. Reads the option_quotes that keep flowing AFTER an early manual close (the
 // override insight). null when no quotes cover the window; rideOk=false when an off-chain
 // OCC's stream stopped before the flatten (a stale last-mid would fabricate the ride).
-export async function reconstructRideToClose(occ: string, entry: number, qty: number, openedAt: string, flattenIso: string): Promise<{ ride: number; rideStop: boolean; rideOk: boolean } | null> {
+export async function reconstructRideToClose(occ: string, entry: number, qty: number, openedAt: string, flattenIso: string): Promise<{ ride: number; rideStop: boolean; rideOk: boolean; rideExitMs: number | null } | null> {
   if (!(entry > 0) || !(qty > 0) || !openedAt) return null;
   const stopLevel = 0.5 * entry;
   const [{ data: stop }, { data: last }] = await Promise.all([
@@ -139,7 +139,8 @@ export async function reconstructRideToClose(occ: string, entry: number, qty: nu
   // bound) — exact parity with day-report, which splits FLATTEN_MS (reach) vs +30s (bound).
   const flattenMs = Date.parse(flattenIso) - 30_000;
   const reached = rideStop || (last != null && flattenMs - Date.parse((last as any).captured_at) < 6 * 60_000);
-  return { ride, rideStop, rideOk: reached };
+  const rideExitMs = rideStop ? Date.parse((stop as any).captured_at) : last ? Date.parse((last as any).captured_at) : null;
+  return { ride, rideStop, rideOk: reached, rideExitMs };
 }
 
 export async function getOpenPositions(): Promise<PositionRow[]> {

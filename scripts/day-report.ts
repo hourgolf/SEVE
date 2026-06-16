@@ -59,6 +59,7 @@ interface Trade {
   rideDelta: number | null;   // actual pnl − ride  (>0 ⇒ the actual exit beat riding)
   rideStop: boolean;          // the ride would have hit the −50% premium stop
   rideOk: boolean;            // reconstruction usable (quotes present through the flatten)
+  rideExitMs: number | null;  // when the ride would have exited (stop fill / flatten) — for exit-timing
 }
 
 // Ride-to-close counterfactual: hold the position from entry to the native 15:25 flatten,
@@ -85,11 +86,14 @@ async function reconstructRide(occ: string, entry: number, qty: number, openedAt
   const rideStop = !!stop;
   const rideExit = rideStop ? stopLevel : Number(last!.mid);
   const ride = (rideExit - entry) * qty * 100;
+  // when the RIDE would have exited (the −50% stop's fill, else the flatten) — for the
+  // exit-timing family (cost-of-early-exit / auto-arbiter): how long the operator held vs ride.
+  const rideExitMs = rideStop ? Date.parse(stop!.captured_at) : last ? Date.parse(last.captured_at) : null;
   // data-quality guard: if it never stopped, the flatten mid must actually reach the
   // flatten (an OCC that drifts off the tracked ATM chain stops being quoted early —
   // a stale last-mid would fabricate the ride). Stop-hit rides are flatten-independent.
   const reached = rideStop || (last != null && FLATTEN_MS - Date.parse(last.captured_at) < 6 * 60_000);
-  return { ride, rideStop, rideOk: reached };
+  return { ride, rideStop, rideOk: reached, rideExitMs };
 }
 
 // Publish the computed forensics to the §03 dashboard panel (best-effort, env-gated). The CLI
@@ -217,7 +221,7 @@ async function main() {
       reason: p.close_reason ?? reason, // column beats journal-parse once stamped
       manual: /-manual$/i.test(slug),
       closeReason: p.close_reason ?? null,
-      ride, rideDelta: ride != null ? pnl - ride : null, rideStop: !!r?.rideStop, rideOk: !!r?.rideOk,
+      ride, rideDelta: ride != null ? pnl - ride : null, rideStop: !!r?.rideStop, rideOk: !!r?.rideOk, rideExitMs: r?.rideExitMs ?? null,
     });
   }
 
@@ -421,6 +425,9 @@ async function main() {
         id: t.id, date: DATE, slug: t.slug, name: t.name, occ: t.occ, cp: t.cp, strike: t.strike, qty: t.qty,
         closeReason: t.closeReason, tag: t.closeReason?.match(/^manual:(.+)$/)?.[1] ?? null,
         actual: Math.round(t.pnl), ride: Math.round(t.ride!), delta: Math.round(t.pnl) - Math.round(t.ride!), stopHit: t.rideStop, // delta from the rounded fields → ΣΔ == Σactual−Σride
+        // exit-timing (run #4 enablement): operator's hold vs the ride's would-be hold
+        actualHoldMin: Math.round((Date.parse(t.closedAt) - Date.parse(t.openedAt)) / 60000),
+        rideHoldMin: t.rideExitMs != null ? Math.round((t.rideExitMs - Date.parse(t.openedAt)) / 60000) : null,
         recordedAt: new Date().toISOString(),
       }));
       const { added, updated } = upsertLedger(entries);
