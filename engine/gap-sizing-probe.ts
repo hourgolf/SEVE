@@ -24,7 +24,13 @@ import type { ChainProvider } from "./optionsource";
 import type { Bar, Evaluate, FundState, StrategistConfig, Trade } from "./types";
 import type { StrategySpec, Condition } from "../lib/desk/strategySpec";
 
-const FUND: FundState = { total_capital_usd: 100000, master_daily_stop_usd: 1e9, is_halted: false };
+// V3/ALT's REAL knob: RISK $500 → total_capital 2×risk / pct100 / agg100 (the decide.ts mapping) so
+// qty = floor(risk/(0.5·ask·100)) is RISK-BASED (2–6 contracts by premium), NOT pinned to max — only
+// then does the conviction scalar move size. (At the $100k budget qty pins to max_contracts and the
+// scalar is inert.) daily_stop kept large to ISOLATE pure sizing (entry set fixed); the daily-stop ×
+// sizing interaction is a follow-up.
+const RISK = 500;
+const FUND: FundState = { total_capital_usd: 2 * RISK, master_daily_stop_usd: 1e9, is_halted: false };
 const NBBO: CostModel = { ...DEFAULT_COST_MODEL, spreadSource: "option_bars", slippageTicksPerSide: 0.25 }; // match the live worker
 const GATE = { minMoveToCostRatio: 3.0 };
 const CFG: StrategistConfig = { slug: "gs", capital_pct: 100, aggression: 100, max_contracts: 6, daily_stop_usd: 1e9, muted: false, soloed: false };
@@ -87,22 +93,23 @@ async function main() {
     const ws = real.filter((s) => s.dateET >= from && s.dateET <= to);
     const trades = ws.flatMap((s) => simulateSession(s.bars, CFG, FUND, mk(s), chainOf(s), false, { stopPct: 50 }, NBBO, undefined, undefined, undefined, undefined, 0, GATE, sizingFor(spec, s)));
     const m = metrics(trades, ws.length);
-    return { n: trades.length, total: m.totalPnl, dd: maxDrawdown(trades), win: trades.length ? trades.filter((t) => t.pnl > 0).length / trades.length : 0 };
+    return { n: trades.length, total: m.totalPnl, dd: maxDrawdown(trades), qty: trades.reduce((s, t) => s + t.qty, 0), win: trades.length ? trades.filter((t) => t.pnl > 0).length / trades.length : 0 };
   };
 
   for (const withMom of [false, true]) {
     const ch = withMom ? "BREAK(ALT)" : "BREAK(ALT V3)";
     console.log(`\n═══ ${ch} · gap-magnitude SIZING (entry set fixed at gap_min 0.25) · real NBBO ═══`);
     console.log(`window        ` + VARIANTS.map((v) => v.label.padStart(20)).join(""));
-    const pooled = VARIANTS.map(() => ({ total: 0, dd: 0, n: 0 }));
+    const pooled = VARIANTS.map(() => ({ total: 0, dd: 0, n: 0, qty: 0 }));
     const holds = VARIANTS.map(() => ({ better: 0, worseDD: 0 }));
     for (const w of WINDOWS) {
       const cells = VARIANTS.map((v) => runWin(withMom, v.spec, w.from, w.to));
       const base = cells[0];
-      cells.forEach((c, i) => { pooled[i].total += c.total; pooled[i].dd += c.dd; pooled[i].n += c.n; if (i > 0) { if (c.total >= base.total - 1) holds[i].better++; if (c.dd < base.dd - 1) holds[i].worseDD++; } });
+      cells.forEach((c, i) => { pooled[i].total += c.total; pooled[i].dd += c.dd; pooled[i].n += c.n; pooled[i].qty += c.qty; if (i > 0) { if (c.total >= base.total - 1) holds[i].better++; if (c.dd < base.dd - 1) holds[i].worseDD++; } });
       console.log(`${(w.key + ` n${base.n}`).padEnd(14)}` + cells.map((c) => `${sgn(c.total)}/dd${Math.round(c.dd)}`.padStart(20)).join(""));
     }
     console.log(`${"POOLED".padEnd(14)}` + pooled.map((p) => `${sgn(p.total)}/dd${Math.round(p.dd)}`.padStart(20)).join(""));
+    console.log(`${"Σcontracts".padEnd(14)}` + pooled.map((p) => String(p.qty).padStart(20)).join("") + "   ← scalar moved size iff these differ");
     VARIANTS.forEach((v, i) => { if (i > 0) console.log(`  ${v.label}: holds-or-improves ${holds[i].better}/${WINDOWS.length} windows · worsens maxDD in ${holds[i].worseDD}/${WINDOWS.length} · pooled Δ ${sgn(pooled[i].total - pooled[0].total)} (dd Δ ${Math.round(pooled[i].dd - pooled[0].dd)})${holds[i].better === WINDOWS.length && holds[i].worseDD === 0 ? "  ✅ PASS" : "  ✗ mixed/fail"}`); });
   }
   console.log(`\n⚠ entry set held fixed (pure sizing). PASS = a variant holds/improves EVERY window with NO maxDD worsening. Even a PASS graduates to the paper-lab, not the live book — and a pooled lift with a maxDD blow-up is a FAIL (multiplicative variance on the convex tail).\n`);
