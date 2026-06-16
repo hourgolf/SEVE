@@ -38,7 +38,7 @@ function etMinuteOfDay(ms: number): number {
 }
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
-import { loadOptionBarsByDay, makeRealChain, type ChainProvider } from "./optionsource";
+import { loadOptionBarsByDay, makeRealChain, loadOptionQuotesByDay, makeQuotesChain, type ChainProvider } from "./optionsource";
 import { loadDatabentoByDay, makeDatabentoChain } from "./databentosource";
 import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
 import { DEFAULT_FADE_V2_PARAMS, fadeV2Evaluate } from "./strategies/fade-v2";
@@ -554,6 +554,32 @@ async function main() {
   const lateCutoff = argNum("late-cutoff", 0);
   const lateMax = argNum("late-max", 1);
   const lateGate = lateCutoff > 0 ? { cutoffMin: lateCutoff, maxEntries: Math.max(0, lateMax) } : undefined;
+  // FAITHFUL-CONFIG overrides (the benched-channel "would-be vs live" sim, scripts/benched-sim.ts):
+  // reproduce the LIVE worker's per-channel risk + exit stack on a research run. All default off →
+  // existing runs are byte-identical. --risk <usd> = the worker's RISK $/trade; the engine's
+  // riskGovernor uses the legacy capital%×aggression% budget, so map RISK → (total_capital 2×risk,
+  // pct 100, agg 100): qty = floor(2·risk / (ask·100)) = floor(risk / (0.5·ask·100)) — IDENTICAL to
+  // decide.ts. --max-contracts / --daily-stop override the per-channel caps.
+  const riskUsd = argNum("risk", 0);
+  const maxC = argNum("max-contracts", 0);
+  const dailyStop = argNum("daily-stop", 0);
+  const cfgRun: StrategistConfig = { ...FADE,
+    ...(riskUsd > 0 ? { capital_pct: 100, aggression: 100 } : {}),
+    ...(maxC > 0 ? { max_contracts: maxC } : {}),
+    ...(dailyStop > 0 ? { daily_stop_usd: dailyStop } : {}) };
+  // master_daily_stop_usd → inert under --risk: the LIVE worker has NO fund master stop
+  // (decide.ts only enforces the per-channel daily_stop), so leaving FUND's $300 would halt a
+  // benched channel ~$50 sooner than live and flatter its would-be loss (cull-biasing).
+  const fundRun: FundState = { ...FUND, ...(riskUsd > 0 ? { total_capital_usd: 2 * riskUsd, master_daily_stop_usd: Number.MAX_SAFE_INTEGER } : {}) };
+  // --ustop <pct> = config underlying_stop_pct; --cost-gate <ratio> = the worker COST_GATE_RATIO.
+  const ustopPct = argNum("ustop", 0);
+  const costGateRatio = argNum("cost-gate", 0);
+  const entryCostGate = costGateRatio > 0 ? { minMoveToCostRatio: costGateRatio } : undefined;
+  // --prem-stop <pct> = the worker's universal −50% premium catastrophic stop (decide.ts:231),
+  // which built-ins (no spec premiumExit) otherwise lack in the backtest. Only fills a missing
+  // stop — a spec's own stop wins.
+  const premStopPct = argNum("prem-stop", 0);
+  if (premStopPct > 0) premiumExit = premiumExit ? (premiumExit.stopPct == null ? { ...premiumExit, stopPct: premStopPct } : premiumExit) : { stopPct: premStopPct };
   const gross = process.argv.includes("--gross");
   const costTag = gross ? " · GROSS (mid fills, no fees — signal only)" : "";
   const stratName = specDef
@@ -595,18 +621,30 @@ async function main() {
     const optMode = argStr("options", "synthetic");
     const useDatabento = optMode === "databento";
     const useRealOptions = optMode === "real";
+    const useQuotes = optMode === "quotes"; // SAME-WEEK real NBBO from option_quotes (benched-sim)
     // Databento gives REAL bid/ask → cross the ACTUAL spread, not the 3% model.
     // --fill-cross <0..1>: fraction of the half-spread paid per side (1 = market order
     // crossing the full spread [default], 0 = passive limit at mid). Bounds how much a
     // channel's edge is execution-quality (a scalper working limits) vs strategy.
     const fillCross = process.argv.includes("--fill-cross") ? argNum("fill-cross", 1) : undefined;
     const cost: CostModel = {
-      ...(useDatabento ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL),
+      // quotes + databento carry REAL bid/ask → cross the actual spread (not the 3% model).
+      // quotes ALSO matches the live worker's COST_MODEL exactly (0.25 tick/side, decide.ts) so the
+      // benched sim's fills + cost gate use the same costs the channel runs live — not 1 tick/side.
+      ...(useQuotes
+        ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars", slippageTicksPerSide: 0.25 }
+        : useDatabento ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL),
       ...(fillCross != null ? { spreadCrossFrac: fillCross } : {}),
     };
     let byDay = new Map();
     if (useDatabento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET), underlying);
-    else if (useRealOptions) {
+    else if (useQuotes) {
+      try {
+        byDay = await loadOptionQuotesByDay(sessions.map((s) => s.dateET), underlying);
+      } catch (e) {
+        console.log(`  (option_quotes unavailable — ${(e as Error).message}; falling back to modeled chains)`);
+      }
+    } else if (useRealOptions) {
       try {
         byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET), underlying);
       } catch (e) {
@@ -626,18 +664,23 @@ async function main() {
       if (useDatabento && contracts && contracts.length) {
         chainAt = makeDatabentoChain(contracts as Parameters<typeof makeDatabentoChain>[0]);
         realDays++;
+      } else if (useQuotes && contracts && contracts.length) {
+        chainAt = makeQuotesChain(contracts as Parameters<typeof makeQuotesChain>[0]);
+        realDays++;
       } else if (useRealOptions && contracts && contracts.length) {
         chainAt = makeRealChain(contracts);
         realDays++;
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      const dayTrades = simulateSession(s.bars, FADE, FUND, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl, gap: s.gap }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate);
+      const dayTrades = simulateSession(s.bars, cfgRun, fundRun, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl, gap: s.gap }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate, ustopPct, entryCostGate);
       all.push(...dayTrades);
       perDay.push({ date: s.dateET, pnl: Math.round(dayTrades.reduce((a, t) => a + t.pnl, 0) * 100) / 100, trades: dayTrades.length });
     }
     const optLabel = useDatabento
       ? `REAL NBBO · Databento cbbo-1m (${realDays}/${sessions.length} days) + real spread`
+      : useQuotes
+      ? `REAL NBBO · option_quotes same-week (${realDays}/${sessions.length} days) + real spread`
       : useRealOptions
       ? `REAL BARS + REAL option prices (modeled spread) · ${realDays}/${sessions.length} days had option data`
       : "REAL BARS + modeled (Black-Scholes) option chains";
@@ -655,7 +698,7 @@ async function main() {
     for (let d = 0; d < days; d++) {
       const s = generateSession(seed + d, BASE_MS + d * DAY_MS);
       const chainAt: ChainProvider = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
-      all.push(...simulateSession(s.bars, FADE, FUND, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management, trailExit, breakevenExit, lateGate));
+      all.push(...simulateSession(s.bars, cfgRun, fundRun, evalFor(s.bars), chainAt, gross, premiumExit, DEFAULT_COST_MODEL, management, trailExit, breakevenExit, lateGate, ustopPct, entryCostGate));
     }
     report(all, days, stratLabel, "SYNTHETIC data (shape-test — not a real-edge claim)");
   }

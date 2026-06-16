@@ -41,6 +41,31 @@ Frame: ride-to-close is a hypothesis the tape keeps testing — one giveback day
 distribution where the convex tail pays; the running tally is the only honest arbiter. ⚠ **the ledger has 1
 day (N=4) — it's an anchor, not a verdict; keep running day-report SAME-WEEK to accrue N.**
 
+**✅ BENCHED "would-be vs live" FAITHFUL SIM — BUILT 2026-06-15 (follow-on, same session).** Answers "do the
+cut channels still earn their bench?" each day — the live-day twin of the cull's backtest. Replays each
+benched (`status='draft'`) channel's REAL strategy + REAL exit stack over the day's tape + the day's REAL
+option NBBO (a NEW `--options quotes` source reading `option_quotes`, the same-week table that dodges the
+Databento T+1 embargo), with the channel's REAL RISK/cost-gate/u-stop config (NEW opt-in backtest flags
+`--risk/--max-contracts/--daily-stop/--ustop/--cost-gate/--prem-stop`; `--risk` maps to the engine's legacy
+budget as total_capital=2×risk/pct100/agg100 → qty IDENTICAL to decide.ts). `scripts/benched-sim.ts`
+(`npm run benched-sim`) drives it per signaling draft (builtin vs spec via the worker's base-slug rule) and
+prints benched-would-be vs live-actual; day-report carries it as a standing section. **The point: it replaces
+ride-to-close/hand-waving with the channels' ACTUAL trail/target/stop exits + re-entries.** ⚑ **An adversarial
+review (workflow) caught a MATERIAL faithfulness bug before it misled:** DEFAULT_COST_MODEL uses 1 tick/side
+slippage but the live worker uses 0.25 — the inflated round-trip made the 3× cost gate OVER-veto power's late
+leans, leaving one lucky winner (+$414) and hiding the churn. Fixed (quotes path matches 0.25). Also fixed: the
+sim enforced FUND's $300 master daily stop the live worker does NOT (decide.ts has none) — flattering benched
+losers. **Both fixes FLIPPED the 06-15 verdict: benched would-be +$190 (looks good) → −$364 (POWERHOUR base −20
+churning 4 flip-flop leans; ORB base −344) vs live +$200 → arming the bench would have COST $364, CULL
+VALIDATED.** Only the post-review faithful sim gets this right. ⚠ Known gaps (documented, LOW): 0DTE chain only
+— **final-window/`entry_dte=1` channels (power-final30) are FLAGGED "1DTE — not comparable" + excluded** (their
+entries roll past the cutoff to 1DTE live); other channels' last-31-min entries are 0DTE-modeled; the power
++100% giveback trail isn't modeled; engine `minutesToClose` is last-bar-relative (off-by-≤1 on full sessions).
+Standing fidelity upgrade = serve the 1DTE chain for cutoff entries (mirror the multidte path) — a follow-on.
+Run after the session settles (the live `option_quotes` flush makes an intraday run shift). ⚠ override
+counterfactual + benched-sim are research/forensics tooling + engine backtest additions — NONE touches the
+Vercel app or the Railway worker's trade path (the override build's worker bits deployed separately).
+
 **Open-day config (via MCP, desk flat at the bell):** (1) **pb-ride mute was BACKWARDS** — `pb-ride`
 (validated 1DTE) was muted and `pb-ride-2` (the *refuted* 0DTE) was live → **swapped**: pb-ride live,
 pb-ride-2 muted. (2) **grind-v3-2 unmuted** → `grind-v3` (0DTE) + `grind-v3-2` (1DTE) now run a CLEAN

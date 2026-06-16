@@ -123,3 +123,86 @@ export function makeRealChain(contracts: Series[]): ChainProvider {
     return quotes;
   };
 }
+
+// ── option_quotes source (the SAME-WEEK real-NBBO chain) ────────────────────
+// option_bars/Databento are T+1-embargoed, so a TODAY backtest can't use them.
+// option_quotes is the live NBBO the worker captured this session (real bid/ask,
+// 7-day retention) — so a same-week run gets REAL fills. Used by the benched-channel
+// "would-be vs live" sim (scripts/benched-sim.ts): it replays each cut channel's REAL
+// strategy + exits (trail incl.) on the real chain, which ride-to-close can't.
+
+interface QSeries { strike: number; optType: OptType; ts: number[]; bid: number[]; ask: number[]; }
+const QFILL_LAG_MS = 60_000; // mirror Databento: serve the quote captured within ~1 min of the bar
+
+function qIdxAtOrBefore(ts: number[], tsMs: number): number {
+  let lo = 0, hi = ts.length - 1, ans = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (ts[m] <= tsMs) { ans = m; lo = m + 1; } else hi = m - 1; }
+  return ans;
+}
+
+interface RawOQ { occ_symbol: string; captured_at: string; strike: number; opt_type: OptType; bid: number | null; ask: number | null; }
+
+// Load option_quotes for each ET date's 0DTE chain (expiration = date), grouped into
+// per-contract bid/ask series. underlying filters the ticker (option_quotes HAS the column,
+// unlike option_bars). Same per-day keyset paging as loadOptionBarsByDay.
+export async function loadOptionQuotesByDay(dates: string[], underlying = "SPY"): Promise<Map<string, QSeries[]>> {
+  loadEnv();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY");
+  const sb = createClient(url, key, { auth: { persistSession: false } });
+
+  const PAGE = 1000;
+  const out = new Map<string, QSeries[]>();
+  for (const date of dates) {
+    const contracts = new Map<string, QSeries>();
+    let lastId = "";
+    // keyset-paginate on id (OFFSET paging this table times out — the W3 export learned this)
+    for (;;) {
+      let q = sb.from("option_quotes")
+        .select("id,occ_symbol,captured_at,strike,opt_type,bid,ask")
+        .eq("expiration", date).eq("underlying", underlying)
+        .order("id", { ascending: true }).limit(PAGE);
+      if (lastId) q = q.gt("id", lastId);
+      const { data, error } = await q;
+      if (error) throw new Error("option_quotes read: " + error.message);
+      const rows = (data ?? []) as Array<RawOQ & { id: string }>;
+      for (const r of rows) {
+        if (r.bid == null || r.ask == null) continue;
+        let s = contracts.get(r.occ_symbol);
+        if (!s) { s = { strike: Number(r.strike), optType: r.opt_type, ts: [], bid: [], ask: [] }; contracts.set(r.occ_symbol, s); }
+        s.ts.push(Date.parse(r.captured_at));
+        s.bid.push(Number(r.bid));
+        s.ask.push(Number(r.ask));
+      }
+      if (rows.length < PAGE) break;
+      lastId = rows[rows.length - 1].id;
+    }
+    // keyset order is by id, not time → sort each series by ts so the binary search holds
+    for (const s of contracts.values()) {
+      const ord = s.ts.map((_, i) => i).sort((a, b) => s.ts[a] - s.ts[b]);
+      s.ts = ord.map((i) => s.ts[i]); s.bid = ord.map((i) => s.bid[i]); s.ask = ord.map((i) => s.ask[i]);
+    }
+    if (contracts.size) out.set(date, [...contracts.values()]);
+  }
+  return out;
+}
+
+// Chain provider from one day's option_quotes series — real bid/ask, crossed like Databento
+// (no modeled spread). Forward-fill with a 3-min staleness guard (a strike that drifts off
+// the captured NTM chain stops quoting; don't serve a stale mark).
+export function makeQuotesChain(contracts: QSeries[]): ChainProvider {
+  return (_spot, _mtc, tsMs) => {
+    const at = tsMs + QFILL_LAG_MS;
+    const quotes: Quote[] = [];
+    for (const c of contracts) {
+      const i = qIdxAtOrBefore(c.ts, at);
+      if (i < 0) continue;
+      if (at - c.ts[i] > 180_000) continue; // stale forward-fill guard
+      const bid = c.bid[i], ask = c.ask[i];
+      if (!(ask > 0) || ask < bid) continue;
+      quotes.push({ strike: c.strike, optType: c.optType, bid, ask, mid: (bid + ask) / 2 });
+    }
+    return quotes;
+  };
+}

@@ -20,6 +20,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { upcomingEvents, tableHorizonDays } from "../engine/market-events";
 import { upsertLedger, loadLedger, scorecardLines, LEDGER_PATH, type LedgerEntry } from "./override-ledger";
+import { benchedVsLive } from "./benched-sim";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
@@ -431,6 +432,24 @@ async function main() {
   // ---- override SCORECARD (accumulated — the only honest arbiter) ----------------------
   console.log(`\nOVERRIDE SCORECARD (accumulated — does the manual close systematically beat ride-to-close?)`);
   for (const l of scorecardLines(loadLedger())) console.log(l);
+
+  // ---- benched would-be vs live (did the cut channels earn their bench today?) ---------
+  // Replays each benched (draft) channel's REAL strategy + exits on today's real NBBO with
+  // its real config (scripts/benched-sim.ts) — the live-day equivalent of the cull's backtest.
+  // Same-week only (option_quotes 7d); sims only channels that signaled (rest traded nothing).
+  try {
+    const bvl = await benchedVsLive(DATE);
+    if (bvl.sameWeek) {
+      console.log(`\nbenched would-be vs live actual (cut channels — did they earn the bench?)`);
+      if (!bvl.benched.length) console.log(`  no benched channel signaled today${bvl.skipped.length ? ` (${bvl.skipped.length} silent)` : ""}`);
+      for (const b of bvl.benched) console.log(`  ${b.name.padEnd(24)} ${b.ran ? `${String(b.trades).padStart(2)}t  ${sgn(b.pnl).padStart(7)}  [${b.useSpec ? "spec" : "builtin"}/${b.underlying}]` : `— ${b.note}`}`);
+      if (bvl.benched.some((b) => b.ran)) console.log(`  ── Σ benched would-be ${sgn(bvl.benchedTotal)} vs Σ live actual ${sgn(bvl.liveTotal)} → arming the (comparable) bench today would have ${bvl.benchedTotal >= 0 ? "ADDED" : "COST"} $${Math.abs(bvl.benchedTotal).toLocaleString()} (one day = noise; cull rests on the 5-window evidence)`);
+    } else {
+      console.log(`\nbenched would-be vs live: skipped (${DATE} outside the 7-day option_quotes window — run same-week)`);
+    }
+  } catch (e) {
+    console.log(`\nbenched would-be vs live: failed (${(e as Error).message})`);
+  }
 
   console.log("");
 }
