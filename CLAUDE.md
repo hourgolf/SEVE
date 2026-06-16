@@ -8,6 +8,61 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-16 (FRONTIER SWEPT → DATA-BOUND; REGIME-ROUTER FEASIBLE) — READ FIRST
+**Marathon research session. Verdicts live in memory/ (read them); this is the pointer + the next step.**
+
+**06-16 close: NAV +$959** (a clean SPY −0.52% trend-down day; QQQ −1.63% whippy). **PB riders were the engine
+(+$1,226, 10/10)** — pullback-in-trend buying the bounces. Scalpers bled (grind-v3/v3-2 −$264). All forensics
+auto-published to the §03 panel. ⚠ **OVERRIDE SCORECARD FLIPPED:** after N=17 (2 days) the operator's manual
+overrides now TRAIL ride-to-close −$1,978 (beat 35%) — his **"reversal"-tag exits leak on trend days** (−$1,285/7;
+he bailed winners that kept running, e.g. Trend-QQQ +$12 vs ride +$1,634). Day-1's +$1,016 was a giveback-day
+artifact; it's REGIME-DEPENDENT (his early exits win chop/giveback, lose trend). Keep accruing — run day-report
+SAME-WEEK. [[override-counterfactual-scorecard]]
+
+**SESSION ARC — swept entries → exits → conviction sizing → regime gating. CONCLUSION: the desk is DATA-bound,
+not idea-bound.** A 37-agent frontier sweep found the axes "largely-mined" (16/27 candidates = graveyard-rhymes).
+The remaining program is COLLECT-FORWARD (accrue data; the machinery to make it fittable is now built).
+
+**BUILT THIS SESSION (all on `main`, pushed; research/forensics + engine — the worker bits are shadow-only):**
+- **Override counterfactual + scorecard** (day-report + `scripts/override-ledger.ts` + `npm run override-scorecard`
+  + the live shadowManage `RIDE` events) + **§03 "Shadow & Override" dashboard panel** (`forensics_reports` table +
+  `/api/forensics-report` route; day-report auto-publishes when APP_URL+PUSH_SECRET set — both in .env.local now).
+- **Faithful benched-sim** (`npm run benched-sim`; backtest `--options quotes` = same-week real NBBO + `--risk`/
+  `--cost-gate`/`--ustop`/`--prem-stop` faithful-config flags). [[override-counterfactual-scorecard]]
+- **Conviction-sizing keystone**: `scripts/build-training-store.ts` (features→outcome join, no FK) + `riskGovernor`
+  `convictionScalar` + `engine/sizing.ts` + backtest `--sizing-model` (byte-identical default). [[conviction-sizing-roadmap]]
+- **`trend_align` entry condition** + selftest (the bug-free trend filter; pb-ride's ribbon as vocab). [[entry-audit-grind-trend]]
+- **exit-timing plumbing** (override-ledger now logs actual-vs-ride hold times) + **gamma-open diagnostic log**
+  (worker shadow, 0DTE ATM implied-move + delta @9:35 — first capture 06-17).
+- New probes: `gap-sizing-probe`, `grind-entry-probe`, `trend-align-swap-probe`, `ride-burst-probe`,
+  `regime-attribution-probe`.
+
+**VERDICTS (all in memory — don't re-litigate):**
+- **Conviction sizing = CLOSED.** gap-sizing REFUTED (fails OOS, near-inert at $500 RISK); EV-margin fit REFUTED
+  (INVERTED for riders — high evMargin=high vol=worse); operator exit-tags NOT anticipatable at entry. **The cost
+  gate's binary veto IS the conviction layer.** PARKED → collect-forward. [[conviction-sizing-roadmap]]
+- **Entry audit:** grind's counter-trend entries are real (~2× bleed) but it's manual-or-cut (entry too weak —
+  ride-not-scalp rebuild REFUTED); `trend_align` built but has NO current-roster home (breakout/PB already encode
+  direction; the swap on V3/ALT is redundant — their vwap_side is degraded-live but also redundant). [[entry-audit-grind-trend]]
+- **Regime router = FEASIBLE.** `regime-attribution-probe`: channels strongly SEPARABLE (PB +555 TREND/−313 CHOP =
+  pure trend engine; V3/ALT gap+non-drift; grind chop-only; power dead everywhere). The desk is ALREADY a
+  decentralized router (gap_min + PB ribbon self-select); actuation is trivial. Binding constraint = an ex-ante
+  TREND/CHOP/DRIFT classifier (the dead axis). [[regime-router-feasibility]]
+
+**NEXT SESSION (in priority order):**
+1. **PB-regime-mute probe** — THE concrete next test + the matrix's biggest lever: does muting PB on
+   predicted-chop mornings beat always-on PB (PB's TREND +555 vs CHOP −313 = $868/session swing)? A NEW
+   application of the drift+persistence signal (refuted as a breakout PROFIT gate, never tested as a PB-mute).
+   5-window OOS + montecarlo tail. [[regime-router-feasibility]]
+2. **gamma-open clock** — first capture 06-17; correlate `impliedMovePct`/`callDelta` vs day-P&L/per-ride-R after
+   ~10 sessions (the candidate DRIFT detector; DRIFT = 48% of sessions, all-negative → stand-down lever).
+3. **Collect-forward** — run day-report SAME-WEEK to accrue the training store + override ledger (now with
+   hold-times) + shadow events. Revisit conviction-fit ~mid-July (≥50 keeper rows), exit auto-arbiter ~1mo (N≥30/ch).
+4. **06-17 = FOMC** — first live stand-down (13:50–14:30, watch the `⚑ event stand-down` page); post-close re-run
+   `fomc-resolution-probe` (adds day 19).
+
+⚠ MEMORY.md index is over its size cap — a consolidate-memory pass is overdue (not done this session).
+
 ## SESSION HANDOFF — 2026-06-15 LATE (NEXT-GEN: CONVICTION-SIZING KEYSTONE BUILT) — READ FIRST
 **Operator's next-gen direction: the desk is still flat-RISK single-leg ("buy a decent entry, hope it runs
 to offset the runner we let burn") — make conviction + market conditions inform SIZING + scaling.** Key
