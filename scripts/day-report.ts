@@ -19,12 +19,29 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { upcomingEvents, tableHorizonDays } from "../engine/market-events";
+import { upsertLedger, loadLedger, scorecardLines, LEDGER_PATH, type LedgerEntry } from "./override-ledger";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
 const di = process.argv.indexOf("--date");
 const ET_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" });
 const DATE = di >= 0 && process.argv[di + 1] ? process.argv[di + 1] : ET_DATE.format(new Date());
+
+// UTC instant of a given ET wall-clock (hh:mm) on DATE — DST-correct via a noon probe
+// (offset = how far UTC leads ET that day: 240 EDT / 300 EST).
+function etWallToUtcMs(dateET: string, hh: number, mm: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false })
+    .formatToParts(new Date(Date.parse(`${dateET}T12:00:00Z`)));
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? "12") % 24;
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const offsetMin = 12 * 60 - (h * 60 + m);
+  return Date.parse(`${dateET}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00Z`) + offsetMin * 60_000;
+}
+// The native ride-flatten the counterfactual holds to: 15:25 ET. EXACT for the ride
+// channels (pullback flattenMtc=35; V3/ALT armed time_before 15:25); the −50% premium
+// stop (universal, decide.ts) usually binds first on the losers regardless.
+const FLATTEN_MS = etWallToUtcMs(DATE, 15, 25);
+const PREMIUM_STOP_FRAC = 0.5; // mid ≤ 0.5×entry ⇒ −50% stop (worker PREMIUM_STOP_PCT)
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit" });
 const sgn = (v: number) => (v >= 0 ? "+" : "") + Math.round(v);
@@ -36,6 +53,42 @@ interface Trade {
   peak: number | null; mfePct: number | null; gavePct: number | null; reason: string;
   manual: boolean;
   closeReason: string | null; // durable column (31_close_reason.sql) — authoritative once stamped
+  // ride-to-close counterfactual (reconstructed from option_quotes, same-week only):
+  ride: number | null;        // P&L if held from entry to the native 15:25 flatten / −50% stop
+  rideDelta: number | null;   // actual pnl − ride  (>0 ⇒ the actual exit beat riding)
+  rideStop: boolean;          // the ride would have hit the −50% premium stop
+  rideOk: boolean;            // reconstruction usable (quotes present through the flatten)
+}
+
+// Ride-to-close counterfactual: hold the position from entry to the native 15:25 flatten,
+// exiting early ONLY on the −50% premium stop. Reads the quote stream that keeps flowing
+// AFTER the operator's actual close (the override insight), so it answers "what would
+// riding have booked". Two tiny indexed point-queries (no path transfer):
+//   · first mid ≤ 0.5×entry in [entry, flatten]  → the −50% stop fill (at the stop level)
+//   · last mid ≤ flatten                          → the flatten-exit mid (if it never stopped)
+async function reconstructRide(occ: string, entry: number, qty: number, openedAt: string) {
+  if (!(entry > 0) || !(qty > 0)) return null;
+  // The eod_flatten FILLS at the 15:25 cycle (~15:25:01), so the faithful flatten mid is the
+  // quote AT the flatten minute, not strictly before it — grace the window +30s to capture it.
+  const flattenIso = new Date(FLATTEN_MS + 30_000).toISOString();
+  const stopLevel = PREMIUM_STOP_FRAC * entry;
+  const [{ data: stop }, { data: last }] = await Promise.all([
+    sb.from("option_quotes").select("mid,captured_at").eq("occ_symbol", occ)
+      .gte("captured_at", openedAt).lte("captured_at", flattenIso).lte("mid", stopLevel)
+      .order("captured_at", { ascending: true }).limit(1).maybeSingle(),
+    sb.from("option_quotes").select("mid,captured_at").eq("occ_symbol", occ)
+      .gte("captured_at", openedAt).lte("captured_at", flattenIso)
+      .order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (!stop && last?.mid == null) return null; // no quotes in window → can't reconstruct
+  const rideStop = !!stop;
+  const rideExit = rideStop ? stopLevel : Number(last!.mid);
+  const ride = (rideExit - entry) * qty * 100;
+  // data-quality guard: if it never stopped, the flatten mid must actually reach the
+  // flatten (an OCC that drifts off the tracked ATM chain stops being quoted early —
+  // a stale last-mid would fabricate the ride). Stop-hit rides are flatten-independent.
+  const reached = rideStop || (last != null && FLATTEN_MS - Date.parse(last.captured_at) < 6 * 60_000);
+  return { ride, rideStop, rideOk: reached };
 }
 
 async function main() {
@@ -93,18 +146,29 @@ async function main() {
     .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,strategists(slug,name)")
     .eq("status", "closed").gte("closed_at", `${DATE}T13:00:00Z`).lte("closed_at", `${DATE}T22:00:00Z`)
     .order("opened_at");
-  const { data: evRaw } = await sb.from("events").select("message,created_at")
-    .gte("created_at", `${DATE}T13:00:00Z`).lte("created_at", `${DATE}T22:00:00Z`);
-  const events = (evRaw ?? []) as Array<{ message: string; created_at: string }>;
+  // Paginate past PostgREST's 1000-row cap — a busy session logs ~2k events, and an
+  // UNORDERED capped fetch silently drops the tail (which is where the late-day exit
+  // reasons AND the MGMT close shadows live → "exit —" / "managed-exit none" mirages).
+  const events: Array<{ message: string; created_at: string; meta: Record<string, unknown> | null }> = [];
+  for (let from = 0; from < 50_000; from += 1000) {
+    const { data } = await sb.from("events").select("message,created_at,meta")
+      .gte("created_at", `${DATE}T13:00:00Z`).lte("created_at", `${DATE}T22:00:00Z`)
+      .order("created_at", { ascending: true }).range(from, from + 999);
+    const batch = (data ?? []) as typeof events;
+    events.push(...batch);
+    if (batch.length < 1000) break;
+  }
 
   // Per-channel executor + arm state (W2 migration: which executor OWNS each channel).
   // NOTE: this is CURRENT config, not the config at trade time — accurate for a
   // same-day report (the normal use), approximate when re-running an old date.
-  const { data: stratRaw } = await sb.from("strategists").select("slug,executor,status,strategist_config(muted)");
+  const { data: stratRaw } = await sb.from("strategists").select("slug,name,executor,status,strategist_config(muted)");
   const execBySlug = new Map<string, { executor: string; armed: boolean; muted: boolean }>();
+  const nameBySlug = new Map<string, string>();
   for (const s of (stratRaw ?? []) as any[]) {
     const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
     execBySlug.set(s.slug, { executor: String(s.executor ?? "cron"), armed: s.status === "armed", muted: !!cfg?.muted });
+    nameBySlug.set(s.slug, s.name ?? s.slug);
   }
   const execOf = (slug: string) => execBySlug.get(slug)?.executor ?? "cron";
 
@@ -120,6 +184,8 @@ async function main() {
     const peak = pk?.mid != null ? Number(pk.mid) : null;
     const mfePct = peak != null && entry > 0 ? ((peak - entry) / entry) * 100 : null;
     const gavePct = peak != null && peak > entry && exit < peak ? ((peak - exit) / (peak - entry)) * 100 : null;
+    const r = await reconstructRide(p.occ_symbol, entry, qty, p.opened_at);
+    const ride = r ? r.ride : null;
     // exit reason from the worker journal: "<slug>: exit <occ> ×N @ px (reason)" / reconciled
     const ev = events.find((e) =>
       e.message.includes(p.occ_symbol) && e.message.includes(slug)
@@ -133,6 +199,7 @@ async function main() {
       reason: p.close_reason ?? reason, // column beats journal-parse once stamped
       manual: /-manual$/i.test(slug),
       closeReason: p.close_reason ?? null,
+      ride, rideDelta: ride != null ? pnl - ride : null, rideStop: !!r?.rideStop, rideOk: !!r?.rideOk,
     });
   }
 
@@ -304,6 +371,67 @@ async function main() {
     const overrides = auto.filter((t) => t.closeReason === "manual" || t.closeReason?.startsWith("manual:"));
     if (overrides.length) console.log(`  operator overrides on AUTO channels: ${overrides.length} (${[...new Set(overrides.map((t) => t.slug))].join(", ")})`);
   }
+
+  // ---- override counterfactual: did the human beat the ride? (the LIVE scalp-twin) -----
+  // Per closed trade, ride-to-close is reconstructed from option_quotes (hold from entry to
+  // the 15:25 flatten, exit early only on the −50% stop) — reading the quote stream that keeps
+  // flowing AFTER the operator's close. Δ = actual − ride (>0 ⇒ the actual exit beat riding).
+  // The OPERATOR OVERRIDES (close_reason manual/manual:*) accumulate into the durable scorecard:
+  // ride-to-close is a hypothesis the tape keeps testing, and the tally is its honest arbiter
+  // (one giveback day ≠ overturning the distribution). Run SAME-WEEK (quotes prune 7d).
+  const isOverride = (t: Trade) => t.closeReason === "manual" || !!t.closeReason?.startsWith("manual:");
+  const recon = trades.filter((t) => t.ride != null);
+  if (recon.length) {
+    console.log(`\noverride counterfactual — actual vs ride-to-close (hold to 15:25 ET flatten / −50% stop)`);
+    console.log(`channel                 trade        actual    ride    Δ act−ride   note`);
+    for (const t of recon) {
+      const ovr = isOverride(t);
+      const note = !t.rideOk ? "⚠ ride mid stale (drifted off the tracked chain)"
+        : ovr ? `OVR ✋ override ${t.rideDelta! > 0 ? "WON" : t.rideDelta! < 0 ? "LOST" : "≈"} ${t.rideStop ? "(ride → −50% stop)" : "(rode to flatten)"}`
+        : `${t.reason}${t.rideStop ? " · ride → −50% stop" : ""}`;
+      console.log(
+        `${t.name.padEnd(22)} ${(t.strike.toFixed(0) + (t.cp === "call" ? "C" : "P") + "×" + t.qty).padEnd(12)} ` +
+        `${sgn(t.pnl).padStart(6)}  ${sgn(t.ride!).padStart(6)}  ${sgn(t.rideDelta!).padStart(9)}   ${note}`,
+      );
+    }
+    const dayOvr = recon.filter((t) => isOverride(t) && t.rideOk);
+    if (dayOvr.length) {
+      const a = dayOvr.reduce((s, t) => s + t.pnl, 0), rd = dayOvr.reduce((s, t) => s + t.ride!, 0);
+      const w = dayOvr.filter((t) => t.rideDelta! > 0).length;
+      console.log(`  ── today's overrides: ${dayOvr.length} · actual ${sgn(a)} vs ride ${sgn(rd)} · Δ ${sgn(a - rd)} · beat ride ${w}/${dayOvr.length}`);
+      const entries: LedgerEntry[] = dayOvr.map((t) => ({
+        id: t.id, date: DATE, slug: t.slug, name: t.name, occ: t.occ, cp: t.cp, strike: t.strike, qty: t.qty,
+        closeReason: t.closeReason, tag: t.closeReason?.match(/^manual:(.+)$/)?.[1] ?? null,
+        actual: Math.round(t.pnl), ride: Math.round(t.ride!), delta: Math.round(t.rideDelta!), stopHit: t.rideStop,
+        recordedAt: new Date().toISOString(),
+      }));
+      const { added, updated } = upsertLedger(entries);
+      console.log(`  ── ledger: +${added} new / ${updated} refreshed → ${LEDGER_PATH}`);
+    }
+    const stale = recon.filter((t) => isOverride(t) && !t.rideOk);
+    if (stale.length) console.log(`  ⚠ ${stale.length} override(s) not ledgered — quote stream didn't reach the flatten (re-run earlier in the week / off-chain OCC)`);
+  }
+
+  // ---- managed-exit shadow (shadowManage MGMT) — the OTHER counterfactual --------------
+  // For MANAGED channels (a `management` block: scale-out / breakeven / trail) the live
+  // worker already runs the managed-vs-actual what-if each cycle and writes a `MGMT …`
+  // shadow event when the position closes (worker/src/shadowManage.ts). Surfaced here so the
+  // day's counterfactual shows BOTH baselines — ride-to-close (above, ride channels) and the
+  // managed exit (here, managed channels) — without an offline manage.ts replay.
+  const mgmt = events.filter((e) => e.message.includes("MGMT "));
+  console.log(`\nmanaged-exit shadow (shadowManage MGMT — managed channels)`);
+  if (!mgmt.length) console.log(`  none today (no managed channel closed; ride/scalp channels use ride-to-close above)`);
+  else for (const e of mgmt.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+    const m = e.message.match(/MGMT\s+(\S+)\s+(\S+)/);
+    const meta = (e.meta ?? {}) as { managed?: number; actual?: number; delta?: number };
+    const slug = m?.[1] ?? "?", occ = m?.[2] ?? "";
+    console.log(`  ${(nameBySlug.get(slug) ?? slug).padEnd(22)} ${occ.padEnd(20)} managed ${sgn(meta.managed ?? 0).padStart(6)} vs actual ${sgn(meta.actual ?? 0).padStart(6)} (Δ ${sgn(meta.delta ?? 0)})`);
+  }
+
+  // ---- override SCORECARD (accumulated — the only honest arbiter) ----------------------
+  console.log(`\nOVERRIDE SCORECARD (accumulated — does the manual close systematically beat ride-to-close?)`);
+  for (const l of scorecardLines(loadLedger())) console.log(l);
+
   console.log("");
 }
 

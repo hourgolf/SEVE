@@ -110,9 +110,34 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
 }
 
 // A closed position's realized P&L (for the shadow-management A/B finalize).
-export async function getPositionById(id: string): Promise<{ realized_pnl: number; status: string } | null> {
-  const { data } = await sb.from("positions").select("realized_pnl,status").eq("id", id).maybeSingle();
-  return data ? { realized_pnl: Number((data as any).realized_pnl ?? 0), status: String((data as any).status) } : null;
+export async function getPositionById(id: string): Promise<{ realized_pnl: number; status: string; close_reason: string | null } | null> {
+  const { data } = await sb.from("positions").select("realized_pnl,status,close_reason").eq("id", id).maybeSingle();
+  return data ? { realized_pnl: Number((data as any).realized_pnl ?? 0), status: String((data as any).status), close_reason: (data as any).close_reason ?? null } : null;
+}
+
+// Ride-to-close reconstruction — PARITY with scripts/day-report.ts reconstructRide (keep
+// them in sync): hold from entry to the 15:25 flatten, exiting early only on the −50%
+// premium stop. Reads the option_quotes that keep flowing AFTER an early manual close (the
+// override insight). null when no quotes cover the window; rideOk=false when an off-chain
+// OCC's stream stopped before the flatten (a stale last-mid would fabricate the ride).
+export async function reconstructRideToClose(occ: string, entry: number, qty: number, openedAt: string, flattenIso: string): Promise<{ ride: number; rideStop: boolean; rideOk: boolean } | null> {
+  if (!(entry > 0) || !(qty > 0) || !openedAt) return null;
+  const stopLevel = 0.5 * entry;
+  const [{ data: stop }, { data: last }] = await Promise.all([
+    sb.from("option_quotes").select("mid,captured_at").eq("occ_symbol", occ)
+      .gte("captured_at", openedAt).lte("captured_at", flattenIso).lte("mid", stopLevel)
+      .order("captured_at", { ascending: true }).limit(1).maybeSingle(),
+    sb.from("option_quotes").select("mid,captured_at").eq("occ_symbol", occ)
+      .gte("captured_at", openedAt).lte("captured_at", flattenIso)
+      .order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (!stop && (last as any)?.mid == null) return null;
+  const rideStop = !!stop;
+  const rideExit = rideStop ? stopLevel : Number((last as any).mid);
+  const ride = (rideExit - entry) * qty * 100;
+  const flattenMs = Date.parse(flattenIso);
+  const reached = rideStop || (last != null && flattenMs - Date.parse((last as any).captured_at) < 6 * 60_000);
+  return { ride, rideStop, rideOk: reached };
 }
 
 export async function getOpenPositions(): Promise<PositionRow[]> {

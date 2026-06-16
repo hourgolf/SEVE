@@ -215,9 +215,12 @@ async function cycle(trigger: string): Promise<void> {
       // live positions on its real-time quote (logs managed-vs-actual; no orders).
       try {
         const symRows = openRowsArr.filter((r) => byId.get(r.strategist_id)?.underlying.toUpperCase() === sym);
-        if (symRows.length) await updateShadowManagement({
+        // ALWAYS call (was gated on open rows): the ride-to-close override finalize must run
+        // at the 15:25 flatten even when the overridden position was the last one open.
+        await updateShadowManagement({
           rows: symRows,
           slugById: new Map(symChannels.map((c) => [c.id, c.slug])),
+          sym,
           chain, sessionBars,
           atr: computeFeatures(sessionBars, sessionBars.length - 1).atr,
           etMin: barMin, minutesToClose,

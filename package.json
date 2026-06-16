@@ -65,6 +65,7 @@
     "repair-bars-archive": "tsx scripts/repair-bars-archive.ts",
     "verify-bars-archive": "tsx scripts/verify-bars-archive.ts",
     "day-report": "tsx --env-file=.env.local scripts/day-report.ts",
+    "override-scorecard": "tsx scripts/override-scorecard.ts",
     "mfe-drift": "tsx --env-file=.env.local scripts/mfe-drift.ts",
     "cron:diff": "tsx --env-file=.env.local scripts/cron-deploy.ts",
     "cron:deploy": "tsx --env-file=.env.local scripts/cron-deploy.ts --deploy",

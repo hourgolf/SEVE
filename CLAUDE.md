@@ -9,24 +9,37 @@ durable context for a new session. Read it first.
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
 ## SESSION HANDOFF — 2026-06-15 MONDAY OPEN (CHOP-DETECTOR REPURPOSE → ORB RESURRECTION CANDIDATE) — READ FIRST
-**⚑ NEXT-SESSION BUILD (operator greenlit, deferred to a fresh session) — the OVERRIDE COUNTERFACTUAL /
-"did the human beat the ride" scorecard.** Operator manually closed both PB trades 06-15 (pb-ride +$428
-`manual:reversal`, pb-ride-2 +$320 `manual:target`); I claimed "we lose the data" — WRONG. The decision +
-reason ARE on the row (`positions.close_reason`), the day-report already reconstructs peak/MFE/giveback from
-`option_quotes`, and the quotes keep flowing after a close. **I reconstructed ride-to-close from `option_quotes`
-(captured_at/mid, 7d retention → run SAME-WEEK; −50% stop = mid ≤ 0.5×entry, native flatten ~15:25 ET = 19:25
-UTC in EDT): pb-ride ride-to-close = −$52 (drifted below entry by the flatten), pb-ride-2 = −$214 (gave it ALL
-back to the −50% stop — the 0DTE gamma murder weapon, LIVE). So the operator's overrides BEAT ride-to-close by
-~$1,014 today (+$748 vs −$266).** THE GAP: `worker/src/shadowManage.ts` runs a managed-vs-actual what-if but
-DELIBERATELY SKIPS ride channels ("unmanaged — intentionally not tracked", ~line 49) — so the ride channels,
-where overrides matter most, get NO shadow, and the "ride wins" verdict (a backtest prior) is never tested
-against live overrides. **BUILD: (1) day-report counterfactual column — per closed trade, reconstruct
-ride-to-close (hold to native flatten / −50% stop) AND the managed-exit from option_quotes, show Δ vs actual;
-(2) an accumulating override SCORECARD (does the operator's manual close systematically beat ride-to-close over
-N trades — the LIVE scalp-twin, vs the one-off backtest study); (3) optionally extend shadowManage to track
-ride channels' ride-vs-override delta live.** Frame: ride-to-close is a hypothesis the tape keeps testing, not
-dogma — one giveback day (today) doesn't overturn the distribution where the convex tail pays, but the running
-tally is the only honest arbiter. Today's numbers are the anchor to verify the reconstruction.
+**✅ OVERRIDE COUNTERFACTUAL / "did the human beat the ride" scorecard — BUILT 2026-06-15 (all 4 items).**
+Reconstructs ride-to-close from `option_quotes` (the stream keeps flowing AFTER an early manual close;
+−50% stop = mid ≤ 0.5×entry, native flatten 15:25 ET = `flattenMtc 35` in pullback.ts, EXACT not approximate)
+and tallies it against the operator's actual exits. **Anchors reproduced EXACTLY:** pb-ride ride-to-close
+−$54 (handoff said −$52, the 1-tick flatten-second), pb-ride-2 −$214 (hit the −50% stop); the two PB overrides
+beat ride-to-close +$748 vs −$268 = **Δ +$1,016** (handoff ~$1,014). SHIPPED:
+- **(1) day-report counterfactual** (`scripts/day-report.ts`) — per closed trade an `override counterfactual`
+  section: actual / ride-to-close / Δ + WON/LOST, marking operator overrides (`close_reason` manual/manual:*).
+- **(2) accumulating SCORECARD** — a durable, re-run-safe ledger (`scripts/override-ledger.ts`, keyed by
+  position id → `data/override-ledger.json`, **gitignored = operator-local**, upserted SAME-WEEK since quotes
+  prune 7d) + an `OVERRIDE SCORECARD` (N / Σactual / Σride / ΣΔ / beat-rate, by close-reason tag + by channel).
+  Standalone `npm run override-scorecard` reads the ledger (no DB). ⚠ baseline = uniform hold-to-close: NATIVE
+  for ride channels (pb-ride), a pure-hold REFERENCE for scalper twins (grind) — read the by-channel cut, the
+  caveat is printed.
+- **(1b) managed-exit shadow** — day-report surfaces the existing `shadowManage` `MGMT managed-vs-actual` events
+  (no offline manage.ts replay; for ride channels managed-exit ≡ ride-to-close so they collapse). En route this
+  found+fixed a **latent bug: the day-report `events` fetch hit PostgREST's 1000-row cap UNORDERED** → late-day
+  exit reasons AND MGMT shadows silently dropped on busy days (1828 events 06-15); now paginated.
+- **(3) shadowManage RIDE extension (`worker/src/shadowManage.ts` + `store.ts` + `index.ts`)** — the LIVE,
+  cloud-durable twin: ride channels are now TRACKED while open; an OVERRIDDEN ride position is reconstructed at
+  the flatten and written as a `RIDE <slug> <occ> — ride X vs actual Y (Δ)` shadow event (meta carries
+  ride/actual/delta/override). Shadow-only (reads + `writeShadowEvent`, double-guarded by the call-site + cycle
+  try/catch → ZERO trade-path impact). Also fixed a latent **cross-symbol finalize bug** (the module-global
+  `tracked`/`rideTracked` maps weren't symbol-scoped → a SPY position could be mis-finalized during the QQQ pass;
+  necessary because the `if(symRows.length)` call-site guard was dropped so the deferred finalize runs at 15:25
+  even when the overridden position was the last one open). ⚠ **DEPLOY-AND-WATCH (can't verify the armed worker
+  locally):** auto-deploys on push (Railway) — Monday watch the worker log for `ride-shadow … OVERRIDE` lines
+  and `events.message like 'stream-shadow: RIDE%'` after the 15:25 flatten on any ride-channel override.
+Frame: ride-to-close is a hypothesis the tape keeps testing — one giveback day doesn't overturn the
+distribution where the convex tail pays; the running tally is the only honest arbiter. ⚠ **the ledger has 1
+day (N=4) — it's an anchor, not a verdict; keep running day-report SAME-WEEK to accrue N.**
 
 **Open-day config (via MCP, desk flat at the bell):** (1) **pb-ride mute was BACKWARDS** — `pb-ride`
 (validated 1DTE) was muted and `pb-ride-2` (the *refuted* 0DTE) was live → **swapped**: pb-ride live,
