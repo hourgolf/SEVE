@@ -135,7 +135,9 @@ export async function reconstructRideToClose(occ: string, entry: number, qty: nu
   const rideStop = !!stop;
   const rideExit = rideStop ? stopLevel : Number((last as any).mid);
   const ride = (rideExit - entry) * qty * 100;
-  const flattenMs = Date.parse(flattenIso);
+  // staleness reference = the UN-graced flatten (the +30s grace applies only to the query
+  // bound) — exact parity with day-report, which splits FLATTEN_MS (reach) vs +30s (bound).
+  const flattenMs = Date.parse(flattenIso) - 30_000;
   const reached = rideStop || (last != null && flattenMs - Date.parse((last as any).captured_at) < 6 * 60_000);
   return { ride, rideStop, rideOk: reached };
 }

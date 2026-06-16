@@ -132,6 +132,6 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
     const actualPnl = Number(actual.realized_pnl ?? 0);
     const delta = actualPnl - r.ride;              // >0 ⇒ the override BEAT ride-to-close
     info(`ride-shadow ${rt.slug} ${rt.occ} OVERRIDE — ride ${sgn(r.ride)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`);
-    void writeShadowEvent(`RIDE ${rt.slug} ${rt.occ} — ride ${sgn(r.ride)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`, { slug: rt.slug, occ: rt.occ, ride: Math.round(r.ride), actual: Math.round(actualPnl), delta: Math.round(delta), stopHit: r.rideStop, override: true });
+    void writeShadowEvent(`RIDE ${rt.slug} ${rt.occ} — ride ${sgn(r.ride)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`, { slug: rt.slug, occ: rt.occ, ride: Math.round(r.ride), actual: Math.round(actualPnl), delta: Math.round(actualPnl) - Math.round(r.ride), stopHit: r.rideStop, override: true });
   }
 }

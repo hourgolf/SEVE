@@ -15,7 +15,7 @@
 //  (worker, deferred — it has the service-role write + sees every cycle).
 // ============================================================================
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "fs";
 import { dirname } from "path";
 
 export interface LedgerEntry {
@@ -43,7 +43,11 @@ export function loadLedger(path = LEDGER_PATH): Record<string, LedgerEntry> {
   try {
     return JSON.parse(readFileSync(path, "utf8")) as Record<string, LedgerEntry>;
   } catch {
-    return {}; // a corrupt ledger fails SAFE — start fresh rather than crash the report
+    // Don't SILENTLY start fresh — that would let one bad parse make the next upsert overwrite
+    // the whole accrued tally (gitignored = no recovery). Preserve the corrupt file + warn loudly.
+    try { renameSync(path, `${path}.corrupt`); } catch { /* best-effort */ }
+    console.error(`⚠ override-ledger: ${path} was unreadable — moved to ${path}.corrupt; starting fresh`);
+    return {};
   }
 }
 
@@ -55,7 +59,11 @@ export function upsertLedger(entries: LedgerEntry[], path = LEDGER_PATH): { adde
     led[e.id] = e; // re-running an old same-week date refreshes the reconstruction in place
   }
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(led) + "\n");
+  // Atomic write (temp + rename on the same fs) — a crash mid-write can never leave a
+  // half-written ledger that the next loadLedger would discard, wiping the accumulation.
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(led) + "\n");
+  renameSync(tmp, path);
   return { added, updated };
 }
 

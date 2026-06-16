@@ -396,13 +396,13 @@ async function main() {
     }
     const dayOvr = recon.filter((t) => isOverride(t) && t.rideOk);
     if (dayOvr.length) {
-      const a = dayOvr.reduce((s, t) => s + t.pnl, 0), rd = dayOvr.reduce((s, t) => s + t.ride!, 0);
+      const a = dayOvr.reduce((s, t) => s + Math.round(t.pnl), 0), rd = dayOvr.reduce((s, t) => s + Math.round(t.ride!), 0);
       const w = dayOvr.filter((t) => t.rideDelta! > 0).length;
       console.log(`  ── today's overrides: ${dayOvr.length} · actual ${sgn(a)} vs ride ${sgn(rd)} · Δ ${sgn(a - rd)} · beat ride ${w}/${dayOvr.length}`);
       const entries: LedgerEntry[] = dayOvr.map((t) => ({
         id: t.id, date: DATE, slug: t.slug, name: t.name, occ: t.occ, cp: t.cp, strike: t.strike, qty: t.qty,
         closeReason: t.closeReason, tag: t.closeReason?.match(/^manual:(.+)$/)?.[1] ?? null,
-        actual: Math.round(t.pnl), ride: Math.round(t.ride!), delta: Math.round(t.rideDelta!), stopHit: t.rideStop,
+        actual: Math.round(t.pnl), ride: Math.round(t.ride!), delta: Math.round(t.pnl) - Math.round(t.ride!), stopHit: t.rideStop, // delta from the rounded fields → ΣΔ == Σactual−Σride
         recordedAt: new Date().toISOString(),
       }));
       const { added, updated } = upsertLedger(entries);
