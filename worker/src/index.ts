@@ -44,6 +44,7 @@ const peakMidByKey = new Map<string, number>();
 // unique (the ticker is in the OCC root) so account-wide reads stay shared.
 const barsBySym = new Map<string, BarStore>(SYMBOLS.map((s) => [s, new BarStore(config.barHistory)]));
 const chainBySym = new Map<string, ChainStore>(SYMBOLS.map((s) => [s, new ChainStore()]));
+const gammaLogged = new Set<string>(); // `${sym}|${etDate}` — once-per-day gamma-open diagnostic snapshot
 let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[] } = { fund: null, channels: [] };
 let reloadPending = false;
 let cycling = false;
@@ -153,6 +154,26 @@ async function cycle(trigger: string): Promise<void> {
       const minutesToClose = Math.max(0, RTH_CLOSE - barMin);
       await refreshChain(sym);
       const chain = chainBySym.get(sym)!;
+
+      // ---- gamma-open diagnostic (frontier #3, SHADOW-ONLY collect-forward) ----
+      // Once/day at ~9:35, snapshot the 0DTE ATM implied move (straddle/spot) + ATM call delta —
+      // a live-only gamma-regime number (no historical Databento greeks, so it can only accrue
+      // forward). Correlate vs day P&L / per-ride R after ~10 sessions to decide if a gamma gate is
+      // worth proposing. Pure event write, double-guarded — zero trade-path impact.
+      try {
+        const gk = `${sym}|${todayET}`;
+        if (barMin >= 575 && barMin <= 600 && !gammaLogged.has(gk)) {
+          gammaLogged.add(gk);
+          const spot = lastSession.close, k = Math.round(spot);
+          const call = chain.byOcc(alpaca.occSymbol(sym, todayET, k, "call"));
+          const put = chain.byOcc(alpaca.occSymbol(sym, todayET, k, "put"));
+          if (call && put && call.mid > 0 && put.mid > 0) {
+            const imPct = ((call.mid + put.mid) / spot) * 100;
+            void store.writeShadowEvent(`gamma-open ${sym} — im ${imPct.toFixed(2)}% delta ${call.delta != null ? call.delta.toFixed(2) : "?"} spot ${spot.toFixed(2)}`,
+              { kind: "gamma-open", sym, etMin: barMin, spot: Math.round(spot * 100) / 100, strike: k, callMid: call.mid, putMid: put.mid, impliedMovePct: Math.round(imPct * 1000) / 1000, callDelta: call.delta, putDelta: put.delta });
+          }
+        }
+      } catch (e) { warn(`gamma-open[${sym}] failed — ${(e as Error).message}`); }
 
       const ctx: DecisionCtx = {
         sessionBars, chain, fund: cfg.fund, equity: account.equity, todayET,
