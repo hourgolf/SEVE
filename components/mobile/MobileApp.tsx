@@ -17,6 +17,7 @@ import { Bezel } from "@/components/console/hw/Bezel";
 import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
+import { ForensicsPanel } from "@/components/console/ForensicsPanel";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { DayBooksStrip } from "@/components/console/DayBooksStrip";
 import { EventLog } from "@/components/EventLog";
@@ -207,6 +208,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             </Bezel>
             <DailyAutopsyPanel strategists={desk.strategists} />
             <WeeklyAutopsyPanel strategists={desk.strategists} />
+            <ForensicsPanel />
           </>
         )}
 

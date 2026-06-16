@@ -62,9 +62,22 @@ VALIDATED.** Only the post-review faithful sim gets this right. ⚠ Known gaps (
 entries roll past the cutoff to 1DTE live); other channels' last-31-min entries are 0DTE-modeled; the power
 +100% giveback trail isn't modeled; engine `minutesToClose` is last-bar-relative (off-by-≤1 on full sessions).
 Standing fidelity upgrade = serve the 1DTE chain for cutoff entries (mirror the multidte path) — a follow-on.
-Run after the session settles (the live `option_quotes` flush makes an intraday run shift). ⚠ override
-counterfactual + benched-sim are research/forensics tooling + engine backtest additions — NONE touches the
-Vercel app or the Railway worker's trade path (the override build's worker bits deployed separately).
+Run after the session settles (the live `option_quotes` flush makes an intraday run shift).
+
+**✅ §03 "SHADOW & OVERRIDE" DASHBOARD PANEL — BUILT 2026-06-15 (operator: "where does this live? I'm not
+seeing it").** The forensics were CLI/DB-only (day-report terminal + the local ledger); the operator wanted it
+ON the dashboard. Now a §03 panel (`components/console/ForensicsPanel.tsx`, desktop + mobile Desk tab) renders
+the OVERRIDE SCORECARD (N / actual-vs-ride / Δ / beat-rate, by-channel + by-tag on expand) + BENCHED would-be
+vs live (per-channel, Σ, "cull validated"). **Data path (the CLI can't write — anon/read-only + the benched sim
+needs the engine):** day-report computes the payload and POSTs it to a NEW service-role route
+`/api/forensics-report` (x-push-secret = PUSH_SEND_SECRET, mirrors push-send) → `forensics_reports` table
+(`37_forensics_reports.sql` APPLIED; one row/ET-date, jsonb payload). Panel reads it via `useForensicsReport`
+(anon). ⚠ **the publish is OPT-IN: day-report needs `APP_URL` + `PUSH_SECRET` in `.env.local`** (the same vars
+the worker uses) or it skips publishing (terminal report unaffected) — without them the panel shows the last
+published row (06-15 is seeded). Preview-verified both breakpoints (expand + mobile). Caught in review: the table
+must `grant select` to BOTH anon AND authenticated (a signed-in operator reads as `authenticated` → anon-only =
+empty panel; mirrors daily_reports). ⚠ NOW the forensics DO touch the Vercel app (this panel + route); the
+benched-sim engine/CLI bits still don't touch the Railway worker's trade path.
 
 **Open-day config (via MCP, desk flat at the bell):** (1) **pb-ride mute was BACKWARDS** — `pb-ride`
 (validated 1DTE) was muted and `pb-ride-2` (the *refuted* 0DTE) was live → **swapped**: pb-ride live,

@@ -29,6 +29,7 @@ import { PushToggle } from "@/components/console/PushToggle";
 import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
+import { ForensicsPanel } from "@/components/console/ForensicsPanel";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
 import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { padCode } from "@/components/mobile/MixerPads";
@@ -291,6 +292,7 @@ export function DesktopSurface({
           <div className="col"><DailyAutopsyPanel strategists={desk.strategists} /></div>
           <div className="col"><WeeklyAutopsyPanel strategists={desk.strategists} /></div>
         </div>
+        <div style={{ marginTop: 14 }}><ForensicsPanel /></div>
         <div className="grid grid--live grid--even" style={{ marginTop: 14 }}>
           <div className="col">
             <SignalsTape signals={feed.signals} />

@@ -1441,6 +1441,16 @@ td.clk.sel {
 }
 .au-fund .pos { color: var(--green); }
 .au-fund .neg { color: var(--red); }
+.au-fund b.pos { color: var(--green); }
+.au-fund b.neg { color: var(--red); }
+
+/* Shadow & Override (forensics) panel rows */
+.fx-rows { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 2px; }
+.fx-row { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.fx-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-mid { font-family: var(--mono); font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fx-note { font-size: 10.5px; color: var(--amber); font-style: italic; }
+.fx-foot { font-family: var(--mono); font-size: 10px; color: var(--muted-2); margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
 
 .au-channels { display: flex; flex-direction: column; gap: 8px; }
 .au-ch { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }

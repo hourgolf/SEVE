@@ -19,8 +19,8 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { upcomingEvents, tableHorizonDays } from "../engine/market-events";
-import { upsertLedger, loadLedger, scorecardLines, LEDGER_PATH, type LedgerEntry } from "./override-ledger";
-import { benchedVsLive } from "./benched-sim";
+import { upsertLedger, loadLedger, scorecardLines, scorecardData, LEDGER_PATH, type LedgerEntry } from "./override-ledger";
+import { benchedVsLive, type BenchedVsLive } from "./benched-sim";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
@@ -90,6 +90,23 @@ async function reconstructRide(occ: string, entry: number, qty: number, openedAt
   // a stale last-mid would fabricate the ride). Stop-hit rides are flatten-independent.
   const reached = rideStop || (last != null && FLATTEN_MS - Date.parse(last.captured_at) < 6 * 60_000);
   return { ride, rideStop, rideOk: reached };
+}
+
+// Publish the computed forensics to the §03 dashboard panel (best-effort, env-gated). The CLI
+// is anon/read-only, so it POSTs to the service-role route. Needs APP_URL + PUSH_SECRET in
+// .env.local (the same vars the worker uses); absent → skipped, the terminal report is unaffected.
+async function publishForensics(date: string, payload: unknown): Promise<string> {
+  const url = process.env.APP_URL, secret = process.env.PUSH_SECRET;
+  if (!url || !secret) return "skipped (set APP_URL + PUSH_SECRET in .env.local to publish)";
+  try {
+    const r = await fetch(`${url.replace(/\/$/, "")}/api/forensics-report`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-push-secret": secret },
+      body: JSON.stringify({ date, payload }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    return r.ok ? "published to dashboard ✓" : `publish failed (${r.status})`;
+  } catch (e) { return `publish failed (${(e as Error).message})`; }
 }
 
 async function main() {
@@ -437,8 +454,9 @@ async function main() {
   // Replays each benched (draft) channel's REAL strategy + exits on today's real NBBO with
   // its real config (scripts/benched-sim.ts) — the live-day equivalent of the cull's backtest.
   // Same-week only (option_quotes 7d); sims only channels that signaled (rest traded nothing).
+  let bvl: BenchedVsLive | null = null;
   try {
-    const bvl = await benchedVsLive(DATE);
+    bvl = await benchedVsLive(DATE);
     if (bvl.sameWeek) {
       console.log(`\nbenched would-be vs live actual (cut channels — did they earn the bench?)`);
       if (!bvl.benched.length) console.log(`  no benched channel signaled today${bvl.skipped.length ? ` (${bvl.skipped.length} silent)` : ""}`);
@@ -450,6 +468,14 @@ async function main() {
   } catch (e) {
     console.log(`\nbenched would-be vs live: failed (${(e as Error).message})`);
   }
+
+  // ---- publish to the §03 dashboard panel (override scorecard + benched-vs-live) ----------
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    overrideScorecard: scorecardData(loadLedger()),
+    benchedVsLive: bvl ? { sameWeek: bvl.sameWeek, benched: bvl.benched, skipped: bvl.skipped, benchedTotal: bvl.benchedTotal, liveTotal: bvl.liveTotal } : null,
+  };
+  console.log(`\n  dashboard: ${await publishForensics(DATE, payload)}`);
 
   console.log("");
 }

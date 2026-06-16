@@ -69,6 +69,35 @@ export function upsertLedger(entries: LedgerEntry[], path = LEDGER_PATH): { adde
 
 const sgn = (v: number) => (v >= 0 ? "+" : "") + Math.round(v);
 
+// Structured tally for the dashboard payload (the §03 panel) — same math as scorecardLines,
+// shaped as data instead of text so the panel renders it natively.
+export interface ScorecardCut { key: string; n: number; wins: number; delta: number }
+export interface ScorecardData {
+  n: number; actual: number; ride: number; delta: number; wins: number; span: string;
+  byTag: ScorecardCut[]; byChannel: ScorecardCut[];
+}
+export function scorecardData(led: Record<string, LedgerEntry>): ScorecardData {
+  const rows = Object.values(led);
+  const cut = (key: (r: LedgerEntry) => string): ScorecardCut[] => {
+    const by = new Map<string, LedgerEntry[]>();
+    for (const r of rows) { const k = key(r); by.set(k, [...(by.get(k) ?? []), r]); }
+    return [...by.entries()]
+      .map(([k, rs]) => ({ key: k, n: rs.length, wins: rs.filter((r) => r.delta > 0).length, delta: Math.round(rs.reduce((s, r) => s + r.delta, 0)) }))
+      .sort((a, b) => b.delta - a.delta);
+  };
+  const dates = rows.map((r) => r.date).sort();
+  return {
+    n: rows.length,
+    actual: Math.round(rows.reduce((s, r) => s + r.actual, 0)),
+    ride: Math.round(rows.reduce((s, r) => s + r.ride, 0)),
+    delta: Math.round(rows.reduce((s, r) => s + r.delta, 0)),
+    wins: rows.filter((r) => r.delta > 0).length,
+    span: dates.length ? (dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]}…${dates[dates.length - 1]}`) : "",
+    byTag: cut((r) => r.tag ?? "untagged"),
+    byChannel: cut((r) => r.name),
+  };
+}
+
 // The running tally + the "which instinct beats the ride" cuts (by close-reason tag,
 // by channel). Pure formatting over the ledger — no DB, so the standalone
 // `npm run override-scorecard` and the day-report share one definition.
