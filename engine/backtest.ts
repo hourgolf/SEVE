@@ -22,6 +22,7 @@ import { computeFeatures, riskGovernor } from "./engine";
 import { DEFAULT_COST_MODEL, fillWithCost, type CostModel } from "./cost";
 import { buildSizingModel, scalarFor, loadSizingSpec, featuresForSizing, type SizingFeatures } from "./sizing";
 import { openManaged, stepManaged, costGatePass, type ManagedState } from "./manage";
+import { decidePyramidAdd } from "./pyramid";
 import type { Management } from "../lib/desk/strategySpec";
 
 // Zero-cost model for `--gross` runs (mid fills, no spread/slippage/fees).
@@ -397,28 +398,33 @@ export function simulateSession(
     }
 
     // PYRAMID: add to a winning single-leg position when a fresh continuation signal fires.
-    // Runs only when held at the START of this bar (!wasFlat → never the entry bar) and not
-    // exiting. Adds the SAME contract (pos.strike/optType) — "more of the winner", not a new
-    // strike — sized as a fresh risk-unit; updates the weighted-avg entry so the existing exit
-    // math books the whole stack correctly. Never averages down (en.fill must exceed the last lot).
-    if (pyramid && pos && !pos.legs && !wasFlat && (!intent || intent.kind !== "exit") && pyramidLots.length <= pyramid.maxAdds) {
-      const cont = evaluate(f, null); // the entry setup as-if-flat = the continuation trigger
-      if (cont && cont.kind === "enter" && cont.direction === pos.optType) {
-        const q = findQuote(chain, pos.strike, pos.optType);
-        if (q) {
-          const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);
-          const base = pyramidLots[0].entryFill, last = pyramidLots[pyramidLots.length - 1].entryFill;
-          const appreciatedPct = base > 0 ? ((en.fill - base) / base) * 100 : 0;
-          if (en.fill > last && appreciatedPct >= pyramid.minProfitPct) {
-            const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false, sizingModel ? sizingModel(featuresForSizing(f)) : 1);
-            if (r.ok && r.qty > 0) {
-              const newQty = pos.qty + r.qty;
-              pos.entryPrice = (pos.entryPrice * pos.qty + en.fill * r.qty) / newQty; // weighted avg → exit math unchanged
-              pos.qty = newQty;
-              pos.entryEdgeUsd = (pos.entryEdgeUsd ?? 0) + en.edgeUsd * r.qty;
-              pyramidLots.push({ qty: r.qty, entryFill: en.fill });
-            }
-          }
+    // The add-GATE is the shared engine/pyramid.ts predicate (the SAME logic the live-worker
+    // shadow will use → no drift). The fill + riskGovernor sizing stay HERE (engine-specific).
+    // The `eligible` guard preserves the original short-circuit (evaluate call-count unchanged)
+    // so the refactor is byte-identical — verified by pb-selftest + the pyramid-probe numbers.
+    if (pyramid && pos && !pos.legs) {
+      const eligible = !wasFlat && (!intent || intent.kind !== "exit") && pyramidLots.length <= pyramid.maxAdds;
+      const cont = eligible ? evaluate(f, null) : null; // the entry setup as-if-flat = the continuation trigger
+      const dir = cont?.kind === "enter" ? cont.direction ?? null : null;
+      const q = dir != null && dir === pos.optType ? findQuote(chain, pos.strike, pos.optType) : null;
+      if (q) {
+        const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);
+        const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false, sizingModel ? sizingModel(featuresForSizing(f)) : 1);
+        const dec = decidePyramidAdd({
+          cfg: pyramid,
+          pos: { optType: pos.optType, qty: pos.qty, entryPrice: pos.entryPrice },
+          lots: pyramidLots,
+          heldAtPriorBar: !wasFlat,
+          exiting: !!intent && intent.kind === "exit",
+          continuationDir: dir,
+          addFill: en.fill,
+          sizeQty: r.ok ? r.qty : 0,
+        });
+        if (dec.add) {
+          pos.entryPrice = dec.newEntryPrice; // weighted avg → exit math unchanged
+          pos.qty = dec.newQty;
+          pos.entryEdgeUsd = (pos.entryEdgeUsd ?? 0) + en.edgeUsd * dec.qty;
+          pyramidLots.push({ qty: dec.qty, entryFill: en.fill });
         }
       }
     }
