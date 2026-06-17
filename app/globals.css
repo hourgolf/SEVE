@@ -18,8 +18,16 @@
   --red: #f0563f;
   --amber: #ffb224;
   --blue: #3b9eff;
+  /* Recessed LCD "screen" surface — theme-INVARIANT (stays near-black in both
+     the cream and the blackout themes). Promoted from baked .panel/.phead hex
+     so the screens read identically regardless of chassis theme. */
+  --lcd: #14181b;
+  --lcd-2: #0f1214;
+  --lcd-edge: #0a0a0b;
+  --plate-ink: #d7d5cb;
   --mono: "JetBrains Mono", ui-monospace, monospace;
   --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --wordmark: "Inter", "IBM Plex Sans", system-ui, sans-serif;
 }
 
 /* ---------- shared top navigation (dark theme, all routes) ---------------- */
@@ -427,9 +435,9 @@ body {
    corner screws (instrument panels only — keeps dense panels clean). */
 .panel {
   position: relative;
-  background: linear-gradient(180deg, #14181b, #0f1214); /* recessed dark LCD screen */
+  background: linear-gradient(180deg, var(--lcd), var(--lcd-2)); /* recessed dark LCD screen */
   color: var(--text, #e9eef0); /* light default so uncolored cells read (.pos/.neg override) */
-  border: 1px solid #0a0a0b; /* black molded edge */
+  border: 1px solid var(--lcd-edge); /* black molded edge */
   border-radius: 9px;
   overflow: hidden;
   min-width: 0;
@@ -453,7 +461,7 @@ body {
   letter-spacing: 1.2px;
   /* Silkscreen label on the molded plate band — explicit light colour so the
      dark panels don't inherit the cream chassis's near-black text. */
-  color: #d7d5cb;
+  color: var(--plate-ink);
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
   flex: 1 1 auto;
   min-width: 0;

@@ -16,6 +16,13 @@
   --ink: #2a2a28; /* dark text on cream */
   --ink-soft: #55534c;
 
+  /* --- dark hardware surface (the master strip) — themeable so it can cool
+     from this warm brown to graphite under [data-theme="blackout"]. Other
+     neutral-dark hw surfaces (xport/pad/mode/kill) are promoted with their
+     component restyle in P4. --- */
+  --master-bg-1: #20140a;
+  --master-bg-2: #160d06;
+
   /* --- knob metal --- */
   --knob-metal: #2c2d30;
   --knob-metal-hi: #54565c;
@@ -908,7 +915,7 @@
 
 /* ---------- master strip -------------------------------------------------- */
 .master {
-  background: linear-gradient(180deg, #20140a, #160d06);
+  background: linear-gradient(180deg, var(--master-bg-1), var(--master-bg-2));
   border: 1px solid #000;
   border-top: 3px solid var(--stripe-orange);
   border-radius: 10px;

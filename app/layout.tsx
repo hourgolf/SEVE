@@ -20,7 +20,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* IBM Plex Sans + JetBrains Mono — same fonts as the reference. */}
+        {/* IBM Plex Sans + JetBrains Mono — same fonts as the reference.
+            Inter (800) is the cream-TE wordmark face (see --wordmark). */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -28,7 +29,7 @@ export default function RootLayout({
           crossOrigin=""
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@600;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>
