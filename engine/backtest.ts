@@ -144,15 +144,27 @@ export function simulateSession(
   // ENTRY COST GATE (the live worker's COST_GATE_RATIO). Veto an entry whose expected
   // ~1·ATR premium move doesn't clear the round-trip cost by minMoveToCostRatio.
   // Single-leg simple path (the managed path uses management.costGate). undefined = off.
-  entryCostGate?: { minMoveToCostRatio: number },
+  // gateCostModel: OPTIONAL separate slippage for the GATE decision only — the live worker's
+  // gate uses 0.25 tick (decide.ts) while the FILL model (`costModel`) may be the audited
+  // 1-tick. Absent → the gate uses `costModel` (byte-identical with every prior caller).
+  entryCostGate?: { minMoveToCostRatio: number; gateCostModel?: CostModel },
   // CONVICTION SIZING (engine/sizing.ts): per-bar feature record → RISK multiplier, applied at
   // every riskGovernor call. undefined → scalar 1.0 (flat RISK, byte-identical). The caller bakes
   // in session-level features (gap) + the clamp, so this is a ready scalar function.
   sizingModel?: (f: SizingFeatures) => number,
+  // PYRAMIDING ("double down as winners win"): while holding a single-leg winner, when a
+  // FRESH continuation signal fires (evaluate as-if-flat → enter, same direction) and the
+  // contract has appreciated ≥ minProfitPct from the base lot AND above the last add (NEVER
+  // average down), ADD a riskGovernor-sized lot of the SAME contract. The whole stack exits
+  // together at the −50%-of-weighted-avg stop / target / flatten — so adds RATCHET the stop
+  // up (protecting gains) but FATTEN the loser if the add bar marks the top. undefined → off,
+  // byte-identical with every prior caller (no lot is ever added). Single-leg only.
+  pyramid?: { maxAdds: number; minProfitPct: number },
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
   let ms: ManagedState | null = null; // managed (smart) position
+  let pyramidLots: { qty: number; entryFill: number }[] = []; // lots of the open stack (base + adds); only populated when `pyramid` set
   let dayPnl = 0;
   let lateEntries = 0; // entries opened inside the late-leans gate window (this session)
   const cm = gross ? GROSS_COST : costModel;
@@ -327,6 +339,7 @@ export function simulateSession(
         riskUsd: pos.legs ? (pos.maxLossUsd ?? 0) * pos.qty : 0.5 * pos.entryPrice * pos.qty * 100,
       });
       pos = null;
+      if (pyramid) pyramidLots = []; // stack closed
     } else if (!pos && intent && intent.kind === "enter" && !lateBlocked) {
       if (intent.legs?.length) {
         // MULTI-LEG: resolve each leg's strike off ATM, price it (long→ask, short→bid),
@@ -361,7 +374,7 @@ export function simulateSession(
       } else if (intent.direction) {
         const strike = Math.round(f.close);
         const q = findQuote(chain, strike, intent.direction);
-        if (q && (!entryCostGate || gross || costGatePass(q, f.atr, entryCostGate.minMoveToCostRatio, costModel))) {
+        if (q && (!entryCostGate || gross || costGatePass(q, f.atr, entryCostGate.minMoveToCostRatio, entryCostGate.gateCostModel ?? costModel))) {
           const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false, sizingModel ? sizingModel(featuresForSizing(f)) : 1);
           if (r.ok) {
             const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);
@@ -377,6 +390,34 @@ export function simulateSession(
               peakPremium: en.fill, // seed the premium-giveback trail at the entry fill
               entryEdgeUsd: en.edgeUsd * r.qty,
             };
+            if (pyramid) pyramidLots = [{ qty: r.qty, entryFill: en.fill }]; // base lot of the stack
+          }
+        }
+      }
+    }
+
+    // PYRAMID: add to a winning single-leg position when a fresh continuation signal fires.
+    // Runs only when held at the START of this bar (!wasFlat → never the entry bar) and not
+    // exiting. Adds the SAME contract (pos.strike/optType) — "more of the winner", not a new
+    // strike — sized as a fresh risk-unit; updates the weighted-avg entry so the existing exit
+    // math books the whole stack correctly. Never averages down (en.fill must exceed the last lot).
+    if (pyramid && pos && !pos.legs && !wasFlat && (!intent || intent.kind !== "exit") && pyramidLots.length <= pyramid.maxAdds) {
+      const cont = evaluate(f, null); // the entry setup as-if-flat = the continuation trigger
+      if (cont && cont.kind === "enter" && cont.direction === pos.optType) {
+        const q = findQuote(chain, pos.strike, pos.optType);
+        if (q) {
+          const en = gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("buy", q, costModel);
+          const base = pyramidLots[0].entryFill, last = pyramidLots[pyramidLots.length - 1].entryFill;
+          const appreciatedPct = base > 0 ? ((en.fill - base) / base) * 100 : 0;
+          if (en.fill > last && appreciatedPct >= pyramid.minProfitPct) {
+            const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false, sizingModel ? sizingModel(featuresForSizing(f)) : 1);
+            if (r.ok && r.qty > 0) {
+              const newQty = pos.qty + r.qty;
+              pos.entryPrice = (pos.entryPrice * pos.qty + en.fill * r.qty) / newQty; // weighted avg → exit math unchanged
+              pos.qty = newQty;
+              pos.entryEdgeUsd = (pos.entryEdgeUsd ?? 0) + en.edgeUsd * r.qty;
+              pyramidLots.push({ qty: r.qty, entryFill: en.fill });
+            }
           }
         }
       }
