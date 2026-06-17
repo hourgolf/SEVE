@@ -19,7 +19,10 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { upcomingEvents, tableHorizonDays } from "../engine/market-events";
-import { upsertLedger, loadLedger, scorecardLines, scorecardData, LEDGER_PATH, type LedgerEntry } from "./override-ledger";
+import {
+  upsertLedger, loadLedger, scorecardLines, scorecardData, LEDGER_PATH, type LedgerEntry,
+  simulateFoulout, upsertFoulout, loadFoulout, fouloutScorecardLines, fouloutScorecardData, FOULOUT_PATH, type FouloutEntry, type RideLeg,
+} from "./override-ledger";
 import { benchedVsLive, type BenchedVsLive } from "./benched-sim";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
@@ -184,13 +187,15 @@ async function main() {
   // Per-channel executor + arm state (W2 migration: which executor OWNS each channel).
   // NOTE: this is CURRENT config, not the config at trade time — accurate for a
   // same-day report (the normal use), approximate when re-running an old date.
-  const { data: stratRaw } = await sb.from("strategists").select("slug,name,executor,status,strategist_config(muted)");
+  const { data: stratRaw } = await sb.from("strategists").select("slug,name,executor,status,strategist_config(muted,daily_stop_usd)");
   const execBySlug = new Map<string, { executor: string; armed: boolean; muted: boolean }>();
   const nameBySlug = new Map<string, string>();
+  const dailyStopBySlug = new Map<string, number>(); // for the foul-out replay (live decide.ts:304 gate)
   for (const s of (stratRaw ?? []) as any[]) {
     const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
     execBySlug.set(s.slug, { executor: String(s.executor ?? "cron"), armed: s.status === "armed", muted: !!cfg?.muted });
     nameBySlug.set(s.slug, s.name ?? s.slug);
+    dailyStopBySlug.set(s.slug, Number(cfg?.daily_stop_usd ?? 0));
   }
   const execOf = (slug: string) => execBySlug.get(slug)?.executor ?? "cron";
 
@@ -437,6 +442,52 @@ async function main() {
     if (stale.length) console.log(`  ⚠ ${stale.length} override(s) not ledgered — quote stream didn't reach the flatten (re-run earlier in the week / off-chain OCC)`);
   }
 
+  // ---- foul-out-aware re-score (the capital-path correction) --------------------------
+  // The counterfactual above scores each override against an INDEPENDENT ride-to-close —
+  // a per-position "was this exit early?" read. But a channel is ONE-AT-A-TIME (worker
+  // decide.ts: openRows keyed by strategist_id, entry gated on !row), so you can't ride
+  // EVERY override: riding one OCCUPIES the book through its hold and forecloses the later
+  // re-entries that actually booked (slot occupancy), and a bigger ride loss can trip the
+  // daily_stop. This replays the day's legs per channel under those live constraints — the
+  // honest "would riding-as-a-policy have beaten me" (vs the gross sum of phantom
+  // simultaneous rides). It is the modeled answer to "letting a winner bleed fouls out the
+  // player so they can't make it back even with a signal".
+  const overrideSlugs = [...new Set(trades.filter((t) => isOverride(t) && t.rideOk).map((t) => t.slug))];
+  if (overrideSlugs.length) {
+    console.log(`\nfoul-out-aware re-score — can't ride EVERY override (one-at-a-time book): riding occupies the channel + can trip the daily stop, foreclosing the re-entries that actually booked`);
+    console.log(`channel                 trades  actual  ride(gross)  ride(foul)   Δgross   Δfoul    adj   foreclosed`);
+    const fouloutEntries: FouloutEntry[] = [];
+    for (const slug of overrideSlugs) {
+      const chTrades = trades.filter((t) => t.slug === slug);
+      const legs: RideLeg[] = chTrades.map((t) => ({
+        openedMs: Date.parse(t.openedAt),
+        actualCloseMs: Date.parse(t.closedAt),
+        actualPnl: t.pnl,
+        isOverride: isOverride(t) && t.rideOk && t.ride != null, // stale overrides degrade to their actual exit
+        ridePnl: t.ride ?? t.pnl,
+        rideExitMs: t.rideExitMs ?? FLATTEN_MS,
+      }));
+      const stop = dailyStopBySlug.get(slug) ?? 0;
+      const r = simulateFoulout(legs, stop, FLATTEN_MS);
+      const name = nameBySlug.get(slug) ?? slug;
+      const foreclosed = r.blockedSlot || r.blockedStop ? `${r.blockedSlot}slot${r.blockedStop ? `/${r.blockedStop}stop` : ""}` : "—";
+      console.log(
+        `  ${name.padEnd(22)} ${String(chTrades.length).padStart(5)}  ${sgn(r.actualTotal).padStart(6)}  ${sgn(r.rideGross).padStart(9)}  ${sgn(r.rideFoulAware).padStart(8)}  ${sgn(r.deltaGross).padStart(7)} ${sgn(r.deltaFoulAware).padStart(7)} ${sgn(r.foulAdjustment).padStart(6)}   ${foreclosed}`,
+      );
+      fouloutEntries.push({
+        key: `${DATE}|${slug}`, date: DATE, slug, name, dailyStopUsd: stop,
+        nOverrides: legs.filter((l) => l.isOverride).length, nTrades: legs.length,
+        actualTotal: Math.round(r.actualTotal), rideGross: Math.round(r.rideGross), rideFoulAware: Math.round(r.rideFoulAware),
+        deltaGross: Math.round(r.deltaGross), deltaFoulAware: Math.round(r.deltaFoulAware), foulAdjustment: Math.round(r.foulAdjustment),
+        blockedSlot: r.blockedSlot, blockedStop: r.blockedStop, recordedAt: new Date().toISOString(),
+      });
+    }
+    const { added, updated } = upsertFoulout(fouloutEntries);
+    const dg = fouloutEntries.reduce((s, e) => s + e.deltaGross, 0), df = fouloutEntries.reduce((s, e) => s + e.deltaFoulAware, 0);
+    console.log(`  ── today: ride beats you (gross) ${sgn(-dg)} → (foul-aware) ${sgn(-df)} · foul-out adjustment ${sgn(df - dg)} (phantom re-entries riding can't take)`);
+    console.log(`  ── foulout ledger: +${added} new / ${updated} refreshed → ${FOULOUT_PATH}`);
+  }
+
   // ---- managed-exit shadow (shadowManage MGMT) — the OTHER counterfactual --------------
   // For MANAGED channels (a `management` block: scale-out / breakeven / trail) the live
   // worker already runs the managed-vs-actual what-if each cycle and writes a `MGMT …`
@@ -456,6 +507,11 @@ async function main() {
   // ---- override SCORECARD (accumulated — the only honest arbiter) ----------------------
   console.log(`\nOVERRIDE SCORECARD (accumulated — does the manual close systematically beat ride-to-close?)`);
   for (const l of scorecardLines(loadLedger())) console.log(l);
+  // The foul-out-aware companion: the SAME overrides re-scored as ride-AS-A-POLICY on a
+  // one-at-a-time book (you can't ride every re-entry). The gross headline above answers
+  // "was each exit early?"; this answers "would riding have beaten me?".
+  console.log(`\nOVERRIDE SCORECARD — FOUL-OUT-AWARE (ride-as-a-policy: one-at-a-time + daily-stop)`);
+  for (const l of fouloutScorecardLines(loadFoulout())) console.log(l);
 
   // ---- benched would-be vs live (did the cut channels earn their bench today?) ---------
   // Replays each benched (draft) channel's REAL strategy + exits on today's real NBBO with
@@ -480,6 +536,7 @@ async function main() {
   const payload = {
     generatedAt: new Date().toISOString(),
     overrideScorecard: scorecardData(loadLedger()),
+    overrideFouloutScorecard: fouloutScorecardData(loadFoulout()), // capital-path re-score (additive; panel may ignore)
     benchedVsLive: bvl ? { sameWeek: bvl.sameWeek, benched: bvl.benched, skipped: bvl.skipped, benchedTotal: bvl.benchedTotal, liveTotal: bvl.liveTotal } : null,
   };
   console.log(`\n  dashboard: ${await publishForensics(DATE, payload)}`);
