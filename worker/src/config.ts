@@ -115,7 +115,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-13b";
+export const WORKER_VERSION = "stream-2026-06-17a"; // PB take-profit compound + pyramid shadow (Phase A)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
