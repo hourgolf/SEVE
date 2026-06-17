@@ -225,6 +225,7 @@ export interface FastExitCheck {
   row: store.PositionRow;
   slug: string;
   premiumExit?: { profitPct?: number; stopPct?: number };
+  takeProfitPct?: number; // per-channel compound take-profit (ChannelConfig.take_profit_pct); 0 = off
   isPowerTrail: boolean;
   isManual: boolean;
   minutesToClose: number;
@@ -235,6 +236,10 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
   if (!(entry > 0) || !(mark > 0)) return null;
   if (c.isManual) return c.minutesToClose <= policy.MANUAL_BACKSTOP_MIN ? "manual_eod_backstop" : null;
   if (c.premiumExit?.profitPct != null && mark >= entry * (1 + c.premiumExit.profitPct / 100)) return "target_premium";
+  // Per-channel compound take-profit — fires in the ~10s sweep too (NOT only at bar close), so the
+  // +pct target gets the same sub-minute reaction as the −50% stop (the compound thesis is a pop-harvest;
+  // a bar-close-only target would systematically give back intra-bar). Mirrors decide.ts:take_profit_pct.
+  if (c.takeProfitPct != null && c.takeProfitPct > 0 && mark >= entry * (1 + c.takeProfitPct / 100)) return "target_premium";
   if (c.premiumExit?.stopPct != null && mark <= entry * (1 - c.premiumExit.stopPct / 100)) return "stop_premium";
   if (mark <= entry * (1 - policy.PREMIUM_STOP_PCT / 100)) return "premium_stop";
   if (c.isPowerTrail && peak >= entry * policy.POWER_TRAIL_ENGAGE_MULT) {

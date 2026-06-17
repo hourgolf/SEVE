@@ -16,17 +16,30 @@ import { getStrategy } from "../../engine/registry";
 import { specToStrategyDef, specPremiumExit } from "../../engine/specEvaluate";
 import { roundTripCostUsd as engineRoundTrip, type CostModel } from "../../engine/cost";
 import type { Bar, Evaluate, Features, OptType, Position } from "../../engine/types";
+import { decidePyramidAdd } from "../../engine/pyramid"; // shared add-gate (pyramid shadow Phase A → no engine drift)
 import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { policy } from "./config.js";
 import { inEventWindow } from "../../engine/market-events";
 import { etParts, occSymbol, type AlpacaPosition } from "./alpaca.js";
-import { peakMidSince, realizedTodayByChannel, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
+import { peakMidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
 import { entryStateByKey, entryKey } from "./execute.js";
 
 // RTH in ET minutes-since-midnight: 09:30 (570) → 16:00 (960).
 const RTH_OPEN = 570;
 const RTH_CLOSE = 960;
+
+// PYRAMID SHADOW (Phase A) — detect-only, the channels with a REAL convex tail that the
+// pyramid-probe validated (V3/ALT, 4/5 OOS, +30% sweet spot). NEVER places an order — logs
+// what an add WOULD be via writeShadowEvent. minProfitPct/maxAdds MUST match the probe so the
+// graduation-replay (engine vs live PYRAMID events) asserts qty/bar parity. [[compound-vs-ride-verdict]]
+const PYRAMID_SHADOW_SLUGS = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
+const PYRAMID_MIN_PROFIT_PCT = 30;
+const PYRAMID_MAX_ADDS = 3;
+// once-per-(ET-day, slug, occ) dedup (mirror index.ts gammaLogged) — Phase A has a STATIC base lot,
+// so the +30%-off-fixed-base gate re-passes every bar; log only the FIRST crossing so the graduation
+// replay sees 1 shadow event vs the engine's first add (not N duplicates, incl. boot/stale cycles).
+const pyramidShadowLogged = new Set<string>();
 
 // Cost-gate model: real bid/ask ("option_bars" source) + the worker's calibrated
 // slippage/commission. Mirrors the cron dispatcher's roundTripCostUsd, but via
@@ -217,6 +230,15 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     if (profitPct != null && mark >= entryPx * (1 + profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
     else if (stopPct != null && mark <= entryPx * (1 - stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
   }
+  // Per-channel TAKE-PROFIT (compound policy, ChannelConfig.take_profit_pct): exit at +pct%
+  // of premium; the entry path below re-enters on the next signal when flat → compounding.
+  // For channels with NO convex tail (PB: ridden −EV, compound +EV — compound-vs-ride-probe)
+  // this beats riding. Applies to ANY channel incl. BUILTINS (built.premiumExit only covers
+  // compiled specs). Mirrors the engine premiumExit.profitPct (mid-based) → parity by construction.
+  if (pos && row && ch.take_profit_pct > 0 && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0
+      && mark >= entryPx * (1 + ch.take_profit_pct / 100)) {
+    intent = { kind: "exit", reason: "target_premium" };
+  }
   // Flatten by the SESSION close, not the contract expiry. A late-day signal inside
   // the 0DTE open cutoff rolls to a 1DTE (next1DTE) — that roll swings the final 20 min
   // and is meant to CLOSE SAME-DAY, not carry overnight. So only exempt a position held
@@ -333,6 +355,52 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       ...base, action: "enter", reason: intent.reason, direction: dir, occ, qty, blocked,
       detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), gap: ctx.gap != null ? +ctx.gap.toFixed(3) : null, expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close) },
     };
+  }
+
+  // ---- PYRAMID SHADOW (Phase A, V3/ALT only) — detect-only, NEVER enters/adds an order. ----
+  // When a row is open + a fresh SAME-DIRECTION continuation fires (eval AS-IF-FLAT, NOT the
+  // pos-aware intent above) + appreciated ≥ minProfitPct, log what an add WOULD be via the SHARED
+  // engine decidePyramidAdd gate (→ no drift from the backtest) + writeShadowEvent (double-guarded).
+  // `action` stays "hold" → index.ts marks the row, never an order. Phase A has a SINGLE row (no lot
+  // stack) so it detects the FIRST add only; the multi-lot executor + restart-safe weighted-avg = Phase B.
+  if (row && pos && PYRAMID_SHADOW_SLUGS.has(ch.slug) && (!intent || intent.kind !== "exit")) {
+    const cont = built.evaluate(f, null); // as-if-flat continuation trigger
+    const dir = cont?.kind === "enter" ? cont.direction ?? null : null;
+    const q = dir != null ? ctx.chain.byOcc(row.occ_symbol) : null;
+    const ask = q?.ask ?? 0;
+    const logKey = `${ctx.todayET}|${ch.slug}|${row.occ_symbol}`;
+    if (dir != null && ask > 0 && !pyramidShadowLogged.has(logKey)) {
+      // ⚠ Phase-A parity caveats for the graduation replay (all un-shared with the engine, documented
+      // so they're reconciled at Phase B, NOT silently trusted): (1) addFill = raw ask here vs the engine's
+      // cost-adjusted en.fill (~1 tick higher) → the +30% gate can disagree at the boundary; (2) base =
+      // row.avg_entry_price (real Alpaca fill) vs the engine's entry en.fill; (3) wouldQty uses the worker
+      // decide-formula floor(capital_pct/(0.5·ask·100)) (NOT riskGovernor, and ignores the daily-stop latch) —
+      // it equals the engine's floor(2·RISK/(ask·100)) only while capital_pct=RISK & aggression=100.
+      const riskPer = 0.5 * ask * 100;
+      const wouldQty = riskPer > 0 ? Math.max(0, Math.min(Math.floor(ch.capital_pct / riskPer), ch.max_contracts)) : 0;
+      const dec = decidePyramidAdd({
+        cfg: { maxAdds: PYRAMID_MAX_ADDS, minProfitPct: PYRAMID_MIN_PROFIT_PCT },
+        pos: { optType: pos.optType, qty: row.qty, entryPrice: row.avg_entry_price },
+        lots: [{ qty: row.qty, entryFill: row.avg_entry_price }], // single base lot (Phase A)
+        heldAtPriorBar: true, // a row in openRows was opened in a PRIOR cycle
+        exiting: false, // the outer guard already ensured this bar isn't an exit
+        continuationDir: dir,
+        addFill: ask,
+        sizeQty: wouldQty,
+      });
+      if (dec.add) {
+        pyramidShadowLogged.add(logKey); // first crossing only
+        void writeShadowEvent(
+          `PYRAMID ${ch.slug} ${row.occ_symbol} — would add ×${dec.qty} @ ${ask.toFixed(2)} ` +
+            `(base ${row.avg_entry_price.toFixed(2)}, +${dec.appreciatedPct.toFixed(0)}%, dir ${pos.optType})`,
+          {
+            kind: "pyramid-shadow", slug: ch.slug, occ: row.occ_symbol, dir: pos.optType,
+            base: round2(row.avg_entry_price), ask: round2(ask), appreciatedPct: +dec.appreciatedPct.toFixed(2),
+            wouldQty: dec.qty, reason: cont?.kind === "enter" ? cont.reason : "", minToClose: ctx.minutesToClose, spotClose: round2(f.close),
+          },
+        );
+      }
+    }
   }
 
   return { ...base, action: "hold", reason: row ? "open" : "flat", occ: row?.occ_symbol };

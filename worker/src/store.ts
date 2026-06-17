@@ -41,6 +41,11 @@ export interface ChannelConfig {
   // (default); 1 = ALWAYS the next session's expiry (pb-ride — its edge IS the
   // 1DTE time value). Same-day flatten unchanged either way.
   entry_dte: number;
+  // Per-channel TAKE-PROFIT (compound policy, 38_take_profit.sql): exit at +pct% of
+  // premium, then RE-ENTER on the next signal when flat. For channels with NO convex
+  // tail (PB: ridden −EV, compound +EV) compounding beats riding. 0 = off (ride to the
+  // −50% stop / flatten). Mirrors the engine's premiumExit.profitPct (compound-vs-ride-probe).
+  take_profit_pct: number;
 }
 export interface FundState {
   total_capital_usd: number;
@@ -96,6 +101,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       soloed: !!cfg.soloed,
       event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
       entry_dte: Math.max(0, Math.min(1, Number(cfg.entry_dte ?? 0))),
+      take_profit_pct: Math.max(0, Number(cfg.take_profit_pct ?? 0)),
     });
   }
   const fund: FundState | null = fundRow
