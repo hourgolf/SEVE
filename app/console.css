@@ -415,6 +415,7 @@
   cursor: grab;
   user-select: none;
   outline: none;
+  --knob-edge: rgba(0, 0, 0, 0.22); /* subtle rim around the flat TE cap */
 }
 .knob.dragging {
   cursor: grabbing;
@@ -429,11 +430,9 @@
     0 3px 7px rgba(0, 0, 0, 0.6) inset;
 }
 .knob-well {
+  /* TE flat knob: no dark recess — the fill disc IS the knob. */
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 38%, #3a3b3e, #0f1011 78%);
-  box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.6),
-    0 1px 0 rgba(255, 255, 255, 0.07) inset;
+  background: none;
   display: grid;
   place-items: center;
   transition: box-shadow 0.12s;

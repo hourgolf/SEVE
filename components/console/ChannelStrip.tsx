@@ -373,14 +373,14 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
             <Knob value={config.capital_pct} min={0} max={500} step={25}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
               onCommit={(v) => persistConfig(id, { capital_pct: v })}
-              size="md" color={cssColor} label="Risk/trade" format={usd0} />
+              size="md" color={cssColor} cap="var(--knob-cream)" tick="#2a2a24" label="Risk/trade" format={usd0} />
           </div>
           <div className="ch-kunit">
             <LedMeter frac={config.daily_stop_usd / 500} count={22} />
             <Knob value={config.daily_stop_usd} min={0} max={500} step={25}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { daily_stop_usd: v } })}
               onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}
-              size="md" color={cssColor} label="Stop/day" format={usd0} />
+              size="md" color={cssColor} cap="var(--knob-dark)" tick="#d7d5cb" label="Stop/day" format={usd0} />
           </div>
         </div>
 
@@ -433,6 +433,8 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           onCommit={(v) => persistConfig(id, { capital_pct: v })}
           size="md"
           color={cssColor}
+          cap="var(--knob-cream)"
+          tick="#2a2a24"
           label="Risk/trade"
           format={usd0}
         />
@@ -445,6 +447,8 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}
           size="md"
           color={cssColor}
+          cap="var(--knob-dark)"
+          tick="#d7d5cb"
           label="Stop/day"
           format={usd0}
         />
