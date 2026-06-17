@@ -36,6 +36,7 @@ export interface StrategistConfig {
   underlying_stop_pct?: number; // 0 = off; exits when the underlying moves X% against entry
   event_policy?: "standdown" | "ignore"; // scheduled-event (FOMC) posture
   entry_dte?: number; // 0 = today's expiry + cutoff roll; 1 = always next session's expiry
+  take_profit_pct?: number; // 0 = off (ride); >0 = exit at +pct% premium then re-enter (compound)
 }
 
 // A strategist + its live config (strategists ⋈ strategist_config).

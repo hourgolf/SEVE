@@ -38,6 +38,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
   const ustop = config.underlying_stop_pct ?? 0;
   const dte = config.entry_dte ?? 0;
   const eventPolicy = config.event_policy ?? "standdown";
+  const tp = config.take_profit_pct ?? 0;
 
   // Flip-card editor: rename + delete. Opens an overlay over the card.
   const [editing, setEditing] = useState(false);
@@ -185,6 +186,11 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           <span className="cfg-k" title="underlying stop %: exit when the underlying moves this % against entry (0 = off)">U-stop %</span>
           <input className="cfg-num" type="number" inputMode="decimal" min={0} max={2} step={0.05} value={ustop}
             onChange={(e) => setCfg({ underlying_stop_pct: Math.max(0, Math.min(2, Number(e.target.value) || 0)) })} aria-label="underlying stop percent" />
+        </div>
+        <div className="cfg-row">
+          <span className="cfg-k" title="take-profit %: exit at +this % of premium then re-enter on the next signal (compound). 0 = off (ride)">Take-profit %</span>
+          <input className="cfg-num" type="number" inputMode="numeric" min={0} max={300} step={5} value={tp}
+            onChange={(e) => setCfg({ take_profit_pct: Math.max(0, Math.min(300, Math.floor(Number(e.target.value)) || 0)) })} aria-label="take profit percent" />
         </div>
         <div className="cfg-row">
           <span className="cfg-k" title="hidden hard ceiling on contracts per trade">Max contracts</span>
