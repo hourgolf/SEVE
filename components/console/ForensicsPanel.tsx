@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useForensicsReport } from "@/hooks/useForensicsReport";
+import { usePyramidShadow, pyramidName } from "@/hooks/usePyramidShadow";
 
 // §03 "Shadow & Override" panel — renders the deterministic forensics the CLI day-report
 // publishes (forensics_reports): the OVERRIDE SCORECARD (did the human's manual close beat
@@ -11,9 +12,12 @@ import { useForensicsReport } from "@/hooks/useForensicsReport";
 const EXP_KEY = "seve-forensics-expanded";
 const shortDate = (d: string) => d.slice(5); // "06-15"
 const cls = (v: number) => (v < 0 ? "neg" : "pos");
+const etTime = (iso: string) => { try { return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+const etDay = (iso: string) => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", month: "2-digit", day: "2-digit" }).format(new Date(iso)); } catch { return ""; } };
 
 export function ForensicsPanel() {
   const { report, loading, error } = useForensicsReport();
+  const ps = usePyramidShadow();
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggle = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
@@ -111,6 +115,43 @@ export function ForensicsPanel() {
               </div>
             )}
             {expanded && bvl.skipped.length > 0 && <div className="au-dormant">silent: {bvl.skipped.map((s) => s.name).join(" · ")}</div>}
+          </>
+        )}
+
+        {/* ── PYRAMID SHADOW (V3/ALT would-be adds — zero-order, Phase A graduation) ── */}
+        <div className="au-sub" style={{ marginTop: 12 }}>Pyramid shadow — would-be adds on V3/ALT winners (zero-order; tracking Phase-A graduation)</div>
+        {ps.loading ? (
+          <p className="au-market">loading…</p>
+        ) : ps.error ? (
+          <p className="au-market">couldn&apos;t load — {ps.error}</p>
+        ) : ps.events.length === 0 ? (
+          <p className="au-market">no would-be adds in 14d — fires only when V3/ALT run +30% on a fresh continuation (RTH).</p>
+        ) : (
+          <>
+            <div className="au-fund">
+              <span>{ps.events.length} would-be add{ps.events.length === 1 ? "" : "s"} · 14d</span>
+              <span>Σ <b className="pos">×{ps.byChannel.reduce((s, c) => s + c.contracts, 0)}</b> contracts</span>
+            </div>
+            <div className="fx-rows">
+              {ps.byChannel.map((c) => (
+                <div className="fx-row" key={c.slug}>
+                  <span className="fx-name">{c.name}</span>
+                  <span className="fx-mid">{c.adds} add{c.adds === 1 ? "" : "s"}</span>
+                  <span className="au-pnl pos">×{c.contracts}</span>
+                </div>
+              ))}
+            </div>
+            {expanded && (
+              <div className="fx-rows">
+                {ps.events.slice(0, 10).map((e, i) => (
+                  <div className="fx-row" key={i}>
+                    <span className="fx-name">{pyramidName(e.slug)} {e.occ}</span>
+                    <span className="fx-mid">+{Math.round(e.appreciatedPct)}% · {etDay(e.createdAt)} {etTime(e.createdAt)}</span>
+                    <span className="au-pnl pos">×{e.wouldQty} @ {e.ask.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
