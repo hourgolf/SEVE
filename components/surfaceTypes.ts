@@ -17,4 +17,7 @@ export interface SurfaceProps {
   /** §01 market instrument (SPY default, QQQ); the chart/chain/spot follow it. */
   symbol: string;
   setSymbol: Dispatch<SetStateAction<string>>;
+  /** Active chassis theme + setter (cream default | blackout). OPS hosts the toggle. */
+  theme: "cream" | "blackout";
+  setTheme: Dispatch<SetStateAction<"cream" | "blackout">>;
 }

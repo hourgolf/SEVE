@@ -56,6 +56,41 @@
   font-family: var(--sans);
 }
 
+/* ---------- BLACKOUT THEME -------------------------------------------------
+   ONE override block: re-declares the SAME token names to graphite values for
+   the whole .console-root subtree (higher specificity than :root + .console-root,
+   so it wins regardless of position). The recessed --lcd* screen tokens are NOT
+   touched — screens stay near-black in both themes. Toggle = data-theme on the
+   .console-root div (OPS room control; persisted to localStorage). */
+.console-root[data-theme="blackout"] {
+  /* semantic tokens (mirror globals.css :root) */
+  --bg: #1c1d1f;
+  --panel: #2a2b2d;
+  --panel-2: #232426;
+  --panel-3: #2f3033;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-bright: #3a3b3d;
+  --text: #e7e4db;
+  --muted: #8a8c8e;
+  --muted-2: #6c6e70;
+  --green: #6cc06d; /* brighter P&L green on graphite cards */
+  --red: #e07a58;
+  --amber: #e0a23f;
+  --blue: #5aa0e6;
+  --accent: #ef5a23; /* brighter orange on dark */
+  --accent-cream: #f0703a;
+  /* chassis hardware tokens (mirror .console-root) */
+  --chassis: #26282a;
+  --chassis-2: #1f2123;
+  --chassis-edge: #3a3b3d;
+  --chassis-dark: #4a4b4d;
+  --ink: #e7e4db;
+  --ink-soft: #9a9c9e;
+  --knob-cream: #b9bbbd; /* silver knobs in blackout */
+  --master-bg-1: #202123; /* cool the warm master strip to graphite */
+  --master-bg-2: #161719;
+}
+
 /* Map a PmColor token to its accent var. */
 .pm-green { --pm: var(--pm-green); }
 .pm-blue { --pm: var(--pm-blue); }
@@ -743,16 +778,9 @@
      a few hardcoded fields below (inputs, the lit segment) get a light/vivid treatment the
      token-flip can't reach. --border-bright is remapped to the chassis edge so every input
      and segmented control picks up the soft cream border for free. */
-  --text: #2a2a28;
-  --muted: #55534c;
-  --muted-2: #6e6c63;
-  /* DEEP accent set (not the standard cream palette): the outlined action buttons + err/ok
-     text need ~3:1 on cream, and these match the channel-state LIGHTS exactly so the strip,
-     its editor, and its lights share one legible accent system. */
-  --green: #1c7a44;
-  --red: #be3326;
-  --amber: #855f0c;
-  --blue: #2862a6;
+  /* Tokens inherit from the themed :root (cream default) / .console-root[data-theme=
+     "blackout"] override — no hardcoded cream values here, so the flip-editor re-skins
+     with the theme. --border-bright remaps to the (themed) chassis edge. */
   --border-bright: var(--chassis-edge);
   background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 4px 14px rgba(0, 0, 0, 0.3);
@@ -1391,17 +1419,11 @@
 .market-section .grid .panel,
 .market-section > .panel,           /* §01 chart FRAME — canvas keeps its own dark JS theme */
 .m-app .panel {                     /* mobile: every data panel + the chart frame goes cream */
-  --text: #2a2a28;
-  --muted: #55534c;
-  --muted-2: #6e6c63;
-  --green: #1f9d57;
-  --red: #d23a28;
-  --amber: #b07d10;
-  --blue: #2b6fb8;
-  --panel-2: #d3d1c7; /* light row card (e.g. autopsy .au-ch) on cream */
+  /* Tokens inherit from the themed :root (cream) / blackout override — no hardcoded
+     cream values, so these data panels re-skin with the theme. */
   --border: var(--chassis-edge);
-  /* base .panel is now --lcd-ink (light) for dark screens; cream-flip panels read
-     dark ink again (these scopes also still redeclare --text above for child cells). */
+  /* base .panel is now --lcd-ink (light) for dark screens; cream-flip panels paint a
+     cream/graphite card, so their text reads the themed ink via var(--text). */
   color: var(--text);
   background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
   border-color: var(--chassis-edge);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import "./console.css";
 import "./mobile.css";
 import { useMarketData } from "@/hooks/useMarketData";
@@ -14,7 +15,13 @@ import { MobileApp } from "@/components/mobile/MobileApp";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
 // tab-shell. The data-seam pattern means neither layout re-subscribes.
-function Surface() {
+function Surface({
+  theme,
+  setTheme,
+}: {
+  theme: "cream" | "blackout";
+  setTheme: Dispatch<SetStateAction<"cream" | "blackout">>;
+}) {
   // §01 market instrument (SPY default, QQQ live). One state drives the single
   // market hook + the chart/chain/spot toggle — the desk (§02/§03) is per-channel.
   const [symbol, setSymbol] = useState("SPY");
@@ -39,15 +46,26 @@ function Surface() {
     return priorClose != null ? data.spot >= priorClose : null;
   }, [data.bars, data.spot]);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme };
   return isMobile ? <MobileApp {...props} /> : <DesktopSurface {...props} />;
 }
 
 export default function Page() {
+  // Chassis theme — cream (default) | blackout. Persisted to localStorage; applied
+  // as data-theme on .console-root (the single [data-theme="blackout"] CSS override
+  // re-skins the whole subtree). The toggle control lives in the OPS room.
+  const [theme, setTheme] = useState<"cream" | "blackout">("cream");
+  useEffect(() => {
+    const saved = localStorage.getItem("seve-theme");
+    if (saved === "blackout" || saved === "cream") setTheme(saved);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("seve-theme", theme);
+  }, [theme]);
   return (
-    <div className="console-root">
+    <div className="console-root" data-theme={theme}>
       <DeskProvider>
-        <Surface />
+        <Surface theme={theme} setTheme={setTheme} />
       </DeskProvider>
     </div>
   );
