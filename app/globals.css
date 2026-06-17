@@ -5,26 +5,43 @@
    =========================================================================== */
 
 :root {
-  --bg: #0a0f11;
-  --panel: #0f1619;
-  --panel-2: #121c20;
-  --panel-3: #182428;
-  --border: #1d2a30;
-  --border-bright: #2a3a42;
-  --text: #e9eef0;
-  --muted: #6f828a;
-  --muted-2: #4a5b63;
-  --green: #2fd573;
-  --red: #f0563f;
-  --amber: #ffb224;
-  --blue: #3b9eff;
-  /* Recessed LCD "screen" surface — theme-INVARIANT (stays near-black in both
-     the cream and the blackout themes). Promoted from baked .panel/.phead hex
-     so the screens read identically regardless of chassis theme. */
+  /* === CREAM-TE PALETTE (default theme). The chassis is cream, ink is dark.
+     [data-theme="blackout"] (console.css) re-declares these same token NAMES to
+     the graphite values — so this is the single source of truth for both themes.
+     Recessed LCD "screen" tokens (--lcd*) are theme-INVARIANT (near-black both). === */
+  --bg: #d8d3c4;            /* page / chassis body */
+  --panel: #efe7d2;          /* cream card */
+  --panel-2: #cfc9b8;        /* inset cell */
+  --panel-3: #d3d1c7;        /* light row card (autopsy rows etc.) */
+  --border: rgba(60, 52, 30, 0.16); /* hairline */
+  --border-bright: #d7cca9;  /* card edge */
+  --text: #2c2a24;           /* ink (on cream) */
+  --muted: #8b8678;
+  --muted-2: #6e6c63;
+  --green: #1f9d57;          /* P&L up — cream-legible deep green */
+  --red: #d23a28;            /* P&L down — cream-legible deep red */
+  --amber: #b07d10;
+  --blue: #2b6fb8;
+  /* recessed LCD "screen" — theme-INVARIANT (near-black both themes). --lcd-ink is
+     the LIGHT text on those screens; --lcd-up/down are the BRIGHT P&L colours for
+     dark screens (vs the deep --green/--red used on cream cards). */
   --lcd: #14181b;
   --lcd-2: #0f1214;
   --lcd-edge: #0a0a0b;
+  --lcd-ink: #e9eef0;
+  --lcd-up: #6cc06d;
+  --lcd-down: #e07a58;
   --plate-ink: #d7d5cb;
+  /* cream-TE accent system — a single orange for live/active states + named tones */
+  --accent: #df5320;
+  --accent-cream: #cf5a26;
+  --nav-orange: #e0a23f;
+  --pill: #33332f;
+  --mute: #d98e6e;
+  --start: #2f5d39;
+  --kill: #7a2420;
+  --knob-dark: #3a3a38;
+  --knob-cream: #e9e5d6;
   --mono: "JetBrains Mono", ui-monospace, monospace;
   --sans: "IBM Plex Sans", system-ui, sans-serif;
   --wordmark: "Inter", "IBM Plex Sans", system-ui, sans-serif;
@@ -436,7 +453,7 @@ body {
 .panel {
   position: relative;
   background: linear-gradient(180deg, var(--lcd), var(--lcd-2)); /* recessed dark LCD screen */
-  color: var(--text, #e9eef0); /* light default so uncolored cells read (.pos/.neg override) */
+  color: var(--lcd-ink); /* light text on the dark screen; cream-flip panels override to --text */
   border: 1px solid var(--lcd-edge); /* black molded edge */
   border-radius: 9px;
   overflow: hidden;

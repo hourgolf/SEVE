@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { NavBar } from "@/components/NavBar";
 import { AuthProvider } from "@/hooks/useAuth";
 
 export const metadata: Metadata = {
@@ -35,7 +34,8 @@ export default function RootLayout({
       </head>
       <body>
         <AuthProvider>
-          <NavBar />
+          {/* NavBar retired in the cream-TE redesign — the persistent Shell owns the
+              wordmark + room tabs; sign-in moves to the OPS room (F6 / P3-ops). */}
           {children}
         </AuthProvider>
       </body>

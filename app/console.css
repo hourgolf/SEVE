@@ -6,10 +6,10 @@
 
 .console-root {
   /* --- 909 chassis palette --- */
-  --chassis: #c9c7bd; /* cream/grey body */
-  --chassis-2: #b6b4a8;
-  --chassis-edge: #8f8d82;
-  --chassis-dark: #6e6c63;
+  --chassis: #d8d3c4; /* cream-TE body */
+  --chassis-2: #ccc6b5;
+  --chassis-edge: #c5bfae;
+  --chassis-dark: #b3ad9c;
   --panel-plate: #2b2b2e; /* dark sub-panels behind knobs */
   --panel-plate-2: #1d1d20;
   --screw: #7a7870;
@@ -1400,6 +1400,9 @@
   --blue: #2b6fb8;
   --panel-2: #d3d1c7; /* light row card (e.g. autopsy .au-ch) on cream */
   --border: var(--chassis-edge);
+  /* base .panel is now --lcd-ink (light) for dark screens; cream-flip panels read
+     dark ink again (these scopes also still redeclare --text above for child cells). */
+  color: var(--text);
   background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
   border-color: var(--chassis-edge);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 3px 12px rgba(0, 0, 0, 0.35);
