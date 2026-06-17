@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Chassis } from "@/components/console/Chassis";
 import { AddChannel } from "@/components/console/AddChannel";
 import { HeadReadouts } from "@/components/console/HeadReadouts";
@@ -10,7 +10,6 @@ import { ContractDetail } from "@/components/ContractDetail";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { DayBooksStrip } from "@/components/console/DayBooksStrip";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
-import { useAccounts } from "@/hooks/useAccounts";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
@@ -30,8 +29,6 @@ import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
-import { usePositionMarks } from "@/hooks/usePositionMarks";
-import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -97,17 +94,20 @@ export function DesktopSurface({
   setSelected,
   symbol,
   setSymbol,
+  accounts,
+  acctId,
+  setAcctId,
+  ops,
+  liveMarks,
+  livePnl,
+  liveFund,
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const { canWrite } = write;
 
-  // Multi-account: the desk scopes its roster to the selected account. One account today
-  // (paper-main) → a no-op filter; the moment a second account exists the switcher routes.
-  const { accounts } = useAccounts();
-  const [acctId, setAcctId] = useState<string | null>(null);
-  useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
+  // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
 
   // The 86'd shelf: only ARMED channels get full strips; benched (draft) channels
@@ -130,20 +130,8 @@ export function DesktopSurface({
     persist(arrayMove(channelOrder, from, to));
   };
 
-  // occ_symbol → live option mark (delta-extrapolated off the fast spot tick), so
-  // open positions mark in real time, not once a minute. Recomputes each spot tick.
-  // Live marks for ALL open positions (both tickers) — independent of the selected
-  // chart, so the unselected ticker's positions don't freeze. (was chart-bound)
-  const liveMarks = usePositionMarks(feed.positions);
-  // Per-channel P&L re-derived off the SAME live marks, so the Equity rows + channel
-  // strips track the Open Positions panel instead of lagging on stored unrealized_pnl.
-  // Full day per-channel P&L: today's CLOSED (realized) + OPEN (unrealized, off the live
-  // marks). feed.positions is open-only, so include feed.recentTrades or a flat desk reads
-  // $0 per channel while the fund (which uses the whole day) shows the realized total.
-  const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
-  // Fund NAV + Day-P&L re-marked to the SAME live marks (account-truth base + the
-  // open-position live delta) so the head readout + master strip track live spot too.
-  const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
+  // liveMarks / livePnl / liveFund are lifted to Surface (the seam) and arrive as props,
+  // so the persistent shell LEDs and the rooms share the SAME live-marked values.
 
   return (
     <Chassis
@@ -301,6 +289,7 @@ export function DesktopSurface({
             <OpsPreflight
               strategists={desk.strategists}
               tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
+              ops={ops}
             />
           </div>
         </div>

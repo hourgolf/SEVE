@@ -8,6 +8,10 @@ import { useMarketData } from "@/hooks/useMarketData";
 import { useDeskState } from "@/hooks/useDeskState";
 import { useDeskFeed } from "@/hooks/useDeskFeed";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
+import { useAccounts } from "@/hooks/useAccounts";
+import { useOpsStatus } from "@/hooks/useOpsStatus";
+import { usePositionMarks } from "@/hooks/usePositionMarks";
+import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
@@ -46,7 +50,17 @@ function Surface({
     return priorClose != null ? data.spot >= priorClose : null;
   }, [data.bars, data.spot]);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme };
+  // Lifted to the seam — called ONCE here so the persistent shell AND both layouts
+  // share one accounts/ops poll + one live-marked P&L derivation (no re-subscribe).
+  const { accounts } = useAccounts();
+  const ops = useOpsStatus();
+  const [acctId, setAcctId] = useState<string | null>(null);
+  useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
+  const liveMarks = usePositionMarks(feed.positions);
+  const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
+  const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
+
+  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund };
   return isMobile ? <MobileApp {...props} /> : <DesktopSurface {...props} />;
 }
 

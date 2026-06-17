@@ -9,7 +9,7 @@
 //   EXEC    armed-channel split between the two executors
 //   RISK    Σ RISK-$/trade + Σ daily stops across armed, unmuted channels —
 //           the morning's total exposure-at-stake at a glance
-import { useOpsStatus } from "@/hooks/useOpsStatus";
+import type { OpsStatus } from "@/hooks/useOpsStatus";
 import type { StrategistState } from "@/lib/desk/types";
 
 const fmtAge = (s: number | null): string =>
@@ -41,8 +41,7 @@ export interface TapeVitals {
   expirations: number;
 }
 
-export function OpsPreflight({ strategists, tape }: { strategists: StrategistState[]; tape?: TapeVitals }) {
-  const ops = useOpsStatus();
+export function OpsPreflight({ strategists, tape, ops }: { strategists: StrategistState[]; tape?: TapeVitals; ops: OpsStatus }) {
   const rth = inRth();
 
   // STREAM light

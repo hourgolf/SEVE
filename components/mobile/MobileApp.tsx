@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
@@ -23,10 +23,7 @@ import { DayBooksStrip } from "@/components/console/DayBooksStrip";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
-import { usePositionMarks } from "@/hooks/usePositionMarks";
-import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
-import { useAccounts } from "@/hooks/useAccounts";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { MixerPads, padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
@@ -55,12 +52,9 @@ const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
   { id: "mix", label: "Mix", Icon: IcMix },
 ];
 
-export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol }: SurfaceProps) {
+export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
-  // Multi-account: scope the roster to the selected account (one today → no-op filter).
-  const { accounts } = useAccounts();
-  const [acctId, setAcctId] = useState<string | null>(null);
-  useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
+  // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
   // The 86'd shelf: armed channels fill the Mix grid + mixer pads; benched (draft)
   // channels collapse to grey pads below — tap to open the full strip / re-arm.
@@ -79,19 +73,8 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
 
-  // occ_symbol → live option mark for ALL open positions (both tickers), independent
-  // of the selected chart — so the unselected ticker's positions mark in real time
-  // instead of freezing on the worker's ~1-min cadence. (was chart-bound)
-  const liveMarks = usePositionMarks(feed.positions);
-  // per-channel P&L off the SAME live marks → Equity rows + channel strips track the
-  // Open Positions panel instead of lagging on the worker's stored unrealized_pnl.
-  // Full day per-channel P&L: today's CLOSED (realized) + OPEN (unrealized, live marks).
-  // feed.positions is open-only — without recentTrades a flat desk reads $0 per channel
-  // while the fund (whole-day) shows the realized total.
-  const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
-  // Fund NAV + Day-P&L re-marked to the SAME live marks, so the headline vitals LEDs
-  // track live spot instead of lagging on the worker's ~1-min equity snapshot.
-  const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
+  // liveMarks / livePnl / liveFund are lifted to Surface (the seam) and arrive as props,
+  // so the headline vitals LEDs and the rooms share the SAME live-marked values.
 
   const goTab = (t: Tab) => {
     setTab(t);
@@ -320,6 +303,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <OpsPreflight
               strategists={desk.strategists}
               tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
+              ops={ops}
             />
             <SignalsTape signals={feed.signals} />
             <EventLog events={data.events} />

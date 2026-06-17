@@ -3,6 +3,10 @@ import type { useMarketData } from "@/hooks/useMarketData";
 import type { useDeskState } from "@/hooks/useDeskState";
 import type { useDeskFeed } from "@/hooks/useDeskFeed";
 import type { useDeskWrite } from "@/hooks/useDeskWrite";
+import type { useAccounts } from "@/hooks/useAccounts";
+import type { OpsStatus } from "@/hooks/useOpsStatus";
+import type { usePositionMarks } from "@/hooks/usePositionMarks";
+import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 
 // Shared props for the desktop / mobile surfaces. All data hooks are called once
 // in the page and the results passed down, so neither layout re-subscribes.
@@ -20,4 +24,14 @@ export interface SurfaceProps {
   /** Active chassis theme + setter (cream default | blackout). OPS hosts the toggle. */
   theme: "cream" | "blackout";
   setTheme: Dispatch<SetStateAction<"cream" | "blackout">>;
+  /** Multi-account (lifted to the seam): the roster scopes to the selected account. */
+  accounts: ReturnType<typeof useAccounts>["accounts"];
+  acctId: string | null;
+  setAcctId: Dispatch<SetStateAction<string | null>>;
+  /** Ops health (stream/cron/exec) — lifted so the shell + OPS share one 15s poll. */
+  ops: OpsStatus;
+  /** Live option marks + the P&L derived off them — shared by the shell LEDs + rooms. */
+  liveMarks: ReturnType<typeof usePositionMarks>;
+  livePnl: ReturnType<typeof channelPnl>;
+  liveFund: ReturnType<typeof liveFundPnl>;
 }
