@@ -2,6 +2,7 @@
 
 import { memo, useState } from "react";
 import { Knob } from "@/components/console/hw/Knob";
+import { Fader } from "@/components/console/hw/Fader";
 import { LedMeter } from "@/components/console/hw/LedMeter";
 import { PadButton } from "@/components/console/hw/PadButton";
 import { useDeskDispatch } from "@/hooks/useDeskState";
@@ -395,7 +396,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
 
   return (
     <div
-      className={`channel pm-${color}${ducked ? " ducked" : ""}${dragging ? " ch-dragging" : ""}`}
+      className={`channel ch-col pm-${color}${ducked ? " ducked" : ""}${config.muted ? " ch-muted" : ""}${dragging ? " ch-dragging" : ""}`}
     >
       {dragHandle && (
         <button
@@ -417,27 +418,16 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
       <div className="ch-head">
         <span className={`ch-dot${active ? " on" : ""}`} />
         <div className="ch-name">{name}</div>
-        <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
         {statusBadge}
       </div>
-      <div className="ch-regime">{regime}</div>
-      {lights}
+      <div className="ch-sub">{config.muted ? "muted" : `${executor} · ${dte}DTE`}</div>
 
-      <div className="ch-knobs">
-        <Knob
-          value={config.capital_pct}
-          min={0}
-          max={500}
-          step={25}
-          onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
-          onCommit={(v) => persistConfig(id, { capital_pct: v })}
-          size="md"
-          color={cssColor}
-          cap="var(--knob-cream)"
-          tick="#2a2a24"
-          label="Risk/trade"
-          format={usd0}
-        />
+      <div className="ch-lcd">
+        <div className={`ch-lcd-v ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
+        <div className="ch-lcd-bar"><i className={day < 0 ? "neg" : "pos"} style={{ width: `${mag * 100}%` }} /></div>
+      </div>
+
+      <div className="ch-stack">
         <Knob
           value={config.daily_stop_usd}
           min={0}
@@ -446,46 +436,51 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { daily_stop_usd: v } })}
           onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}
           size="md"
-          color={cssColor}
           cap="var(--knob-dark)"
           tick="#d7d5cb"
-          label="Stop/day"
+          label="STOP"
           format={usd0}
         />
-      </div>
-
-      <div className="ch-meter">
-        <div className="ch-meter-track">
-          <div
-            className={`ch-meter-fill ${day < 0 ? "neg" : "pos"}`}
-            style={{ height: `${mag * 100}%` }}
-          />
-        </div>
-        <div className={`ch-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
-      </div>
-
-      <div className="ch-pads">
-        <PadButton
-          label="MUTE"
-          lit={config.muted}
-          color="var(--led-red)"
-          onClick={() => {
-            dispatch({ type: "TOGGLE_MUTE", slug });
-            persistConfig(id, { muted: !config.muted });
-          }}
-          title="mute this strategist"
+        <Knob
+          value={tp}
+          min={0}
+          max={300}
+          step={5}
+          onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { take_profit_pct: v } })}
+          onCommit={(v) => persistConfig(id, { take_profit_pct: v })}
+          size="md"
+          cap="var(--accent)"
+          tick="#3a1505"
+          label="TP"
+          format={(v) => (v === 0 ? "RIDE" : `${v}%`)}
         />
-        <PadButton
-          label="SOLO"
-          lit={config.soloed}
-          color={cssColor}
-          onClick={() => {
-            dispatch({ type: "TOGGLE_SOLO", slug });
-            persistConfig(id, { soloed: !config.soloed });
-          }}
-          title="solo this strategist"
+        <Knob
+          value={ustop}
+          min={0}
+          max={2}
+          step={0.05}
+          onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { underlying_stop_pct: v } })}
+          onCommit={(v) => persistConfig(id, { underlying_stop_pct: v })}
+          size="md"
+          cap="var(--knob-cream)"
+          tick="#2a2a24"
+          label="U-STOP"
+          format={(v) => String(v)}
         />
       </div>
+
+      <Fader
+        value={config.capital_pct}
+        min={0}
+        max={500}
+        step={25}
+        onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
+        onCommit={(v) => persistConfig(id, { capital_pct: v })}
+        label="RISK"
+        format={usd0}
+      />
+
+      {pads}
       {editOverlay}
     </div>
   );

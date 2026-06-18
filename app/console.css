@@ -481,6 +481,35 @@
   color: #e9e9e6;
   font-variant-numeric: tabular-nums;
 }
+/* one-line caption: "STOP $500" */
+.knob-caption { display: flex; gap: 5px; align-items: baseline; justify-content: center; margin-top: 1px; }
+
+/* ---------- TE vertical fader (the RISK control) -------------------------- */
+.fader { display: flex; flex-direction: column; align-items: center; gap: 6px; touch-action: none; cursor: grab; user-select: none; outline: none; }
+.fader.dragging { cursor: grabbing; }
+.fader.disabled { opacity: 0.45; cursor: not-allowed; }
+.fader-track { position: relative; width: 5px; height: 88px; background: rgba(0, 0, 0, 0.32); border-radius: 3px; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5); }
+.fader-fill { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 3px; background: var(--accent); opacity: 0.4; }
+.fader-cap { position: absolute; left: 50%; width: 28px; height: 14px; background: var(--knob-cream); border: 1px solid var(--chassis-edge); border-radius: 3px; transform: translate(-50%, 50%); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 1px 2px rgba(0, 0, 0, 0.3); }
+.fader-cap::after { content: ""; position: absolute; left: 5px; right: 5px; top: 6px; height: 1px; background: var(--chassis-edge); }
+.fader:focus-visible .fader-cap { box-shadow: 0 0 0 2px var(--ind, var(--accent)); }
+
+/* ---------- TX-6 channel column (the strip layout) ------------------------ */
+.channel.ch-col { gap: 9px; padding: 13px 12px 11px; }
+.channel.ch-col.ch-muted { opacity: 0.5; }
+.ch-col .ch-head { display: flex; align-items: center; gap: 7px; width: 100%; }
+.ch-col .ch-name { font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: 0.01em; }
+.ch-col .ch-sub { width: 100%; font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--ink-soft); margin-top: -5px; }
+.ch-col .ch-lcd { width: 100%; background: var(--lcd); border-radius: 7px; border: 1px solid var(--lcd-edge); padding: 7px 10px; }
+.ch-col .ch-lcd-v { font-family: var(--mono); font-size: 18px; font-weight: 700; line-height: 1.2; }
+.ch-col .ch-lcd-v.pos { color: var(--lcd-up); }
+.ch-col .ch-lcd-v.neg { color: var(--lcd-down); }
+.ch-col .ch-lcd-bar { height: 5px; border-radius: 3px; background: #2c2f29; margin-top: 6px; overflow: hidden; }
+.ch-col .ch-lcd-bar i { display: block; height: 100%; border-radius: 3px; }
+.ch-col .ch-lcd-bar i.pos { background: #57b35a; }
+.ch-col .ch-lcd-bar i.neg { background: #b06a52; }
+.ch-col .ch-stack { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+.ch-col .ch-pads { width: 100%; }
 
 /* ---------- persistent SHELL (room header) -------------------------------- */
 .shell {

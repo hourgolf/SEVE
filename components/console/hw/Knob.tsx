@@ -78,8 +78,12 @@ export function Knob({
           </g>
         </svg>
       </div>
-      {label && <div className="knob-label">{label}</div>}
-      <div className="knob-val">{format ? format(value) : value}</div>
+      {label && (
+        <div className="knob-caption">
+          <span className="knob-label">{label}</span>
+          <span className="knob-val">{format ? format(value) : value}</span>
+        </div>
+      )}
     </div>
   );
 }
