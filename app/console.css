@@ -509,7 +509,7 @@
 .ch-col .ch-lcd-bar i.pos { background: #57b35a; }
 .ch-col .ch-lcd-bar i.neg { background: #b06a52; }
 .ch-col .ch-stack { display: flex; flex-direction: column; align-items: center; gap: 9px; }
-.ch-col .ch-pads { width: 100%; }
+.ch-col .ch-pads { width: 100%; justify-content: center; }
 
 /* ---------- persistent SHELL (room header) -------------------------------- */
 /* The persistent shell is a DARK instrument bar in BOTH themes (like the LCD
@@ -605,6 +605,15 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
+/* The FUND master is a fixed control panel — anchor it at the top (align-self:start
+   stops it stretching as channel rows are added) and pin its height to one channel
+   column so the mixer's top row reads as equal-height strips. Width stays auto/wide;
+   content distributes top→bottom (transport sits low, mirroring the MUTE/SOLO row). */
+.console-grid > .master {
+  align-self: start;
+  min-height: 552px;
+  justify-content: space-between;
+}
 
 /* Responsive: stack the master below the channels, then drop to 2 columns. */
 @media (max-width: 1080px) {
@@ -624,6 +633,11 @@
     flex-wrap: wrap;
     justify-content: space-around;
     align-items: center;
+  }
+  /* stacked (full-width) master: drop the one-channel height pin + vertical spread */
+  .console-grid > .master {
+    min-height: 0;
+    justify-content: space-around;
   }
 }
 @media (max-width: 720px) {
