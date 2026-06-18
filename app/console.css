@@ -482,6 +482,61 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- persistent SHELL (room header) -------------------------------- */
+.shell {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 9px 4px 13px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--chassis-edge);
+}
+.shell-l { display: flex; align-items: center; gap: 11px; flex: 0 0 auto; }
+.shell-mark { font-family: var(--wordmark); font-weight: 800; font-size: 22px; letter-spacing: 0.01em; color: var(--ink); }
+.shell-health { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
+.shell-health i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.shell-health.sh-ok i { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.shell-health.sh-warn i { background: var(--amber); }
+.shell-health.sh-bad i { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.shell-leds { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.shell-led { display: flex; flex-direction: column; align-items: flex-start; background: var(--lcd); border: 1px solid var(--lcd-edge); border-radius: 6px; padding: 4px 10px; }
+.shell-led .sl-cap { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #5c6f60; }
+.shell-led .sl-v { font-family: var(--mono); font-size: 14px; font-weight: 700; line-height: 1.25; }
+.shell-books { display: flex; flex-direction: column; align-items: flex-start; font-family: var(--mono); }
+.shell-books .shb-k { font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); }
+.shell-books .shb-v { font-size: 14px; font-weight: 700; }
+.shell-books.shb-ok .shb-v { color: var(--ink-soft); }
+.shell-books.shb-warn .shb-v { color: var(--amber); }
+.shell-books.shb-bad .shb-v { color: var(--red); }
+.shell-tabs { display: flex; gap: 7px; margin-left: auto; flex: 0 0 auto; }
+.shell-tab {
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+  padding: 8px 15px; border-radius: 7px; border: 1px solid var(--chassis-edge);
+  background: var(--panel-2); color: var(--ink-soft); cursor: pointer;
+  display: inline-flex; align-items: baseline; gap: 6px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.shell-tab:hover { color: var(--ink); }
+.shell-tab .jp { font-size: 10px; font-weight: 500; color: var(--muted); }
+.shell-tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.shell-tab.on .jp { color: rgba(255, 255, 255, 0.82); }
+.shell-r { display: flex; align-items: center; gap: 13px; flex: 0 0 auto; }
+.shell-write { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; color: var(--muted); white-space: nowrap; }
+.shell-write.on { color: var(--green); }
+.shell-cog { background: none; border: none; padding: 4px; color: var(--ink-soft); cursor: pointer; display: grid; place-items: center; }
+.shell-cog:hover { color: var(--accent-cream); }
+
+/* ---------- rooms (DESK / REVIEW / OPS) ----------------------------------- */
+.room { display: block; }
+.ops-controls { display: flex; flex-direction: column; gap: 12px; }
+.theme-toggle { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-soft); }
+.theme-toggle button {
+  font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 6px 12px; border-radius: 6px; border: 1px solid var(--chassis-edge);
+  background: var(--panel-2); color: var(--ink-soft); cursor: pointer;
+}
+.theme-toggle button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 /* ---------- console layout: channels + master ----------------------------- */
 .console-grid {
   display: grid;

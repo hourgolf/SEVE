@@ -8,6 +8,9 @@ import type { OpsStatus } from "@/hooks/useOpsStatus";
 import type { usePositionMarks } from "@/hooks/usePositionMarks";
 import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 
+/** The three rooms of the redesigned desk (replaces the stacked §01/§02/§03). */
+export type Room = "desk" | "review" | "ops";
+
 // Shared props for the desktop / mobile surfaces. All data hooks are called once
 // in the page and the results passed down, so neither layout re-subscribes.
 export interface SurfaceProps {
@@ -34,4 +37,9 @@ export interface SurfaceProps {
   liveMarks: ReturnType<typeof usePositionMarks>;
   livePnl: ReturnType<typeof channelPnl>;
   liveFund: ReturnType<typeof liveFundPnl>;
+  /** Active room (shell tabs) + the market-band collapse state (DESK). */
+  activeRoom: Room;
+  setActiveRoom: Dispatch<SetStateAction<Room>>;
+  collapsedMarket: boolean;
+  setCollapsedMarket: Dispatch<SetStateAction<boolean>>;
 }

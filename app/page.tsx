@@ -16,6 +16,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileApp } from "@/components/mobile/MobileApp";
+import type { Room } from "@/components/surfaceTypes";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
 // tab-shell. The data-seam pattern means neither layout re-subscribes.
@@ -60,7 +61,17 @@ function Surface({
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
   const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund };
+  // Active room (shell tabs) + the DESK market-band collapse — persisted so the
+  // operator returns to the same room/layout. Lifted to the seam (passed down).
+  const [activeRoom, setActiveRoom] = useState<Room>("desk");
+  useEffect(() => {
+    const s = localStorage.getItem("seve-room");
+    if (s === "desk" || s === "review" || s === "ops") setActiveRoom(s);
+  }, []);
+  useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
+  const [collapsedMarket, setCollapsedMarket] = useState(false);
+
+  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket };
   return isMobile ? <MobileApp {...props} /> : <DesktopSurface {...props} />;
 }
 

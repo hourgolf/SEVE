@@ -5,7 +5,6 @@ import { Knob } from "@/components/console/hw/Knob";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { TransportButton } from "@/components/console/hw/TransportButton";
 import { GuardedToggle } from "@/components/console/hw/GuardedToggle";
-import { KillSwitch } from "@/components/console/hw/KillSwitch";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { signedUsd, usd0 } from "@/lib/format";
@@ -21,7 +20,6 @@ export interface MasterStripProps {
 function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
   const dispatch = useDeskDispatch();
   const { canWrite, persistFund } = useDeskWrite();
-  const [armed, setArmed] = useState(false);
   const [showNav, setShowNav] = useState(true);
 
   // LED value: NAV (digits only) or signed day P&L. Strip the $ / commas for
@@ -98,20 +96,6 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
             onChange={(m) => {
               dispatch({ type: "SET_MODE", mode: m });
               persistFund({ mode: m });
-            }}
-          />
-          <KillSwitch
-            halted={fund.is_halted}
-            armed={armed}
-            onArm={() => setArmed((v) => !v)}
-            onFire={() => {
-              dispatch({ type: "KILL", reason: "manual kill switch" });
-              persistFund({ is_halted: true, halted_reason: "manual kill switch" });
-              setArmed(false);
-            }}
-            onReset={() => {
-              dispatch({ type: "RESET_HALT" });
-              persistFund({ is_halted: false, halted_reason: null });
             }}
           />
         </div>
