@@ -29,6 +29,7 @@ import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
 import { padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
+import { marketSummary } from "@/lib/marketSummary";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
@@ -126,6 +127,12 @@ export function DesktopSurface({
   const attrib = Object.values(livePnl).reduce((a, c) => a + (c.dayPnl || 0), 0);
   const booksDelta = Math.round(liveFund.dayPnl - attrib);
 
+  // Collapsed-market ticker: the selected symbol's day summary + a sparkline path.
+  const mkt = marketSummary(data.bars, data.spot);
+  const sMin = mkt.spark.length ? Math.min(...mkt.spark) : 0;
+  const sMax = mkt.spark.length ? Math.max(...mkt.spark) : 1;
+  const sparkPts = mkt.spark.map((v, i) => `${i * 4},${(23 - ((v - sMin) / (sMax - sMin || 1)) * 21).toFixed(2)}`).join(" ");
+
   return (
     <div className="chassis">
       <Shell
@@ -146,11 +153,28 @@ export function DesktopSurface({
       {activeRoom === "desk" && (
         <section className="room room--desk">
           <div className="market-section">
-            <button type="button" className={`mkt-bar${collapsedMarket ? " collapsed" : ""}`} onClick={() => setCollapsedMarket((c) => !c)} title="collapse / expand the chart — give the mixer + book more room">
-              <span className="mkt-sym">{symbol}</span>
-              <span className="mkt-spot" style={{ color: spotUp ? "var(--green)" : "var(--red)" }}>{data.spot != null ? data.spot.toFixed(2) : "—"}</span>
-              <span className="mkt-chev">{collapsedMarket ? "▾ expand chart" : "▴ collapse chart"}</span>
-            </button>
+            <div className={`mkt-bar${collapsedMarket ? " collapsed" : ""}`}>
+              <span className="mkt-pills">
+                <button type="button" className={`mkt-pill${symbol === "SPY" ? " on" : ""}`} onClick={() => setSymbol("SPY")}>SPY</button>
+                <button type="button" className={`mkt-pill${symbol === "QQQ" ? " on" : ""}`} onClick={() => setSymbol("QQQ")}>QQQ</button>
+              </span>
+              <span className="mkt-spot" style={{ color: spotUp ? "var(--lcd-up)" : "var(--lcd-down)" }}>{data.spot != null ? data.spot.toFixed(2) : "—"}</span>
+              {mkt.dayChangePct != null && (
+                <span className="mkt-chg" style={{ color: mkt.dayChangePct < 0 ? "var(--lcd-down)" : "var(--lcd-up)" }}>
+                  {mkt.dayChangePct >= 0 ? "+" : ""}{mkt.dayChangePct.toFixed(2)}%
+                </span>
+              )}
+              {mkt.vwap != null && <span className="mkt-stat"><b>VWAP</b> {mkt.vwap.toFixed(2)}</span>}
+              {mkt.dayHigh != null && mkt.dayLow != null && <span className="mkt-stat"><b>RANGE</b> {mkt.dayLow.toFixed(1)}–{mkt.dayHigh.toFixed(1)}</span>}
+              {mkt.spark.length > 1 && (
+                <svg className="mkt-spark" viewBox={`0 0 ${(mkt.spark.length - 1) * 4} 24`} preserveAspectRatio="none" aria-hidden>
+                  <polyline points={sparkPts} fill="none" stroke={spotUp ? "var(--lcd-up)" : "var(--lcd-down)"} strokeWidth="1.4" />
+                </svg>
+              )}
+              <button type="button" className="mkt-exp" onClick={() => setCollapsedMarket((c) => !c)}>
+                {collapsedMarket ? "▾ expand chart · chain" : "▴ collapse chart"}
+              </button>
+            </div>
             <div className="mkt-chart" style={{ display: collapsedMarket ? "none" : "block" }}>
               <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
             </div>
