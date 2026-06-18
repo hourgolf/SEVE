@@ -30,6 +30,7 @@ import { ForensicsPanel } from "@/components/console/ForensicsPanel";
 import { padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
 import { marketSummary } from "@/lib/marketSummary";
+import { signedUsd } from "@/lib/format";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
@@ -132,6 +133,7 @@ export function DesktopSurface({
   const sMin = mkt.spark.length ? Math.min(...mkt.spark) : 0;
   const sMax = mkt.spark.length ? Math.max(...mkt.spark) : 1;
   const sparkPts = mkt.spark.map((v, i) => `${i * 4},${(23 - ((v - sMin) / (sMax - sMin || 1)) * 21).toFixed(2)}`).join(" ");
+  const realizedToday = feed.recentTrades.reduce((a, t) => a + (t.realized_pnl ?? 0), 0);
 
   return (
     <div className="chassis">
@@ -177,25 +179,24 @@ export function DesktopSurface({
             </div>
             <div className="mkt-chart" style={{ display: collapsedMarket ? "none" : "block" }}>
               <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
-            </div>
-            <div className="grid grid--live live-body">
-              <div className="col col--fill">
-                <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
-                <OptionChain
-                  snapshot={data.snapshot}
-                  spot={data.spot}
-                  deltasModeled={data.deltasModeled}
-                  selected={selected}
-                  onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
-                  symbol={symbol}
-                />
-                {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
+              <div className="grid grid--live" style={{ marginTop: 12 }}>
+                <div className="col col--fill">
+                  <OptionChain
+                    snapshot={data.snapshot}
+                    spot={data.spot}
+                    deltasModeled={data.deltasModeled}
+                    selected={selected}
+                    onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
+                    symbol={symbol}
+                  />
+                  {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
+                </div>
               </div>
             </div>
           </div>
 
-          <SectionLabel id="composer" idx="02">
-            Strategy Composer<span className="sec-jp">ミキサー</span>
+          <SectionLabel id="composer" idx="B">
+            Mixer<span className="sec-jp">ミキサー</span>
             {canWrite && (
               <span className="group-by" title="auto-arrange the channels, then nudge by hand">
                 <span className="gb-label">group</span>
@@ -260,6 +261,22 @@ export function DesktopSurface({
             </div>
             <MasterStrip fund={desk.fund} fundPnl={liveFund} />
           </div>
+
+          <div className="section-label" id="livebook">
+            <span className="idx">C</span>
+            <span className="lab">Live Book<span className="sec-jp">ブック</span></span>
+            <span className="sec-right">{feed.positions.length} open · realized <span className={realizedToday < 0 ? "neg" : "pos"}>{signedUsd(realizedToday)}</span></span>
+          </div>
+          <div className="log-section">
+            <div className="grid grid--live">
+              <div className="col col--fill">
+                <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
+              </div>
+              <div className="col">
+                <SignalsTape signals={feed.signals} />
+              </div>
+            </div>
+          </div>
         </section>
       )}
 
@@ -282,7 +299,6 @@ export function DesktopSurface({
             <div className="col"><WeeklyAutopsyPanel strategists={desk.strategists} /></div>
           </div>
           <div style={{ marginTop: 14 }}><ForensicsPanel /></div>
-          <div style={{ marginTop: 14 }}><SignalsTape signals={feed.signals} /></div>
         </section>
       )}
 
