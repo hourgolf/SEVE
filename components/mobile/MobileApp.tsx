@@ -19,6 +19,7 @@ import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { DayBooksStrip } from "@/components/console/DayBooksStrip";
+import { MasterStopControl } from "@/components/console/MasterStopControl";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
@@ -289,6 +290,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
               ops={ops}
             />
+            <MasterStopControl fund={desk.fund} />
             <MasterStrip fund={desk.fund} fundPnl={liveFund} />
             <EventLog events={data.events} />
           </div>

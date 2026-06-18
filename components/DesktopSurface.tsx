@@ -9,6 +9,7 @@ import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { DayBooksStrip } from "@/components/console/DayBooksStrip";
+import { MasterStopControl } from "@/components/console/MasterStopControl";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
@@ -271,7 +272,8 @@ export function DesktopSurface({
               />
             </div>
             <div className="col">
-              <div className="ops-controls">
+              <MasterStopControl fund={desk.fund} />
+              <div className="ops-controls" style={{ marginTop: 14 }}>
                 <PushToggle />
                 <div className="theme-toggle">
                   <span>Chassis theme</span>

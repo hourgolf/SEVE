@@ -528,6 +528,10 @@
 
 /* ---------- rooms (DESK / REVIEW / OPS) ----------------------------------- */
 .room { display: block; }
+.mstop-body { display: flex; align-items: center; gap: 18px; }
+.mstop-note { display: flex; flex-direction: column; gap: 3px; }
+.mstop-v { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--ink); }
+.mstop-hint { font-family: var(--mono); font-size: 10px; color: var(--muted); max-width: 210px; line-height: 1.4; }
 .ops-controls { display: flex; flex-direction: column; gap: 12px; }
 .theme-toggle { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-soft); }
 .theme-toggle button {
