@@ -41,8 +41,21 @@
 .m-vtop {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 9px;
 }
+.m-vtop-sp { flex: 1 1 auto; }
+.m-health { display: inline-flex; align-items: center; }
+.m-health i { display: block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.m-health.sh-ok i { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.m-health.sh-warn i { background: var(--amber); }
+.m-health.sh-bad i { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.m-vtop .kill { gap: 5px; }
+.m-vtop .kill-fire { padding: 6px 11px; font-size: 10px; }
+.m-vtop .kill-cover { width: 26px; height: 26px; }
+.m-books { align-self: center; font-family: var(--mono); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.m-books.shb-ok { color: var(--ink-soft); }
+.m-books.shb-warn { color: var(--amber); }
+.m-books.shb-bad { color: var(--red); }
 /* the account switcher sits in the CREAM vitals header on mobile (it inherits the dark
    surface's light --text everywhere else) → ink it so the badge/segments are legible;
    the 'live' alarm state keeps its red. */
@@ -232,9 +245,9 @@
   width: 100%;
   height: 38px;
   border-radius: 9px;
-  border: 1px solid #000;
-  background: linear-gradient(180deg, #e7e5da, #c3c1b6);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 2px 3px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--chassis-edge);
+  background: var(--panel-2);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 2px 3px rgba(0, 0, 0, 0.25);
   display: grid;
   place-items: center;
   color: var(--ink-soft);
@@ -248,12 +261,12 @@
   transform: translateY(1px);
 }
 .m-tab.on {
-  color: var(--stripe-red);
+  color: var(--accent-cream);
 }
 .m-tab.on .ic {
-  background: linear-gradient(180deg, #ff9a6e, #e0552f);
-  box-shadow: 0 0 12px rgba(224, 85, 47, 0.5), 0 1px 0 rgba(255, 255, 255, 0.35) inset;
-  color: #2a160e;
+  background: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 45%, transparent), 0 1px 0 rgba(255, 255, 255, 0.25) inset;
+  color: #fff;
 }
 
 /* ---- Live: additive view toggles (909 cream pads) ---- */

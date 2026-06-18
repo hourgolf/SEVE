@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { KillSwitch } from "@/components/console/hw/KillSwitch";
+import { KillControl } from "@/components/console/hw/KillControl";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
-import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { signedUsd } from "@/lib/format";
 import type { FundState } from "@/lib/desk/types";
@@ -42,9 +40,7 @@ export interface ShellProps {
 // tabs + the ONE always-visible KILL + a cog (jumps to OPS). Owns the kill wiring
 // (the local arm state + KILL/RESET_HALT dispatch) so it's the single fire control.
 export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAcctId, activeRoom, setActiveRoom }: ShellProps) {
-  const dispatch = useDeskDispatch();
-  const { canWrite, persistFund } = useDeskWrite();
-  const [armed, setArmed] = useState(false);
+  const { canWrite } = useDeskWrite();
 
   const running = fund.running && !fund.is_halted;
   const runLabel = fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
@@ -112,20 +108,7 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
         <span className={`shell-write${canWrite ? " on" : ""}`} title={canWrite ? "changes persist to the desk" : "read-only — sign in via OPS to control the desk"}>
           {canWrite ? "● operator" : "○ read-only"}
         </span>
-        <KillSwitch
-          halted={fund.is_halted}
-          armed={armed}
-          onArm={() => setArmed((v) => !v)}
-          onFire={() => {
-            dispatch({ type: "KILL", reason: "manual kill switch" });
-            persistFund({ is_halted: true, halted_reason: "manual kill switch" });
-            setArmed(false);
-          }}
-          onReset={() => {
-            dispatch({ type: "RESET_HALT" });
-            persistFund({ is_halted: false, halted_reason: null });
-          }}
-        />
+        <KillControl halted={fund.is_halted} />
         <button className="shell-cog" type="button" onClick={() => setActiveRoom("ops")} aria-label="ops & settings">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <circle cx="12" cy="12" r="3.2" />

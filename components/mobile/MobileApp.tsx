@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
+import { KillControl } from "@/components/console/hw/KillControl";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
@@ -12,8 +13,6 @@ import { PushToggle } from "@/components/console/PushToggle";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { AddChannel } from "@/components/console/AddChannel";
 import { MasterStrip } from "@/components/console/MasterStrip";
-import { StepRow } from "@/components/console/hw/StepRow";
-import { Bezel } from "@/components/console/hw/Bezel";
 import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
@@ -27,59 +26,62 @@ import { useChannelOrdering } from "@/hooks/useChannelOrdering";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { MixerPads, padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
+import { signedUsd } from "@/lib/format";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
 // ---- 909-flavoured inline-SVG tab icons (silkscreen line-art, no emoji) ----
 const sv = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-const IcLive = () => (
+const IcMarket = () => (
   <svg viewBox="0 0 24 24" {...sv}><path d="M3 20V4M3 20h18" /><rect x="6" y="11" width="2.6" height="6" /><rect x="11" y="7" width="2.6" height="10" /><rect x="16" y="13" width="2.6" height="4" /></svg>
 );
-const IcDesk = () => (
+const IcMixer = () => (
+  <svg viewBox="0 0 24 24" {...sv}><path d="M7 4v16M17 4v16" /><circle cx="7" cy="9" r="2.3" /><circle cx="17" cy="15" r="2.3" /></svg>
+);
+const IcBook = () => (
   <svg viewBox="0 0 24 24" {...sv}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>
 );
-const IcMix = () => (
-  <svg viewBox="0 0 24 24" {...sv}><path d="M7 4v16M17 4v16" /><circle cx="7" cy="9" r="2.3" /><circle cx="17" cy="15" r="2.3" /></svg>
+const IcReview = () => (
+  <svg viewBox="0 0 24 24" {...sv}><path d="M4 4v16h16" /><path d="M7 14l4-5 3 3 4-6" /></svg>
 );
 const IcCog = () => (
   <svg viewBox="0 0 24 24" {...sv}><circle cx="12" cy="12" r="3.2" /><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" /></svg>
 );
 
-type Tab = "live" | "desk" | "mix";
-const TABS: { id: Tab; label: string; Icon: () => React.ReactNode }[] = [
-  { id: "live", label: "Live", Icon: IcLive },
-  { id: "desk", label: "Desk", Icon: IcDesk },
-  { id: "mix", label: "Mix", Icon: IcMix },
+type Tab = "market" | "mixer" | "book" | "review";
+const TABS: { id: Tab; label: string; jp: string; Icon: () => React.ReactNode }[] = [
+  { id: "market", label: "Market", jp: "ライブ", Icon: IcMarket },
+  { id: "mixer", label: "Mixer", jp: "ミキサー", Icon: IcMixer },
+  { id: "book", label: "Book", jp: "ブック", Icon: IcBook },
+  { id: "review", label: "Review", jp: "検証", Icon: IcReview },
 ];
 
-export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund }: SurfaceProps) {
+function inRth(): boolean {
+  const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const d = et.getDay(), m = et.getHours() * 60 + et.getMinutes();
+  return d >= 1 && d <= 5 && m >= 570 && m < 960;
+}
+
+export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
-  // The 86'd shelf: armed channels fill the Mix grid + mixer pads; benched (draft)
-  // channels collapse to grey pads below — tap to open the full strip / re-arm.
   const armed = accountChannels.filter((s) => s.status === "armed");
   const benched = accountChannels.filter((s) => s.status !== "armed");
   const { persist, canWrite } = useChannelOrdering(armed, write);
-  const [expanded, setExpanded] = useState<string | null>(null); // Mix: channel open for full-knob editing
-  const [benchOpen, setBenchOpen] = useState(false); // 86'd shelf: collapsed by default so it doesn't steal carousel height
-  const PER_PAGE = 4; // channels per swipe page in the Mix grid
-  const [tab, setTab] = useState<Tab>("live");
-  const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
-  // Live: additive view toggles (like indicator chips) — chart is the base.
-  const [show, setShow] = useState({ chart: true, chain: false, pos: false });
-  const [settings, setSettings] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null); // Mixer: channel open for full-knob editing
+  const [benchOpen, setBenchOpen] = useState(false);
+  const PER_PAGE = 4;
+  const [tab, setTab] = useState<Tab>("market");
+  const [hlTrade, setHlTrade] = useState<Position | null>(null);
+  const [show, setShow] = useState({ chart: true, chain: false });
+  const [settings, setSettings] = useState(false); // cog → OPS sheet
   const [addOpen, setAddOpen] = useState(false);
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
 
-  // liveMarks / livePnl / liveFund are lifted to Surface (the seam) and arrive as props,
-  // so the headline vitals LEDs and the rooms share the SAME live-marked values.
-
-  const goTab = (t: Tab) => {
-    setTab(t);
-    window.scrollTo(0, 0);
-  };
+  // liveMarks / livePnl / liveFund are lifted to Surface (the seam) and arrive as props.
+  const goTab = (t: Tab) => { setTab(t); window.scrollTo(0, 0); };
 
   const running = desk.fund.running && !desk.fund.is_halted;
   const runLabel = desk.fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
@@ -87,25 +89,32 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const down = liveFund.dayPnl < 0;
   const dayLed = (down ? "-" : "") + Math.abs(Math.round(liveFund.dayPnl));
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
-  // Header headline = fund NAV (total) + day P&L — both colored by the day's direction
-  // (green up / red down), now that the desk trades SPY *and* QQQ and a lone SPY price
-  // belongs to the chart, not the global vitals.
   const navLed = String(Math.round(liveFund.nav));
+
+  // BOOKS Δ + composite HEALTH dot for the persistent vitals header (mirrors the desktop Shell).
+  const attrib = Object.values(livePnl).reduce((a, c) => a + (c.dayPnl || 0), 0);
+  const booksDelta = Math.round(liveFund.dayPnl - attrib);
+  const dTone = Math.abs(booksDelta) < 100 ? "ok" : Math.abs(booksDelta) < 500 ? "warn" : "bad";
+  const rth = inRth();
+  let hTone: "ok" | "warn" | "bad" | "dim" = "dim";
+  if (ops.loaded) {
+    if (ops.hbAgeSec == null) hTone = rth && ops.streamArmed > 0 ? "bad" : "dim";
+    else if (ops.hbAgeSec < 60) hTone = "ok";
+    else if (ops.hbAgeSec < 300) hTone = "warn";
+    else hTone = rth && ops.streamArmed > 0 ? "bad" : "dim";
+  }
 
   function onDeckScroll() {
     const el = deckRef.current;
     if (!el) return;
-    setSlide(Math.round(el.scrollLeft / (el.clientWidth || 1))); // page-based now (4 channels/page)
+    setSlide(Math.round(el.scrollLeft / (el.clientWidth || 1)));
   }
-  // tap a mixer pad → scroll the grid to that channel's page (armed grid only)
   const jumpToChannel = (slug: string) => {
     const i = armed.findIndex((s) => s.slug === slug);
     if (i < 0) return;
     const el = deckRef.current;
     if (el) el.scrollTo({ left: Math.floor(i / PER_PAGE) * el.clientWidth, behavior: "smooth" });
   };
-  // chunk ARMED channels (+ a trailing "add" card) into pages of PER_PAGE for the swipe
-  // grid — the add-channel lives in the last grid slot so the cards stretch to fill the page.
   type GridItem = typeof desk.strategists[number] | "add";
   const gridItems: GridItem[] = [...armed, "add"];
   const pages: GridItem[][] = [];
@@ -116,37 +125,34 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
     <div className="m-app">
       <header className="m-vitals">
         <div className="m-vtop">
-          <span className="m-brand">$EVE<span> · DESK</span></span>
+          <span className="m-brand">$EVE</span>
+          <span className={`m-health sh-${hTone}`} title="stream/cron health" aria-label="health"><i /></span>
           <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
-          <button className="m-cog" onClick={() => setSettings(true)} aria-label="settings & log">
+          <span className="m-vtop-sp" />
+          <KillControl halted={desk.fund.is_halted} />
+          <button className="m-cog" onClick={() => setSettings(true)} aria-label="ops & settings">
             <IcCog />
           </button>
         </div>
         <div className="m-vleds">
           <div className="m-pills">
             <span className={`m-pill m-run ${runCls}`}>{runLabel}</span>
-            <span className={`m-pill m-mode ${desk.fund.mode}`}>
-              {desk.fund.mode === "live" ? "LIVE" : "PAPER"}
-            </span>
+            <span className={`m-pill m-mode ${desk.fund.mode}`}>{desk.fund.mode === "live" ? "LIVE" : "PAPER"}</span>
           </div>
-          <div className="m-led">
-            <LedDisplay value={navLed} digits={6} color={dayColor} caption="fund $" />
-          </div>
-          <div className="m-led">
-            <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
-          </div>
+          <div className="m-led"><LedDisplay value={navLed} digits={6} color={dayColor} caption="fund $" /></div>
+          <div className="m-led"><LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" /></div>
+          <span className={`m-books shb-${dTone}`} title="NAV − attribution Σ">Δ {signedUsd(booksDelta)}</span>
         </div>
       </header>
 
-      <main className={`m-screen${tab === "mix" ? " m-screen--mix" : ""}`}>
+      <main className={`m-screen${tab === "mixer" ? " m-screen--mix" : ""}`}>
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
 
-        {tab === "live" && (
+        {tab === "market" && (
           <>
             <div className="m-toggles">
               <button className={`m-tog${show.chart ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, chart: !s.chart }))}>CHART</button>
               <button className={`m-tog${show.chain ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, chain: !s.chain }))}>CHAIN</button>
-              <button className={`m-tog${show.pos ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, pos: !s.pos }))}>POSITIONS</button>
             </div>
             {show.chart && (
               <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} mobile trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
@@ -165,39 +171,28 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
               </>
             )}
-            {show.pos && <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />}
           </>
         )}
 
-        {tab === "desk" && (
+        {tab === "book" && (
           <>
-            <DayBooksStrip
-              strategists={desk.strategists}
-              pnl={livePnl}
-              fund={liveFund}
-              closedToday={feed.recentTrades.length}
-              openCount={feed.positions.length}
-            />
-            <PnlPanel
-              strategists={desk.strategists}
-              pnlByStrategist={livePnl}
-              fundPnl={liveFund}
-              equityCurve={feed.equityCurve}
-            />
+            <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
+            <SignalsTape signals={feed.signals} />
+          </>
+        )}
+
+        {tab === "review" && (
+          <>
+            <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} />
             <ManVsMachine strategists={desk.strategists} pnl={livePnl} />
-            <MasterStrip fund={desk.fund} fundPnl={liveFund} />
-            <Bezel label="16-Step Tape · recent signals" className="tape m-steptape">
-              <StepRow steps={feed.steps} />
-            </Bezel>
             <DailyAutopsyPanel strategists={desk.strategists} />
             <WeeklyAutopsyPanel strategists={desk.strategists} />
             <ForensicsPanel />
           </>
         )}
 
-        {tab === "mix" && (
+        {tab === "mixer" && (
           <div className="m-mix">
-            {/* channel grid — 4 compact strips per page, swipe to the next 4 */}
             <div className="m-grid" ref={deckRef} onScroll={onDeckScroll}>
               {pages.map((page, pi) => (
                 <div className="m-page" key={pi}>
@@ -228,7 +223,6 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <div className="m-pagedots">
               {pages.map((_, i) => <i key={i} className={i === slide ? "on" : ""} />)}
             </div>
-            {/* master mixer — armed channels as small sortable pads (tap=jump, hold=reorder) */}
             <MixerPads
               strategists={armed}
               focusedSlugs={pageSlugs}
@@ -236,31 +230,16 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               persist={persist}
               canWrite={canWrite}
             />
-            {/* the 86'd shelf — benched channels as grey pads. COLLAPSED by default to a slim
-                bar (it otherwise stole ~50px from the channel carousel, clipping the 4th card);
-                tap the bar to reveal the pads, tap a pad → full strip sheet. */}
             {benched.length > 0 && (
               <div className={`mx-bench${benchOpen ? " open" : ""}`}>
-                <button
-                  type="button"
-                  className="mx-bench-toggle"
-                  onClick={() => setBenchOpen((o) => !o)}
-                  aria-expanded={benchOpen}
-                >
+                <button type="button" className="mx-bench-toggle" onClick={() => setBenchOpen((o) => !o)} aria-expanded={benchOpen}>
                   <span className="mx-title">Bench · 86&apos;d · {benched.length}</span>
                   <span className="mx-bench-chev" aria-hidden>{benchOpen ? "▾" : "▸"}</span>
                 </button>
                 {benchOpen && (
                   <div className="mx-pads">
                     {benched.map((s) => (
-                      <button
-                        key={s.slug}
-                        type="button"
-                        className="mx-pad bench"
-                        style={{ ["--pad" as string]: pmVar(s.color) }}
-                        onClick={() => setExpanded(s.slug)}
-                        title={`${s.name} — ${s.status}`}
-                      >
+                      <button key={s.slug} type="button" className="mx-pad bench" style={{ ["--pad" as string]: pmVar(s.color) }} onClick={() => setExpanded(s.slug)} title={`${s.name} — ${s.status}`}>
                         {padCode(s)}
                       </button>
                     ))}
@@ -272,7 +251,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
         )}
       </main>
 
-      <nav className="m-tabs" aria-label="sections">
+      <nav className="m-tabs" aria-label="rooms">
         {TABS.map((t) => (
           <button key={t.id} className={`m-tab${tab === t.id ? " on" : ""}`} onClick={() => goTab(t.id)} aria-pressed={tab === t.id}>
             <span className="ic"><t.Icon /></span>
@@ -285,34 +264,38 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
         <AddChannel onClose={() => setAddOpen(false)} existingSlugs={desk.strategists.map((s) => s.slug)} />
       )}
 
+      {/* cog → OPS sheet: health/system controls + sign-in + theme + event log */}
       {settings && (
         <div className="m-scrim" onClick={() => setSettings(false)}>
           <div className="m-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="m-grab" />
             <div className="m-sheet-head">
-              <span>Settings · Log</span>
+              <span>OPS · 運用</span>
               <button className="m-sheet-x" onClick={() => setSettings(false)} aria-label="close">✕</button>
             </div>
             <div className="m-sheet-auth">
               <AuthControl />
-              <span className={`write-chip${write.canWrite ? " on" : ""}`}>
-                {write.canWrite ? "● operator" : "○ read-only"}
-              </span>
+              <span className={`write-chip${write.canWrite ? " on" : ""}`}>{write.canWrite ? "● operator" : "○ read-only"}</span>
+            </div>
+            <div className="theme-toggle">
+              <span>Chassis theme</span>
+              <button type="button" className={theme === "cream" ? "on" : ""} onClick={() => setTheme("cream")}>cream</button>
+              <button type="button" className={theme === "blackout" ? "on" : ""} onClick={() => setTheme("blackout")}>blackout</button>
             </div>
             <PushToggle />
+            <DayBooksStrip strategists={desk.strategists} pnl={livePnl} fund={liveFund} closedToday={feed.recentTrades.length} openCount={feed.positions.length} />
             <OpsPreflight
               strategists={desk.strategists}
               tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
               ops={ops}
             />
-            <SignalsTape signals={feed.signals} />
+            <MasterStrip fund={desk.fund} fundPnl={liveFund} />
             <EventLog events={data.events} />
           </div>
         </div>
       )}
 
-      {/* Expanded channel — the full strip with draggable knobs, opened from a compact
-          grid card (tap-to-expand). Tap the scrim or ✕ to close. */}
+      {/* Expanded channel — full strip with draggable knobs (Mixer tap-to-expand). */}
       {expanded && (() => {
         const s = desk.strategists.find((x) => x.slug === expanded);
         if (!s) return null;
