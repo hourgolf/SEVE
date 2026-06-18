@@ -95,6 +95,8 @@ export function DesktopSurface({
   liveFund,
   activeRoom,
   setActiveRoom,
+  collapsedMarket,
+  setCollapsedMarket,
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
@@ -144,7 +146,14 @@ export function DesktopSurface({
       {activeRoom === "desk" && (
         <section className="room room--desk">
           <div className="market-section">
-            <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
+            <button type="button" className={`mkt-bar${collapsedMarket ? " collapsed" : ""}`} onClick={() => setCollapsedMarket((c) => !c)} title="collapse / expand the chart — give the mixer + book more room">
+              <span className="mkt-sym">{symbol}</span>
+              <span className="mkt-spot" style={{ color: spotUp ? "var(--green)" : "var(--red)" }}>{data.spot != null ? data.spot.toFixed(2) : "—"}</span>
+              <span className="mkt-chev">{collapsedMarket ? "▾ expand chart" : "▴ collapse chart"}</span>
+            </button>
+            <div className="mkt-chart" style={{ display: collapsedMarket ? "none" : "block" }}>
+              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
+            </div>
             <div className="grid grid--live live-body">
               <div className="col col--fill">
                 <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
@@ -162,7 +171,7 @@ export function DesktopSurface({
           </div>
 
           <SectionLabel id="composer" idx="02">
-            Strategy Composer
+            Strategy Composer<span className="sec-jp">ミキサー</span>
             {canWrite && (
               <span className="group-by" title="auto-arrange the channels, then nudge by hand">
                 <span className="gb-label">group</span>

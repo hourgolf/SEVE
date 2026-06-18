@@ -528,6 +528,11 @@
 
 /* ---------- rooms (DESK / REVIEW / OPS) ----------------------------------- */
 .room { display: block; }
+.sec-jp { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent-cream); margin-left: 9px; font-weight: 500; }
+.mkt-bar { display: flex; align-items: center; gap: 14px; width: 100%; background: var(--panel); border: 1px solid var(--border-bright); border-radius: 9px; padding: 9px 14px; margin-bottom: 12px; cursor: pointer; font-family: var(--mono); text-align: left; }
+.mkt-bar .mkt-sym { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: var(--ink); }
+.mkt-bar .mkt-spot { font-size: 15px; font-weight: 700; }
+.mkt-bar .mkt-chev { margin-left: auto; font-size: 11px; color: var(--accent-cream); letter-spacing: 0.06em; }
 .mstop-body { display: flex; align-items: center; gap: 18px; }
 .mstop-note { display: flex; flex-direction: column; gap: 3px; }
 .mstop-v { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--ink); }
