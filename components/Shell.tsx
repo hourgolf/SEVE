@@ -77,16 +77,16 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
 
       <div className="shell-leds">
         <span className="shell-led">
-          <span className="sl-cap">fund nav</span>
-          <span className="sl-v" style={{ color: fund.is_halted ? "var(--nav-orange)" : "var(--led-red)" }}>{navK}K</span>
+          <span className="sl-cap">NAV</span>
+          <span className="sl-v" style={{ color: fund.is_halted ? "var(--amber)" : "var(--nav-orange)" }}>{`$${navK}k`}</span>
         </span>
         <span className="shell-led">
-          <span className="sl-cap">day p&amp;l</span>
+          <span className="sl-cap">DAY</span>
           <span className="sl-v" style={{ color: dayColor }}>{signedUsd(liveFund.dayPnl)}</span>
         </span>
         <span className={`shell-books shb-${dTone}`} title="NAV − attribution Σ (small = the books reconcile)">
-          <span className="shb-k">books Δ</span>
-          <span className="shb-v">{signedUsd(booksDelta)}</span>
+          <span className="shb-k">BOOKS</span>
+          <span className="shb-v">{`Δ${signedUsd(booksDelta)}`}</span>
         </span>
       </div>
 
