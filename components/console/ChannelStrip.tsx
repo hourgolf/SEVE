@@ -31,6 +31,13 @@ export interface ChannelStripProps {
 // swatch) — low = green (safe), high = red (hot). hue 130 (green) → 0 (red).
 const meterColor = (f: number) => `hsl(${Math.round(130 * (1 - Math.max(0, Math.min(1, f))))} 72% 48%)`;
 
+// The ONLY channels the worker pyramids (decide.ts PYRAMID_SLUGS) — the validated convex tail
+// (pyramid-roster-faithful). The pyramid control is shown only here; elsewhere it's a no-op.
+const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
+// The validated cap12 arm = add up to 3 lots + a 12-contract total-stack cap.
+const PYRAMID_ADDS_ON = 3;
+const PYRAMID_CAP = 12;
+
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging, compact, onExpand }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
   const { persistConfig, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, duplicateChannel, deleteChannel, canWrite } = useDeskWrite();
@@ -40,6 +47,8 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
   const dte = config.entry_dte ?? 0;
   const eventPolicy = config.event_policy ?? "standdown";
   const tp = config.take_profit_pct ?? 0;
+  const pyr = config.pyramid_adds ?? 0;
+  const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
 
   // Flip-card editor: rename + delete. Opens an overlay over the card.
   const [editing, setEditing] = useState(false);
@@ -108,6 +117,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
       {dte === 1 && <span className="chl chl-dte" title="enters next-session (1DTE) expiry">1DTE</span>}
       {ustop > 0 && <span className="chl chl-us" title={`underlying stop ${ustop}%`}>uS {ustop}%</span>}
       {eventPolicy === "ignore" && <span className="chl chl-evt" title="ignores scheduled-event stand-downs (event-native)">evt:ignore</span>}
+      {pyr > 0 && <span className="chl chl-pyr" title={`pyramiding: adds up to ${pyr} lot(s) to a winner, stack capped at ${config.max_contracts}`}>PYR ×{pyr}</span>}
       {inTrade && <span className="chl chl-live" title={`${pnl?.openCount} open position(s)`}>● in trade</span>}
       {atStop && <span className="chl chl-stop" title="day P&L at/through the STOP — entries halted">STOP</span>}
     </div>
@@ -198,6 +208,15 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           <input className="cfg-num" type="number" inputMode="numeric" min={1} max={50} step={1} value={config.max_contracts}
             onChange={(e) => setCfg({ max_contracts: Math.max(1, Math.min(50, Math.floor(Number(e.target.value)) || 1)) })} aria-label="max contracts" />
         </div>
+        {pyrEligible && (
+          <div className="cfg-row">
+            <span className="cfg-k" title="pyramid: add to a winning position as it runs (never average down, ≥+30% off base). The validated arm = +3 lots at a 12-contract stack cap (cap12). Off = Phase-A shadow only.">Pyramid</span>
+            <span className="cfg-seg">
+              <button className={pyr === 0 ? "on" : ""} onClick={() => pyr !== 0 && setCfg({ pyramid_adds: 0 })} title="off — shadow only (no live adds)">OFF</button>
+              <button className={pyr > 0 ? "on" : ""} onClick={() => pyr === 0 && setCfg({ pyramid_adds: PYRAMID_ADDS_ON, max_contracts: Math.max(config.max_contracts, PYRAMID_CAP) })} title={`arm cap12 — +${PYRAMID_ADDS_ON} lots, raise the stack cap to ${PYRAMID_CAP}`}>+{PYRAMID_ADDS_ON} · cap{PYRAMID_CAP}</button>
+            </span>
+          </div>
+        )}
       </div>
 
       <label className="ch-edit-label">Lifecycle</label>
@@ -420,7 +439,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         <div className="ch-name">{name}</div>
         {statusBadge}
       </div>
-      <div className="ch-sub">{config.muted ? "muted" : `${executor} · ${dte}DTE`}</div>
+      <div className="ch-sub">{config.muted ? "muted" : `${executor} · ${dte}DTE${pyr > 0 ? ` · PYR×${pyr}` : ""}`}</div>
 
       <div className="ch-lcd">
         <div className={`ch-lcd-v ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>

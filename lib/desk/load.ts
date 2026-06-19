@@ -24,7 +24,7 @@ const COLOR_BY_SLUG: Record<string, PmColor> = {
 const ORDER = ["fade", "breakout", "power", "grind"];
 
 const CONFIG_COLS =
-  "strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed,underlying_stop_pct,event_policy,entry_dte,take_profit_pct)";
+  "strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed,underlying_stop_pct,event_policy,entry_dte,take_profit_pct,pyramid_adds)";
 const NEW_COLS = `id,slug,underlying,executor,account_id,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`;
 const NEW_COLS_NOUL = `id,slug,executor,account_id,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`; // DB predates `underlying`
 const LEGACY_COLS = `id,slug,name,mandate,regime,${CONFIG_COLS}`;
@@ -77,6 +77,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
           event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
           entry_dte: cfg.entry_dte != null ? Number(cfg.entry_dte) : 0,
           take_profit_pct: cfg.take_profit_pct != null ? Number(cfg.take_profit_pct) : 0,
+          pyramid_adds: cfg.pyramid_adds != null ? Number(cfg.pyramid_adds) : 0,
         } as StrategistConfig;
         // Accent: the row's token if valid → else the legacy slug map → else cycle
         // the palette by position (so an arbitrary new channel still gets a color).

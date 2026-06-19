@@ -13,6 +13,11 @@ export interface PyramidShadowEvent {
   createdAt: string; slug: string; occ: string; dir: string;
   wouldQty: number; appreciatedPct: number; base: number; ask: number;
 }
+// A LIVE add the multi-lot executor actually placed (Phase B, pyramid_adds>0) — meta.kind
+// "pyramid-exec" (vs the would-add shadow's "pyramid-shadow"); both share the PYRAMID% prefix.
+export interface PyramidExecEvent {
+  createdAt: string; slug: string; occ: string; addQty: number; newQty: number; newAvg: number;
+}
 export interface PyramidChannelAgg { slug: string; name: string; adds: number; contracts: number }
 
 const NAME_BY_SLUG: Record<string, string> = {
@@ -22,9 +27,10 @@ const NAME_BY_SLUG: Record<string, string> = {
 export const pyramidName = (slug: string) => NAME_BY_SLUG[slug] ?? slug;
 
 export function usePyramidShadow(days = 14): {
-  events: PyramidShadowEvent[]; byChannel: PyramidChannelAgg[]; loading: boolean; error: string | null;
+  events: PyramidShadowEvent[]; execs: PyramidExecEvent[]; byChannel: PyramidChannelAgg[]; loading: boolean; error: string | null;
 } {
   const [events, setEvents] = useState<PyramidShadowEvent[]>([]);
+  const [execs, setExecs] = useState<PyramidExecEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,15 +48,20 @@ export function usePyramidShadow(days = 14): {
         .limit(200);
       if (!alive) return;
       if (error) { setError(error.message); setLoading(false); return; }
-      const evs: PyramidShadowEvent[] = ((data ?? []) as Array<{ created_at: string; meta: Record<string, unknown> | null }>).map((r) => {
+      const rows = (data ?? []) as Array<{ created_at: string; meta: Record<string, unknown> | null }>;
+      // Split by meta.kind: "pyramid-exec" = a LIVE add the executor placed; everything else
+      // ("pyramid-shadow" / legacy) = a would-be add (Phase A detect-only).
+      const shadows: PyramidShadowEvent[] = [];
+      const liveAdds: PyramidExecEvent[] = [];
+      for (const r of rows) {
         const m = (r.meta ?? {}) as Record<string, unknown>;
-        return {
-          createdAt: r.created_at, slug: String(m.slug ?? "?"), occ: String(m.occ ?? ""), dir: String(m.dir ?? ""),
-          wouldQty: Number(m.wouldQty ?? 0), appreciatedPct: Number(m.appreciatedPct ?? 0),
-          base: Number(m.base ?? 0), ask: Number(m.ask ?? 0),
-        };
-      });
-      setEvents(evs); setLoading(false);
+        if (m.kind === "pyramid-exec") {
+          liveAdds.push({ createdAt: r.created_at, slug: String(m.slug ?? "?"), occ: String(m.occ ?? ""), addQty: Number(m.addQty ?? 0), newQty: Number(m.newQty ?? 0), newAvg: Number(m.newAvg ?? 0) });
+        } else {
+          shadows.push({ createdAt: r.created_at, slug: String(m.slug ?? "?"), occ: String(m.occ ?? ""), dir: String(m.dir ?? ""), wouldQty: Number(m.wouldQty ?? 0), appreciatedPct: Number(m.appreciatedPct ?? 0), base: Number(m.base ?? 0), ask: Number(m.ask ?? 0) });
+        }
+      }
+      setEvents(shadows); setExecs(liveAdds); setLoading(false);
     })().catch((e) => { if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); } });
     return () => { alive = false; };
   }, [days]);
@@ -61,5 +72,5 @@ export function usePyramidShadow(days = 14): {
     .map(([slug, a]) => ({ slug, name: pyramidName(slug), ...a }))
     .sort((x, y) => y.contracts - x.contracts);
 
-  return { events, byChannel, loading, error };
+  return { events, execs, byChannel, loading, error };
 }

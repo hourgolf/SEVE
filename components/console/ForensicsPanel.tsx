@@ -118,7 +118,25 @@ export function ForensicsPanel() {
           </>
         )}
 
-        {/* ── PYRAMID SHADOW (V3/ALT would-be adds — zero-order, Phase A graduation) ── */}
+        {/* ── PYRAMID — live adds (executor armed) + would-be adds (shadow) on V3/ALT winners ── */}
+        {ps.execs.length > 0 && (
+          <>
+            <div className="au-sub" style={{ marginTop: 12 }}>Pyramid — LIVE adds (executor armed) · 14d</div>
+            <div className="au-fund">
+              <span>{ps.execs.length} live add{ps.execs.length === 1 ? "" : "s"}</span>
+              <span>Σ <b className="pos">+{ps.execs.reduce((s, e) => s + e.addQty, 0)}</b> contracts added</span>
+            </div>
+            <div className="fx-rows">
+              {ps.execs.slice(0, 10).map((e, i) => (
+                <div className="fx-row" key={`x${i}`}>
+                  <span className="fx-name">{pyramidName(e.slug)} {e.occ}</span>
+                  <span className="fx-mid">→ ×{e.newQty} @ {e.newAvg.toFixed(2)} · {etDay(e.createdAt)} {etTime(e.createdAt)}</span>
+                  <span className="au-pnl pos">+{e.addQty}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
         <div className="au-sub" style={{ marginTop: 12 }}>Pyramid shadow — would-be adds on V3/ALT winners (zero-order; tracking Phase-A graduation)</div>
         {ps.loading ? (
           <p className="au-market">loading…</p>

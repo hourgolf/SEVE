@@ -1854,6 +1854,7 @@
 .chl-dte { color: #6a37b5; }
 .chl-us, .chl-evt { color: #855f0c; }
 .chl-live { color: #1c7a44; }
+.chl-pyr { color: #0f7a6b; background: rgba(15, 122, 107, 0.12); }
 .chl-stop { color: #be3326; background: rgba(190, 51, 38, 0.12); }
 
 /* ---- live-config controls in the flip-card editor (cream scope, tokens flipped above) ---- */
