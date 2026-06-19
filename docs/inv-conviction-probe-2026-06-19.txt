@@ -1,0 +1,41 @@
+
+> seve-live-market-monitor@0.1.0 inv-conviction-probe
+> tsx --env-file=.env.local engine/inv-conviction-probe.ts
+
+
+  atrPct (atr/close) over 106 V3 entries — mean 0.045% · sd 0.023%
+
+═══ BREAK(ALT V3) · INVERTED-vol SIZING (entry set fixed at gap_min 0.25) · real NBBO · 5-window + tail ═══
+window               flat (base)   inv-gap 0.8/1.2   inv-gap 0.6/1.4      inv-atr W0.3      inv-atr W0.5
+2024-trend n22     +2229/dd-2942     +2052/dd-2867     +1730/dd-2685     +2670/dd-2798     +2604/dd-2864
+2025-trend n24      +321/dd-2064      -106/dd-2357     -1219/dd-2410      +140/dd-2078      -314/dd-2113
+late-2025 n14      +7935/dd-1173     +6849/dd-1015      +6018/dd-698     +7745/dd-1012      +7812/dd-931
+CHOP-Mar26 n13     +1297/dd-1976     +1415/dd-1697     +1055/dd-1500     +1435/dd-1493      +746/dd-1289
+AprJun26 n20       +4883/dd-2286     +3510/dd-2487     +2282/dd-2371     +3814/dd-1979     +4884/dd-1657
+POOLED           +16665/dd-10441   +13719/dd-10424     +9865/dd-9663    +15804/dd-9360    +15732/dd-8854
+boot-p5                     -413              -932             -2773              +343              -261   ← tail (higher=better)
+Σcontracts                   502               476               423               460               450   ← moved size iff differ
+  inv-gap 0.8/1.2: holds/improves 1/5 · pooled Δ -2946 · tail WORSE · size moved  ✗
+  inv-gap 0.6/1.4: holds/improves 0/5 · pooled Δ -6800 · tail WORSE · size moved  ✗
+  inv-atr W0.3: holds/improves 2/5 · pooled Δ -862 · tail intact · size moved  ✗
+  inv-atr W0.5: holds/improves 2/5 · pooled Δ -933 · tail intact · size moved  ✗
+
+═══ BREAK(ALT) · INVERTED-vol SIZING (entry set fixed at gap_min 0.25) · real NBBO · 5-window + tail ═══
+window               flat (base)   inv-gap 0.8/1.2   inv-gap 0.6/1.4      inv-atr W0.3      inv-atr W0.5
+2024-trend n21     +1509/dd-2928     +1327/dd-2857     +1002/dd-2678     +1823/dd-2905     +1757/dd-2970
+2025-trend n22     +1298/dd-1551      +786/dd-1929      -499/dd-2153     +1118/dd-1565      +663/dd-1600
+late-2025 n13      +8415/dd-1191     +7428/dd-1033      +6598/dd-716     +8225/dd-1030      +8292/dd-949
+CHOP-Mar26 n11      -238/dd-2287      +264/dd-1701      +287/dd-1269      +283/dd-1515       -22/dd-1819
+AprJun26 n16       +4721/dd-1584     +3819/dd-1532     +2851/dd-1374     +4308/dd-1057      +5283/dd-831
+POOLED            +15705/dd-9540    +13624/dd-9052    +10239/dd-8190    +15757/dd-8071    +15974/dd-8169
+boot-p5                    -1662             -1240             -2473               -17               +59   ← tail (higher=better)
+Σcontracts                   447               422               375               409               402   ← moved size iff differ
+  inv-gap 0.8/1.2: holds/improves 1/5 · pooled Δ -2080 · tail intact · size moved  ✗
+  inv-gap 0.6/1.4: holds/improves 1/5 · pooled Δ -5465 · tail WORSE · size moved  ✗
+  inv-atr W0.3: holds/improves 2/5 · pooled Δ +52 · tail intact · size moved  ✗
+  inv-atr W0.5: holds/improves 3/5 · pooled Δ +269 · tail intact · size moved  ✗
+
+  READ: this is the CORRECTLY-SIGNED conviction test (the refuted gap-sizing probe sized UP on vol; this sizes DOWN).
+  PASS = holds/improves EVERY window + tail intact + size actually moved. A pooled lift that fails a window or worsens
+  the tail = the inversion isn't a robust sizing lever (the cost-gate veto stays the conviction layer). Paper-lab, never backtest-armed.
+

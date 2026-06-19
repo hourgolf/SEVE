@@ -68,6 +68,7 @@
     "override-scorecard": "tsx scripts/override-scorecard.ts",
     "build-training-store": "tsx --env-file=.env.local scripts/build-training-store.ts",
     "gap-sizing-probe": "tsx --env-file=.env.local engine/gap-sizing-probe.ts",
+    "inv-conviction-probe": "tsx --env-file=.env.local engine/inv-conviction-probe.ts",
     "benched-sim": "tsx --env-file=.env.local scripts/benched-sim.ts",
     "mfe-drift": "tsx --env-file=.env.local scripts/mfe-drift.ts",
     "cron:diff": "tsx --env-file=.env.local scripts/cron-deploy.ts",
