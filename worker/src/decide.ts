@@ -20,6 +20,7 @@ import { decidePyramidAdd } from "../../engine/pyramid"; // shared add-gate (pyr
 import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { policy } from "./config.js";
 import { inEventWindow } from "../../engine/market-events";
+import { isLastSessionBeforeHoliday } from "../../engine/market-calendar";
 import { etParts, occSymbol, type AlpacaPosition } from "./alpaca.js";
 import { peakMidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
@@ -71,7 +72,8 @@ export interface DecisionCtx {
   fund: FundState;
   equity: number;
   todayET: string;
-  minutesToClose: number;
+  minutesToClose: number; // BAR-relative (RTH_CLOSE − last-bar minute) — strategy intents key off this
+  wallMinutesToClose: number; // WALL-CLOCK (RTH_CLOSE − now) — EOD hard-flatten + entry-window guards, bars-independent
   next1DTE: string | null;
   pdh?: number;
   pdl?: number;
@@ -323,6 +325,14 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
         && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
       blocked = "event_window";
     }
+    // HOLIDAY-EVE cutoff block (2026-06-19, the Juneteenth strand fix): a late entry that rolls
+    // to the NEXT session's expiry on the last session before a market holiday can't honor the
+    // "swing the final 20 min, close same-day" premise — and a flatten miss strands it over the
+    // multi-day closure (06-18: 747C held Thu→Mon). Fail-safe: no calendar entry → no block.
+    if (!blocked && inCutoff && isLastSessionBeforeHoliday(ctx.todayET)) blocked = "holiday_eve_cutoff";
+    // EOD hard-flatten window (wall-clock): don't OPEN what the wall-clock backstop is about to
+    // force-flatten (the fast-exit sweep flattens same-session positions within EOD_HARD_FLATTEN_MIN).
+    if (!blocked && ctx.wallMinutesToClose <= policy.EOD_HARD_FLATTEN_MIN) blocked = "eod_flatten_window";
     if (!blocked && ch.daily_stop_usd > 0) {
       const realizedToday = await realizedTodayByChannel(ch.id, ctx.todayET);
       if (realizedToday <= -ch.daily_stop_usd) blocked = "daily_stop";

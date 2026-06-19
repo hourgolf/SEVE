@@ -177,7 +177,9 @@ async function cycle(trigger: string): Promise<void> {
 
       const ctx: DecisionCtx = {
         sessionBars, chain, fund: cfg.fund, equity: account.equity, todayET,
-        minutesToClose, next1DTE: chain.nextExpiryAfter(todayET),
+        minutesToClose, // BAR-relative (strategy intents); wall-clock below is bars-independent
+        wallMinutesToClose: Math.max(0, RTH_CLOSE - alpaca.etParts(Date.now()).min),
+        next1DTE: chain.nextExpiryAfter(todayET),
         ...computeLevels(bars.all(), todayET),
         openRows, alpacaByOcc,
       };
@@ -307,9 +309,25 @@ async function fastExitSweep(): Promise<void> {
     for (const r of rows) {
       const ch = byId.get(r.strategist_id)!;
       const chain = chainBySym.get(ch.underlying.toUpperCase());
+      const exec: ExecCtx = { chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+      // ---- EOD HARD-FLATTEN backstop (wall-clock; 2026-06-19 Juneteenth strand fix) ----
+      // The strategy's same-day flatten is BAR-relative, so a gapped near-bell bar (06-18: no
+      // 15:59 print) means it never fires and the position strands — over a 3-day weekend if a
+      // holiday follows. This sweep is a 10s WALL-CLOCK timer that runs even when bars stop, so
+      // it force-flattens a SAME-SESSION machine position with margin while the market is still
+      // open. Reuses executeExit → inherits the shared-OCC sell-cap + client_order_id idempotency.
+      // Machine channels only — manual twins keep their own MANUAL_BACKSTOP_MIN bell exit.
+      const wallMtc = Math.max(0, RTH_CLOSE - nowMin);
+      const openedET = r.opened_at ? alpaca.etParts(Date.parse(r.opened_at)).date : todayET;
+      if (wallMtc <= policy.EOD_HARD_FLATTEN_MIN && openedET === todayET && !/-manual$/i.test(ch.slug)) {
+        info(`eod-hard-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — same-session, wall-clock mtc ${wallMtc} (pre-bell backstop, bars-independent)`);
+        try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
+        catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+        peakMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
+        continue;
+      }
       const mid = chain?.byOcc(r.occ_symbol)?.mid ?? 0;
       if (!(mid > 0)) continue;
-      const exec: ExecCtx = { chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
       const key = entryKey(r.strategist_id, r.occ_symbol);
       const peak = Math.max(peakMidByKey.get(key) ?? r.avg_entry_price, mid);
       peakMidByKey.set(key, peak);

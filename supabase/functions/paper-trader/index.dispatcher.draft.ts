@@ -743,6 +743,17 @@ async function buildMarket(sym: string, todayET: string): Promise<MarketCtx> {
   return { all1m, session1m, pdh, pdl, next1DTE };
 }
 
+// Inlined US market holidays (full-day closures). The cron is a self-contained Deno paste — it
+// can't import engine/market-calendar.ts, so the dates are mirrored here. Used ONLY to suppress
+// the false "stream stale" page on a closed day (the Railway worker doesn't beat with no market
+// data → the cron would otherwise page every holiday, e.g. Juneteenth 2026-06-19). Fail-safe: a
+// missing date just lets a rare benign false-page through; it NEVER gates trading. Keep in sync
+// with engine/market-calendar.ts when extending the year.
+const CRON_MARKET_HOLIDAYS = new Set<string>([
+  "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+  "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+]);
+
 Deno.serve(async () => {
   try {
     const { data: fund } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
@@ -766,7 +777,10 @@ Deno.serve(async () => {
       const inWin = (mark: number) => Number.isFinite(hbAge) && hbAge >= mark && hbAge < mark + 60_000;
       const nowMinET = etParts(Date.now()).min;
       const longDeadAtOpen = nowMinET === 540 && (!Number.isFinite(hbAge) || hbAge >= 121 * 60_000);
-      if (inWin(5 * 60_000) || inWin(60 * 60_000) || inWin(120 * 60_000) || longDeadAtOpen) {
+      // Suppress the page on a market holiday — the worker correctly doesn't beat with no data,
+      // so a "stale" heartbeat on a closed day is expected, not an alarm (2026-06-19 fix).
+      const holidayToday = CRON_MARKET_HOLIDAYS.has(etParts(Date.now()).date);
+      if (!holidayToday && (inWin(5 * 60_000) || inWin(60 * 60_000) || inWin(120 * 60_000) || longDeadAtOpen)) {
         const ageTxt = Number.isFinite(hbAge) ? `${Math.round(hbAge / 60_000)}m old` : "never seen";
         await firePush("⚠ STREAM STALE", `Railway worker heartbeat ${ageTxt} — cron exit-only failover on stream channels`, "seve-alert");
       }

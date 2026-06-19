@@ -115,7 +115,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-17a"; // PB take-profit compound + pyramid shadow (Phase A)
+export const WORKER_VERSION = "stream-2026-06-19a"; // holiday calendar + wall-clock EOD hard-flatten + holiday-eve cutoff block
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
@@ -130,6 +130,14 @@ export const policy = {
   ATM_DELTA: 0.55, // ATM 0DTE delta proxy when the quote carries none
   OPEN_0DTE_CUTOFF_MIN: 31, // inside last ~30 min, roll to 1DTE (Alpaca widened the lockout ~15→~30min, 06-11 422s)
   MANUAL_BACKSTOP_MIN: 3, // `-manual` twins: forced bell backstop (human owns exits)
+  // EOD HARD-FLATTEN (2026-06-19, the Juneteenth strand fix): a WALL-CLOCK backstop that
+  // force-flattens a SAME-SESSION machine position this many minutes before the 16:00 bell.
+  // The strategy's own eod_flatten is BAR-relative (minutesToClose = RTH_CLOSE − lastBarMin),
+  // so when the near-bell bar gaps (06-18: no 15:59 bar) the flatten never triggers and the
+  // position strands — over a 3-day weekend if a holiday follows. The fast-exit sweep (10s
+  // wall-clock timer, runs even when bars stop) fires this with margin so the flatten fills
+  // while the market is open. Machine channels only — manual twins keep MANUAL_BACKSTOP_MIN.
+  EOD_HARD_FLATTEN_MIN: 5, // flatten at ~15:55 ET (5 min margin to fill before the close)
   // Cost-gate cost model (fed REAL bid/ask → engine/cost.ts roundTripCostUsd).
   SLIPPAGE_TICKS_PER_SIDE: 0.25,
   COMMISSION_PER_CONTRACT: 0.04,

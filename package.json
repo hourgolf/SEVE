@@ -106,7 +106,8 @@
     "pyramid-tune-probe": "tsx --env-file=.env.local engine/pyramid-tune-probe.ts",
     "pb-conviction-probe": "tsx --env-file=.env.local engine/pb-conviction-probe.ts",
     "regime-router-probe": "tsx --env-file=.env.local engine/regime-router-probe.ts",
-    "pb-trigger-probe": "tsx --env-file=.env.local engine/pb-trigger-probe.ts"
+    "pb-trigger-probe": "tsx --env-file=.env.local engine/pb-trigger-probe.ts",
+    "market-calendar-selftest": "tsx engine/market-calendar.selftest.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
