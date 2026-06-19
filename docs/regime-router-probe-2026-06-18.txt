@@ -1,0 +1,66 @@
+
+> seve-live-market-monitor@0.1.0 regime-router-probe
+> tsx --env-file=.env.local engine/regime-router-probe.ts
+
+
+  REGIME-ROUTER (Phase 0, v2) · 308 SPY sessions (real NBBO) · ride book {PB-ride,BREAK-V3,BREAK-ALT,power}
+  FAITHFUL: RISK 500 / daily-stop 500 / gate 3 / 0.25 fill. Router = arm rides only on predicted-TREND.
+  oracle regime mix:  TREND 99  CHOP 60  DRIFT 149
+
+  ══ (0) CHANNEL P&L — all-in (always-on) vs ONLY oracle-TREND days ══
+  channel           all-in Σ  TREND-only Σ   note
+  PB-ride             -$3157       +$33103   NET-NEGATIVE all-in — prize leans on a weak channel
+  BREAK-V3           +$10995       +$10486   
+  BREAK-ALT           +$9326        +$9560   
+  power              -$15642        -$8112   structural bleeder (roster-cull, not routing)
+
+  ══ (1) ORACLE CEILING (perfect TREND call — NOT achievable live) by channel subset ══
+                              CHOP     TREND TREND-OOS     TREND  CHOP-MIX         Σ     exClf  w/5
+  A always-on full {PB,V3,ALT,pw}    +$5216     +$579    -$6598    -$5406    +$7731    +$1522    -$6209
+  B routed→TREND             -$816    +$9737    +$9514    +$8693   +$17908   +$45036   +$27128  4/5
+  A always-on core {V3,ALT,pw}    +$4621    -$1200    -$5629    -$5093   +$11980    +$4679    -$7301
+  B routed→TREND            -$1364    +$2551    +$1780    +$3532    +$5435   +$11934    +$6499  3/5
+  A always-on pair {V3,ALT}    +$1058     -$817    +$1619    +$4429   +$14032   +$20322    +$6290
+  B routed→TREND             -$478    +$3746    +$4578    +$4544    +$7655   +$20045   +$12391  3/5
+  → full-book prize +$45036 is CONVEX-TAIL-concentrated: top-1 15% · top-5 51% · top-10 80% of 99 trend days.
+  → ⚠ THE PRIZE IS A ROSTER SIGNAL, NOT A ROUTING ONE: it is dominated by gating BAD channels (PB -EV all-in; power a -$15.6k bleeder).
+    The validated V3+ALT PAIR is ALREADY +EV always-on (+$20,322) and oracle-perfect routing nets the SAME (+$20,045) — V3/ALT
+    self-route via gap_min + er/rel_vol filters, so a centralized router adds ~nothing for the channels actually worth trading.
+
+  ══ (2) CHOP-ARM (H3) — grind-base on the 60 PERFECT-hindsight CHOP days ══
+  grind-base Σ on oracle-CHOP = -$14828  ·  win days 13/60 (22%)  ·  mean -$247/day
+  → oracle B (full ride book) +$45036 + chop -$14828 = +$30208 < B → arming the scalper LOWERS the total even on a PERFECT chop call.
+    grind is -EV even on true chop → chop-arm DEAD; the router is a 2-way TREND/no-TREND call. (06-18 +$1,190 was a cherry day, out-of-corpus.)
+
+  ══ (3) EX-ANTE — morning-ER trend call, OOS leave-one-out, desk-B Ptrend SWEEP (full ride book) ══
+  Ptrend = top-(1-P) of OTHER-4-window ER ⇒ TREND. always-on A +$1522 (exClf -$6209)
+  Ptrend    armed%  recall    prec       B Σ   B exClf   ΔΣ vs A  w/5
+  0.50         50%     62%     39%    +$2347    -$2010     +$826  4/5
+  0.55         44%     56%     40%    +$6733     +$579    +$5211  4/5
+  0.60         40%     52%     42%    -$5013    -$2979    -$6534  3/5
+  0.65         35%     47%     44%    -$6483    -$8034    -$8005  3/5
+  0.70         30%     43%     47%    -$6668    -$9466    -$8190  2/5
+  → NON-MONOTONIC + threshold-fragile: best ~Ptrend 0.55 modestly beats A, but the signal is weak (recall≈precision in the 40s)
+    and MISSES the biggest trend days (the convex tail) → captures only a small fraction of the oracle prize. INSUFFICIENT to build on.
+
+  ══ (4) ACCURACY BAR — flip k% of the oracle TREND/no-TREND calls (avg 8 seeds); how good must an ex-ante call be? ══
+    accuracy    full B Σ    pair B Σ   (always-on A: full +$1522 · pair +$20322)
+        100%     +$45036     +$20045
+         90%     +$37796     +$19067
+         80%     +$28033     +$17311
+         70%     +$19826     +$14022
+         60%     +$10031     +$13450
+         50%        -$11      +$8432
+  → on the FULL (-EV-laden) book, routing clears always-on at ~55-60% accuracy; capturing HALF the prize needs ~80%.
+    But on the validated V3+ALT PAIR routing is NEUTRAL at the oracle and HARMFUL at any realistic accuracy (50% → +$8.4k < +$20.3k
+    always-on) → a classifier can't help channels that are already +EV; it can only un-bleed channels you'd cull or fix anyway.
+
+  ══ VERDICT ══
+  DON'T BUILD THE ROUTER (for the current book). The +$45k oracle "prize" is mostly a ROSTER signal — gating channels that are
+  -EV all-in (PB, -$3157) or a structural bleeder (power, -$15642). The validated V3+ALT pair is ALREADY +EV always-on
+  (+$20,322) and self-routes via its gap_min/er/rel_vol filters → an oracle router nets the SAME and a real (imperfect) one HURTS it.
+  The ex-ante morning-ER call is weak + threshold-fragile; the chop-arm is DEAD (grind -EV on perfect chop).
+  REAL LEVERS (priority): (1) ROSTER — cull power, resolve PB's trigger ([[pb-conviction]] — it's -EV all-in). (2) Revisit a router
+  ONLY IF a NEW channel emerges whose edge is regime-concentrated AND that lacks its own entry filter — then a classifier bake-off
+  (realized÷implied, gap, OR-expansion, gamma-open) vs the ~55-80% accuracy bar. Today, the decentralized filters already route.
+

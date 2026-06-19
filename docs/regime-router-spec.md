@@ -1,12 +1,37 @@
 # Regime Router — design spec
 
-**Status:** DESIGN (not built). 2026-06-18.
+**Status:** PHASE 0 RUN → **DON'T BUILD (for the current book).** 2026-06-18.
+
+> ## ⚑ PHASE 0 RESULT (2026-06-18, `npm run regime-router-probe`, adversarially verified)
+> Routed-desk vs always-on across the 5-window corpus on real NBBO, with an oracle ceiling.
+> **The router is NOT the lever for the current book** — three findings, all reproduced to the
+> dollar by a 4-skeptic adversarial review (docs/regime-router-probe-2026-06-18.txt):
+> 1. **The +$45k oracle "prize" is mostly a ROSTER signal, not a routing one.** It's dominated by
+>    gating channels that shouldn't run always-on: PB-ride (−$3,157 all-in, 73% of the prize) and
+>    power (−$15,642 bleeder). The **validated V3+ALT pair is already +EV always-on (+$20,322)** and
+>    oracle-*perfect* routing nets the **same** (+$20,045) — V3/ALT **self-route** via their
+>    gap_min/er/rel_vol entry filters, so a centralized router adds ~nothing for the channels worth
+>    trading, and an *imperfect* classifier only **hurts** them (50%-acc → +$8.4k < +$20.3k).
+> 2. **The ex-ante classifier is weak + threshold-fragile.** Morning-ER (the live candidate) hovers
+>    around the bar (best Ptrend 0.55 → +$6,733, but non-monotonic: 0.60 → −$5,013), recall≈precision
+>    in the 40s, and it misses the convex-tail trend days. Insufficient.
+> 3. **The chop-arm is DEAD.** grind-base on the 60 *perfect-hindsight* CHOP days = −$14,828 (22% win,
+>    p<0.0001) → arming the scalper lowers the total even with a perfect chop call. The 06-18 +$1,190
+>    was a cherry day (out-of-corpus).
+>
+> **REAL LEVERS instead:** (1) **roster** — cull power, resolve PB's trigger ([[pb-conviction]]).
+> (2) Revisit a router **only if** a NEW channel emerges whose edge is regime-concentrated AND that
+> lacks its own entry filter. Today the decentralized filters already do the routing. The design
+> below stands as the interface if that day comes.
+
 **One-liner:** a shared TREND/CHOP/DRIFT classifier + a per-channel posture matrix so
 the desk stops running directional rides into chop and a scalper into trends.
 **Verdict up front:** the *actuation* is trivial (the desk already has every lever); the
 *classifier* is the binding constraint and has been the desk's dead axis. This spec defines
 the interface + the shadow-first gauntlet so a classifier can be validated before it routes a
-dollar — it does **not** claim a working classifier exists yet.
+dollar — it does **not** claim a working classifier exists yet. **Phase 0 (above) found the
+router doesn't help the *validated* channels — they already self-route — so the design below is
+held pending a regime-concentrated, filter-less new channel.**
 
 ---
 
