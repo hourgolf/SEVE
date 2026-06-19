@@ -74,10 +74,24 @@ launchctl list | grep seve
 launchctl bootout gui/$(id -u)/com.seve.capture
 ```
 
-## Durability note (open follow-on)
+## Cloud durability — the Mac-independent backstop (BUILT)
 
-The archive is local-only — robust if the Mac is on most days (the catch-up window + gap-check
-cover gaps), but a dead/long-off laptop past the 7d window still loses the tape. A cloud backstop
-(push the gzipped day archives to Supabase Storage / a bucket after export) would make the corpus
-durable independent of the Mac. Not built yet — flagged as the next hardening step if the laptop
-isn't reliably on.
+The local archive alone covers Mac-DEATH only if the Mac was running to capture; it does NOT cover
+the Mac being OFF past the 7d prune (nothing gets captured to begin with). So the **always-on Railway
+worker** also uploads each COMPLETE day's `option_quotes` (gz, format-identical to the local archive)
+to a private **Supabase Storage bucket `forward-data`** (`quotes/<date>.json.gz`), post-close — fully
+Mac-independent. `worker/src/archive.ts` + `store.ts` helpers; boot run = catch-up for missed days, a
+20-min timer fires once/day after 16:15 ET. Service-role only (bypasses RLS — no object policies);
+off the trade path; `ARCHIVE_QUOTES=0` disables it. Only COMPLETE days upload (prior days always; today
+only post-close) → no partial-day risk, so skip-if-already-uploaded is safe.
+
+Size: ~3.5 MB gz/day × ~250 trading days ≈ **~875 MB/yr** — fits the Storage free tier (1 GB) for ~a
+year. Revisit the tier / roll old days to colder storage before then. Only the quotes tape is uploaded
+(the one irreplaceable thing); bars/training/ledgers are reconstructable, so they stay local-only.
+
+Inspect what's in the cloud:
+```sql
+select name, (metadata->>'size')::int as bytes from storage.objects
+where bucket_id = 'forward-data' order by name desc;   -- via Supabase SQL
+```
+Restore a day: download `quotes/<date>.json.gz` from the bucket into `data/quotes-archive/`.

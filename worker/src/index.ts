@@ -21,6 +21,7 @@ import { StockBarStream } from "./stream.js";
 import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type ShadowDecision } from "./decide.js";
 import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
+import { archiveQuotesToStorage, maybeArchiveTick } from "./archive.js";
 import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, type ExecCtx } from "./execute.js";
 import { computeFeatures } from "../../engine/engine";
 import { specPremiumExit } from "../../engine/specEvaluate";
@@ -430,6 +431,13 @@ async function main(): Promise<void> {
 
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
   setInterval(() => { void fastExitSweep(); }, Math.max(5, config.fastExitSec) * 1000);
+
+  // FORWARD-DATA DURABILITY: upload each complete day's option_quotes (gz) to Supabase Storage,
+  // post-close, from this always-on worker — the Mac-independent backstop against the 7d prune
+  // (docs/data-capture.md). Boot run = catch-up for any day missed while down; the timer fires
+  // once post-close per ET day. Off the trade path; no-op without the service role.
+  void archiveQuotesToStorage("boot");
+  setInterval(() => { void maybeArchiveTick(); }, 20 * 60_000); // every 20 min; self-gates to once/day post-close
 
   // PRE-OPEN IDLE BEAT: the cron wakes at 09:00 ET but bars (hence cycles/sweeps)
   // start at 09:30 — the heartbeat read stale every morning and the cron's

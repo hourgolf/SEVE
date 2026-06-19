@@ -115,7 +115,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-19b"; // + PYRAMID multi-lot executor (Phase B, V3/ALT, default-off via pyramid_adds)
+export const WORKER_VERSION = "stream-2026-06-19c"; // + forward-data durability: post-close quotes → Supabase Storage
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

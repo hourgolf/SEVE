@@ -303,6 +303,50 @@ export async function openRowQtyByOcc(): Promise<Map<string, number>> {
   return m;
 }
 
+// ---- Forward-data durability backstop (Supabase Storage) --------------------
+// The Railway worker (always-on, service-role) uploads each COMPLETE day's option_quotes
+// here post-close so the irreplaceable tape survives the operator's Mac being off/dead past
+// the 7d DB prune. Files are gz per ET day under quotes/<date>.json.gz, FORMAT-IDENTICAL to
+// the local export-quotes archive (a verbatim array of rows) so they're interchangeable.
+const FORWARD_BUCKET = "forward-data";
+
+/** ET dates already archived to Storage (so we skip complete days; restart-safe). */
+export async function listArchivedQuoteDays(): Promise<Set<string>> {
+  const out = new Set<string>();
+  const { data, error } = await sb.storage.from(FORWARD_BUCKET).list("quotes", { limit: 2000 });
+  if (error) { warn(`store: storage list failed — ${error.message}`); return out; }
+  for (const o of data ?? []) { const m = o.name.match(/^(\d{4}-\d{2}-\d{2})\.json\.gz$/); if (m) out.add(m[1]); }
+  return out;
+}
+
+/** Verbatim option_quotes rows for one UTC/ET calendar day (RTH option quotes ⇒ UTC date ==
+ *  ET date), keyset-paginated on the pkey (OFFSET dies on this table). One day ≈ ~85k rows. */
+export async function fetchQuotesForDay(etDate: string): Promise<unknown[]> {
+  const startISO = `${etDate}T00:00:00Z`;
+  const end = new Date(Date.parse(startISO) + 86_400_000).toISOString();
+  const rows: Array<{ id: string | number }> = [];
+  let lastId: string | number | null = null;
+  for (;;) {
+    let q = sb.from("option_quotes").select("*").gte("captured_at", startISO).lt("captured_at", end).order("id", { ascending: true }).limit(1000);
+    if (lastId != null) q = q.gt("id", lastId);
+    const { data, error } = await q;
+    if (error) throw new Error(`option_quotes[${etDate}]: ${error.message}`);
+    const batch = (data ?? []) as Array<{ id: string | number }>;
+    rows.push(...batch);
+    if (batch.length < 1000) break;
+    lastId = batch[batch.length - 1].id;
+  }
+  return rows;
+}
+
+/** Upload a gzipped day archive (upsert = idempotent / re-do a partial). Returns the error msg. */
+export async function uploadQuotesArchive(etDate: string, gz: Uint8Array): Promise<string | null> {
+  const { error } = await sb.storage.from(FORWARD_BUCKET).upload(`quotes/${etDate}.json.gz`, gz, {
+    contentType: "application/gzip", upsert: true,
+  });
+  return error ? error.message : null;
+}
+
 export async function insertEquitySnapshot(equity: number, cash: number, unrealized: number): Promise<void> {
   if (!config.writeEquitySnapshots) return;
   try { await sb.from("equity_snapshots").insert({ strategist_id: null, net_liquidation: equity, cash, unrealized_pnl: unrealized }); }
