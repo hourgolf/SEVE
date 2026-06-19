@@ -1,0 +1,25 @@
+
+> seve-live-market-monitor@0.1.0 grind-slippage-probe
+> tsx --env-file=.env.local engine/grind-slippage-probe.ts
+
+
+  GRIND-v3 SLIPPAGE SENSITIVITY · FAITHFUL (live 0.25 gate FIXED / full spread crossed / real NBBO) · RISK 500 / stop 500
+  how much of grind-v3's −EV is the SLIPPAGE assumption? FILL slippage swept; everything else held faithful.
+
+  slip/side        Σ P&L    exp$/t    win%  trades   note
+  0.00t           -$5679      -4.0     46%    1405   ← mid+spread only (no adverse fill)
+  0.25t           -$8466      -6.0     46%    1405   ← ≈ live cross (compare live +$371/22 = +16.9/t)
+  0.50t          -$11205      -8.0     45%    1404   
+  1.00t          -$16791     -12.0     44%    1399   ← faithful default (the −$16.8k)
+
+  ══ per-window at 0.25t (≈ live cross) — broad −EV or window-specific? ══
+    CHOP Mar26            -$2562
+    TREND AprMay26        -$1243
+    TREND-OOS MA25        -$1104
+    TREND 24              -$2252
+    CHOP-MIX 25-26        -$1306
+
+  READ: grind-v3's per-trade edge moves -12.0/t (1.0t, the −$16.8k) → -6.0/t (0.25t) → -4.0/t (0t, no slippage).
+  The slippage assumption is worth ~$11136 over the corpus. Live (+$371/22 = +16.9/t, n=22 = noise)
+  is ABOVE even the 0.25t backtest → either live fills beat 0.25t, or 22 trades is just a lucky draw on a ≈coin-flip. VERDICT: −EV even at ZERO slippage → no real edge; live + is small-sample noise → grind-v3 is a CUT candidate, not a keeper.
+
