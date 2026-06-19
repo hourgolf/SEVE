@@ -237,11 +237,19 @@ export function IntradayChart({
   // (the cross-symbol wick: a SPY chart spiking to QQQ's price and vice versa).
   const formingRef = useRef<{ min: number; sym: string; open: number; high: number; low: number } | null>(null);
   const liveSource = useMemo<UnderlyingBar[]>(() => {
-    const src = isDaily ? dailyBars : bars;
+    // INTRADAY ranges plot 1-min bars → filter to RTH (09:30–16:00 ET). Pre/post-market bars
+    // (~19% of the feed) are sparse, low-volume and render as overnight-gap / spike candles
+    // (e.g. the QQQ 08:59 bar that gaps 1.3% off the prior close). Daily ranges use dailyBars,
+    // an RTH rollup, so they're untouched.
+    const src = isDaily ? dailyBars : bars.filter((b) => { const m = etParts(Date.parse(b.ts)).min; return m >= 570 && m < 960; });
     if (spot == null || !src.length) return src;
     const last = src[src.length - 1];
     const lc = last.close ?? spot, lh = last.high ?? spot, ll = last.low ?? spot;
     if (isDaily) return [...src.slice(0, -1), { ...last, close: spot, high: Math.max(lh, spot), low: Math.min(ll, spot) }];
+    // no forming bar outside RTH — the live spot keeps polling after the close, which would
+    // append an extended-hours candle to an otherwise RTH-clean chart.
+    const nowMin = etParts(Date.now()).min;
+    if (nowMin < 570 || nowMin >= 960) return src;
     // drop a spot wildly off the last 1-min close (a glitch /api/spot tick or a mid-toggle
     // stale value) — a >2% move in under a minute isn't real, so don't let it set high/low.
     if (lc > 0 && Math.abs(spot - lc) / lc > 0.02) return src;
