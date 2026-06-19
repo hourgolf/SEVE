@@ -1,0 +1,23 @@
+
+> seve-live-market-monitor@0.1.0 drift-detector-probe
+> tsx --env-file=.env.local engine/drift-detector-probe.ts
+
+
+  DRIFT-DETECTOR · 311 SPY sessions w/ signals (real NBBO) · regime mix TREND 100 CHOP 60 DRIFT 151 (49% drift)
+  ORB-base drift-day bleed = -$23744 over 151 days (the target to avoid). LOW signal = drift-prone for all candidates.
+
+  ══ signal separation (mean value by realized regime) + drift recall + OOS stand-down on ORB ══
+  signal                           DRIFT    CHOP   TREND  recall   OOS standdown Δ  better/5
+  implied-move (9:40 straddle)      0.44    0.73    0.49    68%            -$3381  3/5
+  morning range                     0.00    0.01    0.00    64%            -$2509  2/5
+  morning net move                  0.00    0.00    0.00    61%              +$85  2/5
+  morning volume ratio              1.00    1.21    0.99    52%            -$4428  2/5
+  morning ER                        0.18    0.23    0.20    56%             +$582  2/5
+
+  ══ VERDICT (CAUSAL, →10:00) ══
+  No causal morning signal predicts drift well enough: morning-ER stand-down is ~+$582 (2/5) once the look-ahead is removed (was +$9,253/4-5 at
+  the contaminating →10:30 window); morning-move collapses the same (+$8,768→~+$85); random same-count control ties it. The implied-move /
+  gamma-open clock does NOT separate drift (0.44) from trend (0.49) — it flags CHOP (0.73), so it's a chop/vol signal, DROP it as a drift detector.
+  → CAUSAL DRIFT DETECTION IS DEAD on this corpus. ORB's −$23.7k drift bleed is a ROSTER problem (cull/downsize orb-trend-rider, a live bleeder),
+  NOT a stand-down flag — and a DESK-WIDE drift mute is BACKWARDS (it would silence PB, which makes its best days on quiet/low-move mornings).
+

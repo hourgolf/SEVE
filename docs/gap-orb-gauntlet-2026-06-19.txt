@@ -1,0 +1,35 @@
+
+> seve-live-market-monitor@0.1.0 gap-orb-gauntlet
+> tsx --env-file=.env.local engine/gap-orb-gauntlet.ts
+
+
+  GAP-ORB GAUNTLET · 311 SPY sessions (real NBBO) · ORB-base + gap_min, OOS + MC. Faithful RISK500/stop500/+75%/gate3.
+
+  ══ (1) gap_min sweep — per-window Σ (in-sample) ══
+  gap       n  exp$/t      CHOP     TREND TREND-OOS     TREND  CHOP-MIX         Σ  win/5
+  0.00    557     -$2    +$1358    -$2418    -$5054    +$3433    +$1521    -$1159  —
+  0.10    491     -$2    +$1397    -$3085    -$4564    +$4380     +$842    -$1030  3/5
+  0.15    449     -$7    +$1397    -$2716    -$3409    +$4334    -$2817    -$3211  3/5
+  0.20    400     +$3    +$1397    -$2928     +$398    +$5836    -$3591    +$1111  3/5
+  0.25    359     +$3     +$739    -$2187    +$1117    +$2916    -$1457    +$1130  2/5
+  0.30    327    +$13     +$739    -$3829    +$3586    +$4253     -$640    +$4109  2/5
+  0.35    277     +$9     +$739    -$3950    +$4179    +$2223     -$586    +$2606  1/5
+  0.40    251     +$8     +$102    -$2829    +$3791    +$2223    -$1365    +$1922  1/5
+
+  ══ (2) OOS LEAVE-ONE-OUT — best gap on the OTHER 4 windows, applied to the held-out window ══
+  held-out window     always-on Σ      best-gap (on other-4)   held-out Σ @ that gap    better?
+  CHOP Mar26               +$1358      gap 0.30                     +$739        ✗
+  TREND AprMay26           -$2418      gap 0.30                    -$3829        ✗
+  TREND-OOS MA25           -$5054      gap 0.00                    -$5054        ✓
+  TREND 24                 +$3433      gap 0.35                    +$2223        ✗
+  CHOP-MIX 25-26           +$1521      gap 0.30                     -$640        ✗
+  POOLED  always-on -$1159  →  OOS-gap -$6560  (Δ -$5401)  · better 1/5  · FAILS the OOS bar (≥4/5 needed)
+
+  ══ (3) MC TAIL — block-bootstrap (B=5, 2000 paths), gap0.25 vs always-on ══
+  policy        Σ        p5         p50        p95        maxDD p5
+  always-on     -$1159   -$17200     -$1647    +$14867    -$21758
+  gap_min0.25   +$1130   -$11698      +$773    +$13590    -$15753
+
+  ══ VERDICT ══  ARM iff OOS ≥4/5 held-out windows AND MC lifts p5 / cuts maxDD without collapsing p95.
+  Else PARK (one-window-carried, not a generalizable gap edge) → collect-forward / paper-lab, don't wire the spec.
+
