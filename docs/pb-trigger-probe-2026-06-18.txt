@@ -1,0 +1,55 @@
+
+> seve-live-market-monitor@0.1.0 pb-trigger-probe
+> tsx --env-file=.env.local engine/pb-trigger-probe.ts
+
+
+  PB-TRIGGER · 308 SPY sessions (real NBBO, PB @1DTE) · FAITHFUL gate 0.25 + audited 1-tick fills + RISK 500/stop 500/maxC 4
+  Stronger trend-establishment TRIGGER (wraps buildPullback). Baseline = current trigger. Goal: flip +EV at REASONABLE volume (vs the er-floor's 95% cut).
+
+  variant                     n  cut%  win%  exp$/t   Σ (1t)  ex-CHOP-MIX  w/5
+  baseline (current)        349    0%   42%    -$10   -$3646          +$9   —  ← baseline
+  ribbon-sep 0.3            323    7%   44%    +$12   +$3991       +$3855   4/5
+  ribbon-sep 0.6            209   40%   39%    -$22   -$4699       -$2281   2/5
+  ribbon-sep 1.0             33   91%   30%   -$122   -$4011       -$3345   2/5
+  deep-ribbon e9>e21>e50    346    1%   42%    -$16   -$5505        -$974   2/5
+  slope 20b 0.5atr          339    3%   41%    -$15   -$5157        -$772   1/5
+  slope 20b 1.0atr          331    5%   44%     -$1    -$486       +$1394   3/5
+  sep0.6 + slope0.5         208   40%   39%    -$22   -$4591       -$2172   2/5
+  sep0.6 + deep             205   41%   40%    -$21   -$4255       -$1857   3/5
+  deep + slope0.5           335    4%   42%    -$18   -$6177       -$2312   2/5
+
+  ══ RIBBON-SEP fine sweep — is the 0.3 sweet spot a PLATEAU (robust) or a SPIKE (overfit)? ══
+  sep·ATR      n  cut%  exp$/t    Σ(1t)  ex-CHOP-MIX  w/5
+  0.10       349    0%     -$3   -$1021       +$1827   3/5
+  0.15       344    1%     -$7   -$2317       +$1071   2/5
+  0.20       340    3%     -$4   -$1524       +$1335   3/5
+  0.25       335    4%     +$0    +$167       +$3326   4/5
+  0.30       323    7%    +$12   +$3991       +$3855   4/5
+  0.35       314   10%     +$5   +$1604        +$773   3/5
+  0.40       298   15%    +$14   +$4257       +$1150   3/5
+  0.50       260   26%    -$11   -$2870        +$600   2/5
+  OOS leave-one-out (best sep per held-out window, fit on the OTHER 4): Σ -$436  [picks CHOP:0.30 TREND:0.30 TREND-OOS:0.40 TREND:0.40 CHOP-MIX:0.30]
+  → PLATEAU (a BAND of seps beat baseline + OOS≈in-sample) = robust; lone-0.3-spike or OOS≪in-sample = overfit.
+
+
+  ══ WINNER ribbon-sep 0.40 — per-window vs baseline ══
+  window               base exp$/t (n)   trig exp$/t (n)      ΔΣ$
+  CHOP Mar26                 +$19 (27)          +$1897 Σ   +$1386
+  TREND AprMay26             +$30 (46)          +$4865 Σ   +$3493
+  TREND-OOS MA25             -$15 (93)          -$4404 Σ   -$2963
+  TREND 24                    -$6 (77)          -$1208 Σ    -$776
+  CHOP-MIX 25-26            -$34 (106)          +$3107 Σ   +$6763
+  POOLED  base exp$/t -$10 (n 349) → +$14 (n 298)  ·  Σ -$3646 → +$4257  ·  bracket [+$4257 1t, +$5440 0.25]
+
+  ══ TAIL CHECK — block-bootstrap (B=5, 2000 paths) ══
+  policy     Σ        p5         p50        p95        maxDD p5
+  baseline    -$3646   -$16336     -$4158     +$7907    -$19278
+  trigger     +$4257    -$7426     +$3928    +$16533    -$12472
+
+  ══ VERDICT ══
+  IN-SAMPLE the best trigger (ribbon-sep 0.40) looks strong: Σ -$3646→+$4257, 15% cut, tail improves — BUT
+  the fine sweep is JAGGED (0.25/0.30/0.40 spike, 0.35/0.50 dip) and OOS leave-one-out collapses to -$436 (vs in-sample +$4257)
+  → OVERFIT: the separation sweet-spot doesn't transfer out-of-sample.
+  Three entry-tightenings now fail PB (er-floor needs a 95% cut; ribbon-sep overfits; slope/deep are weak). PB is NOT fixable by tightening
+  its existing pullback entries → FIX-THE-SHAPE (a different entry thesis = new R&D, not a tweak) or CUT the channel.
+
