@@ -46,6 +46,12 @@ export interface ChannelConfig {
   // tail (PB: ridden −EV, compound +EV) compounding beats riding. 0 = off (ride to the
   // −50% stop / flatten). Mirrors the engine's premiumExit.profitPct (compound-vs-ride-probe).
   take_profit_pct: number;
+  // Per-channel PYRAMID executor switch (39_pyramid_adds.sql): the MAX lots the live worker may
+  // ADD to a winning V3/ALT position as it runs (same contract, never average down; whole stack
+  // exits together). 0 = OFF (Phase A shadow only — byte-identical). N>0 = add up to N lots, total
+  // stack capped at max_contracts. The validated "cap12" arm = pyramid_adds=3 + max_contracts=12.
+  // Only ever acts on the hardcoded PYRAMID_SLUGS (V3/ALT). (pyramid-roster-faithful, 2026-06-19.)
+  pyramid_adds: number;
 }
 export interface FundState {
   total_capital_usd: number;
@@ -102,6 +108,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
       entry_dte: Math.max(0, Math.min(1, Number(cfg.entry_dte ?? 0))),
       take_profit_pct: Math.max(0, Number(cfg.take_profit_pct ?? 0)),
+      pyramid_adds: Math.max(0, Math.floor(Number(cfg.pyramid_adds ?? 0))),
     });
   }
   const fund: FundState | null = fundRow
@@ -248,6 +255,18 @@ export async function insertPosition(row: {
   const { error } = await sb.from("positions").insert({
     ...row, current_mark: row.avg_entry_price, unrealized_pnl: 0, status: "open",
   });
+  return error ? error.message : null;
+}
+
+/** PYRAMID add (Phase B): grow the SINGLE position row to the new weighted-avg entry + summed
+ *  qty — NEVER a sibling row (a 2nd row sharing the OCC would mis-net the 06-09 shared-OCC ledger).
+ *  The row IS the stack, so exit/booking (realizedToBook fill-net, sell min(held,row.qty)) and
+ *  restart reconstruction need NO changes — they already read this row. Returns the error to journal
+ *  LOUD on failure (the silent-insert → re-buy-loop incident is why writes that gate correctness do). */
+export async function updatePositionStack(id: string, newQty: number, newAvgEntry: number): Promise<string | null> {
+  const { error } = await sb.from("positions")
+    .update({ qty: newQty, avg_entry_price: newAvgEntry, current_mark: newAvgEntry })
+    .eq("id", id);
   return error ? error.message : null;
 }
 

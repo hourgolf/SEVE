@@ -21,7 +21,7 @@ import { StockBarStream } from "./stream.js";
 import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type ShadowDecision } from "./decide.js";
 import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
-import { executeEntry, executeExit, executeReconcile, premiumExitReason, seedRemaining, entryKey, type ExecCtx } from "./execute.js";
+import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, type ExecCtx } from "./execute.js";
 import { computeFeatures } from "../../engine/engine";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
@@ -182,6 +182,7 @@ async function cycle(trigger: string): Promise<void> {
         next1DTE: chain.nextExpiryAfter(todayET),
         ...computeLevels(bars.all(), todayET),
         openRows, alpacaByOcc,
+        allOrders, // live-only snapshot (empty in shadow) — the PYRAMID executor reconstructs the lot stack from it
       };
       const symChannels = cfg.channels.filter((c) => c.underlying.toUpperCase() === sym);
       const symDecisions: ShadowDecision[] = [];
@@ -222,6 +223,7 @@ async function cycle(trigger: string): Promise<void> {
           try {
             if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
             else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec);
+            else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
             else if (d.action === "enter" && barFresh) await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
             else if (d.action === "hold" && row) {
               const alp = alpacaByOcc.get(row.occ_symbol);
@@ -262,10 +264,13 @@ async function cycle(trigger: string): Promise<void> {
 }
 
 function report(trigger: string, equity: number, ds: ShadowDecision[]): void {
-  const act = ds.filter((d) => d.action === "enter" || d.action === "exit" || d.action === "reconcile");
+  const act = ds.filter((d) => d.action === "enter" || d.action === "exit" || d.action === "reconcile" || d.action === "add");
   shadow(`cycle (${trigger}) equity $${Math.round(equity)} — ${ds.length} ch [${SYMBOLS.join("+")}], ${act.length} actionable`);
   for (const d of ds) {
-    if (d.action === "enter") {
+    if (d.action === "add") {
+      shadow(`  ${d.slug}: PYRAMID add ${d.occ} ×${d.qty} — WOULD ADD [${d.reason}]`, d.detail);
+      void store.writeShadowEvent(`${d.slug} PYRAMID add ${d.occ} ×${d.qty} (${d.reason})`, d.detail);
+    } else if (d.action === "enter") {
       const verb = d.blocked ? `BLOCKED(${d.blocked})` : `WOULD BUY ×${d.qty}`;
       shadow(`  ${d.slug}: ENTER ${d.direction} ${d.occ} — ${verb} [${d.reason}]`, d.detail);
       void store.writeShadowEvent(`${d.slug} ENTER ${d.direction} ${d.occ} — ${d.blocked ? `blocked:${d.blocked}` : `qty:${d.qty}`} (${d.reason})`, d.detail);

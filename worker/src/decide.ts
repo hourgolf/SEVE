@@ -21,7 +21,7 @@ import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { policy } from "./config.js";
 import { inEventWindow } from "../../engine/market-events";
 import { isLastSessionBeforeHoliday } from "../../engine/market-calendar";
-import { etParts, occSymbol, type AlpacaPosition } from "./alpaca.js";
+import { etParts, occSymbol, type AlpacaPosition, type AlpacaOrder } from "./alpaca.js";
 import { peakMidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
 import { entryStateByKey, entryKey } from "./execute.js";
@@ -30,16 +30,19 @@ import { entryStateByKey, entryKey } from "./execute.js";
 const RTH_OPEN = 570;
 const RTH_CLOSE = 960;
 
-// PYRAMID SHADOW (Phase A) — detect-only, the channels with a REAL convex tail that the
-// pyramid-probe validated (V3/ALT, 4/5 OOS, +30% sweet spot). NEVER places an order — logs
-// what an add WOULD be via writeShadowEvent. minProfitPct/maxAdds MUST match the probe so the
-// graduation-replay (engine vs live PYRAMID events) asserts qty/bar parity. [[compound-vs-ride-verdict]]
-const PYRAMID_SHADOW_SLUGS = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
+// PYRAMID (V3/ALT only) — the channels with a REAL convex tail the pyramid probes validated
+// (4/5 OOS, +30%@cap12 = the sweet spot, pyramid-roster-faithful 2026-06-19). HARDCODED as a safety
+// rail: even with pyramid_adds>0 the worker only ever pyramids these two slugs (a new channel needs a
+// deliberate code change here, not just the config column). Phase A = shadow (pyramid_adds=0): log what
+// an add WOULD be, place NO order. Phase B = executor (pyramid_adds>0): emit action:"add" → executeAdd.
+// minProfitPct MUST match the probe so the graduation replay asserts qty/bar parity. [[compound-vs-ride-verdict]]
+const PYRAMID_SLUGS = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 const PYRAMID_MIN_PROFIT_PCT = 30;
-const PYRAMID_MAX_ADDS = 3;
-// once-per-(ET-day, slug, occ) dedup (mirror index.ts gammaLogged) — Phase A has a STATIC base lot,
-// so the +30%-off-fixed-base gate re-passes every bar; log only the FIRST crossing so the graduation
-// replay sees 1 shadow event vs the engine's first add (not N duplicates, incl. boot/stale cycles).
+const PYRAMID_MAX_ADDS = 3; // shadow-detect default (the executor uses ch.pyramid_adds as its cap)
+// once-per-(ET-day, slug, occ) dedup for the SHADOW log only — Phase A has a STATIC base lot so the
+// +30%-off-fixed-base gate re-passes every bar; log the FIRST crossing only (1 event vs the engine's
+// first add, not N duplicates incl. boot/stale cycles). The EXECUTOR is NOT deduped — its real lot
+// count (maxAdds) + maxStack + never-average-down gate are the limiters, so it adds on each fresh leg.
 const pyramidShadowLogged = new Set<string>();
 
 // Cost-gate model: real bid/ask ("option_bars" source) + the worker's calibrated
@@ -57,7 +60,7 @@ const COST_MODEL: CostModel = {
 export interface ShadowDecision {
   slug: string;
   status: string;
-  action: "enter" | "exit" | "hold" | "reconcile" | "skip";
+  action: "enter" | "exit" | "hold" | "reconcile" | "skip" | "add";
   reason: string;
   direction?: OptType;
   occ?: string;
@@ -80,6 +83,7 @@ export interface DecisionCtx {
   gap?: number; // signed overnight gap % (for `gap_min`); undefined when no prior session in memory
   openRows: Map<string, PositionRow>; // strategist_id → open desk row
   alpacaByOcc: Map<string, AlpacaPosition>; // occ → Alpaca position
+  allOrders?: AlpacaOrder[]; // cycle-start order snapshot (live only) — the PYRAMID executor reconstructs the real lot stack from the slug-prefixed filled buys
 }
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
@@ -367,48 +371,71 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     };
   }
 
-  // ---- PYRAMID SHADOW (Phase A, V3/ALT only) — detect-only, NEVER enters/adds an order. ----
-  // When a row is open + a fresh SAME-DIRECTION continuation fires (eval AS-IF-FLAT, NOT the
-  // pos-aware intent above) + appreciated ≥ minProfitPct, log what an add WOULD be via the SHARED
-  // engine decidePyramidAdd gate (→ no drift from the backtest) + writeShadowEvent (double-guarded).
-  // `action` stays "hold" → index.ts marks the row, never an order. Phase A has a SINGLE row (no lot
-  // stack) so it detects the FIRST add only; the multi-lot executor + restart-safe weighted-avg = Phase B.
-  if (row && pos && PYRAMID_SHADOW_SLUGS.has(ch.slug) && (!intent || intent.kind !== "exit")) {
-    const cont = built.evaluate(f, null); // as-if-flat continuation trigger
-    const dir = cont?.kind === "enter" ? cont.direction ?? null : null;
-    const q = dir != null ? ctx.chain.byOcc(row.occ_symbol) : null;
-    const ask = q?.ask ?? 0;
-    const logKey = `${ctx.todayET}|${ch.slug}|${row.occ_symbol}`;
-    if (dir != null && ask > 0 && !pyramidShadowLogged.has(logKey)) {
-      // ⚠ Phase-A parity caveats for the graduation replay (all un-shared with the engine, documented
-      // so they're reconciled at Phase B, NOT silently trusted): (1) addFill = raw ask here vs the engine's
-      // cost-adjusted en.fill (~1 tick higher) → the +30% gate can disagree at the boundary; (2) base =
-      // row.avg_entry_price (real Alpaca fill) vs the engine's entry en.fill; (3) wouldQty uses the worker
-      // decide-formula floor(capital_pct/(0.5·ask·100)) (NOT riskGovernor, and ignores the daily-stop latch) —
-      // it equals the engine's floor(2·RISK/(ask·100)) only while capital_pct=RISK & aggression=100.
-      const riskPer = 0.5 * ask * 100;
-      const wouldQty = riskPer > 0 ? Math.max(0, Math.min(Math.floor(ch.capital_pct / riskPer), ch.max_contracts)) : 0;
-      const dec = decidePyramidAdd({
-        cfg: { maxAdds: PYRAMID_MAX_ADDS, minProfitPct: PYRAMID_MIN_PROFIT_PCT },
-        pos: { optType: pos.optType, qty: row.qty, entryPrice: row.avg_entry_price },
-        lots: [{ qty: row.qty, entryFill: row.avg_entry_price }], // single base lot (Phase A)
-        heldAtPriorBar: true, // a row in openRows was opened in a PRIOR cycle
-        exiting: false, // the outer guard already ensured this bar isn't an exit
-        continuationDir: dir,
-        addFill: ask,
-        sizeQty: wouldQty,
-      });
-      if (dec.add) {
-        pyramidShadowLogged.add(logKey); // first crossing only
-        void writeShadowEvent(
-          `PYRAMID ${ch.slug} ${row.occ_symbol} — would add ×${dec.qty} @ ${ask.toFixed(2)} ` +
-            `(base ${row.avg_entry_price.toFixed(2)}, +${dec.appreciatedPct.toFixed(0)}%, dir ${pos.optType})`,
-          {
-            kind: "pyramid-shadow", slug: ch.slug, occ: row.occ_symbol, dir: pos.optType,
-            base: round2(row.avg_entry_price), ask: round2(ask), appreciatedPct: +dec.appreciatedPct.toFixed(2),
-            wouldQty: dec.qty, reason: cont?.kind === "enter" ? cont.reason : "", minToClose: ctx.minutesToClose, spotClose: round2(f.close),
-          },
-        );
+  // ---- PYRAMID (V3/ALT only) — shadow when pyramid_adds=0, EXECUTOR when >0. ----
+  // When a row is open + a fresh SAME-DIRECTION continuation fires (eval AS-IF-FLAT, NOT the pos-aware
+  // intent above) + the contract appreciated ≥ minProfitPct off the BASE lot + above the last add (never
+  // average down) + room under maxStack, the SHARED engine decidePyramidAdd gate (→ no drift from the
+  // backtest) says add ×N. pyramid_adds=0 → log what an add WOULD be (Phase A shadow, deduped, action
+  // stays "hold"). pyramid_adds>0 → emit action:"add" (Phase B executor → executeAdd buys + weighted-avgs
+  // the row). maxStack = max_contracts: sizeQty is capped to the remaining room, so the total stack can
+  // NEVER exceed the per-channel cap (the cap12 = pyramid_adds 3 + max_contracts 12 arm).
+  if (row && pos && PYRAMID_SLUGS.has(ch.slug) && (!intent || intent.kind !== "exit")) {
+    const exec = ch.pyramid_adds > 0; // executor armed for this channel
+    // Hard guards (executor only) — an add is a NEW buy of risk, so respect the same hard walls as an
+    // entry: not halted/muted, paper mode, armed. (NOT the cost gate / daily-stop: the continuation eval
+    // already requires the full entry conditions, and the engine pyramid path doesn't re-gate adds.)
+    const pyrBlocked = entryGuard ?? (ch.status !== "armed" ? "not_armed" : null);
+    if (!exec || !pyrBlocked) {
+      const cont = built.evaluate(f, null); // as-if-flat continuation trigger
+      const dir = cont?.kind === "enter" ? cont.direction ?? null : null;
+      const q = dir != null ? ctx.chain.byOcc(row.occ_symbol) : null;
+      const ask = q?.ask ?? 0;
+      if (dir != null && ask > 0) {
+        // The real lot stack: the slug+occ filled BUYS (base entry + prior adds), oldest→newest. In
+        // shadow (no allOrders) it's the single base lot. Over-counting in a rare same-day OCC re-open
+        // only makes the count gate MORE conservative; maxStack (sizeQty cap below) is the hard limiter.
+        const prefix = `${ch.slug}-${row.occ_symbol}-`;
+        const buys = (ctx.allOrders ?? []).filter((o) => o.status === "filled" && o.side === "buy" && o.filled_qty > 0 && o.client_order_id.startsWith(prefix));
+        const lots = buys.length
+          ? buys.slice().sort((a, b) => (parseInt(a.client_order_id.slice(prefix.length), 10) || 0) - (parseInt(b.client_order_id.slice(prefix.length), 10) || 0)).map((o) => ({ qty: o.filled_qty, entryFill: o.filled_avg_price }))
+          : [{ qty: row.qty, entryFill: row.avg_entry_price }];
+        // ⚠ parity caveats (un-shared with the engine, documented for the graduation replay): (1) addFill
+        // = raw ask vs the engine's cost-adjusted en.fill (~1 tick higher) → +30% gate can disagree at the
+        // boundary; (2) wouldQty = the worker decide-formula floor(capital_pct/(0.5·ask·100)) (NOT
+        // riskGovernor) — equals the engine's floor(2·RISK/(ask·100)) only while capital_pct=RISK & aggression=100.
+        const riskPer = 0.5 * ask * 100;
+        const wouldQty = riskPer > 0 ? Math.floor(ch.capital_pct / riskPer) : 0;
+        const roomToCap = Math.max(0, ch.max_contracts - row.qty); // maxStack = max_contracts
+        const maxAdds = exec ? ch.pyramid_adds : PYRAMID_MAX_ADDS;
+        const dec = decidePyramidAdd({
+          cfg: { maxAdds, minProfitPct: PYRAMID_MIN_PROFIT_PCT },
+          pos: { optType: pos.optType, qty: row.qty, entryPrice: row.avg_entry_price },
+          lots,
+          heldAtPriorBar: true, // a row in openRows was opened in a PRIOR cycle
+          exiting: false, // the outer guard already ensured this bar isn't an exit
+          continuationDir: dir,
+          addFill: ask,
+          sizeQty: Math.min(wouldQty, roomToCap), // capped to maxStack room → 0 = no add (zero_qty)
+        });
+        if (dec.add) {
+          const detail = {
+            ask: round2(ask), base: round2(lots[0].entryFill), appreciatedPct: +dec.appreciatedPct.toFixed(2),
+            stack: row.qty, addQty: dec.qty, expiry: row.expiration ?? ctx.todayET, dir: pos.optType, spotClose: round2(f.close),
+          };
+          if (exec) {
+            // Phase B: hand the executor a precise add lot (executeAdd re-checks the live held qty before buying).
+            return { ...base, action: "add", reason: cont?.kind === "enter" ? cont.reason : "pyramid", direction: pos.optType, occ: row.occ_symbol, qty: dec.qty, detail };
+          }
+          // Phase A shadow: log the FIRST crossing only (dedup) — never an order.
+          const logKey = `${ctx.todayET}|${ch.slug}|${row.occ_symbol}`;
+          if (!pyramidShadowLogged.has(logKey)) {
+            pyramidShadowLogged.add(logKey);
+            void writeShadowEvent(
+              `PYRAMID ${ch.slug} ${row.occ_symbol} — would add ×${dec.qty} @ ${ask.toFixed(2)} (base ${lots[0].entryFill.toFixed(2)}, +${dec.appreciatedPct.toFixed(0)}%, dir ${pos.optType})`,
+              { kind: "pyramid-shadow", slug: ch.slug, occ: row.occ_symbol, ...detail, reason: cont?.kind === "enter" ? cont.reason : "", minToClose: ctx.minutesToClose },
+            );
+          }
+        }
       }
     }
   }

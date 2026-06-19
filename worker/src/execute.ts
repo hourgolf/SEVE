@@ -214,6 +214,59 @@ export async function executeEntry(
   }
 }
 
+// ---- PYRAMID ADD (Phase B) ----------------------------------------------------
+// Buy another lot of the SAME contract on a winning V3/ALT position and weighted-avg the EXISTING
+// row — NEVER a sibling row (the 06-09 shared-OCC ledger nets one Alpaca lot; a 2nd row double-counts).
+// Because the row becomes the weighted-avg stack, exit/booking/restart need NO changes: executeExit
+// sells min(held, row.qty) = the whole stack, realizedToBook blends every slug-prefixed buy (base +
+// adds) vs the sell, and a restart just re-reads the grown row. The decide-layer gate (decidePyramidAdd:
+// never average down, ≥+30% off base, maxStack room, hard guards) already passed; here we re-check the
+// LIVE held qty (defense in depth), place the buy, and grow the row.
+export async function executeAdd(
+  d: ShadowDecision, ch: store.ChannelConfig, row: store.PositionRow, ctx: ExecCtx,
+): Promise<void> {
+  const occ = row.occ_symbol;
+  const want = d.qty ?? 0;
+  if (want <= 0) return;
+  const addCoid = `${d.slug}-${occ}-${ctx.etMin}-a`;
+  // idempotency: one add per (slug, occ, bar-minute) — a working/filled add this minute = done.
+  if (ctx.allOrders.some((o) => o.client_order_id === addCoid && (WORKING_ORDER.has(o.status) || o.status === "filled"))) return;
+  // re-check maxStack against the LIVE held qty (the broker is the truth; decide used the row).
+  const heldNow = Math.max(Math.abs(Math.round(ctx.alpacaByOcc.get(occ)?.qty ?? 0)), row.qty);
+  const buyQty = Math.min(want, Math.max(0, ch.max_contracts - heldNow));
+  if (buyQty <= 0) return;
+  try {
+    const o = await alpaca.orderAndFill({
+      symbol: occ, qty: String(buyQty), side: "buy", type: "market", time_in_force: "day",
+      client_order_id: addCoid,
+    });
+    const ask = (d.detail?.ask as number) ?? 0;
+    const fillPx = o.fill > 0 ? o.fill : ask;
+    // terminal-final 0 = nothing filled → no growth (a ghost otherwise); non-terminal (poll didn't
+    // settle) → assume the intended qty filled (executeEntry parity — over-record + reconcile beats
+    // orphaning the add: executeExit then sells the actual held and books fill-net correctly).
+    const fillQty = o.filledQty > 0 ? o.filledQty : (alpaca.TERMINAL_ORDER_STATUS.has(o.status) ? 0 : buyQty);
+    if (fillQty <= 0 || !(fillPx > 0)) {
+      await store.journal("WARN", `${d.slug}: PYRAMID add ${occ} ×0 (${o.status || "unfilled"}) — no add`, { order_id: o.id });
+      return;
+    }
+    const newQty = row.qty + fillQty;
+    const newAvg = (row.avg_entry_price * row.qty + fillPx * fillQty) / newQty; // weighted avg
+    const err = await store.updatePositionStack(row.id, newQty, newAvg);
+    if (err) {
+      await store.journal("WARN", `${d.slug}: PYRAMID add FILLED but row update FAILED (${err}) — reconcile manually`, { occ, order_id: o.id });
+      return;
+    }
+    ctx.remainingByOcc.set(occ, (ctx.remainingByOcc.get(occ) ?? 0) + fillQty); // shared-OCC counters (09c)
+    ctx.openRowQty.set(occ, (ctx.openRowQty.get(occ) ?? 0) + fillQty);
+    await store.journal("EXEC", `${d.slug}: PYRAMID add ×${fillQty} ${occ} @ ${fillPx.toFixed(2)} → stack ×${newQty} avg ${newAvg.toFixed(2)} (${d.reason})`, { order_id: o.id });
+    void store.writeShadowEvent(`PYRAMID-EXEC ${d.slug} ${occ} +${fillQty} → ×${newQty} @ avg ${newAvg.toFixed(2)}`,
+      { kind: "pyramid-exec", slug: d.slug, occ, addQty: fillQty, newQty, newAvg: Math.round(newAvg * 100) / 100 });
+  } catch (e) {
+    await store.journal("WARN", `${d.slug}: PYRAMID add ${occ} rejected — ${(e as Error).message}`);
+  }
+}
+
 // ---- FAST EXIT SWEEP -------------------------------------------------------------
 // Between bar closes (every config.fastExitSec) check the PREMIUM-side exits on the
 // LIVE chain for stream-owned open rows: catastrophic stop, compiled stop/target,
