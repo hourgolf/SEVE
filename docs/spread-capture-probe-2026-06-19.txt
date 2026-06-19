@@ -1,0 +1,67 @@
+
+> seve-live-market-monitor@0.1.0 spread-capture-probe
+> tsx --env-file=.env.local engine/spread-capture-probe.ts
+
+
+  SPREAD-CAPTURE SENSITIVITY · #4 LOWER THE COST · FAITHFUL (live 0.25 gate held FIXED / 1-tick slippage) · RISK 500 / stop 500
+  capture part of the spread via limit execution vs cross it (= today). captureFrac 0=cross/today · 0.5=half · 1.0=mid (ceiling).
+  GATE FIXED → identical roster at every level → the lift is PURELY execution. real NBBO · SPY 5-window OOS · QQQ single-regime
+
+  ══ Σ P&L by capture fraction ══
+  channel            tr/sess    cap0.00    cap0.25    cap0.50    cap0.75    cap1.00   Δ(cap.5−today)
+  BREAK(ALT V3)          0.3     +$8309     +$7948     +$8251    +$10781    +$11091       -$58
+  BREAK(ALT)             0.3     +$8927     +$8537     +$8810     +$9082     +$9355      -$118
+  ORB(trend-rider)       1.8     -$6044     -$4864     -$4047     -$3195     -$2250     +$1998
+  BREAK(base/ORB)        1.9    -$19899    -$18772    -$17708    -$16579    -$15450     +$2191
+  POWERHOUR(base)        2.7    -$29730    -$27896    -$26134    -$24503    -$22394     +$3595
+  POWERHOUR(ALT)         1.5    -$20871    -$19613    -$18334    -$16700    -$15692     +$2537
+  PB RIDER 1DTE          1.1     -$3646     -$3053     -$2471     -$2290     -$2184     +$1175
+  PB RIDER 0DTE          1.5     -$7678     -$7443     -$6572     -$4350     -$3475     +$1106
+  GRIND v3               4.5    -$16791    -$15053    -$13298    -$11504     -$9791     +$3493
+  Trend QQQ              0.5     -$3107     -$2979     -$2804     -$2667     -$2493      +$303  ·QQQ
+  QQQ-ORB                0.6     +$7596     +$8018     +$8203     +$8380     +$8408      +$607  ·QQQ
+  QQQ-Breakout           2.5     +$6944     +$7300     +$6041     +$6451     +$6878      -$903  ·QQQ
+
+  ══ exp$/trade by capture fraction (the per-trade lift — channel-size-independent) ══
+  channel             trades    cap0.00    cap0.25    cap0.50    cap0.75    cap1.00   be-cap
+  BREAK(ALT V3)           96      +86.6      +81.9      +85.1     +110.0     +113.2   ≤0 (always+)
+  BREAK(ALT)              87     +102.6      +97.0     +100.1     +103.2     +106.3   ≤0 (always+)
+  ORB(trend-rider)       550      -11.0       -8.8       -7.3       -5.7       -4.0   >1 (never+)
+  BREAK(base/ORB)        593      -33.6      -31.7      -29.8      -27.9      -26.0   >1 (never+)
+  POWERHOUR(base)        836      -35.6      -33.2      -31.1      -29.0      -26.4   >1 (never+)
+  POWERHOUR(ALT)         463      -45.1      -42.8      -39.9      -36.3      -34.0   >1 (never+)
+  PB RIDER 1DTE          349      -10.4       -8.7       -7.1       -6.5       -6.2   >1 (never+)
+  PB RIDER 0DTE          460      -16.7      -16.2      -14.3       -9.4       -7.5   >1 (never+)
+  GRIND v3              1399      -12.0      -10.7       -9.5       -8.2       -7.0   >1 (never+)
+  Trend QQQ               35      -88.8      -85.1      -80.1      -76.2      -71.2   >1 (never+)
+  QQQ-ORB                 45     +168.8     +182.2     +186.4     +190.5     +191.1   ≤0 (always+)
+  QQQ-Breakout           175      +39.7      +41.5      +34.1      +36.4      +38.9   ≤0 (always+)
+
+  ══ roster decision: does capture flip a benched channel +EV? ══
+  NO channel flips +EV at half-capture (cap.5); not one −EV channel is even within 2× the half-capture lift of zero → capture changes NO roster decision.
+
+  ══ per-window Σ for the 3 biggest-lift channels — today (cap0) → capture-half (cap.5) — broad or one-window? ══
+  POWERHOUR(base)  (Σ lift +$3595)
+    CHOP Mar26            +$1512 →    +$1827      +$315
+    TREND AprMay26         -$201 →     +$364      +$565
+    TREND-OOS MA25        -$9818 →    -$9006      +$812
+    TREND 24             -$11157 →   -$10278      +$880
+    CHOP-MIX 25-26       -$10065 →    -$9041     +$1024
+  GRIND v3  (Σ lift +$3493)
+    CHOP Mar26            -$3231 →    -$2884      +$347
+    TREND AprMay26        -$2529 →    -$1975      +$553
+    TREND-OOS MA25        -$3189 →    -$2331      +$859
+    TREND 24              -$3997 →    -$3280      +$717
+    CHOP-MIX 25-26        -$3845 →    -$2828     +$1017
+  POWERHOUR(ALT)  (Σ lift +$2537)
+    CHOP Mar26              +$78 →    +$1017      +$939
+    TREND AprMay26         -$809 →     -$806        +$3
+    TREND-OOS MA25        -$9289 →    -$8995      +$293
+    TREND 24              -$5008 →    -$4125      +$883
+    CHOP-MIX 25-26        -$5843 →    -$5425      +$418
+
+  READ: a big Σ lift on a channel already +EV today = free money the desk leaves on the table by crossing. A ⇧+EV flip on
+  a marginal/benched channel = capture RESCUES it (a roster lever). exp$/t lift ≈ captureFrac × ½-spread × round-trips — so the
+  scalpers (many round-trips) lift most in Σ. NEXT (if material): worker marketable-limit ladder SHADOW-FIRST, measure REAL
+  capture, THEN flip spreadCrossFrac — never trust the ceiling (Nakamoto fill-at-trigger optimism = the cautionary receipt).
+

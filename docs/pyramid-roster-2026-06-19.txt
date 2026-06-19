@@ -1,0 +1,123 @@
+
+> seve-live-market-monitor@0.1.0 pyramid-roster
+> tsx --env-file=.env.local engine/pyramid-roster-faithful.ts
+
+
+  PYRAMID-ROSTER · TASK 2 / #2 SIZING breadth · FAITHFUL (live 0.25 gate + 1-tick fills) · RISK 500 / stop 500
+  RIDE vs +3@30% at maxStack {6=cap, 12=2×, ∞=uncapped}. Which channels BEYOND V3/ALT have a pyramidable convex tail?
+  win/W = windows where the config's per-window Σ ≥ RIDE's (SPY=5-window OOS; QQQ=single regime, /W covered)
+
+  BREAK(ALT V3)  [SPY, 0DTE, 311 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)        +$8309 (96t)      6       -$5101     -$5693               —
+    +3@30% cap6          +$9855 (96t)      6       -$5039     -$5949    +$1546 ✓   3/5
+    +3@30% cap12        +$17753 (94t)     12       -$6527     -$5986    +$9444 ✓   5/5  ★
+    +3@30% UNCAP        +$20568 (94t)     23       -$7711     -$6310   +$12259 ✓   4/5  ★
+    → ★ PYRAMIDABLE — robust at cap12, UNCAP (best Σ +$20568 at UNCAP)
+
+  BREAK(ALT)  [SPY, 0DTE, 311 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)        +$8927 (87t)      6       -$4565     -$5677               —
+    +3@30% cap6         +$11162 (87t)      6       -$4820     -$5520    +$2235 ✓   4/5  ★
+    +3@30% cap12        +$17657 (85t)     12       -$6744     -$6633    +$8730 ✓   4/5  ★
+    +3@30% UNCAP        +$20871 (85t)     23       -$7233     -$6427   +$11944 ✓   4/5  ★
+    → ★ PYRAMIDABLE — robust at cap6, cap12, UNCAP (best Σ +$20871 at UNCAP)
+
+  ORB(trend-rider)  [SPY, 0DTE, 311 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)       -$6044 (550t)      6      -$11137    -$21322               —
+    +3@30% cap6        -$11383 (516t)      6      -$14902    -$27443      -$5339   1/5
+    +3@30% cap12        -$2048 (420t)     12      -$24293    -$31615    +$3996 ✓   3/5
+    +3@30% UNCAP       -$13608 (382t)     24      -$41635    -$55259      -$7564   3/5
+    → −EV under RIDE — no tail to amplify (pyramiding a loser)
+
+  BREAK(base/ORB)  [SPY, 0DTE, 311 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)      -$19899 (593t)      6      -$20420    -$28676               —
+    +3@30% cap6        -$20749 (593t)      6      -$21269    -$29362       -$849   0/5
+    +3@30% cap12       -$26360 (593t)     12      -$26872    -$36377      -$6460   1/5
+    +3@30% UNCAP       -$27514 (588t)     24      -$28027    -$40394      -$7614   1/5
+    → −EV under RIDE — no tail to amplify (pyramiding a loser)
+
+  POWERHOUR(base)  [SPY, 0DTE, 311 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)      -$29730 (836t)      6      -$33238    -$42662               —
+    +3@30% cap6        -$29730 (836t)      6      -$33238    -$42662         +$0   5/5
+    +3@30% cap12       -$31179 (778t)     12      -$39723    -$53774      -$1449   3/5
+    +3@30% UNCAP       -$42565 (756t)     24      -$53666    -$76084     -$12836   2/5
+    → −EV under RIDE — no tail to amplify (pyramiding a loser)
+
+  POWERHOUR(ALT)  [SPY, 0DTE, 311 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)      -$20871 (463t)      6      -$22851    -$32730               —
+    +3@30% cap6        -$20461 (462t)      6      -$22397    -$32315     +$410 ✓   4/5
+    +3@30% cap12       -$20350 (433t)     12      -$27055    -$40014     +$521 ✓   3/5
+    +3@30% UNCAP       -$28220 (415t)     24      -$45974    -$61336      -$7349   2/5
+    → −EV under RIDE — no tail to amplify (pyramiding a loser)
+
+  PB RIDER 1DTE  [SPY, 1DTE, 308 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)       -$3646 (349t)      4      -$10194    -$15989               —
+    +3@30% cap6         -$1325 (349t)      6       -$9247    -$16521    +$2321 ✓   5/5
+    +3@30% cap12        -$1085 (349t)     12       -$9649    -$19389    +$2562 ✓   3/5
+    +3@30% UNCAP         -$808 (349t)     16       -$9778    -$19434    +$2839 ✓   3/5
+    → −EV under RIDE — no tail to amplify (pyramiding a loser)
+
+  PB RIDER 0DTE  [SPY, 0DTE, 311 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)       -$7678 (460t)      4       -$9007    -$22550               —
+    +3@30% cap6        -$11593 (452t)      6      -$13352    -$29930      -$3915   1/5
+    +3@30% cap12       -$19586 (448t)     12      -$21606    -$48009     -$11907   1/5
+    +3@30% UNCAP       -$19240 (448t)     16      -$21784    -$50252     -$11562   1/5
+    → −EV under RIDE — no tail to amplify (pyramiding a loser)
+
+  GRIND v3  [SPY, 0DTE, 311 sessions]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/5
+    RIDE (no pyr)     -$16791 (1399t)      4      -$17012    -$22141               —
+    +3@30% cap6       -$16791 (1399t)      4      -$17012    -$22141         +$0   5/5
+    +3@30% cap12      -$16791 (1399t)      4      -$17012    -$22141         +$0   5/5
+    +3@30% UNCAP      -$16791 (1399t)      4      -$17012    -$22141         +$0   5/5
+    → −EV under RIDE — no tail to amplify (pyramiding a loser)
+
+  Trend QQQ  [QQQ, 0DTE, 71 sessions — single regime, NOT OOS]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/2
+    RIDE (no pyr)        -$3107 (35t)      4       -$7715    -$10524               —
+    +3@30% cap6          -$4005 (35t)      6       -$8421    -$11462       -$899   0/2
+    +3@30% cap12         -$6026 (35t)     12      -$10442    -$14112      -$2920   0/2
+    +3@30% UNCAP         -$6218 (35t)     13      -$10634    -$14486      -$3112   0/2
+    → −EV under RIDE — no tail to amplify (pyramiding a loser)
+
+  QQQ-ORB  [QQQ, 0DTE, 71 sessions — single regime, NOT OOS]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/2
+    RIDE (no pyr)        +$7596 (45t)      4       -$4956     -$4773               —
+    +3@30% cap6         +$17811 (45t)      6       -$4878     -$4675   +$10215 ✓   1/2
+    +3@30% cap12        +$16898 (45t)     12       -$7299     -$7242    +$9302 ✓   1/2
+    +3@30% UNCAP        +$16794 (45t)     13       -$7478     -$7285    +$9198 ✓   1/2
+    → RIDE (+EV but no robust pyramid lift)
+
+  QQQ-Breakout  [QQQ, 0DTE, 71 sessions — single regime, NOT OOS]
+    config           Σ P&L (trades)     maxStack   maxDD      boot-p5    vs RIDE     win/2
+    RIDE (no pyr)       +$6944 (175t)      4       -$2954     -$1524               —
+    +3@30% cap6         +$7029 (144t)      6       -$3674     -$2797      +$85 ✓   1/2
+    +3@30% cap12        +$4775 (133t)     12       -$5231     -$7761      -$2169   1/2
+    +3@30% UNCAP        +$8321 (131t)     16       -$5441     -$6039    +$1376 ✓   1/2
+    → RIDE (+EV but no robust pyramid lift)
+
+  ══ SUMMARY — pyramidable channels (★ = beats RIDE + tail intact + ≥80% windows) ══
+    BREAK(ALT V3)             ★ PYRAMIDABLE — robust at cap12, UNCAP (best Σ +$20568 at UNCAP)
+    BREAK(ALT)                ★ PYRAMIDABLE — robust at cap6, cap12, UNCAP (best Σ +$20871 at UNCAP)
+    ORB(trend-rider)          −EV under RIDE — no tail to amplify (pyramiding a loser)
+    BREAK(base/ORB)           −EV under RIDE — no tail to amplify (pyramiding a loser)
+    POWERHOUR(base)           −EV under RIDE — no tail to amplify (pyramiding a loser)
+    POWERHOUR(ALT)            −EV under RIDE — no tail to amplify (pyramiding a loser)
+    PB RIDER 1DTE             −EV under RIDE — no tail to amplify (pyramiding a loser)
+    PB RIDER 0DTE             −EV under RIDE — no tail to amplify (pyramiding a loser)
+    GRIND v3                  −EV under RIDE — no tail to amplify (pyramiding a loser)
+    Trend QQQ            QQQ  −EV under RIDE — no tail to amplify (pyramiding a loser)
+    QQQ-ORB              QQQ  RIDE (+EV but no robust pyramid lift)
+    QQQ-Breakout         QQQ  RIDE (+EV but no robust pyramid lift)
+
+  READ: PRIOR expects only V3/ALT (real convex tail) to clear the bar; PB→compound (no tail), grind→scalper, power→lean,
+  ORB→drift bleeder should NOT. Any OTHER ★ is a surprise tail worth a second look. cap12 is the established V3/ALT sweet
+  spot — confirm it holds; uncap only adds risk-appetite $ at the worst DD. QQQ ★ is hypothesis-grade (single regime).
+
