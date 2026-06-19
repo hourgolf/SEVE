@@ -1,0 +1,30 @@
+
+> seve-live-market-monitor@0.1.0 ride-filter-probe
+> tsx --env-file=.env.local engine/ride-filter-probe.ts
+
+
+  RIDE-FILTER (Thread A) · 311 SPY sessions (real NBBO) · add V3/ALT's chop filters (er≥0.45 + gap_min 0.25) to the filterless bleeders
+  CHOP windows = {CHOP Mar26, CHOP-MIX 25-26} · TREND windows = {AprMay26, MA25, 2024}. Real regime filter = cut CHOP, keep TREND. Faithful RISK500/stop500/gate3.
+
+  ══ ORB-base (orb-trend-rider, +75%) — filter-component sweep, by realized DAY-regime ══
+  the edge is regime-SEPARABLE: base WINS trend days, BLEEDS chop+drift. A real filter keeps trend-$, flips chop+drift→0 AND lifts exp$/t.
+  filter              n  exp$/t        Σ    exClf   CHOPday   TRENDday   DRIFTday  trend-kept
+  base (none)       557     -$2   -$1159   -$2679   -$14062    +$36647    -$23744   100%
+  gap_min 0.25      359     +$3   +$1130   +$2587    -$9147    +$25030    -$14754    68%
+  gap_min 0.15      449     -$7   -$3211    -$394    -$9801    +$27315    -$20725    75%
+  er 0.45           184    -$22   -$4119   -$2701    -$8719     +$8044     -$3444    22%
+  er 0.30           392     -$4   -$1407   -$2821   -$10139    +$28981    -$20249    79%
+  er0.45+gap0.25    116     -$4    -$433   -$1455    -$5503     +$4713      +$357    13%
+  er0.30+gap0.15    314     -$5   -$1558     -$15    -$7340    +$22481    -$16700    61%
+  lead = gap_min 0.25:  per-window CHOP +$1358→+$739 · TREND -$2418→-$2187 · TREND-OOS -$5054→+$1117 · TREND +$3433→+$2916 · CHOP-MIX +$1521→-$1457   (better 2/5, ex-CHOP-MIX -$2679→+$2587)
+  → gap_min ALONE flips ORB +EV with RISING exp$/t (real selection) — er was the over-cutter (gutted the +$36k trend edge). Same armed signal as V3/ALT.
+
+  ══ power (POWERHOUR base, +100%) ══
+  base     n 1249  exp$/t -$21  Σ -$25885  · day CHOP -$6642 / TREND -$7635 / DRIFT -$11608
+  +er+gap  n   55  exp$/t -$33  Σ -$1817  · day CHOP -$274 / TREND -$388 / DRIFT -$1156
+  → power loses on EVERY day-regime in the backtest — no winning regime to preserve, so a filter only reduces trade count (exp$/t doesn't rise). Unfilterable HERE.
+    ⚠ BUT backtest power is −$26k while LIVE power is +$1,848 (the "unrankable on backtest" channel) — judge power LIVE, not on this corpus.
+
+  ══ READ ══  Thread A verdict: ORB-base IS regime-separable (trend +$, chop+drift −$) — find the filter that keeps trend-kept% high
+  while flipping chop+drift; that earns the spec change. power has no backtest winning regime (judge live). Adversarially verify any ORB winner before arming.
+
