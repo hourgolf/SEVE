@@ -103,7 +103,8 @@
     "compound-vs-ride-probe": "tsx --env-file=.env.local engine/compound-vs-ride-probe.ts",
     "pyramid-probe": "tsx --env-file=.env.local engine/pyramid-probe.ts",
     "pyramid-ext-probe": "tsx --env-file=.env.local engine/pyramid-ext-probe.ts",
-    "pyramid-tune-probe": "tsx --env-file=.env.local engine/pyramid-tune-probe.ts"
+    "pyramid-tune-probe": "tsx --env-file=.env.local engine/pyramid-tune-probe.ts",
+    "pb-conviction-probe": "tsx --env-file=.env.local engine/pb-conviction-probe.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

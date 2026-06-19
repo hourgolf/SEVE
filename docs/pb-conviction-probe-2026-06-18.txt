@@ -1,0 +1,57 @@
+
+> seve-live-market-monitor@0.1.0 pb-conviction-probe
+> tsx --env-file=.env.local engine/pb-conviction-probe.ts
+
+
+  PB-CONVICTION · 308 SPY sessions (real NBBO, PB @1DTE) · FAITHFUL gate 0.25 + audited 1-tick fills + RISK 500/stop 500/maxC 4
+  Gate = a per-entry floor on er (trend strength) and/or relVol (volume expansion). Baseline = no floor = today's PB.
+
+  ══ (0) BASELINE — faithful PB, NO conviction floor ══
+  window               n    exp$/t      Σ$
+  CHOP Mar26           27      +$19      +$511
+  TREND AprMay26       46      +$30     +$1371
+  TREND-OOS MA25       93      -$15     -$1440
+  TREND 24             77       -$6      -$432
+  CHOP-MIX 25-26      106      -$34     -$3655
+  POOLED  n 349  win 42%  exp$/t -$10  Σ -$3646  ·  ex-CHOP-MIX +$9  ·  fill bracket [-$3646 1t, -$2746 0.25]
+  entry er    p10 0.03  p25 0.07  p50 0.15  p75 0.23   ·  share er<0.20 = 67%  er<0.30 = 90%
+  entry relVol p10 0.24  p25 0.40  p50 0.65  p75 1.11   ·  share relVol<1.0 = 72%
+
+  ══ (1) SWEEP — er_floor × relVol_floor (audited 1-tick fill; baseline exp$/t -$10, Σ -$3646) ══
+  erFloor  rvFloor   n    win%   exp$/t    Σ$        ΔΣ vs base   ex-CHOP-MIX   win/5
+  0.00     0.00     349   42%     -$10    -$3646        +$0         +$9    —  ← baseline
+  0.00     1.00     271   40%      +$1     +$219     +$3866      -$1648    3/5
+  0.00     1.30     225   38%     -$15    -$3390      +$256      -$4116    3/5
+  0.10     0.00     327   42%     -$10    -$3175      +$471      -$3328    2/5
+  0.10     1.00     229   39%     -$14    -$3097      +$549      -$5498    3/5
+  0.10     1.30     176   37%     -$31    -$5432     -$1786      -$6239    2/5
+  0.20     0.00     274   42%      -$9    -$2570     +$1076      -$4610    3/5
+  0.20     1.00     130   43%      -$5     -$669     +$2977      -$3414    3/5
+  0.20     1.30      85   40%     -$45    -$3810      -$164      -$5221    2/5
+  0.30     0.00     127   41%     -$37    -$4669     -$1022      -$1962    3/5
+  0.30     1.00      39   33%     -$60    -$2349     +$1297      -$1321    3/5
+  0.30     1.30      25   40%      -$0       -$4     +$3643        -$55    3/5
+  0.40     0.00      17   59%     +$90    +$1524     +$5170      +$1403    3/5
+  0.40     1.00       4   75%    +$203     +$814     +$4460       +$814    3/5
+  0.40     1.30       4   75%    +$203     +$814     +$4460       +$814    3/5
+
+  ══ (2) BEST POSITIVE TAIL — n=17 < 30, sample too thin to wire (collect-forward): er≥0.40 relVol≥0.00 — per-window vs baseline ══
+  window               base exp$/t (n)      gated exp$/t (n)      ΔΣ$      better?
+  CHOP Mar26                +$19 (27)           -$89 (2)     -$688   ✗
+  TREND AprMay26            +$30 (46)          +$203 (5)     -$359   ✗
+  TREND-OOS MA25            -$15 (93)          -$528 (1)     +$912   ✓
+  TREND 24                   -$6 (77)          +$274 (4)    +$1528   ✓
+  CHOP-MIX 25-26           -$34 (106)           +$24 (5)    +$3777   ✓
+  POOLED  base exp$/t -$10 (n 349) → gated +$90 (n 17)  ·  Σ -$3646 → +$1524  ·  fill bracket [+$1524 1t, +$1616 0.25]
+  ⚠ no combo is BOTH positive AND ≥30 trades — PB only flips +EV by cutting to a 17-trade sniper tail (95% of the book gone). That is overfit territory, not a volume channel.
+
+  ══ (3) TAIL CHECK — block-bootstrap (B=5, 2000 paths) of the daily PB series ══
+  policy       Σ realized    p5 terminal   p50 terminal   p95 terminal   maxDD p5 (worst)
+  baseline       -$3646     -$16336       -$4158       +$7907      -$19278
+  conviction     +$1524       -$927       +$1495       +$3951       -$1985
+  → the floor must lift p5 / cut maxDD WITHOUT collapsing p95 (PB has no convex tail, so p95 erosion = it cut real winners).
+
+  ══ VERDICT SCAFFOLD ══
+  focus er≥0.40 relVol≥0.00: exp$/t -$10→+$90, Σ -$3646→+$1524 (bracket [+$1524,+$1616]), helps 3/5, ex-CHOP-MIX +$9→+$1403, n 349→17.
+  NOT ARMABLE: the only positive books are sniper tails (n<30). The er floor is a real but MONOTONIC harm-reducer — it reveals PB fires mostly on non-trends, but cutting the bleed never yields a +EV book at volume. PB's fix is the TRIGGER (demand trend in the shape), not a post-hoc threshold. Collect-forward the high-er tail.
+
