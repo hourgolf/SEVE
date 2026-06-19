@@ -8,6 +8,56 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
+## SESSION HANDOFF — 2026-06-19 (REGIME MINED OUT → FOCUS #2 SIZING + #4 COST; TWO PROBES QUEUED) — READ FIRST
+**Exhaustive regime-awareness reopen (every thread FAILED, all 4-skeptic adversarially verified), then pivoted
+to the two HANDS-OFF levers the operator chose: #2 SIZING/ALLOCATION + #4 LOWER THE COST. Two probes are queued
+for the NEXT session to BUILD + RUN — full specs below. Operator wants to stay hands-off; both levers are
+machine-side (no manual involvement).**
+
+**WHAT FAILED THIS SESSION (don't re-litigate — verified, in docs/ + memory):** gap-ORB OOS-fail (1/5, −$5,401);
+drift detector DEAD causally (morning-ER "+$9,253/4-of-5" was ~92% LOOK-AHEAD → causal +$582/2-5; morning-move
+identical); the gamma-open clock is a CHOP/vol signal NOT drift (drop it as a drift detector — keep logging only as
+a chop indicator); filter-transfer fails (V3/ALT's gap_min/er DON'T bolt onto ORB/power — `ride-filter-probe`).
+Filter audit: only V3/ALT are correctly self-routed; the rest are under/mis/un-filterable → ROSTER calls, not
+filter-engineering. CONCLUSION: the system isn't broken, it's MIS-AIMED — a search machine pointed at the exhausted
+entry/exit axis; the leverage is in SIZING (#2) + COST (#4). [[pb-conviction-and-regime-router]]
+
+**#2 GROUNDWORK DONE — pyramiding REHABILITATED at cap12** (`npm run pyramid-faithful`; engine `maxStack` param
+added to simulateSession's pyramid path — additive/default-off, `pyramid-probe` byte-identical). The verification
+caught that the famous "+$22.5k" was the UNCAPPED 23-contract stack (violates the live max_contracts=6, which caps
+each LOT not the stack). Faithful re-validation, V3/ALT +3@30%: **cap6** (current governor, no change) = +$1.5–2.2k/ch,
+tail FLAT (free but marginal, V3 only 3/5); **cap12 (raise the per-channel cap 6→12) = +$17–18k combined, V3 5/5 /
+ALT 4/5, boot-p5 tail intact = THE REAL SWEET SPOT**; uncap-23 adds only ~$3k more at the worst DD. PATH: raise
+max_contracts 6→12 on V3/ALT + build the multi-lot worker SHADOW-FIRST (zero live PYRAMID shadow events have fired
+yet → confirm the base edge at live scale before arming). [[compound-vs-ride-verdict]]
+
+**▶ TASK 1 — SPREAD-CAPTURE SENSITIVITY SWEEP (#4 first test, cheapest "better game" probe).** The binding
+constraint all session = the 0DTE bid/ask SPREAD (every structure pays it; new-instrument games are refuted/blocked
+— longer-hold hurts V3's convex tail [[one-dte-verdict]], spreads pay more legs, new underlyings need data). The
+lever = limit-order execution to CAPTURE part of the spread instead of crossing it (helps EVERY channel). BUILD a
+probe running ALL armed+benched channels at `spreadCrossFrac` ∈ {0 (cross = today), 0.25, 0.5} — how much does each
+channel's Σ / exp$/t lift as you recapture the spread? Infra EXISTS: `cost.ts` `spreadCrossFrac` + backtest
+`--fill-cross` + `npm run fill-probe`/`spread-probe`. Faithful (RISK 500/stop 500/gate 3/real NBBO, 5-window). READ:
+if capturing half the spread MATERIALLY lifts the book (esp. the marginal channels), build a marketable-limit ladder
+in the worker SHADOW-FIRST and measure REAL capture before flipping `spreadCrossFrac` — the standing discipline
+(Nakamoto fill-at-trigger optimism is the cautionary receipt). [[fill-and-scalp-verdict]] [[fill-lag-verdict]]
+
+**▶ TASK 2 — ALL-CHANNEL PYRAMID PROBE (#2 breadth).** Extend `pyramid-faithful` (currently V3/ALT only) to the
+FULL roster — ORB-base, power(base/smart), PB(0/1DTE), grind-v3, the QQQ channels — at maxStack {6,12,∞} + per-window
++ tail (boot-p5). Question: which channels BEYOND V3/ALT have a real convex tail that pyramiding amplifies robustly
+(≥4/5, tail intact)? Prior says only convex-tail channels benefit (PB has no tail → compound not pyramid; grind is
+a scalper; power is a final-hour lean), so expect V3/ALT to stay the only candidates — but CONFIRM + size the cap12
+decision across the validated set. (QQQ needs its 1DTE chain: data/databento-mdte-qqq.)
+
+**DEPLOYED THIS SESSION (live):** worker `stream-2026-06-19a` (US holiday calendar `engine/market-calendar.ts` +
+wall-clock EOD hard-flatten in fastExitSweep + holiday-eve cutoff entry-block — the Juneteenth strand fix
+[[holiday-eod-flatten-fix]]); cron v59 (holiday stale-page suppression); chart RTH-only intraday candles (killed
+the extended-hours spike/gap candles). ⚠ **MONDAY 06-22:** the stranded SPY 747C-06/22 (power + power-smart, 6 lots)
+expires — close it at the open or confirm the worker flattens it (first live test of the EOD hard-flatten; watch
+for an `eod-hard-flatten` log ~15:55). ⚠ **PENDING OPERATOR ROSTER CALLS (not done):** PB downsize/draft (proven
+−EV, unfixable 3 ways), `orb-trend-rider` cull (drift bleeder, −$23.7k corpus), `breakout` base fold into V3/ALT
+(its dominated, unfiltered twin).
+
 ## SESSION HANDOFF — 2026-06-16 (FRONTIER SWEPT → DATA-BOUND; REGIME-ROUTER FEASIBLE) — READ FIRST
 **Marathon research session. Verdicts live in memory/ (read them); this is the pointer + the next step.**
 
