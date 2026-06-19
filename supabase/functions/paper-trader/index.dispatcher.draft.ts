@@ -1,3 +1,7 @@
+// ⚑ WORKER VERSION: 2026-06-19a  (HOLIDAY STALE-PAGE SUPPRESSION — the cron false-paged "⚠ STREAM
+//   STALE" on market holidays (the Railway worker correctly doesn't beat with no market data, e.g.
+//   Juneteenth 2026-06-19). Inlined CRON_MARKET_HOLIDAYS + a holidayToday guard on the page condition.
+//   Mirrors engine/market-calendar.ts; TRADING BEHAVIOR UNCHANGED (informational page only). Prior below.)
 // ⚑ WORKER VERSION: 2026-06-13b  (DUPLICATE-CHANNEL RESOLVER — the base-slug resolver now strips a
 //   trailing -N (`<base>-2`,`-3`) BEFORE the -manual/-qqq|spy strips, so a DUPLICATED channel (the
 //   new A/B primitive: clone → tweak DTE/U-stop → arm both) resolves to its source strategy.
