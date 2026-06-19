@@ -1,0 +1,25 @@
+
+> seve-live-market-monitor@0.1.0 pyramid-faithful
+> tsx --env-file=.env.local engine/pyramid-faithful.ts
+
+
+  PYRAMID-FAITHFUL · 311 SPY sessions (real NBBO) · FAITHFUL (live 0.25 gate / 1-tick fills) · RISK 500/stop 500/base-cap 6
+  does the pyramid edge survive the live per-channel total-stack cap? +3@30% at maxStack {6=current, 12=2×, ∞=uncapped (+$22.5k)}
+
+  BREAK(ALT V3)
+    config           Σ P&L (trades)   maxStack    maxDD      boot-p5    vs RIDE    win/5
+    RIDE (no pyr)      +$8309 (96t)      6      -$5101     -$5693              —
+    +3@30% cap6        +$9855 (96t)      6      -$5039     -$5949   +$1546 ✓   3/5
+    +3@30% cap12      +$17753 (94t)     12      -$6527     -$5986   +$9444 ✓   5/5
+    +3@30% UNCAP      +$20568 (94t)     23      -$7711     -$6310   +$12259 ✓   4/5
+
+  BREAK(ALT)
+    config           Σ P&L (trades)   maxStack    maxDD      boot-p5    vs RIDE    win/5
+    RIDE (no pyr)      +$8927 (87t)      6      -$4565     -$5677              —
+    +3@30% cap6       +$11162 (87t)      6      -$4820     -$5520   +$2235 ✓   4/5
+    +3@30% cap12      +$17657 (85t)     12      -$6744     -$6633   +$8730 ✓   4/5
+    +3@30% UNCAP      +$20871 (85t)     23      -$7233     -$6427   +$11944 ✓   4/5
+
+  READ: if cap6 (the live governor) ≈ RIDE, the +$22.5k requires 3-4× the per-channel contract cap — i.e. it's a RISK-APPETITE
+  decision (run 12-23 contract stacks), not a free edge. ARM-worthy only if cap6/cap12 beats RIDE robustly (≥4/5) AND the tail holds.
+

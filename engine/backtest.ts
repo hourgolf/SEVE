@@ -160,7 +160,10 @@ export function simulateSession(
   // together at the −50%-of-weighted-avg stop / target / flatten — so adds RATCHET the stop
   // up (protecting gains) but FATTEN the loser if the add bar marks the top. undefined → off,
   // byte-identical with every prior caller (no lot is ever added). Single-leg only.
-  pyramid?: { maxAdds: number; minProfitPct: number },
+  // maxStack (opt-in) caps the TOTAL open stack (base + adds) at N contracts — the FAITHFUL
+  // live governor (a per-channel max_contracts limits the whole position, not each lot). Unset =
+  // each add is fully risk-sized (the uncapped probe behavior — stacks can reach base + maxAdds×lot).
+  pyramid?: { maxAdds: number; minProfitPct: number; maxStack?: number },
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -418,7 +421,8 @@ export function simulateSession(
           exiting: !!intent && intent.kind === "exit",
           continuationDir: dir,
           addFill: en.fill,
-          sizeQty: r.ok ? r.qty : 0,
+          // maxStack (faithful live governor): cap the add so base+adds never exceed N total.
+          sizeQty: r.ok ? (pyramid.maxStack ? Math.max(0, Math.min(r.qty, pyramid.maxStack - pos.qty)) : r.qty) : 0,
         });
         if (dec.add) {
           pos.entryPrice = dec.newEntryPrice; // weighted avg → exit math unchanged

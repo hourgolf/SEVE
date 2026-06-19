@@ -110,7 +110,8 @@
     "market-calendar-selftest": "tsx engine/market-calendar.selftest.ts",
     "ride-filter-probe": "tsx --env-file=.env.local engine/ride-filter-probe.ts",
     "gap-orb-gauntlet": "tsx --env-file=.env.local engine/gap-orb-gauntlet.ts",
-    "drift-detector-probe": "tsx --env-file=.env.local engine/drift-detector-probe.ts"
+    "drift-detector-probe": "tsx --env-file=.env.local engine/drift-detector-probe.ts",
+    "pyramid-faithful": "tsx --env-file=.env.local engine/pyramid-faithful.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
