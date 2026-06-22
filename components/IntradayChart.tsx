@@ -253,6 +253,18 @@ export function IntradayChart({
     // drop a spot wildly off the last 1-min close (a glitch /api/spot tick or a mid-toggle
     // stale value) — a >2% move in under a minute isn't real, so don't let it set high/low.
     if (lc > 0 && Math.abs(spot - lc) / lc > 0.02) return src;
+    // AND drop a SUB-2% bad tick that falls outside the recent established range. A single glitch
+    // /api/spot print (e.g. 738 while the session has held 743-746) is only ~0.9% off — it clears
+    // the 2% guard, then STICKS in the forming bar's Math.min/max low/high and renders a giant wick
+    // BELOW the day's LOD for the whole minute (the recurring "giant candle" bug). A genuine new
+    // extreme arrives incrementally (just past the recent low/high, and confirmed by the next
+    // completed bar); a 5-point spike past the last ~30 RTH bars' range + a 0.4% tolerance does not.
+    if (src.length >= 10) {
+      let rLo = Infinity, rHi = -Infinity;
+      for (const b of src.slice(-30)) { const h = b.high ?? b.close, l = b.low ?? b.close; if (h != null) rHi = Math.max(rHi, h); if (l != null) rLo = Math.min(rLo, l); }
+      const band = (lc > 0 ? lc : spot) * 0.004;
+      if (Number.isFinite(rLo) && Number.isFinite(rHi) && (spot < rLo - band || spot > rHi + band)) return src;
+    }
     const minStart = Math.floor(Date.now() / 60000) * 60000;
     if (Date.parse(last.ts) >= minStart) return src;
     const acc = formingRef.current;
