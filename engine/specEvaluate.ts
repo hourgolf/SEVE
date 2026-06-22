@@ -95,10 +95,17 @@ function timeExitMinute(spec: StrategySpec): number | null {
 }
 
 // Warmup: opening range + the longest indicator lookback the spec needs.
+// All conditions an entry references: the mandatory `all` block + the optional
+// `anyOf.of` pool. Used by every scan that must see ALL conditions (warmup,
+// indicator precompute, direction inference) — entryHolds keeps them separate.
+function entryConds(e: SpecEntry): Condition[] {
+  return [...(e.all ?? []), ...(e.anyOf?.of ?? [])];
+}
+
 function computeWarmup(spec: StrategySpec): number {
   let warm = WARMUP_FLOOR;
   for (const e of spec.entries ?? []) {
-    for (const c of e.all ?? []) {
+    for (const c of entryConds(e)) {
       if (c.kind === "ma_cross") warm = Math.max(warm, c.slow, c.fast);
       else if (c.kind === "trend_align") warm = Math.max(warm, c.ref === "ema50" ? 50 : 21);
       else if (c.kind === "rsi") warm = Math.max(warm, c.period + 1);
@@ -111,7 +118,7 @@ function computeWarmup(spec: StrategySpec): number {
 
 // Direction for a "both" entry: infer from the first unambiguous momentum cue.
 function inferDirection(entry: SpecEntry): OptType | null {
-  for (const c of entry.all ?? []) {
+  for (const c of entryConds(entry)) {
     if (c.kind === "ma_cross") return c.dir === "up" ? "call" : "put";
     if (c.kind === "vwap_side") return c.side === "above" ? "call" : "put";
     if (c.kind === "trend_align") return c.side === "up" ? "call" : "put";
@@ -225,18 +232,30 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
 // All supported conditions of an entry hold AND it has ≥1 supported condition
 // (an all-unsupported entry never fires — see header note).
 function entryHolds(entry: SpecEntry, ctx: Ctx): boolean {
-  let supported = 0;
-  let held = 0;
+  // Mandatory `all` block (feed-dependent gates ignored — backtest is informational;
+  // capabilityCheck flags them so an ARMED spec has none).
+  let allSup = 0, allHeld = 0;
   for (const c of entry.all ?? []) {
-    if (!SUPPORTED.has(c.kind)) continue; // ignore feed-dependent gate
-    supported++;
-    if (condHolds(c, ctx)) held++;
+    if (!SUPPORTED.has(c.kind)) continue;
+    allSup++;
+    if (condHolds(c, ctx)) allHeld++;
   }
-  if (supported === 0) return false;
-  // Confluence: ≥ atLeast of the supported conditions (capped at how many exist);
-  // omitted → strict AND (all must hold).
-  const need = entry.atLeast != null ? Math.min(Math.max(1, entry.atLeast), supported) : supported;
-  return held >= need;
+  // Optional `anyOf` pool: require ≥ anyOf.atLeast of its supported conditions.
+  let anySup = 0, anyHeld = 0;
+  if (entry.anyOf) {
+    for (const c of entry.anyOf.of ?? []) {
+      if (!SUPPORTED.has(c.kind)) continue;
+      anySup++;
+      if (condHolds(c, ctx)) anyHeld++;
+    }
+  }
+  if (allSup + anySup === 0) return false; // never fire on thin air
+  // `all`: ≥atLeast of it (omitted → strict AND); empty/all-unsupported → vacuously true.
+  const allNeed = entry.atLeast != null ? Math.min(Math.max(1, entry.atLeast), allSup) : allSup;
+  const allPass = allSup === 0 ? true : allHeld >= allNeed;
+  // pool: ≥atLeast of it (capped to supported); absent → vacuously true.
+  const anyPass = !entry.anyOf ? true : (anySup === 0 ? true : anyHeld >= Math.min(Math.max(1, entry.anyOf.atLeast), anySup));
+  return allPass && anyPass;
 }
 
 // Build the per-session Evaluate for a spec (precomputes EMA/RSI over closes).
@@ -246,7 +265,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
   const rsiSeries = new Map<number, number[]>();
   const macdSeries = new Map<string, number[]>();
   for (const e of spec.entries ?? []) {
-    for (const c of e.all ?? []) {
+    for (const c of entryConds(e)) {
       if (c.kind === "ma_cross") {
         if (!emaSeries.has(c.fast)) emaSeries.set(c.fast, ema(closes, c.fast));
         if (!emaSeries.has(c.slow)) emaSeries.set(c.slow, ema(closes, c.slow));

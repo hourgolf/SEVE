@@ -122,9 +122,15 @@ export interface SpecEntry {
   direction: "call" | "put" | "both";
   all: Condition[]; // conditions to enter
   reason: string;
-  // Confluence count: require AT LEAST N of the (supported) conditions to hold
+  // Confluence count: require AT LEAST N of the (supported) `all` conditions to hold
   // instead of all of them (e.g. "≥2 of N features"). Omit → all must hold.
   atLeast?: number;
+  // Mandatory + counted-optional confluence: the entry fires only if the `all` block
+  // holds (strict AND, or ≥atLeast of it) AND ≥`anyOf.atLeast` of the `anyOf.of` pool
+  // also hold. Expresses "core gate + N confirmations" — e.g. the nakamoto breakout
+  // (3 required gates + ≥k of {macd, ma_cross, volume}). With an empty/absent `all`
+  // it degrades to a pure "≥N of pool". Omit → no optional pool (legacy behavior).
+  anyOf?: { atLeast: number; of: Condition[] };
   // Multi-leg geometry. Present (and used) only when meta.structure is not
   // "single-leg"; the entry then emits intent.legs instead of a single direction.
   // For single-leg structures this is ignored (direction drives the trade).
@@ -273,7 +279,13 @@ export function normalizeSpec(spec: StrategySpec): { spec: StrategySpec; repairs
     }
     return c as unknown as Condition;
   };
-  const entries = (spec.entries ?? []).map((e) => ({ ...e, all: (e.all ?? []).map(fixCond) }));
+  const entries = (spec.entries ?? []).map((e) => ({
+    ...e,
+    all: (e.all ?? []).map(fixCond),
+    // normalize the optional pool too, so a malformed condition in anyOf.of downgrades
+    // to `unknown` (a flagged gap) rather than silently arming a misread rule.
+    ...(e.anyOf ? { anyOf: { atLeast: e.anyOf.atLeast, of: (e.anyOf.of ?? []).map(fixCond) } } : {}),
+  }));
   return { spec: { ...spec, entries }, repairs };
 }
 
@@ -327,9 +339,12 @@ export function capabilityCheck(spec: StrategySpec): CapabilityReport {
   const structureOk = SUPPORTED_STRUCTURES.has(spec.meta.structure);
   if (!structureOk) gaps.push(`${spec.meta.structure} orders (multi-leg routing — backtest-only, not run live yet)`);
   for (const e of spec.entries ?? []) {
-    for (const c of e.all ?? []) {
+    for (const c of [...(e.all ?? []), ...(e.anyOf?.of ?? [])]) {
       if (!SUPPORTED_KINDS.has(c.kind)) gaps.push(GAP_LABEL[c.kind] ?? c.kind);
     }
+    // A malformed optional pool (empty / non-positive count) is a capability gap.
+    if (e.anyOf && (!(e.anyOf.atLeast >= 1) || !(e.anyOf.of?.length > 0)))
+      gaps.push("anyOf confluence (needs atLeast ≥ 1 and a non-empty `of` pool)");
   }
   // Multi-leg geometry: validate every entry's legs against the declared structure
   // (defined-risk check). Surfaced so a malformed multi-leg spec shows a precise

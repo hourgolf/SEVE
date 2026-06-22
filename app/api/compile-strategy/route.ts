@@ -44,6 +44,14 @@ const SPEC_TOOL = {
               description: "Conditions to enter (all must hold unless `atLeast` is set). Use these kinds: ma_cross{fast,slow,dir:up|down}, vwap_side{side:above|below}, vwap_dev{atr,cmp:>|<}, opening_range{minutes,side:break_above|break_below}, or_width_min{pct}, rel_vol{min}, rsi{period,cmp:>|<,value}, time_before{et}, time_between{startET,endET}, efficiency_ratio{op:>=|<=,value,lookback}, momentum_atr{op:>=|<=,value,lookback}, macd{fast,slow,signal,cmp:bull|bear}, level{ref:pdh|pdl|orb_hi|orb_lo,cmp:>|<|near,withinPct}, tick{cmp,value}, gamma_regime{require:POSITIVE|NEGATIVE|TRANSITION|NEGATIVE_OR_TRANSITION}, gamma_wall{wall}, iv_rank{cmp,value}, event_within{sessions}, unknown{note}.",
               items: { type: "object", required: ["kind"], properties: { kind: { type: "string" } }, additionalProperties: true },
             },
+            anyOf: {
+              type: "object",
+              description: "Optional mandatory+confluence pool: the entry fires only if the `all` block holds AND ≥`atLeast` of these `of` conditions ALSO hold. Use for 'core gate + N confirmations' theses (e.g. 3 required gates in `all` + ≥1 of {macd, ma_cross, rel_vol} confirmations here). Same condition kinds as `all`. Omit if not needed.",
+              properties: {
+                atLeast: { type: "number" },
+                of: { type: "array", items: { type: "object", required: ["kind"], properties: { kind: { type: "string" } }, additionalProperties: true } },
+              },
+            },
           },
         },
       },
@@ -72,7 +80,7 @@ const SYSTEM = `You compile options trading-strategy theses (markdown) into a st
 Rules:
 - Map every mechanical entry/exit rule to a condition. Use the EXACT kinds in the tool schema.
 - Use the documented feed-dependent kinds where the thesis calls for them (tick, gamma_regime, gamma_wall, iv_rank, event_within) — do not invent supported substitutes; the desk flags them as gaps itself.
-- Use efficiency_ratio / momentum_atr for ER and momentum gates, macd{fast,slow,signal,cmp} for MACD. For a "≥N of M confluence" rule, put the M conditions in \`all\` and set \`atLeast: N\`.
+- Use efficiency_ratio / momentum_atr for ER and momentum gates, macd{fast,slow,signal,cmp} for MACD. For a "≥N of M confluence" rule, put the M conditions in \`all\` and set \`atLeast: N\`. For a "these MUST hold AND ≥k of {confirmations}" rule (core gate + confirmations), put the REQUIRED gates in \`all\` and the confirmation pool in \`anyOf:{atLeast:k, of:[...]}\`.
 - entries[].all are ENTRY GATES ONLY (market state: price/indicator/volume/time). Post-entry rules — stops, scale-outs, breakeven, trailing, cost gate, EOD-flatten — are MANAGEMENT: put them in the \`management\` block. NEVER emit them as entry conditions and never emit \`unknown\` for a cost gate / stop / scale rule.
 - structure: single-leg for one long call/put; straddle/vertical-spread/etc. for multi-leg.
 - "Smart" theses (those with a Management section: R-based stops, scale-outs, breakeven ratchet, trail, cost gate) → fill the optional \`management\` block faithfully from that section. A plain thesis with no such section → OMIT management entirely.

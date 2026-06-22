@@ -482,6 +482,10 @@ const REGISTRY: Record<string, { evaluate: Evaluate; tf: number; warmup: number 
 // capability-checked, so this is defensive. KEEP IN SYNC with engine/specEvaluate.ts.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Spec = any;
+// All conditions an entry references: mandatory `all` + the optional `anyOf.of` pool
+// (mirrors engine/specEvaluate.ts entryConds — used by warmup/precompute/infer scans).
+// deno-lint-ignore no-explicit-any
+const entryConds = (e: any): any[] => [...(e.all ?? []), ...(e.anyOf?.of ?? [])];
 function emaArr(vals: number[], p: number): number[] {
   const out: number[] = []; const k = 2 / (p + 1); let prev = vals.length ? vals[0] : 0;
   for (let i = 0; i < vals.length; i++) { prev = i === 0 ? vals[0] : vals[i] * k + prev * (1 - k); out.push(prev); }
@@ -539,7 +543,7 @@ function compileSpec(spec: Spec): CompiledSpec {
     if (e.timeET) { const t = parseET(e.timeET); if (t != null) timeExit = timeExit == null ? t : Math.min(timeExit, t); }
   }
   let warmup = 15; // warmup FLOOR (was 30) — sync with engine/specEvaluate.ts WARMUP_FLOOR.
-  for (const e of entries) for (const c of (e.all ?? [])) {
+  for (const e of entries) for (const c of entryConds(e)) {
     if (c.kind === "ma_cross") warmup = Math.max(warmup, c.slow, c.fast);
     else if (c.kind === "rsi") warmup = Math.max(warmup, c.period + 1);
     else if (c.kind === "momentum_atr") warmup = Math.max(warmup, (c.lookback ?? 3) + 1);
@@ -548,7 +552,7 @@ function compileSpec(spec: Spec): CompiledSpec {
   const build = (bars: Bar[], levels?: { pdh?: number; pdl?: number }): Evaluate => {
     const closes = bars.map((b) => b.close);
     const emaS = new Map<number, number[]>(), rsiS = new Map<number, number[]>(), macdS = new Map<string, number[]>();
-    for (const e of entries) for (const c of (e.all ?? [])) {
+    for (const e of entries) for (const c of entryConds(e)) {
       if (c.kind === "ma_cross") { if (!emaS.has(c.fast)) emaS.set(c.fast, emaArr(closes, c.fast)); if (!emaS.has(c.slow)) emaS.set(c.slow, emaArr(closes, c.slow)); }
       else if (c.kind === "rsi" && !rsiS.has(c.period)) rsiS.set(c.period, rsiArr(closes, c.period));
       else if (c.kind === "macd" && !macdS.has(macdKey(c))) { const fa = emaArr(closes, c.fast), sl = emaArr(closes, c.slow); const line = closes.map((_, i) => fa[i] - sl[i]); const sig = emaArr(line, c.signal); macdS.set(macdKey(c), line.map((v, i) => v - sig[i])); }
@@ -577,14 +581,23 @@ function compileSpec(spec: Spec): CompiledSpec {
     // the entry NOT fire — never trade an unevaluated rule. Armed channels are
     // capability-checked (zero unsupported), so this only guards a force-armed spec.
     const entryHolds = (e: Spec, f: Features, i: number): boolean => {
-      const all = e.all ?? []; if (!all.length) return false;
+      const all = e.all ?? [];
+      const pool = e.anyOf?.of ?? [];
+      if (!all.length && !pool.length) return false;
+      // STRICT live posture: any unsupported (feed-dependent) gate anywhere → no fire.
       for (const c of all) if (!SPEC_SUPPORTED.has(c.kind)) return false;
+      for (const c of pool) if (!SPEC_SUPPORTED.has(c.kind)) return false;
+      // mandatory `all`: ≥atLeast of it (omitted → strict AND); empty → vacuously true.
       let held = 0; for (const c of all) if (cond(c, f, i)) held++;
       const need = e.atLeast != null ? Math.min(Math.max(1, e.atLeast), all.length) : all.length;
-      return held >= need;
+      const allPass = all.length === 0 ? true : held >= need;
+      // optional pool: ≥anyOf.atLeast of it (capped to pool size); absent → vacuously true.
+      let pHeld = 0; for (const c of pool) if (cond(c, f, i)) pHeld++;
+      const anyPass = !e.anyOf ? true : pHeld >= Math.min(Math.max(1, e.anyOf.atLeast), pool.length);
+      return allPass && anyPass;
     };
     const infer = (e: Spec): OptType | null => {
-      for (const c of (e.all ?? [])) {
+      for (const c of entryConds(e)) {
         if (c.kind === "ma_cross") return c.dir === "up" ? "call" : "put";
         if (c.kind === "vwap_side") return c.side === "above" ? "call" : "put";
         if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
