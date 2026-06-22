@@ -43,7 +43,7 @@ const dir3 = (s: "call" | "put" | null) => (s === "call" ? "C" : s === "put" ? "
 function nakamotoSpec(): StrategySpec {
   const entries: SpecEntry[] = [];
   for (const [d, opt] of [["up", "call"], ["down", "put"]] as Array<["up" | "down", "call" | "put"]>) {
-    const macd: Condition = { kind: "macd", fast: 12, slow: 26, signal: 9, cmp: d === "up" ? "bull" : "bear" };
+    const macd: Condition = { kind: "macd", fast: 12, slow: 26, signal: 9, cmp: d === "up" ? "bull" : "bear", mode: "state" };
     const level: Condition = { kind: "level", ref: "custom", cmp: "near", withinDollars: 1.0 };
     const stale: Condition = { kind: "stale_extreme", dir: d, sinceMin: 6 };
     const others = [macd, level, stale];

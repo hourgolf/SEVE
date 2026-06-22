@@ -46,7 +46,7 @@ export type Condition =
   // ---- engine signals (computeFeatures / precomputed indicators) ----
   | { kind: "efficiency_ratio"; op: ">=" | "<="; value: number; lookback?: number }
   | { kind: "momentum_atr"; op: ">=" | "<="; value: number; lookback?: number } // (close − close[lookback]) / ATR
-  | { kind: "macd"; fast: number; slow: number; signal: number; cmp: "bull" | "bear" } // bull = histogram > 0
+  | { kind: "macd"; fast: number; slow: number; signal: number; cmp: "bull" | "bear"; mode?: "hist" | "state" } // hist (default) = histogram >/< 0; state = nakamoto macdState (sign±0.005 deadband + line-slope agree) OR fresh-cross ≤3 bars
   | { kind: "level"; ref: "pdh" | "pdl" | "orb_hi" | "orb_lo" | "custom"; cmp: ">" | "<" | "near"; withinPct?: number; withinDollars?: number } // price-level gate; near = within withinPct% (or withinDollars $ if set) of the level. ref "custom" = an injected level set (near-only; for backtest/replication head-to-heads)
   // ---- candle-shape conditions (engine/candle-shapes.ts; pure bar geometry) ----
   | { kind: "pin_bar"; dir: "up" | "down" } // rejection wick ≥2× body, body ≤33% range, close in upper/lower third

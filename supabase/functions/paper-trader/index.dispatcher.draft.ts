@@ -565,12 +565,12 @@ function compileSpec(spec: Spec): CompiledSpec {
   }
   const build = (bars: Bar[], levels?: { pdh?: number; pdl?: number }): Evaluate => {
     const closes = bars.map((b) => b.close);
-    const emaS = new Map<number, number[]>(), rsiS = new Map<number, number[]>(), macdS = new Map<string, number[]>(), smaS = new Map<number, number[]>();
+    const emaS = new Map<number, number[]>(), rsiS = new Map<number, number[]>(), macdS = new Map<string, number[]>(), smaS = new Map<number, number[]>(), macdLineS = new Map<string, number[]>();
     for (const e of entries) for (const c of entryConds(e)) {
       if (c.kind === "ma_cross") { if (!emaS.has(c.fast)) emaS.set(c.fast, emaArr(closes, c.fast)); if (!emaS.has(c.slow)) emaS.set(c.slow, emaArr(closes, c.slow)); }
       else if (c.kind === "sma_cross") { const fa = c.fast ?? 20, sw = c.slow ?? 120; if (!smaS.has(fa)) smaS.set(fa, cSmaArr(closes, fa)); if (!smaS.has(sw)) smaS.set(sw, cSmaArr(closes, sw)); }
       else if (c.kind === "rsi" && !rsiS.has(c.period)) rsiS.set(c.period, rsiArr(closes, c.period));
-      else if (c.kind === "macd" && !macdS.has(macdKey(c))) { const fa = emaArr(closes, c.fast), sl = emaArr(closes, c.slow); const line = closes.map((_, i) => fa[i] - sl[i]); const sig = emaArr(line, c.signal); macdS.set(macdKey(c), line.map((v, i) => v - sig[i])); }
+      else if (c.kind === "macd" && !macdS.has(macdKey(c))) { const fa = emaArr(closes, c.fast), sl = emaArr(closes, c.slow); const line = closes.map((_, i) => fa[i] - sl[i]); const sig = emaArr(line, c.signal); macdS.set(macdKey(c), line.map((v, i) => v - sig[i])); macdLineS.set(macdKey(c), line); }
     }
     const etMin = bars.map((b) => etParts(b.ts).min);
     const { sinceHod, sinceLod } = cSessionSince(bars); // for stale_extreme
@@ -584,7 +584,7 @@ function compileSpec(spec: Spec): CompiledSpec {
         case "rel_vol": return f.relVol >= c.min;
         case "efficiency_ratio": return c.op === ">=" ? f.er >= c.value : f.er <= c.value;
         case "momentum_atr": { if (f.atr <= 0) return false; const lb = c.lookback ?? 3; const mom = i >= lb ? (closes[i] - closes[i - lb]) / f.atr : 0; return c.op === ">=" ? mom >= c.value : mom <= c.value; }
-        case "macd": { const h = macdS.get(macdKey(c)); if (!h) return false; return c.cmp === "bull" ? h[i] > 0 : h[i] < 0; }
+        case "macd": { const h = macdS.get(macdKey(c)); if (!h) return false; if (c.mode === "state") { const ln = macdLineS.get(macdKey(c)); if (!ln || i < 29) return false; const sg = h[i] > 0.005 ? 1 : h[i] < -0.005 ? -1 : 0; const sp = i >= 1 ? ln[i] - ln[i - 1] : 0; const iL = sg > 0 && sp > 0, iS = sg < 0 && sp < 0; let bsc = 999, cd = 0; for (let j = i; j > 0; j--) if ((h[j] > 0) !== (h[j - 1] > 0)) { bsc = i - j; cd = h[j] > 0 ? 1 : -1; break; } const fU = cd === 1 && bsc <= 3, fD = cd === -1 && bsc <= 3; return c.cmp === "bull" ? (iL || fU) : (iS || fD); } return c.cmp === "bull" ? h[i] > 0 : h[i] < 0; }
         case "level": { if (c.ref === "custom") return false; /* injected level set is backtest-only; worker has none */ const lvl = c.ref === "orb_hi" ? f.openRangeHi : c.ref === "orb_lo" ? f.openRangeLo : c.ref === "pdh" ? levels?.pdh : levels?.pdl; if (lvl == null || f.close <= 0) return false; if (c.cmp === ">") return f.close > lvl; if (c.cmp === "<") return f.close < lvl; return c.withinDollars != null ? Math.abs(f.close - lvl) <= c.withinDollars : (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); }
         case "pin_bar": return cPin(bars[i], c.dir);
         case "engulfing": return i > 0 && cEngulf(bars[i - 1], bars[i], c.dir);

@@ -149,6 +149,7 @@ interface Ctx {
   sinceHod: number[]; // bars since session HOD per index (for stale_extreme)
   sinceLod: number[];
   macdSeries: Map<string, number[]>; // key `${fast}-${slow}-${signal}` → histogram
+  macdLineSeries: Map<string, number[]>; // same key → macd LINE (for macd mode:"state")
   pdh?: number; // prior-day high (for `level` conditions)
   pdl?: number;
   customLevels?: number[]; // injected level set for level{ref:"custom"} (replication head-to-heads)
@@ -211,6 +212,17 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
     case "macd": {
       const hist = ctx.macdSeries.get(macdKey(c));
       if (!hist) return false;
+      if (c.mode === "state") { // nakamoto macdState: (sign & line-slope agree) OR fresh cross ≤3 bars
+        const line = ctx.macdLineSeries.get(macdKey(c));
+        if (!line || i < 29) return false; // needs ≥30 bars (his guard)
+        const sign = hist[i] > 0.005 ? 1 : hist[i] < -0.005 ? -1 : 0;
+        const slope = i >= 1 ? line[i] - line[i - 1] : 0;
+        const inLong = sign > 0 && slope > 0, inShort = sign < 0 && slope < 0;
+        let bsc = 999, cdir = 0;
+        for (let j = i; j > 0; j--) if ((hist[j] > 0) !== (hist[j - 1] > 0)) { bsc = i - j; cdir = hist[j] > 0 ? 1 : -1; break; }
+        const freshUp = cdir === 1 && bsc <= 3, freshDown = cdir === -1 && bsc <= 3;
+        return c.cmp === "bull" ? (inLong || freshUp) : (inShort || freshDown);
+      }
       return c.cmp === "bull" ? hist[i] > 0 : hist[i] < 0;
     }
     case "level": {
@@ -317,6 +329,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
   const rsiSeries = new Map<number, number[]>();
   const smaSeries = new Map<number, number[]>();
   const macdSeries = new Map<string, number[]>();
+  const macdLineSeries = new Map<string, number[]>();
   for (const e of spec.entries ?? []) {
     for (const c of entryConds(e)) {
       if (c.kind === "ma_cross") {
@@ -336,6 +349,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
         const line = closes.map((_, i) => fa[i] - sl[i]);
         const sig = ema(line, c.signal);
         macdSeries.set(macdKey(c), line.map((v, i) => v - sig[i])); // histogram
+        macdLineSeries.set(macdKey(c), line); // for mode:"state"
       }
     }
   }
@@ -358,7 +372,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, smaSeries, etMin, closes, bars, sinceHod, sinceLod, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap, customLevels: levels?.customLevels };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, smaSeries, etMin, closes, bars, sinceHod, sinceLod, macdSeries, macdLineSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap, customLevels: levels?.customLevels };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {
