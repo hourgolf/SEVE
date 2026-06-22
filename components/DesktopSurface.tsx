@@ -174,13 +174,27 @@ export function DesktopSurface({
                 </svg>
               )}
               <button type="button" className="mkt-exp" onClick={() => setCollapsedMarket((c) => !c)}>
-                {collapsedMarket ? "▾ expand chart · chain" : "▴ collapse chart"}
+                {collapsedMarket ? "▾ expand chart" : "▴ collapse chart"}
               </button>
             </div>
             <div className="mkt-chart" style={{ display: collapsedMarket ? "none" : "block" }}>
               <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
-              <div className="grid grid--live" style={{ marginTop: 12 }}>
+            </div>
+            {/* LIVE BOOK — directly under the chart so open positions ↔ price are visible together
+                for exit timing (no scroll). Positions LEFT; signals tape stacked over the chain RIGHT.
+                Stays visible when the chart is collapsed. */}
+            <div className="section-label" id="livebook">
+              <span className="idx">B</span>
+              <span className="lab">Live Book<span className="sec-jp">ブック</span></span>
+              <span className="sec-right">{feed.positions.length} open · realized <span className={realizedToday < 0 ? "neg" : "pos"}>{signedUsd(realizedToday)}</span></span>
+            </div>
+            <div className="log-section livebook-section">
+              <div className="grid grid--live">
                 <div className="col col--fill">
+                  <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
+                </div>
+                <div className="col">
+                  <SignalsTape signals={feed.signals} />
                   <OptionChain
                     snapshot={data.snapshot}
                     spot={data.spot}
@@ -188,6 +202,7 @@ export function DesktopSurface({
                     selected={selected}
                     onSelect={(s) => setSelected((cur) => (cur === s ? null : s))}
                     symbol={symbol}
+                    compact
                   />
                   {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
                 </div>
@@ -195,7 +210,7 @@ export function DesktopSurface({
             </div>
           </div>
 
-          <SectionLabel id="composer" idx="B">
+          <SectionLabel id="composer" idx="C">
             Mixer<span className="sec-jp">ミキサー</span>
             {canWrite && (
               <span className="group-by" title="auto-arrange the channels, then nudge by hand">
@@ -260,22 +275,6 @@ export function DesktopSurface({
               )}
             </div>
             <MasterStrip fund={desk.fund} fundPnl={liveFund} />
-          </div>
-
-          <div className="section-label" id="livebook">
-            <span className="idx">C</span>
-            <span className="lab">Live Book<span className="sec-jp">ブック</span></span>
-            <span className="sec-right">{feed.positions.length} open · realized <span className={realizedToday < 0 ? "neg" : "pos"}>{signedUsd(realizedToday)}</span></span>
-          </div>
-          <div className="log-section">
-            <div className="grid grid--live">
-              <div className="col col--fill">
-                <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
-              </div>
-              <div className="col">
-                <SignalsTape signals={feed.signals} />
-              </div>
-            </div>
           </div>
         </section>
       )}

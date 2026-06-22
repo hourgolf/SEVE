@@ -53,7 +53,6 @@ type Tab = "market" | "mixer" | "book" | "review";
 const TABS: { id: Tab; label: string; jp: string; Icon: () => React.ReactNode }[] = [
   { id: "market", label: "Market", jp: "ライブ", Icon: IcMarket },
   { id: "mixer", label: "Mixer", jp: "ミキサー", Icon: IcMixer },
-  { id: "book", label: "Book", jp: "ブック", Icon: IcBook },
   { id: "review", label: "Review", jp: "検証", Icon: IcReview },
 ];
 
@@ -75,7 +74,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const PER_PAGE = 4;
   const [tab, setTab] = useState<Tab>("market");
   const [hlTrade, setHlTrade] = useState<Position | null>(null);
-  const [show, setShow] = useState({ chart: true, chain: false });
+  const [show, setShow] = useState({ chart: true, positions: true, chain: false });
   const [settings, setSettings] = useState(false); // cog → OPS sheet
   const [addOpen, setAddOpen] = useState(false);
   const [slide, setSlide] = useState(0);
@@ -153,10 +152,18 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
           <>
             <div className="m-toggles">
               <button className={`m-tog${show.chart ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, chart: !s.chart }))}>CHART</button>
+              <button className={`m-tog${show.positions ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, positions: !s.positions }))}>BOOK</button>
               <button className={`m-tog${show.chain ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, chain: !s.chain }))}>CHAIN</button>
             </div>
             {show.chart && (
               <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} mobile trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
+            )}
+            {/* BOOK right under the chart — open positions ↔ price together for exit timing (no tab-hop). */}
+            {show.positions && (
+              <>
+                <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
+                <SignalsTape signals={feed.signals} />
+              </>
             )}
             {show.chain && (
               <>
@@ -172,13 +179,6 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
               </>
             )}
-          </>
-        )}
-
-        {tab === "book" && (
-          <>
-            <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
-            <SignalsTape signals={feed.signals} />
           </>
         )}
 
