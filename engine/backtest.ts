@@ -22,8 +22,21 @@ import { computeFeatures, riskGovernor } from "./engine";
 import { DEFAULT_COST_MODEL, fillWithCost, type CostModel } from "./cost";
 import { buildSizingModel, scalarFor, loadSizingSpec, featuresForSizing, type SizingFeatures } from "./sizing";
 import { openManaged, stepManaged, costGatePass, type ManagedState } from "./manage";
-import { decidePyramidAdd } from "./pyramid";
+import { decidePyramidAdd, type PyramidDecision } from "./pyramid";
 import type { Management } from "../lib/desk/strategySpec";
+
+// Default-null GRADUATION-REPLAY hook: fires at each pyramid add-decision with the engine's
+// inputs + the raw quote, so a replay can recompute the WORKER's decision (raw-ask addFill +
+// decide-formula sizeQty) on identical state and assert parity. Unset → never called → the
+// engine path is byte-identical (the standing additive/default-off discipline).
+export interface PyramidParityInfo {
+  ask: number; engineFill: number; engineDec: PyramidDecision;
+  lots: { qty: number; entryFill: number }[]; posQty: number; posEntry: number; optType: OptType;
+  dir: OptType | null; heldAtPriorBar: boolean; exiting: boolean;
+  cfg: { maxAdds: number; minProfitPct: number }; maxStack?: number;
+}
+export let pyramidParityHook: ((p: PyramidParityInfo) => void) | null = null;
+export function setPyramidParityHook(h: ((p: PyramidParityInfo) => void) | null): void { pyramidParityHook = h; }
 
 // Zero-cost model for `--gross` runs (mid fills, no spread/slippage/fees).
 const GROSS_COST: CostModel = { spreadSource: "modeled", modeledSpreadPct: 0, modeledSpreadFloorUsd: 0, slippageTicksPerSide: 0, commissionPerContract: 0, crossSpread: false };
@@ -423,6 +436,11 @@ export function simulateSession(
           addFill: en.fill,
           // maxStack (faithful live governor): cap the add so base+adds never exceed N total.
           sizeQty: r.ok ? (pyramid.maxStack ? Math.max(0, Math.min(r.qty, pyramid.maxStack - pos.qty)) : r.qty) : 0,
+        });
+        if (pyramidParityHook) pyramidParityHook({
+          ask: q.ask, engineFill: en.fill, engineDec: dec, lots: pyramidLots.slice(),
+          posQty: pos.qty, posEntry: pos.entryPrice, optType: pos.optType, dir,
+          heldAtPriorBar: !wasFlat, exiting: !!intent && intent.kind === "exit", cfg: pyramid, maxStack: pyramid.maxStack,
         });
         if (dec.add) {
           pos.entryPrice = dec.newEntryPrice; // weighted avg → exit math unchanged

@@ -121,6 +121,7 @@
     "pyramid-faithful": "tsx --env-file=.env.local engine/pyramid-faithful.ts",
     "spread-capture-probe": "tsx --env-file=.env.local engine/spread-capture-probe.ts",
     "pyramid-roster": "tsx --env-file=.env.local engine/pyramid-roster-faithful.ts",
+    "pyramid-graduation-replay": "tsx --env-file=.env.local engine/pyramid-graduation-replay.ts",
     "grind-slippage-probe": "tsx --env-file=.env.local engine/grind-slippage-probe.ts"
   },
   "dependencies": {
