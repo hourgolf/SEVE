@@ -17,6 +17,7 @@
     "breakeven-probe": "tsx engine/breakeven-probe.ts",
     "late-gate-probe": "tsx engine/late-gate-probe.ts",
     "fill-probe": "tsx engine/fill-probe.ts",
+    "spread-capture-sweep": "tsx engine/spread-capture-sweep.ts",
     "mfe-probe": "tsx engine/mfe-probe.ts",
     "scalp-edge-probe": "tsx engine/scalp-edge-probe.ts",
     "tier2-probe": "tsx engine/tier2-target-probe.ts",
