@@ -585,7 +585,7 @@ function compileSpec(spec: Spec): CompiledSpec {
         case "efficiency_ratio": return c.op === ">=" ? f.er >= c.value : f.er <= c.value;
         case "momentum_atr": { if (f.atr <= 0) return false; const lb = c.lookback ?? 3; const mom = i >= lb ? (closes[i] - closes[i - lb]) / f.atr : 0; return c.op === ">=" ? mom >= c.value : mom <= c.value; }
         case "macd": { const h = macdS.get(macdKey(c)); if (!h) return false; return c.cmp === "bull" ? h[i] > 0 : h[i] < 0; }
-        case "level": { const lvl = c.ref === "orb_hi" ? f.openRangeHi : c.ref === "orb_lo" ? f.openRangeLo : c.ref === "pdh" ? levels?.pdh : levels?.pdl; if (lvl == null || f.close <= 0) return false; if (c.cmp === ">") return f.close > lvl; if (c.cmp === "<") return f.close < lvl; return (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); }
+        case "level": { if (c.ref === "custom") return false; /* injected level set is backtest-only; worker has none */ const lvl = c.ref === "orb_hi" ? f.openRangeHi : c.ref === "orb_lo" ? f.openRangeLo : c.ref === "pdh" ? levels?.pdh : levels?.pdl; if (lvl == null || f.close <= 0) return false; if (c.cmp === ">") return f.close > lvl; if (c.cmp === "<") return f.close < lvl; return c.withinDollars != null ? Math.abs(f.close - lvl) <= c.withinDollars : (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); }
         case "pin_bar": return cPin(bars[i], c.dir);
         case "engulfing": return i > 0 && cEngulf(bars[i - 1], bars[i], c.dir);
         case "strong_trend": return cStrongTrend(bars[i], c.dir);

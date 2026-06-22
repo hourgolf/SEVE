@@ -31,6 +31,7 @@
     "nakamoto-repro": "tsx engine/nakamoto/repro.ts",
     "nakamoto-phase2": "tsx engine/nakamoto/phase2.ts",
     "nakamoto-discover": "tsx engine/nakamoto/discover-levels.ts",
+    "nakamoto-ab": "tsx engine/nakamoto/ab-compiled.ts",
     "anyof-selftest": "tsx engine/anyof-selftest.ts",
     "candle-selftest": "tsx engine/candle-selftest.ts",
     "fill-lag-probe": "tsx engine/fill-lag-probe.ts",

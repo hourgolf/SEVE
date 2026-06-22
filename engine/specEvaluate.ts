@@ -37,7 +37,7 @@ export interface CompiledStrategy {
   timeframeMin: number;
   warmupBars: number;
   mandate: string;
-  build: (bars: Bar[], tfMin: number, levels?: { pdh?: number; pdl?: number; gap?: number }) => Evaluate;
+  build: (bars: Bar[], tfMin: number, levels?: { pdh?: number; pdl?: number; gap?: number; customLevels?: number[] }) => Evaluate;
 }
 
 // ---- ET wall-clock (portable: Intl works in Node + Deno) -------------------
@@ -151,6 +151,7 @@ interface Ctx {
   macdSeries: Map<string, number[]>; // key `${fast}-${slow}-${signal}` → histogram
   pdh?: number; // prior-day high (for `level` conditions)
   pdl?: number;
+  customLevels?: number[]; // injected level set for level{ref:"custom"} (replication head-to-heads)
   gap?: number; // signed overnight gap % ((open − priorClose)/priorClose·100); session constant (for `gap_min`)
 }
 
@@ -213,6 +214,12 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       return c.cmp === "bull" ? hist[i] > 0 : hist[i] < 0;
     }
     case "level": {
+      if (c.ref === "custom") { // near-only against the injected level SET (his $1.00 proximity)
+        const set = ctx.customLevels;
+        if (!set || !set.length || f.close <= 0) return false;
+        const d = c.withinDollars ?? 1.0;
+        return set.some((L) => Math.abs(f.close - L) <= d);
+      }
       const lvl = c.ref === "orb_hi" ? f.openRangeHi
         : c.ref === "orb_lo" ? f.openRangeLo
         : c.ref === "pdh" ? ctx.pdh
@@ -220,7 +227,9 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       if (lvl == null || f.close <= 0) return false;
       if (c.cmp === ">") return f.close > lvl;
       if (c.cmp === "<") return f.close < lvl;
-      return (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); // near
+      return c.withinDollars != null
+        ? Math.abs(f.close - lvl) <= c.withinDollars
+        : (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); // near
     }
     case "pin_bar":
       return pinBar(ctx.bars[i], c.dir);
@@ -302,7 +311,7 @@ function entryHolds(entry: SpecEntry, ctx: Ctx): boolean {
 }
 
 // Build the per-session Evaluate for a spec (precomputes EMA/RSI over closes).
-function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, levels?: { pdh?: number; pdl?: number; gap?: number }): Evaluate {
+function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, levels?: { pdh?: number; pdl?: number; gap?: number; customLevels?: number[] }): Evaluate {
   const closes = bars.map((b) => b.close);
   const emaSeries = new Map<number, number[]>();
   const rsiSeries = new Map<number, number[]>();
@@ -349,7 +358,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, smaSeries, etMin, closes, bars, sinceHod, sinceLod, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, smaSeries, etMin, closes, bars, sinceHod, sinceLod, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap, customLevels: levels?.customLevels };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {
