@@ -510,7 +510,12 @@ function parseET(s: string): number | null { const m = /^\s*(\d{1,2}):(\d{2})/.e
 // Full parity with engine/specEvaluate.ts SUPPORTED — keep these in sync (the
 // capabilityCheck in lib/desk/strategySpec.ts is the arm gate; a kind it deems
 // armable MUST be runnable here, or a channel arms and silently never trades).
-const SPEC_SUPPORTED = new Set(["ma_cross","vwap_side","vwap_dev","opening_range","or_width_min","rel_vol","rsi","time_before","time_between","efficiency_ratio","momentum_atr","macd","level"]);
+const SPEC_SUPPORTED = new Set(["ma_cross","vwap_side","vwap_dev","opening_range","or_width_min","rel_vol","rsi","time_before","time_between","efficiency_ratio","momentum_atr","macd","level","pin_bar","engulfing","strong_trend","stale_extreme"]);
+// Candle-shape detectors — transcribed from engine/candle-shapes.ts (parity). deno-lint-ignore-file no-explicit-any
+const cStrongTrend = (b: any, dir: string): boolean => { const r = b.high - b.low; if (r <= 0) return false; const bf = Math.abs(b.close - b.open) / r, cp = (b.close - b.low) / r; return dir === "up" ? bf > 0.65 && cp > 0.80 && b.close > b.open : bf > 0.65 && cp < 0.20 && b.close < b.open; };
+const cPin = (b: any, dir: string): boolean => { const r = b.high - b.low; if (r <= 0) return false; const body = Math.abs(b.close - b.open), lw = Math.min(b.open, b.close) - b.low, uw = b.high - Math.max(b.open, b.close), cp = (b.close - b.low) / r; if (body > 0.33 * r) return false; return dir === "up" ? lw >= 2 * body && cp >= 0.66 : uw >= 2 * body && cp <= 0.33; };
+const cEngulf = (p: any, c: any, dir: string): boolean => { const ph = Math.max(p.open, p.close), pl = Math.min(p.open, p.close), ch = Math.max(c.open, c.close), cl = Math.min(c.open, c.close); if (ch < ph || cl > pl) return false; return dir === "up" ? c.close > c.open && p.close < p.open : c.close < c.open && p.close > p.open; };
+const cSessionSince = (bars: any[]): { sinceHod: number[]; sinceLod: number[] } => { const sh = new Array(bars.length), sl = new Array(bars.length); let hi = 0, lo = 0; for (let i = 0; i < bars.length; i++) { if (i > 0) { if (bars[i].high > bars[hi].high) hi = i; if (bars[i].low < bars[lo].low) lo = i; } sh[i] = i - hi; sl[i] = i - lo; } return { sinceHod: sh, sinceLod: sl }; };
 const macdKey = (c: Spec) => `${c.fast}-${c.slow}-${c.signal}`;
 
 interface CompiledSpec { build: (bars: Bar[], levels?: { pdh?: number; pdl?: number }) => Evaluate; tf: number; warmup: number; premiumExit: { profitPct?: number; stopPct?: number }; trail?: { atrChandelierK?: number; premiumGivebackPct?: number }; }
@@ -558,6 +563,7 @@ function compileSpec(spec: Spec): CompiledSpec {
       else if (c.kind === "macd" && !macdS.has(macdKey(c))) { const fa = emaArr(closes, c.fast), sl = emaArr(closes, c.slow); const line = closes.map((_, i) => fa[i] - sl[i]); const sig = emaArr(line, c.signal); macdS.set(macdKey(c), line.map((v, i) => v - sig[i])); }
     }
     const etMin = bars.map((b) => etParts(b.ts).min);
+    const { sinceHod, sinceLod } = cSessionSince(bars); // for stale_extreme
     const cond = (c: Spec, f: Features, i: number): boolean => {
       switch (c.kind) {
         case "ma_cross": { const a = emaS.get(c.fast), b = emaS.get(c.slow); if (!a || !b) return false; return xdir(a, b, i) === (c.dir === "up" ? 1 : -1); }
@@ -570,6 +576,10 @@ function compileSpec(spec: Spec): CompiledSpec {
         case "momentum_atr": { if (f.atr <= 0) return false; const lb = c.lookback ?? 3; const mom = i >= lb ? (closes[i] - closes[i - lb]) / f.atr : 0; return c.op === ">=" ? mom >= c.value : mom <= c.value; }
         case "macd": { const h = macdS.get(macdKey(c)); if (!h) return false; return c.cmp === "bull" ? h[i] > 0 : h[i] < 0; }
         case "level": { const lvl = c.ref === "orb_hi" ? f.openRangeHi : c.ref === "orb_lo" ? f.openRangeLo : c.ref === "pdh" ? levels?.pdh : levels?.pdl; if (lvl == null || f.close <= 0) return false; if (c.cmp === ">") return f.close > lvl; if (c.cmp === "<") return f.close < lvl; return (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); }
+        case "pin_bar": return cPin(bars[i], c.dir);
+        case "engulfing": return i > 0 && cEngulf(bars[i - 1], bars[i], c.dir);
+        case "strong_trend": return cStrongTrend(bars[i], c.dir);
+        case "stale_extreme": { if (i + 1 < 12) return false; const sn = c.dir === "up" ? sinceHod[i] : sinceLod[i]; return sn >= (c.sinceMin ?? 6); }
         case "rsi": { const s = rsiS.get(c.period); if (!s) return false; return c.cmp === ">" ? s[i] > c.value : s[i] < c.value; }
         case "time_before": { const t = parseET(c.et); return t != null && etMin[i] < t; }
         case "time_between": { const a = parseET(c.startET), b = parseET(c.endET); return a != null && b != null && etMin[i] >= a && etMin[i] <= b; }
@@ -602,6 +612,7 @@ function compileSpec(spec: Spec): CompiledSpec {
         if (c.kind === "vwap_side") return c.side === "above" ? "call" : "put";
         if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
         if (c.kind === "momentum_atr") return c.op === ">=" ? "call" : "put";
+        if (c.kind === "pin_bar" || c.kind === "engulfing" || c.kind === "strong_trend" || c.kind === "stale_extreme") return c.dir === "up" ? "call" : "put";
       }
       return null;
     };

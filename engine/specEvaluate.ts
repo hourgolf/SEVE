@@ -18,6 +18,7 @@
 // ============================================================================
 
 import { ema, rsi, crossDir } from "../lib/indicators";
+import { pinBar, engulfing, strongTrendBar, sessionSince } from "./candle-shapes";
 import type { StrategySpec, Condition, SpecEntry, SpecLeg } from "../lib/desk/strategySpec";
 import type { Bar, Evaluate, Features, Intent, OptType, Position } from "./types";
 
@@ -68,6 +69,7 @@ const SUPPORTED = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
   "efficiency_ratio", "momentum_atr", "macd", "level",
+  "pin_bar", "engulfing", "strong_trend", "stale_extreme",
 ]);
 
 // Premium profit/stop exits (need the option mark) — applied by the driver.
@@ -124,6 +126,8 @@ function inferDirection(entry: SpecEntry): OptType | null {
     if (c.kind === "trend_align") return c.side === "up" ? "call" : "put";
     if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
     if (c.kind === "momentum_atr") return c.op === ">=" ? "call" : "put";
+    if (c.kind === "pin_bar" || c.kind === "engulfing" || c.kind === "strong_trend" || c.kind === "stale_extreme")
+      return c.dir === "up" ? "call" : "put";
   }
   return null;
 }
@@ -135,6 +139,9 @@ interface Ctx {
   rsiSeries: Map<number, number[]>;
   etMin: number[];
   closes: number[];
+  bars: Bar[]; // raw OHLC (for candle-shape conditions)
+  sinceHod: number[]; // bars since session HOD per index (for stale_extreme)
+  sinceLod: number[];
   macdSeries: Map<string, number[]>; // key `${fast}-${slow}-${signal}` → histogram
   pdh?: number; // prior-day high (for `level` conditions)
   pdl?: number;
@@ -208,6 +215,17 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       if (c.cmp === ">") return f.close > lvl;
       if (c.cmp === "<") return f.close < lvl;
       return (Math.abs(f.close - lvl) / f.close) * 100 <= (c.withinPct ?? 0.15); // near
+    }
+    case "pin_bar":
+      return pinBar(ctx.bars[i], c.dir);
+    case "engulfing":
+      return i > 0 && engulfing(ctx.bars[i - 1], ctx.bars[i], c.dir);
+    case "strong_trend":
+      return strongTrendBar(ctx.bars[i], c.dir);
+    case "stale_extreme": {
+      if (i + 1 < 12) return false; // needs ≥12 RTH bars (nakamoto gate)
+      const since = c.dir === "up" ? ctx.sinceHod[i] : ctx.sinceLod[i];
+      return since >= (c.sinceMin ?? 6);
     }
     case "rsi": {
       const series = ctx.rsiSeries.get(c.period);
@@ -283,6 +301,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
     }
   }
   const etMin = bars.map((b) => etMinuteOfDay(b.ts));
+  const { sinceHod, sinceLod } = sessionSince(bars); // for stale_extreme
   const warmup = computeWarmup(spec);
   const timeExit = timeExitMinute(spec);
   const entries = spec.entries ?? [];
@@ -300,7 +319,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes, bars, sinceHod, sinceLod, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {

@@ -48,6 +48,11 @@ export type Condition =
   | { kind: "momentum_atr"; op: ">=" | "<="; value: number; lookback?: number } // (close − close[lookback]) / ATR
   | { kind: "macd"; fast: number; slow: number; signal: number; cmp: "bull" | "bear" } // bull = histogram > 0
   | { kind: "level"; ref: "pdh" | "pdl" | "orb_hi" | "orb_lo"; cmp: ">" | "<" | "near"; withinPct?: number } // price-level gate; near = within withinPct% of the level
+  // ---- candle-shape conditions (engine/candle-shapes.ts; pure bar geometry) ----
+  | { kind: "pin_bar"; dir: "up" | "down" } // rejection wick ≥2× body, body ≤33% range, close in upper/lower third
+  | { kind: "engulfing"; dir: "up" | "down" } // current body fully covers prior body, colors reversed
+  | { kind: "strong_trend"; dir: "up" | "down" } // body >65% range, close in top/bottom 20% (in dir)
+  | { kind: "stale_extreme"; dir: "up" | "down"; sinceMin?: number } // ≥sinceMin (default 6) bars since session HOD(up)/LOD(down); needs ≥12 RTH bars
   // ---- NOT yet supported (need a feed/infra we don't ingest) ----
   | { kind: "tick"; cmp: ">" | "<"; value: number } // NYSE TICK feed
   | { kind: "gamma_regime"; require: "POSITIVE" | "NEGATIVE" | "TRANSITION" | "NEGATIVE_OR_TRANSITION" } // GEX/dealer feed
@@ -150,6 +155,7 @@ const SUPPORTED_KINDS = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
   "efficiency_ratio", "momentum_atr", "macd", "level",
+  "pin_bar", "engulfing", "strong_trend", "stale_extreme",
 ]);
 // Structures the (single-leg) worker can place today.
 const SUPPORTED_STRUCTURES = new Set<LegStructure>(["single-leg"]);
@@ -247,7 +253,8 @@ export function validateLegs(structure: LegStructure, legs: SpecLeg[] | undefine
 const KNOWN_KINDS = new Set<string>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min", "rel_vol",
   "rsi", "time_before", "time_between", "efficiency_ratio", "momentum_atr", "macd",
-  "level", "tick", "gamma_regime", "gamma_wall", "iv_rank", "event_within", "unknown",
+  "level", "pin_bar", "engulfing", "strong_trend", "stale_extreme",
+  "tick", "gamma_regime", "gamma_wall", "iv_rank", "event_within", "unknown",
 ]);
 
 // Normalize a freshly-compiled spec: coerce the enum slips the LLM commonly makes
