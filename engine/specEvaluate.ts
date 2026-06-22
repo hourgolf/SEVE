@@ -17,8 +17,8 @@
 //  This file is portable TS (Intl only) so it runs in Node and Deno alike.
 // ============================================================================
 
-import { ema, rsi, crossDir } from "../lib/indicators";
-import { pinBar, engulfing, strongTrendBar, sessionSince } from "./candle-shapes";
+import { ema, sma, rsi, crossDir } from "../lib/indicators";
+import { pinBar, engulfing, strongTrendBar, sessionSince, curlUp, rolloverDown, rangeCompression, rangeBreakoutDirection } from "./candle-shapes";
 import type { StrategySpec, Condition, SpecEntry, SpecLeg } from "../lib/desk/strategySpec";
 import type { Bar, Evaluate, Features, Intent, OptType, Position } from "./types";
 
@@ -70,6 +70,7 @@ const SUPPORTED = new Set<Condition["kind"]>([
   "rel_vol", "rsi", "time_before", "time_between",
   "efficiency_ratio", "momentum_atr", "macd", "level",
   "pin_bar", "engulfing", "strong_trend", "stale_extreme",
+  "curl", "range_break", "sma_cross",
 ]);
 
 // Premium profit/stop exits (need the option mark) — applied by the driver.
@@ -113,6 +114,9 @@ function computeWarmup(spec: StrategySpec): number {
       else if (c.kind === "rsi") warm = Math.max(warm, c.period + 1);
       else if (c.kind === "momentum_atr") warm = Math.max(warm, (c.lookback ?? 3) + 1);
       else if (c.kind === "macd") warm = Math.max(warm, c.slow + c.signal);
+      else if (c.kind === "sma_cross") warm = Math.max(warm, c.slow ?? 120);
+      else if (c.kind === "range_break") warm = Math.max(warm, (c.bars ?? 8) + 1);
+      else if (c.kind === "curl") warm = Math.max(warm, c.bars ?? 7);
     }
   }
   return warm;
@@ -126,7 +130,8 @@ function inferDirection(entry: SpecEntry): OptType | null {
     if (c.kind === "trend_align") return c.side === "up" ? "call" : "put";
     if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
     if (c.kind === "momentum_atr") return c.op === ">=" ? "call" : "put";
-    if (c.kind === "pin_bar" || c.kind === "engulfing" || c.kind === "strong_trend" || c.kind === "stale_extreme")
+    if (c.kind === "pin_bar" || c.kind === "engulfing" || c.kind === "strong_trend" || c.kind === "stale_extreme"
+      || c.kind === "curl" || c.kind === "range_break" || c.kind === "sma_cross")
       return c.dir === "up" ? "call" : "put";
   }
   return null;
@@ -137,6 +142,7 @@ interface Ctx {
   i: number;
   emaSeries: Map<number, number[]>;
   rsiSeries: Map<number, number[]>;
+  smaSeries: Map<number, number[]>; // for sma_cross (SMA fast/slow)
   etMin: number[];
   closes: number[];
   bars: Bar[]; // raw OHLC (for candle-shape conditions)
@@ -227,6 +233,25 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       const since = c.dir === "up" ? ctx.sinceHod[i] : ctx.sinceLod[i];
       return since >= (c.sinceMin ?? 6);
     }
+    case "curl": {
+      const prefix = ctx.bars.slice(0, i + 1); // only bars up to now (causal)
+      return c.dir === "up" ? curlUp(prefix, c.bars ?? 7) : rolloverDown(prefix, c.bars ?? 7);
+    }
+    case "range_break": {
+      const rng = rangeCompression(ctx.bars.slice(0, i), c.bars ?? 8, c.maxWidthPct ?? 0.005); // prior bars
+      if (!rng) return false;
+      return rangeBreakoutDirection(ctx.bars[i], rng, c.edgeMargin ?? 0.10) === c.dir;
+    }
+    case "sma_cross": {
+      const fast = c.fast ?? 20, slow = c.slow ?? 120;
+      if (i < slow - 1) return false; // flat until both SMAs warmed (nakamoto)
+      const fs = ctx.smaSeries.get(fast), sl = ctx.smaSeries.get(slow);
+      if (!fs || !sl) return false;
+      const diff = fs[i] - sl[i];
+      if (!isFinite(diff)) return false;
+      const dirNow = diff > 0.02 ? "up" : diff < -0.02 ? "down" : "flat"; // eps $0.02 flat band
+      return dirNow === c.dir;
+    }
     case "rsi": {
       const series = ctx.rsiSeries.get(c.period);
       if (!series) return false;
@@ -281,6 +306,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
   const closes = bars.map((b) => b.close);
   const emaSeries = new Map<number, number[]>();
   const rsiSeries = new Map<number, number[]>();
+  const smaSeries = new Map<number, number[]>();
   const macdSeries = new Map<string, number[]>();
   for (const e of spec.entries ?? []) {
     for (const c of entryConds(e)) {
@@ -292,6 +318,10 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
         for (const n of c.ref === "ema21" ? [21] : c.ref === "ema50" ? [50] : [9, 21]) if (!emaSeries.has(n)) emaSeries.set(n, ema(closes, n));
       } else if (c.kind === "rsi" && !rsiSeries.has(c.period)) {
         rsiSeries.set(c.period, rsi(closes, c.period));
+      } else if (c.kind === "sma_cross") {
+        const fast = c.fast ?? 20, slow = c.slow ?? 120;
+        if (!smaSeries.has(fast)) smaSeries.set(fast, sma(closes, fast));
+        if (!smaSeries.has(slow)) smaSeries.set(slow, sma(closes, slow));
       } else if (c.kind === "macd" && !macdSeries.has(macdKey(c))) {
         const fa = ema(closes, c.fast), sl = ema(closes, c.slow);
         const line = closes.map((_, i) => fa[i] - sl[i]);
@@ -319,7 +349,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, etMin, closes, bars, sinceHod, sinceLod, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, smaSeries, etMin, closes, bars, sinceHod, sinceLod, macdSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {

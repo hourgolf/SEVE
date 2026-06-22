@@ -53,6 +53,9 @@ export type Condition =
   | { kind: "engulfing"; dir: "up" | "down" } // current body fully covers prior body, colors reversed
   | { kind: "strong_trend"; dir: "up" | "down" } // body >65% range, close in top/bottom 20% (in dir)
   | { kind: "stale_extreme"; dir: "up" | "down"; sinceMin?: number } // ≥sinceMin (default 6) bars since session HOD(up)/LOD(down); needs ≥12 RTH bars
+  | { kind: "curl"; dir: "up" | "down"; bars?: number } // N-bar (default 7) curl_up(up)/rollover_down(down): monotone lows/highs + range compressing + close past prior body
+  | { kind: "range_break"; dir: "up" | "down"; bars?: number; maxWidthPct?: number; edgeMargin?: number } // break of a compressed rolling prior-N-bar (default 8) range — NOT the opening range
+  | { kind: "sma_cross"; dir: "up" | "down"; fast?: number; slow?: number } // SMA(fast=20)/SMA(slow=120) state with $0.02 flat band (distinct from EMA ma_cross)
   // ---- NOT yet supported (need a feed/infra we don't ingest) ----
   | { kind: "tick"; cmp: ">" | "<"; value: number } // NYSE TICK feed
   | { kind: "gamma_regime"; require: "POSITIVE" | "NEGATIVE" | "TRANSITION" | "NEGATIVE_OR_TRANSITION" } // GEX/dealer feed
@@ -155,7 +158,7 @@ const SUPPORTED_KINDS = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
   "efficiency_ratio", "momentum_atr", "macd", "level",
-  "pin_bar", "engulfing", "strong_trend", "stale_extreme",
+  "pin_bar", "engulfing", "strong_trend", "stale_extreme", "curl", "range_break", "sma_cross",
 ]);
 // Structures the (single-leg) worker can place today.
 const SUPPORTED_STRUCTURES = new Set<LegStructure>(["single-leg"]);
@@ -253,7 +256,7 @@ export function validateLegs(structure: LegStructure, legs: SpecLeg[] | undefine
 const KNOWN_KINDS = new Set<string>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min", "rel_vol",
   "rsi", "time_before", "time_between", "efficiency_ratio", "momentum_atr", "macd",
-  "level", "pin_bar", "engulfing", "strong_trend", "stale_extreme",
+  "level", "pin_bar", "engulfing", "strong_trend", "stale_extreme", "curl", "range_break", "sma_cross",
   "tick", "gamma_regime", "gamma_wall", "iv_rank", "event_within", "unknown",
 ]);
 

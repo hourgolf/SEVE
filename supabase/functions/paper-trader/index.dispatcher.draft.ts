@@ -510,12 +510,18 @@ function parseET(s: string): number | null { const m = /^\s*(\d{1,2}):(\d{2})/.e
 // Full parity with engine/specEvaluate.ts SUPPORTED — keep these in sync (the
 // capabilityCheck in lib/desk/strategySpec.ts is the arm gate; a kind it deems
 // armable MUST be runnable here, or a channel arms and silently never trades).
-const SPEC_SUPPORTED = new Set(["ma_cross","vwap_side","vwap_dev","opening_range","or_width_min","rel_vol","rsi","time_before","time_between","efficiency_ratio","momentum_atr","macd","level","pin_bar","engulfing","strong_trend","stale_extreme"]);
+const SPEC_SUPPORTED = new Set(["ma_cross","vwap_side","vwap_dev","opening_range","or_width_min","rel_vol","rsi","time_before","time_between","efficiency_ratio","momentum_atr","macd","level","pin_bar","engulfing","strong_trend","stale_extreme","curl","range_break","sma_cross"]);
 // Candle-shape detectors — transcribed from engine/candle-shapes.ts (parity). deno-lint-ignore-file no-explicit-any
 const cStrongTrend = (b: any, dir: string): boolean => { const r = b.high - b.low; if (r <= 0) return false; const bf = Math.abs(b.close - b.open) / r, cp = (b.close - b.low) / r; return dir === "up" ? bf > 0.65 && cp > 0.80 && b.close > b.open : bf > 0.65 && cp < 0.20 && b.close < b.open; };
 const cPin = (b: any, dir: string): boolean => { const r = b.high - b.low; if (r <= 0) return false; const body = Math.abs(b.close - b.open), lw = Math.min(b.open, b.close) - b.low, uw = b.high - Math.max(b.open, b.close), cp = (b.close - b.low) / r; if (body > 0.33 * r) return false; return dir === "up" ? lw >= 2 * body && cp >= 0.66 : uw >= 2 * body && cp <= 0.33; };
 const cEngulf = (p: any, c: any, dir: string): boolean => { const ph = Math.max(p.open, p.close), pl = Math.min(p.open, p.close), ch = Math.max(c.open, c.close), cl = Math.min(c.open, c.close); if (ch < ph || cl > pl) return false; return dir === "up" ? c.close > c.open && p.close < p.open : c.close < c.open && p.close > p.open; };
 const cSessionSince = (bars: any[]): { sinceHod: number[]; sinceLod: number[] } => { const sh = new Array(bars.length), sl = new Array(bars.length); let hi = 0, lo = 0; for (let i = 0; i < bars.length; i++) { if (i > 0) { if (bars[i].high > bars[hi].high) hi = i; if (bars[i].low < bars[lo].low) lo = i; } sh[i] = i - hi; sl[i] = i - lo; } return { sinceHod: sh, sinceLod: sl }; };
+const cAvg = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+const cCurlUp = (bars: any[], n = 7, mv = 1): boolean => { if (bars.length < n) return false; const w = bars.slice(-n); let v = 0; for (let i = 1; i < w.length; i++) if (w[i].low < w[i - 1].low) { v++; if (v > mv) return false; } const k = Math.floor(n / 3); const first = cAvg(w.slice(0, k).map((b: any) => b.high - b.low)); const last = cAvg(w.slice(w.length - k).map((b: any) => b.high - b.low)); if (!(last < first)) return false; const p = w[w.length - 2], lb = w[w.length - 1]; return lb.close > Math.max(p.open, p.close); };
+const cRollover = (bars: any[], n = 7, mv = 1): boolean => { if (bars.length < n) return false; const w = bars.slice(-n); let v = 0; for (let i = 1; i < w.length; i++) if (w[i].high > w[i - 1].high) { v++; if (v > mv) return false; } const k = Math.floor(n / 3); const first = cAvg(w.slice(0, k).map((b: any) => b.high - b.low)); const last = cAvg(w.slice(w.length - k).map((b: any) => b.high - b.low)); if (!(last < first)) return false; const p = w[w.length - 2], lb = w[w.length - 1]; return lb.close < Math.min(p.open, p.close); };
+const cRangeComp = (bars: any[], n = 8, maxW = 0.005): { high: number; low: number; width: number } | null => { if (bars.length < n) return null; const w = bars.slice(-n); const rh = Math.max(...w.map((b: any) => b.high)), rl = Math.min(...w.map((b: any) => b.low)); const width = rh - rl, mid = (rh + rl) / 2; if (mid <= 0) return null; if (width / mid > maxW) return null; return { high: rh, low: rl, width }; };
+const cRangeBreakDir = (cur: any, rng: { high: number; low: number; width: number }, em = 0.10): string | null => { const m = em * rng.width; if (cur.close > rng.high + m) return "up"; if (cur.close < rng.low - m) return "down"; return null; };
+const cSmaArr = (vals: number[], p: number): number[] => { const out: number[] = []; let sum = 0; for (let i = 0; i < vals.length; i++) { sum += vals[i]; if (i >= p) sum -= vals[i - p]; out.push(sum / Math.min(i + 1, p)); } return out; };
 const macdKey = (c: Spec) => `${c.fast}-${c.slow}-${c.signal}`;
 
 interface CompiledSpec { build: (bars: Bar[], levels?: { pdh?: number; pdl?: number }) => Evaluate; tf: number; warmup: number; premiumExit: { profitPct?: number; stopPct?: number }; trail?: { atrChandelierK?: number; premiumGivebackPct?: number }; }
@@ -553,12 +559,16 @@ function compileSpec(spec: Spec): CompiledSpec {
     else if (c.kind === "rsi") warmup = Math.max(warmup, c.period + 1);
     else if (c.kind === "momentum_atr") warmup = Math.max(warmup, (c.lookback ?? 3) + 1);
     else if (c.kind === "macd") warmup = Math.max(warmup, c.slow + c.signal);
+    else if (c.kind === "sma_cross") warmup = Math.max(warmup, c.slow ?? 120);
+    else if (c.kind === "range_break") warmup = Math.max(warmup, (c.bars ?? 8) + 1);
+    else if (c.kind === "curl") warmup = Math.max(warmup, c.bars ?? 7);
   }
   const build = (bars: Bar[], levels?: { pdh?: number; pdl?: number }): Evaluate => {
     const closes = bars.map((b) => b.close);
-    const emaS = new Map<number, number[]>(), rsiS = new Map<number, number[]>(), macdS = new Map<string, number[]>();
+    const emaS = new Map<number, number[]>(), rsiS = new Map<number, number[]>(), macdS = new Map<string, number[]>(), smaS = new Map<number, number[]>();
     for (const e of entries) for (const c of entryConds(e)) {
       if (c.kind === "ma_cross") { if (!emaS.has(c.fast)) emaS.set(c.fast, emaArr(closes, c.fast)); if (!emaS.has(c.slow)) emaS.set(c.slow, emaArr(closes, c.slow)); }
+      else if (c.kind === "sma_cross") { const fa = c.fast ?? 20, sw = c.slow ?? 120; if (!smaS.has(fa)) smaS.set(fa, cSmaArr(closes, fa)); if (!smaS.has(sw)) smaS.set(sw, cSmaArr(closes, sw)); }
       else if (c.kind === "rsi" && !rsiS.has(c.period)) rsiS.set(c.period, rsiArr(closes, c.period));
       else if (c.kind === "macd" && !macdS.has(macdKey(c))) { const fa = emaArr(closes, c.fast), sl = emaArr(closes, c.slow); const line = closes.map((_, i) => fa[i] - sl[i]); const sig = emaArr(line, c.signal); macdS.set(macdKey(c), line.map((v, i) => v - sig[i])); }
     }
@@ -580,6 +590,9 @@ function compileSpec(spec: Spec): CompiledSpec {
         case "engulfing": return i > 0 && cEngulf(bars[i - 1], bars[i], c.dir);
         case "strong_trend": return cStrongTrend(bars[i], c.dir);
         case "stale_extreme": { if (i + 1 < 12) return false; const sn = c.dir === "up" ? sinceHod[i] : sinceLod[i]; return sn >= (c.sinceMin ?? 6); }
+        case "curl": { const pre = bars.slice(0, i + 1); return c.dir === "up" ? cCurlUp(pre, c.bars ?? 7) : cRollover(pre, c.bars ?? 7); }
+        case "range_break": { const rng = cRangeComp(bars.slice(0, i), c.bars ?? 8, c.maxWidthPct ?? 0.005); if (!rng) return false; return cRangeBreakDir(bars[i], rng, c.edgeMargin ?? 0.10) === c.dir; }
+        case "sma_cross": { const fa = c.fast ?? 20, sw = c.slow ?? 120; if (i < sw - 1) return false; const ff = smaS.get(fa), ss = smaS.get(sw); if (!ff || !ss) return false; const d = ff[i] - ss[i]; if (!isFinite(d)) return false; const dn = d > 0.02 ? "up" : d < -0.02 ? "down" : "flat"; return dn === c.dir; }
         case "rsi": { const s = rsiS.get(c.period); if (!s) return false; return c.cmp === ">" ? s[i] > c.value : s[i] < c.value; }
         case "time_before": { const t = parseET(c.et); return t != null && etMin[i] < t; }
         case "time_between": { const a = parseET(c.startET), b = parseET(c.endET); return a != null && b != null && etMin[i] >= a && etMin[i] <= b; }
@@ -612,7 +625,7 @@ function compileSpec(spec: Spec): CompiledSpec {
         if (c.kind === "vwap_side") return c.side === "above" ? "call" : "put";
         if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
         if (c.kind === "momentum_atr") return c.op === ">=" ? "call" : "put";
-        if (c.kind === "pin_bar" || c.kind === "engulfing" || c.kind === "strong_trend" || c.kind === "stale_extreme") return c.dir === "up" ? "call" : "put";
+        if (c.kind === "pin_bar" || c.kind === "engulfing" || c.kind === "strong_trend" || c.kind === "stale_extreme" || c.kind === "curl" || c.kind === "range_break" || c.kind === "sma_cross") return c.dir === "up" ? "call" : "put";
       }
       return null;
     };
