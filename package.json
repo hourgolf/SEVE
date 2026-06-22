@@ -30,6 +30,8 @@
     "nakamoto-selftest": "tsx engine/nakamoto/selftest.ts",
     "nakamoto-repro": "tsx engine/nakamoto/repro.ts",
     "nakamoto-phase2": "tsx engine/nakamoto/phase2.ts",
+    "nakamoto-discover": "tsx engine/nakamoto/discover-levels.ts",
+    "anyof-selftest": "tsx engine/anyof-selftest.ts",
     "fill-lag-probe": "tsx engine/fill-lag-probe.ts",
     "scalp-twin-probe": "tsx engine/scalp-twin-probe.ts",
     "hour-edge-probe": "tsx engine/hour-edge-probe.ts",

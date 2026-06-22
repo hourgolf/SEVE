@@ -22,14 +22,58 @@
  *
  * Run: npm run nakamoto-phase2     (after nakamoto-fetch-window for each window)
  */
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { loadDatabentoByDay } from "../databentosource";
 import { Bar, loadCsvBars, ptParts, pyRound, resample5m, rthOnly } from "./data";
-import { DEFAULT_SCAN_CONFIG, scanForEntry } from "./entry-v2";
+import { DEFAULT_SCAN_CONFIG, scanForEntry, type ScanConfig } from "./entry-v2";
 import { warmupLevels } from "./levels";
+import { discoverLevelsV2, DEFAULT_DISCOVER, type DiscoverConfig } from "./discover-levels";
 
+// LEVELS source: "warmup" (default, the −$10.4k weak-grid baseline — byte-identical
+// to the original run) | "discovered" (David's volume-at-price + swing finder,
+// discover-levels.ts) | "split" (grid levels for REVERSAL, discovered for BREAKOUT
+// — the APRMAY finding). Day-eligibility stays gated on warmupLevels either way, so
+// the A/B isolates ONLY the levels fed to the entry scan. Set LEVELS=discovered|split.
+const LEVELS_MODE = (process.env.LEVELS || "warmup").toLowerCase();
+const USES_DISCOVERED = LEVELS_MODE === "discovered" || LEVELS_MODE === "split";
 const IEX = "data/handoff-verify/iex";
-const OUTDIR = "data/handoff-verify/phase2";
+const OUTDIR = "data/handoff-verify/phase2" + (LEVELS_MODE !== "warmup" ? `-${LEVELS_MODE}` : "");
+
+// Sweep knobs (env-overridable; defaults = David's prototype + the faithful port,
+// so an unset env is byte-identical to the original run). The ultracode sweep
+// drives these to find a robust param regime — or prove there isn't one.
+const num = (k: string, d: number) => (process.env[k] != null && process.env[k] !== "" ? Number(process.env[k]) : d);
+const DISCOVER_CFG: DiscoverConfig = {
+  ...DEFAULT_DISCOVER,
+  bin: num("BIN", DEFAULT_DISCOVER.bin),
+  halflife: num("HALFLIFE", DEFAULT_DISCOVER.halflife),
+  lookbackTd: num("LOOKBACK", DEFAULT_DISCOVER.lookbackTd),
+  swingWin: num("SWING_WIN", DEFAULT_DISCOVER.swingWin),
+  cluster: num("CLUSTER", DEFAULT_DISCOVER.cluster),
+  topN: num("TOP_N", DEFAULT_DISCOVER.topN),
+  nearAnchor: num("NEAR", DEFAULT_DISCOVER.nearAnchor),
+};
+const SCAN_CFG: ScanConfig = {
+  ...DEFAULT_SCAN_CONFIG,
+  ...(process.env.LEVEL_PROX ? { levelProximity: Number(process.env.LEVEL_PROX) } : {}),
+  ...(process.env.EDGE_PROX ? { edgeProximity: Number(process.env.EDGE_PROX) } : {}),
+};
+const ARTIFACTS = !process.env.NO_ARTIFACTS; // sweep runs set NO_ARTIFACTS=1 (parse stdout)
+
+// DISC_BARS: which VOLUME source feeds the discovered-level finder's lookback.
+// "iex" (default) = the sparse IEX 1m bars (matches the −$10.4k harness, but IEX
+// is ~2-3% of market and its share drifted 2024→2026 — the era-artifact suspect).
+// "archive" = full-market Alpaca 1m bars (data/bars-archive) — what a LIVE channel
+// would actually use. Isolates whether the era-artifact verdict is an IEX confound:
+// entry signal + NBBO fills are UNCHANGED, only the volume-at-price data swaps.
+const DISC_BARS = (process.env.DISC_BARS || "iex").toLowerCase();
+const ARCHIVE = "data/bars-archive/SPY";
+function loadArchiveBars(day: string): Bar[] {
+  const p = `${ARCHIVE}/${day}.json`;
+  if (!existsSync(p)) return [];
+  const arr = JSON.parse(readFileSync(p, "utf8")) as Array<Record<string, unknown>>;
+  return arr.map(b => ({ ts: Date.parse(String(b.ts)), open: +(b.open as number), high: +(b.high as number), low: +(b.low as number), close: +(b.close as number), volume: +(b.volume as number) }));
+}
 const SPAN_START_PT = 4 * 60;       // LOOP_FACTS §3: 1m span from 04:00 PT
 const FLATTEN_PT = 12 * 60 + 45;    // 15:45 ET
 const QTY = 5;
@@ -92,6 +136,8 @@ interface SessionStats {
 function simSession(
   day: string, oneM: Bar[], levels: number[],
   dbSeries: Map<string, DbSeries>,
+  scanCfg: ScanConfig = DEFAULT_SCAN_CONFIG,
+  levelsBreakout?: number[],
 ): SessionStats {
   const open: Pos[] = [];
   const closed: Closed[] = [];
@@ -99,7 +145,7 @@ function simSession(
   let entriesToday = 0;
   let lastEntryTs = -1;
   let latched = false;
-  const cfg = DEFAULT_SCAN_CONFIG;
+  const cfg = scanCfg;
 
   const closeLeg = (p: Pos, t: number, exit: number, reason: string, kitExit?: number) => {
     const kitX = kitExit ?? p.kitExit ?? exit; // if kit leg already closed, keep its exit
@@ -187,7 +233,7 @@ function simSession(
 
     const bars5m = resample5m(growing);
     const spot = growing[growing.length - 1].close;
-    const sig = scanForEntry(bars5m, rthOnly(bars5m), spot, pt.hm, levels, cfg);
+    const sig = scanForEntry(bars5m, rthOnly(bars5m), spot, pt.hm, levels, cfg, levelsBreakout);
     if (!sig) continue;
 
     const strike = pyRound(spot);
@@ -227,14 +273,14 @@ function fmt(n: number): string {
 }
 
 async function main() {
-  mkdirSync(OUTDIR, { recursive: true });
+  if (ARTIFACTS) mkdirSync(OUTDIR, { recursive: true });
   const dailyAll = loadCsvBars(`${IEX}/spy_1d_all.csv`);
   const dbDates = new Set(readdirSync("data/databento").filter(f => f.endsWith(".json")).map(f => f.slice(0, 10)));
 
   const summary: string[] = [];
   const P = (s: string) => { console.log(s); summary.push(s); };
 
-  P("PHASE 2 — Nakamoto Level-Reversal+Breakout on real NBBO (vs his zero-spread fills)");
+  P(`PHASE 2 — Nakamoto Level-Reversal+Breakout on real NBBO (vs his zero-spread fills)  [LEVELS=${LEVELS_MODE}${USES_DISCOVERED ? ` DISC_BARS=${DISC_BARS}` : ""}]`);
   P(`policy: qty ${QTY} · TP +75% / SL −30% · flatten 15:45 ET · cap 10/d · conc 2 · −$500 daily stop`);
   P("");
   P("window            sess  trades  win%   NBBO P&L  $/t    KIT P&L  $/t   spread-tax  maxDD   tp/sl/eod  latch/cap");
@@ -254,20 +300,47 @@ async function main() {
     const fiveAll: Bar[] = [];
     for (const d of fiveDays) fiveAll.push(...loadCsvBars(`${IEX}/spy_5mw_${d}.csv`));
 
+    // discovered-levels need RTH 1m history: this window + ~95 calendar days before
+    // (covers the 30-trading-day lookback). Loaded once per window, sliced per day
+    // inside discoverLevelsV2. Skipped entirely in warmup mode (default unchanged).
+    const oneMAllWin: Bar[] = [];
+    if (USES_DISCOVERED) {
+      const pre1m = new Date(Date.parse(`${w.from}T00:00:00Z`) - 95 * 86400_000).toISOString().slice(0, 10);
+      if (DISC_BARS === "archive") {
+        const days = readdirSync(ARCHIVE).filter(f => f.endsWith(".json"))
+          .map(f => f.slice(0, 10)).filter(d => d >= pre1m && d <= w.to).sort();
+        for (const d of days) oneMAllWin.push(...loadArchiveBars(d));
+      } else {
+        const oneDays = readdirSync(IEX).filter(f => f.startsWith("spy_1m_"))
+          .map(f => f.slice(7, 17)).filter(d => d >= pre1m && d <= w.to).sort();
+        for (const d of oneDays) oneMAllWin.push(...loadCsvBars(`${IEX}/spy_1m_${d}.csv`));
+      }
+    }
+
     const trades: Closed[] = [];
     let latchDays = 0, capDays = 0, noQuote = 0, minPrem = 0, sessions = 0;
 
     for (const day of days) {
       const oneM = loadCsvBars(`${IEX}/spy_1m_${day}.csv`).filter(b => ptParts(b.ts).hm >= SPAN_START_PT);
       if (!oneM.length) continue;
+      let warm: { levels: number[] };
+      try { warm = warmupLevels(dailyAll, fiveAll, day); } catch { continue; }
       let levels: number[];
-      try { levels = warmupLevels(dailyAll, fiveAll, day).levels; } catch { continue; }
+      let levelsBreakout: number[] | undefined;
+      if (LEVELS_MODE === "discovered") {
+        levels = discoverLevelsV2(oneMAllWin, day, DISCOVER_CFG).levels;
+      } else if (LEVELS_MODE === "split") {
+        levels = warm.levels;                                              // reversal: grid
+        levelsBreakout = discoverLevelsV2(oneMAllWin, day, DISCOVER_CFG).levels; // breakout: discovered
+      } else {
+        levels = warm.levels;
+      }
       const db = loadDatabentoByDay([day]) as unknown as Map<string, DbSeries[]>;
       const series = db.get(day);
       if (!series) continue;
       const dayMap = new Map(series.map(s => [`${s.strike}|${s.optType}`, s]));
       sessions++;
-      const r = simSession(day, oneM, levels, dayMap);
+      const r = simSession(day, oneM, levels, dayMap, SCAN_CFG, levelsBreakout);
       trades.push(...r.closed);
       if (r.latched) latchDays++;
       if (r.capped) capDays++;
@@ -298,7 +371,7 @@ async function main() {
     const brk = trades.filter(c => c.setup === "breakout");
     P(`    setups: reversal ${rev.length}t ${fmt(rev.reduce((s, c) => s + c.pnl, 0))} · breakout ${brk.length}t ${fmt(brk.reduce((s, c) => s + c.pnl, 0))}`);
 
-    writeFileSync(`${OUTDIR}/trades_${w.name}.csv`,
+    if (ARTIFACTS) writeFileSync(`${OUTDIR}/trades_${w.name}.csv`,
       ["day,entry_et,exit_et,right,strike,setup,conf,entry,exit,reason,pnl,kit_pnl",
         ...trades.map(c => [
           c.day,
@@ -313,9 +386,11 @@ async function main() {
 
   P("");
   P(`TOTAL: ${gTrades} trades · NBBO ${fmt(gPnl)} (${fmt(gTrades ? gPnl / gTrades : 0)}/t) · zero-spread ${fmt(gKit)} (${fmt(gTrades ? gKit / gTrades : 0)}/t) · spread-tax ${fmt(gKit - gPnl)}`);
-  writeFileSync(`${OUTDIR}/daily_pnl.csv`, allDaily.join("\n"));
-  writeFileSync(`${OUTDIR}/summary.txt`, summary.join("\n"));
-  console.log(`\nartifacts: ${OUTDIR}/trades_<window>.csv · daily_pnl.csv · summary.txt`);
+  if (ARTIFACTS) {
+    writeFileSync(`${OUTDIR}/daily_pnl.csv`, allDaily.join("\n"));
+    writeFileSync(`${OUTDIR}/summary.txt`, summary.join("\n"));
+    console.log(`\nartifacts: ${OUTDIR}/trades_<window>.csv · daily_pnl.csv · summary.txt`);
+  }
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

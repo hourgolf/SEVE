@@ -46,6 +46,11 @@ export interface ScanConfig {
   revCutoffPt: number | null;
   useSingleBarShapes: boolean; // ablation: count pin/engulfing/strong-trend in F1
   regimeGate: boolean;         // apply classify_regime gate to MEDIUM reversals
+  // SEVE experiment hooks (default undefined → faithful constants; golden tests
+  // use DEFAULT_SCAN_CONFIG so the port stays byte-identical). Let the discovered-
+  // levels sweep tune the proximity the sparser level set is matched against.
+  levelProximity?: number;     // reversal near_level $ (default LEVEL_PROXIMITY 1.00)
+  edgeProximity?: number;      // breakout edge_at_level $ (default EDGE_LEVEL_PROXIMITY 1.00)
 }
 
 export const DEFAULT_SCAN_CONFIG: ScanConfig = {
@@ -101,7 +106,7 @@ function scoreReversal(
   if (macdAligned) features.push("macd");
 
   // F3: level proximity
-  if (nearLevel(spot, levels, LEVEL_PROXIMITY)) features.push("level");
+  if (nearLevel(spot, levels, cfg.levelProximity ?? LEVEL_PROXIMITY)) features.push("level");
 
   // F4: stale opposite-extreme (needs ≥12 RTH bars to be informative)
   if (ext.rth_bars_total >= 12) {
@@ -139,7 +144,7 @@ function scoreBreakout(bars5m: Bar[], bars5mRth: Bar[], levels: number[], cfg: S
   if (direction === null) return null;
 
   const edgePrice = direction === "up" ? rng.high : rng.low;
-  const L = edgeAtLevel(edgePrice, levels, EDGE_LEVEL_PROXIMITY);
+  const L = edgeAtLevel(edgePrice, levels, cfg.edgeProximity ?? EDGE_LEVEL_PROXIMITY);
   if (L === null) return null;
 
   const features = ["range", "decisive_break", "edge_at_level"];
@@ -174,6 +179,10 @@ export function scanForEntry(
   bars5m: Bar[], bars5mRth: Bar[], spot: number,
   nowPtMin: number | null, levels: number[],
   cfg: ScanConfig = DEFAULT_SCAN_CONFIG,
+  // SEVE experiment hook: a SEPARATE level set for the breakout scorer (the split
+  // mode — discovered levels make better breakout edges, grid better reversal
+  // magnets). Default undefined → breakout uses the same `levels` as reversal.
+  levelsBreakout?: number[],
 ): EntrySignal | null {
   if (nowPtMin === null) return null;
   if (!(cfg.winStartPt <= nowPtMin && nowPtMin < cfg.winEndPt)) return null;
@@ -187,7 +196,7 @@ export function scanForEntry(
   const candidates: EntrySignal[] = [];
   const revUp = scoreReversal(bars5m, bars5mRth, spot, levels, "up", cfg);
   const revDn = scoreReversal(bars5m, bars5mRth, spot, levels, "down", cfg);
-  const brk = scoreBreakout(bars5m, bars5mRth, levels, cfg);
+  const brk = scoreBreakout(bars5m, bars5mRth, levelsBreakout ?? levels, cfg);
 
   for (const c of [revUp, revDn, brk]) {
     if (c === null) continue;
