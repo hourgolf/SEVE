@@ -25,7 +25,14 @@ for (const line of readFileSync(".env.local", "utf8").split("\n")) {
 }
 const TSX = join(process.cwd(), "node_modules", ".bin", "tsx");
 const FROM = "2024-05-01", TO = "2026-06-09";
-const FRACS = [1.0, 0.5, 0.25]; // cross(today) · half-capture · 3/4-capture
+// today (cross) · capture half, gate also loosens (coupled) · capture half, gate stays STRICT (decoupled).
+// The decoupled config is the A1 test: does keeping the gate at cross-cost give the fill benefit on the
+// edge channels WITHOUT loosening the gate to admit junk on the dead books?
+const CONFIGS = [
+  { name: "today(cross)", flags: ["--fill-cross", "1.0"] },
+  { name: "½ coupled", flags: ["--fill-cross", "0.5"] },
+  { name: "½ gate-strict", flags: ["--fill-cross", "0.5", "--gate-fill-cross", "1.0"] },
+];
 
 // armed spec channels (pull live spec_json) + key builtins for contrast
 const SPEC_SLUGS = ["breakout-alt-v3", "breakout-smart-entries"];
@@ -64,24 +71,25 @@ async function main() {
 
   const base = ["--source", "real", "--options", "databento", "--underlying", "SPY", "--from", FROM, "--to", TO, "--risk", "500", "--daily-stop", "500", "--cost-gate", "3", "--prem-stop", "50"];
   console.log(`\nSPREAD-CAPTURE SWEEP · faithful (real SPY bars + Databento NBBO · RISK 500 · gate 3 · −50% stop) · ${FROM}→${TO}`);
-  console.log("frac 1.00 = cross full spread (today) · 0.50 = recapture half · 0.25 = recapture 3/4. Σ shown as P&L(trades).\n");
-  console.log("channel".padEnd(24) + FRACS.map((f) => `Σ@f${f.toFixed(2)} (n)`.padStart(17)).join("") + "  Σ-lift @½   @¾");
-  console.log("─".repeat(24 + 17 * FRACS.length + 22));
+  console.log("today=cross · ½ coupled=capture half + gate loosens · ½ gate-strict=capture half + gate held at cross. Σ as P&L(trades).\n");
+  console.log("channel".padEnd(24) + CONFIGS.map((c) => `${c.name} (n)`.padStart(20)).join("") + "   Δcoupled  Δstrict");
+  console.log("─".repeat(24 + 20 * CONFIGS.length + 20));
   const usd = (v: number) => (v < 0 ? "-$" : "+$") + Math.abs(Math.round(v)).toLocaleString();
-  const pct = (a: number, b: number) => (a === 0 ? "  n/a" : ((b - a) / Math.abs(a) >= 0 ? "+" : "") + (100 * (b - a) / Math.abs(a)).toFixed(0) + "%");
+  const pct = (a: number, b: number) => (a === 0 ? "n/a" : ((b - a) / Math.abs(a) >= 0 ? "+" : "") + (100 * (b - a) / Math.abs(a)).toFixed(0) + "%");
 
   for (const ch of channels) {
-    const runs = FRACS.map((fr) => backtest([...base, ...ch.route, "--fill-cross", String(fr)]));
+    const runs = CONFIGS.map((c) => backtest([...base, ...ch.route, ...c.flags]));
     const r0 = runs[0];
     if (!r0) { console.log(ch.name.padEnd(24) + "  FAILED"); continue; }
     console.log(
       ch.name.padEnd(24) +
-      runs.map((r) => (r ? `${usd(r.pnl)}(${r.trades})` : "—").padStart(17)).join("") +
-      `  ${pct(r0.pnl, runs[1]?.pnl ?? r0.pnl).padStart(7)} ${pct(r0.pnl, runs[2]?.pnl ?? r0.pnl).padStart(6)}`);
+      runs.map((r) => (r ? `${usd(r.pnl)}(${r.trades})` : "—").padStart(20)).join("") +
+      `   ${pct(r0.pnl, runs[1]?.pnl ?? r0.pnl).padStart(7)} ${pct(r0.pnl, runs[2]?.pnl ?? r0.pnl).padStart(7)}`);
   }
-  console.log("\nΣ-lift @½ / @¾ = % change in total P&L from recapturing half / three-quarters of the spread.");
-  console.log("The gate is ON: lower frac → lower round-trip cost → MORE trades pass the 3× gate (n grows), so the");
-  console.log("lift is both cheaper fills AND more admitted +EV trades. On a REAL edge (V3/ALT) that compounds; on a");
-  console.log("directionally-dead book (grind/power, −EV gross) it only reduces the loss.");
+  console.log("\nΔcoupled / Δstrict = % change in Σ P&L from today (cross) under each capture mode.");
+  console.log("COUPLED lets the cheaper cost loosen the 3× gate → admits more trades (n grows); on a dead book that");
+  console.log("admits more −EV trades (backfire). GATE-STRICT keeps the gate at cross-cost: pure fill benefit on the");
+  console.log("SAME trade set. If gate-strict lifts V3/ALT AND no longer hurts the dead books → spread-capture is");
+  console.log("a SAFE GLOBAL win (deploy via entryCostGate.gateCostModel). If dead books still bleed → V3/ALT-only.");
 }
 main().catch((e) => { console.error(e); process.exit(1); });

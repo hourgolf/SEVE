@@ -630,7 +630,8 @@ async function main() {
   // --ustop <pct> = config underlying_stop_pct; --cost-gate <ratio> = the worker COST_GATE_RATIO.
   const ustopPct = argNum("ustop", 0);
   const costGateRatio = argNum("cost-gate", 0);
-  const entryCostGate = costGateRatio > 0 ? { minMoveToCostRatio: costGateRatio } : undefined;
+  const entryCostGate: { minMoveToCostRatio: number; gateCostModel?: CostModel } | undefined =
+    costGateRatio > 0 ? { minMoveToCostRatio: costGateRatio } : undefined;
   // --prem-stop <pct> = the worker's universal −50% premium catastrophic stop (decide.ts:231),
   // which built-ins (no spec premiumExit) otherwise lack in the backtest. Only fills a missing
   // stop — a spec's own stop wins.
@@ -689,6 +690,11 @@ async function main() {
     // crossing the full spread [default], 0 = passive limit at mid). Bounds how much a
     // channel's edge is execution-quality (a scalper working limits) vs strategy.
     const fillCross = process.argv.includes("--fill-cross") ? argNum("fill-cross", 1) : undefined;
+    // --gate-fill-cross <0..1>: DECOUPLE the cost gate's spread assumption from the fill's.
+    // Default (unset) → the gate uses the run cost model (same frac as fills). Set it to keep
+    // the gate STRICT (e.g. 1 = cross) while fills capture (--fill-cross 0.5) — so spread-capture
+    // doesn't loosen the gate to admit marginal trades (the dead-book backfire).
+    const gateFillCross = process.argv.includes("--gate-fill-cross") ? argNum("gate-fill-cross", 1) : undefined;
     const cost: CostModel = {
       // quotes + databento carry REAL bid/ask → cross the actual spread (not the 3% model).
       // quotes ALSO matches the live worker's COST_MODEL exactly (0.25 tick/side, decide.ts) so the
@@ -698,6 +704,8 @@ async function main() {
         : useDatabento ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL),
       ...(fillCross != null ? { spreadCrossFrac: fillCross } : {}),
     };
+    // gate keeps its own (stricter) spread assumption when --gate-fill-cross is set
+    if (entryCostGate && gateFillCross != null) entryCostGate.gateCostModel = { ...cost, spreadCrossFrac: gateFillCross };
     let byDay = new Map();
     if (useDatabento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET), underlying);
     else if (useQuotes) {
