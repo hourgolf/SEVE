@@ -108,6 +108,8 @@
     "pb-regime-mute-probe": "tsx --env-file=.env.local engine/pb-regime-mute-probe.ts",
     "roster-cost-audit": "tsx --env-file=.env.local engine/roster-cost-audit.ts",
     "momo-shape-probe": "tsx --env-file=.env.local engine/momo-shape-probe.ts",
+    "fly-capture-probe": "tsx --env-file=.env.local engine/fly-capture-probe.ts",
+    "failed-or-fade-probe": "tsx --env-file=.env.local engine/failed-or-fade-probe.ts",
     "compound-vs-ride-probe": "tsx --env-file=.env.local engine/compound-vs-ride-probe.ts",
     "pyramid-probe": "tsx --env-file=.env.local engine/pyramid-probe.ts",
     "pyramid-ext-probe": "tsx --env-file=.env.local engine/pyramid-ext-probe.ts",
