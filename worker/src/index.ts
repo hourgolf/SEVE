@@ -46,11 +46,52 @@ const peakMidByKey = new Map<string, number>();
 const barsBySym = new Map<string, BarStore>(SYMBOLS.map((s) => [s, new BarStore(config.barHistory)]));
 const chainBySym = new Map<string, ChainStore>(SYMBOLS.map((s) => [s, new ChainStore()]));
 const gammaLogged = new Set<string>(); // `${sym}|${etDate}` — once-per-day gamma-open diagnostic snapshot
-let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[] } = { fund: null, channels: [] };
+let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[]; accounts: store.AccountRow[] } = { fund: null, channels: [], accounts: [] };
 let reloadPending = false;
 let cycling = false;
 
 function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
+
+// ---- accounts (cockpit P3) -------------------------------------------------
+// Each channel routes its orders to ONE Alpaca paper account (strategists.account_id
+// → accounts row → cred_ref → config.altAccounts creds). A channel with no/unknown
+// account_id falls back to the DEFAULT account (the accounts row with cred_ref null =
+// the original paper account). With one account holding every channel this is exactly
+// today's single-account path. The whole point of separate accounts: per-bucket NAV is
+// clean (no shared-OCC netting ACROSS buckets — only within one).
+const SYNTH_DEFAULT: store.AccountRow = { id: "__default__", name: "default", cred_ref: null, is_armed: true, is_halted: false, master_daily_stop_usd: 0 };
+function resolveDefaultAccount(accounts: store.AccountRow[]): store.AccountRow {
+  return accounts.find((a) => !a.cred_ref) ?? SYNTH_DEFAULT;
+}
+/** The Api for an account, or null if it's a non-default account whose creds are
+ *  absent from env — null = SHADOW ONLY (decide+log, never route an order to the
+ *  wrong account). The default account always resolves to ACCT1_API. */
+function apiForAccount(acct: store.AccountRow): alpaca.Api | null {
+  if (!acct.cred_ref) return alpaca.ACCT1_API;
+  const creds = config.altAccounts[acct.cred_ref];
+  return creds ? alpaca.makeApi(creds.key, creds.secret) : null;
+}
+type AccountGroup = { account: store.AccountRow; api: alpaca.Api | null; channels: store.ChannelConfig[] };
+/** Group channels by their effective account (cockpit P3). */
+function groupByAccount(channels: store.ChannelConfig[], accounts: store.AccountRow[]): AccountGroup[] {
+  const def = resolveDefaultAccount(accounts);
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  const groups = new Map<string, AccountGroup>();
+  for (const ch of channels) {
+    const acct = (ch.account_id && byId.get(ch.account_id)) || def;
+    let g = groups.get(acct.id);
+    if (!g) { g = { account: acct, api: apiForAccount(acct), channels: [] }; groups.set(acct.id, g); }
+    g.channels.push(ch);
+  }
+  return [...groups.values()];
+}
+/** The account id a position row belongs to (via its channel) — for per-account row scoping. */
+function rowAccountId(row: store.PositionRow, byChannelId: Map<string, store.ChannelConfig>, accounts: store.AccountRow[]): string {
+  const ch = byChannelId.get(row.strategist_id);
+  const def = resolveDefaultAccount(accounts);
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  return (ch?.account_id && byId.has(ch.account_id)) ? ch.account_id : def.id;
+}
 
 // Retry a transient async op with exponential backoff. Used for boot-time REST
 // calls so a flaky Alpaca/network moment doesn't crash-loop the container.
@@ -122,45 +163,131 @@ async function cycle(trigger: string): Promise<void> {
     if (!cfg.fund) { warn(`cycle(${trigger}): missing config — skip`); return; }
 
     const todayET = alpaca.etParts(Date.now()).date;
-    // ACCOUNT-WIDE reads, shared across symbols (positions/orders span every ticker;
-    // OCCs are globally unique so one set of maps is correct for all symbols).
-    let account, alpacaPositions;
-    try { [account, alpacaPositions] = await Promise.all([alpaca.getAccount(), alpaca.getPositions()]); }
-    catch (e) { warn(`cycle(${trigger}): Alpaca read failed — ${(e as Error).message}; skip`); return; }
-    const openRowsArr = await store.getOpenPositions();
-    const openRows = new Map(openRowsArr.map((r) => [r.strategist_id, r]));
-    const alpacaByOcc = new Map(alpacaPositions.map((p) => [p.symbol, p]));
-    const byId = new Map(cfg.channels.map((c) => [c.id, c]));
-
     const live = liveMode();
-    let allOrders: alpaca.AlpacaOrder[] = [];
-    let openRowQty = new Map<string, number>();
-    let remainingByOcc = new Map<string, number>();
-    if (live) {
-      await store.heartbeat(`${WORKER_VERSION} cycle`);
-      try { [allOrders, openRowQty] = await Promise.all([alpaca.getOrders(), store.openRowQtyByOcc()]); }
-      catch (e) { warn(`cycle(${trigger}): order/row read failed — ${(e as Error).message}; bookkeeping only`); }
-      remainingByOcc = seedRemaining(alpacaPositions);
+    const byId = new Map(cfg.channels.map((c) => [c.id, c]));
+    const openRowsArr = await store.getOpenPositions(); // spans accounts; scoped per group below
+    if (live) await store.heartbeat(`${WORKER_VERSION} cycle`);
+    // Refresh every chain ONCE up front (shared, account-independent) so the per-account
+    // passes + the diagnostics pass all read the same fresh NTM snapshot.
+    for (const sym of SYMBOLS) await refreshChain(sym);
+
+    const decisions: ShadowDecision[] = [];
+    let totEquity = 0, totCash = 0, totUnreal = 0, snappedAny = false;
+
+    // ---- PER-ACCOUNT pass (cockpit P3) ----
+    // Each bucket reads ITS OWN positions/orders/equity (the same OCC can be held in two
+    // accounts as separate lots — netting must be per-account) and executes only its own
+    // channels via its own Api. A non-armed bucket (or one whose creds are absent) is fully
+    // decided + shadow-logged but places NO orders — the shadow-first gate.
+    for (const g of groupByAccount(cfg.channels, cfg.accounts)) {
+      const api = g.api;
+      let account: alpaca.AlpacaAccount = { equity: 0, cash: 0 };
+      let positions: alpaca.AlpacaPosition[] = [];
+      if (api) {
+        try { [account, positions] = await Promise.all([alpaca.getAccount(api), alpaca.getPositions(api)]); }
+        catch (e) { warn(`cycle(${trigger}): account ${g.account.name} read failed — ${(e as Error).message}; skip bucket`); continue; }
+      } else {
+        warn(`cycle(${trigger}): account ${g.account.name} (cred_ref ${g.account.cred_ref}) has no creds in env — shadow only`);
+      }
+      const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
+      const groupRows = openRowsArr.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
+      const openRows = new Map(groupRows.map((r) => [r.strategist_id, r]));
+      // EXECUTE only when fully live AND this bucket is armed AND not halted AND its creds resolve.
+      const acctLive = live && g.account.is_armed && !g.account.is_halted && api != null;
+      let allOrders: alpaca.AlpacaOrder[] = [];
+      let remainingByOcc = new Map<string, number>();
+      const openRowQty = new Map<string, number>();
+      if (acctLive) {
+        try { allOrders = await alpaca.getOrders(500, api!); }
+        catch (e) { warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; bookkeeping only`); }
+        remainingByOcc = seedRemaining(positions);
+        for (const r of groupRows) openRowQty.set(r.occ_symbol, (openRowQty.get(r.occ_symbol) ?? 0) + Math.abs(Math.round(r.qty)));
+      }
+
+      // Per-symbol: each symbol decides on ITS last RTH bar against ITS own bars/chain.
+      for (const sym of SYMBOLS) {
+        const symChannels = g.channels.filter((c) => c.underlying.toUpperCase() === sym);
+        if (!symChannels.length) continue;
+        const bars = barsBySym.get(sym)!;
+        const sessionBars = buildSessionBars(bars.all(), todayET);
+        const lastSession = sessionBars[sessionBars.length - 1];
+        if (!lastSession) continue; // this symbol has no RTH bars yet
+        const barMin = alpaca.etParts(lastSession.ts).min;
+        const minutesToClose = Math.max(0, RTH_CLOSE - barMin);
+        const chain = chainBySym.get(sym)!;
+        const ctx: DecisionCtx = {
+          sessionBars, chain, fund: cfg.fund, equity: account.equity, todayET,
+          minutesToClose, // BAR-relative (strategy intents); wall-clock below is bars-independent
+          wallMinutesToClose: Math.max(0, RTH_CLOSE - alpaca.etParts(Date.now()).min),
+          next1DTE: chain.nextExpiryAfter(todayET),
+          ...computeLevels(bars.all(), todayET),
+          openRows, alpacaByOcc,
+          allOrders, // empty unless acctLive — the PYRAMID executor reconstructs the lot stack from it
+        };
+        const symDecisions: ShadowDecision[] = [];
+        for (const ch of symChannels) {
+          try { symDecisions.push(await decideChannel(ch, ctx)); }
+          catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
+        }
+        decisions.push(...symDecisions);
+
+        // ---- PHASE B: EXECUTE the decisions for channels this worker OWNS, on an ARMED bucket ----
+        if (acctLive) {
+          // STALE-BAR ORDER GUARD (per symbol): a boot/restart decides on the last KNOWN
+          // bar — orders need a fresh decision bar; reconcile + mark are always safe.
+          const barFresh = Date.now() - lastSession.ts < 180_000;
+          if (!barFresh) info(`live pass[${g.account.name}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
+          const exec: ExecCtx = { api: api!, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+          const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
+          for (const d of symDecisions) {
+            const ch = bySlug.get(d.slug);
+            if (!ch || !ownedBy(ch)) continue;
+            // "The desk summons you" — informational pages (once per day per key; never alters execution).
+            if (barFresh) {
+              if (d.action === "exit" && d.reason === "event_flatten")
+                alertOnce(todayET, "event", "standdown", "⚑ event stand-down", `${d.slug} flattening ${d.occ ?? ""} — entries blocked through the window`);
+              if (d.action === "enter" && d.blocked === "daily_stop")
+                alertOnce(todayET, "latch", d.slug, `⛔ ${d.slug} daily stop latched`, `realized ≤ −$${Math.round(ch.daily_stop_usd)} — its entries are done for the day`);
+              if (d.action === "enter" && d.blocked === "insufficient_capital")
+                alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
+            }
+            const row = openRows.get(ch.id);
+            try {
+              if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
+              else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec);
+              else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
+              else if (d.action === "enter" && barFresh) await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+              else if (d.action === "hold" && row) {
+                const alp = alpacaByOcc.get(row.occ_symbol);
+                if (alp) {
+                  const unreal = Math.round((alp.current_price - row.avg_entry_price) * row.qty * 10000) / 100;
+                  await store.markPositionRow(row.id, alp.current_price, unreal);
+                }
+              }
+            } catch (e) { warn(`execute ${d.slug} failed — ${(e as Error).message}`); }
+          }
+        }
+      }
+
+      // Per-account equity snapshot (tagged account_id → clean per-bucket forward NAV).
+      if (live && api) {
+        const unreal = positions.reduce((a, p) => a + p.unrealized_pl, 0);
+        totEquity += account.equity; totCash += account.cash; totUnreal += unreal; snappedAny = true;
+        try { await store.insertEquitySnapshot(account.equity, account.cash, unreal, g.account.id); }
+        catch (e) { warn(`equity snapshot[${g.account.name}] failed — ${(e as Error).message}`); }
+      }
     }
 
-    // Per-symbol pass: each symbol decides on ITS last RTH session bar against ITS
-    // own bars/chain (a stale symbol can't suppress a fresh one — own freshness).
-    const decisions: ShadowDecision[] = [];
+    // ---- SHARED diagnostics, once per symbol (account-independent) ----
     for (const sym of SYMBOLS) {
       const bars = barsBySym.get(sym)!;
       const sessionBars = buildSessionBars(bars.all(), todayET);
       const lastSession = sessionBars[sessionBars.length - 1];
-      if (!lastSession) continue; // this symbol has no RTH bars yet
+      if (!lastSession) continue;
       const barMin = alpaca.etParts(lastSession.ts).min;
       const minutesToClose = Math.max(0, RTH_CLOSE - barMin);
-      await refreshChain(sym);
       const chain = chainBySym.get(sym)!;
-
       // ---- gamma-open diagnostic (frontier #3, SHADOW-ONLY collect-forward) ----
-      // Once/day at ~9:35, snapshot the 0DTE ATM implied move (straddle/spot) + ATM call delta —
-      // a live-only gamma-regime number (no historical Databento greeks, so it can only accrue
-      // forward). Correlate vs day P&L / per-ride R after ~10 sessions to decide if a gamma gate is
-      // worth proposing. Pure event write, double-guarded — zero trade-path impact.
       try {
         const gk = `${sym}|${todayET}`;
         if (barMin >= 575 && barMin <= 600 && !gammaLogged.has(gk)) {
@@ -175,77 +302,14 @@ async function cycle(trigger: string): Promise<void> {
           }
         }
       } catch (e) { warn(`gamma-open[${sym}] failed — ${(e as Error).message}`); }
-
-      const ctx: DecisionCtx = {
-        sessionBars, chain, fund: cfg.fund, equity: account.equity, todayET,
-        minutesToClose, // BAR-relative (strategy intents); wall-clock below is bars-independent
-        wallMinutesToClose: Math.max(0, RTH_CLOSE - alpaca.etParts(Date.now()).min),
-        next1DTE: chain.nextExpiryAfter(todayET),
-        ...computeLevels(bars.all(), todayET),
-        openRows, alpacaByOcc,
-        allOrders, // live-only snapshot (empty in shadow) — the PYRAMID executor reconstructs the lot stack from it
-      };
-      const symChannels = cfg.channels.filter((c) => c.underlying.toUpperCase() === sym);
-      const symDecisions: ShadowDecision[] = [];
-      for (const ch of symChannels) {
-        try { symDecisions.push(await decideChannel(ch, ctx)); }
-        catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
-      }
-      decisions.push(...symDecisions);
-
-      // ---- PHASE B: EXECUTE the decisions for channels this worker OWNS ----
-      // (executor='stream' + a symbol we hold). Everything else stays shadow-logged.
-      if (live) {
-        // STALE-BAR ORDER GUARD (per symbol): a boot/restart decides on the last
-        // KNOWN bar — after an overnight restart that's yesterday's close, and a
-        // market order placed then would queue for the next open at an unknowable
-        // price. Orders need a fresh decision bar; reconcile + mark are always safe.
-        const barFresh = Date.now() - lastSession.ts < 180_000;
-        if (!barFresh) info(`live pass[${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
-        const exec: ExecCtx = { chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
-        const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
-        for (const d of symDecisions) {
-          const ch = bySlug.get(d.slug);
-          if (!ch || !ownedBy(ch)) continue;
-          // "The desk summons you" — page the operator on the decision-level moments
-          // (informational; once per day per key; never alters the execution below).
-          // Gated on barFresh: a boot/stale-bar cycle re-decides on yesterday's bar and
-          // would emit phantom "daily stop / sized-to-zero" pages for decisions it is NOT
-          // acting on — only page when the decision is fresh (i.e. the worker is acting).
-          if (barFresh) {
-            if (d.action === "exit" && d.reason === "event_flatten")
-              alertOnce(todayET, "event", "standdown", "⚑ event stand-down", `${d.slug} flattening ${d.occ ?? ""} — entries blocked through the window`);
-            if (d.action === "enter" && d.blocked === "daily_stop")
-              alertOnce(todayET, "latch", d.slug, `⛔ ${d.slug} daily stop latched`, `realized ≤ −$${Math.round(ch.daily_stop_usd)} — its entries are done for the day`);
-            if (d.action === "enter" && d.blocked === "insufficient_capital")
-              alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
-          }
-          const row = openRows.get(ch.id);
-          try {
-            if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
-            else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec);
-            else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
-            else if (d.action === "enter" && barFresh) await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
-            else if (d.action === "hold" && row) {
-              const alp = alpacaByOcc.get(row.occ_symbol);
-              if (alp) {
-                const unreal = Math.round((alp.current_price - row.avg_entry_price) * row.qty * 10000) / 100;
-                await store.markPositionRow(row.id, alp.current_price, unreal);
-              }
-            }
-          } catch (e) { warn(`execute ${d.slug} failed — ${(e as Error).message}`); }
-        }
-      }
-
-      // Shadow MANAGEMENT what-if (per symbol): scale/BE/trail over THIS symbol's
-      // live positions on its real-time quote (logs managed-vs-actual; no orders).
+      // Shadow MANAGEMENT what-if: scale/BE/trail over THIS symbol's live positions (all
+      // buckets) on its real-time quote (logs managed-vs-actual; no orders). ALWAYS call —
+      // the ride-to-close override finalize must run at the 15:25 flatten.
       try {
         const symRows = openRowsArr.filter((r) => byId.get(r.strategist_id)?.underlying.toUpperCase() === sym);
-        // ALWAYS call (was gated on open rows): the ride-to-close override finalize must run
-        // at the 15:25 flatten even when the overridden position was the last one open.
         await updateShadowManagement({
           rows: symRows,
-          slugById: new Map(symChannels.map((c) => [c.id, c.slug])),
+          slugById: new Map(cfg.channels.filter((c) => c.underlying.toUpperCase() === sym).map((c) => [c.id, c.slug])),
           sym,
           chain, sessionBars,
           atr: computeFeatures(sessionBars, sessionBars.length - 1).atr,
@@ -253,8 +317,11 @@ async function cycle(trigger: string): Promise<void> {
         });
       } catch (e) { warn(`shadow-management[${sym}] failed — ${(e as Error).message}`); }
     }
-    report(trigger, account.equity, decisions);
-    if (live) { try { await store.insertEquitySnapshot(account.equity, account.cash, alpacaPositions.reduce((a, p) => a + p.unrealized_pl, 0)); } catch (e) { warn(`equity snapshot failed — ${(e as Error).message}`); } }
+
+    report(trigger, totEquity, decisions);
+    // Desk-wide TOTAL snapshot (account_id null = the sum across buckets) — the existing
+    // dashboard equity curve reads the null rows; per-bucket rows are tagged above.
+    if (live && snappedAny) { try { await store.insertEquitySnapshot(totEquity, totCash, totUnreal, null); } catch (e) { warn(`equity snapshot[total] failed — ${(e as Error).message}`); } }
   } catch (e) {
     // A cycle must never throw — it's fired forget-style from onBar, so an
     // unhandled rejection would otherwise take down the process.
@@ -301,21 +368,31 @@ async function fastExitSweep(): Promise<void> {
   try {
     await store.heartbeat(`${WORKER_VERSION} sweep`);
     if (cfg.fund.is_halted || cfg.fund.mode !== "paper") return; // exits frozen (kill switch)
-    const byId = new Map(owned.map((c) => [c.id, c]));
-    const rows = (await store.getOpenPositions()).filter((r) => byId.has(r.strategist_id));
-    if (!rows.length) return;
+    const byId = new Map(cfg.channels.map((c) => [c.id, c]));
+    const allRows = (await store.getOpenPositions()).filter((r) => owned.some((c) => c.id === r.strategist_id));
+    if (!allRows.length) return;
     // refresh only the chains for symbols that have owned open positions
-    const activeSyms = new Set(rows.map((r) => byId.get(r.strategist_id)!.underlying.toUpperCase()));
+    const activeSyms = new Set(allRows.map((r) => byId.get(r.strategist_id)!.underlying.toUpperCase()));
     for (const sym of activeSyms) await refreshChain(sym);
-    const [positions, allOrders] = await Promise.all([alpaca.getPositions(), alpaca.getOrders()]);
     const todayET = alpaca.etParts(Date.now()).date;
-    const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
-    const remainingByOcc = seedRemaining(positions);
-    const openRowQty = await store.openRowQtyByOcc();
-    for (const r of rows) {
+    // Per-account (cockpit P3): only ARMED buckets with resolved creds sweep; each reads its OWN
+    // positions/orders so an exit sells the right account's lot (the same OCC can live in two).
+    for (const g of groupByAccount(owned, cfg.accounts)) {
+      const api = g.api;
+      if (!api || !g.account.is_armed || g.account.is_halted) continue;
+      const rows = allRows.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
+      if (!rows.length) continue;
+      let positions: alpaca.AlpacaPosition[] = [], allOrders: alpaca.AlpacaOrder[] = [];
+      try { [positions, allOrders] = await Promise.all([alpaca.getPositions(api), alpaca.getOrders(500, api)]); }
+      catch (e) { warn(`fast-exit[${g.account.name}] read failed — ${(e as Error).message}`); continue; }
+      const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
+      const remainingByOcc = seedRemaining(positions);
+      const openRowQty = new Map<string, number>();
+      for (const r of rows) openRowQty.set(r.occ_symbol, (openRowQty.get(r.occ_symbol) ?? 0) + Math.abs(Math.round(r.qty)));
+      for (const r of rows) {
       const ch = byId.get(r.strategist_id)!;
       const chain = chainBySym.get(ch.underlying.toUpperCase());
-      const exec: ExecCtx = { chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+      const exec: ExecCtx = { api, chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
       // ---- EOD HARD-FLATTEN backstop (wall-clock; 2026-06-19 Juneteenth strand fix) ----
       // The strategy's same-day flatten is BAR-relative, so a gapped near-bell bar (06-18: no
       // 15:59 print) means it never fires and the position strands — over a 3-day weekend if a
@@ -364,6 +441,7 @@ async function fastExitSweep(): Promise<void> {
       info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (mid ${mid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)})`);
       await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec);
       peakMidByKey.delete(key);
+      }
     }
   } catch (e) {
     warn(`fast-exit sweep failed — ${(e as Error).message}`);
@@ -416,6 +494,11 @@ async function main(): Promise<void> {
   try { await reloadConfig(); }
   catch (e) { warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`); }
   info(`config: ${cfg.fund ? `fund cap $${cfg.fund.total_capital_usd} mode=${cfg.fund.mode} halted=${cfg.fund.is_halted}` : "fund MISSING"}, ${cfg.channels.length} channels [${cfg.channels.map((c) => `${c.slug}:${c.status}`).join(", ")}]`);
+  // Cockpit P3 routing summary: each bucket's posture — LIVE (armed + creds), shadow (decided,
+  // no orders), or no-creds (cred_ref set but env keys absent). The shadow-first verification view.
+  const acctSummary = groupByAccount(cfg.channels, cfg.accounts)
+    .map((g) => `${g.account.name}[${g.api ? (liveMode() && g.account.is_armed && !g.account.is_halted ? "LIVE" : "shadow") : "no-creds"}]×${g.channels.length}`).join(", ");
+  info(`accounts (cockpit P3): ${acctSummary || "single-account"}; alt-creds: [${Object.keys(config.altAccounts).join(",") || "none"}]`);
   try { await seed(); }
   catch (e) { error(`seed failed after retries — continuing; the websocket will populate bars live (${(e as Error).message})`); }
 

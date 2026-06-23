@@ -7,23 +7,39 @@
 import { config } from "./config.js";
 import type { Bar, OptType } from "../../engine/types";
 
-const H = {
-  "APCA-API-KEY-ID": config.alpacaKey,
-  "APCA-API-SECRET-KEY": config.alpacaSecret,
+// ---- per-account routing (cockpit P3) --------------------------------------
+// An Api bundles ONE Alpaca paper account's creds + host. Paper-host calls
+// (account/positions/orders/fills) take an `api` (default = account 1) so every
+// pre-cockpit call site stays byte-identical, and the multi-account cycle passes
+// each bucket's own Api. DATA-host calls (bars/chain) ALWAYS use account 1 — the
+// sip/opra data subscription lives on that account; the other paper accounts have
+// only the free feed, so market data must route through account 1's creds.
+export interface Api { paperHost: string; headers: Record<string, string>; }
+const credHeaders = (key: string, secret: string): Record<string, string> => ({
+  "APCA-API-KEY-ID": key,
+  "APCA-API-SECRET-KEY": secret,
   accept: "application/json",
-};
+});
+/** Account 1 — the existing paper account; the default for every legacy call site. */
+export const ACCT1_API: Api = { paperHost: config.alpacaPaperHost, headers: credHeaders(config.alpacaKey, config.alpacaSecret) };
+/** Build an Api for another paper account (cred pair from config.altAccounts). */
+export function makeApi(key: string, secret: string, paperHost = config.alpacaPaperHost): Api {
+  return { paperHost, headers: credHeaders(key, secret) };
+}
+// Data host always rides account 1's creds (it holds the data subscription).
+const DATA_HEADERS = credHeaders(config.alpacaKey, config.alpacaSecret);
 
-async function get(host: string, path: string): Promise<any> {
-  const r = await fetch(host + path, { headers: H });
+async function get(host: string, path: string, headers: Record<string, string>): Promise<any> {
+  const r = await fetch(host + path, { headers });
   const body = await r.text();
   if (!r.ok) throw new Error(`${r.status} GET ${path.split("?")[0]} → ${body.slice(0, 200)}`);
   return body ? JSON.parse(body) : {};
 }
 
-async function post(host: string, path: string, payload: unknown): Promise<any> {
+async function post(host: string, path: string, payload: unknown, headers: Record<string, string>): Promise<any> {
   const r = await fetch(host + path, {
     method: "POST",
-    headers: { ...H, "content-type": "application/json" },
+    headers: { ...headers, "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
   const body = await r.text();
@@ -31,8 +47,8 @@ async function post(host: string, path: string, payload: unknown): Promise<any> 
   return body ? JSON.parse(body) : {};
 }
 
-async function del(host: string, path: string): Promise<void> {
-  const r = await fetch(host + path, { method: "DELETE", headers: H });
+async function del(host: string, path: string, headers: Record<string, string>): Promise<void> {
+  const r = await fetch(host + path, { method: "DELETE", headers });
   if (!r.ok) throw new Error(`${r.status} DELETE ${path.split("?")[0]}`);
 }
 
@@ -40,12 +56,12 @@ async function del(host: string, path: string): Promise<void> {
 export interface AlpacaAccount { equity: number; cash: number; }
 export interface AlpacaPosition { symbol: string; qty: number; avg_entry_price: number; current_price: number; unrealized_pl: number; }
 
-export async function getAccount(): Promise<AlpacaAccount> {
-  const a = await get(config.alpacaPaperHost, "/v2/account");
+export async function getAccount(api: Api = ACCT1_API): Promise<AlpacaAccount> {
+  const a = await get(api.paperHost, "/v2/account", api.headers);
   return { equity: Number(a.equity), cash: Number(a.cash) };
 }
-export async function getPositions(): Promise<AlpacaPosition[]> {
-  const ps = await get(config.alpacaPaperHost, "/v2/positions");
+export async function getPositions(api: Api = ACCT1_API): Promise<AlpacaPosition[]> {
+  const ps = await get(api.paperHost, "/v2/positions", api.headers);
   return (ps as any[]).map((p) => ({
     symbol: String(p.symbol),
     qty: Number(p.qty),
@@ -55,8 +71,8 @@ export async function getPositions(): Promise<AlpacaPosition[]> {
   }));
 }
 export interface MarketClock { is_open: boolean; next_open: string; next_close: string; timestamp: string; }
-export async function getClock(): Promise<MarketClock> {
-  return get(config.alpacaPaperHost, "/v2/clock");
+export async function getClock(api: Api = ACCT1_API): Promise<MarketClock> {
+  return get(api.paperHost, "/v2/clock", api.headers);
 }
 
 // ---- orders (Phase B execution) ---------------------------------------------
@@ -76,8 +92,8 @@ const mapOrder = (o: any): AlpacaOrder => ({
 
 /** Recent orders, newest first — the per-channel ledger source (client_order_id
  *  prefixes). Mirrors the cron's cycle-start snapshot. */
-export async function getOrders(limit = 500): Promise<AlpacaOrder[]> {
-  const res = await get(config.alpacaPaperHost, `/v2/orders?status=all&limit=${limit}&direction=desc`);
+export async function getOrders(limit = 500, api: Api = ACCT1_API): Promise<AlpacaOrder[]> {
+  const res = await get(api.paperHost, `/v2/orders?status=all&limit=${limit}&direction=desc`, api.headers);
   return (res as any[]).map(mapOrder);
 }
 
@@ -96,17 +112,17 @@ export const TERMINAL_ORDER_STATUS = new Set(["filled", "canceled", "expired", "
  *  the returned filledQty is FINAL, nothing can fill after the desk books. */
 export async function orderAndFill(body: {
   symbol: string; qty: string; side: "buy" | "sell"; type: "market"; time_in_force: "day"; client_order_id: string;
-}): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
-  const o = await post(config.alpacaPaperHost, "/v2/orders", body);
+}, api: Api = ACCT1_API): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
+  const o = await post(api.paperHost, "/v2/orders", body, api.headers);
   const id = String(o.id ?? "");
   let status = String(o.status ?? "");
   let fill = Number(o.filled_avg_price ?? 0);
   let filledQty = Number(o.filled_qty ?? 0);
   for (let i = 0; i < 13 && id && !TERMINAL_ORDER_STATUS.has(status); i++) {
-    if (i === 10) { try { await del(config.alpacaPaperHost, `/v2/orders/${id}`); } catch { /* may have just gone terminal — the reads below settle it */ } }
+    if (i === 10) { try { await del(api.paperHost, `/v2/orders/${id}`, api.headers); } catch { /* may have just gone terminal — the reads below settle it */ } }
     await new Promise((r) => setTimeout(r, 300));
     try {
-      const g = await get(config.alpacaPaperHost, `/v2/orders/${id}`);
+      const g = await get(api.paperHost, `/v2/orders/${id}`, api.headers);
       status = String(g.status ?? status);
       if (Number(g.filled_avg_price) > 0) fill = Number(g.filled_avg_price);
       filledQty = Number(g.filled_qty ?? filledQty);
@@ -139,7 +155,7 @@ export interface LadderParams { frac: number; rungs: number; rungSec: number; }
 export async function limitLadderFill(args: {
   symbol: string; side: "buy" | "sell"; qty: number; coidBase: string;
   bid: number; ask: number; ladder: LadderParams;
-}): Promise<{ id: string; fill: number; filledQty: number; status: string; capturedUsd: number; crossRef: number; crossedQty: number }> {
+}, api: Api = ACCT1_API): Promise<{ id: string; fill: number; filledQty: number; status: string; capturedUsd: number; crossRef: number; crossedQty: number }> {
   const { symbol, side, qty, coidBase, bid, ask } = args;
   const rungs = Math.max(1, Math.floor(args.ladder.rungs));
   const frac = Math.max(0, Math.min(1, args.ladder.frac));
@@ -149,7 +165,7 @@ export async function limitLadderFill(args: {
 
   // Unusable NBBO (locked/crossed/zero) → don't ladder; one market order = today's path.
   if (!(ask > bid && bid > 0)) {
-    const m = await orderAndFill({ symbol, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: `${coidBase}-m` });
+    const m = await orderAndFill({ symbol, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: `${coidBase}-m` }, api);
     return { ...m, capturedUsd: 0, crossRef: crossRef || m.fill, crossedQty: m.filledQty };
   }
 
@@ -159,7 +175,7 @@ export async function limitLadderFill(args: {
     try {
       if (final) {
         // guaranteed cross — the trade always completes
-        const m = await orderAndFill({ symbol, qty: String(remaining), side, type: "market", time_in_force: "day", client_order_id: `${coidBase}-m` });
+        const m = await orderAndFill({ symbol, qty: String(remaining), side, type: "market", time_in_force: "day", client_order_id: `${coidBase}-m` }, api);
         lastId = m.id; status = m.status;
         if (m.filledQty > 0 && m.fill > 0) { accQty += m.filledQty; accCost += m.filledQty * m.fill; crossedQty += m.filledQty; remaining -= m.filledQty; }
       } else {
@@ -168,21 +184,21 @@ export async function limitLadderFill(args: {
         const fr = Math.min(0.95, frac + (1 - frac) * t);
         const raw = side === "buy" ? mid + fr * (ask - mid) : mid - fr * (mid - bid);
         const px = Math.max(TICK, Math.round(raw / TICK) * TICK);
-        const o = await post(config.alpacaPaperHost, "/v2/orders", {
+        const o = await post(api.paperHost, "/v2/orders", {
           symbol, qty: String(remaining), side, type: "limit", limit_price: px.toFixed(2),
           time_in_force: "day", client_order_id: `${coidBase}-r${i}`,
-        });
+        }, api.headers);
         const id = String(o.id ?? ""); lastId = id;
         let st = String(o.status ?? ""), fq = Number(o.filled_qty ?? 0), fp = Number(o.filled_avg_price ?? 0);
         const deadline = Date.now() + rungMs;
         while (id && !TERMINAL_ORDER_STATUS.has(st) && Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, 300));
-          try { const g = await get(config.alpacaPaperHost, `/v2/orders/${id}`); st = String(g.status ?? st); fq = Number(g.filled_qty ?? fq); if (Number(g.filled_avg_price) > 0) fp = Number(g.filled_avg_price); } catch { /* keep polling */ }
+          try { const g = await get(api.paperHost, `/v2/orders/${id}`, api.headers); st = String(g.status ?? st); fq = Number(g.filled_qty ?? fq); if (Number(g.filled_avg_price) > 0) fp = Number(g.filled_avg_price); } catch { /* keep polling */ }
         }
         // cancel any unfilled remainder before re-pricing — never stack two working limits
         if (id && !TERMINAL_ORDER_STATUS.has(st)) {
-          try { await del(config.alpacaPaperHost, `/v2/orders/${id}`); } catch { /* may have just filled */ }
-          try { const g = await get(config.alpacaPaperHost, `/v2/orders/${id}`); st = String(g.status ?? st); fq = Number(g.filled_qty ?? fq); if (Number(g.filled_avg_price) > 0) fp = Number(g.filled_avg_price); } catch { /* settle */ }
+          try { await del(api.paperHost, `/v2/orders/${id}`, api.headers); } catch { /* may have just filled */ }
+          try { const g = await get(api.paperHost, `/v2/orders/${id}`, api.headers); st = String(g.status ?? st); fq = Number(g.filled_qty ?? fq); if (Number(g.filled_avg_price) > 0) fp = Number(g.filled_avg_price); } catch { /* settle */ }
         }
         status = st;
         if (fq > 0 && fp > 0) { accQty += fq; accCost += fq * fp; remaining -= fq; } // captured (priced inside the spread)
@@ -203,7 +219,7 @@ export async function backfillBars(symbol: string, lookbackDays: number): Promis
     const q = `/v2/stocks/${symbol}/bars?timeframe=1Min&feed=${config.stockFeed}` +
       `&start=${encodeURIComponent(start)}&limit=10000&adjustment=raw` +
       (token ? `&page_token=${token}` : "");
-    const res = await get(config.alpacaDataHost, q);
+    const res = await get(config.alpacaDataHost, q, DATA_HEADERS);
     for (const b of (res.bars ?? [])) {
       out.push({
         ts: Date.parse(b.t),
@@ -231,7 +247,7 @@ export async function snapshotChain(symbol: string, spot: number, fromDate: stri
     path += `&strike_price_gte=${Math.floor(spot - config.strikeWindow)}` +
       `&strike_price_lte=${Math.ceil(spot + config.strikeWindow)}`;
   }
-  const res = await get(config.alpacaDataHost, path);
+  const res = await get(config.alpacaDataHost, path, DATA_HEADERS);
   const raw = res?.snapshots ?? {};
   const out: ChainQuote[] = [];
   for (const [sym, s] of Object.entries<any>(raw)) {

@@ -87,6 +87,7 @@ export function useDeskFeed(): DeskFeed {
             .from("equity_snapshots")
             .select("net_liquidation,captured_at")
             .is("strategist_id", null)
+            .is("account_id", null) // desk-TOTAL rows only (per-bucket rows carry account_id — cockpit P3)
             .order("captured_at", { ascending: false })
             .limit(MAX_CURVE),
           // recent CLOSED trades (narrowed to the current session in JS) — for the

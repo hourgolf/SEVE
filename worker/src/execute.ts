@@ -36,14 +36,15 @@ export const entryStateByKey = new Map<string, LiveEntryState>();
 export const entryKey = (strategistId: string, occ: string) => `${strategistId}|${occ}`;
 
 export interface ExecCtx {
+  api: alpaca.Api;                        // cockpit P3: the account this channel's orders route to (default acct 1)
   chain: ChainStore;
   todayET: string;
   etMin: number;
   sinceIso: string;                       // session start — the fill-net realized window
-  allOrders: alpaca.AlpacaOrder[];        // cycle-start snapshot, newest first
-  alpacaByOcc: Map<string, alpaca.AlpacaPosition>;
-  remainingByOcc: Map<string, number>;    // live per-OCC held counter (09c fix 2)
-  openRowQty: Map<string, number>;        // Σ open-row qty per OCC (09d gate input)
+  allOrders: alpaca.AlpacaOrder[];        // cycle-start snapshot, newest first — THIS account's orders
+  alpacaByOcc: Map<string, alpaca.AlpacaPosition>;  // THIS account's positions
+  remainingByOcc: Map<string, number>;    // live per-OCC held counter (09c fix 2) — THIS account
+  openRowQty: Map<string, number>;        // Σ open-row qty per OCC (09d gate input) — THIS account's channels
 }
 
 /** Seed the per-OCC remaining counter from Alpaca's positions (cycle start). */
@@ -67,7 +68,7 @@ async function placeFill(
 ): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
   const q = ctx.chain.byOcc(occ);
   if (config.spreadCapture && q && q.ask > q.bid && q.bid > 0) {
-    const r = await alpaca.limitLadderFill({ symbol: occ, side, qty, coidBase, bid: q.bid, ask: q.ask, ladder: config.spreadCaptureLadder });
+    const r = await alpaca.limitLadderFill({ symbol: occ, side, qty, coidBase, bid: q.bid, ask: q.ask, ladder: config.spreadCaptureLadder }, ctx.api);
     if (r.filledQty > 0) {
       const ref = side === "buy" ? "ask" : "bid";
       await store.journal("EXEC",
@@ -78,7 +79,7 @@ async function placeFill(
     }
     return { id: r.id, fill: r.fill, filledQty: r.filledQty, status: r.status };
   }
-  return alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase });
+  return alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase }, ctx.api);
 }
 
 // Fill-net realized to book on THIS close (cron realizedToBook parity): the

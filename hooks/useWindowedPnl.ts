@@ -71,7 +71,7 @@ export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
         curveRaw = rows.map((r) => Number(r.nav));
         labelsRaw = rows.map((r) => shortDate(r.et_date)); // "Jun 4" — one point per session
       } catch {
-        let cq = sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null);
+        let cq = sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).is("account_id", null); // desk-TOTAL only (cockpit P3)
         if (start) cq = cq.gte("captured_at", start);
         const cRes = await cq.order("captured_at", { ascending: false }).limit(6000);
         const rows = ((cRes.data ?? []) as { net_liquidation: number; captured_at: string }[]).reverse();

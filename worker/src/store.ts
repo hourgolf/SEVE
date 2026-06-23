@@ -26,6 +26,7 @@ export interface ChannelConfig {
   spec_json: unknown | null;
   underlying: string;           // per-channel ticker (QQQ rollout) — SPY default
   executor: "cron" | "stream";  // Phase B: who places this channel's orders
+  account_id: string | null;    // cockpit P3: which Alpaca paper account routes this channel's orders (null = default acct 1)
   capital_pct: number;          // two-dial model: RISK $/trade (legacy column name)
   aggression: number;           // retired knob (kept for the legacy read)
   max_contracts: number;
@@ -59,6 +60,19 @@ export interface FundState {
   mode: string;
   is_halted: boolean;
 }
+// One Alpaca paper account = one hypothesis-bucket (cockpit P3). cred_ref maps to
+// config.altAccounts (null/empty = the default ALPACA_KEY/SECRET). is_armed is the
+// SHADOW-FIRST gate: a non-armed account is fully decided + logged but places NO
+// orders, exactly like the global two-key turn — flip it true after one clean
+// shadow cycle proves routing. is_halted = a per-bucket kill switch.
+export interface AccountRow {
+  id: string;
+  name: string;
+  cred_ref: string | null;
+  is_armed: boolean;
+  is_halted: boolean;
+  master_daily_stop_usd: number;
+}
 export interface PositionRow {
   id: string;
   strategist_id: string;
@@ -77,14 +91,19 @@ const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServi
   realtime: { transport: WebSocket as unknown as WSTransport },
 });
 
-export async function loadConfig(): Promise<{ fund: FundState | null; channels: ChannelConfig[] }> {
+export async function loadConfig(): Promise<{ fund: FundState | null; channels: ChannelConfig[]; accounts: AccountRow[] }> {
   const { data: fundRow, error: fundErr } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
   if (fundErr) warn(`store: fund_state read failed — ${fundErr.message}`);
   const { data: rows, error } = await sb
     .from("strategists")
-    .select("id,slug,name,status,spec_json,underlying,executor,strategist_config(*)");
-  if (error) { warn(`store: strategists read failed — ${error.message}`); return { fund: null, channels: [] }; }
+    .select("id,slug,name,status,spec_json,underlying,executor,account_id,strategist_config(*)");
+  if (error) { warn(`store: strategists read failed — ${error.message}`); return { fund: null, channels: [], accounts: [] }; }
   if (!fundRow) warn("store: fund_state id=1 not found (check SUPABASE_URL / service-role key point at the right project)");
+  // Accounts (cockpit P3) — optional; a project without the table just runs single-account.
+  const { data: acctRows, error: acctErr } = await sb
+    .from("accounts")
+    .select("id,name,cred_ref,is_armed,is_halted,master_daily_stop_usd");
+  if (acctErr) warn(`store: accounts read failed — ${acctErr.message}; single-account fallback`);
 
   const channels: ChannelConfig[] = [];
   for (const r of (rows ?? []) as any[]) {
@@ -98,6 +117,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       spec_json: r.spec_json ?? null,
       underlying: String(r.underlying ?? "SPY").toUpperCase(),
       executor: (r.executor === "stream" ? "stream" : "cron"),
+      account_id: r.account_id ?? null,
       capital_pct: Number(cfg.capital_pct),
       aggression: Number(cfg.aggression),
       max_contracts: Number(cfg.max_contracts),
@@ -119,7 +139,15 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
         is_halted: !!(fundRow as any).is_halted,
       }
     : null;
-  return { fund, channels };
+  const accounts: AccountRow[] = ((acctRows ?? []) as any[]).map((a) => ({
+    id: String(a.id),
+    name: String(a.name ?? a.id),
+    cred_ref: a.cred_ref ?? null,
+    is_armed: !!a.is_armed,
+    is_halted: !!a.is_halted,
+    master_daily_stop_usd: Number(a.master_daily_stop_usd ?? 0),
+  }));
+  return { fund, channels, accounts };
 }
 
 // A closed position's realized P&L (for the shadow-management A/B finalize).
@@ -211,6 +239,7 @@ export function subscribeConfig(onChange: () => void): void {
     .on("postgres_changes", { event: "*", schema: "public", table: "fund_state" }, () => { info("store: fund_state changed (realtime)"); onChange(); })
     .on("postgres_changes", { event: "*", schema: "public", table: "strategist_config" }, () => { info("store: strategist_config changed (realtime)"); onChange(); })
     .on("postgres_changes", { event: "*", schema: "public", table: "strategists" }, () => { info("store: strategists changed (realtime)"); onChange(); })
+    .on("postgres_changes", { event: "*", schema: "public", table: "accounts" }, () => { info("store: accounts changed (realtime)"); onChange(); })
     .subscribe((status) => { if (status === "SUBSCRIBED") info("store: realtime config subscription active"); });
 }
 
@@ -347,9 +376,11 @@ export async function uploadQuotesArchive(etDate: string, gz: Uint8Array): Promi
   return error ? error.message : null;
 }
 
-export async function insertEquitySnapshot(equity: number, cash: number, unrealized: number): Promise<void> {
+export async function insertEquitySnapshot(equity: number, cash: number, unrealized: number, accountId: string | null = null): Promise<void> {
   if (!config.writeEquitySnapshots) return;
-  try { await sb.from("equity_snapshots").insert({ strategist_id: null, net_liquidation: equity, cash, unrealized_pnl: unrealized }); }
+  // account_id tags the snapshot to its bucket (cockpit P3) so each bucket's forward NAV
+  // reads cleanly; null = the legacy desk-wide row (back-compat single-account).
+  try { await sb.from("equity_snapshots").insert({ strategist_id: null, account_id: accountId, net_liquidation: equity, cash, unrealized_pnl: unrealized }); }
   catch (e) { warn(`store: equity snapshot failed — ${(e as Error).message}`); }
 }
 

@@ -31,10 +31,32 @@ function flag(name: string, fallback: boolean): boolean {
   return v.toLowerCase() === "true" || v === "1";
 }
 
+// ---- Multi-account creds (cockpit P3) --------------------------------------
+// Each non-default Alpaca paper account's creds live in env as ALPACA_KEY_<ref> /
+// ALPACA_SECRET_<ref>, where <ref> matches the `accounts.cred_ref` column. The
+// default account (cred_ref null/empty) uses ALPACA_KEY/SECRET. Channels route by
+// their account's cred_ref → these creds (store.ts loads account_id; index.ts
+// builds the per-account Api). A ref present in the DB but ABSENT here = that
+// account simply can't go live (its channels stay shadow) — fail-safe, never a crash.
+function loadAltAccounts(): Record<string, { key: string; secret: string }> {
+  const out: Record<string, { key: string; secret: string }> = {};
+  for (const m of Object.keys(process.env)) {
+    const mm = m.match(/^ALPACA_KEY_(\w+)$/);
+    if (!mm) continue;
+    const ref = mm[1];
+    const key = process.env[`ALPACA_KEY_${ref}`];
+    const secret = process.env[`ALPACA_SECRET_${ref}`];
+    if (key && secret) out[ref] = { key, secret };
+  }
+  return out;
+}
+
 export const config = {
   // ---- Alpaca ----
   alpacaKey: req("ALPACA_KEY"),
   alpacaSecret: req("ALPACA_SECRET"),
+  // cred_ref → {key,secret} for the non-default paper accounts (cockpit P3).
+  altAccounts: loadAltAccounts(),
   // Paper trading + paper account data. (Algo Trader Plus is a DATA sub on the
   // same account — it unlocks sip/opra; the paper REST host is unchanged.)
   alpacaPaperHost: opt("ALPACA_PAPER_HOST", "https://paper-api.alpaca.markets"),
@@ -134,7 +156,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-22a"; // + spread-capture ladder (A2) — INERT by default (SPREAD_CAPTURE=false)
+export const WORKER_VERSION = "stream-2026-06-23a"; // cockpit P3: per-account order routing (shadow-first via accounts.is_armed)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

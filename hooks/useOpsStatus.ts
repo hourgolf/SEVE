@@ -36,7 +36,7 @@ export function useOpsStatus(): OpsStatus {
       try {
         const [hb, snap, strat] = await Promise.all([
           sb.from("worker_heartbeat").select("beat_at,note").eq("id", "stream").maybeSingle(),
-          sb.from("equity_snapshots").select("captured_at").is("strategist_id", null)
+          sb.from("equity_snapshots").select("captured_at").is("strategist_id", null).is("account_id", null) // desk-TOTAL only (cockpit P3)
             .order("captured_at", { ascending: false }).limit(1).maybeSingle(),
           sb.from("strategists").select("executor,status"),
         ]);
