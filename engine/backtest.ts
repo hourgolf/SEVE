@@ -177,6 +177,13 @@ export function simulateSession(
   // live governor (a per-channel max_contracts limits the whole position, not each lot). Unset =
   // each add is fully risk-sized (the uncapped probe behavior — stacks can reach base + maxAdds×lot).
   pyramid?: { maxAdds: number; minProfitPct: number; maxStack?: number },
+  // SPY↔QQQ COORDINATION GATE (cross-asset pyramid confirmation, 2026-06-22): an optional
+  // predicate consulted at each pyramid ADD — the add executes ONLY if it returns true. Lets a
+  // probe gate adds on a CONCURRENT cross-asset signal (e.g. QQQ confirming SPY's move) WITHOUT
+  // touching entries (entries amputate the convex tail; pyramiding is the lever to sharpen). The
+  // continuation trigger + decidePyramidAdd gate + the parity hook are unchanged — this only
+  // suppresses the EXECUTION of an otherwise-valid add. undefined → always add = byte-identical.
+  addGate?: (ts: number, dir: OptType) => boolean,
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -442,7 +449,7 @@ export function simulateSession(
           posQty: pos.qty, posEntry: pos.entryPrice, optType: pos.optType, dir,
           heldAtPriorBar: !wasFlat, exiting: !!intent && intent.kind === "exit", cfg: pyramid, maxStack: pyramid.maxStack,
         });
-        if (dec.add) {
+        if (dec.add && (!addGate || addGate(bars[i].ts, pos.optType))) {
           pos.entryPrice = dec.newEntryPrice; // weighted avg → exit math unchanged
           pos.qty = dec.newQty;
           pos.entryEdgeUsd = (pos.entryEdgeUsd ?? 0) + en.edgeUsd * dec.qty;
