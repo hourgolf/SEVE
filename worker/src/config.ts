@@ -84,6 +84,25 @@ export const config = {
   // Off by default to keep prod tables un-polluted; needs the service role.
   shadowWriteEvents: flag("SHADOW_WRITE_EVENTS", false),
 
+  // ---- SPREAD-CAPTURE LADDER (#4 cost lever, A2 — 2026-06-22) ----
+  // OFF by default → byte-identical to today's market-order fills (executeEntry/Add/
+  // Exit fall straight through to alpaca.orderAndFill with the same client_order_id).
+  // ON → every fill runs a marketable-limit→cross ladder (alpaca.limitLadderFill):
+  // place a limit inside the spread, poll, re-price toward the cross, FINAL rung is a
+  // market backstop so the order always completes. It recaptures part of the bid/ask
+  // spread (the binding 0DTE cost) and LOGS the real $ captured per fill (tagged by
+  // side+reason) — the shadow-first measurement before relying on it. The cost gate is
+  // UNTOUCHED (decide.ts computes round-trip at the cross price), so capture can never
+  // loosen the gate (the A1 gate-decoupled finding). Ladder is bounded (default ~3s of
+  // limit attempts ≈ today's cancel window) so a collapsing-premium stop can't dawdle
+  // into a worse fill — and negative capture on such stops shows up in the log.
+  spreadCapture: flag("SPREAD_CAPTURE", false),
+  spreadCaptureLadder: {
+    frac: Number(opt("SPREAD_CAPTURE_FRAC", "0.5")),     // first-rung aggressiveness: 0=mid, 1=cross
+    rungs: Number(opt("SPREAD_CAPTURE_RUNGS", "3")),     // total rungs incl. the final market cross
+    rungSec: Number(opt("SPREAD_CAPTURE_RUNG_SEC", "1.5")), // seconds per limit rung before re-pricing
+  },
+
   // Symbols this instance owns. SINGLE Alpaca data websocket per account/feed
   // (the 406 single-connection limit) → one socket subscribed to ALL of these,
   // routed by bar.S. Each symbol keeps its own in-memory bars + chain; the cron's
@@ -115,7 +134,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-19c"; // + forward-data durability: post-close quotes → Supabase Storage
+export const WORKER_VERSION = "stream-2026-06-22a"; // + spread-capture ladder (A2) — INERT by default (SPREAD_CAPTURE=false)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

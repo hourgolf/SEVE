@@ -53,6 +53,34 @@ export function seedRemaining(positions: alpaca.AlpacaPosition[]): Map<string, n
   return m;
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// Place a BUY/SELL for one of the execute fns. With SPREAD_CAPTURE off (default) this
+// is exactly alpaca.orderAndFill with the caller's client_order_id (byte-identical to
+// the proven market-order path). With it on AND a usable NBBO, it runs the marketable-
+// limit→cross ladder (alpaca.limitLadderFill) to recapture part of the spread and LOGS
+// the real $ captured (tagged side+reason) — the shadow-first measurement. The ladder's
+// final rung always crosses, so the order completes regardless. The cost gate is never
+// consulted here (it ran at the cross price in decide.ts), so capture can't loosen it.
+async function placeFill(
+  slug: string, occ: string, side: "buy" | "sell", qty: number, coidBase: string, reason: string, ctx: ExecCtx,
+): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
+  const q = ctx.chain.byOcc(occ);
+  if (config.spreadCapture && q && q.ask > q.bid && q.bid > 0) {
+    const r = await alpaca.limitLadderFill({ symbol: occ, side, qty, coidBase, bid: q.bid, ask: q.ask, ladder: config.spreadCaptureLadder });
+    if (r.filledQty > 0) {
+      const ref = side === "buy" ? "ask" : "bid";
+      await store.journal("EXEC",
+        `${slug}: spread-capture ${side} ${occ} ×${r.filledQty} @ ${r.fill.toFixed(2)} vs ${ref} ${r.crossRef.toFixed(2)} → captured $${r.capturedUsd.toFixed(0)} (${r.crossedQty} crossed, ${reason})`,
+        { kind: "spread-capture", slug, occ, side, reason, fill: round2(r.fill), crossRef: round2(r.crossRef), capturedUsd: round2(r.capturedUsd), filledQty: r.filledQty, crossedQty: r.crossedQty });
+      void store.writeShadowEvent(`SPREAD-CAPTURE ${slug} ${side} ${occ} ×${r.filledQty} captured $${r.capturedUsd.toFixed(0)}`,
+        { kind: "spread-capture", slug, occ, side, reason, capturedUsd: round2(r.capturedUsd), filledQty: r.filledQty, crossedQty: r.crossedQty });
+    }
+    return { id: r.id, fill: r.fill, filledQty: r.filledQty, status: r.status };
+  }
+  return alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase });
+}
+
 // Fill-net realized to book on THIS close (cron realizedToBook parity): the
 // channel's own filled buys/sells for this OCC (slug-prefixed client_order_id)
 // blended, minus what prior closed rows already booked today.
@@ -98,10 +126,7 @@ export async function executeExit(
   }
   try {
     let exitPx = alp?.current_price ?? liveBid;
-    const r = await alpaca.orderAndFill({
-      symbol: occ, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day",
-      client_order_id: `${d.slug}-${occ}-${ctx.etMin}-x`,
-    });
+    const r = await placeFill(d.slug, occ, "sell", sellQty, `${d.slug}-${occ}-${ctx.etMin}-x`, d.reason, ctx);
     if (r.fill > 0) exitPx = r.fill;
     if (r.filledQty <= 0 && alpaca.TERMINAL_ORDER_STATUS.has(r.status)) {
       // 2026-06-11a: known-terminal sell with NOTHING sold — don't book a phantom
@@ -180,10 +205,7 @@ export async function executeEntry(
   if (blocked || qty <= 0) { if (blocked !== d.blocked) info(`entry ${d.slug} blocked: ${blocked}`); return; }
 
   try {
-    const o = await alpaca.orderAndFill({
-      symbol: occ, qty: String(qty), side: "buy", type: "market", time_in_force: "day",
-      client_order_id: `${d.slug}-${occ}-${ctx.etMin}`,
-    });
+    const o = await placeFill(d.slug, occ, "buy", qty, `${d.slug}-${occ}-${ctx.etMin}`, d.reason, ctx);
     const ask = (d.detail?.ask as number) ?? 0;
     const entryPx = o.fill > 0 ? o.fill : ask;
     // 09c fix 1: row mirrors the REAL fill. 2026-06-11a: terminal-final 0 = nothing
@@ -236,10 +258,7 @@ export async function executeAdd(
   const buyQty = Math.min(want, Math.max(0, ch.max_contracts - heldNow));
   if (buyQty <= 0) return;
   try {
-    const o = await alpaca.orderAndFill({
-      symbol: occ, qty: String(buyQty), side: "buy", type: "market", time_in_force: "day",
-      client_order_id: addCoid,
-    });
+    const o = await placeFill(d.slug, occ, "buy", buyQty, addCoid, d.reason, ctx);
     const ask = (d.detail?.ask as number) ?? 0;
     const fillPx = o.fill > 0 ? o.fill : ask;
     // terminal-final 0 = nothing filled → no growth (a ghost otherwise); non-terminal (poll didn't

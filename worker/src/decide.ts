@@ -396,8 +396,19 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
         // only makes the count gate MORE conservative; maxStack (sizeQty cap below) is the hard limiter.
         const prefix = `${ch.slug}-${row.occ_symbol}-`;
         const buys = (ctx.allOrders ?? []).filter((o) => o.status === "filled" && o.side === "buy" && o.filled_qty > 0 && o.client_order_id.startsWith(prefix));
-        const lots = buys.length
-          ? buys.slice().sort((a, b) => (parseInt(a.client_order_id.slice(prefix.length), 10) || 0) - (parseInt(b.client_order_id.slice(prefix.length), 10) || 0)).map((o) => ({ qty: o.filled_qty, entryFill: o.filled_avg_price }))
+        // Group filled buys into LOGICAL lots by coid STEM: a spread-capture ladder (A2) fills
+        // ONE entry/add as several rung orders (`…-r0`/`…-m`), so collapse them by stripping that
+        // suffix — else lots.length inflates and the maxAdds gate throttles the validated pyramid.
+        // Byte-identical when no ladder suffix exists (each order is its own stem → today's lots).
+        const stemOf = (coid: string) => coid.slice(prefix.length).replace(/-(r\d+|m)$/, "");
+        const byStem = new Map<string, { qty: number; cost: number; sort: number }>();
+        for (const o of buys) {
+          const stem = stemOf(o.client_order_id);
+          const g = byStem.get(stem) ?? { qty: 0, cost: 0, sort: parseInt(stem, 10) || 0 };
+          g.qty += o.filled_qty; g.cost += o.filled_qty * o.filled_avg_price; byStem.set(stem, g);
+        }
+        const lots = byStem.size
+          ? [...byStem.values()].sort((a, b) => a.sort - b.sort).map((g) => ({ qty: g.qty, entryFill: g.cost / g.qty }))
           : [{ qty: row.qty, entryFill: row.avg_entry_price }];
         // ⚠ parity caveats (un-shared with the engine, documented for the graduation replay): (1) addFill
         // = raw ask vs the engine's cost-adjusted en.fill (~1 tick higher) → +30% gate can disagree at the

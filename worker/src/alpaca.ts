@@ -115,6 +115,85 @@ export async function orderAndFill(body: {
   return { id, fill, filledQty, status };
 }
 
+const TICK = 0.01;
+export interface LadderParams { frac: number; rungs: number; rungSec: number; }
+
+/** SPREAD-CAPTURE LADDER (A2). Place a limit between mid and the cross, poll briefly,
+ *  cancel + re-price toward the cross across `rungs`, with the FINAL rung a MARKET
+ *  backstop so the order ALWAYS completes (never worse than today's plain market
+ *  order — the trade can't fail to fill). Returns the real weighted fill + the $
+ *  actually CAPTURED vs the live cross reference (ask for a buy, bid for a sell) —
+ *  the real-capture measurement the shadow-first discipline needs. A drop-in
+ *  superset of orderAndFill's return.
+ *
+ *  ⚠ This NEVER touches the cost gate (decide.ts computes round-trip at the CROSS
+ *  price, independent of how a fill executes) — capturing spread therefore can't
+ *  loosen the gate to admit marginal trades (the A1 gate-decoupled invariant).
+ *
+ *  Every rung keeps the caller's coid prefix (`${slug}-${occ}-…`, suffixed `-r{i}`
+ *  / `-m`) so fill-net booking, idempotency, lost-insert recovery, and the pyramid
+ *  lot grouping all still see every rung. Captured-$ is signed: a collapsing-premium
+ *  stop whose limits don't fill crosses via the market backstop and reports ~0 (or
+ *  negative if the bid dropped during the wait) — the adverse-selection cost made
+ *  visible, not hidden. */
+export async function limitLadderFill(args: {
+  symbol: string; side: "buy" | "sell"; qty: number; coidBase: string;
+  bid: number; ask: number; ladder: LadderParams;
+}): Promise<{ id: string; fill: number; filledQty: number; status: string; capturedUsd: number; crossRef: number; crossedQty: number }> {
+  const { symbol, side, qty, coidBase, bid, ask } = args;
+  const rungs = Math.max(1, Math.floor(args.ladder.rungs));
+  const frac = Math.max(0, Math.min(1, args.ladder.frac));
+  const rungMs = Math.max(250, args.ladder.rungSec * 1000);
+  const crossRef = side === "buy" ? ask : bid;
+  const mid = (ask + bid) / 2;
+
+  // Unusable NBBO (locked/crossed/zero) → don't ladder; one market order = today's path.
+  if (!(ask > bid && bid > 0)) {
+    const m = await orderAndFill({ symbol, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: `${coidBase}-m` });
+    return { ...m, capturedUsd: 0, crossRef: crossRef || m.fill, crossedQty: m.filledQty };
+  }
+
+  let remaining = qty, accQty = 0, accCost = 0, crossedQty = 0, lastId = "", status = "new";
+  for (let i = 0; i < rungs && remaining > 0; i++) {
+    const final = i === rungs - 1;
+    try {
+      if (final) {
+        // guaranteed cross — the trade always completes
+        const m = await orderAndFill({ symbol, qty: String(remaining), side, type: "market", time_in_force: "day", client_order_id: `${coidBase}-m` });
+        lastId = m.id; status = m.status;
+        if (m.filledQty > 0 && m.fill > 0) { accQty += m.filledQty; accCost += m.filledQty * m.fill; crossedQty += m.filledQty; remaining -= m.filledQty; }
+      } else {
+        // ramp aggressiveness frac→~0.95 across the non-final rungs (intermediate limits stay inside the spread)
+        const t = rungs > 2 ? i / (rungs - 2) : 0;
+        const fr = Math.min(0.95, frac + (1 - frac) * t);
+        const raw = side === "buy" ? mid + fr * (ask - mid) : mid - fr * (mid - bid);
+        const px = Math.max(TICK, Math.round(raw / TICK) * TICK);
+        const o = await post(config.alpacaPaperHost, "/v2/orders", {
+          symbol, qty: String(remaining), side, type: "limit", limit_price: px.toFixed(2),
+          time_in_force: "day", client_order_id: `${coidBase}-r${i}`,
+        });
+        const id = String(o.id ?? ""); lastId = id;
+        let st = String(o.status ?? ""), fq = Number(o.filled_qty ?? 0), fp = Number(o.filled_avg_price ?? 0);
+        const deadline = Date.now() + rungMs;
+        while (id && !TERMINAL_ORDER_STATUS.has(st) && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 300));
+          try { const g = await get(config.alpacaPaperHost, `/v2/orders/${id}`); st = String(g.status ?? st); fq = Number(g.filled_qty ?? fq); if (Number(g.filled_avg_price) > 0) fp = Number(g.filled_avg_price); } catch { /* keep polling */ }
+        }
+        // cancel any unfilled remainder before re-pricing — never stack two working limits
+        if (id && !TERMINAL_ORDER_STATUS.has(st)) {
+          try { await del(config.alpacaPaperHost, `/v2/orders/${id}`); } catch { /* may have just filled */ }
+          try { const g = await get(config.alpacaPaperHost, `/v2/orders/${id}`); st = String(g.status ?? st); fq = Number(g.filled_qty ?? fq); if (Number(g.filled_avg_price) > 0) fp = Number(g.filled_avg_price); } catch { /* settle */ }
+        }
+        status = st;
+        if (fq > 0 && fp > 0) { accQty += fq; accCost += fq * fp; remaining -= fq; } // captured (priced inside the spread)
+      }
+    } catch { /* a rung threw — fall through to the next rung / market backstop; never strand the order */ }
+  }
+  const fill = accQty > 0 ? accCost / accQty : 0;
+  const capturedUsd = accQty > 0 ? (side === "buy" ? crossRef - fill : fill - crossRef) * accQty * 100 : 0;
+  return { id: lastId, fill, filledQty: accQty, status, capturedUsd, crossRef, crossedQty };
+}
+
 // ---- underlying bars (data host) — seed the rolling window on startup -------
 export async function backfillBars(symbol: string, lookbackDays: number): Promise<Bar[]> {
   const start = new Date(Date.now() - lookbackDays * 24 * 3600 * 1000).toISOString();
