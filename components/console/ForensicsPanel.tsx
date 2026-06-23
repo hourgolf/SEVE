@@ -47,8 +47,8 @@ export function ForensicsPanel() {
         </button>
       </div>
       <div className="pbody">
-        {/* ── OVERRIDE SCORECARD ── */}
-        <div className="au-sub">Override scorecard — did the manual close beat ride-to-close?</div>
+        {/* ── OVERRIDE SCORECARD (CUMULATIVE — accumulating ledger since inception) ── */}
+        <div className="au-sub">Override scorecard <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>cumulative{sc.span ? ` · ${sc.span}` : ""}</span> — manual close vs ride-to-close (man&nbsp;vs&nbsp;machine)</div>
         {sc.n === 0 ? (
           <p className="au-market">no overrides recorded yet — accrues as you manually close ride-channel positions.</p>
         ) : (
@@ -85,8 +85,8 @@ export function ForensicsPanel() {
           </>
         )}
 
-        {/* ── BENCHED would-be vs LIVE ── */}
-        <div className="au-sub" style={{ marginTop: 12 }}>Benched would-be vs live — did the cut channels earn their bench?</div>
+        {/* ── BENCHED would-be vs LIVE (TODAY only — replays every draft/culled channel on the day's tape) ── */}
+        <div className="au-sub" style={{ marginTop: 12 }}>Benched would-be vs live <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>today · {shortDate(report.report_date)}</span> — did the cut channels earn their bench?</div>
         {!bvl || !bvl.sameWeek ? (
           <p className="au-market">same-week only (option_quotes 7d) — re-run day-report same-week to refresh.</p>
         ) : bvl.benched.length === 0 ? (
