@@ -131,11 +131,15 @@ export const config = {
   // executor gate uses ONE 'stream' heartbeat, so this instance must reliably
   // handle EVERY symbol it lists (a silently-unhandled symbol whose channels are
   // flagged 'stream' would strand — cron defers on the fresh heartbeat while the
-  // worker no-ops it). Default SPY,QQQ (QQQ shadow-runs until its channels flip).
+  // worker no-ops it). Default SPY,QQQ,IWM — IWM is the 2nd validated index (MOVE 3:
+  // V3/ALT generalize 5/5 OOS). Listing it makes the worker seed[IWM] bars + snapshot
+  // its 0DTE chain every cycle (data-only proof) BEFORE any IWM channel arms — the same
+  // shadow gate QQQ passed. ⚠ Railway env SYMBOLS overrides this default, so to add IWM
+  // live the env must be set to SPY,QQQ,IWM (or unset to fall through to this default).
   // SYMBOL (singular) kept as a back-compat alias for the first symbol.
-  symbols: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ")
+  symbols: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ,IWM")
     .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean),
-  symbol: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ").split(",")[0].trim().toUpperCase(),
+  symbol: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ,IWM").split(",")[0].trim().toUpperCase(),
   // ---- Operator alerts ("the desk summons you", 2026-06-12) ----
   // POSTs to the app's /api/push-send — the SAME route + secret the cron's ✋
   // manual-twin ping uses (x-push-secret = the app's PUSH_SEND_SECRET). Both
@@ -156,7 +160,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-24a"; // + durable per-trade forensics (peak_mark MFE ratchet + entry_reason/features/delta)
+export const WORKER_VERSION = "stream-2026-06-24b"; // + IWM in the symbol set (2nd validated index; seed[IWM] data-proof before any IWM channel arms)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
