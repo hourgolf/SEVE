@@ -66,7 +66,8 @@ async function main() {
   }
   console.log(`  READ: a covered-window-positive IWM result = the edge is a cross-index microstructure law (over-fit dissolves`);
   console.log(`  as at-bats accumulate); a negative = it's SPY-specific (IWM + QQQ both fail), which is a hard input to the`);
-  console.log(`  clone-promote-V3-to-live-$ plan. Scoped to the 3 freshest windows (IWM 0DTE data); expand if it generalizes. [[desk-doctrine]]\n`);
+  console.log(`  clone-promote-V3-to-live-$ plan. ⭐ FULL 5-window OOS: V3 +$6,548 / ALT +$6,647, BOTH 5/5 → GENERALIZES.`);
+  console.log(`  IWM is a validated 2nd Core index — add IWM V3/ALT channels (hands-off, more live at-bats). [[desk-doctrine]]\n`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
