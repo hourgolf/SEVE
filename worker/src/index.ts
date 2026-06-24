@@ -40,6 +40,9 @@ const SYMBOLS = config.symbols;
 const ownedBy = (c: store.ChannelConfig): boolean => c.executor === "stream" && SYMBOLS.includes(c.underlying.toUpperCase());
 // Running peak option mid per open position (power giveback + sweep state).
 const peakMidByKey = new Map<string, number>();
+// Orphan safety-net persistence: `${accountId}|${occ}` → consecutive cycles seen UNCOVERED
+// (held in a bucket with no open desk row). A 2-cycle gate dodges same-cycle fill→insert races.
+const orphanSeen = new Map<string, number>();
 
 // Per-symbol in-memory state (one BarStore + ChainStore each); OCCs are globally
 // unique (the ticker is in the OCC root) so account-wide reads stay shared.
@@ -155,6 +158,53 @@ async function seed(): Promise<void> {
   }
 }
 
+// Per-account ORPHAN safety-net (cockpit P3). An Alpaca lot a bucket holds with NO open desk
+// row covering it — the desk believes it's flat. Canonical cause: the 2026-06-24 manual-close
+// bug (the route sold the DEFAULT account for a Core/Resurrected position → 0 sold, row booked
+// closed, the real lot rode on); an insert-failed entry is another. EVERY other worker path keys
+// off OPEN desk rows (fast-exit sweep, EOD hard-flatten), so such a lot is otherwise never
+// managed. Detect + page ALWAYS; auto-flatten ONLY when armed (config.orphanFlatten) AND the
+// bucket is live — flattening live positions on a held-vs-rows heuristic is where reconciliation
+// bugs bite, so it's shadow-first. Runs on the PRE-cycle snapshot (same-cycle entries/exits touch
+// neither side) + a 2-cycle persistence gate → only true cross-cycle orphans page. Off the trade
+// path: the caller wraps it so a failure never breaks the cycle.
+async function orphanSweep(
+  g: AccountGroup,
+  alpacaByOcc: Map<string, alpaca.AlpacaPosition>,
+  groupRows: store.PositionRow[],
+  acctLive: boolean,
+  todayET: string,
+): Promise<void> {
+  if (!alpacaByOcc.size) return;
+  const covered = new Map<string, number>();
+  for (const r of groupRows) covered.set(r.occ_symbol, (covered.get(r.occ_symbol) ?? 0) + Math.abs(Math.round(r.qty)));
+  for (const [occ, p] of alpacaByOcc) {
+    const held = Math.abs(Math.round(p.qty));
+    const uncovered = held - (covered.get(occ) ?? 0);
+    const key = `${g.account.id}|${occ}`;
+    if (uncovered <= 0) { orphanSeen.delete(key); continue; }
+    const seen = (orphanSeen.get(key) ?? 0) + 1;
+    orphanSeen.set(key, seen);
+    if (seen < 2) continue; // grace: one cycle to let a same-cycle fill→insert settle
+    warn(`orphan: ${g.account.name} holds ${uncovered}× ${occ} with no open desk row (held ${held}, desk-open ${covered.get(occ) ?? 0})`);
+    await store.journal("WARN", `orphan: ${g.account.name} holds ${uncovered}× ${occ} the desk thinks is flat`, { account: g.account.name, occ, uncovered, held });
+    alertOnce(todayET, "orphan", key, "⚠ orphaned lot", `${g.account.name} holds ${uncovered} ${occ} the desk thinks is flat — close it / check the bucket`);
+    if (config.orphanFlatten && acctLive && g.api) {
+      try {
+        const o = await alpaca.orderAndFill(
+          { symbol: occ, qty: String(uncovered), side: "sell", type: "market", time_in_force: "day", client_order_id: `orphan-${occ}-${Date.now()}` },
+          g.api,
+        );
+        await store.journal("EXEC", `orphan-flatten: ${g.account.name} sold ${o.filledQty}/${uncovered} ${occ} @ ${o.fill.toFixed(2)} (${o.status})`,
+          { account: g.account.name, occ, sold: o.filledQty, order_id: o.id });
+        if (o.filledQty >= uncovered) orphanSeen.delete(key); // fully cleared; else re-page next round
+      } catch (e) {
+        await store.journal("WARN", `orphan-flatten ${g.account.name} ${occ} failed — ${(e as Error).message}`);
+      }
+    }
+  }
+}
+
 async function cycle(trigger: string): Promise<void> {
   if (cycling) { return; } // never overlap cycles
   cycling = true;
@@ -173,6 +223,9 @@ async function cycle(trigger: string): Promise<void> {
 
     const decisions: ShadowDecision[] = [];
     let totEquity = 0, totCash = 0, totUnreal = 0, snappedAny = false;
+    // Per-account orphan-sweep inputs, captured on each bucket's PRE-cycle snapshot and swept
+    // AFTER the decision pass (so same-cycle entries/exits don't false-positive).
+    const sweepInputs: { g: AccountGroup; alpacaByOcc: Map<string, alpaca.AlpacaPosition>; groupRows: store.PositionRow[]; acctLive: boolean }[] = [];
 
     // ---- PER-ACCOUNT pass (cockpit P3) ----
     // Each bucket reads ITS OWN positions/orders/equity (the same OCC can be held in two
@@ -194,6 +247,7 @@ async function cycle(trigger: string): Promise<void> {
       const openRows = new Map(groupRows.map((r) => [r.strategist_id, r]));
       // EXECUTE only when fully live AND this bucket is armed AND not halted AND its creds resolve.
       const acctLive = live && g.account.is_armed && !g.account.is_halted && api != null;
+      sweepInputs.push({ g, alpacaByOcc, groupRows, acctLive }); // orphan net (swept post-decision)
       let allOrders: alpaca.AlpacaOrder[] = [];
       let remainingByOcc = new Map<string, number>();
       const openRowQty = new Map<string, number>();
@@ -319,6 +373,12 @@ async function cycle(trigger: string): Promise<void> {
     }
 
     report(trigger, totEquity, decisions);
+    // Orphan safety-net: flag (and, when armed, flatten) Alpaca lots the desk thinks are flat.
+    // Live-only (no pages on shadow/boot); each sweep is isolated so it can never break the cycle.
+    if (live) for (const si of sweepInputs) {
+      try { await orphanSweep(si.g, si.alpacaByOcc, si.groupRows, si.acctLive, todayET); }
+      catch (e) { warn(`orphan-sweep[${si.g.account.name}] failed — ${(e as Error).message}`); }
+    }
     // Desk-wide TOTAL snapshot (account_id null = the sum across buckets) — the existing
     // dashboard equity curve reads the null rows; per-bucket rows are tagged above.
     if (live && snappedAny) { try { await store.insertEquitySnapshot(totEquity, totCash, totUnreal, null); } catch (e) { warn(`equity snapshot[total] failed — ${(e as Error).message}`); } }

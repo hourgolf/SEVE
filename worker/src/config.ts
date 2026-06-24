@@ -140,6 +140,11 @@ export const config = {
   symbols: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ,IWM")
     .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean),
   symbol: (process.env.SYMBOLS ?? process.env.SYMBOL ?? "SPY,QQQ,IWM").split(",")[0].trim().toUpperCase(),
+  // Per-account ORPHAN safety-net (cockpit P3). When armed, auto-FLATTEN an Alpaca lot a
+  // bucket holds with NO open desk row covering it (the 2026-06-24 manual-close bug stranded
+  // exactly this). Default OFF = detect + page only (shadow-first; flattening live positions on
+  // a held-vs-rows heuristic is where reconciliation bugs bite — arm after a clean detection day).
+  orphanFlatten: flag("ORPHAN_FLATTEN", false),
   // ---- Operator alerts ("the desk summons you", 2026-06-12) ----
   // POSTs to the app's /api/push-send — the SAME route + secret the cron's ✋
   // manual-twin ping uses (x-push-secret = the app's PUSH_SEND_SECRET). Both
@@ -160,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-24b"; // + IWM in the symbol set (2nd validated index; seed[IWM] data-proof before any IWM channel arms)
+export const WORKER_VERSION = "stream-2026-06-24c"; // + IWM symbol set + per-account orphan safety-net (detect/page always; flatten behind ORPHAN_FLATTEN)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
