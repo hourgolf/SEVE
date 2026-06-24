@@ -1,43 +1,49 @@
 // ============================================================================
-//  stall-exit-probe — STRAND-4 calibration on orb-trend-rider (desk-doctrine.md).
+//  stall-exit-probe — STRAND-4 stall-exit across the FULL faithful roster
+//  (desk-doctrine.md). The stall-exit cuts a NON-MOVER (held ≥ minMinutes, peak
+//  mark never popped past maxFavorPct above entry) to free the one-at-a-time slot.
 //
-//  The stall-exit cuts a NON-MOVER (held ≥ minMinutes, peak mark never popped past
-//  maxFavorPct above entry) to free the one-at-a-time slot. orb-trend-rider is the
-//  CALIBRATION SUBSTRATE because pyramid-roster proved it has NO convex tail → ~ZERO
-//  slow-builder-amputation risk (you can't amputate a tail that doesn't exist). So this
-//  isolates the MECHANISM: on a no-tail bleeder, does cutting dead slots free +EV
-//  re-entries? And what (minMinutes, maxFavorPct) shape works? The tuned shape then
-//  transfers to the LIVE field-test on pb-ride (1DTE, longer dwell → its own N>90).
+//  This tests it on EVERY channel — the doctrine's per-channel prediction is:
+//   • TAIL channels (V3/ALT, QQQ-ORB) → stall should HURT (amputates the convex tail) → OFF
+//   • no-tail BLEEDERS (orb-trend-rider, pb-ride, pb-ride-2, power) → should HELP (free dead slots)
+//   • fast SCALPERS (grind) → ~neutral (self-recycle in ~3 min; nothing to cut)
+//  A surprise (stall helping a tail channel, or hurting a bleeder) is a finding.
 //
-//  FAITHFUL: real Databento NBBO, the live 0.25-tick gate vs 1-tick fills, RISK 500 /
-//  −50% stop, orb-trend-rider's live spec + its +75% native target, 5-window OOS.
-//  Reads the doctrine's bar (Σ up AND ≥4/5 windows hold/improve) — NOT a mirage. If the
-//  mechanism FAILS even here (no tail to confound it), the mechanical stall-exit is
-//  likely unbuildable and strand-4 stays human-led.
+//  FAITHFUL: real Databento NBBO, live 0.25-tick gate vs 1-tick fills, RISK 500 / −50% stop,
+//  each channel's live spec + native target, 5-window OOS (SPY) / single-regime (QQQ).
+//  Per channel: baseline vs a focused PATIENT grid (the orb-trend-rider calibration found the
+//  shape is patient — long N, generous X; short/tight OVERCUTS = mini-amputation). Reports each
+//  channel's best stall + Δ + windows-hold + the verdict. `--deep <slug>` = full 20-config sweep.
 //
-//  npm run stall-exit-probe
+//  npm run stall-exit-probe  [--deep orb-trend-rider]
 // ============================================================================
 
 import { simulateSession } from "./backtest";
 import {
   loadFaithfulRoster, sessionsFor, cfgOf, FUND, FILL_1T, ENTRY_GATE,
-  WINDOWS, winOf, usd, maxDD,
+  WINDOWS, winOf, usd, type Channel,
 } from "./roster-faithful";
 import type { Trade } from "./types";
 
 type Stall = { minMinutes: number; maxFavorPct: number };
+const holdMin = (t: Trade) => ((t.exitTs ?? 0) - (t.entryTs ?? 0)) / 60000;
+
+// Focused PATIENT grid (+ a couple shorter, to catch a 0DTE channel that resolves faster).
+const GRID: Stall[] = [
+  { minMinutes: 45, maxFavorPct: 15 }, { minMinutes: 60, maxFavorPct: 25 },
+  { minMinutes: 90, maxFavorPct: 20 }, { minMinutes: 120, maxFavorPct: 20 },
+  { minMinutes: 120, maxFavorPct: 25 }, { minMinutes: 150, maxFavorPct: 25 },
+];
+const DEEP_NS = [30, 45, 60, 90, 120, 150], DEEP_XS = [10, 15, 20, 25];
 
 async function main() {
+  const deepSlug = (() => { const i = process.argv.indexOf("--deep"); return i >= 0 ? process.argv[i + 1] : null; })();
   const { channels, corpusOf } = await loadFaithfulRoster();
-  const ch = channels.find((c) => c.slug === "orb-trend-rider");
-  if (!ch) throw new Error("orb-trend-rider not in faithful roster");
-  const corpus = corpusOf(ch.symbol);
-  const { real, chainFor } = sessionsFor(ch, corpus);
 
-  // Run orb-trend-rider over every session at a given stall config (undefined = baseline).
-  const run = (stall?: Stall) => {
-    const perWin = new Map<string, { pnl: number; n: number }>();
-    const daily: number[] = [];
+  const runChannel = (ch: Channel, stall: Stall | undefined) => {
+    const corpus = corpusOf(ch.symbol);
+    const { real, chainFor } = sessionsFor(ch, corpus);
+    const perWin = new Map<string, number>();
     const trades: Trade[] = [];
     for (const s of real) {
       const ts = simulateSession(
@@ -45,56 +51,64 @@ async function main() {
         FILL_1T, undefined, undefined, undefined, undefined, 0, ENTRY_GATE, undefined, undefined,
         undefined, stall, // addGate (17th) = undefined · stallExit (18th)
       );
-      const w = winOf(s.dateET);
-      const dayPnl = ts.reduce((a, t) => a + t.pnl, 0);
-      if (w) { const e = perWin.get(w) ?? { pnl: 0, n: 0 }; e.pnl += dayPnl; e.n += ts.length; perWin.set(w, e); }
-      daily.push(dayPnl);
+      const w = winOf(s.dateET); const day = ts.reduce((a, t) => a + t.pnl, 0);
+      if (w) perWin.set(w, (perWin.get(w) ?? 0) + day);
       trades.push(...ts);
     }
-    const total = trades.reduce((a, t) => a + t.pnl, 0);
-    return { trades, perWin, daily, total };
+    return { total: trades.reduce((a, t) => a + t.pnl, 0), perWin, trades, n: real.length };
   };
 
-  const base = run();
-  const baseWin = WINDOWS.map((w) => base.perWin.get(w.name)?.pnl ?? 0);
-  const holdMin = (t: Trade) => ((t.exitTs ?? 0) - (t.entryTs ?? 0)) / 60000; // entryTs/exitTs are epoch-ms numbers
-
-  console.log(`\n  STALL-EXIT CALIBRATION · orb-trend-rider (no-tail substrate, ~zero amputation risk) · ${real.length} sessions · faithful 5-window OOS\n`);
-  console.log(`  BASELINE (no stall): Σ ${usd(base.total)} · ${base.trades.length} trades · ${(100 * base.trades.filter((t) => t.pnl > 0).length / Math.max(1, base.trades.length)).toFixed(0)}% win · maxDD ${usd(maxDD(base.daily))}`);
-  console.log(`    per-window: ${WINDOWS.map((w, i) => `${w.name.split(" ")[0]} ${usd(baseWin[i])}`).join(" · ")}`);
-  console.log(`    baseline hold-time: median ${median(base.trades.map(holdMin)).toFixed(0)}min · p90 ${pctile(base.trades.map(holdMin), 0.9).toFixed(0)}min\n`);
-
-  console.log(`  SWEEP (Σ · Δvs-base · windows≥base · stall-cuts: n/Σ/medHold) — ★ = Σ up AND ≥4/5 windows hold-or-improve:`);
-  const Ns = [30, 45, 60, 90, 120];
-  const Xs = [10, 15, 20, 25];
-  const rows: { N: number; X: number; total: number; d: number; winsHold: number; stallN: number; stallPnl: number; medHold: number; star: boolean }[] = [];
-  for (const N of Ns) for (const X of Xs) {
-    const r = run({ minMinutes: N, maxFavorPct: X });
-    const win = WINDOWS.map((w) => r.perWin.get(w.name)?.pnl ?? 0);
-    const winsHold = win.filter((v, i) => v >= baseWin[i] - 1).length; // hold-or-improve vs baseline
-    const stalls = r.trades.filter((t) => t.exitReason === "stall_exit");
-    const star = r.total > base.total + 1 && winsHold >= 4;
-    rows.push({ N, X, total: r.total, d: r.total - base.total, winsHold, stallN: stalls.length, stallPnl: stalls.reduce((a, t) => a + t.pnl, 0), medHold: stalls.length ? median(stalls.map(holdMin)) : 0, star });
-  }
-  rows.sort((a, b) => b.total - a.total);
-  for (const r of rows) {
-    console.log(
-      `    ${r.star ? "★" : " "} N${String(r.N).padStart(3)} X${String(r.X).padStart(2)}%  Σ ${usd(r.total).padStart(8)}  Δ ${usd(r.d).padStart(7)}  win${r.winsHold}/5  stall ${String(r.stallN).padStart(3)}/${usd(r.stallPnl).padStart(7)} med ${r.medHold.toFixed(0)}min`,
-    );
+  if (deepSlug) { // full sweep on one channel
+    const ch = channels.find((c) => c.slug === deepSlug)!;
+    const base = runChannel(ch, undefined);
+    const baseWin = WINDOWS.map((w) => base.perWin.get(w.name) ?? 0);
+    console.log(`\n  DEEP SWEEP · ${ch.name} (${ch.slug}) · ${base.n} sessions\n  baseline Σ ${usd(base.total)} · ${base.trades.length}t · median hold ${pctile(base.trades.map(holdMin), 0.5).toFixed(0)}min\n`);
+    const rows: any[] = [];
+    for (const N of DEEP_NS) for (const X of DEEP_XS) {
+      const r = runChannel(ch, { minMinutes: N, maxFavorPct: X });
+      const wins = WINDOWS.filter((w, i) => (r.perWin.get(w.name) ?? 0) >= baseWin[i] - 1).length;
+      const st = r.trades.filter((t) => t.exitReason === "stall_exit");
+      rows.push({ N, X, total: r.total, d: r.total - base.total, wins, stN: st.length });
+    }
+    rows.sort((a, b) => b.total - a.total);
+    for (const r of rows) console.log(`    N${String(r.N).padStart(3)} X${String(r.X).padStart(2)}%  Σ ${usd(r.total).padStart(8)}  Δ ${usd(r.d).padStart(7)}  win${r.wins}/5  cuts ${r.stN}`);
+    return;
   }
 
-  const best = rows[0];
-  const stars = rows.filter((r) => r.star);
-  console.log(`\n  READ: ${stars.length ? `${stars.length} config(s) clear the bar (Σ up + ≥4/5 windows) — the stall mechanism frees +EV slots on a no-tail bleeder.` : "NO config clears the bar — cutting stalls does NOT free +EV slots even on a no-tail channel → the mechanical stall-exit is likely unbuildable; strand-4 stays human-led."}`);
-  console.log(`  Best Σ: N${best.N}/X${best.X}% → ${usd(best.total)} (Δ ${usd(best.d)} vs baseline ${usd(base.total)}); stall-cuts realized ${usd(best.stallPnl)} over ${best.stallN} dead slots at med ${best.medHold.toFixed(0)}min hold.`);
-  console.log(`  ⚠ This is the MECHANISM + shape test on a zero-amputation substrate. A win here graduates to the LIVE pb-ride (1DTE) field-test with pb-ride's own dwell-tuned N (>90min); a real-NBBO slow-builder-amputation check is MANDATORY before any tail-channel ever sees it (OFF on V3/ALT/QQQ/momo). [[desk-doctrine]]\n`);
+  // ── ALL-CHANNEL: baseline vs the best PATIENT-grid stall, per channel ──
+  console.log(`\n  STALL-EXIT ACROSS THE FULL ROSTER · faithful real-NBBO · patient grid ${GRID.length} configs\n`);
+  console.log(`  channel              tail?  baseΣ      best-stallΣ  Δ        config      win   cuts  VERDICT`);
+  const tailSet = new Set(["breakout-alt-v3", "breakout-smart-entries", "orb-qqq-trail"]); // doctrine tail channels
+  for (const ch of channels) {
+    const base = runChannel(ch, undefined);
+    const baseWin = WINDOWS.map((w) => base.perWin.get(w.name) ?? 0);
+    let best = { total: base.total, cfg: null as Stall | null, wins: ch.oos ? 5 : 1, cuts: 0 };
+    for (const g of GRID) {
+      const r = runChannel(ch, g);
+      if (r.total > best.total) {
+        const wins = ch.oos ? WINDOWS.filter((w, i) => (r.perWin.get(w.name) ?? 0) >= baseWin[i] - 1).length : 1;
+        best = { total: r.total, cfg: g, wins, cuts: r.trades.filter((t) => t.exitReason === "stall_exit").length };
+      }
+    }
+    const d = best.total - base.total;
+    const isTail = tailSet.has(ch.slug);
+    // VERDICT: a tail channel where ANY stall helps = a surprise to investigate; where best==baseline = OFF confirmed.
+    const verdict = best.cfg == null
+      ? (isTail ? "OFF ✓ (no stall beats baseline — tail intact)" : "no help (stall never beats baseline)")
+      : isTail
+        ? `⚠ stall HELPS a tail ch — investigate amputation read`
+        : d > 200 && best.wins >= 4 ? `HELP — field candidate` : `marginal`;
+    const cfgStr = best.cfg ? `N${best.cfg.minMinutes}/X${best.cfg.maxFavorPct}` : "—";
+    console.log(`  ${ch.name.padEnd(20)} ${(isTail ? "TAIL" : ch.oos ? "spy" : "qqq").padEnd(5)}  ${usd(base.total).padStart(8)}  ${usd(best.total).padStart(9)}  ${usd(d).padStart(7)}  ${cfgStr.padEnd(10)} ${ch.oos ? best.wins + "/5" : " — "}  ${String(best.cuts).padStart(4)}  ${verdict}`);
+  }
+  console.log(`\n  READ: stall-exit is a FREE-THE-STUCK-SLOT lever — it should HELP no-tail bleeders that DWELL`);
+  console.log(`  (orb-trend-rider, pb-ride) and be OFF/neutral elsewhere. A tail channel it "helps" = a false-positive`);
+  console.log(`  to investigate (likely amputating its convex tail in a flat window). Fast scalpers (grind) + fast-`);
+  console.log(`  resolving 0DTE have little dwell to cut. The LIVE field-test target is pb-ride (1DTE, longest dwell).`);
+  console.log(`  ⚠ faithful spec channels model the −50% stop + native target, NOT their live chandelier (roster-faithful`);
+  console.log(`  caveat) — the stall DELTA is valid within-channel; absolute Σ is the pyramid-ext simplification. [[desk-doctrine]]\n`);
 }
 
-function median(xs: number[]): number { return pctile(xs, 0.5); }
-function pctile(xs: number[], p: number): number {
-  if (!xs.length) return 0;
-  const s = [...xs].sort((a, b) => a - b);
-  return s[Math.floor(p * (s.length - 1))];
-}
+function pctile(xs: number[], p: number): number { if (!xs.length) return 0; const s = [...xs].sort((a, b) => a - b); return s[Math.floor(p * (s.length - 1))]; }
 
 main().catch((e) => { console.error(e); process.exit(1); });
