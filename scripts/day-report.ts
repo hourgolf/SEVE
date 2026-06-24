@@ -159,12 +159,28 @@ async function main() {
     console.log(`${sym}: open ${o.toFixed(2)} → close ${c.toFixed(2)} (${(100 * (c / o - 1)).toFixed(2)}%) · range ${(100 * (hi - lo) / o).toFixed(2)}% · ${legs} reversal leg(s) ≥0.3%${legs >= 3 ? "  ⚠ WHIPSAW" : ""}`);
   }
 
-  // ---- NAV truth vs attribution ------------------------------------------------
-  const { data: snaps } = await sb.from("equity_snapshots").select("net_liquidation,captured_at")
-    .is("strategist_id", null).gte("captured_at", `${DATE}T13:00:00Z`).lte("captured_at", `${DATE}T21:30:00Z`)
-    .order("captured_at");
-  const nav = (snaps ?? []) as Array<{ net_liquidation: number; captured_at: string }>;
-  const navDelta = nav.length >= 2 ? Number(nav[nav.length - 1].net_liquidation) - Number(nav[0].net_liquidation) : null;
+  // ---- per-bucket NAV (cockpit P3 — the 3-hypothesis forward test) + true total --
+  // equity_snapshots carries PER-ACCOUNT rows (account_id set, strategist_id null), written by
+  // the worker each cycle. The OLD read filtered strategist_id-null but NOT account_id → it
+  // mixed the two $1M buckets, the ~$98k account, AND the desk-total into one first-vs-last
+  // delta = garbage ("NAV truth +419" on a −$6.5k day). Read per-account, delta each bucket,
+  // SUM for the real total. (Same-day snapshots are interleaved but per-account order holds, so
+  // first-seen = open, last-seen = close per bucket.)
+  const { data: acctRows } = await sb.from("accounts").select("id,name,cred_ref");
+  const acctName = new Map(((acctRows ?? []) as Array<{ id: string; name: string }>).map((a) => [a.id, String(a.name)]));
+  const { data: snapRaw } = await sb.from("equity_snapshots").select("account_id,net_liquidation,captured_at")
+    .not("account_id", "is", null).is("strategist_id", null)
+    .gte("captured_at", `${DATE}T13:00:00Z`).lte("captured_at", `${DATE}T22:00:00Z`).order("captured_at");
+  const navByAcct = new Map<string, { open: number; close: number }>();
+  for (const s of (snapRaw ?? []) as Array<{ account_id: string; net_liquidation: number }>) {
+    const v = Number(s.net_liquidation);
+    const cur = navByAcct.get(s.account_id);
+    if (!cur) navByAcct.set(s.account_id, { open: v, close: v }); else cur.close = v;
+  }
+  const buckets = [...navByAcct.entries()]
+    .map(([id, v]) => ({ name: acctName.get(id) ?? id.slice(0, 8), open: v.open, close: v.close, delta: v.close - v.open }))
+    .sort((a, b) => a.delta - b.delta);
+  const navDelta = buckets.length ? buckets.reduce((a, b) => a + b.delta, 0) : null;
 
   // ---- trades -------------------------------------------------------------------
   const { data: posRaw } = await sb.from("positions")
@@ -232,72 +248,84 @@ async function main() {
 
   const auto = trades.filter((t) => !t.manual);
   const tot = trades.reduce((a, t) => a + t.pnl, 0);
-  console.log(`\nNAV truth: ${navDelta == null ? "n/a" : sgn(navDelta)} · Σ attribution ${sgn(tot)} (auto ${sgn(auto.reduce((a, t) => a + t.pnl, 0))}, manual ${sgn(trades.filter((t) => t.manual).reduce((a, t) => a + t.pnl, 0))}) · ${trades.length} trades`);
-  if (navDelta != null && Math.abs(navDelta - tot) > 300) console.log(`  ⚠ attribution drifts ${sgn(tot - navDelta)} from NAV (open positions / shared-OCC residue?)`);
+  console.log(`\nNAV truth — per bucket (cockpit P3, the 3-hypothesis forward test):`);
+  if (!buckets.length) console.log(`  (no per-account snapshots for ${DATE} — worker down, or pre-cockpit date)`);
+  for (const b of buckets)
+    console.log(`  ${b.name.padEnd(14)} ${Math.round(b.open).toLocaleString().padStart(11)} → ${Math.round(b.close).toLocaleString().padStart(11)}   ${sgn(b.delta).padStart(7)}`);
+  console.log(`  ── TOTAL ${navDelta == null ? "n/a" : sgn(navDelta)} · Σ attribution ${sgn(tot)} (auto ${sgn(auto.reduce((a, t) => a + t.pnl, 0))}, manual ${sgn(trades.filter((t) => t.manual).reduce((a, t) => a + t.pnl, 0))}) · ${trades.length} trades`);
+  if (navDelta != null && Math.abs(navDelta - tot) > 300) console.log(`  ⚠ attribution drifts ${sgn(tot - navDelta)} from NAV (per-account snapshot timing / shared-OCC residue / a mis-booked close — e.g. the close-route account bug)`);
 
-  // ---- coverage: account fills vs desk rows (the uncovered-contract detector) ----
-  // The 06-11 incident surfaced only as a +$58 NAV-vs-attribution gap: a partial-fill
-  // poll recorded qty 1 on a ×2 buy and the extra contract rode UNMANAGED. This makes
-  // the check explicit and daily: per OCC, Alpaca's filled orders today vs the desk's
-  // recorded rows, plus a live held-vs-open-rows audit. Needs ALPACA_KEY/SECRET
-  // (read-only paper endpoints) — degrades to a skip note without them.
+  // ---- coverage: per-bucket account fills vs desk rows (cockpit P3 account-aware) --
+  // Each channel routes to its bucket (strategists.account_id → accounts.cred_ref →
+  // ALPACA_KEY[_<ref>]). The OLD check used ONLY the default keys and compared ALL desk rows
+  // (every bucket) against the default account's fills → a false "ghost qty" for every
+  // Core/Resurrected OCC (those lots live in a DIFFERENT Alpaca account; that false alarm filled
+  // the 06-24 report). Now: resolve each desk row to its bucket and compare per-account against
+  // THAT bucket's Alpaca. A bucket whose creds aren't in .env.local is SKIPPED with a note (never
+  // a false alarm) — add ALPACA_KEY_<ref>/ALPACA_SECRET_<ref> there for full coverage. Both the
+  // 06-11 partial-fill and the 06-24 orphaned-lot classes surface here (buys-vs-rows + held-vs-rows).
   const AK = process.env.ALPACA_KEY, AS = process.env.ALPACA_SECRET;
-  if (!AK || !AS) {
-    console.log(`\ncoverage: skipped (no ALPACA_KEY/ALPACA_SECRET in env)`);
-  } else {
+  const credsFor = (credRef: string | null): { k: string; s: string } | null => {
+    const k = credRef ? process.env[`ALPACA_KEY_${credRef}`] : AK;
+    const s = credRef ? process.env[`ALPACA_SECRET_${credRef}`] : AS;
+    return k && s ? { k, s } : null;
+  };
+  const defaultAcctId = ((acctRows ?? []) as Array<{ id: string; cred_ref: string | null }>).find((a) => !a.cred_ref)?.id ?? "__none__";
+  const { data: chAcctRaw } = await sb.from("strategists").select("id,account_id");
+  const acctOfCh = new Map(((chAcctRaw ?? []) as Array<{ id: string; account_id: string | null }>).map((c) => [c.id, c.account_id ?? defaultAcctId]));
+  const grpByAcct = (rows: Array<{ strategist_id: string; occ_symbol: string; qty: number }>): Map<string, Map<string, number>> => {
+    const m = new Map<string, Map<string, number>>();
+    for (const p of rows) {
+      const aid = acctOfCh.get(p.strategist_id) ?? defaultAcctId;
+      if (!m.has(aid)) m.set(aid, new Map());
+      const mm = m.get(aid)!; mm.set(p.occ_symbol, (mm.get(p.occ_symbol) ?? 0) + Number(p.qty));
+    }
+    return m;
+  };
+  const { data: openedRaw } = await sb.from("positions").select("strategist_id,occ_symbol,qty")
+    .gte("opened_at", `${DATE}T13:00:00Z`).lte("opened_at", `${DATE}T22:00:00Z`);
+  const { data: openRowsRaw } = await sb.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open");
+  const boughtByAcct = grpByAcct((openedRaw ?? []) as Array<{ strategist_id: string; occ_symbol: string; qty: number }>);
+  const openByAcct = grpByAcct((openRowsRaw ?? []) as Array<{ strategist_id: string; occ_symbol: string; qty: number }>);
+
+  console.log(`\ncoverage (per bucket — account fills vs desk rows)`);
+  const PAPER = "https://paper-api.alpaca.markets";
+  for (const a of (acctRows ?? []) as Array<{ id: string; name: string; cred_ref: string | null }>) {
+    const dBought = boughtByAcct.get(a.id) ?? new Map<string, number>();
+    const dOpen = openByAcct.get(a.id) ?? new Map<string, number>();
+    if (!dBought.size && !dOpen.size) continue; // bucket didn't trade today
+    const creds = credsFor(a.cred_ref);
+    if (!creds) { console.log(`  ${a.name}: skipped — no creds in .env.local (ALPACA_KEY_${a.cred_ref}); ${dBought.size} OCC(s) untested`); continue; }
     try {
-      const aHdr = { "APCA-API-KEY-ID": AK, "APCA-API-SECRET-KEY": AS };
-      const PAPER = "https://paper-api.alpaca.markets";
-      // day's terminal orders, paginated by sliding `until` (endpoint caps at 500/page)
+      const aHdr = { "APCA-API-KEY-ID": creds.k, "APCA-API-SECRET-KEY": creds.s };
       const orders: Array<{ symbol: string; side: string; filled_qty: string; submitted_at: string }> = [];
       let until = `${DATE}T22:00:00Z`;
       for (let page = 0; page < 6; page++) {
         const r = await fetch(`${PAPER}/v2/orders?status=closed&limit=500&direction=desc&after=${DATE}T13:00:00Z&until=${until}`, { headers: aHdr });
-        if (!r.ok) throw new Error(`alpaca orders ${r.status}`);
+        if (!r.ok) throw new Error(`orders ${r.status}`);
         const batch = await r.json() as typeof orders;
         orders.push(...batch);
         if (batch.length < 500) break;
         until = batch[batch.length - 1].submitted_at;
       }
-      const acct = new Map<string, { b: number; s: number }>();
-      for (const o of orders) {
-        const q = Number(o.filled_qty);
-        if (!(q > 0)) continue;
-        const a = acct.get(o.symbol) ?? { b: 0, s: 0 };
-        if (o.side === "buy") a.b += q; else a.s += q;
-        acct.set(o.symbol, a);
-      }
-      // desk buys: Σ row qty opened today per OCC (every channel — rows mirror fills)
-      const { data: openedRaw } = await sb.from("positions").select("occ_symbol,qty")
-        .gte("opened_at", `${DATE}T13:00:00Z`).lte("opened_at", `${DATE}T22:00:00Z`);
-      const deskBought = new Map<string, number>();
-      for (const p of (openedRaw ?? []) as Array<{ occ_symbol: string; qty: number }>) {
-        deskBought.set(p.occ_symbol, (deskBought.get(p.occ_symbol) ?? 0) + Number(p.qty));
-      }
-      // live audit: what Alpaca holds NOW vs Σ open desk rows ("check coverage")
+      const acctBuy = new Map<string, number>();
+      for (const o of orders) { const q = Number(o.filled_qty); if (q > 0 && o.side === "buy") acctBuy.set(o.symbol, (acctBuy.get(o.symbol) ?? 0) + q); }
       const pr = await fetch(`${PAPER}/v2/positions`, { headers: aHdr });
       const alpPos = pr.ok ? (await pr.json() as Array<{ symbol: string; qty: string }>) : [];
-      const { data: openRows } = await sb.from("positions").select("occ_symbol,qty").eq("status", "open");
-      const openByOcc = new Map<string, number>();
-      for (const p of (openRows ?? []) as Array<{ occ_symbol: string; qty: number }>) {
-        openByOcc.set(p.occ_symbol, (openByOcc.get(p.occ_symbol) ?? 0) + Number(p.qty));
-      }
       const issues: string[] = [];
-      for (const [occ, a] of acct) {
-        const rows = deskBought.get(occ) ?? 0;
-        if (a.b !== rows) issues.push(`${occ}: account bought ${a.b} / desk rows opened ${rows} → ${a.b > rows ? `+${a.b - rows} UNCOVERED at entry (partial-fill class)` : `${rows - a.b} over-recorded (ghost qty)`}`);
-        if (a.b !== a.s) issues.push(`${occ}: EOD net ${a.b - a.s > 0 ? "+" : ""}${a.b - a.s} (buys ${a.b} / sells ${a.s}) — carried overnight, expired on book, or a prior-day carry closed today`);
+      for (const [occ, b] of acctBuy) {
+        const rows = dBought.get(occ) ?? 0;
+        if (b !== rows) issues.push(`${occ}: account bought ${b} / desk rows ${rows} → ${b > rows ? `+${b - rows} UNCOVERED (partial-fill)` : `${rows - b} over-recorded (ghost qty)`}`);
       }
       for (const ap of alpPos) {
         const held = Math.abs(Math.round(Number(ap.qty)));
-        const rows = openByOcc.get(ap.symbol) ?? 0;
-        if (held !== rows) issues.push(`${ap.symbol}: Alpaca holds ${held} / open desk rows ${rows} → ${held > rows ? "UNCOVERED — close or reconstruct" : "ghost rows"}`);
+        const rows = dOpen.get(ap.symbol) ?? 0;
+        if (held !== rows) issues.push(`${ap.symbol}: Alpaca holds ${held} / open desk rows ${rows} → ${held > rows ? "UNCOVERED — orphan, close it" : "ghost rows"}`);
       }
-      console.log(`\ncoverage (account vs rows)`);
-      if (issues.length) for (const i of issues) console.log(`  ⚠ ${i}`);
-      else console.log(`  ✓ clean: ${acct.size} OCC(s) — account buys == desk rows opened, EOD flat, held == open rows`);
+      if (issues.length) { console.log(`  ${a.name}:`); for (const i of issues) console.log(`    ⚠ ${i}`); }
+      else console.log(`  ${a.name}: ✓ clean (${acctBuy.size} OCC(s) — buys == desk rows, held == open rows)`);
     } catch (e) {
-      console.log(`\ncoverage: check failed (${(e as Error).message})`);
+      console.log(`  ${a.name}: check failed (${(e as Error).message})`);
     }
   }
 
