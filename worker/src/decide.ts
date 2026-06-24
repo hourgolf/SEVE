@@ -12,6 +12,7 @@
 // ============================================================================
 
 import { computeFeatures } from "../../engine/engine";
+import { macdAt } from "../../engine/macd";
 import { getStrategy } from "../../engine/registry";
 import { specToStrategyDef, specPremiumExit } from "../../engine/specEvaluate";
 import { roundTripCostUsd as engineRoundTrip, type CostModel } from "../../engine/cost";
@@ -191,6 +192,9 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // Reuse the engine's features; only minutesToClose is bars-relative (=0 at the
   // last bar) so override it with the real time to the 16:00 ET close.
   const f: Features = { ...computeFeatures(bars, i), minutesToClose: ctx.minutesToClose };
+  // Forensics MACD(12/26/9) at the decision bar — the SAME helper the historical backfill uses,
+  // so live-stamped == backfilled. Read-only context for the per-trade dataset; NOT a gate input.
+  const fm = macdAt(bars.map((b) => b.close));
 
   const row = ctx.openRows.get(ch.id);
   const alp = row ? ctx.alpacaByOcc.get(row.occ_symbol) : undefined;
@@ -367,7 +371,9 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     }
     return {
       ...base, action: "enter", reason: intent.reason, direction: dir, occ, qty, blocked,
-      detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), gap: ctx.gap != null ? +ctx.gap.toFixed(3) : null, expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close) },
+      detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), gap: ctx.gap != null ? +ctx.gap.toFixed(3) : null, expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close),
+        // forensics entry context (per-trade dataset, matches the historical backfill) — read-only, not gate inputs:
+        vwap: +f.vwap.toFixed(3), vwapDist: +(f.close - f.vwap).toFixed(3), macd: fm?.macd ?? null, macdSignal: fm?.signal ?? null, macdHist: fm?.hist ?? null, mom: +f.mom.toFixed(3), orHi: f.openRangeHi != null ? +f.openRangeHi.toFixed(3) : null, orLo: f.openRangeLo != null ? +f.openRangeLo.toFixed(3) : null },
     };
   }
 

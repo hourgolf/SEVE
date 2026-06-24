@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-24c"; // + IWM symbol set + per-account orphan safety-net (detect/page always; flatten behind ORPHAN_FLATTEN)
+export const WORKER_VERSION = "stream-2026-06-24d"; // + forensics VWAP+MACD in the entry stamp (matches the historical backfill; gate untouched)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
