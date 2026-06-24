@@ -68,9 +68,28 @@ export async function POST(req: Request) {
   // couldn't see the sell, so its re-buy guard kept RESURRECTING the already-closed position as a
   // ghost row at the stale entry ("recovered … lost insert") and mis-booked the realized. Falls
   // back to `manual` only if the strategist can't be resolved.
-  const { data: strat } = await sb.from("strategists").select("slug").eq("id", pos.strategist_id).maybeSingle();
+  // Resolve the position's ACCOUNT → its Alpaca creds. Cockpit P3 (2026-06-24) made each
+  // bucket a SEPARATE paper account (strategists.account_id → accounts.cred_ref → the worker's
+  // ALPACA_KEY_<ref>/ALPACA_SECRET_<ref>). This route predated P3 and always used the DEFAULT
+  // keys → closing a Core/Resurrected position queried the WRONG Alpaca account, saw 0 held,
+  // placed NO sell, and booked $0 while the real lot rode on ORPHANED in its bucket. Mirror the
+  // worker's resolveDefaultAccount/apiForAccount: cred_ref null/empty = default keys.
+  const { data: strat } = await sb.from("strategists").select("slug,account_id").eq("id", pos.strategist_id).maybeSingle();
   const slug = String(strat?.slug ?? "manual");
-  const aHdr = { "APCA-API-KEY-ID": AK, "APCA-API-SECRET-KEY": AS, "content-type": "application/json" };
+  let credRef = "";
+  if (strat?.account_id) {
+    const { data: acct } = await sb.from("accounts").select("cred_ref").eq("id", strat.account_id).maybeSingle();
+    credRef = acct?.cred_ref ? String(acct.cred_ref) : "";
+  }
+  const acctKey = credRef ? process.env[`ALPACA_KEY_${credRef}`] : AK;
+  const acctSecret = credRef ? process.env[`ALPACA_SECRET_${credRef}`] : AS;
+  // Fail CLOSED if this bucket's creds aren't in the Vercel env — NEVER sell the wrong account
+  // or book a phantom close. The row stays open; close the lot in its own Alpaca account, or add
+  // ALPACA_KEY_<ref>/ALPACA_SECRET_<ref> to Vercel (the same pair the worker uses on Railway).
+  if (!acctKey || !acctSecret) {
+    return NextResponse.json({ ok: false, error: `Alpaca creds for account cred_ref '${credRef}' not set in Vercel env — close this position in its own Alpaca account, or add ALPACA_KEY_${credRef}/ALPACA_SECRET_${credRef}` }, { status: 503 });
+  }
+  const aHdr = { "APCA-API-KEY-ID": acctKey, "APCA-API-SECRET-KEY": acctSecret, "content-type": "application/json" };
 
   // Cap the sell to what Alpaca ACTUALLY holds for this OCC. Manual-exit twins (and the
   // power mirrors) SHARE their OCC with the base machine channel — same entry, one netted
