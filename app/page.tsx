@@ -32,7 +32,12 @@ function Surface({
   const [symbol, setSymbol] = useState("SPY");
   const data = useMarketData(symbol);
   const view = useDeskState();
-  const feed = useDeskFeed();
+  // Multi-account (cockpit P3): the selected bucket scopes the live feed (NAV / signals /
+  // positions / day-P&L) as well as the roster. Declared ABOVE useDeskFeed so the feed reads
+  // the selected account's data, not the desk total.
+  const { accounts } = useAccounts();
+  const [acctId, setAcctId] = useState<string | null>(null);
+  const feed = useDeskFeed(acctId);
   const write = useDeskWrite();
   const isMobile = useIsMobile();
   const [selected, setSelected] = useState<string | null>(null);
@@ -53,9 +58,7 @@ function Surface({
 
   // Lifted to the seam — called ONCE here so the persistent shell AND both layouts
   // share one accounts/ops poll + one live-marked P&L derivation (no re-subscribe).
-  const { accounts } = useAccounts();
   const ops = useOpsStatus();
-  const [acctId, setAcctId] = useState<string | null>(null);
   useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);

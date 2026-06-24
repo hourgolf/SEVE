@@ -49,7 +49,7 @@ function signalMessage(row: any): string {
  * shapes match the sample feed it replaces, so no component changes. Honest
  * empty states until the bots trade; `status: "error"` if reads are denied.
  */
-export function useDeskFeed(): DeskFeed {
+export function useDeskFeed(acctId: string | null = null): DeskFeed {
   const { desk } = useDeskState();
   const totalCapital = desk.fund.total_capital_usd;
 
@@ -72,33 +72,23 @@ export function useDeskFeed(): DeskFeed {
         // current session even after the ET session crosses midnight UTC; the exact
         // session start is applied in JS below (sessionStartMs).
         const closedSince = new Date(Date.now() - 20 * 3600_000).toISOString();
+        // Cockpit P3 account scoping: when a bucket is selected, the live feed reads ITS
+        // channels' positions/signals (inner-join strategists.account_id) + ITS per-account
+        // equity snapshot; with no acctId it falls back to the desk total (account_id NULL).
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        const sel = acctId ? "*, strategists!inner(slug,account_id)" : "*, strategists(slug)";
+        const byAcct = (q: any) => (acctId ? q.eq("strategists.account_id", acctId) : q);
         const [posRes, sigRes, eqRes, closedRes] = await Promise.all([
-          sb
-            .from("positions")
-            .select("*, strategists(slug)")
-            .eq("status", "open")
-            .limit(100),
-          sb
-            .from("signals")
-            .select("*, strategists(slug)")
-            .order("created_at", { ascending: false })
-            .limit(16),
-          sb
-            .from("equity_snapshots")
-            .select("net_liquidation,captured_at")
-            .is("strategist_id", null)
-            .is("account_id", null) // desk-TOTAL rows only (per-bucket rows carry account_id — cockpit P3)
-            .order("captured_at", { ascending: false })
-            .limit(MAX_CURVE),
+          byAcct(sb.from("positions").select(sel).eq("status", "open")).limit(100),
+          byAcct(sb.from("signals").select(sel)).order("created_at", { ascending: false }).limit(16),
+          (acctId
+            ? sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).eq("account_id", acctId)
+            : sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).is("account_id", null)
+          ).order("captured_at", { ascending: false }).limit(MAX_CURVE),
           // recent CLOSED trades (narrowed to the current session in JS) — for the
           // realized day P&L + the recent-trades view, so fast scalps don't vanish.
-          sb
-            .from("positions")
-            .select("*, strategists(slug)")
-            .eq("status", "closed")
-            .gte("closed_at", closedSince)
-            .order("closed_at", { ascending: false })
-            .limit(400),
+          byAcct(sb.from("positions").select(sel).eq("status", "closed").gte("closed_at", closedSince))
+            .order("closed_at", { ascending: false }).limit(400),
         ]);
         if (posRes.error || sigRes.error || eqRes.error) throw new Error("read denied");
         if (!mounted.current) return;
@@ -206,7 +196,7 @@ export function useDeskFeed(): DeskFeed {
         }
       }
     };
-  }, []);
+  }, [acctId]); // re-poll + re-subscribe when the selected bucket changes
 
   // Day P&L = open (unrealized) + today's closed (realized).
   const dayPositions = useMemo(() => [...positions, ...closedToday], [positions, closedToday]);
