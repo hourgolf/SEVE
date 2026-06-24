@@ -8,7 +8,59 @@ durable context for a new session. Read it first.
 - **Supabase project ref:** `xvdfsxwwedltvdktqdac` (free tier — mind the 0.5 GB cap).
 - Deploys auto on `git push` to `main` (Vercel; SSH deploy key already configured).
 
-## SESSION HANDOFF — 2026-06-19 (REGIME MINED OUT → FOCUS #2 SIZING + #4 COST; TWO PROBES QUEUED) — READ FIRST
+> ⚠ CLAUDE.md handoffs lapsed 06-19→06-24 — the 06-22 (nakamoto vocab) + 06-23 (cockpit/doctrine) work
+> lives in **memory/** (read `desk-doctrine.md` FIRST, then `cockpit-p3-multi-account.md`,
+> `doctrine-drift-and-forward-validation.md`). The block below re-anchors the convention.
+
+## SESSION HANDOFF — 2026-06-24 (COCKPIT LIVE-PROVEN + FORENSICS DATASET DEPLOYED) — READ FIRST
+**Two things shipped + verified live today; the rest is a clean queue. Doctrine = `memory/desk-doctrine.md` (READ FIRST):
+the desk is a convex-bet engine competing for a scarce ONE-AT-A-TIME slot per channel; forward(paper) > backtest.**
+
+**1. COCKPIT P3 LIVE-PROVEN (the morning watch PASSED).** The 3-account multi-bucket cockpit routed real orders to
+the right Alpaca accounts on its first live day: **Core→acct2 ($1M; held a QQQ 719C, NAV diverged to $999,415),
+Resurrected→acct3 ($1M; pb-ride + pb-ride-2 fired = bucket live), Bleeders→acct1 ($98,516; grind/breakout).** All
+3 per-bucket NAVs diverge cleanly = per-account routing + netting + snapshots all correct. The old pb-ride
+`not_armed` issue is gone. Worker `stream-2026-06-24a`. See `memory/cockpit-p3-multi-account.md`.
+
+**2. DURABLE PER-TRADE FORENSICS DEPLOYED + CAPTURING (operator's ask: peak%/giveback/MFE for each trade, for
+weeks-to-months pattern analysis + "teaching edge to the edge-less channels").** Before today we only banked
+entry/exit/realized/close_reason/timing; MFE/peak/giveback were reconstruct-only from `option_quotes` (7d prune)
+and the entry reason lived in a separate table. NOW stamped ON THE POSITION ROW, live (`44_trade_forensics.sql`
+APPLIED, all additive/nullable; commit `86f22a2`): **`peak_mark`** (running MAX mark, ratcheted in the 10s
+fast-exit sweep, NEW-high-only writes, restart-safe → MFE%=(peak−entry)/entry, giveback=(peak−exit)/(peak−entry))
++ **`entry_reason`** + **`entry_features`** (jsonb: gap/er/relVol/atr/…) + **`entry_delta`**. VERIFIED capturing
+(peak_mark ratcheting live: pb-ride +3.4%, grind-smart +22.5% MFE). ⚠ **entry_reason confirmation PENDING** — the
+15:17 entries were old-worker transition inserts (blank); the capture path is proven by peak_mark, and entry_reason
+stamps on the next clean 24a entry (a background watcher was catching it; if still blank next session, query
+`positions where entry_reason is not null and opened_at::date=today` — empty = investigate the stamp). The
+`day-report` already computes MFE%/giveback% from these fields same-week.
+
+**3. STALL-EXIT KNOB rode this deploy (default-off, byte-identical until armed).** Strand-4 lever: cut a NON-MOVER
+to free the one-at-a-time slot. Engine + worker (`stall_minutes`/`stall_max_favor_pct`, migration 43) built +
+calibrated. NOT armed. Field it on pb-ride/pb-ride-2 (~N=120min / X=25% favor) shadow-first after a clean cockpit
+day. [[desk-doctrine]] strand-4.
+
+**NEXT STEPS (prioritized, all hands-off / machine-side per the operator's standing preference):**
+1. **IWM CHANNELS — the validated 2nd index (MOVE 3: V3/ALT GENERALIZE 5/5 OOS on IWM, +$6.5–6.6k each).** Add IWM
+   V3/ALT as live Core channels = real diversification + faster forward at-bats, zero driver's-seat. A REAL build
+   (not a flip): add `IWM` to the worker symbol set (`SYMBOLS`), create the channel rows (clone V3/ALT specs,
+   underlying=IWM, account_id=Core), confirm the worker handles IWM 0DTE chains (data feed + chain snapshot).
+   Backfill exists (`data/databento-mdte-iwm` + `repair-bars-archive --underlying IWM`). The MOVE 0/3/4 trilogy
+   verdict: the edge is broad-market gap-momentum, cross-index-generalizable (SPY+IWM), NOT a new shape — so growth
+   = cross-index at-bats, don't re-hunt directional entries (MOVE 4 found no survivor). See `memory/desk-doctrine.md`
+   "⭐ EDGE STATUS".
+2. **FORENSICS VIEW** — once ~2–4 weeks accrue, a per-trade peak%/MFE/giveback-by-channel view/report (reads the
+   new durable columns) so the dataset is one query away (the "see it" layer over the now-flowing capture). The
+   "teach edge" analysis (compare V3/ALT entry-context+trajectory vs the edge-less channels) is the payoff, months out.
+3. **FIELD STALL-EXIT** on pb-ride (above), shadow-watch the `stall_exit` close_reason.
+4. **PB-COMPOUND + FOMC channel** — the remaining cockpit-roadmap builds (operator's order: Cockpit→MOMO→PB-compound→FOMC).
+   MOMO is armed (acct3). PB-compound = the +30%-redeploy harvest on the no-tail PB channels ([[compound-vs-ride-verdict]]).
+
+**STANDING:** run `day-report` SAME-WEEK (forensics/peaks need option_quotes 7d; nightly `npm run capture` automates
+the archive). The cockpit's per-bucket NAVs should keep diverging — that's the clean 3-hypothesis forward test the
+whole session was for. Confirm `entry_reason` populated on the next session's first trades.
+
+## SESSION HANDOFF — 2026-06-19 (REGIME MINED OUT → FOCUS #2 SIZING + #4 COST; TWO PROBES QUEUED)
 **Exhaustive regime-awareness reopen (every thread FAILED, all 4-skeptic adversarially verified), then pivoted
 to the two HANDS-OFF levers the operator chose: #2 SIZING/ALLOCATION + #4 LOWER THE COST. Two probes are queued
 for the NEXT session to BUILD + RUN — full specs below. Operator wants to stay hands-off; both levers are
