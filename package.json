@@ -129,7 +129,8 @@
     "pyramid-graduation-replay": "tsx --env-file=.env.local engine/pyramid-graduation-replay.ts",
     "grind-slippage-probe": "tsx --env-file=.env.local engine/grind-slippage-probe.ts",
     "stall-exit-probe": "tsx --env-file=.env.local engine/stall-exit-probe.ts",
-    "null-desk-probe": "tsx --env-file=.env.local engine/null-desk-probe.ts"
+    "null-desk-probe": "tsx --env-file=.env.local engine/null-desk-probe.ts",
+    "universe-port-probe": "tsx --env-file=.env.local engine/universe-port-probe.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
