@@ -68,9 +68,11 @@ async function pageAll<T>(make: (from: number) => any): Promise<T[]> {
 const floorMin = (ms: number) => ms - (ms % 60_000);
 
 type Pos = {
-  id: string; strategist_id: string; occ_symbol: string; underlying: string | null;
+  id: string; strategist_id: string; occ_symbol: string; underlying: string | null; opt_type: string;
+  qty: number; avg_entry_price: number; realized_pnl: number | null;
   opened_at: string; closed_at: string | null;
   entry_features: unknown; entry_reason: string | null; entry_delta: number | null; peak_mark: number | null;
+  close_reason: string | null; strategists?: { slug?: string; name?: string } | null;
 };
 type Sig = { ts: number; signal_type: string | null; rationale: any };
 
@@ -119,7 +121,7 @@ async function main() {
   console.log(`backfill-forensics — closed positions opened ≥ ${FROM} (ET)\n`);
 
   const positions = await pageAll<Pos>((from) => sb.from("positions")
-    .select("id,strategist_id,occ_symbol,underlying,opened_at,closed_at,entry_features,entry_reason,entry_delta,peak_mark")
+    .select("id,strategist_id,occ_symbol,underlying,opt_type,qty,avg_entry_price,realized_pnl,opened_at,closed_at,entry_features,entry_reason,entry_delta,peak_mark,close_reason,strategists(slug,name)")
     .eq("status", "closed").gte("opened_at", `${FROM}T00:00:00Z`).order("opened_at", { ascending: true }));
 
   // acted_on entry signals → index by strategist_id|occ (the no-FK join, build-training-store rule)
@@ -149,6 +151,7 @@ async function main() {
   }
 
   const rows: Array<{ id: string; entry_features: Record<string, unknown> | null; entry_reason: string | null; entry_delta: number | null; peak_mark: number | null }> = [];
+  const dataset: Record<string, unknown>[] = []; // flat per-trade rows for the pattern-mining pass
   const stat = { total: 0, feat: 0, reason: 0, delta: 0, peak: 0, noSession: 0, noSignal: 0 };
   for (const p of positions) {
     stat.total++;
@@ -204,10 +207,30 @@ async function main() {
       entry_delta: p.entry_delta ?? entryDelta,
       peak_mark: p.peak_mark ?? peak,
     });
+
+    // flat analysis row: entry context (incl VWAP/MACD) + trajectory + outcome
+    const entryPx = Number(p.avg_entry_price), q = Number(p.qty), realized = Number(p.realized_pnl ?? 0);
+    const exitPx = q > 0 ? entryPx + realized / (q * 100) : entryPx;
+    const pkUsed = p.peak_mark ?? peak;
+    const mfePct = pkUsed != null && entryPx > 0 ? r3(((pkUsed - entryPx) / entryPx) * 100) : null;
+    const givebackPct = pkUsed != null && pkUsed > entryPx && exitPx < pkUsed ? r3(((pkUsed - exitPx) / (pkUsed - entryPx)) * 100) : null;
+    dataset.push({
+      id: p.id, date: d, channel: p.strategists?.name ?? p.strategists?.slug ?? sym, slug: p.strategists?.slug ?? null,
+      sym, dir: p.opt_type, reason: p.entry_reason ?? reason,
+      ...(mergedFeat ?? {}),
+      entryDelta: p.entry_delta ?? entryDelta,
+      entry: r3(entryPx), exit: r3(exitPx), qty: q, pnl: realized,
+      peak: pkUsed != null ? r3(pkUsed) : null, mfePct, givebackPct,
+      holdMin: Math.round((closeMs - openMs) / 60000), exitReason: p.close_reason ?? null,
+    });
   }
 
   console.log(`\n${stat.total} trades · features ${stat.feat} · reason ${stat.reason} · delta ${stat.delta} · peak ${stat.peak}`);
   console.log(`  gaps: ${stat.noSession} no-session-bars · ${stat.noSignal} no-matched-signal`);
+
+  // Always emit the flat analysis dataset (the pattern-mining substrate), independent of the DB apply.
+  writeFileSync("data/forensics-dataset.jsonl", dataset.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  console.log(`→ data/forensics-dataset.jsonl (${dataset.length} trades · entry context + MFE/giveback + outcome)`);
 
   if (WRITE && sbWrite) {
     console.log(`\napplying ${rows.length} rows via service role…`);
