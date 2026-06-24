@@ -216,9 +216,12 @@ export async function executeEntry(
       await store.journal("WARN", `${d.slug}: buy ${occ} ended ${o.status || "unfilled"} ×0 — no contracts, no row`, { order_id: o.id });
       return;
     }
+    const eq = ctx.chain.byOcc(occ); // ATM delta at fill (durable entry greek)
     const err = await store.insertPosition({
       strategist_id: ch.id, occ_symbol: occ, underlying: ch.underlying,
       expiration: (d.detail?.expiry as string) ?? ctx.todayET, strike, opt_type: dir, qty: fillQty, avg_entry_price: entryPx,
+      // durable per-trade forensics (44_trade_forensics): the entry side of the dataset.
+      entry_reason: d.reason, entry_features: (d.detail ?? null) as Record<string, unknown> | null, entry_delta: eq?.delta ?? null,
     });
     if (err) {
       await store.journal("WARN", `${d.slug}: ORDER FILLED but position insert FAILED (${err}) — reconcile manually`, { occ, order_id: o.id });

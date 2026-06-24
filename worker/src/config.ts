@@ -156,7 +156,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-23b"; // + strand-4 stall-exit knob (stall_minutes/stall_max_favor_pct, default 0 = off)
+export const WORKER_VERSION = "stream-2026-06-24a"; // + durable per-trade forensics (peak_mark MFE ratchet + entry_reason/features/delta)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

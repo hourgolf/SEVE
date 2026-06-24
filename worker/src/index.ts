@@ -412,8 +412,11 @@ async function fastExitSweep(): Promise<void> {
       const mid = chain?.byOcc(r.occ_symbol)?.mid ?? 0;
       if (!(mid > 0)) continue;
       const key = entryKey(r.strategist_id, r.occ_symbol);
-      const peak = Math.max(peakMidByKey.get(key) ?? r.avg_entry_price, mid);
+      // seed from the persisted peak_mark so a worker restart doesn't lose the MFE high-water mark
+      const prevPeak = peakMidByKey.get(key) ?? r.peak_mark ?? r.avg_entry_price;
+      const peak = Math.max(prevPeak, mid);
       peakMidByKey.set(key, peak);
+      if (peak > prevPeak) void store.markPeak(r.id, peak); // durable MFE ratchet, NEW-high only (44_trade_forensics; off the trade path)
       // "The desk summons you" — premium-side pages off the same ~10s sweep state:
       // a ripper crossing +CROSS%, and a meaningful peak giving back ≥ FRAC of the
       // move (the positions panel's 50%-giveback amber, pushed to the phone live).

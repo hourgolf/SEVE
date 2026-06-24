@@ -90,6 +90,7 @@ export interface PositionRow {
   expiration: string | null;
   opened_at: string | null;
   status: string;
+  peak_mark: number | null; // durable MFE source — the running MAX option mark over the hold (44_trade_forensics)
 }
 
 const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServiceKey, {
@@ -205,7 +206,15 @@ export async function getOpenPositions(): Promise<PositionRow[]> {
     expiration: p.expiration ?? null,
     opened_at: p.opened_at ?? null,
     status: p.status,
+    peak_mark: p.peak_mark != null ? Number(p.peak_mark) : null,
   }));
+}
+
+/** Durable MFE: persist the running peak option mark (the fast-exit sweep ratchets it).
+ *  The in-memory peak is already monotonic, so a direct write is correct. Display-only. */
+export async function markPeak(id: string, peak: number): Promise<void> {
+  try { await sb.from("positions").update({ peak_mark: peak }).eq("id", id); }
+  catch { /* forensics only — never block the trade path */ }
 }
 
 // Today's realized P&L for a channel (for the Stop knob gate). closedAfterDate is
@@ -288,9 +297,14 @@ export async function insertSignal(row: {
 export async function insertPosition(row: {
   strategist_id: string; occ_symbol: string; underlying: string; expiration: string;
   strike: number; opt_type: "call" | "put"; qty: number; avg_entry_price: number;
+  // durable per-trade forensics (44_trade_forensics) — the entry side of the dataset.
+  entry_reason?: string; entry_features?: Record<string, unknown> | null; entry_delta?: number | null;
 }): Promise<string | null> {
+  const { entry_reason, entry_features, entry_delta, ...core } = row;
   const { error } = await sb.from("positions").insert({
-    ...row, current_mark: row.avg_entry_price, unrealized_pnl: 0, status: "open",
+    ...core, current_mark: core.avg_entry_price, unrealized_pnl: 0, status: "open",
+    peak_mark: core.avg_entry_price, // MFE ratchet starts at entry
+    entry_reason: entry_reason ?? null, entry_features: entry_features ?? null, entry_delta: entry_delta ?? null,
   });
   return error ? error.message : null;
 }
