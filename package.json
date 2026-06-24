@@ -70,6 +70,7 @@
     "repair-bars-archive": "tsx scripts/repair-bars-archive.ts",
     "verify-bars-archive": "tsx scripts/verify-bars-archive.ts",
     "day-report": "tsx --env-file=.env.local scripts/day-report.ts",
+    "backfill-forensics": "tsx --env-file=.env.local scripts/backfill-forensics.ts",
     "override-scorecard": "tsx scripts/override-scorecard.ts",
     "build-training-store": "tsx --env-file=.env.local scripts/build-training-store.ts",
     "gap-sizing-probe": "tsx --env-file=.env.local engine/gap-sizing-probe.ts",
