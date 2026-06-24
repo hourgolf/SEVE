@@ -436,6 +436,7 @@ async function fastExitSweep(): Promise<void> {
         isPowerTrail: policy.POWER_TRAIL_CHANNELS.has(ch.slug),
         isManual: /-manual$/i.test(ch.slug),
         minutesToClose: Math.max(0, RTH_CLOSE - nowMin),
+        stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)
       }, mid, peak);
       if (!reason) continue;
       info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (mid ${mid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)})`);

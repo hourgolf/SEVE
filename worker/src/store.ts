@@ -53,6 +53,12 @@ export interface ChannelConfig {
   // stack capped at max_contracts. The validated "cap12" arm = pyramid_adds=3 + max_contracts=12.
   // Only ever acts on the hardcoded PYRAMID_SLUGS (V3/ALT). (pyramid-roster-faithful, 2026-06-19.)
   pyramid_adds: number;
+  // STRAND-4 STALL-EXIT (43_stall_exit.sql, desk-doctrine.md): cut a NON-MOVER held ≥ stall_minutes
+  // whose PEAK mark never popped past stall_max_favor_pct above entry → free the one-at-a-time slot.
+  // 0 = OFF (default, byte-identical). Applied in the fast-exit sweep (premiumExitReason), lowest
+  // priority. Calibrated PATIENT; live field-test = pb-ride (1DTE). NOT for tail channels (V3/ALT/QQQ).
+  stall_minutes: number;
+  stall_max_favor_pct: number;
 }
 export interface FundState {
   total_capital_usd: number;
@@ -129,6 +135,8 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       entry_dte: Math.max(0, Math.min(1, Number(cfg.entry_dte ?? 0))),
       take_profit_pct: Math.max(0, Number(cfg.take_profit_pct ?? 0)),
       pyramid_adds: Math.max(0, Math.floor(Number(cfg.pyramid_adds ?? 0))),
+      stall_minutes: Math.max(0, Math.floor(Number(cfg.stall_minutes ?? 0))),
+      stall_max_favor_pct: Math.max(0, Number(cfg.stall_max_favor_pct ?? 0)),
     });
   }
   const fund: FundState | null = fundRow

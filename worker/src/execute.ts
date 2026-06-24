@@ -302,6 +302,8 @@ export interface FastExitCheck {
   isPowerTrail: boolean;
   isManual: boolean;
   minutesToClose: number;
+  stallMinutes?: number;     // strand-4 stall-exit: cut after this many minutes held if it never popped (0/undef = off)
+  stallMaxFavorPct?: number; // ...where "never popped" = PEAK mark < entry × (1 + this/100)
 }
 
 export function premiumExitReason(c: FastExitCheck, mark: number, peak: number): string | null {
@@ -318,6 +320,15 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
   if (c.isPowerTrail && peak >= entry * policy.POWER_TRAIL_ENGAGE_MULT) {
     const giveback = entry + (peak - entry) * (1 - policy.POWER_TRAIL_GIVEBACK_PCT / 100);
     if (mark <= giveback) return "trail_giveback";
+  }
+  // STALL-EXIT (strand-4, desk-doctrine.md) — LOWEST priority (a real stop/target/trail above wins
+  // first): a NON-MOVER held ≥ stallMinutes whose PEAK never popped past stallMaxFavorPct above entry
+  // is dead money occupying the one-at-a-time slot → cut it so the re-entry loop re-bets. NOT a
+  // tail-capper (the "peak never popped" guard exempts a faded winner). Mirrors the engine
+  // simulateSession stallExit. Calibrated PATIENT; OFF on tail channels (V3/ALT/QQQ).
+  if (c.stallMinutes && c.stallMinutes > 0 && c.row.opened_at && peak < entry * (1 + (c.stallMaxFavorPct ?? 0) / 100)) {
+    const heldMin = (Date.now() - Date.parse(c.row.opened_at)) / 60000;
+    if (heldMin >= c.stallMinutes) return "stall_exit";
   }
   return null;
 }
