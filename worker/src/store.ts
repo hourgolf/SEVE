@@ -377,9 +377,11 @@ export async function uploadQuotesArchive(etDate: string, gz: Uint8Array): Promi
 }
 
 export async function insertEquitySnapshot(equity: number, cash: number, unrealized: number, accountId: string | null = null): Promise<void> {
-  if (!config.writeEquitySnapshots) return;
-  // account_id tags the snapshot to its bucket (cockpit P3) so each bucket's forward NAV
-  // reads cleanly; null = the legacy desk-wide row (back-compat single-account).
+  // The desk-TOTAL row (account_id NULL) conflicts with the cron's snapshot writer (it also writes
+  // strategist_id/account_id NULL), so it stays gated behind WRITE_EQUITY_SNAPSHOTS — flip that at
+  // full cron cutover. PER-ACCOUNT rows (account_id set) are conflict-free NEW data → always write,
+  // so each bucket's forward NAV (cockpit P3) is captured now without touching the cron.
+  if (accountId == null && !config.writeEquitySnapshots) return;
   try { await sb.from("equity_snapshots").insert({ strategist_id: null, account_id: accountId, net_liquidation: equity, cash, unrealized_pnl: unrealized }); }
   catch (e) { warn(`store: equity snapshot failed — ${(e as Error).message}`); }
 }
