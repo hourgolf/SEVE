@@ -184,6 +184,16 @@ export function simulateSession(
   // continuation trigger + decidePyramidAdd gate + the parity hook are unchanged — this only
   // suppresses the EXECUTION of an otherwise-valid add. undefined → always add = byte-identical.
   addGate?: (ts: number, dir: OptType) => boolean,
+  // STRAND-4 STALL-EXIT (the stuck-slot lever, desk-doctrine.md). Cut a NON-MOVER: a position
+  // held ≥ minMinutes whose peak option mark NEVER popped past maxFavorPct above entry — it
+  // entered but failed to develop, so it's dead money OCCUPYING the one-at-a-time slot (the
+  // re-entry-when-flat loop then frees it to re-bet). DISTINCT from the −50% crash stop (a
+  // crasher) and a take-profit (a winner). NOT a tail-capper: it requires the peak to have
+  // NEVER reached maxFavorPct, so a position that popped then faded is EXEMPT (the buried
+  // tail-cappers cut exactly those). KILL-RISK = slow-builder tails (a late winner) → calibrate
+  // minMinutes long on a NO-TAIL channel first (orb-trend-rider). Single-leg only. undefined →
+  // off, byte-identical with every prior caller.
+  stallExit?: { minMinutes: number; maxFavorPct: number },
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -247,7 +257,7 @@ export function simulateSession(
 
     // Premium profit/stop takes priority over the strategy's own exit when held.
     // (single-leg only — multi-leg exits are handled by the strategy itself.)
-    if (pos && !pos.legs && (premiumExit || trailExit || breakevenExit || (underlyingStopPct && underlyingStopPct > 0)) && (!intent || intent.kind !== "exit")) {
+    if (pos && !pos.legs && (premiumExit || trailExit || breakevenExit || stallExit || (underlyingStopPct && underlyingStopPct > 0)) && (!intent || intent.kind !== "exit")) {
       const q = findQuote(chain, pos.strike, pos.optType);
       if (q) {
         // ratchet the peak option mid (the trail's / breakeven's high-water mark)
@@ -285,6 +295,15 @@ export function simulateSession(
             && pos.peakPremium >= pos.entryPrice * (1 + breakevenExit.engagePct / 100)
             && q.mid <= pos.entryPrice * (1 + (breakevenExit.lockPct ?? 0) / 100)) {
           intent = { kind: "exit", reason: "breakeven_stop" };
+        }
+        // STALL-EXIT (strand-4): held ≥ minMinutes AND the peak mark NEVER popped past
+        // maxFavorPct above entry → a dead non-mover; free the slot. Checked LAST so a real
+        // exit (target/stop/trail/breakeven) this bar wins. The "never popped" guard makes it
+        // strictly a non-tail-capper (a winner that faded already triggered above or is exempt).
+        if ((!intent || intent.kind !== "exit") && stallExit && pos.peakPremium != null
+            && pos.peakPremium < pos.entryPrice * (1 + stallExit.maxFavorPct / 100)
+            && (bars[i].ts - bars[pos.entryMinute].ts) / 60000 >= stallExit.minMinutes) {
+          intent = { kind: "exit", reason: "stall_exit" };
         }
       }
     }

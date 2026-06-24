@@ -127,7 +127,8 @@
     "spread-capture-probe": "tsx --env-file=.env.local engine/spread-capture-probe.ts",
     "pyramid-roster": "tsx --env-file=.env.local engine/pyramid-roster-faithful.ts",
     "pyramid-graduation-replay": "tsx --env-file=.env.local engine/pyramid-graduation-replay.ts",
-    "grind-slippage-probe": "tsx --env-file=.env.local engine/grind-slippage-probe.ts"
+    "grind-slippage-probe": "tsx --env-file=.env.local engine/grind-slippage-probe.ts",
+    "stall-exit-probe": "tsx --env-file=.env.local engine/stall-exit-probe.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
