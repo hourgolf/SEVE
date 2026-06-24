@@ -369,11 +369,26 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor(ch.capital_pct / riskPerContract), ch.max_contracts)) : 0;
       if (qty === 0) blocked = "insufficient_capital";
     }
+    // ---- shadow "awareness" levers (forensics brief 2026-06-24) — LOG-ONLY, never block. ----
+    // Computed for EVERY entry on EVERY channel so the shallow-VWAP / against-histogram / whipsaw-zone
+    // signals accrue forward, per-channel, for the OOS validation the brief calls for. Raw values stored
+    // (thresholds re-tunable in analysis); `aware` lists the levers tripped at the brief's thresholds.
+    // NOT a gate input — pure observability (the desk's shadow-first discipline before arming anything).
+    const dirSign = dir === "call" ? 1 : -1;
+    const dirVwapAtr = f.atr > 0 ? (dirSign * (f.close - f.vwap)) / f.atr : 0;        // Lever 1: directional VWAP displacement / ATR
+    const histRel = dirSign * (fm?.hist ?? 0);                                         // Lever 2: directional MACD histogram
+    const whipZone = f.er >= 0.10 && f.er < 0.20 && f.atr >= 0.40;                     // Lever 3: whipsaw zone
+    const orDepthAtr = f.atr > 0 && f.openRangeHi != null && f.openRangeLo != null     // Lever 4 raw (ORB-family-scoped in analysis)
+      ? (dir === "call" ? f.close - f.openRangeHi : f.openRangeLo - f.close) / f.atr : null;
+    const aware = [dirVwapAtr < 4 ? "shallowVwap" : null, histRel < 0 ? "histAgainst" : null, whipZone ? "whipZone" : null]
+      .filter(Boolean).join(",") || "clean";
     return {
       ...base, action: "enter", reason: intent.reason, direction: dir, occ, qty, blocked,
       detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), gap: ctx.gap != null ? +ctx.gap.toFixed(3) : null, expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close),
         // forensics entry context (per-trade dataset, matches the historical backfill) — read-only, not gate inputs:
-        vwap: +f.vwap.toFixed(3), vwapDist: +(f.close - f.vwap).toFixed(3), macd: fm?.macd ?? null, macdSignal: fm?.signal ?? null, macdHist: fm?.hist ?? null, mom: +f.mom.toFixed(3), orHi: f.openRangeHi != null ? +f.openRangeHi.toFixed(3) : null, orLo: f.openRangeLo != null ? +f.openRangeLo.toFixed(3) : null },
+        vwap: +f.vwap.toFixed(3), vwapDist: +(f.close - f.vwap).toFixed(3), macd: fm?.macd ?? null, macdSignal: fm?.signal ?? null, macdHist: fm?.hist ?? null, mom: +f.mom.toFixed(3), orHi: f.openRangeHi != null ? +f.openRangeHi.toFixed(3) : null, orLo: f.openRangeLo != null ? +f.openRangeLo.toFixed(3) : null,
+        // shadow awareness levers (log-only) — raw metrics + which tripped at the brief's thresholds:
+        dirVwapAtr: +dirVwapAtr.toFixed(2), histRel: +histRel.toFixed(3), whipZone, orDepthAtr: orDepthAtr != null ? +orDepthAtr.toFixed(2) : null, aware },
     };
   }
 

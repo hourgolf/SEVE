@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-24d"; // + forensics VWAP+MACD in the entry stamp (matches the historical backfill; gate untouched)
+export const WORKER_VERSION = "stream-2026-06-24e"; // + shadow awareness levers on every entry (shallowVwap/histAgainst/whipZone, log-only, all channels)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
