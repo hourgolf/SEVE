@@ -68,7 +68,7 @@ function parseET(hhmm: string): number | null {
 const SUPPORTED = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
-  "efficiency_ratio", "momentum_atr", "macd", "level",
+  "efficiency_ratio", "momentum_atr", "macd", "macd_hist_align", "level",
   "pin_bar", "engulfing", "strong_trend", "stale_extreme",
   "curl", "range_break", "sma_cross",
 ]);
@@ -130,6 +130,7 @@ function inferDirection(entry: SpecEntry): OptType | null {
     if (c.kind === "trend_align") return c.side === "up" ? "call" : "put";
     if (c.kind === "opening_range") return c.side === "break_above" ? "call" : "put";
     if (c.kind === "momentum_atr") return c.op === ">=" ? "call" : "put";
+    if (c.kind === "macd_hist_align") return c.dir === "up" ? "call" : "put";
     if (c.kind === "pin_bar" || c.kind === "engulfing" || c.kind === "strong_trend" || c.kind === "stale_extreme"
       || c.kind === "curl" || c.kind === "range_break" || c.kind === "sma_cross")
       return c.dir === "up" ? "call" : "put";
@@ -224,6 +225,18 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
         return c.cmp === "bull" ? (inLong || freshUp) : (inShort || freshDown);
       }
       return c.cmp === "bull" ? hist[i] > 0 : hist[i] < 0;
+    }
+    case "macd_hist_align": {
+      // the armable form of the forensics "MACD-hist-against" lever (forensics-levers):
+      // require the histogram ALIGNED with the trade — up→hist≥min, down→hist≤−min. min
+      // default 0 = the lever's exact sign rule (the verify found θ=0 the sweet spot; V3
+      // degrades with a large positive deadband). 12/26/9 reuses the macd precompute and
+      // is the SAME hist the dataset/worker stamp + the lever-probe gate read (ema≡emaSeries).
+      // No warmup bump: host gates (OR/time/relVol) set timing → reproduces the lever exactly.
+      const hist = ctx.macdSeries.get(macdKey({ fast: c.fast ?? 12, slow: c.slow ?? 26, signal: c.signal ?? 9 }));
+      if (!hist) return false;
+      const min = c.min ?? 0;
+      return c.dir === "up" ? hist[i] >= min : hist[i] <= -min;
     }
     case "level": {
       if (c.ref === "custom") { // near-only against the injected level SET (his $1.00 proximity)
@@ -350,6 +363,14 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
         const sig = ema(line, c.signal);
         macdSeries.set(macdKey(c), line.map((v, i) => v - sig[i])); // histogram
         macdLineSeries.set(macdKey(c), line); // for mode:"state"
+      } else if (c.kind === "macd_hist_align") {
+        const p = { fast: c.fast ?? 12, slow: c.slow ?? 26, signal: c.signal ?? 9 };
+        if (!macdSeries.has(macdKey(p))) { // forensics MACD (12/26/9); ema≡engine/macd.emaSeries → same hist the lever uses
+          const fa = ema(closes, p.fast), sl = ema(closes, p.slow);
+          const line = closes.map((_, i) => fa[i] - sl[i]);
+          const sig = ema(line, p.signal);
+          macdSeries.set(macdKey(p), line.map((v, i) => v - sig[i])); // histogram
+        }
       }
     }
   }

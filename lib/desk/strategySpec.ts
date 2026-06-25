@@ -47,6 +47,7 @@ export type Condition =
   | { kind: "efficiency_ratio"; op: ">=" | "<="; value: number; lookback?: number }
   | { kind: "momentum_atr"; op: ">=" | "<="; value: number; lookback?: number } // (close − close[lookback]) / ATR
   | { kind: "macd"; fast: number; slow: number; signal: number; cmp: "bull" | "bear"; mode?: "hist" | "state" } // hist (default) = histogram >/< 0; state = nakamoto macdState (sign±0.005 deadband + line-slope agree) OR fresh-cross ≤3 bars
+  | { kind: "macd_hist_align"; dir: "up" | "down"; min?: number; fast?: number; slow?: number; signal?: number } // MACD histogram ALIGNED with the trade (up→hist≥min, down→hist≤−min; 12/26/9 default, min=0 = the lever's sign rule). The armable form of the forensics "MACD-hist-against" lever (forensics-levers): enter only when momentum-histogram AGREES with the bet — modest+real on V3/ALT, hurts in chop. Forward-test, not arm.
   | { kind: "level"; ref: "pdh" | "pdl" | "orb_hi" | "orb_lo" | "custom"; cmp: ">" | "<" | "near"; withinPct?: number; withinDollars?: number } // price-level gate; near = within withinPct% (or withinDollars $ if set) of the level. ref "custom" = an injected level set (near-only; for backtest/replication head-to-heads)
   // ---- candle-shape conditions (engine/candle-shapes.ts; pure bar geometry) ----
   | { kind: "pin_bar"; dir: "up" | "down" } // rejection wick ≥2× body, body ≤33% range, close in upper/lower third
@@ -157,7 +158,7 @@ export interface StrategySpec {
 const SUPPORTED_KINDS = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
-  "efficiency_ratio", "momentum_atr", "macd", "level",
+  "efficiency_ratio", "momentum_atr", "macd", "macd_hist_align", "level",
   "pin_bar", "engulfing", "strong_trend", "stale_extreme", "curl", "range_break", "sma_cross",
 ]);
 // Structures the (single-leg) worker can place today.
@@ -255,7 +256,7 @@ export function validateLegs(structure: LegStructure, legs: SpecLeg[] | undefine
 // Every condition kind the compiler is allowed to emit (the Condition union).
 const KNOWN_KINDS = new Set<string>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min", "rel_vol",
-  "rsi", "time_before", "time_between", "efficiency_ratio", "momentum_atr", "macd",
+  "rsi", "time_before", "time_between", "efficiency_ratio", "momentum_atr", "macd", "macd_hist_align",
   "level", "pin_bar", "engulfing", "strong_trend", "stale_extreme", "curl", "range_break", "sma_cross",
   "tick", "gamma_regime", "gamma_wall", "iv_rank", "event_within", "unknown",
 ]);
