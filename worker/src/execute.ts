@@ -35,6 +35,20 @@ export interface LiveEntryState { entryUnderlying: number; entryTs: number; peak
 export const entryStateByKey = new Map<string, LiveEntryState>();
 export const entryKey = (strategistId: string, occ: string) => `${strategistId}|${occ}`;
 
+// 2-CYCLE RECONCILE GATE (review 2026-06-24): a SINGLE empty getPositions read (Alpaca eventual
+// consistency — a just-settled lot not yet listed) must NOT book-and-close a row that then reappears
+// → 09d re-rows the same contracts → the leg books TWICE at full magnitude (the silent double-count).
+// Require the orphan to persist 2 CONSECUTIVE cycles before booking (mirrors the orphan-net gate); the
+// row is reset the moment it's seen held again (noteRowHeld). Keyed by row.id.
+const reconcileSeen = new Map<string, number>();
+export const noteRowHeld = (rowId: string) => { reconcileSeen.delete(rowId); };
+const reconcileConfirmed = (rowId: string): boolean => {
+  const n = (reconcileSeen.get(rowId) ?? 0) + 1;
+  if (n >= 2) { reconcileSeen.delete(rowId); return true; }
+  reconcileSeen.set(rowId, n);
+  return false;
+};
+
 export interface ExecCtx {
   api: alpaca.Api;                        // cockpit P3: the account this channel's orders route to (default acct 1)
   chain: ChainStore;
@@ -130,7 +144,14 @@ export async function executeExit(
   const sellQty = Math.min(heldQty, row.qty);
 
   const liveBid = ctx.chain.byOcc(occ)?.bid ?? 0;
-  const reconcileClose = async (why: string) => {
+  const reconcileClose = async (why: string, gated = true) => {
+    // GATED (the read-based "lot drained" path): require the orphan to persist 2 consecutive cycles
+    // before booking, so a transient empty read can't book-and-close a row that reappears next cycle (the
+    // re-row double-count). A sell Alpaca REJECTED (contracts provably gone) passes gated=false.
+    if (gated && !reconcileConfirmed(row.id)) {
+      await store.journal("WARN", `${d.slug}: ${occ} ${why} — orphan unconfirmed (cycle 1), leaving row open, no book yet`);
+      return;
+    }
     // SHARED-OCC FIX (2026-06-24, row-primary): the lot was sold by a SIBLING (or manually) so this row
     // has no own slug-tagged sell — the old order-tag fill-net booked $0 (the bug that recorded +15-92%
     // movers as $0: 06-09 V3/ALT, 06-23/24 power-smart "reconciled"). Book the row's share directly from
@@ -139,30 +160,34 @@ export async function executeExit(
     // The row sold nothing itself, so row.qty IS its unsold share → no double-count. $0 only if no mark.
     const { px: mark, estimated } = reconcileExitPx(occ, ctx.allOrders, liveBid || (alp?.current_price ?? 0));
     const realized = mark > 0 ? rowRealized(row, mark, row.qty) : 0;
-    await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
+    const closed = await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
+    if (!closed) { await store.journal("WARN", `${d.slug}: ${occ} reconcile raced — already closed elsewhere`); return; }
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
     await store.journal("WARN", `${d.slug}: ${occ} ${why} — reconciled @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} (booked $${realized.toFixed(0)} = ${row.qty}-share)`);
   };
 
   if (sellQty <= 0) {
-    await reconcileClose(`shared lot drained (held ${heldQty})`); // 09b: free the row, never loop
+    await reconcileClose(`shared lot drained (held ${heldQty})`); // 09b: gated 2-cycle, then book the row's share
     return;
   }
+  noteRowHeld(row.id); // a real position to sell → not orphaned; reset any pending reconcile count
   try {
     let exitPx = alp?.current_price ?? liveBid;
     const r = await placeFill(d.slug, occ, "sell", sellQty, `${d.slug}-${occ}-${ctx.etMin}-x`, d.reason, ctx);
     if (r.fill > 0) exitPx = r.fill;
-    if (r.filledQty <= 0 && alpaca.TERMINAL_ORDER_STATUS.has(r.status)) {
-      // 2026-06-11a: known-terminal sell with NOTHING sold — don't book a phantom
-      // close at the mark while the contracts stay held. Row stays open; retry next bar.
-      await store.journal("WARN", `${d.slug}: exit ${occ} ended unfilled — row stays open to retry`);
+    if (r.filledQty <= 0) {
+      // book ONLY on positive fill evidence: a terminal-0 (nothing crossed) OR a non-terminal timeout
+      // (poll didn't settle) both leave the row OPEN to retry next bar — never a phantom close at the mark
+      // for contracts that may not have sold (review 2026-06-24 #3; mirrors the manual close-position route).
+      await store.journal("WARN", `${d.slug}: exit ${occ} ${r.status || "unsettled"} ×0 — row stays open to retry`);
       return;
     }
     // Book the ACTUAL sold qty (terminal-final): a partial→canceled sell realizes only what crossed; the
     // 09d reconstruct re-rows any leftover contracts next cycle. Row-primary: (exit − avg_entry)×soldQty.
-    const soldQty = r.filledQty > 0 ? r.filledQty : sellQty;
+    const soldQty = r.filledQty;
     const realized = rowRealized(row, exitPx, soldQty);
-    await store.closePositionRow(row.id, exitPx, realized, d.reason);
+    const closed = await store.closePositionRow(row.id, exitPx, realized, d.reason);
+    if (!closed) { await store.journal("WARN", `${d.slug}: exit ${occ} close raced — already closed (sold ${soldQty}) — reconcile`); return; }
     ctx.remainingByOcc.set(occ, Math.max(0, heldQty - soldQty)); // 09c fix 2
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
     await store.journal("EXEC", `${d.slug}: exit ${occ} ×${soldQty} @ ${exitPx.toFixed(2)} (${d.reason}) → $${realized.toFixed(0)}`);
@@ -172,21 +197,29 @@ export async function executeExit(
     if (Math.abs(realized - tagChk) > 5) await store.journal("WARN", `${d.slug}: booking cross-check Δ ${occ} — row $${realized.toFixed(0)} vs order-tag $${tagChk.toFixed(0)} (row-primary booked)`);
   } catch (e) {
     const msg = (e as Error).message;
-    if (/insufficient|cash.?secured|not enough|40310000/i.test(msg)) await reconcileClose(`sell rejected (${msg.slice(0, 50)})`);
+    if (/insufficient|cash.?secured|not enough|40310000/i.test(msg)) await reconcileClose(`sell rejected (${msg.slice(0, 50)})`, false); // Alpaca rejected → contracts provably gone, book now (no 2-cycle wait)
     else await store.journal("WARN", `${d.slug}: exit ${occ} rejected — ${msg}`);
   }
 }
 
 // ---- RECONCILE (desk row open, Alpaca flat) -------------------------------------
 export async function executeReconcile(d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx): Promise<void> {
+  // 2-CYCLE GATE: Alpaca read flat for this row. A SINGLE empty/eventually-consistent getPositions read
+  // must not book-and-close (it reappears next cycle → 09d re-rows → double-count). Require the orphan to
+  // persist 2 consecutive cycles before booking; a row seen held again resets the count (noteRowHeld).
+  if (!reconcileConfirmed(row.id)) {
+    await store.journal("WARN", `${d.slug}: ${row.occ_symbol} reads orphaned (Alpaca flat) — confirming (cycle 1), no book yet`);
+    return;
+  }
   // SHARED-OCC FIX (see reconcileClose): book this row's share directly from the ROW —
   // (exit − avg_entry)×row.qty — at the lot's real exit, or an ESTIMATE from the live bid when the
   // OCC's sell price is ambiguous/absent (→ close_reason reconciled_estimated). row.qty is the unsold share.
   const { px: mark, estimated } = reconcileExitPx(row.occ_symbol, ctx.allOrders, ctx.chain.byOcc(row.occ_symbol)?.bid ?? 0);
   const realized = mark > 0 ? rowRealized(row, mark, row.qty) : 0;
-  await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
+  const closed = await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
+  if (!closed) { await store.journal("WARN", `${d.slug}: ${row.occ_symbol} reconcile raced — already closed elsewhere`); return; }
   entryStateByKey.delete(entryKey(row.strategist_id, row.occ_symbol));
-  await store.journal("WARN", `${d.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} — no Alpaca position; booked $${realized.toFixed(0)} (≤${row.qty}-share)`);
+  await store.journal("WARN", `${d.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} — no Alpaca position; booked $${realized.toFixed(0)} (${row.qty}-share)`);
 }
 
 // ---- ENTRY --------------------------------------------------------------------

@@ -22,7 +22,7 @@ import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type 
 import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
 import { archiveQuotesToStorage, maybeArchiveTick } from "./archive.js";
-import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, type ExecCtx } from "./execute.js";
+import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, noteRowHeld, type ExecCtx } from "./execute.js";
 import { computeFeatures } from "../../engine/engine";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
@@ -314,6 +314,7 @@ async function cycle(trigger: string): Promise<void> {
               else if (d.action === "hold" && row) {
                 const alp = alpacaByOcc.get(row.occ_symbol);
                 if (alp) {
+                  noteRowHeld(row.id); // row is held → reset any pending reconcile count (2-cycle gate)
                   const unreal = Math.round((alp.current_price - row.avg_entry_price) * row.qty * 10000) / 100;
                   await store.markPositionRow(row.id, alp.current_price, unreal);
                 }
