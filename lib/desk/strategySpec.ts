@@ -36,7 +36,7 @@ export type Condition =
   // "ema21"/"ema50" = close vs that EMA. Computed EMA → faithful live (no vwap-bug dependency).
   | { kind: "trend_align"; side: "up" | "down"; ref?: "ema9_21" | "ema21" | "ema50" }
   | { kind: "vwap_dev"; atr: number; cmp: ">" | "<" }
-  | { kind: "opening_range"; minutes: number; side: "break_above" | "break_below" }
+  | { kind: "opening_range"; minutes: number; side: "break_above" | "break_below"; band?: number } // band∈(0,1], default 1=OR edge; <1 tightens the trigger toward the midpoint (ORB-tightening)
   | { kind: "or_width_min"; pct: number }
   | { kind: "gap_min"; pct: number } // overnight gap regime: |open − priorClose|/priorClose ≥ pct% (gap = catalyst; flat-open = chop-prone). Magnitude only — gap direction is noise.
   | { kind: "rel_vol"; min: number }

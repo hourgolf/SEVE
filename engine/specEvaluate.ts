@@ -187,9 +187,13 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       return c.cmp === ">" ? dev >= c.atr : dev <= -c.atr;
     }
     case "opening_range": {
-      // computeFeatures fixes the OR at 30m; honor side, approximate width.
-      if (c.side === "break_above") return f.openRangeHi != null && f.close > f.openRangeHi;
-      return f.openRangeLo != null && f.close < f.openRangeLo;
+      // computeFeatures fixes the OR at 30m. `band` (default 1) tightens the trigger toward the OR
+      // midpoint: level = mid + band·(edge − mid). band=1 → the OR edge (live default, byte-identical);
+      // band<1 → fire earlier while momentum is left (the ORB-tightening lever, orb-tightening-runway).
+      if (f.openRangeHi == null || f.openRangeLo == null) return false;
+      const band = (c as { band?: number }).band ?? 1;
+      const mid = (f.openRangeHi + f.openRangeLo) / 2;
+      return c.side === "break_above" ? f.close > mid + band * (f.openRangeHi - mid) : f.close < mid - band * (mid - f.openRangeLo);
     }
     case "or_width_min": {
       if (f.openRangeHi == null || f.openRangeLo == null || f.close <= 0) return false;
