@@ -82,9 +82,20 @@ reversals). Desk **−$6.5k**. **V3/ALT took 0 trades — gap_min stood them dow
 QQQ-ORB −2,085 + pb-ride −1,956/−1,296 + grind churn — chop steamrolled the directional channels (the documented pattern).
 
 **NEXT (operator's queue):**
-1. **"RUN THE NUMBERS with the new knowledge"** (the operator's stated next ask) — backtest/analyze the awareness levers
-   (the 5-window OOS the brief calls for) and/or re-read the roster through the lever lens. ⚠ the brief's standing
-   caveat: 1-month/chop overfit risk — the levers want FORWARD data, the backtest is a preliminary read only.
+1. ⭐ **LEVER-PROBE DONE (`npm run lever-probe`, commit `41824e9`) — IT INVERTS THE BRIEF.** Re-entry-aware OOS backtest
+   (308 SPY sessions, real NBBO, simulateSession `leverGate`: a gated entry frees the slot → engine re-enters the next
+   signal — the foul-out test the capital-blind replay can't do). Per-trade EXPECTANCY is the real-vs-mechanical lens:
+   **MACD-hist-against is the REAL edge on V3/ALT** (expectancy +6.7→+30.6 / +2.4→+27.9/t, OOS 4/5 — keeps the convex
+   tail, cuts momentum-fighting entries) = the brief's #2, now #1. **shallow-VWAP (brief's #1) is MECHANICAL** (expectancy
+   flat-or-worse, just fewer trades on −EV books; GRIND-base −17.7→−19.8/t). whip INERT; bleeders stay −EV. ⚠ modeled
+   options + lever mined on-window → DON'T arm; forward-validate (24e).
+   **▶ NEXT-SESSION VEIN — continue exploring the MACD-on-V3/ALT lead:** (a) **adversarially verify it** — per-window
+   expectancy, drop-the-best-window, threshold sensitivity (`histRel<0`), overfit check (a focused workflow); (b) **build
+   the `macd_hist_align` engine/spec VOCAB** (the brief's NEW condition) so it's armable/backtestable as a real condition,
+   not just the probe gate; (c) **forward-test on V3/ALT** — 24e already stamps `histRel`, so the shadow split accrues →
+   shadow-log → paper-lab a hist-aligned V3/ALT clone → arm if it holds; (d) **extend lever-probe** — per-window expectancy
+   output, QQQ + orb-spy-trail, the +all decomposition. The brief's other 2 levers (shallow-VWAP/whip) are de-prioritized
+   (mechanical/inert under the rigorous test). Memory: `forensics-levers.md`.
 2. **First IWM session watch** (above) — seed[IWM] chain + IWM trading/standdown.
 3. **Awareness accrual** — re-run the pattern-mine aggregate WEEKLY as forward data accrues (`npm run backfill-forensics`
    regenerates the dataset; re-run the workflow). The levers need a non-chop regime; June certifies nothing.
