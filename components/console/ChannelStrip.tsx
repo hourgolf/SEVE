@@ -358,11 +358,11 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           {/* indicator knob — non-interactive (pointer-events:none); a "tap to adjust" cue
               that mirrors the channel color + risk fill. Tapping it falls through to expand. */}
           <div className="mc-knob" aria-hidden="true">
-            <Knob value={config.capital_pct} min={0} max={500} onChange={() => {}} color={cssColor} size="sm" />
+            <Knob value={config.capital_pct} min={0} max={5000} onChange={() => {}} color={cssColor} size="sm" />
           </div>
           <div className="mc-meters">
-            <div className="mc-meter"><span className="mc-lbl">RISK</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.capital_pct / 5)}%`, background: meterColor(config.capital_pct / 500) }} /></span><span className="mc-val">{usd0(config.capital_pct)}</span></div>
-            <div className="mc-meter"><span className="mc-lbl">STOP</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.daily_stop_usd / 5)}%`, background: meterColor(config.daily_stop_usd / 500) }} /></span><span className="mc-val">{usd0(config.daily_stop_usd)}</span></div>
+            <div className="mc-meter"><span className="mc-lbl">RISK</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.capital_pct / 50)}%`, background: meterColor(config.capital_pct / 5000) }} /></span><span className="mc-val">{usd0(config.capital_pct)}</span></div>
+            <div className="mc-meter"><span className="mc-lbl">STOP</span><span className="mc-bar"><span className="mc-fill" style={{ width: `${Math.min(100, config.daily_stop_usd / 50)}%`, background: meterColor(config.daily_stop_usd / 5000) }} /></span><span className="mc-val">{usd0(config.daily_stop_usd)}</span></div>
           </div>
           <div className="mc-pads" onClick={(e) => e.stopPropagation()}>{pads}</div>
         </div>
@@ -389,15 +389,15 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
 
         <div className="ch-knobrow">
           <div className="ch-kunit">
-            <LedMeter frac={config.capital_pct / 500} count={22} />
-            <Knob value={config.capital_pct} min={0} max={500} step={25}
+            <LedMeter frac={config.capital_pct / 5000} count={22} />
+            <Knob value={config.capital_pct} min={0} max={5000} step={25}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
               onCommit={(v) => persistConfig(id, { capital_pct: v })}
               size="md" color={cssColor} cap="var(--knob-cream)" tick="#2a2a24" label="Risk/trade" format={usd0} />
           </div>
           <div className="ch-kunit">
-            <LedMeter frac={config.daily_stop_usd / 500} count={22} />
-            <Knob value={config.daily_stop_usd} min={0} max={500} step={25}
+            <LedMeter frac={config.daily_stop_usd / 5000} count={22} />
+            <Knob value={config.daily_stop_usd} min={0} max={5000} step={25}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { daily_stop_usd: v } })}
               onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}
               size="md" color={cssColor} cap="var(--knob-dark)" tick="#d7d5cb" label="Stop/day" format={usd0} />
@@ -450,7 +450,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         <Knob
           value={config.daily_stop_usd}
           min={0}
-          max={500}
+          max={5000}
           step={25}
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { daily_stop_usd: v } })}
           onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}
@@ -491,7 +491,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
       <Fader
         value={config.capital_pct}
         min={0}
-        max={500}
+        max={5000}
         step={25}
         onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } })}
         onCommit={(v) => persistConfig(id, { capital_pct: v })}
