@@ -234,11 +234,15 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     if (adversePct >= ch.underlying_stop_pct) intent = { kind: "exit", reason: "underlying_stop" };
   }
 
+  // Per-channel PREMIUM-STOP override (47_premium_stop_pct.sql): null → policy default (50,
+  // byte-identical); 0 → OFF (the channel runs its underlying_stop instead — the ORB underlying-stop
+  // finding: a 0.30% underlying-move stop beats the −50% premium stop). Gates BOTH premium stops below.
+  const premStopPct = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
   // Premium profit/stop for compiled specs (needs the option mark).
   if (pos && row && built.premiumExit && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
     const { profitPct, stopPct } = built.premiumExit;
     if (profitPct != null && mark >= entryPx * (1 + profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
-    else if (stopPct != null && mark <= entryPx * (1 - stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
+    else if (premStopPct > 0 && stopPct != null && mark <= entryPx * (1 - stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
   }
   // Per-channel TAKE-PROFIT (compound policy, ChannelConfig.take_profit_pct): exit at +pct%
   // of premium; the entry path below re-enters on the next signal when flat → compounding.
@@ -259,8 +263,9 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     if (openedET !== ctx.todayET) intent = null; // opened a PRIOR session → genuine overnight hold
   }
 
-  // Premium catastrophic stop (all channels) — the backstop the ATR stops miss.
-  if (pos && row && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0 && mark <= entryPx * (1 - policy.PREMIUM_STOP_PCT / 100)) {
+  // Premium catastrophic stop — the backstop the ATR stops miss. Per-channel premStopPct (0 = OFF
+  // for channels running an underlying_stop instead — the ORB finding); null → policy default (50).
+  if (pos && row && premStopPct > 0 && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0 && mark <= entryPx * (1 - premStopPct / 100)) {
     intent = { kind: "exit", reason: "premium_stop" };
   }
 

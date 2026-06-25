@@ -47,6 +47,9 @@ export interface ChannelConfig {
   // delta + intrinsic, less theta/giveback; the strike-moneyness finding). Applied identically in
   // decide (the occ) AND execute (the row.strike) so the order and the booked row agree.
   strike_offset: number;
+  // Per-channel PREMIUM-STOP override (47_premium_stop_pct.sql): null → policy default (50,
+  // byte-identical); 0 → OFF (the channel runs its underlying_stop instead — the ORB stop finding).
+  premium_stop_pct: number | null;
   // Per-channel TAKE-PROFIT (compound policy, 38_take_profit.sql): exit at +pct% of
   // premium, then RE-ENTER on the next signal when flat. For channels with NO convex
   // tail (PB: ridden −EV, compound +EV) compounding beats riding. 0 = off (ride to the
@@ -140,6 +143,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
       entry_dte: Math.max(0, Math.min(1, Number(cfg.entry_dte ?? 0))),
       strike_offset: Math.round(Number(cfg.strike_offset ?? 0)),
+      premium_stop_pct: cfg.premium_stop_pct == null ? null : Number(cfg.premium_stop_pct),
       take_profit_pct: Math.max(0, Number(cfg.take_profit_pct ?? 0)),
       pyramid_adds: Math.max(0, Math.floor(Number(cfg.pyramid_adds ?? 0))),
       stall_minutes: Math.max(0, Math.floor(Number(cfg.stall_minutes ?? 0))),
