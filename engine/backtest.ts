@@ -19,6 +19,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { computeFeatures, riskGovernor } from "./engine";
+import { macdHistSeries } from "./macd";
 import { DEFAULT_COST_MODEL, fillWithCost, type CostModel } from "./cost";
 import { buildSizingModel, scalarFor, loadSizingSpec, featuresForSizing, type SizingFeatures } from "./sizing";
 import { openManaged, stepManaged, costGatePass, type ManagedState } from "./manage";
@@ -194,6 +195,13 @@ export function simulateSession(
   // minMinutes long on a NO-TAIL channel first (orb-trend-rider). Single-leg only. undefined →
   // off, byte-identical with every prior caller.
   stallExit?: { minMinutes: number; maxFavorPct: number },
+  // LEVER GATE (forensics brief 2026-06-24): a RE-ENTRY-AWARE entry filter. Consulted at each ENTER
+  // intent — returns true to BLOCK that entry; the engine then takes the NEXT valid entry, modeling
+  // the freed one-at-a-time slot (the rigorous test the capital-blind dataset replay can't do). The
+  // 3 levers (shallow-VWAP-displacement / MACD-hist-against / whipsaw-zone) are computed from the
+  // entry-bar features + the macd-hist series; the gate function is built in lever-probe.ts. undefined
+  // → off, byte-identical with every prior caller.
+  leverGate?: (f: ReturnType<typeof computeFeatures>, dir: "call" | "put", macdHist: number | null) => boolean,
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -203,6 +211,8 @@ export function simulateSession(
   let lateEntries = 0; // entries opened inside the late-leans gate window (this session)
   const cm = gross ? GROSS_COST : costModel;
   const etMin = management ? bars.map((b) => etMinuteOfDay(b.ts)) : [];
+  // Lever gate (forensics): precompute the MACD-histogram series ONCE (Lever 2 reads it per bar).
+  const lvMacd = leverGate ? macdHistSeries(bars.map((b) => b.close)) : null;
 
   for (let i = 0; i < bars.length; i++) {
     const f = computeFeatures(bars, i);
@@ -227,7 +237,8 @@ export function simulateSession(
         }
       } else {
         const intent = evaluate(f, null);
-        if (intent && intent.kind === "enter" && intent.direction) {
+        if (intent && intent.kind === "enter" && intent.direction
+            && !(leverGate && leverGate(f, intent.direction, lvMacd ? lvMacd[i] : null))) {
           const strike = Math.round(f.close);
           const q = findQuote(chain, strike, intent.direction);
           // guard: only run the cost gate when the strike is actually quotable (a missing
@@ -383,7 +394,8 @@ export function simulateSession(
       });
       pos = null;
       if (pyramid) pyramidLots = []; // stack closed
-    } else if (!pos && intent && intent.kind === "enter" && !lateBlocked) {
+    } else if (!pos && intent && intent.kind === "enter" && !lateBlocked
+        && !(leverGate && intent.direction && leverGate(f, intent.direction, lvMacd ? lvMacd[i] : null))) {
       if (intent.legs?.length) {
         // MULTI-LEG: resolve each leg's strike off ATM, price it (long→ask, short→bid),
         // and size off the structure's DEFINED MAX LOSS (so credit spreads — net

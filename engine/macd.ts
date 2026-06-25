@@ -22,6 +22,17 @@ export function emaSeries(values: number[], period: number): number[] {
   return out;
 }
 
+// The MACD histogram for EVERY bar (O(n), one pass) — for streaming gates that read the series
+// per bar, e.g. the re-entry-aware lever backtest. Index i = hist at bar i. <2 bars → all zeros.
+export function macdHistSeries(closes: number[]): number[] {
+  if (closes.length < 2) return closes.map(() => 0);
+  const e12 = emaSeries(closes, 12);
+  const e26 = emaSeries(closes, 26);
+  const line = closes.map((_, i) => e12[i] - e26[i]);
+  const sig = emaSeries(line, 9);
+  return line.map((m, i) => m - sig[i]);
+}
+
 export interface Macd { macd: number; signal: number; hist: number; }
 
 // MACD at the LAST element of `closes` (i.e. the entry bar — pass closes[0..entryIdx]).
