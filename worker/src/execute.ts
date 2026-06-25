@@ -171,6 +171,12 @@ export async function executeExit(
     return;
   }
   noteRowHeld(row.id); // a real position to sell → not orphaned; reset any pending reconcile count
+  // idempotency (review follow-up): don't stack a 2nd sell while THIS channel's prior sell on this OCC is
+  // still WORKING (a non-terminal timeout left the row open) — mirrors executeEntry/executeAdd. Row waits.
+  if (ctx.allOrders.some((o) => o.side === "sell" && WORKING_ORDER.has(o.status) && o.client_order_id.startsWith(`${d.slug}-${occ}-`))) {
+    await store.journal("WARN", `${d.slug}: exit ${occ} — a prior sell is still working, not re-issuing`);
+    return;
+  }
   try {
     let exitPx = alp?.current_price ?? liveBid;
     const r = await placeFill(d.slug, occ, "sell", sellQty, `${d.slug}-${occ}-${ctx.etMin}-x`, d.reason, ctx);
