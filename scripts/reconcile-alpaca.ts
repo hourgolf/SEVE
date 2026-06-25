@@ -12,6 +12,7 @@
 // An account whose ALPACA_KEY_<ref> isn't in .env.local is SKIPPED (its OCCs flagged, not corrected).
 
 import { createClient } from "@supabase/supabase-js";
+import { writeFileSync } from "fs";
 
 const PAPER = "https://paper-api.alpaca.markets";
 const FIX = process.argv.includes("--fix");
@@ -131,6 +132,9 @@ async function main() {
 
   if (!WRITE) { console.log(`\n  DRY-RUN. Re-run with --fix --write to apply (service role).\n`); return; }
   if (!sbW) { console.error(`\n  --write needs SUPABASE_SERVICE_ROLE_KEY in .env.local.\n`); process.exit(1); }
+  // audit trail / reversibility: dump every {id, old, new} BEFORE applying (gitignored data/).
+  writeFileSync("data/reconcile-applied.json", JSON.stringify({ applied: new Date().toISOString(), brokerTot: r2(brokerTot), corrections }, null, 1));
+  console.log(`  audit → data/reconcile-applied.json (${corrections.length} rows, restorable from the 'old' field)`);
   let ok = 0;
   for (const c of corrections) { const { error } = await sbW.from("positions").update({ realized_pnl: c.neu }).eq("id", c.id).eq("status", "closed"); if (!error) ok++; else console.error(`    ${c.occ}: ${error.message}`); }
   console.log(`\n  ✓ APPLIED ${ok}/${corrections.length} corrections to the books (matched OCCs re-booked to broker truth).\n`);
