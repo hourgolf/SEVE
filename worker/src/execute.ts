@@ -114,11 +114,19 @@ export async function executeExit(
 
   const liveBid = ctx.chain.byOcc(occ)?.bid ?? 0;
   const reconcileClose = async (why: string) => {
-    const realized = await realizedToBook(row.strategist_id, d.slug, occ, ctx.allOrders, ctx.sinceIso);
-    const mark = liveBid || (alp?.current_price ?? 0);
+    // SHARED-OCC FIX (2026-06-24): the lot was sold by a SIBLING (or manually) so this row has no
+    // own slug-tagged sell → order-only fill-net booked $0 (the bug that recorded +15-92% movers
+    // as $0 — e.g. 06-09 V3/ALT, 06-23/24 power-smart "reconciled"). Book this row's SHARE at the
+    // price its contracts ACTUALLY left for: the real sibling/manual sell fill on this OCC, else
+    // the live mark, via (exit − entry)×row.qty (the extraSell hook). NO cross-channel double-count
+    // — each row books only its OWN qty (the seller books its qty via its tagged sell; reconciled
+    // siblings book theirs at that same exit). Falls back to the old $0 only if no exit price exists.
+    const siblingSell = ctx.allOrders.find((o) => o.symbol === occ && o.side === "sell" && o.status === "filled" && o.filled_avg_price > 0);
+    const mark = siblingSell?.filled_avg_price || liveBid || (alp?.current_price ?? 0);
+    const realized = await realizedToBook(row.strategist_id, d.slug, occ, ctx.allOrders, ctx.sinceIso, mark > 0 ? { qty: row.qty, px: mark } : undefined);
     await store.closePositionRow(row.id, mark, realized, "reconciled");
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
-    await store.journal("WARN", `${d.slug}: ${occ} ${why} — reconciled closed @ ${mark.toFixed(2)} (booked $${realized.toFixed(0)} fill-net)`);
+    await store.journal("WARN", `${d.slug}: ${occ} ${why} — reconciled @ ${mark.toFixed(2)} (booked $${realized.toFixed(0)} = ${row.qty}-share at the lot's real exit)`);
   };
 
   if (sellQty <= 0) {
@@ -155,10 +163,12 @@ export async function executeReconcile(d: ShadowDecision, row: store.PositionRow
   // Prefer the actual sell fill (a sibling/manual close leaves one), then live bid.
   const sellFill = ctx.allOrders.find((o) => o.symbol === row.occ_symbol && o.side === "sell" && o.status === "filled" && o.filled_avg_price > 0);
   const mark = sellFill?.filled_avg_price ?? (ctx.chain.byOcc(row.occ_symbol)?.bid ?? 0);
-  const realized = await realizedToBook(row.strategist_id, d.slug, row.occ_symbol, ctx.allOrders, ctx.sinceIso);
+  // SHARED-OCC FIX (see reconcileClose): book this row's SHARE at the lot's real exit (the
+  // sibling/manual sell fill, else live bid) via (exit − entry)×row.qty — not $0.
+  const realized = await realizedToBook(row.strategist_id, d.slug, row.occ_symbol, ctx.allOrders, ctx.sinceIso, mark > 0 ? { qty: row.qty, px: mark } : undefined);
   await store.closePositionRow(row.id, mark, realized, "reconciled");
   entryStateByKey.delete(entryKey(row.strategist_id, row.occ_symbol));
-  await store.journal("WARN", `${d.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${sellFill ? "actual fill" : "live bid"}) — no Alpaca position; booked $${realized.toFixed(0)} (fill-net)`);
+  await store.journal("WARN", `${d.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${sellFill ? "actual fill" : "live bid"}) — no Alpaca position; booked $${realized.toFixed(0)} (${row.qty}-share)`);
 }
 
 // ---- ENTRY --------------------------------------------------------------------
