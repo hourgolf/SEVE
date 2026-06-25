@@ -119,6 +119,7 @@
     "lever-probe": "tsx --env-file=.env.local engine/lever-probe.ts",
     "macd-verify": "tsx --env-file=.env.local engine/macd-verify.ts",
     "pattern-verify": "tsx --env-file=.env.local engine/pattern-verify.ts",
+    "ratchet-probe": "tsx --env-file=.env.local engine/ratchet-probe.ts",
     "pyramid-probe": "tsx --env-file=.env.local engine/pyramid-probe.ts",
     "pyramid-ext-probe": "tsx --env-file=.env.local engine/pyramid-ext-probe.ts",
     "pyramid-tune-probe": "tsx --env-file=.env.local engine/pyramid-tune-probe.ts",

@@ -139,7 +139,7 @@ export function simulateSession(
   // peak favorable price (ignores premium noise — the right trail for 0DTE momentum,
   // what breakout's code does). premiumGivebackPct: give back X% of peak premium gain.
   // Mirrors the live worker so backtest == live.
-  trailExit?: { atrChandelierK?: number; premiumGivebackPct?: number; untilMin?: number },
+  trailExit?: { atrChandelierK?: number; premiumGivebackPct?: number; armPct?: number; untilMin?: number },
   // BREAKEVEN-once-in-profit stop. Once the option has EVER traded up ≥ engagePct
   // above entry, the stop ratchets to entry (× 1+lockPct). It exits a position that
   // went green then gave it all back at ~breakeven instead of a full stop-out — but
@@ -293,7 +293,12 @@ export function simulateSession(
             ? f.close <= pos.peakFavorable - trailExit.atrChandelierK * f.atr
             : f.close >= pos.peakFavorable + trailExit.atrChandelierK * f.atr;
           if (inProfit && retraced) intent = { kind: "exit", reason: "trail_chandelier" };
-        } else if (trailExit?.premiumGivebackPct != null && pos.peakPremium != null && pos.peakPremium > pos.entryPrice) {
+        } else if (trailExit?.premiumGivebackPct != null && pos.peakPremium != null
+            && pos.peakPremium >= pos.entryPrice * (1 + (trailExit.armPct ?? 0) / 100) && pos.peakPremium > pos.entryPrice) {
+          // ARM-HIGH ratchet (the fan-out's premium-peak ratchet): the giveback trail only ARMS once the
+          // peak mark clears +armPct% (default 0 = arm at any pop = prior behavior, byte-identical). Then it
+          // gives back X% of the peak GAIN. Arming high means noise pops don't trigger an early exit — wait for
+          // a REAL peak, bank the mid-MFE round-trips, leave a never-armed runner's convex tail untouched.
           const givebackLevel = pos.entryPrice + (pos.peakPremium - pos.entryPrice) * (1 - trailExit.premiumGivebackPct / 100);
           if (q.mid <= givebackLevel) intent = { kind: "exit", reason: "trail_giveback" };
         }

@@ -101,14 +101,21 @@ export async function prep(symbol: Sym, dir: string): Promise<Prepped> {
 // pooled / per-window / leave-one-out as they need. Identical simulateSession
 // positional call as the original lever-probe (faithful gate + 1-tick fills).
 export type SessRes = { date: string; win: string | null; pnl: number; n: number };
-export function simChannel(D: Prepped, ch: Ch, gate?: LG): SessRes[] {
+// optional EXIT overrides (for the ratchet-probe) — threaded at the correct positional slots
+// (trailExit=10, breakevenExit=11, stallExit=18). undefined → the channel's native exits (px) only.
+export type Exits = {
+  trailExit?: { atrChandelierK?: number; premiumGivebackPct?: number; armPct?: number; untilMin?: number };
+  breakevenExit?: { engagePct: number; lockPct?: number };
+  stallExit?: { minMinutes: number; maxFavorPct: number };
+};
+export function simChannel(D: Prepped, ch: Ch, gate?: LG, exits?: Exits): SessRes[] {
   const cfg = cfgOf(ch.maxC);
   const out: SessRes[] = [];
   for (const s of D.real) {
     const exp = ch.dte === 0 ? s.dateET : D.nextOf.get(s.dateET); if (!exp) continue;
     const ts: Trade[] = simulateSession(s.bars, cfg, FUND, ch.mk(s), D.chainFor(s, exp), false, ch.px, FILL_1T,
-      undefined, undefined, undefined, undefined, 0, { minMoveToCostRatio: RATIO, gateCostModel: GATE_LIVE },
-      undefined, undefined, undefined, undefined, gate);
+      undefined, exits?.trailExit, exits?.breakevenExit, undefined, 0, { minMoveToCostRatio: RATIO, gateCostModel: GATE_LIVE },
+      undefined, undefined, undefined, exits?.stallExit, gate);
     out.push({ date: s.dateET, win: winOf(s.dateET), pnl: ts.reduce((a, x) => a + x.pnl, 0), n: ts.length });
   }
   return out;

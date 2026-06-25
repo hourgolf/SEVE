@@ -99,8 +99,10 @@ function verify(D: Prepped, ch: Ch, cand: Cand, seedBase: number) {
 }
 
 async function main() {
-  if (!existsSync(CAND_FILE)) { console.log(`\n  ${CAND_FILE} not found — run the pattern-mine-allchannels workflow first (it writes the candidates).\n`); return; }
-  const doc = JSON.parse(readFileSync(CAND_FILE, "utf8")) as { generated?: string; entry?: Cand[]; exit?: any[] };
+  const fi = process.argv.indexOf("--file");
+  const file = fi >= 0 ? process.argv[fi + 1] : CAND_FILE;
+  if (!existsSync(file)) { console.log(`\n  ${file} not found — run the pattern-mine-allchannels workflow first (it writes the candidates).\n`); return; }
+  const doc = JSON.parse(readFileSync(file, "utf8")) as { generated?: string; entry?: Cand[]; exit?: any[] };
   const entry = doc.entry ?? [];
   const SPY = await prep("SPY", "data/databento-mdte");
 
