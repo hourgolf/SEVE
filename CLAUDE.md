@@ -12,6 +12,48 @@ durable context for a new session. Read it first.
 > lives in **memory/** (read `desk-doctrine.md` FIRST, then `cockpit-p3-multi-account.md`,
 > `doctrine-drift-and-forward-validation.md`). The block below re-anchors the convention.
 
+## SESSION HANDOFF — 2026-06-25 (⭐ EXECUTION-INTEGRITY RECKONING → CLEAN BOOKS → RE-ANALYZE) — READ FIRST
+**The operator's challenge ("V3/ALT never trade — were they ever properly EXECUTED?") cracked the desk open. A
+desk-wide shared-OCC booking bug meant the per-channel books were materially WRONG; we fixed the worker, reconciled to
+the broker, CORRECTED the historical books, and the clean numbers FLIP the roster. Memory FIRST: `execution-integrity-
+clean-books.md` (the saga + the flipped verdicts) + `data-for-llm-analysis.md` (the storage plan).**
+
+**WHAT HAPPENED (all on `origin/main`, deployed):**
+1. **THE BUG:** 70% of trades are on shared OCCs (the "13 channels" = ~3 correlated bets, one 16-channel SPY-0DTE BLOB).
+   The worker booked per-channel P&L from order tags → a sibling-drained lot booked **$0** on +15-92% movers (16 phantoms)
+   + churn over-booked. Per-channel attribution was fiction.
+2. **WORKER FIX (DEPLOYED `61d63d4`):** ROW-PRIMARY booking `(exit − row.avg_entry_price)×soldQty`, hardened over 2
+   adversarial-review rounds (status-guarded close, 2-cycle reconcile gate, book-on-fill, idempotency guard). Books clean
+   GOING FORWARD. `worker/src/execute.ts`.
+3. **GROUND-TRUTH + CORRECTION:** `npm run reconcile-alpaca` (all 3 Alpaca accounts) → desk OVER-reported **+$5,060**.
+   `--fix --write` qty-distributed each OCC's broker realized across its rows → **490 rows corrected, BOOKING ERROR +$1 ✓
+   books tie out**. Audit: `data/reconcile-applied.json`. ⚠ keys ALPACA_KEY_2/_3 + ALPACA_SECRET_2/_3 now in `.env.local`.
+4. **THE CLEAN BOOKS FLIP THE ROSTER (forensics-mine, exp/t old→new):** POWERHOUR +$23→**−$6** / power-smart +$17→**−$41**
+   (the "winners" were booking ARTIFACTS); GRIND-manual +$8→**−$16** (NOT the operator edge); BREAK(ALT) −$1→**+$38**
+   (real winner, was hidden); BREAK(base) +$131→**+$111/66% win** (still the best); pb-ride −$126 (real bleeder). ⚠ I
+   earlier overstated "06-24 pb-ride loss was a booking artifact" — that was the INCOMPLETE default-only read; with the
+   cockpit (Resurrected) account it's REAL.
+5. **NET-EXPOSURE X-RAY PANEL (DEPLOYED `3c33487`):** the "account for concentration without capping" piece — shows the
+   real correlated lot per OCC/direction, no caps. `components/console/NetExposurePanel.tsx` + `lib/desk/netExposure.ts`.
+
+**⭐ NEXT SESSION — THE OPEN-MINDED RE-ANALYSIS ON CLEAN BOOKS (operator's word; run at MAX effort + ultracode).** The
+BACKTEST entry conclusions stand (clean simulated fills) but EVERY live per-channel verdict + the fan-out's dataset reads
+were on CORRUPTED data. Re-run with an open mind, incl. previously-discredited strategies. **LAUNCH PROMPT (paste to start):**
+> "ultracode — Re-analyze the SEVE desk on the now-CLEAN books (read `execution-integrity-clean-books.md` +
+> `data-for-llm-analysis.md` + `pattern-fanout-verdict.md` FIRST). The per-channel books were corrupted and are now
+> corrected (reconcile-alpaca, BOOKING ERROR +$1); the clean roster FLIPPED key verdicts (power/grind-manual were
+> artifacts, breakout/ALT are the real edge). (1) Re-run the all-channel fan-out (forensics-mine + the re-entry-aware
+> pattern-verify) on the regenerated clean dataset — which entry/exit patterns + which channels actually hold up now?
+> (2) Reopen the PREVIOUSLY-DISCREDITED strategies with an open mind (fade, the power family, the levers, chop-premium —
+> their discredit was on bad data or modeling-only). (3) Give me a DETAILED look at how patterns have EMERGED from the
+> clean data. (4) Implement the [[data-for-llm-analysis]] derivations (stackAtEntry/occShare/bookingDelta/net-exposure
+> snapshots) + the nightly reconcile-alpaca + broker-truth snapshot so the books STAY clean + analysis stays efficient.
+> Use workflows, adversarially verify, forward>backtest doctrine." Run `npm run backfill-forensics` first to regen the
+> dataset off clean books, and `npm run reconcile-alpaca` to confirm the tie-out before analyzing.
+
+**STILL OPEN (lower priority, from the 06-24 queue — but re-validate on clean books):** IWM first-session watch; stall-exit
+on pb-ride; the 24e awareness-lever shadow accrual; Vercel `ALPACA_KEY_2/3` env (for UI-close of Core/Resurrected).
+
 ## SESSION HANDOFF — 2026-06-24 EVENING (FORENSICS PIPELINE COMPLETE + IWM ARMED + AWARENESS LEVERS) — READ FIRST
 **After-close session, desk flat. Shipped the full per-trade forensics pipeline (history backfilled + live forward-
 capture + shadow awareness instrumentation), fixed a cockpit-P3 manual-close bug + built an orphan safety-net,
