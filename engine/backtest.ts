@@ -202,6 +202,11 @@ export function simulateSession(
   // entry-bar features + the macd-hist series; the gate function is built in lever-probe.ts. undefined
   // → off, byte-identical with every prior caller.
   leverGate?: (f: ReturnType<typeof computeFeatures>, dir: "call" | "put", macdHist: number | null) => boolean,
+  // STRIKE OFFSET (moneyness lever, 2026-06-25): shift the single-leg entry strike off ATM by N
+  // dollars (= N strikes) in the OTM direction — +N = OTM (call→higher / put→lower), −N = ITM,
+  // 0 = ATM (byte-identical with every prior caller, the desk's hardcoded Math.round(close)). The
+  // chain must quote the offset strike or the entry is skipped (re-entry-aware). Single-leg only.
+  strikeOffset = 0,
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -239,7 +244,7 @@ export function simulateSession(
         const intent = evaluate(f, null);
         if (intent && intent.kind === "enter" && intent.direction
             && !(leverGate && leverGate(f, intent.direction, lvMacd ? lvMacd[i] : null))) {
-          const strike = Math.round(f.close);
+          const strike = Math.round(f.close) + (intent.direction === "call" ? 1 : -1) * strikeOffset;
           const q = findQuote(chain, strike, intent.direction);
           // guard: only run the cost gate when the strike is actually quotable (a missing
           // quote must skip the entry, not crash costGatePass on an undefined quote).
@@ -432,7 +437,7 @@ export function simulateSession(
           };
         }
       } else if (intent.direction) {
-        const strike = Math.round(f.close);
+        const strike = Math.round(f.close) + (intent.direction === "call" ? 1 : -1) * strikeOffset;
         const q = findQuote(chain, strike, intent.direction);
         if (q && (!entryCostGate || gross || costGatePass(q, f.atr, entryCostGate.minMoveToCostRatio, entryCostGate.gateCostModel ?? costModel))) {
           const r = riskGovernor(cfg, fund, dayPnl, dayPnl, q.ask, false, sizingModel ? sizingModel(featuresForSizing(f)) : 1);
