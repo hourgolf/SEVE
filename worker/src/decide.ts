@@ -31,13 +31,16 @@ import { entryStateByKey, entryKey } from "./execute.js";
 const RTH_OPEN = 570;
 const RTH_CLOSE = 960;
 
-// PYRAMID (V3/ALT only) — the channels with a REAL convex tail the pyramid probes validated
-// (4/5 OOS, +30%@cap12 = the sweet spot, pyramid-roster-faithful 2026-06-19). HARDCODED as a safety
-// rail: even with pyramid_adds>0 the worker only ever pyramids these two slugs (a new channel needs a
-// deliberate code change here, not just the config column). Phase A = shadow (pyramid_adds=0): log what
-// an add WOULD be, place NO order. Phase B = executor (pyramid_adds>0): emit action:"add" → executeAdd.
-// minProfitPct MUST match the probe so the graduation replay asserts qty/bar parity. [[compound-vs-ride-verdict]]
-const PYRAMID_SLUGS = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
+// PYRAMID (V3/ALT cross-index) — the channels with a REAL convex tail the pyramid probes validated.
+// SPY 4/5 OOS +$13k @cap12 (pyramid-roster-faithful 2026-06-19); QQQ HELPS +$5.5k→+$11k (thin/2-window,
+// pyramid-xindex 2026-06-25); IWM HURTS (best flat) so it is deliberately NOT here [[cross-index-atbats]].
+// HARDCODED safety rail: even with pyramid_adds>0 the worker only ever pyramids these slugs (a new channel
+// needs a deliberate code change here, not just the config column). LIVE STATE: SPY base = ARMED
+// (pyramid_adds=3, Core); the QQQ clones = SHADOW (pyramid_adds=0, Resurrected paper-lab, 49_qqq_v3_channels).
+// Phase A shadow (pyramid_adds=0): log what an add WOULD be, place NO order. Phase B executor
+// (pyramid_adds>0): emit action:"add" → executeAdd. minProfitPct MUST match the probe so the graduation
+// replay asserts qty/bar parity. [[compound-vs-ride-verdict]]
+const PYRAMID_SLUGS = new Set(["breakout-alt-v3", "breakout-smart-entries", "breakout-alt-v3-qqq", "breakout-smart-entries-qqq"]);
 const PYRAMID_MIN_PROFIT_PCT = 30;
 const PYRAMID_MAX_ADDS = 3; // shadow-detect default (the executor uses ch.pyramid_adds as its cap)
 // once-per-(ET-day, slug, occ) dedup for the SHADOW log only — Phase A has a STATIC base lot so the
