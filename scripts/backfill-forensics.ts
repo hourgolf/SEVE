@@ -150,6 +150,21 @@ async function main() {
     console.log(`  bars[${sym}]: ${sess.length} sessions ${sess[0]?.dateET ?? "—"}…${sess[sess.length - 1]?.dateET ?? "—"}`);
   }
 
+  // ── concentration derivations (stackAtEntry / occShare) + booking-delta, from the live record ──
+  // The desk shares strikes massively (~70% of trades on an OCC held by 2-7 channels). These fields
+  // expose the correlated concentration each trade joined + how mis-booked it was pre-correction, so
+  // the analysis substrate carries them. Regenerated nightly off the clean books.
+  const byOcc = new Map<string, Pos[]>();
+  for (const p of positions) (byOcc.get(p.occ_symbol) ?? byOcc.set(p.occ_symbol, []).get(p.occ_symbol)!).push(p);
+  const tOpen = (p: Pos) => Date.parse(p.opened_at);
+  const bookingDeltaById = new Map<string, number>(); // corrupted-booked − clean (per position id), from the reconcile audit
+  try {
+    if (existsSync("data/reconcile-applied.json")) {
+      const corr = (JSON.parse(readFileSync("data/reconcile-applied.json", "utf8")).corrections ?? []) as Array<{ id: string; old: number; neu: number }>;
+      for (const c of corr) bookingDeltaById.set(c.id, Math.round((c.old - c.neu) * 100) / 100);
+    }
+  } catch { /* no audit yet → bookingDelta defaults to 0 */ }
+
   const rows: Array<{ id: string; entry_features: Record<string, unknown> | null; entry_reason: string | null; entry_delta: number | null; peak_mark: number | null }> = [];
   const dataset: Record<string, unknown>[] = []; // flat per-trade rows for the pattern-mining pass
   const stat = { total: 0, feat: 0, reason: 0, delta: 0, peak: 0, noSession: 0, noSignal: 0 };
@@ -214,6 +229,11 @@ async function main() {
     const pkUsed = p.peak_mark ?? peak;
     const mfePct = pkUsed != null && entryPx > 0 ? r3(((pkUsed - entryPx) / entryPx) * 100) : null;
     const givebackPct = pkUsed != null && pkUsed > entryPx && exitPx < pkUsed ? r3(((pkUsed - exitPx) / (pkUsed - entryPx)) * 100) : null;
+    // concentration: # OTHER channels concurrently on this strike at entry + this row's qty-share of the lot
+    const sib = byOcc.get(p.occ_symbol) ?? [p];
+    const stackAtEntry = new Set(sib.filter((o) => o.id !== p.id && ((tOpen(o) <= openMs && (o.closed_at ? Date.parse(o.closed_at) : Infinity) >= openMs) || Math.abs(tOpen(o) - openMs) <= 120_000)).map((o) => o.strategist_id)).size;
+    const occTotQty = sib.reduce((s, o) => s + Math.abs(Number(o.qty)), 0);
+    const occShare = occTotQty > 0 ? r3(Math.abs(q) / occTotQty) : 1;
     dataset.push({
       id: p.id, date: d, channel: p.strategists?.name ?? p.strategists?.slug ?? sym, slug: p.strategists?.slug ?? null,
       sym, dir: p.opt_type, reason: p.entry_reason ?? reason,
@@ -222,6 +242,7 @@ async function main() {
       entry: r3(entryPx), exit: r3(exitPx), qty: q, pnl: realized,
       peak: pkUsed != null ? r3(pkUsed) : null, mfePct, givebackPct,
       holdMin: Math.round((closeMs - openMs) / 60000), exitReason: p.close_reason ?? null,
+      stackAtEntry, occShare, bookingDelta: bookingDeltaById.get(p.id) ?? 0,
     });
   }
 
@@ -230,7 +251,7 @@ async function main() {
 
   // Always emit the flat analysis dataset (the pattern-mining substrate), independent of the DB apply.
   writeFileSync("data/forensics-dataset.jsonl", dataset.map((r) => JSON.stringify(r)).join("\n") + "\n");
-  console.log(`→ data/forensics-dataset.jsonl (${dataset.length} trades · entry context + MFE/giveback + outcome)`);
+  console.log(`→ data/forensics-dataset.jsonl (${dataset.length} trades · entry context + MFE/giveback + outcome + concentration[stackAtEntry/occShare/bookingDelta])`);
 
   if (WRITE && sbWrite) {
     console.log(`\napplying ${rows.length} rows via service role…`);
