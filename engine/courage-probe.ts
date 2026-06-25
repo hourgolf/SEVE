@@ -52,8 +52,8 @@ const variantsFor = (base: Gates): Array<{ key: string; g: Gates }> => {
   v.push({ key: "relVol1.15", g: { ...base, relVol: 1.15 } }, { key: "relVol1.0", g: { ...base, relVol: 1.0 } });
   v.push({ key: "er.40", g: { ...base, er: 0.40 } }, { key: "er.35", g: { ...base, er: 0.35 } }, { key: "er.30", g: { ...base, er: 0.30 } }, { key: "er.25", g: { ...base, er: 0.25 } });
   v.push({ key: "OR15", g: { ...base, orMin: 15 } });
-  v.push({ key: "time→15:25", g: { ...base, timeET: "15:25" } });
-  if (base.mom !== false) v.push({ key: "mom.2", g: { ...base, mom: 0.2 } }, { key: "mom→off(=V3)", g: { ...base, mom: false } });
+  v.push({ key: "time→14:30", g: { ...base, timeET: "14:30" } }, { key: "time→15:00", g: { ...base, timeET: "15:00" } }, { key: "time→15:25", g: { ...base, timeET: "15:25" } });
+  if (base.mom !== false) v.push({ key: "mom.1", g: { ...base, mom: 0.1 } }, { key: "mom.2", g: { ...base, mom: 0.2 } }, { key: "mom.4", g: { ...base, mom: 0.4 } }, { key: "mom→off(=V3)", g: { ...base, mom: false } });
   v.push({ key: "LOOSE-combo", g: { ...base, gap: 0.10, relVol: 1.15, er: 0.35 } });
   return v;
 };
