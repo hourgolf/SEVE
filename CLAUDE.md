@@ -12,6 +12,86 @@ durable context for a new session. Read it first.
 > lives in **memory/** (read `desk-doctrine.md` FIRST, then `cockpit-p3-multi-account.md`,
 > `doctrine-drift-and-forward-validation.md`). The block below re-anchors the convention.
 
+## SESSION HANDOFF — 2026-06-24 EVENING (FORENSICS PIPELINE COMPLETE + IWM ARMED + AWARENESS LEVERS) — READ FIRST
+**After-close session, desk flat. Shipped the full per-trade forensics pipeline (history backfilled + live forward-
+capture + shadow awareness instrumentation), fixed a cockpit-P3 manual-close bug + built an orphan safety-net,
+ARMED IWM (2nd index) + the stall-exit knob, and ran a 45-agent pattern-mine → a per-channel training brief.
+DEPLOY STATE: `origin/main = 369c455`, worker `stream-2026-06-24e` live, Vercel deployed. `SUPABASE_SERVICE_ROLE_KEY`
+now in `.env.local` (enables backfill `--write` + future service-role scripts).**
+
+**Worker 24e = 24c (IWM in the SYMBOLS default + per-account orphan net) + 24d (VWAP/MACD entry stamp) + 24e
+(awareness levers, log-only). Three after-close deploys, each desk-flat.**
+
+**1. ⭐ IWM — 2nd validated index, ARMED (direct-arm, operator's word).** `breakout-alt-v3-iwm` + `breakout-smart-
+entries-iwm` = clones of SPY V3/ALT, underlying=IWM, account=Core, executor=stream, entry_dte=0, **flat
+(pyramid_adds=0)**, risk $2000 / 24 contracts / standdown (`45_iwm_channels.sql`, committed). IWM is in the worker's
+symbol set via the CODE DEFAULT `SPY,QQQ,IWM` (Railway pins NO `SYMBOLS`/`SYMBOL` — confirmed; the default applies).
+⚠ **FIRST IWM SESSION WATCH:** (a) Railway boot log `seed[IWM]: N bars` + `seed[IWM]: chain M contracts` (M>0 = the
+0DTE chain snapshots clean); (b) day-report shows IWM trading or standing down (gap_min); (c) IWM's 0DTE expiry
+calendar — IWM may lack same-day expiries some days → the cutoff-roll picks the nearest. A chain miss = NO trade
+(safe) + the orphan-net guards anything stranded. Rollback: `status='draft'`.
+
+**2. ⭐ FORENSICS PIPELINE COMPLETE (the operator's "train channels on entry/exits + whiplash" dataset).**
+- **History BACKFILLED + APPLIED:** all **592** closed trades (06-01→06-24) now carry `entry_features` incl **VWAP
+  (true cumulative session) + MACD(12/26/9)** + gap/er/relVol/atr/mom/openRange (100%), `entry_reason` (550/93%,
+  signals join), `entry_delta` (504), `peak_mark`/MFE (357/60%, quote-retention-bound). `npm run backfill-forensics`
+  (`scripts/backfill-forensics.ts` + `engine/macd.ts`): recompute from bars-archive + signals join + option_quotes ∪
+  quotes-archive; COALESCE/merge = **live-wins, only fills gaps, idempotent**. Applied via `--write` (service role).
+  Also emits `data/forensics-dataset.jsonl` (the analysis substrate, gitignored).
+- **FORWARD capture (worker 24d):** every new entry stamps VWAP/MACD/mom/orHi/orLo — **IDENTICAL to the backfill**
+  (`buildSessionBars` computes the same cumulative VWAP; same `macdAt` helper). ⚠ **FINDING — retire the stale note:**
+  the June CLAUDE.md "worker reads per-bar vwap as session VWAP" quirk is FIXED — `buildSessionBars` already computes
+  true cumulative session VWAP, so the `vwap_side` gate has been using the GOOD vwap.
+- **AWARENESS levers (worker 24e, LOG-ONLY, ALL channels):** every entry stamps `dirVwapAtr` (Lever1) / `histRel`
+  (Lever2) / `whipZone` (Lever3) / `orDepthAtr` (Lever4) + an `aware` summary on `entry_features` + the EXEC log
+  (`· aware:shallowVwap,histAgainst`). Pure observability (NO gate) so the splits accrue forward per-channel for OOS.
+
+**3. PATTERN-MINE BRIEF — `docs/forensics-pattern-brief-2026-06-24.md`.** Workflow `forensics-pattern-mine` (45 agents,
+**13/35 candidates survived** adversarial verification — it KILLED the seductive-wrong ones: hold≤1min "edge"=selection
+bias, power-atr-cap=06-05 artifact, macd-fully-aligned=just `momentum_atr`). 3 entry levers to forward-test: **shallow-
+VWAP-displacement deadband** (strongest, shallow [0,4)ATR = −$46.6/t, carries ~5× the net loss), **MACD-hist-against
+guard** (MFE collapses 13→24%, test the MFE-suppression not the $), **whipsaw-zone size-down** (`er∈[0.10,0.20) &
+atr≥0.40` = −$127/t). + the **stall-exit** (target 93.8%/+$164 vs stop 1.4%/−$254/174min). **ALL forward-test
+HYPOTHESES — 1 month / chop / put-tape certifies NOTHING.** V3/ALT NOT invalidated by their −$14/t this month (the
+single-window mirage). pb-ride = biggest $ bleeder this month, the cleanest place to shadow the levers. Generative
+residue: **premium-peak ratchet exit** (now measurable via the live `peak_mark`).
+
+**4. STALL-EXIT ARMED LIVE (operator's word) on pb-ride + pb-ride-2 @ `stall_minutes=120` / `stall_max_favor_pct=25`
+(Resurrected).** ⚠ NO shadow mode — the knob CUTS live (`execute.ts:333`: cut a NON-MOVER held ≥120min whose peak
+never popped +25%). Watch the `stall_exit` close_reason accrue; compare stalled-out non-movers vs ride-to-close. Only
+fires on HOLD channels (pb-ride rides long; grind/power exit before 120min so it's inert there). Rollback: `stall_minutes=0`.
+
+**5. COCKPIT-P3 BUG FIXES:**
+- **close-route account bug FIXED (`2d8e6cf`).** `/api/close-position` predated P3, used the DEFAULT Alpaca keys →
+  manual close of a Core/Resurrected position queried the WRONG account → 0 sold, booked $0, lot orphaned (surfaced
+  06-24: pb-ride 732P ×11 booked $0 vs a real loss; operator closed it in Alpaca). Now resolves account_id→cred_ref→
+  `ALPACA_KEY_<ref>`, FAILS-CLOSED if creds absent. ⚠ **VERCEL needs `ALPACA_KEY_2/3` + `ALPACA_SECRET_2/3`** (the pairs
+  already on Railway) or UI-close of Core/Resurrected fail-closes with a clear 503.
+- **Per-account ORPHAN safety-net (`e03554b`, worker 24c).** Every worker management path (fast-exit sweep + EOD
+  hard-flatten) keys off OPEN desk rows → an Alpaca lot with no open row was never flattened (what let the 732P
+  orphan). New per-account sweep: uncovered = held − Σ(open rows), 2-cycle gate, WARN+journal+page. Auto-flatten behind
+  `ORPHAN_FLATTEN` (default OFF = detect+page; arm after a clean detection day).
+
+**6. day-report P3 fix (`c78fb6c`).** Was account-blind: NAV mixed the two $1M buckets + the $98k account → garbage
+("+419" on a −$6.5k day); coverage false-"ghost"-alarmed every Core/Resurrected OCC. Now **per-bucket NAV** (the
+3-hypothesis forward test) + **account-aware coverage** (skips buckets whose creds aren't in `.env.local`). 06-24 reads
+correctly: TOTAL **−$6,433** (Resurrected −3,164 / Core −2,086 / Bleeders −1,183), drift +438 = the close-route mis-book.
+
+**THE 06-24 DAY (what we saw):** whipsaw chop (SPY +0.12% / 1.19% range / 4 reversals; QQQ +0.10% / 2.11% / 9
+reversals). Desk **−$6.5k**. **V3/ALT took 0 trades — gap_min stood them down correctly** (doctrine working). The loss =
+QQQ-ORB −2,085 + pb-ride −1,956/−1,296 + grind churn — chop steamrolled the directional channels (the documented pattern).
+
+**NEXT (operator's queue):**
+1. **"RUN THE NUMBERS with the new knowledge"** (the operator's stated next ask) — backtest/analyze the awareness levers
+   (the 5-window OOS the brief calls for) and/or re-read the roster through the lever lens. ⚠ the brief's standing
+   caveat: 1-month/chop overfit risk — the levers want FORWARD data, the backtest is a preliminary read only.
+2. **First IWM session watch** (above) — seed[IWM] chain + IWM trading/standdown.
+3. **Awareness accrual** — re-run the pattern-mine aggregate WEEKLY as forward data accrues (`npm run backfill-forensics`
+   regenerates the dataset; re-run the workflow). The levers need a non-chop regime; June certifies nothing.
+4. **Stall-exit watch** — the `stall_exit` close_reason on pb-ride/pb-ride-2.
+5. **Vercel env** — add `ALPACA_KEY_2/3` + `ALPACA_SECRET_2/3` so UI-close works for Core/Resurrected.
+6. **ORPHAN_FLATTEN** — arm after a clean detection day (currently detect+page only).
+
 ## SESSION HANDOFF — 2026-06-24 (COCKPIT LIVE-PROVEN + FORENSICS DATASET DEPLOYED) — READ FIRST
 **Two things shipped + verified live today; the rest is a clean queue. Doctrine = `memory/desk-doctrine.md` (READ FIRST):
 the desk is a convex-bet engine competing for a scarce ONE-AT-A-TIME slot per channel; forward(paper) > backtest.**
