@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-25b"; // + QQQ V3/ALT clones in the PYRAMID rail (shadow, pyramid_adds=0); SPY base stays armed (pyramid_adds=3)
+export const WORKER_VERSION = "stream-2026-06-25c"; // + base-slug resolver strips -itm (builtin ITM clones, e.g. pb-ride-itm → pb-ride builtin + strike_offset)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

@@ -136,11 +136,12 @@ export function computeLevels(all: Bar[], todayET: string): { pdh?: number; pdl?
 interface Built { evaluate: Evaluate; warmup: number; tf: number; premiumExit?: { profitPct?: number; stopPct?: number }; trailK?: number; }
 function buildEvaluator(ch: ChannelConfig, ctx: DecisionCtx): Built | null {
   // Base-slug resolve (cron parity): a DUPLICATE (`<base>-2`, `-3` — the A/B primitive) strips
-  // its trailing -N to find the source strategy; then `<base>-manual` and `<base>-qqq/spy` twins
-  // run the base CODE strategy; a compiled .md/clone finds no registry hit and falls through to
-  // its spec_json. Provably safe — no built-in slug ends in -<digits>, so the -N strip only ever
-  // touches duplicates.
-  const code = getStrategy(ch.slug) ?? getStrategy(ch.slug.replace(/-\d+$/, "").replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, ""));
+  // its trailing -N to find the source strategy; then `<base>-manual`, `<base>-qqq/spy`, and
+  // `<base>-itm` (the strike-offset paper-lab twin, e.g. pb-ride-itm → pb-ride builtin) run the base
+  // CODE strategy; a compiled .md/clone finds no registry hit and falls through to its spec_json.
+  // Provably safe — no built-in slug ends in -<digits>/-itm, and the spec `-itm` clones (breakout-*-itm)
+  // strip to non-builtin base slugs so they still resolve via spec_json.
+  const code = getStrategy(ch.slug) ?? getStrategy(ch.slug.replace(/-\d+$/, "").replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "").replace(/-itm$/i, ""));
   if (code) return { evaluate: code.build(ctx.sessionBars, code.timeframeMin), warmup: code.warmupBars, tf: code.timeframeMin };
   if (ch.spec_json) {
     const spec = ch.spec_json as StrategySpec;
