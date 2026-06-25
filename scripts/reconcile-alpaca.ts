@@ -12,7 +12,7 @@
 // An account whose ALPACA_KEY_<ref> isn't in .env.local is SKIPPED (its OCCs flagged, not corrected).
 
 import { createClient } from "@supabase/supabase-js";
-import { writeFileSync } from "fs";
+import { writeFileSync, readFileSync, existsSync } from "fs";
 
 const PAPER = "https://paper-api.alpaca.markets";
 const FIX = process.argv.includes("--fix");
@@ -104,8 +104,33 @@ async function main() {
   for (const d of diffs.slice(0, 12)) console.log(`    ${d.occ}  broker ${usd(d.broker).padStart(9)}  desk ${usd(d.desk).padStart(9)}  Δ ${usd(d.delta).padStart(9)}`);
   if (onlyDesk.length) console.log(`\n  ⚠ ${onlyDesk.length} OCC(s) booked by the desk but NOT in any reached broker account — add the missing account keys (not corrected).`);
 
+  // ---- durable broker-truth snapshot (always; read-only OR fix) ----
+  // Persist each OCC's broker truth so re-analysis never re-does the slow Alpaca round-trip AND the
+  // books stay anchored after Alpaca prunes old orders. MERGED: the current run wins on overlap, older
+  // OCCs persist forever. Lean local jsonl (data/ is gitignored) — derive nightly, don't warehouse.
+  try {
+    const TPATH = "data/broker-truth.json";
+    const prevOccs: Record<string, any> = existsSync(TPATH) ? (JSON.parse(readFileSync(TPATH, "utf8")).occs ?? {}) : {};
+    const asOf = new Date().toISOString();
+    for (const [occ, e] of byOcc) {
+      const t = truth.get(occ)!;
+      prevOccs[occ] = { realized: r2(t.realized), avgSell: r2(t.avgSell), closed: t.closed, buyQty: e.bq, sellQty: e.sq, accts: [...e.accts], asOf };
+    }
+    writeFileSync(TPATH, JSON.stringify({ updated: asOf, count: Object.keys(prevOccs).length, occs: prevOccs }, null, 1));
+    console.log(`\n  broker-truth snapshot → ${TPATH} (${Object.keys(prevOccs).length} OCCs, durable/merged)`);
+  } catch (e) { console.error(`  ⚠ broker-truth snapshot failed: ${(e as Error).message}`); }
+
   // ---- correct (--fix) ----
-  if (!FIX) { console.log(`\n  (read-only. add --fix for the per-row correction preview, --fix --write to apply.)\n`); return; }
+  if (!FIX) {
+    // Health gate for the nightly clean-books cron: fail loud (non-zero) on unreachable accounts or
+    // real drift, so launchd/capture-forward surfaces it. The worker books row-primary going forward,
+    // so |error| should stay ~$0; a drift ≥ $200 means investigate the worker BEFORE auto-correcting.
+    const reachableN = equities.filter((e) => e.reachable).length;
+    if (reachableN === 0) { console.log(`\n  ✗ no Alpaca accounts reachable — cannot verify books (check keys/network).\n`); process.exit(4); }
+    if (Math.abs(deltaTot) >= 200) { console.log(`\n  ⚠ BOOKS DRIFT ${usd(deltaTot)} ≥ $200 — review the worker's booking, then 'reconcile-alpaca --fix --write' once confirmed.\n`); process.exit(3); }
+    console.log(`\n  ✓ books clean (|error| ${usd(deltaTot)} < $200). (add --fix for the per-row correction preview, --fix --write to apply.)\n`);
+    return;
+  }
   // DISTRIBUTE each OCC's TRUE broker realized across its desk rows by qty share → the books tie out to
   // the broker EXACTLY per OCC. Robust to the corrupted per-row entry/qty the (avg_sell−entry)×qty
   // formula can't reconcile (it left ~$3k off). Fair split on a shared lot (same strike, same-time

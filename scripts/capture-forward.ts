@@ -75,6 +75,17 @@ async function main() {
   const quotesOk = run("export-quotes", ["export-quotes"], 1);
   const barsOk = run("export-bars", ["export-bars"], 1);
 
+  // CLEAN BOOKS — keep the desk's per-channel P&L tied out to the broker so all analysis runs on truth.
+  //  · reconcile-alpaca (READ-ONLY) verifies the books vs the real Alpaca fills across all 3 accounts +
+  //    writes the durable broker-truth snapshot. It exits non-zero on real drift (≥$200) or unreachable
+  //    accounts → flagged in the summary. It does NOT auto-correct: the worker books row-primary going
+  //    forward, so drift means investigate the worker, never silently rewrite the books (run --fix --write
+  //    by hand once confirmed). Tier 1 because corrupted books poison every downstream verdict.
+  //  · backfill-forensics regenerates data/forensics-dataset.jsonl off the now-clean books (the LLM
+  //    analysis substrate) — best-effort.
+  const booksOk = run("reconcile-alpaca", ["reconcile-alpaca"], 1);
+  run("backfill-forensics", ["backfill-forensics"], 2);
+
   // TIER 2 — live-window analyses (best-effort; the ledger needs the still-live 7d quotes)
   for (const d of recentDays) run(`day-report ${d}`, ["day-report", "--", "--date", d], 2);
   run("build-training-store", ["build-training-store"], 2);
@@ -94,6 +105,10 @@ async function main() {
   else if (qBehind >= 5) { console.log(`\n  ⚠ GAP — quotes archive is ${qBehind} trading days behind (prune is ~7d). Data may already be LOST. Investigate the schedule.`); exit = exit || 2; }
   else if (qBehind >= 3) { console.log(`\n  ⚠ quotes archive is ${qBehind} trading days behind — within the 7d window but watch it; the Mac may be missing runs.`); }
   else { console.log(`\n  ✓ tape captured — corpus current (≤2 trading days behind). The flywheel is fed.`); }
+
+  // CLEAN-BOOKS verdict (the new nightly guarantee) — separate from the tape gap check above.
+  if (booksOk) console.log(`\n  ✓ clean books — desk P&L ties out to the broker; forensics dataset regenerated off clean books.`);
+  else { console.log(`\n  ⚠ CLEAN BOOKS — reconcile-alpaca flagged drift or unreachable accounts (see above). The books may NOT tie out; investigate the worker's booking before trusting the dataset, then 'npm run reconcile-alpaca -- --fix --write' once confirmed.`); exit = exit || 3; }
 
   const t1Fail = results.some((r) => r.tier === 1 && !r.ok);
   const t2Fail = results.filter((r) => r.tier === 2 && !r.ok).length;
