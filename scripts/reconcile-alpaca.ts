@@ -105,12 +105,24 @@ async function main() {
 
   // ---- correct (--fix) ----
   if (!FIX) { console.log(`\n  (read-only. add --fix for the per-row correction preview, --fix --write to apply.)\n`); return; }
+  // DISTRIBUTE each OCC's TRUE broker realized across its desk rows by qty share → the books tie out to
+  // the broker EXACTLY per OCC. Robust to the corrupted per-row entry/qty the (avg_sell−entry)×qty
+  // formula can't reconcile (it left ~$3k off). Fair split on a shared lot (same strike, same-time
+  // entries). The last row absorbs the rounding remainder so the OCC sums exactly.
+  type Row = NonNullable<typeof rows>[number];
   const corrections: { id: string; occ: string; old: number; neu: number }[] = [];
-  for (const r of rows ?? []) {
-    const t = truth.get(r.occ_symbol);
-    if (!t || !t.closed || t.avgSell <= 0) continue; // only matched, fully-closed, broker-reachable OCCs
-    const neu = r2((t.avgSell - Number(r.avg_entry_price)) * Number(r.qty) * 100);
-    if (Math.abs(neu - Number(r.realized_pnl ?? 0)) >= 0.5) corrections.push({ id: r.id, occ: r.occ_symbol, old: Number(r.realized_pnl ?? 0), neu });
+  const occRows = new Map<string, Row[]>();
+  for (const r of rows ?? []) { const t = truth.get(r.occ_symbol); if (t?.closed) { const a = occRows.get(r.occ_symbol) ?? []; a.push(r); occRows.set(r.occ_symbol, a); } }
+  for (const [occ, rs] of occRows) {
+    const t = truth.get(occ)!;
+    const totQty = rs.reduce((s, r) => s + Math.abs(Number(r.qty)), 0);
+    if (totQty <= 0) continue;
+    let assigned = 0;
+    rs.forEach((r, i) => {
+      const neu = i === rs.length - 1 ? r2(t.realized - assigned) : r2((t.realized * Math.abs(Number(r.qty))) / totQty);
+      assigned += neu;
+      if (Math.abs(neu - Number(r.realized_pnl ?? 0)) >= 0.5) corrections.push({ id: r.id, occ, old: Number(r.realized_pnl ?? 0), neu });
+    });
   }
   const oldSum = corrections.reduce((s, c) => s + c.old, 0), newSum = corrections.reduce((s, c) => s + c.neu, 0);
   console.log(`\n  CORRECTION (row-primary re-book to broker avg-sell) · ${corrections.length} rows change`);
