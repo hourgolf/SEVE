@@ -22,7 +22,7 @@ const f3 = (v: number) => (Number.isNaN(v) ? "—" : v.toFixed(3));
 const floorMin = (ms: number) => ms - (ms % 60_000);
 const DIRS: Record<string, string> = { SPY: "data/databento-mdte", QQQ: "data/databento-mdte-qqq", IWM: "data/databento-mdte-iwm" };
 
-type Decomp = { actual: number; delta: number; decay: number; thetaPerMin: number; realizedDelta: number; n: number; holdMin: number; qty: number; flatDecay: number | null };
+type Decomp = { actual: number; delta: number; decay: number; thetaPerMin: number; realizedDelta: number; n: number; holdMin: number; qty: number; flatDecay: number | null; corrUT: number };
 
 // reconstruct a trade's mid path from the day's mdte series + decompose via OLS(Δmid ~ a + b·ΔU)
 function decompose(trade: Trade, series: { ts: number[]; bid: number[]; ask: number[] } | undefined, uAt: (ts: number) => number | null): Decomp | null {
@@ -52,6 +52,7 @@ function decompose(trade: Trade, series: { ts: number[]; bid: number[]; ask: num
   for (const q of pts) { const du = q.u - mU, dt = q.tau - mT, dm = q.mid - mM; Suu += du * du; Stt += dt * dt; Sut += du * dt; Sum += du * dm; Stm += dt * dm; }
   const denom = Suu * Stt - Sut * Sut;
   if (Math.abs(denom) < 1e-9) return null; // degenerate: no underlying OR no time variation
+  const corrUT = Suu > 0 && Stt > 0 ? Sut / Math.sqrt(Suu * Stt) : 1; // U/time collinearity — the theta-v2 caveat made measurable (#5 hardening)
   const beta = (Sum * Stt - Stm * Sut) / denom;  // realized delta
   const gamma = (Stm * Suu - Sum * Sut) / denom; // realized theta per minute
   const totalDU = path[path.length - 1].u - path[0].u;
@@ -60,7 +61,7 @@ function decompose(trade: Trade, series: { ts: number[]; bid: number[]; ask: num
   const actual = (path[path.length - 1].mid - path[0].mid) * mult;
   const deltaPnl = beta * totalDU * mult, decay = gamma * totalMin * mult; // actual ≈ deltaPnl + decay + fit-residual
   const flat = Math.abs(totalDU) < 0.20; // directional≈0 ⇒ actual is ~pure decay (delta-free cross-check)
-  return { actual, delta: deltaPnl, decay, thetaPerMin: gamma, realizedDelta: beta, n: nP, holdMin: (trade.exitTs - trade.entryTs) / 60_000, qty: Math.abs(trade.qty), flatDecay: flat ? actual : null };
+  return { actual, delta: deltaPnl, decay, thetaPerMin: gamma, realizedDelta: beta, n: nP, holdMin: (trade.exitTs - trade.entryTs) / 60_000, qty: Math.abs(trade.qty), flatDecay: flat ? actual : null, corrUT };
 }
 
 // run a channel (optional strikeOffset) → per-session trades tagged with their session, decomposed
@@ -88,7 +89,10 @@ const agg = (ds: Decomp[]) => {
   const holdMin = n ? ds.reduce((a, d) => a + d.holdMin, 0) / n : 0;
   const flats = ds.filter((d) => d.flatDecay != null); const flatDecay = flats.reduce((a, d) => a + (d.flatDecay ?? 0), 0);
   const rd = ds.filter((d) => Math.abs(d.realizedDelta) > 1e-6); const avgRD = rd.length ? rd.reduce((a, d) => a + Math.abs(d.realizedDelta), 0) / rd.length : NaN; // |β| — signed avg cancels across calls/puts
-  return { n, actual, delta, decay, ctHours, holdMin, decayPerCtHr: ctHours ? decay / ctHours : NaN, flatN: flats.length, flatDecay, avgRealizedDelta: avgRD };
+  // #5 hardening: collinearity. hiCorr = trades where U/time too collinear to trust the β/γ split; loDecayPct = decay% on the CLEAN (low-corr) subset → if ≈ the all-trade decay%, the estimate is collinearity-robust.
+  const hiCorr = ds.filter((d) => Math.abs(d.corrUT) > 0.9).length;
+  const lo = ds.filter((d) => Math.abs(d.corrUT) <= 0.9); const loDecay = lo.reduce((a, d) => a + d.decay, 0), loDelta = lo.reduce((a, d) => a + Math.abs(d.delta), 0);
+  return { n, actual, delta, decay, ctHours, holdMin, decayPerCtHr: ctHours ? decay / ctHours : NaN, flatN: flats.length, flatDecay, avgRealizedDelta: avgRD, hiCorrPct: n ? 100 * hiCorr / n : NaN, loDecayPct: loDelta + Math.abs(loDecay) ? 100 * loDecay / (loDelta + Math.abs(loDecay)) : NaN };
 };
 
 async function main() {
@@ -100,7 +104,7 @@ async function main() {
 
   console.log(`\n  ═══ THETA v2 (EMPIRICAL, no BS) · per-channel decomposition · ACTUAL = DELTA(realized b·ΔU) + DECAY(realized a·n) ═══`);
   console.log(`  decay = the model-free holding cost (theta-dominated; carries vega + gamma-curvature). Real NBBO mid paths, backtest corpus.\n`);
-  console.log(`  ${p("channel", 16)}${p("n", 5)}${p("avgHold", 8)}${p("Σactual", 9)}${p("Σdelta", 9)}${p("Σdecay", 9)}${p("decay%", 8)}${p("$/ct/hr", 9)}${p("|realδ|", 7)}${p("flatChk", 9)}`);
+  console.log(`  ${p("channel", 16)}${p("n", 5)}${p("avgHold", 8)}${p("Σactual", 9)}${p("Σdelta", 9)}${p("Σdecay", 9)}${p("decay%", 8)}${p("$/ct/hr", 9)}${p("|realδ|", 7)}${p("flatChk", 9)}${p("%collin", 8)}${p("dec%loC", 8)}`);
   for (const ch of CH) {
     const D = byS.get(ch.sym), mdte = byMdte.get(ch.sym); if (!D || !mdte) continue;
     const a = agg(runChannel(D, mdte, ch));
@@ -108,7 +112,7 @@ async function main() {
     const decayPct = a.actual !== 0 || a.delta !== 0 ? 100 * a.decay / (Math.abs(a.delta) + Math.abs(a.decay)) : NaN;
     const flatChk = a.flatN >= 2 ? `${usd(a.flatDecay)}/${a.flatN}` : "—";
     const rel = a.decay > 0 ? " ?" : ""; // positive decay is theta-impossible → the regression can't isolate decay on premium-exit channels
-    console.log(`  ${p(ch.name.slice(0, 15), 16)}${p(a.n, 5)}${p(Math.round(a.holdMin) + "m", 8)}${p(usd(a.actual), 9)}${p(usd(a.delta), 9)}${p(usd(a.decay) + rel, 9)}${p(f1(decayPct) + "%", 8)}${p(usd(a.decayPerCtHr), 9)}${p(f3(a.avgRealizedDelta), 7)}${p(flatChk, 9)}`);
+    console.log(`  ${p(ch.name.slice(0, 15), 16)}${p(a.n, 5)}${p(Math.round(a.holdMin) + "m", 8)}${p(usd(a.actual), 9)}${p(usd(a.delta), 9)}${p(usd(a.decay) + rel, 9)}${p(f1(decayPct) + "%", 8)}${p(usd(a.decayPerCtHr), 9)}${p(f3(a.avgRealizedDelta), 7)}${p(flatChk, 9)}${p(f1(a.hiCorrPct) + "%", 8)}${p(f1(a.loDecayPct) + "%", 8)}`);
   }
 
   console.log(`\n  ═══ DOES ITM BUY BACK THETA? · V3/ALT decay rate ATM vs ITM1 (same channel, strike_offset 0 vs −1) ═══\n`);

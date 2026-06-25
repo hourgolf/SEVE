@@ -117,6 +117,39 @@ async function peakAndDelta(occ: string, openMs: number, closeMs: number, dateET
   return { peak: null, delta: null };
 }
 
+// option mid PATH over [open,close] from option_quotes (DB ~7d) ∪ the gz archive — substrate for the empirical greek.
+async function optionPath(occ: string, openMs: number, closeMs: number, dateET: string): Promise<Array<{ ts: number; mid: number }>> {
+  const { data } = await sb.from("option_quotes").select("captured_at,mid").eq("occ_symbol", occ)
+    .gte("captured_at", new Date(openMs).toISOString()).lte("captured_at", new Date(closeMs ?? openMs).toISOString())
+    .order("captured_at", { ascending: true });
+  if (data && data.length) return (data as Array<{ captured_at: string; mid: number | null }>).filter((q) => q.mid != null).map((q) => ({ ts: Date.parse(q.captured_at), mid: Number(q.mid) }));
+  const qs = archiveFor(dateET)?.get(occ);
+  if (qs && qs.length) return qs.filter((q) => q.ts >= openMs && q.ts <= (closeMs ?? openMs) && isFinite(q.mid)).sort((a, b) => a.ts - b.ts).map((q) => ({ ts: q.ts, mid: q.mid }));
+  return [];
+}
+
+// EMPIRICAL greeks (NO Black-Scholes [[no-black-scholes]]): per-trade levels regression mid ~ α + β·U + γ·τ over the
+// minute-resampled path. β = realized delta (what the option ACTUALLY did per $ of underlying — pin/skew baked in),
+// γ = realized theta/min (the intercept IS the model-free decay). The verified theta-v2 method
+// (engine/theta-empirical-probe.ts, 43e3383). Reliable for HOLD channels (≥10min); short premium-exit scalps return
+// null (too short a path + selection bias flips γ positive — theta-impossible). decayPerCtHr = γ·60·100.
+function empiricalGreeks(optPath: Array<{ ts: number; mid: number }>, sess: RealSession | undefined, holdMin: number): { realizedDelta: number; realizedThetaPerMin: number; decayPerCtHr: number; nPts: number } | null {
+  if (holdMin < 10 || !sess || optPath.length < 4) return null;
+  const uMap = new Map<number, number>(); for (const b of sess.bars) uMap.set(floorMin(b.ts), b.close);
+  const minuteMid = new Map<number, number>(); for (const q of optPath) if (q.mid > 0) minuteMid.set(floorMin(q.ts), q.mid);
+  const path = [...minuteMid.keys()].sort((a, b) => a - b).map((m) => ({ t: m, mid: minuteMid.get(m)!, u: uMap.get(m) })).filter((x): x is { t: number; mid: number; u: number } => x.u != null);
+  if (path.length < 4) return null;
+  const t0 = path[0].t, pts = path.map((x) => ({ u: x.u, tau: (x.t - t0) / 60000, mid: x.mid }));
+  const nP = pts.length, mU = pts.reduce((a, q) => a + q.u, 0) / nP, mT = pts.reduce((a, q) => a + q.tau, 0) / nP, mM = pts.reduce((a, q) => a + q.mid, 0) / nP;
+  let Suu = 0, Stt = 0, Sut = 0, Sum = 0, Stm = 0;
+  for (const q of pts) { const du = q.u - mU, dt = q.tau - mT, dm = q.mid - mM; Suu += du * du; Stt += dt * dt; Sut += du * dt; Sum += du * dm; Stm += dt * dm; }
+  const corrUT = Suu > 0 && Stt > 0 ? Sut / Math.sqrt(Suu * Stt) : 1;
+  if (Math.abs(corrUT) > 0.9) return null; // U & time too collinear (monotonic-trend hold) → β/γ split unreliable (the theta-v2 caveat, gated per-trade); the choppier holds (low corr) carry the channel's estimate
+  const denom = Suu * Stt - Sut * Sut; if (Math.abs(denom) < 1e-9) return null;
+  const beta = (Sum * Stt - Stm * Sut) / denom, gamma = (Stm * Suu - Sum * Sut) / denom;
+  return { realizedDelta: Math.round(beta * 1000) / 1000, realizedThetaPerMin: Math.round(gamma * 10000) / 10000, decayPerCtHr: Math.round(gamma * 6000 * 100) / 100, nPts: nP };
+}
+
 async function main() {
   console.log(`backfill-forensics — closed positions opened ≥ ${FROM} (ET)\n`);
 
@@ -167,7 +200,7 @@ async function main() {
 
   const rows: Array<{ id: string; entry_features: Record<string, unknown> | null; entry_reason: string | null; entry_delta: number | null; peak_mark: number | null }> = [];
   const dataset: Record<string, unknown>[] = []; // flat per-trade rows for the pattern-mining pass
-  const stat = { total: 0, feat: 0, reason: 0, delta: 0, peak: 0, noSession: 0, noSignal: 0 };
+  const stat = { total: 0, feat: 0, reason: 0, delta: 0, peak: 0, greeks: 0, noSession: 0, noSignal: 0 };
   for (const p of positions) {
     stat.total++;
     const sym = (p.underlying ?? "SPY").toUpperCase();
@@ -211,9 +244,15 @@ async function main() {
     if (entryDelta != null) stat.delta++;
     if (peak != null) stat.peak++;
 
+    // ---- empirical greeks (realized delta + realized theta from the price path; NO Black-Scholes) ----
+    const holdMinTr = Math.round((closeMs - openMs) / 60000);
+    const greeks = empiricalGreeks(await optionPath(p.occ_symbol, openMs, closeMs, d), sess, holdMinTr);
+    if (greeks) stat.greeks++;
+
     // ---- merge: cost < computed < EXISTING (live ground-truth always wins, only fill gaps) ----
-    const mergedFeat = (feat || Object.keys(cost).length)
-      ? { ...cost, ...(feat ?? {}), ...((p.entry_features as Record<string, unknown>) ?? {}) }
+    const greekFields = greeks ? { realizedDelta: greeks.realizedDelta, realizedThetaPerMin: greeks.realizedThetaPerMin, decayPerCtHr: greeks.decayPerCtHr } : {};
+    const mergedFeat = (feat || Object.keys(cost).length || greeks)
+      ? { ...cost, ...(feat ?? {}), ...((p.entry_features as Record<string, unknown>) ?? {}), ...greekFields } // greeks last: freshly COMPUTED each run (not live ground-truth) → recompute-wins
       : null;
     rows.push({
       id: p.id,
@@ -239,6 +278,7 @@ async function main() {
       sym, dir: p.opt_type, reason: p.entry_reason ?? reason,
       ...(mergedFeat ?? {}),
       entryDelta: p.entry_delta ?? entryDelta,
+      realizedDelta: greeks?.realizedDelta ?? null, realizedThetaPerMin: greeks?.realizedThetaPerMin ?? null, decayPerCtHr: greeks?.decayPerCtHr ?? null,
       entry: r3(entryPx), exit: r3(exitPx), qty: q, pnl: realized,
       peak: pkUsed != null ? r3(pkUsed) : null, mfePct, givebackPct,
       holdMin: Math.round((closeMs - openMs) / 60000), exitReason: p.close_reason ?? null,
@@ -246,12 +286,12 @@ async function main() {
     });
   }
 
-  console.log(`\n${stat.total} trades · features ${stat.feat} · reason ${stat.reason} · delta ${stat.delta} · peak ${stat.peak}`);
+  console.log(`\n${stat.total} trades · features ${stat.feat} · reason ${stat.reason} · delta ${stat.delta} · peak ${stat.peak} · realized-greeks ${stat.greeks}`);
   console.log(`  gaps: ${stat.noSession} no-session-bars · ${stat.noSignal} no-matched-signal`);
 
   // Always emit the flat analysis dataset (the pattern-mining substrate), independent of the DB apply.
   writeFileSync("data/forensics-dataset.jsonl", dataset.map((r) => JSON.stringify(r)).join("\n") + "\n");
-  console.log(`→ data/forensics-dataset.jsonl (${dataset.length} trades · entry context + MFE/giveback + outcome + concentration[stackAtEntry/occShare/bookingDelta])`);
+  console.log(`→ data/forensics-dataset.jsonl (${dataset.length} trades · entry context + MFE/giveback + outcome + concentration + empirical-greeks[realizedDelta/realizedThetaPerMin/decayPerCtHr, no BS])`);
 
   if (WRITE && sbWrite) {
     console.log(`\napplying ${rows.length} rows via service role…`);
