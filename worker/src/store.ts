@@ -42,6 +42,11 @@ export interface ChannelConfig {
   // (default); 1 = ALWAYS the next session's expiry (pb-ride — its edge IS the
   // 1DTE time value). Same-day flatten unchanged either way.
   entry_dte: number;
+  // Per-channel STRIKE OFFSET (moneyness, 46_strike_offset.sql): shift the entry strike off ATM by N
+  // dollars (= N strikes) toward OTM — 0 = ATM (default, byte-identical), −1 = one strike ITM (more
+  // delta + intrinsic, less theta/giveback; the strike-moneyness finding). Applied identically in
+  // decide (the occ) AND execute (the row.strike) so the order and the booked row agree.
+  strike_offset: number;
   // Per-channel TAKE-PROFIT (compound policy, 38_take_profit.sql): exit at +pct% of
   // premium, then RE-ENTER on the next signal when flat. For channels with NO convex
   // tail (PB: ridden −EV, compound +EV) compounding beats riding. 0 = off (ride to the
@@ -134,6 +139,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       soloed: !!cfg.soloed,
       event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
       entry_dte: Math.max(0, Math.min(1, Number(cfg.entry_dte ?? 0))),
+      strike_offset: Math.round(Number(cfg.strike_offset ?? 0)),
       take_profit_pct: Math.max(0, Number(cfg.take_profit_pct ?? 0)),
       pyramid_adds: Math.max(0, Math.floor(Number(cfg.pyramid_adds ?? 0))),
       stall_minutes: Math.max(0, Math.floor(Number(cfg.stall_minutes ?? 0))),

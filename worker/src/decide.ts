@@ -313,7 +313,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   if (intent?.kind === "enter" && !row) {
     const dir = intent.direction;
     if (!dir) return { ...base, action: "skip", reason: "multileg_unsupported" }; // multi-leg specs aren't live-armable (memory)
-    const strike = Math.round(f.close);
+    const strike = Math.round(f.close) + (dir === "call" ? 1 : -1) * (ch.strike_offset ?? 0);
     const inCutoff = ctx.minutesToClose <= policy.OPEN_0DTE_CUTOFF_MIN;
     // entry_dte=1 (34_entry_dte.sql): the channel ALWAYS buys the next session's
     // expiry (pb-ride — the 0DTE variant is refuted; the edge is the time value).

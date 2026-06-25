@@ -234,7 +234,7 @@ export async function executeEntry(
 ): Promise<void> {
   const occ = d.occ!;
   const dir = d.direction!;
-  const strike = Math.round(spotClose);
+  const strike = Math.round(spotClose) + (dir === "call" ? 1 : -1) * (ch.strike_offset ?? 0);
   let blocked = d.blocked ?? null;
 
   // Per-channel idempotency + the lost-insert recovery (cron parity, incl. 09d).
