@@ -1,30 +1,37 @@
-// reconcile-alpaca — GROUND-TRUTH the desk's books against the broker. The shared-OCC booking bugs
-// (the $0 phantoms, the over-books) mean the historical realized_pnl can't be trusted until it's tied
-// out to what ACTUALLY traded. This reconstructs each OCC's TRUE realized from the default Alpaca
-// account's real fills (Σ sell − Σ buy, for fully-closed OCCs) and diffs it against the desk's booked
-// realized_pnl per OCC. The divergence IS the booking error. Read-only (GET account + orders).
+// reconcile-alpaca — GROUND-TRUTH the desk's books against the broker, then optionally CORRECT them.
+// The shared-OCC booking bugs (the $0 phantoms, the multi-channel over-books) mean historical
+// realized_pnl can't be trusted until tied out to what ACTUALLY traded. This reconstructs each OCC's
+// TRUE realized from the real Alpaca fills across ALL cockpit accounts (Σ sell − Σ buy, fully-closed),
+// diffs vs the desk's booked realized_pnl, and — with --fix — re-books each row to the broker truth via
+// the row-primary formula (broker avg-sell − row entry)×row.qty, the SAME math now live in the worker.
 //
-//   npm run reconcile-alpaca
+//   npm run reconcile-alpaca                 # read-only diagnosis (all accounts with keys)
+//   npm run reconcile-alpaca -- --fix        # + dry-run preview of the per-row correction
+//   npm run reconcile-alpaca -- --fix --write  # APPLY the correction (service role; idempotent)
 //
-// Scope: the DEFAULT account (ALPACA_KEY) = every channel pre-06-24 + the 06-24 Bleeders bucket (the
-// bulk). Cockpit Core/Resurrected (06-24 only) need ALPACA_KEY_2/3 in .env.local — flagged, not failed.
+// An account whose ALPACA_KEY_<ref> isn't in .env.local is SKIPPED (its OCCs flagged, not corrected).
 
 import { createClient } from "@supabase/supabase-js";
 
 const PAPER = "https://paper-api.alpaca.markets";
+const FIX = process.argv.includes("--fix");
+const WRITE = process.argv.includes("--write");
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
-const AK = process.env.ALPACA_KEY!, AS = process.env.ALPACA_SECRET!;
-const hdr = { "APCA-API-KEY-ID": AK, "APCA-API-SECRET-KEY": AS } as Record<string, string>;
+const sbW = WRITE && process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  : null;
 const usd = (v: number) => (v >= 0 ? "+$" : "-$") + Math.abs(Math.round(v)).toLocaleString();
+const r2 = (v: number) => Math.round(v * 100) / 100;
 
 interface Order { id: string; symbol: string; side: "buy" | "sell"; status: string; filled_qty: string; filled_avg_price: string | null; submitted_at: string; }
+interface Leg { bq: number; bc: number; sq: number; sp: number; accts: Set<string>; }
 
-async function allOrders(): Promise<Order[]> {
+async function accountFills(hdr: Record<string, string>): Promise<Order[]> {
   const out = new Map<string, Order>();
   let after = "2026-05-31T00:00:00Z";
   for (let page = 0; page < 80; page++) {
     const r = await fetch(`${PAPER}/v2/orders?status=all&limit=500&direction=asc&nested=false&after=${after}`, { headers: hdr });
-    if (!r.ok) { console.error(`alpaca orders ${r.status}: ${(await r.text()).slice(0, 200)}`); break; }
+    if (!r.ok) { console.error(`  alpaca orders ${r.status}: ${(await r.text()).slice(0, 160)}`); break; }
     const batch = (await r.json()) as Order[];
     if (!Array.isArray(batch) || batch.length === 0) break;
     let added = 0;
@@ -36,71 +43,84 @@ async function allOrders(): Promise<Order[]> {
 }
 
 async function main() {
-  // ---- broker truth: equity + per-OCC realized from real fills ----
-  const acct = await fetch(`${PAPER}/v2/account`, { headers: hdr }).then((r) => r.json());
-  const orders = await allOrders();
-  const filled = orders.filter((o) => o.status === "filled" && Number(o.filled_qty) > 0 && Number(o.filled_avg_price) > 0);
+  // ---- which accounts to reconcile (cred_ref → keys) ----
+  const { data: accts } = await sb.from("accounts").select("name,cred_ref");
+  const targets = [{ name: "paper-main (default)", ref: "" }, ...(accts ?? []).filter((a) => a.cred_ref).map((a) => ({ name: a.name as string, ref: String(a.cred_ref) }))];
+  // de-dup (paper-main may also appear with null cred_ref)
+  const seen = new Set<string>();
+  const accountList = targets.filter((t) => !seen.has(t.ref) && (seen.add(t.ref), true));
 
-  type Leg = { bq: number; bc: number; sq: number; sp: number };
+  // ---- broker truth: merge fills across every reachable account, by OCC ----
   const byOcc = new Map<string, Leg>();
-  for (const o of filled) {
-    const q = Number(o.filled_qty), px = Number(o.filled_avg_price);
-    const e = byOcc.get(o.symbol) ?? { bq: 0, bc: 0, sq: 0, sp: 0 };
-    if (o.side === "buy") { e.bq += q; e.bc += q * px; } else { e.sq += q; e.sp += q * px; }
-    byOcc.set(o.symbol, e);
+  const equities: { name: string; equity: number; reachable: boolean }[] = [];
+  for (const a of accountList) {
+    const AK = a.ref ? process.env[`ALPACA_KEY_${a.ref}`] : process.env.ALPACA_KEY;
+    const AS = a.ref ? process.env[`ALPACA_SECRET_${a.ref}`] : process.env.ALPACA_SECRET;
+    if (!AK || !AS) { equities.push({ name: a.name, equity: NaN, reachable: false }); console.log(`  ⚠ ${a.name}: no ALPACA_KEY_${a.ref || "(default)"} in .env.local — SKIPPED`); continue; }
+    const hdr = { "APCA-API-KEY-ID": AK, "APCA-API-SECRET-KEY": AS };
+    const acct = await fetch(`${PAPER}/v2/account`, { headers: hdr }).then((r) => r.json());
+    equities.push({ name: a.name, equity: Number(acct.equity), reachable: true });
+    const fills = (await accountFills(hdr)).filter((o) => o.status === "filled" && Number(o.filled_qty) > 0 && Number(o.filled_avg_price) > 0);
+    for (const o of fills) {
+      const q = Number(o.filled_qty), px = Number(o.filled_avg_price);
+      const e = byOcc.get(o.symbol) ?? { bq: 0, bc: 0, sq: 0, sp: 0, accts: new Set() };
+      if (o.side === "buy") { e.bq += q; e.bc += q * px; } else { e.sq += q; e.sp += q * px; }
+      e.accts.add(a.name);
+      byOcc.set(o.symbol, e);
+    }
   }
-  const brokerRealized = new Map<string, { realized: number; closed: boolean }>();
+  // per-OCC broker realized + avg sell (the row-primary exit for the correction)
+  const truth = new Map<string, { realized: number; avgSell: number; closed: boolean }>();
   for (const [occ, e] of byOcc) {
-    const closed = Math.abs(e.bq - e.sq) < 0.5; // fully round-tripped
-    const realized = closed && e.sq > 0 ? (e.sp - e.bc) * 100 : 0;
-    brokerRealized.set(occ, { realized, closed });
+    const closed = Math.abs(e.bq - e.sq) < 0.5 && e.sq > 0;
+    truth.set(occ, { realized: closed ? (e.sp - e.bc) * 100 : 0, avgSell: e.sq > 0 ? e.sp / e.sq : 0, closed });
   }
 
-  // ---- desk books: realized_pnl per OCC (default-account channels only) ----
-  // Pre-06-24 every channel hit the default account; on 06-24 only the Bleeders (cred_ref null) did.
-  // Match by OCC: an OCC the BROKER (default) traded is by definition a default-account OCC, so summing
-  // ALL desk rows on that OCC is correct for pre-cockpit days; 06-24 split OCCs are flagged separately.
-  const { data: rows } = await sb.from("positions").select("occ_symbol,realized_pnl,strategist_id").eq("status", "closed").gte("opened_at", "2026-06-01");
+  // ---- desk rows (per OCC) ----
+  const { data: rows } = await sb.from("positions").select("id,occ_symbol,realized_pnl,avg_entry_price,qty,strategist_id").eq("status", "closed").gte("opened_at", "2026-06-01");
   const deskByOcc = new Map<string, number>();
   for (const r of rows ?? []) deskByOcc.set(r.occ_symbol, (deskByOcc.get(r.occ_symbol) ?? 0) + Number(r.realized_pnl ?? 0));
 
-  // ---- compare ----
-  const onlyDesk: { occ: string; desk: number }[] = []; // desk booked but broker(default) never traded → cockpit/other acct
-  const onlyBroker: { occ: string; broker: number }[] = []; // broker traded but desk has no row → coverage gap
+  // ---- diagnose ----
   const diffs: { occ: string; broker: number; desk: number; delta: number }[] = [];
   let brokerTot = 0, deskTot = 0, deltaTot = 0;
-
-  const allOccs = new Set([...brokerRealized.keys(), ...deskByOcc.keys()]);
-  for (const occ of allOccs) {
-    const b = brokerRealized.get(occ), d = deskByOcc.get(occ);
-    if (b && !b.closed) continue; // not fully closed on the broker → skip
-    if (b && d == null) { onlyBroker.push({ occ, broker: b.realized }); continue; }
-    if (!b && d != null) { onlyDesk.push({ occ, desk: d }); continue; }
-    if (b && d != null) {
-      const delta = d - b.realized; // desk-booked minus broker-truth: + = desk OVER-booked, − = UNDER (the $0 phantoms)
-      brokerTot += b.realized; deskTot += d; deltaTot += delta;
-      if (Math.abs(delta) >= 1) diffs.push({ occ, broker: b.realized, desk: d, delta });
-    }
+  const onlyDesk: string[] = [];
+  for (const occ of new Set([...truth.keys(), ...deskByOcc.keys()])) {
+    const t = truth.get(occ), d = deskByOcc.get(occ);
+    if (t && !t.closed) continue;
+    if (!t && d != null) { onlyDesk.push(occ); continue; }
+    if (t && d != null) { brokerTot += t.realized; deskTot += d; deltaTot += d - t.realized; if (Math.abs(d - t.realized) >= 1) diffs.push({ occ, broker: t.realized, desk: d, delta: d - t.realized }); }
   }
   diffs.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
-  console.log(`\n  RECONCILE-ALPACA · DEFAULT account (paper-main + 06-24 Bleeders) · ${filled.length} filled orders / ${byOcc.size} OCCs since 06-01`);
-  console.log(`  ─────────────────────────────────────────────────────────────────────────────`);
-  console.log(`  BROKER (truth)   equity ${usd(Number(acct.equity))} · cash ${usd(Number(acct.cash))} · last_equity ${usd(Number(acct.last_equity))}`);
-  console.log(`  Σ realized — broker fills:  ${usd(brokerTot)}`);
+  const reachable = equities.filter((e) => e.reachable);
+  console.log(`\n  RECONCILE-ALPACA · ${reachable.length}/${equities.length} accounts reached · ${byOcc.size} broker OCCs since 06-01`);
+  for (const e of equities) console.log(`    ${e.reachable ? "✓" : "—"} ${e.name.padEnd(22)} ${e.reachable ? "equity " + usd(e.equity) : "(skipped — add keys)"}`);
+  console.log(`\n  Σ realized — broker fills:  ${usd(brokerTot)}`);
   console.log(`  Σ realized — desk booked:   ${usd(deskTot)}   (matched OCCs)`);
-  console.log(`  ⇒ BOOKING ERROR (desk − broker): ${usd(deltaTot)}   ${Math.abs(deltaTot) < 200 ? "✓ books tie out" : "⚠ books DIVERGE"}`);
-  console.log(`     (+ = desk over-reported · − = desk under-reported, the $0 phantoms)\n`);
+  console.log(`  ⇒ BOOKING ERROR (desk − broker): ${usd(deltaTot)}   ${Math.abs(deltaTot) < 200 ? "✓ books tie out" : "⚠ books DIVERGE"}  (+ over-reported · − under, the $0 phantoms)`);
+  console.log(`\n  TOP PER-OCC DIVERGENCES:`);
+  for (const d of diffs.slice(0, 12)) console.log(`    ${d.occ}  broker ${usd(d.broker).padStart(9)}  desk ${usd(d.desk).padStart(9)}  Δ ${usd(d.delta).padStart(9)}`);
+  if (onlyDesk.length) console.log(`\n  ⚠ ${onlyDesk.length} OCC(s) booked by the desk but NOT in any reached broker account — add the missing account keys (not corrected).`);
 
-  console.log(`  TOP PER-OCC DIVERGENCES (desk − broker):`);
-  for (const d of diffs.slice(0, 14)) console.log(`    ${d.occ}  broker ${usd(d.broker).padStart(9)}  desk ${usd(d.desk).padStart(9)}  Δ ${usd(d.delta).padStart(9)}`);
+  // ---- correct (--fix) ----
+  if (!FIX) { console.log(`\n  (read-only. add --fix for the per-row correction preview, --fix --write to apply.)\n`); return; }
+  const corrections: { id: string; occ: string; old: number; neu: number }[] = [];
+  for (const r of rows ?? []) {
+    const t = truth.get(r.occ_symbol);
+    if (!t || !t.closed || t.avgSell <= 0) continue; // only matched, fully-closed, broker-reachable OCCs
+    const neu = r2((t.avgSell - Number(r.avg_entry_price)) * Number(r.qty) * 100);
+    if (Math.abs(neu - Number(r.realized_pnl ?? 0)) >= 0.5) corrections.push({ id: r.id, occ: r.occ_symbol, old: Number(r.realized_pnl ?? 0), neu });
+  }
+  const oldSum = corrections.reduce((s, c) => s + c.old, 0), newSum = corrections.reduce((s, c) => s + c.neu, 0);
+  console.log(`\n  CORRECTION (row-primary re-book to broker avg-sell) · ${corrections.length} rows change`);
+  console.log(`    Σ booked (old): ${usd(oldSum)}  →  Σ corrected: ${usd(newSum)}   (net ${usd(newSum - oldSum)})`);
+  for (const c of corrections.slice(0, 10)) console.log(`      ${c.occ}  ${usd(c.old).padStart(9)} → ${usd(c.neu).padStart(9)}`);
 
-  const odTot = onlyDesk.reduce((s, x) => s + x.desk, 0);
-  const obTot = onlyBroker.reduce((s, x) => s + x.broker, 0);
-  console.log(`\n  ONLY-DESK (booked, but NOT on the default account → cockpit Core/Resurrected, needs ALPACA_KEY_2/3): ${onlyDesk.length} OCCs, ${usd(odTot)} booked`);
-  console.log(`  ONLY-BROKER (traded on default, NO desk row → coverage gap): ${onlyBroker.length} OCCs, ${usd(obTot)} broker realized`);
-  if (onlyBroker.length) for (const x of onlyBroker.slice(0, 6)) console.log(`    ${x.occ}  broker ${usd(x.broker)}`);
-  console.log(`\n  READ: the BOOKING ERROR is how far the historical per-OCC books are off the broker. Big − = the $0`);
-  console.log(`  phantoms (movers booked $0). Correcting = re-book each matched OCC's desk rows to the broker truth.\n`);
+  if (!WRITE) { console.log(`\n  DRY-RUN. Re-run with --fix --write to apply (service role).\n`); return; }
+  if (!sbW) { console.error(`\n  --write needs SUPABASE_SERVICE_ROLE_KEY in .env.local.\n`); process.exit(1); }
+  let ok = 0;
+  for (const c of corrections) { const { error } = await sbW.from("positions").update({ realized_pnl: c.neu }).eq("id", c.id).eq("status", "closed"); if (!error) ok++; else console.error(`    ${c.occ}: ${error.message}`); }
+  console.log(`\n  ✓ APPLIED ${ok}/${corrections.length} corrections to the books (matched OCCs re-booked to broker truth).\n`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
