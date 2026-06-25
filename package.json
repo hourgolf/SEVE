@@ -73,6 +73,7 @@
     "day-report": "tsx --env-file=.env.local scripts/day-report.ts",
     "backfill-forensics": "tsx --env-file=.env.local scripts/backfill-forensics.ts",
     "forensics-mine": "tsx scripts/forensics-mine.ts",
+    "reconcile-alpaca": "tsx --env-file=.env.local scripts/reconcile-alpaca.ts",
     "override-scorecard": "tsx scripts/override-scorecard.ts",
     "build-training-store": "tsx --env-file=.env.local scripts/build-training-store.ts",
     "gap-sizing-probe": "tsx --env-file=.env.local engine/gap-sizing-probe.ts",
