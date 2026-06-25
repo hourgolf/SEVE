@@ -82,32 +82,33 @@ async function placeFill(
   return alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase }, ctx.api);
 }
 
-// Fill-net realized to book on THIS close (cron realizedToBook parity): the
-// channel's own filled buys/sells for this OCC (slug-prefixed client_order_id)
-// blended, minus what prior closed rows already booked today.
-async function realizedToBook(
-  strategistId: string, slug: string, occ: string,
-  allOrders: alpaca.AlpacaOrder[], sinceIso: string,
-  extraSell?: { qty: number; px: number },
-): Promise<number> {
+// ROW-PRIMARY realized (the hardened booking, 2026-06-24): the position ROW is the source of truth for
+// the channel's entry (avg_entry_price — blended across any pyramid adds in executeAdd) and its qty (its
+// OWN share of a shared/netted Alpaca lot). Booking (exit − entry)×soldQty is IMMUNE to the order-tag
+// reconstruction's failure modes that booked real movers as $0: a sibling's sell tagged to the SIBLING
+// not this row, a buy aged out of the 500-order snapshot, a tag mismatch. soldQty = contracts THIS close
+// actually moved (own fill, or the row's full share on a sibling-drained reconcile). A partial exit
+// always CLOSES the row (leftover re-rows via 09d) → no cumulative sum to over-count; each row books its
+// own qty exactly once (status-guarded close), so re-entries and shared lots can't double-count.
+function rowRealized(row: store.PositionRow, exitPx: number, soldQty: number): number {
+  return Math.round((exitPx - row.avg_entry_price) * soldQty * 100 * 100) / 100;
+}
+
+// The legacy order-tag P&L (this channel's slug-tagged buys/sells, blended). Kept ONLY as a sync
+// CROSS-CHECK against rowRealized so a divergence — the very tag bug that used to book $0 — gets
+// journaled. Never the booking path now. (The cap keeps any injected sell ≤ the unsold share.)
+function orderTagTarget(slug: string, occ: string, allOrders: alpaca.AlpacaOrder[], extraSell?: { qty: number; px: number }): number {
   let bq = 0, bc = 0, sq = 0, sp = 0;
   for (const o of allOrders) {
-    if (o.status !== "filled") continue;
-    if (!o.client_order_id.startsWith(`${slug}-${occ}-`)) continue;
+    if (o.status !== "filled" || !o.client_order_id.startsWith(`${slug}-${occ}-`)) continue;
     if (o.side === "buy") { bq += o.filled_qty; bc += o.filled_qty * o.filled_avg_price; }
     else { sq += o.filled_qty; sp += o.filled_qty * o.filled_avg_price; }
   }
-  // Cap the injected reconcile-sell to the row's UNSOLD share (bq − sq): a row can only book the
-  // contracts it BOUGHT and hasn't already sold under its own tag, so a partial-own-sell that then
-  // reconciles can't push sq past bq (which would over-report — the double-count the adversarial
-  // review caught). Enforces the per-row "books only its own qty" invariant the fix relies on.
   if (extraSell && extraSell.qty > 0 && extraSell.px > 0) {
     const inject = Math.max(0, Math.min(extraSell.qty, bq - sq));
     if (inject > 0) { sq += inject; sp += inject * extraSell.px; }
   }
-  const target = sq > 0 && bq > 0 ? sq * (sp / sq - bc / bq) * 100 : 0;
-  const booked = await store.bookedRealizedSince(strategistId, occ, sinceIso);
-  return Math.round((target - booked) * 100) / 100;
+  return sq > 0 && bq > 0 ? Math.round(sq * (sp / sq - bc / bq) * 100 * 100) / 100 : 0;
 }
 
 // The price a reconciled (sibling-drained) row's contracts ACTUALLY left for, + whether it's a real
@@ -130,18 +131,17 @@ export async function executeExit(
 
   const liveBid = ctx.chain.byOcc(occ)?.bid ?? 0;
   const reconcileClose = async (why: string) => {
-    // SHARED-OCC FIX (2026-06-24, hardened by adversarial review): the lot was sold by a SIBLING (or
-    // manually) so this row has no own slug-tagged sell → order-only fill-net booked $0 (the bug that
-    // recorded +15-92% movers as $0 — 06-09 V3/ALT, 06-23/24 power-smart "reconciled"). Book this row's
-    // SHARE at the price its contracts ACTUALLY left for, via (exit − entry)×row.qty. realizedToBook
-    // caps the inject to the UNSOLD share (bq−sq) so a partial-own-sell-then-reconcile can't over-report;
-    // the px is the OCC's unambiguous filled sell, else an ESTIMATE from the live mark (→ close_reason
-    // reconciled_estimated). Falls back to $0 only if no mark exists. Each row books only its OWN qty.
+    // SHARED-OCC FIX (2026-06-24, row-primary): the lot was sold by a SIBLING (or manually) so this row
+    // has no own slug-tagged sell — the old order-tag fill-net booked $0 (the bug that recorded +15-92%
+    // movers as $0: 06-09 V3/ALT, 06-23/24 power-smart "reconciled"). Book the row's share directly from
+    // the ROW — (exit − avg_entry)×row.qty — at the price its contracts actually left for: the OCC's
+    // unambiguous filled sell, else an ESTIMATE from the live mark (→ close_reason reconciled_estimated).
+    // The row sold nothing itself, so row.qty IS its unsold share → no double-count. $0 only if no mark.
     const { px: mark, estimated } = reconcileExitPx(occ, ctx.allOrders, liveBid || (alp?.current_price ?? 0));
-    const realized = mark > 0 ? await realizedToBook(row.strategist_id, d.slug, occ, ctx.allOrders, ctx.sinceIso, { qty: row.qty, px: mark }) : 0;
+    const realized = mark > 0 ? rowRealized(row, mark, row.qty) : 0;
     await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
-    await store.journal("WARN", `${d.slug}: ${occ} ${why} — reconciled @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} (booked $${realized.toFixed(0)} ≤${row.qty}-share)`);
+    await store.journal("WARN", `${d.slug}: ${occ} ${why} — reconciled @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} (booked $${realized.toFixed(0)} = ${row.qty}-share)`);
   };
 
   if (sellQty <= 0) {
@@ -158,14 +158,18 @@ export async function executeExit(
       await store.journal("WARN", `${d.slug}: exit ${occ} ended unfilled — row stays open to retry`);
       return;
     }
-    // Book the ACTUAL sold qty (terminal-final): a partial→canceled sell realizes only
-    // what crossed; the 09d reconstruct re-rows any leftover contracts next cycle.
+    // Book the ACTUAL sold qty (terminal-final): a partial→canceled sell realizes only what crossed; the
+    // 09d reconstruct re-rows any leftover contracts next cycle. Row-primary: (exit − avg_entry)×soldQty.
     const soldQty = r.filledQty > 0 ? r.filledQty : sellQty;
-    const realized = await realizedToBook(row.strategist_id, d.slug, occ, ctx.allOrders, ctx.sinceIso, { qty: soldQty, px: exitPx });
+    const realized = rowRealized(row, exitPx, soldQty);
     await store.closePositionRow(row.id, exitPx, realized, d.reason);
     ctx.remainingByOcc.set(occ, Math.max(0, heldQty - soldQty)); // 09c fix 2
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
-    await store.journal("EXEC", `${d.slug}: exit ${occ} ×${soldQty} @ ${exitPx.toFixed(2)} (${d.reason})`);
+    await store.journal("EXEC", `${d.slug}: exit ${occ} ×${soldQty} @ ${exitPx.toFixed(2)} (${d.reason}) → $${realized.toFixed(0)}`);
+    // cross-check vs the legacy order-tag P&L — equal on a clean exit; a divergence flags the tag bug
+    // that used to book $0. Row-primary is authoritative; the WARN only surfaces the anomaly for audit.
+    const tagChk = orderTagTarget(d.slug, occ, ctx.allOrders, { qty: soldQty, px: exitPx });
+    if (Math.abs(realized - tagChk) > 5) await store.journal("WARN", `${d.slug}: booking cross-check Δ ${occ} — row $${realized.toFixed(0)} vs order-tag $${tagChk.toFixed(0)} (row-primary booked)`);
   } catch (e) {
     const msg = (e as Error).message;
     if (/insufficient|cash.?secured|not enough|40310000/i.test(msg)) await reconcileClose(`sell rejected (${msg.slice(0, 50)})`);
@@ -175,11 +179,11 @@ export async function executeExit(
 
 // ---- RECONCILE (desk row open, Alpaca flat) -------------------------------------
 export async function executeReconcile(d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx): Promise<void> {
-  // SHARED-OCC FIX (see reconcileClose): book this row's SHARE at the lot's real exit via
-  // (exit − entry)×row.qty (capped to the unsold share in realizedToBook), or an ESTIMATE from the
-  // live bid when the OCC's sell price is ambiguous/absent (→ close_reason reconciled_estimated).
+  // SHARED-OCC FIX (see reconcileClose): book this row's share directly from the ROW —
+  // (exit − avg_entry)×row.qty — at the lot's real exit, or an ESTIMATE from the live bid when the
+  // OCC's sell price is ambiguous/absent (→ close_reason reconciled_estimated). row.qty is the unsold share.
   const { px: mark, estimated } = reconcileExitPx(row.occ_symbol, ctx.allOrders, ctx.chain.byOcc(row.occ_symbol)?.bid ?? 0);
-  const realized = mark > 0 ? await realizedToBook(row.strategist_id, d.slug, row.occ_symbol, ctx.allOrders, ctx.sinceIso, { qty: row.qty, px: mark }) : 0;
+  const realized = mark > 0 ? rowRealized(row, mark, row.qty) : 0;
   await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
   entryStateByKey.delete(entryKey(row.strategist_id, row.occ_symbol));
   await store.journal("WARN", `${d.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} — no Alpaca position; booked $${realized.toFixed(0)} (≤${row.qty}-share)`);
