@@ -20,6 +20,7 @@ import { useChannelOrdering } from "@/hooks/useChannelOrdering";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { MasterStrip } from "@/components/console/MasterStrip";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
+import { NetExposurePanel } from "@/components/console/NetExposurePanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { ManVsMachine } from "@/components/console/ManVsMachine";
 import { PushToggle } from "@/components/console/PushToggle";
@@ -192,6 +193,7 @@ export function DesktopSurface({
               <div className="grid grid--live">
                 <div className="col col--fill">
                   <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
+                  <NetExposurePanel positions={feed.positions} liveMarks={liveMarks} />
                 </div>
                 <div className="col">
                   <SignalsTape signals={feed.signals} />

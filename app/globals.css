@@ -1617,3 +1617,23 @@ td.clk.sel {
 .dbk-v.dbk-d-ok { color: var(--green); }
 .dbk-v.dbk-d-warn { color: var(--amber); }
 .dbk-v.dbk-d-bad { color: var(--red); }
+
+/* NET EXPOSURE — the read-only correlated-lot X-ray under the Live Book */
+.netx { margin-top: 8px; }
+.netx .pbody { display: flex; flex-direction: column; gap: 9px; }
+.netx .dbk-v.warn { color: var(--amber); }
+.netx-dir { display: flex; flex-wrap: wrap; gap: 6px 16px; font-family: var(--mono); font-size: 12px; }
+.netx-u { display: inline-flex; align-items: baseline; gap: 5px; }
+.netx-u b { font-weight: 700; color: var(--text); }
+.netx-u .pos { color: var(--green); }
+.netx-u .neg { color: var(--red); }
+.netx-sep { color: var(--muted); }
+.netx-no, .netx-no2 { color: var(--muted); }
+.netx-stacks { display: flex; flex-direction: column; gap: 0; }
+.netx-stack { display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: baseline; font-family: var(--mono); font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.netx-stack:last-child { border-bottom: none; }
+.netx-occ { font-weight: 700; color: var(--text); }
+.netx-ct { color: var(--text); }
+.netx-ch { color: var(--amber); font-size: 11px; }
+.netx-heavy .netx-ch { color: var(--red); font-weight: 700; }
+.netx-note { font-family: var(--mono); font-size: 11px; color: var(--amber); line-height: 1.45; }
