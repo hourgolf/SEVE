@@ -21,7 +21,11 @@ import { fillWithCost, roundTripCostUsd, type CostModel, DEFAULT_COST_MODEL } fr
 
 const RTH_OPEN_MIN = 570; // 09:30 ET
 const SESSION_MIN = 390; // 09:30–16:00
-const ATM_DELTA = 0.5; // the backtest enters ATM 0DTE → delta ≈ 0.5
+// ATM 0DTE calibration constant (NOT a Black-Scholes greek). It pairs with the gate
+// `ratio` to set the effective threshold K = ratio/ATM_DELTA — the multiple of round-trip
+// cost the underlying's atr-move (×100) must clear. The optimum ratio 3.0 → K = 6.0; that
+// single number is what's optimized (the live worker mirrors it via policy.COST_GATE_K).
+const ATM_DELTA = 0.5;
 
 // Cost gate (Brief P7): veto an entry whose expected premium move on a ~1·ATR
 // favorable move doesn't clear the round-trip cost by `ratio`. Keeps a scalper

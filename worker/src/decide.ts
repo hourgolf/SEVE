@@ -92,13 +92,11 @@ export interface DecisionCtx {
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
-// EMPIRICAL-moneyness ATM-delta proxy (NO Black-Scholes [[no-black-scholes]]). The OPRA feed nulls 0DTE
-// greeks, so when the chain carries no delta we approximate from strike-vs-spot instead of the old flat
-// policy.ATM_DELTA=0.55 placeholder: ATM≈0.50, ~+0.07/strike ITM, clamped [0.35,0.65]. A transparent linear
-// proxy (not a vol/diffusion model) — right DIRECTION for the ITM/OTM strike_offset clones, where the flat
-// 0.55 was most wrong. The realized-greek TRUTH is stamped post-hoc by the forensics (theta-v2 regression);
-// this is only the entry-time cost-gate input (expectedMove = delta·atr). 0.07/strike is a cross-underlying
-// average (steeper on IWM, flatter on SPY) — fine for a gate multiplier the atr dominates.
+// EMPIRICAL-moneyness ATM-delta ESTIMATE (NO Black-Scholes [[no-black-scholes]]) — INFORMATIONAL ONLY.
+// The OPRA feed nulls 0DTE greeks, so we approximate an entry delta from strike-vs-spot: ATM≈0.50,
+// ~+0.07/strike ITM, clamped [0.35,0.65]. It's logged in the signal rationale (and serves as the forensics
+// entry_delta fallback when no realized greek exists) but it does NOT drive the cost gate — that's K-based
+// now (policy.COST_GATE_K). The realized-greek TRUTH is stamped post-hoc by the forensics (theta-v2).
 function atmDeltaProxy(dir: string, spot: number, strike: number): number {
   const strikesItm = dir === "call" ? spot - strike : strike - spot; // +ve = in-the-money
   return Math.min(0.65, Math.max(0.35, 0.5 + 0.07 * strikesItm));
@@ -378,8 +376,11 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     }
     if (!blocked && !policy.COST_GATE_EXEMPT.has(ch.slug)) {
       roundTrip = engineRoundTrip({ strike, optType: dir, bid, ask, mid: ask > 0 && bid > 0 ? (ask + bid) / 2 : ask }, COST_MODEL);
-      expectedMove = delta * Math.max(0, f.atr) * 100;
-      if (expectedMove < policy.COST_GATE_RATIO * roundTrip) blocked = "cost_gate";
+      expectedMove = delta * Math.max(0, f.atr) * 100; // informational (logged) — est. option $-move; NOT the gate input
+      // post-BS cost gate: the expected UNDERLYING move (atr × 100) must clear the round-trip
+      // cost by the optimized factor K. No option greek — K folds the old delta×ratio into one
+      // empirical knob == the engine gate every probe backtested (K=6.0). [[no-black-scholes]]
+      if (Math.max(0, f.atr) * 100 < policy.COST_GATE_K * roundTrip) blocked = "cost_gate";
     }
     if (!blocked) {
       // RISK-BASED sizing (two-dial model, cron 2026-06-04b parity): capital_pct

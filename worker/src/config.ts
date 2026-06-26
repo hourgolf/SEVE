@@ -165,11 +165,17 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-25d"; // + moneyness ATM-delta proxy replaces the flat 0.55 cost-gate placeholder (last BS-adjacent residue gone)
+export const WORKER_VERSION = "stream-2026-06-25e"; // + cost gate reframed to K=6.0 (matches the engine/optimization; the live worker was at K=5.45, ~10% loose)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
-  COST_GATE_RATIO: 3.0,
+  // COST GATE — ONE empirical knob (post-BS, no greek). Take a trade only if the
+  // expected UNDERLYING move (atr × 100) clears the round-trip cost by this factor K.
+  // K folds the old delta×ratio into a single number: K=6.0 == the engine's optimized
+  // gate (0.5·atr·100 ≥ 3.0·rt  ⟺  atr·100 ≥ 6.0·rt), the exact point every probe +
+  // the RATIO-3.0 sweep backtested. The live worker previously ran delta 0.55 / ratio
+  // 3.0 → K 5.45 (~10% looser than what we optimized); this realigns it. [[no-black-scholes]]
+  COST_GATE_K: 6.0,
   // EMPTY since cron 2026-06-09a: the power exemption was refuted by the roster
   // probe (gating halves base power's bleed). ALL channels are cost-gated.
   COST_GATE_EXEMPT: new Set<string>(),
@@ -177,7 +183,6 @@ export const policy = {
   POWER_TRAIL_CHANNELS: new Set(["power"]),
   POWER_TRAIL_ENGAGE_MULT: 2.0, // engage once mark ≥ entry × this (+100%)
   POWER_TRAIL_GIVEBACK_PCT: 40, // exit if it gives back > this % of peak gain
-  ATM_DELTA: 0.55, // ATM 0DTE delta proxy when the quote carries none
   OPEN_0DTE_CUTOFF_MIN: 31, // inside last ~30 min, roll to 1DTE (Alpaca widened the lockout ~15→~30min, 06-11 422s)
   MANUAL_BACKSTOP_MIN: 3, // `-manual` twins: forced bell backstop (human owns exits)
   // EOD HARD-FLATTEN (2026-06-19, the Juneteenth strand fix): a WALL-CLOCK backstop that
