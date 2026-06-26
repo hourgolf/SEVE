@@ -86,10 +86,14 @@
   --chassis-dark: #4a4b4d;
   --ink: #e7e4db;
   --ink-soft: #9a9c9e;
+  --plate-ink: #e2d6b8; /* warm parchment silkscreen (was the cool #d7d5cb that read as "silver") */
   --knob-cream: #b9bbbd; /* silver knobs in blackout */
   --master-bg-1: #202123; /* cool the warm master strip to graphite */
   --master-bg-2: #161719;
 }
+/* §-divider silkscreen labels use the cool body --ink (#e7e4db) → "silver" in blackout.
+   Warm them to the same parchment --plate-ink as the panel headers (cream theme unaffected). */
+.console-root[data-theme="blackout"] .section-label .lab { color: var(--plate-ink); }
 
 /* Map a PmColor token to its accent var. */
 .pm-green { --pm: var(--pm-green); }
@@ -560,8 +564,19 @@
 .shell-r { display: flex; align-items: center; gap: 13px; flex: 0 0 auto; }
 .shell-write { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; color: #7d7f81; white-space: nowrap; }
 .shell-write.on { color: var(--green); }
-.shell-cog { background: none; border: none; padding: 4px; color: #9a9d9f; cursor: pointer; display: grid; place-items: center; }
-.shell-cog:hover { color: var(--accent-cream); }
+
+/* The chassis is a FIXED ~1180px, but the dense header content (~1223px: mark ·
+   account · run/mode · health · NAV/DAY/BOOKS · room tabs · operator · KILL) is
+   wider — so it overflowed and the KILL spilled off-chassis at EVERY viewport.
+   Trim to fit: hide the decorative tab JP sublabels (the EN labels + every
+   functional element stay) + tighten the gaps. (The redundant settings cog is
+   gone — OPS is the settings tab.) */
+.shell { gap: 12px; }
+.shell-l { gap: 9px; }
+.shell-leds { gap: 13px; }
+.shell-r { gap: 10px; }
+.shell-tab .jp { display: none; }
+@media (max-width: 1180px) { .shell-books { display: none; } } /* very narrow desktop */
 
 /* ---------- rooms (DESK / REVIEW / OPS) ----------------------------------- */
 .room { display: block; }

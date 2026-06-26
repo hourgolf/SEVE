@@ -37,8 +37,8 @@ export interface ShellProps {
 }
 
 // The persistent shell: wordmark + account + health + NAV/DAY/BOOKS LEDs + room
-// tabs + the ONE always-visible KILL + a cog (jumps to OPS). Owns the kill wiring
-// (the local arm state + KILL/RESET_HALT dispatch) so it's the single fire control.
+// tabs + the ONE always-visible KILL. (Settings live in the OPS room tab — no
+// separate cog.) Owns the kill wiring (local arm state + KILL/RESET_HALT dispatch).
 export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAcctId, activeRoom, setActiveRoom }: ShellProps) {
   const { canWrite } = useDeskWrite();
 
@@ -109,12 +109,6 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
           {canWrite ? "● operator" : "○ read-only"}
         </span>
         <KillControl halted={fund.is_halted} />
-        <button className="shell-cog" type="button" onClick={() => setActiveRoom("ops")} aria-label="ops & settings">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <circle cx="12" cy="12" r="3.2" />
-            <path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
-          </svg>
-        </button>
       </div>
     </header>
   );
