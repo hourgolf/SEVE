@@ -229,6 +229,7 @@ export function PositionsPanel({
               <tr className="pos-ctx">
                 <td colSpan={canWrite ? 7 : 6}>
                   <span className="ctx-line">
+                    <span className="ctx-bit ctx-ch" title="channel">{nameOf(p.strategist_slug)}</span>
                     {inTradeStr(p.opened_at) && <span className="ctx-bit">{inTradeStr(p.opened_at)}</span>}
                     {retPct != null && (
                       <span className={`ctx-bit ${retPct < 0 ? "neg" : "pos"}`}>{retPct >= 0 ? "+" : ""}{retPct.toFixed(0)}%</span>

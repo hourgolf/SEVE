@@ -1223,6 +1223,9 @@ tr:hover td.clk {
 .ctx-bit { white-space: nowrap; }
 .ctx-hot { color: var(--amber); font-weight: 700; }
 .ctx-dim { opacity: 0.75; }
+/* channel name on a position's context line — bright + bold vs the dim metric bits, so
+   you can tell which channel owns the row when several share a strike + color family */
+.ctx-ch { color: var(--text); font-weight: 700; letter-spacing: 0.04em; }
 
 /* OPS · PRE-FLIGHT — stream/cron liveness + executor split + risk-at-stake */
 .ops-pf { margin-bottom: 14px; flex: none; } /* flex:none — the mobile sheet's flex column must not squeeze it */

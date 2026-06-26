@@ -1625,6 +1625,14 @@
 .m-app .puts { color: #b23a22; }
 .market-section .grid .strike-col,
 .m-app .strike-col { color: var(--ink); background: rgba(0, 0, 0, 0.06); }
+/* BLACKOUT: the cream chain tints (#1f7d45 / #b23a22) are tuned for the cream card —
+   on the dark blackout panel they read dim/muddy. Use the brighter blackout green/red. */
+.console-root[data-theme="blackout"] .market-section .grid .calls,
+.console-root[data-theme="blackout"] .m-app .calls { color: var(--green); }
+.console-root[data-theme="blackout"] .market-section .grid .puts,
+.console-root[data-theme="blackout"] .m-app .puts { color: var(--red); }
+.console-root[data-theme="blackout"] .market-section .grid .strike-col,
+.console-root[data-theme="blackout"] .m-app .strike-col { background: rgba(255, 255, 255, 0.04); }
 .market-section .grid td,
 .m-app .panel td { border-bottom-color: rgba(0, 0, 0, 0.08); }
 .market-section .grid th,
