@@ -1593,6 +1593,30 @@
 .market-section .grid .phead .x,
 .market-section > .panel .phead .x,
 .m-app .panel .phead .x { color: var(--ink-soft); }
+/* BLACKOUT: the cream-flip above hardcodes a SILVER plate (#d9d7cd→#c5c3b8) + white
+   bevels + dark --ink text on these pheads — right on cream, but "silver" on the dark
+   chassis. Re-skin to the dark molded plate (like the chart header / default .phead)
+   with warm parchment silkscreen text. Also dim the cream white card-bevel. */
+.console-root[data-theme="blackout"] .log-section .panel,
+.console-root[data-theme="blackout"] .market-section .grid .panel,
+.console-root[data-theme="blackout"] .market-section > .panel,
+.console-root[data-theme="blackout"] .m-app .panel {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+.console-root[data-theme="blackout"] .log-section .phead,
+.console-root[data-theme="blackout"] .market-section .grid .phead,
+.console-root[data-theme="blackout"] .market-section > .panel .phead,
+.console-root[data-theme="blackout"] .m-app .panel .phead {
+  background: linear-gradient(180deg, var(--panel-plate), var(--panel-plate-2));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+.console-root[data-theme="blackout"] .log-section .phead .t,
+.console-root[data-theme="blackout"] .market-section .grid .phead .t,
+.console-root[data-theme="blackout"] .market-section > .panel .phead .t,
+.console-root[data-theme="blackout"] .m-app .panel .phead .t {
+  color: var(--plate-ink);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
 /* option chain + tables on cream: the call/put tints + strike column + borders
    are tuned for the dark panel, so deepen/relight them for the cream body */
 .market-section .grid .calls,
