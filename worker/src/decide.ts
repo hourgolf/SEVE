@@ -92,6 +92,18 @@ export interface DecisionCtx {
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
+// EMPIRICAL-moneyness ATM-delta proxy (NO Black-Scholes [[no-black-scholes]]). The OPRA feed nulls 0DTE
+// greeks, so when the chain carries no delta we approximate from strike-vs-spot instead of the old flat
+// policy.ATM_DELTA=0.55 placeholder: ATM≈0.50, ~+0.07/strike ITM, clamped [0.35,0.65]. A transparent linear
+// proxy (not a vol/diffusion model) — right DIRECTION for the ITM/OTM strike_offset clones, where the flat
+// 0.55 was most wrong. The realized-greek TRUTH is stamped post-hoc by the forensics (theta-v2 regression);
+// this is only the entry-time cost-gate input (expectedMove = delta·atr). 0.07/strike is a cross-underlying
+// average (steeper on IWM, flatter on SPY) — fine for a gate multiplier the atr dominates.
+function atmDeltaProxy(dir: string, spot: number, strike: number): number {
+  const strikesItm = dir === "call" ? spot - strike : strike - spot; // +ve = in-the-money
+  return Math.min(0.65, Math.max(0.35, 0.5 + 0.07 * strikesItm));
+}
+
 // ---- session prep (mirror engine/realsource.ts) ----------------------------
 // Today's RTH bars with CUMULATIVE session VWAP (typical×vol), matching the
 // backtest's bar construction — the edges are tuned on this, not per-minute vw.
@@ -356,12 +368,12 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     }
 
     let ask = 0, bid = 0, roundTrip = 0, expectedMove = 0, qty = 0;
-    let delta: number = policy.ATM_DELTA;
+    let delta: number = atmDeltaProxy(dir, f.close, strike); // moneyness proxy (no BS) — replaces the flat 0.55 placeholder
     if (!blocked) {
       const q = ctx.chain.byOcc(occ);
       ask = q?.ask ?? 0;
       bid = q?.bid ?? 0;
-      if (q?.delta != null && q.delta !== 0) delta = Math.abs(q.delta);
+      if (q?.delta != null && q.delta !== 0) delta = Math.abs(q.delta); // real chain delta when present (≈1DTE; feed nulls 0DTE)
       if (!ask) blocked = "no_quote";
     }
     if (!blocked && !policy.COST_GATE_EXEMPT.has(ch.slug)) {

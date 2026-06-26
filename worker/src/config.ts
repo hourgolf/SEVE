@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-25c"; // + base-slug resolver strips -itm (builtin ITM clones, e.g. pb-ride-itm → pb-ride builtin + strike_offset)
+export const WORKER_VERSION = "stream-2026-06-25d"; // + moneyness ATM-delta proxy replaces the flat 0.55 cost-gate placeholder (last BS-adjacent residue gone)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
