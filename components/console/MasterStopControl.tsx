@@ -23,7 +23,7 @@ export function MasterStopControl({ fund }: { fund: FundState }) {
         <Knob
           value={v}
           min={0}
-          max={5000}
+          max={20000}
           step={100}
           onChange={(val) => dispatch({ type: "SET_FUND", patch: { master_daily_stop_usd: val } })}
           onCommit={(val) => persistFund({ master_daily_stop_usd: val })}
