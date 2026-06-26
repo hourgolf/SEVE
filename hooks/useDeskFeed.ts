@@ -7,8 +7,13 @@ import { useDeskState } from "@/hooks/useDeskState";
 import { buildSteps, channelPnl, fundPnl } from "@/lib/desk/derive";
 import type { ChannelPnl, PmColor, Position, Signal, Step } from "@/lib/desk/types";
 import type { EventLevel, OptionType } from "@/lib/types";
+import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
 
-const POLL_MS = 10000; // safety-net; Realtime drives the live updates
+// Safety-net only — Realtime (positions/signals/equity) drives live updates, so
+// this can run slow and pause while hidden. The poll re-reads the full book
+// (incl. ~400 closed positions); doing that every 10s in an idle tab was a top
+// egress driver.
+const POLL_MS = 45000;
 const MAX_CURVE = 600; // ~1.25 RTH sessions of 1-min fund snapshots — enough to find the current session's open
 const SESSION_GAP_MS = 2 * 3600_000; // a gap this large between snapshots = a new trading session
 
@@ -160,12 +165,13 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
     }
 
     poll();
-    const id = setInterval(poll, POLL_MS);
+    const stopPoll = startVisibilityPoll(poll, POLL_MS);
 
-    // Realtime refetch trigger (debounced); 10s poll remains the fallback.
+    // Realtime refetch trigger (debounced); the poll is the fallback. Skipped
+    // while hidden — the websocket fires even when the interval is paused.
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const trigger = () => {
-      if (debounce) return;
+      if (debounce || isHidden()) return;
       debounce = setTimeout(() => {
         debounce = null;
         poll();
@@ -186,7 +192,7 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
 
     return () => {
       mounted.current = false;
-      clearInterval(id);
+      stopPoll();
       if (debounce) clearTimeout(debounce);
       if (channel) {
         try {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { startVisibilityPoll } from "@/lib/pollControl";
 import type { Position } from "@/lib/desk/types";
 
 // occ_symbol → a "live" mark for EVERY open position, BOTH tickers, independent of
@@ -94,8 +95,11 @@ export function usePositionMarks(positions: Position[]): Record<string, number> 
     }
 
     poll();
-    const id = setInterval(poll, 3000);
-    return () => { alive = false; clearInterval(id); };
+    // 3s → 15s + pause while hidden: this re-reads option_quotes for every open
+    // position; at 3s in an always-open tab it was a heavy egress source. Marks
+    // still track the live spot via the per-poll delta proxy below.
+    const stop = startVisibilityPoll(poll, 15000);
+    return () => { alive = false; stop(); };
   }, [occKey, metaKey]);
 
   return marks;

@@ -14,10 +14,12 @@ import type {
   OptionQuote,
   UnderlyingBar,
 } from "@/lib/types";
+import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
 
-// Safety-net poll interval (ms). Realtime drives updates; this only covers
-// dropped subscriptions / missed events, so it can be slow.
-export const POLL_INTERVAL_MS = 10000;
+// Safety-net poll interval (ms). The cheap underlying_bars realtime tick (one
+// row/min) drives fresh updates; this only covers dropped subscriptions, so it
+// runs slow — and pauses while the tab is hidden — to keep egress low.
+export const POLL_INTERVAL_MS = 60000;
 // The Supabase tape only refreshes once a minute (the ingest cadence), so the
 // spot LED gets a faster live tick from /api/spot (Alpaca IEX last trade).
 const SPOT_POLL_MS = 3000;
@@ -343,15 +345,20 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     loadHistory();
     loadDaily();
     pollSpot();
-    const id = setInterval(poll, POLL_INTERVAL_MS);
-    const spotId = setInterval(pollSpot, SPOT_POLL_MS);
+    // Visibility-aware polling: both loops pause while the tab is hidden (a
+    // backgrounded / after-hours tab re-reading the 1-min tape every few seconds
+    // was the dominant Supabase egress) and resume with an immediate refresh.
+    const stopPoll = startVisibilityPoll(poll, POLL_INTERVAL_MS);
+    const stopSpot = startVisibilityPoll(pollSpot, SPOT_POLL_MS);
 
-    // Realtime: refetch (debounced) the instant new rows land, instead of
-    // waiting up to POLL_INTERVAL_MS. The poll above remains the safety net if
-    // the subscription never connects (publication not enabled) or drops.
+    // Realtime: a CHEAP minute-tick trigger. Subscribe ONLY to underlying_bars
+    // (~1 row/min/symbol) — NOT option_quotes, whose hundreds-of-rows/min fan-out
+    // was the egress that blew the quota. A new bar = a new minute of tape, so
+    // refetch the chain then; the poll above is the safety net. Skipped while
+    // hidden (the websocket keeps firing even when the interval is paused).
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const trigger = () => {
-      if (debounce) return;
+      if (debounce || isHidden()) return;
       debounce = setTimeout(() => {
         debounce = null;
         poll();
@@ -363,8 +370,6 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       channel = sb
         .channel("monitor-feed")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "underlying_bars" }, trigger)
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "option_quotes" }, trigger)
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, trigger)
         .subscribe();
     } catch {
       /* env missing — poll-only */
@@ -373,8 +378,8 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     return () => {
       mounted.current = false;
       cancelled = true; // drop any in-flight responses from THIS (old-symbol) effect
-      clearInterval(id);
-      clearInterval(spotId);
+      stopPoll();
+      stopSpot();
       if (debounce) clearTimeout(debounce);
       if (channel) {
         try {
