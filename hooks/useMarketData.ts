@@ -16,12 +16,16 @@ import type {
 } from "@/lib/types";
 import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
 
-// Safety-net poll interval (ms). The cheap underlying_bars realtime tick (one
-// row/min) drives fresh updates; this only covers dropped subscriptions, so it
-// runs slow — and pauses while the tab is hidden — to keep egress low.
+// CHAIN (option_quotes) safety-net poll. The chain is the heavy read (200 full
+// rows) and was the egress that blew the quota, so it runs slow; the bars poll +
+// spot below keep the CHART live independently. Pauses while the tab is hidden.
 export const POLL_INTERVAL_MS = 60000;
-// The Supabase tape only refreshes once a minute (the ingest cadence), so the
-// spot LED gets a faster live tick from /api/spot (Alpaca IEX last trade).
+// BARS (the chart) poll. Cheap (~200 small OHLC rows) and exit-critical, so it
+// stays fast and realtime-independent: closed candles refresh within ~10s even
+// if the realtime tick drops. The live forming candle tracks the 3s spot below.
+const BARS_POLL_MS = 10000;
+// The live chart EDGE for exit timing: /api/spot (Alpaca last trade) folds into
+// the forming candle every 3s — kept fast (only pauses when the tab is hidden).
 const SPOT_POLL_MS = 3000;
 // History (1-min bars) loaded ONCE on mount — ~15 trading days, so higher
 // timeframes have months of candles to pan through. The repeating poll only
@@ -275,6 +279,28 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       }
     }
 
+    // Bars-only poll for the CHART (exit-critical). Cheap and decoupled from the
+    // heavy chain poll, so the closed candles stay fresh within ~10s even if the
+    // realtime tick drops; the live forming candle tracks the 3s spot. mergeBars
+    // keys on ts → idempotent with the chain poll's bars (whichever lands last).
+    async function pollBars() {
+      try {
+        const sb = getSupabase();
+        const barsRes = await sb
+          .from("underlying_bars")
+          .select("ts,open,high,low,close,volume,vwap")
+          .eq("symbol", symbol)
+          .order("ts", { ascending: false })
+          .limit(RECENT_BARS);
+        if (barsRes.error || !live()) return;
+        const recent = [...((barsRes.data ?? []) as UnderlyingBar[])].reverse();
+        const bars = mergeBars(historyBars.current, recent);
+        setData((prev) => ({ ...prev, bars }));
+      } catch {
+        /* keep the last bars on a failed poll */
+      }
+    }
+
     // One-time deep history; on success re-poll so the chart gets the full
     // range. PostgREST caps a single request at ~1000 rows, so page with
     // .range() (in parallel) to reach HISTORY_LIMIT. Silent poll-only fallback.
@@ -342,13 +368,16 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     }
 
     poll();
+    pollBars();
     loadHistory();
     loadDaily();
     pollSpot();
-    // Visibility-aware polling: both loops pause while the tab is hidden (a
-    // backgrounded / after-hours tab re-reading the 1-min tape every few seconds
-    // was the dominant Supabase egress) and resume with an immediate refresh.
+    // Visibility-aware polling: every loop pauses while the tab is hidden (a
+    // backgrounded / after-hours tab re-reading the tape was the dominant
+    // Supabase egress) and resumes with an immediate refresh. The bars + spot
+    // loops stay fast (the live chart for exits); only the heavy chain is slow.
     const stopPoll = startVisibilityPoll(poll, POLL_INTERVAL_MS);
+    const stopBars = startVisibilityPoll(pollBars, BARS_POLL_MS);
     const stopSpot = startVisibilityPoll(pollSpot, SPOT_POLL_MS);
 
     // Realtime: a CHEAP minute-tick trigger. Subscribe ONLY to underlying_bars
@@ -379,6 +408,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       mounted.current = false;
       cancelled = true; // drop any in-flight responses from THIS (old-symbol) effect
       stopPoll();
+      stopBars();
       stopSpot();
       if (debounce) clearTimeout(debounce);
       if (channel) {

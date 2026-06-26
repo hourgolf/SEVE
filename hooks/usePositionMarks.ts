@@ -95,10 +95,10 @@ export function usePositionMarks(positions: Position[]): Record<string, number> 
     }
 
     poll();
-    // 3s → 15s + pause while hidden: this re-reads option_quotes for every open
-    // position; at 3s in an always-open tab it was a heavy egress source. Marks
-    // still track the live spot via the per-poll delta proxy below.
-    const stop = startVisibilityPoll(poll, 15000);
+    // Live position P&L is exit-critical → stays fast (4s). It's cheap: only the
+    // open OCCs (~4 rows each) and only while a position is open, and it pauses in
+    // a background tab — so it's not an egress risk. Marks track the live spot.
+    const stop = startVisibilityPoll(poll, 4000);
     return () => { alive = false; stop(); };
   }, [occKey, metaKey]);
 
