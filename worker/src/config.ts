@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-30a"; // + post-close shadow §03 publish (Mac-independent: spawns day-report as a child; forensics.ts)
+export const WORKER_VERSION = "stream-2026-06-30b"; // + fast-exit sweep honors per-channel premium_stop_pct (config −30 fires sub-minute, not only at bar close)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

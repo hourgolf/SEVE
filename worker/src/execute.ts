@@ -370,6 +370,7 @@ export interface FastExitCheck {
   slug: string;
   premiumExit?: { profitPct?: number; stopPct?: number };
   takeProfitPct?: number; // per-channel compound take-profit (ChannelConfig.take_profit_pct); 0 = off
+  premiumStopPct?: number | null; // per-channel premium STOP override (ChannelConfig.premium_stop_pct); null → policy default 50
   isPowerTrail: boolean;
   isManual: boolean;
   minutesToClose: number;
@@ -387,7 +388,10 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
   // a bar-close-only target would systematically give back intra-bar). Mirrors decide.ts:take_profit_pct.
   if (c.takeProfitPct != null && c.takeProfitPct > 0 && mark >= entry * (1 + c.takeProfitPct / 100)) return "target_premium";
   if (c.premiumExit?.stopPct != null && mark <= entry * (1 - c.premiumExit.stopPct / 100)) return "stop_premium";
-  if (mark <= entry * (1 - policy.PREMIUM_STOP_PCT / 100)) return "premium_stop";
+  // per-channel premium stop (config) takes precedence over the policy default → a tightened −30%
+  // stop fires in the ~10s sweep, not only at bar close (same sub-minute reaction as the take-profit
+  // above; mirrors decide.ts:254 premStopPct). null → policy default (50).
+  if (mark <= entry * (1 - (c.premiumStopPct ?? policy.PREMIUM_STOP_PCT) / 100)) return "premium_stop";
   if (c.isPowerTrail && peak >= entry * policy.POWER_TRAIL_ENGAGE_MULT) {
     const giveback = entry + (peak - entry) * (1 - policy.POWER_TRAIL_GIVEBACK_PCT / 100);
     if (mark <= giveback) return "trail_giveback";

@@ -497,7 +497,7 @@ async function fastExitSweep(): Promise<void> {
       }
       const pe = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
       const reason = premiumExitReason({
-        row: r, slug: ch.slug, premiumExit: pe, takeProfitPct: ch.take_profit_pct,
+        row: r, slug: ch.slug, premiumExit: pe, takeProfitPct: ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
         isPowerTrail: policy.POWER_TRAIL_CHANNELS.has(ch.slug),
         isManual: /-manual$/i.test(ch.slug),
         minutesToClose: Math.max(0, RTH_CLOSE - nowMin),
