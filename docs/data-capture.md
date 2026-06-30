@@ -36,6 +36,13 @@ not in the cloud. A LaunchAgent runs it twice a day + on login:
   the repo; the canonical copy is below).
 - Times: 02:15 + 13:15 local, `RunAtLoad`, and launchd re-runs missed calendar times on wake.
 - Log: `~/Library/Logs/seve-capture.log` (tail it to audit that it ran).
+- ⚠ **Sleep (fixed 2026-06-29):** the `capture` npm script runs under **`caffeinate -i`** so the Mac
+  can't idle-sleep mid-run. Before this, a sleeping Mac suspended the job → the Tier-1 steps failed
+  (network dropped) and wall-clock ballooned to ~8h, so the §03 shadow/forensics panel published late
+  or not at all. caffeinate guarantees a *started* run COMPLETES in minutes; the launchd 13:15 PT
+  (post-close) run now publishes the day's shadow promptly. (It still needs the Mac AWAKE when the
+  calendar time fires — launchd re-runs missed times on wake — so the panel is current within the day
+  the Mac is used. Full Mac-independence would need the Railway worker to publish; not built.)
 
 Reproduce the plist on a new machine (adjust the `/Users/mattlynch` paths + `/usr/local/bin` if
 node lives elsewhere — `which node`):

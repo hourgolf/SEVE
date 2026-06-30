@@ -103,7 +103,7 @@
     "fomc-costgate-probe": "tsx engine/fomc-costgate-probe.ts",
     "cross-gap-probe": "tsx engine/cross-gap-probe.ts",
     "export-quotes": "tsx scripts/export-quotes.ts",
-    "capture": "tsx --env-file=.env.local scripts/capture-forward.ts",
+    "capture": "caffeinate -i tsx --env-file=.env.local scripts/capture-forward.ts",
     "grind-entry-probe": "tsx --env-file=.env.local engine/grind-entry-probe.ts",
     "trend-align-selftest": "tsx --env-file=.env.local engine/trend-align-selftest.ts",
     "trend-align-swap-probe": "tsx --env-file=.env.local engine/trend-align-swap-probe.ts",
