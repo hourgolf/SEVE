@@ -48,7 +48,8 @@ const isBuiltin = (slug: string) => BUILTINS.has(slug) || BUILTINS.has(baseSlug(
 // 1DTE-only channel's P&L is NOT comparable (premium ~2-3× / different theta). Flag, don't sim.
 const FINAL_WINDOW = new Set(["power-final30", "power-final35", "power-mom30", "power-mom35"]);
 
-const TSX = join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+// TSX_BIN lets the worker's shadow-publish (cwd /app, deps under /app/worker) pass an absolute path.
+const TSX = process.env.TSX_BIN || join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
 
 export interface BenchedResult { slug: string; name: string; underlying: string; useSpec: boolean; ran: boolean; trades: number; pnl: number; note?: string; }
 export interface LiveResult { slug: string; name: string; pnl: number; trades: number; }

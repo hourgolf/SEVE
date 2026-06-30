@@ -15,7 +15,8 @@ import { spawnSync } from "child_process";
 const ET = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
 const DAYS = Math.max(1, Number(process.env.SHADOW_CRON_DAYS ?? 3));
 const now = Date.now();
-const tsx = "node_modules/.bin/tsx"; // the repo's tsx (the worker runs via tsx too) — no --env-file (Railway env)
+// the repo's tsx — TSX_BIN lets the worker (deps under /app/worker, child cwd /app) pass an absolute path; no --env-file (Railway env)
+const tsx = process.env.TSX_BIN || "node_modules/.bin/tsx";
 
 let fail = 0;
 for (let i = 0; i < DAYS; i++) {

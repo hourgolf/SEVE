@@ -18,9 +18,18 @@ RUN cd worker && npm ci --no-audit --no-fund
 COPY engine ./engine
 COPY lib ./lib
 COPY worker ./worker
+# scripts/ + tsconfig.json: the post-close shadow §03 publish (forensics.ts) spawns the
+# EXISTING scripts/shadow-cron.ts (→ day-report → benched-sim) as a child, so the panel
+# stays current with no Mac. tsconfig.json carries the `@/*` path alias the scripts resolve.
+COPY scripts ./scripts
+COPY tsconfig.json ./
 
 WORKDIR /app/worker
 ENV NODE_ENV=production
 # Phase A is shadow-only; DRY_RUN must stay true until Phase B is wired + verified.
 ENV DRY_RUN=true
+# Absolute tsx for the shadow-publish child (forensics.ts / shadow-cron.ts / benched-sim.ts):
+# the worker's deps install under /app/worker, but the child runs with cwd=/app (repo root),
+# where a relative ./node_modules/.bin/tsx would not resolve.
+ENV TSX_BIN=/app/worker/node_modules/.bin/tsx
 CMD ["npm", "start"]

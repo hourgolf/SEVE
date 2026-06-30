@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-25e"; // + cost gate reframed to K=6.0 (matches the engine/optimization; the live worker was at K=5.45, ~10% loose)
+export const WORKER_VERSION = "stream-2026-06-30a"; // + post-close shadow §03 publish (Mac-independent: spawns day-report as a child; forensics.ts)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

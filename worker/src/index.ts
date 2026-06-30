@@ -22,6 +22,7 @@ import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type 
 import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
 import { archiveQuotesToStorage, maybeArchiveTick } from "./archive.js";
+import { maybePublishForensicsTick } from "./forensics.js";
 import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, noteRowHeld, type ExecCtx } from "./execute.js";
 import { computeFeatures } from "../../engine/engine";
 import { specPremiumExit } from "../../engine/specEvaluate";
@@ -586,6 +587,12 @@ async function main(): Promise<void> {
   // once post-close per ET day. Off the trade path; no-op without the service role.
   void archiveQuotesToStorage("boot");
   setInterval(() => { void maybeArchiveTick(); }, 20 * 60_000); // every 20 min; self-gates to once/day post-close
+
+  // SHADOW §03 PANEL (Mac-independent): run the existing day-report (override/foul-out
+  // scorecard + benched-sim) from this always-on worker post-close, so the panel stays
+  // current with no Mac. Reuses scripts/shadow-cron.ts as a NON-BLOCKING child (the heartbeat
+  // keeps beating while it runs); off the trade path; no-op without the service role.
+  setInterval(() => { void maybePublishForensicsTick(); }, 20 * 60_000); // self-gates to once/day post-close
 
   // PRE-OPEN IDLE BEAT: the cron wakes at 09:00 ET but bars (hence cycles/sweeps)
   // start at 09:30 — the heartbeat read stale every morning and the cron's
