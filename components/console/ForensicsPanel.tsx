@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
-import { useForensicsReport } from "@/hooks/useForensicsReport";
+import { useForensicsReport, type GivebackTrendPoint } from "@/hooks/useForensicsReport";
 import { usePyramidShadow, pyramidName } from "@/hooks/usePyramidShadow";
 
 // §03 "Shadow & Override" panel — renders the deterministic forensics the CLI day-report
@@ -15,8 +15,28 @@ const cls = (v: number) => (v < 0 ? "neg" : "pos");
 const etTime = (iso: string) => { try { return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 const etDay = (iso: string) => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", month: "2-digit", day: "2-digit" }).format(new Date(iso)); } catch { return ""; } };
 
+// inline capture-rate sparkline (kept ÷ peak, %): higher = keeping more of the peak. Cream-scope
+// CSS vars resolve inside the panel; last point colored by trend direction. No chart-lib (house rule).
+function CaptureSparkline({ pts }: { pts: GivebackTrendPoint[] }) {
+  const vals = pts.map((p) => p.capturePct as number);
+  if (vals.length < 2) return null;
+  const W = 168, H = 30, pad = 4;
+  const lo = Math.min(...vals, 0), hi = Math.max(...vals, 100), span = hi - lo || 1;
+  const x = (i: number) => pad + (i * (W - 2 * pad)) / (vals.length - 1);
+  const y = (v: number) => pad + (H - 2 * pad) * (1 - (v - lo) / span);
+  const d = vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const up = vals[vals.length - 1] >= vals[vals.length - 2];
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "0 0 auto" }}>
+      <line x1={pad} y1={y(0)} x2={W - pad} y2={y(0)} stroke="var(--border)" strokeDasharray="2 2" strokeWidth={1} />
+      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.5} opacity={0.7} />
+      <circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r={2.6} style={{ fill: up ? "var(--green)" : "var(--red)" }} />
+    </svg>
+  );
+}
+
 export function ForensicsPanel() {
-  const { report, loading, error } = useForensicsReport();
+  const { report, trend, loading, error } = useForensicsReport();
   const ps = usePyramidShadow();
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
@@ -35,6 +55,8 @@ export function ForensicsPanel() {
 
   const sc = report.payload.overrideScorecard;
   const bvl = report.payload.benchedVsLive;
+  const gb = report.payload.giveback ?? null;
+  const trendUp = trend.length >= 2 && (trend[trend.length - 1].capturePct ?? 0) >= (trend[0].capturePct ?? 0);
   const ranAny = bvl?.benched.some((b) => b.ran) ?? false;
   const asOf = (() => { try { return new Date(report.payload.generatedAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return report.report_date; } })();
 
@@ -47,6 +69,40 @@ export function ForensicsPanel() {
         </button>
       </div>
       <div className="pbody">
+        {/* ── DAILY GIVE-BACK / CAPTURE — the take-profit policy's success metric (peak → close) ── */}
+        <div className="au-sub">Give-back <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>peak → close · is the desk keeping its peaks?</span></div>
+        {!gb || gb.capturePct == null ? (
+          <p className="au-market">accruing — the first point lands at the next post-close publish (needs trades that peaked + 7d quote coverage).</p>
+        ) : (
+          <>
+            <div className="au-fund">
+              <span>kept <b className={gb.capturePct >= 50 ? "pos" : "neg"}>{gb.capturePct}%</b> of peak</span>
+              <span>gave back <b className="neg">${gb.givenBackUsd.toLocaleString()}</b></span>
+              <span>{gb.nPeakers}/{gb.nClosed} peaked</span>
+            </div>
+            {trend.length >= 2 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 2px" }}>
+                <CaptureSparkline pts={trend} />
+                <span style={{ fontSize: "0.82em", fontWeight: 700 }}>
+                  capture {trend[0].capturePct}% → <b className={trendUp ? "pos" : "neg"}>{trend[trend.length - 1].capturePct}%</b>
+                  <span style={{ opacity: 0.55, fontWeight: 400 }}> · {trend.length}d {trendUp ? "↑ keeping more" : "↓ giving back more"}</span>
+                </span>
+              </div>
+            )}
+            {expanded && gb.byChannel.length > 0 && (
+              <div className="fx-rows">
+                {gb.byChannel.map((c) => (
+                  <div className="fx-row" key={c.key}>
+                    <span className="fx-name">{c.key}</span>
+                    <span className="fx-mid">kept {c.capturePct}% · {c.n}t</span>
+                    <span className="au-pnl neg">-${c.givenBackUsd.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {/* ── OVERRIDE SCORECARD (CUMULATIVE — accumulating ledger since inception) ── */}
         <div className="au-sub">Override scorecard <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>cumulative{sc.span ? ` · ${sc.span}` : ""}</span> — manual close vs ride-to-close (man&nbsp;vs&nbsp;machine)</div>
         {sc.n === 0 ? (

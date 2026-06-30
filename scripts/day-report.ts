@@ -560,6 +560,31 @@ async function main() {
     console.log(`\nbenched would-be vs live: failed (${(e as Error).message})`);
   }
 
+  // ---- DAILY GIVE-BACK / CAPTURE (the take-profit policy's success metric) -----------------
+  // Over trades that PEAKED above entry (with option_quotes coverage): how much of the peak gain
+  // did the desk KEEP? capturePct = realized ÷ peak-gain (→100 = kept it all; →0 = gave it all
+  // back; <0 = closed red after peaking). The take-profit policy should push capture UP and the
+  // $ given-back DOWN. Published daily → accrues one point/day in the §03 panel (watch the trend).
+  const gbPeakers = trades.filter((t) => t.peak != null && t.peak > t.entry && t.qty > 0);
+  const peakGainUsd = (t: Trade) => (t.peak! - t.entry) * t.qty * 100;
+  const gbPeaked = gbPeakers.reduce((a, t) => a + peakGainUsd(t), 0);
+  const gbKept = gbPeakers.reduce((a, t) => a + t.pnl, 0);
+  const gbChan = new Map<string, { name: string; peaked: number; kept: number; n: number }>();
+  for (const t of gbPeakers) { const e = gbChan.get(t.slug) ?? { name: t.name, peaked: 0, kept: 0, n: 0 }; e.peaked += peakGainUsd(t); e.kept += t.pnl; e.n++; gbChan.set(t.slug, e); }
+  const giveback = {
+    date: DATE,
+    nPeakers: gbPeakers.length,
+    nClosed: trades.length,
+    peakedUsd: Math.round(gbPeaked),
+    keptUsd: Math.round(gbKept),
+    givenBackUsd: Math.round(gbPeaked - gbKept),
+    capturePct: gbPeaked > 0 ? Math.round((gbKept / gbPeaked) * 100) : null,
+    byChannel: [...gbChan.values()]
+      .map((e) => ({ key: e.name, capturePct: e.peaked > 0 ? Math.round((e.kept / e.peaked) * 100) : 0, givenBackUsd: Math.round(e.peaked - e.kept), n: e.n }))
+      .sort((a, b) => b.givenBackUsd - a.givenBackUsd),
+  };
+  console.log(`\nGIVE-BACK (peak→close) — ${giveback.nPeakers}/${giveback.nClosed} trades peaked +; kept ${giveback.capturePct ?? "—"}% of peak · $${giveback.givenBackUsd} given back (peaked ${sgn(giveback.peakedUsd)} → kept ${sgn(giveback.keptUsd)})`);
+
   // ---- publish to the §03 dashboard panel (override scorecard + benched-vs-live) ----------
   const [ledgerNow, fouloutNow] = await Promise.all([loadLedger(), loadFoulout()]);
   const payload = {
@@ -567,6 +592,7 @@ async function main() {
     overrideScorecard: scorecardData(ledgerNow),
     overrideFouloutScorecard: fouloutScorecardData(fouloutNow), // capital-path re-score (additive; panel may ignore)
     benchedVsLive: bvl ? { sameWeek: bvl.sameWeek, benched: bvl.benched, skipped: bvl.skipped, benchedTotal: bvl.benchedTotal, liveTotal: bvl.liveTotal } : null,
+    giveback,
   };
   console.log(`\n  dashboard: ${await publishForensics(DATE, payload)}`);
 
