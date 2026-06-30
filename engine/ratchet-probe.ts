@@ -17,22 +17,32 @@
 //    npm run ratchet-probe
 // ============================================================================
 
-import { CH, WINDOWS, prep, simChannel, pool, byWindow, exp$, usd, type Ch, type Exits } from "./lever-shared";
+import { CH, WINDOWS, prep, simChannel, pool, byWindow, exp$, usd, specEval, type Ch, type Exits } from "./lever-shared";
 
 const padR = (s: string, n: number) => s.padEnd(n);
 const padL = (s: string, n: number) => s.padStart(n);
 const f1 = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(1);
 
-// the channels worth the exit test: round-trip (ratchet should help) + convex-tail (must not cap)
-const TARGETS = ["BREAK(ALT V3)", "BREAK(ALT)", "ORB(breakout)", "POWERHOUR", "POWER Final30", "PB RIDER 1DTE", "GRIND v3"];
-const KIND: Record<string, string> = { "BREAK(ALT V3)": "convex-tail", "BREAK(ALT)": "convex-tail", "ORB(breakout)": "round-trip", "POWERHOUR": "round-trip", "POWER Final30": "round-trip", "PB RIDER 1DTE": "round-trip", "GRIND v3": "scalper" };
+// MOMO Continuation — the desk's #1 keep-the-peak RIDE channel (giveback probe: peak +51%, exit +12.9%
+// = surrenders ~75% of its peak). Not in the shared CH; build it locally from its live spec (ride exit,
+// NO profit cap) so the ratchet can be tested on the prime harvest target.
+const MOMO_LEGS: any = [
+  { direction: "call", reason: "u", all: [{ kind: "range_break", dir: "up", bars: 8 }, { kind: "strong_trend", dir: "up" }, { kind: "vwap_side", side: "above" }, { kind: "gap_min", pct: 0.25 }, { kind: "time_before", et: "14:00" }] },
+  { direction: "put", reason: "d", all: [{ kind: "range_break", dir: "down", bars: 8 }, { kind: "strong_trend", dir: "down" }, { kind: "vwap_side", side: "below" }, { kind: "gap_min", pct: 0.25 }, { kind: "time_before", et: "14:00" }] },
+];
+const momoCh: Ch = { name: "MOMO Cont", sym: "SPY", dte: 0, maxC: 6, mk: specEval(MOMO_LEGS, "15:25"), px: { stopPct: 50 } };
 
-// ride (baseline = channel's native px exits) vs arm-high ratchet configs
+// the channels worth the exit test: ride-harvest (giveback surrendered) + convex-tail (must not cap) + round-trip
+const TARGETS = ["MOMO Cont", "BREAK(ALT V3)", "BREAK(ALT)", "ORB(breakout)", "POWERHOUR", "POWER Final30", "PB RIDER 1DTE", "GRIND v3"];
+const KIND: Record<string, string> = { "MOMO Cont": "ride-harvest", "BREAK(ALT V3)": "convex-tail", "BREAK(ALT)": "convex-tail", "ORB(breakout)": "round-trip", "POWERHOUR": "round-trip", "POWER Final30": "round-trip", "PB RIDER 1DTE": "round-trip", "GRIND v3": "scalper" };
+
+// ride (baseline = channel's native px exits) vs arm-high ratchet configs (arm HIGH = let the tail develop, then trail)
 const CONFIGS: Array<{ key: string; exits?: Exits }> = [
   { key: "ride" },
   { key: "gb50/arm20", exits: { trailExit: { premiumGivebackPct: 50, armPct: 20 } } },
   { key: "gb50/arm30", exits: { trailExit: { premiumGivebackPct: 50, armPct: 30 } } },
   { key: "gb40/arm50", exits: { trailExit: { premiumGivebackPct: 40, armPct: 50 } } },
+  { key: "gb30/arm50", exits: { trailExit: { premiumGivebackPct: 30, armPct: 50 } } },
   { key: "gb60/arm30", exits: { trailExit: { premiumGivebackPct: 60, armPct: 30 } } },
 ];
 
@@ -45,7 +55,7 @@ async function main() {
   const winHdr = WINDOWS.map((w) => padL(w.short, 8)).join("");
 
   for (const name of TARGETS) {
-    const ch = CH.find((c) => c.name === name) as Ch;
+    const ch = name === "MOMO Cont" ? momoCh : (CH.find((c) => c.name === name) as Ch);
     const rows = CONFIGS.map((C) => { const rs = simChannel(SPY, ch, undefined, C.exits); return { key: C.key, ...pool(rs), bw: byWindow(rs) }; });
     const base = rows[0];
     console.log(`  ━━ ${name} (${KIND[name]}) ━━  ride ${usd(base.tot)} (${base.n}t, ${exp$(base.tot, base.n)}/t)`);
