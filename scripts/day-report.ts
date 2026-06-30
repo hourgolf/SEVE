@@ -20,8 +20,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { upcomingEvents, tableHorizonDays } from "../engine/market-events";
 import {
-  upsertLedger, loadLedger, scorecardLines, scorecardData, LEDGER_PATH, type LedgerEntry,
-  simulateFoulout, upsertFoulout, loadFoulout, fouloutScorecardLines, fouloutScorecardData, FOULOUT_PATH, type FouloutEntry, type RideLeg,
+  upsertLedger, loadLedger, scorecardLines, scorecardData, type LedgerEntry,
+  simulateFoulout, upsertFoulout, loadFoulout, fouloutScorecardLines, fouloutScorecardData, type FouloutEntry, type RideLeg,
 } from "./override-ledger";
 import { benchedVsLive, type BenchedVsLive } from "./benched-sim";
 
@@ -463,8 +463,8 @@ async function main() {
         rideHoldMin: t.rideExitMs != null ? Math.round((t.rideExitMs - Date.parse(t.openedAt)) / 60000) : null,
         recordedAt: new Date().toISOString(),
       }));
-      const { added, updated } = upsertLedger(entries);
-      console.log(`  ── ledger: +${added} new / ${updated} refreshed → ${LEDGER_PATH}`);
+      const { added, updated } = await upsertLedger(entries);
+      console.log(`  ── ledger: +${added} new / ${updated} refreshed → override_ledger (Supabase)`);
     }
     const stale = recon.filter((t) => isOverride(t) && !t.rideOk);
     if (stale.length) console.log(`  ⚠ ${stale.length} override(s) not ledgered — quote stream didn't reach the flatten (re-run earlier in the week / off-chain OCC)`);
@@ -510,10 +510,10 @@ async function main() {
         blockedSlot: r.blockedSlot, blockedStop: r.blockedStop, recordedAt: new Date().toISOString(),
       });
     }
-    const { added, updated } = upsertFoulout(fouloutEntries);
+    const { added, updated } = await upsertFoulout(fouloutEntries);
     const dg = fouloutEntries.reduce((s, e) => s + e.deltaGross, 0), df = fouloutEntries.reduce((s, e) => s + e.deltaFoulAware, 0);
     console.log(`  ── today: ride beats you (gross) ${sgn(-dg)} → (foul-aware) ${sgn(-df)} · foul-out adjustment ${sgn(df - dg)} (phantom re-entries riding can't take)`);
-    console.log(`  ── foulout ledger: +${added} new / ${updated} refreshed → ${FOULOUT_PATH}`);
+    console.log(`  ── foulout ledger: +${added} new / ${updated} refreshed → foulout_ledger (Supabase)`);
   }
 
   // ---- managed-exit shadow (shadowManage MGMT) — the OTHER counterfactual --------------
@@ -534,12 +534,12 @@ async function main() {
 
   // ---- override SCORECARD (accumulated — the only honest arbiter) ----------------------
   console.log(`\nOVERRIDE SCORECARD (accumulated — does the manual close systematically beat ride-to-close?)`);
-  for (const l of scorecardLines(loadLedger())) console.log(l);
+  for (const l of scorecardLines(await loadLedger())) console.log(l);
   // The foul-out-aware companion: the SAME overrides re-scored as ride-AS-A-POLICY on a
   // one-at-a-time book (you can't ride every re-entry). The gross headline above answers
   // "was each exit early?"; this answers "would riding have beaten me?".
   console.log(`\nOVERRIDE SCORECARD — FOUL-OUT-AWARE (ride-as-a-policy: one-at-a-time + daily-stop)`);
-  for (const l of fouloutScorecardLines(loadFoulout())) console.log(l);
+  for (const l of fouloutScorecardLines(await loadFoulout())) console.log(l);
 
   // ---- benched would-be vs live (did the cut channels earn their bench today?) ---------
   // Replays each benched (draft) channel's REAL strategy + exits on today's real NBBO with
@@ -561,10 +561,11 @@ async function main() {
   }
 
   // ---- publish to the §03 dashboard panel (override scorecard + benched-vs-live) ----------
+  const [ledgerNow, fouloutNow] = await Promise.all([loadLedger(), loadFoulout()]);
   const payload = {
     generatedAt: new Date().toISOString(),
-    overrideScorecard: scorecardData(loadLedger()),
-    overrideFouloutScorecard: fouloutScorecardData(loadFoulout()), // capital-path re-score (additive; panel may ignore)
+    overrideScorecard: scorecardData(ledgerNow),
+    overrideFouloutScorecard: fouloutScorecardData(fouloutNow), // capital-path re-score (additive; panel may ignore)
     benchedVsLive: bvl ? { sameWeek: bvl.sameWeek, benched: bvl.benched, skipped: bvl.skipped, benchedTotal: bvl.benchedTotal, liveTotal: bvl.liveTotal } : null,
   };
   console.log(`\n  dashboard: ${await publishForensics(DATE, payload)}`);

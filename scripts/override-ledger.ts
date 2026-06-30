@@ -17,6 +17,22 @@
 
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "fs";
 import { dirname } from "path";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+// ── cloud ledger (Supabase) — the durable, SHARED accumulation so the §03 panel is
+// computable from the always-on cloud (the Railway day-report cron), not just the
+// operator's Mac. Both the Mac CLI and the cron write here. Falls back to LOCAL JSON
+// only when the service-role env is absent (a bare dev box) — LOUDLY, so a misconfigured
+// cron never silently accrues to an ephemeral disk and loses the tally.
+const _SB_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const _SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+let _sbCache: SupabaseClient | null | undefined;
+function cloudSb(): SupabaseClient | null {
+  if (_sbCache !== undefined) return _sbCache;
+  _sbCache = _SB_URL && _SB_KEY ? createClient(_SB_URL, _SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+  if (!_sbCache) console.error("⚠ override-ledger: no SUPABASE_SERVICE_ROLE_KEY+URL — using LOCAL JSON (NOT cloud-durable). Set them so the ledger persists in Supabase.");
+  return _sbCache;
+}
 
 export interface LedgerEntry {
   id: string;                 // positions.id (stable UUID → re-run-safe upsert key)
@@ -40,7 +56,31 @@ export interface LedgerEntry {
 
 export const LEDGER_PATH = "data/override-ledger.json";
 
-export function loadLedger(path = LEDGER_PATH): Record<string, LedgerEntry> {
+export async function loadLedger(): Promise<Record<string, LedgerEntry>> {
+  const sb = cloudSb();
+  if (!sb) return loadLedgerLocal();
+  const { data, error } = await sb.from("override_ledger").select("entry");
+  if (error) throw new Error(`override_ledger read: ${error.message}`);
+  const out: Record<string, LedgerEntry> = {};
+  for (const r of data ?? []) { const e = (r as { entry: LedgerEntry }).entry; if (e?.id) out[e.id] = e; }
+  return out;
+}
+
+export async function upsertLedger(entries: LedgerEntry[]): Promise<{ added: number; updated: number }> {
+  const sb = cloudSb();
+  if (!sb) return upsertLedgerLocal(entries);
+  if (!entries.length) return { added: 0, updated: 0 };
+  const existing = await loadLedger(); // count added vs refreshed (cosmetic) — once/day, fine
+  let added = 0, updated = 0;
+  for (const e of entries) { if (existing[e.id]) updated++; else added++; }
+  const rows = entries.map((e) => ({ id: e.id, report_date: e.date, entry: e }));
+  const { error } = await sb.from("override_ledger").upsert(rows, { onConflict: "id" });
+  if (error) throw new Error(`override_ledger upsert: ${error.message}`);
+  return { added, updated };
+}
+
+// ── local-JSON fallback (the pre-cloud behavior; used only when no service-role env) ──
+function loadLedgerLocal(path = LEDGER_PATH): Record<string, LedgerEntry> {
   if (!existsSync(path)) return {};
   try {
     return JSON.parse(readFileSync(path, "utf8")) as Record<string, LedgerEntry>;
@@ -52,17 +92,11 @@ export function loadLedger(path = LEDGER_PATH): Record<string, LedgerEntry> {
     return {};
   }
 }
-
-export function upsertLedger(entries: LedgerEntry[], path = LEDGER_PATH): { added: number; updated: number } {
-  const led = loadLedger(path);
+function upsertLedgerLocal(entries: LedgerEntry[], path = LEDGER_PATH): { added: number; updated: number } {
+  const led = loadLedgerLocal(path);
   let added = 0, updated = 0;
-  for (const e of entries) {
-    if (led[e.id]) updated++; else added++;
-    led[e.id] = e; // re-running an old same-week date refreshes the reconstruction in place
-  }
+  for (const e of entries) { if (led[e.id]) updated++; else added++; led[e.id] = e; }
   mkdirSync(dirname(path), { recursive: true });
-  // Atomic write (temp + rename on the same fs) — a crash mid-write can never leave a
-  // half-written ledger that the next loadLedger would discard, wiping the accumulation.
   const tmp = `${path}.tmp`;
   writeFileSync(tmp, JSON.stringify(led) + "\n");
   renameSync(tmp, path);
@@ -225,7 +259,30 @@ export interface FouloutEntry {
 
 export const FOULOUT_PATH = "data/foulout-ledger.json";
 
-export function loadFoulout(path = FOULOUT_PATH): Record<string, FouloutEntry> {
+export async function loadFoulout(): Promise<Record<string, FouloutEntry>> {
+  const sb = cloudSb();
+  if (!sb) return loadFouloutLocal();
+  const { data, error } = await sb.from("foulout_ledger").select("entry");
+  if (error) throw new Error(`foulout_ledger read: ${error.message}`);
+  const out: Record<string, FouloutEntry> = {};
+  for (const r of data ?? []) { const e = (r as { entry: FouloutEntry }).entry; if (e?.key) out[e.key] = e; }
+  return out;
+}
+
+export async function upsertFoulout(entries: FouloutEntry[]): Promise<{ added: number; updated: number }> {
+  const sb = cloudSb();
+  if (!sb) return upsertFouloutLocal(entries);
+  if (!entries.length) return { added: 0, updated: 0 };
+  const existing = await loadFoulout();
+  let added = 0, updated = 0;
+  for (const e of entries) { if (existing[e.key]) updated++; else added++; }
+  const rows = entries.map((e) => ({ k: e.key, report_date: e.date, entry: e }));
+  const { error } = await sb.from("foulout_ledger").upsert(rows, { onConflict: "k" });
+  if (error) throw new Error(`foulout_ledger upsert: ${error.message}`);
+  return { added, updated };
+}
+
+function loadFouloutLocal(path = FOULOUT_PATH): Record<string, FouloutEntry> {
   if (!existsSync(path)) return {};
   try { return JSON.parse(readFileSync(path, "utf8")) as Record<string, FouloutEntry>; }
   catch {
@@ -234,9 +291,8 @@ export function loadFoulout(path = FOULOUT_PATH): Record<string, FouloutEntry> {
     return {};
   }
 }
-
-export function upsertFoulout(entries: FouloutEntry[], path = FOULOUT_PATH): { added: number; updated: number } {
-  const led = loadFoulout(path);
+function upsertFouloutLocal(entries: FouloutEntry[], path = FOULOUT_PATH): { added: number; updated: number } {
+  const led = loadFouloutLocal(path);
   let added = 0, updated = 0;
   for (const e of entries) { if (led[e.key]) updated++; else added++; led[e.key] = e; }
   mkdirSync(dirname(path), { recursive: true });
