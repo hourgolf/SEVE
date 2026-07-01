@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-01a"; // + feat-diag: journal per-symbol V3-gate features (gap/er/relVol/atr) to diagnose why IWM channels never fire (temp)
+export const WORKER_VERSION = "stream-2026-07-01b"; // feat-diag removed (IWM confirmed healthy + selective, not a bug); back to a clean worker
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

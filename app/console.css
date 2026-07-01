@@ -1995,6 +1995,10 @@
 .ts-evt { margin-left: auto; font-size: 10px; font-weight: 700; }
 .ts-evt-off { color: var(--ink-soft, #6b6960); }
 .ts-evt-on { color: #b45309; background: rgba(180, 83, 9, 0.1); padding: 3px 9px; border-radius: 5px; }
+/* mobile: compact + let the event wrap to its own line */
+.m-app .today-strip { margin: 0 10px 8px; padding: 7px 11px; gap: 6px 9px; font-size: 10px; }
+.m-app .today-strip .ts-sym { font-size: 10px; padding: 2px 7px; }
+.m-app .today-strip .ts-evt { margin-left: 0; width: 100%; font-size: 9px; }
 
 /* ---- live-config controls in the flip-card editor (cream scope, tokens flipped above) ---- */
 .ch-edit-cfg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }

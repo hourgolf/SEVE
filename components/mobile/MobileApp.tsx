@@ -7,6 +7,7 @@ import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
+import { TodayStrip } from "@/components/console/TodayStrip";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { ManVsMachine } from "@/components/console/ManVsMachine";
 import { PushToggle } from "@/components/console/PushToggle";
@@ -66,6 +67,10 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const { desk, anySolo, isActive } = view;
   // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
+
+  // Traded indices (desk-wide, armed) for the TODAY readiness strip — gaps are market-wide.
+  const tradedUnderlyings = [...new Set(desk.strategists.filter((s) => s.status === "armed").map((s) => s.underlying.toUpperCase()))]
+    .sort((a, b) => { const o = ["SPY", "QQQ", "IWM"]; const ai = o.indexOf(a), bi = o.indexOf(b); return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.localeCompare(b); });
   const armed = accountChannels.filter((s) => s.status === "armed");
   const benched = accountChannels.filter((s) => s.status !== "armed");
   const { persist, canWrite } = useChannelOrdering(armed, write);
@@ -144,6 +149,8 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
           <span className={`m-books shb-${dTone}`} title="NAV − attribution Σ">Δ {signedUsd(booksDelta)}</span>
         </div>
       </header>
+
+      <TodayStrip underlyings={tradedUnderlyings} />
 
       <main className={`m-screen${tab === "mixer" ? " m-screen--mix" : ""}`}>
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
