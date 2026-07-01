@@ -193,35 +193,58 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
     </div>
   );
 
-  // "What fires" — the binding exits in plain terms. Surfaces the premium stop (which has no knob)
-  // and reads the same config the worker exits on, so what you see is what actually happens.
+  // Exit MODE — the matched TP+stop pair as one control. LOCK = take profit + a tight
+  // −30% stop (the find-and-surrender book); RIDE = no take + a loose −50% stop (let the
+  // convex tail run, e.g. MOMO). Read from whether a take is set; picking a mode writes
+  // BOTH values so the pair always stays coherent, and the pills fine-tune from there.
+  const exitMode = tp > 0 ? "lock" : "ride";
+  const applyLock = () => {
+    const nextTp = tp > 0 ? tp : 22; // keep a tuned take; else default the canonical directional 22
+    if (nextTp !== tp || premStop !== 30) setCfg({ take_profit_pct: nextTp, premium_stop_pct: 30 });
+  };
+  const applyRide = () => {
+    if (tp !== 0 || premStop !== 50) setCfg({ take_profit_pct: 0, premium_stop_pct: 50 });
+  };
+
+  // "What fires" — the binding exits in plain terms + (auth) the LOCK/RIDE mode picker.
+  // Reads the same config the worker exits on, so what you see is what actually happens.
   const firesReadout = (
-    <div className="ch-fires" title="what actually fires — the binding exits (reads the live worker config)">
-      <span className="chf-lbl">fires</span>
-      <FiresPill
-        value={tp}
-        display={tp > 0 ? `+${tp}%` : "ride"}
-        onCommit={(v) => setCfg({ take_profit_pct: v })}
-        min={0}
-        max={300}
-        className={tp > 0 ? "chf-take" : "chf-ride"}
-        canWrite={canWrite}
-        label="take profit percent"
-        title="take-profit % (0 = ride)"
-      />
-      <FiresPill
-        value={premStop}
-        display={`−${premStop}%`}
-        onCommit={(v) => setCfg({ premium_stop_pct: v })}
-        min={10}
-        max={90}
-        className="chf-stop"
-        canWrite={canWrite}
-        label="premium stop percent"
-        title="premium stop % — the binding downside"
-      />
-      <span className="chf chf-flat">EOD</span>
-    </div>
+    <>
+      {canWrite && (
+        <div className="ch-mode" role="group" aria-label="exit mode">
+          <button type="button" className={`chm chm-lock${exitMode === "lock" ? " on" : ""}`}
+            onClick={applyLock} title="LOCK — take profit + a tight −30% stop (find-and-surrender book)">LOCK</button>
+          <button type="button" className={`chm chm-ride${exitMode === "ride" ? " on" : ""}`}
+            onClick={applyRide} title="RIDE — no take, loose −50% stop (let the convex tail run)">RIDE</button>
+        </div>
+      )}
+      <div className="ch-fires" title="what actually fires — the binding exits (reads the live worker config)">
+        <span className="chf-lbl">fires</span>
+        <FiresPill
+          value={tp}
+          display={tp > 0 ? `+${tp}%` : "ride"}
+          onCommit={(v) => setCfg({ take_profit_pct: v })}
+          min={0}
+          max={300}
+          className={tp > 0 ? "chf-take" : "chf-ride"}
+          canWrite={canWrite}
+          label="take profit percent"
+          title="take-profit % (0 = ride)"
+        />
+        <FiresPill
+          value={premStop}
+          display={`−${premStop}%`}
+          onCommit={(v) => setCfg({ premium_stop_pct: v })}
+          min={10}
+          max={90}
+          className="chf-stop"
+          canWrite={canWrite}
+          label="premium stop percent"
+          title="premium stop % — the binding downside"
+        />
+        <span className="chf chf-flat">EOD</span>
+      </div>
+    </>
   );
 
   const editBtn = canWrite ? (

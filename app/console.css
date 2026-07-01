@@ -1925,6 +1925,18 @@
 .channel--m .chf-edit { padding: 3px 7px; }
 .channel--m .chf-input { padding: 2px 4px; }
 
+/* exit MODE picker — one tap writes the matched TP+stop pair (LOCK: take + −30% / RIDE: ride + −50%) */
+.ch-mode { display: inline-flex; margin: 4px 22px 0; width: fit-content; }
+.channel--m .ch-mode { margin-left: 0; margin-right: 0; }
+.chm { font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.6px; padding: 2px 9px; line-height: 1.2; cursor: pointer; background: transparent; color: var(--ink-soft, #6b6960); border: 1px solid rgba(0, 0, 0, 0.22); }
+.chm-lock { border-radius: 4px 0 0 4px; }
+.chm-ride { border-radius: 0 4px 4px 0; margin-left: -1px; }
+.chm:hover { background: rgba(0, 0, 0, 0.05); }
+.chm.on { color: #fff; border-color: transparent; position: relative; z-index: 1; }
+.chm-lock.on { background: #1c7a44; }
+.chm-ride.on { background: #6b6960; }
+.channel--m .chm { padding: 4px 12px; font-size: 9px; }
+
 /* ---- live-config controls in the flip-card editor (cream scope, tokens flipped above) ---- */
 .ch-edit-cfg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
 .cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
