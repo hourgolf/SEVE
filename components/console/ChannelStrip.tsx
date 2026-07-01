@@ -41,8 +41,8 @@ const PYRAMID_CAP = 12;
 // An inline-editable pill for the FIRES readout — click to set the value as a plain
 // number (the worker's real TP / stop %). Read-only span when signed out (identical
 // to the static readout). Commit on Enter/blur, Esc cancels, ↑/↓ nudge by 1.
-function FiresPill({
-  value, display, onCommit, min, max, className, canWrite, label, title,
+export function FiresPill({
+  value, display, onCommit, min, max, className, canWrite, label, title, maxDigits = 3,
 }: {
   value: number;
   display: string; // read-mode text, e.g. "+22%" / "ride" / "−30%"
@@ -53,6 +53,7 @@ function FiresPill({
   canWrite: boolean;
   label: string;
   title: string;
+  maxDigits?: number; // digit cap for the edit input (3 for %, more for $ fields)
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -89,11 +90,11 @@ function FiresPill({
       type="text"
       inputMode="numeric"
       autoFocus
-      size={3}
+      size={maxDigits}
       value={draft}
       aria-label={label}
       onClick={(e) => e.stopPropagation()}
-      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, maxDigits))}
       onFocus={(e) => e.currentTarget.select()}
       onBlur={commit}
       onKeyDown={(e) => {

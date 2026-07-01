@@ -13,6 +13,7 @@ import { MasterStopControl } from "@/components/console/MasterStopControl";
 import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
+import { RosterTable } from "@/components/console/RosterTable";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -103,6 +104,7 @@ export function DesktopSurface({
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
+  const [rosterView, setRosterView] = useState<"strips" | "table">("strips"); // Mixer: per-channel strips vs the fleet table
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const { canWrite } = write;
 
@@ -214,7 +216,11 @@ export function DesktopSurface({
 
           <SectionLabel id="composer" idx="C">
             Mixer<span className="sec-jp">ミキサー</span>
-            {canWrite && (
+            <span className="roster-toggle" title="per-channel strips vs the fleet table">
+              <button type="button" className={rosterView === "strips" ? "on" : ""} onClick={() => setRosterView("strips")}>strips</button>
+              <button type="button" className={rosterView === "table" ? "on" : ""} onClick={() => setRosterView("table")}>table</button>
+            </span>
+            {canWrite && rosterView === "strips" && (
               <span className="group-by" title="auto-arrange the channels, then nudge by hand">
                 <span className="gb-label">group</span>
                 <button type="button" onClick={() => groupBy("underlying")}>ticker</button>
@@ -228,6 +234,9 @@ export function DesktopSurface({
           )}
           <div className="console-grid">
             <div className="channels-col">
+              {rosterView === "table" ? (
+                <RosterTable channels={armed} livePnl={livePnl} />
+              ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                 <SortableContext items={channelOrder} strategy={rectSortingStrategy}>
                   <div className="channels">
@@ -244,6 +253,7 @@ export function DesktopSurface({
                   </div>
                 </SortableContext>
               </DndContext>
+              )}
               {benched.length > 0 && (
                 <div className="bench">
                   <div className="bench-bar">
