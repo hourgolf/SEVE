@@ -43,6 +43,20 @@ config the worker exits on: `premium_stop_pct ?? 50` / `take_profit_pct` / EOD f
   `canWrite` from `useDeskWrite`; writes = optimistic `dispatch(SET_CONFIG)` + `persistConfig` (RLS-guarded).
 - ⚠ **Desktop Mixer-room screenshots return blank cream when scrolled** (a preview-harness rasterizer quirk, not a
   bug) — verify desktop strips/table via DOM eval or a tall-viewport (`height:2680`) capture at scroll 0.
+- **⚙ SIZING (two-dial, made honest 2026-06-30):** live qty = `min( floor(RISK ÷ (premium_stop_pct·ask·100)),
+  max_contracts )`. STOP-AWARE since worker `stream-2026-06-30c` (decide.ts base entry + pyramid wouldQty) — reads
+  each channel's real stop so **`RISK $` = the same real dollars on every channel** (was hardcoded 0.5 = −50%, which
+  under-sized the −30% channels to 0.6× their stated risk). Then reconciled RISK↔caps so **RISK governs day-to-day and
+  max_contracts is a true safety ceiling** (before: caps bound at typical asks → RISK was inert). Per-account ≈$/trade:
+  paper-main $600 · Core $750 (incl. IWM — the strongest edge, bumped to parity, cap 30) · Resurrected $720–1,800
+  (MOMO the ride). daily_stop set ≈2.5× RISK so one stop-out doesn't halt a channel. To scale a channel, turn RISK up —
+  it now responds (bounded by max_contracts).
+- **☠ DEAD / UNENFORCED KNOBS (audit 2026-06-30) — don't trust these to act:** (1) **SOLO** is read but the worker does
+  NOT enforce it (`decide.ts:192`) — soloing dims others in the UI, they KEEP trading. (2) **fund
+  `master_daily_stop_usd`** is also NOT enforced by the worker — only the manual **KILL** (`is_halted`) halts the desk;
+  the auto "halt at −$X" does nothing (and has no UI). (3) **aggression** — retired/unused, removed from the UI. (4)
+  **u-stops** — every armed channel's `underlying_stop_pct` is set to a value the premium stop beats first (the `uS·off`
+  flag) → it never fires. Wire SOLO / master-stop into `decide.ts`, or drop them from the UI, if you want them real.
 
 ## SESSION HANDOFF — 2026-06-25 (⭐ EXECUTION-INTEGRITY RECKONING → CLEAN BOOKS → RE-ANALYZE) — READ FIRST
 **The operator's challenge ("V3/ALT never trade — were they ever properly EXECUTED?") cracked the desk open. A
