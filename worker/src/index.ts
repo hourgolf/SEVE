@@ -50,6 +50,7 @@ const orphanSeen = new Map<string, number>();
 const barsBySym = new Map<string, BarStore>(SYMBOLS.map((s) => [s, new BarStore(config.barHistory)]));
 const chainBySym = new Map<string, ChainStore>(SYMBOLS.map((s) => [s, new ChainStore()]));
 const gammaLogged = new Set<string>(); // `${sym}|${etDate}` — once-per-day gamma-open diagnostic snapshot
+const featLogged = new Set<string>(); // `${sym}|${etDate}|${5min}` — throttled per-symbol feature diagnostic (why armed channels don't fire)
 let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[]; accounts: store.AccountRow[] } = { fund: null, channels: [], accounts: [] };
 let reloadPending = false;
 let cycling = false;
@@ -358,6 +359,21 @@ async function cycle(trigger: string): Promise<void> {
           }
         }
       } catch (e) { warn(`gamma-open[${sym}] failed — ${(e as Error).message}`); }
+
+      // ---- FEATURE diagnostic (temp) — why armed channels don't fire: journal each symbol's
+      // V3-gate features so IWM's live numbers can be compared to SPY/QQQ. Throttled to once per
+      // symbol per 5-min bucket; journal-only (off the trade path). Remove once IWM is diagnosed. ----
+      try {
+        const fk = `${sym}|${todayET}|${Math.floor(barMin / 5)}`;
+        if (!featLogged.has(fk)) {
+          featLogged.add(fk);
+          const lv = computeLevels(bars.all(), todayET);
+          const ff = computeFeatures(sessionBars, sessionBars.length - 1);
+          void store.writeShadowEvent(
+            `feat ${sym} gap=${lv.gap != null ? lv.gap.toFixed(3) : "null"} er=${ff.er.toFixed(2)} relVol=${ff.relVol.toFixed(2)} atr=${ff.atr.toFixed(2)} close=${ff.close.toFixed(2)} bars=${sessionBars.length}`,
+            { kind: "feat-diag", sym, gap: lv.gap ?? null, er: +ff.er.toFixed(3), relVol: +ff.relVol.toFixed(3), atr: +ff.atr.toFixed(3), close: +ff.close.toFixed(2), sessionBars: sessionBars.length, barMin });
+        }
+      } catch (e) { warn(`feat-diag[${sym}] failed — ${(e as Error).message}`); }
       // Shadow MANAGEMENT what-if: scale/BE/trail over THIS symbol's live positions (all
       // buckets) on its real-time quote (logs managed-vs-actual; no orders). ALWAYS call —
       // the ride-to-close override finalize must run at the 15:25 flatten.

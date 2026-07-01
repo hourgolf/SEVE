@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-30d"; // + BOOST: a boosted channel runs 2× for the day (RISK budget + max_contracts + daily-stop all ×2); replaces inert SOLO; auto-cleared nightly by seve-clear-boosts cron
+export const WORKER_VERSION = "stream-2026-07-01a"; // + feat-diag: journal per-symbol V3-gate features (gap/er/relVol/atr) to diagnose why IWM channels never fire (temp)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
