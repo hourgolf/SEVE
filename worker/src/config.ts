@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-30b"; // + fast-exit sweep honors per-channel premium_stop_pct (config −30 fires sub-minute, not only at bar close)
+export const WORKER_VERSION = "stream-2026-06-30c"; // + STOP-AWARE sizing: qty = RISK ÷ (premium_stop_pct·ask·100), not hardcoded 0.5 → "RISK $" = same real dollars on every channel (base entry + pyramid add)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

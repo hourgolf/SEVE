@@ -383,11 +383,15 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       if (Math.max(0, f.atr) * 100 < policy.COST_GATE_K * roundTrip) blocked = "cost_gate";
     }
     if (!blocked) {
-      // RISK-BASED sizing (two-dial model, cron 2026-06-04b parity): capital_pct
-      // holds RISK $/trade; risk per contract = the −50% premium stop = 0.5·ask·100;
-      // qty = risk ÷ that, capped by max_contracts. (Replaces the inert
-      // capital%×aggression% budget that pinned qty to max.)
-      const riskPerContract = 0.5 * ask * 100;
+      // RISK-BASED sizing (two-dial model): capital_pct holds RISK $/trade; risk per contract =
+      // the channel's premium stop (what it actually loses on a stop-out) = stopFrac·ask·100;
+      // qty = risk ÷ that, capped by max_contracts.
+      // STOP-AWARE (2026-06-30): read the REAL per-channel stop (premium_stop_pct, null→policy 50)
+      // instead of a hardcoded 0.5. Before this, a −30% LOCK channel was sized as if it stopped at
+      // −50%, so it only risked ~0.6× its stated RISK $. Now "RISK $" means the same dollars on
+      // every channel. (−50% channels: stopFrac=0.5 → byte-identical to the old behavior.)
+      const stopFrac = (ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT) / 100;
+      const riskPerContract = stopFrac * ask * 100;
       qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor(ch.capital_pct / riskPerContract), ch.max_contracts)) : 0;
       if (qty === 0) blocked = "insufficient_capital";
     }
@@ -455,9 +459,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
           : [{ qty: row.qty, entryFill: row.avg_entry_price }];
         // ⚠ parity caveats (un-shared with the engine, documented for the graduation replay): (1) addFill
         // = raw ask vs the engine's cost-adjusted en.fill (~1 tick higher) → +30% gate can disagree at the
-        // boundary; (2) wouldQty = the worker decide-formula floor(capital_pct/(0.5·ask·100)) (NOT
-        // riskGovernor) — equals the engine's floor(2·RISK/(ask·100)) only while capital_pct=RISK & aggression=100.
-        const riskPer = 0.5 * ask * 100;
+        // boundary; (2) wouldQty = the worker decide-formula floor(capital_pct/(stopFrac·ask·100)), STOP-AWARE
+        // (2026-06-30, mirrors the base-entry sizer) — the engine replay still models a −50% stop, so a −30%
+        // channel now sizes bigger live than the graduation backtest modeled (forward>backtest doctrine).
+        const riskPer = ((ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT) / 100) * ask * 100;
         const wouldQty = riskPer > 0 ? Math.floor(ch.capital_pct / riskPer) : 0;
         const roomToCap = Math.max(0, ch.max_contracts - row.qty); // maxStack = max_contracts
         const maxAdds = exec ? ch.pyramid_adds : PYRAMID_MAX_ADDS;
