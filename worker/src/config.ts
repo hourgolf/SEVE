@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-06-30c"; // + STOP-AWARE sizing: qty = RISK ÷ (premium_stop_pct·ask·100), not hardcoded 0.5 → "RISK $" = same real dollars on every channel (base entry + pyramid add)
+export const WORKER_VERSION = "stream-2026-06-30d"; // + BOOST: a boosted channel runs 2× for the day (RISK budget + max_contracts + daily-stop all ×2); replaces inert SOLO; auto-cleared nightly by seve-clear-boosts cron
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

@@ -34,6 +34,7 @@ export interface ChannelConfig {
   underlying_stop_pct: number;  // 0 = off (config-gated underlying initial stop)
   muted: boolean;
   soloed: boolean;
+  boosted: boolean;             // BOOST (54_boost.sql): 2× sizing for the day (replaces SOLO); auto-cleared nightly by cron
   // Per-channel event posture (33_event_policy.sql): 'standdown' (default) =
   // flatten + block entries in a scheduled-event window; 'ignore' = the channel's
   // thesis owns the event (future event-native strategies opt out here).
@@ -140,6 +141,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       underlying_stop_pct: Number(cfg.underlying_stop_pct ?? 0),
       muted: !!cfg.muted,
       soloed: !!cfg.soloed,
+      boosted: !!cfg.boosted,
       event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
       entry_dte: Math.max(0, Math.min(1, Number(cfg.entry_dte ?? 0))),
       strike_offset: Math.round(Number(cfg.strike_offset ?? 0)),

@@ -22,7 +22,7 @@ Rebuilt the ChannelStrip around what the worker ACTUALLY exits on. Shipped in 5 
 **THE NEW STRIP (top→bottom):** `executor · DTE` sub → **FIRES readout** (`fires −30% +22% EOD`, reads the live
 config the worker exits on: `premium_stop_pct ?? 50` / `take_profit_pct` / EOD flatten) → **LOCK/RIDE mode toggle**
 → **trade-shape bar** (to-scale red stop | entry | green target, drag handles, `0.73R` label) → **two-dial sizing**
-(`STOP/day` knob = `daily_stop_usd` + `RISK` fader = `capital_pct`) → MUTE/SOLO pads.
+(`STOP/day` knob = `daily_stop_usd` + `RISK` fader = `capital_pct`) → MUTE/BOOST pads.
 - **FIRES pills are click-to-edit** (`FiresPill`, exported): take (0 = ride) + premium-stop (clamped 10–90%). The
   premium stop had NO knob before — it's the binding downside, now surfaced + editable.
 - **⚠ ORDER CONVENTION (operator's call, don't re-flip): stop·take left→right EVERYWHERE** — FIRES text, shape bar,
@@ -51,12 +51,17 @@ config the worker exits on: `premium_stop_pct ?? 50` / `take_profit_pct` / EOD f
   paper-main $600 · Core $750 (incl. IWM — the strongest edge, bumped to parity, cap 30) · Resurrected $720–1,800
   (MOMO the ride). daily_stop set ≈2.5× RISK so one stop-out doesn't halt a channel. To scale a channel, turn RISK up —
   it now responds (bounded by max_contracts).
-- **☠ DEAD / UNENFORCED KNOBS (audit 2026-06-30) — don't trust these to act:** (1) **SOLO** is read but the worker does
-  NOT enforce it (`decide.ts:192`) — soloing dims others in the UI, they KEEP trading. (2) **fund
-  `master_daily_stop_usd`** is also NOT enforced by the worker — only the manual **KILL** (`is_halted`) halts the desk;
-  the auto "halt at −$X" does nothing (and has no UI). (3) **aggression** — retired/unused, removed from the UI. (4)
-  **u-stops** — every armed channel's `underlying_stop_pct` is set to a value the premium stop beats first (the `uS·off`
-  flag) → it never fires. Wire SOLO / master-stop into `decide.ts`, or drop them from the UI, if you want them real.
+- **🔥 BOOST pad (54_boost.sql, worker `stream-2026-06-30d`) — replaced the inert SOLO.** A per-channel amber toggle
+  (`strategist_config.boosted`): while lit the worker runs that channel **2× for the day** — RISK budget ×2 +
+  `max_contracts` ×2 + `daily_stop_usd` ×2 (all in `decide.ts`, base entry + pyramid). **Auto-cleared nightly** by the
+  `seve-clear-boosts` pg_cron (weekdays 21:15 UTC, after the cash close) so a 2× can't ride into the next session. Pad
+  writes `boosted` via SET_CONFIG + persistConfig (anon read-only). The `soloed` column + solo-ducking are now DORMANT
+  (nothing sets `soloed` true) — kept in the DB to avoid a live-worker deploy race; drop later.
+- **☠ STILL DEAD / UNENFORCED KNOBS (audit 2026-06-30):** (1) **fund `master_daily_stop_usd`** is read but NOT enforced
+  by the worker — only the manual **KILL** (`is_halted`) halts the desk; the auto "halt at −$X" does nothing (and has no
+  UI). (2) **aggression** — retired/unused, removed from the UI. (3) **u-stops** — every armed channel's
+  `underlying_stop_pct` is set to a value the premium stop beats first (the `uS·off` flag) → it never fires. Wire
+  master-stop into `decide.ts`, or drop it from the UI, if you want it real.
 
 ## SESSION HANDOFF — 2026-06-25 (⭐ EXECUTION-INTEGRITY RECKONING → CLEAN BOOKS → RE-ANALYZE) — READ FIRST
 **The operator's challenge ("V3/ALT never trade — were they ever properly EXECUTED?") cracked the desk open. A

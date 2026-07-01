@@ -30,7 +30,8 @@ export interface StrategistConfig {
   max_contracts: number; // hidden hard per-trade ceiling
   daily_stop_usd: number; // STOP $/day — halts new entries at this realized loss (wired)
   muted: boolean;
-  soloed: boolean;
+  soloed: boolean; // DORMANT — replaced by `boosted`; nothing sets it true now, so solo-ducking never fires
+  boosted?: boolean; // BOOST: 2× sizing for the day (RISK + cap + daily-stop); replaces SOLO; auto-cleared nightly
   // Live channel attributes now exposed as strip controls (optional = back-compat with
   // the seed; load.ts fills them from the DB, the UI reads with defaults).
   underlying_stop_pct?: number; // 0 = off; exits when the underlying moves X% against entry

@@ -24,7 +24,7 @@ const COLOR_BY_SLUG: Record<string, PmColor> = {
 const ORDER = ["fade", "breakout", "power", "grind"];
 
 const CONFIG_COLS =
-  "strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed,underlying_stop_pct,event_policy,entry_dte,take_profit_pct,premium_stop_pct,pyramid_adds)";
+  "strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed,boosted,underlying_stop_pct,event_policy,entry_dte,take_profit_pct,premium_stop_pct,pyramid_adds)";
 const NEW_COLS = `id,slug,underlying,executor,account_id,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`;
 const NEW_COLS_NOUL = `id,slug,executor,account_id,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`; // DB predates `underlying`
 const LEGACY_COLS = `id,slug,name,mandate,regime,${CONFIG_COLS}`;
@@ -71,6 +71,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
           max_contracts: Number(cfg.max_contracts),
           daily_stop_usd: Number(cfg.daily_stop_usd),
           muted: !!cfg.muted,
+          boosted: !!cfg.boosted,
           soloed: !!cfg.soloed,
           // live attributes now editable from the strip (defaults keep old DBs working)
           underlying_stop_pct: cfg.underlying_stop_pct != null ? Number(cfg.underlying_stop_pct) : 0,

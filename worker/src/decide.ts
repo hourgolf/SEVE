@@ -360,9 +360,13 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     // EOD hard-flatten window (wall-clock): don't OPEN what the wall-clock backstop is about to
     // force-flatten (the fast-exit sweep flattens same-session positions within EOD_HARD_FLATTEN_MIN).
     if (!blocked && ctx.wallMinutesToClose <= policy.EOD_HARD_FLATTEN_MIN) blocked = "eod_flatten_window";
+    // BOOST (54_boost.sql): a boosted channel runs 2× for the day — RISK budget, the
+    // max_contracts ceiling, AND the daily-stop floor all double (auto-cleared nightly by
+    // the seve-clear-boosts cron). Replaces the inert SOLO. boost=1 when off → no change.
+    const boost = ch.boosted ? 2 : 1;
     if (!blocked && ch.daily_stop_usd > 0) {
       const realizedToday = await realizedTodayByChannel(ch.id, ctx.todayET);
-      if (realizedToday <= -ch.daily_stop_usd) blocked = "daily_stop";
+      if (realizedToday <= -ch.daily_stop_usd * boost) blocked = "daily_stop";
     }
 
     let ask = 0, bid = 0, roundTrip = 0, expectedMove = 0, qty = 0;
@@ -392,7 +396,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       // every channel. (−50% channels: stopFrac=0.5 → byte-identical to the old behavior.)
       const stopFrac = (ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT) / 100;
       const riskPerContract = stopFrac * ask * 100;
-      qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor(ch.capital_pct / riskPerContract), ch.max_contracts)) : 0;
+      qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor((ch.capital_pct * boost) / riskPerContract), ch.max_contracts * boost)) : 0;
       if (qty === 0) blocked = "insufficient_capital";
     }
     // ---- shadow "awareness" levers (forensics brief 2026-06-24) — LOG-ONLY, never block. ----
@@ -462,9 +466,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
         // boundary; (2) wouldQty = the worker decide-formula floor(capital_pct/(stopFrac·ask·100)), STOP-AWARE
         // (2026-06-30, mirrors the base-entry sizer) — the engine replay still models a −50% stop, so a −30%
         // channel now sizes bigger live than the graduation backtest modeled (forward>backtest doctrine).
+        const boost = ch.boosted ? 2 : 1; // BOOST: 2× budget + cap for adds too (mirrors the base-entry sizer)
         const riskPer = ((ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT) / 100) * ask * 100;
-        const wouldQty = riskPer > 0 ? Math.floor(ch.capital_pct / riskPer) : 0;
-        const roomToCap = Math.max(0, ch.max_contracts - row.qty); // maxStack = max_contracts
+        const wouldQty = riskPer > 0 ? Math.floor((ch.capital_pct * boost) / riskPer) : 0;
+        const roomToCap = Math.max(0, ch.max_contracts * boost - row.qty); // maxStack = max_contracts (×2 when boosted)
         const maxAdds = exec ? ch.pyramid_adds : PYRAMID_MAX_ADDS;
         const dec = decidePyramidAdd({
           cfg: { maxAdds, minProfitPct: PYRAMID_MIN_PROFIT_PCT },

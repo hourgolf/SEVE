@@ -193,6 +193,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
   const ustopInert = ustop > 0 && ustop * 180 >= premStop; // 0.5% ≈ −90% premium → the −premStop% premium stop fires first
   const pyr = config.pyramid_adds ?? 0;
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
+  const boosted = config.boosted ?? false; // BOOST: 2× sizing for the day (replaces SOLO)
 
   // Flip-card editor: rename + delete. Opens an overlay over the card.
   const [editing, setEditing] = useState(false);
@@ -524,14 +525,15 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         title="mute this strategist"
       />
       <PadButton
-        label="SOLO"
-        lit={config.soloed}
-        color={cssColor}
+        label="BOOST"
+        lit={boosted}
+        color="var(--led-amber)"
         onClick={() => {
-          dispatch({ type: "TOGGLE_SOLO", slug });
-          persistConfig(id, { soloed: !config.soloed });
+          const next = !boosted;
+          dispatch({ type: "SET_CONFIG", slug, patch: { boosted: next } });
+          persistConfig(id, { boosted: next });
         }}
-        title="solo this strategist"
+        title={boosted ? "BOOST on — 2× size today (RISK + cap + daily-stop); auto-clears after the close" : "BOOST — run this channel at 2× size for today"}
       />
     </div>
   );
