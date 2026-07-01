@@ -3,11 +3,12 @@
 //  Phase 1 — observation. Pulls each underlying's spot + near-the-money 0DTE/1DTE
 //  option chain from Alpaca and writes them to the desk DB. No trades placed here.
 //
-//  Multi-underlying (2026-06-04): loops over UNDERLYINGS (env, default "SPY,QQQ")
-//  so adding/removing a ticker is a SECRET change, not a re-paste. Each ticker is
-//  ingested in its OWN try/catch — a QQQ hiccup can NEVER break SPY (the live trader
-//  reads SPY). Strike window narrowed (8 -> 6) so two tickers cost ~one ticker's old
-//  storage. Set `UNDERLYINGS=SPY` to revert to SPY-only.
+//  Multi-underlying (2026-06-04; IWM added to the default 2026-07-01): loops over
+//  UNDERLYINGS (env, default "SPY,QQQ,IWM" — matches the worker's SYMBOLS default so
+//  the dashboard tape covers every traded index) so adding/removing a ticker is a
+//  SECRET change, not a re-paste. Each ticker is ingested in its OWN try/catch — one
+//  hiccup can NEVER break the others. Strike window narrowed (8 -> 6) to keep storage
+//  lean. Set `UNDERLYINGS=SPY,QQQ` to drop IWM, or `UNDERLYINGS=SPY` for SPY-only.
 //
 //  Secrets:  ALPACA_KEY / ALPACA_SECRET (SUPABASE_* injected automatically).
 //  Optional: STOCK_FEED=sip OPT_FEED=opra (real-time on Algo Trader Plus),
@@ -30,7 +31,7 @@ const DATA = "https://data.alpaca.markets";
 const STOCK_FEED    = Deno.env.get("STOCK_FEED") ?? "iex";        // "sip"  on Algo Trader Plus (real-time)
 const OPT_FEED      = Deno.env.get("OPT_FEED")   ?? "indicative"; // "opra" on Algo Trader Plus (real-time NBBO)
 // Underlyings to ingest (env-driven; the system only uses ATM ± a few strikes).
-const UNDERLYINGS   = (Deno.env.get("UNDERLYINGS") ?? "SPY,QQQ").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+const UNDERLYINGS   = (Deno.env.get("UNDERLYINGS") ?? "SPY,QQQ,IWM").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
 const STRIKE_WINDOW = Number(Deno.env.get("STRIKE_WINDOW") ?? 6); // keep strikes within +/- this many $ of spot
 
 const H = {
