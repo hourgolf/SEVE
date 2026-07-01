@@ -14,12 +14,13 @@
 //  few holiday-eve entries, never halt a real session. The wall-clock EOD
 //  hard-flatten that actually prevents the strand is calendar-INDEPENDENT.
 //
-//  Half-days (1pm early closes: day after Thanksgiving, Christmas/July-3 eves) are
-//  NOT modeled — they're normal trading days; the wall-clock flatten margin would
-//  need an early-close table to be exact, a documented follow-on (LOW: those days
-//  rarely carry a late cutoff entry, and the flatten still fires relative to 16:00
-//  → it just fires after the 1pm close, i.e. at the next session — acceptable vs
-//  the holiday strand this fixes). MAINTENANCE: extend when the next year posts.
+//  Half-days (1pm early closes: day after Thanksgiving, Christmas/July-3 eves) ARE
+//  modeled (audit fix 2026-07-01, the documented follow-on): EARLY_CLOSES +
+//  sessionCloseMin() give the worker the REAL session close minute, so the 0DTE
+//  cutoff-roll, the wall-clock EOD hard-flatten, and the sweep's RTH gate all
+//  anchor to 13:00 on those days instead of firing into a closed market at 15:55.
+//  Fail-safe: a date missing from EARLY_CLOSES reads as a normal 16:00 session
+//  (the pre-fix behavior). MAINTENANCE: extend both tables when the next year posts.
 //  Portable TS, zero deps, pure functions (no Date.now/argless-new-Date).
 // ============================================================================
 
@@ -51,6 +52,27 @@ function dowUTC(dateET: string): number {
   const [y, m, d] = dateET.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Sun … 6=Sat
 }
+
+// 13:00-ET early closes (NYSE/Nasdaq half-days): July 3 when July 4 is a Tue–Fri
+// weekday, the day after Thanksgiving, and Christmas Eve when it's a trading day.
+// Dates NOT here for a year: the eve fell on a weekend or is itself an observed
+// holiday (e.g. 2026-07-03 = July-4-Saturday observed closure; 2027-12-24 = observed
+// Christmas). Verified 2024-2026; 2027 forward — re-verify when NYSE posts the year.
+const EARLY_CLOSES = new Set<string>([
+  "2024-07-03", "2024-11-29", "2024-12-24",
+  "2025-07-03", "2025-11-28", "2025-12-24",
+  "2026-11-27", "2026-12-24",
+  "2027-11-26",
+]);
+
+// ET minutes-since-midnight session close: 780 (13:00) on a half-day, 960 (16:00) else.
+const FULL_CLOSE_MIN = 960;
+const EARLY_CLOSE_MIN = 780;
+
+export function isEarlyClose(dateET: string): boolean { return EARLY_CLOSES.has(dateET); }
+/** The session's REAL close in ET minutes-since-midnight (960 normal / 780 half-day).
+ *  Fail-safe: an unknown date reads 960 — exactly the pre-early-close behavior. */
+export function sessionCloseMin(dateET: string): number { return EARLY_CLOSES.has(dateET) ? EARLY_CLOSE_MIN : FULL_CLOSE_MIN; }
 
 export function isMarketHoliday(dateET: string): boolean { return MARKET_HOLIDAYS.has(dateET); }
 export function isWeekend(dateET: string): boolean { const d = dowUTC(dateET); return d === 0 || d === 6; }

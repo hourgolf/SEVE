@@ -91,9 +91,13 @@ const mapOrder = (o: any): AlpacaOrder => ({
 });
 
 /** Recent orders, newest first — the per-channel ledger source (client_order_id
- *  prefixes). Mirrors the cron's cycle-start snapshot. */
-export async function getOrders(limit = 500, api: Api = ACCT1_API): Promise<AlpacaOrder[]> {
-  const res = await get(api.paperHost, `/v2/orders?status=all&limit=${limit}&direction=desc`, api.headers);
+ *  prefixes). Mirrors the cron's cycle-start snapshot. `afterIso` date-scopes the
+ *  window (audit L3): without it, a >500-order stretch ages SAME-DAY buys out of
+ *  the snapshot and degrades the pyramid lot reconstruction + the order-tag
+ *  cross-check. Callers pass ~2 days back (covers prior-session 1DTE buys). */
+export async function getOrders(limit = 500, api: Api = ACCT1_API, afterIso?: string): Promise<AlpacaOrder[]> {
+  const after = afterIso ? `&after=${encodeURIComponent(afterIso)}` : "";
+  const res = await get(api.paperHost, `/v2/orders?status=all&limit=${limit}&direction=desc${after}`, api.headers);
   return (res as any[]).map(mapOrder);
 }
 

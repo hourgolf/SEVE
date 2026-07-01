@@ -679,10 +679,13 @@ async function main() {
   // FAITHFUL-CONFIG overrides (the benched-channel "would-be vs live" sim, scripts/benched-sim.ts):
   // reproduce the LIVE worker's per-channel risk + exit stack on a research run. All default off →
   // existing runs are byte-identical. --risk <usd> = the worker's RISK $/trade; the engine's
-  // riskGovernor uses the legacy capital%×aggression% budget, so map RISK → (total_capital 2×risk,
-  // pct 100, agg 100): qty = floor(2·risk / (ask·100)) = floor(risk / (0.5·ask·100)) — IDENTICAL to
-  // decide.ts. --max-contracts / --daily-stop override the per-channel caps.
+  // riskGovernor uses the legacy capital%×aggression% budget, so map RISK → (total_capital
+  // (100/stop)·risk, pct 100, agg 100): qty = floor(risk / (stopFrac·ask·100)) — IDENTICAL to
+  // decide.ts, now STOP-AWARE (audit L6a): --prem-stop sets the risk-per-contract fraction the
+  // way the worker's premium_stop_pct sizing does (2026-06-30). Absent/50 → 2×risk, byte-identical
+  // to the pre-fix mapping. --max-contracts / --daily-stop override the per-channel caps.
   const riskUsd = argNum("risk", 0);
+  const premStopPct = argNum("prem-stop", 0); // hoisted: feeds BOTH the sizing map and the exit stop below
   const maxC = argNum("max-contracts", 0);
   const dailyStop = argNum("daily-stop", 0);
   const cfgRun: StrategistConfig = { ...FADE,
@@ -692,7 +695,7 @@ async function main() {
   // master_daily_stop_usd → inert under --risk: the LIVE worker has NO fund master stop
   // (decide.ts only enforces the per-channel daily_stop), so leaving FUND's $300 would halt a
   // benched channel ~$50 sooner than live and flatter its would-be loss (cull-biasing).
-  const fundRun: FundState = { ...FUND, ...(riskUsd > 0 ? { total_capital_usd: 2 * riskUsd, master_daily_stop_usd: Number.MAX_SAFE_INTEGER } : {}) };
+  const fundRun: FundState = { ...FUND, ...(riskUsd > 0 ? { total_capital_usd: (100 / (premStopPct > 0 ? premStopPct : 50)) * riskUsd, master_daily_stop_usd: Number.MAX_SAFE_INTEGER } : {}) };
   // --ustop <pct> = config underlying_stop_pct; --cost-gate <ratio> = the worker COST_GATE_RATIO.
   const ustopPct = argNum("ustop", 0);
   const costGateRatio = argNum("cost-gate", 0);
@@ -700,8 +703,7 @@ async function main() {
     costGateRatio > 0 ? { minMoveToCostRatio: costGateRatio } : undefined;
   // --prem-stop <pct> = the worker's universal −50% premium catastrophic stop (decide.ts:231),
   // which built-ins (no spec premiumExit) otherwise lack in the backtest. Only fills a missing
-  // stop — a spec's own stop wins.
-  const premStopPct = argNum("prem-stop", 0);
+  // stop — a spec's own stop wins. (Parsed above, beside --risk, so sizing is stop-aware too.)
   if (premStopPct > 0) premiumExit = premiumExit ? (premiumExit.stopPct == null ? { ...premiumExit, stopPct: premStopPct } : premiumExit) : { stopPct: premStopPct };
   // --sizing-model static|json:<path>|<inline-json>: CONVICTION sizing (engine/sizing.ts). Default
   // (absent/static/unparseable) → no model → scalar 1.0 → byte-identical flat RISK. The built model
@@ -778,13 +780,15 @@ async function main() {
       try {
         byDay = await loadOptionQuotesByDay(sessions.map((s) => s.dateET), underlying);
       } catch (e) {
-        console.log(`  (option_quotes unavailable — ${(e as Error).message}; falling back to modeled chains)`);
+        // LOUD (audit L6c): a silent fallback reads as "real NBBO" when the run is actually modeled.
+        console.log(`  ⚠⚠ OPTION DATA FALLBACK — option_quotes unavailable (${(e as Error).message}); this run uses MODELED (Black-Scholes) chains, NOT real NBBO. Results are not fill-realistic.`);
       }
     } else if (useRealOptions) {
       try {
         byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET), underlying);
       } catch (e) {
-        console.log(`  (option_bars unavailable — ${(e as Error).message}; falling back to modeled chains)`);
+        // LOUD (audit L6c): a silent fallback reads as "real fills" when the run is actually modeled.
+        console.log(`  ⚠⚠ OPTION DATA FALLBACK — option_bars unavailable (${(e as Error).message}); this run uses MODELED (Black-Scholes) chains, NOT real option prices. Results are not fill-realistic.`);
       }
     }
     let realDays = 0;

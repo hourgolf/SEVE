@@ -25,6 +25,7 @@ import { archiveQuotesToStorage, maybeArchiveTick } from "./archive.js";
 import { maybePublishForensicsTick } from "./forensics.js";
 import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, noteRowHeld, type ExecCtx } from "./execute.js";
 import { computeFeatures } from "../../engine/engine";
+import { sessionCloseMin } from "../../engine/market-calendar";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
@@ -127,7 +128,7 @@ async function reloadConfig(): Promise<void> {
   else warn("config: reload returned no fund_state — keeping previous");
   const nowHalted = cfg.fund?.is_halted ?? false;
   if (hadFund && !prevHalted && nowHalted)
-    alertOnce(alpaca.etParts(Date.now()).date, "halt", "fund", "⛔ desk HALTED", "kill switch / master stop tripped — entries frozen, exits keep managing");
+    alertOnce(alpaca.etParts(Date.now()).date, "halt", "fund", "⛔ desk HALTED", "kill switch tripped — entries AND exits frozen (incl. the EOD flatten) until cleared; open positions are unmanaged");
   if (prevHalted && !nowHalted) alertClear("halt", "fund");
 }
 
@@ -214,6 +215,7 @@ async function cycle(trigger: string): Promise<void> {
     if (!cfg.fund) { warn(`cycle(${trigger}): missing config — skip`); return; }
 
     const todayET = alpaca.etParts(Date.now()).date;
+    const rthClose = sessionCloseMin(todayET); // 960 normal / 780 half-day (early-close audit fix)
     const live = liveMode();
     const byId = new Map(cfg.channels.map((c) => [c.id, c]));
     const openRowsArr = await store.getOpenPositions(); // spans accounts; scoped per group below
@@ -253,7 +255,7 @@ async function cycle(trigger: string): Promise<void> {
       let remainingByOcc = new Map<string, number>();
       const openRowQty = new Map<string, number>();
       if (acctLive) {
-        try { allOrders = await alpaca.getOrders(500, api!); }
+        try { allOrders = await alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()); }
         catch (e) { warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; bookkeeping only`); }
         remainingByOcc = seedRemaining(positions);
         for (const r of groupRows) openRowQty.set(r.occ_symbol, (openRowQty.get(r.occ_symbol) ?? 0) + Math.abs(Math.round(r.qty)));
@@ -268,12 +270,13 @@ async function cycle(trigger: string): Promise<void> {
         const lastSession = sessionBars[sessionBars.length - 1];
         if (!lastSession) continue; // this symbol has no RTH bars yet
         const barMin = alpaca.etParts(lastSession.ts).min;
-        const minutesToClose = Math.max(0, RTH_CLOSE - barMin);
+        const minutesToClose = Math.max(0, rthClose - barMin);
         const chain = chainBySym.get(sym)!;
         const ctx: DecisionCtx = {
           sessionBars, chain, fund: cfg.fund, equity: account.equity, todayET,
           minutesToClose, // BAR-relative (strategy intents); wall-clock below is bars-independent
-          wallMinutesToClose: Math.max(0, RTH_CLOSE - alpaca.etParts(Date.now()).min),
+          wallMinutesToClose: Math.max(0, rthClose - alpaca.etParts(Date.now()).min),
+          rthCloseMin: rthClose,
           next1DTE: chain.nextExpiryAfter(todayET),
           ...computeLevels(bars.all(), todayET),
           openRows, alpacaByOcc,
@@ -341,7 +344,7 @@ async function cycle(trigger: string): Promise<void> {
       const lastSession = sessionBars[sessionBars.length - 1];
       if (!lastSession) continue;
       const barMin = alpaca.etParts(lastSession.ts).min;
-      const minutesToClose = Math.max(0, RTH_CLOSE - barMin);
+      const minutesToClose = Math.max(0, rthClose - barMin);
       const chain = chainBySym.get(sym)!;
       // ---- gamma-open diagnostic (frontier #3, SHADOW-ONLY collect-forward) ----
       try {
@@ -423,7 +426,9 @@ function report(trigger: string, equity: number, ds: ShadowDecision[]): void {
 async function fastExitSweep(): Promise<void> {
   if (!liveMode() || cycling) return;
   const nowMin = alpaca.etParts(Date.now()).min;
-  if (nowMin < RTH_OPEN || nowMin >= RTH_CLOSE) return;
+  const todayET = alpaca.etParts(Date.now()).date;
+  const rthClose = sessionCloseMin(todayET); // 960 normal / 780 half-day — the sweep must stop AT the real close
+  if (nowMin < RTH_OPEN || nowMin >= rthClose) return;
   const owned = cfg.channels.filter(ownedBy);
   if (!owned.length || !cfg.fund) return;
   cycling = true;
@@ -436,7 +441,6 @@ async function fastExitSweep(): Promise<void> {
     // refresh only the chains for symbols that have owned open positions
     const activeSyms = new Set(allRows.map((r) => byId.get(r.strategist_id)!.underlying.toUpperCase()));
     for (const sym of activeSyms) await refreshChain(sym);
-    const todayET = alpaca.etParts(Date.now()).date;
     // Per-account (cockpit P3): only ARMED buckets with resolved creds sweep; each reads its OWN
     // positions/orders so an exit sells the right account's lot (the same OCC can live in two).
     for (const g of groupByAccount(owned, cfg.accounts)) {
@@ -445,7 +449,7 @@ async function fastExitSweep(): Promise<void> {
       const rows = allRows.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
       if (!rows.length) continue;
       let positions: alpaca.AlpacaPosition[] = [], allOrders: alpaca.AlpacaOrder[] = [];
-      try { [positions, allOrders] = await Promise.all([alpaca.getPositions(api), alpaca.getOrders(500, api)]); }
+      try { [positions, allOrders] = await Promise.all([alpaca.getPositions(api), alpaca.getOrders(500, api, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString())]); }
       catch (e) { warn(`fast-exit[${g.account.name}] read failed — ${(e as Error).message}`); continue; }
       const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
       const remainingByOcc = seedRemaining(positions);
@@ -462,10 +466,15 @@ async function fastExitSweep(): Promise<void> {
       // it force-flattens a SAME-SESSION machine position with margin while the market is still
       // open. Reuses executeExit → inherits the shared-OCC sell-cap + client_order_id idempotency.
       // Machine channels only — manual twins keep their own MANUAL_BACKSTOP_MIN bell exit.
-      const wallMtc = Math.max(0, RTH_CLOSE - nowMin);
+      const wallMtc = Math.max(0, rthClose - nowMin);
       const openedET = r.opened_at ? alpaca.etParts(Date.parse(r.opened_at)).date : todayET;
-      if (wallMtc <= policy.EOD_HARD_FLATTEN_MIN && openedET === todayET && !/-manual$/i.test(ch.slug)) {
-        info(`eod-hard-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — same-session, wall-clock mtc ${wallMtc} (pre-bell backstop, bars-independent)`);
+      // Flatten a SAME-SESSION machine position — AND any position whose contract EXPIRES today
+      // (audit M4): a prior-session 1DTE hold is 0DTE now and previously relied only on the
+      // bar-relative eod_flatten, the exact gapped-near-bell-bar failure this wall-clock backstop
+      // was built for. A genuine multi-day hold (expiration > today) stays exempt.
+      const expiresToday = String(r.expiration ?? todayET) <= todayET;
+      if (wallMtc <= policy.EOD_HARD_FLATTEN_MIN && (openedET === todayET || expiresToday) && !/-manual$/i.test(ch.slug)) {
+        info(`eod-hard-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — ${openedET === todayET ? "same-session" : "expires today"}, wall-clock mtc ${wallMtc} (pre-bell backstop, bars-independent)`);
         try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
         catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
         peakMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
@@ -500,7 +509,7 @@ async function fastExitSweep(): Promise<void> {
         row: r, slug: ch.slug, premiumExit: pe, takeProfitPct: ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
         isPowerTrail: policy.POWER_TRAIL_CHANNELS.has(ch.slug),
         isManual: /-manual$/i.test(ch.slug),
-        minutesToClose: Math.max(0, RTH_CLOSE - nowMin),
+        minutesToClose: Math.max(0, rthClose - nowMin),
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)
       }, mid, peak);
       if (!reason) continue;

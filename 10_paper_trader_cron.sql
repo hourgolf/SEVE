@@ -1,9 +1,10 @@
 -- ============================================================================
 --  10_paper_trader_cron.sql   ·   schedule the live paper-trading worker.
---  Calls the `paper-trader` edge function every minute during the US cash
---  session (13:30–20:00 UTC ≈ 9:30a–4:00p ET during EDT). Same pattern as the
---  market-ingest cron. The function self-guards on bars/freshness/halt/mute, so
---  the slightly-early 13:00 start is harmless.
+--  Calls the `paper-trader` edge function every minute, 13:00–20:59 UTC ('* 13-20'
+--  covers the whole 20:xx hour) ≈ 9:00a–4:59p ET in EDT / 8:00a–3:59p ET in EST —
+--  loose bounds around the 9:30–16:00 cash session in BOTH DST regimes. Same
+--  pattern as the market-ingest cron. The function self-guards on bars/freshness/
+--  halt/mute, so the out-of-session minutes are harmless no-ops.
 --
 --  PREREQUISITE: deploy the function first (Supabase Dashboard → Edge Functions
 --  → create `paper-trader` → paste supabase/functions/paper-trader/index.ts →

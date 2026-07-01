@@ -79,8 +79,9 @@ export interface DecisionCtx {
   fund: FundState;
   equity: number;
   todayET: string;
-  minutesToClose: number; // BAR-relative (RTH_CLOSE − last-bar minute) — strategy intents key off this
-  wallMinutesToClose: number; // WALL-CLOCK (RTH_CLOSE − now) — EOD hard-flatten + entry-window guards, bars-independent
+  minutesToClose: number; // BAR-relative (session close − last-bar minute) — strategy intents key off this
+  wallMinutesToClose: number; // WALL-CLOCK (session close − now) — EOD hard-flatten + entry-window guards, bars-independent
+  rthCloseMin: number; // the session's REAL close in ET minutes (960 normal / 780 half-day — market-calendar sessionCloseMin)
   next1DTE: string | null;
   pdh?: number;
   pdl?: number;
@@ -291,7 +292,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // their exits; the bell backstop still stands). Events are symbol-scoped.
   if (pos && row && policy.EVENT_STANDDOWN && ch.event_policy !== "ignore" && !/-manual$/i.test(ch.slug)
       && (!intent || intent.kind !== "exit")
-      && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
+      && inEventWindow(ctx.todayET, ctx.rthCloseMin - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
     intent = { kind: "exit", reason: "event_flatten" };
   }
 
@@ -349,7 +350,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     // EVENT STAND-DOWN entry block (incl. twins — a machine entry into the FOMC
     // window is a machine decision either way). event_policy='ignore' opts out.
     if (!blocked && policy.EVENT_STANDDOWN && ch.event_policy !== "ignore"
-        && inEventWindow(ctx.todayET, RTH_CLOSE - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
+        && inEventWindow(ctx.todayET, ctx.rthCloseMin - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
       blocked = "event_window";
     }
     // HOLIDAY-EVE cutoff block (2026-06-19, the Juneteenth strand fix): a late entry that rolls
@@ -377,6 +378,11 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       bid = q?.bid ?? 0;
       if (q?.delta != null && q.delta !== 0) delta = Math.abs(q.delta); // real chain delta when present (≈1DTE; feed nulls 0DTE)
       if (!ask) blocked = "no_quote";
+      // STALE-CHAIN guard (audit L4): refreshChain runs each cycle, so a healthy snapshot is
+      // seconds old — an age past 2 min means the refresh is FAILING and this ask is a relic a
+      // fast 0DTE has long left behind. Don't size off it: stand down (fail-closed, self-heals
+      // on the next successful refresh).
+      if (!blocked && ctx.chain.ageMs > 120_000) blocked = "stale_chain";
     }
     if (!blocked && !policy.COST_GATE_EXEMPT.has(ch.slug)) {
       roundTrip = engineRoundTrip({ strike, optType: dir, bid, ask, mid: ask > 0 && bid > 0 ? (ask + bid) / 2 : ask }, COST_MODEL);
@@ -394,7 +400,11 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       // instead of a hardcoded 0.5. Before this, a −30% LOCK channel was sized as if it stopped at
       // −50%, so it only risked ~0.6× its stated RISK $. Now "RISK $" means the same dollars on
       // every channel. (−50% channels: stopFrac=0.5 → byte-identical to the old behavior.)
-      const stopFrac = (ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT) / 100;
+      // ⚠ premium_stop_pct=0 means the premium stop is OFF (the channel runs its underlying stop,
+      // 47_premium_stop_pct) — it must NOT zero the sizer (÷0 → qty 0 → the channel silently never
+      // trades, audit H1a). Size such a channel off the policy default risk fraction instead.
+      const stopPctForSizing = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
+      const stopFrac = (stopPctForSizing > 0 ? stopPctForSizing : policy.PREMIUM_STOP_PCT) / 100;
       const riskPerContract = stopFrac * ask * 100;
       qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor((ch.capital_pct * boost) / riskPerContract), ch.max_contracts * boost)) : 0;
       if (qty === 0) blocked = "insufficient_capital";
@@ -467,7 +477,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
         // (2026-06-30, mirrors the base-entry sizer) — the engine replay still models a −50% stop, so a −30%
         // channel now sizes bigger live than the graduation backtest modeled (forward>backtest doctrine).
         const boost = ch.boosted ? 2 : 1; // BOOST: 2× budget + cap for adds too (mirrors the base-entry sizer)
-        const riskPer = ((ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT) / 100) * ask * 100;
+        // premium_stop_pct=0 (stop OFF) must not zero the add sizer either — mirror the base-entry
+        // sizer's fallback to the policy default risk fraction (audit H1a).
+        const addStopPct = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
+        const riskPer = ((addStopPct > 0 ? addStopPct : policy.PREMIUM_STOP_PCT) / 100) * ask * 100;
         const wouldQty = riskPer > 0 ? Math.floor((ch.capital_pct * boost) / riskPer) : 0;
         const roomToCap = Math.max(0, ch.max_contracts * boost - row.qty); // maxStack = max_contracts (×2 when boosted)
         const maxAdds = exec ? ch.pyramid_adds : PYRAMID_MAX_ADDS;

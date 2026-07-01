@@ -266,6 +266,8 @@ async function main() {
     const entryPx = Number(p.avg_entry_price), q = Number(p.qty), realized = Number(p.realized_pnl ?? 0);
     const exitPx = q > 0 ? entryPx + realized / (q * 100) : entryPx;
     const pkUsed = p.peak_mark ?? peak;
+    // ⚠ mid-basis (audit M6): peak_mark ratchets on the NBBO MID; a sell realizes the bid, so
+    // mfePct/givebackPct are UPPER BOUNDS on realizable — treat as such in any analysis.
     const mfePct = pkUsed != null && entryPx > 0 ? r3(((pkUsed - entryPx) / entryPx) * 100) : null;
     const givebackPct = pkUsed != null && pkUsed > entryPx && exitPx < pkUsed ? r3(((pkUsed - exitPx) / (pkUsed - entryPx)) * 100) : null;
     // concentration: # OTHER channels concurrently on this strike at entry + this row's qty-share of the lot

@@ -1,3 +1,7 @@
+// ⚑ WORKER VERSION: 2026-07-01a  (STATUS-GUARDED CLOSES — audit H3: all three position-close
+//   UPDATEs now carry .eq("status","open") (worker store.closePositionRow parity), so the exit-only
+//   failover racing the stream worker on the same row can no longer OVERWRITE an already-booked
+//   close's realized/mark with a different value. Already-closed row → no-op. Prior below.)
 // ⚑ WORKER VERSION: 2026-06-19a  (HOLIDAY STALE-PAGE SUPPRESSION — the cron false-paged "⚠ STREAM
 //   STALE" on market holidays (the Railway worker correctly doesn't beat with no market data, e.g.
 //   Juneteenth 2026-06-19). Inlined CRON_MARKET_HOLIDAYS + a holidayToday guard on the page condition.
@@ -1099,7 +1103,10 @@ Deno.serve(async () => {
         const realized = DRY_RUN
           ? (mark - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 100
           : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince);
-        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id);
+        // STATUS-GUARDED close (audit H3, worker parity): the failover can race the stream worker
+        // on the same row — without .eq(status,'open') a later cron write OVERWROTE the worker's
+        // booked realized/mark with a different value. Already-closed → no-op.
+        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id).eq("status", "open");
         await journal("WARN", `${s.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${src}) — no Alpaca position; booked $${realized.toFixed(0)} (fill-net)`);
         out.push({ slug: s.slug, note: "reconciled" });
         continue;
@@ -1146,7 +1153,8 @@ Deno.serve(async () => {
           const realized = DRY_RUN ? 0 : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince);
           const { data: q } = await sb.from("option_quotes").select("bid,mid").eq("occ_symbol", row.occ_symbol).order("captured_at", { ascending: false }).limit(1).maybeSingle();
           const mark = Number(q?.bid ?? q?.mid ?? alp.current_price ?? 0);
-          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id);
+          // STATUS-GUARDED close (audit H3, worker parity) — a raced already-closed row is a no-op.
+          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id).eq("status", "open");
           await journal("WARN", `${s.slug}: ${row.occ_symbol} ${why} — reconciled closed @ ${mark.toFixed(2)} (booked $${realized.toFixed(0)} fill-net)`);
         };
         if (sellQty <= 0) {
@@ -1178,7 +1186,8 @@ Deno.serve(async () => {
                 : await realizedToBook(sb, s.id, s.slug, row.occ_symbol, allOrders, sessionSince, { qty: soldQty, px: exitPx });
               // close_reason (31_close_reason.sql): durable exit attribution — the journal
               // says the same but events expire (30d); the column is the dataset.
-              await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized, close_reason: intent.reason }).eq("id", row.id);
+              // STATUS-GUARDED close (audit H3, worker parity) — a raced already-closed row is a no-op.
+              await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized, close_reason: intent.reason }).eq("id", row.id).eq("status", "open");
               // de-dup Fix 2: drop this OCC's remaining by what we just sold so a sibling
               // exiting the same lot later this cycle sees the true leftover.
               remainingByOcc.set(String(row.occ_symbol), Math.max(0, heldQty - soldQty));

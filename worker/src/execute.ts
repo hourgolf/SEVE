@@ -247,9 +247,17 @@ export async function executeEntry(
       const alpHeld = Math.abs(Math.round(ctx.alpacaByOcc.get(occ)?.qty ?? 0));
       const uncovered = alpHeld - (ctx.openRowQty.get(occ) ?? 0);
       if (uncovered >= net) {
+        // Blend only the NEWEST buys covering the uncovered net (audit L5): after a same-day
+        // round-trip on this slug+OCC, blending ALL of the day's buys skews the recovered row's
+        // entry with the earlier, already-closed lot's fills. allOrders is newest-first.
         const buys = filled.filter((o) => o.side === "buy");
-        const totBuy = buys.reduce((q, o) => q + o.filled_qty, 0);
-        const avg = totBuy ? buys.reduce((s, o) => s + o.filled_avg_price * o.filled_qty, 0) / totBuy : 0;
+        let need = net, coveredQty = 0, coveredCost = 0;
+        for (const o of buys) {
+          if (need <= 0) break;
+          const take = Math.min(o.filled_qty, need);
+          coveredQty += take; coveredCost += take * o.filled_avg_price; need -= take;
+        }
+        const avg = coveredQty ? coveredCost / coveredQty : 0;
         const err = await store.insertPosition({
           strategist_id: ch.id, occ_symbol: occ, underlying: ch.underlying,
           expiration: d.detail?.expiry as string ?? ctx.todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg,
@@ -325,9 +333,16 @@ export async function executeAdd(
   const addCoid = `${d.slug}-${occ}-${ctx.etMin}-a`;
   // idempotency: one add per (slug, occ, bar-minute) — a working/filled add this minute = done.
   if (ctx.allOrders.some((o) => o.client_order_id === addCoid && (WORKING_ORDER.has(o.status) || o.status === "filled"))) return;
-  // re-check maxStack against the LIVE held qty (the broker is the truth; decide used the row).
-  const heldNow = Math.max(Math.abs(Math.round(ctx.alpacaByOcc.get(occ)?.qty ?? 0)), row.qty);
-  const buyQty = Math.min(want, Math.max(0, ch.max_contracts - heldNow));
+  // re-check maxStack against THIS CHANNEL's stack, not the whole Alpaca lot (audit M2): the lot
+  // is SHARED — V3+ALT habitually hold the same OCC — and counting the SIBLING's contracts against
+  // this channel's cap silently suppressed armed adds whenever combined holdings hit max_contracts.
+  // Defense in depth kept: any UNCOVERED broker contracts (lot beyond ALL rows' shares — an
+  // under-recorded fill) still count as ours. Boost mirrors the decide-layer roomToCap (×2).
+  const alpHeld = Math.abs(Math.round(ctx.alpacaByOcc.get(occ)?.qty ?? 0));
+  const siblingShares = Math.max(0, (ctx.openRowQty.get(occ) ?? row.qty) - row.qty);
+  const heldNow = Math.max(row.qty, alpHeld - siblingShares);
+  const addBoost = ch.boosted ? 2 : 1;
+  const buyQty = Math.min(want, Math.max(0, ch.max_contracts * addBoost - heldNow));
   if (buyQty <= 0) return;
   try {
     const o = await placeFill(d.slug, occ, "buy", buyQty, addCoid, d.reason, ctx);
@@ -387,11 +402,15 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
   // +pct target gets the same sub-minute reaction as the −50% stop (the compound thesis is a pop-harvest;
   // a bar-close-only target would systematically give back intra-bar). Mirrors decide.ts:take_profit_pct.
   if (c.takeProfitPct != null && c.takeProfitPct > 0 && mark >= entry * (1 + c.takeProfitPct / 100)) return "target_premium";
-  if (c.premiumExit?.stopPct != null && mark <= entry * (1 - c.premiumExit.stopPct / 100)) return "stop_premium";
   // per-channel premium stop (config) takes precedence over the policy default → a tightened −30%
   // stop fires in the ~10s sweep, not only at bar close (same sub-minute reaction as the take-profit
-  // above; mirrors decide.ts:254 premStopPct). null → policy default (50).
-  if (mark <= entry * (1 - (c.premiumStopPct ?? policy.PREMIUM_STOP_PCT) / 100)) return "premium_stop";
+  // above; mirrors decide.ts premStopPct). null → policy default (50). ⚠ 0 = the stop is OFF
+  // (47_premium_stop_pct: the channel runs its underlying stop instead) — it gates BOTH premium
+  // stops here, exactly like the bar-close path. Without the >0 guard, 0 read as a stop AT ENTRY
+  // (entry × (1 − 0) = entry → any downtick exited "premium_stop" — audit H1b).
+  const premStop = c.premiumStopPct ?? policy.PREMIUM_STOP_PCT;
+  if (premStop > 0 && c.premiumExit?.stopPct != null && mark <= entry * (1 - c.premiumExit.stopPct / 100)) return "stop_premium";
+  if (premStop > 0 && mark <= entry * (1 - premStop / 100)) return "premium_stop";
   if (c.isPowerTrail && peak >= entry * policy.POWER_TRAIL_ENGAGE_MULT) {
     const giveback = entry + (peak - entry) * (1 - policy.POWER_TRAIL_GIVEBACK_PCT / 100);
     if (mark <= giveback) return "trail_giveback";

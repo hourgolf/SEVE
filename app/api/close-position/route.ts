@@ -127,7 +127,11 @@ export async function POST(req: Request) {
   // partial sell (rest canceled/working) booked contracts that never sold. Now: poll to
   // terminal, cancel the working remainder after the budget, book the FINAL filled_qty.
   const TERMINAL = new Set(["filled", "canceled", "expired", "rejected", "done_for_day", "stopped", "replaced"]);
-  let fill = 0, soldQty = sellQty, status = "";
+  // soldQty starts at 0 and is set ONLY from a real filled_qty read (audit M1): the old init to
+  // the intended sellQty meant a non-terminal poll timeout with nothing filled booked the FULL
+  // intended qty at a fallback quote — a phantom close. Book only on positive fill evidence,
+  // exactly like the worker's executeExit; no fill evidence → the row stays open to retry.
+  let fill = 0, soldQty = 0, status = "";
   for (let i = 0; i < 10 && orderId && !TERMINAL.has(status); i++) {
     if (i === 7) { try { await fetch(`${PAPER}/v2/orders/${orderId}`, { method: "DELETE", headers: aHdr }); } catch { /* may have just gone terminal */ } }
     await new Promise((res) => setTimeout(res, 350));
@@ -135,14 +139,17 @@ export async function POST(req: Request) {
       const o = await fetch(`${PAPER}/v2/orders/${orderId}`, { headers: aHdr }).then((x) => x.json());
       status = String(o?.status ?? status);
       if (Number(o?.filled_avg_price) > 0) fill = Number(o.filled_avg_price);
-      // Trust filled_qty once it's terminal (FINAL) or >0; a non-terminal timeout
-      // keeps the intended sellQty (old fallback semantics — the order will fill).
+      // Trust filled_qty once it's terminal (FINAL) or >0 (a partial books what actually crossed).
       if (o?.filled_qty != null && (Number(o.filled_qty) > 0 || TERMINAL.has(status))) soldQty = Number(o.filled_qty);
     } catch { /* keep polling */ }
   }
-  if (orderId && TERMINAL.has(status) && soldQty <= 0) {
-    // Known-terminal with NOTHING sold — don't book a phantom close; the row stays open.
-    return NextResponse.json({ ok: false, error: `sell ended ${status} with 0 filled — position left open` }, { status: 502 });
+  if (orderId && soldQty <= 0) {
+    // NOTHING confirmed sold — terminal-0 (order died) OR a non-terminal poll timeout (no fill
+    // evidence). Either way, don't book a phantom close; the row stays open to retry. The cancel
+    // at i===7 means a still-working order resolves shortly; a late fill leaves an uncovered lot
+    // the worker's orphan sweep pages.
+    const why = TERMINAL.has(status) ? `sell ended ${status} with 0 filled` : `sell still ${status || "working"} after the poll window — no confirmed fill`;
+    return NextResponse.json({ ok: false, error: `${why} — position left open` }, { status: 502 });
   }
   // Fallback to the latest real-time option mark if the fill didn't post in time.
   if (!fill) {

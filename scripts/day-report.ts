@@ -168,11 +168,21 @@ async function main() {
   // first-seen = open, last-seen = close per bucket.)
   const { data: acctRows } = await sb.from("accounts").select("id,name,cred_ref");
   const acctName = new Map(((acctRows ?? []) as Array<{ id: string; name: string }>).map((a) => [a.id, String(a.name)]));
-  const { data: snapRaw } = await sb.from("equity_snapshots").select("account_id,net_liquidation,captured_at")
-    .not("account_id", "is", null).is("strategist_id", null)
-    .gte("captured_at", `${DATE}T13:00:00Z`).lte("captured_at", `${DATE}T22:00:00Z`).order("captured_at");
+  // Paginated (audit M5): the worker snapshots every cycle per bucket — a full session easily
+  // exceeds PostgREST's silent 1000-row cap, which cut off the CLOSING snapshots and understated
+  // every bucket's NAV delta. Same loop pattern as the events read below.
+  const snapRaw: Array<{ account_id: string; net_liquidation: number }> = [];
+  for (let from = 0; from < 50_000; from += 1000) {
+    const { data } = await sb.from("equity_snapshots").select("account_id,net_liquidation,captured_at")
+      .not("account_id", "is", null).is("strategist_id", null)
+      .gte("captured_at", `${DATE}T13:00:00Z`).lte("captured_at", `${DATE}T22:00:00Z`)
+      .order("captured_at").range(from, from + 999);
+    const batch = (data ?? []) as typeof snapRaw;
+    snapRaw.push(...batch);
+    if (batch.length < 1000) break;
+  }
   const navByAcct = new Map<string, { open: number; close: number }>();
-  for (const s of (snapRaw ?? []) as Array<{ account_id: string; net_liquidation: number }>) {
+  for (const s of snapRaw) {
     const v = Number(s.net_liquidation);
     const cur = navByAcct.get(s.account_id);
     if (!cur) navByAcct.set(s.account_id, { open: v, close: v }); else cur.close = v;
@@ -183,10 +193,18 @@ async function main() {
   const navDelta = buckets.length ? buckets.reduce((a, b) => a + b.delta, 0) : null;
 
   // ---- trades -------------------------------------------------------------------
-  const { data: posRaw } = await sb.from("positions")
-    .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,strategists(slug,name)")
-    .eq("status", "closed").gte("closed_at", `${DATE}T13:00:00Z`).lte("closed_at", `${DATE}T22:00:00Z`)
-    .order("opened_at");
+  // Paginated (audit M5): an UNPAGINATED read silently drops late-day closes past 1000 rows —
+  // exactly where the exit reasons live (the same failure mode the events read below had).
+  const posRaw: Array<Record<string, unknown>> = [];
+  for (let from = 0; from < 50_000; from += 1000) {
+    const { data } = await sb.from("positions")
+      .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,strategists(slug,name)")
+      .eq("status", "closed").gte("closed_at", `${DATE}T13:00:00Z`).lte("closed_at", `${DATE}T22:00:00Z`)
+      .order("opened_at").range(from, from + 999);
+    const batch = (data ?? []) as typeof posRaw;
+    posRaw.push(...batch);
+    if (batch.length < 1000) break;
+  }
   // Paginate past PostgREST's 1000-row cap — a busy session logs ~2k events, and an
   // UNORDERED capped fetch silently drops the tail (which is where the late-day exit
   // reasons AND the MGMT close shadows live → "exit —" / "managed-exit none" mirages).
@@ -331,6 +349,7 @@ async function main() {
 
   // ---- per-trade table ------------------------------------------------------------
   console.log(`\ntime        channel                 trade        entry→peak→exit      P&L     MFE   gave   hold  exit`);
+  console.log(`  (MFE/gave are option-MID based — an UPPER BOUND on what a sell would have realized at the bid)`);
   for (const t of trades) {
     const hold = Math.round((Date.parse(t.closedAt) - Date.parse(t.openedAt)) / 60000);
     console.log(

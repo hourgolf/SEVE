@@ -159,6 +159,16 @@ interface Ctx {
 
 const macdKey = (c: { fast: number; slow: number; signal: number }) => `${c.fast}-${c.slow}-${c.signal}`;
 
+// Numeric-threshold guard (parser hardening, audit L1): a null/absent/non-numeric threshold
+// must FAIL CLOSED (condition false → no trade), never coerce. Pre-guard, `x >= null` coerced
+// null→0 and turned a gate PERMISSIVE (gap_min pct:null fired on any gap), while a numeric
+// string compared as NaN and silently never fired. A numeric string now coerces to its number.
+const numOr = (v: unknown): number | null => {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
 function condHolds(c: Condition, ctx: Ctx): boolean {
   const { f, i } = ctx;
   switch (c.kind) {
@@ -183,8 +193,10 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
     }
     case "vwap_dev": {
       if (f.atr <= 0) return false;
+      const k = numOr(c.atr);
+      if (k == null) return false;
       const dev = (f.close - f.vwap) / f.atr; // signed deviation, in ATRs
-      return c.cmp === ">" ? dev >= c.atr : dev <= -c.atr;
+      return c.cmp === ">" ? dev >= k : dev <= -k;
     }
     case "opening_range": {
       // computeFeatures fixes the OR at 30m. `band` (default 1) tightens the trigger toward the OR
@@ -197,22 +209,32 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
     }
     case "or_width_min": {
       if (f.openRangeHi == null || f.openRangeLo == null || f.close <= 0) return false;
-      return ((f.openRangeHi - f.openRangeLo) / f.close) * 100 >= c.pct;
+      const pct = numOr(c.pct);
+      return pct != null && ((f.openRangeHi - f.openRangeLo) / f.close) * 100 >= pct;
     }
-    case "gap_min":
+    case "gap_min": {
       // overnight gap regime (gap-gate-verdict): trade only on days with a catalyst-sized
       // gap; flat-open days are chop-prone and bleed. MAGNITUDE (direction is noise). A
       // session constant → gates the whole day. No gap data (first session) ⇒ false (stand down).
-      return ctx.gap != null && Math.abs(ctx.gap) >= c.pct;
-    case "rel_vol":
-      return f.relVol >= c.min;
-    case "efficiency_ratio":
-      return c.op === ">=" ? f.er >= c.value : f.er <= c.value;
+      const pct = numOr(c.pct);
+      return pct != null && ctx.gap != null && Math.abs(ctx.gap) >= pct;
+    }
+    case "rel_vol": {
+      const min = numOr(c.min);
+      return min != null && f.relVol >= min;
+    }
+    case "efficiency_ratio": {
+      const v = numOr(c.value);
+      if (v == null) return false;
+      return c.op === ">=" ? f.er >= v : f.er <= v;
+    }
     case "momentum_atr": {
       if (f.atr <= 0) return false;
+      const v = numOr(c.value);
+      if (v == null) return false;
       const lb = c.lookback ?? 3;
       const mom = i >= lb ? (ctx.closes[i] - ctx.closes[i - lb]) / f.atr : 0;
-      return c.op === ">=" ? mom >= c.value : mom <= c.value;
+      return c.op === ">=" ? mom >= v : mom <= v;
     }
     case "macd": {
       const hist = ctx.macdSeries.get(macdKey(c));

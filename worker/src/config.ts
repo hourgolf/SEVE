@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-01b"; // feat-diag removed (IWM confirmed healthy + selective, not a bug); back to a clean worker
+export const WORKER_VERSION = "stream-2026-07-01c"; // audit fixes: prem_stop=0 semantics (sizing + sweep), half-day session close, pyramid cap scoped to own stack (+boost), EOD flatten covers expiring prior-session holds, stale-chain entry guard, date-scoped orders, daily-stop >100-close window, recovery-avg newest-buys
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

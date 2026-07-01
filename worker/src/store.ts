@@ -232,13 +232,17 @@ export async function markPeak(id: string, peak: number): Promise<void> {
 // Today's realized P&L for a channel (for the Stop knob gate). closedAfterDate is
 // the ET date string; we filter client-side like the cron worker.
 export async function realizedTodayByChannel(strategistId: string, etDate: string): Promise<number> {
+  // Server-side date floor + a wide cap (audit L2): the old newest-100 window under-counted a
+  // churny channel's realized past 100 closes/day → the daily-stop latched LATE. 00:00Z on the
+  // ET date = the prior evening ET — a safe superset; the client-side ET filter below is exact.
   const { data } = await sb
     .from("positions")
     .select("realized_pnl,closed_at")
     .eq("strategist_id", strategistId)
     .eq("status", "closed")
+    .gte("closed_at", `${etDate}T00:00:00Z`)
     .order("closed_at", { ascending: false })
-    .limit(100);
+    .limit(1000);
   let sum = 0;
   for (const c of (data ?? []) as any[]) {
     if (c.closed_at && etDateOf(Date.parse(c.closed_at)) === etDate) sum += Number(c.realized_pnl ?? 0);
