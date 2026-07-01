@@ -14,6 +14,7 @@ import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { RosterTable } from "@/components/console/RosterTable";
+import { TodayStrip } from "@/components/console/TodayStrip";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -111,6 +112,11 @@ export function DesktopSurface({
   // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
 
+  // Traded indices (desk-wide, armed) for the TODAY readiness strip — gaps are market-wide, so
+  // this isn't account-scoped. Order SPY · QQQ · IWM, then anything else.
+  const tradedUnderlyings = [...new Set(desk.strategists.filter((s) => s.status === "armed").map((s) => s.underlying.toUpperCase()))]
+    .sort((a, b) => { const o = ["SPY", "QQQ", "IWM"]; const ai = o.indexOf(a), bi = o.indexOf(b); return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.localeCompare(b); });
+
   // The 86'd shelf: only ARMED channels get full strips; benched (draft) channels
   // collapse to small pads on a rail below — tap one to inspect / re-arm.
   const armed = accountChannels.filter((s) => s.status === "armed");
@@ -157,6 +163,7 @@ export function DesktopSurface({
       {/* ============ DESK — market · mixer · live book ====================== */}
       {activeRoom === "desk" && (
         <section className="room room--desk">
+          <TodayStrip underlyings={tradedUnderlyings} />
           <div className="market-section">
             <div className={`mkt-bar${collapsedMarket ? " collapsed" : ""}`}>
               <span className="mkt-pills">
