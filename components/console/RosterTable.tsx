@@ -34,8 +34,8 @@ export function RosterTable({
           <tr>
             <th className="rt-chh">Channel</th>
             <th>Mode</th>
-            <th>Take</th>
             <th>Stop</th>
+            <th>Take</th>
             <th>Risk/tr</th>
             <th>Stop/day</th>
             <th className="rt-num">Day P&amp;L</th>
@@ -77,10 +77,10 @@ export function RosterTable({
                   )}
                 </td>
                 <td>
-                  <FiresPill value={tp} display={tp > 0 ? `+${tp}%` : "ride"} onCommit={(v) => setCfg(s.slug, s.id, { take_profit_pct: v })} min={0} max={300} className={tp > 0 ? "chf-take" : "chf-ride"} canWrite={canWrite} label={`${s.name} take profit percent`} title="take-profit % (0 = ride)" />
+                  <FiresPill value={premStop} display={`−${premStop}%`} onCommit={(v) => setCfg(s.slug, s.id, { premium_stop_pct: v })} min={10} max={90} className="chf-stop" canWrite={canWrite} label={`${s.name} premium stop percent`} title="premium stop % — the binding downside" />
                 </td>
                 <td>
-                  <FiresPill value={premStop} display={`−${premStop}%`} onCommit={(v) => setCfg(s.slug, s.id, { premium_stop_pct: v })} min={10} max={90} className="chf-stop" canWrite={canWrite} label={`${s.name} premium stop percent`} title="premium stop % — the binding downside" />
+                  <FiresPill value={tp} display={tp > 0 ? `+${tp}%` : "ride"} onCommit={(v) => setCfg(s.slug, s.id, { take_profit_pct: v })} min={0} max={300} className={tp > 0 ? "chf-take" : "chf-ride"} canWrite={canWrite} label={`${s.name} take profit percent`} title="take-profit % (0 = ride)" />
                 </td>
                 <td>
                   <FiresPill value={c.capital_pct} display={usd0(c.capital_pct)} onCommit={(v) => setCfg(s.slug, s.id, { capital_pct: v })} min={0} max={5000} maxDigits={5} className="chf-amt" canWrite={canWrite} label={`${s.name} risk per trade`} title="risk $/trade" />

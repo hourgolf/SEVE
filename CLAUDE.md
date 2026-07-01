@@ -19,12 +19,15 @@ Rebuilt the ChannelStrip around what the worker ACTUALLY exits on. Shipped in 5 
 `components/console/ChannelStrip.tsx` + `components/console/RosterTable.tsx` + the `.ch-fires`/`.chm`/`.ch-shape`/
 `.roster*` rules in `app/console.css`.**
 
-**THE NEW STRIP (top→bottom):** `executor · DTE` sub → **FIRES readout** (`fires +22% −30% EOD`, reads the live
-config the worker exits on: `take_profit_pct` / `premium_stop_pct ?? 50` / EOD flatten) → **LOCK/RIDE mode toggle**
+**THE NEW STRIP (top→bottom):** `executor · DTE` sub → **FIRES readout** (`fires −30% +22% EOD`, reads the live
+config the worker exits on: `premium_stop_pct ?? 50` / `take_profit_pct` / EOD flatten) → **LOCK/RIDE mode toggle**
 → **trade-shape bar** (to-scale red stop | entry | green target, drag handles, `0.73R` label) → **two-dial sizing**
 (`STOP/day` knob = `daily_stop_usd` + `RISK` fader = `capital_pct`) → MUTE/SOLO pads.
 - **FIRES pills are click-to-edit** (`FiresPill`, exported): take (0 = ride) + premium-stop (clamped 10–90%). The
   premium stop had NO knob before — it's the binding downside, now surfaced + editable.
+- **⚠ ORDER CONVENTION (operator's call, don't re-flip): stop·take left→right EVERYWHERE** — FIRES text, shape bar,
+  AND roster-table columns all read stop (red, left) → take (green, right), the number-line convention (loss left /
+  gain right) so the bar's drag stays intuitive (drag right = bigger take). Keep the three in sync.
 - **LOCK/RIDE writes the MATCHED PAIR** in one move: LOCK = take (keep tuned, else default 22) + tight −30% stop;
   RIDE = no take + loose −50% stop. Mode is read from `tp>0?lock:ride`. This encodes the giveback doctrine
   ([[giveback-takeprofit-split]]): LOCK the find-and-surrender book, RIDE the genuine tails (MOMO).

@@ -292,19 +292,9 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
             onClick={applyRide} title="RIDE — no take, loose −50% stop (let the convex tail run)">RIDE</button>
         </div>
       )}
+      {/* order = stop · take · EOD — left→right matches the shape bar (loss left, gain right) */}
       <div className="ch-fires" title="what actually fires — the binding exits (reads the live worker config)">
         <span className="chf-lbl">fires</span>
-        <FiresPill
-          value={tp}
-          display={tp > 0 ? `+${tp}%` : "ride"}
-          onCommit={(v) => setCfg({ take_profit_pct: v })}
-          min={0}
-          max={300}
-          className={tp > 0 ? "chf-take" : "chf-ride"}
-          canWrite={canWrite}
-          label="take profit percent"
-          title="take-profit % (0 = ride)"
-        />
         <FiresPill
           value={premStop}
           display={`−${premStop}%`}
@@ -315,6 +305,17 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           canWrite={canWrite}
           label="premium stop percent"
           title="premium stop % — the binding downside"
+        />
+        <FiresPill
+          value={tp}
+          display={tp > 0 ? `+${tp}%` : "ride"}
+          onCommit={(v) => setCfg({ take_profit_pct: v })}
+          min={0}
+          max={300}
+          className={tp > 0 ? "chf-take" : "chf-ride"}
+          canWrite={canWrite}
+          label="take profit percent"
+          title="take-profit % (0 = ride)"
         />
         <span className="chf chf-flat">EOD</span>
       </div>
