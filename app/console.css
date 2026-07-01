@@ -1915,6 +1915,16 @@
 .chf-stop { color: #be3326; }
 .chf-ride, .chf-flat { color: var(--ink-soft, #6b6960); font-weight: 600; }
 
+/* editable pills — click to set the real TP / stop % (color comes from the chf-* class) */
+.chf-edit, .chf-input { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.2px; }
+.chf-edit { border: none; background: none; margin: 0; padding: 1px 4px; line-height: 1.1; cursor: pointer; border-radius: 3px; border-bottom: 1px dotted currentColor; }
+.chf-edit:hover { background: rgba(0, 0, 0, 0.06); }
+.chf-edit:active { background: rgba(0, 0, 0, 0.1); }
+.chf-edit:focus-visible { outline: 1.5px solid currentColor; outline-offset: 1px; }
+.chf-input { width: 3.4ch; padding: 0 3px; text-align: center; line-height: 1.3; background: #fff; border: 1px solid currentColor; border-radius: 3px; outline: none; }
+.channel--m .chf-edit { padding: 3px 7px; }
+.channel--m .chf-input { padding: 2px 4px; }
+
 /* ---- live-config controls in the flip-card editor (cream scope, tokens flipped above) ---- */
 .ch-edit-cfg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
 .cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

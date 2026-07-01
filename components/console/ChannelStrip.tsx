@@ -38,6 +38,74 @@ const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 const PYRAMID_ADDS_ON = 3;
 const PYRAMID_CAP = 12;
 
+// An inline-editable pill for the FIRES readout — click to set the value as a plain
+// number (the worker's real TP / stop %). Read-only span when signed out (identical
+// to the static readout). Commit on Enter/blur, Esc cancels, ↑/↓ nudge by 1.
+function FiresPill({
+  value, display, onCommit, min, max, className, canWrite, label, title,
+}: {
+  value: number;
+  display: string; // read-mode text, e.g. "+22%" / "ride" / "−30%"
+  onCommit: (v: number) => void;
+  min: number;
+  max: number;
+  className: string; // "chf-take" | "chf-ride" | "chf-stop"
+  canWrite: boolean;
+  label: string;
+  title: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  if (!canWrite) return <span className={`chf ${className}`} title={title}>{display}</span>;
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={`chf chf-edit ${className}`}
+        title={`${title} — click to set`}
+        aria-label={`${label}: ${display}. Click to edit.`}
+        onClick={(e) => { e.stopPropagation(); setDraft(String(value)); setEditing(true); }}
+      >
+        {display}
+      </button>
+    );
+  }
+
+  const commit = () => {
+    setEditing(false);
+    const t = draft.trim();
+    if (t === "") return; // empty = cancel (never silently zero a stop)
+    const n = Math.round(Number(t));
+    if (!Number.isFinite(n)) return;
+    const clamped = Math.max(min, Math.min(max, n));
+    if (clamped !== value) onCommit(clamped);
+  };
+
+  return (
+    <input
+      className={`chf chf-input ${className}`}
+      type="text"
+      inputMode="numeric"
+      autoFocus
+      size={3}
+      value={draft}
+      aria-label={label}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(); }
+        else if (e.key === "Escape") { e.preventDefault(); setEditing(false); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); setDraft(String(Math.min(max, (Number(draft) || 0) + 1))); }
+        else if (e.key === "ArrowDown") { e.preventDefault(); setDraft(String(Math.max(min, (Number(draft) || 0) - 1))); }
+      }}
+    />
+  );
+}
+
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging, compact, onExpand }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
   const { persistConfig, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, duplicateChannel, deleteChannel, canWrite } = useDeskWrite();
@@ -130,8 +198,28 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
   const firesReadout = (
     <div className="ch-fires" title="what actually fires — the binding exits (reads the live worker config)">
       <span className="chf-lbl">fires</span>
-      {tp > 0 ? <span className="chf chf-take">+{tp}%</span> : <span className="chf chf-ride">ride</span>}
-      <span className="chf chf-stop">−{premStop}%</span>
+      <FiresPill
+        value={tp}
+        display={tp > 0 ? `+${tp}%` : "ride"}
+        onCommit={(v) => setCfg({ take_profit_pct: v })}
+        min={0}
+        max={300}
+        className={tp > 0 ? "chf-take" : "chf-ride"}
+        canWrite={canWrite}
+        label="take profit percent"
+        title="take-profit % (0 = ride)"
+      />
+      <FiresPill
+        value={premStop}
+        display={`−${premStop}%`}
+        onCommit={(v) => setCfg({ premium_stop_pct: v })}
+        min={10}
+        max={90}
+        className="chf-stop"
+        canWrite={canWrite}
+        label="premium stop percent"
+        title="premium stop % — the binding downside"
+      />
       <span className="chf chf-flat">EOD</span>
     </div>
   );
