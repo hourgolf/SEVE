@@ -12,6 +12,35 @@ durable context for a new session. Read it first.
 > lives in **memory/** (read `desk-doctrine.md` FIRST, then `cockpit-p3-multi-account.md`,
 > `doctrine-drift-and-forward-validation.md`). The block below re-anchors the convention.
 
+## DESK-CONTROLS MAP — 2026-06-30 (CHANNEL-STRIP REDESIGN: knobs → real TP/stop/risk)
+**Operator's complaint: the strip knobs were "mostly inert/counterintuitive" and didn't map to real-world TP/stops.
+Rebuilt the ChannelStrip around what the worker ACTUALLY exits on. Shipped in 5 slices, all on `main` (commits
+`25595d3`→`5d60e63`), UI-only (no worker/trade-path change), reversible. The whole redesign is in
+`components/console/ChannelStrip.tsx` + `components/console/RosterTable.tsx` + the `.ch-fires`/`.chm`/`.ch-shape`/
+`.roster*` rules in `app/console.css`.**
+
+**THE NEW STRIP (top→bottom):** `executor · DTE` sub → **FIRES readout** (`fires +22% −30% EOD`, reads the live
+config the worker exits on: `take_profit_pct` / `premium_stop_pct ?? 50` / EOD flatten) → **LOCK/RIDE mode toggle**
+→ **trade-shape bar** (to-scale red stop | entry | green target, drag handles, `0.73R` label) → **two-dial sizing**
+(`STOP/day` knob = `daily_stop_usd` + `RISK` fader = `capital_pct`) → MUTE/SOLO pads.
+- **FIRES pills are click-to-edit** (`FiresPill`, exported): take (0 = ride) + premium-stop (clamped 10–90%). The
+  premium stop had NO knob before — it's the binding downside, now surfaced + editable.
+- **LOCK/RIDE writes the MATCHED PAIR** in one move: LOCK = take (keep tuned, else default 22) + tight −30% stop;
+  RIDE = no take + loose −50% stop. Mode is read from `tp>0?lock:ride`. This encodes the giveback doctrine
+  ([[giveback-takeprofit-split]]): LOCK the find-and-surrender book, RIDE the genuine tails (MOMO).
+- **Shape bar** = the same tp/premium_stop as pills, visual + draggable (live dispatch on drag, persist on release).
+- **Declutter:** removed the redundant TP knob (→ pill/shape bar) + inert U-STOP knob (→ flagged `uS·off` when
+  `ustop*180≥premStop`; lives in the flip "advanced" editor). `aggression` shows in NO view (retired).
+- **ADVANCED = the flip-card editor** (pencil icon): executor · entry_dte · event_policy · **u-stop %** · take-profit
+  % · **max-contracts** · pyramid + lifecycle (bench/duplicate/delete). Everything secondary lives here.
+- **ROSTER TABLE (slice 5b, DESKTOP only):** a `strips ⇄ table` toggle in the Mixer (§02) label swaps the strips for
+  a fleet grid — Channel · Mode · Take · Stop · Risk/tr · Stop/day · Day P&L, every cell inline-editable (reuses
+  FiresPill + the LOCK/RIDE pair). Mobile keeps its Mix carousel (got slices 1–4, not the table).
+- **Anon = read-only** everywhere (pills/mode/shape → static text/labels; same as pre-redesign). Editing gates on
+  `canWrite` from `useDeskWrite`; writes = optimistic `dispatch(SET_CONFIG)` + `persistConfig` (RLS-guarded).
+- ⚠ **Desktop Mixer-room screenshots return blank cream when scrolled** (a preview-harness rasterizer quirk, not a
+  bug) — verify desktop strips/table via DOM eval or a tall-viewport (`height:2680`) capture at scroll 0.
+
 ## SESSION HANDOFF — 2026-06-25 (⭐ EXECUTION-INTEGRITY RECKONING → CLEAN BOOKS → RE-ANALYZE) — READ FIRST
 **The operator's challenge ("V3/ALT never trade — were they ever properly EXECUTED?") cracked the desk open. A
 desk-wide shared-OCC booking bug meant the per-channel books were materially WRONG; we fixed the worker, reconciled to
