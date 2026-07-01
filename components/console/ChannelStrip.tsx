@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { Knob } from "@/components/console/hw/Knob";
 import { Fader } from "@/components/console/hw/Fader";
 import { LedMeter } from "@/components/console/hw/LedMeter";
@@ -103,6 +103,79 @@ function FiresPill({
         else if (e.key === "ArrowDown") { e.preventDefault(); setDraft(String(Math.max(min, (Number(draft) || 0) - 1))); }
       }}
     />
+  );
+}
+
+// The trade's SHAPE, to scale — a red stop zone (left of entry) + a green target zone
+// (right of entry), widths proportional to the premium stop / take %. Seeing the two
+// side-by-side makes the per-trade risk:reward legible (e.g. −30% risked vs +22% target).
+// Drag a handle to set the value (the same tp / premium_stop the pills edit); no take =
+// no green zone (riding). Read-only visual when signed out (no handles).
+const SHAPE_FULL = 100; // the % that fills half the track (visual scale; larger values clamp)
+function TradeShapeBar({
+  tp, premStop, canWrite, onChange, onCommit,
+}: {
+  tp: number;
+  premStop: number;
+  canWrite: boolean;
+  onChange: (patch: { take_profit_pct?: number; premium_stop_pct?: number }) => void;
+  onCommit: (patch: { take_profit_pct?: number; premium_stop_pct?: number }) => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<null | "tp" | "stop">(null);
+  const live = useRef<{ take_profit_pct?: number; premium_stop_pct?: number } | null>(null);
+  const tpFrac = Math.min(1, tp / SHAPE_FULL);
+  const stopFrac = Math.min(1, premStop / SHAPE_FULL);
+
+  const valueFromX = (clientX: number, side: "tp" | "stop") => {
+    const el = ref.current;
+    if (!el) return 0;
+    const r = el.getBoundingClientRect();
+    const center = r.left + r.width / 2;
+    const half = r.width / 2 || 1;
+    const frac = side === "tp" ? (clientX - center) / half : (center - clientX) / half;
+    return Math.round(Math.max(0, Math.min(1, frac)) * SHAPE_FULL);
+  };
+  const start = (side: "tp" | "stop") => (e: React.PointerEvent) => {
+    if (!canWrite) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    drag.current = side;
+  };
+  const move = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const v = valueFromX(e.clientX, drag.current);
+    if (drag.current === "tp") { live.current = { take_profit_pct: v }; onChange({ take_profit_pct: v }); }
+    else { const s = Math.max(10, Math.min(90, v)); live.current = { premium_stop_pct: s }; onChange({ premium_stop_pct: s }); }
+  };
+  const end = (e: React.PointerEvent) => {
+    if (drag.current && live.current) onCommit(live.current);
+    drag.current = null;
+    live.current = null;
+    try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch { /* already released */ }
+  };
+
+  const rr = tp > 0 ? (tp / premStop).toFixed(2) : null; // reward-to-risk, per-trade
+  return (
+    <div className="ch-shape" title={tp > 0 ? `per-trade shape — risk −${premStop}% to make +${tp}% (${rr}R)` : `per-trade shape — riding (no target), risk −${premStop}%`}>
+      <div className="shp-track" ref={ref}>
+        <div className="shp-stop" style={{ width: `${stopFrac * 50}%` }} />
+        <div className="shp-take" style={{ width: `${tpFrac * 50}%` }} />
+        <div className="shp-entry" />
+      </div>
+      {canWrite && (
+        <>
+          <button type="button" className="shp-h shp-h-stop" style={{ left: `${50 - stopFrac * 50}%` }}
+            onPointerDown={start("stop")} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+            title="drag to set the stop %" aria-label={`stop ${premStop}%, drag to change`} />
+          <button type="button" className="shp-h shp-h-take" style={{ left: `${50 + tpFrac * 50}%` }}
+            onPointerDown={start("tp")} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+            title="drag to set the take-profit % (all the way to entry = ride)" aria-label={`take ${tp}%, drag to change`} />
+        </>
+      )}
+      <span className="shp-rr">{rr ? `${rr}R` : "ride"}</span>
+    </div>
   );
 }
 
@@ -244,6 +317,13 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         />
         <span className="chf chf-flat">EOD</span>
       </div>
+      <TradeShapeBar
+        tp={tp}
+        premStop={premStop}
+        canWrite={canWrite}
+        onChange={(patch) => dispatch({ type: "SET_CONFIG", slug, patch })}
+        onCommit={(patch) => persistConfig(id, patch)}
+      />
     </>
   );
 
@@ -572,7 +652,9 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         <div className="ch-lcd-bar"><i className={day < 0 ? "neg" : "pos"} style={{ width: `${mag * 100}%` }} /></div>
       </div>
 
-      <div className="ch-stack">
+      {/* Two-dial sizing (RISK $/trade + STOP $/day). Exits (TP / premium stop) live in the
+          LOCK/RIDE toggle + pills + shape bar above; u-stop / max-contracts in the edit drawer. */}
+      <div className="ch-stack ch-stack--sizing">
         <Knob
           value={config.daily_stop_usd}
           min={0}
@@ -583,34 +665,8 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           size="md"
           cap="var(--knob-dark)"
           tick="#d7d5cb"
-          label="STOP"
+          label="STOP/day"
           format={usd0}
-        />
-        <Knob
-          value={tp}
-          min={0}
-          max={300}
-          step={5}
-          onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { take_profit_pct: v } })}
-          onCommit={(v) => persistConfig(id, { take_profit_pct: v })}
-          size="md"
-          cap="var(--accent)"
-          tick="#3a1505"
-          label="TP"
-          format={(v) => (v === 0 ? "RIDE" : `${v}%`)}
-        />
-        <Knob
-          value={ustop}
-          min={0}
-          max={2}
-          step={0.05}
-          onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { underlying_stop_pct: v } })}
-          onCommit={(v) => persistConfig(id, { underlying_stop_pct: v })}
-          size="md"
-          cap="var(--knob-cream)"
-          tick="#2a2a24"
-          label={ustopInert ? "U-STOP·off" : "U-STOP"}
-          format={(v) => (v === 0 ? "0" : ustopInert ? `${v} off` : String(v))}
         />
       </div>
 

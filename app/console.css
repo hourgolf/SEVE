@@ -1937,6 +1937,20 @@
 .chm-ride.on { background: #6b6960; }
 .channel--m .chm { padding: 4px 12px; font-size: 9px; }
 
+/* trade-SHAPE bar — the per-trade risk:reward to scale (red stop | entry | green target), drag handles set tp/stop */
+.ch-shape { position: relative; height: 16px; margin: 3px 22px 2px; align-self: stretch; box-sizing: border-box; }
+.channel--m .ch-shape { margin-left: 0; margin-right: 0; height: 20px; }
+.shp-track { position: absolute; left: 0; right: 0; top: 50%; height: 8px; transform: translateY(-50%); border-radius: 4px; background: rgba(0, 0, 0, 0.08); overflow: hidden; }
+.shp-stop { position: absolute; top: 0; bottom: 0; right: 50%; background: #d05646; }
+.shp-take { position: absolute; top: 0; bottom: 0; left: 50%; background: #2f9e5c; }
+.shp-entry { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1.5px; transform: translateX(-50%); background: var(--ink, #2a2a24); opacity: 0.55; }
+.shp-h { position: absolute; top: 50%; width: 14px; height: 16px; transform: translate(-50%, -50%); padding: 0; border: none; background: transparent; cursor: ew-resize; touch-action: none; z-index: 2; }
+.channel--m .shp-h { width: 22px; height: 22px; }
+.shp-h::after { content: ""; display: block; width: 3px; height: 13px; margin: 0 auto; border-radius: 2px; background: currentColor; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.75); }
+.shp-h-take { color: #1c7a44; }
+.shp-h-stop { color: #be3326; }
+.shp-rr { position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 1; font-family: var(--mono); font-size: 7px; font-weight: 700; letter-spacing: 0.3px; color: var(--ink-soft, #6b6960); background: var(--chassis, #d8d5c8); padding: 0 2px; border-radius: 2px; }
+
 /* ---- live-config controls in the flip-card editor (cream scope, tokens flipped above) ---- */
 .ch-edit-cfg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
 .cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
