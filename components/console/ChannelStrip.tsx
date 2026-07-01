@@ -47,6 +47,8 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
   const dte = config.entry_dte ?? 0;
   const eventPolicy = config.event_policy ?? "standdown";
   const tp = config.take_profit_pct ?? 0;
+  const premStop = config.premium_stop_pct ?? 50; // the binding downside (policy default −50); has no knob today
+  const ustopInert = ustop > 0 && ustop * 180 >= premStop; // 0.5% ≈ −90% premium → the −premStop% premium stop fires first
   const pyr = config.pyramid_adds ?? 0;
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
 
@@ -115,11 +117,22 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
     <div className="ch-lights" aria-label="channel state">
       <span className={`chl chl-exec chl-${executor}`} title={`orders placed by the ${executor} worker`}>{executor}</span>
       {dte === 1 && <span className="chl chl-dte" title="enters next-session (1DTE) expiry">1DTE</span>}
-      {ustop > 0 && <span className="chl chl-us" title={`underlying stop ${ustop}%`}>uS {ustop}%</span>}
+      {ustop > 0 && <span className={`chl chl-us${ustopInert ? " chl-inert" : ""}`} title={ustopInert ? `u-stop ${ustop}% never fires — the −${premStop}% premium stop hits first` : `underlying stop ${ustop}%`}>uS {ustop}%{ustopInert ? " ·off" : ""}</span>}
       {eventPolicy === "ignore" && <span className="chl chl-evt" title="ignores scheduled-event stand-downs (event-native)">evt:ignore</span>}
       {pyr > 0 && <span className="chl chl-pyr" title={`pyramiding: adds up to ${pyr} lot(s) to a winner, stack capped at ${config.max_contracts}`}>PYR ×{pyr}</span>}
       {inTrade && <span className="chl chl-live" title={`${pnl?.openCount} open position(s)`}>● in trade</span>}
       {atStop && <span className="chl chl-stop" title="day P&L at/through the STOP — entries halted">STOP</span>}
+    </div>
+  );
+
+  // "What fires" — the binding exits in plain terms. Surfaces the premium stop (which has no knob)
+  // and reads the same config the worker exits on, so what you see is what actually happens.
+  const firesReadout = (
+    <div className="ch-fires" title="what actually fires — the binding exits (reads the live worker config)">
+      <span className="chf-lbl">fires</span>
+      {tp > 0 ? <span className="chf chf-take">+{tp}%</span> : <span className="chf chf-ride">ride</span>}
+      <span className="chf chf-stop">−{premStop}%</span>
+      <span className="chf chf-flat">EOD</span>
     </div>
   );
 
@@ -385,6 +398,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           </div>
           <div className="ch-regime">{regime}</div>
         {lights}
+        {firesReadout}
         </div>
 
         <div className="ch-knobrow">
@@ -440,6 +454,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         {statusBadge}
       </div>
       <div className="ch-sub">{config.muted ? "muted" : `${executor} · ${dte}DTE${pyr > 0 ? ` · PYR×${pyr}` : ""}`}</div>
+      {firesReadout}
 
       <div className="ch-lcd">
         <div className={`ch-lcd-v ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
@@ -483,8 +498,8 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           size="md"
           cap="var(--knob-cream)"
           tick="#2a2a24"
-          label="U-STOP"
-          format={(v) => String(v)}
+          label={ustopInert ? "U-STOP·off" : "U-STOP"}
+          format={(v) => (v === 0 ? "0" : ustopInert ? `${v} off` : String(v))}
         />
       </div>
 

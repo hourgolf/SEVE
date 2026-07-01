@@ -37,6 +37,7 @@ export interface StrategistConfig {
   event_policy?: "standdown" | "ignore"; // scheduled-event (FOMC) posture
   entry_dte?: number; // 0 = today's expiry + cutoff roll; 1 = always next session's expiry
   take_profit_pct?: number; // 0 = off (ride); >0 = exit at +pct% premium then re-enter (compound)
+  premium_stop_pct?: number | null; // per-trade premium STOP % (null/0 → policy default 50); the binding downside, no knob today
   pyramid_adds?: number; // 0 = off (Phase A shadow); N>0 = the worker adds up to N lots to a winning V3/ALT position (stack capped at max_contracts → the cap12 arm = 3 + max_contracts 12). Only V3/ALT act on it.
 }
 

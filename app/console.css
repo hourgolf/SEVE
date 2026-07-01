@@ -1903,6 +1903,17 @@
 .chl-live { color: #1c7a44; }
 .chl-pyr { color: #0f7a6b; background: rgba(15, 122, 107, 0.12); }
 .chl-stop { color: #be3326; background: rgba(190, 51, 38, 0.12); }
+.chl-inert { opacity: 0.4; text-decoration: line-through; }
+
+/* ---- "what fires" readout — the binding exits (surfaces the premium stop, which has no knob) ---- */
+.ch-fires { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--mono); padding: 1px 22px 4px; }
+.channel--m .ch-fires { padding-left: 0; padding-right: 0; }
+.ch-col .ch-fires { margin-top: 4px; }
+.ch-fires .chf-lbl { font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--ink-soft, #6b6960); }
+.chf { font-size: 10px; font-weight: 700; letter-spacing: 0.2px; }
+.chf-take { color: #1c7a44; }
+.chf-stop { color: #be3326; }
+.chf-ride, .chf-flat { color: var(--ink-soft, #6b6960); font-weight: 600; }
 
 /* ---- live-config controls in the flip-card editor (cream scope, tokens flipped above) ---- */
 .ch-edit-cfg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
