@@ -30,6 +30,7 @@ import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
+import { LabPanel } from "@/components/console/LabPanel";
 import { padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
 import { marketSummary } from "@/lib/marketSummary";
@@ -317,6 +318,7 @@ export function DesktopSurface({
             <div className="col"><WeeklyAutopsyPanel strategists={desk.strategists} /></div>
           </div>
           <div style={{ marginTop: 14 }}><ForensicsPanel /></div>
+          <div style={{ marginTop: 14 }}><LabPanel /></div>
         </section>
       )}
 

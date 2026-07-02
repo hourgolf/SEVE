@@ -18,6 +18,7 @@ import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
+import { LabPanel } from "@/components/console/LabPanel";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { DayBooksStrip } from "@/components/console/DayBooksStrip";
 import { MasterStopControl } from "@/components/console/MasterStopControl";
@@ -196,6 +197,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <DailyAutopsyPanel strategists={desk.strategists} />
             <WeeklyAutopsyPanel strategists={desk.strategists} />
             <ForensicsPanel />
+            <LabPanel />
           </>
         )}
 

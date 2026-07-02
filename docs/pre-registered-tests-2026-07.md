@@ -77,6 +77,19 @@ The related flagged-but-not-approved items stay parked: grind-v3-2's unreachable
 p90 MFE, the 1DTE %-scaling misfit) and breakout(base)'s LOCK-22 vs its ride-verdict tail —
 both deferred to the A6 era-4 read unless separately approved.
 
+## A8 · Virtual bench fleet (approved 2026-07-01 — COLLECTING; §03 LAB panel)
+59_virtual_bench_fleet.sql (10 mechanism-diverse `vb-*` DRAFTS: vwap-revert · rsi-revert ·
+level-break · or-fail · macd-state · curl-reversal · squeeze-break · pm-trend · gap-drift ·
+ribbon-cross) + 60_virtual_trades.sql + the gate-shadow extension: drafts signal but never
+trade; the nightly job reconstructs each FIRST-signal-of-day's would-have outcome (entry ask →
+own TP/stop → 15:25 flatten) from the quotes tape → `virtual_trades` → the §03 LAB panel.
+- **Rules (fixed now):** virtual data is CAPITAL-BLIND + mid/ask-basis → hypothesis substrate
+  ONLY, never an arm. Graduation: virtual → paper-lab draft at A1 sizing → its own
+  pre-registered gate. The MINING pass over this data waits for **≥2 months of accrual or a
+  regime change** — the June lesson (one month, one regime → sign-flipping levers, twice).
+- **Kill (per variant):** any vb-* with <10 first-of-day signals after 30 sessions is inert —
+  delete or re-spec it; no threshold tinkering in between.
+
 ## B2 · Chop-day short-premium (DEFERRED — chained behind A5)
 No multi-leg compiler work unless A5 passes. Inherits A5's kill. Additional standing door-check:
 if modeled limit-order body-spread capture can't flip the iron-fly replay ≥ +$25/day pooled,
