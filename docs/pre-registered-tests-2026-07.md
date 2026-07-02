@@ -95,6 +95,17 @@ pooled on 308 sessions; watch-cells = or-fail's chop +$44/t and ribbon-cross's t
 - **Kill (per variant):** any vb-* with <10 first-of-day signals after 30 sessions is inert —
   delete or re-spec it; no threshold tinkering in between.
 
+## A6b · NEAR-MISS metric (pre-registered 2026-07-02 — read WITH A6, not before)
+**Metric:** near-miss rate = trades whose peak_mark reached ≥70% of the channel's TP level
+(`peak ≥ entry·(1 + 0.7·tp/100)`, tp>0) but closed ≤ $0, per channel. Measurable from live
+10s peak/trough stamps only (era-4 data; mid-basis label applies).
+**Trigger:** evaluated at the A6 read (N≥40 trades/channel or 15 era-4 sessions). **Decision
+rule fixed now:** a channel with near-miss rate ≥15% at N≥40 REOPENS the arm-high-ratchet
+probe (the one surviving ratchet residue) on ITS live peak/trough paths — probe first, never
+a live knob from the metric alone. Below 15% → the ratchet question stays closed for that
+channel. Motivating observations (2026-07-02): IWM peaked +21.7% vs TP 22 → stop; the ORB
+A/B green→reds are EXCLUDED (no-TP probe spec — their fade-back is design cost, not signal).
+
 ## Calibration-change log (era boundaries for the A6/month-end reads)
 - **2026-07-02 (pre-open):** (A) QQQ V3 clones (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
   RISK 900→500, mc 18→6, daily stop 2000→1000 — the A1 lab-sizing standard applied (they predated

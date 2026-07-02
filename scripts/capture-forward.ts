@@ -92,6 +92,11 @@ async function main() {
   // gate-shadow (phase-4 A2): bank each blocked entry's would-have outcome BEFORE the 7d
   // quote prune erases it — the cost-gate calibration dataset accrues nightly, read-only.
   run("gate-shadow", ["gate-shadow"], 2);
+  // WEEKLY READOUT (approved 2026-07-02): Fridays only — the week's aggregate interrogation
+  // of the banked data (rollup + near-miss + vb-fleet-vs-prior + gate counters). Analysis
+  // only; scheduling it here is the whole point (the re-mine cadence was a memory note).
+  const [ey, em, ed] = etDate(now).split("-").map(Number);
+  if (new Date(Date.UTC(ey, em - 1, ed)).getUTCDay() === 5) run("weekly-readout", ["weekly-readout"], 2);
 
   // ── summary ──
   console.log(`\n══ summary · ${stamp()} ══`);
