@@ -227,14 +227,16 @@ export async function getOpenPositions(): Promise<PositionRow[]> {
 /** Durable MFE: persist the running peak option mark (the fast-exit sweep ratchets it).
  *  The in-memory peak is already monotonic, so a direct write is correct. Display-only. */
 export async function markPeak(id: string, peak: number): Promise<void> {
-  try { await sb.from("positions").update({ peak_mark: peak }).eq("id", id); }
+  // peak_at (61_peak_trough_at): NEW-high-only writes ⇒ the last write's timestamp IS the
+  // time of the running max (~10s granularity) → time-to-MFE is one query, no archive replay.
+  try { await sb.from("positions").update({ peak_mark: peak, peak_at: new Date().toISOString() }).eq("id", id); }
   catch { /* forensics only — never block the trade path */ }
 }
 
 /** Durable MAE twin (58_trough_mark): persist the running MIN option mark (the fast-exit sweep
  *  ratchets it, NEW-low-only). Stop-calibration instrumentation — display/analysis only. */
 export async function markTrough(id: string, trough: number): Promise<void> {
-  try { await sb.from("positions").update({ trough_mark: trough }).eq("id", id); }
+  try { await sb.from("positions").update({ trough_mark: trough, trough_at: new Date().toISOString() }).eq("id", id); }
   catch { /* forensics only — never block the trade path */ }
 }
 
@@ -330,6 +332,7 @@ export async function insertPosition(row: {
     ...core, current_mark: core.avg_entry_price, unrealized_pnl: 0, status: "open",
     peak_mark: core.avg_entry_price, // MFE ratchet starts at entry
     trough_mark: core.avg_entry_price, // MAE ratchet starts at entry (58_trough_mark)
+    peak_at: new Date().toISOString(), trough_at: new Date().toISOString(), // extremes = entry at t0 (61)
     entry_reason: entry_reason ?? null, entry_features: entry_features ?? null, entry_delta: entry_delta ?? null,
   });
   return error ? error.message : null;

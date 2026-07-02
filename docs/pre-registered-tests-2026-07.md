@@ -67,6 +67,9 @@ close.** Next event 2026-07-29; re-run `npm run fomc-resolution-probe` after eac
 - **Kill:** expectancy ≤0 at n=10, or concentration never dissolves by n=12 → delete the channel.
 
 ## A7 · trough_mark MAE instrumentation (approved 2026-07-01 — COLLECTING from worker -e)
+**+ 61_peak_trough_at (2026-07-02, worker -02a):** `peak_at`/`trough_at` timestamps stamp on every
+new-extreme ratchet write (~10s granularity; seeded at entry) → time-to-MFE/MAE is one query.
+Feeds the A6b ratchet probe and exit-timing analyses; instrumentation only, same rules as A7.
 58_trough_mark.sql + worker stream-2026-07-01e: the fast sweep ratchets a durable running MIN
 mark beside peak_mark (NEW-low-only, seeded at entry, restart-safe). MAE% = (entry−trough)/entry,
 mid-basis (a LOWER bound on bid-side adverse excursion — label it). Instrumentation only; no

@@ -14,6 +14,7 @@ import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { RosterTable } from "@/components/console/RosterTable";
+import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { TodayStrip } from "@/components/console/TodayStrip";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
@@ -220,6 +221,9 @@ export function DesktopSurface({
                 </div>
               </div>
             </div>
+            {/* SESSION SEQUENCER — the day as a 16-step pattern, under the live
+                chain (909-redesign slice 1). Read-only off the same feed. */}
+            <SessionSequencer positions={feed.positions} recentTrades={feed.recentTrades} strategists={desk.strategists} />
           </div>
 
           <SectionLabel id="composer" idx="C">

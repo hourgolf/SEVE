@@ -11,6 +11,8 @@ import { TodayStrip } from "@/components/console/TodayStrip";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { ManVsMachine } from "@/components/console/ManVsMachine";
 import { PushToggle } from "@/components/console/PushToggle";
+import { KitToggle } from "@/components/console/KitToggle";
+import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { AddChannel } from "@/components/console/AddChannel";
 import { MasterStrip } from "@/components/console/MasterStrip";
@@ -261,6 +263,10 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
         )}
       </main>
 
+      {/* SESSION SEQUENCER dock — the day's pattern pinned above the tab bar
+          (909-redesign slice 1); slim + closed by default, tap to expand. */}
+      <SessionSequencer variant="dock" positions={feed.positions} recentTrades={feed.recentTrades} strategists={desk.strategists} />
+
       <nav className="m-tabs" aria-label="rooms">
         {TABS.map((t) => (
           <button key={t.id} className={`m-tab${tab === t.id ? " on" : ""}`} onClick={() => goTab(t.id)} aria-pressed={tab === t.id}>
@@ -293,6 +299,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               <button type="button" className={theme === "blackout" ? "on" : ""} onClick={() => setTheme("blackout")}>blackout</button>
             </div>
             <PushToggle />
+            <KitToggle variant="sheet" />
             <DayBooksStrip strategists={desk.strategists} pnl={livePnl} fund={liveFund} closedToday={feed.recentTrades.length} openCount={feed.positions.length} />
             <OpsPreflight
               strategists={desk.strategists}
