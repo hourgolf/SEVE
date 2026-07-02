@@ -1,0 +1,1413 @@
+<!doctype html>
+<!-- ============================================================================
+     SEVE · seve-dashboard — GROUND-UP 909 REDESIGN MOCKUP · v2 (2026-07-02)
+     Project marker: SEVE trading desk (github.com/hourgolf/SEVE). Do not reuse
+     outside this repo. Static single-file HTML + vanilla JS, zero dependencies.
+
+     v2 — operator feedback applied:
+       · CHART = full-width hero with real height (the exit-timing instrument)
+       · DESKTOP = ONE scrolling page: rooms stack (PLAY→MIX→WRITE→TAPE→OPS);
+         transport buttons are anchor nav w/ scrollspy; every section + panel
+         is collapsible (chevrons) to declutter
+       · SEQUENCER sits UNDER the live chain on desktop (collapsible bezel);
+         on MOBILE it's a slim closable dock pinned above the tab bar
+     Clickable: anchor nav · fold chevrons (room + panel) · sequencer steps ·
+     voice pads · ▶ REPLAY · KILL (flip cover first) · KIT toggle for sound.
+     ============================================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SEVE — 909 redesign mockup v2</title>
+<style>
+:root {
+  --chassis:#d8d3c4; --chassis-2:#ccc6b5; --chassis-edge:#c5bfae; --chassis-dark:#b3ad9c;
+  --plate:#2b2b2e; --plate-2:#1d1d20; --plate-ink:#d7d5cb;
+  --ink:#2a2a28; --ink-soft:#55534c;
+  --green:#0e6132; --red:#9e2d1c; --amber-ink:#855f0c;
+  --lcd:#14181b; --lcd-2:#0f1214; --lcd-edge:#0a0a0b; --lcd-ink:#e9eef0;
+  --lcd-up:#6cc06d; --lcd-down:#e07a58;
+  --led-bg:#1a0604; --led-red:#ff3b2f;
+  --stripe-red:#c5362a; --stripe-orange:#e0552f; --accent:#df5320;
+  --pm-green:#2fd573; --pm-blue:#3b9eff; --pm-amber:#ffb224; --pm-cyan:#45c4d6;
+  --pm-violet:#b06bff; --pm-orange:#ff8a3d; --pm-lime:#a3e635;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#b6b1a2;color:var(--ink);font-family:var(--sans);font-size:13px;
+     padding:22px 18px 46px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+
+/* ---------------- mockup chrome ---------------- */
+.mk-head{max-width:1240px;margin:0 auto 14px}
+.mk-head h1{font:700 15px var(--mono);letter-spacing:1px;text-transform:uppercase}
+.mk-head p{font:400 12px var(--sans);color:#4a4840;margin-top:4px;max-width:92ch}
+.mk-head b{font-family:var(--mono)}
+.mk-sec{max-width:1240px;margin:24px auto 0}
+.mk-sec>h2{font:700 11px var(--mono);letter-spacing:1.5px;text-transform:uppercase;color:#56524a;margin-bottom:8px}
+.mk-legend{max-width:1240px;margin:10px auto 0;display:flex;flex-wrap:wrap;gap:5px 18px;
+  font:400 11px var(--sans);color:#45423b;list-style:none}
+.mk-legend b{font-family:var(--mono);color:var(--stripe-red)}
+.mk-frames{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start}
+
+/* ============================================================================
+   CHASSIS (desktop 1180) — ONE scrolling page
+   ============================================================================ */
+.chassis{position:relative;background:linear-gradient(180deg,var(--chassis),var(--chassis-2));
+  border:1px solid var(--chassis-edge);border-top-color:#deded4;border-radius:14px;padding:16px 20px 20px;
+  width:1180px;max-width:100%;
+  box-shadow:0 1px 0 #e6e4da inset,0 -2px 6px rgba(0,0,0,.25) inset,0 18px 40px rgba(0,0,0,.45)}
+
+/* ---------------- TRANSPORT (sticky — anchor nav) ---------------- */
+.transport{position:sticky;top:8px;z-index:30;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  background:linear-gradient(180deg,#20140a,#160d06);border:1px solid #000;border-top:3px solid #3d3128;
+  border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 6px 18px rgba(0,0,0,.55);
+  padding:9px 14px;margin-bottom:14px}
+.t-brand{display:flex;align-items:center;gap:10px}
+.stripes{display:flex;gap:3px}
+.stripes i{display:block;width:22px;height:6px;border-radius:1px}
+.stripes .s1{background:var(--stripe-orange)}.stripes .s2{background:var(--stripe-red)}.stripes .s3{background:#6e6c63}
+.t-mark{font:700 18px var(--mono);letter-spacing:1px;color:var(--stripe-red)}
+.t-mark span{color:#e7e4db}
+.t-rooms{display:flex;gap:5px}
+.rm-btn{display:flex;flex-direction:column;align-items:center;gap:1px;
+  font:700 10px var(--mono);letter-spacing:1px;padding:6px 12px 5px;border-radius:7px;
+  border:1px solid #000;background:linear-gradient(180deg,#4a4b4f,#2a2b2e);color:#b9b7af;cursor:pointer;
+  box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 2px 4px rgba(0,0,0,.4);
+  transition:transform .06s,background .12s,color .12s}
+.rm-btn .jp{font:500 8px var(--mono);letter-spacing:.1em;color:#8b8f8c}
+.rm-btn:active{transform:translateY(1px)}
+.rm-btn.on{background:linear-gradient(180deg,#ff8a5c,var(--accent));color:#fff;border-color:#7a2d10}
+.rm-btn.on .jp{color:rgba(255,255,255,.8)}
+.t-leds{display:flex;gap:12px;margin-left:auto;align-items:center}
+.t-led{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.t-led-win{background:var(--led-bg);border:1px solid #000;border-radius:7px;padding:3px 9px;
+  box-shadow:0 2px 10px rgba(0,0,0,.6) inset,0 1px 0 rgba(255,255,255,.05);
+  font:700 17px var(--mono);letter-spacing:1.5px;white-space:nowrap}
+.t-led-win.up{color:var(--pm-green);text-shadow:0 0 8px rgba(47,213,115,.7)}
+.t-led-win.stp{color:var(--led-red);text-shadow:0 0 8px rgba(255,59,47,.7)}
+.t-led-cap{font:600 8px var(--mono);letter-spacing:1.3px;color:#8b8f8c;text-transform:uppercase}
+.t-pills{display:flex;flex-direction:column;gap:4px}
+.t-pill{min-width:56px;text-align:center;font:700 9px var(--mono);letter-spacing:1px;
+  padding:3px 8px;border-radius:5px;border:1px solid rgba(255,255,255,.14);
+  color:#8b8f8c;background:rgba(255,255,255,.05);white-space:nowrap}
+.t-pill.run{color:#2fd573;border-color:rgba(47,213,115,.55);background:rgba(47,213,115,.18)}
+.snd{display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;background:none;border:none}
+.snd .snd-pad{width:40px;height:26px;border-radius:6px;border:1px solid #000;
+  background:linear-gradient(180deg,#3a3b3e,#232427);color:#cfcdc6;
+  font:700 8.5px var(--mono);letter-spacing:.5px;display:grid;place-items:center;
+  box-shadow:0 1px 0 rgba(255,255,255,.1) inset,0 2px 4px rgba(0,0,0,.4)}
+.snd.on .snd-pad{background:linear-gradient(180deg,var(--pm-amber),#b87d14);color:#1a1206;
+  box-shadow:0 0 10px rgba(255,178,36,.55),0 1px 0 rgba(255,255,255,.3) inset}
+.snd .t-led-cap{font-size:7.5px}
+.kill{display:flex;align-items:center;gap:8px}
+.kill-cover{width:28px;height:28px;border-radius:6px;border:1px solid #000;
+  background:linear-gradient(180deg,#d7d5cb,#a9a79c);box-shadow:0 2px 4px rgba(0,0,0,.4);
+  cursor:pointer;display:grid;place-items:center;transition:transform .12s;transform-origin:left center}
+.kill.armed .kill-cover{transform:rotate(-32deg) translateY(-3px)}
+.kill-grip{width:15px;height:3px;border-radius:2px;background:#6e6c63}
+.kill-fire{font:800 10px var(--mono);letter-spacing:1px;color:#fff;padding:7px 13px;border-radius:7px;
+  border:2px solid #7a1a13;background:radial-gradient(circle at 50% 35%,#ff5946,#b5281d);
+  box-shadow:0 0 12px rgba(255,59,47,.5),0 2px 4px rgba(0,0,0,.5);cursor:pointer}
+.kill:not(.armed) .kill-fire{filter:grayscale(.65) brightness(.72);box-shadow:none}
+.kill-flash{position:absolute;inset:0;z-index:50;display:none;place-items:center;border-radius:14px;
+  background:rgba(120,16,10,.88);color:#fff;font:800 22px var(--mono);letter-spacing:3px;
+  text-shadow:0 0 14px rgba(255,90,70,.9)}
+.kill-flash.show{display:grid;animation:kf .25s steps(2) 4}
+@keyframes kf{50%{opacity:.55}}
+
+/* ---------------- rooms (stacked, collapsible) ---------------- */
+.room{display:block;scroll-margin-top:82px;margin-bottom:8px}
+.room-body{display:block}
+.room.folded .room-body{display:none}
+.section-label{display:flex;align-items:center;gap:12px;margin:18px 1px 12px;cursor:pointer;user-select:none}
+.section-label .idx{font:700 11px var(--mono);letter-spacing:1px;color:var(--stripe-red)}
+.section-label .lab{font:700 12px var(--mono);letter-spacing:2px;text-transform:uppercase;color:var(--ink)}
+.section-label .jp{font:500 11px var(--mono);letter-spacing:.12em;color:#cf5a26}
+.section-label .sec-right{font:400 11px var(--mono);color:var(--ink-soft);margin-left:auto;white-space:nowrap}
+.section-label .sec-right .pos{color:var(--green);font-weight:700}
+.section-label::after{content:"";flex:1 1 auto;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--chassis-edge),transparent)}
+.section-label:has(.sec-right)::after{display:none}
+.fold-ch{font:700 10px var(--mono);color:var(--ink-soft);flex:0 0 auto;width:16px;text-align:center}
+.grid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px}
+.grid--even{grid-template-columns:1fr 1fr}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+
+/* ---------------- panels (collapsible pheads) ---------------- */
+.panel{position:relative;background:linear-gradient(180deg,var(--chassis),var(--chassis-2));
+  color:var(--ink);border:1px solid var(--chassis-edge);border-radius:9px;overflow:hidden;min-width:0;
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 3px 12px rgba(0,0,0,.35)}
+.panel.folded > *:not(.phead){display:none}
+.phead{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:1px 12px;
+  padding:10px 15px;border-bottom:1px solid var(--chassis-edge);cursor:pointer;user-select:none;
+  background:linear-gradient(180deg,#d9d7cd,#c5c3b8);box-shadow:0 1px 0 rgba(255,255,255,.5) inset}
+.panel.folded .phead{border-bottom:none}
+.phead .t{font:600 11px var(--mono);text-transform:uppercase;letter-spacing:1.2px;color:var(--ink);
+  text-shadow:0 1px 0 rgba(255,255,255,.4)}
+.phead .x{font:400 10px var(--mono);color:var(--ink-soft);margin-left:auto}
+.pbody{padding:12px 15px}
+.panel--lcd{background:linear-gradient(180deg,var(--lcd),var(--lcd-2));color:var(--lcd-ink);border-color:var(--lcd-edge);
+  box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 3px 12px rgba(0,0,0,.55)}
+.panel--lcd .phead{background:linear-gradient(180deg,var(--plate),var(--plate-2));border-bottom-color:#000;
+  box-shadow:0 1px 0 rgba(255,255,255,.05) inset}
+.panel--lcd .phead .t{color:var(--plate-ink);text-shadow:0 1px 0 rgba(0,0,0,.6)}
+.panel--lcd .phead .x{color:#8b8f8c}
+.panel--lcd .fold-ch{color:#8b8f8c}
+.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:middle;
+  background:var(--pm-green);box-shadow:0 0 6px var(--pm-green)}
+
+/* chart hero */
+.chart-hero{margin-bottom:14px}
+.chart-ctl{display:inline-flex;border:1px solid #3a3b3d;border-radius:5px;overflow:hidden;margin-right:8px}
+.chart-ctl span{font:600 9px var(--mono);padding:3px 8px;color:#8b8f8c;border-right:1px solid #2e2f31}
+.chart-ctl span:last-child{border-right:none}
+.chart-ctl span.on{background:#2b6fb8;color:#fff}
+.chart-ctl.ivl span.on{background:var(--stripe-red)}
+.chart-body{padding:10px 12px 12px}
+.chart-meta{display:flex;gap:18px;font:400 10.5px var(--mono);color:#7d8a82;padding:0 4px 8px;flex-wrap:wrap}
+.chart-meta b{color:var(--lcd-ink);font-weight:700}
+.chart-meta .up{color:var(--lcd-up)}
+
+/* tables */
+table{width:100%;border-collapse:collapse}
+th{font:600 10px var(--mono);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.6px;
+  padding:7px 8px;border-bottom:1px solid var(--chassis-edge);text-align:right}
+td{padding:6px 8px;text-align:right;border-bottom:1px solid rgba(0,0,0,.08);font:400 12.5px var(--mono)}
+tr:last-child td{border-bottom:none}
+.pos{color:var(--green)}.neg{color:var(--red)}
+td.pos,td.neg{font-weight:700}
+th.tl,td.tl{text-align:left}
+.pm-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+.pos-main td{border-bottom:0;padding-bottom:2px}
+.pos-ctx td{padding:0 8px 7px;border-bottom:1px solid rgba(0,0,0,.08)}
+.ctx-line{display:flex;flex-wrap:wrap;gap:10px;font:400 10.5px var(--mono);color:var(--ink-soft)}
+.ctx-ch{color:var(--ink);font-weight:700}
+.ctx-dim{opacity:.75}
+.ctx-line .pos,.ctx-line .neg{font-weight:700}
+.ctx-hot{color:var(--amber-ink);font-weight:700;background:rgba(133,95,12,.13);padding:0 4px;border-radius:3px}
+.rt-list{display:flex;flex-direction:column;gap:3px;padding:8px 10px 10px;border-top:1px solid var(--chassis-edge)}
+.rt-hd{display:flex;justify-content:space-between;font:400 9px var(--mono);text-transform:uppercase;
+  letter-spacing:.6px;color:var(--ink-soft);padding:8px 10px 0}
+.rt-hd .pos{font-weight:700}
+.rt-row{display:flex;align-items:center;gap:8px;font:400 12px var(--mono);background:none;border:0;
+  padding:2px 4px;text-align:left;border-radius:4px}
+.rt-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.rt-sym{min-width:70px}
+.rt-ch{font-weight:600;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rt-time{color:var(--ink-soft);font-size:11px}
+.rt-pnl{min-width:64px;text-align:right;font-weight:700}
+
+/* chain */
+.chain-scroll{max-height:186px;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:var(--chassis-dark) transparent}
+.chain-table th{position:sticky;top:0;z-index:2;background:linear-gradient(180deg,#d9d7cd,#c5c3b8);
+  box-shadow:0 1px 0 var(--chassis-edge)}
+.calls{color:#1f7d45}.puts{color:#b23a22}
+.strike-col{text-align:center;font-weight:700;color:var(--ink);background:rgba(0,0,0,.06)}
+tr.atm td{background:rgba(31,157,87,.13)}
+tr.atm .strike-col{color:var(--green)}
+
+/* signals */
+.sig{display:flex;gap:9px;align-items:baseline;font:400 11px var(--mono);padding:5px 0;
+  border-bottom:1px solid rgba(0,0,0,.08)}
+.sig:last-child{border-bottom:none}
+.sig .ts{color:var(--ink-soft);font-size:10px;flex:none}
+.sig .tag{font-weight:700;font-size:9px;letter-spacing:.4px;flex:none}
+.sig .tag.ok{color:var(--green)}.sig .tag.blk{color:var(--amber-ink)}
+.sig .msg{color:var(--ink)}
+
+/* ---------------- SESSION SEQUENCER (bezel — desktop: under the chain) ------- */
+.seq-bez{background:linear-gradient(180deg,var(--chassis),var(--chassis-2));border:1px solid var(--chassis-edge);
+  border-radius:9px;box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 2px 8px rgba(0,0,0,.4);
+  padding:10px 12px 11px;margin-top:14px}
+.seq-bez.folded > *:not(.seq-bar){display:none}
+.seq-bar{display:flex;align-items:baseline;gap:12px;cursor:pointer;user-select:none}
+.seq-bez:not(.folded) .seq-bar{margin-bottom:8px}
+.seq-title{font:700 9px var(--mono);letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft)}
+.seq-sub{font:400 9px var(--mono);color:var(--ink-soft);opacity:.75}
+.seq-play{margin-left:auto;font:700 9px var(--mono);letter-spacing:.6px;padding:3px 10px;border-radius:5px;
+  border:1px solid rgba(0,0,0,.25);background:rgba(255,255,255,.4);color:var(--ink-soft);cursor:pointer}
+.seq-play:hover{color:var(--ink);background:rgba(255,255,255,.6)}
+.seq-play.busy{background:var(--accent);color:#fff;border-color:transparent}
+.seq-leds{display:grid;grid-template-columns:repeat(16,1fr);gap:8px;padding:0 2px;margin-bottom:5px}
+.sled{width:8px;height:8px;border-radius:50%;justify-self:center;background:#3b1210;
+  box-shadow:inset 0 1px 1px rgba(0,0,0,.6)}
+.sled.on{background:var(--led-red);box-shadow:0 0 8px var(--led-red);animation:pulse2 1.1s ease-in-out infinite}
+.sled.chase{background:var(--led-red);box-shadow:0 0 8px var(--led-red)}
+@keyframes pulse2{50%{opacity:.45}}
+.seq-steps{display:grid;grid-template-columns:repeat(16,1fr);gap:8px}
+.step{position:relative;height:60px;border-radius:5px;border:1px solid #000;padding:0;cursor:pointer;
+  background:linear-gradient(180deg,#e7e5da,#c3c1b6);
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 2px 3px rgba(0,0,0,.3);
+  transition:box-shadow .1s,transform .06s}
+.step:active{transform:translateY(1px)}
+.step.acc{background:linear-gradient(180deg,#f0a07f,#e0552f)}
+.step.past{filter:brightness(.9) saturate(.9)}
+.step.cur{box-shadow:0 0 0 2px var(--led-red),0 0 12px rgba(255,59,47,.45),0 1px 0 rgba(255,255,255,.4) inset}
+.step.sel{box-shadow:0 0 0 2px var(--ink),0 1px 0 rgba(255,255,255,.4) inset}
+.step.chased{box-shadow:0 0 0 2px var(--led-red),0 0 14px rgba(255,59,47,.6)}
+.st-num{position:absolute;top:4px;left:6px;font:400 8px var(--mono);color:rgba(0,0,0,.45)}
+.st-time{position:absolute;top:4px;right:6px;font:600 8px var(--mono);color:rgba(0,0,0,.5)}
+.st-dots{position:absolute;left:6px;right:6px;bottom:6px;display:flex;flex-wrap:wrap;gap:3px}
+.sd{width:7px;height:7px;border-radius:50%}
+.st-evt{position:absolute;top:18px;left:0;right:0;text-align:center;
+  font:800 7.5px var(--mono);letter-spacing:.5px;padding:1px 0;color:#fff}
+.step.evt-FOMC .st-evt{background:rgba(197,54,42,.85)}
+.step.evt-CUT .st-evt{background:rgba(176,125,16,.9)}
+.step.evt-EOD .st-evt{background:rgba(224,85,47,.9)}
+.slice{margin-top:9px;background:linear-gradient(180deg,var(--lcd),var(--lcd-2));border:1px solid var(--lcd-edge);
+  border-radius:7px;padding:7px 12px;font:400 11px var(--mono);color:var(--lcd-ink);
+  display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;min-height:32px}
+.slice b{color:#fff;font-weight:700}
+.slice .sl-k{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#7d8a82}
+.voices{display:flex;gap:8px;margin-top:9px;align-items:flex-end}
+.v-lbl{font:700 8px var(--mono);letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-soft);
+  writing-mode:vertical-rl;transform:rotate(180deg);align-self:stretch;text-align:center}
+.vpad{position:relative;width:56px;height:40px;border-radius:7px;border:1px solid #000;
+  border-top:3px solid var(--vc,#888);cursor:pointer;
+  background:linear-gradient(180deg,#ece9de,#d2cfc4);
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 1px 3px rgba(0,0,0,.25);
+  font:700 10px var(--mono);letter-spacing:.5px;color:var(--ink);transition:transform .06s}
+.vpad:active{transform:translateY(1px)}
+.vpad .v-code{position:absolute;top:6px;left:0;right:0;text-align:center}
+.vpad .v-snd{position:absolute;bottom:4px;left:0;right:0;text-align:center;
+  font:600 7px var(--mono);letter-spacing:.5px;color:var(--ink-soft)}
+.vpad.lit{box-shadow:0 0 10px var(--vc),0 1px 0 rgba(255,255,255,.5) inset}
+.vpad.mut{opacity:.38;filter:grayscale(.6)}
+.vpad.bst{box-shadow:0 0 0 2px var(--pm-amber),0 0 10px rgba(255,178,36,.5)}
+.vpad.hit{animation:vhit .22s ease-out}
+@keyframes vhit{0%{box-shadow:0 0 16px 3px var(--vc)}100%{}}
+
+/* ---------------- MIX ---------------- */
+.strips{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.strip{position:relative;background:linear-gradient(180deg,var(--chassis),var(--chassis-2));
+  border:1px solid var(--chassis-edge);border-top:3px solid var(--vc);border-radius:10px;
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 -2px 4px rgba(0,0,0,.12) inset,0 2px 8px rgba(0,0,0,.4);
+  padding:12px 12px 11px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.strip.mut{opacity:.5}
+.s-head{display:flex;align-items:center;gap:7px}
+.s-dot{width:8px;height:8px;border-radius:50%;background:var(--vc);box-shadow:0 0 8px var(--vc)}
+.s-name{font:700 12px var(--mono);letter-spacing:.5px}
+.s-tick{font:800 8px var(--mono);letter-spacing:.6px;padding:1px 5px;border-radius:3px;color:var(--ink-soft);
+  background:rgba(0,0,0,.06);border:1px solid var(--chassis-edge)}
+.s-fires{display:flex;gap:6px;align-items:baseline;font:700 10px var(--mono)}
+.s-fires .lb{font-size:8px;letter-spacing:.3px;text-transform:uppercase;color:var(--ink-soft)}
+.f-stop{color:#be3326}.f-take{color:#1c7a44}.f-eod{color:var(--ink-soft);font-weight:600}
+.chm{font:700 8px var(--mono);letter-spacing:.6px;padding:2px 9px;cursor:pointer;background:transparent;
+  color:var(--ink-soft);border:1px solid rgba(0,0,0,.22)}
+.chm-l{border-radius:4px 0 0 4px}.chm-r{border-radius:0 4px 4px 0;margin-left:-1px}
+.chm.on{color:#fff;border-color:transparent}
+.chm-l.on{background:#1c7a44}.chm-r.on{background:#6b6960}
+.shape{position:relative;height:14px;width:100%}
+.shape .trk{position:absolute;left:0;right:0;top:50%;height:8px;transform:translateY(-50%);
+  border-radius:4px;background:rgba(0,0,0,.08);overflow:hidden}
+.shape .stp{position:absolute;top:0;bottom:0;background:#d05646}
+.shape .tak{position:absolute;top:0;bottom:0;background:#2f9e5c}
+.shape .ent{position:absolute;top:-2px;bottom:-2px;left:50%;width:1.5px;background:var(--ink);opacity:.55}
+.shape .rr{position:absolute;right:0;top:-9px;font:700 7px var(--mono);color:var(--ink-soft)}
+.s-dials{display:flex;gap:20px;align-items:flex-end}
+.kn-unit{display:flex;flex-direction:column;align-items:center;gap:4px}
+.kn{width:50px;height:50px;border-radius:50%;position:relative;border:1px solid #000;
+  background:radial-gradient(circle at 35% 28%,#54565c,#2c2d30 72%);
+  box-shadow:0 2px 5px rgba(0,0,0,.45),0 1px 0 rgba(255,255,255,.14) inset}
+.kn::after{content:"";position:absolute;left:50%;top:5px;width:3px;height:13px;border-radius:2px;
+  background:#e9e9e6;transform-origin:50% 20px;transform:translateX(-50%) rotate(var(--rot,0deg))}
+.kn-lbl{font:400 8.5px var(--mono);letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft)}
+.kn-val{font:600 11px var(--mono);color:var(--ink)}
+.fd-unit{display:flex;flex-direction:column;align-items:center;gap:4px}
+.fd{position:relative;width:5px;height:64px;background:rgba(0,0,0,.32);border-radius:3px;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.fd i{position:absolute;left:50%;bottom:var(--lv,40%);width:26px;height:13px;
+  background:#e9e5d6;border:1px solid var(--chassis-edge);border-radius:3px;transform:translate(-50%,50%);
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 1px 2px rgba(0,0,0,.3)}
+.fd i::after{content:"";position:absolute;left:5px;right:5px;top:6px;height:1px;background:var(--chassis-edge)}
+.s-lcd{width:100%;background:var(--lcd);border:1px solid var(--lcd-edge);border-radius:7px;padding:6px 10px}
+.s-lcd-v{font:700 16px var(--mono)}
+.s-lcd-v.up{color:var(--lcd-up)}.s-lcd-v.dn{color:var(--lcd-down)}
+.s-lcd-bar{height:5px;border-radius:3px;background:#2c2f29;margin-top:5px;overflow:hidden}
+.s-lcd-bar i{display:block;height:100%;border-radius:3px}
+.s-pads{display:flex;gap:8px}
+.pad{font:700 9px var(--mono);letter-spacing:.5px;width:44px;height:30px;border-radius:6px;border:1px solid #000;
+  background:linear-gradient(180deg,#ece9de,#d2cfc4);color:var(--ink-soft);cursor:pointer;
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 1px 3px rgba(0,0,0,.25)}
+.pad.lit-m{background:linear-gradient(180deg,#d98e6e,#b56445);color:#2a120a;box-shadow:0 0 9px rgba(217,142,110,.6)}
+.pad.lit-b{background:linear-gradient(180deg,var(--pm-amber),#c9891a);color:#1a1206;box-shadow:0 0 10px rgba(255,178,36,.6)}
+.roster-table{width:100%;border-collapse:collapse;font-family:var(--mono)}
+.roster-table th{text-align:left;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--ink-soft);padding:5px 12px;border-bottom:1px solid rgba(0,0,0,.18);white-space:nowrap}
+.roster-table td{padding:6px 12px;border-bottom:1px solid rgba(0,0,0,.07);font-size:12px;text-align:left;white-space:nowrap}
+.roster-table th.rt-num,.roster-table td.rt-num{text-align:right}
+.rt-name{font-weight:700}
+.rt-tickc{margin-left:7px;font-size:8px;font-weight:700;color:var(--ink-soft);
+  border:1px solid rgba(0,0,0,.18);border-radius:3px;padding:0 3px}
+.chf{font:700 11px var(--mono);border:none;background:none;padding:1px 4px;cursor:pointer;
+  border-bottom:1px dotted currentColor;border-radius:3px}
+.chf.f-amt{color:var(--ink)}
+.rt-num.pos,.rt-num.neg{font-weight:700}
+.bench{display:flex;align-items:center;gap:10px;border-top:1px dashed rgba(0,0,0,.22);
+  margin:0 15px;padding:9px 0 12px}
+.bench-t{font:400 9px var(--mono);letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft)}
+.bench-pad{width:46px;height:30px;border-radius:7px;font:700 10px var(--mono);color:#0d0e0f;
+  border:1px solid rgba(0,0,0,.3);opacity:.42;filter:grayscale(.65);cursor:pointer}
+.bench-pad:hover{opacity:.8;filter:grayscale(.2)}
+
+/* ---------------- WRITE ---------------- */
+.drop{border:1.5px dashed var(--chassis-dark);border-radius:8px;padding:18px 14px;text-align:center;
+  font:700 11px var(--mono);letter-spacing:.6px;text-transform:uppercase;color:var(--ink-soft);
+  background:rgba(255,255,255,.25);margin-bottom:10px}
+.tagrow{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
+.tag{font:400 9px var(--mono);text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;
+  border-radius:5px;border:1px solid var(--chassis-dark);color:var(--ink-soft)}
+.tag.ok{color:var(--green);border-color:color-mix(in srgb,var(--green) 55%,transparent)}
+.tag.no{color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,transparent);text-decoration:line-through}
+.wbtn{font:700 11px var(--mono);letter-spacing:.5px;text-transform:uppercase;padding:7px 14px;border-radius:7px;
+  border:1px solid var(--green);color:var(--green);background:color-mix(in srgb,var(--green) 10%,transparent);cursor:pointer}
+.gate-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12px;align-items:baseline}
+.gate-grid span{color:var(--ink-soft)}
+.gate-grid b{font-family:var(--mono);justify-self:end;font-weight:700}
+.mo-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.mo{font:400 9.5px var(--mono);border:1px solid rgba(0,0,0,.15);border-radius:5px;padding:2px 7px}
+.mo.pos{color:var(--green);font-weight:700}.mo.neg{color:var(--red);font-weight:700}
+.lab-row{display:flex;align-items:center;gap:10px;font:400 11.5px var(--mono);padding:6px 0;
+  border-bottom:1px solid rgba(0,0,0,.08)}
+.lab-row:last-child{border-bottom:none}
+.lab-name{font-weight:700;min-width:120px}
+.lab-prog{flex:1;height:6px;border-radius:3px;background:rgba(0,0,0,.12);overflow:hidden}
+.lab-prog i{display:block;height:100%;border-radius:3px;background:var(--pm-cyan)}
+.lab-n{color:var(--ink-soft);font-size:10px;min-width:64px;text-align:right}
+.lab-pnl{min-width:56px;text-align:right;font-weight:700}
+.spec-chips{display:flex;flex-wrap:wrap;gap:6px}
+.spec-chip{font:600 10px var(--mono);padding:3px 9px;border-radius:6px;border:1px solid var(--chassis-dark);
+  background:rgba(255,255,255,.35);color:var(--ink)}
+.spec-chip b{color:#2862a6}
+.note{font:400 9.5px var(--mono);color:var(--ink-soft);line-height:1.5;margin-top:9px}
+
+/* ---------------- TAPE / OPS ---------------- */
+.au-fund{display:flex;gap:14px;flex-wrap:wrap;font:400 11.5px var(--mono);color:var(--ink-soft);
+  padding-bottom:8px;border-bottom:1px solid rgba(0,0,0,.1);margin-bottom:8px}
+.au-fund b{font-weight:700}
+.au-fund b.pos{color:var(--green)}.au-fund b.neg{color:var(--red)}
+.fx-row{display:flex;align-items:baseline;gap:8px;font-size:12px;padding:3px 0}
+.fx-name{flex:1;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fx-mid{font:400 11px var(--mono);color:var(--ink-soft)}
+.fx-pnl{font:700 12px var(--mono)}
+.movers{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font:400 12px var(--sans)}
+.movers b{font-weight:600}
+.mv-ar{font-size:10px}
+.tape-note{font:400 10px var(--mono);color:var(--ink-soft);line-height:1.5}
+.pf-row{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  font:400 10.5px var(--mono);padding:5px 0}
+.pf-l{display:inline-flex;align-items:center;gap:8px;color:var(--ink-soft);letter-spacing:.08em;font-weight:700}
+.pf-dot{width:8px;height:8px;border-radius:50%;background:var(--pm-green);box-shadow:0 0 6px var(--pm-green)}
+.pf-dot.warn{background:var(--pm-amber);box-shadow:0 0 6px var(--pm-amber)}
+.pf-v{color:var(--ink);text-align:right}
+.kitmap{display:flex;flex-direction:column;gap:6px}
+.km{display:flex;align-items:center;gap:10px;font:400 11px var(--mono)}
+.km .km-ev{min-width:104px;color:var(--ink)}
+.km .km-arrow{color:var(--ink-soft)}
+.km-btn{font:700 9px var(--mono);letter-spacing:.5px;padding:4px 10px;border-radius:5px;border:1px solid #000;
+  background:linear-gradient(180deg,#3a3b3e,#232427);color:#cfcdc6;cursor:pointer;
+  box-shadow:0 1px 0 rgba(255,255,255,.1) inset,0 2px 4px rgba(0,0,0,.4)}
+.km-btn:active{transform:translateY(1px)}
+.logline{display:flex;gap:9px;align-items:baseline;font:400 11.5px var(--mono);padding:5px 0;
+  border-bottom:1px solid rgba(0,0,0,.08)}
+.logline:last-child{border-bottom:none}
+.logline .ts{color:var(--ink-soft);opacity:.8;font-size:10px;flex:none}
+.logline .lv{flex:none;width:38px;font-size:9px;font-weight:600}
+.lv.OK{color:var(--green)}.lv.EXEC{color:var(--ink)}.lv.WARN{color:var(--amber-ink)}.lv.INFO{color:#2862a6}
+
+/* ============================================================================
+   MOBILE frame — sequencer = closable dock pinned above the tab bar
+   ============================================================================ */
+.m-frame{position:relative;width:402px;max-width:100%;border-radius:18px;overflow:hidden;
+  border:1px solid #8d887a;box-shadow:0 18px 40px rgba(0,0,0,.45);
+  background:var(--chassis-2);display:flex;flex-direction:column}
+.m-transport{display:flex;align-items:center;gap:8px;padding:8px 10px;
+  background:linear-gradient(180deg,#20140a,#160d06);border-bottom:2px solid #000}
+.m-transport .t-mark{font-size:14px}
+.m-transport .t-led-win{font-size:14px;padding:2px 7px}
+.m-transport .t-pill{min-width:0;font-size:8px}
+.m-transport .kill-cover{width:24px;height:24px}
+.m-transport .kill-fire{font-size:9px;padding:6px 9px}
+.m-transport .snd .snd-pad{width:34px;height:22px}
+.m-sp{flex:1 1 auto}
+.m-screen{flex:1 1 auto;padding:10px;display:flex;flex-direction:column;gap:10px;
+  max-height:520px;overflow-y:auto;overscroll-behavior:contain}
+.m-screen .panel{box-shadow:0 1px 0 rgba(255,255,255,.35),0 3px 8px rgba(0,0,0,.3);border-color:var(--chassis-dark)}
+.m-room{display:none;flex-direction:column;gap:10px}
+.m-room.on{display:flex}
+/* --- the sequencer DOCK: slim bar, tap to open, pinned above the tabs --- */
+.m-seqdock{flex:0 0 auto;background:linear-gradient(180deg,var(--chassis),var(--chassis-2));
+  border-top:2px solid var(--chassis-edge);box-shadow:0 -2px 10px rgba(0,0,0,.25)}
+.m-dockbar{display:flex;align-items:center;gap:9px;padding:7px 12px;cursor:pointer;user-select:none}
+.m-dock-lbl{font:700 8px var(--mono);letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-soft)}
+.m-mini{display:flex;gap:3px;flex:1 1 auto}
+.m-mini i{flex:1;height:7px;border-radius:2px;background:rgba(0,0,0,.14)}
+.m-dock-step{font:700 9.5px var(--mono);color:var(--ink-soft);white-space:nowrap}
+.m-dock-play{font:700 9px var(--mono);padding:2px 8px;border-radius:5px;border:1px solid rgba(0,0,0,.25);
+  background:rgba(255,255,255,.4);color:var(--ink-soft);cursor:pointer}
+.m-dock-play.busy{background:var(--accent);color:#fff;border-color:transparent}
+.m-dock-ch{font:700 10px var(--mono);color:var(--ink-soft);width:14px;text-align:center}
+.m-dockbody{display:none;padding:0 10px 10px}
+.m-seqdock.open .m-dockbody{display:block}
+.m-dockbody .seq-leds{display:none}
+.m-dockbody .seq-steps{grid-template-columns:repeat(8,1fr);gap:6px}
+.m-dockbody .step{height:42px}
+.m-dockbody .st-time{display:none}
+.m-dockbody .st-evt{top:13px;font-size:7px}
+.m-dockbody .slice{margin-top:7px;font-size:10px;padding:6px 9px;gap:8px}
+.m-dockbody .voices{margin-top:7px;gap:6px}
+.m-dockbody .vpad{width:100%;height:30px;font-size:9px}
+.m-dockbody .vpad .v-snd{display:none}
+.m-dockbody .seq-play{display:none}
+.m-tabs{display:flex;gap:7px;padding:9px 10px 12px;background:linear-gradient(180deg,var(--chassis),var(--chassis-2));
+  border-top:2px solid var(--chassis-edge);box-shadow:0 -2px 10px rgba(0,0,0,.35)}
+.m-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;
+  font:700 8.5px var(--mono);letter-spacing:.5px;color:var(--ink-soft);cursor:pointer;padding:0}
+.m-tab .ic{width:100%;height:34px;border-radius:8px;border:1px solid var(--chassis-edge);
+  background:linear-gradient(180deg,#e7e5da,#c3c1b6);
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 2px 3px rgba(0,0,0,.25);
+  display:grid;place-items:center;font:800 11px var(--mono);color:var(--ink-soft)}
+.m-tab:active .ic{transform:translateY(1px)}
+.m-tab.on{color:var(--accent)}
+.m-tab.on .ic{background:linear-gradient(180deg,#ff9a6e,#e0552f);color:#fff;
+  box-shadow:0 0 12px rgba(224,85,47,.5),0 1px 0 rgba(255,255,255,.25) inset}
+.m-frame .strips{grid-template-columns:1fr 1fr;gap:9px}
+.m-frame .strip{padding:10px 9px}
+.m-frame .s-dials{gap:12px}
+.m-frame .kn{width:44px;height:44px}
+.m-frame td{font-size:12px;padding:6px 6px}
+.m-frame .chain-scroll{max-height:150px}
+
+@media (max-width:1240px){.chassis{width:100%}}
+@media (max-width:920px){.grid,.grid--even{grid-template-columns:1fr}.strips{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<header class="mk-head">
+  <h1>SEVE · 909 redesign — clickable mockup · v2</h1>
+  <p><b>v2 changes:</b> the chart is now the full-width hero (the exit-timing instrument gets the space);
+  desktop is <b>one scrolling page</b> — transport buttons jump to rooms (scrollspy keeps them lit), and every
+  room + panel collapses via its chevron (WRITE and OPS start folded to show the declutter);
+  the sequencer moved <b>under the live chain</b> on desktop and became a <b>closable dock above the tab bar</b> on mobile.
+  <b>Click:</b> transport rooms · chevrons · steps · voices · ▶ REPLAY · KILL (flip cover first) · KIT for sound.</p>
+</header>
+
+<!-- ==================================================================== -->
+<section class="mk-sec">
+<h2>Desktop · 1180px — one page, five rooms, everything folds</h2>
+<div class="mk-frames">
+<div class="chassis" data-frame data-nav="scroll">
+  <div class="kill-flash" data-flash>FLATTEN — DESK HALTED</div>
+
+  <!-- TRANSPORT (sticky) -->
+  <div class="transport">
+    <div class="t-brand">
+      <span class="stripes"><i class="s1"></i><i class="s2"></i><i class="s3"></i></span>
+      <span class="t-mark">SE<span>VE</span></span>
+    </div>
+    <div class="t-rooms">
+      <button class="rm-btn on" data-room-btn="play">PLAY<span class="jp">演奏</span></button>
+      <button class="rm-btn" data-room-btn="mix">MIX<span class="jp">ミキサー</span></button>
+      <button class="rm-btn" data-room-btn="write">WRITE<span class="jp">作曲</span></button>
+      <button class="rm-btn" data-room-btn="tape">TAPE<span class="jp">テープ</span></button>
+      <button class="rm-btn" data-room-btn="ops">OPS<span class="jp">整備</span></button>
+    </div>
+    <div class="t-leds">
+      <div class="t-led"><span class="t-led-win up">101.2K</span><span class="t-led-cap">NAV</span></div>
+      <div class="t-led"><span class="t-led-win up">+842</span><span class="t-led-cap">DAY</span></div>
+      <div class="t-led"><span class="t-led-win stp">11·16</span><span class="t-led-cap">STEP</span></div>
+    </div>
+    <div class="t-pills"><span class="t-pill run">RUN</span><span class="t-pill">PAPER</span></div>
+    <button class="snd" data-snd title="909 kit — audible desk alerts">
+      <span class="snd-pad">KIT</span><span class="t-led-cap">SOUND</span>
+    </button>
+    <div class="kill" data-kill>
+      <button class="kill-cover" data-kill-cover title="flip the cover to arm"><span class="kill-grip"></span></button>
+      <button class="kill-fire" data-kill-fire>KILL</button>
+    </div>
+  </div>
+
+  <!-- ================= PLAY ================= -->
+  <section class="room" data-room="play">
+    <div class="section-label" data-fold-room>
+      <span class="idx">A</span><span class="lab">Play</span><span class="jp">演奏</span>
+      <span class="sec-right">3 open · realized <span class="pos">+$1,061</span></span><span class="fold-ch">▾</span>
+    </div>
+    <div class="room-body">
+
+      <!-- CHART HERO — full width, real height -->
+      <div class="panel panel--lcd chart-hero">
+        <div class="phead" data-fold>
+          <span class="t">SPY · Session</span>
+          <span style="margin-left:14px">
+            <span class="chart-ctl"><span class="on">1D</span><span>3D</span><span>1W</span></span><!--
+            --><span class="chart-ctl ivl"><span class="on">1m</span><span>5m</span><span>15m</span></span>
+          </span>
+          <span class="x">743.18 · VWAP 742.61 · entries ride the chart</span><span class="fold-ch">▾</span>
+        </div>
+        <div class="chart-body">
+          <div class="chart-meta">
+            <span><b>O</b> 741.02</span><span><b>H</b> 743.65</span><span><b>L</b> 740.18</span>
+            <span class="up"><b>Δ</b> +0.42%</span><span><b>VOL</b> 48.2M</span><span><b>RANGE</b> 0.47%</span>
+          </div>
+          <svg viewBox="0 0 1100 310" width="100%" height="310" preserveAspectRatio="none">
+            <!-- gridlines + right price axis -->
+            <g stroke="rgba(233,238,240,.06)"><line x1="0" y1="50" x2="1100" y2="50"/><line x1="0" y1="90" x2="1100" y2="90"/>
+              <line x1="0" y1="130" x2="1100" y2="130"/><line x1="0" y1="170" x2="1100" y2="170"/><line x1="0" y1="210" x2="1100" y2="210"/></g>
+            <g font-family="JetBrains Mono,monospace" font-size="10" fill="#7d8a82">
+              <text x="1058" y="53">744</text><text x="1058" y="93">743</text><text x="1058" y="133">742</text>
+              <text x="1058" y="173">741</text><text x="1058" y="213">740</text>
+            </g>
+            <!-- entry lines (open positions ride the chart) -->
+            <line x1="0" y1="94" x2="1040" y2="94" stroke="#2fd573" stroke-width="1" stroke-dasharray="5 4" opacity=".55"/>
+            <text x="8" y="90" font-family="JetBrains Mono,monospace" font-size="9.5" fill="#2fd573">▲ 745C ×2 · BRK</text>
+            <line x1="0" y1="126" x2="1040" y2="126" stroke="#45c4d6" stroke-width="1" stroke-dasharray="5 4" opacity=".55"/>
+            <text x="8" y="140" font-family="JetBrains Mono,monospace" font-size="9.5" fill="#45c4d6">▼ 741P ×4 · PB</text>
+            <!-- vwap -->
+            <polyline fill="none" stroke="#ffb224" stroke-width="1" stroke-dasharray="3 4" opacity=".6"
+              points="0,168 200,150 400,132 600,118 800,112 1100,110"/>
+            <!-- price -->
+            <polyline fill="none" stroke="#6cc06d" stroke-width="1.7"
+              points="0,170 27,175 55,185 82,196 110,202 137,190 165,178 192,184 220,166 247,150 275,158 302,138
+                      330,120 357,128 385,108 412,96 440,104 467,84 495,72 522,64 550,78 577,92 605,86 632,100
+                      660,94 687,110 715,102 742,88 770,80 797,90 825,76 852,70 880,82 907,74 935,68 962,80
+                      990,72 1017,78 1045,70 1072,86 1100,83"/>
+            <circle cx="1100" cy="83" r="3.2" fill="#6cc06d"><animate attributeName="opacity" values="1;.3;1" dur="1.6s" repeatCount="indefinite"/></circle>
+            <!-- volume -->
+            <path stroke="#3a4a52" stroke-width="18" d="M20 296V266 M56 296V278 M92 296V258 M128 296V282 M164 296V272
+              M200 296V262 M236 296V284 M272 296V276 M308 296V268 M344 296V252 M380 296V280 M416 296V270 M452 296V262
+              M488 296V240 M524 296V255 M560 296V284 M596 296V278 M632 296V270 M668 296V286 M704 296V280 M740 296V272
+              M776 296V284 M812 296V278 M848 296V266 M884 296V280 M920 296V274 M956 296V286 M992 296V282 M1028 296V276 M1064 296V284"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="col">
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">Live Book</span>
+              <span class="x"><span class="live-dot"></span>3 legs</span><span class="fold-ch">▾</span></div>
+            <table style="table-layout:fixed">
+              <colgroup><col style="width:28px"><col><col style="width:48px"><col style="width:62px"><col style="width:62px"><col style="width:88px"></colgroup>
+              <thead><tr><th class="tl">PM</th><th class="tl">Contract</th><th>Qty</th><th>Entry</th><th>Mark</th><th>Unreal P&amp;L</th></tr></thead>
+              <tbody>
+                <tr class="pos-main"><td class="tl"><span class="pm-dot" style="background:var(--pm-green);box-shadow:0 0 6px var(--pm-green)"></span></td>
+                  <td class="tl">745C</td><td>+2</td><td>2.35</td><td>3.10</td><td class="pos">+$150</td></tr>
+                <tr class="pos-ctx"><td colspan="6" class="tl"><span class="ctx-line">
+                  <span class="ctx-ch">BREAK(ALT)</span><span>38m in</span><span class="pos">+32%</span>
+                  <span>peak +41%</span><span class="ctx-dim">stop 1.18</span></span></td></tr>
+                <tr class="pos-main"><td class="tl"><span class="pm-dot" style="background:var(--pm-cyan);box-shadow:0 0 6px var(--pm-cyan)"></span></td>
+                  <td class="tl">741P</td><td>+4</td><td>1.62</td><td>0.98</td><td class="neg">−$256</td></tr>
+                <tr class="pos-ctx"><td colspan="6" class="tl"><span class="ctx-line">
+                  <span class="ctx-ch">PB RIDER</span><span>1h 12m in</span><span class="neg">−40%</span>
+                  <span class="ctx-dim">stop 0.81</span></span></td></tr>
+                <tr class="pos-main"><td class="tl"><span class="pm-dot" style="background:var(--pm-amber);box-shadow:0 0 6px var(--pm-amber)"></span></td>
+                  <td class="tl">743C</td><td>+1</td><td>1.90</td><td>2.05</td><td class="pos">+$15</td></tr>
+                <tr class="pos-ctx"><td colspan="6" class="tl"><span class="ctx-line">
+                  <span class="ctx-ch">MOMO</span><span>22m in</span><span class="pos">+8%</span>
+                  <span>peak +55%</span><span class="ctx-hot">gave 85%</span><span class="ctx-dim">stop 0.95</span></span></td></tr>
+              </tbody>
+            </table>
+            <div class="rt-hd"><span>Today's trades</span><span class="pos">attribution +$1,061 · 4</span></div>
+            <div class="rt-list">
+              <div class="rt-row"><span class="rt-dot" style="background:var(--pm-green);box-shadow:0 0 5px var(--pm-green)"></span>
+                <span class="rt-sym">745C ×2</span><span class="rt-ch">BREAK(ALT)</span><span class="rt-time">9:51</span><span class="rt-pnl pos">+$612</span></div>
+              <div class="rt-row"><span class="rt-dot" style="background:var(--pm-blue);box-shadow:0 0 5px var(--pm-blue)"></span>
+                <span class="rt-sym">741C ×3</span><span class="rt-ch">V3</span><span class="rt-time">10:24</span><span class="rt-pnl neg">−$402</span></div>
+              <div class="rt-row"><span class="rt-dot" style="background:var(--pm-violet);box-shadow:0 0 5px var(--pm-violet)"></span>
+                <span class="rt-sym">744C ×2</span><span class="rt-ch">GRIND</span><span class="rt-time">11:14</span><span class="rt-pnl pos">+$347</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">Signals</span><span class="x">tape</span><span class="fold-ch">▾</span></div>
+            <div class="pbody" style="padding-top:6px">
+              <div class="sig"><span class="ts">13:48</span><span class="tag ok">TAKEN</span><span class="msg">PB RIDER · pullback bounce · 741P</span></div>
+              <div class="sig"><span class="ts">13:31</span><span class="tag blk">GATE</span><span class="msg">V3 · gap_min stood down (gap 0.09)</span></div>
+              <div class="sig"><span class="ts">12:58</span><span class="tag ok">TAKEN</span><span class="msg">BREAK(ALT) · OR break ↑ · 745C</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">SPY Chain · 0DTE</span><span class="x">header sticks</span><span class="fold-ch">▾</span></div>
+            <div class="chain-scroll">
+              <table class="chain-table">
+                <thead><tr><th>C Bid</th><th>C Ask</th><th style="text-align:center">Strike</th><th>P Bid</th><th>P Ask</th></tr></thead>
+                <tbody>
+                  <tr><td class="calls">6.20</td><td class="calls">6.35</td><td class="strike-col">740</td><td class="puts">0.79</td><td class="puts">0.83</td></tr>
+                  <tr><td class="calls">5.30</td><td class="calls">5.45</td><td class="strike-col">741</td><td class="puts">1.05</td><td class="puts">1.10</td></tr>
+                  <tr><td class="calls">4.45</td><td class="calls">4.60</td><td class="strike-col">742</td><td class="puts">1.38</td><td class="puts">1.44</td></tr>
+                  <tr class="atm"><td class="calls">3.65</td><td class="calls">3.78</td><td class="strike-col">743</td><td class="puts">1.79</td><td class="puts">1.86</td></tr>
+                  <tr><td class="calls">2.92</td><td class="calls">3.04</td><td class="strike-col">744</td><td class="puts">2.28</td><td class="puts">2.36</td></tr>
+                  <tr><td class="calls">2.28</td><td class="calls">2.38</td><td class="strike-col">745</td><td class="puts">2.86</td><td class="puts">2.95</td></tr>
+                  <tr><td class="calls">1.72</td><td class="calls">1.81</td><td class="strike-col">746</td><td class="puts">3.54</td><td class="puts">3.65</td></tr>
+                  <tr><td class="calls">1.26</td><td class="calls">1.34</td><td class="strike-col">747</td><td class="puts">4.31</td><td class="puts">4.44</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SESSION SEQUENCER — under the live chain, collapsible -->
+      <div class="seq-bez" data-seqbez>
+        <div class="seq-bar" data-fold-seq>
+          <span class="seq-title">Session Sequencer</span>
+          <span class="seq-sub">16 steps · 9:30 → 16:00 · fills light the pattern · events programmed ahead</span>
+          <button class="seq-play" data-replay>▶ REPLAY DAY</button>
+          <span class="fold-ch">▾</span>
+        </div>
+        <div data-seq></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= MIX ================= -->
+  <section class="room" data-room="mix">
+    <div class="section-label" data-fold-room>
+      <span class="idx">B</span><span class="lab">Mix</span><span class="jp">ミキサー</span><span class="fold-ch">▾</span>
+    </div>
+    <div class="room-body">
+      <div class="strips">
+        <div class="strip" style="--vc:var(--pm-green)">
+          <div class="s-head"><span class="s-dot"></span><span class="s-name">BREAK(ALT)</span><span class="s-tick">SPY</span></div>
+          <div class="s-fires"><span class="lb">fires</span><span class="f-stop">−30%</span><span class="f-take">+22%</span><span class="f-eod">EOD</span></div>
+          <div><button class="chm chm-l on">LOCK</button><button class="chm chm-r">RIDE</button></div>
+          <div class="shape"><span class="rr">0.73R</span><div class="trk"><i class="stp" style="right:50%;left:26%"></i><i class="tak" style="left:50%;right:32%"></i></div><i class="ent"></i></div>
+          <div class="s-dials">
+            <div class="kn-unit"><div class="kn" style="--rot:52deg"></div><span class="kn-lbl">Stop/day</span><span class="kn-val">$1,250</span></div>
+            <div class="fd-unit"><div class="fd"><i style="--lv:42%"></i></div><span class="kn-lbl">Risk</span><span class="kn-val">$500</span></div>
+          </div>
+          <div class="s-lcd"><div class="s-lcd-v up">+$612</div><div class="s-lcd-bar"><i style="width:64%;background:#57b35a"></i></div></div>
+          <div class="s-pads"><button class="pad">MUTE</button><button class="pad">BOOST</button></div>
+        </div>
+        <div class="strip" style="--vc:var(--pm-blue)">
+          <div class="s-head"><span class="s-dot"></span><span class="s-name">V3</span><span class="s-tick">SPY</span></div>
+          <div class="s-fires"><span class="lb">fires</span><span class="f-stop">−50%</span><span class="f-eod">ride · EOD</span></div>
+          <div><button class="chm chm-l">LOCK</button><button class="chm chm-r on">RIDE</button></div>
+          <div class="shape"><span class="rr">ride</span><div class="trk"><i class="stp" style="right:50%;left:10%"></i><i class="tak" style="left:50%;right:4%"></i></div><i class="ent"></i></div>
+          <div class="s-dials">
+            <div class="kn-unit"><div class="kn" style="--rot:52deg"></div><span class="kn-lbl">Stop/day</span><span class="kn-val">$1,250</span></div>
+            <div class="fd-unit"><div class="fd"><i style="--lv:42%"></i></div><span class="kn-lbl">Risk</span><span class="kn-val">$500</span></div>
+          </div>
+          <div class="s-lcd"><div class="s-lcd-v dn">−$402</div><div class="s-lcd-bar"><i style="width:38%;background:#b06a52"></i></div></div>
+          <div class="s-pads"><button class="pad">MUTE</button><button class="pad">BOOST</button></div>
+        </div>
+        <div class="strip" style="--vc:var(--pm-amber)">
+          <div class="s-head"><span class="s-dot"></span><span class="s-name">MOMO</span><span class="s-tick">QQQ</span></div>
+          <div class="s-fires"><span class="lb">fires</span><span class="f-stop">−50%</span><span class="f-eod">ride · EOD</span></div>
+          <div><button class="chm chm-l">LOCK</button><button class="chm chm-r on">RIDE</button></div>
+          <div class="shape"><span class="rr">ride</span><div class="trk"><i class="stp" style="right:50%;left:10%"></i><i class="tak" style="left:50%;right:4%"></i></div><i class="ent"></i></div>
+          <div class="s-dials">
+            <div class="kn-unit"><div class="kn" style="--rot:74deg"></div><span class="kn-lbl">Stop/day</span><span class="kn-val">$1,800</span></div>
+            <div class="fd-unit"><div class="fd"><i style="--lv:58%"></i></div><span class="kn-lbl">Risk</span><span class="kn-val">$720</span></div>
+          </div>
+          <div class="s-lcd"><div class="s-lcd-v up">+$15</div><div class="s-lcd-bar"><i style="width:12%;background:#57b35a"></i></div></div>
+          <div class="s-pads"><button class="pad">MUTE</button><button class="pad lit-b">BOOST</button></div>
+        </div>
+        <div class="strip mut" style="--vc:var(--pm-violet)">
+          <div class="s-head"><span class="s-dot"></span><span class="s-name">GRIND</span><span class="s-tick">SPY</span></div>
+          <div class="s-fires"><span class="lb">fires</span><span class="f-stop">−30%</span><span class="f-take">+15%</span><span class="f-eod">EOD</span></div>
+          <div><button class="chm chm-l on">LOCK</button><button class="chm chm-r">RIDE</button></div>
+          <div class="shape"><span class="rr">0.5R</span><div class="trk"><i class="stp" style="right:50%;left:26%"></i><i class="tak" style="left:50%;right:38%"></i></div><i class="ent"></i></div>
+          <div class="s-dials">
+            <div class="kn-unit"><div class="kn" style="--rot:30deg"></div><span class="kn-lbl">Stop/day</span><span class="kn-val">$900</span></div>
+            <div class="fd-unit"><div class="fd"><i style="--lv:30%"></i></div><span class="kn-lbl">Risk</span><span class="kn-val">$350</span></div>
+          </div>
+          <div class="s-lcd"><div class="s-lcd-v up">+$347</div><div class="s-lcd-bar"><i style="width:34%;background:#57b35a"></i></div></div>
+          <div class="s-pads"><button class="pad lit-m">MUTE</button><button class="pad">BOOST</button></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">Fleet</span><span class="x">every knob, one grid — pills editable</span><span class="fold-ch">▾</span></div>
+        <div style="overflow-x:auto;padding:4px 2px 2px">
+          <table class="roster-table">
+            <thead><tr><th>Channel</th><th>Mode</th><th class="rt-num">Stop</th><th class="rt-num">Take</th>
+              <th class="rt-num">Risk/tr</th><th class="rt-num">Stop/day</th><th class="rt-num">Day P&amp;L</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pm-dot" style="background:var(--pm-green);margin-right:7px;vertical-align:middle"></span><span class="rt-name">BREAK(ALT)</span><span class="rt-tickc">SPY</span></td>
+                <td><button class="chm chm-l on">LOCK</button><button class="chm chm-r">RIDE</button></td>
+                <td class="rt-num"><button class="chf" style="color:#be3326">−30%</button></td>
+                <td class="rt-num"><button class="chf" style="color:#1c7a44">+22%</button></td>
+                <td class="rt-num"><button class="chf f-amt">$500</button></td>
+                <td class="rt-num"><button class="chf f-amt">$1,250</button></td>
+                <td class="rt-num pos">+$612</td></tr>
+              <tr><td><span class="pm-dot" style="background:var(--pm-blue);margin-right:7px;vertical-align:middle"></span><span class="rt-name">V3</span><span class="rt-tickc">SPY</span></td>
+                <td><button class="chm chm-l">LOCK</button><button class="chm chm-r on">RIDE</button></td>
+                <td class="rt-num"><button class="chf" style="color:#be3326">−50%</button></td>
+                <td class="rt-num"><button class="chf" style="color:var(--ink-soft)">ride</button></td>
+                <td class="rt-num"><button class="chf f-amt">$500</button></td>
+                <td class="rt-num"><button class="chf f-amt">$1,250</button></td>
+                <td class="rt-num neg">−$402</td></tr>
+              <tr><td><span class="pm-dot" style="background:var(--pm-lime);margin-right:7px;vertical-align:middle"></span><span class="rt-name">V3 ITM</span><span class="rt-tickc">IWM</span></td>
+                <td><button class="chm chm-l on">LOCK</button><button class="chm chm-r">RIDE</button></td>
+                <td class="rt-num"><button class="chf" style="color:#be3326">−30%</button></td>
+                <td class="rt-num"><button class="chf" style="color:#1c7a44">+22%</button></td>
+                <td class="rt-num"><button class="chf f-amt">$750</button></td>
+                <td class="rt-num"><button class="chf f-amt">$1,875</button></td>
+                <td class="rt-num pos">+$36</td></tr>
+              <tr><td><span class="pm-dot" style="background:var(--pm-amber);margin-right:7px;vertical-align:middle"></span><span class="rt-name">MOMO</span><span class="rt-tickc">QQQ</span></td>
+                <td><button class="chm chm-l">LOCK</button><button class="chm chm-r on">RIDE</button></td>
+                <td class="rt-num"><button class="chf" style="color:#be3326">−50%</button></td>
+                <td class="rt-num"><button class="chf" style="color:var(--ink-soft)">ride</button></td>
+                <td class="rt-num"><button class="chf f-amt">$720</button></td>
+                <td class="rt-num"><button class="chf f-amt">$1,800</button></td>
+                <td class="rt-num pos">+$15</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bench">
+          <span class="bench-t">Bench · 86'd</span>
+          <button class="bench-pad" style="background:var(--pm-violet)">GR</button>
+          <button class="bench-pad" style="background:var(--pm-orange)">OQ</button>
+          <button class="bench-pad" style="background:var(--pm-cyan)">FD</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WRITE (starts folded) ================= -->
+  <section class="room folded" data-room="write">
+    <div class="section-label" data-fold-room>
+      <span class="idx">C</span><span class="lab">Write</span><span class="jp">作曲</span>
+      <span class="sec-right">arming a channel = programming a step</span><span class="fold-ch">▸</span>
+    </div>
+    <div class="room-body">
+      <div class="grid grid--even">
+        <div class="col">
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">Add Channel</span><span class="x">thesis → spec → gate → arm</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div class="drop">drop a thesis .md — or paste</div>
+              <div class="tagrow">
+                <span class="tag ok">opening_range</span><span class="tag ok">rel_vol</span><span class="tag ok">gap_min</span>
+                <span class="tag ok">macd_hist_align</span><span class="tag no">multi-leg</span><span class="tag no">GEX</span>
+              </div>
+              <button class="wbtn">Compile spec</button>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <div class="phead" data-fold><span class="t">Backtest Gate</span><span class="x">5-window · real NBBO</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div class="gate-grid">
+                <span>expectancy</span><b class="pos">+$31.4 / trade</b>
+                <span>win rate</span><b>54%</b>
+                <span>max drawdown</span><b class="neg">−$2,140</b>
+                <span>trades</span><b>412</b>
+              </div>
+              <div class="mo-chips">
+                <span class="mo pos">2024 +$3.1k</span><span class="mo neg">MA25 −$0.4k</span>
+                <span class="mo pos">CHOP +$1.2k</span><span class="mo pos">TREND +$2.8k</span><span class="mo pos">2026 +$1.9k</span>
+              </div>
+              <div style="margin-top:12px"><button class="wbtn">Arm as draft →</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">Spec · BREAK(ALT)</span><span class="x">entry conditions</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div class="spec-chips">
+                <span class="spec-chip"><b>gap_min</b> 0.25</span>
+                <span class="spec-chip"><b>rel_vol</b> ≥ 1.3</span>
+                <span class="spec-chip"><b>er</b> ≥ 0.40</span>
+                <span class="spec-chip"><b>entries</b> → 14:00</span>
+                <span class="spec-chip"><b>exit</b> 15:25 flatten</span>
+              </div>
+              <div class="note">conditions are sequencer-aware: →14:00 renders as the channel's last armed step.</div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <div class="phead" data-fold><span class="t">Lab · Virtual Bench</span><span class="x">signals without capital</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div class="lab-row"><span class="lab-name">vb-macd-v3</span><div class="lab-prog"><i style="width:32%"></i></div>
+                <span class="lab-n">38 / 120t</span><span class="lab-pnl pos">+$412</span></div>
+              <div class="lab-row"><span class="lab-name">vb-orb-ustop</span><div class="lab-prog"><i style="width:10%"></i></div>
+                <span class="lab-n">12 / 120t</span><span class="lab-pnl neg">−$85</span></div>
+              <div class="lab-row"><span class="lab-name">vb-itm-qqq</span><div class="lab-prog"><i style="width:55%"></i></div>
+                <span class="lab-n">66 / 120t</span><span class="lab-pnl pos">+$1,038</span></div>
+              <div class="note">gate = 120 trades or a regime change — no arm from virtual data alone.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TAPE ================= -->
+  <section class="room" data-room="tape">
+    <div class="section-label" data-fold-room>
+      <span class="idx">D</span><span class="lab">Tape</span><span class="jp">テープ</span>
+      <span class="sec-right">the sequencer scrubs the day · ▶ REPLAY plays it through the kit</span><span class="fold-ch">▾</span>
+    </div>
+    <div class="room-body">
+      <div class="grid grid--even">
+        <div class="col">
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">Override Scorecard</span><span class="x">man vs machine · cumulative</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div class="au-fund"><span>N=17</span>
+                <span>actual <b class="neg">−$1,978</b> vs ride <b class="pos">+$412</b></span>
+                <span>beat <b>6/17</b></span></div>
+              <div class="fx-row"><span class="fx-name">PB RIDER</span><span class="fx-mid">beat 3/5</span><span class="fx-pnl pos">+$748</span></div>
+              <div class="fx-row"><span class="fx-name">Trend-QQQ</span><span class="fx-mid">beat 0/3</span><span class="fx-pnl neg">−$1,622</span></div>
+              <div class="fx-row"><span class="fx-name">GRIND ✋</span><span class="fx-mid">beat 2/4</span><span class="fx-pnl neg">−$214</span></div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <div class="phead" data-fold><span class="t">Give-back</span><span class="x">peak → close</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div class="au-fund"><span>kept <b class="pos">62%</b> of peak</span>
+                <span>gave back <b class="neg">−$1,204</b></span><span>9/14 peaked</span></div>
+              <svg viewBox="0 0 168 30" width="168" height="30">
+                <line x1="4" y1="26" x2="164" y2="26" stroke="rgba(0,0,0,.2)" stroke-dasharray="2 2"/>
+                <path d="M4,22 L36,18 L68,20 L100,14 L132,12 L160,8" fill="none" stroke="#2a2a28" stroke-width="1.5" opacity=".7"/>
+                <circle cx="160" cy="8" r="2.6" fill="#0e6132"/>
+              </svg>
+              <div class="note">capture 41% → 62% · 6d ↑ keeping more</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">Daily Autopsy</span><span class="x">07-02 · generated 16:20 ET</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <p style="font-size:12px;line-height:1.5;margin-bottom:8px">Gap-and-go morning (+0.42% open gap), whipsaw
+                lunch, trend resumed 13:00. Gap gate stood V3 down correctly at 13:31.</p>
+              <div class="movers">
+                <span><i class="mv-ar pos">▲</i> <b>BREAK(ALT)</b> +$612</span>
+                <span><i class="mv-ar neg">▼</i> <b>V3</b> −$402</span>
+                <span style="margin-left:auto;font:400 10.5px var(--mono);color:var(--ink-soft)">7 channels · 2 findings — expand</span>
+              </div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <div class="phead" data-fold><span class="t">Day Pattern</span><span class="x">the session as it was played</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div class="tape-note">
+                9:30 BRK in/out +41% · 10:02 V3 in · 10:24 V3 stop · 11:14 GRIND scalp ×2 · 12:33 MO in ·
+                12:58 BRK re-entry · 13:15 PB in · <b>14:00 FOMC stand-down programmed</b> · 15:29 cutoff · 15:55 flatten
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= OPS (starts folded) ================= -->
+  <section class="room folded" data-room="ops">
+    <div class="section-label" data-fold-room>
+      <span class="idx">E</span><span class="lab">Ops</span><span class="jp">整備</span><span class="fold-ch">▸</span>
+    </div>
+    <div class="room-body">
+      <div class="grid grid--even">
+        <div class="col">
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">Health</span><span class="x">preflight + books merged</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div class="pf-row"><span class="pf-l"><i class="pf-dot"></i>STREAM</span><span class="pf-v">beating · 6s fresh · stream-2026-07-02a</span></div>
+              <div class="pf-row"><span class="pf-l"><i class="pf-dot"></i>CRON</span><span class="pf-v">v59 · failover standby</span></div>
+              <div class="pf-row"><span class="pf-l"><i class="pf-dot"></i>FEED</span><span class="pf-v">SIP + OPRA · real-time</span></div>
+              <div class="pf-row"><span class="pf-l"><i class="pf-dot"></i>BOOKS Δ</span><span class="pf-v">+$4 · NAV ties out</span></div>
+              <div class="pf-row"><span class="pf-l"><i class="pf-dot warn"></i>DB</span><span class="pf-v">142 / 500 MB · export due in 3d</span></div>
+              <div class="pf-row"><span class="pf-l"><i class="pf-dot"></i>ORPHANS</span><span class="pf-v">none detected</span></div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <div class="phead" data-fold><span class="t">Event Log</span><span class="x">today</span><span class="fold-ch">▾</span></div>
+            <div class="pbody" style="padding-top:6px">
+              <div class="logline"><span class="ts">13:48</span><span class="lv EXEC">EXEC</span><span>stream: PB RIDER buy 741P ×4 @ 1.62</span></div>
+              <div class="logline"><span class="ts">13:31</span><span class="lv INFO">INFO</span><span>V3 gap gate stand-down (gap 0.09 &lt; 0.25)</span></div>
+              <div class="logline"><span class="ts">12:58</span><span class="lv EXEC">EXEC</span><span>stream: BREAK(ALT) buy 745C ×2 @ 2.35</span></div>
+              <div class="logline"><span class="ts">10:24</span><span class="lv WARN">WARN</span><span>V3 stop_premium −50% · 741C ×3</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="panel">
+            <div class="phead" data-fold><span class="t">Kit</span><span class="x">audible desk — tap to audition</span><span class="fold-ch">▾</span></div>
+            <div class="pbody kitmap">
+              <div class="km"><span class="km-ev">entry fill</span><span class="km-arrow">→</span><button class="km-btn" data-hit="kick">BD · KICK</button></div>
+              <div class="km"><span class="km-ev">target exit</span><span class="km-arrow">→</span><button class="km-btn" data-hit="snare">SD · SNARE</button></div>
+              <div class="km"><span class="km-ev">stop-out</span><span class="km-arrow">→</span><button class="km-btn" data-hit="rim">RS · RIM</button></div>
+              <div class="km"><span class="km-ev">EOD flatten</span><span class="km-arrow">→</span><button class="km-btn" data-hit="hat">OH · HAT</button></div>
+              <div class="km"><span class="km-ev">KILL</span><span class="km-arrow">→</span><button class="km-btn" data-hit="crash">CY · CRASH</button></div>
+              <div class="note">off by default · KIT toggle lives on the transport · never an exit path, alert-only</div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <div class="phead" data-fold><span class="t">Master Stop</span><span class="x">desk-wide</span><span class="fold-ch">▾</span></div>
+            <div class="pbody">
+              <div style="font:700 20px var(--mono)">$2,500 / day</div>
+              <div class="note">halts new entries desk-wide at this realized loss; KILL remains the manual flatten.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+<ul class="mk-legend">
+  <li><b>ONE PAGE</b> transport buttons scroll to rooms (scrollspy keeps them lit)</li>
+  <li><b>FOLDS</b> room chevrons + panel chevrons — WRITE + OPS start folded</li>
+  <li><b>CHART HERO</b> full width · entry lines ride it · 310px tall</li>
+  <li><b>SEQ</b> under the chain · collapsible · ▶ REPLAY plays the day</li>
+</ul>
+</section>
+
+<!-- ==================================================================== -->
+<section class="mk-sec">
+<h2>Mobile · 402px — sequencer docks above the tabs, closed by default</h2>
+<div class="mk-frames">
+<div class="m-frame" data-frame data-nav="switch">
+  <div class="kill-flash" data-flash style="border-radius:18px">HALTED</div>
+  <div class="m-transport">
+    <span class="t-mark">SE<span>VE</span></span>
+    <span class="t-pill run">RUN</span>
+    <span class="m-sp"></span>
+    <button class="snd" data-snd><span class="snd-pad">KIT</span></button>
+    <div class="t-led"><span class="t-led-win up">+842</span></div>
+    <div class="kill" data-kill>
+      <button class="kill-cover" data-kill-cover><span class="kill-grip"></span></button>
+      <button class="kill-fire" data-kill-fire>KILL</button>
+    </div>
+  </div>
+
+  <div class="m-screen">
+    <div class="m-room on" data-room="play">
+      <div class="panel panel--lcd">
+        <div class="phead" data-fold><span class="t">SPY · 1m</span><span class="x">743.18 · +0.42%</span><span class="fold-ch">▾</span></div>
+        <div class="chart-body" style="padding:8px">
+          <svg viewBox="0 0 360 150" width="100%" height="150" preserveAspectRatio="none">
+            <g stroke="rgba(233,238,240,.06)"><line x1="0" y1="38" x2="360" y2="38"/><line x1="0" y1="76" x2="360" y2="76"/><line x1="0" y1="114" x2="360" y2="114"/></g>
+            <line x1="0" y1="52" x2="340" y2="52" stroke="#2fd573" stroke-width="1" stroke-dasharray="4 4" opacity=".55"/>
+            <line x1="0" y1="78" x2="340" y2="78" stroke="#45c4d6" stroke-width="1" stroke-dasharray="4 4" opacity=".55"/>
+            <polyline fill="none" stroke="#ffb224" stroke-width="1" stroke-dasharray="3 4" opacity=".6"
+              points="0,96 90,86 180,74 270,66 360,62"/>
+            <polyline fill="none" stroke="#6cc06d" stroke-width="1.6"
+              points="0,108 22,112 45,118 68,124 90,116 112,104 135,110 158,94 180,82 202,88 225,72 248,64 270,76
+                      292,68 315,58 338,64 360,50"/>
+            <circle cx="360" cy="50" r="2.8" fill="#6cc06d"/>
+          </svg>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">Live Book</span><span class="x"><span class="live-dot"></span>3 legs</span><span class="fold-ch">▾</span></div>
+        <table style="table-layout:fixed">
+          <colgroup><col style="width:24px"><col><col style="width:40px"><col style="width:52px"><col style="width:52px"><col style="width:76px"></colgroup>
+          <thead><tr><th class="tl">PM</th><th class="tl">Ct</th><th>Qty</th><th>Entry</th><th>Mark</th><th>P&amp;L</th></tr></thead>
+          <tbody>
+            <tr class="pos-main"><td class="tl"><span class="pm-dot" style="background:var(--pm-green);box-shadow:0 0 6px var(--pm-green)"></span></td>
+              <td class="tl">745C</td><td>+2</td><td>2.35</td><td>3.10</td><td class="pos">+$150</td></tr>
+            <tr class="pos-ctx"><td colspan="6" class="tl"><span class="ctx-line">
+              <span class="ctx-ch">BREAK(ALT)</span><span class="pos">+32%</span><span class="ctx-dim">stop 1.18</span></span></td></tr>
+            <tr class="pos-main"><td class="tl"><span class="pm-dot" style="background:var(--pm-amber);box-shadow:0 0 6px var(--pm-amber)"></span></td>
+              <td class="tl">743C</td><td>+1</td><td>1.90</td><td>2.05</td><td class="pos">+$15</td></tr>
+            <tr class="pos-ctx"><td colspan="6" class="tl"><span class="ctx-line">
+              <span class="ctx-ch">MOMO</span><span class="pos">+8%</span><span class="ctx-hot">gave 85%</span></span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">SPY Chain · 0DTE</span><span class="x">header sticks</span><span class="fold-ch">▾</span></div>
+        <div class="chain-scroll">
+          <table class="chain-table">
+            <thead><tr><th>C Bid</th><th>C Ask</th><th style="text-align:center">Strike</th><th>P Bid</th><th>P Ask</th></tr></thead>
+            <tbody>
+              <tr><td class="calls">5.30</td><td class="calls">5.45</td><td class="strike-col">741</td><td class="puts">1.05</td><td class="puts">1.10</td></tr>
+              <tr><td class="calls">4.45</td><td class="calls">4.60</td><td class="strike-col">742</td><td class="puts">1.38</td><td class="puts">1.44</td></tr>
+              <tr class="atm"><td class="calls">3.65</td><td class="calls">3.78</td><td class="strike-col">743</td><td class="puts">1.79</td><td class="puts">1.86</td></tr>
+              <tr><td class="calls">2.92</td><td class="calls">3.04</td><td class="strike-col">744</td><td class="puts">2.28</td><td class="puts">2.36</td></tr>
+              <tr><td class="calls">2.28</td><td class="calls">2.38</td><td class="strike-col">745</td><td class="puts">2.86</td><td class="puts">2.95</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-room" data-room="mix">
+      <div class="strips">
+        <div class="strip" style="--vc:var(--pm-green)">
+          <div class="s-head"><span class="s-dot"></span><span class="s-name">BRK</span></div>
+          <div class="s-fires"><span class="f-stop">−30%</span><span class="f-take">+22%</span></div>
+          <div><button class="chm chm-l on">LOCK</button><button class="chm chm-r">RIDE</button></div>
+          <div class="s-dials">
+            <div class="kn-unit"><div class="kn" style="--rot:52deg"></div><span class="kn-val">$1,250</span></div>
+            <div class="fd-unit"><div class="fd"><i style="--lv:42%"></i></div><span class="kn-val">$500</span></div>
+          </div>
+          <div class="s-lcd"><div class="s-lcd-v up">+$612</div></div>
+        </div>
+        <div class="strip" style="--vc:var(--pm-amber)">
+          <div class="s-head"><span class="s-dot"></span><span class="s-name">MOMO</span></div>
+          <div class="s-fires"><span class="f-stop">−50%</span><span class="f-eod">ride</span></div>
+          <div><button class="chm chm-l">LOCK</button><button class="chm chm-r on">RIDE</button></div>
+          <div class="s-dials">
+            <div class="kn-unit"><div class="kn" style="--rot:74deg"></div><span class="kn-val">$1,800</span></div>
+            <div class="fd-unit"><div class="fd"><i style="--lv:58%"></i></div><span class="kn-val">$720</span></div>
+          </div>
+          <div class="s-lcd"><div class="s-lcd-v up">+$15</div></div>
+        </div>
+      </div>
+      <div class="panel"><div class="pbody" style="display:flex;gap:8px;align-items:center">
+        <span class="bench-t">Bench</span>
+        <button class="bench-pad" style="background:var(--pm-violet)">GR</button>
+        <button class="bench-pad" style="background:var(--pm-orange)">OQ</button>
+      </div></div>
+    </div>
+
+    <div class="m-room" data-room="write">
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">Add Channel</span><span class="fold-ch">▾</span></div>
+        <div class="pbody"><div class="drop" style="margin:0">drop a thesis .md</div></div>
+      </div>
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">Lab · Virtual Bench</span><span class="fold-ch">▾</span></div>
+        <div class="pbody">
+          <div class="lab-row"><span class="lab-name">vb-macd-v3</span><div class="lab-prog"><i style="width:32%"></i></div><span class="lab-pnl pos">+$412</span></div>
+          <div class="lab-row"><span class="lab-name">vb-itm-qqq</span><div class="lab-prog"><i style="width:55%"></i></div><span class="lab-pnl pos">+$1,038</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-room" data-room="tape">
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">Override Scorecard</span><span class="fold-ch">▾</span></div>
+        <div class="pbody">
+          <div class="au-fund"><span>N=17</span><span>Δ <b class="neg">−$2,390</b></span><span>beat 6/17</span></div>
+          <div class="fx-row"><span class="fx-name">PB RIDER</span><span class="fx-mid">3/5</span><span class="fx-pnl pos">+$748</span></div>
+          <div class="fx-row"><span class="fx-name">Trend-QQQ</span><span class="fx-mid">0/3</span><span class="fx-pnl neg">−$1,622</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">Give-back</span><span class="fold-ch">▾</span></div>
+        <div class="pbody"><div class="au-fund" style="margin:0;border:none;padding:0">
+          <span>kept <b class="pos">62%</b></span><span>gave <b class="neg">−$1,204</b></span></div></div>
+      </div>
+    </div>
+
+    <div class="m-room" data-room="ops">
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">Health</span><span class="fold-ch">▾</span></div>
+        <div class="pbody">
+          <div class="pf-row"><span class="pf-l"><i class="pf-dot"></i>STREAM</span><span class="pf-v">6s fresh</span></div>
+          <div class="pf-row"><span class="pf-l"><i class="pf-dot"></i>BOOKS Δ</span><span class="pf-v">+$4</span></div>
+          <div class="pf-row"><span class="pf-l"><i class="pf-dot warn"></i>DB</span><span class="pf-v">142 MB</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="phead" data-fold><span class="t">Event Log</span><span class="fold-ch">▾</span></div>
+        <div class="pbody" style="padding-top:4px">
+          <div class="logline"><span class="ts">13:48</span><span class="lv EXEC">EXEC</span><span>PB buy 741P ×4</span></div>
+          <div class="logline"><span class="ts">13:31</span><span class="lv INFO">INFO</span><span>V3 gap stand-down</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEQUENCER DOCK — slim, closed by default, pinned above the tabs -->
+  <div class="m-seqdock" data-dockwrap>
+    <div class="m-dockbar" data-dock>
+      <span class="m-dock-lbl">Seq</span>
+      <span class="m-mini" data-mini></span>
+      <span class="m-dock-step">11·16 · 13:34</span>
+      <button class="m-dock-play" data-replay>▶</button>
+      <span class="m-dock-ch" data-dock-ch>▲</span>
+    </div>
+    <div class="m-dockbody"><div data-seq></div></div>
+  </div>
+
+  <div class="m-tabs">
+    <button class="m-tab on" data-room-btn="play"><span class="ic">▶</span>PLAY</button>
+    <button class="m-tab" data-room-btn="mix"><span class="ic">≡</span>MIX</button>
+    <button class="m-tab" data-room-btn="write"><span class="ic">✎</span>WRITE</button>
+    <button class="m-tab" data-room-btn="tape"><span class="ic">◼</span>TAPE</button>
+    <button class="m-tab" data-room-btn="ops"><span class="ic">⚙</span>OPS</button>
+  </div>
+</div>
+</div>
+<ul class="mk-legend">
+  <li><b>DOCK</b> slim pattern bar above the tabs — tap to open the full sequencer, tap again to close</li>
+  <li><b>CHART</b> taller on the phone too · entry lines ride it</li>
+  <li><b>FOLDS</b> panel chevrons work here as well</li>
+</ul>
+</section>
+
+<footer class="mk-head" style="margin-top:34px">
+  <p style="font-family:var(--mono);font-size:10px;letter-spacing:.5px">
+    SEVE · seve-dashboard · 909 redesign mockup v2 · 2026-07-02 · tokens from app/globals.css + app/console.css</p>
+</footer>
+
+<script>
+/* ================= data ================= */
+var CH = {
+  BRK:{c:"#2fd573",name:"BREAK(ALT)",snd:"kick"},
+  V3:{c:"#3b9eff",name:"V3",snd:"snare"},
+  VI:{c:"#a3e635",name:"V3 ITM",snd:"tom"},
+  MO:{c:"#ffb224",name:"MOMO",snd:"hat"},
+  PB:{c:"#45c4d6",name:"PB RIDER",snd:"tom"},
+  GR:{c:"#b06bff",name:"GRIND",snd:"rim"}
+};
+var VOICES = [
+  {ch:"BRK",state:"lit"},{ch:"V3",state:""},{ch:"VI",state:"bst"},
+  {ch:"MO",state:"lit"},{ch:"PB",state:"lit"},{ch:"GR",state:"mut"}
+];
+var CUR = 10; /* step 11 (0-indexed) — ~13:52 ET */
+var STEPS = [
+  {t:"9:30", fills:[{ch:"BRK",k:"entry"},{ch:"BRK",k:"win"}], note:"BRK 745C ×2 in 9:38 → out +41% 9:51 (+$612)"},
+  {t:"9:54", fills:[{ch:"V3",k:"entry"}], note:"V3 741C ×3 in 10:02 — OR break ↑"},
+  {t:"10:19", fills:[{ch:"V3",k:"stop"}], note:"V3 stopped −50% at 10:24 (−$402)"},
+  {t:"10:43", fills:[], note:"quiet — no signals cleared the gates"},
+  {t:"11:08", fills:[{ch:"GR",k:"entry"},{ch:"GR",k:"win"}], note:"GRIND 744C scalp +28%, 2m hold (+$347)"},
+  {t:"11:32", fills:[], note:"lunch chop — desk idle"},
+  {t:"11:56", fills:[], note:"lunch chop — desk idle"},
+  {t:"12:21", fills:[{ch:"MO",k:"entry"}], note:"MOMO 743C ×1 in 12:33 — continuation"},
+  {t:"12:45", fills:[{ch:"BRK",k:"entry"}], note:"BRK 745C ×2 re-entry 12:58"},
+  {t:"13:10", fills:[{ch:"PB",k:"entry"}], note:"PB RIDER 741P ×4 in 13:15 — pullback bounce"},
+  {t:"13:34", fills:[], note:"LIVE — 3 legs open, running P&L +$842"},
+  {t:"13:59", fills:[], evt:{k:"FOMC"}, note:"programmed: FOMC stand-down 13:50–14:30 — flatten + block entries"},
+  {t:"14:23", fills:[], note:"future — entries resume 14:30"},
+  {t:"14:48", fills:[], note:"future"},
+  {t:"15:12", fills:[], evt:{k:"CUT"}, note:"programmed: 0DTE entry cutoff 15:29 — rolls to 1DTE"},
+  {t:"15:36", fills:[], evt:{k:"EOD"}, note:"programmed: EOD hard-flatten 15:55"}
+];
+
+/* ================= sequencer render ================= */
+function renderSeq(host){
+  var leds = '<div class="seq-leds">';
+  for (var i=0;i<16;i++) leds += '<i class="sled'+(i===CUR?' on':'')+'"></i>';
+  leds += '</div>';
+  var steps = '<div class="seq-steps">';
+  STEPS.forEach(function(s,i){
+    var cls = 'step';
+    if (i%4===0) cls += ' acc';
+    if (i<CUR) cls += ' past';
+    if (i===CUR) cls += ' cur';
+    if (s.evt) cls += ' evt-'+s.evt.k;
+    var dots = s.fills.map(function(f){
+      return '<i class="sd" style="background:'+CH[f.ch].c+';box-shadow:0 0 4px '+CH[f.ch].c+'"></i>';
+    }).join('');
+    steps += '<button class="'+cls+'" data-step="'+i+'" title="'+s.t+'">'
+      + '<span class="st-num">'+(i+1)+'</span><span class="st-time">'+s.t+'</span>'
+      + (s.evt ? '<span class="st-evt">'+s.evt.k+'</span>' : '')
+      + '<span class="st-dots">'+dots+'</span></button>';
+  });
+  steps += '</div>';
+  var voices = '<div class="voices"><span class="v-lbl">Voices</span>';
+  VOICES.forEach(function(v){
+    voices += '<button class="vpad '+v.state+'" data-voice="'+v.ch+'" style="--vc:'+CH[v.ch].c+'">'
+      + '<span class="v-code">'+v.ch+'</span><span class="v-snd">'+CH[v.ch].snd.toUpperCase()+'</span></button>';
+  });
+  voices += '</div>';
+  host.innerHTML = leds + steps + '<div class="slice" data-slice></div>' + voices;
+  setSlice(host, CUR);
+}
+function sliceHTML(i){
+  var s = STEPS[i];
+  var end = (i<15) ? STEPS[i+1].t : "16:00";
+  var chips = s.fills.map(function(f){
+    return '<b style="color:'+CH[f.ch].c+'">'+f.ch+'</b>';
+  }).join(' ');
+  return '<span class="sl-k">Step '+(i+1)+' · '+s.t+'–'+end+'</span>'
+    + (chips ? '<span>'+chips+'</span>' : '')
+    + '<span>'+s.note+'</span>';
+}
+function setSlice(host, i){
+  var el = host.querySelector('[data-slice]');
+  if (el) el.innerHTML = sliceHTML(i);
+}
+function renderMini(el){
+  el.innerHTML = STEPS.map(function(s,i){
+    var st = '';
+    if (s.fills.length) st = 'background:'+CH[s.fills[0].ch].c;
+    if (s.evt) st = 'background:'+(s.evt.k==='FOMC'?'#c5362a':s.evt.k==='CUT'?'#b07d10':'#e0552f')+';opacity:.55';
+    if (i===CUR) st = 'background:var(--led-red);box-shadow:0 0 5px var(--led-red)';
+    return '<i style="'+st+'"></i>';
+  }).join('');
+}
+document.querySelectorAll('[data-seq]').forEach(renderSeq);
+document.querySelectorAll('[data-mini]').forEach(renderMini);
+
+/* ================= 909 kit (WebAudio, synthesized) ================= */
+var AC = null, soundOn = false;
+function ac(){ if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==="suspended") AC.resume(); return AC; }
+function envG(c,t,peak,dur){ var g=c.createGain(); g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(peak,t+0.003); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  g.connect(c.destination); return g; }
+function noiseSrc(c,dur){ var b=c.createBuffer(1,Math.ceil(c.sampleRate*dur),c.sampleRate),d=b.getChannelData(0);
+  for(var i=0;i<d.length;i++) d[i]=Math.random()*2-1; var n=c.createBufferSource(); n.buffer=b; return n; }
+var KIT = {
+  kick: function(){ var c=ac(),t=c.currentTime,o=c.createOscillator(); o.type="sine";
+    o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(45,t+0.12);
+    o.connect(envG(c,t,0.85,0.30)); o.start(t); o.stop(t+0.32); },
+  snare: function(){ var c=ac(),t=c.currentTime,n=noiseSrc(c,0.25),f=c.createBiquadFilter();
+    f.type="bandpass"; f.frequency.value=1800; f.Q.value=0.8; n.connect(f); f.connect(envG(c,t,0.5,0.18)); n.start(t);
+    var o=c.createOscillator(); o.type="triangle"; o.frequency.value=185; o.connect(envG(c,t,0.35,0.10)); o.start(t); o.stop(t+0.12); },
+  rim: function(){ var c=ac(),t=c.currentTime,o=c.createOscillator(); o.type="square"; o.frequency.value=1720;
+    o.connect(envG(c,t,0.22,0.05)); o.start(t); o.stop(t+0.06); },
+  hat: function(){ var c=ac(),t=c.currentTime,n=noiseSrc(c,0.4),f=c.createBiquadFilter();
+    f.type="highpass"; f.frequency.value=7200; n.connect(f); f.connect(envG(c,t,0.3,0.34)); n.start(t); },
+  tom: function(){ var c=ac(),t=c.currentTime,o=c.createOscillator(); o.type="sine";
+    o.frequency.setValueAtTime(210,t); o.frequency.exponentialRampToValueAtTime(88,t+0.18);
+    o.connect(envG(c,t,0.6,0.26)); o.start(t); o.stop(t+0.28); },
+  crash: function(){ var c=ac(),t=c.currentTime,n=noiseSrc(c,1.3),f=c.createBiquadFilter();
+    f.type="highpass"; f.frequency.value=4300; n.connect(f); f.connect(envG(c,t,0.45,1.2)); n.start(t); }
+};
+var KIND_SND = { entry:"kick", win:"snare", stop:"rim", eod:"hat" };
+function hit(name){ if (soundOn && KIT[name]) KIT[name](); }
+function playStepFills(i){
+  STEPS[i].fills.forEach(function(f,j){ setTimeout(function(){ hit(KIND_SND[f.k]||"kick"); }, j*90); });
+}
+
+/* ================= interactions ================= */
+document.addEventListener('click', function(e){
+  /* replay (checked before dock/fold since the buttons nest inside those bars) */
+  var rp = e.target.closest('[data-replay]');
+  if (rp && !rp.classList.contains('busy')) {
+    rp.classList.add('busy');
+    var isDock = !!rp.closest('.m-dockbar');
+    if (!isDock) rp.textContent = "■ PLAYING";
+    var frame = rp.closest('[data-frame]');
+    var wrap = rp.closest('.seq-bez') || frame.querySelector('[data-dockwrap]');
+    if (wrap.classList) { wrap.classList.remove('folded'); wrap.classList.add('open'); }
+    var host = wrap.querySelector('[data-seq]');
+    var steps = host.querySelectorAll('.step');
+    var leds = host.querySelectorAll('.sled');
+    var i = 0;
+    var iv = setInterval(function(){
+      steps.forEach(function(s){ s.classList.remove('chased'); });
+      leds.forEach(function(l){ l.classList.remove('chase'); });
+      if (i > 15) {
+        clearInterval(iv);
+        rp.classList.remove('busy');
+        rp.textContent = isDock ? "▶" : "▶ REPLAY DAY";
+        setSlice(host, CUR);
+        return;
+      }
+      steps[i].classList.add('chased');
+      if (leds[i]) leds[i].classList.add('chase');
+      setSlice(host, i);
+      playStepFills(i);
+      i++;
+    }, 340);
+    return;
+  }
+  /* room nav: desktop scrolls, mobile switches */
+  var rb = e.target.closest('[data-room-btn]');
+  if (rb) {
+    var frame = rb.closest('[data-frame]');
+    var r = rb.getAttribute('data-room-btn');
+    frame.querySelectorAll('[data-room-btn]').forEach(function(b){ b.classList.toggle('on', b===rb); });
+    if (frame.getAttribute('data-nav') === 'scroll') {
+      var sec = frame.querySelector('[data-room="'+r+'"]');
+      sec.classList.remove('folded');
+      var fc = sec.querySelector('.section-label .fold-ch'); if (fc) fc.textContent = '▾';
+      sec.scrollIntoView({behavior:'smooth', block:'start'});
+    } else {
+      frame.querySelectorAll('[data-room]').forEach(function(s){ s.classList.toggle('on', s.getAttribute('data-room')===r); });
+    }
+    return;
+  }
+  /* step select */
+  var st = e.target.closest('[data-step]');
+  if (st) {
+    var host = st.closest('[data-seq]');
+    var i = +st.getAttribute('data-step');
+    host.querySelectorAll('.step').forEach(function(s){ s.classList.remove('sel'); });
+    if (i !== CUR) st.classList.add('sel');
+    setSlice(host, i);
+    playStepFills(i);
+    return;
+  }
+  /* voice audition */
+  var vp = e.target.closest('[data-voice]');
+  if (vp) {
+    vp.classList.remove('hit'); void vp.offsetWidth; vp.classList.add('hit');
+    hit(CH[vp.getAttribute('data-voice')].snd);
+    return;
+  }
+  /* kit toggle */
+  var sn = e.target.closest('[data-snd]');
+  if (sn) {
+    soundOn = !soundOn;
+    document.querySelectorAll('[data-snd]').forEach(function(b){ b.classList.toggle('on', soundOn); });
+    if (soundOn) { ac(); hit("kick"); }
+    return;
+  }
+  /* kit audition buttons */
+  var kb = e.target.closest('[data-hit]');
+  if (kb) { var was=soundOn; soundOn=true; ac(); hit(kb.getAttribute('data-hit')); soundOn=was; return; }
+  /* KILL */
+  var kc = e.target.closest('[data-kill-cover]');
+  if (kc) { kc.closest('[data-kill]').classList.toggle('armed'); return; }
+  var kf = e.target.closest('[data-kill-fire]');
+  if (kf) {
+    var kill = kf.closest('[data-kill]');
+    if (!kill.classList.contains('armed')) return;
+    kill.classList.remove('armed');
+    var was2=soundOn; soundOn=true; ac(); hit("crash"); soundOn=was2;
+    var flash = kf.closest('[data-frame]').querySelector('[data-flash]');
+    flash.classList.add('show');
+    setTimeout(function(){ flash.classList.remove('show'); }, 1500);
+    return;
+  }
+  /* mobile dock open/close */
+  var dk = e.target.closest('[data-dock]');
+  if (dk) {
+    var wrap2 = dk.closest('[data-dockwrap]');
+    var open = wrap2.classList.toggle('open');
+    var ch = wrap2.querySelector('[data-dock-ch]'); if (ch) ch.textContent = open ? '▼' : '▲';
+    return;
+  }
+  /* sequencer bezel fold (desktop) */
+  var fs = e.target.closest('[data-fold-seq]');
+  if (fs) {
+    var bez = fs.closest('.seq-bez');
+    var folded = bez.classList.toggle('folded');
+    var fch = fs.querySelector('.fold-ch'); if (fch) fch.textContent = folded ? '▸' : '▾';
+    return;
+  }
+  /* room fold */
+  var fr = e.target.closest('[data-fold-room]');
+  if (fr) {
+    var room = fr.closest('.room');
+    var folded2 = room.classList.toggle('folded');
+    var fch2 = fr.querySelector('.fold-ch'); if (fch2) fch2.textContent = folded2 ? '▸' : '▾';
+    return;
+  }
+  /* panel fold */
+  var fp = e.target.closest('[data-fold]');
+  if (fp) {
+    var panel = fp.closest('.panel');
+    var folded3 = panel.classList.toggle('folded');
+    var fch3 = fp.querySelector('.fold-ch'); if (fch3) fch3.textContent = folded3 ? '▸' : '▾';
+    return;
+  }
+});
+
+/* scrollspy for the desktop anchor nav */
+if ('IntersectionObserver' in window) {
+  var deskFrame = document.querySelector('[data-nav="scroll"]');
+  if (deskFrame) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(x){
+        if (x.isIntersecting) {
+          var r = x.target.getAttribute('data-room');
+          deskFrame.querySelectorAll('[data-room-btn]').forEach(function(b){
+            b.classList.toggle('on', b.getAttribute('data-room-btn')===r);
+          });
+        }
+      });
+    }, {rootMargin:'-30% 0px -60% 0px'});
+    deskFrame.querySelectorAll('[data-room]').forEach(function(s){ io.observe(s); });
+  }
+}
+</script>
+</body>
+</html>

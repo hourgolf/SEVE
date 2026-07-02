@@ -1,0 +1,560 @@
+<!doctype html>
+<!-- ============================================================================
+     SEVE · seve-dashboard — UI readability mockup (Phase 2 · 2026-07-02)
+     Project marker: SEVE trading desk (github.com/hourgolf/SEVE). Do not reuse
+     outside this repo. Static single-file HTML, zero dependencies.
+
+     One representative screen (Live Book + Mixer roster) shown at desktop
+     (1180px chassis) and mobile (402px shell) widths, with the ten approved
+     readability fixes applied INSIDE the existing TR-909 design language.
+     Tokens mirror app/globals.css + app/console.css; changed values are
+     called out in the TOKEN DELTA strip up top. Fake illustrative data.
+     ============================================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SEVE — readability mockup</title>
+<style>
+/* ---------- tokens (mirrors :root, with the PROPOSED cream P&L pair) -------- */
+:root {
+  --chassis: #d8d3c4; --chassis-2: #ccc6b5; --chassis-edge: #c5bfae; --chassis-dark: #b3ad9c;
+  --ink: #2a2a28; --ink-soft: #55534c;
+  /* PROPOSED on-cream P&L pair (finding 1) */
+  --green: #0e6132;   /* was #1f9d57 (≈2.3:1) → ≈4.4–5.0:1 on the chassis gradient */
+  --red:   #9e2d1c;   /* was #d23a28 (≈3.2:1) → ≈4.3–4.8:1 */
+  /* PROPOSED alert amber for foreground text on cream (finding 3) */
+  --amber-ink: #855f0c;  /* --amber #b07d10 stays for fills; fg alerts use this */
+  /* previous values, kept only for the delta swatches */
+  --green-old: #1f9d57; --red-old: #d23a28; --amber-old: #b07d10; --muted-old: #8b8678;
+  /* unchanged: LCD screens + hardware */
+  --lcd: #14181b; --lcd-2: #0f1214; --lcd-edge: #0a0a0b; --lcd-ink: #e9eef0;
+  --lcd-up: #6cc06d; --lcd-down: #e07a58; --led-bg: #1a0604; --led-red: #ff3b2f;
+  --stripe-red: #c5362a; --stripe-orange: #e0552f; --accent: #df5320;
+  --pm-green: #2fd573; --pm-blue: #3b9eff; --pm-amber: #ffb224; --pm-cyan: #45c4d6; --pm-violet: #b06bff;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #b6b1a2; color: var(--ink); font-family: var(--sans); font-size: 13px;
+       padding: 22px 18px 40px; -webkit-font-smoothing: antialiased; }
+
+/* ---------- mockup chrome (NOT part of the app — the grey matter around frames) */
+.mk-head { max-width: 1220px; margin: 0 auto 14px; }
+.mk-head h1 { font: 700 15px var(--mono); letter-spacing: 1px; text-transform: uppercase; }
+.mk-head p { font: 400 12px var(--sans); color: #4a4840; margin-top: 4px; max-width: 72ch; }
+.mk-sec { max-width: 1220px; margin: 26px auto 0; }
+.mk-sec > h2 { font: 700 11px var(--mono); letter-spacing: 1.5px; text-transform: uppercase;
+               color: #56524a; margin-bottom: 8px; }
+.mk-legend { max-width: 1220px; margin: 10px auto 0; display: flex; flex-wrap: wrap; gap: 5px 16px;
+             font: 400 11px var(--sans); color: #45423b; padding: 0; list-style: none; }
+.mk-legend b { font-family: var(--mono); color: var(--stripe-red); font-weight: 700; }
+.mk-frames { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+
+/* ---------- TOKEN DELTA strip -------------------------------------------- */
+.mk-tokens { background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+             border: 1px solid var(--chassis-edge); border-radius: 10px; padding: 12px 16px;
+             box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 3px 12px rgba(0,0,0,.3);
+             display: flex; flex-wrap: wrap; gap: 10px 34px; }
+.tk { display: flex; align-items: center; gap: 8px; font: 400 11px var(--mono); }
+.tk .tk-name { font-weight: 700; width: 118px; color: var(--ink); }
+.tk .sw { display: inline-flex; align-items: center; gap: 5px; }
+.tk .sw i { width: 15px; height: 15px; border-radius: 4px; border: 1px solid rgba(0,0,0,.25); }
+.tk .sw span { color: var(--ink-soft); font-size: 10px; }
+.tk .arr { color: var(--ink-soft); }
+.tk .new span { color: var(--ink); font-weight: 700; }
+
+/* ============================================================================
+   SEVE component styles — faithful to console.css / globals.css, with the
+   approved fixes applied (type bump, bold P&L, pinned columns, sticky thead).
+   ============================================================================ */
+.chassis { background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  border: 1px solid var(--chassis-edge); border-top-color: #deded4; border-radius: 14px;
+  padding: 20px; width: 1180px; max-width: 100%;
+  box-shadow: 0 1px 0 #e6e4da inset, 0 -2px 6px rgba(0,0,0,.25) inset, 0 18px 40px rgba(0,0,0,.45); }
+
+.section-label { display: flex; align-items: center; gap: 12px; margin: 4px 1px 14px; }
+.section-label .idx { font: 700 11px var(--mono); letter-spacing: 1px; color: var(--stripe-red); }
+.section-label .lab { font: 700 12px var(--mono); letter-spacing: 2px; text-transform: uppercase; color: var(--ink); }
+.section-label .sec-right { font: 400 11px var(--mono); letter-spacing: .04em; color: var(--ink-soft); margin-left: auto; white-space: nowrap; }
+.section-label::after { content: ""; flex: 1 1 auto; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--chassis-edge), transparent); }
+.section-label:has(.sec-right)::after { display: none; }
+.sec-right .pos { color: var(--green); font-weight: 700; }
+
+.grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* cream "printout" data panel (the Live Book token-flip look) */
+.panel { position: relative; background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  color: var(--ink); border: 1px solid var(--chassis-edge); border-radius: 9px; overflow: hidden; min-width: 0;
+  box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 3px 12px rgba(0,0,0,.35); }
+.phead { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap;
+  gap: 1px 12px; padding: 11px 15px; border-bottom: 1px solid var(--chassis-edge);
+  background: linear-gradient(180deg, #d9d7cd, #c5c3b8); box-shadow: 0 1px 0 rgba(255,255,255,.5) inset; }
+.phead .t { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: 1.2px;
+  color: var(--ink); text-shadow: 0 1px 0 rgba(255,255,255,.4); }
+.phead .x { font: 400 10px var(--mono); color: var(--ink-soft); }
+.live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px;
+  vertical-align: middle; background: var(--pm-green); box-shadow: 0 0 6px var(--pm-green); }
+
+/* ---- tables: bumped floor (finding 4) — td 11.5→12.5, th 9.5→10 ---------- */
+table { width: 100%; border-collapse: collapse; }
+th { font: 600 10px var(--mono); color: var(--ink-soft); text-transform: uppercase;
+  letter-spacing: .6px; padding: 7px 8px; border-bottom: 1px solid var(--chassis-edge); text-align: right; }
+td { padding: 6px 8px; text-align: right; border-bottom: 1px solid rgba(0,0,0,.08);
+  font: 400 12.5px var(--mono); }
+tr:last-child td { border-bottom: none; }
+.pos { color: var(--green); } .neg { color: var(--red); }
+td.pos, td.neg { font-weight: 700; }           /* finding 4 — P&L outranks its context */
+th.tl, td.tl { text-align: left; }
+
+/* finding 5 — pinned columns so live ticks can't reflow the table */
+.pos-table { table-layout: fixed; }
+
+.pm-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.man-tag { margin-left: 5px; font: 700 9px var(--mono); color: var(--amber-ink); letter-spacing: .3px; vertical-align: middle; }
+.pos-close { width: 22px; height: 20px; padding: 0; border-radius: 5px; border: 1px solid var(--chassis-dark);
+  background: transparent; color: var(--ink-soft); font-size: 11px; line-height: 1; cursor: pointer; }
+
+/* decision-context line — 9.5→10.5px (finding 4) */
+.pos-main td { border-bottom: 0; padding-bottom: 2px; }
+.pos-ctx td { padding: 0 8px 7px; border-bottom: 1px solid rgba(0,0,0,.08); }
+.ctx-line { display: flex; flex-wrap: wrap; gap: 10px; font: 400 10.5px var(--mono);
+  letter-spacing: .02em; color: var(--ink-soft); }
+.ctx-bit { white-space: nowrap; }
+.ctx-ch { color: var(--ink); font-weight: 700; letter-spacing: .04em; }
+.ctx-dim { opacity: .75; }
+.ctx-line .pos, .ctx-line .neg { font-weight: 700; }
+/* finding 3 — the giveback tell: deep amber ink + wash, not bright amber alone */
+.ctx-hot { color: var(--amber-ink); font-weight: 700; background: rgba(133,95,12,.13);
+  padding: 0 4px; border-radius: 3px; }
+
+/* today's trades (rt rows 11→12px, finding 4) */
+.recent-trades { border-top: 1px solid var(--chassis-edge); padding: 8px 10px 10px; }
+.rt-head { display: flex; justify-content: space-between; font: 400 9px var(--mono);
+  text-transform: uppercase; letter-spacing: .6px; color: var(--ink-soft); margin-bottom: 6px; }
+.rt-head .pos, .rt-head .neg { font-weight: 700; }
+.rt-list { display: flex; flex-direction: column; gap: 3px; }
+.rt-row { display: flex; align-items: center; gap: 8px; font: 400 12px var(--mono);
+  width: 100%; background: none; border: 0; padding: 2px 4px; color: inherit; text-align: left;
+  cursor: pointer; border-radius: 4px; }
+.rt-row:hover { background: rgba(0,0,0,.045); }
+.rt-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.rt-sym { color: var(--ink); min-width: 78px; flex: 0 0 auto; }
+.rt-meta { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 7px; overflow: hidden; }
+.rt-ch { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-trig { font: 400 10.5px var(--mono); letter-spacing: .3px; color: var(--ink-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-time { color: var(--ink-soft); opacity: .8; margin-left: auto; font-size: 11px; }
+.rt-pnl { min-width: 64px; text-align: right; font-weight: 700; }
+/* finding 8 — the attribution caveat surfaced as visible text (was title-attr only) */
+.rt-note { margin-top: 7px; font: 400 9.5px var(--mono); color: var(--ink-soft); line-height: 1.45; }
+
+/* option chain — sticky header (finding 7); cream tints per console.css */
+.chain-scroll { max-height: 208px; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--chassis-dark) transparent; }
+.chain-table th { position: sticky; top: 0; z-index: 2;
+  background: linear-gradient(180deg, #d9d7cd, #c5c3b8); box-shadow: 0 1px 0 var(--chassis-edge); }
+.calls { color: #1f7d45; } .puts { color: #b23a22; }
+.strike-col { text-align: center; font-weight: 700; color: var(--ink); background: rgba(0,0,0,.06); }
+tr.atm td { background: rgba(31,157,87,.13); }
+tr.atm .strike-col { color: var(--green); }
+
+/* ---- MIXER roster table (desktop) — numeric columns right-aligned (finding 6),
+       td 11→12px / th 8→9px, pills 10→11px (finding 4) ----------------------- */
+.roster { overflow-x: auto; padding: 6px 2px 2px; }
+.roster-table { width: 100%; border-collapse: collapse; font-family: var(--mono); color: var(--ink); }
+.roster-table th { text-align: left; font-size: 9px; font-weight: 700; letter-spacing: .5px;
+  text-transform: uppercase; color: var(--ink-soft); padding: 5px 12px;
+  border-bottom: 1px solid rgba(0,0,0,.18); white-space: nowrap; }
+.roster-table td { padding: 6px 12px; border-bottom: 1px solid rgba(0,0,0,.07);
+  font-size: 12px; font-weight: 400; white-space: nowrap; text-align: left; }
+.roster-table th.rt-num, .roster-table td.rt-num { text-align: right; }
+.roster-table tr:hover td { background: rgba(0,0,0,.03); }
+.rt-muted td { opacity: .5; }
+.rt-name { font-weight: 700; }
+.rt-tick { margin-left: 7px; font-size: 8px; font-weight: 700; letter-spacing: .3px; color: var(--ink-soft);
+  border: 1px solid rgba(0,0,0,.18); border-radius: 3px; padding: 0 3px; }
+.rt-flag { margin-left: 7px; font-size: 8px; font-weight: 700; color: var(--ink-soft); text-decoration: line-through; opacity: .75; }
+.rt-mutedflag { text-decoration: none; }
+.chm { font: 700 9px var(--mono); letter-spacing: .6px; padding: 2px 9px; line-height: 1.2;
+  cursor: pointer; background: transparent; color: var(--ink-soft); border: 1px solid rgba(0,0,0,.22); }
+.chm-lock { border-radius: 4px 0 0 4px; }
+.chm-ride { border-radius: 0 4px 4px 0; margin-left: -1px; }
+.chm.on { color: #fff; border-color: transparent; }
+.chm-lock.on { background: #1c7a44; }
+.chm-ride.on { background: #6b6960; }
+.chf-edit { font: 700 11px var(--mono); letter-spacing: .2px; border: none; background: none;
+  padding: 1px 4px; line-height: 1.1; cursor: pointer; border-radius: 3px;
+  border-bottom: 1px dotted currentColor; position: relative; }
+.chf-take { color: #1c7a44; } .chf-stop { color: #be3326; }
+.chf-ride { color: var(--ink-soft); font-weight: 600; }
+.chf-amt { color: var(--ink); }
+/* finding 8 — coarse-pointer hit-area extension (invisible; visual unchanged) */
+@media (pointer: coarse) { .chf-edit::after { content: ""; position: absolute; inset: -9px -7px; } }
+.rt-num.pos { color: var(--green); font-weight: 700; }
+.rt-num.neg { color: var(--red); font-weight: 700; }
+
+/* ---- states (finding 9): loading (proposed) vs empty (existing) ----------- */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 26px 16px; font: 400 11px var(--mono); letter-spacing: .5px; color: var(--ink-soft); }
+.es-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-soft);
+  box-shadow: 0 0 7px var(--ink-soft); animation: es-pulse 2.4s ease-in-out infinite; }
+.es-sub { font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; opacity: .75; }
+@keyframes es-pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+
+/* ============================================================================
+   MOBILE frame — 402px $EVE shell (cream vitals header · scrolling screen)
+   ============================================================================ */
+.m-frame { width: 402px; max-width: 100%; border-radius: 18px; overflow: hidden;
+  border: 1px solid #8d887a; box-shadow: 0 18px 40px rgba(0,0,0,.45); background: var(--chassis-2);
+  display: flex; flex-direction: column; }
+.m-vitals { display: flex; align-items: center; gap: 9px; padding: 9px 10px 8px;
+  background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
+  border-bottom: 2px solid var(--chassis-edge); }
+.m-brand { font: 700 14px var(--mono); letter-spacing: .5px; color: var(--stripe-red); }
+.m-brand span { color: var(--ink); }
+.m-vsp { flex: 1 1 auto; }
+.m-led { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.m-led-win { background: var(--led-bg); border: 1px solid #000; border-radius: 8px; padding: 4px 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.6) inset, 0 1px 0 rgba(255,255,255,.05);
+  font: 700 19px var(--mono); letter-spacing: 2px; color: var(--pm-green);
+  text-shadow: 0 0 8px rgba(47,213,115,.7); }
+.m-led-cap { font: 600 9px var(--mono); letter-spacing: 1.4px; color: var(--ink-soft); text-transform: uppercase; }
+.m-pill { font: 700 8px var(--mono); letter-spacing: 1px; padding: 3px 7px; border-radius: 5px;
+  border: 1px solid rgba(47,213,115,.55); color: #1f7a45; background: rgba(47,213,115,.22); }
+.m-screen { padding: 11px; display: flex; flex-direction: column; gap: 11px; background: var(--chassis-2);
+  max-height: 640px; overflow-y: auto; }
+.m-screen .panel { box-shadow: 0 1px 0 rgba(255,255,255,.35), 0 3px 8px rgba(0,0,0,.3);
+  border-color: var(--chassis-dark); }
+/* phone: taller chain rows (the P2 touch rule) */
+.m-frame .chain-table td, .m-frame .chain-table th { padding-top: 7px; padding-bottom: 7px; }
+.m-frame .pos-close { min-width: 34px; min-height: 30px; font-size: 15px; }
+.m-frame .chain-scroll { max-height: 186px; }
+
+/* mockup responsiveness: frames shrink on a narrow window */
+@media (max-width: 1240px) { .chassis { width: 100%; } }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="mk-head">
+  <h1>SEVE · readability pass — consolidated mockup</h1>
+  <p>One representative screen (Live Book + Mixer roster) at desktop and mobile widths, with the ten
+     approved fixes applied inside the existing 909 language. Illustrative data. Grey matter around the
+     frames is mockup chrome, not the app.</p>
+</header>
+
+<!-- ==================== TOKEN DELTA (findings 1 · 2 · 3) ==================== -->
+<section class="mk-sec">
+  <h2>Token delta — on-cream ink only (LCD / LED / blackout / --pm-* untouched)</h2>
+  <div class="mk-tokens">
+    <div class="tk"><span class="tk-name">--green (cream)</span>
+      <span class="sw"><i style="background:#1f9d57"></i><span>#1f9d57 · 2.3:1</span></span>
+      <span class="arr">→</span>
+      <span class="sw new"><i style="background:#0e6132"></i><span>#0e6132 · ≈4.4–5.0:1</span></span>
+    </div>
+    <div class="tk"><span class="tk-name">--red (cream)</span>
+      <span class="sw"><i style="background:#d23a28"></i><span>#d23a28 · 3.2:1</span></span>
+      <span class="arr">→</span>
+      <span class="sw new"><i style="background:#9e2d1c"></i><span>#9e2d1c · ≈4.3–4.8:1</span></span>
+    </div>
+    <div class="tk"><span class="tk-name">alert amber (fg)</span>
+      <span class="sw"><i style="background:#b07d10"></i><span>#b07d10 · 2.4:1</span></span>
+      <span class="arr">→</span>
+      <span class="sw new"><i style="background:#855f0c"></i><span>#855f0c + wash · ≈3.4–3.8:1</span></span>
+    </div>
+    <div class="tk"><span class="tk-name">--muted on cream</span>
+      <span class="sw"><i style="background:#8b8678"></i><span>#8b8678 · 2.4:1</span></span>
+      <span class="arr">→</span>
+      <span class="sw new"><i style="background:#55534c"></i><span>--ink-soft · ≈4.4–5.0:1</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== DESKTOP · 1180px ==================== -->
+<section class="mk-sec">
+  <h2>Desktop · 1180px chassis</h2>
+  <div class="mk-frames">
+  <div class="chassis">
+
+    <div class="section-label"><span class="idx">B</span><span class="lab">Live Book</span>
+      <span class="sec-right">3 open · realized <span class="pos">+$1,061</span></span></div>
+
+    <div class="grid">
+      <div class="col">
+        <!-- OPEN POSITIONS — pinned columns, bumped type, bold P&L, amber tell -->
+        <div class="panel">
+          <div class="phead"><span class="t">Open Positions</span>
+            <span class="x"><span class="live-dot"></span>3 legs</span></div>
+          <table class="pos-table">
+            <colgroup>
+              <col style="width:30px"><col><col style="width:52px"><col style="width:66px">
+              <col style="width:66px"><col style="width:92px"><col style="width:40px">
+            </colgroup>
+            <thead><tr>
+              <th class="tl">PM</th><th class="tl">Contract</th><th>Qty</th><th>Entry</th>
+              <th>Mark</th><th>Unreal P&amp;L</th><th aria-label="close"></th>
+            </tr></thead>
+            <tbody>
+              <tr class="pos-main">
+                <td class="tl"><span class="pm-dot" style="background:var(--pm-green);box-shadow:0 0 6px var(--pm-green)"></span></td>
+                <td class="tl">745C</td><td>+2</td><td>2.35</td><td>3.10</td>
+                <td class="pos">+$150</td><td><button class="pos-close">✕</button></td>
+              </tr>
+              <tr class="pos-ctx"><td colspan="7" class="tl"><span class="ctx-line">
+                <span class="ctx-bit ctx-ch">BREAK(ALT)</span><span class="ctx-bit">38m in</span>
+                <span class="ctx-bit pos">+32%</span><span class="ctx-bit">peak +41%</span>
+                <span class="ctx-bit ctx-dim">stop 1.18</span></span></td></tr>
+
+              <tr class="pos-main">
+                <td class="tl"><span class="pm-dot" style="background:var(--pm-cyan);box-shadow:0 0 6px var(--pm-cyan)"></span></td>
+                <td class="tl">741P <span class="man-tag">✋MAN</span></td><td>+4</td><td>1.62</td><td>0.98</td>
+                <td class="neg">−$256</td><td><button class="pos-close">✕</button></td>
+              </tr>
+              <tr class="pos-ctx"><td colspan="7" class="tl"><span class="ctx-line">
+                <span class="ctx-bit ctx-ch">PB RIDER</span><span class="ctx-bit">1h 12m in</span>
+                <span class="ctx-bit neg">−40%</span><span class="ctx-bit ctx-dim">stop 0.81</span></span></td></tr>
+
+              <tr class="pos-main">
+                <td class="tl"><span class="pm-dot" style="background:var(--pm-amber);box-shadow:0 0 6px var(--pm-amber)"></span></td>
+                <td class="tl">743C</td><td>+1</td><td>1.90</td><td>2.05</td>
+                <td class="pos">+$15</td><td><button class="pos-close">✕</button></td>
+              </tr>
+              <tr class="pos-ctx"><td colspan="7" class="tl"><span class="ctx-line">
+                <span class="ctx-bit ctx-ch">MOMO</span><span class="ctx-bit">22m in</span>
+                <span class="ctx-bit pos">+8%</span><span class="ctx-bit">peak +55%</span>
+                <span class="ctx-bit ctx-hot">gave 85%</span>
+                <span class="ctx-bit ctx-dim">stop 0.95</span></span></td></tr>
+            </tbody>
+          </table>
+
+          <div class="recent-trades">
+            <div class="rt-head"><span>Today's trades</span>
+              <span class="pos">attribution +$1,061 · 4</span></div>
+            <div class="rt-list">
+              <button class="rt-row"><span class="rt-dot" style="background:var(--pm-violet);box-shadow:0 0 5px var(--pm-violet)"></span>
+                <span class="rt-sym">744C ×3</span><span class="rt-meta"><span class="rt-ch">GRIND</span>
+                <span class="rt-trig">target premium</span></span><span class="rt-time">10:42</span>
+                <span class="rt-pnl pos">+$347</span></button>
+              <button class="rt-row"><span class="rt-dot" style="background:var(--pm-blue);box-shadow:0 0 5px var(--pm-blue)"></span>
+                <span class="rt-sym">739P ×2</span><span class="rt-meta"><span class="rt-ch">V3</span>
+                <span class="rt-trig">stop premium</span></span><span class="rt-time">11:05</span>
+                <span class="rt-pnl neg">−$402</span></button>
+              <button class="rt-row"><span class="rt-dot" style="background:var(--pm-green);box-shadow:0 0 5px var(--pm-green)"></span>
+                <span class="rt-sym">745C ×2</span><span class="rt-meta"><span class="rt-ch">BREAK(ALT)</span>
+                <span class="rt-trig">trail exit</span></span><span class="rt-time">13:18</span>
+                <span class="rt-pnl pos">+$1,204</span></button>
+              <button class="rt-row"><span class="rt-dot" style="background:var(--pm-cyan);box-shadow:0 0 5px var(--pm-cyan)"></span>
+                <span class="rt-sym">741P ×1</span><span class="rt-meta"><span class="rt-ch">PB RIDER</span>
+                <span class="rt-trig">✋ reversal</span></span><span class="rt-time">14:02</span>
+                <span class="rt-pnl neg">−$88</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <!-- OPTION CHAIN — sticky header while the strikes scroll -->
+        <div class="panel">
+          <div class="phead"><span class="t">SPY Chain · 0DTE</span><span class="x">scroll — header stays</span></div>
+          <div class="chain-scroll">
+            <table class="chain-table">
+              <thead><tr><th>C Bid</th><th>C Ask</th><th style="text-align:center">Strike</th><th>P Bid</th><th>P Ask</th></tr></thead>
+              <tbody>
+                <tr><td class="calls">8.10</td><td class="calls">8.25</td><td class="strike-col">738</td><td class="puts">0.42</td><td class="puts">0.45</td></tr>
+                <tr><td class="calls">7.15</td><td class="calls">7.30</td><td class="strike-col">739</td><td class="puts">0.58</td><td class="puts">0.61</td></tr>
+                <tr><td class="calls">6.20</td><td class="calls">6.35</td><td class="strike-col">740</td><td class="puts">0.79</td><td class="puts">0.83</td></tr>
+                <tr><td class="calls">5.30</td><td class="calls">5.45</td><td class="strike-col">741</td><td class="puts">1.05</td><td class="puts">1.10</td></tr>
+                <tr><td class="calls">4.45</td><td class="calls">4.60</td><td class="strike-col">742</td><td class="puts">1.38</td><td class="puts">1.44</td></tr>
+                <tr class="atm"><td class="calls">3.65</td><td class="calls">3.78</td><td class="strike-col">743</td><td class="puts">1.79</td><td class="puts">1.86</td></tr>
+                <tr><td class="calls">2.92</td><td class="calls">3.04</td><td class="strike-col">744</td><td class="puts">2.28</td><td class="puts">2.36</td></tr>
+                <tr><td class="calls">2.28</td><td class="calls">2.38</td><td class="strike-col">745</td><td class="puts">2.86</td><td class="puts">2.95</td></tr>
+                <tr><td class="calls">1.72</td><td class="calls">1.81</td><td class="strike-col">746</td><td class="puts">3.54</td><td class="puts">3.65</td></tr>
+                <tr><td class="calls">1.26</td><td class="calls">1.34</td><td class="strike-col">747</td><td class="puts">4.31</td><td class="puts">4.44</td></tr>
+                <tr><td class="calls">0.89</td><td class="calls">0.96</td><td class="strike-col">748</td><td class="puts">5.18</td><td class="puts">5.32</td></tr>
+                <tr><td class="calls">0.61</td><td class="calls">0.67</td><td class="strike-col">749</td><td class="puts">6.13</td><td class="puts">6.29</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- STATES — proposed loading vs existing empty (finding 9) -->
+        <div class="panel">
+          <div class="phead"><span class="t">Open Positions</span><span class="x">first paint (proposed)</span></div>
+          <div class="empty-state"><span class="es-dot"></span><span>syncing book…</span>
+            <span class="es-sub">loading positions</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label" style="margin-top:22px"><span class="idx">C</span><span class="lab">Mixer · Roster</span></div>
+    <div class="panel">
+      <div class="phead"><span class="t">Fleet</span><span class="x">$ columns right-aligned · pills editable</span></div>
+      <div class="roster">
+        <table class="roster-table">
+          <thead><tr>
+            <th>Channel</th><th>Mode</th><th class="rt-num">Stop</th><th class="rt-num">Take</th>
+            <th class="rt-num">Risk/tr</th><th class="rt-num">Stop/day</th><th class="rt-num">Day P&amp;L</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="pm-dot" style="background:var(--pm-green);margin-right:7px;vertical-align:middle"></span><span class="rt-name">BREAK(ALT)</span><span class="rt-tick">SPY</span></td>
+              <td><span class="chm chm-lock on">LOCK</span><span class="chm chm-ride">RIDE</span></td>
+              <td class="rt-num"><button class="chf-edit chf-stop">−30%</button></td>
+              <td class="rt-num"><button class="chf-edit chf-take">+22%</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$500</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$1,250</button></td>
+              <td class="rt-num pos">+$1,204</td>
+            </tr>
+            <tr>
+              <td><span class="pm-dot" style="background:var(--pm-blue);margin-right:7px;vertical-align:middle"></span><span class="rt-name">V3</span><span class="rt-tick">SPY</span></td>
+              <td><span class="chm chm-lock">LOCK</span><span class="chm chm-ride on">RIDE</span></td>
+              <td class="rt-num"><button class="chf-edit chf-stop">−50%</button></td>
+              <td class="rt-num"><button class="chf-edit chf-ride">ride</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$500</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$1,250</button></td>
+              <td class="rt-num neg">−$402</td>
+            </tr>
+            <tr>
+              <td><span class="pm-dot" style="background:var(--pm-amber);margin-right:7px;vertical-align:middle"></span><span class="rt-name">V3 ITM</span><span class="rt-tick">IWM</span></td>
+              <td><span class="chm chm-lock on">LOCK</span><span class="chm chm-ride">RIDE</span></td>
+              <td class="rt-num"><button class="chf-edit chf-stop">−30%</button></td>
+              <td class="rt-num"><button class="chf-edit chf-take">+22%</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$750</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$1,875</button></td>
+              <td class="rt-num pos">+$36</td>
+            </tr>
+            <tr>
+              <td><span class="pm-dot" style="background:var(--pm-cyan);margin-right:7px;vertical-align:middle"></span><span class="rt-name">MOMO</span><span class="rt-tick">QQQ</span></td>
+              <td><span class="chm chm-lock">LOCK</span><span class="chm chm-ride on">RIDE</span></td>
+              <td class="rt-num"><button class="chf-edit chf-stop">−50%</button></td>
+              <td class="rt-num"><button class="chf-edit chf-ride">ride</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$720</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$1,800</button></td>
+              <td class="rt-num pos">+$88</td>
+            </tr>
+            <tr class="rt-muted">
+              <td><span class="pm-dot" style="background:var(--pm-violet);margin-right:7px;vertical-align:middle"></span><span class="rt-name">GRIND</span><span class="rt-tick">SPY</span><span class="rt-flag rt-mutedflag">muted</span><span class="rt-flag">uS·off</span></td>
+              <td><span class="chm chm-lock on">LOCK</span><span class="chm chm-ride">RIDE</span></td>
+              <td class="rt-num"><button class="chf-edit chf-stop">−30%</button></td>
+              <td class="rt-num"><button class="chf-edit chf-take">+15%</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$350</button></td>
+              <td class="rt-num"><button class="chf-edit chf-amt">$900</button></td>
+              <td class="rt-num pos">+$0</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+  </div>
+  <ul class="mk-legend">
+    <li><b>①</b> P&L green/red = new deep pair (readable on cream)</li>
+    <li><b>③</b> “gave 85%” tell: deep amber + wash</li>
+    <li><b>④</b> cells 12.5px · headers 10px · P&L bold</li>
+    <li><b>⑤</b> position columns pinned (no tick-reflow)</li>
+    <li><b>⑥</b> roster $ columns right-aligned</li>
+    <li><b>⑦</b> chain header sticky under scroll</li>
+    <li><b>⑨</b> “syncing book…” before first data</li>
+    <li><b>⑩</b> true minus “−” everywhere</li>
+  </ul>
+</section>
+
+<!-- ==================== MOBILE · 402px ==================== -->
+<section class="mk-sec">
+  <h2>Mobile · 402px shell</h2>
+  <div class="mk-frames">
+  <div class="m-frame">
+    <div class="m-vitals">
+      <span class="m-brand">S<span>EVE</span></span>
+      <span class="m-pill">RUN</span>
+      <span class="m-vsp"></span>
+      <div class="m-led"><span class="m-led-win">101.2K</span><span class="m-led-cap">Fund $</span></div>
+    </div>
+    <div class="m-screen">
+
+      <div class="panel">
+        <div class="phead"><span class="t">Open Positions</span>
+          <span class="x"><span class="live-dot"></span>3 legs</span></div>
+        <table class="pos-table">
+          <colgroup>
+            <col style="width:26px"><col><col style="width:44px"><col style="width:56px">
+            <col style="width:56px"><col style="width:82px">
+          </colgroup>
+          <thead><tr>
+            <th class="tl">PM</th><th class="tl">Contract</th><th>Qty</th><th>Entry</th><th>Mark</th><th>Unreal P&amp;L</th>
+          </tr></thead>
+          <tbody>
+            <tr class="pos-main">
+              <td class="tl"><span class="pm-dot" style="background:var(--pm-green);box-shadow:0 0 6px var(--pm-green)"></span></td>
+              <td class="tl">745C</td><td>+2</td><td>2.35</td><td>3.10</td><td class="pos">+$150</td>
+            </tr>
+            <tr class="pos-ctx"><td colspan="6" class="tl"><span class="ctx-line">
+              <span class="ctx-bit ctx-ch">BREAK(ALT)</span><span class="ctx-bit">38m in</span>
+              <span class="ctx-bit pos">+32%</span><span class="ctx-bit ctx-dim">stop 1.18</span></span></td></tr>
+            <tr class="pos-main">
+              <td class="tl"><span class="pm-dot" style="background:var(--pm-amber);box-shadow:0 0 6px var(--pm-amber)"></span></td>
+              <td class="tl">743C</td><td>+1</td><td>1.90</td><td>2.05</td><td class="pos">+$15</td>
+            </tr>
+            <tr class="pos-ctx"><td colspan="6" class="tl"><span class="ctx-line">
+              <span class="ctx-bit ctx-ch">MOMO</span><span class="ctx-bit">22m in</span>
+              <span class="ctx-bit pos">+8%</span><span class="ctx-bit ctx-hot">gave 85%</span>
+              <span class="ctx-bit ctx-dim">stop 0.95</span></span></td></tr>
+          </tbody>
+        </table>
+        <div class="recent-trades">
+          <div class="rt-head"><span>Today's trades</span><span class="pos">attribution +$1,061 · 4</span></div>
+          <div class="rt-list">
+            <button class="rt-row"><span class="rt-dot" style="background:var(--pm-green);box-shadow:0 0 5px var(--pm-green)"></span>
+              <span class="rt-sym">745C ×2</span><span class="rt-meta"><span class="rt-ch">BREAK(ALT)</span></span>
+              <span class="rt-time">13:18</span><span class="rt-pnl pos">+$1,204</span></button>
+            <button class="rt-row"><span class="rt-dot" style="background:var(--pm-blue);box-shadow:0 0 5px var(--pm-blue)"></span>
+              <span class="rt-sym">739P ×2</span><span class="rt-meta"><span class="rt-ch">V3</span></span>
+              <span class="rt-time">11:05</span><span class="rt-pnl neg">−$402</span></button>
+          </div>
+          <!-- finding 8: the tooltip caveat, visible on touch -->
+          <div class="rt-note">Σ per-channel fill-net = attribution; shared-strike rows are approximate — Fund (NAV) is the headline truth.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="phead"><span class="t">SPY Chain · 0DTE</span><span class="x">header sticks</span></div>
+        <div class="chain-scroll">
+          <table class="chain-table">
+            <thead><tr><th>C Bid</th><th>C Ask</th><th style="text-align:center">Strike</th><th>P Bid</th><th>P Ask</th></tr></thead>
+            <tbody>
+              <tr><td class="calls">6.20</td><td class="calls">6.35</td><td class="strike-col">740</td><td class="puts">0.79</td><td class="puts">0.83</td></tr>
+              <tr><td class="calls">5.30</td><td class="calls">5.45</td><td class="strike-col">741</td><td class="puts">1.05</td><td class="puts">1.10</td></tr>
+              <tr><td class="calls">4.45</td><td class="calls">4.60</td><td class="strike-col">742</td><td class="puts">1.38</td><td class="puts">1.44</td></tr>
+              <tr class="atm"><td class="calls">3.65</td><td class="calls">3.78</td><td class="strike-col">743</td><td class="puts">1.79</td><td class="puts">1.86</td></tr>
+              <tr><td class="calls">2.92</td><td class="calls">3.04</td><td class="strike-col">744</td><td class="puts">2.28</td><td class="puts">2.36</td></tr>
+              <tr><td class="calls">2.28</td><td class="calls">2.38</td><td class="strike-col">745</td><td class="puts">2.86</td><td class="puts">2.95</td></tr>
+              <tr><td class="calls">1.72</td><td class="calls">1.81</td><td class="strike-col">746</td><td class="puts">3.54</td><td class="puts">3.65</td></tr>
+              <tr><td class="calls">1.26</td><td class="calls">1.34</td><td class="strike-col">747</td><td class="puts">4.31</td><td class="puts">4.44</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  </div>
+  <ul class="mk-legend">
+    <li><b>②</b> secondary text = ink-soft (no 2.4:1 grey)</li>
+    <li><b>④</b> same bumped scale as desktop (shared components)</li>
+    <li><b>⑦</b> chain header pins inside the screen scroll</li>
+    <li><b>⑧</b> attribution caveat visible (tooltips die on touch) · pill hit-areas extended invisibly</li>
+  </ul>
+</section>
+
+<footer class="mk-head" style="margin-top:34px">
+  <p style="font-family:var(--mono);font-size:10px;letter-spacing:.5px">
+    SEVE · seve-dashboard · readability mockup · 2026-07-02 · tokens from app/globals.css + app/console.css</p>
+</footer>
+
+</body>
+</html>

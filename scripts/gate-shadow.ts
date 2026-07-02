@@ -110,7 +110,7 @@ async function main() {
   const { data: sigs, error } = await sb
     .from("signals")
     .select("id,strategist_id,created_at,blocked_reason,rationale,strategists(slug),direction")
-    .in("blocked_reason", ["cost_gate", "stale_chain", "not_armed"])
+    .in("blocked_reason", ["cost_gate", "stale_chain", "not_armed", "halted"])
     .gte("created_at", since)
     .order("created_at", { ascending: true });
   if (error) { console.error(`gate-shadow: signals read failed — ${error.message}`); process.exit(1); }
@@ -127,10 +127,14 @@ async function main() {
 
   // Split populations: every gate block processes; bench signals group per (channel, ET day)
   // for the sequential re-entry walk.
+  // `halted` joins the bench walk (data-hole fix 2026-07-02): a KILL window's blocked
+  // entries re-signal every bar while flat, exactly like drafts — same one-at-a-time
+  // sequential semantics, and without this they vanish at the 7d quote prune.
+  const WALK = new Set(["not_armed", "halted"]);
   const benchByDay = new Map<string, any[]>();
   const gateSigs: any[] = [];
   for (const s of (sigs ?? []) as any[]) {
-    if (s.blocked_reason !== "not_armed") { gateSigs.push(s); continue; }
+    if (!WALK.has(s.blocked_reason)) { gateSigs.push(s); continue; }
     const key = `${s.strategist_id}|${String(s.created_at).slice(0, 10)}`;
     const arr = benchByDay.get(key) ?? [];
     arr.push(s);
@@ -193,6 +197,27 @@ async function main() {
       cursorMs = base.exitAt ? Date.parse(base.exitAt) : tMs + 60_000; // unscored → try the next minute's signal
     }
   }
+
+  // ── GAMMA-OPEN LEDGER (data-hole fix 2026-07-02): the 9:35 implied-move readings — the A5
+  // classifier's own input — live only in `events`, which PRUNES AT 30d; the earliest readings
+  // (06-17) would evaporate the week of the A5 read. Bank message+meta durably, keyed sym|date.
+  try {
+    const { data: gam } = await sb
+      .from("events").select("created_at,message,meta")
+      .like("message", "stream-shadow: gamma-open%")
+      .order("created_at", { ascending: true }).limit(2000);
+    const GLED = "data/gamma-open.json";
+    const prev: Record<string, unknown> = existsSync(GLED) ? JSON.parse(readFileSync(GLED, "utf8")) : {};
+    let gNew = 0;
+    for (const e of (gam ?? []) as any[]) {
+      const sym = e.meta?.sym ?? "?";
+      const key = `${sym}|${String(e.created_at).slice(0, 10)}`;
+      if (!(key in prev)) { prev[key] = { at: e.created_at, ...(e.meta ?? {}) }; gNew++; }
+    }
+    mkdirSync("data", { recursive: true });
+    writeFileSync(GLED, JSON.stringify(prev, null, 1));
+    console.log(`  gamma-open ledger: +${gNew} new / ${Object.keys(prev).length} total sym-days banked → ${GLED} (events prune 30d — this is the durable copy)`);
+  } catch (e) { console.error(`  gamma-open ledger failed — ${(e as Error).message}`); }
 
   mkdirSync("data", { recursive: true });
   const rows = [...ledger.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
