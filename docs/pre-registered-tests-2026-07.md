@@ -109,6 +109,32 @@ a live knob from the metric alone. Below 15% → the ratchet question stays clos
 channel. Motivating observations (2026-07-02): IWM peaked +21.7% vs TP 22 → stop; the ORB
 A/B green→reds are EXCLUDED (no-TP probe spec — their fade-back is design cost, not signal).
 
+## C1 · Correlated-bet STACK CAP (pre-registered 2026-07-02 — enforcement PENDING operator go)
+**Rule (fixed now):** block a NEW entry when ≥4 positions are already open desk-wide on the same
+underlying+direction (the entry would be the 5th+). Entries-only; never forces exits; blocked
+entries get `blocked_reason='stack_cap'` → gate-shadow scores their would-haves automatically.
+**Evidence (23 sessions, retro depth replay):** P&L by stack depth at entry is near-monotonic —
+depth 1–2: +$11/+$40 per trade (n=584); depth 3–4: ≈flat (n=197); depth ≥5: −$67→−$1,944/t
+(n=99, Σ −$43.4k). ⚠ Depth correlates with the 06-26/29 clone-sizing era — the mechanism and
+monotonicity survive the confound; the exact dollars do not.
+**Kill criterion:** if capped entries' gate-shadow would-have P&L is net POSITIVE at N≥30
+blocked (the cap is blocking winners), the cap dies. **Era note:** arming this changes the
+entry mix mid-era-4 — the A6 read must note the boundary date if enforcement lands before it.
+
+## B2-CLOSURE · Chop-day short-premium — CLOSED (operator's word, 2026-07-02)
+Operator: not interested in multi-leg for now — drawdown appetite. The A5→B2 chain is severed;
+A5's pass path is the ride-family SIZE-DOWN only. The multi-leg compiler stays unbuilt. (The
+vol-risk-premium finding stays on file if appetite changes; nothing else keeps this alive.)
+
+## PINNED · Runner/scale-out experiment (operator's word, 2026-07-02 — "a real lever")
+Operator-pinned as the lever straddling take-profit vs letting winners win: **TP half at the
+LOCK target + ratchet the remainder, vs the standard all-out LOCK twin** (separate accounts,
+A1 sizing, N≥40, pre-register before build). Build trigger unchanged: the A6 read (either
+outcome informs it — LOCK failing its bar makes it urgent; LOCK passing scopes it to the
+fat-near-miss channels via A6b). Requires multi-TRANCHE exit support in the worker (partial
+exits currently close the row — touches the shared-OCC ledger; sized as a real build).
+peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
+
 ## Calibration-change log (era boundaries for the A6/month-end reads)
 - **2026-07-02 (pre-open):** (A) QQQ V3 clones (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
   RISK 900→500, mc 18→6, daily stop 2000→1000 — the A1 lab-sizing standard applied (they predated
