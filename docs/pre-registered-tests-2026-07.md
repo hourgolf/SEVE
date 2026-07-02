@@ -81,8 +81,13 @@ both deferred to the A6 era-4 read unless separately approved.
 59_virtual_bench_fleet.sql (10 mechanism-diverse `vb-*` DRAFTS: vwap-revert · rsi-revert ·
 level-break · or-fail · macd-state · curl-reversal · squeeze-break · pm-trend · gap-drift ·
 ribbon-cross) + 60_virtual_trades.sql + the gate-shadow extension: drafts signal but never
-trade; the nightly job reconstructs each FIRST-signal-of-day's would-have outcome (entry ask →
-own TP/stop → 15:25 flatten) from the quotes tape → `virtual_trades` → the §03 LAB panel.
+trade; the nightly job (v2, RE-ENTRY-AWARE) walks each (channel, day)'s signal stream
+sequentially — reconstruct a trade at the first quote ask, replay the channel's OWN TP/stop
+(TP-before-stop within a quote, the live sweep's ordering) to the 15:25 flatten, then take the
+next signal AFTER that exit — capped 6 round trips/channel/day (daily-stop latch unmodeled) —
+→ `virtual_trades` → the §03 LAB panel. This matches the backtest prior's one-at-a-time +
+re-enter-when-flat semantics (engine/vb-fleet-probe.ts banks that prior: all 10 specs −EV
+pooled on 308 sessions; watch-cells = or-fail's chop +$44/t and ribbon-cross's trend +$3/+9/t).
 - **Rules (fixed now):** virtual data is CAPITAL-BLIND + mid/ask-basis → hypothesis substrate
   ONLY, never an arm. Graduation: virtual → paper-lab draft at A1 sizing → its own
   pre-registered gate. The MINING pass over this data waits for **≥2 months of accrual or a

@@ -24,6 +24,7 @@ create table if not exists virtual_trades (
   entry_px        numeric,                   -- decision ask (rationale, else first quote after the signal)
   exit_reason     text not null default 'no_quotes',  -- would_target | would_stop | would_flatten | no_quotes
   exit_px         numeric,
+  exit_at         timestamptz,                        -- v2 re-entry walk anchors the next entry AFTER this
   pnl_per_contract numeric,                  -- (exit − entry) × 100, mid-basis UPPER BOUND
   tp_pct          numeric,
   stop_pct        numeric,
