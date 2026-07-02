@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-01c"; // audit fixes: prem_stop=0 semantics (sizing + sweep), half-day session close, pyramid cap scoped to own stack (+boost), EOD flatten covers expiring prior-session holds, stale-chain entry guard, date-scoped orders, daily-stop >100-close window, recovery-avg newest-buys
+export const WORKER_VERSION = "stream-2026-07-01d"; // KILL = FLATTEN (operator's word): halt/kill now market-closes every open position via the fast sweep (fund-wide or per-bucket), instead of freezing exits; entries stay frozen. Prior (c): audit fixes — prem_stop=0 semantics, half-day close, pyramid cap own-stack+boost, EOD flatten expiring holds, stale-chain guard
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

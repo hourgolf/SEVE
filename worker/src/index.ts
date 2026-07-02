@@ -128,7 +128,7 @@ async function reloadConfig(): Promise<void> {
   else warn("config: reload returned no fund_state — keeping previous");
   const nowHalted = cfg.fund?.is_halted ?? false;
   if (hadFund && !prevHalted && nowHalted)
-    alertOnce(alpaca.etParts(Date.now()).date, "halt", "fund", "⛔ desk HALTED", "kill switch tripped — entries AND exits frozen (incl. the EOD flatten) until cleared; open positions are unmanaged");
+    alertOnce(alpaca.etParts(Date.now()).date, "halt", "fund", "⛔ desk HALTED", "kill switch tripped — entries frozen; FLATTENING every open position at market (within ~10s in RTH, else at the next open)");
   if (prevHalted && !nowHalted) alertClear("halt", "fund");
 }
 
@@ -434,7 +434,14 @@ async function fastExitSweep(): Promise<void> {
   cycling = true;
   try {
     await store.heartbeat(`${WORKER_VERSION} sweep`);
-    if (cfg.fund.is_halted || cfg.fund.mode !== "paper") return; // exits frozen (kill switch)
+    if (cfg.fund.mode !== "paper") return; // a non-paper mode freezes everything (live-$ safety wall)
+    // KILL = FLATTEN (operator's word, 2026-07-01): flipping the kill switch closes every open
+    // stream-owned position at MARKET — within one ~10s sweep during RTH, or at the first sweep
+    // after the next open if tripped off-hours. Entries stay frozen (decide.ts entryGuard);
+    // the bar-close exit path stays frozen too (this sweep owns the flatten). Per-account
+    // is_halted does the same for just that bucket. Replaces the old freeze-everything
+    // semantics, which stranded same-day 0DTEs through the bell (audit M3).
+    const haltFlatten = cfg.fund.is_halted;
     const byId = new Map(cfg.channels.map((c) => [c.id, c]));
     const allRows = (await store.getOpenPositions()).filter((r) => owned.some((c) => c.id === r.strategist_id));
     if (!allRows.length) return;
@@ -445,7 +452,9 @@ async function fastExitSweep(): Promise<void> {
     // positions/orders so an exit sells the right account's lot (the same OCC can live in two).
     for (const g of groupByAccount(owned, cfg.accounts)) {
       const api = g.api;
-      if (!api || !g.account.is_armed || g.account.is_halted) continue;
+      // A halted bucket is NOT skipped anymore — it enters flatten mode below (kill = close all).
+      if (!api || !g.account.is_armed) continue;
+      const acctFlatten = haltFlatten || g.account.is_halted;
       const rows = allRows.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
       if (!rows.length) continue;
       let positions: alpaca.AlpacaPosition[] = [], allOrders: alpaca.AlpacaOrder[] = [];
@@ -459,6 +468,18 @@ async function fastExitSweep(): Promise<void> {
       const ch = byId.get(r.strategist_id)!;
       const chain = chainBySym.get(ch.underlying.toUpperCase());
       const exec: ExecCtx = { api, chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+      // ---- KILL/HALT FLATTEN (operator's word, 2026-07-01): close EVERYTHING at market ----
+      // Highest priority — runs before every other exit check, incl. the manual twins (a kill
+      // switch overrides the human-owns-exits experiment; safety beats the A/B). executeExit's
+      // idempotency (working-order check, min(held,row), status-guarded close) makes the 10s
+      // retry loop safe until each row books; a rejected/drained lot reconciles via 09b.
+      if (acctFlatten) {
+        info(`halt-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — kill switch (${haltFlatten ? "fund" : g.account.name})`);
+        try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "halt_flatten" }, r, exec); }
+        catch (e) { warn(`halt-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+        peakMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
+        continue;
+      }
       // ---- EOD HARD-FLATTEN backstop (wall-clock; 2026-06-19 Juneteenth strand fix) ----
       // The strategy's same-day flatten is BAR-relative, so a gapped near-bell bar (06-18: no
       // 15:59 print) means it never fires and the position strands — over a 3-day weekend if a
