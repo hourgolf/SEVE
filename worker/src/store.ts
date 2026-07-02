@@ -100,6 +100,7 @@ export interface PositionRow {
   opened_at: string | null;
   status: string;
   peak_mark: number | null; // durable MFE source — the running MAX option mark over the hold (44_trade_forensics)
+  trough_mark: number | null; // durable MAE twin — the running MIN option mark over the hold (58_trough_mark; stop-calibration instrumentation)
 }
 
 const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServiceKey, {
@@ -219,6 +220,7 @@ export async function getOpenPositions(): Promise<PositionRow[]> {
     opened_at: p.opened_at ?? null,
     status: p.status,
     peak_mark: p.peak_mark != null ? Number(p.peak_mark) : null,
+    trough_mark: p.trough_mark != null ? Number(p.trough_mark) : null,
   }));
 }
 
@@ -226,6 +228,13 @@ export async function getOpenPositions(): Promise<PositionRow[]> {
  *  The in-memory peak is already monotonic, so a direct write is correct. Display-only. */
 export async function markPeak(id: string, peak: number): Promise<void> {
   try { await sb.from("positions").update({ peak_mark: peak }).eq("id", id); }
+  catch { /* forensics only — never block the trade path */ }
+}
+
+/** Durable MAE twin (58_trough_mark): persist the running MIN option mark (the fast-exit sweep
+ *  ratchets it, NEW-low-only). Stop-calibration instrumentation — display/analysis only. */
+export async function markTrough(id: string, trough: number): Promise<void> {
+  try { await sb.from("positions").update({ trough_mark: trough }).eq("id", id); }
   catch { /* forensics only — never block the trade path */ }
 }
 
@@ -320,6 +329,7 @@ export async function insertPosition(row: {
   const { error } = await sb.from("positions").insert({
     ...core, current_mark: core.avg_entry_price, unrealized_pnl: 0, status: "open",
     peak_mark: core.avg_entry_price, // MFE ratchet starts at entry
+    trough_mark: core.avg_entry_price, // MAE ratchet starts at entry (58_trough_mark)
     entry_reason: entry_reason ?? null, entry_features: entry_features ?? null, entry_delta: entry_delta ?? null,
   });
   return error ? error.message : null;

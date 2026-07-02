@@ -66,6 +66,17 @@ close.** Next event 2026-07-29; re-run `npm run fomc-resolution-probe` after eac
 - **Graduation:** standing arm only at pooled n≥10 AND largest single day ≤50% of total P&L.
 - **Kill:** expectancy ≤0 at n=10, or concentration never dissolves by n=12 → delete the channel.
 
+## A7 · trough_mark MAE instrumentation (approved 2026-07-01 — COLLECTING from worker -e)
+58_trough_mark.sql + worker stream-2026-07-01e: the fast sweep ratchets a durable running MIN
+mark beside peak_mark (NEW-low-only, seeded at entry, restart-safe). MAE% = (entry−trough)/entry,
+mid-basis (a LOWER bound on bid-side adverse excursion — label it). Instrumentation only; no
+exit reads it. **Purpose:** makes stop calibration a measurable question (noise-stop rate vs
+stop level per channel). **No stop change from this data before ~N≥100 stamped trades per
+channel-family AND an offline replay agreeing** — same anti-shopping rule as the rest of this file.
+The related flagged-but-not-approved items stay parked: grind-v3-2's unreachable TP (12% > its
+p90 MFE, the 1DTE %-scaling misfit) and breakout(base)'s LOCK-22 vs its ride-verdict tail —
+both deferred to the A6 era-4 read unless separately approved.
+
 ## B2 · Chop-day short-premium (DEFERRED — chained behind A5)
 No multi-leg compiler work unless A5 passes. Inherits A5's kill. Additional standing door-check:
 if modeled limit-order body-spread capture can't flip the iron-fly replay ≥ +$25/day pooled,

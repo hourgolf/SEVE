@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-01d"; // KILL = FLATTEN (operator's word): halt/kill now market-closes every open position via the fast sweep (fund-wide or per-bucket), instead of freezing exits; entries stay frozen. Prior (c): audit fixes — prem_stop=0 semantics, half-day close, pyramid cap own-stack+boost, EOD flatten expiring holds, stale-chain guard
+export const WORKER_VERSION = "stream-2026-07-01e"; // trough_mark MAE ratchet (58_trough_mark, instrumentation only — makes stop calibration measurable). Prior (d): KILL = FLATTEN — halt/kill market-closes every open position via the fast sweep; entries stay frozen. (c): audit fixes — prem_stop=0 semantics, half-day close, pyramid cap own-stack+boost, EOD flatten expiring holds, stale-chain guard
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

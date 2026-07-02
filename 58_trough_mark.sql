@@ -1,0 +1,16 @@
+-- ============================================================================
+-- 58_trough_mark.sql — durable MAE (maximum adverse excursion), approved 2026-07-01.
+--
+-- The desk ratchets peak_mark (MFE) but has NO adverse-side twin, so the stop-
+-- calibration question ("does the −30% stop fire on noise a −40% would survive?")
+-- was unanswerable from durable data — option_quotes prune at 7d. trough_mark is
+-- the running MIN option mark over the hold, ratcheted in the same ~10s fast-exit
+-- sweep as peak_mark (NEW-low-only writes, seeded at entry, restart-safe via the
+-- persisted value). MAE% = (entry − trough)/entry. Mid-basis, same as peak_mark:
+-- a LOWER bound on how bad the bid-side got — label it in any analysis.
+--
+-- INSTRUMENTATION ONLY (docs/pre-registered-tests-2026-07.md context): no exit
+-- logic reads it; it makes future stop calibration measurable, forward. Additive
+-- + nullable → old rows unaffected; worker stream-2026-07-01e stamps it.
+-- ============================================================================
+alter table positions add column if not exists trough_mark numeric;

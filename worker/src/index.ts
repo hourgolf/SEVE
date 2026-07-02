@@ -42,6 +42,9 @@ const SYMBOLS = config.symbols;
 const ownedBy = (c: store.ChannelConfig): boolean => c.executor === "stream" && SYMBOLS.includes(c.underlying.toUpperCase());
 // Running peak option mid per open position (power giveback + sweep state).
 const peakMidByKey = new Map<string, number>();
+// Running TROUGH option mid per open position — the MAE twin (58_trough_mark). Instrumentation
+// only: no exit reads it; it makes stop calibration measurable from durable data.
+const troughMidByKey = new Map<string, number>();
 // Orphan safety-net persistence: `${accountId}|${occ}` → consecutive cycles seen UNCOVERED
 // (held in a bucket with no open desk row). A 2-cycle gate dodges same-cycle fill→insert races.
 const orphanSeen = new Map<string, number>();
@@ -478,6 +481,7 @@ async function fastExitSweep(): Promise<void> {
         try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "halt_flatten" }, r, exec); }
         catch (e) { warn(`halt-flatten ${ch.slug} failed — ${(e as Error).message}`); }
         peakMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
+        troughMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
         continue;
       }
       // ---- EOD HARD-FLATTEN backstop (wall-clock; 2026-06-19 Juneteenth strand fix) ----
@@ -499,6 +503,7 @@ async function fastExitSweep(): Promise<void> {
         try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
         catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
         peakMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
+        troughMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
         continue;
       }
       const mid = chain?.byOcc(r.occ_symbol)?.mid ?? 0;
@@ -509,6 +514,12 @@ async function fastExitSweep(): Promise<void> {
       const peak = Math.max(prevPeak, mid);
       peakMidByKey.set(key, peak);
       if (peak > prevPeak) void store.markPeak(r.id, peak); // durable MFE ratchet, NEW-high only (44_trade_forensics; off the trade path)
+      // MAE twin (58_trough_mark): ratchet the running MIN mark, NEW-low-only writes, seeded from
+      // the persisted value (restart-safe). Instrumentation only — nothing reads it on the trade path.
+      const prevTrough = troughMidByKey.get(key) ?? r.trough_mark ?? r.avg_entry_price;
+      const trough = Math.min(prevTrough, mid);
+      troughMidByKey.set(key, trough);
+      if (trough < prevTrough) void store.markTrough(r.id, trough);
       // "The desk summons you" — premium-side pages off the same ~10s sweep state:
       // a ripper crossing +CROSS%, and a meaningful peak giving back ≥ FRAC of the
       // move (the positions panel's 50%-giveback amber, pushed to the phone live).
@@ -537,6 +548,7 @@ async function fastExitSweep(): Promise<void> {
       info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (mid ${mid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)})`);
       await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec);
       peakMidByKey.delete(key);
+      troughMidByKey.delete(key);
       }
     }
   } catch (e) {
