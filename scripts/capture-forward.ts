@@ -89,6 +89,9 @@ async function main() {
   // TIER 2 — live-window analyses (best-effort; the ledger needs the still-live 7d quotes)
   for (const d of recentDays) run(`day-report ${d}`, ["day-report", "--", "--date", d], 2);
   run("build-training-store", ["build-training-store"], 2);
+  // gate-shadow (phase-4 A2): bank each blocked entry's would-have outcome BEFORE the 7d
+  // quote prune erases it — the cost-gate calibration dataset accrues nightly, read-only.
+  run("gate-shadow", ["gate-shadow"], 2);
 
   // ── summary ──
   console.log(`\n══ summary · ${stamp()} ══`);

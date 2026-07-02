@@ -74,6 +74,7 @@
     "backfill-forensics": "tsx --env-file=.env.local scripts/backfill-forensics.ts",
     "forensics-mine": "tsx scripts/forensics-mine.ts",
     "reconcile-alpaca": "tsx --env-file=.env.local scripts/reconcile-alpaca.ts",
+    "gate-shadow": "tsx --env-file=.env.local scripts/gate-shadow.ts",
     "override-scorecard": "tsx --env-file=.env.local scripts/override-scorecard.ts",
     "import-ledgers": "tsx --env-file=.env.local scripts/import-ledgers-to-cloud.ts",
     "shadow-cron": "tsx scripts/shadow-cron.ts",

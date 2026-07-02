@@ -149,8 +149,13 @@ export function useDeskWrite() {
         const newId = (ins as { id: string }).id;
         const { error: e3 } = await sb.from("strategist_config").insert({
           strategist_id: newId,
-          capital_pct: Number(cfg.capital_pct) || 200, aggression: Number(cfg.aggression) || 0,
-          max_contracts: Number(cfg.max_contracts) || 6, daily_stop_usd: Number(cfg.daily_stop_usd) || 500,
+          // PAPER-LAB SIZING RULE (phase-4 A1, 2026-07-01): a clone starts at VALIDATION size —
+          // RISK ≤ $500 / ≤6 contracts — regardless of the source's knobs. The 06-26 clones
+          // inherited RISK $2,000 and owned the month's largest loss driver before earning any
+          // forward evidence. Scale a clone UP only after it passes its pre-registered gate
+          // (docs/pre-registered-tests-2026-07.md).
+          capital_pct: Math.min(Number(cfg.capital_pct) || 200, 500), aggression: Number(cfg.aggression) || 0,
+          max_contracts: Math.min(Number(cfg.max_contracts) || 6, 6), daily_stop_usd: Math.min(Number(cfg.daily_stop_usd) || 500, 1000),
           muted: false, soloed: false,
           underlying_stop_pct: cfg.underlying_stop_pct != null ? Number(cfg.underlying_stop_pct) : 0,
           event_policy: cfg.event_policy === "ignore" ? "ignore" : "standdown",
