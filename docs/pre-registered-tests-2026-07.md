@@ -95,6 +95,16 @@ pooled on 308 sessions; watch-cells = or-fail's chop +$44/t and ribbon-cross's t
 - **Kill (per variant):** any vb-* with <10 first-of-day signals after 30 sessions is inert —
   delete or re-spec it; no threshold tinkering in between.
 
+## Calibration-change log (era boundaries for the A6/month-end reads)
+- **2026-07-02 (pre-open):** (A) QQQ V3 clones (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
+  RISK 900→500, mc 18→6, daily stop 2000→1000 — the A1 lab-sizing standard applied (they predated
+  the rule; first live trade 07-01 cost −$1,708 at 14ct). Entries/TP/stop untouched.
+- **2026-07-02 (pre-open):** (B) `grind-v3-2` take_profit_pct 12→5 — DTE-scaling calibration
+  parity (its 0DTE twin's TP 10 ÷ the ~2.2× 1DTE premium ratio; the 12% target sat ABOVE its own
+  p90 MFE and fired 0/42 times lifetime). ⚠ Its per-channel stats are a NEW ERA from 07-02 —
+  evaluate pre/post separately; do not pool across the boundary.
+Both reversible by restoring the prior values; both are rule-applications, not P&L-fitted tweaks.
+
 ## B2 · Chop-day short-premium (DEFERRED — chained behind A5)
 No multi-leg compiler work unless A5 passes. Inherits A5's kill. Additional standing door-check:
 if modeled limit-order body-spread capture can't flip the iron-fly replay ≥ +$25/day pooled,
