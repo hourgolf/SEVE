@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { KillControl } from "@/components/console/hw/KillControl";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
-import { KitToggle } from "@/components/console/KitToggle";
-import { sessionStep } from "@/components/console/SessionSequencer";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { signedUsd } from "@/lib/format";
 import type { FundState } from "@/lib/desk/types";
@@ -44,15 +41,6 @@ export interface ShellProps {
 // separate cog.) Owns the kill wiring (local arm state + KILL/RESET_HALT dispatch).
 export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAcctId, activeRoom, setActiveRoom }: ShellProps) {
   const { canWrite } = useDeskWrite();
-
-  // STEP readout — the session sequencer's clock, mirrored on the transport
-  // (set in an effect + 30s tick so SSR/hydration can't disagree on the time).
-  const [stepNow, setStepNow] = useState<number | null>(null);
-  useEffect(() => {
-    setStepNow(sessionStep());
-    const iv = window.setInterval(() => setStepNow(sessionStep()), 30_000);
-    return () => window.clearInterval(iv);
-  }, []);
 
   const running = fund.running && !fund.is_halted;
   const runLabel = fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
@@ -100,12 +88,6 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
           <span className="shb-k">BOOKS</span>
           <span className="shb-v">{`Δ${signedUsd(booksDelta)}`}</span>
         </span>
-        <span className="shell-led shell-step" title="session step — 16 steps map 9:30→16:00 ET (the sequencer under the Live Book)">
-          <span className="sl-cap">STEP</span>
-          <span className="sl-v" style={{ color: stepNow != null ? "var(--led-red)" : "#8a8c8e" }}>
-            {stepNow != null ? `${stepNow + 1}·16` : "—"}
-          </span>
-        </span>
       </div>
 
       <nav className="shell-tabs" aria-label="rooms">
@@ -126,7 +108,6 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
         <span className={`shell-write${canWrite ? " on" : ""}`} title={canWrite ? "changes persist to the desk" : "read-only — sign in via OPS to control the desk"}>
           {canWrite ? "● operator" : "○ read-only"}
         </span>
-        <KitToggle />
         <KillControl halted={fund.is_halted} />
       </div>
     </header>

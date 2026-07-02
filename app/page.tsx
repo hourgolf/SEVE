@@ -11,6 +11,7 @@ import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useOpsStatus } from "@/hooks/useOpsStatus";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
+import { useKitSounds } from "@/hooks/useKitSounds";
 import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { DeskProvider } from "@/components/console/DeskProvider";
@@ -63,6 +64,9 @@ function Surface({
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
   const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
+  // 909 KIT — audible fills (opt-in via the KIT pad; inert while off). At the
+  // seam so desktop + mobile share one diff of the same feed.
+  useKitSounds(feed.positions, feed.recentTrades);
 
   // Active room (shell tabs) + the DESK market-band collapse — persisted so the
   // operator returns to the same room/layout. Lifted to the seam (passed down).

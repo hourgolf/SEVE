@@ -15,6 +15,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { eventsOn } from "@/engine/market-events";
+import { KitToggle } from "@/components/console/KitToggle";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd } from "@/lib/format";
 import type { Position, StrategistState } from "@/lib/desk/types";
@@ -303,12 +304,15 @@ export function SessionSequencer({
 
   return (
     <div className={`sqz${open ? "" : " folded"}`}>
-      <button type="button" className="sqz-bar" onClick={toggle} aria-expanded={open}>
-        <span className="sqz-title">Session Sequencer</span>
-        <span className="sqz-sub">16 steps · 9:30 → 16:00 ET · fills light the pattern · events programmed ahead</span>
-        <span className="sqz-now">{cur != null ? `step ${cur + 1}·16` : afterClose ? "session done" : "pre-open"}</span>
-        <span className="sqz-ch">{open ? "▾" : "▸"}</span>
-      </button>
+      <div className="sqz-head">
+        <button type="button" className="sqz-bar" onClick={toggle} aria-expanded={open}>
+          <span className="sqz-title">Session Sequencer</span>
+          <span className="sqz-sub">16 steps · 9:30 → 16:00 ET · fills light the pattern · events programmed ahead</span>
+          <span className="sqz-now">{cur != null ? `step ${cur + 1}·16` : afterClose ? "session done" : "pre-open"}</span>
+          <span className="sqz-ch">{open ? "▾" : "▸"}</span>
+        </button>
+        <KitToggle />
+      </div>
       {open && (
         <>
           <div className="sq-leds">

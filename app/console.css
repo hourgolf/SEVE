@@ -2041,9 +2041,10 @@
 .sqz { background: linear-gradient(180deg, var(--chassis), var(--chassis-2)); border: 1px solid var(--chassis-edge);
   border-radius: 9px; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 2px 8px rgba(0, 0, 0, 0.4);
   padding: 10px 12px 11px; margin: 14px 0 0; }
-.sqz-bar { display: flex; align-items: baseline; gap: 12px; width: 100%; padding: 0; background: none; border: none;
-  cursor: pointer; text-align: left; }
-.sqz:not(.folded) .sqz-bar { margin-bottom: 8px; }
+.sqz-head { display: flex; align-items: center; gap: 12px; }
+.sqz:not(.folded) .sqz-head { margin-bottom: 8px; }
+.sqz-bar { display: flex; align-items: baseline; gap: 12px; flex: 1 1 auto; min-width: 0; padding: 0;
+  background: none; border: none; cursor: pointer; text-align: left; }
 .sqz-title { font: 700 9px var(--mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-soft); }
 .sqz-sub { font: 400 9px var(--mono); color: var(--ink-soft); opacity: 0.75; }
 .sqz-now { margin-left: auto; font: 700 9px var(--mono); letter-spacing: 0.5px; color: var(--ink-soft); white-space: nowrap; }
@@ -2083,10 +2084,12 @@
 .sq-up { color: var(--lcd-up); }
 .sq-dn { color: var(--lcd-down); }
 
-/* KIT pad (desktop shell transport) + the STEP LED's width guard — the shell is
-   width-critical at 1180, so the STEP readout yields first on narrow desktops. */
-.shell-kit { font: 700 10px var(--mono); letter-spacing: 0.8px; padding: 5px 10px; border-radius: 6px;
-  border: 1px solid #2e2f31; background: #26282a; color: #9a9d9f; cursor: pointer;
+/* KIT pad — lives on the sequencer bar (the shell measured ZERO width slack at
+   the fixed 1180 chassis, so shell STEP/KIT additions wait for the transport
+   reflow). Dark 909 pad on the cream bezel; amber-lit when the kit is on. */
+.kit-pad { font: 700 10px var(--mono); letter-spacing: 0.8px; padding: 5px 10px; border-radius: 6px;
+  border: 1px solid #000; background: linear-gradient(180deg, #3a3b3e, #232427); color: #cfcdc6; cursor: pointer;
+  flex: 0 0 auto; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 2px 4px rgba(0, 0, 0, 0.4);
   transition: background 0.12s, color 0.12s, box-shadow 0.12s; }
-.shell-kit.on { background: #e0a43c; border-color: #e0a43c; color: #1a1407; box-shadow: 0 0 9px rgba(224, 164, 60, 0.5); }
-@media (max-width: 1290px) { .shell-step { display: none; } }
+.kit-pad.on { background: linear-gradient(180deg, var(--pm-amber), #b87d14); border-color: #7a5a10; color: #1a1407;
+  box-shadow: 0 0 10px rgba(255, 178, 36, 0.55), 0 1px 0 rgba(255, 255, 255, 0.3) inset; }
