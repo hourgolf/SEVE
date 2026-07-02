@@ -10,13 +10,17 @@ export interface KillSwitchProps {
 
 // Red guarded KILL switch. Click the cover to lift (arm) it; click again to
 // close (disarm). Strike KILL while armed to halt the desk.
-// (UI-first: flips local fund_state.is_halted only.)
+// ⚠ SEMANTICS since worker stream-2026-07-01d (operator's word): KILL = FLATTEN —
+// the worker market-closes EVERY open position within ~10s (or at the next open),
+// then freezes entries until RESET. The old freeze-everything is gone; the label
+// and tooltips below say so, so muscle memory can't assume a freeze.
+// (UI-first: flips local fund_state.is_halted; the worker does the flatten.)
 export function KillSwitch({ halted, armed, onArm, onFire, onReset }: KillSwitchProps) {
   if (halted) {
     return (
       <div className="kill halted">
-        <div className="kill-status">HALTED</div>
-        <button type="button" className="kill-reset" onClick={onReset}>
+        <div className="kill-status" title="desk halted — open positions were flattened at market; entries frozen until RESET">HALTED</div>
+        <button type="button" className="kill-reset" onClick={onReset} title="clear the halt — entries resume next cycle">
           RESET
         </button>
       </div>
@@ -29,6 +33,7 @@ export function KillSwitch({ halted, armed, onArm, onFire, onReset }: KillSwitch
         className="kill-cover"
         onClick={onArm}
         aria-label={armed ? "close cover (disarm kill switch)" : "lift cover to arm kill switch"}
+        title={armed ? "close cover (disarm)" : "lift cover to arm — KILL closes ALL open positions at market"}
       >
         <span className="kill-cover-grip" />
       </button>
@@ -37,7 +42,8 @@ export function KillSwitch({ halted, armed, onArm, onFire, onReset }: KillSwitch
         className="kill-fire"
         onClick={onFire}
         disabled={!armed}
-        aria-label="halt the desk"
+        aria-label="KILL — flatten every open position at market and freeze entries"
+        title="KILL = FLATTEN: market-closes every open position (~10s in RTH) and freezes entries until RESET"
       >
         KILL
       </button>
