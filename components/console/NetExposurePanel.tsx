@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useFold } from "@/hooks/useFold";
 import { computeNetExposure } from "@/lib/desk/netExposure";
 import type { Position } from "@/lib/desk/types";
 
@@ -13,6 +14,7 @@ const k = (v: number) => (Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `
 
 export function NetExposurePanel({ positions, liveMarks }: { positions: Position[]; liveMarks?: Record<string, number> }) {
   const ex = useMemo(() => computeNetExposure(positions, liveMarks), [positions, liveMarks]);
+  const [folded, toggleFold] = useFold("netx"); // before the early return — hooks stay unconditional
   if (ex.occCount === 0) return null; // desk flat → nothing to show
 
   const stacks = ex.byOcc.filter((e) => e.channels.length >= 2).slice(0, 4);
@@ -23,7 +25,9 @@ export function NetExposurePanel({ positions, liveMarks }: { positions: Position
       <div className="phead">
         <span className="t">Net Exposure</span>
         <span className="x" title="the desk's TRUE aggregate per contract — the channels share lots, so this is the real correlated bet. Read-only: no channel is ever capped.">the real correlated lot · no caps</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
+      {!folded && (
       <div className="pbody">
         <div className="dbk-row">
           <div className="dbk-stat" title="total contracts held across all channels right now">
@@ -71,6 +75,7 @@ export function NetExposurePanel({ positions, liveMarks }: { positions: Position
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

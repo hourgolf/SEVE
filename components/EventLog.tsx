@@ -1,14 +1,20 @@
+"use client";
+
+import { useFold } from "@/hooks/useFold";
 import { timeOfDay } from "@/lib/format";
 import type { MarketEvent } from "@/lib/types";
 
 // Latest ~14 rows from the append-only events journal. Mirrors renderLog().
 export function EventLog({ events }: { events: MarketEvent[] }) {
+  const [folded, toggleFold] = useFold("events");
   return (
     <div className="panel">
       <div className="phead">
         <span className="t">System Event Log</span>
         <span className="x">live</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
+      {!folded && (
       <div className="pbody">
         <div className="log">
           {events.length === 0 ? (
@@ -26,6 +32,7 @@ export function EventLog({ events }: { events: MarketEvent[] }) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

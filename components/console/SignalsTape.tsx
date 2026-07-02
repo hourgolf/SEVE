@@ -1,5 +1,6 @@
 "use client";
 
+import { useFold } from "@/hooks/useFold";
 import { timeOfDay } from "@/lib/format";
 import type { Signal } from "@/lib/desk/types";
 
@@ -9,6 +10,7 @@ import type { Signal } from "@/lib/desk/types";
 // ×N counter, so the tape reads as information instead of scrolling itself
 // to death. The newest occurrence's timestamp is shown.
 export function SignalsTape({ signals }: { signals: Signal[] }) {
+  const [folded, toggleFold] = useFold("signals");
   const rows: { s: Signal; n: number }[] = [];
   for (const s of signals) {
     const last = rows[rows.length - 1];
@@ -20,7 +22,9 @@ export function SignalsTape({ signals }: { signals: Signal[] }) {
       <div className="phead">
         <span className="t">Signals Tape</span>
         <span className="x">live</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
+      {!folded && (
       <div className="pbody">
         <div className="log">
           {rows.length === 0 ? (
@@ -44,6 +48,7 @@ export function SignalsTape({ signals }: { signals: Signal[] }) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

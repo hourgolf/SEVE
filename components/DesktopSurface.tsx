@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { AddChannel } from "@/components/console/AddChannel";
 import { AuthControl } from "@/components/AuthControl";
@@ -36,7 +36,7 @@ import { padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
 import { marketSummary } from "@/lib/marketSummary";
 import { signedUsd } from "@/lib/format";
-import type { SurfaceProps } from "@/components/surfaceTypes";
+import type { Room, SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
 function SectionLabel({ id, idx, children }: { id: string; idx: string; children: ReactNode }) {
@@ -45,6 +45,29 @@ function SectionLabel({ id, idx, children }: { id: string; idx: string; children
       <span className="idx">{idx}</span>
       <span className="lab">{children}</span>
     </div>
+  );
+}
+
+// ---- one-page rooms (909-redesign slice 2) --------------------------------
+// The three rooms STACK on one scrolling page; the shell tabs anchor-jump (with
+// scrollspy keeping the lit tab honest) and each room folds via its silkscreen
+// head. Folded rooms don't mount their content — REVIEW/OPS defer their fetches
+// until opened (default: desk open, review + ops folded).
+const ROOM_DEFS: { id: Room; idx: string; label: string; jp: string }[] = [
+  { id: "desk", idx: "01", label: "Desk", jp: "操作" },
+  { id: "review", idx: "02", label: "Review", jp: "検証" },
+  { id: "ops", idx: "03", label: "Ops", jp: "運用" },
+];
+const ROOM_FOLD_KEY = "seve-room-folds";
+
+function RoomHead({ def, folded, onToggle }: { def: (typeof ROOM_DEFS)[number]; folded: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="section-label room-head" onClick={onToggle} aria-expanded={!folded}>
+      <span className="idx">{def.idx}</span>
+      <span className="lab">{def.label}</span>
+      <span className="sec-jp">{def.jp}</span>
+      <span className="fold-ch">{folded ? "▸" : "▾"}</span>
+    </button>
   );
 }
 
@@ -111,6 +134,52 @@ export function DesktopSurface({
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const { canWrite } = write;
 
+  // Room folds (one-page desk): desk open, review/ops folded until wanted —
+  // folded rooms don't mount, so their data fetches defer too. Persisted.
+  const [roomFolds, setRoomFolds] = useState<Record<Room, boolean>>({ desk: false, review: true, ops: true });
+  useEffect(() => {
+    try {
+      const s = window.localStorage.getItem(ROOM_FOLD_KEY);
+      if (s) setRoomFolds((f) => ({ ...f, ...(JSON.parse(s) as Partial<Record<Room, boolean>>) }));
+    } catch { /* */ }
+  }, []);
+  const persistFolds = (n: Record<Room, boolean>) => {
+    try { window.localStorage.setItem(ROOM_FOLD_KEY, JSON.stringify(n)); } catch { /* */ }
+  };
+  const toggleRoom = (r: Room) => setRoomFolds((f) => { const n = { ...f, [r]: !f[r] }; persistFolds(n); return n; });
+  // Shell tab click → unfold + smooth-scroll to the room (scrollspy below keeps
+  // the lit tab honest on manual scroll).
+  const jumpToRoom = (r: Room) => {
+    setActiveRoom(r);
+    setRoomFolds((f) => { if (!f[r]) return f; const n = { ...f, [r]: false }; persistFolds(n); return n; });
+    // setTimeout (not rAF — throttled tabs may never fire rAF) after the unfold commits;
+    // "auto" behavior so the jump lands even where smooth-scroll animation is suppressed.
+    window.setTimeout(() => document.getElementById(`room-${r}`)?.scrollIntoView({ block: "start" }), 30);
+  };
+  // Scrollspy — a throttled scroll listener (not IntersectionObserver: IO rides
+  // the rendering pipeline and goes silent in throttled/backgrounded tabs). The active
+  // room = the last one whose top has crossed the 30%-from-top reading line.
+  useEffect(() => {
+    let pending = false;
+    const spy = () => {
+      pending = false;
+      const line = window.innerHeight * 0.3;
+      let cur: Room = "desk";
+      for (const d of ROOM_DEFS) {
+        const el = document.getElementById(`room-${d.id}`);
+        if (el && el.getBoundingClientRect().top <= line) cur = d.id;
+      }
+      setActiveRoom(cur);
+    };
+    const onScroll = () => {
+      if (pending) return;
+      pending = true;
+      window.setTimeout(spy, 120);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [setActiveRoom]);
+
   // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
 
@@ -157,14 +226,15 @@ export function DesktopSurface({
         acctId={acctId}
         setAcctId={setAcctId}
         activeRoom={activeRoom}
-        setActiveRoom={setActiveRoom}
+        setActiveRoom={jumpToRoom}
       />
 
       {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
 
       {/* ============ DESK — market · mixer · live book ====================== */}
-      {activeRoom === "desk" && (
-        <section className="room room--desk">
+      <section className="room room--desk" id="room-desk" data-room-id="desk">
+        <RoomHead def={ROOM_DEFS[0]} folded={roomFolds.desk} onToggle={() => toggleRoom("desk")} />
+        {!roomFolds.desk && (<>
           <TodayStrip underlyings={tradedUnderlyings} />
           <div className="market-section">
             <div className={`mkt-bar${collapsedMarket ? " collapsed" : ""}`}>
@@ -300,12 +370,13 @@ export function DesktopSurface({
             </div>
             <MasterStrip fund={desk.fund} fundPnl={liveFund} />
           </div>
-        </section>
-      )}
+        </>)}
+      </section>
 
       {/* ============ REVIEW — reflect ===================================== */}
-      {activeRoom === "review" && (
-        <section className="room room--review log-section">
+      <section className="room room--review log-section" id="room-review" data-room-id="review">
+        <RoomHead def={ROOM_DEFS[1]} folded={roomFolds.review} onToggle={() => toggleRoom("review")} />
+        {!roomFolds.review && (<>
           <div className="grid grid--live">
             <div className="col col--fill">
               <PnlPanel
@@ -323,12 +394,13 @@ export function DesktopSurface({
           </div>
           <div style={{ marginTop: 14 }}><ForensicsPanel /></div>
           <div style={{ marginTop: 14 }}><LabPanel /></div>
-        </section>
-      )}
+        </>)}
+      </section>
 
       {/* ============ OPS — tend the machine =============================== */}
-      {activeRoom === "ops" && (
-        <section className="room room--ops log-section">
+      <section className="room room--ops log-section" id="room-ops" data-room-id="ops">
+        <RoomHead def={ROOM_DEFS[2]} folded={roomFolds.ops} onToggle={() => toggleRoom("ops")} />
+        {!roomFolds.ops && (<>
           <DayBooksStrip
             strategists={desk.strategists}
             pnl={livePnl}
@@ -360,8 +432,8 @@ export function DesktopSurface({
           <div className="log-foot" style={{ marginTop: 14 }}>
             <EventLog events={data.events} />
           </div>
-        </section>
-      )}
+        </>)}
+      </section>
     </div>
   );
 }

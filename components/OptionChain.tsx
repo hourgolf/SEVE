@@ -1,3 +1,6 @@
+"use client";
+
+import { useFold } from "@/hooks/useFold";
 import { num2 } from "@/lib/format";
 import type { OptionQuote } from "@/lib/types";
 
@@ -31,6 +34,7 @@ export function OptionChain({
   /** Instrument label for the header (SPY/QQQ). */
   symbol?: string;
 }) {
+  const [folded, toggleFold] = useFold("chain");
   let rows: React.ReactNode;
   let meta = "—";
   let livePricing = false;
@@ -153,7 +157,9 @@ export function OptionChain({
             </span>
           )}
         </span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
+      {!folded && (
       <div className={`table-scroll${compact ? " table-fit" : ""}`}>
         <table>
           <thead>
@@ -184,6 +190,7 @@ export function OptionChain({
           <tbody>{rows}</tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

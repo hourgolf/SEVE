@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import { useFold } from "@/hooks/useFold";
 import { signedUsd } from "@/lib/format";
 import { useTradeInsight } from "@/hooks/useTradeInsight";
 import { useTradeTriggers } from "@/hooks/useTradeTriggers";
@@ -59,6 +60,7 @@ export function PositionsPanel({
    *  that fill on the chart (null when collapsed). */
   onOpenTrade?: (trade: Position | null) => void;
 }) {
+  const [folded, toggleFold] = useFold("book");
   const colorOf = (slug: string) =>
     pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
   const nameOf = (slug: string) => strategists.find((s) => s.slug === slug)?.name ?? slug;
@@ -135,7 +137,9 @@ export function PositionsPanel({
           {anyLive && <span className="live-dot" title="mark + P&L live from the option chain" />}
           {positions.length} legs
         </span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
+      {!folded && (<>
       <div className="table-scroll table-scroll--fit">
         <table>
           <thead>
@@ -344,6 +348,7 @@ export function PositionsPanel({
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 }

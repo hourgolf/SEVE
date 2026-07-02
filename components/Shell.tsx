@@ -33,7 +33,8 @@ export interface ShellProps {
   acctId: string | null;
   setAcctId: Dispatch<SetStateAction<string | null>>;
   activeRoom: Room;
-  setActiveRoom: Dispatch<SetStateAction<Room>>;
+  /** Tab click — the surface decides what it means (one-page desk: unfold + scroll). */
+  setActiveRoom: (r: Room) => void;
 }
 
 // The persistent shell: wordmark + account + health + NAV/DAY/BOOKS LEDs + room
