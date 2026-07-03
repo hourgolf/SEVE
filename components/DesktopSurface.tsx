@@ -368,7 +368,6 @@ export function DesktopSurface({
                 </div>
               )}
             </div>
-            <MasterStrip fund={desk.fund} fundPnl={liveFund} />
           </div>
         </>)}
       </section>
@@ -417,6 +416,9 @@ export function DesktopSurface({
               />
             </div>
             <div className="col">
+              {/* the MASTER hardware panel (capital knob · big NAV LED · full transport)
+                  lives in OPS now — the shell transport carries the daily-use controls */}
+              <MasterStrip fund={desk.fund} fundPnl={liveFund} />
               <MasterStopControl fund={desk.fund} />
               <div className="ops-controls" style={{ marginTop: 14 }}>
                 <PushToggle />

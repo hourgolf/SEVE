@@ -609,9 +609,11 @@
 .theme-toggle button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* ---------- console layout: channels + master ----------------------------- */
+/* single column since the transport reflow (slice 3) — the MASTER strip moved
+   to OPS, so the channel strips get the full chassis width */
 .console-grid {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   gap: 14px;
   margin-bottom: 14px;
 }
@@ -620,15 +622,8 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
-/* The FUND master is a fixed control panel — anchor it at the top (align-self:start
-   stops it stretching as channel rows are added) and pin its height to one channel
-   column so the mixer's top row reads as equal-height strips. Width stays auto/wide;
-   content distributes top→bottom (transport sits low, mirroring the MUTE/SOLO row). */
-.console-grid > .master {
-  align-self: start;
-  min-height: 552px;
-  justify-content: space-between;
-}
+/* (the old .console-grid > .master height-pin retired with the transport reflow —
+   the MASTER panel renders in the OPS room column now) */
 
 /* Responsive: stack the master below the channels, then drop to 2 columns. */
 @media (max-width: 1080px) {
@@ -648,11 +643,6 @@
     flex-wrap: wrap;
     justify-content: space-around;
     align-items: center;
-  }
-  /* stacked (full-width) master: drop the one-channel height pin + vertical spread */
-  .console-grid > .master {
-    min-height: 0;
-    justify-content: space-around;
   }
 }
 @media (max-width: 720px) {
@@ -2104,3 +2094,23 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
 .pfold { background: none; border: none; cursor: pointer; font: 700 11px var(--mono); color: inherit;
   opacity: 0.6; padding: 0 2px; flex: 0 0 auto; }
 .pfold:hover { opacity: 1; }
+
+/* ---- TRANSPORT REFLOW (909-redesign slice 3) — the shell absorbs the master's
+   START/STOP + guarded PAPER/LIVE; health + operator chips go dot-only (titles
+   carry the words); the STEP LED returns. The chassis is a fixed 1180 with zero
+   slack, so flex-wrap is the safety net: the bar wraps, it never clips. ---- */
+.shell { flex-wrap: wrap; row-gap: 8px; gap: 9px; }
+.shell-l { gap: 8px; }
+.shell-leds { gap: 10px; }
+.shell-tab { padding: 8px 11px; }
+.shell-xport { display: inline-flex; align-items: center; gap: 6px; }
+.shell-xport--locked { opacity: 0.45; filter: grayscale(0.4); pointer-events: none; }
+.shell-xport .xport { padding: 5px 7px; font-size: 9px; letter-spacing: 0.8px; }
+.shell-xport .guarded { flex-direction: row; }
+/* width-critical row: the switch + its title carry the mode; full labels live on
+   the OPS MASTER panel */
+.shell-xport .mode-labels { display: none; }
+.shell-xport .mode-hint { display: none; }
+/* the Δ prefix IS the label on the width-critical transport (title carries "BOOKS") */
+.shell .shell-books .shb-k { display: none; }
+.shell-write { font-size: 13px; letter-spacing: 0; }

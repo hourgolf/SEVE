@@ -1,8 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { KillControl } from "@/components/console/hw/KillControl";
+import { TransportButton } from "@/components/console/hw/TransportButton";
+import { GuardedToggle } from "@/components/console/hw/GuardedToggle";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
+import { sessionStep } from "@/components/console/SessionSequencer";
+import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { signedUsd } from "@/lib/format";
 import type { FundState } from "@/lib/desk/types";
@@ -37,15 +42,25 @@ export interface ShellProps {
   setActiveRoom: (r: Room) => void;
 }
 
-// The persistent shell: wordmark + account + health + NAV/DAY/BOOKS LEDs + room
-// tabs + the ONE always-visible KILL. (Settings live in the OPS room tab — no
-// separate cog.) Owns the kill wiring (local arm state + KILL/RESET_HALT dispatch).
+// THE TRANSPORT (909-redesign slice 3): the persistent shell now owns the
+// master controls — START/STOP + guarded PAPER/LIVE (lifted from MasterStrip,
+// identical handlers) + NAV/DAY/BOOKS/STEP readouts + room tabs + the ONE
+// always-visible KILL. Health + operator collapse to dots (titles carry the
+// words) — the fixed 1180 chassis has zero slack, and flex-wrap is the net.
 export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAcctId, activeRoom, setActiveRoom }: ShellProps) {
-  const { canWrite } = useDeskWrite();
+  const dispatch = useDeskDispatch();
+  const { canWrite, persistFund } = useDeskWrite();
 
   const running = fund.running && !fund.is_halted;
-  const runLabel = fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
-  const runCls = fund.is_halted ? "halt" : running ? "on" : "off";
+
+  // STEP readout — the session sequencer's clock on the transport (effect + 30s
+  // tick so SSR/hydration can't disagree on the time).
+  const [stepNow, setStepNow] = useState<number | null>(null);
+  useEffect(() => {
+    setStepNow(sessionStep());
+    const iv = window.setInterval(() => setStepNow(sessionStep()), 30_000);
+    return () => window.clearInterval(iv);
+  }, []);
 
   const down = liveFund.dayPnl < 0;
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
@@ -69,10 +84,22 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
       <div className="shell-l">
         <span className="shell-mark">$EVE</span>
         <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
-        <span className={`mm-pill mm-run ${runCls}`}>{runLabel}</span>
-        <span className={`mm-pill mm-mode ${fund.mode}`}>{fund.mode === "live" ? "LIVE" : "PAPER"}</span>
-        <span className={`shell-health sh-${hTone}`} title={ops.hbNote ? `worker: ${ops.hbNote}` : "stream/cron health (heartbeat)"}>
-          <i />{hLabel}
+        <span
+          className={`shell-xport${canWrite ? "" : " shell-xport--locked"}`}
+          title={canWrite ? undefined : "desk transport (START/STOP · PAPER/LIVE) — sign in via OPS to control the desk"}
+        >
+          <TransportButton label="START" variant="start" active={running} onPress={() => dispatch({ type: "START" })} disabled={fund.is_halted} />
+          <TransportButton label="STOP" variant="stop" active={!fund.running} onPress={() => dispatch({ type: "STOP" })} />
+          <GuardedToggle
+            mode={fund.mode}
+            onChange={(m) => {
+              dispatch({ type: "SET_MODE", mode: m });
+              persistFund({ mode: m });
+            }}
+          />
+        </span>
+        <span className={`shell-health sh-${hTone}`} title={`${hLabel} — stream/cron heartbeat${ops.hbNote ? ` · worker: ${ops.hbNote}` : ""}`}>
+          <i />
         </span>
       </div>
 
@@ -88,6 +115,12 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
         <span className={`shell-books shb-${dTone}`} title="NAV − attribution Σ (small = the books reconcile)">
           <span className="shb-k">BOOKS</span>
           <span className="shb-v">{`Δ${signedUsd(booksDelta)}`}</span>
+        </span>
+        <span className="shell-led shell-step" title="session step — 16 steps map 9:30→16:00 ET (the session sequencer under the Live Book)">
+          <span className="sl-cap">STEP</span>
+          <span className="sl-v" style={{ color: stepNow != null ? "var(--led-red)" : "#6c6e70" }}>
+            {stepNow != null ? `${stepNow + 1}·16` : "—"}
+          </span>
         </span>
       </div>
 
@@ -106,8 +139,8 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
       </nav>
 
       <div className="shell-r">
-        <span className={`shell-write${canWrite ? " on" : ""}`} title={canWrite ? "changes persist to the desk" : "read-only — sign in via OPS to control the desk"}>
-          {canWrite ? "● operator" : "○ read-only"}
+        <span className={`shell-write${canWrite ? " on" : ""}`} title={canWrite ? "operator — changes persist to the desk" : "read-only — sign in via OPS to control the desk"}>
+          {canWrite ? "●" : "○"}
         </span>
         <KillControl halted={fund.is_halted} />
       </div>
