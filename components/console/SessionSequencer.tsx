@@ -15,6 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { eventsOn } from "@/engine/market-events";
+import { isMarketHoliday, sessionCloseMin } from "@/engine/market-calendar";
 import { KitToggle } from "@/components/console/KitToggle";
 import { playKit, voiceForClose, type KitVoice } from "@/lib/desk/kit";
 import { pmVar } from "@/lib/desk/colors";
@@ -59,13 +60,22 @@ function stepOf(min: number): number {
   return Math.max(0, Math.min(N_STEPS - 1, Math.floor((min - OPEN_MIN) / STEP_LEN)));
 }
 
-/** Current session step (0-based) — null outside RTH / on weekends. Also feeds
- *  the shell's STEP LED. */
+// ET calendar date from an etNow()-shifted Date (its Y/M/D are already ET).
+function etDateFromShifted(et: Date): string {
+  return `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}`;
+}
+
+/** Current session step (0-based) — null outside RTH, on weekends, and on
+ *  market holidays; half-days end at the real 13:00 close. Also feeds the
+ *  shell's STEP LED. (Audit fix 2026-07-03: the running LED was chasing steps
+ *  on the July-4th-observed closure — the clock never consulted the calendar.) */
 export function sessionStep(): number | null {
   const et = etNow();
   const dow = et.getDay();
   const min = et.getHours() * 60 + et.getMinutes();
-  if (dow < 1 || dow > 5 || min < OPEN_MIN || min >= CLOSE_MIN) return null;
+  const dateET = etDateFromShifted(et);
+  if (dow < 1 || dow > 5 || isMarketHoliday(dateET)) return null;
+  if (min < OPEN_MIN || min >= sessionCloseMin(dateET)) return null;
   return stepOf(min);
 }
 
@@ -111,9 +121,13 @@ export function SessionSequencer({
   const et = etNow();
   const dow = et.getDay();
   const nowMin = et.getHours() * 60 + et.getMinutes();
-  const inSession = dow >= 1 && dow <= 5 && nowMin >= OPEN_MIN && nowMin < CLOSE_MIN;
+  // Calendar-aware clock: weekends + holidays have NO session (the LED stays
+  // dark); half-days close at 13:00 so the running light stops there.
+  const closed = dow < 1 || dow > 5 || isMarketHoliday(todayET);
+  const closeMin = sessionCloseMin(todayET);
+  const inSession = !closed && nowMin >= OPEN_MIN && nowMin < closeMin;
   const cur = inSession ? stepOf(nowMin) : null;
-  const afterClose = dow >= 1 && dow <= 5 && nowMin >= CLOSE_MIN;
+  const afterClose = !closed && nowMin >= closeMin;
 
   const colorOf = (slug: string) => pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
   const nameOf = (slug: string) => strategists.find((s) => s.slug === slug)?.name ?? slug;
@@ -326,7 +340,7 @@ export function SessionSequencer({
           <button type="button" className="m-sqbar" onClick={toggle} aria-expanded={open} aria-label="session sequencer">
             <span className="m-sq-lbl">Seq</span>
             {mini}
-            <span className="m-sq-step">{cur != null ? `${cur + 1}·16` : afterClose ? "done" : "pre"}</span>
+            <span className="m-sq-step">{cur != null ? `${cur + 1}·16` : afterClose ? "done" : closed ? "closed" : "pre"}</span>
             <span className="m-sq-ch">{open ? "▼" : "▲"}</span>
           </button>
           <button type="button" className={`m-sq-play${replaying ? " busy" : ""}`} onClick={replay} title="replay the day through the kit" aria-label="replay day">
@@ -349,7 +363,7 @@ export function SessionSequencer({
         <button type="button" className="sqz-bar" onClick={toggle} aria-expanded={open}>
           <span className="sqz-title">Session Sequencer</span>
           <span className="sqz-sub">16 steps · 9:30 → 16:00 ET · fills light the pattern · events programmed ahead</span>
-          <span className="sqz-now">{cur != null ? `step ${cur + 1}·16` : afterClose ? "session done" : "pre-open"}</span>
+          <span className="sqz-now">{cur != null ? `step ${cur + 1}·16` : afterClose ? "session done" : closed ? "market closed" : "pre-open"}</span>
           <span className="sqz-ch">{open ? "▾" : "▸"}</span>
         </button>
         <button type="button" className={`sqz-play${replaying ? " busy" : ""}`} onClick={replay} title="replay the day — chases the pattern; fills voice through the kit when it's on">

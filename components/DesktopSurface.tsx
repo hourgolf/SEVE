@@ -20,6 +20,7 @@ import { DndContext, closestCenter, PointerSensor, useDroppable, useSensor, useS
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
+import { useFold } from "@/hooks/useFold";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { MasterStrip } from "@/components/console/MasterStrip";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
@@ -161,6 +162,7 @@ export function DesktopSurface({
   const [addOpen, setAddOpen] = useState(false);
   const [rosterView, setRosterView] = useState<"strips" | "table">("strips"); // Mixer: per-channel strips vs the fleet table
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
+  const [composeFolded, toggleCompose] = useFold("compose");
   const { canWrite } = write;
 
   // Room folds (one-page desk): play + mix open, write/tape/ops folded until
@@ -472,8 +474,8 @@ export function DesktopSurface({
         {!roomFolds.write && (
           <div className="grid grid--live grid--even">
             <div className="col">
-              <div className="panel write-compose">
-                <div className="phead"><span className="t">Add Channel</span><span className="x">thesis → spec → gate → arm</span></div>
+              <div className={`panel write-compose${composeFolded ? " folded" : ""}`}>
+                <div className="phead"><span className="t">Add Channel</span><span className="x">thesis → spec → gate → arm</span><button type="button" className="pfold" onClick={toggleCompose} aria-expanded={!composeFolded} title={composeFolded ? "expand" : "collapse"}>{composeFolded ? "▸" : "▾"}</button></div>
                 <div className="pbody">
                   <p className="write-hint">
                     Import a strategy thesis (.md): instant frontmatter preview, LLM compile to a spec,

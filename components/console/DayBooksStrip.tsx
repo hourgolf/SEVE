@@ -1,6 +1,7 @@
 "use client";
 
 import { signedUsd } from "@/lib/format";
+import { useFold } from "@/hooks/useFold";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 
 // DAY · BOOKS — the numbers-first EOD trust strip atop §03 (consultant item:
@@ -31,12 +32,14 @@ export function DayBooksStrip({
   let topSlug = "", topVal = 0;
   for (const [slug, c] of Object.entries(pnl)) if (Math.abs(c.dayPnl || 0) > Math.abs(topVal)) { topSlug = slug; topVal = c.dayPnl || 0; }
   const topName = strategists.find((s) => s.slug === topSlug)?.name ?? topSlug;
+  const [folded, toggleFold] = useFold("daybooks");
 
   return (
-    <div className="panel dbk">
+    <div className={`panel dbk${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Day · Books</span>
         <span className="x" title="the NAV-delta is account truth; per-channel rows are relative attribution (shared-OCC)">NAV is truth</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody dbk-row">
         <div className="dbk-stat" title="account-truth day P&L (NAV delta, re-marked live)">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useVirtualBench } from "@/hooks/useVirtualBench";
+import { useFold } from "@/hooks/useFold";
 
 // LAB · VIRTUAL BENCH — the visibility layer for the spaghetti-without-splatter fleet
 // (59_virtual_bench_fleet): draft channels that signal but never trade, reconstructed
@@ -13,12 +14,14 @@ const cls = (v: number) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 
 export function LabPanel() {
   const { bench, gateBlocks, loading } = useVirtualBench();
+  const [folded, toggleFold] = useFold("lab");
 
   return (
-    <div className="panel">
+    <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Lab · Virtual Bench</span>
         <span className="x">would-have, mid-basis — not tradable evidence</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div style={{ padding: "10px 12px" }}>
         {loading ? (

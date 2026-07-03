@@ -2108,6 +2108,10 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
 .pfold { background: none; border: none; cursor: pointer; font: 700 11px var(--mono); color: inherit;
   opacity: 0.6; padding: 0 2px; flex: 0 0 auto; }
 .pfold:hover { opacity: 1; }
+/* generic class-based fold (tidy pass C7): panels that keep their body mounted
+   (reports keep fetching; folding is purely visual) hide everything but the phead */
+.panel.folded > *:not(.phead) { display: none; }
+.panel.folded > .phead { border-bottom: none; }
 
 /* ---- TRANSPORT REFLOW (909-redesign slice 3) — the shell absorbs the master's
    START/STOP + guarded PAPER/LIVE; health + operator chips go dot-only (titles
@@ -2134,6 +2138,15 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
 .shell-xport .mode-hint { display: none; }
 /* the Δ prefix IS the label on the width-critical transport (title carries "BOOKS") */
 .shell .shell-books .shb-k { display: none; }
+
+/* Knob captions inside CREAM data panels (e.g. Risk·Master Stop) — the Knob's
+   base palette is dark-panel (#9a9a9a / #e9e9e6 ≈ invisible on cream). Ink them
+   via the themed tokens; the dark MASTER strip (.master, not .panel) keeps its
+   light captions, and .channel already has its own override. (tidy pass A2) */
+.log-section .panel .knob-label,
+.m-app .panel .knob-label { color: var(--ink-soft); }
+.log-section .panel .knob-val,
+.m-app .panel .knob-val { color: var(--ink); }
 .shell-write { font-size: 13px; letter-spacing: 0; }
 
 /* ---- 5-ROOM RESHUFFLE (909-redesign slice 4): PLAY/MIX/WRITE/TAPE/OPS ------ */

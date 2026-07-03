@@ -29,6 +29,7 @@ import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { AuthControl } from "@/components/AuthControl";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
+import { useFold } from "@/hooks/useFold";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { MixerPads, padCode } from "@/components/mobile/MixerPads";
 import { pmVar } from "@/lib/desk/colors";
@@ -93,6 +94,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const [hlTrade, setHlTrade] = useState<Position | null>(null);
   const [show, setShow] = useState({ chart: true, positions: true, chain: false });
   const [addOpen, setAddOpen] = useState(false);
+  const [composeFolded, toggleCompose] = useFold("compose");
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
 
@@ -231,8 +233,8 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
 
         {tab === "write" && (
           <>
-            <div className="panel write-compose">
-              <div className="phead"><span className="t">Add Channel</span><span className="x">thesis → spec → gate → arm</span></div>
+            <div className={`panel write-compose${composeFolded ? " folded" : ""}`}>
+              <div className="phead"><span className="t">Add Channel</span><span className="x">thesis → spec → gate → arm</span><button type="button" className="pfold" onClick={toggleCompose} aria-expanded={!composeFolded} title={composeFolded ? "expand" : "collapse"}>{composeFolded ? "▸" : "▾"}</button></div>
               <div className="pbody">
                 <p className="write-hint">
                   Import a strategy thesis (.md): frontmatter preview, LLM compile to a spec,

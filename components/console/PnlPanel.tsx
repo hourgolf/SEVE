@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
+import { useFold } from "@/hooks/useFold";
 import { signedUsd, usd0, timeOfDay } from "@/lib/format";
 import { useWindowedPnl, type PnlWindow, type ChannelStat } from "@/hooks/useWindowedPnl";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
@@ -42,12 +43,14 @@ export function PnlPanel({
 
   const hasCurve =
     equityValues.length >= 2 && Math.max(...equityValues) !== Math.min(...equityValues);
+  const [folded, toggleFold] = useFold("pnl");
 
   return (
-    <div className="panel">
+    <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">P&amp;L · Equity</span>
         <span className="x">NAV {usd0(fundPnl.nav)}</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody">
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>

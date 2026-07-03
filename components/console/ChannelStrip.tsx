@@ -549,7 +549,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         tabIndex={0}
         onClick={onExpand}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onExpand?.(); } }}
-        title={`${name} — tap to adjust`}
+        title={`${name} · ${underlying} — tap to adjust`}
       >
         <div className="mc-head">
           <div className="mc-head-l">
@@ -559,8 +559,15 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           </div>
           <div className="mc-head-r">
             <div className={`mc-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
-            <span className="ch-ticker" title={`trades ${underlying}`}>{underlying}</span>
           </div>
+        </div>
+        {/* the binding exits at a glance (read-only here — tap expands to the editable pills) */}
+        <div className="mc-fires" aria-hidden="true">
+          <span className="chf-lbl">fires</span>
+          <span className="chf chf-stop">−{premStop}%</span>
+          <span className={`chf ${tp > 0 ? "chf-take" : "chf-ride"}`}>{tp > 0 ? `+${tp}%` : "ride"}</span>
+          <span className="chf chf-flat">EOD</span>
+          <span className="mc-tick">{underlying}</span>
         </div>
         <div className="mc-row">
           {/* indicator knob — non-interactive (pointer-events:none); a "tap to adjust" cue

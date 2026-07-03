@@ -1,6 +1,7 @@
 "use client";
 
 import { Knob } from "@/components/console/hw/Knob";
+import { useFold } from "@/hooks/useFold";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { usd0 } from "@/lib/format";
@@ -13,11 +14,13 @@ export function MasterStopControl({ fund }: { fund: FundState }) {
   const dispatch = useDeskDispatch();
   const { canWrite, persistFund } = useDeskWrite();
   const v = fund.master_daily_stop_usd ?? 0;
+  const [folded, toggleFold] = useFold("masterstop");
   return (
-    <div className="panel mstop">
+    <div className={`panel mstop${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Risk · Master Stop</span>
         <span className="x">desk-wide</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody mstop-body">
         <Knob

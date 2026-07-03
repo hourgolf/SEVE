@@ -150,6 +150,9 @@ export function IntradayChart({
   highlightTrade?: Position | null;
 }) {
   const [mode, setMode] = useState<Mode>("line");
+  // mobile: the control chrome collapses behind a CFG chip (one row instead of
+  // ~121px of wrapping toggles above the exit-timing canvas — tidy pass B6)
+  const [cfgOpen, setCfgOpen] = useState(false);
   const [range, setRange] = useState<RangeKey>("1D");
   const [tf, setTf] = useState<number>(RANGES["1D"].tf);
   const [showVwap, setShowVwap] = useState(true);
@@ -639,6 +642,17 @@ export function IntradayChart({
               ))}
             </span>
           )}
+          {mobile && (
+            <button
+              type="button"
+              className={`chart-cfg-chip${cfgOpen ? " on" : ""}`}
+              onClick={() => setCfgOpen((o) => !o)}
+              aria-expanded={cfgOpen}
+              title="chart settings — interval · indicators · line/candles"
+            >
+              CFG
+            </button>
+          )}
           {/* duration (top) over candle-interval (bottom), stacked + right-justified on mobile */}
           <span className="chart-controls-right">
             <span className="seg seg--range" role="group" aria-label="range">
@@ -646,7 +660,7 @@ export function IntradayChart({
                 <button key={rk} className={range === rk ? "on" : ""} onClick={() => setRangeP(rk)} aria-pressed={range === rk}>{rk}</button>
               ))}
             </span>
-            {!isDaily && (
+            {!isDaily && (!mobile || cfgOpen) && (
               <span className="seg seg--interval" role="group" aria-label="interval">
                 {INTRADAY_TFS.map((m) => (
                   <button key={m} className={tf === m ? "on" : ""} onClick={() => setTfP(m)} aria-pressed={tf === m}>
@@ -661,7 +675,7 @@ export function IntradayChart({
       <div className="pbody">
         <div className="chart-wrap chart-wrap--lw" style={{ position: "relative" }}>
           {/* the exit-timing instrument — sized up (operator: the chart was undersized for how much it's read) */}
-          <div ref={elRef} style={{ height: mobile ? 300 : (showMacd ? 500 : 420), width: "100%" }} />
+          <div ref={elRef} style={{ height: mobile ? (showMacd ? 420 : 380) : (showMacd ? 500 : 420), width: "100%" }} />
           {ledSpot != null && (
             <div className="chart-led">
               <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption={`${symbol.toLowerCase()} $`} color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"} />
@@ -671,6 +685,7 @@ export function IntradayChart({
             <button className="chart-live-jump" onClick={jumpLive} aria-label="Jump to the latest bar" title="Jump to the latest bar + re-arm autoscale">→ LIVE</button>
           )}
         </div>
+        {(!mobile || cfgOpen) && (
         <div className="chart-controls chart-controls--bottom">
           <span className="ind-chips">
             <button className={`ind-chip${showEma ? " on" : ""}`} onClick={toggle(EMA_KEY, setShowEma)} aria-pressed={showEma} title="EMA overlay">EMA</button>
@@ -700,6 +715,7 @@ export function IntradayChart({
             </span>
           </span>
         </div>
+        )}
       </div>
     </div>
   );

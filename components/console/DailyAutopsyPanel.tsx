@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
+import { useFold } from "@/hooks/useFold";
 import { useDailyReports } from "@/hooks/useDailyReports";
 import type { StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
@@ -21,6 +22,7 @@ const topExit = (ex: Record<string, number>) => {
 export function DailyAutopsyPanel({ strategists }: { strategists: StrategistState[] }) {
   const { reports, loading, error } = useDailyReports(8);
   const [idx, setIdx] = useState(0);
+  const [folded, toggleFold] = useFold("daily-autopsy");
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggleExp = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
@@ -52,12 +54,13 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
   const best = sorted[0], worst = sorted.length > 1 ? sorted[sorted.length - 1] : undefined;
 
   return (
-    <div className="panel">
+    <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Daily Autopsy</span>
         <button className="au-expand" onClick={toggleExp} aria-expanded={expanded} title={expanded ? "collapse" : "expand full detail"}>
           {r.mode}{n ? "" : " · no LLM"} · {expanded ? "▾ collapse" : "▸ expand"}
         </button>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody">
         <div className="seg au-dates" aria-label="report date">

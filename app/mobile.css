@@ -140,23 +140,25 @@
    pill column beside RUN/PAPER: lit + arrow = gap cleared the gate (move
    direction); unlit + dim arrow = flat open (gap-gated channels stand down);
    unlit · = pre-open / no tape. Titles carry the numbers. ---- */
-.m-ticks { gap: 3px; }
+.m-ticks { gap: 4px; }
 /* BOOKS Δ as the third mini-pill under RUN/PAPER (row 1 has zero slack) */
 .m-pills { gap: 4px; }
 .m-books-pill { font-size: 8px; letter-spacing: 0.4px; }
 .m-books-pill.shb-warn { color: #855f0c; border-color: rgba(133, 95, 12, 0.5); background: rgba(133, 95, 12, 0.12); }
 .m-books-pill.shb-bad { color: #b23a22; border-color: rgba(190, 51, 38, 0.5); background: rgba(190, 51, 38, 0.14); }
+/* exact .m-pill metrics (font 8 / pad 3px 7px / radius 5) so the two header
+   columns align row-for-row (tidy pass B4) */
 .m-tick {
   display: inline-flex; align-items: center; justify-content: space-between; gap: 4px;
   min-width: 46px;
-  font-family: var(--mono); font-size: 7.5px; font-weight: 700; letter-spacing: 0.6px;
-  padding: 2px 6px; border-radius: 4px;
+  font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.6px;
+  padding: 3px 7px; border-radius: 5px;
   border: 1px solid rgba(0, 0, 0, 0.2);
   color: var(--ink-soft); background: rgba(255, 255, 255, 0.32);
   white-space: nowrap;
 }
 .m-tick b { font-weight: 700; }
-.m-tick i { font-style: normal; font-size: 7px; opacity: 0.55; }
+.m-tick i { font-style: normal; font-size: 7.5px; opacity: 0.55; }
 .m-tick.off { opacity: 0.55; }
 .m-tick.on i { opacity: 1; }
 .m-tick.on.up { color: #1f7a45; border-color: rgba(28, 122, 68, 0.55); background: rgba(47, 213, 115, 0.22); }
@@ -507,6 +509,14 @@
 }
 .m-sheet .auth-email { color: var(--ink); }
 
+/* CFG chip — the chart's collapsed control chrome (renders on mobile only; the
+   interval seg + indicator row hide behind it — one row of chrome, more canvas) */
+.chart-cfg-chip { display: inline-grid; place-items: center; min-width: 40px; min-height: 30px;
+  border-radius: 6px; border: 1px solid var(--chassis-edge); background: rgba(255, 255, 255, 0.4);
+  color: var(--ink-soft); font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.6px; cursor: pointer; }
+.chart-cfg-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 /* chart toolbar must wrap on the phone (was cut off on the right) */
 .m-app .chart-controls {
   flex-wrap: wrap;
@@ -604,10 +614,15 @@
 .channel--mc.ch-on { box-shadow: inset 0 0 0 1.5px var(--pm); }
 /* header: dot+title pinned LEFT, P&L+ticker pinned RIGHT (no divider) */
 .mc-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
-.mc-head-l { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.mc-head-l { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1 1 auto; }
 .mc-head-r { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-.mc-head .ch-name { font-size: 15px; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.channel--mc .ch-ticker { font-size: 9.5px; padding: 3px 8px; flex: 0 0 auto; }
+/* name owns the row (the ticker chip moved into the fires line) — 14px buys ~3
+   more chars before ellipsis on the 2-up cards (tidy pass B5) */
+.mc-head .ch-name { font-size: 14px; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the binding exits at a glance — reuses the strip's chf ink colors */
+.mc-fires { display: flex; align-items: baseline; gap: 7px; }
+.mc-fires .chf-lbl { font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--ink-soft); }
+.mc-tick { margin-left: auto; font-family: var(--mono); font-size: 8px; font-weight: 800; letter-spacing: 0.6px; color: var(--ink-soft); border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 3px; padding: 0 4px; }
 .mc-pnl { font-family: var(--mono); font-size: 15px; font-weight: 700; }
 .mc-pnl.pos { color: #1f9d57; }   /* legible dark green (matches desktop on cream) */
 .mc-pnl.neg { color: #d23a28; }
@@ -670,6 +685,33 @@
   border: 1px solid rgba(0, 0, 0, 0.25); background: rgba(255, 255, 255, 0.4); color: var(--ink-soft);
   cursor: pointer; flex: 0 0 auto; }
 .m-sq-play.busy { background: var(--accent); border-color: transparent; color: #fff; }
+
+/* ---- BLACKOUT: the mobile header chips use cream-tuned deep hues — on the
+   graphite chassis they're dark-on-dark. Re-light with the LED tokens and swap
+   the white-tint chip bodies for dark ones. (tidy pass A3) ---- */
+.console-root[data-theme="blackout"] .m-pill,
+.console-root[data-theme="blackout"] .m-tick {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.console-root[data-theme="blackout"] .m-run.on {
+  color: var(--pm-green); border-color: rgba(47, 213, 115, 0.5); background: rgba(47, 213, 115, 0.14);
+}
+.console-root[data-theme="blackout"] .m-mode.live {
+  color: var(--pm-red); border-color: rgba(240, 86, 63, 0.5); background: rgba(240, 86, 63, 0.14);
+}
+.console-root[data-theme="blackout"] .m-tick.on.up {
+  color: var(--pm-green); border-color: rgba(47, 213, 115, 0.45); background: rgba(47, 213, 115, 0.12);
+}
+.console-root[data-theme="blackout"] .m-tick.on.down {
+  color: var(--pm-red); border-color: rgba(240, 86, 63, 0.45); background: rgba(240, 86, 63, 0.12);
+}
+.console-root[data-theme="blackout"] .m-books-pill.shb-warn {
+  color: var(--pm-amber); border-color: rgba(255, 178, 36, 0.4); background: rgba(255, 178, 36, 0.1);
+}
+.console-root[data-theme="blackout"] .m-books-pill.shb-bad {
+  color: var(--pm-red); border-color: rgba(240, 86, 63, 0.45); background: rgba(240, 86, 63, 0.12);
+}
 
 /* OPS tab settings panel (slice 5 — the cog sheet dissolved into the 5th tab) */
 .m-ops-settings { display: flex; flex-direction: column; gap: 10px; }

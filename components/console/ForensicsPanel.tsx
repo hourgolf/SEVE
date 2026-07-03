@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
+import { useFold } from "@/hooks/useFold";
 import { useForensicsReport, type GivebackTrendPoint } from "@/hooks/useForensicsReport";
 import { usePyramidShadow, pyramidName } from "@/hooks/usePyramidShadow";
 
@@ -38,6 +39,7 @@ function CaptureSparkline({ pts }: { pts: GivebackTrendPoint[] }) {
 export function ForensicsPanel() {
   const { report, trend, loading, error } = useForensicsReport();
   const ps = usePyramidShadow();
+  const [folded, toggleFold] = useFold("forensics");
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggle = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
@@ -61,12 +63,13 @@ export function ForensicsPanel() {
   const asOf = (() => { try { return new Date(report.payload.generatedAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return report.report_date; } })();
 
   return (
-    <div className="panel">
+    <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Shadow &amp; Override</span>
         <button className="au-expand" onClick={toggle} aria-expanded={expanded} title={expanded ? "collapse" : "expand the by-tag / by-channel cuts"}>
           {shortDate(report.report_date)} · {expanded ? "▾ collapse" : "▸ expand"}
         </button>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody">
         {/* ── DAILY GIVE-BACK / CAPTURE — the take-profit policy's success metric (peak → close) ── */}

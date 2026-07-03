@@ -9,6 +9,7 @@
 //   EXEC    armed-channel split between the two executors
 //   RISK    Σ RISK-$/trade + Σ daily stops across armed, unmuted channels —
 //           the morning's total exposure-at-stake at a glance
+import { useFold } from "@/hooks/useFold";
 import type { OpsStatus } from "@/hooks/useOpsStatus";
 import type { StrategistState } from "@/lib/desk/types";
 
@@ -43,6 +44,7 @@ export interface TapeVitals {
 
 export function OpsPreflight({ strategists, tape, ops }: { strategists: StrategistState[]; tape?: TapeVitals; ops: OpsStatus }) {
   const rth = inRth();
+  const [folded, toggleFold] = useFold("preflight");
 
   // STREAM light
   let sTone: Tone = "dim", sVal = "—";
@@ -80,10 +82,11 @@ export function OpsPreflight({ strategists, tape, ops }: { strategists: Strategi
   }
 
   return (
-    <div className="panel ops-pf">
+    <div className={`panel ops-pf${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Ops · Pre-flight</span>
         <span className="x">{rth ? "RTH" : "closed"}</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pf-body">
         <Row label="STREAM" tone={sTone} value={sVal} hint={ops.hbNote ? `worker: ${ops.hbNote}` : "Railway executor heartbeat (beats only while live)"} />
