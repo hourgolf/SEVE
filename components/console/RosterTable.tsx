@@ -34,10 +34,10 @@ export function RosterTable({
           <tr>
             <th className="rt-chh">Channel</th>
             <th>Mode</th>
-            <th>Stop</th>
-            <th>Take</th>
-            <th>Risk/tr</th>
-            <th>Stop/day</th>
+            <th className="rt-num">Stop</th>
+            <th className="rt-num">Take</th>
+            <th className="rt-num">Risk/tr</th>
+            <th className="rt-num">Stop/day</th>
             <th className="rt-num">Day P&amp;L</th>
           </tr>
         </thead>
@@ -76,16 +76,16 @@ export function RosterTable({
                     <span className={`rt-modelbl rt-${mode}`}>{mode.toUpperCase()}</span>
                   )}
                 </td>
-                <td>
+                <td className="rt-num">
                   <FiresPill value={premStop} display={`−${premStop}%`} onCommit={(v) => setCfg(s.slug, s.id, { premium_stop_pct: v })} min={10} max={90} className="chf-stop" canWrite={canWrite} label={`${s.name} premium stop percent`} title="premium stop % — the binding downside" />
                 </td>
-                <td>
+                <td className="rt-num">
                   <FiresPill value={tp} display={tp > 0 ? `+${tp}%` : "ride"} onCommit={(v) => setCfg(s.slug, s.id, { take_profit_pct: v })} min={0} max={300} className={tp > 0 ? "chf-take" : "chf-ride"} canWrite={canWrite} label={`${s.name} take profit percent`} title="take-profit % (0 = ride)" />
                 </td>
-                <td>
+                <td className="rt-num">
                   <FiresPill value={c.capital_pct} display={usd0(c.capital_pct)} onCommit={(v) => setCfg(s.slug, s.id, { capital_pct: v })} min={0} max={5000} maxDigits={5} className="chf-amt" canWrite={canWrite} label={`${s.name} risk per trade`} title="risk $/trade" />
                 </td>
-                <td>
+                <td className="rt-num">
                   <FiresPill value={c.daily_stop_usd} display={usd0(c.daily_stop_usd)} onCommit={(v) => setCfg(s.slug, s.id, { daily_stop_usd: v })} min={0} max={5000} maxDigits={5} className="chf-amt" canWrite={canWrite} label={`${s.name} daily stop`} title="stop $/day — halts entries at this realized loss" />
                 </td>
                 <td className={`rt-num ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</td>

@@ -77,7 +77,7 @@ export function ForensicsPanel() {
           <>
             <div className="au-fund">
               <span>kept <b className={gb.capturePct >= 50 ? "pos" : "neg"}>{gb.capturePct}%</b> of peak</span>
-              <span>gave back <b className="neg">${gb.givenBackUsd.toLocaleString()}</b></span>
+              <span>gave back <b className="neg">{signedUsd(-gb.givenBackUsd)}</b></span>
               <span>{gb.nPeakers}/{gb.nClosed} peaked</span>
             </div>
             {trend.length >= 2 && (
@@ -95,7 +95,7 @@ export function ForensicsPanel() {
                   <div className="fx-row" key={c.key}>
                     <span className="fx-name">{c.key}</span>
                     <span className="fx-mid">kept {c.capturePct}% · {c.n}t</span>
-                    <span className="au-pnl neg">-${c.givenBackUsd.toLocaleString()}</span>
+                    <span className="au-pnl neg">{signedUsd(-c.givenBackUsd)}</span>
                   </div>
                 ))}
               </div>

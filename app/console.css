@@ -94,6 +94,9 @@
 /* §-divider silkscreen labels use the cool body --ink (#e7e4db) → "silver" in blackout.
    Warm them to the same parchment --plate-ink as the panel headers (cream theme unaffected). */
 .console-root[data-theme="blackout"] .section-label .lab { color: var(--plate-ink); }
+/* blackout: the giveback tell + sticky chain header re-skin for graphite */
+.console-root[data-theme="blackout"] .ctx-hot { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.console-root[data-theme="blackout"] .chain-table thead th { background: linear-gradient(180deg, var(--panel-plate), var(--panel-plate-2)); }
 
 /* Map a PmColor token to its accent var. */
 .pm-green { --pm: var(--pm-green); }
@@ -589,8 +592,8 @@
 .mkt-pills { display: inline-flex; gap: 4px; }
 .mkt-pill { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; padding: 3px 9px; border-radius: 5px; border: 1px solid #2e2f31; background: #26282a; color: #9a9d9f; cursor: pointer; }
 .mkt-pill.on { background: var(--nav-orange); color: #1a1206; border-color: var(--nav-orange); }
-.mkt-bar .mkt-spot { font-size: 16px; font-weight: 700; }
-.mkt-chg { font-size: 13px; font-weight: 700; }
+.mkt-bar .mkt-spot { font-size: 16px; font-weight: 700; min-width: 68px; } /* pinned: live ticks can't shuffle the bar */
+.mkt-chg { font-size: 13px; font-weight: 700; min-width: 58px; }
 .mkt-stat { font-size: 12px; color: #cfccc2; white-space: nowrap; }
 .mkt-stat b { color: #7d8a82; font-weight: 500; letter-spacing: 0.08em; margin-right: 4px; }
 .mkt-spark { width: 120px; height: 22px; flex: 0 0 auto; }
@@ -911,6 +914,7 @@
      "blackout"] override — no hardcoded cream values here, so the flip-editor re-skins
      with the theme. --border-bright remaps to the (themed) chassis edge. */
   --border-bright: var(--chassis-edge);
+  --muted: var(--ink-soft); /* readability pass — see the flip-scope note */
   background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 4px 14px rgba(0, 0, 0, 0.3);
   display: flex;
@@ -1551,6 +1555,10 @@
   /* Tokens inherit from the themed :root (cream) / blackout override — no hardcoded
      cream values, so these data panels re-skin with the theme. */
   --border: var(--chassis-edge);
+  /* readability pass 2026-07-02: the global --muted (#8b8678) measured ~2.4:1 on
+     cream — inside the flip scopes secondary text reads as the themed soft ink
+     (~4.4:1 cream / light grey in blackout). --muted-2 stays the tertiary step. */
+  --muted: var(--ink-soft);
   /* base .panel is now --lcd-ink (light) for dark screens; cream-flip panels paint a
      cream/graphite card, so their text reads the themed ink via var(--text). */
   color: var(--text);
@@ -1900,13 +1908,18 @@
 .channel--m .ch-fires { padding-left: 0; padding-right: 0; }
 .ch-col .ch-fires { margin-top: 4px; }
 .ch-fires .chf-lbl { font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--ink-soft, #6b6960); }
-.chf { font-size: 10px; font-weight: 700; letter-spacing: 0.2px; }
+.chf { font-size: 11px; font-weight: 700; letter-spacing: 0.2px; }
 .chf-take { color: #1c7a44; }
 .chf-stop { color: #be3326; }
 .chf-ride, .chf-flat { color: var(--ink-soft, #6b6960); font-weight: 600; }
 
 /* editable pills — click to set the real TP / stop % (color comes from the chf-* class) */
-.chf-edit, .chf-input { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.2px; }
+.chf-edit, .chf-input { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.2px; }
+/* touch: extend the pill's hit area invisibly (visual unchanged) */
+@media (pointer: coarse) {
+  .chf-edit { position: relative; }
+  .chf-edit::after { content: ""; position: absolute; inset: -9px -7px; }
+}
 .chf-edit { border: none; background: none; margin: 0; padding: 1px 4px; line-height: 1.1; cursor: pointer; border-radius: 3px; border-bottom: 1px dotted currentColor; }
 .chf-edit:hover { background: rgba(0, 0, 0, 0.06); }
 .chf-edit:active { background: rgba(0, 0, 0, 0.1); }
@@ -1950,9 +1963,9 @@
 .roster-toggle button.on { background: var(--ink, #2a2a24); color: var(--chassis, #efeee6); border-color: transparent; position: relative; z-index: 1; }
 .roster { overflow-x: auto; padding: 6px 2px 2px; }
 .roster-table { width: 100%; border-collapse: collapse; font-family: var(--mono); color: var(--ink, #2a2a24); }
-.roster-table th { text-align: left; font-size: 8px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-soft, #6b6960); padding: 5px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.18); white-space: nowrap; }
+.roster-table th { text-align: left; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-soft, #6b6960); padding: 5px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.18); white-space: nowrap; }
 .roster-table th.rt-num, .roster-table td.rt-num { text-align: right; }
-.roster-table td { padding: 6px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.07); font-size: 11px; white-space: nowrap; }
+.roster-table td { padding: 6px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.07); font-size: 12px; white-space: nowrap; }
 .rt-row:hover td { background: rgba(0, 0, 0, 0.03); }
 .rt-muted td { opacity: 0.5; }
 .rt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
@@ -2124,9 +2137,23 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
    (the room head carries the silkscreen now) */
 .mix-ctl { display: flex; align-items: center; gap: 6px; margin: 0 1px 12px; }
 .mix-ctl .roster-toggle { margin-left: 0; }
-/* WRITE room compose panel */
-.room--write .add-channel-btn { margin-left: 0; font-size: 11px; padding: 7px 14px; }
+/* WRITE room compose panel (desktop room + mobile tab share the class) */
+.write-compose .add-channel-btn { margin-left: 0; font-size: 11px; padding: 7px 14px; }
 .write-hint { font-size: 12px; line-height: 1.5; color: var(--ink-soft); margin-bottom: 10px; }
+
+/* ---- RACK v1 (909-redesign slice 5): the Live Book panels are modules — drag
+   the ⠿ grip to re-rack them within/between the two columns. Order is a local
+   preference (localStorage), available signed-out too. ---- */
+.rack-item { position: relative; }
+.rack-item:not(:has(.panel)) { display: none; } /* e.g. Net Exposure renders null when flat */
+.rack-item.dragging { opacity: 0.95; }
+.rack-item.dragging > .panel { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--chassis-dark); }
+.rack-grip { position: absolute; top: 8px; left: 8px; z-index: 4; width: 20px; height: 20px; padding: 0;
+  border: none; background: transparent; color: var(--ink-soft); opacity: 0.4; cursor: grab;
+  touch-action: none; font-size: 12px; line-height: 1; }
+.rack-item > .panel:first-of-type > .phead { padding-left: 32px; } /* clear the grip */
+.rack-grip:hover { opacity: 1; }
+.rack-grip:active { cursor: grabbing; }
 /* sequencer ▶ REPLAY — chases the day; steps flash chase-red as they play */
 .sqz-play { font: 700 9px var(--mono); letter-spacing: 0.6px; padding: 4px 10px; border-radius: 5px;
   border: 1px solid rgba(0, 0, 0, 0.25); background: rgba(255, 255, 255, 0.4); color: var(--ink-soft);

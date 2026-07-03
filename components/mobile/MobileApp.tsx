@@ -52,12 +52,20 @@ const IcReview = () => (
 const IcCog = () => (
   <svg viewBox="0 0 24 24" {...sv}><circle cx="12" cy="12" r="3.2" /><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" /></svg>
 );
+const IcWrite = () => (
+  <svg viewBox="0 0 24 24" {...sv}><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4z" /><path d="M14 7l3 3" /></svg>
+);
 
-type Tab = "market" | "mixer" | "book" | "review";
+// The 5 rooms of the 909 desk (parity with the desktop transport, slice 5):
+// PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend —
+// absorbs the old cog settings sheet).
+type Tab = "play" | "mix" | "write" | "tape" | "ops";
 const TABS: { id: Tab; label: string; jp: string; Icon: () => React.ReactNode }[] = [
-  { id: "market", label: "Market", jp: "ライブ", Icon: IcMarket },
-  { id: "mixer", label: "Mixer", jp: "ミキサー", Icon: IcMixer },
-  { id: "review", label: "Review", jp: "検証", Icon: IcReview },
+  { id: "play", label: "Play", jp: "演奏", Icon: IcMarket },
+  { id: "mix", label: "Mix", jp: "ミキサー", Icon: IcMixer },
+  { id: "write", label: "Write", jp: "作曲", Icon: IcWrite },
+  { id: "tape", label: "Tape", jp: "テープ", Icon: IcReview },
+  { id: "ops", label: "Ops", jp: "整備", Icon: IcCog },
 ];
 
 function inRth(): boolean {
@@ -80,10 +88,9 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const [expanded, setExpanded] = useState<string | null>(null); // Mixer: channel open for full-knob editing
   const [benchOpen, setBenchOpen] = useState(false);
   const PER_PAGE = 4;
-  const [tab, setTab] = useState<Tab>("market");
+  const [tab, setTab] = useState<Tab>("play");
   const [hlTrade, setHlTrade] = useState<Position | null>(null);
   const [show, setShow] = useState({ chart: true, positions: true, chain: false });
-  const [settings, setSettings] = useState(false); // cog → OPS sheet
   const [addOpen, setAddOpen] = useState(false);
   const [slide, setSlide] = useState(0);
   const deckRef = useRef<HTMLDivElement>(null);
@@ -138,9 +145,6 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
           <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
           <span className="m-vtop-sp" />
           <KillControl halted={desk.fund.is_halted} />
-          <button className="m-cog" onClick={() => setSettings(true)} aria-label="ops & settings">
-            <IcCog />
-          </button>
         </div>
         <div className="m-vleds">
           <div className="m-pills">
@@ -155,10 +159,10 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
 
       <TodayStrip underlyings={tradedUnderlyings} />
 
-      <main className={`m-screen${tab === "mixer" ? " m-screen--mix" : ""}`}>
+      <main className={`m-screen${tab === "mix" ? " m-screen--mix" : ""}`}>
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
 
-        {tab === "market" && (
+        {tab === "play" && (
           <>
             <div className="m-toggles">
               <button className={`m-tog${show.chart ? " on" : ""}`} onClick={() => setShow((s) => ({ ...s, chart: !s.chart }))}>CHART</button>
@@ -171,7 +175,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             {/* BOOK right under the chart — open positions ↔ price together for exit timing (no tab-hop). */}
             {show.positions && (
               <>
-                <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} />
+                <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} loading={feed.updatedAt == null} />
                 <SignalsTape signals={feed.signals} />
               </>
             )}
@@ -192,18 +196,63 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
           </>
         )}
 
-        {tab === "review" && (
+        {tab === "write" && (
+          <>
+            <div className="panel write-compose">
+              <div className="phead"><span className="t">Add Channel</span><span className="x">thesis → spec → gate → arm</span></div>
+              <div className="pbody">
+                <p className="write-hint">
+                  Import a strategy thesis (.md): frontmatter preview, LLM compile to a spec,
+                  the backtest gate, then arm to the bench.
+                </p>
+                <button className="add-channel-btn" onClick={() => setAddOpen(true)}>+ Add Channel</button>
+              </div>
+            </div>
+            <LabPanel />
+          </>
+        )}
+
+        {tab === "tape" && (
           <>
             <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} />
             <ManVsMachine strategists={desk.strategists} pnl={livePnl} />
             <DailyAutopsyPanel strategists={desk.strategists} />
             <WeeklyAutopsyPanel strategists={desk.strategists} />
             <ForensicsPanel />
-            <LabPanel />
           </>
         )}
 
-        {tab === "mixer" && (
+        {tab === "ops" && (
+          <>
+            <DayBooksStrip strategists={desk.strategists} pnl={livePnl} fund={liveFund} closedToday={feed.recentTrades.length} openCount={feed.positions.length} />
+            <OpsPreflight
+              strategists={desk.strategists}
+              tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
+              ops={ops}
+            />
+            <MasterStopControl fund={desk.fund} />
+            <MasterStrip fund={desk.fund} fundPnl={liveFund} />
+            <div className="panel">
+              <div className="phead"><span className="t">Settings</span><span className="x">operator · chassis · alerts</span></div>
+              <div className="pbody m-ops-settings">
+                <div className="m-ops-auth">
+                  <AuthControl />
+                  <span className={`write-chip${write.canWrite ? " on" : ""}`}>{write.canWrite ? "● operator" : "○ read-only"}</span>
+                </div>
+                <div className="theme-toggle">
+                  <span>Chassis theme</span>
+                  <button type="button" className={theme === "cream" ? "on" : ""} onClick={() => setTheme("cream")}>cream</button>
+                  <button type="button" className={theme === "blackout" ? "on" : ""} onClick={() => setTheme("blackout")}>blackout</button>
+                </div>
+                <PushToggle />
+                <KitToggle variant="sheet" />
+              </div>
+            </div>
+            <EventLog events={data.events} />
+          </>
+        )}
+
+        {tab === "mix" && (
           <div className="m-mix">
             <div className="m-grid" ref={deckRef} onScroll={onDeckScroll}>
               {pages.map((page, pi) => (
@@ -278,39 +327,6 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
 
       {addOpen && (
         <AddChannel onClose={() => setAddOpen(false)} existingSlugs={desk.strategists.map((s) => s.slug)} />
-      )}
-
-      {/* cog → OPS sheet: health/system controls + sign-in + theme + event log */}
-      {settings && (
-        <div className="m-scrim" onClick={() => setSettings(false)}>
-          <div className="m-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="m-grab" />
-            <div className="m-sheet-head">
-              <span>OPS · 運用</span>
-              <button className="m-sheet-x" onClick={() => setSettings(false)} aria-label="close">✕</button>
-            </div>
-            <div className="m-sheet-auth">
-              <AuthControl />
-              <span className={`write-chip${write.canWrite ? " on" : ""}`}>{write.canWrite ? "● operator" : "○ read-only"}</span>
-            </div>
-            <div className="theme-toggle">
-              <span>Chassis theme</span>
-              <button type="button" className={theme === "cream" ? "on" : ""} onClick={() => setTheme("cream")}>cream</button>
-              <button type="button" className={theme === "blackout" ? "on" : ""} onClick={() => setTheme("blackout")}>blackout</button>
-            </div>
-            <PushToggle />
-            <KitToggle variant="sheet" />
-            <DayBooksStrip strategists={desk.strategists} pnl={livePnl} fund={liveFund} closedToday={feed.recentTrades.length} openCount={feed.positions.length} />
-            <OpsPreflight
-              strategists={desk.strategists}
-              tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
-              ops={ops}
-            />
-            <MasterStopControl fund={desk.fund} />
-            <MasterStrip fund={desk.fund} fundPnl={liveFund} />
-            <EventLog events={data.events} />
-          </div>
-        </div>
       )}
 
       {/* Expanded channel — full strip with draggable knobs (Mixer tap-to-expand). */}

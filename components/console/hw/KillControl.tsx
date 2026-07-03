@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { KillSwitch } from "@/components/console/hw/KillSwitch";
+import { playKit } from "@/lib/desk/kit";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 
@@ -20,6 +21,7 @@ export function KillControl({ halted }: { halted: boolean }) {
       onFire={() => {
         dispatch({ type: "KILL", reason: "manual kill switch" });
         persistFund({ is_halted: true, halted_reason: "manual kill switch" });
+        playKit("crash"); // the 909 crash on FLATTEN — alert-only, no-op unless the KIT is on
         setArmed(false);
       }}
       onReset={() => {

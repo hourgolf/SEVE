@@ -47,11 +47,15 @@ export function PositionsPanel({
   recentTrades = [],
   liveMarks,
   onOpenTrade,
+  loading: syncing = false,
 }: {
   positions: Position[];
   strategists: StrategistState[];
   /** Today's closed trades (newest first) — so fast scalps are visible. */
   recentTrades?: Position[];
+  /** True until the feed's first fetch lands — shows "syncing" instead of a
+   *  false "flat — desk is idle" flash on load. */
+  loading?: boolean;
   /** occ_symbol → live mid from the option chain. When present, Mark + Unreal
    *  P&L are computed live off the chain instead of the worker's last write
    *  (which only updates ~once a minute, and not at all for orphaned rows). */
@@ -142,6 +146,16 @@ export function PositionsPanel({
       {!folded && (<>
       <div className="table-scroll table-scroll--fit">
         <table>
+          {/* pinned widths (+ table-layout:fixed) — live ticks can't reflow the table */}
+          <colgroup>
+            <col style={{ width: 30 }} />
+            <col />
+            <col style={{ width: 50 }} />
+            <col style={{ width: 64 }} />
+            <col style={{ width: 64 }} />
+            <col style={{ width: 92 }} />
+            {canWrite && <col style={{ width: 42 }} />}
+          </colgroup>
           <thead>
             <tr>
               <th style={{ textAlign: "left" }}>PM</th>
@@ -159,8 +173,8 @@ export function PositionsPanel({
               <td colSpan={canWrite ? 7 : 6}>
                 <div className="empty-state">
                   <span className="es-dot" />
-                  <span>flat — no open positions</span>
-                  <span className="es-sub">desk is idle</span>
+                  <span>{syncing ? "syncing book…" : "flat — no open positions"}</span>
+                  <span className="es-sub">{syncing ? "loading positions" : "desk is idle"}</span>
                 </div>
               </td>
             </tr>
@@ -346,6 +360,8 @@ export function PositionsPanel({
               );
             })}
           </div>
+          {/* the tooltip caveat, visible where tooltips don't exist (touch) */}
+          <div className="rt-note">Σ per-channel fill-net = attribution; shared-strike rows are approximate — Fund (NAV) is the headline truth.</div>
         </div>
       )}
       </>)}

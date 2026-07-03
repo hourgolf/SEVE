@@ -644,6 +644,11 @@
   border: 1px solid rgba(0, 0, 0, 0.25); background: rgba(255, 255, 255, 0.4); color: var(--ink-soft);
   cursor: pointer; flex: 0 0 auto; }
 .m-sq-play.busy { background: var(--accent); border-color: transparent; color: #fff; }
+
+/* OPS tab settings panel (slice 5 — the cog sheet dissolved into the 5th tab) */
+.m-ops-settings { display: flex; flex-direction: column; gap: 10px; }
+.m-ops-auth { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 8px; border-bottom: 1px solid var(--chassis-edge); }
 .m-sq-lbl { font: 700 8px var(--mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink-soft); }
 .m-sq-mini { display: flex; gap: 3px; flex: 1 1 auto; }
 .m-sq-mini i { flex: 1; height: 7px; border-radius: 2px; background: rgba(0, 0, 0, 0.14); }

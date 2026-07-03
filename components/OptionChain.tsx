@@ -161,7 +161,7 @@ export function OptionChain({
       </div>
       {!folded && (
       <div className={`table-scroll${compact ? " table-fit" : ""}`}>
-        <table>
+        <table className="chain-table">
           <thead>
             {compact ? (
               <tr>
