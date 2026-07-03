@@ -10,7 +10,6 @@ import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { GAP_MIN } from "@/components/console/TodayStrip";
 import { useTodayReadiness } from "@/hooks/useTodayReadiness";
 import { PnlPanel } from "@/components/console/PnlPanel";
-import { ManVsMachine } from "@/components/console/ManVsMachine";
 import { PushToggle } from "@/components/console/PushToggle";
 import { KitToggle } from "@/components/console/KitToggle";
 import { SessionSequencer } from "@/components/console/SessionSequencer";
@@ -243,14 +242,13 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                 <button className="add-channel-btn" onClick={() => setAddOpen(true)}>+ Add Channel</button>
               </div>
             </div>
-            <LabPanel />
           </>
         )}
 
         {tab === "tape" && (
           <>
-            <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} />
-            <ManVsMachine strategists={desk.strategists} pnl={livePnl} />
+            <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} acctId={acctId} />
+            <LabPanel />
             <DailyAutopsyPanel strategists={desk.strategists} />
             <WeeklyAutopsyPanel strategists={desk.strategists} />
             <ForensicsPanel />

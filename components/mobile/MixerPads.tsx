@@ -1,6 +1,6 @@
 "use client";
 
-import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, MouseSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { pmVar } from "@/lib/desk/colors";
@@ -46,10 +46,13 @@ export function MixerPads({
   canWrite: boolean;
 }) {
   const order = strategists.map((s) => s.slug);
-  // delay activation so a quick TAP fires onClick (jump) and a press-HOLD starts the drag.
+  // delay activation so a quick TAP fires onClick (jump) and a press-HOLD starts the
+  // drag. Mouse+Touch (NOT Pointer+Touch): registering PointerSensor alongside
+  // TouchSensor double-fires on iOS and the hold-drag never activates — the dnd-kit
+  // mixed-input combo is Mouse for desktop + Touch (longer delay) for fingers.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 10 } }),
   );
   const onDragEnd = (e: DragEndEvent) => {
     const from = order.indexOf(String(e.active.id));
@@ -62,7 +65,7 @@ export function MixerPads({
       <div className="mx-bar">
         <span className="mx-title">Mixer</span>
       </div>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext id="mixer-pads" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={order} strategy={horizontalListSortingStrategy}>
           <div className="mx-pads">
             {strategists.map((s) => (

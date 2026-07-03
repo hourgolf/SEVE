@@ -619,13 +619,17 @@
 /* name owns the row (the ticker chip moved into the fires line) — 14px buys ~3
    more chars before ellipsis on the 2-up cards (tidy pass B5) */
 .mc-head .ch-name { font-size: 14px; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* the binding exits at a glance — reuses the strip's chf ink colors */
-.mc-fires { display: flex; align-items: baseline; gap: 7px; }
-.mc-fires .chf-lbl { font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--ink-soft); }
-.mc-tick { margin-left: auto; font-family: var(--mono); font-size: 8px; font-weight: 800; letter-spacing: 0.6px; color: var(--ink-soft); border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 3px; padding: 0 4px; }
+/* the binding exits at a glance — reuses the strip's chf ink colors. min-width:0
+   + tighter gaps so the line can't spill past the card edge at 2-up width. */
+.mc-fires { display: flex; align-items: baseline; gap: 5px; min-width: 0; overflow: hidden; }
+.mc-fires .chf { font-size: 10px; flex: 0 0 auto; }
+.mc-fires .chf-lbl { font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--ink-soft); flex: 0 0 auto; }
+.mc-tick { margin-left: auto; font-family: var(--mono); font-size: 8px; font-weight: 800; letter-spacing: 0.6px; color: var(--ink-soft); border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 3px; padding: 0 4px; flex: 0 0 auto; }
+/* very narrow cards: the FIRES label yields first, then the ticker */
+@media (max-width: 419px) { .channel--mc .mc-fires .chf-lbl { display: none; } }
 .mc-pnl { font-family: var(--mono); font-size: 15px; font-weight: 700; }
-.mc-pnl.pos { color: #1f9d57; }   /* legible dark green (matches desktop on cream) */
-.mc-pnl.neg { color: #d23a28; }
+.mc-pnl.pos { color: var(--green); }   /* themed — the old hardcoded cream-greens went dim on blackout */
+.mc-pnl.neg { color: var(--red); }
 .mc-row { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
 .mc-knob { flex: 0 0 auto; pointer-events: none; }   /* indicator only; tap falls through to expand */
 .mc-knob .knob-val { display: none; }
@@ -634,7 +638,8 @@
 .mc-bar { flex: 1 1 auto; min-width: 32px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.16); overflow: hidden; }
 .mc-fill { display: block; height: 100%; border-radius: 4px; }
 .mc-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.5px; color: var(--ink-soft); width: 30px; flex: 0 0 auto; }   /* cream ink (was the dark global --muted → ~2.1:1 on cream) */
-.mc-val { font-family: var(--mono); font-size: 12px; color: #222; width: 46px; text-align: right; flex: 0 0 auto; }   /* black amounts on cream */
+/* themed ink (a hardcoded #222 vanished on the blackout card) + wide enough for "$1,500" */
+.mc-val { font-family: var(--mono); font-size: 12px; color: var(--ink); width: 50px; text-align: right; flex: 0 0 auto; }
 .mc-pads { display: flex; gap: 8px; flex: 0 0 auto; }
 .mc-pads .pad { min-width: 50px; min-height: 42px; }   /* mute/solo — sized down so they clear the bottom border */
 
@@ -648,6 +653,8 @@
   font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
   color: #0d0e0f; background: var(--pad); border: 1px solid rgba(0,0,0,0.28);
   display: grid; place-items: center; cursor: pointer; touch-action: none;
+  /* iOS: the press-and-hold must start a DRAG, not the callout/text-selection */
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   opacity: 0.66; transition: opacity 0.12s, box-shadow 0.12s;
 }
 .mx-pad.on { opacity: 1; box-shadow: 0 0 0 2px var(--pad), 0 0 9px var(--pad); }

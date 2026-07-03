@@ -26,7 +26,6 @@ import { MasterStrip } from "@/components/console/MasterStrip";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { NetExposurePanel } from "@/components/console/NetExposurePanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
-import { ManVsMachine } from "@/components/console/ManVsMachine";
 import { PushToggle } from "@/components/console/PushToggle";
 import { SignalsTape } from "@/components/console/SignalsTape";
 import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
@@ -486,7 +485,6 @@ export function DesktopSurface({
                 </div>
               </div>
             </div>
-            <div className="col"><LabPanel /></div>
           </div>
         )}
       </section>
@@ -502,8 +500,11 @@ export function DesktopSurface({
                 pnlByStrategist={livePnl}
                 fundPnl={liveFund}
                 equityCurve={feed.equityCurve}
+                acctId={acctId}
               />
-              <ManVsMachine strategists={desk.strategists} pnl={livePnl} />
+              {/* LAB rides TAPE (review evidence), not WRITE — operator's call 07-03;
+                  Man-vs-Machine retired with the manual channels' disarm. */}
+              <LabPanel />
             </div>
           </div>
           <div className="grid grid--live grid--even au-pair" style={{ marginTop: 14 }}>

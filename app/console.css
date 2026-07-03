@@ -1965,7 +1965,9 @@
 .roster-table { width: 100%; border-collapse: collapse; font-family: var(--mono); color: var(--ink, #2a2a24); }
 .roster-table th { text-align: left; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-soft, #6b6960); padding: 5px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.18); white-space: nowrap; }
 .roster-table th.rt-num, .roster-table td.rt-num { text-align: right; }
-.roster-table td { padding: 6px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.07); font-size: 12px; white-space: nowrap; }
+/* text-align:left is LOAD-BEARING — without it the global `td{text-align:right}`
+   wins and the channel names right-justify (LED dots stop lining up vertically) */
+.roster-table td { padding: 6px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.07); font-size: 12px; white-space: nowrap; text-align: left; }
 .rt-row:hover td { background: rgba(0, 0, 0, 0.03); }
 .rt-muted td { opacity: 0.5; }
 .rt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }

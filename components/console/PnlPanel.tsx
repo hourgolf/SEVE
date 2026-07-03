@@ -20,16 +20,19 @@ export function PnlPanel({
   pnlByStrategist,
   fundPnl,
   equityCurve,
+  acctId = null,
 }: {
   strategists: StrategistState[];
   pnlByStrategist: Record<string, ChannelPnl>;
   fundPnl: { nav: number; dayPnl: number };
   equityCurve: { ts: string; equity: number }[];
+  /** Selected cockpit bucket — scopes the windowed stats + NAV curve (null = desk total). */
+  acctId?: string | null;
 }) {
   // Timeframe toggle. "today" uses the live feed props (instant); week/month/all
   // fetch windowed realized P&L (+ open unrealized) + a windowed NAV curve lazily.
   const [win, setWin] = useState<PnlWindow>("today");
-  const windowed = useWindowedPnl(win);
+  const windowed = useWindowedPnl(win, acctId);
   const isToday = win === "today";
   const loading = !isToday && (windowed?.loading ?? true);
   const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();

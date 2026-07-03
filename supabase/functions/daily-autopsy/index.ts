@@ -1,3 +1,10 @@
+// ⚑ DAILY-AUTOPSY VERSION: 2026-07-03a  (PEAK CAPTURE — per-channel MFE/give-back metrics from
+//   the durable positions.peak_mark (44_trade_forensics, ratcheted live by the worker's 10s sweep):
+//   each trade gains peakPct (MFE% off entry) + capturePct (kept share of the peak gain); channel
+//   metrics gain nPeaked / avgPeakPct / peakCapturePct (Σkept ÷ Σpeak-gain — the give-back lens,
+//   same math as the forensics panel's "kept % of peak"). Skeleton + SYS updated so the narrative
+//   judges KEEPING, not just finding (operator ask 07-03). Old reports lack the fields — the
+//   panel guards. Prior banner below.)
 // ⚑ DAILY-AUTOPSY VERSION: 2026-06-13a  (UNIFIED NAMING — the report refers to every channel by
 //   the operator's chosen display name (e.g. "BREAK(ALT)") in all prose, never the slug
 //   ("breakout-smart-entries"); slug stays the internal join key (channels[].slug,
@@ -127,7 +134,7 @@ async function buildDigest(date: string): Promise<Row> {
   const { data: fund } = await sb.from("fund_state").select("mode").eq("id", 1).maybeSingle();
   const mode = (fund as Row | null)?.mode ?? "paper";
 
-  const posCols = "id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,current_mark,realized_pnl,status,opened_at,closed_at,expiration";
+  const posCols = "id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,current_mark,realized_pnl,status,opened_at,closed_at,expiration,peak_mark";
   const posMap = new Map<string, Row>();
   for (const p of [...await fetchWindow("positions", "opened_at", posCols, dayStartMs), ...await fetchWindow("positions", "closed_at", posCols, dayStartMs)]) posMap.set(p.id, p);
   const dayClosed = [...posMap.values()].filter((p) => p.status === "closed" && p.closed_at && etDate(Date.parse(p.closed_at)) === date);
@@ -186,7 +193,12 @@ async function buildDigest(date: string): Promise<Row> {
       const exitReason = exits.length ? exits.reduce((b, e) => (Math.abs(e.ms - closedMs) < Math.abs(b.ms - closedMs) ? e : b)).reason : null;
       const entryPrice = Number(p.avg_entry_price), exitPrice = Number(p.current_mark ?? 0), pnl = Number(p.realized_pnl ?? 0);
       const r = riskUsd(entryPrice, p.qty);
-      return { occ: p.occ_symbol, dir: p.opt_type, qty: Number(p.qty), entryPrice, exitPrice, pnl, holdMin, R: r > 0 ? pnl / r : 0, exitReason, signalType: sig?.signal_type ?? null, conviction };
+      // peak forensics (44_trade_forensics): MFE% off entry + the kept share of the
+      // peak gain — null when the trade never peaked above entry (or pre-column rows).
+      const peak = Number(p.peak_mark ?? 0);
+      const peakPct = entryPrice > 0 && peak > entryPrice ? ((peak - entryPrice) / entryPrice) * 100 : null;
+      const capturePct = peakPct != null ? Math.max(0, Math.min(100, ((exitPrice - entryPrice) / (peak - entryPrice)) * 100)) : null;
+      return { occ: p.occ_symbol, dir: p.opt_type, qty: Number(p.qty), entryPrice, exitPrice, pnl, holdMin, R: r > 0 ? pnl / r : 0, exitReason, signalType: sig?.signal_type ?? null, conviction, peakPct, capturePct };
     });
     const wins = trades.filter((t) => t.pnl > 0), losses = trades.filter((t) => t.pnl <= 0);
     const exitReasons: Record<string, number> = {}; for (const t of trades) { const k = t.exitReason ?? "unknown"; exitReasons[k] = (exitReasons[k] ?? 0) + 1; }
@@ -196,12 +208,22 @@ async function buildDigest(date: string): Promise<Row> {
     const sizePinned = trades.length ? trades.filter((t) => maxC > 0 && Math.abs(t.qty) >= maxC).length / trades.length : 0;
     const convAcc: Record<string, number[]> = {}; for (const t of trades) if (t.conviction) for (const [k, v] of Object.entries(t.conviction)) (convAcc[k] ??= []).push(v as number);
     const convictionAvg = Object.fromEntries(Object.entries(convAcc).map(([k, v]) => [k, Number(mean(v).toFixed(3))]));
+    // peak capture (aggregate give-back lens): over trades that peaked above entry,
+    // kept share = Σ(exit−entry) ÷ Σ(peak−entry) — the [[giveback-takeprofit-split]] metric.
+    const peakers = trades.filter((t) => t.peakPct != null);
+    const peakGainSum = peakers.reduce((a, t) => a + (t.peakPct! / 100) * t.entryPrice, 0);
+    // per-trade kept is capped at that trade's own peak gain — the 10s ratchet can
+    // miss the final tick, letting exit > peak_mark read as >100% kept otherwise
+    const keptSum = peakers.reduce((a, t) => a + Math.min((t.peakPct! / 100) * t.entryPrice, Math.max(0, t.exitPrice - t.entryPrice)), 0);
     const metrics = {
       nTrades: trades.length, wins: wins.length, winRate: trades.length ? wins.length / trades.length : 0,
       realizedPnl: trades.reduce((a, t) => a + t.pnl, 0),
       avgWin: wins.length ? mean(wins.map((t) => t.pnl)) : 0, avgLoss: losses.length ? mean(losses.map((t) => t.pnl)) : 0,
       avgR: mean(trades.map((t) => t.R)), medianR: median(trades.map((t) => t.R)), medianHoldMin: median(trades.map((t) => t.holdMin)),
       sizePinnedPct: sizePinned,
+      nPeaked: peakers.length,
+      avgPeakPct: peakers.length ? Number(mean(peakers.map((t) => t.peakPct!)).toFixed(1)) : null,
+      peakCapturePct: peakers.length && peakGainSum > 0 ? Number(((keptSum / peakGainSum) * 100).toFixed(0)) : null,
     };
     const activity = { signals: chSigs.length, acted, blocked };
     channels.push({ slug: st.slug, name: st.name, mandate: st.mandate, status: st.status, config: st.cfg, metrics, exitReasons, activity, convictionAvg, flaws: detectFlaws(metrics, exitReasons, activity), trades });
@@ -223,6 +245,7 @@ function renderSkeleton(d: Row): string {
     L.push(`\n## ${c.name} — ${c.status}`); L.push(`_${c.mandate}_`);
     if (!m.nTrades) { L.push(`- no trades · signals ${c.activity.signals} (acted ${c.activity.acted}, blocked ${JSON.stringify(c.activity.blocked)})`); continue; }
     L.push(`- trades **${m.nTrades}** · win **${(m.winRate * 100).toFixed(0)}%** · realized **${usd(m.realizedPnl)}** · avgWin ${usd(m.avgWin)} / avgLoss ${usd(m.avgLoss)} · avgR ${m.avgR.toFixed(2)} · median hold **${m.medianHoldMin.toFixed(1)}m**`);
+    if (m.nPeaked) L.push(`- peaks: ${m.nPeaked}/${m.nTrades} trades peaked above entry · avg peak **+${m.avgPeakPct}%** · kept **${m.peakCapturePct}%** of the peak gain (the give-back lens — low kept% on a green peak day = a KEEPING problem, not a finding problem)`);
     L.push(`- exits: ${JSON.stringify(c.exitReasons)}`);
     L.push(`- signals ${c.activity.signals} (acted ${c.activity.acted}, blocked ${JSON.stringify(c.activity.blocked)}) · conviction(avg) ${JSON.stringify(c.convictionAvg)}`);
     for (const f of c.flaws) L.push(`- ⚑ **${f.type}** (${f.severity}): ${f.evidence}`);

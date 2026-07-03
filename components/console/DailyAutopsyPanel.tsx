@@ -102,6 +102,11 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
                   <>
                     <div className="au-metrics">
                       {m.nTrades}t · {Math.round(m.winRate * 100)}% · hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R · exit {topExit(c.exitReasons)}
+                      {m.peakCapturePct != null && (
+                        <span title={`${m.nPeaked}/${m.nTrades} trades peaked above entry · avg peak +${m.avgPeakPct}% · kept ${m.peakCapturePct}% of the peak gain`}>
+                          {" "}· peak +{m.avgPeakPct}% · <b className={m.peakCapturePct >= 50 ? "pos" : "neg"}>kept {m.peakCapturePct}%</b>
+                        </span>
+                      )}
                     </div>
                     {cn?.verdict && <div className="au-verdict">{cn.verdict}</div>}
                     {c.flaws.length > 0 && (

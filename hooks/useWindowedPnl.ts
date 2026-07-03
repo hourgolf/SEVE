@@ -28,9 +28,15 @@ const slugOf = (r: Record<string, unknown>): string => ((r.strategists as { slug
 // null for "today" (panel uses the live feed props there). For week/month/all it
 // fetches closed positions in the window (realized + win/trade counts, paginated),
 // open positions (unrealized — current in every window since 0DTE closes same-day),
-// and the fund NAV curve: from the daily rollup view (14_equity_daily.sql) when it
-// exists — accurate over long ranges — else falling back to per-minute snapshots.
-export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
+// and the fund NAV curve.
+//
+// ACCOUNT-SCOPED (fix 2026-07-03 — operator: the windowed curve "jumbled" the three
+// cockpit buckets together): with an acctId, positions inner-join strategists on
+// account_id (the useDeskFeed pattern) and the curve reads that bucket's own
+// per-account snapshots. The equity_daily rollup view is account-BLIND (pre-P3), so
+// it only serves the no-account desk-total view; per-account curves come from
+// equity_snapshots (90d retention — "All" is bounded there, correct > long).
+export function useWindowedPnl(window: PnlWindow, acctId: string | null = null): WindowedPnl | null {
   const [data, setData] = useState<WindowedPnl | null>(null);
 
   useEffect(() => {
@@ -42,10 +48,13 @@ export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
       const start = startISO(window);
       const stats: Record<string, ChannelStat> = {};
       const bump = (slug: string): ChannelStat => (stats[slug] ??= { pnl: 0, trades: 0, wins: 0 });
+      const posSel = acctId ? "strategists!inner(slug,account_id)" : "strategists(slug)";
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const byAcct = (q: any) => (acctId ? q.eq("strategists.account_id", acctId) : q);
 
       // realized P&L + win/trade counts of closed trades in the window (paginated)
       for (let from = 0; from <= 60000; from += 1000) {
-        let q = sb.from("positions").select("realized_pnl,strategists(slug)").eq("status", "closed");
+        let q = byAcct(sb.from("positions").select(`realized_pnl,${posSel}`).eq("status", "closed"));
         if (start) q = q.gte("closed_at", start);
         const { data: rows, error } = await q.order("closed_at", { ascending: false }).range(from, from + 999);
         if (error) break;
@@ -54,29 +63,39 @@ export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
         if (list.length < 1000) break;
       }
       // open positions' unrealized (current standing, in every window)
-      const openRes = await sb.from("positions").select("unrealized_pnl,strategists(slug)").eq("status", "open").limit(200);
+      const openRes = await byAcct(sb.from("positions").select(`unrealized_pnl,${posSel}`).eq("status", "open")).limit(200);
       for (const r of (openRes.data ?? []) as Record<string, unknown>[]) bump(slugOf(r)).pnl += Number(r.unrealized_pnl ?? 0);
 
-      // fund NAV curve — prefer the daily rollup view (cheap, accurate for long windows).
+      // fund NAV curve — per-account: that bucket's own snapshots; desk-total: the
+      // daily rollup view (cheap, accurate long-range), falling back to snapshots.
       // Keep the RAW series (not just the downsampled display copy) so the window-end /
       // window-start NAVs used for the fund P&L are the true endpoints.
       let curveRaw: number[] = [];
       let labelsRaw: string[] = [];
-      try {
-        let dq = sb.from("equity_daily").select("et_date,nav").order("et_date", { ascending: true });
-        if (start) dq = dq.gte("et_date", start.slice(0, 10));
-        const dRes = await dq;
-        if (dRes.error) throw dRes.error;
-        const rows = (dRes.data ?? []) as { et_date: string; nav: number }[];
-        curveRaw = rows.map((r) => Number(r.nav));
-        labelsRaw = rows.map((r) => shortDate(r.et_date)); // "Jun 4" — one point per session
-      } catch {
-        let cq = sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).is("account_id", null); // desk-TOTAL only (cockpit P3)
+      if (acctId) {
+        let cq = sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).eq("account_id", acctId);
         if (start) cq = cq.gte("captured_at", start);
         const cRes = await cq.order("captured_at", { ascending: false }).limit(6000);
         const rows = ((cRes.data ?? []) as { net_liquidation: number; captured_at: string }[]).reverse();
         curveRaw = rows.map((r) => Number(r.net_liquidation));
-        labelsRaw = rows.map((r) => timeOfDay(r.captured_at));
+        labelsRaw = rows.map((r) => (window === "week" ? timeOfDay(r.captured_at) : shortDate(r.captured_at.slice(0, 10))));
+      } else {
+        try {
+          let dq = sb.from("equity_daily").select("et_date,nav").order("et_date", { ascending: true });
+          if (start) dq = dq.gte("et_date", start.slice(0, 10));
+          const dRes = await dq;
+          if (dRes.error) throw dRes.error;
+          const rows = (dRes.data ?? []) as { et_date: string; nav: number }[];
+          curveRaw = rows.map((r) => Number(r.nav));
+          labelsRaw = rows.map((r) => shortDate(r.et_date)); // "Jun 4" — one point per session
+        } catch {
+          let cq = sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).is("account_id", null); // desk-TOTAL only (cockpit P3)
+          if (start) cq = cq.gte("captured_at", start);
+          const cRes = await cq.order("captured_at", { ascending: false }).limit(6000);
+          const rows = ((cRes.data ?? []) as { net_liquidation: number; captured_at: string }[]).reverse();
+          curveRaw = rows.map((r) => Number(r.net_liquidation));
+          labelsRaw = rows.map((r) => timeOfDay(r.captured_at));
+        }
       }
       // sample curve + labels with the SAME stride so they stay index-aligned
       const stride = curveRaw.length <= 160 ? 1 : Math.ceil(curveRaw.length / 160);
@@ -95,7 +114,7 @@ export function useWindowedPnl(window: PnlWindow): WindowedPnl | null {
       setData({ statsBySlug: stats, fundPnl, curve, curveLabels, loading: false });
     })().catch(() => { if (alive) setData((d) => (d ? { ...d, loading: false } : { statsBySlug: {}, fundPnl: 0, curve: [], curveLabels: [], loading: false })); });
     return () => { alive = false; };
-  }, [window]);
+  }, [window, acctId]);
 
   return window === "today" ? null : data;
 }

@@ -34,7 +34,11 @@ export interface ReportNarrative {
 export interface ReportDigestChannel {
   slug: string;
   name: string;
-  metrics: { nTrades: number; winRate: number; realizedPnl: number; medianHoldMin: number; avgR: number };
+  metrics: {
+    nTrades: number; winRate: number; realizedPnl: number; medianHoldMin: number; avgR: number;
+    /** peak forensics (digest 2026-07-03a; absent on older reports) */
+    nPeaked?: number | null; avgPeakPct?: number | null; peakCapturePct?: number | null;
+  };
   exitReasons: Record<string, number>;
   flaws: { type: string; severity: string; evidence: string }[];
 }
