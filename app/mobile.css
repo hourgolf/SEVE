@@ -660,7 +660,9 @@
 .mx-pad.on { opacity: 1; box-shadow: 0 0 0 2px var(--pad), 0 0 9px var(--pad); }
 .mx-pad.muted { opacity: 0.3; filter: grayscale(0.55); }
 .mx-pad.solo { box-shadow: inset 0 0 0 2px #fff; }
-.mx-pad.dragging { opacity: 0.95; z-index: 5; }
+/* the LIFT must be unmistakable on a phone — bright ring + drop shadow the moment
+   the ¼s hold activates (subtle opacity alone read as "nothing happened") */
+.mx-pad.dragging { opacity: 1; z-index: 5; box-shadow: 0 0 0 2px #fff, 0 0 12px var(--pad), 0 6px 14px rgba(0, 0, 0, 0.45); }
 
 /* expanded edit sheet — reuse the settings sheet chrome; the full strip sits inside */
 .m-editsheet .channel--m { width: 100%; padding-top: 6px; }
