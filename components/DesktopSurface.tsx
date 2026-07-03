@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { AddChannel } from "@/components/console/AddChannel";
 import { AuthControl } from "@/components/AuthControl";
@@ -14,9 +14,10 @@ import { EventLog } from "@/components/EventLog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { RosterTable } from "@/components/console/RosterTable";
+import { Rack } from "@/components/console/Rack";
 import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { TodayStrip } from "@/components/console/TodayStrip";
-import { DndContext, closestCenter, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent, type DragOverEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useChannelOrdering } from "@/hooks/useChannelOrdering";
@@ -63,40 +64,6 @@ function RoomHead({ def, folded, onToggle }: { def: (typeof ROOM_DEFS)[number]; 
       <span className="sec-jp">{def.jp}</span>
       <span className="fold-ch">{folded ? "▸" : "▾"}</span>
     </button>
-  );
-}
-
-// ---- RACK v1 (slice 5): the Live Book panels are modules — drag the ⠿ grip to
-// re-rack them within/between the two columns; order persists locally. ----
-const RACK_KEY = "seve-rack-livebook";
-const RACK_DEFAULT: Record<"a" | "b", string[]> = { a: ["book", "netx"], b: ["signals", "chain"] };
-
-function RackItem({ id, children }: { id: string; children: ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 20 : undefined }}
-      className={`rack-item${isDragging ? " dragging" : ""}`}
-    >
-      <button type="button" className="rack-grip" {...attributes} {...listeners} title="drag to re-rack this panel" aria-label={`move ${id} panel`}>⠿</button>
-      {children}
-    </div>
-  );
-}
-
-function RackColumn({ colId, className, items, panels }: { colId: "a" | "b"; className: string; items: string[]; panels: Record<string, ReactNode> }) {
-  const { setNodeRef } = useDroppable({ id: `col-${colId}` });
-  return (
-    <div ref={setNodeRef} className={className}>
-      <SortableContext items={items} strategy={rectSortingStrategy}>
-        {items.map((k) => (
-          <RackItem key={k} id={k}>
-            {panels[k]}
-          </RackItem>
-        ))}
-      </SortableContext>
-    </div>
   );
 }
 
@@ -226,53 +193,6 @@ export function DesktopSurface({
   const benched = accountChannels.filter((s) => s.status !== "armed");
   const [benchOpen, setBenchOpen] = useState<string | null>(null);
 
-  // ---- RACK v1 state: per-column panel order, local preference ----
-  const [rack, setRack] = useState<Record<"a" | "b", string[]>>(RACK_DEFAULT);
-  const rackLoaded = useRef(false);
-  useEffect(() => {
-    try {
-      const s = window.localStorage.getItem(RACK_KEY);
-      if (s) {
-        const p = JSON.parse(s) as Record<"a" | "b", string[]>;
-        if (Array.isArray(p?.a) && Array.isArray(p?.b)) setRack(p);
-      }
-    } catch { /* */ }
-    rackLoaded.current = true;
-  }, []);
-  useEffect(() => {
-    if (!rackLoaded.current) return;
-    try { window.localStorage.setItem(RACK_KEY, JSON.stringify(rack)); } catch { /* */ }
-  }, [rack]);
-  const rackColOf = (id: string): "a" | "b" | null =>
-    id === "col-a" || rack.a.includes(id) ? "a" : id === "col-b" || rack.b.includes(id) ? "b" : null;
-  const onRackDragOver = (e: DragOverEvent) => {
-    const { active, over } = e;
-    if (!over) return;
-    const from = rackColOf(String(active.id));
-    const to = rackColOf(String(over.id));
-    if (!from || !to || from === to) return;
-    setRack((r) => {
-      const src = r[from].filter((x) => x !== String(active.id));
-      const dst = [...r[to]];
-      const overIdx = dst.indexOf(String(over.id));
-      dst.splice(overIdx >= 0 ? overIdx : dst.length, 0, String(active.id));
-      return { ...r, [from]: src, [to]: dst };
-    });
-  };
-  const onRackDragEnd = (e: DragEndEvent) => {
-    const { active, over } = e;
-    if (!over) return;
-    const col = rackColOf(String(active.id));
-    if (!col) return;
-    setRack((r) => {
-      const from = r[col].indexOf(String(active.id));
-      const to = r[col].indexOf(String(over.id));
-      if (from < 0 || to < 0 || from === to) return r;
-      return { ...r, [col]: arrayMove(r[col], from, to) };
-    });
-  };
-  const rackSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
   // ---- drag-to-reorder + group-by (operator only; persists sort_order) ----
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const { order: channelOrder, persist, groupBy } = useChannelOrdering(armed, write);
@@ -353,9 +273,12 @@ export function DesktopSurface({
               <span className="sec-right">{feed.positions.length} open · realized <span className={realizedToday < 0 ? "neg" : "pos"}>{signedUsd(realizedToday)}</span></span>
             </div>
             <div className="log-section livebook-section">
-              {/* RACK v1 — the four Live Book modules; ⠿ re-racks within/between columns */}
-              {(() => {
-                const rackPanels: Record<string, ReactNode> = {
+              {/* RACK — the four Live Book modules; ⠿ re-racks within/between columns */}
+              <Rack
+                storageKey="seve-rack-livebook"
+                defaults={{ a: ["book", "netx"], b: ["signals", "chain"] }}
+                optional={["netx"]}
+                panels={{
                   book: <PositionsPanel positions={feed.positions} strategists={desk.strategists} recentTrades={feed.recentTrades} liveMarks={liveMarks} onOpenTrade={setHlTrade} loading={feed.updatedAt == null} />,
                   netx: <NetExposurePanel positions={feed.positions} liveMarks={liveMarks} />,
                   signals: <SignalsTape signals={feed.signals} />,
@@ -373,17 +296,8 @@ export function DesktopSurface({
                       {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
                     </>
                   ),
-                };
-                return (
-                  // stable id — dnd-kit's auto ids are SSR-nondeterministic with 2 contexts
-                  <DndContext id="rack-livebook" sensors={rackSensors} collisionDetection={closestCenter} onDragOver={onRackDragOver} onDragEnd={onRackDragEnd}>
-                    <div className="grid grid--live">
-                      <RackColumn colId="a" className="col col--fill" items={rack.a} panels={rackPanels} />
-                      <RackColumn colId="b" className="col" items={rack.b} panels={rackPanels} />
-                    </div>
-                  </DndContext>
-                );
-              })()}
+                }}
+              />
             </div>
             {/* SESSION SEQUENCER — the day as a 16-step pattern, under the live
                 chain (909-redesign slice 1). Read-only off the same feed. */}
@@ -492,27 +406,20 @@ export function DesktopSurface({
       {/* ============ 04 TAPE — review: P&L · autopsies · forensics ========== */}
       <section className="room room--tape log-section" id="room-tape" data-room-id="tape">
         <RoomHead def={ROOM_DEFS[3]} folded={roomFolds.tape} onToggle={() => toggleRoom("tape")} />
-        {!roomFolds.tape && (<>
-          <div className="grid grid--live">
-            <div className="col col--fill">
-              <PnlPanel
-                strategists={desk.strategists}
-                pnlByStrategist={livePnl}
-                fundPnl={liveFund}
-                equityCurve={feed.equityCurve}
-                acctId={acctId}
-              />
-              {/* LAB rides TAPE (review evidence), not WRITE — operator's call 07-03;
-                  Man-vs-Machine retired with the manual channels' disarm. */}
-              <LabPanel />
-            </div>
-          </div>
-          <div className="grid grid--live grid--even au-pair" style={{ marginTop: 14 }}>
-            <div className="col"><DailyAutopsyPanel strategists={desk.strategists} /></div>
-            <div className="col"><WeeklyAutopsyPanel strategists={desk.strategists} /></div>
-          </div>
-          <div style={{ marginTop: 14 }}><ForensicsPanel /></div>
-        </>)}
+        {!roomFolds.tape && (
+          /* TAPE is a RACK — both columns fill; drag ⠿ to arrange the review stack */
+          <Rack
+            storageKey="seve-rack-tape"
+            defaults={{ a: ["pnl", "daily", "weekly"], b: ["lab", "forensics"] }}
+            panels={{
+              pnl: <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} acctId={acctId} />,
+              daily: <DailyAutopsyPanel strategists={desk.strategists} />,
+              weekly: <WeeklyAutopsyPanel strategists={desk.strategists} />,
+              lab: <LabPanel />,
+              forensics: <ForensicsPanel />,
+            }}
+          />
+        )}
       </section>
 
       {/* ============ 05 OPS — tend the machine ============================== */}
@@ -526,32 +433,42 @@ export function DesktopSurface({
             closedToday={feed.recentTrades.length}
             openCount={feed.positions.length}
           />
-          <div className="grid grid--live grid--even" style={{ marginTop: 14 }}>
-            <div className="col">
-              <OpsPreflight
-                strategists={desk.strategists}
-                tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
-                ops={ops}
-              />
-            </div>
-            <div className="col">
-              {/* the MASTER hardware panel (capital knob · big NAV LED · full transport)
-                  lives in OPS now — the shell transport carries the daily-use controls */}
-              <MasterStrip fund={desk.fund} fundPnl={liveFund} />
-              <MasterStopControl fund={desk.fund} />
-              <div className="ops-controls" style={{ marginTop: 14 }}>
-                <PushToggle />
-                <div className="theme-toggle">
-                  <span>Chassis theme</span>
-                  <button type="button" className={theme === "cream" ? "on" : ""} onClick={() => setTheme("cream")}>cream</button>
-                  <button type="button" className={theme === "blackout" ? "on" : ""} onClick={() => setTheme("blackout")}>blackout</button>
-                </div>
-                <AuthControl />
-              </div>
-            </div>
-          </div>
-          <div className="log-foot" style={{ marginTop: 14 }}>
-            <EventLog events={data.events} />
+          <div style={{ marginTop: 14 }}>
+            <Rack
+              storageKey="seve-rack-ops"
+              gridClass="grid grid--live grid--even"
+              colAClass="col"
+              colBClass="col"
+              defaults={{ a: ["preflight", "eventlog"], b: ["master", "masterstop", "settings"] }}
+              panels={{
+                preflight: (
+                  <OpsPreflight
+                    strategists={desk.strategists}
+                    tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
+                    ops={ops}
+                  />
+                ),
+                eventlog: <EventLog events={data.events} />,
+                /* the MASTER hardware panel (capital knob · big NAV LED · full transport)
+                   lives in OPS — the shell transport carries the daily-use controls */
+                master: <MasterStrip fund={desk.fund} fundPnl={liveFund} />,
+                masterstop: <MasterStopControl fund={desk.fund} />,
+                settings: (
+                  <div className="panel">
+                    <div className="phead"><span className="t">Settings</span><span className="x">operator · chassis · alerts</span></div>
+                    <div className="pbody ops-controls">
+                      <PushToggle />
+                      <div className="theme-toggle">
+                        <span>Chassis theme</span>
+                        <button type="button" className={theme === "cream" ? "on" : ""} onClick={() => setTheme("cream")}>cream</button>
+                        <button type="button" className={theme === "blackout" ? "on" : ""} onClick={() => setTheme("blackout")}>blackout</button>
+                      </div>
+                      <AuthControl />
+                    </div>
+                  </div>
+                ),
+              }}
+            />
           </div>
         </>)}
       </section>

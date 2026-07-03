@@ -2164,7 +2164,9 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
    the ⠿ grip to re-rack them within/between the two columns. Order is a local
    preference (localStorage), available signed-out too. ---- */
 .rack-item { position: relative; }
-.rack-item:not(:has(.panel)) { display: none; } /* e.g. Net Exposure renders null when flat */
+/* opt-in per item (Rack `optional` prop): hide the slot when the child renders no
+   .panel (e.g. Net Exposure when flat). NOT global — the MASTER strip is a .master. */
+.rack-item--optional:not(:has(.panel)) { display: none; }
 .rack-item.dragging { opacity: 0.95; }
 .rack-item.dragging > .panel { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--chassis-dark); }
 .rack-grip { position: absolute; top: 8px; left: 8px; z-index: 4; width: 20px; height: 20px; padding: 0;
@@ -2173,6 +2175,16 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
 .rack-item > .panel:first-of-type > .phead { padding-left: 32px; } /* clear the grip */
 .rack-grip:hover { opacity: 1; }
 .rack-grip:active { cursor: grabbing; }
+
+/* report SECTION folds (autopsies: findings/actions/learnings — default folded so
+   an expanded report doesn't monopolize the column) — .au-sub as a button */
+.au-subfold { display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: none; border-top: 1px solid var(--border);
+  cursor: pointer; text-align: left; }
+.au-subfold .fold-ch { margin-left: auto; }
+/* Shadow & Override: today ⇄ cumulative scorecard toggle (reuses the roster seg) */
+.sc-toggle { margin-left: 8px; }
+.roster-toggle button:disabled { opacity: 0.4; cursor: default; }
 /* sequencer ▶ REPLAY — chases the day; steps flash chase-red as they play */
 .sqz-play { font: 700 9px var(--mono); letter-spacing: 0.6px; padding: 4px 10px; border-radius: 5px;
   border: 1px solid rgba(0, 0, 0, 0.25); background: rgba(255, 255, 255, 0.4); color: var(--ink-soft);

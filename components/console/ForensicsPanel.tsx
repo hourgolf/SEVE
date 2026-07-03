@@ -41,6 +41,8 @@ export function ForensicsPanel() {
   const ps = usePyramidShadow();
   const [folded, toggleFold] = useFold("forensics");
   const [expanded, setExpanded] = useState(false);
+  // scorecard window: TODAY's ledger slice vs the cumulative-since-inception book
+  const [scWin, setScWin] = useState<"today" | "cum">("today");
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggle = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
 
@@ -55,7 +57,10 @@ export function ForensicsPanel() {
   if (error) return <Frame><div className="chart-empty">couldn&apos;t load — {error}</div></Frame>;
   if (!report) return <Frame><div className="chart-empty">no report yet — run <code>npm run day-report</code> same-week (with APP_URL + PUSH_SECRET set) to publish</div></Frame>;
 
-  const sc = report.payload.overrideScorecard;
+  // today's slice publishes since 07-03; older payloads only carry the cumulative book
+  const scToday = report.payload.overrideToday ?? null;
+  const showToday = scWin === "today" && !!scToday;
+  const sc = showToday ? scToday! : report.payload.overrideScorecard;
   const bvl = report.payload.benchedVsLive;
   const gb = report.payload.giveback ?? null;
   const trendUp = trend.length >= 2 && (trend[trend.length - 1].capturePct ?? 0) >= (trend[0].capturePct ?? 0);
@@ -106,10 +111,18 @@ export function ForensicsPanel() {
           </>
         )}
 
-        {/* ── OVERRIDE SCORECARD (CUMULATIVE — accumulating ledger since inception) ── */}
-        <div className="au-sub">Override scorecard <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>cumulative{sc.span ? ` · ${sc.span}` : ""}</span> — manual close vs ride-to-close (man&nbsp;vs&nbsp;machine)</div>
+        {/* ── OVERRIDE SCORECARD — today's slice ⇄ the cumulative ledger ── */}
+        <div className="au-sub">
+          Override scorecard
+          <span className="roster-toggle sc-toggle" title="today's ledger entries vs the cumulative book">
+            <button type="button" className={showToday ? "on" : ""} disabled={!scToday} onClick={() => setScWin("today")}
+              title={scToday ? undefined : "publishes with the next day-report run"}>today</button>
+            <button type="button" className={!showToday ? "on" : ""} onClick={() => setScWin("cum")}>cumulative</button>
+          </span>
+          <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}> {showToday ? sc.span || "today" : `cumulative${sc.span ? ` · ${sc.span}` : ""}`}</span> — manual close vs ride-to-close
+        </div>
         {sc.n === 0 ? (
-          <p className="au-market">no overrides recorded yet — accrues as you manually close ride-channel positions.</p>
+          <p className="au-market">{showToday ? "no overrides today — the cumulative book is on the toggle." : "no overrides recorded yet — accrues as you manually close ride-channel positions."}</p>
         ) : (
           <>
             <div className="au-fund">

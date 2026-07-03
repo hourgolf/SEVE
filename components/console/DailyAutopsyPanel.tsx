@@ -23,6 +23,9 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
   const { reports, loading, error } = useDailyReports(8);
   const [idx, setIdx] = useState(0);
   const [folded, toggleFold] = useFold("daily-autopsy");
+  // findings/actions start FOLDED — expanded reports were monopolizing the column
+  const [findingsFolded, toggleFindings] = useFold("daily-findings", true);
+  const [actionsFolded, toggleActions] = useFold("daily-actions", true);
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggleExp = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
@@ -153,8 +156,11 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
 
         {expanded && !!n?.systemFindings?.length && (
           <div className="au-section">
-            <div className="au-sub">System findings</div>
-            {n.systemFindings.map((f, i) => (
+            <button type="button" className="au-sub au-subfold" onClick={toggleFindings} aria-expanded={!findingsFolded}>
+              System findings · {n.systemFindings.length}
+              <span className="fold-ch">{findingsFolded ? "▸" : "▾"}</span>
+            </button>
+            {!findingsFolded && n.systemFindings.map((f, i) => (
               <div className="au-finding" key={i}>
                 <div className="au-finding-head">
                   <span className={`au-chip ${SEV_CLASS[f.severity] ?? "au-sev-low"}`}>{f.category}/{f.severity}</span>
@@ -172,8 +178,11 @@ export function DailyAutopsyPanel({ strategists }: { strategists: StrategistStat
 
         {expanded && !!n?.topActions?.length && (
           <div className="au-section">
-            <div className="au-sub">Top actions</div>
-            <ul className="au-actions">{n.topActions.map((a, i) => <li key={i}>{a}</li>)}</ul>
+            <button type="button" className="au-sub au-subfold" onClick={toggleActions} aria-expanded={!actionsFolded}>
+              Top actions · {n.topActions.length}
+              <span className="fold-ch">{actionsFolded ? "▸" : "▾"}</span>
+            </button>
+            {!actionsFolded && <ul className="au-actions">{n.topActions.map((a, i) => <li key={i}>{a}</li>)}</ul>}
           </div>
         )}
       </div>

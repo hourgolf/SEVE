@@ -22,6 +22,9 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
   const { reports, loading, error } = useWeeklyReports(6);
   const [idx, setIdx] = useState(0);
   const [folded, toggleFold] = useFold("weekly-autopsy");
+  // learnings/suggestions start FOLDED — expanded reports were monopolizing the column
+  const [learnFolded, toggleLearn] = useFold("weekly-learnings", true);
+  const [sugFolded, toggleSug] = useFold("weekly-suggestions", true);
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggleExp = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
@@ -178,15 +181,21 @@ export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistSta
 
         {expanded && !!n?.keyLearnings?.length && (
           <div className="au-section">
-            <div className="au-sub">Key learnings</div>
-            <ul className="au-actions">{n.keyLearnings.map((k, i) => <li key={i}>{k}</li>)}</ul>
+            <button type="button" className="au-sub au-subfold" onClick={toggleLearn} aria-expanded={!learnFolded}>
+              Key learnings · {n.keyLearnings.length}
+              <span className="fold-ch">{learnFolded ? "▸" : "▾"}</span>
+            </button>
+            {!learnFolded && <ul className="au-actions">{n.keyLearnings.map((k, i) => <li key={i}>{k}</li>)}</ul>}
           </div>
         )}
 
         {expanded && !!n?.suggestions?.length && (
           <div className="au-section">
-            <div className="au-sub">Ranked suggestions</div>
-            {n.suggestions.map((s, i) => (
+            <button type="button" className="au-sub au-subfold" onClick={toggleSug} aria-expanded={!sugFolded}>
+              Ranked suggestions · {n.suggestions.length}
+              <span className="fold-ch">{sugFolded ? "▸" : "▾"}</span>
+            </button>
+            {!sugFolded && n.suggestions.map((s, i) => (
               <div className="au-finding" key={i}>
                 <div className="au-finding-head">
                   <span className={`au-chip ${PRI_CLASS[s.priority] ?? "au-sev-low"}`}>{s.priority}</span>

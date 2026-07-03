@@ -609,6 +609,8 @@ async function main() {
   const payload = {
     generatedAt: new Date().toISOString(),
     overrideScorecard: scorecardData(ledgerNow),
+    // TODAY's slice of the same ledger (panel toggle: today ⇄ cumulative)
+    overrideToday: scorecardData(Object.fromEntries(Object.entries(ledgerNow).filter(([, e]) => e.date === DATE))),
     overrideFouloutScorecard: fouloutScorecardData(fouloutNow), // capital-path re-score (additive; panel may ignore)
     benchedVsLive: bvl ? { sameWeek: bvl.sameWeek, benched: bvl.benched, skipped: bvl.skipped, benchedTotal: bvl.benchedTotal, liveTotal: bvl.liveTotal } : null,
     giveback,

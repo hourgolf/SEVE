@@ -26,6 +26,8 @@ export interface GivebackTrendPoint { date: string; capturePct: number | null; g
 export interface ForensicsPayload {
   generatedAt: string;
   overrideScorecard: OverrideScorecard;
+  /** TODAY's slice of the same ledger (panel toggle; absent on pre-07-03 payloads) */
+  overrideToday?: OverrideScorecard | null;
   benchedVsLive: BenchedVsLivePayload | null;
   giveback?: GivebackPayload | null;
 }
