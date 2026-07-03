@@ -118,8 +118,9 @@ depth 1–2: +$11/+$40 per trade (n=584); depth 3–4: ≈flat (n=197); depth �
 (n=99, Σ −$43.4k). ⚠ Depth correlates with the 06-26/29 clone-sizing era — the mechanism and
 monotonicity survive the confound; the exact dollars do not.
 **Kill criterion:** if capped entries' gate-shadow would-have P&L is net POSITIVE at N≥30
-blocked (the cap is blocking winners), the cap dies. **Era note:** arming this changes the
-entry mix mid-era-4 — the A6 read must note the boundary date if enforcement lands before it.
+blocked (the cap is blocking winners), the cap dies. **SEQUENCING (operator's word,
+2026-07-02): enforcement waits until AFTER the A6 read (~Jul 22)** — era-4 stays pristine;
+arm C1 as the first post-A6 action alongside the runner decision. No era footnote needed.
 
 ## B2-CLOSURE · Chop-day short-premium — CLOSED (operator's word, 2026-07-02)
 Operator: not interested in multi-leg for now — drawdown appetite. The A5→B2 chain is severed;
