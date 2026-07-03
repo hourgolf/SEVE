@@ -70,10 +70,10 @@ function Surface({
 
   // Active room (shell tabs) + the DESK market-band collapse — persisted so the
   // operator returns to the same room/layout. Lifted to the seam (passed down).
-  const [activeRoom, setActiveRoom] = useState<Room>("desk");
+  const [activeRoom, setActiveRoom] = useState<Room>("play");
   useEffect(() => {
     const s = localStorage.getItem("seve-room");
-    if (s === "desk" || s === "review" || s === "ops") setActiveRoom(s);
+    if (s === "play" || s === "mix" || s === "write" || s === "tape" || s === "ops") setActiveRoom(s);
   }, []);
   useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [collapsedMarket, setCollapsedMarket] = useState(false);

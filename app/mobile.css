@@ -637,8 +637,13 @@
    readout. Step-pad classes (sq-*) come from console.css. ---- */
 .m-sqdock { flex: 0 0 auto; background: linear-gradient(180deg, var(--chassis), var(--chassis-2));
   border-top: 2px solid var(--chassis-edge); box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.25); }
-.m-sqbar { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 12px;
+.m-sqhead { display: flex; align-items: center; }
+.m-sqbar { display: flex; align-items: center; gap: 9px; flex: 1 1 auto; min-width: 0; padding: 7px 12px;
   background: none; border: none; cursor: pointer; }
+.m-sq-play { font: 700 10px var(--mono); padding: 3px 9px; margin-right: 10px; border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.25); background: rgba(255, 255, 255, 0.4); color: var(--ink-soft);
+  cursor: pointer; flex: 0 0 auto; }
+.m-sq-play.busy { background: var(--accent); border-color: transparent; color: #fff; }
 .m-sq-lbl { font: 700 8px var(--mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink-soft); }
 .m-sq-mini { display: flex; gap: 3px; flex: 1 1 auto; }
 .m-sq-mini i { flex: 1; height: 7px; border-radius: 2px; background: rgba(0, 0, 0, 0.14); }

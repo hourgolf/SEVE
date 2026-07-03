@@ -2099,10 +2099,14 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
    START/STOP + guarded PAPER/LIVE; health + operator chips go dot-only (titles
    carry the words); the STEP LED returns. The chassis is a fixed 1180 with zero
    slack, so flex-wrap is the safety net: the bar wraps, it never clips. ---- */
-.shell { flex-wrap: wrap; row-gap: 8px; gap: 9px; }
-.shell-l { gap: 8px; }
-.shell-leds { gap: 10px; }
-.shell-tab { padding: 8px 11px; }
+.shell { flex-wrap: wrap; row-gap: 8px; gap: 8px; }
+.shell-l { gap: 7px; }
+.shell-leds { gap: 9px; }
+.shell-tabs { gap: 5px; }
+.shell-tab { padding: 8px 8px; font-size: 11px; } /* 5 rooms on the width-critical row */
+/* graceful wrap: if a monster P&L string ever overflows the row, the KILL group
+   drops to its own line RIGHT-aligned (reads intentional, never clips) */
+.shell-r { margin-left: auto; }
 .shell-xport { display: inline-flex; align-items: center; gap: 6px; }
 .shell-xport--locked { opacity: 0.45; filter: grayscale(0.4); pointer-events: none; }
 .shell-xport .xport { padding: 5px 7px; font-size: 9px; letter-spacing: 0.8px; }
@@ -2114,3 +2118,19 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
 /* the Δ prefix IS the label on the width-critical transport (title carries "BOOKS") */
 .shell .shell-books .shb-k { display: none; }
 .shell-write { font-size: 13px; letter-spacing: 0; }
+
+/* ---- 5-ROOM RESHUFFLE (909-redesign slice 4): PLAY/MIX/WRITE/TAPE/OPS ------ */
+/* MIX control row — the old Mixer section-label's controls, sans the title
+   (the room head carries the silkscreen now) */
+.mix-ctl { display: flex; align-items: center; gap: 6px; margin: 0 1px 12px; }
+.mix-ctl .roster-toggle { margin-left: 0; }
+/* WRITE room compose panel */
+.room--write .add-channel-btn { margin-left: 0; font-size: 11px; padding: 7px 14px; }
+.write-hint { font-size: 12px; line-height: 1.5; color: var(--ink-soft); margin-bottom: 10px; }
+/* sequencer ▶ REPLAY — chases the day; steps flash chase-red as they play */
+.sqz-play { font: 700 9px var(--mono); letter-spacing: 0.6px; padding: 4px 10px; border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.25); background: rgba(255, 255, 255, 0.4); color: var(--ink-soft);
+  cursor: pointer; flex: 0 0 auto; white-space: nowrap; }
+.sqz-play:hover { color: var(--ink); background: rgba(255, 255, 255, 0.6); }
+.sqz-play.busy { background: var(--accent); border-color: transparent; color: #fff; }
+.sq-step.chased { box-shadow: 0 0 0 2px var(--led-red), 0 0 14px rgba(255, 59, 47, 0.6), 0 1px 0 rgba(255, 255, 255, 0.4) inset; }

@@ -8,8 +8,9 @@ import type { OpsStatus } from "@/hooks/useOpsStatus";
 import type { usePositionMarks } from "@/hooks/usePositionMarks";
 import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 
-/** The three rooms of the redesigned desk (replaces the stacked §01/§02/§03). */
-export type Room = "desk" | "review" | "ops";
+/** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
+ *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
+export type Room = "play" | "mix" | "write" | "tape" | "ops";
 
 // Shared props for the desktop / mobile surfaces. All data hooks are called once
 // in the page and the results passed down, so neither layout re-subscribes.

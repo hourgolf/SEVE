@@ -16,9 +16,11 @@ import type { useAccounts } from "@/hooks/useAccounts";
 import type { Room } from "@/components/surfaceTypes";
 
 const ROOMS: { id: Room; label: string; jp: string }[] = [
-  { id: "desk", label: "DESK", jp: "操作" },
-  { id: "review", label: "REVIEW", jp: "検証" },
-  { id: "ops", label: "OPS", jp: "運用" },
+  { id: "play", label: "PLAY", jp: "演奏" },
+  { id: "mix", label: "MIX", jp: "ミキサー" },
+  { id: "write", label: "WRITE", jp: "作曲" },
+  { id: "tape", label: "TAPE", jp: "テープ" },
+  { id: "ops", label: "OPS", jp: "整備" },
 ];
 
 // ET market-hours gate so the health dot isn't red all weekend (a quiet worker

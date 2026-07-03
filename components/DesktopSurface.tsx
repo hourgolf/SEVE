@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { AddChannel } from "@/components/console/AddChannel";
 import { AuthControl } from "@/components/AuthControl";
@@ -39,24 +39,19 @@ import { signedUsd } from "@/lib/format";
 import type { Room, SurfaceProps } from "@/components/surfaceTypes";
 import type { Position } from "@/lib/desk/types";
 
-function SectionLabel({ id, idx, children }: { id: string; idx: string; children: ReactNode }) {
-  return (
-    <div className="section-label" id={id}>
-      <span className="idx">{idx}</span>
-      <span className="lab">{children}</span>
-    </div>
-  );
-}
-
-// ---- one-page rooms (909-redesign slice 2) --------------------------------
-// The three rooms STACK on one scrolling page; the shell tabs anchor-jump (with
-// scrollspy keeping the lit tab honest) and each room folds via its silkscreen
-// head. Folded rooms don't mount their content — REVIEW/OPS defer their fetches
-// until opened (default: desk open, review + ops folded).
+// ---- one-page rooms (909-redesign slices 2+4) ------------------------------
+// The FIVE rooms of the 909 desk STACK on one scrolling page: PLAY (perform:
+// chart · live book · sequencer) · MIX (tune: strips · fleet · bench) · WRITE
+// (compose: add-channel · virtual bench LAB) · TAPE (review: P&L · autopsies ·
+// forensics) · OPS (tend). Shell tabs anchor-jump (scrollspy keeps the lit tab
+// honest); each room folds via its silkscreen head, and folded rooms don't
+// mount — WRITE/TAPE/OPS defer their fetches until opened.
 const ROOM_DEFS: { id: Room; idx: string; label: string; jp: string }[] = [
-  { id: "desk", idx: "01", label: "Desk", jp: "操作" },
-  { id: "review", idx: "02", label: "Review", jp: "検証" },
-  { id: "ops", idx: "03", label: "Ops", jp: "運用" },
+  { id: "play", idx: "01", label: "Play", jp: "演奏" },
+  { id: "mix", idx: "02", label: "Mix", jp: "ミキサー" },
+  { id: "write", idx: "03", label: "Write", jp: "作曲" },
+  { id: "tape", idx: "04", label: "Tape", jp: "テープ" },
+  { id: "ops", idx: "05", label: "Ops", jp: "整備" },
 ];
 const ROOM_FOLD_KEY = "seve-room-folds";
 
@@ -134,9 +129,9 @@ export function DesktopSurface({
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const { canWrite } = write;
 
-  // Room folds (one-page desk): desk open, review/ops folded until wanted —
-  // folded rooms don't mount, so their data fetches defer too. Persisted.
-  const [roomFolds, setRoomFolds] = useState<Record<Room, boolean>>({ desk: false, review: true, ops: true });
+  // Room folds (one-page desk): play + mix open, write/tape/ops folded until
+  // wanted — folded rooms don't mount, so their data fetches defer too. Persisted.
+  const [roomFolds, setRoomFolds] = useState<Record<Room, boolean>>({ play: false, mix: false, write: true, tape: true, ops: true });
   useEffect(() => {
     try {
       const s = window.localStorage.getItem(ROOM_FOLD_KEY);
@@ -164,7 +159,7 @@ export function DesktopSurface({
     const spy = () => {
       pending = false;
       const line = window.innerHeight * 0.3;
-      let cur: Room = "desk";
+      let cur: Room = "play";
       for (const d of ROOM_DEFS) {
         const el = document.getElementById(`room-${d.id}`);
         if (el && el.getBoundingClientRect().top <= line) cur = d.id;
@@ -230,11 +225,14 @@ export function DesktopSurface({
       />
 
       {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
+      {addOpen && (
+        <AddChannel onClose={() => setAddOpen(false)} existingSlugs={desk.strategists.map((s) => s.slug)} />
+      )}
 
-      {/* ============ DESK — market · mixer · live book ====================== */}
-      <section className="room room--desk" id="room-desk" data-room-id="desk">
-        <RoomHead def={ROOM_DEFS[0]} folded={roomFolds.desk} onToggle={() => toggleRoom("desk")} />
-        {!roomFolds.desk && (<>
+      {/* ============ 01 PLAY — perform: chart · live book · sequencer ======= */}
+      <section className="room room--play" id="room-play" data-room-id="play">
+        <RoomHead def={ROOM_DEFS[0]} folded={roomFolds.play} onToggle={() => toggleRoom("play")} />
+        {!roomFolds.play && (<>
           <TodayStrip underlyings={tradedUnderlyings} />
           <div className="market-section">
             <div className={`mkt-bar${collapsedMarket ? " collapsed" : ""}`}>
@@ -295,9 +293,14 @@ export function DesktopSurface({
                 chain (909-redesign slice 1). Read-only off the same feed. */}
             <SessionSequencer positions={feed.positions} recentTrades={feed.recentTrades} strategists={desk.strategists} />
           </div>
+        </>)}
+      </section>
 
-          <SectionLabel id="composer" idx="C">
-            Mixer<span className="sec-jp">ミキサー</span>
+      {/* ============ 02 MIX — tune: strips · fleet table · bench ============ */}
+      <section className="room room--mix" id="room-mix" data-room-id="mix">
+        <RoomHead def={ROOM_DEFS[1]} folded={roomFolds.mix} onToggle={() => toggleRoom("mix")} />
+        {!roomFolds.mix && (<>
+          <div className="mix-ctl">
             <span className="roster-toggle" title="per-channel strips vs the fleet table">
               <button type="button" className={rosterView === "strips" ? "on" : ""} onClick={() => setRosterView("strips")}>strips</button>
               <button type="button" className={rosterView === "table" ? "on" : ""} onClick={() => setRosterView("table")}>table</button>
@@ -309,11 +312,7 @@ export function DesktopSurface({
                 <button type="button" onClick={() => groupBy("regime")}>regime</button>
               </span>
             )}
-            <button className="add-channel-btn" onClick={() => setAddOpen(true)}>+ Add Channel</button>
-          </SectionLabel>
-          {addOpen && (
-            <AddChannel onClose={() => setAddOpen(false)} existingSlugs={desk.strategists.map((s) => s.slug)} />
-          )}
+          </div>
           <div className="console-grid">
             <div className="channels-col">
               {rosterView === "table" ? (
@@ -372,10 +371,33 @@ export function DesktopSurface({
         </>)}
       </section>
 
-      {/* ============ REVIEW — reflect ===================================== */}
-      <section className="room room--review log-section" id="room-review" data-room-id="review">
-        <RoomHead def={ROOM_DEFS[1]} folded={roomFolds.review} onToggle={() => toggleRoom("review")} />
-        {!roomFolds.review && (<>
+      {/* ============ 03 WRITE — compose: add-channel · virtual bench ======== */}
+      <section className="room room--write log-section" id="room-write" data-room-id="write">
+        <RoomHead def={ROOM_DEFS[2]} folded={roomFolds.write} onToggle={() => toggleRoom("write")} />
+        {!roomFolds.write && (
+          <div className="grid grid--live grid--even">
+            <div className="col">
+              <div className="panel">
+                <div className="phead"><span className="t">Add Channel</span><span className="x">thesis → spec → gate → arm</span></div>
+                <div className="pbody">
+                  <p className="write-hint">
+                    Import a strategy thesis (.md): instant frontmatter preview, LLM compile to a spec,
+                    the 5-window backtest gate, then arm to the bench. Duplicates for A/Bs live on each
+                    strip&apos;s flip-editor in MIX.
+                  </p>
+                  <button className="add-channel-btn" onClick={() => setAddOpen(true)}>+ Add Channel</button>
+                </div>
+              </div>
+            </div>
+            <div className="col"><LabPanel /></div>
+          </div>
+        )}
+      </section>
+
+      {/* ============ 04 TAPE — review: P&L · autopsies · forensics ========== */}
+      <section className="room room--tape log-section" id="room-tape" data-room-id="tape">
+        <RoomHead def={ROOM_DEFS[3]} folded={roomFolds.tape} onToggle={() => toggleRoom("tape")} />
+        {!roomFolds.tape && (<>
           <div className="grid grid--live">
             <div className="col col--fill">
               <PnlPanel
@@ -392,13 +414,12 @@ export function DesktopSurface({
             <div className="col"><WeeklyAutopsyPanel strategists={desk.strategists} /></div>
           </div>
           <div style={{ marginTop: 14 }}><ForensicsPanel /></div>
-          <div style={{ marginTop: 14 }}><LabPanel /></div>
         </>)}
       </section>
 
-      {/* ============ OPS — tend the machine =============================== */}
+      {/* ============ 05 OPS — tend the machine ============================== */}
       <section className="room room--ops log-section" id="room-ops" data-room-id="ops">
-        <RoomHead def={ROOM_DEFS[2]} folded={roomFolds.ops} onToggle={() => toggleRoom("ops")} />
+        <RoomHead def={ROOM_DEFS[4]} folded={roomFolds.ops} onToggle={() => toggleRoom("ops")} />
         {!roomFolds.ops && (<>
           <DayBooksStrip
             strategists={desk.strategists}

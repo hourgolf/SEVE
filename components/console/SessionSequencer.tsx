@@ -13,9 +13,10 @@
 // and `dock` (mobile — slim pattern bar pinned above the tab bar, closed by
 // default, tap to expand). Fold state persists per-skin.
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { eventsOn } from "@/engine/market-events";
 import { KitToggle } from "@/components/console/KitToggle";
+import { playKit, voiceForClose, type KitVoice } from "@/lib/desk/kit";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd } from "@/lib/format";
 import type { Position, StrategistState } from "@/lib/desk/types";
@@ -75,6 +76,8 @@ interface Fill {
   slug: string;
   text: string;
   neg?: boolean;
+  /** kit voice for ▶ REPLAY (entry = kick; exits voiced by close_reason/sign) */
+  voice: KitVoice;
 }
 interface StepEvt {
   key: "FOMC" | "CUT" | "EOD";
@@ -129,6 +132,7 @@ export function SessionSequencer({
           kind: "entry",
           slug: p.strategist_slug,
           text: `in ${ct(p)} ×${Math.abs(p.qty)}`,
+          voice: "kick",
         });
       }
     }
@@ -138,6 +142,7 @@ export function SessionSequencer({
           kind: "entry",
           slug: t.strategist_slug,
           text: `in ${ct(t)} ×${Math.abs(t.qty)}`,
+          voice: "kick",
         });
       }
       if (t.closed_at && etDateOf(t.closed_at) === todayET) {
@@ -148,6 +153,7 @@ export function SessionSequencer({
           slug: t.strategist_slug,
           neg: pnl < 0,
           text: `out ${ct(t)} ${signedUsd(pnl)}${why ? ` · ${why}` : ""}`,
+          voice: voiceForClose(t.close_reason, pnl),
         });
       }
     }
@@ -205,6 +211,35 @@ export function SessionSequencer({
       return !o;
     });
 
+  // ---- ▶ REPLAY DAY (slice 4): chase the 16 steps, slice readout follows,
+  // fills voice through the kit (playKit no-ops while the KIT pad is off).
+  const [chase, setChase] = useState<number | null>(null);
+  const [replaying, setReplaying] = useState(false);
+  const replayIv = useRef<number | null>(null);
+  useEffect(() => () => { if (replayIv.current != null) window.clearInterval(replayIv.current); }, []);
+  const stopReplay = () => {
+    if (replayIv.current != null) window.clearInterval(replayIv.current);
+    replayIv.current = null;
+    setChase(null);
+    setSel(null);
+    setReplaying(false);
+  };
+  const replay = () => {
+    if (replayIv.current != null) { stopReplay(); return; }
+    if (!open) toggle();
+    setReplaying(true);
+    let i = 0;
+    replayIv.current = window.setInterval(() => {
+      if (i >= N_STEPS) { stopReplay(); return; }
+      setChase(i);
+      setSel(i);
+      fills[i].slice(0, 4).forEach((f, j) => {
+        window.setTimeout(() => playKit(f.voice), j * 90);
+      });
+      i++;
+    }, 340);
+  };
+
   const steps = (
     <div className="sq-steps">
       {Array.from({ length: N_STEPS }, (_, i) => {
@@ -215,6 +250,7 @@ export function SessionSequencer({
         if (cur != null ? i < cur : afterClose) cls.push("past");
         if (i === cur) cls.push("cur");
         if (i === sel) cls.push("sel");
+        if (i === chase) cls.push("chased");
         return (
           <button
             key={i}
@@ -286,12 +322,17 @@ export function SessionSequencer({
     );
     return (
       <div className={`m-sqdock${open ? " open" : ""}`}>
-        <button type="button" className="m-sqbar" onClick={toggle} aria-expanded={open} aria-label="session sequencer">
-          <span className="m-sq-lbl">Seq</span>
-          {mini}
-          <span className="m-sq-step">{cur != null ? `${cur + 1}·16` : afterClose ? "done" : "pre"}</span>
-          <span className="m-sq-ch">{open ? "▼" : "▲"}</span>
-        </button>
+        <div className="m-sqhead">
+          <button type="button" className="m-sqbar" onClick={toggle} aria-expanded={open} aria-label="session sequencer">
+            <span className="m-sq-lbl">Seq</span>
+            {mini}
+            <span className="m-sq-step">{cur != null ? `${cur + 1}·16` : afterClose ? "done" : "pre"}</span>
+            <span className="m-sq-ch">{open ? "▼" : "▲"}</span>
+          </button>
+          <button type="button" className={`m-sq-play${replaying ? " busy" : ""}`} onClick={replay} title="replay the day through the kit" aria-label="replay day">
+            {replaying ? "■" : "▶"}
+          </button>
+        </div>
         {open && (
           <div className="m-sqbody">
             {steps}
@@ -310,6 +351,9 @@ export function SessionSequencer({
           <span className="sqz-sub">16 steps · 9:30 → 16:00 ET · fills light the pattern · events programmed ahead</span>
           <span className="sqz-now">{cur != null ? `step ${cur + 1}·16` : afterClose ? "session done" : "pre-open"}</span>
           <span className="sqz-ch">{open ? "▾" : "▸"}</span>
+        </button>
+        <button type="button" className={`sqz-play${replaying ? " busy" : ""}`} onClick={replay} title="replay the day — chases the pattern; fills voice through the kit when it's on">
+          {replaying ? "■ STOP" : "▶ REPLAY DAY"}
         </button>
         <KitToggle />
       </div>
