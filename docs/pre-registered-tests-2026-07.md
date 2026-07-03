@@ -160,6 +160,11 @@ Both reversible by restoring the prior values; both are rule-applications, not P
 - **2026-07-03 (same session):** accounts re-bucketed to lifecycle (FIRST-TEAM/LAB/MORGUE, 7 channels moved,
   no knob changes) — noted here because per-account rollups re-label retroactively; per-bucket reads that
   span 07-03 should use the strategist join, not the account, as the stable key.
+- **2026-07-03 (same session):** (D) the six BENCHED SPY clones' exits re-synced to the live pair's LOCK:
+  take_profit 0→22, premium_stop null(−50)→30. Rationale: the clones ran tp=0 ride-to-−50 during 06-25→29 —
+  their trades peaked +22..+41% MFE (er40 4/4 reached +22) and surrendered everything to full stops (22
+  stop_premium closes, −$43.3k family-wide); ctl was also no longer a valid control for the LOCK-configured
+  live pair. Zero live effect (status=draft). A re-arm now restarts at A1 size + LOCK exits.
 
 ## B2 · Chop-day short-premium (DEFERRED — chained behind A5)
 No multi-leg compiler work unless A5 passes. Inherits A5's kill. Additional standing door-check:
