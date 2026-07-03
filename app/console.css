@@ -2100,7 +2100,8 @@
 /* ---- ONE-PAGE ROOMS + FOLDS (909-redesign slice 2) — the rooms stack on one
    scrolling page; shell tabs anchor-jump with scrollspy; room heads (silkscreen
    labels) and panel pheads carry fold chevrons. ---- */
-.room { scroll-margin-top: 12px; }
+/* jumps land BELOW the sticky transport (shell ~57px + 8px top offset + air) */
+.room { scroll-margin-top: 78px; }
 button.section-label.room-head { width: 100%; background: none; border: none; padding: 0; cursor: pointer; }
 .section-label .fold-ch { order: 99; font: 700 11px var(--mono); color: var(--ink-soft); flex: 0 0 auto; }
 /* panel-phead fold chevron — inherits the phead's ink (cream) / plate (dark) color */
@@ -2113,6 +2114,9 @@ button.section-label.room-head { width: 100%; background: none; border: none; pa
    carry the words); the STEP LED returns. The chassis is a fixed 1180 with zero
    slack, so flex-wrap is the safety net: the bar wraps, it never clips. ---- */
 .shell { flex-wrap: wrap; row-gap: 8px; gap: 8px; }
+/* STICKY TRANSPORT — the room tabs (+ KILL) ride the scroll; z above panels/
+   knobs (dragging z20, flip-editors z6) but below scrims (z50/60). */
+.shell { position: sticky; top: 8px; z-index: 40; }
 .shell-l { gap: 7px; }
 .shell-leds { gap: 9px; }
 .shell-tabs { gap: 5px; }
