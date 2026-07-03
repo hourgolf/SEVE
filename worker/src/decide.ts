@@ -347,6 +347,11 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     let blocked: string | null = entryGuard;
     if (!blocked && ch.status !== "armed") blocked = "not_armed";
     if (!blocked && !entryExpiry) blocked = "no_1dte_chain";
+    // GAP_MIN knob (62_gap_min_knob.sql): the validated overnight-gap regime gate as per-channel
+    // CONFIG, so builtins can carry what the V3/ALT specs already do. 0 = off (byte-identical).
+    // FAIL-CLOSED like the spec condition: no computable gap → a gated channel stands down
+    // (self-heals next session). Blocked signals stamp 'gap_min' → gate-shadow scores them (A2).
+    if (!blocked && ch.gap_min > 0 && (ctx.gap == null || Math.abs(ctx.gap) < ch.gap_min)) blocked = "gap_min";
     // EVENT STAND-DOWN entry block (incl. twins — a machine entry into the FOMC
     // window is a machine decision either way). event_policy='ignore' opts out.
     if (!blocked && policy.EVENT_STANDDOWN && ch.event_policy !== "ignore"

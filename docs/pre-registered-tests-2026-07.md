@@ -105,6 +105,28 @@ pooled on 308 sessions; watch-cells = or-fail's chop +$44/t and ribbon-cross's t
 - **Kill (per variant):** any vb-* with <10 first-of-day signals after 30 sessions is inert —
   delete or re-spec it; no threshold tinkering in between.
 
+## A9 · gap_min on breakout(base) (pre-registered 2026-07-03 — DARK BUILD DEPLOYED, decision at A6)
+Base is the one breakout-family member without the validated overnight-gap gate (gap_min 0.25,
+5/5-window gap-regime verdict, armed on the V3/ALT specs since 06-11). Base's own lifetime split
+(entry_features.gap, n=46, 100% stamped): **gap-days (|gap|≥0.25) +$2,322 / +$97/t / 63% win /
+49% avg MFE vs flat-open −$881 / −$40/t / 36% / 20%** — live out-of-sample AGREEMENT with a
+pre-validated verdict (confirmation, not mining; distinguishes this from the sign-flipping
+awareness levers).
+- **Reading rule (fixed now):** base's A6 LOCK evaluation is computed ON the gap/flat split
+  (|entry_features.gap| ≥/< 0.25) — so the gate question can't confound the LOCK question, and
+  base can't fail its 58% bar on trades the pending gate would have excluded.
+- **Decision rule (fixed now):** if era-4 flat-open expectancy < 0 at n≥15 AND era-4 gap-day
+  expectancy ≥ 0 (the lifetime pattern reproducing) → the gate is validated for base. The A6
+  action is then ONE roster decision — arm gap_min 0.25 on base, OR consolidate the SPY gap-day
+  slot (base vs V3 vs ALT: three channels firing the same gap mornings, and cross-index says SPY
+  is the marginal index for this edge) — taken alongside C1 + the runner decision.
+- **Kill:** era-4 flat-open expectancy ≥ 0 at n≥15 → base keeps trading ungated; item closes.
+- **Mechanism (DARK-BUILT 2026-07-03, `62_gap_min_knob.sql` + worker `stream-2026-07-03a`):**
+  per-channel `strategist_config.gap_min` — 0 = off for ALL channels (byte-identical), >0 =
+  entry blocked `gap_min` when the worker's |gap| < knob, FAIL-CLOSED on uncomputable gap
+  (mirrors the spec condition). Arming at A6 = a config flip, no deploy. Blocked entries stamp
+  signals → gate-shadow (A2) scores their would-haves automatically.
+
 ## A6b · NEAR-MISS metric (pre-registered 2026-07-02 — read WITH A6, not before)
 **Metric:** near-miss rate = trades whose peak_mark reached ≥70% of the channel's TP level
 (`peak ≥ entry·(1 + 0.7·tp/100)`, tp>0) but closed ≤ $0, per channel. Measurable from live

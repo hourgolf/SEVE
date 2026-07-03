@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-02a"; // peak_at/trough_at timestamps (61) — time-to-MFE/MAE stamped on every new-extreme ratchet write (instrumentation only). Prior (07-01e): trough_mark MAE ratchet; (d): KILL = FLATTEN via the fast sweep; (c): audit fixes — prem_stop=0 semantics, half-day close, pyramid cap own-stack+boost, EOD flatten expiring holds, stale-chain guard
+export const WORKER_VERSION = "stream-2026-07-03a"; // gap_min config knob (62) DARK — per-channel overnight-gap entry gate for builtins, 0=off everywhere (byte-identical); arming on breakout(base) = the pre-registered A9 decision at the A6 read. Prior (07-02a): peak_at/trough_at timestamps (61) — time-to-MFE/MAE on every new-extreme ratchet write
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

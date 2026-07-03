@@ -68,6 +68,12 @@ export interface ChannelConfig {
   // priority. Calibrated PATIENT; live field-test = pb-ride (1DTE). NOT for tail channels (V3/ALT/QQQ).
   stall_minutes: number;
   stall_max_favor_pct: number;
+  // Per-channel GAP_MIN regime gate (62_gap_min_knob.sql): 0 = OFF (default, byte-identical);
+  // >0 = block entries when the worker-computed |overnight gap %| < gap_min. FAIL-CLOSED when the
+  // gap is uncomputable (mirrors the spec `gap_min` condition — gap-regime verdict, 5/5-window).
+  // Lets BUILTIN channels (breakout base) carry the validated V3/ALT gate without a spec rebuild.
+  // DARK as of 2026-07-03 (all channels 0); arming on base = the pre-registered A9 decision at A6.
+  gap_min: number;
 }
 export interface FundState {
   total_capital_usd: number;
@@ -151,6 +157,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       pyramid_adds: Math.max(0, Math.floor(Number(cfg.pyramid_adds ?? 0))),
       stall_minutes: Math.max(0, Math.floor(Number(cfg.stall_minutes ?? 0))),
       stall_max_favor_pct: Math.max(0, Number(cfg.stall_max_favor_pct ?? 0)),
+      gap_min: Math.max(0, Number(cfg.gap_min ?? 0)),
     });
   }
   const fund: FundState | null = fundRow

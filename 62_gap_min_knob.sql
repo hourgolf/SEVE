@@ -1,0 +1,18 @@
+-- 62: per-channel GAP_MIN knob — the validated overnight-gap regime gate as CONFIG,
+-- so BUILTIN channels (breakout base) can carry it without a spec rebuild.
+-- The gate itself is the 5/5-window gap-regime verdict, armed on the V3/ALT specs
+-- since 06-11; base's own lifetime split agrees (gap-days +$97/t vs flat-open −$40/t,
+-- n=46, 100% entry_features.gap coverage).
+--
+-- Semantics (worker stream-2026-07-03a, decide.ts entry guard):
+--   0  = OFF (default — byte-identical for every existing channel)
+--   >0 = block the entry when the worker-computed |overnight gap %| < gap_min,
+--        blocked_reason 'gap_min' (signals stamp it → gate-shadow scores would-haves).
+--        FAIL-CLOSED when the gap is uncomputable (no prior session in memory),
+--        mirroring the spec `gap_min` condition — a gated channel stands down and
+--        self-heals next session.
+--
+-- DARK BUILD (2026-07-03, pre-registered A9 in docs/pre-registered-tests-2026-07.md):
+-- deployed with ALL channels at 0/off; arming on breakout(base) is a config flip
+-- decided at the A6 read, never before.
+alter table strategist_config add column if not exists gap_min numeric not null default 0;
