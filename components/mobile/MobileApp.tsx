@@ -7,7 +7,8 @@ import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
 import { ContractDetail } from "@/components/ContractDetail";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
-import { TodayStrip } from "@/components/console/TodayStrip";
+import { GAP_MIN } from "@/components/console/TodayStrip";
+import { useTodayReadiness } from "@/hooks/useTodayReadiness";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { ManVsMachine } from "@/components/console/ManVsMachine";
 import { PushToggle } from "@/components/console/PushToggle";
@@ -104,7 +105,14 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const down = liveFund.dayPnl < 0;
   const dayLed = (down ? "-" : "") + Math.abs(Math.round(liveFund.dayPnl));
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
-  const navLed = String(Math.round(liveFund.nav));
+  // K-format NAV: fits the $1M cockpit buckets in 5 cells (a raw 7-digit NAV
+  // overflowed the 6-digit window) and buys the ticker pills their column.
+  const navK = (liveFund.nav / 1000).toFixed(1);
+
+  // TODAY readiness → header ticker pills (replaces the space-eating TodayStrip):
+  // lit + arrow = gap cleared the gate (direction of the move); unlit + dim
+  // arrow = flat open, gap-gated channels standing down; unlit · = pre-open.
+  const { gaps, todayET } = useTodayReadiness();
 
   // BOOKS Δ + composite HEALTH dot for the persistent vitals header (mirrors the desktop Shell).
   const attrib = Object.values(livePnl).reduce((a, c) => a + (c.dayPnl || 0), 0);
@@ -150,14 +158,39 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
           <div className="m-pills">
             <span className={`m-pill m-run ${runCls}`}>{runLabel}</span>
             <span className={`m-pill m-mode ${desk.fund.mode}`}>{desk.fund.mode === "live" ? "LIVE" : "PAPER"}</span>
+            <span className={`m-pill m-books-pill shb-${dTone}`} title="BOOKS — NAV − attribution Σ (small = the books reconcile)">
+              Δ{signedUsd(booksDelta)}
+            </span>
           </div>
-          <div className="m-led"><LedDisplay value={navLed} digits={6} color={dayColor} caption="fund $" /></div>
+          <div className="m-pills m-ticks" role="status" aria-label="gap gate readiness">
+            {tradedUnderlyings.map((sym) => {
+              const g = gaps[sym];
+              const gapPct = g && g.sessionDate === todayET ? g.gapPct : null;
+              if (gapPct == null) {
+                const why = !g ? "no tape" : g.sessionDate !== todayET ? "pre-open" : "gap pending";
+                return (
+                  <span key={sym} className="m-tick off" title={`${sym} — ${why}`}>
+                    <b>{sym}</b><i>·</i>
+                  </span>
+                );
+              }
+              const isGap = Math.abs(gapPct) >= GAP_MIN;
+              const dir = gapPct >= 0 ? "up" : "down";
+              return (
+                <span
+                  key={sym}
+                  className={`m-tick${isGap ? ` on ${dir}` : " flat"}`}
+                  title={`${sym} ${gapPct >= 0 ? "+" : ""}${gapPct}% — ${isGap ? `gap day (clears the ${GAP_MIN}% gate)` : "flat open — gap-gated channels stand down"}`}
+                >
+                  <b>{sym}</b><i>{dir === "up" ? "▲" : "▼"}</i>
+                </span>
+              );
+            })}
+          </div>
+          <div className="m-led"><LedDisplay value={navK} digits={5} unit="K" color={dayColor} caption="fund $" /></div>
           <div className="m-led"><LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" /></div>
-          <span className={`m-books shb-${dTone}`} title="NAV − attribution Σ">Δ {signedUsd(booksDelta)}</span>
         </div>
       </header>
-
-      <TodayStrip underlyings={tradedUnderlyings} />
 
       <main className={`m-screen${tab === "mix" ? " m-screen--mix" : ""}`}>
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}

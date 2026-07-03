@@ -65,6 +65,7 @@
 /* match the 30px settings cog so the badge + cog read as one aligned header band */
 .m-vitals .acct-badge,
 .m-vitals .acct-switch { height: 30px; border-radius: 8px; }
+.m-vitals .acct-opt { white-space: nowrap; padding: 3px 6px; } /* no hyphen-wrap; slim enough for 3 buckets at 402px */
 .m-vitals .acct-badge { padding: 0 11px; }
 .m-brand {
   font-family: var(--mono);
@@ -107,7 +108,7 @@
   justify-content: flex-start;
 }
 .m-pill {
-  min-width: 54px;
+  min-width: 46px;
   text-align: center;
   font-family: var(--mono);
   font-size: 8px;
@@ -135,6 +136,31 @@
   border-color: rgba(197, 54, 42, 0.5);
   background: rgba(197, 54, 42, 0.14);
 }
+/* ---- TODAY ticker pills (header) — the TodayStrip's gap-gate read as a slim
+   pill column beside RUN/PAPER: lit + arrow = gap cleared the gate (move
+   direction); unlit + dim arrow = flat open (gap-gated channels stand down);
+   unlit · = pre-open / no tape. Titles carry the numbers. ---- */
+.m-ticks { gap: 3px; }
+/* BOOKS Δ as the third mini-pill under RUN/PAPER (row 1 has zero slack) */
+.m-pills { gap: 4px; }
+.m-books-pill { font-size: 8px; letter-spacing: 0.4px; }
+.m-books-pill.shb-warn { color: #855f0c; border-color: rgba(133, 95, 12, 0.5); background: rgba(133, 95, 12, 0.12); }
+.m-books-pill.shb-bad { color: #b23a22; border-color: rgba(190, 51, 38, 0.5); background: rgba(190, 51, 38, 0.14); }
+.m-tick {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 4px;
+  min-width: 46px;
+  font-family: var(--mono); font-size: 7.5px; font-weight: 700; letter-spacing: 0.6px;
+  padding: 2px 6px; border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  color: var(--ink-soft); background: rgba(255, 255, 255, 0.32);
+  white-space: nowrap;
+}
+.m-tick b { font-weight: 700; }
+.m-tick i { font-style: normal; font-size: 7px; opacity: 0.55; }
+.m-tick.off { opacity: 0.55; }
+.m-tick.on i { opacity: 1; }
+.m-tick.on.up { color: #1f7a45; border-color: rgba(28, 122, 68, 0.55); background: rgba(47, 213, 115, 0.22); }
+.m-tick.on.down { color: #b23a22; border-color: rgba(190, 51, 38, 0.5); background: rgba(190, 51, 38, 0.14); }
 .m-led {
   flex: 1;
   display: flex;
@@ -150,7 +176,7 @@
   gap: 2px;
 }
 .m-led .seven-seg {
-  width: 17px;
+  width: 15px; /* 17→15: buys the ticker-pill column its width (11 cells across the two LEDs) */
   height: 31px;
 }
 .m-led .led-caption {

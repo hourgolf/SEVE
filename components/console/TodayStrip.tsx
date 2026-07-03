@@ -7,7 +7,7 @@
 
 import { useTodayReadiness } from "@/hooks/useTodayReadiness";
 
-const GAP_MIN = 0.25; // V3/ALT gap_min — a session ≥ this |gap| clears the gate
+export const GAP_MIN = 0.25; // V3/ALT gap_min — a session ≥ this |gap| clears the gate (mobile ticker pills read it too)
 
 function fmtDate(d: string): string {
   const dt = new Date(d + "T12:00:00");
