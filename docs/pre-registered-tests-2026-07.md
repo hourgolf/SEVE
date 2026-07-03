@@ -51,7 +51,14 @@ Runs when ≥20 sessions of the 9:35 `gamma-open` shadow log exist (started 06-1
 - **Kill:** thresholds missed at N=20 → one re-check at N=40 → then closed permanently.
   No threshold adjustment between checks.
 
-## A6 · Era-4 LOCK/RIDE evaluation (WAITING — trigger: N≥150 era-4 trades or 15 sessions)
+## A6 · Era-4 LOCK/RIDE evaluation (WAITING — trigger: 15 era-4 sessions; per-channel verdicts at own N≥40)
+**TRIGGER AMENDED 2026-07-03 (operator-approved, BEFORE the window opened — legal per the header rule):**
+was "N≥150 era-4 trades or 15 sessions"; the trade-count leg hit 147 in just THREE sessions (ride/grind
+churn runs ~5× the ~10/day the estimate assumed) and would have fired the read 07-06 with ZERO
+verdict-grade channels (best per-channel era-4 N = pb-ride-2 at 19; V3/ALT/MOMO at 0) while prematurely
+unlocking C1 enforcement. New trigger: **15 era-4 sessions (~2026-07-21); a channel gets its verdict only
+at its own N≥40** — a channel short of N≥40 at the read gets a deferred read when it arrives. C1 stays
+sequenced behind this read. No other A6 rule changed.
 Era 4 = trades opened ≥2026-06-30 (LOCK/RIDE + stop-aware sizing live).
 Per LOCK channel at trigger: win% with 95% CI, green→red rate (peak≥+20% → close ≤0),
 TP-harvest total vs stop total.
@@ -145,6 +152,14 @@ peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
   p90 MFE and fired 0/42 times lifetime). ⚠ Its per-channel stats are a NEW ERA from 07-02 —
   evaluate pre/post separately; do not pool across the boundary.
 Both reversible by restoring the prior values; both are rule-applications, not P&L-fitted tweaks.
+- **2026-07-03 (holiday weekend, desk flat):** (C) the six BENCHED SPY clones (`breakout-alt-v3-ctl/-er40/-itm`,
+  `breakout-smart-entries-ctl/-er40/-itm`) RISK 2000→500, mc 12/10→6, daily stop 2000→1000 — the A1 retrofit
+  applied while dark (mirrors the 07-02 QQQ-clone precedent; these six predated A1 and owned the −$26.6k
+  June driver). Zero live effect (status=draft); a future re-arm now starts at lab sizing by default.
+  Entries/TP/stop untouched.
+- **2026-07-03 (same session):** accounts re-bucketed to lifecycle (FIRST-TEAM/LAB/MORGUE, 7 channels moved,
+  no knob changes) — noted here because per-account rollups re-label retroactively; per-bucket reads that
+  span 07-03 should use the strategist join, not the account, as the stable key.
 
 ## B2 · Chop-day short-premium (DEFERRED — chained behind A5)
 No multi-leg compiler work unless A5 passes. Inherits A5's kill. Additional standing door-check:
