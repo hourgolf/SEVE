@@ -62,9 +62,14 @@ sequenced behind this read. No other A6 rule changed.
 Era 4 = trades opened ≥2026-06-30 (LOCK/RIDE + stop-aware sizing live).
 Per LOCK channel at trigger: win% with 95% CI, green→red rate (peak≥+20% → close ≤0),
 TP-harvest total vs stop total.
-- **Decision rule (fixed now):** the +22/−30 pair implies a ≥58% win-rate bar before costs.
-  A channel whose win% CI *upper* bound < 58% at its own N≥40 → flag for RIDE mode or bench.
-  A channel above the bar with green→red ≈ 0 → LOCK stands. No mid-window knob changes.
+- **Decision rule — BAR AMENDED 2026-07-03 (pre-trigger, operator-approved):** the bar is each
+  channel's OWN breakeven win rate = stop/(tp+stop) before costs — the same arithmetic that
+  produced 58% for the +22/−30 pair, applied to the channel's actual pair. (The LOCK roster spans
+  breakevens 58%→89% — e.g. grind-v3-2 at TP 5/stop 50 needs 89% — so the original flat 58% gave
+  false passes to high-bar channels; `npm run a6-read` exposed this on its first progress run.)
+  Rule otherwise unchanged: a channel whose win% CI *upper* bound < its own bar at its own N≥40 →
+  flag for RIDE mode or bench. CI *lower* ≥ its bar with green→red ≈ 0 → LOCK stands. No
+  mid-window knob changes. The read is mechanized in `scripts/a6-read.ts`.
 
 ## B1 · FOMC-resolution follow (fomc-follow — DRAFT, arm-per-event only)
 57_fomc_follow_channel.sql. ⚠ The spec has no fomc_day vocab — it would fire any day in
@@ -126,6 +131,26 @@ awareness levers).
   entry blocked `gap_min` when the worker's |gap| < knob, FAIL-CLOSED on uncomputable gap
   (mirrors the spec condition). Arming at A6 = a config flip, no deploy. Blocked entries stamp
   signals → gate-shadow (A2) scores their would-haves automatically.
+
+## A10 · Ride-family gate (pre-registered 2026-07-03 — rides previously had NO gate at all)
+Covers armed tp=0 channels (today: momo-shape, qqq-thrust-trail, orb-qqq-trail; orb-ustop/-ctl
+excluded — A4 owns them). A6 evaluates LOCK channels only, which left the rides — including the
+desk's largest single bet (momo-shape, RISK $1,800 on 23 lifetime trades) — with no pre-registered
+evaluation or sizing review. Read at the A6 trigger (15 era-4 sessions), then at each month-end
+until each channel reaches its own N≥40 (rides accrue slowly — deferred reads expected).
+- **Expectancy rule (fixed now):** era-4 expectancy ≤ $0 at own N≥40 → flag for bench or
+  LOCK-conversion review.
+- **MFE-capture rule (fixed now):** capture = Σ realized ÷ Σ peak-potential (peak_mark basis,
+  mid-label; potential = max(0, (peak−entry)·100·qty)) < 25% at own N≥40 → the ride is
+  finding-and-surrendering → reopen the ratchet/LOCK question for that channel (the
+  giveback-takeprofit mechanics).
+- **Unvalidated-size rule (fixed now — the A1 principle applied to rides):** at the FIRST A10 read,
+  a ride WITHOUT a passing expectancy verdict carries max RISK $1,000; any ride above that is
+  resized down as a logged rule-application (today that is momo-shape at $1,800). Passing the gate
+  → sizing back up is a normal operator call. Prevents evidence-inverted sizing (size ∝ recency,
+  not validation) from persisting unexamined.
+- **Pass:** expectancy > 0 AND capture ≥ 25% at own N≥40 → ride config + size stand; the item
+  recurs monthly as N accrues.
 
 ## A6b · NEAR-MISS metric (pre-registered 2026-07-02 — read WITH A6, not before)
 **Metric:** near-miss rate = trades whose peak_mark reached ≥70% of the channel's TP level

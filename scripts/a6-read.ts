@@ -5,15 +5,18 @@
 // to see trigger progress, but VERDICTS only bind per the registry rules:
 //   · trigger: 15 era-4 sessions (amended 2026-07-03; was N≥150-or-15-sessions)
 //   · per-channel verdicts only at that channel's own N≥40 (short channels → deferred read)
-//   · A6:  LOCK channel win% 95% CI (Wilson) vs the pre-registered 58% bar — CI UPPER < 58%
-//          at N≥40 → flag RIDE-or-bench; above bar with green→red ≈ 0 → LOCK stands.
-//          (58% was fixed for the +22/−30 pair; each channel's OWN breakeven bar is printed
-//          for context, but changing the binding bar is a pre-window registry edit, not a
-//          read-time judgment call.)
+//   · A6:  LOCK channel win% 95% CI (Wilson) vs the channel's OWN breakeven bar =
+//          stop/(tp+stop) (bar amended 2026-07-03, pre-trigger — the flat 58% was the
+//          +22/−30 derivation and gave false passes to high-bar channels). CI UPPER < bar
+//          at N≥40 → flag RIDE-or-bench; CI LOWER ≥ bar with green→red ≈ 0 → LOCK stands.
 //   · A6b: near-miss rate = peak ≥ entry·(1 + 0.7·tp/100) AND realized ≤ 0, per channel.
 //          ≥15% at N≥40 → reopen the arm-high-ratchet probe. ORB A/B excluded by design.
 //   · A9:  breakout(base) era-4 split by |entry_features.gap| ≥/< 0.25. Flat expectancy < 0
 //          at n≥15 AND gap expectancy ≥ 0 → gate validated (action chosen at the read).
+//   · A10: ride gate (armed tp=0, excl. the A4 ORB A/B) — era-4 expectancy ≤ $0 at own N≥40
+//          → bench/LOCK-conversion flag; MFE-capture < 25% at N≥40 → reopen ratchet/LOCK;
+//          at the FIRST read a ride without a passing expectancy verdict carries max RISK
+//          $1,000 (resize = logged rule-application).
 //
 //   npm run a6-read            # progress + (at trigger) verdicts
 //
@@ -25,7 +28,7 @@ import { createClient } from "@supabase/supabase-js";
 const ERA4_START = "2026-06-30";
 const SESSIONS_TRIGGER = 15;
 const VERDICT_N = 40;
-const BAR = 0.58; // pre-registered (A6); per-channel own-bar printed for context only
+const RIDE_UNVALIDATED_MAX_RISK = 1000; // A10 unvalidated-size rule
 const ERA_OVERRIDES: Record<string, string> = {
   "grind-v3-2": "2026-07-02", // TP 12→5 calibration (log entry B) — new era
 };
@@ -46,12 +49,12 @@ function wilson(wins: number, n: number): { lo: number; hi: number } {
 
 interface Row {
   strategist_id: string; realized_pnl: number; avg_entry_price: number; peak_mark: number | null;
-  close_reason: string | null; opened_at: string; entry_features: { gap?: number | string } | null;
+  qty: number; close_reason: string | null; opened_at: string; entry_features: { gap?: number | string } | null;
 }
 
 async function main() {
-  const { data: strats } = await sb.from("strategists").select("id,slug,name,status,strategist_config(take_profit_pct,premium_stop_pct)");
-  const bySlug = new Map<string, { id: string; slug: string; status: string; tp: number; stop: number }>();
+  const { data: strats } = await sb.from("strategists").select("id,slug,name,status,strategist_config(take_profit_pct,premium_stop_pct,capital_pct)");
+  const bySlug = new Map<string, { id: string; slug: string; status: string; tp: number; stop: number; risk: number }>();
   for (const s of (strats ?? []) as any[]) {
     const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
     if (!cfg) continue;
@@ -59,6 +62,7 @@ async function main() {
       id: s.id, slug: s.slug, status: s.status,
       tp: Number(cfg.take_profit_pct ?? 0),
       stop: cfg.premium_stop_pct == null ? 50 : Number(cfg.premium_stop_pct), // null → policy default 50
+      risk: Number(cfg.capital_pct ?? 0), // two-dial model: RISK $/trade (legacy column name)
     });
   }
   const idToSlug = new Map([...bySlug.values()].map((s) => [s.id, s.slug]));
@@ -67,7 +71,7 @@ async function main() {
   const rows: Row[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await sb.from("positions")
-      .select("strategist_id,realized_pnl,avg_entry_price,peak_mark,close_reason,opened_at,entry_features")
+      .select("strategist_id,realized_pnl,avg_entry_price,peak_mark,qty,close_reason,opened_at,entry_features")
       .eq("status", "closed").gte("opened_at", ERA4_START)
       .order("opened_at", { ascending: true }).range(from, from + 999);
     if (error) { console.error(`positions read failed: ${error.message}`); process.exit(1); }
@@ -93,8 +97,8 @@ async function main() {
 
   // ---- A6: LOCK channels (tp > 0) ----
   const lock = [...bySlug.values()].filter((s) => s.tp > 0 && s.status === "armed").sort((a, b) => a.slug.localeCompare(b.slug));
-  console.log(`  A6 · LOCK CHANNELS (armed, tp>0) — bar ${pct(BAR)} (pre-registered), own-bar = stop/(tp+stop) shown for context`);
-  console.log(`  ${"channel".padEnd(28)} ${"N".padStart(3)} ${"win%".padStart(5)} ${"CI95".padStart(12)} ${"ownBar".padStart(6)} ${"g→r".padStart(4)} ${"tpΣ".padStart(8)} ${"stopΣ".padStart(8)}  verdict`);
+  console.log(`  A6 · LOCK CHANNELS (armed, tp>0) — bar = OWN breakeven stop/(tp+stop) (amended 2026-07-03, pre-trigger)`);
+  console.log(`  ${"channel".padEnd(28)} ${"N".padStart(3)} ${"win%".padStart(5)} ${"CI95".padStart(12)} ${"bar".padStart(6)} ${"g→r".padStart(4)} ${"tpΣ".padStart(8)} ${"stopΣ".padStart(8)}  verdict`);
   for (const s of lock) {
     const tr = perSlug.get(s.slug) ?? [];
     const n = tr.length;
@@ -108,8 +112,8 @@ async function main() {
     const ownBar = s.stop / (s.tp + s.stop);
     let verdict = `insufficient N (<${VERDICT_N})`;
     if (triggered && n >= VERDICT_N) {
-      if (ci.hi < BAR) verdict = "⚑ FLAG: RIDE mode or bench (CI upper < bar)";
-      else if (ci.lo >= BAR && g2r === 0) verdict = "✓ LOCK stands";
+      if (ci.hi < ownBar) verdict = "⚑ FLAG: RIDE mode or bench (CI upper < own bar)";
+      else if (ci.lo >= ownBar && g2r === 0) verdict = "✓ LOCK stands";
       else verdict = "inconclusive at bar — hold, re-read as N accrues";
     } else if (!triggered && n >= VERDICT_N) verdict = `N ready — awaiting session trigger`;
     const era = ERA_OVERRIDES[s.slug] ? ` (era ${ERA_OVERRIDES[s.slug]}→)` : "";
@@ -143,13 +147,26 @@ async function main() {
   const a9Ready = flat.length >= 15;
   console.log(`  status: ${a9Ready ? (exp(flat) < 0 && exp(gap) >= 0 ? "⚑ RULE MET — gate validated; action (arm gap_min 0.25 vs consolidate SPY slot) is the A6-read roster decision" : "rule NOT met — base keeps trading ungated (kill path)") : `collecting (flat n=${flat.length}/15)`}`);
 
-  // ---- Rides (informational — NO pre-registered gate; the known A6 coverage gap) ----
-  const rides = [...bySlug.values()].filter((s) => s.tp === 0 && s.status === "armed").sort((a, b) => a.slug.localeCompare(b.slug));
-  console.log(`\n  RIDES (tp=0, armed) — INFORMATIONAL ONLY: no pre-registered sizing/eval gate covers these (known gap)`);
+  // ---- A10: ride gate (armed tp=0; orb-ustop/-ctl excluded — A4 owns them) ----
+  const A4_EXCLUDED = new Set(["orb-ustop", "orb-ustop-ctl"]);
+  const rides = [...bySlug.values()].filter((s) => s.tp === 0 && s.status === "armed" && !A4_EXCLUDED.has(s.slug)).sort((a, b) => a.slug.localeCompare(b.slug));
+  console.log(`\n  A10 · RIDE GATE (armed, tp=0; A4 pair excluded) — expectancy ≤$0 or capture <25% at own N≥${VERDICT_N} → flag;`);
+  console.log(`        unvalidated-size rule at first read: no passing expectancy verdict → max RISK $${RIDE_UNVALIDATED_MAX_RISK.toLocaleString()}`);
+  console.log(`  ${"channel".padEnd(28)} ${"N".padStart(3)} ${"Σ".padStart(9)} ${"exp/t".padStart(7)} ${"capture".padStart(7)} ${"RISK".padStart(6)}  status`);
   for (const s of rides) {
     const tr = perSlug.get(s.slug) ?? [];
+    const n = tr.length;
     const sum = tr.reduce((a, r) => a + Number(r.realized_pnl), 0);
-    console.log(`  ${s.slug.padEnd(28)} N ${String(tr.length).padStart(3)}  Σ ${usd(sum)}`);
+    const potential = tr.reduce((a, r) => a + Math.max(0, (Number(r.peak_mark ?? 0) - Number(r.avg_entry_price)) * 100 * Number(r.qty ?? 0)), 0);
+    const capture = potential > 0 ? sum / potential : null;
+    const passed = triggered && n >= VERDICT_N && sum / Math.max(1, n) > 0;
+    const sizeFlag = s.risk > RIDE_UNVALIDATED_MAX_RISK && !passed
+      ? (triggered ? `⚑ RESIZE → $${RIDE_UNVALIDATED_MAX_RISK.toLocaleString()} (unvalidated-size rule binds at this read)` : `(size rule pending trigger: $${s.risk.toLocaleString()} > $${RIDE_UNVALIDATED_MAX_RISK.toLocaleString()})`)
+      : "";
+    const capFlag = triggered && n >= VERDICT_N && capture != null && capture < 0.25 ? "⚑ capture <25% — reopen ratchet/LOCK" : "";
+    const expFlag = triggered && n >= VERDICT_N && sum / n <= 0 ? "⚑ expectancy ≤$0 — bench/LOCK-conversion review" : "";
+    const status = [expFlag, capFlag, sizeFlag].filter(Boolean).join(" · ") || (n >= VERDICT_N ? "✓ within rules" : `collecting (N<${VERDICT_N})`);
+    console.log(`  ${s.slug.padEnd(28)} ${String(n).padStart(3)} ${usd(sum).padStart(9)} ${n ? usd(sum / n).padStart(7) : "      —"} ${capture != null ? pct(capture).padStart(7) : "      —"} ${("$" + s.risk.toLocaleString()).padStart(6)}  ${status}`);
   }
   console.log("");
 }
