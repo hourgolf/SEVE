@@ -1,0 +1,1589 @@
+# SEVE session handoffs — June 2026 archive
+
+> Extracted VERBATIM from CLAUDE.md on 2026-07-03 (consolidation pass). These are point-in-time
+> session narratives — durable verdicts live in memory/; current state lives in CLAUDE.md.
+
+## SESSION HANDOFF — 2026-06-25 (⭐ EXECUTION-INTEGRITY RECKONING → CLEAN BOOKS → RE-ANALYZE) — READ FIRST
+**The operator's challenge ("V3/ALT never trade — were they ever properly EXECUTED?") cracked the desk open. A
+desk-wide shared-OCC booking bug meant the per-channel books were materially WRONG; we fixed the worker, reconciled to
+the broker, CORRECTED the historical books, and the clean numbers FLIP the roster. Memory FIRST: `execution-integrity-
+clean-books.md` (the saga + the flipped verdicts) + `data-for-llm-analysis.md` (the storage plan).**
+
+**WHAT HAPPENED (all on `origin/main`, deployed):**
+1. **THE BUG:** 70% of trades are on shared OCCs (the "13 channels" = ~3 correlated bets, one 16-channel SPY-0DTE BLOB).
+   The worker booked per-channel P&L from order tags → a sibling-drained lot booked **$0** on +15-92% movers (16 phantoms)
+   + churn over-booked. Per-channel attribution was fiction.
+2. **WORKER FIX (DEPLOYED `61d63d4`):** ROW-PRIMARY booking `(exit − row.avg_entry_price)×soldQty`, hardened over 2
+   adversarial-review rounds (status-guarded close, 2-cycle reconcile gate, book-on-fill, idempotency guard). Books clean
+   GOING FORWARD. `worker/src/execute.ts`.
+3. **GROUND-TRUTH + CORRECTION:** `npm run reconcile-alpaca` (all 3 Alpaca accounts) → desk OVER-reported **+$5,060**.
+   `--fix --write` qty-distributed each OCC's broker realized across its rows → **490 rows corrected, BOOKING ERROR +$1 ✓
+   books tie out**. Audit: `data/reconcile-applied.json`. ⚠ keys ALPACA_KEY_2/_3 + ALPACA_SECRET_2/_3 now in `.env.local`.
+4. **THE CLEAN BOOKS FLIP THE ROSTER (forensics-mine, exp/t old→new):** POWERHOUR +$23→**−$6** / power-smart +$17→**−$41**
+   (the "winners" were booking ARTIFACTS); GRIND-manual +$8→**−$16** (NOT the operator edge); BREAK(ALT) −$1→**+$38**
+   (real winner, was hidden); BREAK(base) +$131→**+$111/66% win** (still the best); pb-ride −$126 (real bleeder). ⚠ I
+   earlier overstated "06-24 pb-ride loss was a booking artifact" — that was the INCOMPLETE default-only read; with the
+   cockpit (Resurrected) account it's REAL.
+5. **NET-EXPOSURE X-RAY PANEL (DEPLOYED `3c33487`):** the "account for concentration without capping" piece — shows the
+   real correlated lot per OCC/direction, no caps. `components/console/NetExposurePanel.tsx` + `lib/desk/netExposure.ts`.
+
+**⭐ NEXT SESSION — THE OPEN-MINDED RE-ANALYSIS ON CLEAN BOOKS (operator's word; run at MAX effort + ultracode).** The
+BACKTEST entry conclusions stand (clean simulated fills) but EVERY live per-channel verdict + the fan-out's dataset reads
+were on CORRUPTED data. Re-run with an open mind, incl. previously-discredited strategies. **LAUNCH PROMPT (paste to start):**
+> "ultracode — Re-analyze the SEVE desk on the now-CLEAN books (read `execution-integrity-clean-books.md` +
+> `data-for-llm-analysis.md` + `pattern-fanout-verdict.md` FIRST). The per-channel books were corrupted and are now
+> corrected (reconcile-alpaca, BOOKING ERROR +$1); the clean roster FLIPPED key verdicts (power/grind-manual were
+> artifacts, breakout/ALT are the real edge). (1) Re-run the all-channel fan-out (forensics-mine + the re-entry-aware
+> pattern-verify) on the regenerated clean dataset — which entry/exit patterns + which channels actually hold up now?
+> (2) Reopen the PREVIOUSLY-DISCREDITED strategies with an open mind (fade, the power family, the levers, chop-premium —
+> their discredit was on bad data or modeling-only). (3) Give me a DETAILED look at how patterns have EMERGED from the
+> clean data. (4) Implement the [[data-for-llm-analysis]] derivations (stackAtEntry/occShare/bookingDelta/net-exposure
+> snapshots) + the nightly reconcile-alpaca + broker-truth snapshot so the books STAY clean + analysis stays efficient.
+> Use workflows, adversarially verify, forward>backtest doctrine." Run `npm run backfill-forensics` first to regen the
+> dataset off clean books, and `npm run reconcile-alpaca` to confirm the tie-out before analyzing.
+
+**STILL OPEN (lower priority, from the 06-24 queue — but re-validate on clean books):** IWM first-session watch; stall-exit
+on pb-ride; the 24e awareness-lever shadow accrual; Vercel `ALPACA_KEY_2/3` env (for UI-close of Core/Resurrected).
+
+## SESSION HANDOFF — 2026-06-24 EVENING (FORENSICS PIPELINE COMPLETE + IWM ARMED + AWARENESS LEVERS) — READ FIRST
+**After-close session, desk flat. Shipped the full per-trade forensics pipeline (history backfilled + live forward-
+capture + shadow awareness instrumentation), fixed a cockpit-P3 manual-close bug + built an orphan safety-net,
+ARMED IWM (2nd index) + the stall-exit knob, and ran a 45-agent pattern-mine → a per-channel training brief.
+DEPLOY STATE: `origin/main = 369c455`, worker `stream-2026-06-24e` live, Vercel deployed. `SUPABASE_SERVICE_ROLE_KEY`
+now in `.env.local` (enables backfill `--write` + future service-role scripts).**
+
+**Worker 24e = 24c (IWM in the SYMBOLS default + per-account orphan net) + 24d (VWAP/MACD entry stamp) + 24e
+(awareness levers, log-only). Three after-close deploys, each desk-flat.**
+
+**1. ⭐ IWM — 2nd validated index, ARMED (direct-arm, operator's word).** `breakout-alt-v3-iwm` + `breakout-smart-
+entries-iwm` = clones of SPY V3/ALT, underlying=IWM, account=Core, executor=stream, entry_dte=0, **flat
+(pyramid_adds=0)**, risk $2000 / 24 contracts / standdown (`45_iwm_channels.sql`, committed). IWM is in the worker's
+symbol set via the CODE DEFAULT `SPY,QQQ,IWM` (Railway pins NO `SYMBOLS`/`SYMBOL` — confirmed; the default applies).
+⚠ **FIRST IWM SESSION WATCH:** (a) Railway boot log `seed[IWM]: N bars` + `seed[IWM]: chain M contracts` (M>0 = the
+0DTE chain snapshots clean); (b) day-report shows IWM trading or standing down (gap_min); (c) IWM's 0DTE expiry
+calendar — IWM may lack same-day expiries some days → the cutoff-roll picks the nearest. A chain miss = NO trade
+(safe) + the orphan-net guards anything stranded. Rollback: `status='draft'`.
+
+**2. ⭐ FORENSICS PIPELINE COMPLETE (the operator's "train channels on entry/exits + whiplash" dataset).**
+- **History BACKFILLED + APPLIED:** all **592** closed trades (06-01→06-24) now carry `entry_features` incl **VWAP
+  (true cumulative session) + MACD(12/26/9)** + gap/er/relVol/atr/mom/openRange (100%), `entry_reason` (550/93%,
+  signals join), `entry_delta` (504), `peak_mark`/MFE (357/60%, quote-retention-bound). `npm run backfill-forensics`
+  (`scripts/backfill-forensics.ts` + `engine/macd.ts`): recompute from bars-archive + signals join + option_quotes ∪
+  quotes-archive; COALESCE/merge = **live-wins, only fills gaps, idempotent**. Applied via `--write` (service role).
+  Also emits `data/forensics-dataset.jsonl` (the analysis substrate, gitignored).
+- **FORWARD capture (worker 24d):** every new entry stamps VWAP/MACD/mom/orHi/orLo — **IDENTICAL to the backfill**
+  (`buildSessionBars` computes the same cumulative VWAP; same `macdAt` helper). ⚠ **FINDING — retire the stale note:**
+  the June CLAUDE.md "worker reads per-bar vwap as session VWAP" quirk is FIXED — `buildSessionBars` already computes
+  true cumulative session VWAP, so the `vwap_side` gate has been using the GOOD vwap.
+- **AWARENESS levers (worker 24e, LOG-ONLY, ALL channels):** every entry stamps `dirVwapAtr` (Lever1) / `histRel`
+  (Lever2) / `whipZone` (Lever3) / `orDepthAtr` (Lever4) + an `aware` summary on `entry_features` + the EXEC log
+  (`· aware:shallowVwap,histAgainst`). Pure observability (NO gate) so the splits accrue forward per-channel for OOS.
+
+**3. PATTERN-MINE BRIEF — `docs/forensics-pattern-brief-2026-06-24.md`.** Workflow `forensics-pattern-mine` (45 agents,
+**13/35 candidates survived** adversarial verification — it KILLED the seductive-wrong ones: hold≤1min "edge"=selection
+bias, power-atr-cap=06-05 artifact, macd-fully-aligned=just `momentum_atr`). 3 entry levers to forward-test: **shallow-
+VWAP-displacement deadband** (strongest, shallow [0,4)ATR = −$46.6/t, carries ~5× the net loss), **MACD-hist-against
+guard** (MFE collapses 13→24%, test the MFE-suppression not the $), **whipsaw-zone size-down** (`er∈[0.10,0.20) &
+atr≥0.40` = −$127/t). + the **stall-exit** (target 93.8%/+$164 vs stop 1.4%/−$254/174min). **ALL forward-test
+HYPOTHESES — 1 month / chop / put-tape certifies NOTHING.** V3/ALT NOT invalidated by their −$14/t this month (the
+single-window mirage). pb-ride = biggest $ bleeder this month, the cleanest place to shadow the levers. Generative
+residue: **premium-peak ratchet exit** (now measurable via the live `peak_mark`).
+
+**4. STALL-EXIT ARMED LIVE (operator's word) on pb-ride + pb-ride-2 @ `stall_minutes=120` / `stall_max_favor_pct=25`
+(Resurrected).** ⚠ NO shadow mode — the knob CUTS live (`execute.ts:333`: cut a NON-MOVER held ≥120min whose peak
+never popped +25%). Watch the `stall_exit` close_reason accrue; compare stalled-out non-movers vs ride-to-close. Only
+fires on HOLD channels (pb-ride rides long; grind/power exit before 120min so it's inert there). Rollback: `stall_minutes=0`.
+
+**5. COCKPIT-P3 BUG FIXES:**
+- **close-route account bug FIXED (`2d8e6cf`).** `/api/close-position` predated P3, used the DEFAULT Alpaca keys →
+  manual close of a Core/Resurrected position queried the WRONG account → 0 sold, booked $0, lot orphaned (surfaced
+  06-24: pb-ride 732P ×11 booked $0 vs a real loss; operator closed it in Alpaca). Now resolves account_id→cred_ref→
+  `ALPACA_KEY_<ref>`, FAILS-CLOSED if creds absent. ⚠ **VERCEL needs `ALPACA_KEY_2/3` + `ALPACA_SECRET_2/3`** (the pairs
+  already on Railway) or UI-close of Core/Resurrected fail-closes with a clear 503.
+- **Per-account ORPHAN safety-net (`e03554b`, worker 24c).** Every worker management path (fast-exit sweep + EOD
+  hard-flatten) keys off OPEN desk rows → an Alpaca lot with no open row was never flattened (what let the 732P
+  orphan). New per-account sweep: uncovered = held − Σ(open rows), 2-cycle gate, WARN+journal+page. Auto-flatten behind
+  `ORPHAN_FLATTEN` (default OFF = detect+page; arm after a clean detection day).
+
+**6. day-report P3 fix (`c78fb6c`).** Was account-blind: NAV mixed the two $1M buckets + the $98k account → garbage
+("+419" on a −$6.5k day); coverage false-"ghost"-alarmed every Core/Resurrected OCC. Now **per-bucket NAV** (the
+3-hypothesis forward test) + **account-aware coverage** (skips buckets whose creds aren't in `.env.local`). 06-24 reads
+correctly: TOTAL **−$6,433** (Resurrected −3,164 / Core −2,086 / Bleeders −1,183), drift +438 = the close-route mis-book.
+
+**THE 06-24 DAY (what we saw):** whipsaw chop (SPY +0.12% / 1.19% range / 4 reversals; QQQ +0.10% / 2.11% / 9
+reversals). Desk **−$6.5k**. **V3/ALT took 0 trades — gap_min stood them down correctly** (doctrine working). The loss =
+QQQ-ORB −2,085 + pb-ride −1,956/−1,296 + grind churn — chop steamrolled the directional channels (the documented pattern).
+
+**NEXT (operator's queue):**
+1. ⭐ **LEVER-PROBE DONE (`npm run lever-probe`, commit `41824e9`) — IT INVERTS THE BRIEF.** Re-entry-aware OOS backtest
+   (308 SPY sessions, real NBBO, simulateSession `leverGate`: a gated entry frees the slot → engine re-enters the next
+   signal — the foul-out test the capital-blind replay can't do). Per-trade EXPECTANCY is the real-vs-mechanical lens:
+   **MACD-hist-against is the REAL edge on V3/ALT** (expectancy +6.7→+30.6 / +2.4→+27.9/t, OOS 4/5 — keeps the convex
+   tail, cuts momentum-fighting entries) = the brief's #2, now #1. **shallow-VWAP (brief's #1) is MECHANICAL** (expectancy
+   flat-or-worse, just fewer trades on −EV books; GRIND-base −17.7→−19.8/t). whip INERT; bleeders stay −EV. ⚠ modeled
+   options + lever mined on-window → DON'T arm; forward-validate (24e).
+   **▶ NEXT-SESSION VEIN — continue exploring the MACD-on-V3/ALT lead:** (a) **adversarially verify it** — per-window
+   expectancy, drop-the-best-window, threshold sensitivity (`histRel<0`), overfit check (a focused workflow); (b) **build
+   the `macd_hist_align` engine/spec VOCAB** (the brief's NEW condition) so it's armable/backtestable as a real condition,
+   not just the probe gate; (c) **forward-test on V3/ALT** — 24e already stamps `histRel`, so the shadow split accrues →
+   shadow-log → paper-lab a hist-aligned V3/ALT clone → arm if it holds; (d) **extend lever-probe** — per-window expectancy
+   output, QQQ + orb-spy-trail, the +all decomposition. The brief's other 2 levers (shallow-VWAP/whip) are de-prioritized
+   (mechanical/inert under the rigorous test). Memory: `forensics-levers.md`.
+2. **First IWM session watch** (above) — seed[IWM] chain + IWM trading/standdown.
+3. **Awareness accrual** — re-run the pattern-mine aggregate WEEKLY as forward data accrues (`npm run backfill-forensics`
+   regenerates the dataset; re-run the workflow). The levers need a non-chop regime; June certifies nothing.
+4. **Stall-exit watch** — the `stall_exit` close_reason on pb-ride/pb-ride-2.
+5. **Vercel env** — add `ALPACA_KEY_2/3` + `ALPACA_SECRET_2/3` so UI-close works for Core/Resurrected.
+6. **ORPHAN_FLATTEN** — arm after a clean detection day (currently detect+page only).
+
+## SESSION HANDOFF — 2026-06-24 (COCKPIT LIVE-PROVEN + FORENSICS DATASET DEPLOYED) — READ FIRST
+**Two things shipped + verified live today; the rest is a clean queue. Doctrine = `memory/desk-doctrine.md` (READ FIRST):
+the desk is a convex-bet engine competing for a scarce ONE-AT-A-TIME slot per channel; forward(paper) > backtest.**
+
+**1. COCKPIT P3 LIVE-PROVEN (the morning watch PASSED).** The 3-account multi-bucket cockpit routed real orders to
+the right Alpaca accounts on its first live day: **Core→acct2 ($1M; held a QQQ 719C, NAV diverged to $999,415),
+Resurrected→acct3 ($1M; pb-ride + pb-ride-2 fired = bucket live), Bleeders→acct1 ($98,516; grind/breakout).** All
+3 per-bucket NAVs diverge cleanly = per-account routing + netting + snapshots all correct. The old pb-ride
+`not_armed` issue is gone. Worker `stream-2026-06-24a`. See `memory/cockpit-p3-multi-account.md`.
+
+**2. DURABLE PER-TRADE FORENSICS DEPLOYED + CAPTURING (operator's ask: peak%/giveback/MFE for each trade, for
+weeks-to-months pattern analysis + "teaching edge to the edge-less channels").** Before today we only banked
+entry/exit/realized/close_reason/timing; MFE/peak/giveback were reconstruct-only from `option_quotes` (7d prune)
+and the entry reason lived in a separate table. NOW stamped ON THE POSITION ROW, live (`44_trade_forensics.sql`
+APPLIED, all additive/nullable; commit `86f22a2`): **`peak_mark`** (running MAX mark, ratcheted in the 10s
+fast-exit sweep, NEW-high-only writes, restart-safe → MFE%=(peak−entry)/entry, giveback=(peak−exit)/(peak−entry))
++ **`entry_reason`** + **`entry_features`** (jsonb: gap/er/relVol/atr/…) + **`entry_delta`**. VERIFIED capturing
+(peak_mark ratcheting live: pb-ride +3.4%, grind-smart +22.5% MFE). ⚠ **entry_reason confirmation PENDING** — the
+15:17 entries were old-worker transition inserts (blank); the capture path is proven by peak_mark, and entry_reason
+stamps on the next clean 24a entry (a background watcher was catching it; if still blank next session, query
+`positions where entry_reason is not null and opened_at::date=today` — empty = investigate the stamp). The
+`day-report` already computes MFE%/giveback% from these fields same-week.
+
+**3. STALL-EXIT KNOB rode this deploy (default-off, byte-identical until armed).** Strand-4 lever: cut a NON-MOVER
+to free the one-at-a-time slot. Engine + worker (`stall_minutes`/`stall_max_favor_pct`, migration 43) built +
+calibrated. NOT armed. Field it on pb-ride/pb-ride-2 (~N=120min / X=25% favor) shadow-first after a clean cockpit
+day. [[desk-doctrine]] strand-4.
+
+**NEXT STEPS (prioritized, all hands-off / machine-side per the operator's standing preference):**
+1. **IWM CHANNELS — the validated 2nd index (MOVE 3: V3/ALT GENERALIZE 5/5 OOS on IWM, +$6.5–6.6k each).** Add IWM
+   V3/ALT as live Core channels = real diversification + faster forward at-bats, zero driver's-seat. A REAL build
+   (not a flip): add `IWM` to the worker symbol set (`SYMBOLS`), create the channel rows (clone V3/ALT specs,
+   underlying=IWM, account_id=Core), confirm the worker handles IWM 0DTE chains (data feed + chain snapshot).
+   Backfill exists (`data/databento-mdte-iwm` + `repair-bars-archive --underlying IWM`). The MOVE 0/3/4 trilogy
+   verdict: the edge is broad-market gap-momentum, cross-index-generalizable (SPY+IWM), NOT a new shape — so growth
+   = cross-index at-bats, don't re-hunt directional entries (MOVE 4 found no survivor). See `memory/desk-doctrine.md`
+   "⭐ EDGE STATUS".
+2. **FORENSICS VIEW** — once ~2–4 weeks accrue, a per-trade peak%/MFE/giveback-by-channel view/report (reads the
+   new durable columns) so the dataset is one query away (the "see it" layer over the now-flowing capture). The
+   "teach edge" analysis (compare V3/ALT entry-context+trajectory vs the edge-less channels) is the payoff, months out.
+3. **FIELD STALL-EXIT** on pb-ride (above), shadow-watch the `stall_exit` close_reason.
+4. **PB-COMPOUND + FOMC channel** — the remaining cockpit-roadmap builds (operator's order: Cockpit→MOMO→PB-compound→FOMC).
+   MOMO is armed (acct3). PB-compound = the +30%-redeploy harvest on the no-tail PB channels ([[compound-vs-ride-verdict]]).
+
+**STANDING:** run `day-report` SAME-WEEK (forensics/peaks need option_quotes 7d; nightly `npm run capture` automates
+the archive). The cockpit's per-bucket NAVs should keep diverging — that's the clean 3-hypothesis forward test the
+whole session was for. Confirm `entry_reason` populated on the next session's first trades.
+
+## SESSION HANDOFF — 2026-06-19 (REGIME MINED OUT → FOCUS #2 SIZING + #4 COST; TWO PROBES QUEUED)
+**Exhaustive regime-awareness reopen (every thread FAILED, all 4-skeptic adversarially verified), then pivoted
+to the two HANDS-OFF levers the operator chose: #2 SIZING/ALLOCATION + #4 LOWER THE COST. Two probes are queued
+for the NEXT session to BUILD + RUN — full specs below. Operator wants to stay hands-off; both levers are
+machine-side (no manual involvement).**
+
+**WHAT FAILED THIS SESSION (don't re-litigate — verified, in docs/ + memory):** gap-ORB OOS-fail (1/5, −$5,401);
+drift detector DEAD causally (morning-ER "+$9,253/4-of-5" was ~92% LOOK-AHEAD → causal +$582/2-5; morning-move
+identical); the gamma-open clock is a CHOP/vol signal NOT drift (drop it as a drift detector — keep logging only as
+a chop indicator); filter-transfer fails (V3/ALT's gap_min/er DON'T bolt onto ORB/power — `ride-filter-probe`).
+Filter audit: only V3/ALT are correctly self-routed; the rest are under/mis/un-filterable → ROSTER calls, not
+filter-engineering. CONCLUSION: the system isn't broken, it's MIS-AIMED — a search machine pointed at the exhausted
+entry/exit axis; the leverage is in SIZING (#2) + COST (#4). [[pb-conviction-and-regime-router]]
+
+**#2 GROUNDWORK DONE — pyramiding REHABILITATED at cap12** (`npm run pyramid-faithful`; engine `maxStack` param
+added to simulateSession's pyramid path — additive/default-off, `pyramid-probe` byte-identical). The verification
+caught that the famous "+$22.5k" was the UNCAPPED 23-contract stack (violates the live max_contracts=6, which caps
+each LOT not the stack). Faithful re-validation, V3/ALT +3@30%: **cap6** (current governor, no change) = +$1.5–2.2k/ch,
+tail FLAT (free but marginal, V3 only 3/5); **cap12 (raise the per-channel cap 6→12) = +$17–18k combined, V3 5/5 /
+ALT 4/5, boot-p5 tail intact = THE REAL SWEET SPOT**; uncap-23 adds only ~$3k more at the worst DD. PATH: raise
+max_contracts 6→12 on V3/ALT + build the multi-lot worker SHADOW-FIRST (zero live PYRAMID shadow events have fired
+yet → confirm the base edge at live scale before arming). [[compound-vs-ride-verdict]]
+
+**▶ TASK 1 — SPREAD-CAPTURE SENSITIVITY SWEEP (#4 first test, cheapest "better game" probe).** The binding
+constraint all session = the 0DTE bid/ask SPREAD (every structure pays it; new-instrument games are refuted/blocked
+— longer-hold hurts V3's convex tail [[one-dte-verdict]], spreads pay more legs, new underlyings need data). The
+lever = limit-order execution to CAPTURE part of the spread instead of crossing it (helps EVERY channel). BUILD a
+probe running ALL armed+benched channels at `spreadCrossFrac` ∈ {0 (cross = today), 0.25, 0.5} — how much does each
+channel's Σ / exp$/t lift as you recapture the spread? Infra EXISTS: `cost.ts` `spreadCrossFrac` + backtest
+`--fill-cross` + `npm run fill-probe`/`spread-probe`. Faithful (RISK 500/stop 500/gate 3/real NBBO, 5-window). READ:
+if capturing half the spread MATERIALLY lifts the book (esp. the marginal channels), build a marketable-limit ladder
+in the worker SHADOW-FIRST and measure REAL capture before flipping `spreadCrossFrac` — the standing discipline
+(Nakamoto fill-at-trigger optimism is the cautionary receipt). [[fill-and-scalp-verdict]] [[fill-lag-verdict]]
+
+**▶ TASK 2 — ALL-CHANNEL PYRAMID PROBE (#2 breadth).** Extend `pyramid-faithful` (currently V3/ALT only) to the
+FULL roster — ORB-base, power(base/smart), PB(0/1DTE), grind-v3, the QQQ channels — at maxStack {6,12,∞} + per-window
++ tail (boot-p5). Question: which channels BEYOND V3/ALT have a real convex tail that pyramiding amplifies robustly
+(≥4/5, tail intact)? Prior says only convex-tail channels benefit (PB has no tail → compound not pyramid; grind is
+a scalper; power is a final-hour lean), so expect V3/ALT to stay the only candidates — but CONFIRM + size the cap12
+decision across the validated set. (QQQ needs its 1DTE chain: data/databento-mdte-qqq.)
+
+**DEPLOYED THIS SESSION (live):** worker `stream-2026-06-19a` (US holiday calendar `engine/market-calendar.ts` +
+wall-clock EOD hard-flatten in fastExitSweep + holiday-eve cutoff entry-block — the Juneteenth strand fix
+[[holiday-eod-flatten-fix]]); cron v59 (holiday stale-page suppression); chart RTH-only intraday candles (killed
+the extended-hours spike/gap candles). ⚠ **MONDAY 06-22:** the stranded SPY 747C-06/22 (power + power-smart, 6 lots)
+expires — close it at the open or confirm the worker flattens it (first live test of the EOD hard-flatten; watch
+for an `eod-hard-flatten` log ~15:55). ⚠ **PENDING OPERATOR ROSTER CALLS (not done):** PB downsize/draft (proven
+−EV, unfixable 3 ways), `orb-trend-rider` cull (drift bleeder, −$23.7k corpus), `breakout` base fold into V3/ALT
+(its dominated, unfiltered twin).
+
+## SESSION HANDOFF — 2026-06-16 (FRONTIER SWEPT → DATA-BOUND; REGIME-ROUTER FEASIBLE) — READ FIRST
+**Marathon research session. Verdicts live in memory/ (read them); this is the pointer + the next step.**
+
+**06-16 close: NAV +$959** (a clean SPY −0.52% trend-down day; QQQ −1.63% whippy). **PB riders were the engine
+(+$1,226, 10/10)** — pullback-in-trend buying the bounces. Scalpers bled (grind-v3/v3-2 −$264). All forensics
+auto-published to the §03 panel. ⚠ **OVERRIDE SCORECARD FLIPPED:** after N=17 (2 days) the operator's manual
+overrides now TRAIL ride-to-close −$1,978 (beat 35%) — his **"reversal"-tag exits leak on trend days** (−$1,285/7;
+he bailed winners that kept running, e.g. Trend-QQQ +$12 vs ride +$1,634). Day-1's +$1,016 was a giveback-day
+artifact; it's REGIME-DEPENDENT (his early exits win chop/giveback, lose trend). Keep accruing — run day-report
+SAME-WEEK. [[override-counterfactual-scorecard]]
+
+**SESSION ARC — swept entries → exits → conviction sizing → regime gating. CONCLUSION: the desk is DATA-bound,
+not idea-bound.** A 37-agent frontier sweep found the axes "largely-mined" (16/27 candidates = graveyard-rhymes).
+The remaining program is COLLECT-FORWARD (accrue data; the machinery to make it fittable is now built).
+
+**BUILT THIS SESSION (all on `main`, pushed; research/forensics + engine — the worker bits are shadow-only):**
+- **Override counterfactual + scorecard** (day-report + `scripts/override-ledger.ts` + `npm run override-scorecard`
+  + the live shadowManage `RIDE` events) + **§03 "Shadow & Override" dashboard panel** (`forensics_reports` table +
+  `/api/forensics-report` route; day-report auto-publishes when APP_URL+PUSH_SECRET set — both in .env.local now).
+- **Faithful benched-sim** (`npm run benched-sim`; backtest `--options quotes` = same-week real NBBO + `--risk`/
+  `--cost-gate`/`--ustop`/`--prem-stop` faithful-config flags). [[override-counterfactual-scorecard]]
+- **Conviction-sizing keystone**: `scripts/build-training-store.ts` (features→outcome join, no FK) + `riskGovernor`
+  `convictionScalar` + `engine/sizing.ts` + backtest `--sizing-model` (byte-identical default). [[conviction-sizing-roadmap]]
+- **`trend_align` entry condition** + selftest (the bug-free trend filter; pb-ride's ribbon as vocab). [[entry-audit-grind-trend]]
+- **exit-timing plumbing** (override-ledger now logs actual-vs-ride hold times) + **gamma-open diagnostic log**
+  (worker shadow, 0DTE ATM implied-move + delta @9:35 — first capture 06-17).
+- New probes: `gap-sizing-probe`, `grind-entry-probe`, `trend-align-swap-probe`, `ride-burst-probe`,
+  `regime-attribution-probe`.
+
+**VERDICTS (all in memory — don't re-litigate):**
+- **Conviction sizing = CLOSED.** gap-sizing REFUTED (fails OOS, near-inert at $500 RISK); EV-margin fit REFUTED
+  (INVERTED for riders — high evMargin=high vol=worse); operator exit-tags NOT anticipatable at entry. **The cost
+  gate's binary veto IS the conviction layer.** PARKED → collect-forward. [[conviction-sizing-roadmap]]
+- **Entry audit:** grind's counter-trend entries are real (~2× bleed) but it's manual-or-cut (entry too weak —
+  ride-not-scalp rebuild REFUTED); `trend_align` built but has NO current-roster home (breakout/PB already encode
+  direction; the swap on V3/ALT is redundant — their vwap_side is degraded-live but also redundant). [[entry-audit-grind-trend]]
+- **Regime router = FEASIBLE.** `regime-attribution-probe`: channels strongly SEPARABLE (PB +555 TREND/−313 CHOP =
+  pure trend engine; V3/ALT gap+non-drift; grind chop-only; power dead everywhere). The desk is ALREADY a
+  decentralized router (gap_min + PB ribbon self-select); actuation is trivial. Binding constraint = an ex-ante
+  TREND/CHOP/DRIFT classifier (the dead axis). [[regime-router-feasibility]]
+
+**NEXT SESSION (in priority order):**
+1. **PB-regime-mute probe** — THE concrete next test + the matrix's biggest lever: does muting PB on
+   predicted-chop mornings beat always-on PB (PB's TREND +555 vs CHOP −313 = $868/session swing)? A NEW
+   application of the drift+persistence signal (refuted as a breakout PROFIT gate, never tested as a PB-mute).
+   5-window OOS + montecarlo tail. [[regime-router-feasibility]]
+2. **gamma-open clock** — first capture 06-17; correlate `impliedMovePct`/`callDelta` vs day-P&L/per-ride-R after
+   ~10 sessions (the candidate DRIFT detector; DRIFT = 48% of sessions, all-negative → stand-down lever).
+3. **Collect-forward** — run day-report SAME-WEEK to accrue the training store + override ledger (now with
+   hold-times) + shadow events. Revisit conviction-fit ~mid-July (≥50 keeper rows), exit auto-arbiter ~1mo (N≥30/ch).
+4. **06-17 = FOMC** — first live stand-down (13:50–14:30, watch the `⚑ event stand-down` page); post-close re-run
+   `fomc-resolution-probe` (adds day 19).
+
+⚠ MEMORY.md index is over its size cap — a consolidate-memory pass is overdue (not done this session).
+
+## SESSION HANDOFF — 2026-06-15 LATE (NEXT-GEN: CONVICTION-SIZING KEYSTONE BUILT) — READ FIRST
+**Operator's next-gen direction: the desk is still flat-RISK single-leg ("buy a decent entry, hope it runs
+to offset the runner we let burn") — make conviction + market conditions inform SIZING + scaling.** Key
+insight: the cost gate already computes a continuous conviction signal (EV-margin = expectedMove/roundTrip)
+and THROWS IT AWAY after a binary veto. A workflow produced a **9-item ranked roadmap** (memory
+`conviction-sizing-roadmap.md`); the **KEYSTONE is BUILT** (offline, zero live-trader risk):
+- **#1 `npm run build-training-store`** (`scripts/build-training-store.ts`) — the (entry features → realized
+  outcome) dataset the desk never had. Joins closed `positions` → `acted_on` entry `signals` by
+  (strategist_id, rationale.occ, opened_at±window) — **THERE IS NO FK** — extracts er/relVol/gap/atr/
+  expectedMove/roundTrip, computes R = realized_pnl/(0.5·entry·qty·100), flags `joinAmbiguous`. → data/training/.
+- **#2 SizingModel hook** — `engine/engine.ts` riskGovernor gained optional `convictionScalar=1` (riskBudget×scalar,
+  guarded fail-closed); `engine/sizing.ts` (rules|linear specs, clamp [0.5,2.0]); `engine/backtest.ts`
+  `--sizing-model static|json:<path>|inline` threads it through simulateSession (15th param, all 3 call sites,
+  session-gap injected). **Every conviction idea now rides the existing --options quotes / benched-sim /
+  montecarlo harness as a validatable experiment.** ✅ VERIFIED no-flag == `--sizing-model static` BYTE-IDENTICAL
+  (the critical no-regression property — riskGovernor feeds every probe); default-1.5 → exactly 1.5× size.
+  Adversarial review: engine-regression 0 / sizing-module 0 confirmed (1 LOW doc-note fix, done).
+- **⚠ DATA REALITY (carry into the fit):** 465 closed / 423 matched (91%) but only **25 feature-complete**
+  (gap+evMargin logged only since 06-11/stream) + **26 join-ambiguous** → the rich-feature fit is DATA-STARVED
+  today; accrues as stream days pile up. **Next experiment = #3 gap-magnitude sizing on V3/ALT** (the one armed
+  signal, least overfitting). NOT live: every model graduates through the paper-lab (#8, cockpit P3) beside its
+  flat twin — never arm on backtest alone. Sizing is MULTIPLICATIVE on a convex-tail book → every model must
+  pass a montecarlo TAIL check, not just pooled mean. All research/engine tooling — does NOT touch the worker.
+
+## SESSION HANDOFF — 2026-06-15 MONDAY OPEN (CHOP-DETECTOR REPURPOSE → ORB RESURRECTION CANDIDATE) — READ FIRST
+**✅ OVERRIDE COUNTERFACTUAL / "did the human beat the ride" scorecard — BUILT 2026-06-15 (all 4 items).**
+Reconstructs ride-to-close from `option_quotes` (the stream keeps flowing AFTER an early manual close;
+−50% stop = mid ≤ 0.5×entry, native flatten 15:25 ET = `flattenMtc 35` in pullback.ts, EXACT not approximate)
+and tallies it against the operator's actual exits. **Anchors reproduced EXACTLY:** pb-ride ride-to-close
+−$54 (handoff said −$52, the 1-tick flatten-second), pb-ride-2 −$214 (hit the −50% stop); the two PB overrides
+beat ride-to-close +$748 vs −$268 = **Δ +$1,016** (handoff ~$1,014). SHIPPED:
+- **(1) day-report counterfactual** (`scripts/day-report.ts`) — per closed trade an `override counterfactual`
+  section: actual / ride-to-close / Δ + WON/LOST, marking operator overrides (`close_reason` manual/manual:*).
+- **(2) accumulating SCORECARD** — a durable, re-run-safe ledger (`scripts/override-ledger.ts`, keyed by
+  position id → `data/override-ledger.json`, **gitignored = operator-local**, upserted SAME-WEEK since quotes
+  prune 7d) + an `OVERRIDE SCORECARD` (N / Σactual / Σride / ΣΔ / beat-rate, by close-reason tag + by channel).
+  Standalone `npm run override-scorecard` reads the ledger (no DB). ⚠ baseline = uniform hold-to-close: NATIVE
+  for ride channels (pb-ride), a pure-hold REFERENCE for scalper twins (grind) — read the by-channel cut, the
+  caveat is printed.
+- **(1b) managed-exit shadow** — day-report surfaces the existing `shadowManage` `MGMT managed-vs-actual` events
+  (no offline manage.ts replay; for ride channels managed-exit ≡ ride-to-close so they collapse). En route this
+  found+fixed a **latent bug: the day-report `events` fetch hit PostgREST's 1000-row cap UNORDERED** → late-day
+  exit reasons AND MGMT shadows silently dropped on busy days (1828 events 06-15); now paginated.
+- **(3) shadowManage RIDE extension (`worker/src/shadowManage.ts` + `store.ts` + `index.ts`)** — the LIVE,
+  cloud-durable twin: ride channels are now TRACKED while open; an OVERRIDDEN ride position is reconstructed at
+  the flatten and written as a `RIDE <slug> <occ> — ride X vs actual Y (Δ)` shadow event (meta carries
+  ride/actual/delta/override). Shadow-only (reads + `writeShadowEvent`, double-guarded by the call-site + cycle
+  try/catch → ZERO trade-path impact). Also fixed a latent **cross-symbol finalize bug** (the module-global
+  `tracked`/`rideTracked` maps weren't symbol-scoped → a SPY position could be mis-finalized during the QQQ pass;
+  necessary because the `if(symRows.length)` call-site guard was dropped so the deferred finalize runs at 15:25
+  even when the overridden position was the last one open). ⚠ **DEPLOY-AND-WATCH (can't verify the armed worker
+  locally):** auto-deploys on push (Railway) — Monday watch the worker log for `ride-shadow … OVERRIDE` lines
+  and `events.message like 'stream-shadow: RIDE%'` after the 15:25 flatten on any ride-channel override.
+Frame: ride-to-close is a hypothesis the tape keeps testing — one giveback day doesn't overturn the
+distribution where the convex tail pays; the running tally is the only honest arbiter. ⚠ **the ledger has 1
+day (N=4) — it's an anchor, not a verdict; keep running day-report SAME-WEEK to accrue N.**
+
+**✅ BENCHED "would-be vs live" FAITHFUL SIM — BUILT 2026-06-15 (follow-on, same session).** Answers "do the
+cut channels still earn their bench?" each day — the live-day twin of the cull's backtest. Replays each
+benched (`status='draft'`) channel's REAL strategy + REAL exit stack over the day's tape + the day's REAL
+option NBBO (a NEW `--options quotes` source reading `option_quotes`, the same-week table that dodges the
+Databento T+1 embargo), with the channel's REAL RISK/cost-gate/u-stop config (NEW opt-in backtest flags
+`--risk/--max-contracts/--daily-stop/--ustop/--cost-gate/--prem-stop`; `--risk` maps to the engine's legacy
+budget as total_capital=2×risk/pct100/agg100 → qty IDENTICAL to decide.ts). `scripts/benched-sim.ts`
+(`npm run benched-sim`) drives it per signaling draft (builtin vs spec via the worker's base-slug rule) and
+prints benched-would-be vs live-actual; day-report carries it as a standing section. **The point: it replaces
+ride-to-close/hand-waving with the channels' ACTUAL trail/target/stop exits + re-entries.** ⚑ **An adversarial
+review (workflow) caught a MATERIAL faithfulness bug before it misled:** DEFAULT_COST_MODEL uses 1 tick/side
+slippage but the live worker uses 0.25 — the inflated round-trip made the 3× cost gate OVER-veto power's late
+leans, leaving one lucky winner (+$414) and hiding the churn. Fixed (quotes path matches 0.25). Also fixed: the
+sim enforced FUND's $300 master daily stop the live worker does NOT (decide.ts has none) — flattering benched
+losers. **Both fixes FLIPPED the 06-15 verdict: benched would-be +$190 (looks good) → −$364 (POWERHOUR base −20
+churning 4 flip-flop leans; ORB base −344) vs live +$200 → arming the bench would have COST $364, CULL
+VALIDATED.** Only the post-review faithful sim gets this right. ⚠ Known gaps (documented, LOW): 0DTE chain only
+— **final-window/`entry_dte=1` channels (power-final30) are FLAGGED "1DTE — not comparable" + excluded** (their
+entries roll past the cutoff to 1DTE live); other channels' last-31-min entries are 0DTE-modeled; the power
++100% giveback trail isn't modeled; engine `minutesToClose` is last-bar-relative (off-by-≤1 on full sessions).
+Standing fidelity upgrade = serve the 1DTE chain for cutoff entries (mirror the multidte path) — a follow-on.
+Run after the session settles (the live `option_quotes` flush makes an intraday run shift).
+
+**✅ §03 "SHADOW & OVERRIDE" DASHBOARD PANEL — BUILT 2026-06-15 (operator: "where does this live? I'm not
+seeing it").** The forensics were CLI/DB-only (day-report terminal + the local ledger); the operator wanted it
+ON the dashboard. Now a §03 panel (`components/console/ForensicsPanel.tsx`, desktop + mobile Desk tab) renders
+the OVERRIDE SCORECARD (N / actual-vs-ride / Δ / beat-rate, by-channel + by-tag on expand) + BENCHED would-be
+vs live (per-channel, Σ, "cull validated"). **Data path (the CLI can't write — anon/read-only + the benched sim
+needs the engine):** day-report computes the payload and POSTs it to a NEW service-role route
+`/api/forensics-report` (x-push-secret = PUSH_SEND_SECRET, mirrors push-send) → `forensics_reports` table
+(`37_forensics_reports.sql` APPLIED; one row/ET-date, jsonb payload). Panel reads it via `useForensicsReport`
+(anon). ⚠ **the publish is OPT-IN: day-report needs `APP_URL` + `PUSH_SECRET` in `.env.local`** (the same vars
+the worker uses) or it skips publishing (terminal report unaffected) — without them the panel shows the last
+published row (06-15 is seeded). Preview-verified both breakpoints (expand + mobile). Caught in review: the table
+must `grant select` to BOTH anon AND authenticated (a signed-in operator reads as `authenticated` → anon-only =
+empty panel; mirrors daily_reports). ⚠ NOW the forensics DO touch the Vercel app (this panel + route); the
+benched-sim engine/CLI bits still don't touch the Railway worker's trade path.
+
+**Open-day config (via MCP, desk flat at the bell):** (1) **pb-ride mute was BACKWARDS** — `pb-ride`
+(validated 1DTE) was muted and `pb-ride-2` (the *refuted* 0DTE) was live → **swapped**: pb-ride live,
+pb-ride-2 muted. (2) **grind-v3-2 unmuted** → `grind-v3` (0DTE) + `grind-v3-2` (1DTE) now run a CLEAN
+live DTE A/B — collision-free because a 0DTE and 1DTE option are *different OCCs* (expiry is in the
+symbol), so no shared-lot netting (the A/B-isolation rule: shared-OCC only confounds a SAME-contract
+A/B; the fix for same-DTE knob A/Bs is separate accounts = cockpit P3, still held). (3) ⚠ **MASTER
+DAILY STOP** was $300 with per-channel risk raised to $500 → desk would HALT after one stop-out; raise
+PENDING the operator's explicit $ (the classifier blocks an agent-chosen value). ⚠ **NO master-stop
+UI control exists on the page** — `fund_state.master_daily_stop_usd` is SQL/seed-only; a master STOP
+knob wired to it is an open small build.
+
+**CHOP-DETECTOR REPURPOSE — `npm run chop-ride-gate-probe` (NEW):** the implied-move chop detector
+(48% recall, real) was door-blocked for the fly; this tests it as a stand-down gate on the directional
+RIDES. **Channel-specific verdict:** on the ARMED rides (V3/ALT) the implied gate is HARMFUL — it strips
+their winners (over-filtering an already-selective channel, the 4th "filter the breakout into health"
+refutation); the **gap gate is the clear winner there (V3 +$93→+$222/t, ALT +$77→+$192/t) → `gap_min`
+VINDICATED, leave V3/ALT as armed.** But on **ORB (benched bleeder) the implied gate RESCUES it and
+passes ALL FOUR kill-lanes:** exp$/t −$14→+$59 alone / +$108 with gap (real selection, not the mirage),
+holds ex-CHOP-MIX (+$164/t, stronger), helps the WINNER windows (per-window Δ: CHOP +399, TREND-24 +402,
+TREND +96 — beats rescue-the-worst), and ADDITIVE to gap (im+gap +$108 > gap-only +$31). A rare clean
+sweep. **⚠ IN-SAMPLE (full-corpus percentile) = hypothesis-grade — needs the OOS per-window threshold
+fit before it's real.** ORB RESURRECTION PLAN: (0) OOS validation = leave-one-out threshold fit across
+the 5 windows + threshold/straddle-minute sensitivity + the tail-DD check (the DD is *why* ORB was
+benched — does the gate fix it?); fail OOS → park. **→ STAGE 0 PASSED 2026-06-15 (`npm run
+chop-ride-oos-probe`): OOS gate better on 5/5 held-out windows, pooled −$14→+$97/t; plateau across
+pctile 0.40-0.60 × reads 9:35/9:45; maxDD HALVED −$16.8k→−$7.8k. 4/5 windows +EV gated (MA25 still
+−$116/t); trades ~half as often. GRADUATED → Stage 1.** **⚑ STAGE 1 RE-VALIDATION (06-15, `npm run
+orb-gate-live-probe` / `orb-gate-tune-probe`) — the Stage-0 +$97/t was LOOK-AHEAD-INFLATED:** realized-to-
+10:00 (causal — before any ORB entry) drops it to 3/5 OOS / +$29/t (FAIL). Timing-only 10:15 doesn't recover;
+only a ROLLING-60 causal-median threshold @10:00 clears the LETTER (4/5, +$17/t, maxDD −27%) — but MARGINAL:
+only 3/5 windows truly +EV, MA25 is a mechanical rescue-the-worst (still −$119/t), TREND-24/2024 is HARMED
+(+$63→−$112, gate is era-ASYMMETRIC), and the rolling-median's era-tracking is UNTESTABLE on the disjoint
+5-window corpus (3-9mo gaps → each window opens on stale cross-regime data). **→ DO NOT ARM, DON'T BUILD the
+`implied_move_min` vocab yet; COLLECT-FORWARD (data accrues automatically — re-run the tune once the live
+corpus spans a CONTINUOUS regime transition; build only on live confirmation; may never clear).** **EXIT-MGMT
+THREAD (`npm run pbride-exit-probe` / `exit-scheme-probe --live`, operator's "bank winners / don't let them
+turn into losers"): pb-ride is a RIDE channel** — ride +$4,632 vs BE+30 +$102 vs scale −$5,407 (sanity-anchored
++$4,632; BE whipsaws the pullback out, scale caps the CHOP-Mar26 convex tail). Re-entry is ALREADY MODELED
+(`backtest.ts:325` re-enters when flat), so the convex-vs-tail-less split is real: RIDE the convex (BREAK
+ALT/V3 +$7-10k, pb-ride, ORB-base); only QQQ-Break-ORB wants PROTECT (ride −$5.1k→scale +$3.8k) **BUT scale-out
+is NOT armable** (`isArmableManagement` rejects it; worker only runs the atr_chandelier trail — a tighter
+chandelier can't replicate banking-half, best K −$3.8k, refuted). POWERHOUR(ALT) = −EV cut. Takeaway: the
+operator's instinct is right for tail-less, wrong for convex; pb-ride's giveback is the PRICE of its tail —
+DOWN-SIZE it if the variance stings, don't gate/scale it. ⚠ **GENERALITY (`npm run chop-gate-roster-probe`):
+the gate is ORB-SPECIFIC** — across strategy types it BENEFITS only the spec-ORB (+$111/t, 5/5); base-ORB
+builtin neutral (+$15/t but stays −EV), grind-v3 scalper neutral (+$3/t — chop-agnostic), power lean HARMED
+(−$24/t, 1/5 — its 15:00+ trades vs a 9:35 read = horizon mismatch), V3/ALT HARMED (over-filters selective
+momentum). It's a precision tool for the under-filtered chop-averse bleeder, NOT a roster lever. **Generative
+residue RESOLVED (ultracode workflow, `npm run pbride-invgate-probe` / `qqq-orb-gate-probe`):** (a) pb-ride
+INVERTED gate (trade only predicted-chop) **REFUTED** — sanity-matched EXACTLY (+$18.5/t anchor) so trusted,
+then the inverted gate DESTROYS it (+$18.5→−$18.1/t, 1/5 windows; amputates the CHOP Mar26 +136→−94 window
+the thesis was built on; the 9:35/10:30 classifier is a regime-LABEL not a same-day signal). Keep pb-ride
+ungated. (b) QQQ-ORB port: directionally MIRRORS SPY (ungated −$103→gated +$9/t, lift +$112, DD halved, not
+a mirage) **BUT UN-OOS-ABLE** — QQQ has NO pre-2026 history in the pipeline (underlying archive starts
+2026-01, option NBBO 2026-03; the Databento backfill anchors on the 60d-retained DB) → only 2/5 windows
+exist, the ex-CHOP-MIX check can't run. NOT buyable (no underlying to anchor old strikes). → **COLLECT-FORWARD**
+(QQQ is live on stream; a real cross-regime OOS accrues over months) + the tier2 caveat (probe used spec-ORB
+but QQQ live runs the BUILTIN bare ORB — QQQ's disease is the entry). Takeaway: the gate's edge is the
+chop-AVERSE directional-bleeder SHAPE (ORB-family), not chop-detection in the abstract. (1) if it graduates: build the `implied-chop` gate as
+worker/engine vocab (compute the 9:35 open-straddle implied move + realized-1hr → imScore; a `chop_max`
+condition mirroring `gap_min`; 3-list parity per the add-channel-vocab discipline) — reusable on any weak
+channel. (2) arm a gated-ORB clone in the paper-lab (P3) or as a tiny duplicate, live-observe. (3)
+promote if DD-controlled + EV holds, else cut. Second time the implied-move signal proved real-but-
+elsewhere (fly door closed → ORB) — a good detector still hunting the right book. Links [[chop-day-strategy-verdict]].
+
+## SESSION HANDOFF — 2026-06-14 WEEKEND (TWIN STREAM-MIGRATION DONE → CRON IS FAILOVER-ONLY) — READ FIRST
+**Market closed, desk flat (0 open positions verified). The 4 manual twins flipped cron→stream, so
+the cron now trades NOTHING as primary — its only remaining roles are the exit-only failover
+(dead-man switch for the single Railway replica) + stream-stale paging.**
+
+**TWIN MIGRATION EXECUTED (operator's word "flip the twins now", via MCP):** `update strategists set
+executor='stream' where slug like '%-manual'` — breakout-manual · grind-manual · power-manual ·
+qqq-thrust-trail-manual all → stream (armed, unmuted). Also zeroed `qqq-thrust-trail-manual`
+underlying_stop_pct 0.20→0 (the long-noted inert flag — the worker already drops it via the `-manual`
+exit-drop at `decide.ts:265`, but zeroing clears the misleading "uS 0.2%" strip light). **NO DEPLOY** —
+both cron and worker read `executor` per-cycle → takes effect Monday's open. Pre-flight gates verified
+BEFORE flipping (the QQQ-shadow-gate discipline): (a) worker resolves all 4 — breakout/grind/power-
+manual → builtins via the `decide.ts:120` base-slug strip (`-manual` stripped), qqq-thrust-trail-manual
+→ its OWN `spec_json` (has_spec=true, confirmed); (b) desk flat (0 open rows); (c) entry-push `✋`
+(`execute.ts:211`) + bell backstop (`MANUAL_BACKSTOP_MIN`) + event-flatten exemption (`decide.ts:241`)
+all built. **ROLLBACK any/all (next cycle):** `update strategists set executor='cron' where slug like
+'%-manual';`
+
+**MONDAY 06-15 WATCH (twins):** worker logs `stream:` fills + the `✋ …your exit` push on each twin
+entry; cron logs `stream_owned` skips for the 4. ⚠ `qqq-thrust-trail-manual` rides Monday's FIRST live
+QQQ-stream session (alongside the QQQ machine pair) — the one twin path stream-armed but not yet
+live-proven; watch it fills clean. The "uS 0.2%" light is gone from its strip.
+
+**THE CRON IS NOW FAILOVER-ONLY** (no channel runs on it as primary; `grind` base is on cron but
+`disabled` = inert). Retirement path (the open architecture question): keep the stripped exit-only cron
+as the watchdog for the single-replica worker, OR make the worker resilient (2nd replica / external
+flatten-on-death) and THEN unschedule the cron (W4). Don't fully kill it while the worker is a single
+point of failure.
+
+**ALSO SHIPPED THIS SESSION (all on `main`, deployed):**
+- **Autopsy panels collapsed to a glanceable headline + top movers** (`0d5f889`): daily/weekly default
+  to market gist + fund line + ▲best/▼worst channel + an "N channels · M findings — expand" foot; the
+  full channel roll-up / regime ledger / exit-efficiency runners / findings gate behind expand (state
+  persisted per-user). Desktop 344px collapsed (was the full 13/17-row list); mobile Daily 274 / Weekly 420.
+- **Two new probes** (`e2716c4`, from the ultracode probe slate): `npm run fomc-costgate-probe` — the live
+  cost-gate 3.0 is the GLOBAL OPTIMUM of the sweep (+678/t, maximizes win%+total, min stops); leave-one-out
+  (drop 2024-12-18, 71%) → +244/t survives at the live gate but +14/t noise at gate 0 (residual edge needs
+  the gate ON). `npm run implied-move-probe` — reproduces the +$507 oracle ceiling + 36% drift-recall (build
+  trust-check); **DOOR-CHECK: the chop-fly's realized-chop ceiling is +$20/day and wider wings / hold-to-
+  settle make it WORSE → structurally unliftable, DOOR-BLOCKED.** CLASSIFIER: realized÷implied IS a better
+  detector (48% vs 36% recall, +$12 vs +$5/day, holds ex-CHOP-MIX, catches 5 chop days drift misses —
+  confound passes). **Reframe: detection was improvable but was never the binding constraint — the iron-fly
+  exit/wing structure is. Inverts the prior [[chop-day-strategy-verdict]].**
+- **Mobile header + contrast + bench + cream editor** (`f692744`): flip-editor → cream-909 with unified
+  full-width outlined buttons (86/dup/del/done); channel state-lights were painting bright LED tokens on
+  cream (uS amber 1.04:1 invisible) → deepened to ~3:1; mobile account badge / mixer labels → cream ink; the
+  86'd bench shelf is a collapsible slim bar (was clipping the 4th card); RUN/PAPER pills + paper-main badge
+  aligned to the LED window / settings cog.
+
+## SESSION HANDOFF — 2026-06-13 WEEKEND (PRE-MONDAY HARDENING + CHANNEL UI + COCKPIT FOUNDATION) — READ FIRST
+**Saturday build, market closed, desk flat. Monday 06-15 is the new 7-channel roster's first live
+day — everything below was built/verified to NOT touch Monday's trader behavior.**
+
+**ALERT FIXES (pre-Monday correctness review — worker `stream-2026-06-13a` live + beating, cron v57
+sentinel-verified):** an independent review of the new push-alert system cleared the trade-safety
+paths and caught 3 real low-severity bugs, all fixed: (1) `send()`/`firePush` had NO fetch timeout
+→ added `AbortSignal.timeout(5000)` (worker fire-and-forget; cron is AWAITED so a hang could stall
+a trade-minute). (2) daily_stop/insufficient_capital/event alerts fired on stale-bar BOOT cycles →
+phantom pages on every restart; now gated on `barFresh`. (3) cross/giveback dedup keyed on
+(strategist_id, occ) → a same-day re-entry into the same strike was suppressed; re-keyed on the
+position row id.
+
+**PRE-FLIGHT (Monday) = GREEN.** 7 machine on stream + gap_min/→14:00 on V3/ALT + pb-ride 1DTE
+$400/$450 ustop0 + QQQ pair ustop-aligned + 4 twins UNMUTED + event-standdown on the
+machine roster (twins exempt). ⚑ SUPERSEDED 2026-06-14 (top handoff): the 4 twins MIGRATED to stream
+and `qqq-thrust-trail-manual` ustop 0.20→0 — they're now stream-executed Monday, not cron.
+
+**CHANNEL EDITOR FOLLOW-UPS (same session):** (a) **EDITOR SCROLL FIX (`1a55d7d`)** — the new
+live-config rows made the flip-editor (`.ch-edit`, `position:absolute inset:0`) overflow behind the
+strips below, hiding Done. A `:has()` float was tried but the grid + dnd-kit stacking contexts kept
+a lower row painting over the tail (verified twice) → fix = `overflow-y:auto` (card-bounded scroll
+panel; can't overflow behind a neighbour). A centered-modal editor (portal + scrim, kills the
+stacking issue, unifies desktop+mobile) was MOCKED UP but DEFERRED on operator's word. (b)
+**DUPLICATE-CHANNEL button (`6b14505`) — the A/B primitive:** `useDeskWrite.duplicateChannel` clones
+strategists + config under `<base>-2,-3…` as a DRAFT (copies spec_json/executor/account_id + all
+knobs incl. entry_dte/ustop/event_policy); realtime brings the copy to the bench → tweak DTE/U-stop
+→ arm both. ⚠ RESOLVER EXTENDED (worker `stream-2026-06-13b` + cron v58): the base-slug resolver now
+strips a trailing `-N` BEFORE -manual/-qqq|spy, so a duplicated BUILT-IN (pb-ride-2 → pb-ride) runs
+its source strategy. Provably safe — ZERO current slugs end in -<digits> (verified), so it only ever
+touches new drafts. Smoke-tested clone-of-spec + clone-of-builtin, then removed.
+
+**CHANNEL CONTROLS + LIGHTS SHIPPED (`feaef61`, both breakpoints verified):** the strip grew (1)
+read-only LIGHTS on the face — executor (cron/stream) · 1DTE · uS% · evt:ignore · ●in-trade · STOP
+(at daily-stop) — the live state of an "aware" channel at a glance (PB RIDER shows stream/1DTE; the
+QQQ twin surfaces its uS 0.2%). (2) auth-gated CONTROLS in the flip-editor — executor cron⇄stream,
+entry DTE 0⇄1, event-policy stand-down⇄ignore, u-stop %, max-contracts — full channel tuning, no
+SQL. Threaded `underlying_stop_pct`/`event_policy`/`entry_dte`/`executor` through types→load→state→write.
+
+**MULTI-ACCOUNT COCKPIT P1+P2 (`60ac32f`, design = docs/multi-account-cockpit-design.md):** P1
+(`36_accounts_foundation.sql` APPLIED) = additive `accounts` table + `strategists.account_id`;
+existing channels migrated to a `paper-main` account from fund_state. ⚠ NEW-TABLE GOTCHA: this
+project's default privileges do NOT auto-grant SELECT to anon — had to `grant select on accounts to
+anon` explicitly (RLS policy alone was moot; the dashboard read returned empty until the grant).
+P2 = `useAccounts` + `AccountSwitcher` (badge for 1 acct, segmented selector for 2+, live=red) in
+both headers; the composer scopes its roster to the selected account. Verified with a temp 2nd
+account (switcher became a selector, scoped the composer), then removed. **⚠ THE ENGINE DOES NOT
+USE account_id YET** — all channels still trade under paper-main; the worker account-LOOP (P3) +
+live-$ (P4) are deliberately HELD until after Monday's clean open (don't refactor the live trader
+before its biggest validation). P3/P4 plan + 4 open questions in the design doc.
+
+## SESSION HANDOFF — 2026-06-12 EVENING (VALIDATION DAY PASSED · QQQ FLIPPED)
+**W2 IS COMPLETE. The 06-12 validation day PASSED every gate, and the QQQ trio flipped to
+stream post-close (desk flat) → 13 machine channels on stream, 4 manual twins on cron.**
+Worker `stream-2026-06-12a` deployed + beating (commit `106a3c3`).
+
+**⚑ ROSTER CULL EXECUTED (operator's word "run it chef", same evening, via MCP — supersedes the
+13-channel count above): 7 channels → draft** — power, power-final30, breakout, breakout-qqq,
+orb-spy-trail, orb-trend-rider, grind-smart-entries (draft still winds down exits; desk was flat,
+nothing stranded) **+ qqq-thrust-trail `underlying_stop_pct` 0.20→0** (QQQ pair alignment with
+orb-qqq-trail). **ARMED MACHINE ROSTER = 7, all stream:** breakout-alt-v3 · breakout-smart-entries
+(the momentum_atr A/B pair, month-end folds the loser) · grind-v3 · power-smart-entries
+(PROBATION — clean-era yardstick at month-end; model-red/live-green, the family's last stand) ·
+orb-qqq-trail · qqq-thrust-trail (QQQ pair, month-end clock) · pb-ride (1DTE debut). 4 manual twins: operator
+muted them 15:20 ET, then **RE-ENGAGED (unmuted) all 4 at 18:13 ET — twins are LIVE Monday**.
+Full menu + recipes + epitaphs + projections (menu beat the full roster +$4,441 on this week's
+replay; cut model-drag ≈ −$650…−$940/wk; worst-regime tail cut ~4×):
+**docs/roster-menu-2026-06-15.md**. Rollback any: `update strategists set status='armed' where slug='…';`
+— or from the UI now: the strip flip-editor's Lifecycle button (the 86'd shelf, below).
+
+**KITCHEN CLEANUP SHIPPED (same evening, post-cull — the 06-10 consultant UI thread, courses 1+2):**
+(1) **THE 86'D SHELF** — draft channels no longer render full strips: desktop §02 + mobile Mix
+collapse them to small grey bench pads under a `BENCH · 86'D` rail (tap → full strip to inspect /
+re-arm). NEW `useDeskWrite.setChannelStatus` + a Lifecycle "86 it (bench) / Re-arm" button on the
+strip's flip-editor — the cull/rollback SQL is now one auth-gated tap. Preview-verified both
+breakpoints: 11 armed strips + 7 bench pads; mobile Mix 5 pages → 3. (2) **"THE DESK SUMMONS YOU"
+ALERTS** — worker `stream-2026-06-12c` (new `worker/src/alerts.ts`): pushes via the app's
+/api/push-send (tag `seve-alert`) on **+75% crossing · ≥50% giveback of a ≥+30% peak (the panel's
+amber, pushed live) · daily-stop latch · event stand-down flatten · insufficient_capital (the
+pb-ride Monday watch!) · kill-switch halt transition**. In-memory once-per-ET-day dedup per
+(kind,scope); informational only — NEVER an exit path. **Railway env SET (operator, same
+evening): `APP_URL` + `PUSH_SECRET` (recovered from the 06-08 session transcript — the
+`openssl rand -hex 24` value matching Vercel's hidden `PUSH_SEND_SECRET`); TEST PUSH DELIVERED
+through the production route (`sent:1`, landed on the phone). Alerts ARMED for Monday; this also
+unblocks the twin entry-push migration item.** (3) **CRON v56 `2026-06-12a` DEPLOYED (sentinel-verified): STREAM-STALE
+PAGE** — the cron pages "⚠ STREAM STALE" when the worker heartbeat crosses 5m (stateless
+one-cycle-window dedup; re-pages at 1h/2h; an 09:00 ET first-run check catches weekend deaths;
+known benign edge: market holidays page ~09:40). `firePush` gained a tag param so alerts don't
+replace the ✋ twin pings. **COURSES 3+4 SHIPPED (same night, operator approved all 4 declutter
+items): (3) CHART —** TRUE session VWAP (the old line plotted the PER-BAR vwap ≈ close — the
+display twin of the worker's vwap quirk, fixed display-side only; worker untouched), new `±σ`
+chip (VWAP ±1σ/2σ volume-weighted bands, default off), and OPEN-POSITION ENTRY LINES (dotted,
+direction-colored, at the underlying-at-entry from the fill-time bar, strike fallback, labeled
+`▲741C×2`, rides the TRADES chip — first visual test = Monday's first position). **(4) §03
+DECLUTTER —** `DAY · BOOKS` trust strip atop §03 (DAY P&L (NAV) · ATTRIBUTION Σ · BOOKS Δ
+toned ok/warn/bad · trades · top mover; verified live: Δ −$172 == the 06-12 day-report books
+delta); autopsy rows of benched channels grey out + carry an amber `86'd` chip (a week-old KEEP
+on a culled channel can't read as policy); OPS·PRE-FLIGHT absorbed Tape Health as a 5th TAPE
+light (component deleted); Signals Tape collapses consecutive identical signals into one ×N row.
+Course 5 parked: multi-account/paper-lab cockpit (trigger = real money).
+
+**LATE-NIGHT RESEARCH COOK (operator's "COOOK!!", same evening — 2 bench probes, memory updated):**
+- **FOMC resolution trade (`npm run fomc-resolution-probe`, NEW): PAPER-LAB CANDIDATE, collecting.**
+  18 in-corpus FOMC days: mechanism real (60% continuation on ≥0.10% statement moves, +0.21%
+  avg follow-through); **follow@14:30 +$678/t, 60% win (n=5** — cost gate blocked the other 5;
+  ⚠ 2024-12-18 alone = 71% of the P&L); **FADE is DEAD (0% win)** — inversion filed; the edge
+  decays monotonically with delay (14:30 +376/t → 15:00 −189/t) = it lives in the resume minute.
+  Anecdote-grade BY CONSTRUCTION — nothing arms; **re-run after every live FOMC (Wednesday 06-17
+  adds day 19)**; graduates only if the one-day concentration dissolves as n grows.
+- **ma_cross × gap compose (`npm run cross-gap-probe`, NEW): REFUTED at the pre-registered bar.**
+  Gate lifts pooled exp$/t +17.2→+58.5 and helps 4/5 windows — but **ex-CHOP-MIX the gated book
+  is still red** (−$1,457; fingerprint #1 fires) = the third "filter the crossover into health"
+  refutation. **Don't build tf>1 worker support for it.** Residue: the gap SIGNAL re-validated on
+  yet another shape (flat-open crossover −17/t vs gap-day +73/t) — gap_min stays armed where it
+  earns (V3/ALT); future momentum candidates get gap-gated FIRST before anything fancier.
+  Probe fix en route: aggregate() stamps 15m buckets at their START ts → probes must remap to the
+  bucket's LAST 1m ts or option fills look ahead ~15min (cross-gap-probe does; pattern for any
+  future tf>1 probe).
+
+**VALIDATION RECEIPTS (morning watch, all green):** (1) gap_min FAIL-CLOSED CHECK PASSED —
+stream rationales carried `gap: 0.424` from the open; V3 traded THROUGH the open gate at 11:22
+(−$315 stop_premium at −51.5% vs design −50% — the stream's stop precision on a live loss;
+in-distribution, the gate is a regime bet not a win guarantee). (2) First MULTI-CHANNEL stream
+session: 21 auto trades / 11 channels, coverage ✓ clean 13 OCCs, books Δ$172 on a churny day.
+(3) QQQ SHADOW PROOF EXACT: cron filled orb-qqq-trail QQQ719C ×1 @ 10:53:01; worker shadow
+ENTER same contract/qty at 10:53:02 → trio flipped post-close (rollback: executor='cron').
+(4) Stream-vs-stream shared-OCC exercised live (two ORBs on 742C; spy-trail trail-exit ×2 then
+the operator's route-close of trend-rider's 2 from the half-drained lot) — zero ghosts/
+rejections/reconciles. (5) Late entries 15:36 FILLED (the cutoff-31 roll working; zero 422s vs
+yesterday's 21). (6) close_reason/participation dataset rich on day one: 7 tagged closes
+(reversal×5, risk×2, target), 13 taken vs 1 skipped (power-manual 742C hit the bell backstop
+−$84 — the first 'skipped' datapoint), 4 operator overrides on autos.
+
+**SHIPPED TONIGHT (worker `2026-06-12a`):** pre-open idle heartbeat 08:55–09:35 (kills the
+310-line "stream heartbeat STALE" WARN flood the cron's gate printed 09:00–09:30 every
+morning) + **BAR_HISTORY 900→2400** (the 900 cap was RTH-sized but SIP streams extended-hours
+bars → the window held <1 calendar day, silently truncating prior-session pdh/pdl and — by
+Monday afternoons — the gap's prior-close reference; found via the operator's weekend question).
+
+**DAY REPORT 06-12 (saved docs/day-report-2026-06-12.txt): NAV −$2,834** — a whipsaw chop day
+(SPY +0.23% close-to-close after a +0.42% gap; gap days are trend-PRONE not trend-guaranteed).
+Cut-list receipts stacked: orb-trend-rider −448 (incl. a 111-min ER-0.01 entry + a re-lean),
+power −421 + daily-stop latch, power-smart −420. grind-v3 +22 (3/4 win — the scalper keeps
+grinding). The ⚑ FOMC-ahead line + executor split (stream 11ch/21t · cron 0 autos) + gap-watch
+(ALT 0 trades = selectivity, its momentum gate) all rendered in one report.
+
+**RESEARCH (5 probes today — the generative directive in action, memory updated):**
+- **ema-stretch:** channels are EMA-band-BLIND and the data says keep it — "don't chase"
+  INVERTS (near-band breakouts are the weak ones; ≥3-ATR stretched = +235/t). 3rd
+  entry-geometry refutation. V3 as-armed printed **+$20,053/+275 per t** (strongest yet).
+- **ema-pullback (new shape): KILLED at 0DTE** (single-window mirage + cost-walled scalp).
+- **band-squeeze (new shape): KILLED** — midday coils don't pay; the ORB's 9:30 anchor is
+  load-bearing. Cross-candidate fingerprints filed (CHOP-MIX-only profit = rising tide; 1-min
+  volume confirms SUBTRACT; scalp exits structurally cost-walled).
+- **one-dte (operator's walk-thought), 5-window VERDICT:** whipsaw-survival mechanism REAL
+  (stop-rate halves everywhere) but **KEEPERS STAY 0DTE** — survival costs the convex tail
+  (V3 Δ−$4,711, losing exactly the trend windows; the breakeven/trail regime signature).
+  **RESURRECTION: PB-ride@1DTE flips to +$4,632, 4/5 windows positive** — 0DTE gamma was the
+  pullback's murder weapon, not the entry. First generative candidate to survive a bar;
+  **paper-lab-draft-eligible ON THE OPERATOR'S WORD** (needs an `entry_dte` per-channel policy,
+  small build — the 1DTE roll plumbing exists). 1DTE chains now bought for ALL 5 windows
+  (data/databento-mdte = full corpus).
+
+**MONDAY WATCH (06-15):** (1) NO pre-open WARN flood (the idle beat's first live morning);
+(2) first QQQ STREAM session — worker `stream:` fills on the QQQ PAIR (orb-qqq-trail +
+qqq-thrust-trail; breakout-qqq culled), cron defers; (2b) the 7 culled channels take ZERO
+entries + day-report coverage stays ✓; (2c) twins RE-ENGAGED (operator unmuted all 4 at 18:13
+ET) — twin entries + ✋ exit pings expected; (2d) if Railway env was set: first `alert:` lines in
+worker logs (+75%/giveback/latch pages land on the phone);
+(3) Monday's gap = Monday open vs FRIDAY close (weekend news lands in the gap — by design);
+(4) BAR_HISTORY 2400 = full Friday session in memory (pdh/pdl + gap refs intact all day).
+**WEDNESDAY 06-17: first live FOMC stand-down, 13:50–14:30 — the whole machine roster is now
+covered (twins exempt by design); the worker pages "⚑ event stand-down" when the flatten fires.
+POST-CLOSE: re-run `npm run fomc-resolution-probe` (the live day = dataset day 19 for the
+paper-lab candidate) — and eyeball 14:30→15:25 on the day report against the resolution thesis.**
+
+**PB-RIDE DRAFTED (operator's word, same evening — commit `a608c36`, worker `stream-2026-06-12b`):**
+the resurrected pullback is now a REGISTRY builtin (`engine/strategies/pullback.ts`, 1:1 port,
+`npm run pb-selftest` PASS — trade-identical to the winning probe, 250t/$4,632) behind a NEW
+per-channel **`entry_dte` policy** (`34_entry_dte.sql` APPLIED: 0=today+cutoff-roll default;
+1=always next session's expiry — pb-ride's edge IS the time value; same-day flatten unchanged).
+Channel row `pb-ride` (`35_pb_ride_channel.sql` APPLIED): executor=stream, entry_dte=1
+(LOAD-BEARING — 0DTE variant refuted), event_policy standdown. Thesis doc
+`docs/channels/pb-ride.md`. PB-scalp stays buried.
+
+**PB-RIDE ARMED (operator's word, same evening): live Monday 06-15 on the stream.** SIZING FIX
+en route: the draft's $150 risk knob couldn't clear ONE 1DTE contract (risk/contract = 0.5×ask
+×100 ≈ $200-275 at 1DTE ATM → qty 0 → silent `insufficient_capital` no-trade). **RISK $300 /
+STOP $450** = minimum-size (~1 contract/trade, ~1.5-2 stops/day bounded). MONDAY WATCH addition:
+pb-ride's first live signals — if `blocked: insufficient_capital` appears in signals, the ask
+ran past $6 and the risk knob needs a nudge (visible + fail-safe). Its trades enter NEXT-session
+expiry and flatten same-day (entry_dte=1 + the 06-08a rule). QQQ port gate probed same evening
+(`npm run pb-qqq-probe`, QQQ 1DTE chains bought → data/databento-mdte-qqq) — verdict in
+docs/pb-qqq-probe-2026-06-12.txt.
+
+**NIGHT-CAP CHORES (same evening, "time to lean = time to clean"):** (1) **TWIN ✋ ENTRY-PUSH
+BUILT — worker `stream-2026-06-12d`** (`pushManual` in alerts.ts, tag seve-manual, fires on every
+`-manual` entry fill in executeEntry — cron parity). **The twin stream-migration is now FULLY
+unblocked; flip SQL ready** → **EXECUTED 2026-06-14 (see top handoff): `update strategists set
+executor='stream' where slug like '%-manual';` ran (rollback per-slug to 'cron').** (2) **W3 QUOTES EXPORT BUILT + FIRST RUN
+VERIFIED EXACT** — `npm run export-quotes` (scripts/export-quotes.ts): option_quotes per ET day
+→ data/quotes-archive/<day>.json.gz (keyset-paginated on id — OFFSET pagination times out on
+this table); all 6 in-DB days archived, row counts match the DB exactly (~3.5MB gz/day). **⚠ NEW
+WEEKLY RITUAL: run export-quotes alongside export-bars at least every ~5 days — retention prunes
+quotes at 7d and they are NOT reconstructable** (unlike bars). (3) OTP login bug confirmed dead
+(AuthControl maxLength=10 fits Supabase's 8-digit codes). (4) `drop index idx_bars_symbol_ts`
+(~14MB, redundant with the unique (symbol,ts) key — the 06-07 optional) BLOCKED by tool
+permissions as unauthorized prod DDL — one SQL on the operator's word.
+
+PENDING OPERATOR: ~~twin migration timing~~ DONE 2026-06-14 (twins on stream — top handoff). Month-end cuts:
+PULLED FORWARD — the 06-12 cull; still on the month-end clean-era clock: power-smart-entries
+(probation), the ALT-vs-V3 fold, the QQQ pair.
+
+**WEEKLY-AUTOPSY OUTAGE — FOUND + FIXED (2026-06-13):** the 06-12 weekly report never generated
+(operator caught it). ROOT CAUSE: one of the 06-06 edge-fn redeploys silently flipped
+`weekly-autopsy`'s `verify_jwt` ON; its Friday cron (`seve-weekly-autopsy`, `15 20,21 * * 5`)
+passes a SERVICE_ROLE bearer that the edge gateway 401'd (daily-autopsy + paper-trader run
+verify-JWT OFF → spared; anon passes either way, service_role didn't). SILENT because the cron's
+`net.http_post` logs "succeeded" on ENQUEUE, not on the function's 401. Worked 06-05 (pre-redeploy),
+broke the next Friday. FIX: (1) BACKFILLED the missing report via `curl -X POST …/weekly-autopsy
+-d '{"weekEnd":"2026-06-12"}'` (the body param skips the Friday-only self-gate; anon bearer → 200;
+Opus narrative, ~73s) — week 06-08→06-12 now in `weekly_reports` (+$1,795 realized / −$2,031 NAV /
+229 trades). (2) operator toggled `verify_jwt` OFF in the dashboard (confirmed: no-auth POST → 200
++ get_edge_function `verify_jwt:false`). **⚠ DEPLOY GOTCHA: weekly-autopsy is paste-deployed — any
+future dashboard redeploy MUST keep "Verify JWT" OFF** (the editor defaults it ON), else this
+recurs. Same rule already implicit for daily-autopsy + paper-trader. Diagnostic recipe for any
+"cron fn ran but no row": check edge-function logs for 401/4xx (the cron run-details will lie
+"succeeded"), then compare `verify_jwt` across sibling cron fns.
+
+**WEEKLY-AUTOPSY GENERATOR REWRITE (2026-06-13, operator review "does this help a human?"):** the
+report read impressive but half-trap. Deployed `weekly-autopsy` **v7 (banner 2026-06-13c)** in
+three passes (all verify-JWT OFF, MCP deploy + smoke-test + {weekEnd} regenerate of 06-12 each
+time): (b) **DOCTRINE + ROSTER-AWARE** — SYS prompt now carries the desk's settled findings (MFE
+is an inflated upper bound, ride the convex tail, don't chase capture, one week is noise); digest
+adds per-channel `scalp` (capture board excludes scalpers — killed the "$60k grind-manual leak"
+mirage) + `liveStatus` + `roster` (stops it re-recommending the cull); LLM channel list de-duped.
+(c) **EXIT-LOGGING TEMPORAL GUARD** — the v13b report cried "system bug: fix exit logging" but it
+was a FALSE ALARM: `close_reason` shipped 06-11 eve so 4/5 of the week predates it (06-12 = 34/34
+stamped, prior days 0/195 — NOT a bug, investigated to the row). Guard: digest self-calibrates an
+anchor = earliest stamped exit, tags each channel `exitLogging.status` (ok/legacy/gap) +
+`exitLoggingHealth`; the LLM flags a logging bug ONLY for `gap` (post-feature NULLs). Generalizes
+to any future mid-window feature ship. **close_reason is HEALTHY** — the regenerated 06-12 report
+now states that plainly. Repo file = full source of record; deployed = condensed (logic-identical,
+banner trimmed for the inline MCP paste). ⚠ paste-redeploys must keep Verify-JWT OFF.
+
+**UNIFIED CHANNEL NAMING (2026-06-13, operator: "breakout-smart-entries vs BREAK(ALT) is
+confusing — reference the chosen name across the system"):** the autopsy LLM was the lone violator
+(UI strips/positions/man-vs-machine already resolve slug→name). Rule now: **`name` is the single
+human-facing label; `slug` stays an invisible internal key** (order IDs, worker resolution, your
+SQL). Done: (1) **weekly-autopsy v8 (2026-06-13d) DEPLOYED + regenerated** — SYS OUTPUT NAMING
+rule; rendered narrative + exit lists + skeleton headers resolve slug→name; verified the prose now
+reads "BREAK(ALT)", "GRIND(MANUAL) ✋", "Power Final 30" etc., zero slugs. (2) **day-report CLI**
+(`scripts/day-report.ts`) prints names (selects `strategists(slug,name)`). (3) **daily-autopsy
+(2026-06-13a) — COMMITTED, ⚠ NEEDS PASTE-DEPLOY** (365-line file, too big for a safe inline MCP
+paste): same fix (SYS rule + render maps slug→name in channel headers / finding evidence / finding
+channel tags; slug kept in channels[].slug + systemFindings[].channels[] as the join key). Paste
+`supabase/functions/daily-autopsy/index.ts` into the dashboard editor (Verify-JWT stays OFF) before
+Monday's close so Monday's daily uses names. (4) **daily-autopsy PASTE-DEPLOYED by
+operator → v12 live** (verified: deployed content == repo, banner 2026-06-13a). (5) **CLI MIRRORS
+RETIRED (operator's word "retire the duplicates")** — `engine/autopsy.ts` + `engine/weekly-autopsy.ts`
+were a drifting ~300-line re-implementation; replaced with THIN READ-ONLY CLIENTS that print the
+canonical stored report (`daily_reports`/`weekly_reports.markdown`) the edge fn generated.
+`npm run autopsy`/`weekly-autopsy` now: default = print latest; `--date`/`--weekEnd` = a specific
+one; `--regen` = POST the edge fn to (re)build first; `--json` = raw digest+narrative. ONE source
+of truth (the edge fns), zero future drift. Verified: weekly client prints v8 unified-naming
+report; `npm run autopsy -- --date 2026-06-12 --regen` rebuilt via v12 → clean names. Edge fn
+header comments updated ("Mirrors…" → "THE CANONICAL GENERATOR"). The anti-drift note for future:
+the edge fns are the source of truth; never re-create a parallel local aggregator.
+
+**DATA REFRESH (operator's word, same night):** bars archive exported →06-12 (both tickers) +
+**Databento NBBO refreshed →06-11** (SPY 23,098 + QQQ 28,736 quote-bars; pennies). **⚠ 06-12
+NBBO is EMBARGOED** — Databento historical OPRA serves only >~T+1 (403 `license_not_found_
+unauthorized` past 2026-06-12T13:30Z); **fetch it before Monday's mfe-drift run:**
+`npm run backfill:databento -- --from 2026-06-12 --to 2026-06-12 --underlying SPY` (and QQQ).
+
+## SESSION HANDOFF — 2026-06-11 LATE (W2/B3 STREAM MIGRATION) — prior
+**W2 = move channels off the cron onto the Railway stream executor (operator's word:
+"migrate all even QQQ"). DONE TONIGHT: all 9 armed SPY MACHINE channels flipped to
+`executor='stream'` (joining grind-v3 → 10 on stream); the worker is now MULTI-SYMBOL
+(`stream-2026-06-11b`, commit `188c593`, heartbeat verified beating 6s fresh).** The cron
+(v55) defers them via the fresh `'stream'` heartbeat — NO cron redeploy (it reads the
+per-channel `executor` flag). Desk was flat (EOD) so the switch stranded nothing.
+
+**ON STREAM (10):** breakout, breakout-alt-v3, breakout-smart-entries, grind-smart-entries,
+grind-v3, orb-spy-trail, orb-trend-rider, power, power-final30, power-smart-entries.
+**STILL ON CRON (7):** breakout-qqq, orb-qqq-trail, qqq-thrust-trail (QQQ machine — SHADOW
+GATE, below); breakout-manual, grind-manual, power-manual, qqq-thrust-trail-manual (manual
+twins — need the worker entry-push, below).
+
+**MULTI-SYMBOL WORKER (the B3 enabler):** was single-symbol (`ownedBy` required
+`underlying===config.symbol`). Now: `config.symbols` (default `SYMBOLS=SPY,QQQ`); ONE Alpaca
+data socket (the 406 single-connection limit) subscribed to all symbols, `onBar` routes by
+`bar.S`; per-symbol `BarStore`/`ChainStore` maps; `cycle()` does account-wide reads ONCE
+(positions/orders/openRows — OCCs are globally unique so the netting maps are shared) then
+loops symbols with a per-symbol ctx + own bar-freshness; `occSymbol` uses `ch.underlying`.
+STRICT generalization — one symbol == today's behavior, so the live SPY/grind-v3 path is
+preserved. Worker typecheck clean; runs via `tsx` (no build step).
+
+**⚠ QQQ SHADOW GATE (why QQQ execution is NOT flipped yet):** the cron's executor gate keys
+off a SINGLE `'stream'` heartbeat. If the worker is alive for SPY but silently can't handle
+QQQ (bad sub / chain miss), the cron would DEFER QQQ channels (heartbeat fresh) while the
+worker no-ops them → STRANDED QQQ positions. So QQQ execution flips ONLY after one clean
+shadow open proves the worker handles QQQ — the same shadow-before-live gate grind-v3 passed.
+The worker SHADOW-decides QQQ every cycle now (QQQ channels stay `executor='cron'` → cron
+keeps executing them, zero gap) — tomorrow's open is the proof.
+
+**MORNING WATCH (06-12 open) — W2 validation, IN ORDER:**
+1. **Railway boot log** must read `subscribing bars SPY,QQQ` + `seed[QQQ]: N bars`. If it
+   says SPY only, Railway has `SYMBOL=SPY` pinned → **set `SYMBOLS=SPY,QQQ`** (takes
+   precedence) + redeploy. (SPY migration is UNAFFECTED either way — the worker owns SPY.)
+2. At open: cron logs `stream_owned` skips for all 10 SPY stream channels; worker logs
+   `stream:` execs/fills for them. First-ever MULTI-channel stream session.
+3. The 10 SPY channels book CLEAN — `npm run day-report -- --date 2026-06-12` coverage ✓ +
+   NAV-vs-attribution reconciles (watch stream-vs-stream shared-OCC netting, e.g. V3+ALT on
+   the same 13:30 break OCC — the one path grind-v3-alone never exercised).
+4. Worker SHADOW-decides QQQ channels in the logs, matching the cron's actual QQQ fills =
+   the green light to flip QQQ.
+5. **⚠ gap_min FAIL-CLOSED CHECK (CRITICAL — V3/ALT are now gap-gated):** every stream entry's
+   rationale carries `detail.gap` (worker `c`). Query `select rationale->>'gap' from signals where
+   acted_on and created_at::date='2026-06-12'` for ANY stream channel. NON-NULL → the worker computes
+   gap → V3/ALT gating is sound. NULL / no stream entries showing it → worker can't compute gap →
+   **V3/ALT are SILENTLY HALTED → run the gap_min ROLLBACK** (in `gap-regime-verdict.md`). The desk
+   takes many entries across 10 stream channels daily, so there WILL be a rationale to inspect.
+
+**CALENDAR AWARENESS — FOMC 2PM STAND-DOWN BUILT + LIVE (commit `cdf2923`, worker
+`stream-2026-06-11d`).** `engine/market-events.ts` = FOMC decision dates 2024–2026 VERIFIED vs the
+official Fed calendar (the reconstructed set had missed 3 dates); fail-safe (stale table = no events
+= normal trading). Worker policy: on FOMC days inside [13:50, 14:30) flatten stream-owned holdings
+(`event_flatten`; manual twins exempt) + block entries (`event_window`); `EVENT_STANDDOWN=0`
+env-disables. Probe re-run on verified dates + COMPLETE data (bought the 8 missing FOMC days; all 18
+in-corpus FOMC days covered): 2pm spike 2.82× localized; FOMC gaps 0.175% < calm 0.280% (gap_min's
+literal blind spot — and most FOMC mornings read flat-open, so the armed gap_min already stands
+V3/ALT down); ALT/V3's complete FOMC population = 7 trades, −694/t avg. **First live stand-down:
+2026-06-17 (next Wed).** ⚠ the CRON has no stand-down — flip the QQQ machine to stream before 06-17
+(expected after the 06-12 shadow proof) or it trades FOMC unprotected. **PER-CHANNEL posture (worker
+`e`, `33_event_policy.sql` APPLIED, operator's architecture catch):** `strategist_config.event_policy`
+— 'standdown' default (all 17 channels) | 'ignore' = per-channel opt-out for future event-native
+theses (FOMC straddle, earnings vol); the worker honors it on both flatten + entry block. Events are
+SYMBOL-SCOPED (`MarketEvent.symbols`, absent = market-wide like FOMC; a future NVDA-earnings event
+lists ["QQQ"]) — so event reactions are channel- and symbol-specific, never hardwired global. QQQ
+channels inherit the stand-down automatically when their executor flips to stream. EN-ROUTE FIND+FIX: the entire
+2024-09 month was MISSING from the bars archive (a silent 07_backfill_bars failure, outside every
+regime window) → NEW `npm run repair-bars-archive` (fills holes direct from Alpaca; post-W1 old bars
+must never route through the 60d-retention DB); 2024-09 repaired (20 days).
+
+**GAP_MIN — BUILT + ARMED on V3+ALT (commits `c224d03`/this — the night's research payoff).** The
+overnight gap is a verified ex-ante regime signal (memory `gap-regime-verdict.md`): flat-open days
+bleed, gap days pay for the breakout family; PASSES the 5-window bar AND is independent of OR width
+(the first lead all session to survive). Built as a live `gap_min` condition (`|open−priorClose|/
+priorClose ≥ pct`), threaded the pdh/pdl path, registered in every vocab list, worker computes it in
+computeLevels. `npm run gap-min-selftest` reproduces the probe EXACTLY (ALT gap_min 0.25 → +252/t).
+**ARMED gap_min 0.25 on breakout-alt-v3 + breakout-smart-entries (operator's word)** — both carry it
+on both entry sides + the 14:00 window, verified; live via the stream worker next cycle. Armed BEFORE
+the live gap-observability check could run (off-hours) — bounded risk (fail-closed = missed entries
+not bad trades; one-SQL rollback) accepted; #5 above is the morning confirm-or-rollback. Worker `c`
+(gap additive: computed + in every entry rationale). QQQ shadow gate from W2 unchanged.
+
+**NEXT-SESSION W2 TAIL (after a clean 06-12):** (a) flip QQQ machine channels to stream
+(`update strategists set executor='stream' where slug in ('breakout-qqq','orb-qqq-trail','qqq-thrust-trail');`)
+once shadow-proven; (b) add the manual-twin entry-push to the worker (`firePush` mirror of
+the cron's, needs `APP_URL`+`PUSH_SECRET` env on Railway) then migrate the 4 manual twins —
+without it a migrated twin loses the proactive "✋ your exit" ping (exits still work: manual
+close route is executor-agnostic, bell backstop catches a miss). ROLLBACK any channel:
+`update strategists set executor='cron' where slug='…';` (cron resumes it within a cycle).
+W3 = narrow ingest (option_quotes 94MB/7d now the dominant table); W4 = unschedule the cron
+trader (full cutover) once the whole roster is stream-proven.
+
+## SESSION HANDOFF — 2026-06-11 EVENING (CHANGE LIST EXECUTED) — READ THIS FIRST
+**The after-market change list (items 1-4) is DONE + DEPLOYED (commit `b5cde0a`): cron v55
+`2026-06-11a` (sentinel-verified), Railway worker `stream-2026-06-11a` (heartbeat verified
+beating), Vercel pushed, migration `31_close_reason.sql` APPLIED via MCP.** Items 5-6 (arm
+V3/ALT →14:00 + roster cuts) are PENDING THE OPERATOR'S WORD. Item 7 = the probe queue
+(unchanged, needs Databento refresh first).
+
+**DAY REPORT 06-11 (saved `docs/day-report-2026-06-11.txt`) — B1 VERDICT: PASS.**
+NAV +$1,207, Σ attribution +$1,211 (Δ$4 — books clean). grind-v3 via the STREAM: 4 round-trips
++$347, fast target exits at 1-2m holds (the ~10s premium sweep banking +41%/+28% pops the cron
+band would have quantized away), stops honored, no doubles, no ghosts. NOTE: grind-v3's RISK
+knob is **$350** (not the $150 the prior handoff recorded — qty ×3/×4 matches $350 exactly, so
+sizing was CORRECT vs config; the knob itself moved). Lockout cost quantified: **21 rejected
+0DTE opens 15:32–15:43** (power-manual ×8, power-smart ×8, grind-manual ×5) — entries resumed
+15:46 only because cutoff-16 finally rolled them to 1DTE. Day shape: SPY +1.32% / QQQ +2.51%
+trend with whipsaw legs; 13:30 CALL cluster +$2,271 (one bet ×5), 13:04 PUT cluster −$687.
+Top-3: power-smart-entries +1151 (⚠ CUT-LISTED, see below), BREAK(ALT) +828, V3 +744. Bottom-5
+−$2,036: orb-trend-rider −695, grind-smart −426, power −385, orb-spy-trail −304, orb-qqq-trail
+−226 (that last one is KEEP-list — the rest are cuts). Overshoots: 2 stops closed −67/−70% vs
+−50% design (the known $315/mo cron-quantization tail).
+
+**SHIPPED TONIGHT (all live):**
+1. **`OPEN_0DTE_CUTOFF_MIN` 16→31** (cron + `worker/src/config.ts`) — entries inside the last
+   ~30 min roll to 1DTE; the 06-08a same-day flatten still closes them at the bell.
+2. **TERMINAL-STATUS FILL POLL** (cron `aOrderAndFill` + worker `orderAndFill` + the manual
+   close route) — kills the partial-fill class: poll to a TERMINAL order status, CANCEL the
+   working remainder after ~3s, book the FINAL `filled_qty`. Entries skip the row on a
+   known-0-fill (no ghost); exits book the ACTUAL sold qty and leave the row open to retry on
+   a known-0-fill (no phantom close). The route also books actual-sold (was booking sellQty).
+3. **day-report COVERAGE section** — per-OCC account fills vs desk rows + live held-vs-open-rows
+   audit (needs ALPACA_KEY/SECRET in .env.local — present). 06-11 re-run: ✓ clean 16 OCCs
+   (the morning incident doesn't flag because the operator's SQL reconstruction already
+   restored the row; live it would have read "account bought 2 / desk rows opened 1").
+4. **`close_reason` dataset (31_close_reason.sql APPLIED)** — every exit now stamps durable
+   attribution: machine reason (stop_premium/eod_flatten/…), `reconciled`, `manual` for an
+   operator close, refined to `manual:<tag>` by the NEW post-close tag chips in PositionsPanel
+   (target/reversal/risk/stall — they appear AFTER the fill books, zero friction before;
+   desktop+mobile, shared component). day-report gained a PARTICIPATION section (taken =
+   operator closed · skipped = bell backstop) — the operator-selection dataset. First read:
+   **16/16 twin closes taken today** (he engaged everything; zero backstops). Trade drill-down
+   now shows close_reason (✋-prefixed when manual).
+
+**MORNING WATCH (06-12 open):** (1) entries 15:29+ ET roll to 1DTE with ZERO 422s; (2) first
+manual ✕-close → the tag bar appears and the tap lands `manual:<tag>` on the row; (3) tomorrow's
+day-report coverage section stays ✓ clean; (4) STREAM light green, `stream-2026-06-11a` beating.
+
+**OPERATOR DECISIONS (resolved same evening — operator's word given in-session):**
+- **Item 5 — ARMED ✓: V3+ALT entries→14:00.** Operator chose "arm both". Applied via MCP +
+  VERIFIED: both spec_jsons carry 2 `time_before` entry conditions at 14:00, zero at 15:25,
+  the 15:25 exit flatten (`timeET`) intact, both channels still `armed`. Cron-owned → live
+  next cycle, no deploy needed. The desk's FIRST armed entry-side config (5/5-window PASS).
+  Rollback: `update strategists set spec_json = replace(spec_json::text, '"et": "14:00", "kind": "time_before"', '"et": "15:25", "kind": "time_before"')::jsonb where slug in ('breakout-alt-v3','breakout-smart-entries');`
+  WATCH: V3/ALT take NO entries after 14:00 ET (signals blocked `time_before`), morning
+  entries unchanged.
+- **Item 6 — roster cuts: OPERATOR CHOSE WAIT FOR MONTH-END.** No cuts tonight; the live A/B
+  runs through the month boundary as originally planned. Context that informed it: today's
+  receipts cut both ways — five of the list went −$1,834 (orb-trend-rider −695, grind-smart
+  −426, power −385, orb-spy-trail −304, breakout −24), but **power-smart-entries was the
+  DAY'S BEST channel (+1,151, 2/2)** and breakout-qqq +231. When the word comes, the SQL
+  (mute = draft; exits still wind down; re-arm = status='armed'; pull slugs per keep calls):
+  `update strategists set status='draft' where slug in ('power','power-smart-entries','power-final30','breakout','breakout-qqq','orb-spy-trail','grind-smart-entries','orb-trend-rider');`
+
+**PROBE QUEUE RESULTS (same evening, after the change list — Databento refreshed →06-10
+both tickers ~$0.40; outputs `docs/*-2026-06-11.txt`; new tools `npm run qqq-v3-probe |
+level-gate-probe | confirm-delay-probe`; memory `probe-queue-2026-06-11.md`):**
+- **QQQ-V3 port: NO TRANSFER — don't port, don't buy OOS windows.** 71 sessions Mar→Jun26
+  real NBBO: QQQ V3(→14:00) −$23.5/t pooled −$1,035 (AprMay26 −$5,819) vs SPY V3 +$131/t
+  +$4,585 SAME stretch. QQQ morning-only +$2,489 = one hot Jun split (mirage shape).
+  Incumbent builtin ORB −$8,817 re-confirms the breakout-qqq cut. Bonus: SPY →14:00 beats
+  →15:25 in-stretch — corroborates last night's arm.
+- **Level-context gating: REFUTED on the keep-list.** 320 sessions, nakamoto warmupLevels
+  (pre-session, no look-ahead), pre-registered G1 room-to-run 0.10/0.20% + G2 at-level
+  ±0.05%: EVERY gate lowers V3/ALT pooled (V3 +$15,995→+$8.8k/+$9.3k/+$5.8k), ORB flips
+  negative. Rides want structure CROSSINGS, not avoidance; the $5 grid blankets the tape.
+  Same grave as breakeven/late-gate/regime-gate. Closes "Nakamoto's lever = levels" for
+  our channels.
+- **Confirmation-delay: first entry filter to BEAT its mechanical control — still not
+  wire-worthy.** power(base): persist-2m −$10.8k vs delay-veto-2m −$18.6k vs baseline
+  −$27.6k → the persistence re-check is a REAL filter (+$7.8k over pure lag, n 537→353)
+  but stays −EV 4/5 windows = harm reduction for a cut-listed channel. QQQ-Break: no
+  filter signal. Don't wire either.
+- **mfe-drift first real run:** 10/13 LOW-SAMPLE (expected, 11 live days); 3 DRIFTs all
+  live-runs-HOT (breakout 52% win vs 34% model · power 56 vs 19, +$20 vs −$4/ct ·
+  power-smart 62 vs 28) — model omits the giveback trail + daily latch, stretch favored
+  leans. Month-end input, not action; power-smart counter-receipt #2.
+- **Chop-router (brainstorm composition): REFUTED.** `npm run chop-router-probe` joins the
+  Nakamoto phase2 daily P&L with day shape + the 10:30 gate score (313 sessions): the
+  reversal book loses on EVERY day shape and 20× WORSE on whipsaw days (−$240.6/day at
+  ≥5 legs vs −$12.1 trendy); its CHOPMIX-25-26 green was earned on that window's GO days
+  (+$12,490 go vs −$4,715 no-go). Chop steamrolls BOTH directional shapes → the chop book
+  must be SHORT-PREMIUM (theta fly, blocked on the Phase-B limit/multi-leg doors) or
+  STAND-DOWN sizing, not a cleverer directional entry. Don't resurrect level-reversals
+  for chop.
+
+**RAILWAY FULL-STREAM COUNTERFACTUAL (06-11): net ≈ −$100±150 — execution P&L is NOT the
+B2 case.** Quote paths prove both quantization events were GAPS, not drifts: 736C bid
+2.15→3.61 in ONE minute through the +100% target (the cron's late exit banked ~$250-375
+MORE than a 10s sweep would have); 726P 1.30→0.63 through the −50% stops (sweep recaptures
+only ~$190 of the $230 overshoot). Lockout 422s = same broker wall both executors; clusters
+= signal-level, executor-independent; bleeders get WORSE with speed (fill-lag). What the
+stream actually proved today: grind-v3's 1-2m fast-target exits + the first CROSS-EXECUTOR
+shared-OCC netting (stream grind-v3 vs 5 cron channels on 733C/726P, books Δ$4). B2 =
+reliability + state; order per runbook — after month-end cuts, ALT then V3 last.
+
+**W1 INGEST WIND-DOWN — EXECUTED + VERIFIED (same evening, operator's word):** the DB is no
+longer the tape's archive. (1) **Full 1-min history exported** to `data/bars-archive/<SYM>/`
+(`npm run export-bars`, per-ET-day JSON, verbatim rows; SPY 222,205 + QQQ 46,398 rows, counts
+exact vs DB; gitignored; worst-case reconstructable from Alpaca via backfill-bars). (2)
+**`engine/realsource.ts` + both backfill scripts read ARCHIVE-FIRST** (DB serves only the tail
+from the last archived day; `SEVE_BARS_ARCHIVE=0` disables; no archive = original behavior).
+**GOLDEN-VERIFIED** (`npm run verify-bars-archive`): pre-prune both paths byte-identical
+(570/111 sessions, Σclose to the cent); post-prune overlap-identity + depth invariants PASS;
+`qqq-v3-probe` re-run BYTE-IDENTICAL post-prune. (3) **Daily candles persisted**
+(`daily_bars_hist`, 682/682 identical to the old view's output) + **`underlying_bars_daily`
+view = live-window ∪ hist** → the chart's 3M/1Y/Max keep FULL depth forever (preview-verified,
+Max renders 2024-02→now). (4) **Retention live** (`32_bars_retention.sql` APPLIED via MCP;
+`seve-retention` cron now also upserts daily candles + trims 1-min >60d nightly). (5) **Pruned
++ VACUUM FULL: underlying_bars 65MB → 7.5MB · DB total 130MB** (was ~170). ⚠ NEVER re-run
+`07_backfill_bars.sql`/`20_backfill_qqq_bars.sql` for history (they'd refill the pruned
+window); run `npm run export-bars` at least every ~7 weeks (DB covers 60d, so the archive can
+lag that long safely) and before any research that needs the freshest days from disk.
+RATIONALE (operator, in-session): reliability + state + data consistency + storage runway —
+and channels must succeed/fail on their signal, not on executor luck (the attribution-noise
+argument; see the Railway counterfactual above). W2 = B2 channel migration after month-end
+cuts; W3 = narrow ingest (option_quotes 94MB/7d is now the dominant table); W4 = full cutover.
+
+## SESSION HANDOFF — 2026-06-11 (B1 LIVE DAY) — prior
+**Next session opens with: (1) `npm run day-report -- --date 2026-06-11` (same-week constraint!),
+(2) execute the AFTER-MARKET CHANGE LIST below.** [DONE 06-11 evening — see the section above.] The Railway stream executor ran its first live day
+(grind-v3, $150); heartbeat + cron `stream_owned` deferral worked; full execution validation = the
+day report. THREE INCIDENTS, all diagnosed, two fixed live:
+- **Partial-fill race (NEW BUG CLASS, fix pending tonight):** grind-manual buy filled ×2 but
+  `aOrderAndFill` polled a partial state → desk row recorded qty 1 → operator's ✕-close sold 1 →
+  **1 uncovered contract rode unmanaged** (caught via Fund-vs-attribution gap +$58; row restored by
+  operator-authorized SQL reconstruction; closed manually). Root cause: fill poll exits on first
+  `filled_avg_price>0`, can capture partials. FIX (tonight): poll to TERMINAL status + re-read final
+  filled_qty in BOTH cron `aOrderAndFill` AND `worker/src/alpaca.ts orderAndFill` (same transcribed
+  pattern). On-demand audit exists: "check coverage" = Alpaca positions vs Σ open rows per OCC.
+- **Spot display two-writer bug — FIXED+SHIPPED (`8870e0f`):** main poll's minute-ingest spot stomped
+  the fast /api/spot live tick every cycle → price snapped backwards 30-50¢ every ~4s (operator
+  caught it side-by-side vs TradingView). Now live-tick precedence; minute spot = fallback >15s quiet.
+- **Alpaca WIDENED the 0DTE open-lockout ~15min → ~30min** ("contract expires soon, unable to open
+  new positions" 422s from 15:33 ET — 27 min before close). Our `OPEN_0DTE_CUTOFF_MIN=16` rolls to
+  1DTE too late → ALL 15:30-15:44 entries rejected (cron channels + manual twins; exits unaffected;
+  account stayed flat — rejected ≠ filled, zero coverage risk). FIX (tonight): cutoff 16→31 in the
+  cron draft + `worker/src/config.ts` policy, deploy via `npm run cron:deploy -- --yes` (pipeline
+  CERTIFIED: revision-sentinel verify, v54 deployed via it).
+
+**RESEARCH (committed `9dad6cc`, memory `entry-window-verdict.md`): the first entry-side config wins
+to PASS the 5-window bar.** `hour-edge-probe`: V3/ALT edge = the 10:xx first-leg (V3 +$9.6k of
++$10.0k); **14:xx entries negative family-wide** (mechanism: ride needs RUNWAY — tail-capped by the
+15:25 flatten). `entry-window-probe` validation: **ALT entries→14:00 PASSES 5/5 windows
+(+$6.7k→+$8.6k); V3 →14:00 PASSES (+$10.0k→+$11.5k, +94/t)**. ORB midday rescue REFUTED (Mar26 chop
+mirage) → cut list stands; power has NO rescue hour (482/522 trades bleed in its own window);
+QQQ-Break red every hour. V3 morning-only footnote: all-5-windows-positive, half the trades, same
+total (operator risk-preference alt, NOT armed). Also: cost-model Q&A — fees 4¢/side (Alpaca reg
+pass-throughs), slippage 1 tick/side ON TOP of crossing real NBBO, live fill audit validates the
+model; `spreadCrossFrac` exists for limit-order math but DON'T flip it until the stream's
+marketable-limit ladder MEASURES real capture (Nakamoto's fill-at-trigger optimism = the cautionary
+receipt).
+
+**AFTER-MARKET CHANGE LIST (tonight, in order):**
+1. `OPEN_0DTE_CUTOFF_MIN` 16→31 (cron draft + worker policy) → cron:deploy + git push (Railway).
+2. Terminal-status fill poll (cron aOrderAndFill + worker orderAndFill) — kills the partial-fill class.
+3. day-report: add account-vs-rows coverage-drift flag.
+4. Close-reason tagging (tag-AFTER-fill chips, never friction before) + taken-vs-skipped participation
+   logging — the operator-selection dataset (the scalp-twin verdict says selection is his compilable half).
+5. ON OPERATOR'S WORD: arm V3+ALT entries→14:00 (one `time_before` edit in each spec_json, reversible).
+6. Roster cuts (operator inclined, evidence final): power×3, base breakout, breakout-qqq, orb-spy-trail,
+   grind-smart, orb-trend-rider → 17→~8 channels. Sooner than month-end is on the table.
+7. Probe queue: QQQ-V3 port (refresh QQQ Databento ~$0.20 first), level-context gating
+   (engine/nakamoto/levels.ts validated infra), confirmation-delay on adversely-selected entries,
+   `npm run mfe-drift` first real run (refresh SPY Databento too — cache ends 06-01).
+
+## SESSION HANDOFF — 2026-06-10 — READ THIS FIRST
+Four threads: (1) **Nakamoto strategy audit COMPLETE** — his "Level Reversal+Breakout" ported
+(`engine/nakamoto/`, golden 4,818 checks vs his verbatim python ALL PASS; all 32 live trades
+reproduced) then judged on OUR stack: **NO EDGE** (313 sessions real NBBO: −$10.4k, −$5/t; zero-spread
+−$3.9k → his kit's accounting flips the sign; WR 23–29% vs 28.6% bracket breakeven; confidence score
+carries NO signal). Don't import entries. Memory `nakamoto-backtest-kit-assessment.md`. (2) **Chart UX
+batch SHIPPED** (commit `c253463`): SPY↔QQQ switch re-arms autoscale + restores per-symbol view
+(wall-clock-anchored), → LIVE chip, HOD/LOD on LVL, session separators + premarket tint (custom
+primitive). Known quirk: 1D default window ≈200 bars (poll-vs-history race, pre-existing, ~3-line fix).
+(3) **FILL-LAG VERDICT** (`npm run fill-lag-probe`, memory `fill-lag-verdict.md`): latency is NOT the
+prize — proven edges lose only $67–475 to the cron band over 313 sessions; the 180s missed-cycle CLIFF
+is the real cost (reliability > speed); **the bleeders IMPROVE with lag** (power +$413, QQQ-Break
++$2.3k at 120s = adversely-selected entries — speed makes them WORSE). Live exits already fill at
+design (25 stops avg −50.0% exactly; $315/mo tail). (4) **PHASE B EXECUTION BUILT** (worker
+`stream-2026-06-10a`, inert until turned on): the Railway worker can now place orders for channels
+with `strategists.executor='stream'` (30_executor_cutover.sql APPLIED via MCP) behind a TWO-KEY env
+turn (`DRY_RUN=false` + `LIVE_TRADING=true`); full cron defense stack transcribed (fill-net booking
+04a, actual-qty 09c, sell-min+reconcile 09b, anti-ghost 09d) + stateful entry context + fast premium
+exits (~10s) + `worker_heartbeat`. Cron draft → **`2026-06-10a`** (executor gate: skip stream channels
+while heartbeat fresh; EXIT-ONLY failover when stale) — **⚠ PENDING PASTE-DEPLOY** (verified deployed
+09d == repo HEAD byte-identical pre-edit, so the paste is exactly the +26-line gate). Cutover runbook:
+`docs/streaming-worker.md` (B1 = flip `grind-v3` first). ALSO: consultant review in chat — roster
+17 armed is over-diversified; tier the risk (V3/ALT + manual twins up, power family cut at month-end);
+DB 173MB (export-then-prune plan); manual grind twin is +$1.9k/57 trades live (the operator's edge is
+real and measurable). Prior handoffs below.
+
+**LATE-NIGHT ADDENDUM (same session): B1 IS ARMED + new ops/analysis stack.** (1) Cron `2026-06-10a`
+deployed (v54) — now via **`npm run cron:diff` / `cron:deploy`** (scripts/cron-deploy.ts, Supabase
+Management API, `SUPABASE_ACCESS_TOKEN` in .env.local; revision-sentinel verify because the API serves
+transpiled ESZIP — paste workflow RETIRED). (2) **Railway worker LIVE-armed** (DRY_RUN=false +
+LIVE_TRADING=true set) with **grind-v3 executor='stream' at $150 risk** (knob fixed from $500) — the
+B1 validation channel; stale-bar order guard added (restarts can't act on old bars); heartbeat
+verified beating. Day-1 watch: STREAM light green on OPS·PRE-FLIGHT at the open, `stream:` events,
+fill-net booking, `stream_owned` cron skips; kill test after first clean round-trip. (3) **Desk UI
+batch shipped**: OPS·PRE-FLIGHT panel (stream/cron/exec/risk lights, desktop §03 + mobile sheet),
+position rows get peak/giveback context line (amber ≥50% gave), "attribution" relabel, chart 1D
+window fix. (4) **`npm run day-report [-- --date …]`** = deterministic daily forensics (tape shape/
+whipsaw flag, NAV-vs-attribution, per-trade entry→peak→exit + MFE/giveback/exit-reason, cluster/
+re-lean/latch flags) — replaces the LLM autopsy as numbers backbone; run SAME-WEEK (needs 7d quotes).
+06-10 verdict: −$3.1k day = $3,775 given back from peaks on 6 green→red trades on a 20-leg QQQ
+whipsaw; 11:12 P731 cluster = one bet ×5-6 channels (correlation, not direction, was the loss).
+(5) **Operator manual-exit study + `npm run scalp-twin-probe`**: his exits have REAL 15-min timing
+skill (+$1.5-2.6k saved vs holding 15m; 11/11 on breakout-manual) but cut $13k+ of 30-min tail; the
+CODIFIED policy (grind entries + fast target/time exits, 8 variants) bleeds −$18..−$23/t across ALL
+5 windows (~7k trades each) vs his +$33/t live → **the operator is UNCOMPILABLE at minute granularity
+— the manual book is a legitimate channel (selection + intra-minute timing), not helicopter
+parenting.** Next instrumentation: close-reason tag + participation logging (signals taken vs
+skipped) so his SELECTION can inform machine entry filters.
+
+## SESSION HANDOFF — 2026-06-09 — READ THIS FIRST
+Exit-management deep-dive on the live roster (operator-driven). Investigated conservative take-profits →
+exit schemes → the underlying stop → the QQQ trail → the power family. **Net: two LIVE changes shipped, plus
+five new research probes.** Full writeup: memory `tier2-conservative-targets-verdict.md`. Prior handoffs below.
+
+**LIVE CHANGES SHIPPED THIS SESSION:**
+1. **Underlying stop ZEROED on the 3 ride channels** (`strategist_config.underlying_stop_pct` 0.20 → 0 on
+   `breakout-smart-entries`, `breakout-alt-v3`, `orb-trend-rider` — config-only, applied via SQL, no deploy).
+   The `npm run ustop-sweep` finding: the 0.20% underlying stop was HURTING these momentum/ride channels
+   (whipsaws them out in chop + caps the convex tail). ustop 0 is best — backtest: BREAK(ALT) +1242→+6701,
+   V3 +4815→+10016, ORB -8236→-2918. The −50% premium stop + cost gate + $500 daily-stop remain as backstops.
+   ⚠ CORRECTION to a mid-session claim: the COST GATE is the helpful control, NOT the underlying stop.
+   Rollback: `update strategist_config c set underlying_stop_pct=0.20 from strategists s where
+   c.strategist_id=s.id and s.slug in ('breakout-smart-entries','breakout-alt-v3','orb-trend-rider');`
+2. **Worker `2026-06-09a` DEPLOYED** (power gate-exemption removed: `COST_GATE_EXEMPT = new Set<string>()`).
+   `npm run power-roster` refuted the exemption — gating HALVES power(base)'s bleed (−$32.5k→−$15.3k) by
+   curbing its re-lean-every-bar over-trading (1373→619 entries) while the high-ATR convex tail still passes
+   the gate (only ~$1.1k clipped from one window). All channels now cost-gated. Power roster NOT consolidated
+   (operator kept all 3 power channels armed for the live A/B). NOTE: this paste also shipped the prior
+   pending 06-08a/b/c (1DTE same-day flatten + manual-exit twins/push).
+3. **P&L "Realized" over-report DIAGNOSED + manual close-position FIX (pushed → live).** The desk's
+   "TODAY'S TRADES · REALIZED" + per-channel rows OVER-report vs the account (06-09: desk +$7.6k vs account
+   NAV +$3.7k). Trust **Fund(today) = NAV-delta** (the headline already uses it); per-channel rows are
+   relative attribution. Cause = shared-OCC: 4-6 channels net into one Alpaca lot, desk books per-row.
+   Dominant leak was the **manual close-position API** booking `(fill−entry)×pos.qty` off a mark on the FULL
+   row qty (54 manual closes = +$3.4k phantom). FIXED (`app/api/close-position/route.ts`): book on the
+   actually-sold `sellQty`, $0 if the lot's already gone. Memory `pnl-realized-inflation-fix.md`.
+4. **SHARED-OCC EXIT TRAP + LEDGER ACCURACY — Worker `2026-06-09b` + `2026-06-09c` DEPLOYED.** The real bug
+   behind the stuck ORB 726P (+$700→−$700, couldn't exit): when channels share an OCC, Alpaca nets one lot;
+   a sibling (often a manual ✕-close) drains it, then a channel's exit sell is REJECTED (403 cash-secured
+   put) and the OLD code looped the rejected sell EVERY minute → rode to expiry trapped. **NOT the ustop
+   removal** (the stop fired; the sell was rejected). **09b:** sell only `min(held,row)`; if can't sell,
+   reconcile-close at fill-net (never loop). **09c (de-dup, after operator REJECTED strike-nudging [agility]
+   + 17 separate accounts [infeasible]):** keep same ATM strike / one account, make the per-channel ledger
+   accurate so each sells only its own share — (1) entry records ACTUAL filled qty (not intended) → kills
+   Σ(rows)>Alpaca-net drift; (2) per-OCC `remainingByOcc` counter for within-cycle sell coordination. Honest
+   limit: a sell still reduces the shared lot, so non-interference depends on ledger accuracy (1+2 + 09b floor);
+   truly-impossible needs separate OCCs/accounts (rejected). Manual twins KEPT (operator's manual edge is real).
+5. **GHOST-RESURRECTION fixes — manual close-position slug-tag (Vercel, live) + Worker `2026-06-09d` DEPLOYED.**
+   Two more shared-OCC manifestations: (a) a manual ✕-close showed a position "opening" instantly deep red at a
+   STALE entry, and (b) auto channels (orb 735P) booked $0 on a +90% mover. ROOT: a channel whose contracts
+   were sold by a SIBLING (rejected own exit, or a manual close tagged `manual-<occ>-` the worker couldn't see)
+   has a filled buy with NO matching sell → net stays long → the reconstruct/re-buy guard RESURRECTED a ghost
+   row at the stale entry every cycle. FIXES: (a) close-position API now tags its sell `<slug>-<occ>-` so the
+   worker nets it (no manual ghost, correct realizedToBook); (b) **09d** gates the reconstruct — only resurrect
+   if Alpaca holds UNCOVERED contracts (held − other channels' open rows, via cycle-start `openRowQtyByOcc`);
+   else don't ghost/re-buy (`liquidated_elsewhere`). Preserves the runaway-rebuy safety. **FULL SHARED-OCC
+   DEFENSE STACK now live: 09b (no exit loop) + 09c (ledger accuracy + within-cycle sell coord) + close-position
+   slug-tag + sellQty + 09d (no ghost).** Memory `pnl-realized-inflation-fix.md`. WATCH: no "recovered … lost
+   insert" lines following a close = working.
+6. **CROSS-DEVICE CONFIG SYNC (Vercel, pushed → live).** Bug: mute/solo/kill/knob on mobile didn't reflect on
+   desktop until a reload — the config is GLOBAL in the DB (writes always persisted) but `DeskProvider` hydrated
+   ONCE on mount with no listener, AND `06_realtime.sql` didn't publish the config tables. FIX: (a) `DeskProvider`
+   now subscribes to realtime on `strategist_config`/`strategists`/`fund_state` → debounced, idempotent
+   re-hydrate (re-reads DB truth, own-echo is a no-op); (b) `06_realtime.sql` adds those 3 tables to the
+   `supabase_realtime` publication — **already applied to the live DB** (no SQL to run). Covers the MASTER strip
+   too (KILL/START-STOP/paper-live sync live across devices). Graceful fallback: writes persist + reload picks
+   them up if realtime drops. One surface (`PositionsPanel`, `useDeskWrite`, `useDeskFeed`) is shared desktop+
+   mobile, so all of today's fixes are inherently on both — only the desk-config SYNC needed wiring.
+
+**KEY VERDICTS (don't re-litigate — all real-NBBO, 5 windows):**
+- **RIDE the convex-edge channels (BREAK ALT/V3); don't target/scale/trail them.** They're +EV live with the
+  cost gate; every take-profit/scale/breakeven/trail CAPS the tail (the edge is one big window, CHOP-MIX
+  25-26 +$8k). V3 ride is the desk's only clearly +EV config. The original conservative-take-profit agenda
+  (+30/40/50) = the mechanical mirage; +100/BE was the WORST scheme tested on every channel.
+- **The scale+BE+trail scheme (operator's) only helps the tail-less weak channels** (best on QQQ-Break-ORB,
+  ≈breakeven) — and ~85% of that is the managed EXIT-ENGINE, not the scale-out.
+- **QQQ-Break-ORB** runs the builtin bare ORB (base-slug); its dormant spec_json entry is WORSE (refuted).
+  The deployable lever is a tighter ARMABLE chandelier (k=1.0, not the builtin's 1.5): −5829→−1719 (~breakeven).
+  NOT shipped (needs a worker change to attach a trail to builtin channels, or a compiled rebuild) — parked.
+- **The power family is the desk's biggest bleeder** (base/final30/ALT all −EV, correlated final-hour leans).
+  Gate-exemption removed (above). Consolidation (mute base+ALT, keep Final30 = least-bad) offered but DEFERRED
+  to the live A/B. Builtins run VWAP-OFF live (the per-bar VWAP bug); ALT's vwap_side is degraded live too.
+
+**ENGINE CHANGES (additive, default-off — existing backtests byte-identical; golden test passes):**
+- `simulateSession(…, underlyingStopPct?, entryCostGate?)` + `stepManaged(…, underlyingStopPct)` — mirror the
+  worker's 0.20% underlying stop + COST_GATE_RATIO so probes can model live conditions.
+- Fixed a latent crash: the managed entry called `costGatePass(q!)` before the `if(q)` guard → an undefined
+  QQQ quote crashed once `management.costGate` was set.
+- NEW probes: `npm run tier2-probe | exit-scheme-probe [--live --daily-stop] | ustop-sweep | qqq-trail-ab |
+  power-roster` (outputs saved under `docs/*-2026-06-09.txt`).
+
+## SESSION HANDOFF — 2026-06-08
+LIVE A/B week underway: **13 channels armed+unmuted** (base grind disabled). Prior handoffs below.
+Two UI fixes shipped this session: cross-ticker position-mark freeze (`hooks/usePositionMarks.ts` —
+marks ALL open positions off their own ticker's quote+spot, chart-independent) and per-channel Equity
+P&L now uses the SAME live marks as Open Positions (`channelPnl(positions, liveMarks)`); plus the
+composer group/add-channel button contrast+size fix.
+
+**LIVE A/B — Day 1 (Mon 06-08): NAV +$792.** BUT the day **peaked +$2,560 at 15:26** and gave back
+~$1,770 into the close — the GIVEBACK, not the close, is the lesson. POWERHOUR(base) channel-of-day
++$893 (the 15:01 741P final-hour put lean peaked +$1,189, banked +$694); QQQ trio all rode the SAME
+720C up-break (+$657 combined); BREAK(base) +$384; **BREAK(ALT)/V3 took ZERO trades** (selective —
+V3 STILL has no live data point); GRIND(ALT) −$780 + ORB(base) −$492 (the known weak/high-tail hands).
+
+**EXIT-REFINEMENT MODELING AGENDA — the "what could have been" (MODEL next session, NO live changes yet):**
+1. **Breakeven-once-in-profit stop — MODELED → DON'T WIRE (resolved this session).** The thesis (stop→entry
+   once up ~+30% saves the green→red round-trips WITHOUT capping the tail; hypothetical +$792→+$2,000) does
+   NOT survive systematic backtesting. BUILT (kept as tools): backtest `--breakeven <pct>` (+`--breakeven-lock`,
+   layers onto ANY strat like `--trail`), threaded through montecarlo, + `npm run breakeven-probe`
+   (engine/breakeven-probe.ts). Why it was never isolated before: power-probe only ever engaged breakeven at
+   **+100%** (tail protection) — never the LOW threshold the thesis needs. 5-window real-NBBO sweep (be30):
+   **power HURTS in 4/5 windows** (CHOP-MIX −$4,018), **power-final30 a wash** (2 help / 2 hurt), **breakout a
+   NO-OP** (its own exits get out first; the live "ORB 741P" round-trip is a trail-config ORB, not built-in
+   breakout). MC smoking gun: in TREND it **CAPS the upside** (AprMay26 p95 +$858→+$372) — **refutes "tail
+   intact"** (winner retraces to entry → breakeven exit → trend resumes without you); in CHOP it helps
+   (Mar26 p50 −$3,284→−$2,586, lower DD) but never flips to profit (100% P(lose)). A **chop-only tool with no
+   ex-ante regime signal** — same fate as the trail + the morning regime gate. Verdict: keep ride-to-close +
+   −50% prem stop as the robust default; don't add breakeven to the worker. Full writeup: memory
+   `breakeven-stop-verdict.md`.
+2. **Late-leans gate — MODELED → DON'T WIRE (resolved this session).** Thesis: power over-trades the
+   whipsawy final 20 min (after the 15:26 peak it kept opening wrong-way leans 739P/739C/740C →
+   −$216/−$82/−$80/−$40); cap late re-entries (one-and-done). BUILT (kept as tools): backtest
+   `--late-cutoff <min>` + `--late-max <n>` (final-min entry cap, layers onto any strat), threaded through
+   montecarlo, + `npm run late-gate-probe` (reports **exp$/trade**, the mechanical-vs-real tell). 5-window
+   real-NBBO verdict: the benefit is a **MECHANICAL MIRAGE** — the one-and-done shows big P&L "gains" in the
+   loss-heavy windows (MayAug25 power f60·1 +$13k) but **per-trade expectancy is FLAT-to-WORSE** (MayAug25
+   −$54.0→−$54.1/t unchanged = 100% from cutting average trades; 2024 f60·1 −$29→−$76/t = KEPT the worst
+   leans) and it **HURTS the one +EV window** (Mar26 −$3,438). It's just "fewer trades on a structurally −EV
+   book," not a real edge that targets bad leans. ALSO the WRONG instrument: 06-08 over-trading was partly
+   **CROSS-channel** (POWERHOUR base + ALT each leaning the same minutes — 739C/739P were DIFFERENT channels),
+   which a per-channel cap can't fix → a ROSTER issue (de-dup the power channels), not an entry gate; and the
+   live cost gate already suppresses marginal late entries. Validate-live, not backtest. Full writeup: memory
+   `late-leans-gate-verdict.md`.
+3. **1DTE flatten BUG — FIXED (worker `2026-06-08a`, repo; ⚠ PENDING PASTE-DEPLOY):** the late-day 1DTE
+   (opened past the 15:45 ET / 12:45 PST cutoff) is meant to swing the high-volume last 20 min and
+   **CLOSE SAME-DAY** — it was NOT closing. ROOT CAUSE (corrected — the prior note misdiagnosed it):
+   `minutesToClose` IS session-based (`16*60 − etMin`), so the `eod_flatten` intent DID fire at the bell;
+   a GUARD one step later nulled it for EVERY row whose contract expires after today
+   (`String(row.expiration) > todayET → intent = null`). That guard meant to protect "genuine overnight
+   swings," but NONE exist — every 1DTE here is a cutoff roll meant to close same-day → they all carried
+   overnight. (2 stuck overnight Mon: PowerFinal30 739P + POWERHOUR 739C, both 06-09.) **FIX:** only exempt
+   a position OPENED IN A PRIOR SESSION (`etParts(opened_at).date !== todayET`); a 1DTE opened THIS session
+   now force-flattens at this session's bell. Applied to `index.dispatcher.draft.ts` (banner `2026-06-08a`,
+   **user pastes into Supabase**) + mirrored in the Railway streaming shadow `worker/src/decide.ts` (parity,
+   auto-deploys on push). NOTE: forward-looking only — the 2 already-stuck 06-09 positions become 0DTE Tue
+   and flatten at Tue's CLOSE normally; closing them at the Tue OPEN is a manual call.
+- **DON'T cap the big riders:** the giveback on POWERHOUR 741P (+$1,189→+$694) and the QQQ trio
+  (~+$1,240→+$657) is the convex-tail PREMIUM — the MC verdict (don't profit-target/trail) stands. Only the
+  Bucket-A round-trips are the avoidable target.
+
+**FILL-QUALITY + RAPID-SCALP INVESTIGATION (resolved — "are we over-modeling / over-taxing scalping?"):**
+Operator asked whether BS/MC engrained a long-range lens that misses the rapid in/out take-profit nature of
+0DTE. 3 real-NBBO probes say no — there's no hidden scalp edge. **#1** `npm run fill-probe` (cost.ts
+`spreadCrossFrac` + backtest `--fill-cross`, MC-threaded): real 0DTE spread is TIGHT (~$7/trade round-trip —
+the "cost-doomed by spread" narrative came from MODELED 3% spreads); entries are **~zero-edge GROSS** (grind
+−$0.4/t coin flip) → fills aren't the wall, entry edge is. **#2** `npm run mfe-probe`: the intra-trade pop is
+real (~40% of leans pop +15%, lifts win% 15→39%) but a take-profit never flips a coin-flip entry +EV. **#3**
+`npm run scalp-edge-probe`: on **BREAK(ALT)** (the one real edge) the edge IS the convex tail — +100% bracket
++$2,271 in Mar26, tightening caps it (+15% → −$56); pooled "looks" better tight only via the mechanical
+loss-reduction on losing windows (same mirage as breakeven/late-gate). Verdict: rapid take-profit is the WRONG
+SHAPE — edges are convex, not scalp; ride with a fixed bracket. **OPEN DOOR (premium-selling) — RESOLVED**
+(`npm run theta-probe`): the untested non-directional angle. The vol-risk-premium is **REAL** (naked short ATM
+0DTE straddle nets +$5..+$84/day across regimes — the market overprices the implied move) BUT the tradeable
+defined-risk **iron fly is BREAKEVEN**: you must close the ATM body daily (SPY physical settle → assignment) and
+that ATM 0DTE spread eats the theta (fly·REAL ≈ +$1/day; MC 291 days Sharpe 0.16, P(lose) 42.5%). The "+EV
+held-to-expiry" was an artifact of free body settlement. ROOT (unifies the whole investigation): **the 0DTE
+bid/ask spread on the legs you're forced to trade is the binding cost** — directional AND premium-selling alike.
+One revisit lever: limit-order execution on the liquid ATM body close (needs limit + multi-leg infra + tick
+data). Don't build as-is. Full writeup: memory `fill-and-scalp-verdict.md`.
+
+**NEXT-SESSION AGENDA — CONSERVATIVE take-profits on the Tier 2 channels (operator thesis 06-09):**
+The live "Tier 2" channels run ASPIRATIONAL premium targets — `orb-trend-rider` +75%, `breakout-qqq`
++90%, `power-smart-entries`/`breakout-smart-entries`[BREAK(ALT)]/`breakout-alt-v3` +100%. Operator's
+point (correct, and data-backed): a **+30–50% move is the realistic "big winner," +75–100% is a unicorn**
+— so those targets RARELY fire. The session's `npm run mfe-probe` MFE-survival curve confirms it: only
+**~11% of lean trades ever pop +100%, ~21% reach +50%, ~30% reach +30%** → a +100% target fires ~1-in-9,
+so for the other 8 it NEVER triggers and the channel **effectively rides to close** = gives back every
+sub-target gain (Tier-2 ≈ Tier-1 in practice). AGENDA: sweep **conservative targets (+30/+40/+50)** on
+each Tier 2 channel; report **hit% + per-window EV + per-trade expectancy** (the mechanical-vs-real tell).
+Build on the existing tools — `npm run scalp-edge-probe` already sweeps +100/75/50/30/15 on BREAK(ALT)/V3,
+`npm run mfe-probe` gives the hit% (= MFE survival). **KEY TENSION to resolve, likely a PER-CHANNEL SPLIT:**
+scalp-edge-probe showed the genuine breakout EDGE *is* the convex tail (BREAK(ALT) Mar26 +100% = +$2,271,
+tightening to +15% = −$56 — the tight target CAPS what pays), so **ride the real-edge channels
+(BREAK(ALT)/V3); bank the weaker Tier 2 with no real tail** (ORB-base, QQQ-Break-ORB, POWERHOUR-ALT). The
+earlier intermediate-target (+30/+50) numbers were single-window + noisy → needs the multi-window sweep +
+hit-rate before trusting. Don't apply a blanket conservative target. See `fill-and-scalp-verdict.md`.
+
+## SESSION HANDOFF — 2026-06-07
+LIVE + pushed (`main == origin/main`, clean). This session: (1) mobile chart/P&L UI fixes,
+(2) a Supabase storage audit, (3) a **bootstrap Monte Carlo toolchain** + a real-fills roster
+study → ONE actionable channel (**BREAK(ALT V3)**, drafted, READY-TO-ARM) and a hard lesson:
+**the backtest cannot rank the marginal power/grind channels — validate them LIVE.**
+
+**SHIPPED (Vercel auto-deploys; commits on `main`):**
+- **Mobile chart** (`cd440b1`): LINE/CANDLES moved to the bottom row beside the indicator chips;
+  duration (top) over candle-interval (bottom), right-justified; **interval active = red** (`--red`
+  — fixed a latent source-order CSS bug so it's distinct from blue duration, desktop too); SPY/QQQ
+  top-aligns with the duration row; **mobile vitals LEFT LED = FUND $ (NAV)** not SPY price,
+  green/red by day direction (SPY price still on the chart's embedded LED).
+- **P&L·Equity hover** (`c631cb6`): Week/Month/All hover Δ now shows **that day's P&L** (segment Δ
+  vs prior point) + a **date label**, not the cumulative-since-window-start it showed before (which
+  made Fri read the whole week). Today keeps running-since-open. `LineChart` gained `segmentDelta`;
+  `useWindowedPnl` returns `curveLabels`.
+
+**NEW RESEARCH TOOLCHAIN (`25f14b2` `107c127` `c00a330` `924e1ca`):**
+- **`npm run montecarlo -- --strat <slug>`** (`engine/montecarlo.ts`) — bootstrap Monte Carlo over a
+  channel's REAL-fill daily P&L. Block bootstrap default (B=5 sessions, preserves regime clustering;
+  `--mode iid` to contrast), 10k paths. Prints terminal-P&L dist (p5/p50/p95), P(period<0), max-DD
+  dist, P(daily-stop breach), a percentile cone. Flags: `--from/--to --days --underlying --spec --n
+  --block --horizon --stop --capital --seed --json --in`. Sources trades by shelling to the backtest
+  with new **`--emit-trades <path>`** (backtest stays the single trade generator; MC never re-sims).
+  `--in <log>` reuses an emitted log.
+- **`npm run mc-roster`** (`scripts/mc-roster.ts`) — auto-discovers the armed+unmuted roster from the
+  DB, routes built-in (`--strat`) vs compiled (`--spec`, by the worker base-slug rule), auto-detects
+  real-vs-modeled fills per ticker (Databento cache present?), MCs each over a FIXED window, prints a
+  ranked SPY/QQQ table. Reproducible weekly re-run.
+- **backtest `--from/--to`** — pin a FIXED ET-date window (reproducible; `--days` anchors to
+  `Date.now()` and drifts the boundary session between runs).
+- **Databento `--underlying`** (`c00a330`) — `backfill-databento.ts` + `databentosource.ts`
+  parameterized per ticker (was SPY-hardcoded: osi root, underlying_bars filter, OCC prefix, dir).
+  `npm run backfill:databento -- --underlying QQQ` → `data/databento-qqq/`. Real QQQ NBBO now
+  available (was modeled-only).
+
+**MC FINDINGS (real Databento NBBO):**
+- **BREAK(ALT) (`breakout-smart-entries`) = the desk's ONE robust edge** — only clearly +EV channel
+  (p50 +$1,842, P(lose) 33%, Sharpe 0.83). Ablation: **`rel_vol≥1.3` is load-bearing** (drop it →
+  −$47/trade; bare OR-break is a coin flip +$1/trade); **`efficiency_ratio≥0.45` kept as DRAWDOWN
+  control** (dropping it raises median but blows p95 DD −$7.3k→−$10.8k); **`vwap_side` is REDUNDANT**
+  (removing it is byte-identical → the live-worker VWAP bug doesn't hurt this channel); fixed
+  +100%/−50% bracket > base's trailing stop.
+- **BREAK(ALT V3) DRAFTED + READY-TO-ARM (`509e007`, `27_breakout_alt_v3.sql`)** = BREAK(ALT) minus
+  the `momentum_atr` gate (MC: pure over-filtering → Pareto-better: p50 +$4,151, P(lose) 20%, p95 DD
+  −$6,949, Sharpe 1.54). The SQL clones BREAK(ALT)'s settings (RISK $500 / STOP $500 / underlying-stop)
+  for a fair live A/B, armed+unmuted, compiled-spec channel (no worker change). **⚠ NOT YET RUN — the
+  USER runs the SQL to arm it.** `docs/channels/breakout-alt-v3.md`.
+- **THE POWER/GRIND FAMILY IS UNRANKABLE ON BACKTEST** (the session's hardest lesson). Across 3 regime
+  windows the best→worst ordering COMPLETELY SCRAMBLES, all mostly negative (p50):
+  - CHOP Mar26:        power **+$1,998** · final30 −$3,284 · grind-v3 −$2,049 · grind-smart −$3,159
+  - TREND AprMay26:    power −$830 · final30 −$1,389 · grind-v3 −$3,856 · grind-smart −$1,401
+  - TREND-OOS MayAug25: power −$5,808 · final30 −$5,202 · grind-v3 **−$4,625** · grind-smart −$6,380
+  Last session's ordering (final30≈base, v3>smart) reproduces in MayAug25; THIS session's
+  (base>final30, smart>v3) in Mar-Jun. BOTH real, NEITHER stable → **backtest can't settle these;
+  validate LIVE** (vindicates the existing arm-and-observe design). DON'T swap power/grind on backtest
+  evidence. (An "arm base power" idea was floated and RETRACTED — its apparent edge was March-chop luck.)
+- Roster (Mar-Jun 2026, real fills): BREAK(ALT) only clear +EV; **QQQ-ORB-trail mildly +** (p50 +$662,
+  Sharpe 0.44, real QQQ fills); **base BREAK dominated by ALT** (retire candidate); **ORB(base)/
+  orb-trend-rider** near-zero edge but WORST tail DD (−$11.5k p95) → de-risk; power-final30 / grind-v3
+  / QQQ-Break-ORB weakest (P(lose) 92-100%, **but UNGATED**).
+
+**EXIT-MGMT + MORNING REGIME GATE (later this session):**
+- **New backtest flags:** `--trail <k>` layers an underlying ATR-chandelier (peak−k·ATR, fires
+  only on a "hold" bar once in profit) onto ANY strat without forking it; `--trail-until <min>`
+  gates it to `minutesToClose > min` — a CLOCK-PHASED exit (protect early, ride the final stretch).
+  montecarlo threads both + now uses a **pid-suffixed temp file** (same-strat exit-variant sweeps
+  no longer collide on `seve-mc-<strat>.json` — that bug silently returned a prior variant's emit).
+- **Power exit is REGIME-DEPENDENT — DON'T wire a fixed trail:** ride-to-close vs ATR-chandelier —
+  trail WINS in chop (Mar26 p50 +$1,998→+$2,485), ride WINS in every trend window. The clock-phased
+  exit (trail k=2.5 until the final 20 min, then ride the MOC surge — power-hour volume RAMPS
+  3.4k→4.8k→13.8k/min across the 3 phases) is the BEST chop exit (p50 +$2,543, P(lose) 17%, Sharpe
+  2.54) but ties the plain trail in trend. **Ride-to-close stays the robust regime-agnostic default**;
+  the phased trail is a chop-ONLY tool with no way to know it's a chop day ex-ante — UNTIL the gate ↓.
+- **MORNING REGIME GATE — the breakthrough (OOS-VALIDATED, NOT YET WIRED):** the desk's perennial
+  "regime-aware allocation" lever, finally with a signal that holds out-of-sample.
+  - **efficiency-ratio FAILS** as a regime classifier — intraday SPY is choppy nearly EVERY day
+    (full-day 1-min ER 0.04–0.07 across all buckets → no intraday-trend variation to detect;
+    corr(morning-ER, day-ER)=0.28). The signal everyone reaches for is the wrong one.
+  - **What WORKS: morning NET DRIFT (|open→10:30 move|, spot-normalized) + VWAP PERSISTENCE (frac of
+    the first hour price holds one side of cumulative VWAP)**, both knowable by ~10:30. High-drift
+    mornings flip breakout +EV (+$27, 31% win vs −$60/−$102); high-persistence → power-ride +$39 /
+    breakout +$7. corr modest (0.19–0.24) but the BUCKETS flip strategies positive.
+  - **The GATE = skip the chop mornings** (combined drift+persistence percentile score < 0.5 → no-go,
+    don't trade that session). **OUT-OF-SAMPLE (fit threshold on one window, apply blind to the other,
+    BOTH directions):** 2025→2026 breakout −$1,229→**+$1,841**, power +$763→**+$2,687** (flips to
+    PROFIT); 2026→2025 breakout −$5,460→−$2,125, power −$5,768→−$2,304 (HALVES the loss). In-sample MC:
+    halves drawdowns, P(lose) ~90%→~50%, both to ~breakeven. **The FIRST regime lever that survives
+    OOS** (ER never did). go-days beat no-go in all 4 cases.
+  - **HARDENED → TEMPERED (4-window leave-one-out, 2024-trend / 2025-trend / chop / 2026-mixed):** the
+    2-window result OVER-SOLD it. Gated beats ungated in ALL 4 OOS windows (aggregate breakout
+    −$15,436→−$3,959, power −$13,693→−$2,560) and go-days beat no-go in **7 of 8** holds (direction is
+    right). BUT it only flips to actual PROFIT in the 2026 window; elsewhere it just LOSES LESS — and
+    much of that is MECHANICAL (gate trades ~half the days, channels are −EV, so fewer days = less
+    loss). Genuine predictive edge is strong only in 2026 + 24-trend-power; weak in 25-trend/chop;
+    INVERTED for power in the chop window. Verdict: **a real but MODEST, conservative risk-reducer that
+    does NOT overcome a structurally bad regime — NOT a profit lever. DON'T wire it live.** The live
+    cost gate already does some "trade less on bad setups" work. Park unless a refined signal/threshold
+    (per-channel tuning, better features) lifts the edge meaningfully. The hardening (C) did its job —
+    stopped a premature wire.
+- **Data:** added SPY Databento **May-Aug 2025** (the OOS trend window) to `data/databento` (~116MB).
+
+**METHODOLOGY CAVEATS (don't re-litigate):** backtest is **UNGATED** (the live cost gate softens
+grind/power toward breakeven — the −$5-6k is worst-case, NOT live P&L); **monthly efficiency-ratio
+≠ intraday 0DTE regime** (these strategies care about per-session character, not multi-week drift —
+the "trend windows" picked by monthly ER were the wrong axis); **spot-level cost confound** (2025 SPY
+~$600 is relatively more cost-walled than 2026 ~$720); each MC result is ONE window; the bootstrap
+quantifies WITHIN-window sequence risk and is BLIND to regime shift.
+
+**SUPABASE STORAGE AUDIT:** DB **145 MB / 500 MB** (user truncated `option_bars` → freed ~50MB; it was
+a leftover research backfill that policy says to truncate). Drivers: `underlying_bars` 63MB (NO
+retention, 2024→now — FEEDS `--source real` backtests, so don't prune carelessly), `option_quotes`
+60MB (7d-bounded). `idx_bars_symbol_ts` (14MB) is **redundant** with the unique `(symbol,ts)` key →
+optional `drop index` reclaims ~14MB. **Only cap risk = research backfills (option_bars) — truncate
+after use.** **Supabase MCP is now on the SEVE account** (was `matt@multifresh.com`) → can query
+catalog/sizes directly. Local `data/databento*` (gitignored, ~860MB, re-fetchable ~$0.20/window,
+`DATABENTO_API_KEY` present): SPY Mar-Jun 2026 + May-Aug 2025; QQQ Mar-Jun 2026; bulk `databento-mdte/`
+= the 1DTE+ cache (kept for future multi-leg/reversal work).
+
+**OPEN / TODO (next session):**
+- **MORNING REGIME GATE — HARDENED (4 windows) → DO NOT WIRE.** The 4-window leave-one-out tempered the
+  2-window result: real but MODEST (reduces loss in all 4 OOS holds, but only flips to PROFIT in 2026;
+  elsewhere much of the gain is the mechanical "trade fewer −EV days"). NOT a profit lever — don't wire
+  to the worker. Only revisit if a refined signal/threshold (per-channel tuning, better features than
+  drift+persistence) lifts the edge. Backfilled SPY databento 2024-05/08 + 2025-11/2026-02 for this.
+- **BREAK(ALT V3) is ARMED** (user ran `27_breakout_alt_v3.sql`) — watch the live A/B vs BREAK(ALT);
+  if V3 leads across a trending stretch too, retire base BREAK.
+- **13-channel head-to-head:** worker is channel-INDEPENDENT (per-channel `client_order_id`, no
+  account-wide guard → two channels hold the same OCC, realized P&L attributed per channel), so an
+  unmute-everything live A/B is clean. Leave base `grind` DISABLED (Sharpe −46, structurally cost-doomed).
+  Read it as per-channel realized daily P&L (Desk → Week).
+- **power/grind:** let the live A/B decide — backtest can't rank them. Don't swap on backtest.
+- **grind-v3 RISK = $500** (should be ~$150 small-validation) — still unresolved from the prior handoff.
+- Optional: `drop index idx_bars_symbol_ts` (~14MB).
+- **Mobile** improvements were shelved mid-session (chart quick-fixes done; the rest deferred).
+
+## SESSION HANDOFF — 2026-06-06
+Everything below is LIVE + git is clean (main == origin/main). Next task = **mobile chart
+quick-fixes** (user is doing them). Prior handoffs kept below for history.
+
+**DEPLOY STATE (all deployed + verified):**
+- **Worker `2026-06-05c`** (paper-trader, pasted): adds (a) config-gated **UNDERLYING INITIAL
+  STOP** — new `strategist_config.underlying_stop_pct` (0=off); exits when the underlying
+  moves X% against the reconstructed `entryUnderlying`, fires before the premium stop; **0.20%
+  LIVE on `orb-trend-rider`/`breakout-qqq`/`qqq-thrust-trail`/`breakout-smart-entries`**, and a
+  tighter **0.15% SHADOW** logged to events as `stream-shadow: US0.15…` (not traded — the A/B);
+  (b) **`grind-v3`** (disciplined scalper: er-gate + 14:00 afternoon curfew + grind's fast
+  fixed-target exit, NO trail); (c) **`power-final30`** (final-30-min momentum lean, no VWAP gate).
+- **SQL run:** `24_underlying_stop.sql`, `25_grind_v3_channel.sql` (grind-v3 ARMED — ⚠️ its RISK
+  landed at **$500**, not the intended $150 — dashboard knobs reset it), `26_power_final30_channel.sql`
+  (power-final30 ARMED + base **`power` MUTED**).
+- **Edge fns:** daily-autopsy **`2026-06-06a`** (Sonnet **claude-sonnet-4-6**), weekly-autopsy
+  **`2026-06-05d`** (Opus **claude-opus-4-8** via `ANTHROPIC_MODEL_WEEKLY`). compile-strategy route
+  also bumped to 4-6 (Vercel auto). **`claude-sonnet-4-5` is now LEGACY** (current = 4-6).
+- **Live roster (armed+unmuted):** breakout · breakout-qqq · orb-spy-trail · orb-qqq-trail ·
+  orb-trend-rider · qqq-thrust-trail · breakout-smart-entries · grind-v3 · power-final30.
+  **MUTED:** power, power-smart-entries, grind, grind-smart-entries. **DELETED:** fade.
+
+**KEY FINDINGS (this session — full detail in memory/):**
+- **Autopsy was Frankensteining SPY+QQQ** (unfiltered `underlying_bars` read = SPY's open + QQQ's
+  close → fake "SPY −6.2%") and NAV-truth was truncated at PostgREST's 1000-row cap. BOTH FIXED
+  (per-symbol market split + `.range()` pagination). Weekly now reports SPY+QQQ regimes + `maxDrawdown`.
+- **Real account week (06-01..05): NAV +$6,303, maxDD −$2,823 (−2.6%), peak capital ~$5,044.**
+  Cash-to-run ≈ $8–10k mechanical floor (sizes by fixed RISK-$, not % of account).
+- **MAE study → the 0.20% underlying stop**: it preserved every ≥5min winner (max winner dip 0.137%)
+  while cutting ~⅓ of losers; the −50% premium stop fires at a VARIABLE 0.2–0.5% underlying move by
+  option price. grind/power are gross-positive but cost-walled UNGATED; the live cost gate is what
+  makes them ~breakeven.
+- **⚠️ FADE-VWAP BUG (worker, latent — deliberately NOT fixed):** the worker reads
+  `underlying_bars.vwap` (a PER-BAR vwap ≈ close) AS the session VWAP. fade needs a
+  `close − vwap > 1.5·ATR` stretch → unreachable → fade never fired once in its life. It also
+  silently degrades `power`'s `close>vwap` gate (→ noise) and any compiled `vwap_side`/`vwap_dev`
+  channel. Left as-is because the disabled gate is a *feature* for power this week (counter-VWAP late
+  leans win). fade DELETED (fade-v2 pure-VWAP-reversion also no edge). **If you fix it:** compute
+  cumulative session VWAP in the worker's `buildMarket` (mirror `engine/realsource.ts` ~L147) and
+  re-validate power (it loses its accidental edge).
+
+**MOBILE REWORK (the session's big UI thread — all on Vercel):**
+- Seam = shared data/logic (hooks) + native shells. NEW `hooks/useChannelOrdering.ts` (reorder/
+  group-by, used by both surfaces). Chart cross-symbol spike fixed (`IntradayChart` forming-bar
+  resets on symbol toggle + 2% bad-tick guard).
+- **Mix tab REDESIGNED** (`components/mobile/MobileApp.tsx` + `MixerPads.tsx` + `ChannelStrip`
+  `compact`/`onExpand` props + `app/mobile.css`): **4 compact cards/page, swipe to next 4**; TAP a
+  card → full strip with big knobs in a sheet; a **master mixer** = small sortable colored pads
+  (tap=jump to that channel's page, hold=drag-reorder); **+Add Channel is the last grid card**.
+  Compact card: dot+title LEFT / P&L+ticker RIGHT, non-interactive indicator knob, green→red
+  risk/stop meters, black $ amounts. P2 touch polish (coarse-pointer knobs less twitchy, bigger
+  targets, chart interval selector now on mobile, fiddly EMA inputs hidden on phone). Dead carousel
+  CSS swept. **Target device = iPhone 17 Pro = 402×874 px** (NOT 390).
+
+**CHART-NEXT (the next session's task):** mobile chart quick-fixes. Chart = `components/IntradayChart.tsx`
+(shared desktop+mobile via the `mobile` prop); mobile chart CSS lives in `app/mobile.css`
+(`.m-app .chart-controls` + the P2 block). On mobile the chart is the Live tab's base panel
+(CHART/CHAIN/POSITIONS additive toggles in `MobileApp`). The chart is `lightweight-charts` (see the
+charting memory). **Pull `main` first.**
+
+**OPEN / TODO (next session):**
+- **grind-v3 RISK = $500** (should be ~$150 small-validation) — decide + set.
+- **Lone add-page**: 12 channels = a multiple of 4, so +Add sits alone on page 4 (clean 120px card,
+  empty below). Optional: suppress that page when the last channel page is full.
+- **Validate Monday→Friday in the Opus weekly**: underlying_stop fills + `stream-shadow: US0.15`
+  deltas, grind-v3 vs muted base grind, power-final30 vs muted base power → keep/retune; consider
+  widening the underlying stop to more channels.
+
+## SESSION HANDOFF — 2026-06-03 (Day 3 close)
+Three deploy targets now: **Vercel** (auto on push), **Supabase edge fns** (PASTE-deploy
+— I hand the user the file), **Railway** (the streaming worker, auto on push).
+
+**LIVE + VERIFIED (Day 3):**
+- **Real-time data:** Alpaca **Algo Trader Plus** is ON. `market-ingest` flipped to
+  SIP+OPRA via env-driven secrets `STOCK_FEED=sip` / `OPT_FEED=opra` → the ~15-min
+  options delay is GONE. `/api/spot` LED on SIP (env `STOCK_FEED`). (data-vendors memory.)
+- **Cron `paper-trader` = LIVE paper-trading (`DRY_RUN=false`), version `2026-06-04a`
+  (deployed 2026-06-03 eve)** — the SOLE live trader. RTH-only session bars (SIP streams
+  pre-market bars that polluted warmup/ORB/VWAP). **P&L NOW BOOKS FROM MATCHED FILLS**
+  (`realizedToBook`): 06-03b's book-at-fill alone STILL over-reported ~4× (06-03 broker
+  proved it: desk +$2,114 vs account +$492) because shared-OCC mirror channels (power +
+  power-smart) net the lot and the reconcile/reconstruct churn re-rows one round-trip many
+  times, each re-booking the gain (P00755000: 17 rows/$1,169 vs broker $210). 04a books
+  realized = the channel's fill-net (slug-prefixed `client_order_id`) − already-booked for
+  that (channel,OCC) today → churn rows book $0, Σ desk realized == account. **VERIFY Day 4:
+  `sum(realized_pnl)` over the session ≈ Alpaca `equity − last_equity`.** Confirm the
+  deployed banner == `2026-06-04a`.
+- **Streaming worker (3rd engine driver) DEPLOYED on Railway, Phase A SHADOW** — imports
+  `engine/*` directly, holds SIP/OPRA + state in memory, decides each bar-close, places
+  NO orders, lockstep with the cron. Also runs the **shadow MANAGEMENT what-if**
+  (`worker/src/shadowManage.ts`). 1 replica only. (docs/streaming-worker.md.)
+- **Manual close:** `app/api/close-position` (auth-gated, service-role, books real fill)
+  + the ✕→✓ confirm button in Open Positions (desktop+mobile). Needs Vercel env
+  `SUPABASE_SERVICE_ROLE_KEY` (SET). Verified in prod.
+- **Console restyle:** 2×8 cream tape; cream channel strips / §03 log / §01 data tables;
+  no screws/subtitle; chart + LED vitals + master stay dark; SPY chart has the LVL overlay.
+
+**KEY FINDING (Day 3):** winners give back because exits watch the underlying/clock, not
+the premium peak (STRATEGY, not wiring — verified). Per-channel exit management
+(`engine/management.ts` `MANAGEMENT_BY_SLUG`, NOT global — `.md`-thesis home later) is
+drafted but **DAY-DEPENDENT** (06-03 +$1071 / 06-02 −$636 via `npm run manage-ab`) →
+matches the 63-session backtest → **NOT wired to any live trader**; it runs as the
+streaming-worker shadow what-if to accumulate evidence. Power + grind-base stay
+UNMANAGED (managing caps power's tail / bleeds grind cost). New tools:
+`npm run exit-study | giveback-study | manage-ab`.
+
+**PENDING / TO-DO:**
+- Verify at the **06-04 open**: (1) cron's booked P&L reconciles to the account
+  (`equity − last_equity`), (2) cron no longer fires pre-warmup (RTH fix), (3) shadow⇄cron
+  lockstep, (4) first `MGMT` shadow events land — query `events` where `message like
+  'stream-shadow: MGMT%'` (meta has `{managed,actual,delta,slug}`).
+- Accumulate ~2–4 weeks of MGMT deltas → decide per channel whether to wire management
+  into the cron live (then move each block into its `.md` thesis).
+- **RESOLVED — TWO-DIAL KNOB MODEL (worker `2026-06-04b`):** the old capital%×aggression%
+  budget was inert ($100k×50%×50% ≫ a ~$700 position → qty always pinned to max =
+  `size_pinned`). Now the operator-facing knobs are **RISK $/trade + STOP $/day**:
+  `capital_pct` (legacy column name) holds **RISK $/trade**, sizing is risk-based
+  (qty = riskUsd ÷ 0.5×ask×100, capped by `max_contracts` = hidden ceiling); `aggression`
+  retired; `daily_stop_usd` (STOP) was already wired. Channel strips show **2 knobs** now.
+  **DEPLOY PREREQ: `update strategist_config set capital_pct=200, aggression=0;` BEFORE
+  pasting the worker** (else it reads the old 50 as $50 risk → 0 contracts). At RISK $200
+  channels size ~2–4 contracts (by premium) vs the old pinned 6.
+- **QQQ MULTI-INSTRUMENT ROLLOUT (worker `2026-06-04c`):** each channel trades its OWN
+  `strategists.underlying` (SPY default, QQQ live). 5-step plan — **steps 1–4 DONE:**
+  (1) `market-ingest` v3 writes SPY+QQQ tapes (env `UNDERLYINGS`, per-ticker isolated);
+  (2) per-channel `underlying` column + `.md` frontmatter `underlying:` + Add-Channel/
+  ChannelStrip ticker chip + 3-tier graceful load (`17_strategist_underlying.sql` RUN);
+  (3) worker parameterized — `occSymbol(sym,…)`, `.eq("symbol",sym)`, position `underlying:sym`,
+  bars/levels/expiry built once per distinct ticker (`buildMarket`→`marketByUnderlying`),
+  a channel with no session bars skips `no_market`. Cost gate / ATM-δ / $1-strike rounding
+  transfer as-is (QQQ is $1-strike, OPRA-fed, same OCC layout);
+  (4) **§01 SPY/QQQ chart toggle** — `useMarketData(symbol)` filters EVERY read by ticker
+  (`.eq("symbol",…)`/`.eq("underlying",…)`) + `/api/spot?symbol=` (allowlisted, per-sym cache)
+  + the chart/chain/spot-LED follow a `symbol` state lifted to `Surface` (amber `.sym-toggle`
+  in the IntradayChart header, desktop + mobile). **NOTE this also FIXED a step-1 regression:**
+  the unfiltered reads were interleaving SPY+QQQ bars; **RUN `18_daily_bars_by_symbol.sql`**
+  (recreates `underlying_bars_daily` grouped by symbol — the old view mixed both tickers into
+  one bogus daily candle). **PENDING:** step 5 = backfill QQQ `option_bars` for the backtest
+  gate. To point a channel at QQQ: `update strategists set underlying='QQQ' where slug='…';`
+  (the `.md` `underlying:` does it for new channels). Futures = shelved.
+- **QQQ CODE-CLONE DESK (worker `2026-06-04d`):** a parallel QQQ desk — `breakout-qqq /
+  fade-qqq / power-qqq / grind-qqq`, each running the SAME code strategy as its SPY twin
+  via a **base-slug resolver** in the worker (`REGISTRY[slug] ?? REGISTRY[slug.replace(
+  /-(qqq|spy)$/i,"")]`) on QQQ bars/chain (per `underlying`, 04c). So a multi-instrument
+  desk = just INSERTing rows, no per-channel code. `19_qqq_channels.sql` clones the 4 SPY
+  rows + configs onto QQQ as **DRAFT** (nothing trades until armed: `update strategists set
+  status='armed' where slug like '%-qqq'`). Exact slug wins; compiled `.md` channels are
+  unaffected (arbitrary slugs find no REGISTRY hit). **NOTE:** the SPY-tuned params won't
+  transfer 1:1 to QQQ (more volatile) and power/grind are unvalidated even on SPY → tomorrow's
+  live QQQ is OBSERVATION; the backtest tells us what to retune.
+- **QQQ BACKTEST READY (track 2 code DONE):** the engine + backfills are now ticker-parameterized
+  (default SPY, backward-compatible): `engine/realsource.ts` `.eq("symbol",sym)`,
+  `engine/optionsource.ts` filters `option_bars` by OCC prefix (no `underlying` col, but the
+  root IS the ticker), `engine/backtest.ts` takes `--underlying` (or infers from a `--strat`
+  suffix: `--strat breakout-qqq` → ORB on QQQ). `scripts/backfill-options.ts --underlying QQQ`
+  + `20_backfill_qqq_bars.sql` (generic `fire_bars(symbol,…)` + a `ingest_recent_bars` that
+  reads the ticker from each Alpaca response). **PENDING = the user's DATA runs:** (1) fire
+  `20_backfill_qqq_bars.sql` for QQQ stock history, (2) temp anon INSERT policy on option_bars
+  (no service-role key in .env.local), (3) `npm run backfill:options -- --underlying QQQ --tf 15
+  --from … --to …`, (4) `npm run backtest -- --strat <s>-qqq --source real --options real` per
+  channel. Then drop the temp policy + truncate option_bars (0.5 GB cap).
+- **QQQ BACKTEST VERDICT (06-04, DONE — real fills, H1-2026):** ran all 4 strategies on real
+  bars+`option_bars` for BOTH tickers (Jan–Jun, 106 sessions). **ALL 8 net-negative** → it's
+  **regime (chop) + cost, NOT a QQQ-transfer failure** (SPY equally red same window). Gross-signal
+  layer: **breakout's edge is QQQ-specific (+$1.8k gross), power's is SPY-specific (+$4.7k)**; fade
+  broken both; grind cost-doomed both (1000–1700% drag, 5% win). Backtest is UNGATED → live cost
+  gate makes real bleed milder. **Decision: keep `breakout-qqq` armed, MUTE fade/power/grind-qqq**
+  (`update strategists set status='draft' where slug in ('fade-qqq','power-qqq','grind-qqq')`);
+  power stays the SPY keeper. Docs: `docs/channels/breakout-qqq.md` (cost-disciplined ORB retune),
+  `docs/qqq/qqq-desk-tracking.md` (verdict table + tracking). Memory: `qqq-spy-h1-2026-real-fills.md`.
+- **ARMABLE TRAILING EXITS (worker `2026-06-04e`, 06-04):** uploaded `.md` channels can now declare a
+  LIVE trailing exit. The armable subset = an **underlying ATR-chandelier** (`management.trail` mode
+  `atr_chandelier`, baseK≈1.5: once in profit, exit when price retraces k·ATR from the peak favorable
+  underlying — STATELESS via reconstructed `peakFavorable`, the same trail breakout's code uses) +
+  premium stop/target + cost gate. Scale-outs / scale-in / vwap-target stay backtest-only
+  (`isArmableManagement` in `lib/desk/strategySpec`; capabilityCheck only blocks Arm for those). Engine
+  mirror: `simulateSession(…, trailExit)` + `specTrail`; worker mirror: `specTrailWorker` +
+  `compiled.trail`. **Real-fills proof:** on QQQ momentum the chandelier flips gross −$1,774 (fixed
+  +250%) → **+$3,946**, out-grossing the hardcoded breakout (+$1,811), DD −18% — BUT net still −$5.6k
+  (the trail fixes the EXIT, not the cost wall / chop regime). **premium-giveback trail = WRONG for
+  0DTE** (premium too noisy; not worker-wired — would need a `peak_premium` column). Reference upload:
+  `docs/channels/orb-qqq-trail.md`. The mixer-vision unlock: an uploaded spec now arms a real trail.
+- Phase B (later): de-hardcode the 4 code channels → `.md` theses; streaming worker
+  becomes the SOLE trader (disable the `seve-paper-trader` cron at cutover).
+
