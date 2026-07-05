@@ -20,7 +20,7 @@ import type { Bar, Evaluate, Features, OptType, Position } from "../../engine/ty
 import { decidePyramidAdd } from "../../engine/pyramid"; // shared add-gate (pyramid shadow Phase A → no engine drift)
 import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { policy } from "./config.js";
-import { inEventWindow } from "../../engine/market-events";
+import { inEventWindow, dayTags } from "../../engine/market-events";
 import { isLastSessionBeforeHoliday } from "../../engine/market-calendar";
 import { etParts, occSymbol, type AlpacaPosition, type AlpacaOrder } from "./alpaca.js";
 import { peakMidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
@@ -89,6 +89,10 @@ export interface DecisionCtx {
   openRows: Map<string, PositionRow>; // strategist_id → open desk row
   alpacaByOcc: Map<string, AlpacaPosition>; // occ → Alpaca position
   allOrders?: AlpacaOrder[]; // cycle-start order snapshot (live only) — the PYRAMID executor reconstructs the real lot stack from the slug-prefixed filled buys
+  // C1 STACK CAP input: DESK-WIDE open-position count by "UNDERLYING:direction" (rows, not
+  // contracts; spans ALL accounts), built once per cycle from DB truth + incremented in-cycle
+  // on each executed entry. Optional so shadow/probe ctx builders stay valid; absent = no cap.
+  deskStack?: Map<string, number>;
 }
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
@@ -352,6 +356,14 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     // FAIL-CLOSED like the spec condition: no computable gap → a gated channel stands down
     // (self-heals next session). Blocked signals stamp 'gap_min' → gate-shadow scores them (A2).
     if (!blocked && ch.gap_min > 0 && (ctx.gap == null || Math.abs(ctx.gap) < ch.gap_min)) blocked = "gap_min";
+    // C1 STACK CAP (64_stack_cap.sql, pre-registered): block the (N+1)th same-underlying+direction
+    // entry DESK-WIDE. fund.stack_cap_n 0 = OFF (dark until the post-A6 arming; registered value 4).
+    // Entries-only, never forces exits. Blocked signals stamp 'stack_cap' → gate-shadow scores their
+    // would-haves automatically — the C1 kill criterion's own data feed.
+    if (!blocked && (ctx.fund?.stack_cap_n ?? 0) > 0
+        && (ctx.deskStack?.get(`${ch.underlying.toUpperCase()}:${dir}`) ?? 0) >= ctx.fund!.stack_cap_n) {
+      blocked = "stack_cap";
+    }
     // EVENT STAND-DOWN entry block (incl. twins — a machine entry into the FOMC
     // window is a machine decision either way). event_policy='ignore' opts out.
     if (!blocked && policy.EVENT_STANDDOWN && ch.event_policy !== "ignore"
@@ -429,7 +441,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       .filter(Boolean).join(",") || "clean";
     return {
       ...base, action: "enter", reason: intent.reason, direction: dir, occ, qty, blocked,
-      detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), gap: ctx.gap != null ? +ctx.gap.toFixed(3) : null, expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close),
+      detail: { ask: round2(ask), bid: round2(bid), delta: +delta.toFixed(3), roundTrip: +roundTrip.toFixed(2), expectedMove: +expectedMove.toFixed(2), atr: +f.atr.toFixed(2), er: +f.er.toFixed(2), relVol: +f.relVol.toFixed(2), gap: ctx.gap != null ? +ctx.gap.toFixed(3) : null, eventDay: dayTags(ctx.todayET).join(",") || null, expiry: entryExpiry ?? ctx.todayET, spotClose: round2(f.close),
         // forensics entry context (per-trade dataset, matches the historical backfill) — read-only, not gate inputs:
         vwap: +f.vwap.toFixed(3), vwapDist: +(f.close - f.vwap).toFixed(3), macd: fm?.macd ?? null, macdSignal: fm?.signal ?? null, macdHist: fm?.hist ?? null, mom: +f.mom.toFixed(3), orHi: f.openRangeHi != null ? +f.openRangeHi.toFixed(3) : null, orLo: f.openRangeLo != null ? +f.openRangeLo.toFixed(3) : null,
         // shadow awareness levers (log-only) — raw metrics + which tripped at the brief's thresholds:

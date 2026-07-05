@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-03a"; // gap_min config knob (62) DARK — per-channel overnight-gap entry gate for builtins, 0=off everywhere (byte-identical); arming on breakout(base) = the pre-registered A9 decision at the A6 read. Prior (07-02a): peak_at/trough_at timestamps (61) — time-to-MFE/MAE on every new-extreme ratchet write
+export const WORKER_VERSION = "stream-2026-07-05a"; // C1 stack-cap DARK (64: fund.stack_cap_n, 0=off; desk-wide underlying+direction entry guard, 'stack_cap' blocked reason) + eventDay LOG-ONLY stamps (CPI/NFP/OPEX/FOMC day-tags on entry rationale detail — never gates). Prior (07-03a): gap_min knob (62) dark
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

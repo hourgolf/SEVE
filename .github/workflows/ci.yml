@@ -1,0 +1,33 @@
+# CI — typecheck (root + worker) + the hermetic selftests (no env, no network, no data/).
+# The failure mode this guards: engine↔worker parity drift in hand-transcribed logic, and
+# type breakage from a session editing one side of a shared seam. DB-backed selftests
+# (gap-min, pb, macd-align, trend-align) need .env.local/data — deliberately NOT run here.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix worker
+      - name: typecheck root
+        run: npx tsc --noEmit
+      - name: typecheck worker
+        run: npm run typecheck --prefix worker
+      - name: golden (manage state machine)
+        run: npm run golden
+      - name: market-calendar selftest
+        run: npm run market-calendar-selftest
+      - name: anyOf selftest
+        run: npm run anyof-selftest
+      - name: candle selftest
+        run: npm run candle-selftest

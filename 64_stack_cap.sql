@@ -1,0 +1,13 @@
+-- 64: C1 STACK CAP knob — fund-level max open desk-wide positions per underlying+direction.
+-- Pre-registered as C1 in docs/pre-registered-tests-2026-07.md (evidence: retro depth replay,
+-- depth ≥5 entries −$43.4k/99t — clone-era confound noted; era-4 shows the INVERSE (+$119/t
+-- at 5+, n=13), which is why the kill criterion exists and why this ships DARK).
+--
+-- Semantics (worker stream-2026-07-05a, decide.ts entry guard):
+--   0  = OFF (default — byte-identical for the whole desk)
+--   N>0 = a NEW entry blocks with 'stack_cap' when N same-underlying+direction positions
+--         are already open desk-wide (rows, all accounts). Entries only; never forces exits.
+--         Blocked signals feed gate-shadow → the C1 kill criterion scores itself.
+--
+-- ARMING (post-A6 only, operator's sequencing): update fund_state set stack_cap_n = 4;
+alter table fund_state add column if not exists stack_cap_n int not null default 0;

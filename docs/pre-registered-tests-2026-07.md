@@ -190,6 +190,22 @@ fat-near-miss channels via A6b). Requires multi-TRANCHE exit support in the work
 exits currently close the row — touches the shared-OCC ledger; sized as a real build).
 peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
 
+## Instrumentation log (log-only additions — never gates; A7-style rules apply)
+- **2026-07-05 (holiday weekend, worker `stream-2026-07-05a`):** (i) **eventDay day-tags** — CPI/NFP/
+  OPEX/FOMC labels stamp `entry_features.eventDay` (engine/market-events `dayTags`; CPI/NFP dates
+  BLS-verified, OPEX computed 3rd-Friday). LOG-ONLY: enables the catalyst-vs-newsless-gap forensics
+  split; no stand-down semantics added or changed. (ii) **iv-bank** — nightly dealer-positioning
+  snapshot from the desk's own feed (OI × gamma GEX proxy + ATM IV, SPY/QQQ/IWM → data/iv-bank/,
+  capture-forward tier 2). Starts the IV-rank clock; this is the named "new FEATURE" the
+  conviction-sizing closure requires before that thread may reopen — reopening still requires its
+  own pre-registered item at ≥2 months of accrual. (iii) **C1 mechanism DARK-BUILT** (64_stack_cap.sql,
+  `fund_state.stack_cap_n`=0 desk-wide): arming remains sequenced post-A6, now a config flip.
+  (iv) **A8 fleet expanded cross-index** (63_vb_cross_index.sql): the 10 vb-* specs cloned to QQQ +
+  IWM (drafts, signal-only). Same A8 rules per variant; clocks start at first session 2026-07-06;
+  inert-kill applies per clone. (v) **weekly rituals scheduled** — mfe-drift + override-scorecard now
+  run Fridays inside capture-forward (were memory-dependent); nightly evening-digest push + off-site
+  archive backup (data-archive branch) added to the same chain.
+
 ## Calibration-change log (era boundaries for the A6/month-end reads)
 - **2026-07-02 (pre-open):** (A) QQQ V3 clones (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
   RISK 900→500, mc 18→6, daily stop 2000→1000 — the A1 lab-sizing standard applied (they predated

@@ -80,6 +80,10 @@ export interface FundState {
   master_daily_stop_usd: number;
   mode: string;
   is_halted: boolean;
+  // C1 STACK CAP (64_stack_cap.sql, pre-registered): max OPEN desk-wide positions on one
+  // underlying+direction before a NEW entry blocks ('stack_cap'). 0 = OFF (dark — arming
+  // is the post-A6 decision; the pre-registered value is 4 = block the 5th).
+  stack_cap_n: number;
 }
 // One Alpaca paper account = one hypothesis-bucket (cockpit P3). cred_ref maps to
 // config.altAccounts (null/empty = the default ALPACA_KEY/SECRET). is_armed is the
@@ -166,6 +170,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
         master_daily_stop_usd: Number((fundRow as any).master_daily_stop_usd),
         mode: String((fundRow as any).mode ?? "paper"),
         is_halted: !!(fundRow as any).is_halted,
+        stack_cap_n: Math.max(0, Math.floor(Number((fundRow as any).stack_cap_n ?? 0))),
       }
     : null;
   const accounts: AccountRow[] = ((acctRows ?? []) as any[]).map((a) => ({

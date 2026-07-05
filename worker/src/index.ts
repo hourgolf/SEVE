@@ -222,6 +222,15 @@ async function cycle(trigger: string): Promise<void> {
     const live = liveMode();
     const byId = new Map(cfg.channels.map((c) => [c.id, c]));
     const openRowsArr = await store.getOpenPositions(); // spans accounts; scoped per group below
+    // C1 STACK CAP input: desk-wide open ROW count by "UNDERLYING:direction" (OCC root = the
+    // chars before the 15-char date+type+strike tail). Rebuilt each cycle from DB truth;
+    // incremented below on each executed entry so two same-cycle entries can't both slip
+    // under the cap. Inert while fund.stack_cap_n = 0 (the dark default).
+    const deskStack = new Map<string, number>();
+    for (const r of openRowsArr) {
+      const k = `${r.occ_symbol.slice(0, r.occ_symbol.length - 15).toUpperCase()}:${r.opt_type}`;
+      deskStack.set(k, (deskStack.get(k) ?? 0) + 1);
+    }
     if (live) await store.heartbeat(`${WORKER_VERSION} cycle`);
     // Refresh every chain ONCE up front (shared, account-independent) so the per-account
     // passes + the diagnostics pass all read the same fresh NTM snapshot.
@@ -284,6 +293,7 @@ async function cycle(trigger: string): Promise<void> {
           ...computeLevels(bars.all(), todayET),
           openRows, alpacaByOcc,
           allOrders, // empty unless acctLive — the PYRAMID executor reconstructs the lot stack from it
+          deskStack, // C1 stack-cap input (desk-wide, cycle-scoped)
         };
         const symDecisions: ShadowDecision[] = [];
         for (const ch of symChannels) {
@@ -317,7 +327,17 @@ async function cycle(trigger: string): Promise<void> {
               if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
               else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec);
               else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
-              else if (d.action === "enter" && barFresh) await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+              else if (d.action === "enter" && barFresh) {
+                await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+                // C1 within-cycle increment: count this entry toward the desk-wide stack so a
+                // later same-cycle channel sees it. Conservative over-count if the order 0-filled
+                // (rebuilt from DB truth next cycle); only LIVE executed entries count — shadow
+                // buckets place no orders and never increment.
+                if (d.occ && !d.blocked) {
+                  const k = `${ch.underlying.toUpperCase()}:${d.occ.slice(-9, -8) === "C" ? "call" : "put"}`;
+                  deskStack.set(k, (deskStack.get(k) ?? 0) + 1);
+                }
+              }
               else if (d.action === "hold" && row) {
                 const alp = alpacaByOcc.get(row.occ_symbol);
                 if (alp) {

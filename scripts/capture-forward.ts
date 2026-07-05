@@ -95,8 +95,24 @@ async function main() {
   // WEEKLY READOUT (approved 2026-07-02): Fridays only — the week's aggregate interrogation
   // of the banked data (rollup + near-miss + vb-fleet-vs-prior + gate counters). Analysis
   // only; scheduling it here is the whole point (the re-mine cadence was a memory note).
+  // iv-bank (2026-07-05): the dealer-positioning clock — daily OI/IV/GEX surface snapshot
+  // (session-gated internally; the IV-rank series only exists if this runs every day).
+  run("iv-bank", ["iv-bank"], 2);
   const [ey, em, ed] = etDate(now).split("-").map(Number);
-  if (new Date(Date.UTC(ey, em - 1, ed)).getUTCDay() === 5) run("weekly-readout", ["weekly-readout"], 2);
+  const isFriday = new Date(Date.UTC(ey, em - 1, ed)).getUTCDay() === 5;
+  if (isFriday) {
+    run("weekly-readout", ["weekly-readout"], 2);
+    // Weekly rituals promoted from memory-dependent to scheduled (2026-07-05): drift
+    // detection + the operator-override scorecard. Both read-only.
+    run("mfe-drift", ["mfe-drift"], 2);
+    run("override-scorecard", ["override-scorecard"], 2);
+  }
+  // evening digest (2026-07-05): the ten-line ops push — per-bucket day P&L, era-4/A6
+  // progress, heartbeat + capture health. Deterministic, informational only.
+  run("evening-digest", ["evening-digest"], 2);
+  // OFF-SITE BACKUP — LAST, so tonight's exports/ledgers/iv-bank all ride this push.
+  // The quotes tape is the one artifact a dead Mac cannot re-create.
+  run("backup-archives", ["backup-archives"], 2);
 
   // ── summary ──
   console.log(`\n══ summary · ${stamp()} ══`);
