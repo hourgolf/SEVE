@@ -260,7 +260,9 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // Premium profit/stop for compiled specs (needs the option mark).
   if (pos && row && built.premiumExit && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
     const { profitPct, stopPct } = built.premiumExit;
-    if (profitPct != null && mark >= entryPx * (1 + profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
+    // RUNNER rows (row.runner_of, R1) skip take-profit intents — they ride; the fast sweep's
+    // ratchet is their harvest exit. Stops below still protect them (mirror of exitRules).
+    if (profitPct != null && !row.runner_of && mark >= entryPx * (1 + profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
     else if (premStopPct > 0 && stopPct != null && mark <= entryPx * (1 - stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
   }
   // Per-channel TAKE-PROFIT (compound policy, ChannelConfig.take_profit_pct): exit at +pct%
@@ -268,7 +270,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // For channels with NO convex tail (PB: ridden −EV, compound +EV — compound-vs-ride-probe)
   // this beats riding. Applies to ANY channel incl. BUILTINS (built.premiumExit only covers
   // compiled specs). Mirrors the engine premiumExit.profitPct (mid-based) → parity by construction.
-  if (pos && row && ch.take_profit_pct > 0 && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0
+  if (pos && row && !row.runner_of && ch.take_profit_pct > 0 && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0
       && mark >= entryPx * (1 + ch.take_profit_pct / 100)) {
     intent = { kind: "exit", reason: "target_premium" };
   }

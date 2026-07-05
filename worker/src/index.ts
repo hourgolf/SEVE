@@ -325,7 +325,7 @@ async function cycle(trigger: string): Promise<void> {
             const row = openRows.get(ch.id);
             try {
               if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
-              else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec);
+              else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct });
               else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
               else if (d.action === "enter" && barFresh) {
                 await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
@@ -500,8 +500,8 @@ async function fastExitSweep(): Promise<void> {
         info(`halt-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — kill switch (${haltFlatten ? "fund" : g.account.name})`);
         try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "halt_flatten" }, r, exec); }
         catch (e) { warn(`halt-flatten ${ch.slug} failed — ${(e as Error).message}`); }
-        peakMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
-        troughMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
+        peakMidByKey.delete(r.id);
+        troughMidByKey.delete(r.id);
         continue;
       }
       // ---- EOD HARD-FLATTEN backstop (wall-clock; 2026-06-19 Juneteenth strand fix) ----
@@ -522,13 +522,18 @@ async function fastExitSweep(): Promise<void> {
         info(`eod-hard-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — ${openedET === todayET ? "same-session" : "expires today"}, wall-clock mtc ${wallMtc} (pre-bell backstop, bars-independent)`);
         try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
         catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
-        peakMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
-        troughMidByKey.delete(entryKey(r.strategist_id, r.occ_symbol));
+        peakMidByKey.delete(r.id);
+        troughMidByKey.delete(r.id);
         continue;
       }
       const mid = chain?.byOcc(r.occ_symbol)?.mid ?? 0;
       if (!(mid > 0)) continue;
-      const key = entryKey(r.strategist_id, r.occ_symbol);
+      // KEY BY ROW ID (review hardening 2026-07-05): the old entryKey(strategist,occ) key was
+      // never cleared on bar-close-cycle/manual exits, so a same-day re-entry into the same
+      // strike inherited the PRIOR position's peak — pre-existing latent staleness that the
+      // runner ratchet would have turned into instant wrong exits. Row-id keys are per-position
+      // by construction and self-seed from the row's own persisted peak/trough on first sight.
+      const key = r.id;
       // seed from the persisted peak_mark so a worker restart doesn't lose the MFE high-water mark
       const prevPeak = peakMidByKey.get(key) ?? r.peak_mark ?? r.avg_entry_price;
       const peak = Math.max(prevPeak, mid);
@@ -563,10 +568,11 @@ async function fastExitSweep(): Promise<void> {
         isManual: /-manual$/i.test(ch.slug),
         minutesToClose: Math.max(0, rthClose - nowMin),
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)
+        isRunner: !!r.runner_of, runnerGivebackPct: ch.runner_giveback_pct, // R1 runner ratchet (0 = off)
       }, mid, peak);
       if (!reason) continue;
       info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (mid ${mid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)})`);
-      await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec);
+      await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct });
       peakMidByKey.delete(key);
       troughMidByKey.delete(key);
       }

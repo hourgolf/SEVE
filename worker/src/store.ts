@@ -74,6 +74,11 @@ export interface ChannelConfig {
   // Lets BUILTIN channels (breakout base) carry the validated V3/ALT gate without a spec rebuild.
   // DARK as of 2026-07-03 (all channels 0); arming on base = the pre-registered A9 decision at A6.
   gap_min: number;
+  // RUNNER (R1, 64_runner_tranche — DARK, both 0): at the take-profit, retain runner_frac of the
+  // position as a NEW runner row that rides a peak ratchet (exit when mark ≤ peak×(1−giveback/100)).
+  // 0 = all-out LOCK behavior, byte-identical. The A/B twins get configured at the A6 read.
+  runner_frac: number;
+  runner_giveback_pct: number;
 }
 export interface FundState {
   total_capital_usd: number;
@@ -102,6 +107,7 @@ export interface PositionRow {
   id: string;
   strategist_id: string;
   occ_symbol: string;
+  underlying: string;
   opt_type: "call" | "put";
   qty: number;
   avg_entry_price: number;
@@ -111,6 +117,7 @@ export interface PositionRow {
   status: string;
   peak_mark: number | null; // durable MFE source — the running MAX option mark over the hold (44_trade_forensics)
   trough_mark: number | null; // durable MAE twin — the running MIN option mark over the hold (58_trough_mark; stop-calibration instrumentation)
+  runner_of: string | null; // R1 (64_runner_tranche): parent row id when this row is a runner remainder — rides, never re-tranches
 }
 
 const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServiceKey, {
@@ -162,6 +169,8 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       stall_minutes: Math.max(0, Math.floor(Number(cfg.stall_minutes ?? 0))),
       stall_max_favor_pct: Math.max(0, Number(cfg.stall_max_favor_pct ?? 0)),
       gap_min: Math.max(0, Number(cfg.gap_min ?? 0)),
+      runner_frac: Math.min(0.9, Math.max(0, Number(cfg.runner_frac ?? 0))),
+      runner_giveback_pct: Math.max(0, Number(cfg.runner_giveback_pct ?? 0)),
     });
   }
   const fund: FundState | null = fundRow
@@ -231,8 +240,10 @@ export async function getOpenPositions(): Promise<PositionRow[]> {
     expiration: p.expiration ?? null,
     opened_at: p.opened_at ?? null,
     status: p.status,
+    underlying: String(p.underlying ?? ""),
     peak_mark: p.peak_mark != null ? Number(p.peak_mark) : null,
     trough_mark: p.trough_mark != null ? Number(p.trough_mark) : null,
+    runner_of: p.runner_of ?? null,
   }));
 }
 
@@ -359,6 +370,42 @@ export async function updatePositionStack(id: string, newQty: number, newAvgEntr
   const { error } = await sb.from("positions")
     .update({ qty: newQty, avg_entry_price: newAvgEntry, current_mark: newAvgEntry })
     .eq("id", id);
+  return error ? error.message : null;
+}
+
+/** RUNNER tranche close (R1): close the parent on the SOLD qty — the runner remainder
+ *  becomes its own row via insertRunnerRow. Status-guarded like closePositionRow (books
+ *  at most once); qty is rewritten to the sold share so the closed row's realized and
+ *  qty agree (the parent+runner pair sums to the original share exactly). */
+export async function trancheClosePositionRow(id: string, soldQty: number, mark: number, realized: number): Promise<boolean> {
+  const { data, error } = await sb.from("positions")
+    .update({ status: "closed", closed_at: new Date().toISOString(), qty: soldQty, current_mark: mark, realized_pnl: realized, close_reason: "target_tranche" })
+    .eq("id", id).eq("status", "open").select("id");
+  if (error) { warn(`store: tranche close failed — ${error.message}`); return false; }
+  return (data ?? []).length > 0;
+}
+
+/** RUNNER remainder row (R1): a NEW open row continuing the parent's contract — same
+ *  entry basis + opened_at (hold-clock/stall/EOD semantics preserved), carried peak/
+ *  trough marks (the ratchet anchors on the true MFE), runner_of = parent id. Returns
+ *  the insert error message (null = ok) so the caller journals LOUD on failure — an
+ *  uncovered remainder is the orphan-sweep's job to catch. */
+export async function insertRunnerRow(parent: PositionRow, remainQty: number, mark: number): Promise<string | null> {
+  const { error } = await sb.from("positions").insert({
+    strategist_id: parent.strategist_id, occ_symbol: parent.occ_symbol,
+    underlying: parent.underlying || parent.occ_symbol.slice(0, parent.occ_symbol.length - 15),
+    expiration: parent.expiration ?? new Date().toISOString().slice(0, 10),
+    strike: parent.strike, opt_type: parent.opt_type, qty: remainQty,
+    avg_entry_price: parent.avg_entry_price, current_mark: mark, unrealized_pnl: 0, status: "open",
+    opened_at: parent.opened_at ?? new Date().toISOString(),
+    // Peak floor = the tranche fill (review hardening): the parent's DB peak_mark can be a
+    // sweep stale (markPeak is fire-and-forget; the in-memory row never updates), and a runner
+    // whose peak ≤ entry NEVER arms its ratchet. The tranche filled at/near the TP level, so
+    // flooring on it guarantees the ratchet is armed above water from birth.
+    peak_mark: Math.max(parent.peak_mark ?? parent.avg_entry_price, mark), trough_mark: parent.trough_mark ?? parent.avg_entry_price,
+    peak_at: new Date().toISOString(), trough_at: new Date().toISOString(),
+    entry_reason: "runner_tranche", runner_of: parent.id,
+  });
   return error ? error.message : null;
 }
 

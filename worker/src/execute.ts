@@ -24,8 +24,14 @@ import { info } from "./log.js";
 import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
+import { trancheSplit } from "./exitRules.js";
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
+
+// RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
+// call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
+// is byte-identical to the pre-runner behavior.
+export interface RunnerCfg { frac: number; givebackPct: number }
 
 const WORKING_ORDER = new Set(["new", "accepted", "pending_new", "partially_filled", "held", "calculated", "accepted_for_bidding"]);
 
@@ -130,13 +136,17 @@ function orderTagTarget(slug: string, occ: string, allOrders: alpaca.AlpacaOrder
 // cross-session 1DTE round-trip) OR none → estimate from the live mark, so we never book a DIFFERENT
 // round-trip's price (which could even be the wrong P&L sign). (adversarial-review tweak #2/#3)
 function reconcileExitPx(occ: string, allOrders: alpaca.AlpacaOrder[], liveFallback: number): { px: number; estimated: boolean } {
-  const prices = [...new Set(allOrders.filter((o) => o.symbol === occ && o.side === "sell" && o.status === "filled" && o.filled_avg_price > 0).map((o) => o.filled_avg_price))];
+  // (review hardening 2026-07-05) EXCLUDE tranche sells (coid …-r<rowid8>-t[…]): they booked
+  // row-primary to the PARENT row already, and every runner row structurally has its parent's
+  // tranche as a prior same-OCC sell for ~2 days — without the exclusion, an expired/0-fill
+  // runner "reconciles" at the take-profit price (phantom profit, flagged as a real fill).
+  const prices = [...new Set(allOrders.filter((o) => o.symbol === occ && o.side === "sell" && o.status === "filled" && o.filled_avg_price > 0 && !/-r[0-9a-f-]{8}-t(-|$)/.test(o.client_order_id)).map((o) => o.filled_avg_price))];
   return prices.length === 1 ? { px: prices[0], estimated: false } : { px: liveFallback, estimated: true };
 }
 
 // ---- EXIT ---------------------------------------------------------------------
 export async function executeExit(
-  d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx,
+  d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx, runner?: RunnerCfg,
 ): Promise<void> {
   const occ = row.occ_symbol;
   const alp = ctx.alpacaByOcc.get(occ);
@@ -177,6 +187,22 @@ export async function executeExit(
     await store.journal("WARN", `${d.slug}: exit ${occ} — a prior sell is still working, not re-issuing`);
     return;
   }
+  // ---- RUNNER TRANCHE (R1, 64_runner_tranche — DARK until runner_frac > 0) ----
+  // At the take-profit, bank a tranche and let a remainder row ride the peak ratchet.
+  // SPLIT-ROW by design: the row-primary invariant ("each row books once, its full share,
+  // status-guarded") forbids in-place qty reduction — the parent CLOSES on the sold qty
+  // ('target_tranche') and the remainder becomes a NEW open row (runner_of = parent) with
+  // the same entry basis + opened_at (hold-clock/EOD semantics preserved) and carried
+  // peak/trough marks. Runner rows never re-tranche (!row.runner_of) and skip take-profit
+  // checks in exitRules (ride mode). Unsplittable → the normal all-out exit below.
+  // (review hardening 2026-07-05) sellQty === row.qty: tranche ONLY a whole, undrained share.
+  // A sibling-drained shared lot (held < row.qty) falls through to the proven all-out path —
+  // otherwise remainQty inherits a phantom share that over-covers the OCC, masks the 09d/orphan
+  // gates, and over-books on a later reconcile (confirmed finding, shared-occ lens).
+  if (d.reason === "target_premium" && runner && runner.frac > 0 && !row.runner_of && sellQty === row.qty) {
+    const split = trancheSplit(sellQty, runner.frac);
+    if (split) { await executeTranche(d, row, ctx, split, runner); return; }
+  }
   try {
     let exitPx = alp?.current_price ?? liveBid;
     const r = await placeFill(d.slug, occ, "sell", sellQty, `${d.slug}-${occ}-${ctx.etMin}-x`, d.reason, ctx);
@@ -205,6 +231,76 @@ export async function executeExit(
     const msg = (e as Error).message;
     if (/insufficient|cash.?secured|not enough|40310000/i.test(msg)) await reconcileClose(`sell rejected (${msg.slice(0, 50)})`, false); // Alpaca rejected → contracts provably gone, book now (no 2-cycle wait)
     else await store.journal("WARN", `${d.slug}: exit ${occ} rejected — ${msg}`);
+  }
+}
+
+// ---- RUNNER TRANCHE execution (R1) -----------------------------------------------
+// Bank `split.sell` contracts at the target, close the parent row on the sold qty, then
+// open the remainder as a runner row. WRITE ORDER is deliberate: parent-close FIRST
+// (books the tranche exactly once, status-guarded), runner-insert SECOND — if the insert
+// fails, the remainder contracts are UNCOVERED by rows, which is precisely the orphan
+// class the per-account orphan sweep detects + pages (and ORPHAN_FLATTEN can clear).
+// The inverse order (insert-first) could double-cover the OCC and re-tranche on the next
+// sweep — drift instead of a loud, self-healing failure.
+async function executeTranche(
+  d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx,
+  split: { sell: number; retain: number }, runner: RunnerCfg,
+): Promise<void> {
+  const occ = row.occ_symbol;
+  let exitPx = ctx.alpacaByOcc.get(occ)?.current_price ?? (ctx.chain.byOcc(occ)?.bid ?? 0);
+  // DETERMINISTIC per-row tranche coid (review hardening): a retry after an unsettled poll must
+  // never place a SECOND tranche sell — the first may have filled late (the paid-for $0-booking
+  // class). One coid per row + the recovery scan below make the tranche idempotent; Alpaca's
+  // duplicate-coid rejection backstops the race. Keeps the `${slug}-${occ}-` tag prefix.
+  const coid = `${d.slug}-${occ}-r${row.id.slice(0, 8)}-t`;
+  try {
+    // RECOVERY: a prior tranche sell for THIS row already FILLED (a non-terminal poll returned
+    // ×0 while the market order crossed) → book from ITS fill instead of selling again.
+    const prior = ctx.allOrders.find((o) => o.client_order_id === coid && o.status === "filled" && o.filled_qty > 0);
+    let soldQty: number, fillPx: number;
+    if (prior) {
+      soldQty = prior.filled_qty; fillPx = prior.filled_avg_price;
+      await store.journal("WARN", `${d.slug}: tranche ${occ} recovering a late-filled prior sell ×${soldQty} @ ${fillPx.toFixed(2)} — booking, not re-selling`);
+    } else {
+      const r = await placeFill(d.slug, occ, "sell", split.sell, coid, "target_tranche", ctx);
+      if (r.filledQty <= 0) {
+        // No positive fill evidence → nothing changed; the row stays whole and the next
+        // sweep retries (same book-only-on-evidence rule as the all-out exit path). If the
+        // sell actually filled late, the recovery scan above books it next sweep.
+        await store.journal("WARN", `${d.slug}: tranche ${occ} ${r.status || "unsettled"} ×0 — row stays whole to retry`);
+        return;
+      }
+      soldQty = r.filledQty; fillPx = r.fill;
+    }
+    if (fillPx > 0) exitPx = fillPx;
+    // remainder = the SELLABLE share minus what sold (== row.qty − soldQty here, since the
+    // gate requires sellQty === row.qty; spelled from the split so the invariant is explicit).
+    const remainQty = split.sell + split.retain - soldQty;
+    const realized = rowRealized(row, exitPx, soldQty);
+    const closed = await store.trancheClosePositionRow(row.id, soldQty, exitPx, realized);
+    if (!closed) { await store.journal("WARN", `${d.slug}: tranche ${occ} close raced — already closed elsewhere (sold ${soldQty})`); return; }
+    ctx.remainingByOcc.set(occ, Math.max(0, (ctx.remainingByOcc.get(occ) ?? soldQty) - soldQty)); // 09c fix 2
+    ctx.openRowQty.set(occ, Math.max(0, (ctx.openRowQty.get(occ) ?? row.qty) - soldQty)); // parent −qty, runner +remain
+    // entryStateByKey deliberately KEPT: keyed strategist|occ — the runner continues the same
+    // contract, so ustop/trail state stays valid for the remainder.
+    if (remainQty >= 1) {
+      const err = await store.insertRunnerRow(row, remainQty, exitPx);
+      if (err) {
+        await store.journal("WARN",
+          `${d.slug}: RUNNER ROW INSERT FAILED ${occ} ×${remainQty} — ${err}. Remainder is UNCOVERED by rows; the orphan sweep will page + reconcile.`);
+        return;
+      }
+      await store.journal("EXEC",
+        `${d.slug}: runner tranche ${occ} banked ×${soldQty} @ ${exitPx.toFixed(2)} → $${realized.toFixed(0)}; runner ×${remainQty} rides (ratchet ${runner.givebackPct}% off peak)`);
+      void store.writeShadowEvent(`RUNNER ${d.slug} ${occ} banked ×${soldQty} → $${realized.toFixed(0)}, riding ×${remainQty}`,
+        { kind: "runner-tranche", slug: d.slug, occ, soldQty, remainQty, exitPx: round2(exitPx), realized: round2(realized), givebackPct: runner.givebackPct });
+    } else {
+      await store.journal("EXEC", `${d.slug}: tranche ${occ} sold ×${soldQty} @ ${exitPx.toFixed(2)} → $${realized.toFixed(0)} (nothing left to ride)`);
+    }
+  } catch (e) {
+    // A rejected tranche sell (lot drained by a sibling) leaves the row whole; the next
+    // sweep's sellQty=min(held,row) math routes it to the normal reconcile machinery.
+    await store.journal("WARN", `${d.slug}: tranche ${occ} rejected — ${(e as Error).message}`);
   }
 }
 
@@ -373,56 +469,8 @@ export async function executeAdd(
   }
 }
 
-// ---- FAST EXIT SWEEP -------------------------------------------------------------
-// Between bar closes (every config.fastExitSec) check the PREMIUM-side exits on the
-// LIVE chain for stream-owned open rows: catastrophic stop, compiled stop/target,
-// power giveback. Underlying-side exits (ustop / chandelier / strategy exits) stay
-// on the bar-close cycle — they're defined on bars. This is the latency win the
-// minute cron structurally can't have: a stop fires within seconds of the quote
-// crossing, not at the next minute boundary.
-export interface FastExitCheck {
-  row: store.PositionRow;
-  slug: string;
-  premiumExit?: { profitPct?: number; stopPct?: number };
-  takeProfitPct?: number; // per-channel compound take-profit (ChannelConfig.take_profit_pct); 0 = off
-  premiumStopPct?: number | null; // per-channel premium STOP override (ChannelConfig.premium_stop_pct); null → policy default 50
-  isPowerTrail: boolean;
-  isManual: boolean;
-  minutesToClose: number;
-  stallMinutes?: number;     // strand-4 stall-exit: cut after this many minutes held if it never popped (0/undef = off)
-  stallMaxFavorPct?: number; // ...where "never popped" = PEAK mark < entry × (1 + this/100)
-}
-
-export function premiumExitReason(c: FastExitCheck, mark: number, peak: number): string | null {
-  const entry = c.row.avg_entry_price;
-  if (!(entry > 0) || !(mark > 0)) return null;
-  if (c.isManual) return c.minutesToClose <= policy.MANUAL_BACKSTOP_MIN ? "manual_eod_backstop" : null;
-  if (c.premiumExit?.profitPct != null && mark >= entry * (1 + c.premiumExit.profitPct / 100)) return "target_premium";
-  // Per-channel compound take-profit — fires in the ~10s sweep too (NOT only at bar close), so the
-  // +pct target gets the same sub-minute reaction as the −50% stop (the compound thesis is a pop-harvest;
-  // a bar-close-only target would systematically give back intra-bar). Mirrors decide.ts:take_profit_pct.
-  if (c.takeProfitPct != null && c.takeProfitPct > 0 && mark >= entry * (1 + c.takeProfitPct / 100)) return "target_premium";
-  // per-channel premium stop (config) takes precedence over the policy default → a tightened −30%
-  // stop fires in the ~10s sweep, not only at bar close (same sub-minute reaction as the take-profit
-  // above; mirrors decide.ts premStopPct). null → policy default (50). ⚠ 0 = the stop is OFF
-  // (47_premium_stop_pct: the channel runs its underlying stop instead) — it gates BOTH premium
-  // stops here, exactly like the bar-close path. Without the >0 guard, 0 read as a stop AT ENTRY
-  // (entry × (1 − 0) = entry → any downtick exited "premium_stop" — audit H1b).
-  const premStop = c.premiumStopPct ?? policy.PREMIUM_STOP_PCT;
-  if (premStop > 0 && c.premiumExit?.stopPct != null && mark <= entry * (1 - c.premiumExit.stopPct / 100)) return "stop_premium";
-  if (premStop > 0 && mark <= entry * (1 - premStop / 100)) return "premium_stop";
-  if (c.isPowerTrail && peak >= entry * policy.POWER_TRAIL_ENGAGE_MULT) {
-    const giveback = entry + (peak - entry) * (1 - policy.POWER_TRAIL_GIVEBACK_PCT / 100);
-    if (mark <= giveback) return "trail_giveback";
-  }
-  // STALL-EXIT (strand-4, desk-doctrine.md) — LOWEST priority (a real stop/target/trail above wins
-  // first): a NON-MOVER held ≥ stallMinutes whose PEAK never popped past stallMaxFavorPct above entry
-  // is dead money occupying the one-at-a-time slot → cut it so the re-entry loop re-bets. NOT a
-  // tail-capper (the "peak never popped" guard exempts a faded winner). Mirrors the engine
-  // simulateSession stallExit. Calibrated PATIENT; OFF on tail channels (V3/ALT/QQQ).
-  if (c.stallMinutes && c.stallMinutes > 0 && c.row.opened_at && peak < entry * (1 + (c.stallMaxFavorPct ?? 0) / 100)) {
-    const heldMin = (Date.now() - Date.parse(c.row.opened_at)) / 60000;
-    if (heldMin >= c.stallMinutes) return "stall_exit";
-  }
-  return null;
-}
+// ---- FAST EXIT SWEEP rules — moved to exitRules.ts (2026-07-05, runner build) ----
+// The pure decision rules (FastExitCheck + premiumExitReason + trancheSplit) live in
+// exitRules.ts so they unit-test without this module's Supabase client. Re-exported
+// here so every existing import keeps working unchanged.
+export { premiumExitReason, trancheSplit, type FastExitCheck } from "./exitRules.js";

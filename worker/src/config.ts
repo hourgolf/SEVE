@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-05a"; // C1 stack-cap DARK (64: fund.stack_cap_n, 0=off; desk-wide underlying+direction entry guard, 'stack_cap' blocked reason) + eventDay LOG-ONLY stamps (CPI/NFP/OPEX/FOMC day-tags on entry rationale detail — never gates). Prior (07-03a): gap_min knob (62) dark
+export const WORKER_VERSION = "stream-2026-07-05b"; // RUNNER tranche DARK (R1, 64_runner_tranche: runner_frac/runner_giveback_pct both 0=off) — split-row TP tranche + peak-ratchet remainder ('target_tranche'/'runner_ratchet'); exit rules extracted to exitRules.ts (hermetic selftest). Prior (05a): C1 stack-cap dark + eventDay stamps
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

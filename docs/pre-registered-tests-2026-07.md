@@ -181,6 +181,30 @@ Operator: not interested in multi-leg for now — drawdown appetite. The A5→B2
 A5's pass path is the ride-family SIZE-DOWN only. The multi-leg compiler stays unbuilt. (The
 vol-risk-premium finding stays on file if appetite changes; nothing else keeps this alive.)
 
+## R1 · Runner/scale-out A/B (pre-registered 2026-07-05 — mechanism DARK-BUILT, experiment configured at A6)
+The PINNED lever's execution plan, registered before any era-4 LOCK outcome is readable.
+- **Mechanism (worker `stream-2026-07-05b` + 64_runner_tranche.sql — DARK, both knobs 0):**
+  per-channel `runner_frac` (fraction retained at the take-profit) + `runner_giveback_pct`
+  (the remainder's peak ratchet: exit when mark ≤ peak×(1−pct/100)). SPLIT-ROW design: the
+  parent row closes on the banked qty (`target_tranche`), the remainder becomes a NEW row
+  (`runner_of` = parent, same entry basis + opened_at, carried peak/trough) that skips all
+  take-profit checks and exits via `runner_ratchet` / stop / stall / EOD. Preserves the
+  row-primary invariant (each row books once, full share, status-guarded); an insert-failure
+  remainder is deliberately the ORPHAN class (sweep pages it). Hermetic selftest in CI
+  (worker/src/runner-selftest.ts, 23 checks). **Adversarially reviewed pre-deploy** (14-agent
+  panel, 6 confirmed findings fixed, 1 refuted): tranche only on a whole undrained share
+  (sellQty===row.qty, drained lots → the proven all-out path); deterministic per-row tranche
+  coid + late-fill recovery (idempotent retry); reconcileExitPx excludes tranche sells (a
+  runner can never "reconcile" at its parent's TP price); runner peak floored at the tranche
+  fill (ratchet always armed); sweep peak/trough maps rekeyed by row id (kills a pre-existing
+  same-day-re-entry staleness the ratchet would have amplified).
+- **Experiment (configured at the A6 read, not before):** per PINNED — runner twin
+  (runner_frac 0.5 + a giveback chosen from the A6b near-miss data) vs the standard all-out
+  LOCK twin; SEPARATE accounts (lot isolation), A1 sizing, N≥40 each. Kill: runner twin's
+  expectancy < the all-out twin's at N≥40 → knobs back to 0, mechanism stays for a future
+  channel. Pass: runner ≥ all-out at N≥40 → propose promotion to the live channel.
+- **No channel may run runner_frac > 0 before the A6 read** (same era-4-purity rule as C1).
+
 ## PINNED · Runner/scale-out experiment (operator's word, 2026-07-02 — "a real lever")
 Operator-pinned as the lever straddling take-profit vs letting winners win: **TP half at the
 LOCK target + ratchet the remainder, vs the standard all-out LOCK twin** (separate accounts,

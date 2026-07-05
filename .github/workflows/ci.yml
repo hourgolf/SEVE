@@ -31,3 +31,5 @@ jobs:
         run: npm run anyof-selftest
       - name: candle selftest
         run: npm run candle-selftest
+      - name: runner exit-rules selftest
+        run: npm run runner-selftest
