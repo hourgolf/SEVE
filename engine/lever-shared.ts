@@ -43,7 +43,7 @@ export const V3 = [{ direction: "call" as const, reason: "u", all: leg("break_ab
 export const ALT = [{ direction: "call" as const, reason: "u", all: leg("break_above", "above", true) }, { direction: "put" as const, reason: "d", all: leg("break_below", "below", true) }];
 const reg = (slug: string) => (s: RealSession) => STRATEGY_REGISTRY[slug].build(s.bars as Bar[], 1);
 
-export type Sym = "SPY" | "QQQ";
+export type Sym = "SPY" | "QQQ" | "IWM";
 export type Ch = { name: string; sym: Sym; dte: 0 | 1; maxC: number; mk: (s: RealSession) => Evaluate; px: { profitPct?: number; stopPct?: number } };
 export const CH: Ch[] = [ // the directional book the entry levers apply to (each at its live exit)
   { name: "BREAK(ALT V3)", sym: "SPY", dte: 0, maxC: 6, mk: specEval(V3, "15:25"), px: { profitPct: 100, stopPct: 50 } },

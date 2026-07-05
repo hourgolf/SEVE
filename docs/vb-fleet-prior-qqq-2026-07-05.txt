@@ -1,0 +1,16 @@
+
+  VB-FLEET PRIOR · 70 QQQ sessions · faithful RISK/gate · tp/−30 LOCK · real NBBO
+                spec     n   exp/t     total  win      Mar26  AprMay    MA25     T24    CMix  +wins
+         vwap-revert   822    -9.2    -$7583   60      +21.8   -25.7       —       —       —    1/5
+          rsi-revert   112   -23.2    -$2598   58      -50.4   -26.5       —       —       —    0/5
+         level-break   419   -12.5    -$5225   51      -22.6   -18.1       —       —       —    0/5
+             or-fail    66   -39.8    -$2629   55       -0.2   -49.2       —       —       —    0/5
+          macd-state   381   -34.6   -$13168   47      -41.0   -42.3       —       —       —    0/5
+       curl-reversal   514   -13.4    -$6866   55      -42.7    -9.0       —       —       —    0/5
+       squeeze-break   377   -39.2   -$14777   45      -19.7   -69.3       —       —       —    0/5
+            pm-trend   470   -24.0   -$11264   47      -49.6   -11.0       —       —       —    0/5
+           gap-drift   201   -45.7    -$9192   45      -80.4   -19.9       —       —       —    0/5
+        ribbon-cross   148   -34.7    -$5137   47      -13.5   -49.8       —       —       —    0/5
+
+  PRIOR ONLY — modeled fills where NBBO thins; 10 specs = multiple comparisons; nothing armable from this (registry A8).
+

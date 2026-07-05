@@ -8,7 +8,10 @@
 //  accrues, so forward-vs-prior divergence is itself a finding. ⚠ Modeled options
 //  where the NBBO cache thins + 10 specs = a multiple-comparisons farm — nothing
 //  here is an edge claim or an arm basis (registry A8). Paper research only.
-//    npx tsx --env-file=.env.local engine/vb-fleet-probe.ts
+//    npx tsx --env-file=.env.local engine/vb-fleet-probe.ts [--underlying QQQ|IWM]
+//  CROSS-INDEX (2026-07-05, the 63_vb_cross_index clones): --underlying picks the
+//  NBBO cache. Coverage differs — SPY/IWM span the full 5 windows (~312d); QQQ has
+//  NO pre-2026 history (71d, ~2 windows — the known un-OOS-able caveat): label reads.
 // ============================================================================
 import { simulateSession } from "./backtest";
 import { specEval, prep, cfgOf, FUND, FILL_1T, GATE_LIVE, RATIO, WINDOWS, winOf, type Prepped } from "./lever-shared";
@@ -62,9 +65,17 @@ function run(D: Prepped, entries: Entries, tp: number): { date: string; ts: Trad
 const stat = (z: { ts: Trade[] }[]) => { const f = z.flatMap((x) => x.ts), n = f.length, tot = f.reduce((a, t) => a + t.pnl, 0); return { n, tot, exp: n ? tot / n : NaN, win: n ? (100 * f.filter((t) => t.pnl > 0).length) / n : NaN }; };
 const wexp = (z: { date: string; ts: Trade[] }[], w: string) => { const f = z.filter((x) => winOf(x.date) === w).flatMap((x) => x.ts); return f.length ? f.reduce((a, t) => a + t.pnl, 0) / f.length : NaN; };
 
+const UND = ((): "SPY" | "QQQ" | "IWM" => {
+  const i = process.argv.indexOf("--underlying");
+  const v = (i >= 0 ? process.argv[i + 1] : "SPY").toUpperCase();
+  if (v !== "SPY" && v !== "QQQ" && v !== "IWM") throw new Error(`unknown underlying ${v}`);
+  return v;
+})();
+const CACHE: Record<string, string> = { SPY: "data/databento-mdte", QQQ: "data/databento-mdte-qqq", IWM: "data/databento-mdte-iwm" };
+
 async function main() {
-  const D = await prep("SPY", "data/databento-mdte");
-  console.log(`\n  VB-FLEET PRIOR · ${D.real.length} SPY sessions · faithful RISK/gate · tp/−30 LOCK · real NBBO`);
+  const D = await prep(UND, CACHE[UND]);
+  console.log(`\n  VB-FLEET PRIOR · ${D.real.length} ${UND} sessions · faithful RISK/gate · tp/−30 LOCK · real NBBO`);
   console.log(`  ${p("spec", 18)}${p("n", 6)}${p("exp/t", 8)}${p("total", 10)}${p("win", 5)}   ${WINDOWS.map((w) => p(w.short, 8)).join("")}${p("+wins", 7)}`);
   for (const c of FLEET) {
     const z = run(D, c.entries, c.tp), s = stat(z);

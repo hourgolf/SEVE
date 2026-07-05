@@ -226,7 +226,11 @@ peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
   `fund_state.stack_cap_n`=0 desk-wide): arming remains sequenced post-A6, now a config flip.
   (iv) **A8 fleet expanded cross-index** (63_vb_cross_index.sql): the 10 vb-* specs cloned to QQQ +
   IWM (drafts, signal-only). Same A8 rules per variant; clocks start at first session 2026-07-06;
-  inert-kill applies per clone. (v) **weekly rituals scheduled** — mfe-drift + override-scorecard now
+  inert-kill applies per clone. **Priors BANKED pre-forward** (vb-fleet-probe --underlying, docs/
+  vb-fleet-prior-{qqq,iwm}-2026-07-05.txt): ALL 10 specs −EV pooled on BOTH indices (IWM 310
+  sessions full 5-window; QQQ 70 sessions 2026-only, un-OOS-able) — unlike SPY, no watch-cells
+  (SPY's or-fail-chop / ribbon-cross-trend cells do NOT reproduce cross-index). Forward-vs-prior
+  divergence is the only readable signal; macd-state is worst-or-near-worst on all three indices. (v) **weekly rituals scheduled** — mfe-drift + override-scorecard now
   run Fridays inside capture-forward (were memory-dependent); nightly evening-digest push + off-site
   archive backup (data-archive branch) added to the same chain.
 
