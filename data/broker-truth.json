@@ -1,0 +1,3567 @@
+{
+ "updated": "2026-07-05T20:17:09.064Z",
+ "count": 319,
+ "occs": {
+  "SPY260601C00757000": {
+   "realized": -392,
+   "avgSell": 0.8,
+   "closed": true,
+   "buyQty": 88,
+   "sellQty": 88,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260601P00757000": {
+   "realized": -47,
+   "avgSell": 0.75,
+   "closed": true,
+   "buyQty": 32,
+   "sellQty": 32,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260601P00756000": {
+   "realized": -64,
+   "avgSell": 0.73,
+   "closed": true,
+   "buyQty": 32,
+   "sellQty": 32,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260601C00758000": {
+   "realized": 376,
+   "avgSell": 0.74,
+   "closed": true,
+   "buyQty": 44,
+   "sellQty": 44,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260601P00758000": {
+   "realized": 88,
+   "avgSell": 0.74,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260601C00759000": {
+   "realized": 248,
+   "avgSell": 0.77,
+   "closed": true,
+   "buyQty": 32,
+   "sellQty": 32,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260601P00760000": {
+   "realized": 73,
+   "avgSell": 0.73,
+   "closed": true,
+   "buyQty": 52,
+   "sellQty": 52,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260601C00760000": {
+   "realized": -152,
+   "avgSell": 0.32,
+   "closed": true,
+   "buyQty": 64,
+   "sellQty": 64,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260601P00759000": {
+   "realized": -16,
+   "avgSell": 0.24,
+   "closed": true,
+   "buyQty": 10,
+   "sellQty": 10,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260602P00757000": {
+   "realized": 20,
+   "avgSell": 0.96,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260602C00758000": {
+   "realized": 136,
+   "avgSell": 1.28,
+   "closed": true,
+   "buyQty": 11,
+   "sellQty": 11,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260602P00759000": {
+   "realized": -236,
+   "avgSell": 0.43,
+   "closed": true,
+   "buyQty": 54,
+   "sellQty": 54,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260602C00760000": {
+   "realized": -35,
+   "avgSell": 0.44,
+   "closed": true,
+   "buyQty": 20,
+   "sellQty": 20,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260602C00759000": {
+   "realized": -242,
+   "avgSell": 0.45,
+   "closed": true,
+   "buyQty": 54,
+   "sellQty": 54,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603C00758000": {
+   "realized": 10,
+   "avgSell": 1.75,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603P00758000": {
+   "realized": 250,
+   "avgSell": 1.74,
+   "closed": true,
+   "buyQty": 10,
+   "sellQty": 10,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603P00757000": {
+   "realized": 361,
+   "avgSell": 1.78,
+   "closed": true,
+   "buyQty": 11,
+   "sellQty": 11,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603P00756000": {
+   "realized": -550,
+   "avgSell": 1.31,
+   "closed": true,
+   "buyQty": 67,
+   "sellQty": 67,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603C00757000": {
+   "realized": -66,
+   "avgSell": 1.26,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603C00756000": {
+   "realized": -186,
+   "avgSell": 0.89,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603C00755000": {
+   "realized": -144,
+   "avgSell": 1.01,
+   "closed": true,
+   "buyQty": 48,
+   "sellQty": 48,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603P00755000": {
+   "realized": 210,
+   "avgSell": 0.99,
+   "closed": true,
+   "buyQty": 48,
+   "sellQty": 48,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603P00754000": {
+   "realized": 162,
+   "avgSell": 1.12,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260603C00754000": {
+   "realized": 138,
+   "avgSell": 1.44,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604P00755000": {
+   "realized": 318,
+   "avgSell": 2.03,
+   "closed": true,
+   "buyQty": 18,
+   "sellQty": 18,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604C00754000": {
+   "realized": 432,
+   "avgSell": 1.49,
+   "closed": true,
+   "buyQty": 18,
+   "sellQty": 18,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604P00754000": {
+   "realized": -132,
+   "avgSell": 1.25,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604C00755000": {
+   "realized": 180,
+   "avgSell": 1.17,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604C00756000": {
+   "realized": 606,
+   "avgSell": 1.39,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604C00757000": {
+   "realized": 486,
+   "avgSell": 0.74,
+   "closed": true,
+   "buyQty": 54,
+   "sellQty": 54,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604P00756000": {
+   "realized": -60,
+   "avgSell": 0.57,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604P00757000": {
+   "realized": -103,
+   "avgSell": 0.67,
+   "closed": true,
+   "buyQty": 18,
+   "sellQty": 18,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604C00758000": {
+   "realized": -236,
+   "avgSell": 0.35,
+   "closed": true,
+   "buyQty": 60,
+   "sellQty": 60,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260604P00758000": {
+   "realized": -132,
+   "avgSell": 0.5,
+   "closed": true,
+   "buyQty": 18,
+   "sellQty": 18,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00758000": {
+   "realized": 1422,
+   "avgSell": 6.52,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00750000": {
+   "realized": 45,
+   "avgSell": 1.79,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605C00750000": {
+   "realized": -305,
+   "avgSell": 1.13,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260605P00724000": {
+   "realized": -402,
+   "avgSell": 1.28,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00749000": {
+   "realized": -1180,
+   "avgSell": 1.16,
+   "closed": true,
+   "buyQty": 15,
+   "sellQty": 15,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260605P00723000": {
+   "realized": 864,
+   "avgSell": 3.22,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605C00749000": {
+   "realized": -96,
+   "avgSell": 0.98,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00748000": {
+   "realized": 1997,
+   "avgSell": 2.18,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00747000": {
+   "realized": 498,
+   "avgSell": 1.85,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00746000": {
+   "realized": 391,
+   "avgSell": 1.82,
+   "closed": true,
+   "buyQty": 21,
+   "sellQty": 21,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605C00746000": {
+   "realized": -318,
+   "avgSell": 0.84,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260605P00718000": {
+   "realized": -136,
+   "avgSell": 1.55,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00744000": {
+   "realized": 522,
+   "avgSell": 1.81,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605C00744000": {
+   "realized": -158,
+   "avgSell": 1.38,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260605P00716000": {
+   "realized": 112,
+   "avgSell": 2.48,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00741000": {
+   "realized": 2952,
+   "avgSell": 3.75,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260605P00712000": {
+   "realized": 792,
+   "avgSell": 3.91,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605C00739000": {
+   "realized": -804,
+   "avgSell": 0.73,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00738000": {
+   "realized": -132,
+   "avgSell": 1.35,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605P00737000": {
+   "realized": -420,
+   "avgSell": 0.5,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260605C00738000": {
+   "realized": -396,
+   "avgSell": 0.67,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260608C00738000": {
+   "realized": 281,
+   "avgSell": 5.25,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260608C00744000": {
+   "realized": -100,
+   "avgSell": 1.48,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260608C00720000": {
+   "realized": 657,
+   "avgSell": 3.23,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260608P00743000": {
+   "realized": -112,
+   "avgSell": 1.67,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260608P00742000": {
+   "realized": -414,
+   "avgSell": 0.95,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260608P00741000": {
+   "realized": 712,
+   "avgSell": 1.34,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260608P00740000": {
+   "realized": 510,
+   "avgSell": 1.95,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260608P00739000": {
+   "realized": -582,
+   "avgSell": 0.44,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260608C00739000": {
+   "realized": -38,
+   "avgSell": 0.75,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00740000": {
+   "realized": -120,
+   "avgSell": 2.26,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00739000": {
+   "realized": 477,
+   "avgSell": 2.61,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00739000": {
+   "realized": 681,
+   "avgSell": 5.09,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00746000": {
+   "realized": 486,
+   "avgSell": 2.27,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00744000": {
+   "realized": -130,
+   "avgSell": 1.33,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00743000": {
+   "realized": 355,
+   "avgSell": 2.06,
+   "closed": true,
+   "buyQty": 10,
+   "sellQty": 10,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00742000": {
+   "realized": 551,
+   "avgSell": 2.41,
+   "closed": true,
+   "buyQty": 21,
+   "sellQty": 21,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00741000": {
+   "realized": 230,
+   "avgSell": 2.09,
+   "closed": true,
+   "buyQty": 10,
+   "sellQty": 10,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260609P00717000": {
+   "realized": -48,
+   "avgSell": 3,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00740000": {
+   "realized": -3,
+   "avgSell": 2.27,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00741000": {
+   "realized": 29,
+   "avgSell": 2.28,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260609C00716000": {
+   "realized": -66,
+   "avgSell": 2.96,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260609P00712000": {
+   "realized": 384,
+   "avgSell": 4.22,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00738000": {
+   "realized": 0,
+   "avgSell": 2.73,
+   "closed": false,
+   "buyQty": 4,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00736000": {
+   "realized": 1937,
+   "avgSell": 2.17,
+   "closed": true,
+   "buyQty": 28,
+   "sellQty": 28,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00735000": {
+   "realized": 513,
+   "avgSell": 3.51,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260609P00708000": {
+   "realized": 1381,
+   "avgSell": 7.7,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00732000": {
+   "realized": 330,
+   "avgSell": 2.57,
+   "closed": true,
+   "buyQty": 18,
+   "sellQty": 18,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260609P00703000": {
+   "realized": -112,
+   "avgSell": 3.3,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00731000": {
+   "realized": 138,
+   "avgSell": 2.68,
+   "closed": true,
+   "buyQty": 15,
+   "sellQty": 15,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260609P00702000": {
+   "realized": -150,
+   "avgSell": 3.21,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00731000": {
+   "realized": -99,
+   "avgSell": 2.45,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00730000": {
+   "realized": 857,
+   "avgSell": 3.51,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00729000": {
+   "realized": -159,
+   "avgSell": 2.06,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00730000": {
+   "realized": 260,
+   "avgSell": 2.59,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00728000": {
+   "realized": -24,
+   "avgSell": 2.36,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00727000": {
+   "realized": 193,
+   "avgSell": 2.79,
+   "closed": true,
+   "buyQty": 13,
+   "sellQty": 13,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260609P00693000": {
+   "realized": 56,
+   "avgSell": 4.35,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00726000": {
+   "realized": -1137,
+   "avgSell": 1.6,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00727000": {
+   "realized": -36,
+   "avgSell": 2.48,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00725000": {
+   "realized": 93,
+   "avgSell": 3.21,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00723000": {
+   "realized": -213,
+   "avgSell": 2.3,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00725000": {
+   "realized": 57,
+   "avgSell": 2.82,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00728000": {
+   "realized": 84,
+   "avgSell": 2.53,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00729000": {
+   "realized": 44,
+   "avgSell": 2.44,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260609P00698000": {
+   "realized": -240,
+   "avgSell": 2.29,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00733000": {
+   "realized": -1044,
+   "avgSell": 1.48,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00733000": {
+   "realized": 0,
+   "avgSell": 2.33,
+   "closed": false,
+   "buyQty": 8,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00736000": {
+   "realized": 30,
+   "avgSell": 1.59,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00734000": {
+   "realized": -987,
+   "avgSell": 1.02,
+   "closed": true,
+   "buyQty": 23,
+   "sellQty": 23,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609C00737000": {
+   "realized": -570,
+   "avgSell": 0.8,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260609P00737000": {
+   "realized": 104,
+   "avgSell": 1.54,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "": {
+   "realized": 0,
+   "avgSell": 3.97,
+   "closed": false,
+   "buyQty": 0,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00733000": {
+   "realized": -522,
+   "avgSell": 2.28,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610C00736000": {
+   "realized": 120,
+   "avgSell": 3.95,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00737000": {
+   "realized": 54,
+   "avgSell": 3.02,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00736000": {
+   "realized": -162,
+   "avgSell": 2.32,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610C00738000": {
+   "realized": -960,
+   "avgSell": 1.04,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00735000": {
+   "realized": 112,
+   "avgSell": 2.56,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00734000": {
+   "realized": -12,
+   "avgSell": 2.39,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610C00734000": {
+   "realized": 36,
+   "avgSell": 2.72,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00731000": {
+   "realized": -1034,
+   "avgSell": 2.27,
+   "closed": true,
+   "buyQty": 18,
+   "sellQty": 18,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260610P00698000": {
+   "realized": -388,
+   "avgSell": 2.42,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00729000": {
+   "realized": -27,
+   "avgSell": 2.71,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610C00730000": {
+   "realized": -222,
+   "avgSell": 1.28,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00728000": {
+   "realized": 384,
+   "avgSell": 1.9,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260610P00697000": {
+   "realized": -88,
+   "avgSell": 1.87,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260610P00727000": {
+   "realized": -498,
+   "avgSell": 1.19,
+   "closed": true,
+   "buyQty": 30,
+   "sellQty": 30,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611P00727000": {
+   "realized": -232,
+   "avgSell": 2.85,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611C00727000": {
+   "realized": -145,
+   "avgSell": 2.54,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611P00730000": {
+   "realized": 173,
+   "avgSell": 3.83,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611C00730000": {
+   "realized": -72,
+   "avgSell": 2.23,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611P00726000": {
+   "realized": -1919,
+   "avgSell": 1.43,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611P00725000": {
+   "realized": 68,
+   "avgSell": 3.02,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260611P00696000": {
+   "realized": -226,
+   "avgSell": 1.65,
+   "closed": true,
+   "buyQty": 1,
+   "sellQty": 1,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611C00729000": {
+   "realized": 36,
+   "avgSell": 2.39,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611C00733000": {
+   "realized": 2216,
+   "avgSell": 2.88,
+   "closed": true,
+   "buyQty": 20,
+   "sellQty": 20,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260611C00707000": {
+   "realized": 231,
+   "avgSell": 3.27,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611C00736000": {
+   "realized": 1150,
+   "avgSell": 1.93,
+   "closed": true,
+   "buyQty": 20,
+   "sellQty": 20,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611P00736000": {
+   "realized": 91,
+   "avgSell": 1.38,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260611P00735000": {
+   "realized": -738,
+   "avgSell": 0.38,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612P00739000": {
+   "realized": 194,
+   "avgSell": 4.04,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612P00738000": {
+   "realized": 132,
+   "avgSell": 3.41,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612C00738000": {
+   "realized": -36,
+   "avgSell": 3.58,
+   "closed": true,
+   "buyQty": 1,
+   "sellQty": 1,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612C00739000": {
+   "realized": 96,
+   "avgSell": 3.33,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612C00740000": {
+   "realized": 0,
+   "avgSell": 2.91,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612C00741000": {
+   "realized": -862,
+   "avgSell": 1.1,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612P00737000": {
+   "realized": -164,
+   "avgSell": 1.82,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260612C00719000": {
+   "realized": 242,
+   "avgSell": 5.97,
+   "closed": true,
+   "buyQty": 1,
+   "sellQty": 1,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612C00742000": {
+   "realized": -982,
+   "avgSell": 0.8,
+   "closed": true,
+   "buyQty": 40,
+   "sellQty": 40,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260612C00723000": {
+   "realized": -355,
+   "avgSell": 2.49,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612C00743000": {
+   "realized": 40,
+   "avgSell": 2.67,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612C00744000": {
+   "realized": -370,
+   "avgSell": 1.55,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612P00740000": {
+   "realized": -152,
+   "avgSell": 2.5,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260612P00741000": {
+   "realized": -138,
+   "avgSell": 0.61,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260615P00740000": {
+   "realized": -241,
+   "avgSell": 2.66,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260615P00753000": {
+   "realized": -325,
+   "avgSell": 0.95,
+   "closed": true,
+   "buyQty": 10,
+   "sellQty": 10,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260615C00742000": {
+   "realized": 7,
+   "avgSell": 1.84,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260616C00755000": {
+   "realized": 428,
+   "avgSell": 3.04,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260615C00755000": {
+   "realized": 98,
+   "avgSell": 0.79,
+   "closed": true,
+   "buyQty": 16,
+   "sellQty": 16,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260615C00757000": {
+   "realized": -56,
+   "avgSell": 0.67,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260616C00757000": {
+   "realized": -72,
+   "avgSell": 1.86,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260616P00754000": {
+   "realized": 284,
+   "avgSell": 1.8,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260617P00754000": {
+   "realized": 112,
+   "avgSell": 2.98,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260616P00739000": {
+   "realized": 12,
+   "avgSell": 2.07,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260616P00752000": {
+   "realized": -40,
+   "avgSell": 1.09,
+   "closed": true,
+   "buyQty": 18,
+   "sellQty": 18,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260617P00752000": {
+   "realized": 123,
+   "avgSell": 2.89,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260616P00738000": {
+   "realized": 116,
+   "avgSell": 2.92,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260616P00753000": {
+   "realized": 240,
+   "avgSell": 1.28,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260617P00753000": {
+   "realized": 171,
+   "avgSell": 2.93,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260616P00751000": {
+   "realized": 186,
+   "avgSell": 0.68,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260617P00751000": {
+   "realized": -121,
+   "avgSell": 2.7,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260617P00750000": {
+   "realized": 12,
+   "avgSell": 2.15,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260618P00750000": {
+   "realized": -10,
+   "avgSell": 4.1,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260617P00748000": {
+   "realized": -481,
+   "avgSell": 1.16,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260618P00748000": {
+   "realized": -279,
+   "avgSell": 3.01,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260617P00731000": {
+   "realized": -376,
+   "avgSell": 1.85,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260617C00750000": {
+   "realized": -192,
+   "avgSell": 1.99,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260618P00745000": {
+   "realized": -440,
+   "avgSell": 1.02,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260622P00745000": {
+   "realized": 228,
+   "avgSell": 1.72,
+   "closed": true,
+   "buyQty": 16,
+   "sellQty": 16,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260618C00738000": {
+   "realized": -504,
+   "avgSell": 1.14,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260618C00747000": {
+   "realized": -284,
+   "avgSell": 0.69,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260622C00748000": {
+   "realized": -328,
+   "avgSell": 1.68,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260618P00746000": {
+   "realized": -414,
+   "avgSell": 0.54,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260618C00746000": {
+   "realized": 492,
+   "avgSell": 1.41,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260622C00747000": {
+   "realized": -486,
+   "avgSell": 2.09,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260622C00750000": {
+   "realized": -354,
+   "avgSell": 0.55,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260622C00745000": {
+   "realized": -440,
+   "avgSell": 0.97,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260622P00747000": {
+   "realized": 450,
+   "avgSell": 2.61,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260622P00739000": {
+   "realized": 468,
+   "avgSell": 3.14,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260622P00744000": {
+   "realized": -681,
+   "avgSell": 0.89,
+   "closed": true,
+   "buyQty": 33,
+   "sellQty": 33,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260622P00736000": {
+   "realized": -382,
+   "avgSell": 1.2,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260623P00745000": {
+   "realized": 35,
+   "avgSell": 2.99,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260623P00744000": {
+   "realized": -120,
+   "avgSell": 2.14,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260622C00745000": {
+   "realized": -137,
+   "avgSell": 1.01,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260622C00746000": {
+   "realized": -543,
+   "avgSell": 0.61,
+   "closed": true,
+   "buyQty": 11,
+   "sellQty": 11,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260623P00743000": {
+   "realized": -308,
+   "avgSell": 1.82,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260623C00738000": {
+   "realized": -18,
+   "avgSell": 1.96,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260623C00739000": {
+   "realized": -1408,
+   "avgSell": 0.86,
+   "closed": true,
+   "buyQty": 13,
+   "sellQty": 13,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260623C00737000": {
+   "realized": -492,
+   "avgSell": 0.8,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260623P00713000": {
+   "realized": -80,
+   "avgSell": 1.53,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260623P00735000": {
+   "realized": -474,
+   "avgSell": 0.83,
+   "closed": true,
+   "buyQty": 18,
+   "sellQty": 18,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624P00735000": {
+   "realized": -226,
+   "avgSell": 2.82,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624P00734000": {
+   "realized": -81,
+   "avgSell": 2.68,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624C00738000": {
+   "realized": -68,
+   "avgSell": 1.85,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625C00738000": {
+   "realized": 40,
+   "avgSell": 3.76,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625C00739000": {
+   "realized": -2034,
+   "avgSell": 1.9,
+   "closed": true,
+   "buyQty": 15,
+   "sellQty": 15,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624C00739000": {
+   "realized": -1376,
+   "avgSell": 0.86,
+   "closed": true,
+   "buyQty": 20,
+   "sellQty": 20,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625C00740000": {
+   "realized": -72,
+   "avgSell": 2.8,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624C00740000": {
+   "realized": -88,
+   "avgSell": 1.15,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625P00737000": {
+   "realized": -10,
+   "avgSell": 3.51,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624P00737000": {
+   "realized": 172,
+   "avgSell": 1.97,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625P00736000": {
+   "realized": -18,
+   "avgSell": 3.25,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624P00736000": {
+   "realized": -48,
+   "avgSell": 1.36,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260624P00710000": {
+   "realized": 282,
+   "avgSell": 3.73,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624P00733000": {
+   "realized": 764,
+   "avgSell": 1.73,
+   "closed": true,
+   "buyQty": 20,
+   "sellQty": 20,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625P00733000": {
+   "realized": -366,
+   "avgSell": 1.76,
+   "closed": true,
+   "buyQty": 46,
+   "sellQty": 46,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624P00732000": {
+   "realized": 282,
+   "avgSell": 1.48,
+   "closed": true,
+   "buyQty": 36,
+   "sellQty": 36,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625C00732000": {
+   "realized": 8,
+   "avgSell": 3.7,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624C00732000": {
+   "realized": -13,
+   "avgSell": 1.98,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260624P00707000": {
+   "realized": -51,
+   "avgSell": 2.31,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624P00731000": {
+   "realized": -1051,
+   "avgSell": 0.76,
+   "closed": true,
+   "buyQty": 27,
+   "sellQty": 27,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260624P00706000": {
+   "realized": -308,
+   "avgSell": 1.54,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260624C00733000": {
+   "realized": -246,
+   "avgSell": 0.57,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260624P00705000": {
+   "realized": -124,
+   "avgSell": 2.04,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625P00732000": {
+   "realized": -629,
+   "avgSell": 1.73,
+   "closed": true,
+   "buyQty": 45,
+   "sellQty": 45,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625P00731000": {
+   "realized": -90,
+   "avgSell": 2.92,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260624C00719000": {
+   "realized": -2085,
+   "avgSell": 1.14,
+   "closed": true,
+   "buyQty": 15,
+   "sellQty": 15,
+   "accts": [
+    "FIRST-TEAM"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260625P00713000": {
+   "realized": 287,
+   "avgSell": 8.35,
+   "closed": true,
+   "buyQty": 1,
+   "sellQty": 1,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260626P00733000": {
+   "realized": -1809,
+   "avgSell": 2.14,
+   "closed": true,
+   "buyQty": 13,
+   "sellQty": 13,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260626P00732000": {
+   "realized": -2,
+   "avgSell": 3.05,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625C00733000": {
+   "realized": 496,
+   "avgSell": 1.5,
+   "closed": true,
+   "buyQty": 20,
+   "sellQty": 20,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260626C00733000": {
+   "realized": 4385,
+   "avgSell": 2.46,
+   "closed": true,
+   "buyQty": 117,
+   "sellQty": 117,
+   "accts": [
+    "paper-main (default)",
+    "FIRST-TEAM",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625P00734000": {
+   "realized": 396,
+   "avgSell": 1.46,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625C00734000": {
+   "realized": 160,
+   "avgSell": 1.85,
+   "closed": true,
+   "buyQty": 32,
+   "sellQty": 32,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260626C00734000": {
+   "realized": -5974,
+   "avgSell": 1.4,
+   "closed": true,
+   "buyQty": 121,
+   "sellQty": 121,
+   "accts": [
+    "paper-main (default)",
+    "FIRST-TEAM",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260625C00736000": {
+   "realized": 1058,
+   "avgSell": 2.32,
+   "closed": true,
+   "buyQty": 66,
+   "sellQty": 66,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260626C00736000": {
+   "realized": -14461,
+   "avgSell": 1.19,
+   "closed": true,
+   "buyQty": 252,
+   "sellQty": 252,
+   "accts": [
+    "paper-main (default)",
+    "FIRST-TEAM",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00734000": {
+   "realized": -848,
+   "avgSell": 3.18,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260626C00713000": {
+   "realized": -1164,
+   "avgSell": 1.9,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "paper-main (default)",
+    "FIRST-TEAM"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00736000": {
+   "realized": -76,
+   "avgSell": 3.18,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260626C00715000": {
+   "realized": -300,
+   "avgSell": 1.5,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260626C00735000": {
+   "realized": -6383,
+   "avgSell": 0.88,
+   "closed": true,
+   "buyQty": 72,
+   "sellQty": 72,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00735000": {
+   "realized": -505,
+   "avgSell": 2.79,
+   "closed": true,
+   "buyQty": 8,
+   "sellQty": 8,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00740000": {
+   "realized": 680,
+   "avgSell": 1.05,
+   "closed": true,
+   "buyQty": 84,
+   "sellQty": 84,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629P00734000": {
+   "realized": -5936,
+   "avgSell": 1.24,
+   "closed": true,
+   "buyQty": 50,
+   "sellQty": 50,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629P00733000": {
+   "realized": -12035,
+   "avgSell": 1.3,
+   "closed": true,
+   "buyQty": 153,
+   "sellQty": 153,
+   "accts": [
+    "paper-main (default)",
+    "FIRST-TEAM",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630P00733000": {
+   "realized": 76,
+   "avgSell": 4.02,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260629P00707000": {
+   "realized": 0,
+   "avgSell": 1.89,
+   "closed": false,
+   "buyQty": 28,
+   "sellQty": 27,
+   "accts": [
+    "paper-main (default)",
+    "FIRST-TEAM",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629P00737000": {
+   "realized": 152,
+   "avgSell": 2.2,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630P00737000": {
+   "realized": 76,
+   "avgSell": 3.77,
+   "closed": true,
+   "buyQty": 2,
+   "sellQty": 2,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00738000": {
+   "realized": -1380,
+   "avgSell": 1.12,
+   "closed": true,
+   "buyQty": 54,
+   "sellQty": 54,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260629C00720000": {
+   "realized": -172,
+   "avgSell": 1.19,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260629C00721000": {
+   "realized": 168,
+   "avgSell": 1.97,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630C00740000": {
+   "realized": 290,
+   "avgSell": 2.69,
+   "closed": true,
+   "buyQty": 14,
+   "sellQty": 14,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629P00740000": {
+   "realized": 40,
+   "avgSell": 1.16,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630P00740000": {
+   "realized": 33,
+   "avgSell": 2.75,
+   "closed": true,
+   "buyQty": 3,
+   "sellQty": 3,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260626C00731000": {
+   "realized": 2838,
+   "avgSell": 3.04,
+   "closed": true,
+   "buyQty": 30,
+   "sellQty": 30,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260626C00732000": {
+   "realized": 840,
+   "avgSell": 3.25,
+   "closed": true,
+   "buyQty": 14,
+   "sellQty": 14,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00733000": {
+   "realized": 485,
+   "avgSell": 4.73,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00732000": {
+   "realized": 552,
+   "avgSell": 5.27,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629P00738000": {
+   "realized": 3170,
+   "avgSell": 2.87,
+   "closed": true,
+   "buyQty": 30,
+   "sellQty": 30,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629P00735000": {
+   "realized": 2448,
+   "avgSell": 3,
+   "closed": true,
+   "buyQty": 28,
+   "sellQty": 28,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630P00734000": {
+   "realized": -795,
+   "avgSell": 2.36,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630P00735000": {
+   "realized": -1092,
+   "avgSell": 2.68,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00737000": {
+   "realized": 3800,
+   "avgSell": 2.34,
+   "closed": true,
+   "buyQty": 52,
+   "sellQty": 52,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630C00737000": {
+   "realized": 70,
+   "avgSell": 3.62,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630C00736000": {
+   "realized": 161,
+   "avgSell": 4.32,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00739000": {
+   "realized": 1112,
+   "avgSell": 1.14,
+   "closed": true,
+   "buyQty": 40,
+   "sellQty": 40,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260629C00723000": {
+   "realized": 988,
+   "avgSell": 1.37,
+   "closed": true,
+   "buyQty": 48,
+   "sellQty": 48,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630C00739000": {
+   "realized": 207,
+   "avgSell": 3.35,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260629C00741000": {
+   "realized": -600,
+   "avgSell": 0.57,
+   "closed": true,
+   "buyQty": 48,
+   "sellQty": 48,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260626C00710000": {
+   "realized": 815,
+   "avgSell": 4.31,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "FIRST-TEAM"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630C00744000": {
+   "realized": 262,
+   "avgSell": 1.68,
+   "closed": true,
+   "buyQty": 22,
+   "sellQty": 22,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701C00744000": {
+   "realized": 1009,
+   "avgSell": 3.31,
+   "closed": true,
+   "buyQty": 20,
+   "sellQty": 20,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630C00745000": {
+   "realized": 336,
+   "avgSell": 1.37,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701C00745000": {
+   "realized": 484,
+   "avgSell": 2.86,
+   "closed": true,
+   "buyQty": 11,
+   "sellQty": 11,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260630C00735000": {
+   "realized": 20,
+   "avgSell": 1.44,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630C00746000": {
+   "realized": 294,
+   "avgSell": 1.35,
+   "closed": true,
+   "buyQty": 30,
+   "sellQty": 30,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701C00746000": {
+   "realized": 0,
+   "avgSell": 2.02,
+   "closed": false,
+   "buyQty": 26,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260630C00736000": {
+   "realized": 58,
+   "avgSell": 1.7,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260630C00748000": {
+   "realized": -102,
+   "avgSell": 0.49,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701C00743000": {
+   "realized": 558,
+   "avgSell": 3.76,
+   "closed": true,
+   "buyQty": 9,
+   "sellQty": 9,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260630C00732000": {
+   "realized": 36,
+   "avgSell": 2.19,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "FIRST-TEAM"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702C00746000": {
+   "realized": 692,
+   "avgSell": 3.39,
+   "closed": true,
+   "buyQty": 16,
+   "sellQty": 16,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701C00747000": {
+   "realized": 112,
+   "avgSell": 1.12,
+   "closed": true,
+   "buyQty": 70,
+   "sellQty": 70,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702C00747000": {
+   "realized": 546,
+   "avgSell": 2.66,
+   "closed": true,
+   "buyQty": 25,
+   "sellQty": 25,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701C00748000": {
+   "realized": 562,
+   "avgSell": 1.36,
+   "closed": true,
+   "buyQty": 30,
+   "sellQty": 30,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702C00748000": {
+   "realized": -428,
+   "avgSell": 2.72,
+   "closed": true,
+   "buyQty": 28,
+   "sellQty": 28,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701C00749000": {
+   "realized": -590,
+   "avgSell": 0.92,
+   "closed": true,
+   "buyQty": 102,
+   "sellQty": 102,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702C00749000": {
+   "realized": -605,
+   "avgSell": 2.19,
+   "closed": true,
+   "buyQty": 44,
+   "sellQty": 44,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260701C00731000": {
+   "realized": -2198,
+   "avgSell": 1.38,
+   "closed": true,
+   "buyQty": 36,
+   "sellQty": 36,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701P00748000": {
+   "realized": -92,
+   "avgSell": 0.92,
+   "closed": true,
+   "buyQty": 80,
+   "sellQty": 80,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00748000": {
+   "realized": 981,
+   "avgSell": 2.09,
+   "closed": true,
+   "buyQty": 51,
+   "sellQty": 51,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260701P00747000": {
+   "realized": 84,
+   "avgSell": 0.87,
+   "closed": true,
+   "buyQty": 24,
+   "sellQty": 24,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00747000": {
+   "realized": 1407,
+   "avgSell": 1.98,
+   "closed": true,
+   "buyQty": 71,
+   "sellQty": 71,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00749000": {
+   "realized": 516,
+   "avgSell": 3.03,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702C00751000": {
+   "realized": -782,
+   "avgSell": 0.98,
+   "closed": true,
+   "buyQty": 26,
+   "sellQty": 26,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260702P00722000": {
+   "realized": 2121,
+   "avgSell": 4.27,
+   "closed": true,
+   "buyQty": 15,
+   "sellQty": 15,
+   "accts": [
+    "paper-main (default)",
+    "FIRST-TEAM"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00748000": {
+   "realized": 1427,
+   "avgSell": 3.21,
+   "closed": true,
+   "buyQty": 33,
+   "sellQty": 33,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00747000": {
+   "realized": 1256,
+   "avgSell": 3.4,
+   "closed": true,
+   "buyQty": 42,
+   "sellQty": 42,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260702P00719000": {
+   "realized": -103,
+   "avgSell": 3.38,
+   "closed": true,
+   "buyQty": 13,
+   "sellQty": 13,
+   "accts": [
+    "paper-main (default)",
+    "FIRST-TEAM"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00744000": {
+   "realized": -1491,
+   "avgSell": 1.17,
+   "closed": true,
+   "buyQty": 48,
+   "sellQty": 48,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00744000": {
+   "realized": 414,
+   "avgSell": 2.91,
+   "closed": true,
+   "buyQty": 32,
+   "sellQty": 32,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260702P00715000": {
+   "realized": -210,
+   "avgSell": 2.26,
+   "closed": true,
+   "buyQty": 5,
+   "sellQty": 5,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00746000": {
+   "realized": 975,
+   "avgSell": 1.9,
+   "closed": true,
+   "buyQty": 39,
+   "sellQty": 39,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260702P00714000": {
+   "realized": -287,
+   "avgSell": 1.8,
+   "closed": true,
+   "buyQty": 7,
+   "sellQty": 7,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00743000": {
+   "realized": 1516,
+   "avgSell": 1.5,
+   "closed": true,
+   "buyQty": 48,
+   "sellQty": 48,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260702P00712000": {
+   "realized": 330,
+   "avgSell": 2.95,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00742000": {
+   "realized": -538,
+   "avgSell": 1.32,
+   "closed": true,
+   "buyQty": 41,
+   "sellQty": 41,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00741000": {
+   "realized": -34,
+   "avgSell": 1.2,
+   "closed": true,
+   "buyQty": 30,
+   "sellQty": 30,
+   "accts": [
+    "paper-main (default)",
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00740000": {
+   "realized": -451,
+   "avgSell": 0.8,
+   "closed": true,
+   "buyQty": 22,
+   "sellQty": 22,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00740000": {
+   "realized": -64,
+   "avgSell": 2.53,
+   "closed": true,
+   "buyQty": 4,
+   "sellQty": 4,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "QQQ260702P00708000": {
+   "realized": -927,
+   "avgSell": 1.07,
+   "closed": true,
+   "buyQty": 30,
+   "sellQty": 30,
+   "accts": [
+    "paper-main (default)"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706C00751000": {
+   "realized": -1224,
+   "avgSell": 1.61,
+   "closed": true,
+   "buyQty": 17,
+   "sellQty": 17,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706C00750000": {
+   "realized": -1044,
+   "avgSell": 2.06,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00749000": {
+   "realized": 828,
+   "avgSell": 3.45,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260702P00745000": {
+   "realized": -78,
+   "avgSell": 1.57,
+   "closed": true,
+   "buyQty": 6,
+   "sellQty": 6,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00746000": {
+   "realized": 787,
+   "avgSell": 3.07,
+   "closed": true,
+   "buyQty": 28,
+   "sellQty": 28,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00745000": {
+   "realized": 24,
+   "avgSell": 2.97,
+   "closed": true,
+   "buyQty": 12,
+   "sellQty": 12,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00743000": {
+   "realized": 1347,
+   "avgSell": 3.54,
+   "closed": true,
+   "buyQty": 27,
+   "sellQty": 27,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00742000": {
+   "realized": -421,
+   "avgSell": 3.03,
+   "closed": true,
+   "buyQty": 26,
+   "sellQty": 26,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "SPY260706P00741000": {
+   "realized": -1022,
+   "avgSell": 2.22,
+   "closed": true,
+   "buyQty": 14,
+   "sellQty": 14,
+   "accts": [
+    "LAB"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "IWM260702P00299000": {
+   "realized": 1254,
+   "avgSell": 1.31,
+   "closed": true,
+   "buyQty": 44,
+   "sellQty": 44,
+   "accts": [
+    "FIRST-TEAM"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  },
+  "IWM260702P00295000": {
+   "realized": -540,
+   "avgSell": 0.43,
+   "closed": true,
+   "buyQty": 120,
+   "sellQty": 120,
+   "accts": [
+    "FIRST-TEAM"
+   ],
+   "asOf": "2026-07-05T20:17:09.064Z"
+  }
+ }
+}
