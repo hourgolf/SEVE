@@ -10,6 +10,10 @@
 //   ("breakout-smart-entries"); slug stays the internal join key (channels[].slug,
 //   systemFindings[].channels[]). SYS OUTPUT NAMING rule + render maps slug→name in the channel
 //   headers, finding evidence, and finding channel tags. Matches weekly-autopsy 2026-06-13d. Prior below.)
+// ⚑ DAILY-AUTOPSY VERSION: 2026-07-05a  (REGISTRY-AWARE: NARRATE_SYSTEM gains the pre-registered-
+//   tests guardrails — the LLM can no longer recommend knob/roster changes that bypass
+//   docs/pre-registered-tests-2026-07.md, and knows the dark mechanisms + vb virtual fleet.
+//   Model bump: default claude-sonnet-4-6 → claude-sonnet-5. Prior banner below.)
 // ⚑ DAILY-AUTOPSY VERSION: 2026-06-06a  (model bump: default Sonnet claude-sonnet-4-5 → the
 //   current claude-sonnet-4-6 (4-5 is now legacy; same $3/$15 tier, strictly better). Daily
 //   stays on Sonnet by design — the weekly is the Opus one. ANTHROPIC_MODEL env still overrides.)
@@ -71,7 +75,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-4-6";  // current Sonnet (4-5 is now legacy)
+const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-5";  // current Sonnet (Claude 5 family; 4-6 is now legacy)
 const sb = createClient(SB_URL, SB_SERVICE);
 
 // ---- ET wall-clock helpers -------------------------------------------------
@@ -258,6 +262,7 @@ The digest carries TWO market regimes: \`market\` (SPY) and \`marketQQQ\` (QQQ, 
 For EACH channel: (1) state its INTENT (from mandate + signal types), (2) read its CONVICTION from the entry rationale features (atr/er/relVol/delta, and expectedMove vs roundTrip = the cost-gate margin), (3) say what went RIGHT and WRONG vs its underlying's regime, (4) a one-line verdict.
 Then SYSTEM FINDINGS: diagnose flaws and DISTINGUISH a STRATEGY flaw (thesis wrong for the regime) from a SYSTEM/EXECUTION bug (a channel that never takes profit, exits within a minute, a trailing stop that never fires, sizing always at max_contracts). A "reconciled" exit means the channel's OWN logic did NOT close the position — the cause is AMBIGUOUS (a manual close on the broker, a same-OCC collision with another channel, or expiry); flag it as not-driven-by-the-channel, do NOT assert which. Map the deterministic flaw flags to the specific cause using each channel's mandate. Use the prior-days findings to note RECURRENCE (chronic vs new vs resolved). Propose ONE concrete falsifiable experiment per finding.
 CRITICAL OUTPUT RULES: every deterministic flaw in any channel's \`flaws\` array MUST become a systemFinding — map it to its specific cause via the mandate, and mark recurrence "new"/"recurring"/"resolved" vs the prior-days findings. NEVER drop a flagged flaw because it recurs (a recurring flaw is the MOST important to surface). ALWAYS return 3–5 concrete topActions. Empty systemFindings or topActions is only acceptable when there were genuinely zero flaws AND zero trades.
+REGISTRY GUARDRAILS (docs/pre-registered-tests-2026-07.md, embedded 2026-07-05): every gate/TP/stop/size/roster change on this desk is governed by PRE-REGISTERED decision rules (items A1–A10, C1, R1) whose thresholds were fixed before outcomes were visible. Era 4 = trades opened ≥ 2026-06-30; the A6 read (at 15 era-4 sessions, ~Jul 21) owns the LOCK verdicts (each channel judged against its OWN breakeven bar = stop/(tp+stop)), the C1 stack-cap arming, the A9 breakout(base) gap_min decision, the A10 ride-sizing rule, and the R1 runner A/B. NEVER recommend a config/knob/roster change that would bypass this — when the data motivates one, phrase it as "queue for the A6 read" or "needs a pre-registered item", never "change X now". DARK mechanisms exist in the worker (gap_min knob, stack_cap, runner tranche — all at config 0/off): do not describe them as armed or active. Channels slugged vb-* are VIRTUAL (signal-only drafts; their "trades" are replays) — hypothesis substrate, never evidence for arming.
 You DIAGNOSE only — never tell the operator to auto-apply changes to live trading. Be specific and concise.
 OUTPUT NAMING: in ALL prose (marketSummary, each channel's intent/conviction/wentRight/wentWrong/verdict, and every finding's evidence/hypothesis/suggestedExperiment, and topActions) refer to channels by their display \`name\` (the operator's chosen label given per channel — e.g. "BREAK(ALT)", not "breakout-smart-entries"). EXCEPTION — machine keys stay slugs: channels[].slug and systemFindings[].channels[] must remain the EXACT slug so the system can join.`;
 
