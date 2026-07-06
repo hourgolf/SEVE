@@ -110,6 +110,10 @@ async function main() {
   // evening digest (2026-07-05): the ten-line ops push — per-bucket day P&L, era-4/A6
   // progress, heartbeat + capture health. Deterministic, informational only.
   run("evening-digest", ["evening-digest"], 2);
+  // A6 AUTOPILOT (2026-07-05): counts era-4 sessions; T-1 heads-up push, and AT TRIGGER
+  // auto-generates the decision memo (full read + pre-filled SQL per registered decision)
+  // + pushes the headline. Decides nothing — the operator's word stays the gate.
+  run("a6-watch", ["a6-watch"], 2);
   // OFF-SITE BACKUP — LAST, so tonight's exports/ledgers/iv-bank all ride this push.
   // The quotes tape is the one artifact a dead Mac cannot re-create.
   run("backup-archives", ["backup-archives"], 2);

@@ -25,11 +25,14 @@ grind ×3, breakout-qqq, orb-ustop-ctl (the A4 control, lot-isolated from its tw
 power/orb drafts, and the disabled manual twins (soft-deleted 07-03; all history intact).
 
 **⚖ THE REGISTRY GOVERNS ALL KNOB CHANGES: `docs/pre-registered-tests-2026-07.md`** (A1–A10 + C1 +
-the calibration-change log). Check it BEFORE proposing any gate/TP/stop/size change — thresholds and
-kill criteria are fixed pre-outcome and changed only pre-window. The A6 era-4 read triggers at
-**15 era-4 sessions (~Jul 21; 3/15 as of 07-02)** — **`npm run a6-read`** is the whole evaluation
-locked in code (A6 own-breakeven bars · A6b near-miss · A9 base gap-split · A10 ride gate incl. the
-momo-shape $1,800→$1,000 unvalidated-size rule that binds at the first read).
+R1 + the calibration/instrumentation logs). Check it BEFORE proposing any gate/TP/stop/size change —
+thresholds and kill criteria are fixed pre-outcome and changed only pre-window. The A6 era-4 read
+triggers at **15 era-4 sessions (~Jul 21)** — **`npm run a6-read`** is the whole evaluation locked in
+code (A6 own-breakeven bars · A6b near-miss · A9 base gap-split · A10 ride gate incl. the momo-shape
+$1,800→$1,000 unvalidated-size rule), and **`a6-watch` (nightly, capture chain) is the AUTOPILOT** —
+T-1 push, then the auto-generated decision memo (read + pre-filled SQL per registered decision) at
+trigger. **`docs/go-live-gate.md` (G1)** = the pre-registered real-capital graduation gate (thresholds
+are operator placeholders). **`docs/index-expansion-kit.md`** = the codified one-day new-index playbook.
 
 - **Era 4** = trades opened ≥ 2026-06-30 (LOCK/RIDE strip + stop-aware sizing live). Keep it
   pristine — config changes only as logged rule-applications in the registry's calibration log.
