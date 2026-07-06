@@ -31,8 +31,9 @@ triggers at **15 era-4 sessions (~Jul 21)** — **`npm run a6-read`** is the who
 code (A6 own-breakeven bars · A6b near-miss · A9 base gap-split · A10 ride gate incl. the momo-shape
 $1,800→$1,000 unvalidated-size rule), and **`a6-watch` (nightly, capture chain) is the AUTOPILOT** —
 T-1 push, then the auto-generated decision memo (read + pre-filled SQL per registered decision) at
-trigger. **`docs/go-live-gate.md` (G1)** = the pre-registered real-capital graduation gate (thresholds
-are operator placeholders). **`docs/index-expansion-kit.md`** = the codified one-day new-index playbook.
+trigger. **Go-live/capital on-off = the operator's DISCRETIONARY call** (his word 2026-07-06 — no binding
+gates on capital; `docs/go-live-gate.md` is an advisory readiness checklist only). **`docs/
+index-expansion-kit.md`** = the codified one-day new-index playbook.
 
 - **Era 4** = trades opened ≥ 2026-06-30 (LOCK/RIDE strip + stop-aware sizing live). Keep it
   pristine — config changes only as logged rule-applications in the registry's calibration log.

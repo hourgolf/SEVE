@@ -1,9 +1,9 @@
 # Pre-registered tests & decision rules — July 2026 (phase-4, approved 2026-07-01)
 
-> **G1 · GO-LIVE GATE (framework drafted 2026-07-05): `docs/go-live-gate.md`** — the desk's
-> pre-registered graduation criteria for real capital (evidence gates E1–E5, ops gates O1–O5,
-> sizing ladder, re-bench triggers). Thresholds are ⚠ PLACEHOLDERS until the operator commits
-> numbers; they become law on commit, set before the evidence window they judge.
+> **GO-LIVE (reframed 2026-07-06, operator's word): capital on/off is the OPERATOR'S
+> DISCRETIONARY call — no binding gate.** `docs/go-live-gate.md` is an ADVISORY readiness
+> checklist only. The registry's rigidity governs experiments/measurements, never his
+> capital-allocation comfort. Do not propose binding gates on go-live/sizing decisions.
 > **A6 AUTOPILOT (live 2026-07-05): `npm run a6-watch`** runs nightly in the capture chain —
 > T-1 heads-up push, and at the 15-session trigger auto-generates the decision memo (the full
 > a6-read + pre-filled SQL for C1/A9/A10/R1 + LOCK verdicts) to `docs/a6-decision-memo-<date>.md`.
