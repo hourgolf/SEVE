@@ -1,0 +1,22 @@
+
+  COUNTER-TREND PROBE (A12 · OPEN anchor, deadband 0.05%, from min 30) · 308 SPY sessions · re-entry-aware · real NBBO
+  B = block counter-trend side · C = CONTROL (block aligned side) · rules pre-registered
+
+  ── momo-shape (0DTE, ride/−50)
+    variant     n   exp/t     total  win%  blocked      Mar26  AprMay    MA25     T24    CMix
+          A   216   +40.8    +$8811    27        —      +80.4   +90.6   -41.0  +140.5   -19.3
+          B   217   +27.3    +$5921    27      119      +52.8   +70.4   -49.2  +117.4   -16.3
+          C   181   +43.3    +$7831    24      802      +74.0   +78.5   -91.6   +74.1  +115.3
+  verdict: (1) B>A pooled ✗ (+40.8→+27.3) · (2) ≥4/5 windows ✗ (1/5) · (3) ex-best ✗ (+10.0→-0.4) · (4) control ✗ (CΔ +2.5 vs BΔ -13.5)
+  ⇒ FAIL — closed and banked per A11
+
+  ── pb-ride (1DTE, +14/−30)
+    variant     n   exp/t     total  win%  blocked      Mar26  AprMay    MA25     T24    CMix
+          A   848    -7.5    -$6362    63        —      -12.7   -12.6   +18.2    -5.4   -26.7
+          B   732    -2.6    -$1938    65      536      +13.4   -18.3   +20.4    -1.0   -21.1
+          C   397   -18.5    -$7335    60     1962      -66.0    +6.8    +2.6    -4.2   -43.6
+  verdict: (1) B>A pooled ✓ (-7.5→-2.6) · (2) ≥4/5 windows ✓ (4/5) · (3) ex-best ✓ (-16.6→-10.7) · (4) control ✓ (CΔ -11.0 vs BΔ +4.9)
+  ⇒ PASS — forward item eligible at/after A6 (NOT armable from this)
+
+  PROBE ONLY — modeled where NBBO thins; motivating day 2026-07-06 is outside this corpus. Registry A11 owns the rules.
+

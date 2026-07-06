@@ -177,6 +177,19 @@ counter-trend side improves per-trade expectancy re-entry-aware (a gated entry f
 - **On PASS:** NOT armable from this — next step is a forward item at/after the A6 read (stamped
   shadow split or paper twins). **On FAIL:** closed and banked; don't re-litigate without new data.
 
+## A12 · Counter-DAY-trend gate, OPEN-anchored (pre-registered 2026-07-06 — the A11 residue, OFFLINE PROBE ONLY)
+A11 failed and named its residue: the ribbon is too FAST a clock (pb-ride's entries are ribbon-aligned
+by construction — 0 gate fires; the 07-06 killer puts were with-ribbon at entry because the pullback
+had flipped it). A12 tests the SLOW anchor: day trend = sign(close − session open). Constants FIXED
+now, not tuned: neutral deadband |close−open| < 0.05% of open (never blocks), gate inert before
+minute 30 (no established day trend inside the opening range).
+- **Design:** identical to A11 in every other respect — same channels (momo-shape live spec 0DTE
+  ride/−50; pb-ride builtin 1DTE +14/−30), same faithful re-entry-aware harness, same 5 windows,
+  same B (block counter-day-anchor side) vs C control (block aligned side).
+- **PASS/kill: the same four gates as A11**, verbatim. On PASS → forward item at/after A6, not
+  armable from this. On FAIL → the counter-trend thread is CLOSED at two anchors; no third variant
+  without genuinely new evidence (anti-anchor-shopping rule: two anchors is the budget).
+
 ## A6b · NEAR-MISS metric (pre-registered 2026-07-02 — read WITH A6, not before)
 **Metric:** near-miss rate = trades whose peak_mark reached ≥70% of the channel's TP level
 (`peak ≥ entry·(1 + 0.7·tp/100)`, tp>0) but closed ≤ $0, per channel. Measurable from live

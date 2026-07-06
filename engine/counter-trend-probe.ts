@@ -17,7 +17,13 @@
 //  Channels: momo-shape (LIVE spec_json from the DB, 0DTE, ride to −50) and
 //  pb-ride (registry builtin, 1DTE, live +14/−30). Motivating day 2026-07-06 is
 //  OUTSIDE the corpus (NBBO cache ends 2026-06-01) — zero same-day fitting.
-//    npx tsx --env-file=.env.local engine/counter-trend-probe.ts
+//    npx tsx --env-file=.env.local engine/counter-trend-probe.ts              # A11 ribbon anchor
+//    npx tsx --env-file=.env.local engine/counter-trend-probe.ts --anchor open # A12 open anchor
+//
+//  A12 (--anchor open): day trend = sign(close − session open); pre-fixed
+//  constants (registry A12): 0.05% neutral deadband, inert before minute 30.
+//  The SLOW clock the A11 residue named — pb-ride's ribbon-aligned entries CAN
+//  oppose it (exactly the 07-06 counter-day-put shape).
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
 import { simulateSession } from "./backtest";
@@ -35,13 +41,34 @@ const p = (s: unknown, w: number) => String(s).padStart(w);
 type LG = (f: ReturnType<typeof computeFeatures>, dir: "call" | "put", m: number | null) => boolean;
 interface Res { date: string; win: string | null; pnl: number; n: number; wins: number }
 
-// Ribbon state per engine-minute for one session — keyed by computeFeatures().minute
+const ANCHOR = ((): "ribbon" | "open" => {
+  const i = process.argv.indexOf("--anchor");
+  const v = i >= 0 ? process.argv[i + 1] : "ribbon";
+  if (v !== "ribbon" && v !== "open") throw new Error(`unknown anchor ${v}`);
+  return v;
+})();
+const OPEN_DEADBAND = 0.0005; // A12 pre-fixed: |close−open| < 0.05% of open → neutral, never blocks
+const OPEN_MIN_MINUTE = 30;   // A12 pre-fixed: no day-trend claim inside the opening range
+
+// Trend state per engine-minute for one session — keyed by computeFeatures().minute
 // so the gate's lookup matches the sim's own feature row EXACTLY (no ts in Features).
-function ribbonByMinute(bars: Bar[]): Map<number, boolean> {
-  const closes = bars.map((b) => b.close);
-  const e9 = ema(closes, 9), e21 = ema(closes, 21);
+// Value: true = day-up, false = day-down, ABSENT = neutral/unknown (never blocks).
+function trendByMinute(bars: Bar[]): Map<number, boolean> {
   const m = new Map<number, boolean>();
-  for (let i = 0; i < bars.length; i++) m.set(computeFeatures(bars, i).minute, e9[i] > e21[i]);
+  if (ANCHOR === "ribbon") {
+    const closes = bars.map((b) => b.close);
+    const e9 = ema(closes, 9), e21 = ema(closes, 21);
+    for (let i = 0; i < bars.length; i++) m.set(computeFeatures(bars, i).minute, e9[i] > e21[i]);
+    return m;
+  }
+  const open = bars[0].open;
+  for (let i = 0; i < bars.length; i++) {
+    const f = computeFeatures(bars, i);
+    if (f.minute < OPEN_MIN_MINUTE) continue;
+    const dev = (bars[i].close - open) / open;
+    if (Math.abs(dev) < OPEN_DEADBAND) continue;
+    m.set(f.minute, dev > 0);
+  }
   return m;
 }
 
@@ -56,7 +83,7 @@ function run(D: Prepped, ch: ChanDef, mode: "A" | "B" | "C"): { rs: Res[]; fired
     if (!exp) continue;
     let gate: LG | undefined;
     if (mode !== "A") {
-      const rib = ribbonByMinute(s.bars as Bar[]);
+      const rib = trendByMinute(s.bars as Bar[]);
       gate = (f, dir) => {
         const up = rib.get(f.minute);
         if (up == null) return false; // unknown state never blocks (fail-open for the PROBE — measured, not safety)
@@ -83,8 +110,8 @@ async function main() {
   const momoSpec = (momoRow as { spec_json: StrategySpec } | null)?.spec_json;
   if (!momoSpec?.entries) throw new Error("momo-shape spec_json not readable");
   const D = await prep("SPY", "data/databento-mdte");
-  console.log(`\n  COUNTER-TREND PROBE (A11) · ${D.real.length} SPY sessions · re-entry-aware ribbon gate · real NBBO`);
-  console.log(`  B = block counter-ribbon side · C = CONTROL (block aligned side) · rules pre-registered\n`);
+  console.log(`\n  COUNTER-TREND PROBE (${ANCHOR === "ribbon" ? "A11 · ribbon EMA9/21" : "A12 · OPEN anchor, deadband 0.05%, from min 30"}) · ${D.real.length} SPY sessions · re-entry-aware · real NBBO`);
+  console.log(`  B = block counter-trend side · C = CONTROL (block aligned side) · rules pre-registered\n`);
 
   const CHANNELS: ChanDef[] = [
     { name: "momo-shape (0DTE, ride/−50)", dte: 0, px: { stopPct: 50 }, mk: specEval(momoSpec.entries as never, "15:25") as never },
