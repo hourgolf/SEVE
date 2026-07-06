@@ -154,7 +154,13 @@ async function seed(): Promise<void> {
     const bars = barsBySym.get(sym)!;
     // Per-symbol seed is independent — a flaky one symbol must not abort the others.
     try {
-      bars.seed(await retry(`seed bars ${sym}`, () => alpaca.backfillBars(sym, 3)));
+      // 7-DAY seed lookback (2026-07-06 fix): 3 calendar days misses the PRIOR SESSION when a
+      // boot follows a long weekend (07-06 incident: a 10:02 ET post-Independence-Day reboot
+      // seeded only Fri-holiday+weekend+Monday → computeLevels had no prior session → gap AND
+      // pdh/pdl undefined → gap_min channels fail-closed stood down on a +0.51% gap day, and
+      // `level` conditions never fired). 7 days guarantees ≥1 prior trading session through any
+      // holiday cluster; the BarStore cap keeps memory bounded.
+      bars.seed(await retry(`seed bars ${sym}`, () => alpaca.backfillBars(sym, 7)));
       const l = bars.latest();
       info(`seed[${sym}]: ${bars.length} bars (latest ${l ? new Date(l.ts).toISOString() : "—"}, spot ${l?.close ?? "?"})`);
       await refreshChain(sym);
@@ -605,6 +611,10 @@ async function main(): Promise<void> {
     ? (config.shadowWriteEvents ? "events" : "none (service role, events off)")
     : "none (anon, read-only)";
   info(`feeds: stock=${config.stockFeed} opt=${config.optFeed} · dryRun=${config.dryRun} · liveTrading=${config.liveTrading} · writes=${writeMode}`);
+  // Boot flags → the DB journal (2026-07-06): env-gated safety switches were previously
+  // invisible outside Railway logs — an operator flipping ORPHAN_FLATTEN had no in-band
+  // confirmation the restarted worker picked it up. One line per boot, queryable in events.
+  void store.journal("EXEC", `boot: ${WORKER_VERSION} · orphanFlatten=${config.orphanFlatten ? "ARMED" : "detect-only"} · symbols=${SYMBOLS.join(",")}`);
 
   // Phase B posture — the TWO-KEY turn. Going live requires DRY_RUN=false AND
   // LIVE_TRADING=true AND the service role, together; a partial flip refuses to

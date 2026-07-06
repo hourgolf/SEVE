@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-05b"; // RUNNER tranche DARK (R1, 64_runner_tranche: runner_frac/runner_giveback_pct both 0=off) — split-row TP tranche + peak-ratchet remainder ('target_tranche'/'runner_ratchet'); exit rules extracted to exitRules.ts (hermetic selftest). Prior (05a): C1 stack-cap dark + eventDay stamps
+export const WORKER_VERSION = "stream-2026-07-06a"; // SEED LOOKBACK 3→7 days (post-long-weekend boot lost the prior session → gap/pdh/pdl undefined → gap_min channels silently fail-closed on a gap day; the 07-06 10:02 reboot incident) + boot journal line (version + orphanFlatten state → events). Prior (05b): runner tranche dark
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
