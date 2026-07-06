@@ -161,6 +161,22 @@ until each channel reaches its own N≥40 (rides accrue slowly — deferred read
 - **Pass:** expectancy > 0 AND capture ≥ 25% at own N≥40 → ride config + size stand; the item
   recurs monthly as N accrues.
 
+## A11 · Counter-trend-side gate on the ride family (pre-registered 2026-07-06 — OFFLINE PROBE ONLY)
+Motivated by an n=1 (2026-07-06 PM: five counter-trend puts fired mid-uptrend, −$2,922 — the day's
+whole loss) — DISCLOSED as such; the probe corpus (5 windows, NBBO ends 2026-06-01) excludes that day
+entirely. Hypothesis: on the ride family, entries whose DIRECTION opposes the intraday trend state
+(`trend_align` ribbon, EMA9-vs-EMA21 — existing armable vocab) are the loss engine; gating ONLY the
+counter-trend side improves per-trade expectancy re-entry-aware (a gated entry frees the slot).
+- **Design (fixed before any result):** channels momo-shape (live spec, 0DTE, ride/−50) and pb-ride
+  (registry builtin, 1DTE, live +14/−30); faithful harness (lever-shared: RISK/gate/1-tick, real
+  NBBO); treatment **B** = block entries opposing the ribbon; control **C** = block entries ALIGNED
+  with the ribbon (the anti-mechanical check — if "fewer trades" is the whole effect, C improves too).
+- **PASS requires ALL FOUR:** (1) B pooled exp/t > baseline A per channel; (2) B non-degrading in
+  ≥4/5 windows; (3) B's pooled improvement survives dropping A's best window; (4) C's improvement
+  < half of B's (else the effect is mechanical thinning, not signal).
+- **On PASS:** NOT armable from this — next step is a forward item at/after the A6 read (stamped
+  shadow split or paper twins). **On FAIL:** closed and banked; don't re-litigate without new data.
+
 ## A6b · NEAR-MISS metric (pre-registered 2026-07-02 — read WITH A6, not before)
 **Metric:** near-miss rate = trades whose peak_mark reached ≥70% of the channel's TP level
 (`peak ≥ entry·(1 + 0.7·tp/100)`, tp>0) but closed ≤ $0, per channel. Measurable from live
