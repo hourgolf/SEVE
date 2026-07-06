@@ -1631,6 +1631,13 @@
 .console-root[data-theme="blackout"] .m-app .puts { color: var(--red); }
 .console-root[data-theme="blackout"] .market-section .grid .strike-col,
 .console-root[data-theme="blackout"] .m-app .strike-col { background: rgba(255, 255, 255, 0.04); }
+/* mobile fx rows (LAB bench / forensics): the channel name keeps its full width and a
+   long stat line wraps beneath it — at 375px a wide .fx-mid (e.g. the LAB cumulative
+   "12/12 scored · win 58% · last 07-06") crushed names to 1–2 ellipsized characters,
+   which un-disambiguates the -qqq/-iwm suffixed vb slugs. Short rows stay one line. */
+.m-app .fx-row { flex-wrap: wrap; row-gap: 0; }
+.m-app .fx-row .fx-name { flex: 1 1 auto; min-width: max-content; }
+.m-app .fx-row .au-pnl { margin-left: auto; }
 .market-section .grid td,
 .m-app .panel td { border-bottom-color: rgba(0, 0, 0, 0.08); }
 .market-section .grid th,
