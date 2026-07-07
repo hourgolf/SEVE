@@ -64,13 +64,17 @@ function runOne(c: Chan, spec: any, cfg: { risk: number; maxC: number; dailyStop
   }
   try {
     if (existsSync(emit)) rmSync(emit);
-    execFileSync(TSX, args, { encoding: "utf8", stdio: ["ignore", "ignore", "ignore"], maxBuffer: 1 << 24, timeout: 120_000, killSignal: "SIGKILL" });
+    // stderr piped: the engine fail-fasts on a partial/unloadable quote tape (no more
+    // silent Black-Scholes degrade) — surface its one-line reason instead of "Command failed".
+    execFileSync(TSX, args, { encoding: "utf8", stdio: ["ignore", "ignore", "pipe"], maxBuffer: 1 << 24, timeout: 120_000, killSignal: "SIGKILL" });
     if (!existsSync(emit)) return { pnl: 0, trades: 0, ok: false, note: "no fills" };
     const out = JSON.parse(readFileSync(emit, "utf8")) as { perDay: { date: string; pnl: number; trades: number }[] };
     const pnl = out.perDay.reduce((a, d) => a + d.pnl, 0), trades = out.perDay.reduce((a, d) => a + d.trades, 0);
     return { pnl: Math.round(pnl), trades, ok: true };
   } catch (e) {
-    return { pnl: 0, trades: 0, ok: false, note: (e as Error).message.split("\n")[0] };
+    const err = e as Error & { stderr?: string };
+    const reason = (err.stderr ?? "").split("\n").find((l) => l.trim()) ?? err.message.split("\n")[0];
+    return { pnl: 0, trades: 0, ok: false, note: reason.trim() };
   } finally {
     for (const p of [emit, specPath]) { try { if (existsSync(p)) rmSync(p); } catch { /* */ } }
   }

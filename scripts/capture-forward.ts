@@ -87,6 +87,15 @@ async function main() {
   run("backfill-forensics", ["backfill-forensics"], 2);
 
   // TIER 2 — live-window analyses (best-effort; the ledger needs the still-live 7d quotes)
+  // Sequencing note (2026-07-06): day-report's benched-sim replays stay AFTER the Tier-1
+  // exports on purpose. The chain is sequential (no self-inflicted concurrency), but the
+  // free-tier DB can still be slow in this window (statement timeouts) — that used to make
+  // the engine silently degrade to Black-Scholes chains and bank a modeled P&L as "real
+  // NBBO" (the −144.96/−487.31 two-state flicker). The engine now retries each quote page
+  // 4× and FAIL-FASTS on a partial tape, so residual DB pressure yields a loud "sim
+  // failed:" note in the payload, never a wrong number. Don't move benched-sim ahead of
+  // the irreplaceable Tier-1 tape exports to dodge load — the fix is honest failure, and a
+  // failed night self-heals on the next run (day-report upserts, catch-up window 6d).
   for (const d of recentDays) run(`day-report ${d}`, ["day-report", "--", "--date", d], 2);
   run("build-training-store", ["build-training-store"], 2);
   // gate-shadow (phase-4 A2): bank each blocked entry's would-have outcome BEFORE the 7d

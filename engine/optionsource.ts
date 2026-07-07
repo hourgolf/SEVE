@@ -23,6 +23,33 @@ function loadEnv() {
 
 const SPREAD_FRAC = 0.03; // modeled bid/ask = mid ± 1.5% (until real quotes exist)
 
+// ── transient-load retry + completeness invariant (2026-07-06) ───────────────
+// Under the nightly capture chain's DB load a page read can die server-side
+// ("canceling statement due to statement timeout"). That single lost page used to
+// surface as a THROW that backtest.ts caught and silently replaced with modeled
+// chains — the power/07-02 closed-day flicker (−144.96 real vs −487.31 modeled,
+// same 2 trades). So: (a) every page retries with backoff before giving up, and
+// (b) each day's fetched row count is checked against the server's own count —
+// any shortfall mechanism that does NOT error (row cap, dropped page) throws too.
+// A partial tape must never sim as if it were the real one.
+const PAGE_ATTEMPTS = 4;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// query is a FACTORY (a fresh builder per attempt — supabase builders are single-use).
+async function withRetry<R extends { error: { message: string } | null }>(label: string, query: () => PromiseLike<R>): Promise<R> {
+  let lastMsg = "";
+  for (let attempt = 1; attempt <= PAGE_ATTEMPTS; attempt++) {
+    if (attempt > 1) await sleep(500 * 3 ** (attempt - 2)); // 0.5s → 1.5s → 4.5s
+    try {
+      const res = await query();
+      if (!res.error) return res;
+      lastMsg = res.error.message;
+    } catch (e) {
+      lastMsg = (e as Error).message; // fetch-level (network) rejection
+    }
+  }
+  throw new Error(`${label}: ${lastMsg} (after ${PAGE_ATTEMPTS} attempts)`);
+}
+
 export type ChainProvider = (spot: number, minutesToClose: number, tsMs: number) => Quote[];
 
 interface Series {
@@ -76,16 +103,27 @@ export async function loadOptionBarsByDay(dates: string[], underlying = "SPY"): 
 
   for (const date of dates) {
     const contracts = new Map<string, Series>();
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await sb
-        .from("option_bars")
-        .select("occ_symbol,ts,strike,opt_type,close,expiration")
-        .eq("expiration", date)
-        .like("occ_symbol", occPrefix)
-        .order("ts", { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (error) throw new Error("option_bars read: " + error.message);
+    // completeness invariant: the server's own count is the floor the scan must reach
+    // (rows only ever ARRIVE mid-scan — same-day deletes don't happen — so fetched < count
+    // means pages were silently lost, not that the table moved).
+    const { count } = await withRetry(`option_bars count ${date}`, () =>
+      sb.from("option_bars").select("occ_symbol", { count: "exact", head: true }).eq("expiration", date).like("occ_symbol", occPrefix));
+    const expected = count ?? 0;
+    let fetched = 0;
+    if (expected > 0) for (let from = 0; ; from += PAGE) {
+      const { data } = await withRetry(`option_bars page ${date}@${from}`, () =>
+        sb.from("option_bars")
+          .select("occ_symbol,ts,strike,opt_type,close,expiration")
+          .eq("expiration", date)
+          .like("occ_symbol", occPrefix)
+          // ts alone is not unique (every contract bars the same minute) — without the
+          // occ_symbol tie-break, offset pages can shuffle ties across the boundary and
+          // silently drop/duplicate rows even on an idle table.
+          .order("ts", { ascending: true })
+          .order("occ_symbol", { ascending: true })
+          .range(from, from + PAGE - 1));
       const rows = (data ?? []) as RawOB[];
+      fetched += rows.length;
       for (const r of rows) {
         if (r.close == null) continue;
         let s = contracts.get(r.occ_symbol);
@@ -98,6 +136,8 @@ export async function loadOptionBarsByDay(dates: string[], underlying = "SPY"): 
       }
       if (rows.length < PAGE) break;
     }
+    if (fetched < expected)
+      throw new Error(`option_bars ${date}: fetched ${fetched}/${expected} rows — partial series (DB under load?); refusing to serve a truncated tape`);
     if (contracts.size) out.set(date, [...contracts.values()]);
   }
   return out;
@@ -157,16 +197,25 @@ export async function loadOptionQuotesByDay(dates: string[], underlying = "SPY")
   for (const date of dates) {
     const contracts = new Map<string, QSeries>();
     let lastId = "";
+    // completeness invariant (see withRetry): quotes only INSERT intraday, and retention
+    // prunes whole >7d days — a same-week day's rows never vanish mid-scan, so any
+    // fetched-below-count is a silent shortfall, not churn.
+    const { count } = await withRetry(`option_quotes count ${date}`, () =>
+      sb.from("option_quotes").select("id", { count: "exact", head: true }).eq("expiration", date).eq("underlying", underlying));
+    const expected = count ?? 0;
+    let fetched = 0;
     // keyset-paginate on id (OFFSET paging this table times out — the W3 export learned this)
-    for (;;) {
-      let q = sb.from("option_quotes")
-        .select("id,occ_symbol,captured_at,strike,opt_type,bid,ask")
-        .eq("expiration", date).eq("underlying", underlying)
-        .order("id", { ascending: true }).limit(PAGE);
-      if (lastId) q = q.gt("id", lastId);
-      const { data, error } = await q;
-      if (error) throw new Error("option_quotes read: " + error.message);
+    if (expected > 0) for (;;) {
+      const { data } = await withRetry(`option_quotes page ${date} after ${lastId || "start"}`, () => {
+        let q = sb.from("option_quotes")
+          .select("id,occ_symbol,captured_at,strike,opt_type,bid,ask")
+          .eq("expiration", date).eq("underlying", underlying)
+          .order("id", { ascending: true }).limit(PAGE);
+        if (lastId) q = q.gt("id", lastId);
+        return q;
+      });
       const rows = (data ?? []) as Array<RawOQ & { id: string }>;
+      fetched += rows.length;
       for (const r of rows) {
         if (r.bid == null || r.ask == null) continue;
         let s = contracts.get(r.occ_symbol);
@@ -178,6 +227,8 @@ export async function loadOptionQuotesByDay(dates: string[], underlying = "SPY")
       if (rows.length < PAGE) break;
       lastId = rows[rows.length - 1].id;
     }
+    if (fetched < expected)
+      throw new Error(`option_quotes ${date}: fetched ${fetched}/${expected} rows — partial tape (DB under load?); refusing to sim on it`);
     // keyset order is by id, not time → sort each series by ts so the binary search holds
     for (const s of contracts.values()) {
       const ord = s.ts.map((_, i) => i).sort((a, b) => s.ts[a] - s.ts[b]);

@@ -788,19 +788,35 @@ async function main() {
     if (entryCostGate && gateFillCross != null) entryCostGate.gateCostModel = { ...cost, spreadCrossFrac: gateFillCross };
     let byDay = new Map();
     if (useDatabento) byDay = loadDatabentoByDay(sessions.map((s) => s.dateET), underlying);
-    else if (useQuotes) {
+    else if (useQuotes || useRealOptions) {
+      // FAIL-HONEST (2026-07-06, replaces the L6c warn-and-continue): a failed real-chain
+      // load must KILL the run, not degrade it. The old fallback still produced a P&L on
+      // Black-Scholes chains — under the capture chain's DB load the same closed-day run
+      // quantized to two outcomes (power/07-02: −144.96 real vs −487.31 modeled, same 2
+      // trades), and emit-file consumers (benched-sim, lastweek probe) never see stdout,
+      // so the modeled number banked AS real NBBO. optionsource now retries each page 4×
+      // and verifies row counts before this can even throw — an error here means the DB
+      // is persistently unhealthy. Re-run then, or pass --options synthetic to EXPLICITLY
+      // ask for modeled chains. (Mirrors the KNOWN_STRATS fail-fast above.)
       try {
-        byDay = await loadOptionQuotesByDay(sessions.map((s) => s.dateET), underlying);
+        byDay = useQuotes
+          ? await loadOptionQuotesByDay(sessions.map((s) => s.dateET), underlying)
+          : await loadOptionBarsByDay(sessions.map((s) => s.dateET), underlying);
       } catch (e) {
-        // LOUD (audit L6c): a silent fallback reads as "real NBBO" when the run is actually modeled.
-        console.log(`  ⚠⚠ OPTION DATA FALLBACK — option_quotes unavailable (${(e as Error).message}); this run uses MODELED (Black-Scholes) chains, NOT real NBBO. Results are not fill-realistic.`);
+        console.error(`backtest: --options ${optMode} requested but the real option chain failed to load — refusing the silent Black-Scholes fallback. ${(e as Error).message}`);
+        process.exit(1);
       }
-    } else if (useRealOptions) {
-      try {
-        byDay = await loadOptionBarsByDay(sessions.map((s) => s.dateET), underlying);
-      } catch (e) {
-        // LOUD (audit L6c): a silent fallback reads as "real fills" when the run is actually modeled.
-        console.log(`  ⚠⚠ OPTION DATA FALLBACK — option_bars unavailable (${(e as Error).message}); this run uses MODELED (Black-Scholes) chains, NOT real option prices. Results are not fill-realistic.`);
+    }
+    // --options quotes is the same-week FIDELITY mode — its numbers get banked as "real
+    // NBBO" (benched-sim payloads, probe verdicts), so a session with zero quotes must not
+    // silently sim on modeled chains either (the per-day fallback below stays for --options
+    // real, whose option_bars coverage is legitimately partial and disclosed by the N/M
+    // label). --allow-modeled-days opts back into the labeled blend for exploratory runs.
+    if (useQuotes && !process.argv.includes("--allow-modeled-days")) {
+      const missing = sessions.filter((s) => !(byDay.get(s.dateET) as unknown[] | undefined)?.length).map((s) => s.dateET);
+      if (missing.length) {
+        console.error(`backtest: --options quotes but no option_quotes rows for ${missing.join(", ")} (7d retention — run same-week) — refusing the silent per-day Black-Scholes fallback. Pass --allow-modeled-days to blend modeled chains for the gap days.`);
+        process.exit(1);
       }
     }
     let realDays = 0;

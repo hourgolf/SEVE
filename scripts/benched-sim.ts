@@ -86,7 +86,11 @@ function simChannel(s: { slug: string; name: string; underlying: string; spec_js
   if (useSpec) { writeFileSync(specPath, JSON.stringify(s.spec_json)); args.push("--spec", specPath); }
   try {
     try { if (existsSync(emit)) rmSync(emit); } catch { /* ignore */ } // never read a stale prior emit
-    execFileSync(TSX, args, { encoding: "utf8", stdio: ["ignore", "ignore", "ignore"], maxBuffer: 1 << 24, timeout: 60_000, killSignal: "SIGKILL" });
+    // stderr piped (not ignored): the engine now FAIL-FASTS on a partial/unloadable quote
+    // tape instead of degrading to Black-Scholes (the −144.96/−487.31 two-state flicker) —
+    // the one-line reason must reach the banked note. 120s timeout = headroom for the
+    // loader's 4×-with-backoff page retries under capture-chain DB load.
+    execFileSync(TSX, args, { encoding: "utf8", stdio: ["ignore", "ignore", "pipe"], maxBuffer: 1 << 24, timeout: 120_000, killSignal: "SIGKILL" });
     if (!existsSync(emit)) return { slug: s.slug, name: s.name, underlying: u, useSpec, ran: false, trades: 0, pnl: 0, note: "no session data (no fills emitted)" };
     const out = JSON.parse(readFileSync(emit, "utf8")) as { perDay: { date: string; pnl: number; trades: number }[] };
     const d = out.perDay.find((p) => p.date === date) ?? { pnl: 0, trades: 0 };
@@ -94,7 +98,9 @@ function simChannel(s: { slug: string; name: string; underlying: string; spec_js
     // banked payload is the audit trail the -manual mirage hid in.
     return { slug: s.slug, name: s.name, underlying: u, useSpec, ran: true, trades: d.trades, pnl: Math.round(d.pnl), ...(builtin && builtin !== s.slug ? { note: `ran builtin "${builtin}"` } : {}) };
   } catch (e) {
-    return { slug: s.slug, name: s.name, underlying: u, useSpec, ran: false, trades: 0, pnl: 0, note: `sim failed: ${(e as Error).message.split("\n")[0]}` };
+    const err = e as Error & { stderr?: string };
+    const reason = (err.stderr ?? "").split("\n").find((l) => l.trim()) ?? err.message.split("\n")[0];
+    return { slug: s.slug, name: s.name, underlying: u, useSpec, ran: false, trades: 0, pnl: 0, note: `sim failed: ${reason.trim()}` };
   } finally {
     for (const p of [emit, specPath]) { try { if (existsSync(p)) rmSync(p); } catch { /* ignore */ } }
   }
