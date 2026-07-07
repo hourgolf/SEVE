@@ -11,8 +11,9 @@
 //  actual P&L for the day.
 //
 //  Faithfulness: it drives engine/backtest.ts (--options quotes + the --risk/--ustop/
-//  --cost-gate/--prem-stop faithful-config flags), the SAME resolver mc-roster and every
-//  probe trust — base-slug builtins vs compiled spec_json (worker precedence). Known
+//  --cost-gate/--prem-stop faithful-config flags) with worker-parity slug resolution —
+//  exact-first-then-base builtins passed to --strat by their RESOLVED name (decide.ts
+//  buildEvaluator precedence) vs compiled spec_json for everything else. Known
 //  minor gaps vs live: the cutoff→1DTE roll (backtest sims 0DTE) and power's +100%
 //  giveback trail (not modeled) — both noted; neither changes the verdict's sign.
 //
@@ -37,12 +38,20 @@ function loadEnv() {
   } catch { /* ignore */ }
 }
 
-// Mirror the worker's base-slug precedence (engine/registry.ts + decide.ts buildEvaluator):
-// EXACT slug first (decide.ts:120 tries getStrategy(slug) before the stripped form), else the
-// base slug; a registry built-in runs as CODE, everything else uses spec_json.
+// Mirror the worker's slug resolution (engine/registry.ts + decide.ts buildEvaluator, ~L159):
+// EXACT slug first, else the base slug — the same strip chain decide.ts runs (-N / -manual /
+// -qqq|spy / -itm); a registry built-in runs as CODE, everything else uses spec_json. The sim
+// must pass the RESOLVED name to the engine: backtest.ts strips only -qqq/-spy and used to
+// fall through to FADE for any slug its ternary didn't know — that's the pre-06-30 forensics
+// mirage where the three -manual twins replayed with identical trades+P&L (all three were
+// running fade). Fixed 2026-07-06, alongside a fail-fast on unknown --strat in backtest.ts.
 const BUILTINS = new Set(["breakout", "power", "power-final30", "grind", "grind-v2", "grind-v3", "pb-ride", "fade"]);
-const baseSlug = (s: string) => s.replace(/-\d+$/, "").replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "");
-const isBuiltin = (slug: string) => BUILTINS.has(slug) || BUILTINS.has(baseSlug(slug));
+// Registry CODE the engine CLI can't run — backtest.ts has no pullback branch (the pb probes
+// import buildPullback directly). Flag it honestly; never let it reach the engine's ternary.
+const NO_ENGINE_STRAT = new Set(["pb-ride"]);
+const baseSlug = (s: string) => s.replace(/-\d+$/, "").replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "").replace(/-itm$/i, "");
+export const resolveBuiltin = (slug: string): string | null =>
+  BUILTINS.has(slug) ? slug : BUILTINS.has(baseSlug(slug)) ? baseSlug(slug) : null;
 // Channels whose entries land inside the 0DTE cutoff (OPEN_0DTE_CUTOFF_MIN=31) → the live worker
 // rolls them to the NEXT-session expiry (decide.ts:289). The sim fills the 0DTE chain only, so a
 // 1DTE-only channel's P&L is NOT comparable (premium ~2-3× / different theta). Flag, don't sim.
@@ -58,11 +67,19 @@ export interface BenchedVsLive { date: string; sameWeek: boolean; benched: Bench
 // Run one benched channel through the engine on the day's real NBBO with its real config.
 function simChannel(s: { slug: string; name: string; underlying: string; spec_json: unknown; risk: number; maxC: number; dailyStop: number; ustop: number }, date: string): BenchedResult {
   const u = (s.underlying || "SPY").toUpperCase();
-  const useSpec = !isBuiltin(s.slug) && s.spec_json != null;
+  const builtin = resolveBuiltin(s.slug);
+  const useSpec = builtin == null && s.spec_json != null;
+  // Fail HONEST, not silent: an unresolvable slug with no spec has nothing to replay, and a
+  // pb-ride-family draft would need engine code that doesn't exist — both used to fall through
+  // to the engine's fade default and bank a mirage P&L.
+  if (builtin == null && s.spec_json == null)
+    return { slug: s.slug, name: s.name, underlying: u, useSpec: false, ran: false, trades: 0, pnl: 0, note: "no builtin match + no spec_json — nothing to sim" };
+  if (builtin != null && NO_ENGINE_STRAT.has(builtin))
+    return { slug: s.slug, name: s.name, underlying: u, useSpec: false, ran: false, trades: 0, pnl: 0, note: `${builtin} is worker-only code — engine has no --strat for it` };
   const emit = join(tmpdir(), `seve-benched-${s.slug.replace(/[^a-z0-9-]/gi, "_")}.json`);
   const specPath = join(tmpdir(), `seve-benched-spec-${s.slug.replace(/[^a-z0-9-]/gi, "_")}.json`);
   const daysBack = Math.ceil((Date.now() - Date.parse(date + "T00:00:00Z")) / 86_400_000) + 5;
-  const args = ["engine/backtest.ts", "--strat", s.slug, "--underlying", u, "--source", "real", "--options", "quotes",
+  const args = ["engine/backtest.ts", "--strat", builtin ?? s.slug, "--underlying", u, "--source", "real", "--options", "quotes",
     "--from", date, "--to", date, "--days", String(daysBack),
     "--risk", String(s.risk), "--max-contracts", String(s.maxC), "--daily-stop", String(s.dailyStop),
     "--cost-gate", "3.0", "--prem-stop", "50", "--ustop", String(s.ustop), "--emit-trades", emit];
@@ -73,7 +90,9 @@ function simChannel(s: { slug: string; name: string; underlying: string; spec_js
     if (!existsSync(emit)) return { slug: s.slug, name: s.name, underlying: u, useSpec, ran: false, trades: 0, pnl: 0, note: "no session data (no fills emitted)" };
     const out = JSON.parse(readFileSync(emit, "utf8")) as { perDay: { date: string; pnl: number; trades: number }[] };
     const d = out.perDay.find((p) => p.date === date) ?? { pnl: 0, trades: 0 };
-    return { slug: s.slug, name: s.name, underlying: u, useSpec, ran: true, trades: d.trades, pnl: Math.round(d.pnl) };
+    // A resolved clone (e.g. breakout-2 → breakout) notes which code actually ran — the
+    // banked payload is the audit trail the -manual mirage hid in.
+    return { slug: s.slug, name: s.name, underlying: u, useSpec, ran: true, trades: d.trades, pnl: Math.round(d.pnl), ...(builtin && builtin !== s.slug ? { note: `ran builtin "${builtin}"` } : {}) };
   } catch (e) {
     return { slug: s.slug, name: s.name, underlying: u, useSpec, ran: false, trades: 0, pnl: 0, note: `sim failed: ${(e as Error).message.split("\n")[0]}` };
   } finally {

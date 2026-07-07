@@ -618,6 +618,18 @@ async function main() {
       management = spec.management; // smart (tranched) spec → manage.ts owns exits
     }
   }
+  // Fail FAST on a --strat the ternary below doesn't know (a --spec run is exempt — specDef
+  // wins and --strat is only a label there). This used to fall through to FADE silently, and
+  // roster scripts pass channel slugs here: an unresolved clone slug (e.g. grind-manual)
+  // banked fade P&L as that channel's would-be — the pre-06-30 "-manual twins identical P&L"
+  // forensics mirage. Callers own resolution to a base builtin (scripts/benched-sim.ts
+  // resolveBuiltin / worker decide.ts buildEvaluator). Keep this set in lockstep with the
+  // ternary below.
+  const KNOWN_STRATS = new Set(["fade", "cross", "breakout", "power", "power-final35", "power-final30", "power-mom60", "power-mom35", "power-mom30", "grind", "grind-v2", "grind-v3", "fade-v2", "straddle"]);
+  if (!specPath && !KNOWN_STRATS.has(strat)) {
+    console.error(`backtest: unknown --strat "${stratRaw}"${strat !== stratRaw ? ` (ticker-stripped: "${strat}")` : ""} and no --spec — refusing the silent fade fallback. Known: ${[...KNOWN_STRATS].sort().join(", ")}.`);
+    process.exit(1);
+  }
   // EMA Cross precomputes indicators over the session's closes, so its
   // evaluator is built per session; fade/breakout ignore the closes arg.
   const makeEval = (closes: number[]): Evaluate =>
