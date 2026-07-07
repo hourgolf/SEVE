@@ -45,6 +45,14 @@ index-expansion-kit.md`** = the codified one-day new-index playbook.
   Nightly `npm run capture` = the data ritual (quotes/bars export + reconcile drift-gate +
   gate-shadow + forensics regen) — verify it stays alive; option_quotes prune at 7d and are NOT
   reconstructable.
+- **Backtest input integrity (2026-07-06, merged a5c5726):** the engine's `--options quotes|real`
+  path now FAILS HONEST — quote/bars pages retry 4× then hard-exit, per-day rows verified against
+  the server's own count, NO silent Black-Scholes fallback (was: a statement-timeout under
+  capture-window DB load quantized closed-day runs to two P&Ls, e.g. power/07-02 −144.96 real vs
+  −487.31 modeled — and benched-sim banked the modeled one as "real NBBO"). quotes mode refuses
+  zero-quote days (`--allow-modeled-days` = the explicit escape); benched-sim/lastweek notes carry
+  the fail reason. forensics_reports benchedVsLive payloads generated pre-fix are suspect — audited:
+  07-01/07-02 clean, 07-06 was degraded (power 3t/−352 → true 2t/−103) and re-banked clean.
 - **Vercel env COMPLETE** (ALPACA_KEY_2/3 + SECRET_2/3 since 06-26) — UI-close works on all three
   accounts; any older "pending Vercel env" note is stale.
 - **The breakout-family diagnosis (2026-07-03, clean data):** three separate causes, not one —
