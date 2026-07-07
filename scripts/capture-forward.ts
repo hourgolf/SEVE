@@ -71,6 +71,17 @@ function tradingDaysBehind(latest: string | null): number {
 async function main() {
   console.log(`\n══ capture-forward · ${stamp()} · catch-up ${CATCHUP_DAYS}d ══`);
 
+  // CLOSE PASS (2026-07-07) — TODAY's panel-facing totals FIRST, so the §03 dashboard
+  // (forensics payload · benched-vs-live · one-account shadow · give-back · LAB gate rows)
+  // lands minutes after the bell, beside the 16:05 ET autopsy — not after the archival
+  // work. Safe to front-run Tier 1: both scripts read the LIVE DB (not the archives),
+  // they're idempotent, the engine fail-fasts on a partial quote tape (no silent modeled
+  // numbers under load), and the tape-first guarantee is preserved — exports still run
+  // every cycle below plus the 02:15 catch-up, and option_quotes hold 7d (the GAP CHECK
+  // screams long before loss). Scheduled via launchd at 13:03 local (16:03 ET).
+  run(`day-report ${recentDays[0]} (close pass)`, ["day-report", "--", "--date", recentDays[0]], 2);
+  run("gate-shadow (close pass)", ["gate-shadow"], 2);
+
   // TIER 1 — the irreplaceable raw tape (idempotent: writes only un-archived days)
   const quotesOk = run("export-quotes", ["export-quotes"], 1);
   const barsOk = run("export-bars", ["export-bars"], 1);
@@ -87,20 +98,14 @@ async function main() {
   run("backfill-forensics", ["backfill-forensics"], 2);
 
   // TIER 2 — live-window analyses (best-effort; the ledger needs the still-live 7d quotes)
-  // Sequencing note (2026-07-06): day-report's benched-sim replays stay AFTER the Tier-1
-  // exports on purpose. The chain is sequential (no self-inflicted concurrency), but the
-  // free-tier DB can still be slow in this window (statement timeouts) — that used to make
-  // the engine silently degrade to Black-Scholes chains and bank a modeled P&L as "real
-  // NBBO" (the −144.96/−487.31 two-state flicker). The engine now retries each quote page
-  // 4× and FAIL-FASTS on a partial tape, so residual DB pressure yields a loud "sim
-  // failed:" note in the payload, never a wrong number. Don't move benched-sim ahead of
-  // the irreplaceable Tier-1 tape exports to dodge load — the fix is honest failure, and a
-  // failed night self-heals on the next run (day-report upserts, catch-up window 6d).
-  for (const d of recentDays) run(`day-report ${d}`, ["day-report", "--", "--date", d], 2);
+  // Catch-up for the REMAINING days (today already published by the close pass above).
+  // Sequencing history: 2026-07-06 pinned day-report after Tier 1 because DB load could
+  // silently degrade its sims to Black-Scholes (the −144.96/−487.31 two-state flicker);
+  // the engine now retries each quote page 4× and FAIL-FASTS on a partial tape, which is
+  // what makes the close pass safe — load yields a loud "sim failed:" note, never a wrong
+  // number, and the next run self-heals (idempotent upserts, catch-up window 6d).
+  for (const d of recentDays.slice(1)) run(`day-report ${d}`, ["day-report", "--", "--date", d], 2);
   run("build-training-store", ["build-training-store"], 2);
-  // gate-shadow (phase-4 A2): bank each blocked entry's would-have outcome BEFORE the 7d
-  // quote prune erases it — the cost-gate calibration dataset accrues nightly, read-only.
-  run("gate-shadow", ["gate-shadow"], 2);
   // WEEKLY READOUT (approved 2026-07-02): Fridays only — the week's aggregate interrogation
   // of the banked data (rollup + near-miss + vb-fleet-vs-prior + gate counters). Analysis
   // only; scheduling it here is the whole point (the re-mine cadence was a memory note).
