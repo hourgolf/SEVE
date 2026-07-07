@@ -109,7 +109,14 @@ export async function benchedVsLive(date: string): Promise<BenchedVsLive> {
   // benched roster + config
   const { data: draftRaw } = await sb.from("strategists")
     .select("id,slug,name,underlying,spec_json,strategist_config(capital_pct,max_contracts,daily_stop_usd,underlying_stop_pct,entry_dte)")
-    .eq("status", "draft");
+    .eq("status", "draft")
+    // vb-* EXCLUDED (2026-07-06): the virtual-bench fleet has its OWN replay pipeline
+    // (gate-shadow → virtual_trades → the §03 LAB panel) anchored to the LIVE signal
+    // stream + config TP/stop. Simulating them here too double-reported every vb channel
+    // under DIFFERENT physics (engine-derived entries, spec exits, NBBO-crossing fills) —
+    // e.g. 07-06 vb-macd-state read +$825 here vs −$48 in LAB. One channel, one simulator:
+    // this sweep owns the CULLED drafts; the LAB pipeline owns the fleet.
+    .not("slug", "like", "vb-%");
   const drafts = ((draftRaw ?? []) as any[]).map((s) => {
     const c = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
     return { id: s.id, slug: s.slug, name: s.name ?? s.slug, underlying: s.underlying ?? "SPY", spec_json: s.spec_json,
