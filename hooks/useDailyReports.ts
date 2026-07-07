@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { useRefreshTick } from "./useRefreshTick";
 
 // Lazy read of the daily-autopsy reports (written by the daily-autopsy edge fn).
-// Not live-polled — they're once-a-day artifacts — so this fetches on mount only,
-// keeping it OUT of the always-polled desk feed (mirrors useWindowedPnl).
+// Once-a-day artifacts — kept OUT of the always-polled desk feed, but refreshed on
+// the shared slow tick (visibility-regain + 10-min poll) so a long-lived tab picks
+// up the ~16:05 ET publish without a reload.
 
 export interface ReportChannelNarrative {
   slug: string;
@@ -60,6 +62,7 @@ export function useDailyReports(limit = 10): { reports: DailyReport[]; loading: 
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const tick = useRefreshTick();
 
   useEffect(() => {
     let alive = true;
@@ -80,7 +83,7 @@ export function useDailyReports(limit = 10): { reports: DailyReport[]; loading: 
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
     });
     return () => { alive = false; };
-  }, [limit]);
+  }, [limit, tick]);
 
   return { reports, loading, error };
 }

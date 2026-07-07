@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
-import { useForensicsReport, type GivebackTrendPoint } from "@/hooks/useForensicsReport";
+import { useForensicsReport, type GivebackTrendPoint, type ShadowCurvePoint } from "@/hooks/useForensicsReport";
 import { usePyramidShadow, pyramidName } from "@/hooks/usePyramidShadow";
 
 // §03 "Shadow & Override" panel — renders the deterministic forensics the CLI day-report
@@ -30,6 +30,26 @@ function CaptureSparkline({ pts }: { pts: GivebackTrendPoint[] }) {
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "0 0 auto" }}>
       <line x1={pad} y1={y(0)} x2={W - pad} y2={y(0)} stroke="var(--border)" strokeDasharray="2 2" strokeWidth={1} />
+      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.5} opacity={0.7} />
+      <circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r={2.6} style={{ fill: up ? "var(--green)" : "var(--red)" }} />
+    </svg>
+  );
+}
+
+// NAV sparkline for the one-account shadow — same house style as CaptureSparkline
+// (no chart lib); dashed baseline = starting equity, end-dot colored by above/below it.
+function NavSparkline({ pts, base }: { pts: ShadowCurvePoint[]; base: number }) {
+  const vals = pts.map((p) => p.nav);
+  if (vals.length < 2) return null;
+  const W = 168, H = 30, pad = 4;
+  const lo = Math.min(...vals, base), hi = Math.max(...vals, base), span = hi - lo || 1;
+  const x = (i: number) => pad + (i * (W - 2 * pad)) / (vals.length - 1);
+  const y = (v: number) => pad + (H - 2 * pad) * (1 - (v - lo) / span);
+  const d = vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const up = vals[vals.length - 1] >= base;
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "0 0 auto" }}>
+      <line x1={pad} y1={y(base)} x2={W - pad} y2={y(base)} stroke="var(--border)" strokeDasharray="2 2" strokeWidth={1} />
       <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.5} opacity={0.7} />
       <circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r={2.6} style={{ fill: up ? "var(--green)" : "var(--red)" }} />
     </svg>
@@ -80,6 +100,55 @@ export function ForensicsPanel() {
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody">
+        {/* ── ONE-ACCOUNT SHADOW — the dream team rehearsing in a single live-sized account ── */}
+        {(() => {
+          const oas = report.payload.oneAccountShadow ?? null;
+          const head = (
+            <div className="au-sub">One-account shadow <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>the dream team in one live-sized account · actual trades, one cash pool</span></div>
+          );
+          if (!oas || oas.curve.length === 0) return (<>{head}<p className="au-market">accruing — banks with the nightly capture (era-4 replay, $50k FIRST-TEAM). First curve lands at the next post-close publish.</p></>);
+          const pctRet = (100 * oas.totalPnl) / oas.params.equity;
+          const contested = oas.curve.filter((p) => p.rej + p.dwn > 0).length;
+          const t = oas.today;
+          return (
+            <>
+              {head}
+              <div className="au-fund">
+                <span>NAV <b className={cls(oas.totalPnl)}>${oas.navEnd.toLocaleString()}</b> on ${(oas.params.equity / 1000).toFixed(0)}k</span>
+                <span className={cls(oas.totalPnl)}>{signedUsd(oas.totalPnl)} ({pctRet >= 0 ? "+" : ""}{pctRet.toFixed(1)}%)</span>
+                <span>{oas.params.bucket} · since {shortDate(oas.params.from)}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 2px" }}>
+                <NavSparkline pts={oas.curve} base={oas.params.equity} />
+                <span style={{ fontSize: "0.82em", fontWeight: 700 }}>
+                  {contested === 0
+                    ? <span className="pos">cash never bound</span>
+                    : <span className="neg">contention on {contested}/{oas.curve.length}d</span>}
+                  <span style={{ opacity: 0.55, fontWeight: 400 }}> · peak stack {oas.maxStackChannels}ch · {oas.curve.length} sessions</span>
+                </span>
+              </div>
+              {t && (
+                <div className="au-fund">
+                  <span>today {t.admitted}/{t.entries} admitted{t.downsized ? ` · ${t.downsized} downsized` : ""}{t.rejected ? <b className="neg"> · {t.rejected} rejected</b> : ""}</span>
+                  <span>peak deployed ${Math.round(t.peakDeployedUsd / 100) / 10}k</span>
+                  {t.peakOcc && <span>deepest {t.peakOcc.channels}ch/{t.peakOcc.contracts}ct</span>}
+                </div>
+              )}
+              {expanded && (
+                <div className="fx-rows">
+                  {oas.curve.slice(-8).map((p) => (
+                    <div className="fx-row" key={p.d}>
+                      <span className="fx-name">{shortDate(p.d)}</span>
+                      <span className="fx-mid">{p.adm} adm{p.dwn ? ` · ${p.dwn} dwn` : ""}{p.rej ? ` · ${p.rej} REJ` : ""} · peak ${Math.round(p.peak / 100) / 10}k</span>
+                      <span className="au-pnl">${p.nav.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
+
         {/* ── DAILY GIVE-BACK / CAPTURE — the take-profit policy's success metric (peak → close) ── */}
         <div className="au-sub">Give-back <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>peak → close · is the desk keeping its peaks?</span></div>
         {!gb || gb.capturePct == null ? (

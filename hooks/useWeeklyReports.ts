@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { useRefreshTick } from "./useRefreshTick";
 
 // Lazy read of the weekly-autopsy reports (written by the weekly-autopsy edge fn
-// after Friday's close). Like useDailyReports, fetched once on mount — these are
-// once-a-week artifacts, kept OUT of the always-polled desk feed.
+// after Friday's close). Once-a-week artifacts kept OUT of the always-polled desk
+// feed, but refreshed on the shared slow tick — a tab left open across Friday's
+// close now picks up the new week without a reload (the "weekly is behind a week"
+// illusion was a stale mount, not a late report).
 
 export interface WeeklyChannelNarrative {
   slug: string;
@@ -46,6 +49,7 @@ export function useWeeklyReports(limit = 6): { reports: WeeklyReport[]; loading:
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const tick = useRefreshTick();
 
   useEffect(() => {
     let alive = true;
@@ -67,7 +71,7 @@ export function useWeeklyReports(limit = 6): { reports: WeeklyReport[]; loading:
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
     });
     return () => { alive = false; };
-  }, [limit]);
+  }, [limit, tick]);
 
   return { reports, loading, error };
 }

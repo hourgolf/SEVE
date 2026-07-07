@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { useRefreshTick } from "./useRefreshTick";
 
 // Lazy read of the forensics reports (written by day-report — CLI same-week or the always-on
 // worker post-close — via /api/forensics-report). Pulls the latest report for the headline cuts
-// PLUS the last N days of the give-back metric so the panel can trend it (shrink/grow). Not
-// live-polled — a once-a-run artifact — so it fetches on mount only.
+// PLUS the last N days of the give-back metric so the panel can trend it (shrink/grow).
+// Refreshed on the shared slow tick (visibility-regain + 10-min poll) so a long-lived tab
+// picks up the ~16:21 ET capture-chain publish without a reload.
 
 export interface ScorecardCut { key: string; n: number; wins: number; delta: number }
 export interface OverrideScorecard {
@@ -27,6 +29,24 @@ export interface GivebackPayload {
   capturePct: number | null; byChannel: GivebackCut[];
 }
 export interface GivebackTrendPoint { date: string; capturePct: number | null; givenBackUsd: number | null }
+// ONE-ACCOUNT SHADOW — the live-transition rehearsal (scripts/one-account-shadow.ts):
+// the armed FIRST-TEAM's actual trades replayed through ONE shared cash pool since the
+// era-4 epoch. Full deterministic replay banked nightly → the latest payload carries the
+// whole curve (no cross-report folding needed).
+export interface ShadowCurvePoint { d: string; nav: number; adm: number; dwn: number; rej: number; peak: number }
+export interface ShadowToday {
+  date: string; navEnd: number; dayPnl: number;
+  entries: number; admitted: number; downsized: number; rejected: number;
+  rejectReasons: Record<string, number>;
+  peakDeployedUsd: number; minCashUsd: number;
+  peakOcc: { occ: string; channels: number; contracts: number; usd: number } | null;
+}
+export interface OneAccountShadowPayload {
+  params: { equity: number; from: string; to: string; bucket: string; stackCap: number };
+  navEnd: number; totalPnl: number; actualPnl: number; maxStackChannels: number;
+  curve: ShadowCurvePoint[];
+  today: ShadowToday | null;
+}
 export interface ForensicsPayload {
   generatedAt: string;
   overrideScorecard: OverrideScorecard;
@@ -34,6 +54,8 @@ export interface ForensicsPayload {
   overrideToday?: OverrideScorecard | null;
   benchedVsLive: BenchedVsLivePayload | null;
   giveback?: GivebackPayload | null;
+  /** the dream-team-in-one-account rehearsal (absent on pre-07-07 payloads) */
+  oneAccountShadow?: OneAccountShadowPayload | null;
 }
 export interface ForensicsReport { report_date: string; generated_at: string; payload: ForensicsPayload }
 
@@ -45,6 +67,7 @@ export function useForensicsReport(): { report: ForensicsReport | null; trend: G
   const [benchedCum, setBenchedCum] = useState<BenchedCum | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const tick = useRefreshTick();
 
   useEffect(() => {
     let alive = true;
@@ -109,7 +132,7 @@ export function useForensicsReport(): { report: ForensicsReport | null; trend: G
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
     });
     return () => { alive = false; };
-  }, []);
+  }, [tick]);
 
   return { report, trend, benchedCum, loading, error };
 }

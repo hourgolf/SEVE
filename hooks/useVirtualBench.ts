@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { useRefreshTick } from "./useRefreshTick";
 
 // LAB · VIRTUAL BENCH reads (60_virtual_trades) — the gate-shadow job's reconstructed
 // would-have outcomes for the bench fleet (`vb-*` drafts) and the armed channels' gate
@@ -50,6 +51,9 @@ export function useVirtualBench(): {
   const [gateBlocks, setGateBlocks] = useState({ n: 0, scored: 0, pnl: 0 });
   const [loading, setLoading] = useState(true);
   const todayET = etDate();
+  // virtual_trades accrue INTRADAY (gate-shadow scores within minutes) — the slow tick
+  // keeps a long-lived tab current without joining the always-polled desk feed.
+  const tick = useRefreshTick();
 
   useEffect(() => {
     let alive = true;
@@ -79,7 +83,7 @@ export function useVirtualBench(): {
       if (alive) setLoading(false);
     })();
     return () => { alive = false; };
-  }, [todayET]);
+  }, [todayET, tick]);
 
   return { bench, benchToday, todayET, since, gateBlocks, loading };
 }
