@@ -37,12 +37,14 @@ function CaptureSparkline({ pts }: { pts: GivebackTrendPoint[] }) {
 }
 
 export function ForensicsPanel() {
-  const { report, trend, loading, error } = useForensicsReport();
+  const { report, trend, benchedCum, loading, error } = useForensicsReport();
   const ps = usePyramidShadow();
   const [folded, toggleFold] = useFold("forensics");
   const [expanded, setExpanded] = useState(false);
   // scorecard window: TODAY's ledger slice vs the cumulative-since-inception book
   const [scWin, setScWin] = useState<"today" | "cum">("today");
+  // benched-vs-live window: the day's replay vs the book folded across banked reports
+  const [bvWin, setBvWin] = useState<"today" | "cum">("today");
   useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
   const toggle = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
 
@@ -65,6 +67,7 @@ export function ForensicsPanel() {
   const gb = report.payload.giveback ?? null;
   const trendUp = trend.length >= 2 && (trend[trend.length - 1].capturePct ?? 0) >= (trend[0].capturePct ?? 0);
   const ranAny = bvl?.benched.some((b) => b.ran) ?? false;
+  const showBvToday = bvWin === "today" || !benchedCum; // no banked history yet → today only
   const asOf = (() => { try { return new Date(report.payload.generatedAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return report.report_date; } })();
 
   return (
@@ -157,36 +160,63 @@ export function ForensicsPanel() {
           </>
         )}
 
-        {/* ── BENCHED would-be vs LIVE (TODAY only — replays every draft/culled channel on the day's tape) ── */}
-        <div className="au-sub" style={{ marginTop: 12 }}>Benched would-be vs live <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>today · {shortDate(report.report_date)}</span> — did the cut channels earn their bench?</div>
-        {!bvl || !bvl.sameWeek ? (
-          <p className="au-market">same-week only (option_quotes 7d) — re-run day-report same-week to refresh.</p>
-        ) : bvl.benched.length === 0 ? (
-          <p className="au-market">no benched channel signaled {shortDate(report.report_date)}{bvl.skipped.length ? ` (${bvl.skipped.length} silent)` : ""}.</p>
+        {/* ── BENCHED would-be vs LIVE — the day's replay ⇄ the book folded across banked reports ── */}
+        <div className="au-sub" style={{ marginTop: 12 }}>
+          Benched would-be vs live
+          <span className="roster-toggle sc-toggle" title="the day's replay vs the accrued book">
+            <button type="button" className={showBvToday ? "on" : ""} onClick={() => setBvWin("today")}>today</button>
+            <button type="button" className={!showBvToday ? "on" : ""} disabled={!benchedCum} onClick={() => setBvWin("cum")}
+              title={benchedCum ? undefined : "no banked replays yet"}>cumulative</button>
+          </span>
+          <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}> {showBvToday ? `today · ${shortDate(report.report_date)}` : `cumulative · since ${shortDate(benchedCum!.since)}`}</span> — did the cut channels earn their bench?
+        </div>
+        {showBvToday ? (
+          !bvl || !bvl.sameWeek ? (
+            <p className="au-market">same-week only (option_quotes 7d) — re-run day-report same-week to refresh.</p>
+          ) : bvl.benched.length === 0 ? (
+            <p className="au-market">no benched channel signaled {shortDate(report.report_date)}{bvl.skipped.length ? ` (${bvl.skipped.length} silent)` : ""}.</p>
+          ) : (
+            <>
+              <div className="fx-rows">
+                {bvl.benched.map((b) => (
+                  <div className="fx-row" key={b.slug}>
+                    <span className="fx-name">{b.name}</span>
+                    {b.ran ? (
+                      <>
+                        <span className="fx-mid">{b.trades}t · {b.useSpec ? "spec" : "builtin"}/{b.underlying}</span>
+                        <span className={`au-pnl ${cls(b.pnl)}`}>{signedUsd(b.pnl)}</span>
+                      </>
+                    ) : (
+                      <span className="fx-note">{b.note}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {ranAny && (
+                <div className="au-fund" style={{ marginTop: 6 }}>
+                  <span>Σ bench <b className={cls(bvl.benchedTotal)}>{signedUsd(bvl.benchedTotal)}</b> vs live <b className={cls(bvl.liveTotal)}>{signedUsd(bvl.liveTotal)}</b></span>
+                  <span className={bvl.benchedTotal < 0 ? "neg" : "pos"}>{bvl.benchedTotal < 0 ? "cull validated" : "bench would've added"}</span>
+                </div>
+              )}
+              {expanded && bvl.skipped.length > 0 && <div className="au-dormant">silent: {bvl.skipped.map((s) => s.name).join(" · ")}</div>}
+            </>
+          )
         ) : (
           <>
             <div className="fx-rows">
-              {bvl.benched.map((b) => (
+              {benchedCum!.rows.map((b) => (
                 <div className="fx-row" key={b.slug}>
                   <span className="fx-name">{b.name}</span>
-                  {b.ran ? (
-                    <>
-                      <span className="fx-mid">{b.trades}t · {b.useSpec ? "spec" : "builtin"}/{b.underlying}</span>
-                      <span className={`au-pnl ${cls(b.pnl)}`}>{signedUsd(b.pnl)}</span>
-                    </>
-                  ) : (
-                    <span className="fx-note">{b.note}</span>
-                  )}
+                  <span className="fx-mid">{b.trades}t · {b.days}d · {b.useSpec ? "spec" : "builtin"}/{b.underlying}</span>
+                  <span className={`au-pnl ${cls(b.pnl)}`}>{signedUsd(b.pnl)}</span>
                 </div>
               ))}
             </div>
-            {ranAny && (
-              <div className="au-fund" style={{ marginTop: 6 }}>
-                <span>Σ bench <b className={cls(bvl.benchedTotal)}>{signedUsd(bvl.benchedTotal)}</b> vs live <b className={cls(bvl.liveTotal)}>{signedUsd(bvl.liveTotal)}</b></span>
-                <span className={bvl.benchedTotal < 0 ? "neg" : "pos"}>{bvl.benchedTotal < 0 ? "cull validated" : "bench would've added"}</span>
-              </div>
-            )}
-            {expanded && bvl.skipped.length > 0 && <div className="au-dormant">silent: {bvl.skipped.map((s) => s.name).join(" · ")}</div>}
+            <div className="au-fund" style={{ marginTop: 6 }}>
+              <span>{benchedCum!.sessions} session{benchedCum!.sessions === 1 ? "" : "s"}</span>
+              <span>Σ bench <b className={cls(benchedCum!.benchedTotal)}>{signedUsd(benchedCum!.benchedTotal)}</b> vs live <b className={cls(benchedCum!.liveTotal)}>{signedUsd(benchedCum!.liveTotal)}</b></span>
+              <span className={benchedCum!.benchedTotal < 0 ? "neg" : "pos"}>{benchedCum!.benchedTotal < 0 ? "cull validated" : "bench would've added"}</span>
+            </div>
           </>
         )}
 

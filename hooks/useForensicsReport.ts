@@ -15,6 +15,10 @@ export interface OverrideScorecard {
 }
 export interface BenchedRow { slug: string; name: string; underlying: string; useSpec: boolean; ran: boolean; trades: number; pnl: number; note?: string }
 export interface BenchedVsLivePayload { sameWeek: boolean; benched: BenchedRow[]; skipped: { name: string; reason: string }[]; benchedTotal: number; liveTotal: number }
+// BENCHED vs LIVE, CUMULATIVE — each nightly report banks a single-day replay; the accrued
+// book is folded client-side across the published reports (panel today ⇄ cumulative toggle).
+export interface BenchedCumRow { slug: string; name: string; underlying: string; useSpec: boolean; trades: number; pnl: number; days: number }
+export interface BenchedCum { since: string; sessions: number; rows: BenchedCumRow[]; benchedTotal: number; liveTotal: number }
 // DAILY GIVE-BACK / CAPTURE — the take-profit policy's success metric (peak → close).
 export interface GivebackCut { key: string; capturePct: number; givenBackUsd: number; n: number }
 export interface GivebackPayload {
@@ -35,9 +39,10 @@ export interface ForensicsReport { report_date: string; generated_at: string; pa
 
 const TREND_DAYS = 14;
 
-export function useForensicsReport(): { report: ForensicsReport | null; trend: GivebackTrendPoint[]; loading: boolean; error: string | null } {
+export function useForensicsReport(): { report: ForensicsReport | null; trend: GivebackTrendPoint[]; benchedCum: BenchedCum | null; loading: boolean; error: string | null } {
   const [report, setReport] = useState<ForensicsReport | null>(null);
   const [trend, setTrend] = useState<GivebackTrendPoint[]>([]);
+  const [benchedCum, setBenchedCum] = useState<BenchedCum | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,11 +67,49 @@ export function useForensicsReport(): { report: ForensicsReport | null; trend: G
           .reverse()
       );
       setLoading(false);
+
+      // CUMULATIVE benched-vs-live: fold the banked ERA-4 history (lean slice — just the
+      // benchedVsLive key of each payload, one shot on mount, egress-cheap). Per-channel
+      // sums fold ran-rows only (matching each day's Σ); a report counts as a session when
+      // its replay had anything to say (bench rows or live P&L). Era-4 cutoff: pre-06-30
+      // reports carry a benched-sim resolver mirage (the -manual twins replayed IDENTICAL
+      // trades — an unknown --strat slug fell through to a default strategy), verified gone
+      // from every report ≥ 06-30. Same clean-data epoch the registry keeps pristine.
+      const BVL_CUM_SINCE = "2026-06-30"; // era 4
+      const { data: hist } = await sb
+        .from("forensics_reports")
+        .select("report_date,bvl:payload->benchedVsLive")
+        .gte("report_date", BVL_CUM_SINCE)
+        .order("report_date", { ascending: false })
+        .limit(90);
+      if (!alive) return;
+      const by = new Map<string, BenchedCumRow>();
+      let benchedTotal = 0, liveTotal = 0, sessions = 0, since: string | null = null;
+      for (const h of ((hist ?? []) as unknown as { report_date: string; bvl: BenchedVsLivePayload | null }[])) {
+        const b = h.bvl;
+        if (!b || !b.sameWeek) continue;
+        if ((b.benched?.length ?? 0) === 0 && !b.liveTotal) continue; // silent day (weekend/holiday)
+        sessions++;
+        since = h.report_date; // desc order → last assignment = the earliest banked session
+        benchedTotal += b.benchedTotal ?? 0;
+        liveTotal += b.liveTotal ?? 0;
+        for (const r of b.benched ?? []) {
+          if (!r.ran) continue;
+          const a = by.get(r.slug) ?? { slug: r.slug, name: r.name, underlying: r.underlying, useSpec: r.useSpec, trades: 0, pnl: 0, days: 0 };
+          a.trades += r.trades; a.pnl += r.pnl; a.days++;
+          by.set(r.slug, a);
+        }
+      }
+      setBenchedCum(sessions === 0 ? null : {
+        since: since!, sessions,
+        rows: [...by.values()].sort((a, b2) => b2.pnl - a.pnl),
+        benchedTotal: Math.round(benchedTotal), liveTotal: Math.round(liveTotal),
+      });
     })().catch((e) => {
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
     });
     return () => { alive = false; };
   }, []);
 
-  return { report, trend, loading, error };
+  return { report, trend, benchedCum, loading, error };
 }
