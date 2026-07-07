@@ -294,6 +294,18 @@ Both reversible by restoring the prior values; both are rule-applications, not P
   their trades peaked +22..+41% MFE (er40 4/4 reached +22) and surrendered everything to full stops (22
   stop_premium closes, −$43.3k family-wide); ctl was also no longer a valid control for the LOCK-configured
   live pair. Zero live effect (status=draft). A re-arm now restarts at A1 size + LOCK exits.
+- **2026-07-07 (post-close):** (E) `breakout-qqq` MUTED (operator's discretionary roster call, config
+  untouched). Era-4 forward record −$1,765 over 21t (−$84/t) on a MORGUE known-loser kept only for data —
+  the data tax judged no longer worth the bleed. No registered test reads it (A4 owns the orb-ustop pair
+  only); montecarlo already ruled the backtest can't rank it, so the 21t forward sample is the verdict
+  input, now frozen. ⚠ Its era-4 accrual STOPS at 21t — an A6-style read on it stays deferred unless
+  re-unmuted. Reversible via the MUTE pad.
+- **2026-07-07 (post-close):** (F) QQQ V3/ALT ports (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
+  RISK 500→250 (operator's discretionary sizing; entries/TP/stop untouched — NOT the A1 rule, a
+  tuition-halving on a thin sample). Rationale: −$2,140 combined on FOUR era-4 trades contradicts the
+  +$111/t cross-index backtest — exactly the forward-validation question the ports exist to answer, so
+  they stay ARMED with the verdict clock running at half cost. ⚠ Per-trade DOLLAR stats blend across
+  07-07 — pool per-contract/rate metrics only, or split eras at this boundary. Reversible by restoring 500.
 
 ## B2 · Chop-day short-premium (DEFERRED — chained behind A5)
 No multi-leg compiler work unless A5 passes. Inherits A5's kill. Additional standing door-check:
