@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
+import { Flip } from "gsap/Flip";
+import { prefersReducedMotion } from "@/lib/motion";
 import { Shell } from "@/components/Shell";
 import { AddChannel } from "@/components/console/AddChannel";
 import { AuthControl } from "@/components/AuthControl";
@@ -55,6 +58,11 @@ const ROOM_DEFS: { id: Room; idx: string; label: string; jp: string }[] = [
   { id: "ops", idx: "05", label: "Ops", jp: "整備" },
 ];
 const ROOM_FOLD_KEY = "seve-room-folds";
+
+// GSAP Flip (client only — "use client" components still SSR-render, so the
+// register and the layout effect both need the window guard).
+if (typeof window !== "undefined") gsap.registerPlugin(Flip);
+const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 function RoomHead({ def, folded, onToggle }: { def: (typeof ROOM_DEFS)[number]; folded: boolean; onToggle: () => void }) {
   return (
@@ -196,6 +204,24 @@ export function DesktopSurface({
   // ---- drag-to-reorder + group-by (operator only; persists sort_order) ----
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const { order: channelOrder, persist, groupBy } = useChannelOrdering(armed, write);
+
+  // FLIP the strips on group-by: drags already animate via dnd-kit; this covers
+  // the PROGRAMMATIC re-arrange that used to snap. Capture every strip's box
+  // BEFORE the REORDER dispatch, then animate old box → new box after React
+  // commits the new order. The ref is only armed here, so drag drops and feed
+  // refreshes never re-animate; reduced-motion never arms it (instant, as now).
+  const flipStateRef = useRef<ReturnType<typeof Flip.getState> | null>(null);
+  const groupByFlip = (key: "underlying" | "regime") => {
+    if (!prefersReducedMotion()) flipStateRef.current = Flip.getState(".channels .ch-sortable");
+    groupBy(key);
+  };
+  const orderKey = channelOrder.join("|");
+  useIsoLayoutEffect(() => {
+    const st = flipStateRef.current;
+    if (!st) return;
+    flipStateRef.current = null;
+    Flip.from(st, { duration: 0.5, ease: "power2.inOut", stagger: 0.02 });
+  }, [orderKey]);
   const onDragEnd = (e: DragEndEvent) => {
     const from = channelOrder.indexOf(String(e.active.id));
     const to = e.over ? channelOrder.indexOf(String(e.over.id)) : -1;
@@ -318,8 +344,8 @@ export function DesktopSurface({
             {canWrite && rosterView === "strips" && (
               <span className="group-by" title="auto-arrange the channels, then nudge by hand">
                 <span className="gb-label">group</span>
-                <button type="button" onClick={() => groupBy("underlying")}>ticker</button>
-                <button type="button" onClick={() => groupBy("regime")}>regime</button>
+                <button type="button" onClick={() => groupByFlip("underlying")}>ticker</button>
+                <button type="button" onClick={() => groupByFlip("regime")}>regime</button>
               </span>
             )}
           </div>

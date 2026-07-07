@@ -9,6 +9,7 @@ import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { sessionStep } from "@/components/console/SessionSequencer";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
+import { useChangeFlash } from "@/hooks/useChangeFlash";
 import { signedUsd } from "@/lib/format";
 import type { FundState } from "@/lib/desk/types";
 import type { OpsStatus } from "@/hooks/useOpsStatus";
@@ -66,6 +67,9 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
 
   const down = liveFund.dayPnl < 0;
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
+  // DAY LED change-flash — fund-level sum moves in bigger steps than a single
+  // leg (one chain refresh re-marks many legs), so the material bar is higher.
+  const dayFlashRef = useChangeFlash<HTMLSpanElement>(liveFund.dayPnl, 25);
   const navK = ((fund.is_halted ? 0 : liveFund.nav) / 1000).toFixed(1);
   const dTone = Math.abs(booksDelta) < 100 ? "ok" : Math.abs(booksDelta) < 500 ? "warn" : "bad";
 
@@ -112,7 +116,7 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
         </span>
         <span className="shell-led">
           <span className="sl-cap">DAY</span>
-          <span className="sl-v" style={{ color: dayColor }}>{signedUsd(liveFund.dayPnl)}</span>
+          <span ref={dayFlashRef} className="sl-v" style={{ color: dayColor }}>{signedUsd(liveFund.dayPnl)}</span>
         </span>
         <span className={`shell-books shb-${dTone}`} title="NAV − attribution Σ (small = the books reconcile)">
           <span className="shb-k">BOOKS</span>

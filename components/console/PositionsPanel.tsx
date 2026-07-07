@@ -7,6 +7,7 @@ import { useTradeInsight } from "@/hooks/useTradeInsight";
 import { useTradeTriggers } from "@/hooks/useTradeTriggers";
 import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
+import { useChangeFlash } from "@/hooks/useChangeFlash";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
 import { isManualChannel } from "@/lib/desk/manual";
@@ -39,6 +40,18 @@ const inTradeStr = (opened?: string | null): string => {
   if (!isFinite(m) || m < 0) return "";
   return m < 1 ? "<1m in" : m < 60 ? `${m}m in` : `${Math.floor(m / 60)}h ${m % 60}m in`;
 };
+
+// Unreal P&L cell — flashes on a material move (±$10) so an exit-worthy tick
+// catches the eye without leaving the chart. The number itself never tweens
+// (useChangeFlash rationale); at rest the cell is byte-identical to before.
+function PnlCell({ unreal }: { unreal: number }) {
+  const flashRef = useChangeFlash<HTMLTableCellElement>(unreal);
+  return (
+    <td ref={flashRef} className={unreal < 0 ? "neg" : "pos"}>
+      {signedUsd(unreal)}
+    </td>
+  );
+}
 
 // Reuses the monitor's .panel / table CSS (globals.css).
 export function PositionsPanel({
@@ -219,9 +232,7 @@ export function PositionsPanel({
                 <td>{p.qty > 0 ? `+${p.qty}` : p.qty}</td>
                 <td>{p.avg_entry_price.toFixed(2)}</td>
                 <td>{mark.toFixed(2)}</td>
-                <td className={unreal < 0 ? "neg" : "pos"}>
-                  {signedUsd(unreal)}
-                </td>
+                <PnlCell unreal={unreal} />
                 {canWrite && (
                   <td className="pos-act">
                     {closingId === p.id ? (
