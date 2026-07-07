@@ -5,6 +5,14 @@
 //   OLD = ride-ish (profit +100% / stop −50%)   NEW = the calibrated lock+stop per channel.
 // Compiled channels (V3/ALT/MOMO) get full TP+stop control via an edited spec; builtin PB gets the
 // stop change via --prem-stop (its +20% target is the builtin's, unchanged — the PB change IS the stop).
+//
+// ⚠ VALIDITY (2026-07-06): the PB rows in this probe's original 06-30 run were INVALID — it passed
+// raw slugs (pb-ride-2 / pb-ride) as --strat, backtest.ts has NO pullback branch, and its old silent
+// fallback replayed them as FADE (the same resolver mirage fixed in benched-sim / mc-roster that day).
+// The −30-stop-on-PB call keeps its other evidence legs (the real-trade giveback split + stop-sweep-
+// probe, which drives STRATEGY_REGISTRY's pullback code directly); this probe's PB corroboration is
+// void. pb-ride stays engine-unsimmable (worker-only code) → resolve slugs + refuse, never fade.
+// Archival note: the pinned window's option_quotes are pruned (7d retention) — kept for the record.
 //   npx tsx --env-file=.env.local engine/lastweek-sim-probe.ts
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
@@ -26,11 +34,23 @@ const CHANS: Chan[] = [
   { name: "PB-1DTE", slug: "pb-ride",                compiled: false, old: { stopPct: 50 },                 new: { stopPct: 30 } },
 ];
 
+// Worker slug resolution (decide.ts buildEvaluator): exact registry slug first, else the stripped
+// base. A builtin --strat must be a name the engine's ternary knows — pb-ride is registry code the
+// engine CLI can't run (no pullback branch), so refuse it instead of banking the fade fallback.
+const BUILTINS = new Set(["breakout", "power", "power-final30", "grind", "grind-v2", "grind-v3", "pb-ride", "fade"]);
+const NO_ENGINE_STRAT = new Set(["pb-ride"]);
+const baseSlug = (s: string) => s.replace(/-\d+$/, "").replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "").replace(/-itm$/i, "");
+const resolveBuiltin = (slug: string): string | null =>
+  BUILTINS.has(slug) ? slug : BUILTINS.has(baseSlug(slug)) ? baseSlug(slug) : null;
+
 function runOne(c: Chan, spec: any, cfg: { risk: number; maxC: number; dailyStop: number; ustop: number; underlying: string }, exits: Exits): { pnl: number; trades: number; ok: boolean; note?: string } {
+  const builtin = c.compiled ? null : resolveBuiltin(c.slug);
+  if (!c.compiled && (builtin == null || NO_ENGINE_STRAT.has(builtin)))
+    return { pnl: 0, trades: 0, ok: false, note: "no engine --strat" };
   const tag = `${c.slug}-${exits.profitPct ?? "ride"}-${exits.stopPct}`.replace(/[^a-z0-9-]/gi, "_");
   const emit = join(tmpdir(), `seve-lw-${tag}.json`);
   const specPath = join(tmpdir(), `seve-lw-spec-${tag}.json`);
-  const args = ["engine/backtest.ts", "--strat", c.slug, "--underlying", cfg.underlying, "--source", "real", "--options", "quotes",
+  const args = ["engine/backtest.ts", "--strat", builtin ?? c.slug, "--underlying", cfg.underlying, "--source", "real", "--options", "quotes",
     "--from", FROM, "--to", TO, "--days", "12", "--risk", String(cfg.risk), "--max-contracts", String(cfg.maxC),
     "--daily-stop", String(cfg.dailyStop), "--cost-gate", "3.0", "--ustop", String(cfg.ustop), "--emit-trades", emit];
   if (c.compiled && spec) {
