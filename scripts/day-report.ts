@@ -24,6 +24,7 @@ import {
   simulateFoulout, upsertFoulout, loadFoulout, fouloutScorecardLines, fouloutScorecardData, type FouloutEntry, type RideLeg,
 } from "./override-ledger";
 import { benchedVsLive, type BenchedVsLive } from "./benched-sim";
+import { runOneAccountShadow, type ShadowResult } from "./one-account-shadow";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
@@ -579,6 +580,26 @@ async function main() {
     console.log(`\nbenched would-be vs live: failed (${(e as Error).message})`);
   }
 
+  // ---- ONE-ACCOUNT SHADOW (live-transition rehearsal, 2026-07-07) --------------------------
+  // The dream team's ACTUAL trades replayed through ONE $50k cash pool since the era-4 epoch
+  // (scripts/one-account-shadow.ts) — measures the capital layer (contention, stack
+  // concentration, would-be NAV) that per-channel verdicts can't see. Deterministic full
+  // replay each night → banked curve is idempotent, no state to chain.
+  let oas: ShadowResult | null = null;
+  try {
+    oas = await runOneAccountShadow({ to: DATE });
+    const today = oas.days.find((day) => day.date === DATE);
+    const seshN = oas.days.length;
+    console.log(`\nONE-ACCOUNT SHADOW ($${oas.params.equity.toLocaleString()} · ${oas.params.bucket} · since ${oas.params.from})`);
+    if (today) {
+      console.log(`  today: NAV $${today.navEnd.toLocaleString()} (${sgn(today.dayPnl)}) · ${today.admitted}/${today.entries} entries admitted${today.downsized ? ` · ${today.downsized} downsized` : ""}${today.rejected ? ` · ${today.rejected} REJECTED` : ""} · peak deployed $${today.peakDeployedUsd.toLocaleString()}${today.peakOcc ? ` · deepest stack ${today.peakOcc.channels}ch/${today.peakOcc.contracts}ct` : ""}`);
+    } else console.log(`  (no ${DATE} session rows in the shadow window)`);
+    const contested = oas.days.filter((day) => day.rejected + day.downsized > 0).length;
+    console.log(`  curve: ${sgn(oas.totalPnl)} over ${seshN} sessions (paper same-trades ${sgn(oas.actualPnl)}) · contention on ${contested}/${seshN} days · max OCC stack ${oas.maxStackChannels} channels`);
+  } catch (e) {
+    console.log(`\none-account shadow: failed (${(e as Error).message})`);
+  }
+
   // ---- DAILY GIVE-BACK / CAPTURE (the take-profit policy's success metric) -----------------
   // Over trades that PEAKED above entry (with option_quotes coverage): how much of the peak gain
   // did the desk KEEP? capturePct = realized ÷ peak-gain (→100 = kept it all; →0 = gave it all
@@ -614,6 +635,10 @@ async function main() {
     overrideFouloutScorecard: fouloutScorecardData(fouloutNow), // capital-path re-score (additive; panel may ignore)
     benchedVsLive: bvl ? { sameWeek: bvl.sameWeek, benched: bvl.benched, skipped: bvl.skipped, benchedTotal: bvl.benchedTotal, liveTotal: bvl.liveTotal } : null,
     giveback,
+    // full deterministic replay each night — the banked curve self-heals on re-runs
+    oneAccountShadow: oas ? { params: oas.params, navEnd: oas.navEnd, totalPnl: oas.totalPnl, actualPnl: oas.actualPnl,
+      maxStackChannels: oas.maxStackChannels, curve: oas.days.map((day) => ({ d: day.date, nav: day.navEnd, adm: day.admitted, dwn: day.downsized, rej: day.rejected, peak: day.peakDeployedUsd })),
+      today: oas.days.find((day) => day.date === DATE) ?? null } : null,
   };
   console.log(`\n  dashboard: ${await publishForensics(DATE, payload)}`);
 
