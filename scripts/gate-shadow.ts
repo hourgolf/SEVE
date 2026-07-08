@@ -107,13 +107,36 @@ async function reconstruct(s: any, slug: string, cfg: Cfg): Promise<ShadowRow> {
 
 async function main() {
   const since = new Date(Date.now() - DAYS * 86_400_000).toISOString();
-  const { data: sigs, error } = await sb
-    .from("signals")
-    .select("id,strategist_id,created_at,blocked_reason,rationale,strategists(slug),direction")
-    .in("blocked_reason", ["cost_gate", "stale_chain", "not_armed", "halted"])
-    .gte("created_at", since)
-    .order("created_at", { ascending: true });
-  if (error) { console.error(`gate-shadow: signals read failed — ${error.message}`); process.exit(1); }
+  // PAGINATED + count-verified (2026-07-07): the vb fleet's cross-index expansion pushed the
+  // 6-day blocked-signal window past PostgREST's 1000-row page. The old single fetch silently
+  // returned the OLDEST 1000 — new days' signals never entered the walk, so the LAB panel
+  // froze mid-06 while gate-shadow reported "0 new". Same silent-truncation class as the
+  // quote-fetch flicker; same cure — page to completion, then fail LOUD on any shortfall.
+  const BLOCKED = ["cost_gate", "stale_chain", "not_armed", "halted"];
+  const { count: expected, error: cErr } = await sb
+    .from("signals").select("id", { count: "exact", head: true })
+    .in("blocked_reason", BLOCKED).gte("created_at", since);
+  if (cErr) { console.error(`gate-shadow: signals count failed — ${cErr.message}`); process.exit(1); }
+  const sigs: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb
+      .from("signals")
+      .select("id,strategist_id,created_at,blocked_reason,rationale,strategists(slug),direction")
+      .in("blocked_reason", BLOCKED)
+      .gte("created_at", since)
+      // id tiebreak: created_at alone is not a total order — same-second signals could
+      // shuffle across page boundaries and silently drop/duplicate rows
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+      .range(from, from + 999);
+    if (error) { console.error(`gate-shadow: signals read failed — ${error.message}`); process.exit(1); }
+    sigs.push(...((data ?? []) as any[]));
+    if ((data ?? []).length < 1000) break;
+  }
+  // inserts during the scan can push fetched ABOVE the pre-count; only a shortfall is truncation
+  if (expected != null && sigs.length < expected) {
+    console.error(`gate-shadow: fetched ${sigs.length}/${expected} blocked signals — partial stream; refusing to walk a truncated window`);
+    process.exit(1);
+  }
 
   const { data: cfgRows } = await sb
     .from("strategists")
