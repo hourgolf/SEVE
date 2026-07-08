@@ -245,10 +245,16 @@ async function slotAware(sb: SupabaseClient, from: string, to: string): Promise<
   // three regimes, IDENTICAL entries (the spec) — only the exit differs, so entries cancel and the
   // delta is pure exit-policy + its slot/churn consequence. Ratchet params = the fixed per-trade set
   // (arm +50, keep ⅔ = giveback 33), pre-arm −50% floor.
+  // + entry-capped ratchets (the operator's "quota then sit out" lever, --max-entries): tests
+  // whether a re-entry guard rescues the ratchet. First read (07-01→08): it does NOT — capping is
+  // flat-to-worse (the giveback EXIT trails ride-to-bell at equal trade count; the churn wasn't the
+  // drag). Kept visible so the answer updates as the sample grows across ride- vs give-back-day mixes.
   const regimes: { name: string; flags: string[] }[] = [
     { name: "u-stop 0.30", flags: ["--ustop", "0.30", "--prem-stop", "0"] },
     { name: "prem-stop 50", flags: ["--prem-stop", "50"] },
-    { name: "ratchet a50/g33", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50"] },
+    { name: "ratchet uncapped", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50"] },
+    { name: "ratchet cap-1/day", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50", "--max-entries", "1"] },
+    { name: "ratchet cap-2/day", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50", "--max-entries", "2"] },
   ];
   const runs: RegimeRun[] = [];
   for (const rg of regimes) {
@@ -283,13 +289,13 @@ async function cli() {
     console.log(`  the arbiter: same entries, exit swapped — the ratchet's freed-slot re-entry churn is MODELED here (the per-trade replay can't see it)\n`);
     console.log(`  ${"regime".padEnd(18)}${"trades".padStart(8)}${"P&L".padStart(11)}   exits`);
     for (const run of r.runs) console.log(`  ${run.name.padEnd(18)}${String(run.trades).padStart(8)}${sgn(run.pnl).padStart(11)}   ${run.reasons}`);
-    const rat = r.runs.find((x) => x.name.startsWith("ratchet"))!;
+    const ratchets = r.runs.filter((x) => x.name.startsWith("ratchet"));
     const live = r.runs.filter((x) => !x.name.startsWith("ratchet"));
     const bestLive = live.reduce((a, x) => (x.pnl > a.pnl ? x : a), live[0]);
-    const churn = rat.trades - Math.round(live.reduce((a, x) => a + x.trades, 0) / live.length);
-    console.log(`\n  churn: ratchet ${rat.trades}t vs live arms ~${Math.round(live.reduce((a, x) => a + x.trades, 0) / live.length)}t (+${churn} re-entries from freed slots)`);
-    console.log(`  verdict: ratchet ${sgn(rat.pnl)} vs best live (${bestLive.name}) ${sgn(bestLive.pnl)} → ${rat.pnl >= bestLive.pnl ? "ratchet WINS slot-aware" : `ratchet LOSES ${sgn(rat.pnl - bestLive.pnl)} once churn is counted`}`);
-    console.log(`  ⚠ log-only; ${r.from} is at the 7d option_quotes edge (coverage = still-live window); one era = noise; the A4 read arbitrates.\n`);
+    const bestRat = ratchets.reduce((a, x) => (x.pnl > a.pnl ? x : a), ratchets[0]);
+    console.log(`\n  best ratchet variant: ${bestRat.name} ${sgn(bestRat.pnl)} (${bestRat.trades}t) vs best live ${bestLive.name} ${sgn(bestLive.pnl)} (${bestLive.trades}t)`);
+    console.log(`  verdict: ${bestRat.pnl >= bestLive.pnl ? "a ratchet variant WINS slot-aware" : `every ratchet variant LOSES (best trails by ${sgn(bestRat.pnl - bestLive.pnl)}) — capping entries does NOT rescue it; the giveback EXIT trails ride-to-bell on this window's mix`}`);
+    console.log(`  ⚠ log-only; ${r.from} at the 7d option_quotes edge (coverage = still-live window); ratchet-vs-ride is a day-mix bet → one era = noise, the A4 read (N≥40) arbitrates.\n`);
     return;
   }
   loadEnv();

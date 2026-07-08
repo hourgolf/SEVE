@@ -291,12 +291,19 @@ peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
   engine (real option_quotes) on the twins' own spec entries, swapping ONLY the exit across three
   regimes (u-stop / prem-stop / ratchet a50/g33), so the churn is MODELED. **First read (07-01→07-08,
   the still-live 7d window): it SIGN-FLIPS the per-trade result.** u-stop 5t +$2,125 · prem 6t +$2,163
-  · ratchet **21t +$1,739** (12 giveback exits free the slot → +15 re-entries → ratchet LOSES −$424
-  vs best live once churn is counted). So the shiny per-trade +$6k/arm was a slot mirage; slot-aware,
-  the ratchet as configured OVER-TRADES and underperforms both live arms — vindicating the caution
-  against arming it. A live ratchet would additionally need a re-entry guard (cooldown/once-per-day),
-  another param. Wired via new backtest CLI flags `--giveback <pct> --arm-pct <pct>` (the engine's
-  arm-high trail, generalizing the worker's power-giveback-trail). LOG-ONLY; the A4 read still arbitrates.
+  · ratchet **21t +$1,739** (LOSES −$424 vs best live). So the shiny per-trade +$6k/arm was a slot
+  mirage; slot-aware, the ratchet underperforms both live arms — vindicating the caution against arming.
+  Wired via new backtest CLI flags `--giveback <pct> --arm-pct <pct>` (the engine's arm-high trail,
+  generalizing the worker's power-giveback-trail). LOG-ONLY; the A4 read still arbitrates.
+  **v4 ENTRY-CAP (2026-07-08, `--max-entries <N>` + the operator's "quota then sit out" devil's-advocate):
+  capping re-entries does NOT rescue the ratchet, and CORRECTS v3's churn attribution.** Ratchet cap-1/day
+  5t +$1,585 · cap-2/day 10t +$1,291 · uncapped 21t +$1,739 — capping is flat-to-WORSE, and at equal
+  trade count (cap-1 = 5t = u-stop's 5t) the ratchet makes −$540 vs riding. So the drag was NEVER the
+  freed-slot churn (uncapped actually beat the caps here); it's the giveback EXIT trailing ride-to-bell on
+  THIS window's mix (the 07-06 +149% ride day favored no-cap ride-to-close). Ratchet-vs-ride is a
+  day-mix bet → precisely what A4's N≥40 measures. `--max-entries` (the re-entry guard) is now a real
+  engine lever (0=uncapped, byte-identical) + shown in the --slot readout, but the evidence says it's
+  not the fix here.
 
 ## Calibration-change log (era boundaries for the A6/month-end reads)
 - **2026-07-02 (pre-open):** (A) QQQ V3 clones (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
