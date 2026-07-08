@@ -38,8 +38,11 @@
 //  file, no archive → same-week twins only, labeled source:"live").
 // ============================================================================
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 function loadEnv() {
@@ -219,8 +222,76 @@ export async function ratchetShadowSummary(sb: SupabaseClient): Promise<RatchetS
   } catch { return null; }
 }
 
+// ── SLOT-AWARE replay (the arbiter) ────────────────────────────────────────────
+// The per-trade replay above is capital-blind on the SLOT: it can't see that a
+// ratchet's early exit FREES the one-at-a-time slot → re-entry → the −EV churn that
+// killed the +75% profit cap on this exact spec. This mode closes that gap: it drives
+// the RE-ENTRY-AWARE engine (engine/backtest.ts, real option_quotes fills) on the
+// twins' OWN spec entries, swapping ONLY the exit across three regimes. The churn shows
+// up as the trade-count blow-up; the P&L delta is the honest verdict. --options quotes
+// reads the DB only (7d retention) → coverage is the still-live window; older A4 days
+// prune out (reported). This is the number the arm/no-arm call rests on.
+const TSX = process.env.TSX_BIN || join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+interface RegimeRun { name: string; flags: string[]; trades: number; pnl: number; reasons: string }
+
+async function slotAware(sb: SupabaseClient, from: string, to: string): Promise<{ from: string; to: string; runs: RegimeRun[] } | null> {
+  const { data, error } = await sb.from("strategists").select("spec_json,strategist_config(capital_pct,max_contracts,daily_stop_usd)").eq("slug", "orb-ustop").single();
+  if (error || !(data as any)?.spec_json) { console.error(`slot-aware: orb-ustop spec unavailable (${error?.message ?? "no spec"})`); return null; }
+  const cfg = Array.isArray((data as any).strategist_config) ? (data as any).strategist_config[0] : (data as any).strategist_config;
+  const risk = String(Number(cfg?.capital_pct ?? 500)), maxC = String(Number(cfg?.max_contracts ?? 6)), dstop = String(Number(cfg?.daily_stop_usd ?? 500));
+  const specPath = join(tmpdir(), "ratchet-slot-spec.json");
+  writeFileSync(specPath, JSON.stringify((data as any).spec_json)); // entries + EOD timeET only; stops layered via CLI
+  const daysBack = Math.ceil((Date.now() - Date.parse(from + "T00:00:00Z")) / 86_400_000) + 3;
+  // three regimes, IDENTICAL entries (the spec) — only the exit differs, so entries cancel and the
+  // delta is pure exit-policy + its slot/churn consequence. Ratchet params = the fixed per-trade set
+  // (arm +50, keep ⅔ = giveback 33), pre-arm −50% floor.
+  const regimes: { name: string; flags: string[] }[] = [
+    { name: "u-stop 0.30", flags: ["--ustop", "0.30", "--prem-stop", "0"] },
+    { name: "prem-stop 50", flags: ["--prem-stop", "50"] },
+    { name: "ratchet a50/g33", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50"] },
+  ];
+  const runs: RegimeRun[] = [];
+  for (const rg of regimes) {
+    const emit = join(tmpdir(), `ratchet-slot-${rg.name.replace(/[^a-z0-9]/gi, "_")}.json`);
+    try { if (existsSync(emit)) rmSync(emit); } catch { /* */ }
+    const args = ["engine/backtest.ts", "--spec", specPath, "--strat", "breakout", "--underlying", "SPY",
+      "--source", "real", "--options", "quotes", "--from", from, "--to", to, "--days", String(daysBack),
+      "--risk", risk, "--max-contracts", maxC, "--daily-stop", dstop, "--cost-gate", "3.0", ...rg.flags, "--emit-trades", emit];
+    let stdout = "";
+    try { stdout = execFileSync(TSX, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 24, timeout: 180_000, killSignal: "SIGKILL" }); }
+    catch (e) { const err = e as Error & { stdout?: string; stderr?: string }; console.error(`slot-aware ${rg.name} failed: ${(err.stderr ?? err.stdout ?? err.message).split("\n").find((l) => l.trim()) ?? ""}`); return null; }
+    const reasons = (stdout.match(/Exit reasons\s+(\{[^}]*\})/)?.[1] ?? "").replace(/"/g, "");
+    let trades = 0, pnl = 0;
+    if (existsSync(emit)) { const o = JSON.parse(readFileSync(emit, "utf8")) as { perDay: { pnl: number; trades: number }[] }; trades = o.perDay.reduce((a, d) => a + d.trades, 0); pnl = Math.round(o.perDay.reduce((a, d) => a + d.pnl, 0)); }
+    try { rmSync(emit); } catch { /* */ }
+    runs.push({ name: rg.name, flags: rg.flags, trades, pnl, reasons });
+  }
+  try { rmSync(specPath); } catch { /* */ }
+  return { from, to, runs };
+}
+
 // ── CLI ──────────────────────────────────────────────────────────────────────
 async function cli() {
+  if (process.argv.includes("--slot")) {
+    loadEnv();
+    const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+    const to = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+    const r = await slotAware(sb, "2026-07-01", to);
+    if (!r) process.exit(1);
+    const sgn = (v: number) => `${v < 0 ? "-" : "+"}$${Math.abs(v).toLocaleString()}`;
+    console.log(`\n  RATCHET SHADOW — SLOT-AWARE (re-entry-aware engine · twin spec entries · real option_quotes · ${r.from}→${r.to})`);
+    console.log(`  the arbiter: same entries, exit swapped — the ratchet's freed-slot re-entry churn is MODELED here (the per-trade replay can't see it)\n`);
+    console.log(`  ${"regime".padEnd(18)}${"trades".padStart(8)}${"P&L".padStart(11)}   exits`);
+    for (const run of r.runs) console.log(`  ${run.name.padEnd(18)}${String(run.trades).padStart(8)}${sgn(run.pnl).padStart(11)}   ${run.reasons}`);
+    const rat = r.runs.find((x) => x.name.startsWith("ratchet"))!;
+    const live = r.runs.filter((x) => !x.name.startsWith("ratchet"));
+    const bestLive = live.reduce((a, x) => (x.pnl > a.pnl ? x : a), live[0]);
+    const churn = rat.trades - Math.round(live.reduce((a, x) => a + x.trades, 0) / live.length);
+    console.log(`\n  churn: ratchet ${rat.trades}t vs live arms ~${Math.round(live.reduce((a, x) => a + x.trades, 0) / live.length)}t (+${churn} re-entries from freed slots)`);
+    console.log(`  verdict: ratchet ${sgn(rat.pnl)} vs best live (${bestLive.name}) ${sgn(bestLive.pnl)} → ${rat.pnl >= bestLive.pnl ? "ratchet WINS slot-aware" : `ratchet LOSES ${sgn(rat.pnl - bestLive.pnl)} once churn is counted`}`);
+    console.log(`  ⚠ log-only; ${r.from} is at the 7d option_quotes edge (coverage = still-live window); one era = noise; the A4 read arbitrates.\n`);
+    return;
+  }
   loadEnv();
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
   const { rows, fresh } = await buildRows(sb, { allowArchive: true, prior: loadLedger() });

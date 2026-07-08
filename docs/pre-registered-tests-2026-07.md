@@ -285,6 +285,18 @@ peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
   under the cap/trail-era policy, so epochs don't pool as one baseline) with pruned days replayed
   from the verbatim quotes archive; summary published into the forensics payload → the §03
   Shadow & Override panel (beside the pyramid shadow). Same fixed params, unchanged.
+  **v3 SLOT-AWARE (2026-07-08, `npm run ratchet-shadow -- --slot`):** the per-trade replay is
+  capital-blind on the slot — it cannot see that the ratchet's early exit FREES the one-at-a-time
+  slot → re-entry → the −EV churn that killed the +75% cap. This mode drives the RE-ENTRY-AWARE
+  engine (real option_quotes) on the twins' own spec entries, swapping ONLY the exit across three
+  regimes (u-stop / prem-stop / ratchet a50/g33), so the churn is MODELED. **First read (07-01→07-08,
+  the still-live 7d window): it SIGN-FLIPS the per-trade result.** u-stop 5t +$2,125 · prem 6t +$2,163
+  · ratchet **21t +$1,739** (12 giveback exits free the slot → +15 re-entries → ratchet LOSES −$424
+  vs best live once churn is counted). So the shiny per-trade +$6k/arm was a slot mirage; slot-aware,
+  the ratchet as configured OVER-TRADES and underperforms both live arms — vindicating the caution
+  against arming it. A live ratchet would additionally need a re-entry guard (cooldown/once-per-day),
+  another param. Wired via new backtest CLI flags `--giveback <pct> --arm-pct <pct>` (the engine's
+  arm-high trail, generalizing the worker's power-giveback-trail). LOG-ONLY; the A4 read still arbitrates.
 
 ## Calibration-change log (era boundaries for the A6/month-end reads)
 - **2026-07-02 (pre-open):** (A) QQQ V3 clones (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
