@@ -60,6 +60,11 @@ const SINCE = "2026-06-01T04:00:00Z";
 const EPOCH_BY_SLUG: Record<string, string> = {
   "orb-ustop": "a4", "orb-ustop-ctl": "a4",
   "orb-trend-rider": "pre", // the bare-ORB spec the twins cloned (benched 06-25; cap/trail-era actuals)
+  // momo (2026-07-08, "2 then 3"): the ONE clean automatable manual edge hands-off found — momo's RIDE
+  // exit captures ~$0 while the operator's manual harvest banked +$3,198. Does an arm-high ratchet
+  // reproduce that harvest automatically? Its "actual" already INCLUDES the manual closes, so
+  // ratchet ≈ actual ⇒ the ratchet replaces the hands-on work. Same FIXED params (no per-channel fit).
+  "momo-shape": "momo", "momo-shape-2": "momo",
 };
 // FIXED policy params — see header. Do not tune after seeing results.
 const ARM_PCT = 50;
@@ -197,7 +202,7 @@ function summarize(rows: RatchetRow[], source: "ledger" | "live"): RatchetSummar
     e.n++; e.actual += r.actualPnlCt * r.qty; e.ratchet += (r.ratchetPnlCt ?? 0) * r.qty;
     byDayMap.set(d, e);
   }
-  const epochs = ["a4", "pre"].map((key) => {
+  const epochs = ["a4", "pre", "momo"].map((key) => {
     const es = scored.filter((r) => r.epoch === key);
     return { key, n: es.length, actualUsd: Math.round(es.reduce((a, r) => a + r.actualPnlCt * r.qty, 0)), ratchetUsd: Math.round(es.reduce((a, r) => a + (r.ratchetPnlCt ?? 0) * r.qty, 0)) };
   }).filter((e) => e.n > 0);
@@ -312,8 +317,9 @@ async function cli() {
     console.log(`  ${r.openedAt.slice(5, 10)} ${r.slug.padEnd(16)}${r.occ.slice(9).padEnd(10)}${(r.peakPct + "%").padStart(6)}${sgn(r.actualPnlCt).padStart(9)}  ${("(" + r.actualReason + ")").padEnd(18)}${sgn(r.ratchetPnlCt).padStart(9)}  ${sgn(d).padStart(8)} ${r.ratchetReason === "ratchet_floor" ? "⚑" : r.ratchetReason === "pre_arm_stop" ? "×" : "→bell"}${r.src === "archive" ? " ᵃ" : ""}`);
   }
   const s = summarize(rows, "ledger");
+  const epochLabel = (k: string) => k === "a4" ? "A4 twins" : k === "pre" ? "predecessor (orb-trend-rider, cap/trail-era actuals)" : "MOMO (actual incl. manual harvest — does the ratchet reproduce it?)";
   for (const e of s.epochs) {
-    console.log(`\n  Σ ${e.key === "a4" ? "A4 twins" : "predecessor (orb-trend-rider, cap/trail-era actuals)"} (${e.n}t): actual ${sgn(e.actualUsd)} vs ratchet ${sgn(e.ratchetUsd)} → Δ ${sgn(e.ratchetUsd - e.actualUsd)}`);
+    console.log(`\n  Σ ${epochLabel(e.key)} (${e.n}t): actual ${sgn(e.actualUsd)} vs ratchet ${sgn(e.ratchetUsd)} → Δ ${sgn(e.ratchetUsd - e.actualUsd)}`);
   }
   console.log(`  Σ pooled (${s.scored}/${s.n} scored, position-sized): actual ${sgn(s.actualUsd)} vs ratchet ${sgn(s.ratchetUsd)} → Δ ${sgn(s.deltaUsd)} · armed ${s.armed}/${s.scored}`);
   console.log(`\n  banked ${fresh} new/retried / ${rows.length} total → ${LEDGER}`);
