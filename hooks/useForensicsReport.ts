@@ -47,6 +47,16 @@ export interface OneAccountShadowPayload {
   curve: ShadowCurvePoint[];
   today: ShadowToday | null;
 }
+// RATCHET SHADOW — the A4 twins' virtual third arm (scripts/ratchet-shadow.ts,
+// registry instrumentation vi): each twin/predecessor trade's real quote path
+// replayed under the fixed arm-high ratchet. Log-only, never a gate.
+export interface RatchetShadowPayload {
+  params: string; source: "ledger" | "live";
+  n: number; scored: number; armed: number;
+  actualUsd: number; ratchetUsd: number; deltaUsd: number;
+  epochs: { key: string; n: number; actualUsd: number; ratchetUsd: number }[];
+  byDay: { d: string; n: number; actual: number; ratchet: number }[];
+}
 export interface ForensicsPayload {
   generatedAt: string;
   overrideScorecard: OverrideScorecard;
@@ -56,6 +66,8 @@ export interface ForensicsPayload {
   giveback?: GivebackPayload | null;
   /** the dream-team-in-one-account rehearsal (absent on pre-07-07 payloads) */
   oneAccountShadow?: OneAccountShadowPayload | null;
+  /** the A4 third-arm replay (absent on pre-07-08 payloads) */
+  ratchetShadow?: RatchetShadowPayload | null;
 }
 export interface ForensicsReport { report_date: string; generated_at: string; payload: ForensicsPayload }
 

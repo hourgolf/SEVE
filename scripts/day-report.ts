@@ -25,6 +25,7 @@ import {
 } from "./override-ledger";
 import { benchedVsLive, type BenchedVsLive } from "./benched-sim";
 import { runOneAccountShadow, type ShadowResult } from "./one-account-shadow";
+import { ratchetShadowSummary, type RatchetSummary } from "./ratchet-shadow";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
@@ -600,6 +601,17 @@ async function main() {
     console.log(`\none-account shadow: failed (${(e as Error).message})`);
   }
 
+  // ---- RATCHET SHADOW (A4 third arm, registry instrumentation vi) --------------------------
+  // Ledger-first (Mac, incl. archive-replayed June predecessor trades); the worker image
+  // recomputes same-week twins from the DB (labeled source:"live"). Log-only, never a gate.
+  let ratchet: RatchetSummary | null = null;
+  try {
+    ratchet = await ratchetShadowSummary(sb);
+    if (ratchet) console.log(`\nRATCHET SHADOW (${ratchet.params} · ${ratchet.source}): actual ${sgn(ratchet.actualUsd)} vs ratchet ${sgn(ratchet.ratchetUsd)} → Δ ${sgn(ratchet.deltaUsd)} over ${ratchet.scored}t · armed ${ratchet.armed}/${ratchet.scored}`);
+  } catch (e) {
+    console.log(`\nratchet shadow: failed (${(e as Error).message})`);
+  }
+
   // ---- DAILY GIVE-BACK / CAPTURE (the take-profit policy's success metric) -----------------
   // Over trades that PEAKED above entry (with option_quotes coverage): how much of the peak gain
   // did the desk KEEP? capturePct = realized ÷ peak-gain (→100 = kept it all; →0 = gave it all
@@ -639,6 +651,7 @@ async function main() {
     oneAccountShadow: oas ? { params: oas.params, navEnd: oas.navEnd, totalPnl: oas.totalPnl, actualPnl: oas.actualPnl,
       maxStackChannels: oas.maxStackChannels, curve: oas.days.map((day) => ({ d: day.date, nav: day.navEnd, adm: day.admitted, dwn: day.downsized, rej: day.rejected, peak: day.peakDeployedUsd })),
       today: oas.days.find((day) => day.date === DATE) ?? null } : null,
+    ratchetShadow: ratchet,
   };
   console.log(`\n  dashboard: ${await publishForensics(DATE, payload)}`);
 
