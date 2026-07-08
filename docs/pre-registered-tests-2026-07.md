@@ -320,6 +320,21 @@ Both reversible by restoring the prior values; both are rule-applications, not P
   +$111/t cross-index backtest — exactly the forward-validation question the ports exist to answer, so
   they stay ARMED with the verdict clock running at half cost. ⚠ Per-trade DOLLAR stats blend across
   07-07 — pool per-contract/rate metrics only, or split eras at this boundary. Reversible by restoring 500.
+- **2026-07-08 (mid-session ~13:00–13:20 ET, operator's discretionary calls; logged post-close):**
+  (G) `momo-shape` RISK 1800→1200 + max_contracts ≥24→12 (24-lot fills printed that morning; now
+  capped at its twin's 12). A discretionary two-thirds step toward the REGISTERED A10 rule
+  ($1,800→$1,000 unvalidated-size at the A6 read) — A10 still adjudicates the remainder at the read;
+  this entry does NOT retire it. Post-close true-up (operator-confirmed): daily_stop 4500→3000,
+  restoring the 2.5×RISK convention the RISK cut had loosened to 3.75×. ⚠ Per-trade DOLLAR stats
+  split at the 07-08 intra-session boundary (morning trades ran 2× size); rate/per-contract metrics
+  pool. Reversible (1800/24/4500).
+- **2026-07-08 (after 11:27 ET):** (H) QQQ V3/ALT ports (`breakout-alt-v3-qqq`,
+  `breakout-smart-entries-qqq`) MUTED — supersedes (F)'s armed-at-half-tuition posture. Trigger: their
+  first trades since (F) sized correctly at $250 (3ct, the resize verified live) and both stopped out
+  (−$221/−$261); era-4 book −$2,622 over 6 trades. ⚠ Accrual STOPS at N=6 — the cross-index QQQ-port
+  question stays formally OPEN (thin sample, not a refutation); the backtest-vs-forward contradiction
+  is unresolved evidence, not a verdict. Reversible via the MUTE pads; config (RISK 250, TP/stop)
+  preserved for a clean re-arm.
 
 ## B2 · Chop-day short-premium (DEFERRED — chained behind A5)
 No multi-leg compiler work unless A5 passes. Inherits A5's kill. Additional standing door-check:
