@@ -323,7 +323,7 @@ export function ForensicsPanel() {
               {rs.epochs.length > 1 && (
                 <div className="au-fund">
                   {rs.epochs.map((e) => (
-                    <span key={e.key}>{e.key === "a4" ? "A4 twins" : "predecessor"} {e.n}t <b className={cls(e.ratchetUsd - e.actualUsd)}>{signedUsd(e.ratchetUsd - e.actualUsd)}</b></span>
+                    <span key={e.key}>{e.key === "a4" ? "A4 twins" : e.key === "momo" ? "momo" : "predecessor"} {e.n}t <b className={cls(e.ratchetUsd - e.actualUsd)}>{signedUsd(e.ratchetUsd - e.actualUsd)}</b></span>
                   ))}
                 </div>
               )}
