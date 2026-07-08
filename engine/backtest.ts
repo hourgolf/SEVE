@@ -207,6 +207,12 @@ export function simulateSession(
   // 0 = ATM (byte-identical with every prior caller, the desk's hardcoded Math.round(close)). The
   // chain must quote the offset strike or the entry is skipped (re-entry-aware). Single-leg only.
   strikeOffset = 0,
+  // DAILY ENTRY CAP (the re-entry guard, 2026-07-08): allow at most N NEW positions per session,
+  // then sit out the rest of the day (re-entry-aware engines otherwise re-enter every time the
+  // slot frees — the churn that sinks an early-exit policy like the ratchet). Counts flat→open
+  // only (pyramid adds don't count); the open position still exits normally. 0 = uncapped =
+  // byte-identical with every prior caller.
+  maxEntriesPerDay = 0,
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -214,6 +220,7 @@ export function simulateSession(
   let pyramidLots: { qty: number; entryFill: number }[] = []; // lots of the open stack (base + adds); only populated when `pyramid` set
   let dayPnl = 0;
   let lateEntries = 0; // entries opened inside the late-leans gate window (this session)
+  let entryCount = 0;  // total NEW positions opened this session (for maxEntriesPerDay)
   const cm = gross ? GROSS_COST : costModel;
   const etMin = management ? bars.map((b) => etMinuteOfDay(b.ts)) : [];
   // Lever gate (forensics): precompute the MACD-histogram series ONCE (Lever 2 reads it per bar).
@@ -405,6 +412,7 @@ export function simulateSession(
       pos = null;
       if (pyramid) pyramidLots = []; // stack closed
     } else if (!pos && intent && intent.kind === "enter" && !lateBlocked
+        && !(maxEntriesPerDay > 0 && entryCount >= maxEntriesPerDay)
         && !(leverGate && intent.direction && leverGate(f, intent.direction, lvMacd ? lvMacd[i] : null))) {
       if (intent.legs?.length) {
         // MULTI-LEG: resolve each leg's strike off ATM, price it (long→ask, short→bid),
@@ -498,7 +506,7 @@ export function simulateSession(
         }
       }
     }
-    if (wasFlat && pos && lateGate && f.minutesToClose <= lateGate.cutoffMin) lateEntries++;
+    if (wasFlat && pos) { entryCount++; if (lateGate && f.minutesToClose <= lateGate.cutoffMin) lateEntries++; }
   }
   return trades;
 }
@@ -681,6 +689,9 @@ async function main() {
   // the re-entry-aware engine models the +75%-cap churn the per-trade replay can't see.
   const giveback = argNum("giveback", 0);
   if (giveback > 0 && trailK <= 0) trailExit = { premiumGivebackPct: giveback, armPct: argNum("arm-pct", 0) };
+  // --max-entries <N>: cap NEW positions per session, then sit out (the re-entry guard — turns an
+  // early-exit ratchet from a churn machine into a one/two-and-done). 0 = uncapped.
+  const maxEntries = argNum("max-entries", 0);
   // --breakeven <pct>: once the option is up ≥ pct% over entry, ratchet the stop to
   // entry — convert a green→red round-trip into ~breakeven WITHOUT capping the tail
   // (differs from --trail / a profit target, which cap the convex upside). Layers
@@ -848,7 +859,7 @@ async function main() {
       } else {
         chainAt = (spot, mtc) => priceChain(spot, mtc, s.ivAnnual);
       }
-      const dayTrades = simulateSession(s.bars, cfgRun, fundRun, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl, gap: s.gap }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate, ustopPct, entryCostGate, sizingFor(s.gap));
+      const dayTrades = simulateSession(s.bars, cfgRun, fundRun, evalFor(s.bars, { pdh: s.pdh, pdl: s.pdl, gap: s.gap }), chainAt, gross, premiumExit, cost, management, trailExit, breakevenExit, lateGate, ustopPct, entryCostGate, sizingFor(s.gap), undefined, undefined, undefined, undefined, 0, maxEntries);
       all.push(...dayTrades);
       perDay.push({ date: s.dateET, pnl: Math.round(dayTrades.reduce((a, t) => a + t.pnl, 0) * 100) / 100, trades: dayTrades.length });
     }
