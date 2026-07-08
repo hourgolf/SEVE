@@ -81,6 +81,9 @@ async function main() {
   // screams long before loss). Scheduled via launchd at 13:03 local (16:03 ET).
   run(`day-report ${recentDays[0]} (close pass)`, ["day-report", "--", "--date", recentDays[0]], 2);
   run("gate-shadow (close pass)", ["gate-shadow"], 2);
+  // ratchet-shadow (2026-07-08): the A4 twins' virtual third arm — replays each twin trade's
+  // real quote path under the fixed arm-high ratchet, banked before the 7d prune. Log-only.
+  run("ratchet-shadow (close pass)", ["ratchet-shadow"], 2);
 
   // TIER 1 — the irreplaceable raw tape (idempotent: writes only un-archived days)
   const quotesOk = run("export-quotes", ["export-quotes"], 1);

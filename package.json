@@ -72,6 +72,7 @@
     "verify-bars-archive": "tsx scripts/verify-bars-archive.ts",
     "day-report": "tsx --env-file=.env.local scripts/day-report.ts",
     "one-account-shadow": "tsx --env-file=.env.local scripts/one-account-shadow.ts",
+    "ratchet-shadow": "tsx --env-file=.env.local scripts/ratchet-shadow.ts",
     "backfill-forensics": "tsx --env-file=.env.local scripts/backfill-forensics.ts",
     "forensics-mine": "tsx scripts/forensics-mine.ts",
     "reconcile-alpaca": "tsx --env-file=.env.local scripts/reconcile-alpaca.ts",

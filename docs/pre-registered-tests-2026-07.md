@@ -271,6 +271,16 @@ peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
   divergence is the only readable signal; macd-state is worst-or-near-worst on all three indices. (v) **weekly rituals scheduled** — mfe-drift + override-scorecard now
   run Fridays inside capture-forward (were memory-dependent); nightly evening-digest push + off-site
   archive backup (data-archive branch) added to the same chain.
+- **2026-07-08 (post-entry-window, mid-session):** (vi) **ratchet-shadow — the A4 twins' virtual
+  third arm** (`npm run ratchet-shadow`, nightly in the capture close pass → data/ratchet-shadow.json).
+  Replays each CLOSED twin trade's real option_quotes mid path under a FIXED arm-high ratchet:
+  pre-arm policy −50% premium stop · arm at +50% · once armed exit at entry + (peak−entry)×⅔
+  (keep two-thirds of the peak gain, ratcheting) · else flatten at the session's last quote.
+  **Params fixed BEFORE any results were computed** (the pattern-fanout residue; do not tune
+  post-hoc). Purpose: the A4 read gets a three-way comparison (prem-stop vs u-stop vs ratchet)
+  on identical trades. LOG-ONLY, never a gate; per-trade counterfactual with the slot-path caveat
+  stated in-file (a live ratchet frees the one-at-a-time slot differently — the +75%-cap churn
+  lesson); A4's own two arms and read criteria are unchanged.
 
 ## Calibration-change log (era boundaries for the A6/month-end reads)
 - **2026-07-02 (pre-open):** (A) QQQ V3 clones (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
