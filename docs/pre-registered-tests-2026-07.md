@@ -190,6 +190,33 @@ minute 30 (no established day trend inside the opening range).
   armable from this. On FAIL → the counter-trend thread is CLOSED at two anchors; no third variant
   without genuinely new evidence (anti-anchor-shopping rule: two anchors is the budget).
 
+## A13 · Momo arm-high-ratchet A/B (pre-registered 2026-07-08 — operator-chosen "live A/B"; IMPLEMENTATION DEFERRED to a dedicated worker session)
+The operator's push: the momo ratchet shadow read +$9,950 (ratchet-shadow epoch 'momo') and would make
+him hands-off. Scrutiny of that number (do NOT arm on it): **80% of the +$9,950 is 3 trades; ZERO
+convex tails this era (0 trades peaked ≥120% — momo's raison d'être); and the arm-at-+50% already
+misfires on sub-50% peakers (rides them to the −50% stop, −$177 worst-case, losing the small harvests
+the operator banks by hand).** Same class as the ORB ratchet mirage (+$6,557 per-trade → −$424
+slot-aware). So NOT a config flip — a LIVE A/B to convert the unverified shadow into forward evidence,
+including the eventual tail day the shadow window lacked.
+- **Design (mirror A4):** identical momo entries, exit-only difference. VARIANT = momo-shape with the
+  arm-high ratchet (**FIXED: arm +50%, keep ⅔ of peak gain, −50% pre-arm premium stop** — the
+  ratchet-shadow params, not tuned). CONTROL = pure-ride momo (tp=0, −50% stop = momo-shape's current
+  config). ⚠ Both live in FIRST-TEAM (acct 2) with IDENTICAL entries → same-OCC stacking/self-cross
+  confound (A4 dodged this via separate accounts); IMPLEMENTATION must isolate the control to a
+  different account (LAB) OR accept same-account with row-primary attribution + note it. A1 sizing.
+- **Run to N≥40 trades each. No mid-test param changes.**
+- **Kill (any one):** variant expectancy < control at N≥40 · variant caps a genuine convex tail
+  (a control trade peaking ≥120% where the variant's ratchet exit banks materially less) — this is
+  the specific failure the no-tail shadow couldn't see, so ONE clean instance is disqualifying pending
+  review · a mechanical fault in the ratchet firing.
+- **Success = a follow-up proposal** (arm the ratchet on the momo book), NOT auto-arm.
+- **⚠ IMPLEMENTATION = live worker trade-path change (deferred, dedicated session):** the giveback
+  trail is hardcoded to `POWER_TRAIL_CHANNELS` with power's params (+100%/keep-60%, config.ts:183-185).
+  Generalize to config-driven per-channel (arm_pct + giveback_pct), add momo-shape, deploy-by-paste,
+  verify live code via `worker_heartbeat` note + the `stream: boot:` event. NOT a config flip. Creates a
+  momo era boundary → log in the calibration log at arm time. Connects to A6b (the near-miss metric that
+  independently reopens the ratchet probe) — if A6b also triggers on momo, the two reads corroborate.
+
 ## A6b · NEAR-MISS metric (pre-registered 2026-07-02 — read WITH A6, not before)
 **Metric:** near-miss rate = trades whose peak_mark reached ≥70% of the channel's TP level
 (`peak ≥ entry·(1 + 0.7·tp/100)`, tp>0) but closed ≤ $0, per channel. Measurable from live
