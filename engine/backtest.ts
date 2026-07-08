@@ -601,7 +601,7 @@ async function main() {
   let specDef: CompiledStrategy | null = null;
   let premiumExit: { profitPct?: number; stopPct?: number } | undefined;
   let management: Management | undefined;
-  let trailExit: { atrChandelierK?: number; premiumGivebackPct?: number; untilMin?: number } | undefined;
+  let trailExit: { atrChandelierK?: number; premiumGivebackPct?: number; armPct?: number; untilMin?: number } | undefined;
   if (specPath) {
     const spec = JSON.parse(readFileSync(specPath, "utf8")) as StrategySpec;
     specDef = specToStrategyDef(spec);
@@ -674,6 +674,13 @@ async function main() {
   // volume surge (a CLOCK-phased exit; the phase is deterministic, no regime detection).
   const trailUntil = argNum("trail-until", 0);
   if (trailK > 0) trailExit = { atrChandelierK: trailK, ...(trailUntil > 0 ? { untilMin: trailUntil } : {}) };
+  // --giveback <pct> [+ --arm-pct <pct>]: the ARM-HIGH RATCHET (backtest.ts:301) — once the peak
+  // option mid clears entry×(1+armPct%), exit when the mid gives back >pct% of the peak GAIN. The
+  // --prem-stop is the pre-arm floor (checked first). This is the worker's power-giveback-trail
+  // generalized; the slot-aware ratchet replay (scripts/ratchet-shadow.ts --slot) drives it so
+  // the re-entry-aware engine models the +75%-cap churn the per-trade replay can't see.
+  const giveback = argNum("giveback", 0);
+  if (giveback > 0 && trailK <= 0) trailExit = { premiumGivebackPct: giveback, armPct: argNum("arm-pct", 0) };
   // --breakeven <pct>: once the option is up ≥ pct% over entry, ratchet the stop to
   // entry — convert a green→red round-trip into ~breakeven WITHOUT capping the tail
   // (differs from --trail / a profit target, which cap the convex upside). Layers
