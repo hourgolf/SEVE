@@ -291,52 +291,96 @@ async function quotePath(sb: SupabaseClient, occ: string, openedAt: string): Pro
   const day = archiveDay(date);
   return day ? day.filter((r) => r.occ === occ && r.t >= openedAt && r.t <= dayEnd).sort((a, b) => a.t.localeCompare(b.t)).map((r) => ({ m: r.m, t: r.t })) : [];
 }
-// programmed exit on a mid path: TP-before-stop within a quote (live-sweep ordering), else last mid.
-function programmedExit(entry: number, path: { m: number }[], tpPct: number, stopPct: number): number | null {
+// programmed exit on a mid path: TP → premium-stop → (optional) underlying-stop, first to fire in
+// TIME order (live-sweep ordering); else last mid. ustop = the pb/momo 0.30-0.50% underlying leg —
+// when SPY moves ustopPct% adverse to the entry underlying, exit at that quote's mid.
+function programmedExit(entry: number, path: { m: number; t: string }[], tpPct: number, stopPct: number,
+    ustop?: { pct: number; optType: string; entryU: number; spyAt: (ms: number) => number | null }): number | null {
   if (!path.length) return null;
   const tp = tpPct > 0 ? entry * (1 + tpPct / 100) : null, stop = stopPct > 0 ? entry * (1 - stopPct / 100) : null;
-  for (const q of path) { if (tp != null && q.m >= tp) return tp; if (stop != null && q.m <= stop) return stop; }
+  for (const q of path) {
+    if (tp != null && q.m >= tp) return tp;
+    if (stop != null && q.m <= stop) return stop;
+    if (ustop && ustop.pct > 0 && ustop.entryU > 0) {
+      const u = ustop.spyAt(Date.parse(q.t));
+      if (u != null) {
+        const adverse = (ustop.optType === "call" ? (ustop.entryU - u) : (u - ustop.entryU)) / ustop.entryU * 100;
+        if (adverse >= ustop.pct) return q.m; // ustop fires → exit at the concurrent option mid
+      }
+    }
+  }
   return path[path.length - 1].m;
 }
 
 async function handsOff(to: string): Promise<void> {
   loadEnv();
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
-  const { data: strat } = await sb.from("strategists").select("id,slug,accounts(cred_ref),strategist_config(take_profit_pct,premium_stop_pct)").eq("status", "armed");
-  const ft = new Map<string, { slug: string; tp: number; stop: number }>();
+  const { data: strat } = await sb.from("strategists").select("id,slug,underlying,accounts(cred_ref),strategist_config(take_profit_pct,premium_stop_pct,underlying_stop_pct,entry_dte)").eq("status", "armed");
+  const ft = new Map<string, { slug: string; underlying: string; tp: number; stop: number; ustop: number; dte: number }>();
   for (const s of (strat ?? []) as any[]) {
     if (((Array.isArray(s.accounts) ? s.accounts[0] : s.accounts)?.cred_ref) !== "2") continue;
     const c = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
-    ft.set(s.id, { slug: s.slug, tp: Number(c?.take_profit_pct ?? 0), stop: c?.premium_stop_pct == null ? 50 : Number(c.premium_stop_pct) });
+    ft.set(s.id, { slug: s.slug, underlying: (s.underlying ?? "SPY").toUpperCase(), tp: Number(c?.take_profit_pct ?? 0), stop: c?.premium_stop_pct == null ? 50 : Number(c.premium_stop_pct), ustop: Number(c?.underlying_stop_pct ?? 0), dte: Number(c?.entry_dte ?? 0) });
   }
-  const { data: pos } = await sb.from("positions").select("id,strategist_id,occ_symbol,qty,avg_entry_price,realized_pnl,close_reason,opened_at")
+  const { data: pos } = await sb.from("positions").select("id,strategist_id,occ_symbol,qty,avg_entry_price,realized_pnl,close_reason,opened_at,opt_type,entry_features")
     .eq("status", "closed").gte("opened_at", `${ERA4_EPOCH}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`).in("strategist_id", [...ft.keys()]);
   const rows = (pos ?? []) as any[];
   const manual = rows.filter((r) => String(r.close_reason ?? "").startsWith("manual"));
   const asLivedTotal = Math.round(rows.reduce((a, r) => a + Number(r.realized_pnl), 0));
-  let progManual = 0, actManual = 0, reconciled = 0, uncovered = 0;
+  // Load underlying minute bars for the ustop leg (all ustop>0 dream-team channels are SPY, but
+  // key by symbol so it generalizes). spyAt(symbol, ms) = last close at-or-before ms (forward-fill).
+  const barsBySym = new Map<string, { ms: number; c: number }[]>();
+  const symbols = new Set([...ft.values()].filter((v) => v.ustop > 0).map((v) => v.underlying));
+  for (const sym of symbols) {
+    const arr: { ms: number; c: number }[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data } = await sb.from("underlying_bars").select("ts,close").eq("symbol", sym)
+        .gte("ts", `${ERA4_EPOCH}T04:00:00Z`).lte("ts", `${to}T23:59:59Z`).order("ts", { ascending: true }).range(from, from + 999);
+      for (const b of (data ?? []) as any[]) if (b.close != null) arr.push({ ms: Date.parse(b.ts), c: Number(b.close) });
+      if ((data ?? []).length < 1000) break;
+    }
+    barsBySym.set(sym, arr);
+  }
+  const spyAtFor = (sym: string) => (ms: number): number | null => {
+    const arr = barsBySym.get(sym); if (!arr || !arr.length) return null;
+    let lo = 0, hi = arr.length - 1, ans = -1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (arr[mid].ms <= ms) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+    return ans >= 0 ? arr[ans].c : null;
+  };
+  let progManual = 0, actManual = 0, uncovered = 0, ustopFires = 0;
   const byChan = new Map<string, { n: number; act: number; prog: number; uncov: number }>();
   for (const r of manual) {
     const cfg = ft.get(r.strategist_id)!;
     const path = await quotePath(sb, r.occ_symbol, r.opened_at);
     const e = byChan.get(cfg.slug) ?? { n: 0, act: 0, prog: 0, uncov: 0 };
     e.n++; e.act += Number(r.realized_pnl); actManual += Number(r.realized_pnl);
-    const exitMid = programmedExit(Number(r.avg_entry_price), path, cfg.tp, cfg.stop);
+    const entryU = Number(r.entry_features?.spotClose ?? 0);
+    const ustop = cfg.ustop > 0 && entryU > 0 ? { pct: cfg.ustop, optType: String(r.opt_type), entryU, spyAt: spyAtFor(cfg.underlying) } : undefined;
+    const exitMid = programmedExit(Number(r.avg_entry_price), path, cfg.tp, cfg.stop, ustop);
     if (exitMid == null) { e.uncov++; uncovered++; e.prog += Number(r.realized_pnl); progManual += Number(r.realized_pnl); } // no quotes → hold as-lived
-    else { const pnl = (exitMid - Number(r.avg_entry_price)) * 100 * Number(r.qty); e.prog += pnl; progManual += pnl; reconciled++; }
+    else {
+      // did the ustop leg drive this exit? (diagnostic: exit mid is neither TP nor premium-stop level)
+      const tpL = cfg.tp > 0 ? Number(r.avg_entry_price) * (1 + cfg.tp / 100) : Infinity;
+      const stL = cfg.stop > 0 ? Number(r.avg_entry_price) * (1 - cfg.stop / 100) : -Infinity;
+      if (ustop && exitMid < tpL - 1e-6 && exitMid > stL + 1e-6 && exitMid !== path[path.length - 1].m) ustopFires++;
+      const pnl = (exitMid - Number(r.avg_entry_price)) * 100 * Number(r.qty); e.prog += pnl; progManual += pnl;
+    }
     byChan.set(cfg.slug, e);
   }
   const sgn = (v: number) => `${v < 0 ? "-" : "+"}$${Math.abs(Math.round(v)).toLocaleString()}`;
   const handsOffTotal = asLivedTotal - Math.round(actManual) + Math.round(progManual);
   console.log(`\nHANDS-OFF — the dream team with ZERO manual closes (${ERA4_EPOCH}→${to})`);
-  console.log(`  every manual close swapped for the channel's programmed exit (TP→stop→EOD) on the real quote path\n`);
+  console.log(`  every manual close swapped for the channel's programmed exit (TP→premium-stop→underlying-stop→EOD) on the real quote path\n`);
   console.log(`  as-lived (your hands on):   ${sgn(asLivedTotal)}   (${rows.length} trades)`);
   console.log(`  hands-off (programmed):     ${sgn(handsOffTotal)}   (${manual.length} manual trades reconstructed, ${uncovered} held as-lived: quotes pruned)`);
-  console.log(`  your manual overlay adds:   ${sgn(asLivedTotal - handsOffTotal)}   (manual ${sgn(actManual)} vs those trades programmed ${sgn(progManual)})\n`);
-  console.log(`  by channel (manual trades — your close vs its programmed exit):`);
+  console.log(`  your manual overlay adds:   ${sgn(asLivedTotal - handsOffTotal)}   (manual ${sgn(actManual)} vs those trades programmed ${sgn(progManual)}) · ustop drove ${ustopFires} exits\n`);
+  // which channels are 1DTE (their quote path truncates at day-1 EOD → programmed exit unreliable)
+  const dteBySlug = new Map([...ft.values()].map((v) => [v.slug, v.dte]));
+  console.log(`  by channel (manual trades — your close vs its programmed exit; ⚠1DTE = reconstruction truncates at day-1 EOD):`);
   for (const [slug, e] of [...byChan.entries()].sort((a, b) => (b[1].act - b[1].prog) - (a[1].act - a[1].prog)))
-    console.log(`    ${slug.padEnd(22)} ${String(e.n).padStart(2)}t  you ${sgn(e.act).padStart(8)}  programmed ${sgn(e.prog).padStart(8)}  Δyou ${sgn(e.act - e.prog).padStart(8)}${e.uncov ? ` (${e.uncov} uncov)` : ""}`);
-  console.log(`\n  ⚠ per-trade P&L swap (slot timing held as-lived; pb-ride has no engine evaluator so a full re-entry-aware hands-off isn't possible); ustop leg omitted; one era = noise.\n`);
+    console.log(`    ${slug.padEnd(22)} ${String(e.n).padStart(2)}t  you ${sgn(e.act).padStart(8)}  programmed ${sgn(e.prog).padStart(8)}  Δyou ${sgn(e.act - e.prog).padStart(8)}${(dteBySlug.get(slug) ?? 0) >= 1 ? " ⚠1DTE" : ""}${e.uncov ? ` (${e.uncov} uncov)` : ""}`);
+  console.log(`\n  ⚠ ustop leg modeled but fired 0× — the −30% premium stop is TIGHTER than the 0.35% underlying stop for near-ATM (30% premium ≈ 0.20% SPY < 0.35%), so it dominates; the ustop omission did NOT bias the number.`);
+  console.log(`  ⚠ 1DTE channels (pb-ride/pb-ride-itm) truncate at day-1 EOD (no engine evaluator; quote path is opened-day only) → their programmed loss is OVERSTATED; trust the 0DTE reads (momo/pb-ride-2/breakout/trails). Slot timing held as-lived; one era = noise.\n`);
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
