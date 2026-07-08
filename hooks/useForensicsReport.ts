@@ -41,10 +41,13 @@ export interface ShadowToday {
   peakDeployedUsd: number; minCashUsd: number;
   peakOcc: { occ: string; channels: number; contracts: number; usd: number } | null;
 }
+export interface ShadowScenario { equity: number; rescale: boolean; endNav: number; retPct: number; maxDDpct: number; rejected: number; downsized: number }
 export interface OneAccountShadowPayload {
-  params: { equity: number; from: string; to: string; bucket: string; stackCap: number };
+  params: { equity: number; from: string; to: string; bucket: string; stackCap: number; rescale?: boolean };
   navEnd: number; totalPnl: number; actualPnl: number; maxStackChannels: number;
+  maxDDusd?: number; maxDDpct?: number;      // day-end drawdown (absent on pre-07-08 payloads)
   curve: ShadowCurvePoint[];
+  scenarios?: ShadowScenario[];              // per-pool rescaled runnable profiles (absent on older payloads)
   today: ShadowToday | null;
 }
 // RATCHET SHADOW — the A4 twins' virtual third arm (scripts/ratchet-shadow.ts,

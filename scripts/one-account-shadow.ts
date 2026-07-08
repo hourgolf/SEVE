@@ -46,6 +46,11 @@ function loadEnv() {
 }
 
 const ERA4_EPOCH = "2026-06-30"; // LOCK/RIDE + stop-aware sizing live (the registry's clean-data epoch)
+// The dream team's live RISK dials produce trades sized for ~this much buying power (peak
+// concurrent deployment ~$17.5k; cash never binds at $50k). --rescale sizes every position
+// by equity/REF so a smaller pool runs the SAME roster proportionally instead of cramming
+// full-size trades in (which just rejects/downsizes and inflates % on a base you can't run).
+const REF_EQUITY = 50_000;
 const ET_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" });
 const etDate = (iso: string) => ET_DAY.format(new Date(iso));
 
@@ -55,6 +60,7 @@ export interface ShadowOpts {
   to?: string;          // ET date, default today
   allArmed?: boolean;   // default false → FIRST-TEAM bucket (accounts.cred_ref '2') only
   stackCap?: number;    // 0/undefined = meter only; N = reject entries stacking an OCC past N channels
+  rescale?: boolean;    // size each position by equity/REF_EQUITY (runnable small-pool roster)
 }
 
 interface PosRow {
@@ -72,10 +78,11 @@ export interface ShadowDay {
 }
 
 export interface ShadowResult {
-  params: { equity: number; from: string; to: string; bucket: string; stackCap: number };
+  params: { equity: number; from: string; to: string; bucket: string; stackCap: number; rescale: boolean };
   days: ShadowDay[];
   navEnd: number; totalPnl: number; actualPnl: number;
   maxStackChannels: number;
+  maxDDusd: number; maxDDpct: number; // day-end peak-to-trough (see caveat: intraday is deeper)
   perChannel: { slug: string; trades: number; admitted: number; downsized: number; rejected: number; shadowPnl: number; actualPnl: number }[];
   openCarry: number; // positions still open at the end (carried at cost in NAV)
 }
@@ -87,6 +94,8 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
   const from = opts.from ?? ERA4_EPOCH;
   const to = opts.to ?? ET_DAY.format(new Date());
   const stackCap = opts.stackCap ?? 0;
+  const rescale = opts.rescale ?? false;
+  const scaleRatio = rescale ? equity / REF_EQUITY : 1;
 
   // roster: armed channels, FIRST-TEAM bucket unless --all-armed
   const { data: stratRaw, error: se } = await sb.from("strategists")
@@ -158,12 +167,17 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
     if (ev.kind === "entry") {
       c.trades++; c.actualPnl += p.realized_pnl; d!.entries++;
       const costPerCt = p.avg_entry_price * 100;
+      // --rescale: the proportionally-sized target for this pool; else the real qty.
+      // floor to whole contracts — a sub-1-contract target means this pool is too small
+      // to express the trade at all (an honest small-account effect, not a cash bind).
+      const targetQty = rescale ? Math.floor(p.qty * scaleRatio) : p.qty;
       let reason = "";
       let q = 0;
       if (p.runner_of && !(admittedQty.get(p.runner_of) ?? 0)) reason = "parent-rejected";
+      else if (rescale && targetQty <= 0) reason = "sub-1ct";
       else if (stackCap > 0 && (occOpen.get(p.occ_symbol)?.size ?? 0) >= stackCap && !occOpen.get(p.occ_symbol)?.has(p.slug)) reason = "stack-cap";
       else {
-        q = Math.min(p.qty, Math.floor(cash / costPerCt));
+        q = Math.min(targetQty, Math.floor(cash / costPerCt));
         if (q <= 0) reason = "no-cash";
       }
       if (reason) {
@@ -171,7 +185,7 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
         d!.rejectReasons[reason] = (d!.rejectReasons[reason] ?? 0) + 1;
         admittedQty.set(p.id, 0);
       } else {
-        if (q < p.qty) { c.downsized++; d!.downsized++; }
+        if (q < targetQty) { c.downsized++; d!.downsized++; } // short of the (possibly rescaled) target = a cash bind
         d!.admitted++;
         admittedQty.set(p.id, q);
         const cost = q * costPerCt;
@@ -213,9 +227,17 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
 
   const totalPnl = Math.round(cash + deployed() - equity);
   const actualPnl = Math.round([...perChannel.values()].reduce((a, c) => a + c.actualPnl, 0));
+  // day-end peak-to-trough drawdown (⚠ intraday is deeper — this is EOD-NAV granularity).
+  let peakNav = equity, maxDDusd = 0, maxDDpct = 0;
+  for (const day of days) {
+    peakNav = Math.max(peakNav, day.navEnd);
+    const draw = peakNav - day.navEnd;
+    if (draw > maxDDusd) { maxDDusd = draw; maxDDpct = peakNav > 0 ? (100 * draw) / peakNav : 0; }
+  }
   return {
-    params: { equity, from, to, bucket: opts.allArmed ? "all-armed" : "FIRST-TEAM", stackCap },
+    params: { equity, from, to, bucket: opts.allArmed ? "all-armed" : "FIRST-TEAM", stackCap, rescale },
     days, navEnd: Math.round(cash + deployed()), totalPnl, actualPnl, maxStackChannels,
+    maxDDusd: Math.round(maxDDusd), maxDDpct: Math.round(maxDDpct * 10) / 10,
     perChannel: [...perChannel.entries()].map(([slug, c]) => ({ slug, ...c,
       shadowPnl: Math.round(c.shadowPnl), actualPnl: Math.round(c.actualPnl) }))
       .sort((a, b) => b.shadowPnl - a.shadowPnl),
@@ -235,8 +257,9 @@ async function cli() {
     to: argStr("to", ET_DAY.format(new Date())),
     allArmed: process.argv.includes("--all-armed"),
     stackCap: argNum("stack-cap", 0),
+    rescale: process.argv.includes("--rescale"),
   });
-  console.log(`\nONE-ACCOUNT SHADOW — the dream team in a single $${r.params.equity.toLocaleString()} account`);
+  console.log(`\nONE-ACCOUNT SHADOW — the dream team in a single $${r.params.equity.toLocaleString()} account${r.params.rescale ? " (RESCALED — RISK sized to pool)" : ""}`);
   console.log(`${r.params.bucket} bucket · ${r.params.from} → ${r.params.to} · actual live trades through one cash pool · stack cap ${r.params.stackCap || "OFF (metered)"}\n`);
   console.log(`  date        NAV       day P&L   entries adm/dwn/rej   peak deployed   min cash   deepest stack`);
   for (const day of r.days) {
@@ -244,6 +267,7 @@ async function cli() {
     console.log(`  ${day.date}  $${day.navEnd.toLocaleString().padEnd(8)} ${sgn(day.dayPnl).padStart(8)}   ${String(day.entries).padStart(3)}   ${day.admitted}/${day.downsized}/${day.rejected}      $${day.peakDeployedUsd.toLocaleString().padStart(7)}    $${day.minCashUsd.toLocaleString().padStart(7)}   ${po}`);
   }
   console.log(`\n  Σ shadow ${sgn(r.totalPnl)} on $${r.params.equity.toLocaleString()} (${((100 * r.totalPnl) / r.params.equity).toFixed(1)}%) vs the same trades' paper P&L ${sgn(r.actualPnl)} · max OCC stack ${r.maxStackChannels} channels${r.openCarry ? ` · ⚠ ${r.openCarry} open carried at cost` : ""}`);
+  console.log(`  max drawdown ${sgn(-r.maxDDusd)} (${r.maxDDpct}% of peak, day-end NAV — intraday is deeper)`);
   const contested = r.days.filter((day) => day.rejected + day.downsized > 0).length;
   console.log(`  contention: ${contested}/${r.days.length} sessions had a downsize/rejection${contested ? "" : " — cash never bound at this equity"}\n`);
   console.log(`  per-channel (shadow vs paper):`);

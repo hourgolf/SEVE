@@ -124,6 +124,7 @@ export function ForensicsPanel() {
                   {contested === 0
                     ? <span className="pos">cash never bound</span>
                     : <span className="neg">contention on {contested}/{oas.curve.length}d</span>}
+                  {oas.maxDDpct != null && <span className="neg"> · maxDD {oas.maxDDpct}%</span>}
                   <span style={{ opacity: 0.55, fontWeight: 400 }}> · peak stack {oas.maxStackChannels}ch · {oas.curve.length} sessions</span>
                 </span>
               </div>
@@ -133,6 +134,20 @@ export function ForensicsPanel() {
                   <span>peak deployed ${Math.round(t.peakDeployedUsd / 100) / 10}k</span>
                   {t.peakOcc && <span>deepest {t.peakOcc.channels}ch/{t.peakOcc.contracts}ct</span>}
                 </div>
+              )}
+              {oas.scenarios && oas.scenarios.length > 0 && (
+                <>
+                  <div className="au-sub" style={{ borderTop: "none", paddingTop: 2 }}>runnable at pool <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>RISK rescaled per pool · return / max DD / trades dropped</span></div>
+                  <div className="fx-rows">
+                    {oas.scenarios.map((s) => (
+                      <div className="fx-row" key={s.equity}>
+                        <span className="fx-name">${s.equity / 1000}k{s.equity === oas.params.equity ? " (as-lived)" : ""}</span>
+                        <span className="fx-mid">DD {s.maxDDpct}%{s.rejected ? ` · ${s.rejected} dropped` : ""}{s.downsized ? ` · ${s.downsized} dwn` : ""}</span>
+                        <span className={`au-pnl ${cls(s.retPct)}`}>{s.retPct >= 0 ? "+" : ""}{s.retPct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
               {expanded && (
                 <div className="fx-rows">

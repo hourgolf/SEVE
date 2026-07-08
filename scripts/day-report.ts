@@ -587,6 +587,7 @@ async function main() {
   // concentration, would-be NAV) that per-channel verdicts can't see. Deterministic full
   // replay each night → banked curve is idempotent, no state to chain.
   let oas: ShadowResult | null = null;
+  let oasScenarios: { equity: number; rescale: boolean; endNav: number; retPct: number; maxDDpct: number; rejected: number; downsized: number }[] = [];
   try {
     oas = await runOneAccountShadow({ to: DATE });
     const today = oas.days.find((day) => day.date === DATE);
@@ -596,7 +597,15 @@ async function main() {
       console.log(`  today: NAV $${today.navEnd.toLocaleString()} (${sgn(today.dayPnl)}) · ${today.admitted}/${today.entries} entries admitted${today.downsized ? ` · ${today.downsized} downsized` : ""}${today.rejected ? ` · ${today.rejected} REJECTED` : ""} · peak deployed $${today.peakDeployedUsd.toLocaleString()}${today.peakOcc ? ` · deepest stack ${today.peakOcc.channels}ch/${today.peakOcc.contracts}ct` : ""}`);
     } else console.log(`  (no ${DATE} session rows in the shadow window)`);
     const contested = oas.days.filter((day) => day.rejected + day.downsized > 0).length;
-    console.log(`  curve: ${sgn(oas.totalPnl)} over ${seshN} sessions (paper same-trades ${sgn(oas.actualPnl)}) · contention on ${contested}/${seshN} days · max OCC stack ${oas.maxStackChannels} channels`);
+    console.log(`  curve: ${sgn(oas.totalPnl)} over ${seshN} sessions (paper same-trades ${sgn(oas.actualPnl)}) · maxDD ${sgn(-oas.maxDDusd)} (${oas.maxDDpct}%) · contention on ${contested}/${seshN} days · max OCC stack ${oas.maxStackChannels} channels`);
+    // per-pool RESCALED profiles (RISK sized to the pool) — the honest "runnable at $X" mini-table.
+    // $50k is the as-lived reference (rescale is a no-op at REF). Small pools drop sub-1-contract trades.
+    for (const eq of [5_000, 10_000, 25_000, 50_000]) {
+      const s = await runOneAccountShadow({ to: DATE, equity: eq, rescale: true });
+      oasScenarios.push({ equity: eq, rescale: true, endNav: s.navEnd, retPct: Math.round((1000 * s.totalPnl) / eq) / 10,
+        maxDDpct: s.maxDDpct, rejected: s.days.reduce((a, x) => a + x.rejected, 0), downsized: s.days.reduce((a, x) => a + x.downsized, 0) });
+    }
+    console.log(`  rescaled runnable: ${oasScenarios.map((s) => `$${s.equity / 1000}k→${s.retPct >= 0 ? "+" : ""}${s.retPct}%/DD${s.maxDDpct}%${s.rejected ? `/${s.rejected}drop` : ""}`).join(" · ")}`);
   } catch (e) {
     console.log(`\none-account shadow: failed (${(e as Error).message})`);
   }
@@ -649,7 +658,9 @@ async function main() {
     giveback,
     // full deterministic replay each night — the banked curve self-heals on re-runs
     oneAccountShadow: oas ? { params: oas.params, navEnd: oas.navEnd, totalPnl: oas.totalPnl, actualPnl: oas.actualPnl,
-      maxStackChannels: oas.maxStackChannels, curve: oas.days.map((day) => ({ d: day.date, nav: day.navEnd, adm: day.admitted, dwn: day.downsized, rej: day.rejected, peak: day.peakDeployedUsd })),
+      maxStackChannels: oas.maxStackChannels, maxDDusd: oas.maxDDusd, maxDDpct: oas.maxDDpct,
+      curve: oas.days.map((day) => ({ d: day.date, nav: day.navEnd, adm: day.admitted, dwn: day.downsized, rej: day.rejected, peak: day.peakDeployedUsd })),
+      scenarios: oasScenarios,
       today: oas.days.find((day) => day.date === DATE) ?? null } : null,
     ratchetShadow: ratchet,
   };
