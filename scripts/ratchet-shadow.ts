@@ -1,5 +1,5 @@
 // ============================================================================
-//  ratchet-shadow — the A4 twins' virtual THIRD ARM (2026-07-08).
+//  ratchet-shadow — the A4 twins' virtual THIRD ARM (2026-07-08; v2 same day).
 //
 //  THE QUESTION: A4 tests prem-stop vs u-stop on identical bare-ORB entries, but
 //  the operator's real fear is "letting +80% winners ride to −50%". The obvious
@@ -7,35 +7,40 @@
 //  churn, −EV). The surviving exit idea from the pattern-fanout graveyard is the
 //  ARM-HIGH RATCHET: let winners run, but once armed, never give most of it back.
 //
-//  WHAT IT DOES: for every CLOSED A4 twin trade (orb-ustop / orb-ustop-ctl), walk
-//  the trade's REAL option_quotes mid path from its actual entry fill and replay a
-//  ratchet exit policy. Banked per position id into data/ratchet-shadow.json
-//  (idempotent upsert, survives the 7d quote prune) → the A4 read gets a THREE-WAY
-//  verdict (prem-stop vs u-stop vs ratchet) on identical trades.
+//  WHAT IT DOES: for every CLOSED trade of the A4 twins (orb-ustop/orb-ustop-ctl,
+//  since 07-01) AND their predecessor spec (orb-trend-rider, the bare ORB the
+//  twins cloned — June trades, epoch-labeled), walk the trade's REAL option-quote
+//  mid path from its actual entry fill and replay a ratchet exit. Quotes come
+//  from the DB (7d retention) or, for pruned days, the verbatim quotes archive
+//  (data/quotes-archive/<date>.json.gz — v2). Banked per position id into
+//  data/ratchet-shadow.json (idempotent) → the A4 read gets a THREE-WAY verdict.
 //
 //  POLICY (FIXED 2026-07-08 BEFORE any results were computed — registry
-//  instrumentation-log entry; do NOT tune post-hoc):
+//  instrumentation-log entry vi; do NOT tune post-hoc):
 //   · pre-arm: policy −50% premium stop (a complete policy needs a disaster floor)
 //   · arm when mid reaches entry × 1.50 (+50%)
 //   · once armed: floor = entry + (peak − entry) × 2/3, ratcheting up with each
 //     new peak; exit at the floor (keep ≥ two-thirds of the peak gain)
-//   · never exited → flatten on the session's last quote (the twins' own EOD)
-//   · per-quote ordering mirrors the live sweep: exits check BEFORE the peak
-//     updates (a fresh high can't fire its own floor on the same quote)
+//   · never exited → flatten on the session's last quote
+//   · exits check BEFORE the peak updates (a fresh high can't fire its own floor)
 //
-//  HONESTY NOTES (printed + banked): mid-basis fills at the level (gate-shadow
-//  convention); entry = the trade's REAL fill. PER-TRADE counterfactual only —
-//  a live ratchet arm would free the one-at-a-time slot at different times and
-//  spawn different re-entries (the +75%-cap lesson); the slot-path is unknowable
-//  post-hoc, so totals are per-arm-stream, not a portfolio claim. Same framing
-//  as the override ledger's ride-to-close. Log-only, never a gate (A7-style).
+//  HONESTY NOTES (printed + banked): mid-basis fills at the level; entry = the
+//  trade's REAL fill. PER-TRADE counterfactual only — a live ratchet frees the
+//  one-at-a-time slot differently (the +75%-cap lesson); totals are per-arm-
+//  stream, not a portfolio claim. Predecessor actuals were lived under a
+//  DIFFERENT exit policy (cap/trail era) — epochs don't pool as one baseline.
+//  Log-only, never a gate (A7-style).
 //
-//    npm run ratchet-shadow            # replay all A4-window twin trades (since 07-01)
-//  Runs nightly in the capture close pass (quotes must be inside the 7d window).
+//    npm run ratchet-shadow            # replay all twin + predecessor trades
+//  Runs nightly in the capture close pass. day-report publishes a summary into
+//  the forensics payload (§03 Shadow & Override panel) via ratchetShadowSummary —
+//  ledger-first on the Mac; DB-recompute fallback in the worker image (no ledger
+//  file, no archive → same-week twins only, labeled source:"live").
 // ============================================================================
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
+import { gunzipSync } from "node:zlib";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -48,109 +53,193 @@ function loadEnv() {
 }
 
 const LEDGER = "data/ratchet-shadow.json";
-const SINCE = "2026-07-01T04:00:00Z"; // A4 armed 2026-07-01
-const TWINS = ["orb-ustop", "orb-ustop-ctl"];
+const SINCE = "2026-06-01T04:00:00Z";
+const EPOCH_BY_SLUG: Record<string, string> = {
+  "orb-ustop": "a4", "orb-ustop-ctl": "a4",
+  "orb-trend-rider": "pre", // the bare-ORB spec the twins cloned (benched 06-25; cap/trail-era actuals)
+};
 // FIXED policy params — see header. Do not tune after seeing results.
 const ARM_PCT = 50;
 const KEEP_FRAC = 2 / 3;
 const PRE_ARM_STOP_PCT = 50;
+const PARAMS = `arm${ARM_PCT}/keep${Math.round(KEEP_FRAC * 100)}/pre${PRE_ARM_STOP_PCT}`;
 
-interface RatchetRow {
-  posId: string; slug: string; occ: string; openedAt: string;
+export interface RatchetRow {
+  posId: string; slug: string; epoch: string; occ: string; openedAt: string;
   entry: number; qty: number;
-  actualReason: string; actualPnlCt: number;      // the real arm's outcome ($/contract)
+  actualReason: string; actualPnlCt: number;
   ratchetReason: string; ratchetExit: number | null; ratchetPnlCt: number | null;
-  peakPct: number; armed: boolean; nQuotes: number;
+  peakPct: number; armed: boolean; nQuotes: number; src: "db" | "archive" | "none";
   params: string; basis: "mid-level";
 }
 
 function loadLedger(): Map<string, RatchetRow> {
   if (!existsSync(LEDGER)) return new Map();
-  try { return new Map((JSON.parse(readFileSync(LEDGER, "utf8")) as RatchetRow[]).map((r) => [r.posId, r])); }
-  catch { return new Map(); }
+  try {
+    // v1 rows (2026-07-08 morning) predate the epoch/src fields — normalize on load
+    return new Map((JSON.parse(readFileSync(LEDGER, "utf8")) as RatchetRow[])
+      .map((r) => [r.posId, { ...r, epoch: r.epoch ?? EPOCH_BY_SLUG[r.slug] ?? "a4", src: r.src ?? "db" }]));
+  } catch { return new Map(); }
 }
 
-async function main() {
-  loadEnv();
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+// pure ratchet walk over a mid path
+function replay(entry: number, quotes: { m: number; t: string }[]) {
+  const armLv = entry * (1 + ARM_PCT / 100);
+  const preStopLv = entry * (1 - PRE_ARM_STOP_PCT / 100);
+  let peak = entry, armed = false, exit = quotes[quotes.length - 1].m, reason = "would_flatten";
+  for (const q of quotes) {
+    if (armed) {
+      const floor = entry + (peak - entry) * KEEP_FRAC;
+      if (q.m <= floor) { exit = floor; reason = "ratchet_floor"; break; }
+    } else if (q.m <= preStopLv) { exit = preStopLv; reason = "pre_arm_stop"; break; }
+    if (q.m > peak) { peak = q.m; if (!armed && q.m >= armLv) armed = true; }
+  }
+  return { exit, reason, armed };
+}
 
-  const { data: strat, error: se } = await sb.from("strategists").select("id,slug").in("slug", TWINS);
-  if (se || (strat ?? []).length !== 2) { console.error(`ratchet-shadow: twins lookup failed (${se?.message ?? (strat ?? []).length + "/2"})`); process.exit(1); }
+// archive day cache (one parse per date; ~30k rows/day)
+const archCache = new Map<string, { occ: string; m: number; t: string }[]>();
+function archiveDay(date: string): { occ: string; m: number; t: string }[] | null {
+  if (archCache.has(date)) return archCache.get(date)!;
+  const f = `data/quotes-archive/${date}.json.gz`;
+  if (!existsSync(f)) return null;
+  try {
+    const rows = (JSON.parse(gunzipSync(readFileSync(f)).toString("utf8")) as any[])
+      .map((r) => ({ occ: String(r.occ_symbol), m: Number(r.mid), t: String(r.captured_at) }))
+      .filter((r) => r.m > 0);
+    archCache.set(date, rows);
+    return rows;
+  } catch { return null; }
+}
+
+async function loadQuotes(sb: SupabaseClient, occ: string, openedAt: string, allowArchive: boolean): Promise<{ quotes: { m: number; t: string }[]; src: "db" | "archive" | "none" }> {
+  const date = String(openedAt).slice(0, 10);
+  const dayEnd = `${date}T23:59:59Z`;
+  const quotes: { m: number; t: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data: q, error } = await sb.from("option_quotes").select("mid,captured_at")
+      .eq("occ_symbol", occ).gte("captured_at", openedAt).lte("captured_at", dayEnd)
+      .order("captured_at", { ascending: true }).order("id", { ascending: true }).range(from, from + 999);
+    if (error) throw new Error(`quotes read: ${error.message}`);
+    for (const r of (q ?? []) as any[]) if (Number(r.mid) > 0) quotes.push({ m: Number(r.mid), t: String(r.captured_at) });
+    if ((q ?? []).length < 1000) break;
+  }
+  if (quotes.length) return { quotes, src: "db" };
+  if (allowArchive) {
+    const day = archiveDay(date);
+    if (day) {
+      const qs = day.filter((r) => r.occ === occ && r.t >= openedAt && r.t <= dayEnd)
+        .sort((a, b) => a.t.localeCompare(b.t)).map((r) => ({ m: r.m, t: r.t }));
+      if (qs.length) return { quotes: qs, src: "archive" };
+    }
+  }
+  return { quotes: [], src: "none" };
+}
+
+async function buildRows(sb: SupabaseClient, opts: { allowArchive: boolean; prior: Map<string, RatchetRow> }): Promise<{ rows: RatchetRow[]; fresh: number }> {
+  const slugs = Object.keys(EPOCH_BY_SLUG);
+  const { data: strat, error: se } = await sb.from("strategists").select("id,slug").in("slug", slugs);
+  if (se) throw new Error(`strategists read: ${se.message}`);
   const slugById = new Map((strat ?? []).map((s: any) => [s.id, s.slug]));
-
   const { data: pos, error: pe } = await sb.from("positions")
-    .select("id,strategist_id,occ_symbol,qty,avg_entry_price,realized_pnl,close_reason,opened_at,closed_at,peak_mark")
+    .select("id,strategist_id,occ_symbol,qty,avg_entry_price,realized_pnl,close_reason,opened_at,peak_mark")
     .in("strategist_id", [...slugById.keys()]).eq("status", "closed").gte("opened_at", SINCE)
     .order("opened_at", { ascending: true });
-  if (pe) { console.error(`ratchet-shadow: positions read failed — ${pe.message}`); process.exit(1); }
+  if (pe) throw new Error(`positions read: ${pe.message}`);
 
-  const ledger = loadLedger();
-  let fresh = 0, unscored = 0;
-
+  const ledger = new Map(opts.prior);
+  let fresh = 0;
   for (const p of (pos ?? []) as any[]) {
-    if (ledger.has(p.id)) continue;
+    const prior = ledger.get(p.id);
+    if (prior && prior.ratchetPnlCt != null) continue; // scored rows are final; retry unscored
+    const slug = slugById.get(p.strategist_id)!;
     const entry = Number(p.avg_entry_price);
-    const dayEnd = `${String(p.opened_at).slice(0, 10)}T23:59:59Z`;
-    // full quote paging (the silent-truncation lesson): a session path is ~390 rows,
-    // but page defensively anyway
-    const quotes: { m: number; t: string }[] = [];
-    for (let from = 0; ; from += 1000) {
-      const { data: q, error: qe } = await sb.from("option_quotes").select("mid,captured_at")
-        .eq("occ_symbol", p.occ_symbol).gte("captured_at", p.opened_at).lte("captured_at", dayEnd)
-        .order("captured_at", { ascending: true }).order("id", { ascending: true }).range(from, from + 999);
-      if (qe) { console.error(`ratchet-shadow: quotes read failed — ${qe.message}`); process.exit(1); }
-      for (const r of (q ?? []) as any[]) if (Number(r.mid) > 0) quotes.push({ m: Number(r.mid), t: String(r.captured_at) });
-      if ((q ?? []).length < 1000) break;
-    }
+    const { quotes, src } = await loadQuotes(sb, p.occ_symbol, p.opened_at, opts.allowArchive);
     const row: RatchetRow = {
-      posId: p.id, slug: slugById.get(p.strategist_id)!, occ: p.occ_symbol, openedAt: p.opened_at,
+      posId: p.id, slug, epoch: EPOCH_BY_SLUG[slug], occ: p.occ_symbol, openedAt: p.opened_at,
       entry, qty: Number(p.qty),
       actualReason: String(p.close_reason ?? "?"), actualPnlCt: Math.round((Number(p.realized_pnl) / Number(p.qty)) * 100) / 100,
       ratchetReason: "no_quotes", ratchetExit: null, ratchetPnlCt: null,
-      peakPct: Math.round(100 * (Number(p.peak_mark) / entry - 1)), armed: false, nQuotes: quotes.length,
-      params: `arm${ARM_PCT}/keep${Math.round(KEEP_FRAC * 100)}/pre${PRE_ARM_STOP_PCT}`, basis: "mid-level",
+      peakPct: Math.round(100 * (Number(p.peak_mark) / entry - 1)), armed: false, nQuotes: quotes.length, src,
+      params: PARAMS, basis: "mid-level",
     };
     if (quotes.length) {
-      const armLv = entry * (1 + ARM_PCT / 100);
-      const preStopLv = entry * (1 - PRE_ARM_STOP_PCT / 100);
-      let peak = entry, armed = false, exit = quotes[quotes.length - 1].m, reason = "would_flatten";
-      for (const q of quotes) {
-        if (armed) {
-          const floor = entry + (peak - entry) * KEEP_FRAC;
-          if (q.m <= floor) { exit = floor; reason = "ratchet_floor"; break; }
-        } else if (q.m <= preStopLv) { exit = preStopLv; reason = "pre_arm_stop"; break; }
-        if (q.m > peak) { peak = q.m; if (!armed && q.m >= armLv) armed = true; }
-      }
-      row.armed = armed;
-      row.ratchetExit = Math.round(exit * 100) / 100;
-      row.ratchetReason = reason;
-      row.ratchetPnlCt = Math.round((exit - entry) * 100 * 100) / 100;
-    } else unscored++;
+      const r = replay(entry, quotes);
+      row.armed = r.armed;
+      row.ratchetExit = Math.round(r.exit * 100) / 100;
+      row.ratchetReason = r.reason;
+      row.ratchetPnlCt = Math.round((r.exit - entry) * 100 * 100) / 100;
+    }
     ledger.set(p.id, row);
     fresh++;
   }
+  return { rows: [...ledger.values()].sort((a, b) => a.openedAt.localeCompare(b.openedAt)), fresh };
+}
 
+export interface RatchetSummary {
+  params: string; source: "ledger" | "live";
+  n: number; scored: number; armed: number;
+  actualUsd: number; ratchetUsd: number; deltaUsd: number;
+  epochs: { key: string; n: number; actualUsd: number; ratchetUsd: number }[];
+  byDay: { d: string; n: number; actual: number; ratchet: number }[];
+}
+
+function summarize(rows: RatchetRow[], source: "ledger" | "live"): RatchetSummary {
+  const scored = rows.filter((r) => r.ratchetPnlCt != null);
+  const usd = (f: (r: RatchetRow) => number) => Math.round(scored.reduce((a, r) => a + f(r) * r.qty, 0));
+  const byDayMap = new Map<string, { n: number; actual: number; ratchet: number }>();
+  for (const r of scored) {
+    const d = r.openedAt.slice(0, 10);
+    const e = byDayMap.get(d) ?? { n: 0, actual: 0, ratchet: 0 };
+    e.n++; e.actual += r.actualPnlCt * r.qty; e.ratchet += (r.ratchetPnlCt ?? 0) * r.qty;
+    byDayMap.set(d, e);
+  }
+  const epochs = ["a4", "pre"].map((key) => {
+    const es = scored.filter((r) => r.epoch === key);
+    return { key, n: es.length, actualUsd: Math.round(es.reduce((a, r) => a + r.actualPnlCt * r.qty, 0)), ratchetUsd: Math.round(es.reduce((a, r) => a + (r.ratchetPnlCt ?? 0) * r.qty, 0)) };
+  }).filter((e) => e.n > 0);
+  return {
+    params: PARAMS, source, n: rows.length, scored: scored.length,
+    armed: scored.filter((r) => r.armed).length,
+    actualUsd: usd((r) => r.actualPnlCt), ratchetUsd: usd((r) => r.ratchetPnlCt ?? 0),
+    deltaUsd: usd((r) => (r.ratchetPnlCt ?? 0) - r.actualPnlCt),
+    epochs,
+    byDay: [...byDayMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([d, e]) => ({ d, n: e.n, actual: Math.round(e.actual), ratchet: Math.round(e.ratchet) })),
+  };
+}
+
+// day-report hook: Mac → the banked ledger; worker image (no ledger/archive) → live
+// DB-only recompute of the same-week twins, labeled so the panel can say which it is.
+export async function ratchetShadowSummary(sb: SupabaseClient): Promise<RatchetSummary | null> {
+  try {
+    if (existsSync(LEDGER)) return summarize([...loadLedger().values()], "ledger");
+    const { rows } = await buildRows(sb, { allowArchive: false, prior: new Map() });
+    return rows.length ? summarize(rows, "live") : null;
+  } catch { return null; }
+}
+
+// ── CLI ──────────────────────────────────────────────────────────────────────
+async function cli() {
+  loadEnv();
+  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const { rows, fresh } = await buildRows(sb, { allowArchive: true, prior: loadLedger() });
   mkdirSync("data", { recursive: true });
-  const rows = [...ledger.values()].sort((a, b) => a.openedAt.localeCompare(b.openedAt));
   writeFileSync(LEDGER, JSON.stringify(rows, null, 1));
 
-  // ── three-way read ──
   const sgn = (v: number) => `${v < 0 ? "-" : "+"}$${Math.abs(Math.round(v))}`;
-  console.log(`\n  RATCHET SHADOW — the A4 twins' virtual third arm (${rows[0]?.params ?? ""} · mid-level fills · per-trade, slot-path caveat applies)`);
-  console.log(`  ${String("date").padEnd(6)}${"arm".padEnd(14)}${"occ".padEnd(10)}${"peak".padStart(6)}${"actual".padStart(9)}  ${"".padEnd(16)}${"ratchet".padStart(9)}  ${"Δ/ct".padStart(8)}`);
+  console.log(`\n  RATCHET SHADOW — virtual third arm (${PARAMS} · mid-level · per-trade, slot-path caveat)`);
   for (const r of rows) {
-    if (r.ratchetPnlCt == null) { console.log(`  ${r.openedAt.slice(5, 10)} ${r.slug.padEnd(14)}${r.occ.slice(9).padEnd(10)}  — quotes pruned (${r.actualReason})`); continue; }
+    if (r.ratchetPnlCt == null) { console.log(`  ${r.openedAt.slice(5, 10)} ${r.slug.padEnd(16)}${r.occ.slice(9).padEnd(10)}  — no quotes (${r.src}) (${r.actualReason})`); continue; }
     const d = r.ratchetPnlCt - r.actualPnlCt;
-    console.log(`  ${r.openedAt.slice(5, 10)} ${r.slug.padEnd(14)}${r.occ.slice(9).padEnd(10)}${(r.peakPct + "%").padStart(6)}${sgn(r.actualPnlCt).padStart(9)}  ${("(" + r.actualReason + ")").padEnd(16)}${sgn(r.ratchetPnlCt).padStart(9)}  ${sgn(d).padStart(8)} ${r.ratchetReason === "ratchet_floor" ? "⚑" : r.ratchetReason === "pre_arm_stop" ? "×" : "→bell"}`);
+    console.log(`  ${r.openedAt.slice(5, 10)} ${r.slug.padEnd(16)}${r.occ.slice(9).padEnd(10)}${(r.peakPct + "%").padStart(6)}${sgn(r.actualPnlCt).padStart(9)}  ${("(" + r.actualReason + ")").padEnd(18)}${sgn(r.ratchetPnlCt).padStart(9)}  ${sgn(d).padStart(8)} ${r.ratchetReason === "ratchet_floor" ? "⚑" : r.ratchetReason === "pre_arm_stop" ? "×" : "→bell"}${r.src === "archive" ? " ᵃ" : ""}`);
   }
-  for (const slug of TWINS) {
-    const rs = rows.filter((r) => r.slug === slug && r.ratchetPnlCt != null);
-    if (!rs.length) continue;
-    const act = rs.reduce((a, r) => a + r.actualPnlCt * r.qty, 0);
-    const rat = rs.reduce((a, r) => a + (r.ratchetPnlCt ?? 0) * r.qty, 0);
-    console.log(`\n  Σ ${slug} (${rs.length}t, position-sized): actual ${sgn(act)} vs ratchet ${sgn(rat)} → Δ ${sgn(rat - act)} · armed on ${rs.filter((r) => r.armed).length}/${rs.length}`);
+  const s = summarize(rows, "ledger");
+  for (const e of s.epochs) {
+    console.log(`\n  Σ ${e.key === "a4" ? "A4 twins" : "predecessor (orb-trend-rider, cap/trail-era actuals)"} (${e.n}t): actual ${sgn(e.actualUsd)} vs ratchet ${sgn(e.ratchetUsd)} → Δ ${sgn(e.ratchetUsd - e.actualUsd)}`);
   }
-  console.log(`\n  banked ${fresh} new / ${rows.length} total → ${LEDGER}${unscored ? ` · ⚠ ${unscored} unscored (quotes pruned — run nightly)` : ""}`);
-  console.log(`  ⚠ log-only instrumentation (registry): params fixed pre-results; never a gate; the A4 read arbitrates.\n`);
+  console.log(`  Σ pooled (${s.scored}/${s.n} scored, position-sized): actual ${sgn(s.actualUsd)} vs ratchet ${sgn(s.ratchetUsd)} → Δ ${sgn(s.deltaUsd)} · armed ${s.armed}/${s.scored}`);
+  console.log(`\n  banked ${fresh} new/retried / ${rows.length} total → ${LEDGER}`);
+  console.log(`  ⚠ log-only instrumentation (registry vi): params fixed pre-results; epochs don't pool as one baseline; the A4 read arbitrates.\n`);
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+if (process.argv[1]?.endsWith("ratchet-shadow.ts")) cli().catch((e) => { console.error(e); process.exit(1); });

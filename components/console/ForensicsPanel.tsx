@@ -289,6 +289,44 @@ export function ForensicsPanel() {
           </>
         )}
 
+        {/* ── RATCHET SHADOW — the A4 twins' virtual third arm (registry instrumentation vi) ── */}
+        {(() => {
+          const rs = report.payload.ratchetShadow ?? null;
+          const head = (
+            <div className="au-sub" style={{ marginTop: 12 }}>Ratchet shadow — A4 third arm <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>same trades, virtual arm-high exit ({rs?.params ?? "arm50/keep67/pre50"}) · log-only</span></div>
+          );
+          if (!rs || rs.scored === 0) return (<>{head}<p className="au-market">accruing — replays each A4 twin trade&apos;s real quote path nightly; banks before the 7d prune.</p></>);
+          return (
+            <>
+              {head}
+              <div className="au-fund">
+                <span>actual <b className={cls(rs.actualUsd)}>{signedUsd(rs.actualUsd)}</b> vs ratchet <b className={cls(rs.ratchetUsd)}>{signedUsd(rs.ratchetUsd)}</b></span>
+                <span className={cls(rs.deltaUsd)}>Δ {signedUsd(rs.deltaUsd)}</span>
+                <span>armed {rs.armed}/{rs.scored}</span>
+                {rs.source === "live" && <span style={{ opacity: 0.55 }}>live 7d window</span>}
+              </div>
+              {rs.epochs.length > 1 && (
+                <div className="au-fund">
+                  {rs.epochs.map((e) => (
+                    <span key={e.key}>{e.key === "a4" ? "A4 twins" : "predecessor"} {e.n}t <b className={cls(e.ratchetUsd - e.actualUsd)}>{signedUsd(e.ratchetUsd - e.actualUsd)}</b></span>
+                  ))}
+                </div>
+              )}
+              {expanded && rs.byDay.length > 0 && (
+                <div className="fx-rows">
+                  {rs.byDay.slice(-8).map((d) => (
+                    <div className="fx-row" key={d.d}>
+                      <span className="fx-name">{shortDate(d.d)}</span>
+                      <span className="fx-mid">{d.n}t · actual {signedUsd(d.actual)}</span>
+                      <span className={`au-pnl ${cls(d.ratchet - d.actual)}`}>{signedUsd(d.ratchet - d.actual)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
+
         {/* ── PYRAMID — live adds (executor armed) + would-be adds (shadow) on V3/ALT winners ── */}
         {ps.execs.length > 0 && (
           <>

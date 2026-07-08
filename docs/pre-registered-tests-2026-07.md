@@ -280,7 +280,11 @@ peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
   post-hoc). Purpose: the A4 read gets a three-way comparison (prem-stop vs u-stop vs ratchet)
   on identical trades. LOG-ONLY, never a gate; per-trade counterfactual with the slot-path caveat
   stated in-file (a live ratchet frees the one-at-a-time slot differently — the +75%-cap churn
-  lesson); A4's own two arms and read criteria are unchanged.
+  lesson); A4's own two arms and read criteria are unchanged. **v2 (same day):** sample extended
+  to the predecessor spec's June trades (orb-trend-rider, epoch-labeled — its actuals were lived
+  under the cap/trail-era policy, so epochs don't pool as one baseline) with pruned days replayed
+  from the verbatim quotes archive; summary published into the forensics payload → the §03
+  Shadow & Override panel (beside the pyramid shadow). Same fixed params, unchanged.
 
 ## Calibration-change log (era boundaries for the A6/month-end reads)
 - **2026-07-02 (pre-open):** (A) QQQ V3 clones (`breakout-alt-v3-qqq`, `breakout-smart-entries-qqq`)
