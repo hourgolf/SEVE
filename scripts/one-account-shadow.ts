@@ -383,6 +383,57 @@ async function handsOff(to: string): Promise<void> {
   console.log(`  ⚠ 1DTE channels (pb-ride/pb-ride-itm) truncate at day-1 EOD (no engine evaluator; quote path is opened-day only) → their programmed loss is OVERSTATED; trust the 0DTE reads (momo/pb-ride-2/breakout/trails). Slot timing held as-lived; one era = noise.\n`);
 }
 
+// ── SELF-CROSS / COALESCING detector (go-live infra item 0 — SAFE, measurement only) ──────────
+// In one live account the dream team's shared strikes (70% of trades) collide: channel A's exit-SELL
+// and channel B's entry-BUY on the same OCC in the same minute cross against each other (pay the
+// spread twice), and multiple channels' same-minute BUYs on one OCC could be ONE combined order.
+// This flags both from actual trades → the number that decides if coalescing is worth a worker change.
+// No trade-path change. Cost = modeled half-spread (3% of mid) crossed unnecessarily.
+async function crossAudit(to: string): Promise<void> {
+  loadEnv();
+  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const { data: strat } = await sb.from("strategists").select("id,slug,accounts(cred_ref)").eq("status", "armed");
+  const ft = new Map<string, string>();
+  for (const s of (strat ?? []) as any[]) if (((Array.isArray(s.accounts) ? s.accounts[0] : s.accounts)?.cred_ref) === "2") ft.set(s.id, s.slug);
+  const { data: pos } = await sb.from("positions").select("strategist_id,occ_symbol,qty,avg_entry_price,current_mark,opened_at,closed_at")
+    .eq("status", "closed").gte("opened_at", `${ERA4_EPOCH}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`).in("strategist_id", [...ft.keys()]);
+  const minute = (iso: string) => String(iso).slice(0, 16); // to the minute (UTC)
+  // BUY events (entries) and SELL events (exits), keyed occ|minute
+  const buys = new Map<string, { slug: string; qty: number; px: number }[]>();
+  const sells = new Map<string, { slug: string; qty: number }[]>();
+  for (const p of (pos ?? []) as any[]) {
+    const slug = ft.get(p.strategist_id)!;
+    const bk = `${p.occ_symbol}|${minute(p.opened_at)}`;
+    (buys.get(bk) ?? buys.set(bk, []).get(bk)!).push({ slug, qty: Number(p.qty), px: Number(p.avg_entry_price) });
+    if (p.closed_at) { const sk = `${p.occ_symbol}|${minute(p.closed_at)}`; (sells.get(sk) ?? sells.set(sk, []).get(sk)!).push({ slug, qty: Number(p.qty) }); }
+  }
+  const halfSpread = (px: number) => Math.max(0.01, px * 0.015); // 3% modeled spread → half = 1.5%
+  // self-cross: same occ|minute has BOTH a buy and a sell (from different channels)
+  let scEvents = 0, scContracts = 0, scCost = 0;
+  for (const [k, bs] of buys) {
+    const ss = sells.get(k); if (!ss) continue;
+    const buyers = new Set(bs.map((b) => b.slug)), sellers = new Set(ss.map((s) => s.slug));
+    const crossChans = [...buyers].some((b) => !sellers.has(b)) && sellers.size > 0;
+    if (!crossChans) continue;
+    const crossed = Math.min(bs.reduce((a, b) => a + b.qty, 0), ss.reduce((a, s) => a + s.qty, 0));
+    scEvents++; scContracts += crossed; scCost += 2 * halfSpread(bs[0].px) * 100 * crossed; // both sides cross needlessly
+  }
+  // coalescing opportunity: same occ|minute has ≥2 BUYS across different channels (one combined order)
+  let coEvents = 0, coContracts = 0, coSave = 0;
+  for (const [, bs] of buys) {
+    if (new Set(bs.map((b) => b.slug)).size < 2) continue;
+    const extra = bs.reduce((a, b) => a + b.qty, 0) - Math.max(...bs.map((b) => b.qty)); // contracts beyond the largest single order
+    coEvents++; coContracts += bs.reduce((a, b) => a + b.qty, 0); coSave += halfSpread(bs[0].px) * 100 * extra; // one crossing saved on the merged excess
+  }
+  const sgn = (v: number) => `$${Math.round(v).toLocaleString()}`;
+  console.log(`\nSELF-CROSS / COALESCING AUDIT — dream team in one account (${ERA4_EPOCH}→${to}, ${(pos ?? []).length} trades)`);
+  console.log(`  the go-live collision the 3 paper buckets hide — same OCC, same minute, one pool\n`);
+  console.log(`  SELF-CROSS (A sells while B buys the same strike): ${scEvents} events · ${scContracts} contracts crossed · ~${sgn(scCost)} wasted spread`);
+  console.log(`  COALESCE opp (≥2 channels buy the same strike/min): ${coEvents} events · ${coContracts} contracts · ~${sgn(coSave)} saved by one combined order`);
+  console.log(`\n  → total ~${sgn(scCost + coSave)} of execution friction one account would incur that coalescing/self-cross-prevention (infra item 1) recovers.`);
+  console.log(`  ⚠ modeled 3% half-spread (real NBBO tighter → likely an OVER-estimate); minute-bucketed; the decision input for whether the worker change is worth it.\n`);
+}
+
 // ── CLI ──────────────────────────────────────────────────────────────────────
 const argNum = (name: string, dflt: number) => { const i = process.argv.indexOf(`--${name}`); return i >= 0 && process.argv[i + 1] ? Number(process.argv[i + 1]) : dflt; };
 const argStr = (name: string, dflt: string) => { const i = process.argv.indexOf(`--${name}`); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt; };
@@ -390,6 +441,7 @@ const sgn = (v: number) => `${v < 0 ? "-" : "+"}$${Math.abs(v).toLocaleString()}
 
 async function cli() {
   if (process.argv.includes("--hands-off")) { await handsOff(argStr("to", ET_DAY.format(new Date()))); return; }
+  if (process.argv.includes("--cross-audit")) { await crossAudit(argStr("to", ET_DAY.format(new Date()))); return; }
   // --target-sweep: scope the daily profit-target halt DESKWIDE — baseline (no halt) vs a ladder
   // of per-channel/day profit caps, showing the NAV effect + how many entries each halt would skip.
   if (process.argv.includes("--target-sweep")) {
