@@ -242,29 +242,33 @@ export async function ratchetShadowSummary(sb: SupabaseClient): Promise<RatchetS
 const TSX = process.env.TSX_BIN || join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
 interface RegimeRun { name: string; flags: string[]; trades: number; pnl: number; reasons: string }
 
-async function slotAware(sb: SupabaseClient, from: string, to: string, coreOnly = false): Promise<{ from: string; to: string; runs: RegimeRun[] } | null> {
-  const { data, error } = await sb.from("strategists").select("spec_json,strategist_config(capital_pct,max_contracts,daily_stop_usd)").eq("slug", "orb-ustop").single();
-  if (error || !(data as any)?.spec_json) { console.error(`slot-aware: orb-ustop spec unavailable (${error?.message ?? "no spec"})`); return null; }
+// Per-channel slot-aware configs. Each channel's regimes are IDENTICAL entries, exit-only difference,
+// so entries cancel and the delta is pure exit-policy + its slot/churn consequence. Ratchet params are
+// the FIXED per-trade set (arm +50, keep ⅔ = giveback 33). ORB core = the 3 arms (u-stop/prem/ratchet)
+// banked nightly; the 2 capped ratchets are --slot-only. MOMO = its real ride config (prem50 + ustop0.5)
+// vs +ratchet — momo IS engine-runnable (strong_trend is supported: specEvaluate.ts:289).
+const ORB_REGIMES = [
+  { name: "u-stop 0.30", flags: ["--ustop", "0.30", "--prem-stop", "0"] },
+  { name: "prem-stop 50", flags: ["--prem-stop", "50"] },
+  { name: "ratchet", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50"] },
+  { name: "ratchet cap-1/day", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50", "--max-entries", "1"] },
+  { name: "ratchet cap-2/day", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50", "--max-entries", "2"] },
+];
+const MOMO_REGIMES = [
+  { name: "ride", flags: ["--prem-stop", "50", "--ustop", "0.5"] },
+  { name: "ratchet", flags: ["--prem-stop", "50", "--ustop", "0.5", "--giveback", "33", "--arm-pct", "50"] },
+];
+interface SlotCfg { specSlug: string; regimes: { name: string; flags: string[] }[] }
+
+async function slotAware(sb: SupabaseClient, from: string, to: string, sc: SlotCfg): Promise<{ from: string; to: string; runs: RegimeRun[] } | null> {
+  const { data, error } = await sb.from("strategists").select("spec_json,strategist_config(capital_pct,max_contracts,daily_stop_usd)").eq("slug", sc.specSlug).single();
+  if (error || !(data as any)?.spec_json) { console.error(`slot-aware: ${sc.specSlug} spec unavailable (${error?.message ?? "no spec"})`); return null; }
   const cfg = Array.isArray((data as any).strategist_config) ? (data as any).strategist_config[0] : (data as any).strategist_config;
   const risk = String(Number(cfg?.capital_pct ?? 500)), maxC = String(Number(cfg?.max_contracts ?? 6)), dstop = String(Number(cfg?.daily_stop_usd ?? 500));
-  const specPath = join(tmpdir(), "ratchet-slot-spec.json");
+  const specPath = join(tmpdir(), `ratchet-slot-${sc.specSlug}.json`);
   writeFileSync(specPath, JSON.stringify((data as any).spec_json)); // entries + EOD timeET only; stops layered via CLI
   const daysBack = Math.ceil((Date.now() - Date.parse(from + "T00:00:00Z")) / 86_400_000) + 3;
-  // three regimes, IDENTICAL entries (the spec) — only the exit differs, so entries cancel and the
-  // delta is pure exit-policy + its slot/churn consequence. Ratchet params = the fixed per-trade set
-  // (arm +50, keep ⅔ = giveback 33), pre-arm −50% floor.
-  // + entry-capped ratchets (the operator's "quota then sit out" lever, --max-entries): tests
-  // whether a re-entry guard rescues the ratchet. First read (07-01→08): it does NOT — capping is
-  // flat-to-worse (the giveback EXIT trails ride-to-bell at equal trade count; the churn wasn't the
-  // drag). Kept visible so the answer updates as the sample grows across ride- vs give-back-day mixes.
-  const allRegimes: { name: string; flags: string[] }[] = [
-    { name: "u-stop 0.30", flags: ["--ustop", "0.30", "--prem-stop", "0"] },
-    { name: "prem-stop 50", flags: ["--prem-stop", "50"] },
-    { name: "ratchet uncapped", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50"] },
-    { name: "ratchet cap-1/day", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50", "--max-entries", "1"] },
-    { name: "ratchet cap-2/day", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50", "--max-entries", "2"] },
-  ];
-  const regimes = coreOnly ? allRegimes.slice(0, 3) : allRegimes; // nightly bank = the 3 core arms only
+  const regimes = sc.regimes;
   const runs: RegimeRun[] = [];
   for (const rg of regimes) {
     const emit = join(tmpdir(), `ratchet-slot-${rg.name.replace(/[^a-z0-9]/gi, "_")}.json`);
@@ -285,22 +289,25 @@ async function slotAware(sb: SupabaseClient, from: string, to: string, coreOnly 
   return { from, to, runs };
 }
 
-// GROUND-TRUTH bank for the panel (2026-07-08): the per-trade ledger overstates the ratchet (no
-// slot/churn model, no tail cost). This banks the SLOT-AWARE A4 read — real option_quotes,
-// re-entry-aware, so the churn IS modeled — as the honest headline. Two of its three numbers
-// (u-stop, prem-stop) are the ACTUAL live-arm strategies re-run on real fills = the closest thing
-// to ground truth without waiting for A13's live fills. Nightly, A4 only (momo's spec isn't
-// engine-runnable), 7d-quote-window (trailing). Returns null on any failure → panel shows the
-// per-trade upper bound alone, clearly labeled.
-export interface SlotAwareBank { from: string; to: string; ustopUsd: number; premUsd: number; ratchetUsd: number; ustopT: number; premT: number; ratchetT: number }
-export async function slotAwareA4(sb: SupabaseClient, to: string): Promise<SlotAwareBank | null> {
-  const r = await slotAware(sb, "2026-07-01", to, true);
-  if (!r) return null;
-  const pick = (p: string) => r.runs.find((x) => x.name.startsWith(p));
-  const u = pick("u-stop"), pr = pick("prem-stop"), ra = pick("ratchet");
-  if (!u || !pr || !ra) return null;
-  return { from: r.from, to: r.to, ustopUsd: u.pnl, premUsd: pr.pnl, ratchetUsd: ra.pnl, ustopT: u.trades, premT: pr.trades, ratchetT: ra.trades };
+// GROUND-TRUTH bank for the panel (2026-07-08): the per-trade ledger OVERSTATES the ratchet (no
+// slot/churn model, no tail cost). These bank the SLOT-AWARE read — real option_quotes, re-entry-
+// aware, so the churn IS modeled — as the honest headline. Generic over channel: `arms` are the
+// exit regimes (for A4 the u-stop/prem arms ARE the actual live strategies re-run on real fills =
+// closest to ground truth without A13's live fills; for momo, the ride control vs ratchet).
+// ratchetWins = the ratchet arm ≥ every non-ratchet arm. Trailing 7d quote window. Null on failure
+// → panel shows the per-trade upper bound alone, clearly labeled.
+export interface SlotAwareBank { slug: string; from: string; to: string; arms: { name: string; usd: number; trades: number }[]; ratchetWins: boolean }
+async function slotAwareRead(sb: SupabaseClient, to: string, slug: string, sc: SlotCfg): Promise<SlotAwareBank | null> {
+  const r = await slotAware(sb, "2026-07-01", to, sc);
+  if (!r || !r.runs.length) return null;
+  const arms = r.runs.map((x) => ({ name: x.name, usd: x.pnl, trades: x.trades }));
+  const rat = arms.find((a) => a.name === "ratchet");
+  const others = arms.filter((a) => a.name !== "ratchet" && !a.name.startsWith("ratchet cap"));
+  if (!rat || !others.length) return null;
+  return { slug, from: r.from, to: r.to, arms, ratchetWins: rat.usd >= Math.max(...others.map((a) => a.usd)) };
 }
+export const slotAwareA4 = (sb: SupabaseClient, to: string) => slotAwareRead(sb, to, "A4 (ORB twins)", { specSlug: "orb-ustop", regimes: ORB_REGIMES.slice(0, 3) });
+export const slotAwareMomo = (sb: SupabaseClient, to: string) => slotAwareRead(sb, to, "momo", { specSlug: "momo-shape", regimes: MOMO_REGIMES });
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 async function cli() {
@@ -308,20 +315,20 @@ async function cli() {
     loadEnv();
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
     const to = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
-    const r = await slotAware(sb, "2026-07-01", to);
-    if (!r) process.exit(1);
     const sgn = (v: number) => `${v < 0 ? "-" : "+"}$${Math.abs(v).toLocaleString()}`;
-    console.log(`\n  RATCHET SHADOW — SLOT-AWARE (re-entry-aware engine · twin spec entries · real option_quotes · ${r.from}→${r.to})`);
-    console.log(`  the arbiter: same entries, exit swapped — the ratchet's freed-slot re-entry churn is MODELED here (the per-trade replay can't see it)\n`);
-    console.log(`  ${"regime".padEnd(18)}${"trades".padStart(8)}${"P&L".padStart(11)}   exits`);
-    for (const run of r.runs) console.log(`  ${run.name.padEnd(18)}${String(run.trades).padStart(8)}${sgn(run.pnl).padStart(11)}   ${run.reasons}`);
-    const ratchets = r.runs.filter((x) => x.name.startsWith("ratchet"));
-    const live = r.runs.filter((x) => !x.name.startsWith("ratchet"));
-    const bestLive = live.reduce((a, x) => (x.pnl > a.pnl ? x : a), live[0]);
-    const bestRat = ratchets.reduce((a, x) => (x.pnl > a.pnl ? x : a), ratchets[0]);
-    console.log(`\n  best ratchet variant: ${bestRat.name} ${sgn(bestRat.pnl)} (${bestRat.trades}t) vs best live ${bestLive.name} ${sgn(bestLive.pnl)} (${bestLive.trades}t)`);
-    console.log(`  verdict: ${bestRat.pnl >= bestLive.pnl ? "a ratchet variant WINS slot-aware" : `every ratchet variant LOSES (best trails by ${sgn(bestRat.pnl - bestLive.pnl)}) — capping entries does NOT rescue it; the giveback EXIT trails ride-to-bell on this window's mix`}`);
-    console.log(`  ⚠ log-only; ${r.from} at the 7d option_quotes edge (coverage = still-live window); ratchet-vs-ride is a day-mix bet → one era = noise, the A4 read (N≥40) arbitrates.\n`);
+    console.log(`\n  RATCHET SHADOW — SLOT-AWARE (re-entry-aware engine · real option_quotes · churn MODELED, tail NOT — 0 tails in window)`);
+    for (const [label, sc] of [["A4 (ORB twins)", { specSlug: "orb-ustop", regimes: ORB_REGIMES }], ["momo", { specSlug: "momo-shape", regimes: MOMO_REGIMES }]] as [string, SlotCfg][]) {
+      const r = await slotAware(sb, "2026-07-01", to, sc);
+      if (!r) { console.log(`\n  ${label}: slot-aware failed`); continue; }
+      console.log(`\n  ═ ${label} · ${r.from}→${r.to}`);
+      console.log(`  ${"regime".padEnd(18)}${"trades".padStart(8)}${"P&L".padStart(11)}   exits`);
+      for (const run of r.runs) console.log(`  ${run.name.padEnd(18)}${String(run.trades).padStart(8)}${sgn(run.pnl).padStart(11)}   ${run.reasons}`);
+      const rat = r.runs.find((x) => x.name === "ratchet")!;
+      const ctl = r.runs.filter((x) => x.name !== "ratchet" && !x.name.startsWith("ratchet cap"));
+      const bestCtl = ctl.reduce((a, x) => (x.pnl > a.pnl ? x : a), ctl[0]);
+      console.log(`  verdict: ratchet ${sgn(rat.pnl)} (${rat.trades}t) vs best control ${bestCtl.name} ${sgn(bestCtl.pnl)} → ratchet ${rat.pnl >= bestCtl.pnl ? "WINS" : `LOSES by ${sgn(rat.pnl - bestCtl.pnl)}`} once churn is counted`);
+    }
+    console.log(`\n  ⚠ log-only; trailing 7d option_quotes window; churn modeled but 0 convex tails in sample (the ratchet's tail-cap cost is still unmeasured — only live time / A13 shows it).\n`);
     return;
   }
   loadEnv();
