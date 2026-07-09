@@ -45,7 +45,7 @@ interface ShadowRow {
   signalId: string; slug: string; occ: string; createdAt: string; blocked: string;
   entryAsk: number; exitReason: string; exitPx: number | null; exitAt: string | null;
   pnlPerContract: number | null; stopPct: number; tpPct: number; nQuotes: number;
-  basis: "mid-upper-bound";
+  mfePct: number | null; giveback: number | null; basis: "mid-upper-bound";
 }
 
 function loadLedger(): Map<string, ShadowRow> {
@@ -68,7 +68,7 @@ async function reconstruct(s: any, slug: string, cfg: Cfg): Promise<ShadowRow> {
   const base: ShadowRow = {
     signalId: String(s.id), slug, occ, createdAt: String(s.created_at), blocked: String(s.blocked_reason),
     entryAsk: ask, exitReason: "no_quotes", exitPx: null, exitAt: null, pnlPerContract: null,
-    stopPct, tpPct: cfg.tp, nQuotes: 0, basis: "mid-upper-bound",
+    stopPct, tpPct: cfg.tp, nQuotes: 0, mfePct: null, giveback: null, basis: "mid-upper-bound",
   };
   if (!occ) return base;
   if (!(ask > 0)) {
@@ -94,7 +94,9 @@ async function reconstruct(s: any, slug: string, cfg: Cfg): Promise<ShadowRow> {
   const stopLv = ask * (1 - base.stopPct / 100);
   const tpLv = cfg.tp > 0 ? ask * (1 + cfg.tp / 100) : null;
   let exitPx = qs[qs.length - 1].m, exitAt = qs[qs.length - 1].t, reason = "would_flatten";
+  let peak = qs[0].m; // running max mid over the hold → MFE for the avg-peak harvest lens
   for (const q of qs) {
+    if (q.m > peak) peak = q.m;
     if (tpLv != null && q.m >= tpLv) { exitPx = tpLv; exitAt = q.t; reason = "would_target"; break; }
     if (q.m <= stopLv) { exitPx = stopLv; exitAt = q.t; reason = "would_stop"; break; }
   }
@@ -102,6 +104,11 @@ async function reconstruct(s: any, slug: string, cfg: Cfg): Promise<ShadowRow> {
   base.exitAt = exitAt;
   base.exitReason = reason;
   base.pnlPerContract = Math.round((exitPx - ask) * 100 * 100) / 100;
+  // MFE (peak favorable %) + giveback (% of the peak gain the exit surrendered), mid-basis — same
+  // upper-bound caveat as pnl. Lights up the avg-peak lens on the bench (memory/avg-peak-harvest-lens).
+  base.mfePct = Math.round(((peak - ask) / ask) * 100 * 10) / 10;
+  const realizedPct = ((exitPx - ask) / ask) * 100;
+  base.giveback = base.mfePct > 0.01 ? Math.round(((base.mfePct - realizedPct) / base.mfePct) * 100) : null;
   return base;
 }
 
@@ -171,6 +178,11 @@ async function main() {
     fresh++;
     if (!HAS_SERVICE) return;
     try {
+      // base.mfePct / base.giveback are banked in the gate-shadow.json ledger (the durable peak
+      // store) but NOT mirrored to these columns yet — that needs `alter table virtual_trades add
+      // column mfe_pct real, giveback_pct real`, and adding them here before that DDL lands would
+      // error the whole upsert (silently, via the catch below) and freeze the LAB panel. Add both
+      // to this object the same commit the migration runs.
       await sb.from("virtual_trades").upsert({
         signal_id: base.signalId, strategist_id: s.strategist_id, slug: base.slug, occ: base.occ,
         signal_at: base.createdAt, blocked: base.blocked,
