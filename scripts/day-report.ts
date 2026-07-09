@@ -25,7 +25,7 @@ import {
 } from "./override-ledger";
 import { benchedVsLive, type BenchedVsLive } from "./benched-sim";
 import { runOneAccountShadow, type ShadowResult } from "./one-account-shadow";
-import { ratchetShadowSummary, type RatchetSummary } from "./ratchet-shadow";
+import { ratchetShadowSummary, slotAwareA4, type RatchetSummary, type SlotAwareBank } from "./ratchet-shadow";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
@@ -614,9 +614,18 @@ async function main() {
   // Ledger-first (Mac, incl. archive-replayed June predecessor trades); the worker image
   // recomputes same-week twins from the DB (labeled source:"live"). Log-only, never a gate.
   let ratchet: RatchetSummary | null = null;
+  let slotBank: SlotAwareBank | null = null;
   try {
     ratchet = await ratchetShadowSummary(sb);
-    if (ratchet) console.log(`\nRATCHET SHADOW (${ratchet.params} · ${ratchet.source}): actual ${sgn(ratchet.actualUsd)} vs ratchet ${sgn(ratchet.ratchetUsd)} → Δ ${sgn(ratchet.deltaUsd)} over ${ratchet.scored}t · armed ${ratchet.armed}/${ratchet.scored}`);
+    if (ratchet) console.log(`\nRATCHET SHADOW (${ratchet.params} · ${ratchet.source}): actual ${sgn(ratchet.actualUsd)} vs ratchet ${sgn(ratchet.ratchetUsd)} → Δ ${sgn(ratchet.deltaUsd)} over ${ratchet.scored}t · armed ${ratchet.armed}/${ratchet.scored} · tails ${ratchet.tails}`);
+    // GROUND TRUTH: the slot-aware A4 read (re-entry-aware, real fills) is the honest headline the
+    // per-trade Δ can't be. Spawns backtests → run ONCE, only for the latest ET day (close pass),
+    // never for catch-up backfills (would be 5-6× the cost for stale windows).
+    const todayET = ET_DATE.format(new Date());
+    if (DATE === todayET) {
+      slotBank = await slotAwareA4(sb, DATE);
+      if (slotBank) console.log(`  slot-aware A4 (${slotBank.from}→${slotBank.to}, GROUND-TRUTH proxy): u-stop ${sgn(slotBank.ustopUsd)} · prem ${sgn(slotBank.premUsd)} · ratchet ${sgn(slotBank.ratchetUsd)} → ratchet ${slotBank.ratchetUsd >= Math.max(slotBank.ustopUsd, slotBank.premUsd) ? "WINS" : "LOSES"} vs the real arms`);
+    }
   } catch (e) {
     console.log(`\nratchet shadow: failed (${(e as Error).message})`);
   }
@@ -662,7 +671,7 @@ async function main() {
       curve: oas.days.map((day) => ({ d: day.date, nav: day.navEnd, adm: day.admitted, dwn: day.downsized, rej: day.rejected, peak: day.peakDeployedUsd })),
       scenarios: oasScenarios,
       today: oas.days.find((day) => day.date === DATE) ?? null } : null,
-    ratchetShadow: ratchet,
+    ratchetShadow: ratchet ? { ...ratchet, slotAware: slotBank } : null,
   };
   console.log(`\n  dashboard: ${await publishForensics(DATE, payload)}`);
 

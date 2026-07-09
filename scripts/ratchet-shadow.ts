@@ -190,6 +190,8 @@ export interface RatchetSummary {
   actualUsd: number; ratchetUsd: number; deltaUsd: number;
   epochs: { key: string; n: number; actualUsd: number; ratchetUsd: number }[];
   byDay: { d: string; n: number; actual: number; ratchet: number }[];
+  tails: number; // trades that peaked ≥120% (true convex tails — the case a ratchet CAPS; 0 = the
+                 // per-trade Δ is flattered by a no-tail sample, the honesty flag on the whole read)
 }
 
 function summarize(rows: RatchetRow[], source: "ledger" | "live"): RatchetSummary {
@@ -214,6 +216,7 @@ function summarize(rows: RatchetRow[], source: "ledger" | "live"): RatchetSummar
     epochs,
     byDay: [...byDayMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))
       .map(([d, e]) => ({ d, n: e.n, actual: Math.round(e.actual), ratchet: Math.round(e.ratchet) })),
+    tails: scored.filter((r) => r.peakPct >= 120).length,
   };
 }
 
@@ -239,7 +242,7 @@ export async function ratchetShadowSummary(sb: SupabaseClient): Promise<RatchetS
 const TSX = process.env.TSX_BIN || join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
 interface RegimeRun { name: string; flags: string[]; trades: number; pnl: number; reasons: string }
 
-async function slotAware(sb: SupabaseClient, from: string, to: string): Promise<{ from: string; to: string; runs: RegimeRun[] } | null> {
+async function slotAware(sb: SupabaseClient, from: string, to: string, coreOnly = false): Promise<{ from: string; to: string; runs: RegimeRun[] } | null> {
   const { data, error } = await sb.from("strategists").select("spec_json,strategist_config(capital_pct,max_contracts,daily_stop_usd)").eq("slug", "orb-ustop").single();
   if (error || !(data as any)?.spec_json) { console.error(`slot-aware: orb-ustop spec unavailable (${error?.message ?? "no spec"})`); return null; }
   const cfg = Array.isArray((data as any).strategist_config) ? (data as any).strategist_config[0] : (data as any).strategist_config;
@@ -254,13 +257,14 @@ async function slotAware(sb: SupabaseClient, from: string, to: string): Promise<
   // whether a re-entry guard rescues the ratchet. First read (07-01→08): it does NOT — capping is
   // flat-to-worse (the giveback EXIT trails ride-to-bell at equal trade count; the churn wasn't the
   // drag). Kept visible so the answer updates as the sample grows across ride- vs give-back-day mixes.
-  const regimes: { name: string; flags: string[] }[] = [
+  const allRegimes: { name: string; flags: string[] }[] = [
     { name: "u-stop 0.30", flags: ["--ustop", "0.30", "--prem-stop", "0"] },
     { name: "prem-stop 50", flags: ["--prem-stop", "50"] },
     { name: "ratchet uncapped", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50"] },
     { name: "ratchet cap-1/day", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50", "--max-entries", "1"] },
     { name: "ratchet cap-2/day", flags: ["--prem-stop", "50", "--giveback", "33", "--arm-pct", "50", "--max-entries", "2"] },
   ];
+  const regimes = coreOnly ? allRegimes.slice(0, 3) : allRegimes; // nightly bank = the 3 core arms only
   const runs: RegimeRun[] = [];
   for (const rg of regimes) {
     const emit = join(tmpdir(), `ratchet-slot-${rg.name.replace(/[^a-z0-9]/gi, "_")}.json`);
@@ -279,6 +283,23 @@ async function slotAware(sb: SupabaseClient, from: string, to: string): Promise<
   }
   try { rmSync(specPath); } catch { /* */ }
   return { from, to, runs };
+}
+
+// GROUND-TRUTH bank for the panel (2026-07-08): the per-trade ledger overstates the ratchet (no
+// slot/churn model, no tail cost). This banks the SLOT-AWARE A4 read — real option_quotes,
+// re-entry-aware, so the churn IS modeled — as the honest headline. Two of its three numbers
+// (u-stop, prem-stop) are the ACTUAL live-arm strategies re-run on real fills = the closest thing
+// to ground truth without waiting for A13's live fills. Nightly, A4 only (momo's spec isn't
+// engine-runnable), 7d-quote-window (trailing). Returns null on any failure → panel shows the
+// per-trade upper bound alone, clearly labeled.
+export interface SlotAwareBank { from: string; to: string; ustopUsd: number; premUsd: number; ratchetUsd: number; ustopT: number; premT: number; ratchetT: number }
+export async function slotAwareA4(sb: SupabaseClient, to: string): Promise<SlotAwareBank | null> {
+  const r = await slotAware(sb, "2026-07-01", to, true);
+  if (!r) return null;
+  const pick = (p: string) => r.runs.find((x) => x.name.startsWith(p));
+  const u = pick("u-stop"), pr = pick("prem-stop"), ra = pick("ratchet");
+  if (!u || !pr || !ra) return null;
+  return { from: r.from, to: r.to, ustopUsd: u.pnl, premUsd: pr.pnl, ratchetUsd: ra.pnl, ustopT: u.trades, premT: pr.trades, ratchetT: ra.trades };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
