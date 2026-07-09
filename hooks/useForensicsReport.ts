@@ -53,17 +53,18 @@ export interface OneAccountShadowPayload {
 // RATCHET SHADOW — the A4 twins' virtual third arm (scripts/ratchet-shadow.ts,
 // registry instrumentation vi): each twin/predecessor trade's real quote path
 // replayed under the fixed arm-high ratchet. Log-only, never a gate.
-// slot-aware A4 = the GROUND-TRUTH proxy (re-entry-aware, real fills; u-stop/prem are the actual
-// live arms re-run). The panel leads with THIS, not the per-trade Δ (which overstates — no churn/tail).
-export interface SlotAwareBankUI { from: string; to: string; ustopUsd: number; premUsd: number; ratchetUsd: number; ustopT: number; premT: number; ratchetT: number }
+// slot-aware = the GROUND-TRUTH proxy (re-entry-aware, real fills; churn modeled). Per channel:
+// `arms` are the exit regimes (A4: u-stop/prem [the actual live arms] + ratchet; momo: ride + ratchet).
+// The panel leads with THIS, not the per-trade Δ (which overstates — no churn/tail model).
+export interface SlotAwareBankUI { slug: string; from: string; to: string; arms: { name: string; usd: number; trades: number }[]; ratchetWins: boolean }
 export interface RatchetShadowPayload {
   params: string; source: "ledger" | "live";
   n: number; scored: number; armed: number;
   actualUsd: number; ratchetUsd: number; deltaUsd: number;
   epochs: { key: string; n: number; actualUsd: number; ratchetUsd: number }[];
   byDay: { d: string; n: number; actual: number; ratchet: number }[];
-  tails?: number;                       // convex tails in sample (≥120% peak); 0 = per-trade Δ flattered
-  slotAware?: SlotAwareBankUI | null;   // the ground-truth A4 headline (absent on pre-07-08 / catch-up days)
+  tails?: number;                        // convex tails in sample (≥120% peak); 0 = per-trade Δ flattered
+  slotAware?: SlotAwareBankUI[] | null;  // ground-truth reads per channel (A4 + momo); absent on catch-up days
 }
 export interface ForensicsPayload {
   generatedAt: string;
