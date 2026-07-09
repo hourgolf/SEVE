@@ -198,12 +198,17 @@ misfires on sub-50% peakers (rides them to the −50% stop, −$177 worst-case, 
 the operator banks by hand).** Same class as the ORB ratchet mirage (+$6,557 per-trade → −$424
 slot-aware). So NOT a config flip — a LIVE A/B to convert the unverified shadow into forward evidence,
 including the eventual tail day the shadow window lacked.
-- **Design (mirror A4):** identical momo entries, exit-only difference. VARIANT = momo-shape with the
+- **✅ ARMED 2026-07-08 (worker `stream-2026-07-08a`, boot-verified; e04abd5).** A/B starts next open (07-09).
+- **Design (as armed):** identical momo entries, exit-only difference. VARIANT = momo-shape with the
   arm-high ratchet (**FIXED: arm +50%, keep ⅔ of peak gain, −50% pre-arm premium stop** — the
-  ratchet-shadow params, not tuned). CONTROL = pure-ride momo (tp=0, −50% stop = momo-shape's current
-  config). ⚠ Both live in FIRST-TEAM (acct 2) with IDENTICAL entries → same-OCC stacking/self-cross
-  confound (A4 dodged this via separate accounts); IMPLEMENTATION must isolate the control to a
-  different account (LAB) OR accept same-account with row-primary attribution + note it. A1 sizing.
+  ratchet-shadow params, not tuned; live via the per-channel GIVEBACK_TRAIL map, config.ts). CONTROL =
+  **momo-shape-2 left AS-IS** (its live tp30 lock — NOT degraded to pure-ride) + the shadow's pure-ride
+  baseline on momo-shape's own entries. Rationale for the amendment (legal, pre-outcome): degrading a
+  live earner to pure-ride was a needless cost; the shadow already supplies the ride baseline, so the
+  minimal live footprint = arm ONE channel. ⚠ momo-shape + momo-shape-2 already co-trade FIRST-TEAM
+  (acct 2) with differential exits today (tp0 vs tp30) → the shared-OCC differential-exit case is
+  already exercised/booked (row-primary); the ratchet adds a third exit time, not a new booking class.
+  A1 sizing. Fully reversible: remove the momo-shape line from GIVEBACK_TRAIL to disarm.
 - **Run to N≥40 trades each. No mid-test param changes.**
 - **Kill (any one):** variant expectancy < control at N≥40 · variant caps a genuine convex tail
   (a control trade peaking ≥120% where the variant's ratchet exit banks materially less) — this is
@@ -389,6 +394,13 @@ Both reversible by restoring the prior values; both are rule-applications, not P
   question stays formally OPEN (thin sample, not a refutation); the backtest-vs-forward contradiction
   is unresolved evidence, not a verdict. Reversible via the MUTE pads; config (RISK 250, TP/stop)
   preserved for a clean re-arm.
+- **2026-07-08 (after-hours, worker `stream-2026-07-08a`, boot-verified):** (I) **momo-shape ARMED with the
+  arm-high giveback ratchet** (A13 live A/B; per-channel GIVEBACK_TRAIL map, arm+50%/keep-⅔). ⚠ ERA
+  BOUNDARY for momo-shape: its exit policy changes ride→ratchet starting 07-09 open — evaluate momo-shape
+  pre/post-07-09 separately, do NOT pool. momo-shape-2 (control) UNCHANGED. power's trail byte-identical
+  (map port). Slot-aware pre-check cleared the churn hurdle (ratchet +$1,050 vs ride +$634); the live
+  A/B measures the unresolved TAIL-cap cost (0 tails in shadow window). Fully reversible: remove the
+  momo-shape line from GIVEBACK_TRAIL. See A13 for kill criteria (ONE genuine ≥120%-tail cap = disqualify).
 
 ## B2 · Chop-day short-premium (DEFERRED — chained behind A5)
 No multi-leg compiler work unless A5 passes. Inherits A5's kill. Additional standing door-check:
