@@ -19,10 +19,12 @@ import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
-const sb = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string,
-);
+// Service role (when present, e.g. the nightly capture / .env.local) lets the digest publish to the
+// events table for the §03 panel; anon still reads virtual_trades fine, just skips the publish.
+const SB_URL = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL) as string;
+const SB_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string;
+const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+const sb = createClient(SB_URL, SB_KEY);
 
 const ERA4 = "2026-06-30";
 // Measured NTM exit half-spread ($/ct) — the mid-basis → real-fill haircut on bench
@@ -156,12 +158,20 @@ async function main() {
     ? "\n\n" + "─".repeat(64) + "\nSENTINEL DIGEST — judgment layer\n\n" + judged
     : "\n\n(judgment layer inactive — set ANTHROPIC_API_KEY in .env.local to enable the prose digest)");
   console.log(full);
-  // shadow-first: bank the digest as a dated, reviewable artifact (log-only until it earns paging)
+  const et = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+  // shadow-first: bank the digest as a dated, reviewable artifact (the durable local copy)
   try {
-    const et = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
     mkdirSync(path.join("data", "sentinel"), { recursive: true });
     writeFileSync(path.join("data", "sentinel", `${et}.md`), full);
     writeFileSync(path.join("data", "sentinel-latest.md"), full);
   } catch (e) { console.error(`sentinel: digest write failed — ${(e as Error).message}`); }
+  // surface to the §03 dashboard: publish the digest to the events table (service role only; the
+  // panel reads the latest `sentinel:` event via anon). Upsert-by-day so a re-run replaces the day.
+  if (HAS_SERVICE) {
+    try {
+      await sb.from("events").delete().like("message", `sentinel: ${et}%`);
+      await sb.from("events").insert({ level: "INFO", message: `sentinel: ${et}`, meta: { kind: "sentinel", date: et, digest: full } });
+    } catch (e) { console.error(`sentinel: event publish failed — ${(e as Error).message}`); }
+  }
 }
 main().catch((e) => { console.error(`sentinel: ${(e as Error).message}`); process.exit(1); });

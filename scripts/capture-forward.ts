@@ -113,7 +113,10 @@ async function main() {
   // the engine now retries each quote page 4× and FAIL-FASTS on a partial tape, which is
   // what makes the close pass safe — load yields a loud "sim failed:" note, never a wrong
   // number, and the next run self-heals (idempotent upserts, catch-up window 6d).
-  for (const d of recentDays.slice(1)) run(`day-report ${d}`, ["day-report", "--", "--date", d], 2);
+  // INCLUDES today (2026-07-09 fix): the fast close-pass day-report above ran BEFORE ratchet-shadow +
+  // reconcile, so its §03 ratchet summary was a day stale; re-running today here (post-ratchet-shadow,
+  // post-reconcile) republishes the panel with the complete, settled ledger. day-report is idempotent.
+  for (const d of recentDays) run(`day-report ${d}`, ["day-report", "--", "--date", d], 2);
   run("build-training-store", ["build-training-store"], 2);
   // WEEKLY READOUT (approved 2026-07-02): Fridays only — the week's aggregate interrogation
   // of the banked data (rollup + near-miss + vb-fleet-vs-prior + gate counters). Analysis

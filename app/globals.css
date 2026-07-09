@@ -1480,6 +1480,16 @@ td.clk.sel {
 .au-dates { margin-bottom: 10px; }
 .au-dates button { font-family: var(--mono); }
 .au-market { font-size: 12px; line-height: 1.5; color: var(--text); margin: 0 0 8px; }
+
+/* Sentinel digest (nightly opportunity+drift → LLM judgment; §04, cream via the .log-section flip) */
+.sent-md { font-family: var(--mono); font-size: 11px; line-height: 1.5; color: var(--text); }
+.sent-h { font-weight: 700; letter-spacing: .02em; margin: 9px 0 3px; }
+.sent-h:first-child { margin-top: 0; }
+.sent-ln { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sent-sp { height: 5px; }
+.sent-hr { border: 0; border-top: 1px solid var(--border); margin: 8px 0; }
+.sent-md strong { font-weight: 700; }
+.sent-md code { font-family: inherit; }
 .au-fund {
   display: flex; gap: 14px; font-family: var(--mono); font-size: 11px; color: var(--muted);
   padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 10px;
