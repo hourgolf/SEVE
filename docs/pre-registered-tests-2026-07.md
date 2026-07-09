@@ -216,6 +216,14 @@ including the eventual tail day the shadow window lacked.
   verify live code via `worker_heartbeat` note + the `stream: boot:` event. NOT a config flip. Creates a
   momo era boundary → log in the calibration log at arm time. Connects to A6b (the near-miss metric that
   independently reopens the ratchet probe) — if A6b also triggers on momo, the two reads corroborate.
+- **SLOT-AWARE PRE-CHECK (2026-07-08, `npm run ratchet-shadow -- --slot`):** momo IS engine-runnable
+  (the earlier "can't slot-verify momo" was WRONG — strong_trend is supported, specEvaluate.ts:289), so
+  the churn dimension was verified BEFORE going live. Result (07-01→08, real fills, re-entry-aware): momo
+  ratchet **+$1,050 (6t) vs ride +$634 (2t) → WINS +$416** — it SURVIVES the slot churn that killed A4's
+  (A4 ratchet LOSES −$424 same window). The ORB failure mode does NOT transfer; churn hurdle cleared.
+  ⚠ STILL unresolved: **0 convex tails in sample** → the ratchet's tail-cap cost (momo's raison d'être)
+  is unmeasured; only live time surfaces it — exactly what A13 is FOR. So slot-aware strengthens the case
+  to proceed but does NOT remove the reason for the live A/B. Banked nightly + §03 ground-truth headline.
 
 ## A6b · NEAR-MISS metric (pre-registered 2026-07-02 — read WITH A6, not before)
 **Metric:** near-miss rate = trades whose peak_mark reached ≥70% of the channel's TP level
