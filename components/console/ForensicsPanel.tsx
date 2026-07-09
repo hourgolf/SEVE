@@ -308,23 +308,39 @@ export function ForensicsPanel() {
         {(() => {
           const rs = report.payload.ratchetShadow ?? null;
           const head = (
-            <div className="au-sub" style={{ marginTop: 12 }}>Ratchet shadow — A4 third arm <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>same trades, virtual arm-high exit ({rs?.params ?? "arm50/keep67/pre50"}) · log-only</span></div>
+            <div className="au-sub" style={{ marginTop: 12 }}>Ratchet shadow — ground truth first <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>virtual arm-high exit ({rs?.params ?? "arm50/keep67/pre50"}) · log-only</span></div>
           );
-          if (!rs || rs.scored === 0) return (<>{head}<p className="au-market">accruing — replays each A4 twin trade&apos;s real quote path nightly; banks before the 7d prune.</p></>);
+          if (!rs || rs.scored === 0) return (<>{head}<p className="au-market">accruing — replays each twin/momo trade&apos;s real quote path nightly; banks before the 7d prune.</p></>);
+          const sa = rs.slotAware ?? null;
+          const saWin = sa ? sa.ratchetUsd >= Math.max(sa.ustopUsd, sa.premUsd) : false;
           return (
             <>
               {head}
-              <div className="au-fund">
-                <span>actual <b className={cls(rs.actualUsd)}>{signedUsd(rs.actualUsd)}</b> vs ratchet <b className={cls(rs.ratchetUsd)}>{signedUsd(rs.ratchetUsd)}</b></span>
+              {/* GROUND TRUTH: slot-aware A4 (re-entry-aware, real fills; u-stop/prem are the ACTUAL live arms) */}
+              {sa ? (
+                <div className="au-fund">
+                  <span style={{ fontWeight: 700 }}>A4 slot-aware (real fills, churn modeled):</span>
+                  <span>u-stop <b className={cls(sa.ustopUsd)}>{signedUsd(sa.ustopUsd)}</b></span>
+                  <span>prem <b className={cls(sa.premUsd)}>{signedUsd(sa.premUsd)}</b></span>
+                  <span>ratchet <b className={cls(sa.ratchetUsd)}>{signedUsd(sa.ratchetUsd)}</b></span>
+                  <span className={saWin ? "pos" : "neg"}>{saWin ? "ratchet wins" : "ratchet LOSES vs the real arms"}</span>
+                </div>
+              ) : (
+                <p className="au-market" style={{ margin: "2px 0" }}>slot-aware A4 read pending tonight&apos;s close pass — the ground-truth number (per-trade below is an upper bound).</p>
+              )}
+              {/* per-trade = UPPER BOUND, demoted + flagged (no churn/tail model) */}
+              <div className="au-fund" style={{ opacity: 0.82 }}>
+                <span style={{ opacity: 0.7 }}>per-trade upper bound (no churn/tail):</span>
                 <span className={cls(rs.deltaUsd)}>Δ {signedUsd(rs.deltaUsd)}</span>
                 <span>armed {rs.armed}/{rs.scored}</span>
-                {rs.source === "live" && <span style={{ opacity: 0.55 }}>live 7d window</span>}
+                <span className={(rs.tails ?? 0) > 0 ? "" : "neg"}>{rs.tails ?? 0} convex tail{(rs.tails ?? 0) === 1 ? "" : "s"}{(rs.tails ?? 0) === 0 ? " — Δ flattered" : ""}</span>
               </div>
               {rs.epochs.length > 1 && (
-                <div className="au-fund">
+                <div className="au-fund" style={{ opacity: 0.82 }}>
                   {rs.epochs.map((e) => (
-                    <span key={e.key}>{e.key === "a4" ? "A4 twins" : e.key === "momo" ? "momo" : "predecessor"} {e.n}t <b className={cls(e.ratchetUsd - e.actualUsd)}>{signedUsd(e.ratchetUsd - e.actualUsd)}</b></span>
+                    <span key={e.key}>{e.key === "a4" ? "A4" : e.key === "momo" ? "momo⚠" : "pre"} {e.n}t <b className={cls(e.ratchetUsd - e.actualUsd)}>{signedUsd(e.ratchetUsd - e.actualUsd)}</b></span>
                   ))}
+                  <span style={{ opacity: 0.55, fontWeight: 400 }}>momo⚠ = per-trade only, no slot verify</span>
                 </div>
               )}
               {expanded && rs.byDay.length > 0 && (
