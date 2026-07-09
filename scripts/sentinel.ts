@@ -74,6 +74,45 @@ async function benchScan(days: number) {
   });
 }
 
+// ---- judgment layer (LLM) — turns the deterministic facts into an operator digest ----
+// Matches the desk's raw-fetch Anthropic pattern (app/api/compile-strategy, the daily-autopsy
+// edge fn) rather than pulling in the SDK for a script. Key-gated: no ANTHROPIC_API_KEY →
+// deterministic-only (the sensor layer stands alone). Model defaults to opus-4-8, ANTHROPIC_MODEL
+// overrides. Guardrails mirror the autopsy prompt: registry governs, no arm from bench, magnitude
+// not direction.
+async function judge(facts: string): Promise<string | null> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
+  const system = [
+    "You are the SEVE desk sentinel. Turn the deterministic scan below into a terse nightly operator digest.",
+    "HARD GUARDRAILS:",
+    "- The pre-registered registry (docs/pre-registered-tests-2026-07.md) governs every gate/TP/stop/size/roster change. NEVER say 'change X now' — phrase a motivated change as 'queue for the gate' / 'needs a pre-registered item'.",
+    "- NO ARM FROM BENCH: vb-* / virtual_trades are mid-basis (exit half-spread already netted) and capital-blind — rank them as hypotheses, never recommend arming; the mining pass is the venue.",
+    "- Direction is noise; magnitude is the gate. No directional or regime narrative from a short window.",
+    "- Bench numbers are an UPPER BOUND; n<8 is thin; giveback>100% means peak-then-loss.",
+    "OUTPUT (no preamble, do not restate the raw table verbatim):",
+    "1. OPPORTUNITIES — the 1-3 items worth a human look; each: what it is, why (expected vs anomalous), and the gate/venue it belongs to.",
+    "2. DRIFT — anything that changed or looks off vs how the desk should behave; 'none' if clean.",
+    "3. SO WHAT — one line: anything to do before the next gate, or hold.",
+    "Terse. The operator scans this in 20 seconds.",
+  ].join("\n");
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model, max_tokens: 1024, output_config: { effort: "medium" },
+        system, messages: [{ role: "user", content: `Produce the digest for this scan:\n\n${facts}` }],
+      }),
+    });
+    if (!res.ok) { console.error(`sentinel judge: ${res.status} ${(await res.text()).slice(0, 200)}`); return null; }
+    const data = (await res.json()) as any;
+    const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
+    return text || null;
+  } catch (e) { console.error(`sentinel judge: ${(e as Error).message}`); return null; }
+}
+
 async function main() {
   const dArg = process.argv.indexOf("--days");
   const days = dArg > 0 ? Number(process.argv[dArg + 1]) || 7 : 7;
@@ -110,8 +149,12 @@ async function main() {
   if (craters.length) P(`   bench craters (giveback >500% — peak then deep loss): ${craters.join(", ")}`);
   if (!scalps.length && !craters.length) P(`   (no mechanical flags)`);
   P();
-  P(`   ⚠ deterministic sensor layer — judgment (prose) + paging + schedule pending. No arm from bench (mid-basis, capital-blind).`);
+  P(`   ⚠ SENSOR LAYER (deterministic). Bench is mid-basis + capital-blind — no arm from it. Paging + schedule pending.`);
 
-  console.log(O.join("\n"));
+  const facts = O.join("\n");
+  console.log(facts);
+  const judged = await judge(facts);
+  if (judged) console.log("\n" + "─".repeat(64) + "\nSENTINEL DIGEST — judgment layer\n\n" + judged);
+  else console.log("\n(judgment layer inactive — set ANTHROPIC_API_KEY to enable the prose digest)");
 }
 main().catch((e) => { console.error(`sentinel: ${(e as Error).message}`); process.exit(1); });
