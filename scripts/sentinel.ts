@@ -16,7 +16,7 @@
 //    tsx --env-file=.env.local scripts/sentinel.ts [--days N]
 // ---------------------------------------------------------------------------
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 const sb = createClient(
@@ -84,19 +84,18 @@ async function judge(facts: string): Promise<string | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
+  let brief = "";
+  try { brief = readFileSync(path.join("docs", "sentinel-context.md"), "utf8").trim(); } catch { /* no brief → thinner, guardrail-only judge */ }
   const system = [
-    "You are the SEVE desk sentinel. Turn the deterministic scan below into a terse nightly operator digest.",
-    "HARD GUARDRAILS:",
-    "- The pre-registered registry (docs/pre-registered-tests-2026-07.md) governs every gate/TP/stop/size/roster change. NEVER say 'change X now' — phrase a motivated change as 'queue for the gate' / 'needs a pre-registered item'.",
-    "- NO ARM FROM BENCH: vb-* / virtual_trades are mid-basis (exit half-spread already netted) and capital-blind — rank them as hypotheses, never recommend arming; the mining pass is the venue.",
-    "- Direction is noise; magnitude is the gate. No directional or regime narrative from a short window.",
-    "- Bench numbers are an UPPER BOUND; n<8 is thin; giveback>100% means peak-then-loss.",
+    brief && `DESK CONTEXT — your durable learnings; reason FROM these, they are the desk's settled doctrine:\n\n${brief}\n───`,
+    "You are the SEVE desk sentinel. Turn the deterministic scan below into a terse nightly operator digest, grounded in the DESK CONTEXT above (the avg-peak/book lens, LOCK/RIDE/NEITHER, the live gates).",
+    "Reinforced guardrails: registry governs every knob change (say 'queue for the gate', never 'change X now'); NO ARM FROM BENCH (mid-basis, capital-blind — hypotheses only); direction is noise, magnitude is the gate; bench numbers are an upper bound (n<8 thin, giveback>100% = peak-then-loss).",
     "OUTPUT (no preamble, do not restate the raw table verbatim):",
-    "1. OPPORTUNITIES — the 1-3 items worth a human look; each: what it is, why (expected vs anomalous), and the gate/venue it belongs to.",
+    "1. OPPORTUNITIES — the 1-3 items worth a human look; each: what it is, why (expected vs anomalous, via the avg-peak/book lens), and the gate/venue it belongs to.",
     "2. DRIFT — anything that changed or looks off vs how the desk should behave; 'none' if clean.",
-    "3. SO WHAT — one line: anything to do before the next gate, or hold.",
+    "3. SO WHAT — one line: anything to queue before the next gate, or hold.",
     "Terse. The operator scans this in 20 seconds.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -152,9 +151,17 @@ async function main() {
   P(`   ⚠ SENSOR LAYER (deterministic). Bench is mid-basis + capital-blind — no arm from it. Paging + schedule pending.`);
 
   const facts = O.join("\n");
-  console.log(facts);
   const judged = await judge(facts);
-  if (judged) console.log("\n" + "─".repeat(64) + "\nSENTINEL DIGEST — judgment layer\n\n" + judged);
-  else console.log("\n(judgment layer inactive — set ANTHROPIC_API_KEY to enable the prose digest)");
+  const full = facts + (judged
+    ? "\n\n" + "─".repeat(64) + "\nSENTINEL DIGEST — judgment layer\n\n" + judged
+    : "\n\n(judgment layer inactive — set ANTHROPIC_API_KEY in .env.local to enable the prose digest)");
+  console.log(full);
+  // shadow-first: bank the digest as a dated, reviewable artifact (log-only until it earns paging)
+  try {
+    const et = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+    mkdirSync(path.join("data", "sentinel"), { recursive: true });
+    writeFileSync(path.join("data", "sentinel", `${et}.md`), full);
+    writeFileSync(path.join("data", "sentinel-latest.md"), full);
+  } catch (e) { console.error(`sentinel: digest write failed — ${(e as Error).message}`); }
 }
 main().catch((e) => { console.error(`sentinel: ${(e as Error).message}`); process.exit(1); });

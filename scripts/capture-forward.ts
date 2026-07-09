@@ -99,6 +99,12 @@ async function main() {
   //    analysis substrate) — best-effort.
   const booksOk = run("reconcile-alpaca", ["reconcile-alpaca"], 1);
   run("backfill-forensics", ["backfill-forensics"], 2);
+  // SENTINEL (2026-07-09): the nightly opportunity + drift scan — the avg-peak harvest lens across
+  // live channels (forensics) + the virtual bench (gate-shadow peak), then the key-gated LLM
+  // judgment layer (grounded in docs/sentinel-context.md). Runs AFTER the substrate is fresh
+  // (gate-shadow + backfill-forensics above). Log-only, shadow-first: banks data/sentinel/<date>.md
+  // for review; paging is the graduation step. Best-effort — never blocks the tape capture.
+  run("sentinel", ["sentinel"], 2);
 
   // TIER 2 — live-window analyses (best-effort; the ledger needs the still-live 7d quotes)
   // Catch-up for the REMAINING days (today already published by the close pass above).
