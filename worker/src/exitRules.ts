@@ -25,7 +25,7 @@ export interface FastExitCheck {
   premiumExit?: { profitPct?: number; stopPct?: number };
   takeProfitPct?: number; // per-channel compound take-profit (ChannelConfig.take_profit_pct); 0 = off
   premiumStopPct?: number | null; // per-channel premium STOP override (ChannelConfig.premium_stop_pct); null → policy default 50
-  isPowerTrail: boolean;
+  givebackTrail: { engageMult: number; givebackPct: number } | null; // arm-high giveback trail params (GIVEBACK_TRAIL[slug]); null = none
   isManual: boolean;
   minutesToClose: number;
   stallMinutes?: number;     // strand-4 stall-exit: cut after this many minutes held if it never popped (0/undef = off)
@@ -65,8 +65,8 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
   const premStop = c.premiumStopPct ?? policy.PREMIUM_STOP_PCT;
   if (premStop > 0 && c.premiumExit?.stopPct != null && mark <= entry * (1 - c.premiumExit.stopPct / 100)) return "stop_premium";
   if (premStop > 0 && mark <= entry * (1 - premStop / 100)) return "premium_stop";
-  if (c.isPowerTrail && peak >= entry * policy.POWER_TRAIL_ENGAGE_MULT) {
-    const giveback = entry + (peak - entry) * (1 - policy.POWER_TRAIL_GIVEBACK_PCT / 100);
+  if (c.givebackTrail && peak >= entry * c.givebackTrail.engageMult) {
+    const giveback = entry + (peak - entry) * (1 - c.givebackTrail.givebackPct / 100);
     if (mark <= giveback) return "trail_giveback";
   }
   // STALL-EXIT (strand-4, desk-doctrine.md) — LOWEST priority (a real stop/target/trail above wins

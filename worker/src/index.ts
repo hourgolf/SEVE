@@ -570,7 +570,7 @@ async function fastExitSweep(): Promise<void> {
       const pe = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
       const reason = premiumExitReason({
         row: r, slug: ch.slug, premiumExit: pe, takeProfitPct: ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
-        isPowerTrail: policy.POWER_TRAIL_CHANNELS.has(ch.slug),
+        givebackTrail: policy.GIVEBACK_TRAIL[ch.slug] ?? null,
         isManual: /-manual$/i.test(ch.slug),
         minutesToClose: Math.max(0, rthClose - nowMin),
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)

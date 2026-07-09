@@ -302,12 +302,15 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     intent = { kind: "exit", reason: "event_flatten" };
   }
 
-  // Power giveback trail (lock gains after +100%; power-only).
-  if (pos && row && policy.POWER_TRAIL_CHANNELS.has(ch.slug) && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
+  // Arm-high giveback trail, per-channel (GIVEBACK_TRAIL map): once the peak mark clears
+  // entry×engageMult, exit if it gives back > givebackPct of the peak gain. power +100%/keep-60%;
+  // momo-shape +50%/keep-⅔ (A13). Channels absent from the map have no trail (gt undefined → skip).
+  const gt = policy.GIVEBACK_TRAIL[ch.slug];
+  if (pos && row && gt && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
     const histPeak = row.opened_at ? await peakMidSince(row.occ_symbol, row.opened_at) : 0;
     const peak = Math.max(mark, histPeak);
-    if (peak >= entryPx * policy.POWER_TRAIL_ENGAGE_MULT) {
-      const giveback = entryPx + (peak - entryPx) * (1 - policy.POWER_TRAIL_GIVEBACK_PCT / 100);
+    if (peak >= entryPx * gt.engageMult) {
+      const giveback = entryPx + (peak - entryPx) * (1 - gt.givebackPct / 100);
       if (mark <= giveback) intent = { kind: "exit", reason: "trail_giveback" };
     }
   }
