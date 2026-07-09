@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-06a"; // SEED LOOKBACK 3→7 days (post-long-weekend boot lost the prior session → gap/pdh/pdl undefined → gap_min channels silently fail-closed on a gap day; the 07-06 10:02 reboot incident) + boot journal line (version + orphanFlatten state → events). Prior (05b): runner tranche dark
+export const WORKER_VERSION = "stream-2026-07-08a"; // A13: per-channel GIVEBACK_TRAIL map (power byte-identical; momo-shape armed arm+50/keep-⅔ for the live ratchet A/B). Prior (07-06a): seed lookback 3→7 days + boot journal line
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
@@ -180,9 +180,15 @@ export const policy = {
   // probe (gating halves base power's bleed). ALL channels are cost-gated.
   COST_GATE_EXEMPT: new Set<string>(),
   PREMIUM_STOP_PCT: 50,
-  POWER_TRAIL_CHANNELS: new Set(["power"]),
-  POWER_TRAIL_ENGAGE_MULT: 2.0, // engage once mark ≥ entry × this (+100%)
-  POWER_TRAIL_GIVEBACK_PCT: 40, // exit if it gives back > this % of peak gain
+  // GIVEBACK (arm-high ratchet) trail, per-channel (2026-07-08, A13): engage once the peak mark
+  // clears entry × engageMult, then exit if it gives back > givebackPct of the peak GAIN. power is
+  // byte-identical to its prior POWER_TRAIL_* scalars (+100% / keep-60%); momo-shape armed for the
+  // A13 live A/B at arm+50% / keep-⅔ (engageMult 1.5 / givebackPct 33) — the engine-validated params.
+  // Reversible: remove the momo-shape line to disarm. A channel absent from this map has no trail.
+  GIVEBACK_TRAIL: {
+    power: { engageMult: 2.0, givebackPct: 40 },
+    "momo-shape": { engageMult: 1.5, givebackPct: 33 },
+  } as Record<string, { engageMult: number; givebackPct: number }>,
   OPEN_0DTE_CUTOFF_MIN: 31, // inside last ~30 min, roll to 1DTE (Alpaca widened the lockout ~15→~30min, 06-11 422s)
   MANUAL_BACKSTOP_MIN: 3, // `-manual` twins: forced bell backstop (human owns exits)
   // EOD HARD-FLATTEN (2026-06-19, the Juneteenth strand fix): a WALL-CLOCK backstop that

@@ -42,7 +42,7 @@ const row = (over: Partial<PositionRow> = {}): PositionRow => ({
   peak_mark: null, trough_mark: null, runner_of: null, ...over,
 });
 const base = (over: Partial<FastExitCheck> = {}): FastExitCheck => ({
-  row: row(), slug: "test", isPowerTrail: false, isManual: false, minutesToClose: 120,
+  row: row(), slug: "test", givebackTrail: null, isManual: false, minutesToClose: 120,
   takeProfitPct: 22, premiumStopPct: 30, ...over,
 });
 
@@ -69,6 +69,15 @@ check("stop fires when ratchet line is below it", premiumExitReason(runner({ run
 // ratchet labels ratchet (same continuous-price argument as above)
 check("runner skips SPEC profit target", premiumExitReason(runner({ premiumExit: { profitPct: 15, stopPct: 30 } }), 1.20, 1.25), null);
 check("runner deep drop with spec exits labels ratchet", premiumExitReason(runner({ premiumExit: { profitPct: 15, stopPct: 30 } }), 0.69, 1.25), "runner_ratchet");
+
+// GIVEBACK TRAIL (A13 momo): arms at +50% (engageMult 1.5), keeps ⅔ (givebackPct 33). entry 1.0,
+// tp 0 (ride), premium stop 50. Floor at peak 1.6 = 1.0 + 0.6·0.67 = 1.402.
+const momo = (over: Partial<FastExitCheck> = {}) => base({ givebackTrail: { engageMult: 1.5, givebackPct: 33 }, takeProfitPct: 0, premiumStopPct: 50, ...over });
+check("momo giveback armed (+60% peak) fires at the ⅔ floor", premiumExitReason(momo(), 1.40, 1.60), "trail_giveback");
+check("momo giveback holds above the floor", premiumExitReason(momo(), 1.45, 1.60), null);
+check("momo giveback does NOT arm below +50% (sub-arm peaker rides)", premiumExitReason(momo(), 1.05, 1.40), null);
+check("momo not-armed → premium stop still protects", premiumExitReason(momo(), 0.49, 1.40), "premium_stop");
+check("momo absent from map (no trail) = plain ride", premiumExitReason(base({ takeProfitPct: 0, premiumStopPct: 50 }), 1.40, 1.60), null);
 
 console.log(`\n  runner-selftest: ${pass}/${pass + fail} checks passed${fail ? ` — ${fail} FAILED` : " ✓"}`);
 process.exit(fail ? 1 : 0);
