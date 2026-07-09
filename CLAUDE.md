@@ -12,7 +12,43 @@ durable context for a new session. Read it first.
 > lives in **memory/** (read `desk-doctrine.md` FIRST, then `cockpit-p3-multi-account.md`,
 > `doctrine-drift-and-forward-validation.md`). The block below re-anchors the convention.
 
-## CURRENT STATE — 2026-07-03 (read this + memory/MEMORY.md, then the registry)
+## ⚡ SESSION UPDATE — 2026-07-08 (READ FIRST; supersedes stale bits of the 07-03 block below)
+
+**Worker is `stream-2026-07-08a`** (not 03a). **Books/data clean.**
+
+- **Data integrity (all fixed this session):** the quote-fetch two-state flicker (statement-timeout → silent
+  Black-Scholes) is FIXED — engine `--options quotes|real` now retries pages 4× + verifies row counts +
+  fail-fasts, no silent fallback ([[quote-fetch-two-state-flicker]]); `idx_oq_keyset` applied
+  (2,368→3ms). gate-shadow's blocked-signal fetch was silently 1000-row-truncated (froze virtual_trades/
+  LAB) → now paginated+count-verified. **Lesson: any signals/quotes fetch must paginate + count-verify.**
+- **Capture retimed to a CLOSE PASS** (launchd 13:03 PT): today's day-report + gate-shadow run FIRST →
+  §03 totals land ~16:05 ET beside the autopsy; §03 panels now self-refresh (`useRefreshTick`). Safe post-
+  flicker-fix. [[data-capture-automation]]
+- **Instrument suite BUILT (all shadow/log-only, nightly):** ⭐ **one-account shadow** (dream-team through ONE
+  cash pool — `npm run one-account-shadow`; +rescale/maxDD/`--hands-off`/`--cross-audit`/`--target-sweep`;
+  §03 dream-team section) — first read: CONCENTRATION not buying power is the constraint; hands-off keeps
+  ~57%+ of the edge (machine ≫ manual) [[one-account-shadow]]. **ratchet shadow** (`npm run ratchet-shadow`
+  [`--slot`]) — per-trade OVERSTATES; slot-aware is ground truth: A4 ratchet LOSES (churn), **momo ratchet
+  WINS +$416** (churn cleared); §03 panel leads with slot-aware, per-trade demoted [[orb-tightening-runway]].
+  **docs/go-live-infra.md** blueprint (item-0 cross-audit DONE: self-cross 0, coalescing ~$287 → item-1
+  deferred; allocator/master-stop/reliability sequenced).
+- **Roster/registry (calibration log E–I):** breakout-qqq MUTED (E); QQQ V3/ALT ports RISK 500→250 (F)→
+  MUTED (H, N=6, cross-index QQQ question OPEN not refuted); momo-shape RISK 1800→1200/mc12 + daily-stop
+  3000 (G, discretionary partial toward A10). ⭐ **A13 ARMED (I): momo-shape now runs the arm-high giveback
+  ratchet LIVE** (arm+50%/keep-⅔, per-channel `GIVEBACK_TRAIL` map in worker/src/config.ts; power
+  byte-identical). Live A/B vs momo-shape-2 (unchanged control) + shadow ride baseline; A/B started 07-09
+  open. Kill = ONE genuine ≥120%-tail cap. **DISARM = delete the momo-shape line from GIVEBACK_TRAIL + push.**
+  momo-shape has an ERA BOUNDARY 07-09 (pre/post ratchet — don't pool). See registry A13.
+- **Operator calls 07-06** ([[operator-calls-2026-07-06]]): benched clones HOLD to the A6 read; A6 memo =
+  registered decisions ONLY (advisory sections REJECTED — don't extend a6-watch); UI circle-back queue CLOSED.
+- **Market state:** gaps RETURNED (gap_min gate reopened 07-02 +0.41 / 07-06 +0.52 / 07-08 −0.61 after the
+  flat-open era) → the gap-gated book (V3/ALT, momo) is active again. Daily = mature uptrend showing first
+  distribution, undecided at ~745 (739 the near arbiter, 717 macro shelf). ⚠ DIRECTION IS NOISE (doctrine +
+  the mixed 3 gap days) — don't build directional/regime narratives from 1-day splits; magnitude is the gate.
+- **Next gates (autopilot):** A6 read ~Jul 21 (a6-watch memo) — carries A9/A10, C1 unlock, clone re-arm;
+  A4 (ORB stop A/B) ~early Aug; A13 momo ratchet accruing; FOMC #6 Jul 29.
+
+## CURRENT STATE — 2026-07-03 (superseded above where they conflict; still the roster/bucket + doctrine base)
 
 **The desk in one paragraph:** 3 Alpaca paper accounts as LIFECYCLE buckets (re-bucketed 2026-07-03) —
 **FIRST-TEAM** (acct 2, $1M, cred_ref '2'): the earning roster — pb-ride / pb-ride-2 / pb-ride-itm +
