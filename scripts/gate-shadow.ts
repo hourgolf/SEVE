@@ -178,17 +178,13 @@ async function main() {
     fresh++;
     if (!HAS_SERVICE) return;
     try {
-      // base.mfePct / base.giveback are banked in the gate-shadow.json ledger (the durable peak
-      // store) but NOT mirrored to these columns yet — that needs `alter table virtual_trades add
-      // column mfe_pct real, giveback_pct real`, and adding them here before that DDL lands would
-      // error the whole upsert (silently, via the catch below) and freeze the LAB panel. Add both
-      // to this object the same commit the migration runs.
       await sb.from("virtual_trades").upsert({
         signal_id: base.signalId, strategist_id: s.strategist_id, slug: base.slug, occ: base.occ,
         signal_at: base.createdAt, blocked: base.blocked,
         entry_px: base.entryAsk > 0 ? base.entryAsk : null,
         exit_reason: base.exitReason, exit_px: base.exitPx, exit_at: base.exitAt,
         pnl_per_contract: base.pnlPerContract, tp_pct: base.tpPct, stop_pct: base.stopPct, n_quotes: base.nQuotes,
+        mfe_pct: base.mfePct, giveback_pct: base.giveback, // avg-peak lens on the bench (cols added 2026-07-09)
       }, { onConflict: "signal_id" });
     } catch { /* best-effort */ }
     // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
