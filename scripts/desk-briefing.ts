@@ -14,6 +14,8 @@
 // ---------------------------------------------------------------------------
 import fs from "fs";
 import path from "path";
+import { dayTags, upcomingEvents } from "../engine/market-events";
+import { nextTradingDay, isEarlyClose } from "../engine/market-calendar";
 
 const DATA = path.join(process.cwd(), "data");
 const ERA4_START = "2026-06-30";
@@ -23,16 +25,60 @@ const FOMC = "2026-07-29";
 const A6_TARGET = 15;
 const GAP_MIN = 0.25; // % — validated spec gate (confirmed by the momo firing pattern)
 
-// Human-anchored SPY level ladder. The briefing tracks price against these and flags
-// when a new one should be added (a close beyond the range). Update by hand.
-const LADDER: { px: number; label: string }[] = [
-  { px: 752.4, label: "range top / breakout line" },
-  { px: 748.5, label: "resistance shelf" },
-  { px: 745.0, label: "fulcrum" },
-  { px: 739.5, label: "near-arbiter (support)" },
-  { px: 730.0, label: "lower shelf" },
-  { px: 717.0, label: "macro shelf (era low)" },
-];
+// ---- auto S/R levels: swing pivots + prior-day OHLC + round numbers + dealer gamma walls ----
+// Replaces the old hand-anchored ladder. Pure — reads bars-archive; gamma walls come from iv-bank.
+// (function declarations → hoisted; they call rth/r2 at run time, after those are initialized.)
+function recentDailyOHLC(sym: string, upto: string, n: number) {
+  const dir = path.join(DATA, "bars-archive", sym);
+  if (!fs.existsSync(dir)) return [] as { d: string; o: number; h: number; l: number; c: number }[];
+  const days = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && f.slice(0, 10) <= upto).map((f) => f.slice(0, 10)).sort().slice(-n);
+  const out: { d: string; o: number; h: number; l: number; c: number }[] = [];
+  for (const d of days) { const o = rth(d); if (o) out.push({ d, ...o }); }
+  return out;
+}
+function computeLevels(sym: string, upto: string, spot: number, walls: { strike: number; gex: number }[]) {
+  const hist = recentDailyOHLC(sym, upto, 25);
+  const raw: { px: number; label: string; w: number }[] = [];
+  const add = (px: number, label: string, w = 1) => { if (Number.isFinite(px)) raw.push({ px: r2(px), label, w }); };
+  if (hist.length) {
+    const prev = hist[hist.length - 1]; // the reference day = prior day for the NEXT open
+    add(prev.h, "PDH", 2); add(prev.l, "PDL", 2); add(prev.c, "PDC", 1);
+    for (let i = 2; i < hist.length - 2; i++) { // swing pivots (±2-day window)
+      const w5 = hist.slice(i - 2, i + 3);
+      if (hist[i].h === Math.max(...w5.map((x) => x.h))) add(hist[i].h, "swing-hi", 2);
+      if (hist[i].l === Math.min(...w5.map((x) => x.l))) add(hist[i].l, "swing-lo", 2);
+    }
+    add(Math.max(...hist.map((x) => x.h)), `${hist.length}d-hi`, 1);
+    add(Math.min(...hist.map((x) => x.l)), `${hist.length}d-lo`, 1);
+  }
+  for (let r = Math.ceil((spot * 0.985) / 5) * 5; r <= spot * 1.015; r += 5) add(r, "round", 1); // $5 grid ±1.5%
+  for (const w of [...walls].sort((a, b) => Math.abs(b.gex) - Math.abs(a.gex)).slice(0, 3)) add(w.strike, "γ-wall", 2);
+  raw.sort((a, b) => a.px - b.px); // cluster confluent levels within ~0.12%
+  const tol = spot * 0.0012;
+  const cl: { px: number; labels: Set<string>; w: number }[] = [];
+  for (const lv of raw) {
+    const c = cl[cl.length - 1];
+    if (c && lv.px - c.px <= tol) { c.px = r2((c.px * c.w + lv.px * lv.w) / (c.w + lv.w)); c.labels.add(lv.label); c.w += lv.w; }
+    else cl.push({ px: lv.px, labels: new Set([lv.label]), w: lv.w });
+  }
+  return cl.map((c) => ({ px: r2(c.px), label: [...c.labels].join("+"), w: c.w }));
+}
+// ---- IV / dealer positioning (iv-bank summary.jsonl + gamma-open implied move; both local) ----
+type IVRow = { sym: string; day: string; spot: number; atm_iv: number; gex_proxy: number; walls: { strike: number; gex: number }[] };
+function loadIV(upto: string): Record<string, IVRow> {
+  const f = path.join(DATA, "iv-bank", "summary.jsonl");
+  const out: Record<string, IVRow> = {};
+  if (!fs.existsSync(f)) return out;
+  for (const l of fs.readFileSync(f, "utf8").trim().split("\n")) { const d = JSON.parse(l) as IVRow; if (d.day <= upto) out[d.sym] = d; }
+  return out; // file is chronological → last write per sym on/before `upto` wins
+}
+function impliedMove(sym: string, upto: string): number | null {
+  const f = path.join(DATA, "gamma-open.json");
+  if (!fs.existsSync(f)) return null;
+  const g = JSON.parse(fs.readFileSync(f, "utf8")) as Record<string, { impliedMovePct?: number }>;
+  const keys = Object.keys(g).filter((k) => k.startsWith(sym + "|") && k.split("|")[1] <= upto).sort();
+  return keys.length ? (g[keys[keys.length - 1]].impliedMovePct ?? null) : null;
+}
 
 // Channels muted as of the template date (config snapshot — verify vs DB).
 const MUTED = new Set(["breakout-alt-v3-qqq", "breakout-smart-entries-qqq", "breakout-qqq"]);
@@ -89,6 +135,9 @@ function rth(d: string) {
   return { o: r2(b[0].open), h: r2(Math.max(...b.map((x) => x.high))), l: r2(Math.min(...b.map((x) => x.low))), c: r2(b[b.length - 1].close) };
 }
 const ohlc = rth(date);
+const iv = loadIV(date);
+// auto S/R ladder (replaces the hand-anchored one) — SPY, from bars-archive + SPY gamma walls
+const LADDER = ohlc ? computeLevels("SPY", date, ohlc.c, iv["SPY"]?.walls ?? []) : [];
 
 // ---- accrual ---------------------------------------------------------------
 const era4 = dates.filter((d) => d >= ERA4_START && d <= date);
@@ -161,12 +210,65 @@ if (ohlc) {
   P(`- **IWM / QQQ gap:** independent, on their own opens.`);
   P(`- **breakout-base:** fires on any 30-min range break — ungated (A9 exposure on a flat-open chop day).`);
   P(`- **pb-ride:** needs a ribbon-stacked trend off the open (its lane).`);
+  const above = LADDER.filter((l) => l.px > ohlc.c).slice(0, 3);
+  const below = LADDER.filter((l) => l.px < ohlc.c).slice(-3).reverse();
+  const fmt = (l: { px: number; label: string }) => `${l.px} (${l.label})`;
+  P(`- **Levels** (auto — pivots·PD·round·γ-walls): above ${above.map(fmt).join(" · ") || "—"} | below ${below.map(fmt).join(" · ") || "—"}`);
 }
 P();
 P(`**Watch-list:**`);
 if (date < A13_BOUNDARY) P(`- ⭐ **A13 ratchet goes live ${A13_BOUNDARY} open** — momo-shape (arm+50%/keep-⅔) vs momo-shape-2 control. Watch first \`trail_giveback\`; KILL = one genuine ≥120% tail the ratchet caps.`);
 else P(`- ⭐ **A13 live** (ratcheted momo since ${A13_BOUNDARY}). Watch for the first genuine ≥120% tail the ratchet caps (KILL trip).`);
 P(`- Confirm the SPY gap book arms only if it clears the band above — else it is correctly dark (don't re-make the coil-vs-gap read).`);
+P();
+
+// ---- EVENTS & CALENDAR (next session) ----
+const nextDay = nextTradingDay(date);
+const nTags = dayTags(nextDay);
+P(`## EVENTS & CALENDAR`);
+P();
+if (nTags.length) {
+  const notes: string[] = [];
+  if (nTags.includes("fomc")) notes.push("FOMC 14:00 ET — auto stand-down 13:50→14:30");
+  if (nTags.includes("opex")) notes.push("OPEX — pin risk on the 0DTE book");
+  if (nTags.includes("cpi") || nTags.includes("nfp")) notes.push("08:30 ET pre-open print → gaps the open (gap-book fuel)");
+  P(`- ⚠ **Next session ${nextDay}: ${nTags.map((t) => t.toUpperCase()).join(" + ")}** — ${notes.join("; ")}.`);
+} else P(`- Next session **${nextDay}** — no scheduled macro event (CPI/NFP/OPEX/FOMC).`);
+if (isEarlyClose(nextDay)) P(`- ⏰ **${nextDay} early close (13:00 ET)** — EOD flatten is wall-clock anchored.`);
+const fomcs = upcomingEvents(date, 45).filter((e) => e.kind === "fomc");
+if (fomcs.length) P(`- Next FOMC: **${fomcs[0].date}** (${Math.round((Date.parse(fomcs[0].date) - Date.parse(date)) / 86_400_000)}d out).`);
+P();
+
+// ---- DEALER POSITIONING (IV / GEX) ----
+if (iv["SPY"]) {
+  P(`## DEALER POSITIONING (IV / GEX — banked ${iv["SPY"].day})`);
+  P();
+  for (const sym of ["SPY", "QQQ", "IWM"]) {
+    const s = iv[sym]; if (!s) continue;
+    const short = s.gex_proxy < 0;
+    const im = impliedMove(sym, date);
+    const wallTxt = [...s.walls].sort((a, b) => Math.abs(b.gex) - Math.abs(a.gex)).slice(0, 3).map((w) => w.strike).join(" / ");
+    P(`- **${sym}** — atm-IV **${(s.atm_iv * 100).toFixed(1)}%**${im != null ? ` · implied move ±${im.toFixed(2)}%` : ""} · GEX ${short ? "**−** short-gamma (moves amplify → breakout book)" : "**+** long-gamma (dampened → fade/scalp)"} · walls ${wallTxt}`);
+  }
+  P();
+  P(`  *GEX sign is the read: − = dealers amplify, + = dealers pin. Descriptive context, not a trade signal.*`);
+  P();
+}
+
+// ---- REGIME-CONDITIONED PRIORS (gap-state = the doctrine-primary regime axis) ----
+P(`## REGIME-CONDITIONED PRIORS (era-4, gap-state split)`);
+P();
+P(`| Book | gap-day (≥${GAP_MIN}%) | flat-day (<${GAP_MIN}%) |`);
+P(`|---|---|---|`);
+const era4Recs = all.filter((r) => r.date >= ERA4_START && r.date <= date);
+const statOf = (rs: Rec[]) => rs.length ? `${rs.length}t · ${money(r2(rs.reduce((s, r) => s + r.pnl, 0) / rs.length))}/t · ${Math.round((100 * rs.filter((r) => r.pnl > 0).length) / rs.length)}% win` : "—";
+for (const b of bookOrder) {
+  const bs = era4Recs.filter((r) => book(r.slug) === b);
+  if (!bs.length) continue;
+  P(`| **${b}** | ${statOf(bs.filter((r) => Math.abs(r.gap) >= GAP_MIN))} | ${statOf(bs.filter((r) => Math.abs(r.gap) < GAP_MIN))} |`);
+}
+P();
+P(`  *Descriptive base rate, not a forecast — tomorrow's regime is unknown until the open. IF it gaps ≥${GAP_MIN}%, the gap-day column is the prior; IF flat, the flat column.*`);
 P();
 
 // accrual

@@ -21,7 +21,9 @@ forecasts, no orders.** Readout / roster-signal / expectation only.
 |---|---|
 | Per-channel P&L, per-day gaps, regime features | `data/forensics-dataset.jsonl` (nightly, clean books) |
 | SPY/QQQ/IWM open spots + implied move | `data/gamma-open.json` |
-| Daily RTH OHLC (the levels ladder) | `data/bars-archive/SPY/<date>.json` |
+| Daily RTH OHLC (auto S/R ladder: pivots·PD·round·walls) | `data/bars-archive/SPY/<date>.json` |
+| Dealer positioning (atm-IV, GEX sign, gamma walls) | `data/iv-bank/summary.jsonl` |
+| Event calendar (FOMC/CPI/NFP/OPEX, next-day flags) | `engine/market-events.ts` + `market-calendar.ts` (pure code) |
 | Blocked (`gap_min`) signals — gate scoring | `data/gate-shadow.json` |
 | Broker NAV truth (reconcile) | `data/broker-truth.json` |
 
@@ -43,6 +45,16 @@ gaps run larger, so its leg can arm when SPY's doesn't.
 3. **CARRY FORWARD** — next-open readiness: levels in play, per-book IF-THEN triggers
    (gap arm-threshold = close ± 0.25%), watch-list (A13 tail-watch, gate proximity,
    ungated exposures).
+
+## Forward-context sections (added 2026-07-09 — the "prep the day" layer)
+Beyond the 3 artifacts, the briefing carries **next-session terrain**, all descriptive (never a forecast):
+- **Auto S/R levels** — swing pivots + prior-day OHLC + $5 round grid + dealer γ-walls, clustered into
+  confluence zones with source labels (e.g. `752.08 (PDC+PDH+swing-hi)`). Replaced the hand-anchored ladder.
+- **Events & calendar** — next trading day's CPI/NFP/OPEX/FOMC tags + stand-down notes + FOMC countdown.
+- **Dealer positioning** — atm-IV, implied move, GEX **sign** (− short-gamma = moves amplify → breakout;
+  + long-gamma = pinned → fade), and the gamma walls (which also feed the S/R ladder).
+- **Regime-conditioned priors** — per-book era-4 base rates split by gap-state (≥0.25% vs flat): n · $/t · win%.
+  The doctrine-primary regime axis, IF-THEN framed (tomorrow's regime is unknown until the open).
 
 ## Deterministic (script) vs judgment (agent)
 The script emits all facts + **mechanical anomaly flags** (gap cleared but its book
