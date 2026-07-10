@@ -22,6 +22,12 @@ surrendered a fat peak is a **leak**; a fat P&L on a <5% peak is a scalp doing i
 - **big avg peak + fat MAX tail** → ratchet, not a hard TP (a hard cap decapitates the tail).
 - **modest peak + big P&L** → delta/trend keeper; rides direction, don't LOCK it.
 
+**Peak × WIN rate (both, always):** a high avg peak is only an edge if the WIN rate confirms it.
+High peak + high win = reliable (clean promote / RIDE). **High peak + LOW win (<~40%) = spike/
+giveback-carried — a harvest-FIX (tighter TP to bank the peak before the fade), NOT a clean promote.**
+win% is on the real-fill basis (net of the exit half-spread), so it's independent of giveback — a
+channel can win often yet give back most of each peak (small wins), or win rarely on fat spikes.
+
 **LOCK / RIDE / NEITHER:** LOCK the find-and-surrender book (TPs rescue them), RIDE the genuine-tail
 few (momo — a hard TP would cap the convex tail), scalpers are NEITHER.
 
@@ -47,9 +53,10 @@ few (momo — a hard TP would cap the convex tail), scalpers are NEITHER.
 - **Real NBBO / empirical greeks, never Black-Scholes** (0DTE/1DTE is where BS is worst).
 
 ## Current live state (update as gates read)
-- Worker `stream-2026-07-08a`. **A13 LIVE:** momo-shape runs the arm-high giveback ratchet
+- Worker `stream-2026-07-09a`. **A13 LIVE:** momo-shape runs the arm-high giveback ratchet
   (arm +50% / keep ⅔) vs momo-shape-2 control; era boundary 07-09; kill = one genuine ≥120% tail
-  the ratchet caps.
+  the ratchet caps. **A15 built (07-09):** `daily_target_usd` win-and-done gate — halts a channel's
+  entries once green for the day (mirror of daily_stop); the `qqq-thrust-trail-wd` MORGUE twin tests it.
 - **Pending gates:** A6 LOCK read ~Jul 21 (judges each channel vs its own breakeven bar — **avg peak
   is the input it's missing**); A4 ORB stop-type twins (`orb-ustop` vs `orb-ustop-ctl`) ~early Aug;
   FOMC #6 Jul 29.
@@ -59,9 +66,12 @@ few (momo — a hard TP would cap the convex tail), scalpers are NEITHER.
     slot-freeing *ratchet* already LOST in shadow (−$424 churn) — the lever here is a hard TP that
     ends the day's participation, not a ratchet.
   - **The vb bench is FIND-AND-SURRENDER** (peaks 10–25%, gives it all back) — not dead entries; the
-    untested variable is the **exit (a TP)**, not the entry. Promote candidates by net-of-spread peak:
-    `vb-squeeze-break-qqq`, `vb-level-break*`. Any bench arm ships WITH a pre-committed TP + kill,
-    tiny size, as a real-fill probe.
+    untested variable is the **exit (a TP)**, not the entry. **A14 PROMOTED (07-09, real-fill paper in
+    LAB):** `vb-ribbon-cross` (SPY ITM+1; 28.8% peak + **83% win** = the reliable profile) and
+    `vb-squeeze-break-qqq` (QQQ, TP tightened 25→18 to bank its 61%-win-but-227%-giveback peak). These
+    are LIVE real-fill tests now — do NOT re-propose them for the Aug mining pass. `vb-level-break*`
+    stay bench (thin net; a 2nd breakout per index would OCC-stack). Further bench arms ship WITH a
+    pre-committed TP + kill, tiny size.
 
 ## The sentinel's job
 Surface, don't decide. Each night: **harvest leaks** (live channels bleeding peak), **promote

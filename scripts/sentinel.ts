@@ -49,6 +49,7 @@ function liveScan() {
     return {
       slug, n: rs.length,
       avgPeak: r1(rs.reduce((s, r) => s + (r.mfePct || 0), 0) / rs.length),
+      winPct: Math.round((100 * rs.filter((r) => r.pnl > 0).length) / rs.length),
       avgGive: g.length ? Math.round(g.reduce((s, r) => s + (r.givebackPct || 0), 0) / g.length) : 0,
       pnl: Math.round(rs.reduce((s, r) => s + r.pnl, 0)),
     };
@@ -65,12 +66,16 @@ async function benchScan(days: number) {
   const by = new Map<string, any[]>();
   for (const r of (data ?? []) as any[]) { const a = by.get(r.slug) ?? []; a.push(r); by.set(r.slug, a); }
   return [...by.entries()].map(([slug, rs]) => {
+    const eh = EXIT_HALF[idxOf(slug)] ?? 3;
     const avgPeak = rs.reduce((s, r) => s + (r.mfe_pct || 0), 0) / rs.length;
     const midCt = rs.reduce((s, r) => s + (r.pnl_per_contract || 0), 0) / rs.length;
+    // win% on the REAL-FILL basis (net of the exit half-spread) — mid-basis would overstate it
+    const wins = rs.filter((r) => (r.pnl_per_contract || 0) - eh > 0).length;
     const g = rs.filter((r) => r.giveback_pct != null).map((r) => r.giveback_pct);
     return {
       slug, n: rs.length, avgPeak: r1(avgPeak),
-      netCt: r1(midCt - (EXIT_HALF[idxOf(slug)] ?? 3)),
+      netCt: r1(midCt - eh),
+      winPct: Math.round((100 * wins) / rs.length),
       avgGive: g.length ? Math.round(g.reduce((s: number, x: number) => s + x, 0) / g.length) : null,
     };
   });
@@ -92,6 +97,7 @@ async function judge(facts: string): Promise<string | null> {
     brief && `DESK CONTEXT — your durable learnings; reason FROM these, they are the desk's settled doctrine:\n\n${brief}\n───`,
     "You are the SEVE desk sentinel. Turn the deterministic scan below into a terse nightly operator digest, grounded in the DESK CONTEXT above (the avg-peak/book lens, LOCK/RIDE/NEITHER, the live gates).",
     "Reinforced guardrails: registry governs every knob change (say 'queue for the gate', never 'change X now'); NO ARM FROM BENCH (mid-basis, capital-blind — hypotheses only); direction is noise, magnitude is the gate; bench numbers are an upper bound (n<8 thin, giveback>100% = peak-then-loss).",
+    "PEAK × WIN is the core read: a high avg-peak is only an edge if the WIN rate confirms it. High peak + high win = reliable (clean promote / RIDE). High peak + LOW win = spike/giveback-carried — a harvest-FIX (tighter TP to bank the peak before the fade), NOT a clean promote; call that out explicitly. Low peak (<5%) = scalp, nothing to harvest.",
     "OUTPUT (no preamble, do not restate the raw table verbatim):",
     "1. OPPORTUNITIES — the 1-3 items worth a human look; each: what it is, why (expected vs anomalous, via the avg-peak/book lens), and the gate/venue it belongs to.",
     "2. DRIFT — anything that changed or looks off vs how the desk should behave; 'none' if clean.",
@@ -126,12 +132,25 @@ async function main() {
   P(`# SENTINEL — opportunity + drift scan   (bench window: last ${days}d)`);
   P();
 
-  // BENCH promote candidates: net-positive after spread + a real peak to harvest
-  const promote = bench.filter((c) => c.netCt > 0 && c.avgPeak >= 12).sort((a, b) => b.netCt - a.netCt);
-  P(`## OPPORTUNITIES · BENCH  (promote: net-positive after spread + real peak → TP-probe)`);
+  // BENCH clean-promote: net-positive after spread + a real peak + a real WIN RATE. win% is on the
+  // real-fill basis; a high peak with a LOW win rate is spike/giveback-carried, not an edge (a capped-
+  // upside LOCK channel can't pay for many losers) — that's a harvest-FIX candidate below, not a promote.
+  const WINFLOOR = 40;
+  const promote = bench.filter((c) => c.netCt > 0 && c.avgPeak >= 12 && (c.winPct ?? 0) >= WINFLOOR).sort((a, b) => b.netCt - a.netCt);
+  P(`## OPPORTUNITIES · BENCH  (clean promote: net>0 after spread + peak≥12% + win≥${WINFLOOR}% → real-fill test)`);
   if (!promote.length) P(`   (none clear the bar this window)`);
   for (const c of promote)
-    P(`   ${c.slug.padEnd(24)} peak ${String(c.avgPeak).padStart(5)}%   net ${money(c.netCt).padStart(5)}/ct   give ${String(c.avgGive ?? "-").padStart(4)}%   n=${c.n}`);
+    P(`   ${c.slug.padEnd(24)} peak ${String(c.avgPeak).padStart(5)}%   win ${String(c.winPct).padStart(3)}%   net ${money(c.netCt).padStart(5)}/ct   give ${String(c.avgGive ?? "-").padStart(4)}%   n=${c.n}`);
+  P();
+
+  // FIXABLE: high peak but LOW win — the net (if any) is carried by rare spikes / the giveback eats it.
+  // Not a clean promote; the lever is a tighter LOCK (bank the peak before the fade), then re-measure.
+  const promoteSet = new Set(promote.map((c) => c.slug));
+  const fixable = bench.filter((c) => c.avgPeak >= 15 && (c.winPct ?? 0) < WINFLOOR && !promoteSet.has(c.slug)).sort((a, b) => b.avgPeak - a.avgPeak);
+  P(`## BENCH · high peak / LOW win  (spike-carried → needs a harvest fix, e.g. tighter TP, before any promote)`);
+  if (!fixable.length) P(`   (none)`);
+  for (const c of fixable)
+    P(`   ${c.slug.padEnd(24)} peak ${String(c.avgPeak).padStart(5)}%   win ${String(c.winPct).padStart(3)}%   net ${money(c.netCt).padStart(5)}/ct   give ${String(c.avgGive ?? "-").padStart(4)}%   n=${c.n}`);
   P();
 
   // LIVE harvest leaks: high peak + high giveback → a TP/ratchet would capture it
@@ -139,7 +158,7 @@ async function main() {
   P(`## OPPORTUNITIES · LIVE  (harvest leaks: high peak surrendered → TP/ratchet lever)`);
   if (!leaks.length) P(`   (none)`);
   for (const c of leaks)
-    P(`   ${c.slug.padEnd(24)} peak ${String(c.avgPeak).padStart(5)}%   give ${String(c.avgGive).padStart(4)}%   ${money(c.pnl)}   n=${c.n}`);
+    P(`   ${c.slug.padEnd(24)} peak ${String(c.avgPeak).padStart(5)}%   win ${String(c.winPct).padStart(3)}%   give ${String(c.avgGive).padStart(4)}%   ${money(c.pnl)}   n=${c.n}`);
   P();
 
   // DRIFT / ANOMALY (v1 mechanical — baseline-diff + regime checks come with the judgment layer)
