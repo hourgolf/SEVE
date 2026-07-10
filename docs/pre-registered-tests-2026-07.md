@@ -317,6 +317,13 @@ or ≥ 40 rungs pooled per channel.
   >50% of pooled rung gross (cost-walled — the grind lesson).
 - **OPEN variant (not in the first read):** the reversal-hedge ladder (runner call + fresh put
   concurrently). Same mechanism, bigger doctrinal question — evaluate only after the trend-rung read.
+- **STATUS — instrument BUILT 2026-07-10** (`npm run stairstep-shadow`, nightly on the capture close
+  pass, ledger `data/stairstep-shadow.json`). First backward read (era-4, 67t, 32 TP rungs — informational
+  only, the read stays at A6): LOCK all-out +$6,811 · runner-only +$2,058 · stairstep +$5,426. The
+  operator's core instinct is CONFIRMED (freed-size re-entry is worth +$3.4k over runner-only — the
+  slot matters); the runner halves themselves cost ~$1.4k vs banking at TP (find-and-surrender: post-TP
+  paths mostly fade; 0 convex-tail days in sample — same flag as the ratchet read). v1 caveats: budget
+  ×½ while ANY runner rides (a real build frees size as runners close); mid-basis runner fills.
 
 ## PINNED · Runner/scale-out experiment (operator's word, 2026-07-02 — "a real lever")
 Operator-pinned as the lever straddling take-profit vs letting winners win: **TP half at the

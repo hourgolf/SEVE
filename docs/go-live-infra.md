@@ -45,6 +45,13 @@ needed: a deterministic priority order (or shared risk budget) deciding who gets
 buying power is scarce — the doctrine's one-at-a-time slot made literal. Shadow the priority rule
 in one-account-shadow (rescale mode, where cash DOES bind) before wiring it live.
 
+### 2b. CONCENTRATION allocator — spec'd 2026-07-10 → `docs/concentration-allocator-spec.md`
+The shadow's real finding: cash never binds — **the strike does** (3ch/54ct one OCC). Desk-level
+per-OCC / per-underlying budgets with admit/downsize/reject at decide-time, priority = roster tier,
+exits never gated. Sequenced AHEAD of the cash allocator (2): shadow-first via one-account-shadow cap
+scenarios (~2wk grade) → dedicated worker session, knobs dark → arm post-A6 with C1. End state:
+account placement stops being the isolation mechanism — the dream team concentrates in ONE account.
+
 ### 3. Master-stop enforcement — WORKER, dedicated session
 `fund_state.master_daily_stop_usd` is read but NOT enforced (only the manual KILL halts the desk).
 For one live NAV, an account-level auto-halt is the number that matters. Wire into `decide.ts`

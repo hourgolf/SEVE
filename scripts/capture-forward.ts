@@ -84,6 +84,10 @@ async function main() {
   // ratchet-shadow (2026-07-08): the A4 twins' virtual third arm — replays each twin trade's
   // real quote path under the fixed arm-high ratchet, banked before the 7d prune. Log-only.
   run("ratchet-shadow (close pass)", ["ratchet-shadow"], 2);
+  // stairstep-shadow (2026-07-10, registry R1b): three-arm replay of the TP'd trend channels —
+  // LOCK all-out (as lived) vs runner-only vs the operator's stairstep (TP-half → freed size
+  // takes the next rung). Banks before the 7d prune; log-only, reads behind R1 at A6.
+  run("stairstep-shadow (close pass)", ["stairstep-shadow"], 2);
 
   // TIER 1 — the irreplaceable raw tape (idempotent: writes only un-archived days)
   const quotesOk = run("export-quotes", ["export-quotes"], 1);
