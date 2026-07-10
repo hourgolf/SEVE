@@ -113,6 +113,10 @@ export function SentinelPanel() {
               {scan.leaks.length > 0 && (
                 <><div className="brief-mini">live harvest leaks (peak surrendered → TP/ratchet)</div>{scan.leaks.map((r) => <LeakRow key={r.slug} r={r} />)}</>
               )}
+              {!!scan.patterns?.length && (
+                <><div className="brief-mini">trigger patterns (median-split · descriptive — probe candidates, never gates)</div>
+                <ul className="snt-bullets sm">{scan.patterns.map((p, i) => <li key={i}>{p}</li>)}</ul></>
+              )}
               {(scan.scalps.length > 0 || scan.craters.length > 0) && (
                 <div className="fx-foot">
                   {scan.scalps.length > 0 && <div>scalps (&lt;5% peak): {scan.scalps.join(", ")}</div>}

@@ -1148,6 +1148,8 @@ svg.spark {
 .rtd-call { background: rgba(47, 213, 115, 0.18); color: #2fd573; }
 .rtd-put { background: rgba(255, 107, 107, 0.18); color: #ff6b6b; }
 .rtd-dim { color: var(--muted-2); }
+.rtd-peak { white-space: nowrap; }
+.rtd-peak--hot { color: var(--amber); } /* gave back ≥50% of the peak — the harvest-leak tell */
 .rtd-exit { color: #ffb224; }
 .rtd-perf { color: var(--text); }
 .rtd-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }

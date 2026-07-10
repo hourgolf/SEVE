@@ -113,6 +113,10 @@ export interface Position {
   // Durable exit attribution (31_close_reason.sql): machine reason (stop_premium /
   // eod_flatten / …), 'manual' for an operator close, 'manual:<tag>' once tagged.
   close_reason?: string | null;
+  // Peak instrumentation (61_peak_marks.sql / A7): best mark since entry + when it printed —
+  // the avg-peak lens per trade (peak% + time-to-peak on the closed-trade detail row).
+  peak_mark?: number | null;
+  peak_at?: string | null;
 }
 
 // Drill-down detail for one trade — what triggered it + how it exited. Fetched

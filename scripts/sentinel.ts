@@ -40,7 +40,9 @@ const r1 = (x: number) => Math.round(x * 10) / 10;
 const money = (n: number) => (n < 0 ? "−$" : "+$") + Math.abs(Math.round(n));
 
 // ---- LIVE: avg-peak per channel from forensics (real fills, clean books) ----
-type F = { date: string; slug: string; mfePct: number | null; givebackPct: number | null; pnl: number };
+type F = { date: string; slug: string; mfePct: number | null; givebackPct: number | null; pnl: number;
+  er?: number | null; relVol?: number | null; atr?: number | null; vwapDist?: number | null;
+  minutesToClose?: number | null; entryDelta?: number | null; gap?: number | null };
 function liveScan() {
   const all: F[] = readFileSync(path.join("data", "forensics-dataset.jsonl"), "utf8")
     .trim().split("\n").map((l) => JSON.parse(l));
@@ -57,6 +59,56 @@ function liveScan() {
       pnl: Math.round(rs.reduce((s, r) => s + r.pnl, 0)),
     };
   });
+}
+
+// ---- TRIGGER PATTERNS: per-channel median-splits of entry features vs outcomes ----
+// The "sentinel analyst" read on the trade-row TRIGGER chips (ER/vol/ATR/δ/vwapΔ/entry-time/|gap|):
+// for each channel, split its era-4 trades at the channel's OWN median of each feature and compare
+// win% + avg peak between halves. DESCRIPTIVE ONLY — the entry axis has been mined before (pattern-
+// fanout: 0/10 survived; conviction-sizing CLOSED: features ≈ vol-in-disguise), so flags here are
+// REGISTRY-PROBE CANDIDATES, never gates. Guardrails: n≥12/channel, ≥6/half, |Δwin|≥25pts or
+// Δpeak≥12pts, top 5 desk-wide (…×7 features × ~18 channels = a multiple-comparisons farm; expect
+// false positives; only a pre-registered 5-window read graduates one).
+function triggerScan(): string[] {
+  const all: F[] = readFileSync(path.join("data", "forensics-dataset.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  const era = all.filter((r) => r.date >= ERA4);
+  const FEATS: { key: keyof F; label: string; fmt: (v: number) => string; xf?: (v: number) => number }[] = [
+    { key: "er", label: "ER", fmt: (v) => v.toFixed(2) },
+    { key: "relVol", label: "rel-vol", fmt: (v) => v.toFixed(1) + "×" },
+    { key: "atr", label: "ATR", fmt: (v) => v.toFixed(2) },
+    { key: "vwapDist", label: "vwap-dist", fmt: (v) => v.toFixed(2) },
+    { key: "minutesToClose", label: "entry-time", fmt: (v) => `${Math.round((390 - v) / 60 * 10) / 10}h in` },
+    { key: "entryDelta", label: "δ", fmt: (v) => v.toFixed(2) },
+    { key: "gap", label: "|gap|", fmt: (v) => v.toFixed(2) + "%", xf: Math.abs },
+  ];
+  const by = new Map<string, F[]>();
+  for (const r of era) { const a = by.get(r.slug) ?? []; a.push(r); by.set(r.slug, a); }
+  const flags: { s: number; line: string }[] = [];
+  for (const [slug, rs] of by) {
+    if (rs.length < 12) continue;
+    for (const f of FEATS) {
+      const vs = rs.map((r) => ({ v: f.xf ? f.xf(Number(r[f.key])) : Number(r[f.key]), r })).filter((x) => Number.isFinite(x.v));
+      if (vs.length < 12) continue;
+      const sorted = [...vs].sort((a, b) => a.v - b.v);
+      const med = sorted[Math.floor(sorted.length / 2)].v;
+      const lo = vs.filter((x) => x.v < med), hi = vs.filter((x) => x.v >= med);
+      if (lo.length < 6 || hi.length < 6) continue;
+      const win = (g: typeof lo) => Math.round((100 * g.filter((x) => x.r.pnl > 0).length) / g.length);
+      const pk = (g: typeof lo) => { const p = g.filter((x) => x.r.mfePct != null); return p.length ? Math.round(p.reduce((s, x) => s + (x.r.mfePct as number), 0) / p.length) : 0; };
+      const dWin = win(hi) - win(lo), dPk = pk(hi) - pk(lo);
+      if (Math.abs(dWin) >= 25 || Math.abs(dPk) >= 12) {
+        const better = dWin !== 0 ? (dWin > 0 ? hi : lo) : (dPk > 0 ? hi : lo);
+        const worse = better === hi ? lo : hi;
+        const side = better === hi ? `≥${f.fmt(med)}` : `<${f.fmt(med)}`;
+        flags.push({
+          s: Math.abs(dWin) + Math.abs(dPk) / 2,
+          line: `${slug} · ${f.label} ${side}: win ${win(better)}% pk ${pk(better)}% vs ${win(worse)}%/${pk(worse)}% below (n=${rs.length})`,
+        });
+      }
+    }
+  }
+  return flags.sort((a, b) => b.s - a.s).slice(0, 5).map((f) => f.line);
 }
 
 // ---- BENCH: avg-peak per vb channel from virtual_trades (mid-basis), netted to real-fill ----
@@ -261,6 +313,14 @@ async function main() {
     P(`   ${c.slug.padEnd(24)} peak ${String(c.avgPeak).padStart(5)}%   win ${String(c.winPct).padStart(3)}%   give ${String(c.avgGive).padStart(4)}%   ${money(c.pnl)}   n=${c.n}`);
   P();
 
+  // TRIGGER PATTERNS — the entry-chip analyst read (descriptive; registry-probe candidates only)
+  const patterns = triggerScan();
+  P(`## TRIGGER PATTERNS  (median-split per channel: entry features vs win/peak — DESCRIPTIVE, candidates only)`);
+  if (!patterns.length) P(`   (no split clears the bar: |Δwin|≥25pts or Δpeak≥12pts, n≥12)`);
+  for (const ln of patterns) P(`   ${ln}`);
+  P(`   ⚠ entry axis previously mined out (pattern-fanout 0/10; features ≈ vol-in-disguise) — a flag here queues a 5-window probe, never a gate.`);
+  P();
+
   // DRIFT / ANOMALY — diff vs the prior SESSION snapshot (changes, not static thresholds) + a mechanical floor
   P(`## DRIFT / ANOMALY`);
   const scalps = live.filter((c) => c.avgPeak < 5).map((c) => c.slug);
@@ -295,6 +355,7 @@ async function main() {
     leaks: leaks.map((c) => ({ slug: c.slug, peak: c.avgPeak, win: c.winPct, give: c.avgGive, pnl: c.pnl, n: c.n })),
     drift: drift.lines.map((l) => l.trim()).filter(Boolean),
     scalps, craters,
+    patterns, // trigger-pattern flags (descriptive; registry-probe candidates only)
   };
   const et = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
   // shadow-first: bank the digest as a dated, reviewable artifact (the durable local copy)

@@ -355,6 +355,20 @@ export function PositionsPanel({
                         <span className="rtd-line">
                           <span className="rtd-perf">${entry.toFixed(2)} → ${exit.toFixed(2)}</span>
                           {holdStr(t.opened_at, t.closed_at) && <span className="rtd-dim">held {holdStr(t.opened_at, t.closed_at)}</span>}
+                          {/* the avg-peak lens per trade: best mark since entry + how fast it printed (peak_mark/peak_at, A7) */}
+                          {(() => {
+                            const pk = t.peak_mark != null ? Number(t.peak_mark) : null;
+                            if (pk == null || !(entry > 0) || pk <= entry) return null;
+                            const pkPct = ((pk - entry) / entry) * 100;
+                            const ttp = t.peak_at && t.opened_at ? Math.max(0, Math.round((Date.parse(t.peak_at) - Date.parse(t.opened_at)) / 60000)) : null;
+                            const gave = pk > entry && exit < pk ? Math.min(999, Math.round(((pk - exit) / (pk - entry)) * 100)) : 0;
+                            return (
+                              <span className={`rtd-dim rtd-peak${gave >= 50 ? " rtd-peak--hot" : ""}`}
+                                title={`peaked $${pk.toFixed(2)}${ttp != null ? ` after ${ttp}m` : ""} · exit kept ${100 - gave}% of the peak gain`}>
+                                peak +{pkPct.toFixed(0)}%{ttp != null ? ` @${ttp}m` : ""}{gave >= 50 ? ` · gave ${gave}%` : ""}
+                              </span>
+                            );
+                          })()}
                           {(t.close_reason || insight?.exitReason) && (
                             <span className="rtd-exit">
                               {t.close_reason

@@ -33,6 +33,7 @@ export interface Scan {
   benchDays: number;
   promote: ScanRow[]; fixable: ScanRow[]; leaks: ScanRow[];
   drift: string[]; scalps: string[]; craters: string[];
+  patterns?: string[]; // trigger-pattern flags (median-split entry features — descriptive, absent pre-07-10)
 }
 export interface Judge { verdict: "HOLD" | "QUEUE" | "WATCH" | string; opportunities: string[]; drift: string[]; soWhat: string }
 /** Per-channel avg-peak/win map (era-4, real fills) — the harvest lens the P&L panel columns read. */
