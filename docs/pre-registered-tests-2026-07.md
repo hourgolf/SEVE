@@ -283,6 +283,41 @@ The PINNED lever's execution plan, registered before any era-4 LOCK outcome is r
   channel. Pass: runner ≥ all-out at N≥40 → propose promotion to the live channel.
 - **No channel may run runner_frac > 0 before the A6 read** (same era-4-purity rule as C1).
 
+## R1b · Stairstep — harvest-funded next-rung entry (pre-registered 2026-07-10, operator's design; chained behind R1)
+**The idea (operator's words, 07-10):** TP a rung and free the contracts to take **whatever the channel's
+next signal is** — in a trend that paid the TP, that's a fresh ATM strike higher ("stairstepping a
+trendline"); on a reversal signal, the freed size buys the other side (the hedge case). Each rung is a
+NEW convex bet, partially self-funded by the prior rung's harvest — NOT a re-buy of the same decaying
+strike (the A4-ratchet churn caution does not transfer: every rung passes the normal entry gates,
+cost gate included).
+
+**Decomposition (what exists vs what's missing):**
+- Full-TP stairstep = the LOCK book already (TP 100% → flat → next signal enters the new ATM).
+- R1 runner tranche = DARK-BUILT (TP sells `1−runner_frac`, keeps a `runner_of` row with its own
+  giveback ratchet).
+- **The ONE missing mechanic:** the entry guard is per-CHANNEL (`openRows` keyed by strategist_id),
+  so a riding runner blocks the channel's next entry. R1b = permit an entry when the channel's only
+  open row(s) are runners, sized at the standard RISK formula × `(1 − runner_frac)`. All other gates
+  (cost, gap, stack-cap when armed, daily stop/target) apply to the rung unchanged.
+
+**Shadow-first (no worker change):** build `stairstep-shadow` on the ratchet-shadow pattern — replay
+each candidate channel's REAL signal stream (acted + blocked) against the 7d quote paths under three
+arms on identical signals: (a) LOCK all-out (as lived), (b) R1 runner-only, (c) R1b stairstep
+(TP-half → next signal enters new strike at half size, runner rides its ratchet). Slot-aware by
+construction (the replay owns the whole channel timeline). Candidate book: the TP'd trend channels
+(V3/ALT, pb-ride-2, breakout-base); momo excluded until A13 reads (exit policy in flight).
+
+**Read:** shadow accrues from build; formal read AFTER R1 configures at the A6 read (~Jul 21) —
+R1 answers runner-vs-all-out first; R1b only graduates if the runner leg survives. N ≥ 15 sessions
+or ≥ 40 rungs pooled per channel.
+- **Win** = stairstep beats BOTH all-out LOCK and R1-runner-only on net after real-fill costs, with
+  maxDD no worse — then the guard relaxation is a pre-registered worker build (dedicated session,
+  Fable-tier per go-live doctrine).
+- **Kill** = trails all-out LOCK (the ladder machinery isn't paying), or rung round-trip costs eat
+  >50% of pooled rung gross (cost-walled — the grind lesson).
+- **OPEN variant (not in the first read):** the reversal-hedge ladder (runner call + fresh put
+  concurrently). Same mechanism, bigger doctrinal question — evaluate only after the trend-rung read.
+
 ## PINNED · Runner/scale-out experiment (operator's word, 2026-07-02 — "a real lever")
 Operator-pinned as the lever straddling take-profit vs letting winners win: **TP half at the
 LOCK target + ratchet the remainder, vs the standard all-out LOCK twin** (separate accounts,
