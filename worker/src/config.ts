@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-09a"; // A15: daily_target_usd win-and-done gate (mirrors daily_stop; 0=off byte-identical). Prior (07-08a): per-channel GIVEBACK_TRAIL map (power byte-identical; momo-shape armed arm+50/keep-⅔ for the live ratchet A/B)
+export const WORKER_VERSION = "stream-2026-07-10a"; // inactive-channel skip: soft-deleted (is_active=false) channels get no entry evaluation / no signal rows (tape spam fix); exits untouched. Prior (07-09a): daily_target_usd win-and-done gate
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

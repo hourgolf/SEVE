@@ -27,6 +27,7 @@ export interface ChannelConfig {
   underlying: string;           // per-channel ticker (QQQ rollout) — SPY default
   executor: "cron" | "stream";  // Phase B: who places this channel's orders
   account_id: string | null;    // cockpit P3: which Alpaca paper account routes this channel's orders (null = default acct 1)
+  is_active: boolean;           // false = soft-deleted (07-03 morgue twins) — no entry evaluation, no signal spam; exits still handled
   capital_pct: number;          // two-dial model: RISK $/trade (legacy column name)
   aggression: number;           // retired knob (kept for the legacy read)
   max_contracts: number;
@@ -131,7 +132,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
   if (fundErr) warn(`store: fund_state read failed — ${fundErr.message}`);
   const { data: rows, error } = await sb
     .from("strategists")
-    .select("id,slug,name,status,spec_json,underlying,executor,account_id,strategist_config(*)");
+    .select("id,slug,name,status,spec_json,underlying,executor,account_id,is_active,strategist_config(*)");
   if (error) { warn(`store: strategists read failed — ${error.message}`); return { fund: null, channels: [], accounts: [] }; }
   if (!fundRow) warn("store: fund_state id=1 not found (check SUPABASE_URL / service-role key point at the right project)");
   // Accounts (cockpit P3) — optional; a project without the table just runs single-account.
@@ -153,6 +154,8 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       underlying: String(r.underlying ?? "SPY").toUpperCase(),
       executor: (r.executor === "stream" ? "stream" : "cron"),
       account_id: r.account_id ?? null,
+      is_active: r.is_active !== false, // null/undefined (legacy) → active
+
       capital_pct: Number(cfg.capital_pct),
       aggression: Number(cfg.aggression),
       max_contracts: Number(cfg.max_contracts),

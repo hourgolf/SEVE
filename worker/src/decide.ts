@@ -340,6 +340,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
 
   // ---- entry ----
   if (intent?.kind === "enter" && !row) {
+    // Soft-deleted channels (is_active=false, the 07-03 morgue twins) stay loaded so any stray
+    // open position still gets exit handling — but they get NO entry evaluation and NO signal row
+    // (they were spamming the tape with blocked:muted/not_armed every minute; they're corpses, not roster).
+    if (ch.is_active === false) return { ...base, action: "skip", reason: "inactive" };
     const dir = intent.direction;
     if (!dir) return { ...base, action: "skip", reason: "multileg_unsupported" }; // multi-leg specs aren't live-armable (memory)
     const strike = Math.round(f.close) + (dir === "call" ? 1 : -1) * (ch.strike_offset ?? 0);
