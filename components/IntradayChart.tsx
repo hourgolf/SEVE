@@ -26,7 +26,8 @@ import { getSupabase } from "@/lib/supabaseClient";
 // SENT overlay data — the nightly brief's levels, fetched lazily when the chip first
 // turns on. SPY gets the full ladder (confluence levels + gap-arm lines); every symbol
 // gets its own dealer γ-walls. One tiny read of the latest sentinel event.
-type SentData = { levels: { px: number; label: string }[]; armLo: number | null; armHi: number | null; walls: Record<string, number[]> };
+type SentTerrain = { levels: { px: number; label: string }[]; armLo: number | null; armHi: number | null };
+type SentData = { byIndex: Record<string, SentTerrain> };
 
 type Mode = "line" | "candles";
 const MODE_KEY = "seve-chart-mode", TF_KEY = "seve-chart-tf", RANGE_KEY = "seve-chart-range";
@@ -339,15 +340,25 @@ export function IntradayChart({
           .from("events").select("meta")
           .like("message", "sentinel:%").order("created_at", { ascending: false }).limit(1);
         if (!alive) return;
-        const brief = (data?.[0]?.meta as { brief?: { carry?: { above?: { px: number; label: string }[]; below?: { px: number; label: string }[]; bandLo?: number | null; bandHi?: number | null }; dealer?: { sym: string; walls: number[] }[] } } | undefined)?.brief;
-        if (!brief) { setSentData({ levels: [], armLo: null, armHi: null, walls: {} }); return; }
-        setSentData({
-          levels: [...(brief.carry?.above ?? []), ...(brief.carry?.below ?? [])],
-          armLo: brief.carry?.bandLo ?? null,
-          armHi: brief.carry?.bandHi ?? null,
-          walls: Object.fromEntries((brief.dealer ?? []).map((d) => [d.sym, d.walls ?? []])),
-        });
-      } catch { if (alive) setSentData({ levels: [], armLo: null, armHi: null, walls: {} }); }
+        type Lvl = { px: number; label: string };
+        const brief = (data?.[0]?.meta as { brief?: {
+          sentLevels?: Record<string, { above?: Lvl[]; below?: Lvl[]; armLo?: number | null; armHi?: number | null }>;
+          carry?: { above?: Lvl[]; below?: Lvl[]; bandLo?: number | null; bandHi?: number | null };
+          dealer?: { sym: string; walls: number[] }[];
+        } } | undefined)?.brief;
+        const byIndex: Record<string, SentTerrain> = {};
+        if (brief?.sentLevels) {
+          // NEW path: each index's own full ladder + gap-arm band
+          for (const [sym, t] of Object.entries(brief.sentLevels)) {
+            byIndex[sym] = { levels: [...(t.above ?? []), ...(t.below ?? [])], armLo: t.armLo ?? null, armHi: t.armHi ?? null };
+          }
+        } else if (brief) {
+          // legacy fallback: SPY ladder from carry, others walls-only from dealer
+          byIndex.SPY = { levels: [...(brief.carry?.above ?? []), ...(brief.carry?.below ?? [])], armLo: brief.carry?.bandLo ?? null, armHi: brief.carry?.bandHi ?? null };
+          for (const d of brief.dealer ?? []) if (d.sym !== "SPY") byIndex[d.sym] = { levels: (d.walls ?? []).map((px) => ({ px, label: "γ-wall" })), armLo: null, armHi: null };
+        }
+        setSentData({ byIndex });
+      } catch { if (alive) setSentData({ byIndex: {} }); }
     })();
     return () => { alive = false; };
   }, [showSent, sentData]);
@@ -526,9 +537,9 @@ export function IntradayChart({
 
     // ---- SENT overlay (intraday): the nightly brief's terrain where price lives ----
     // γ-walls amber · confluence levels grey (label carries the sources) · gap-arm lines
-    // green (open beyond → the gap book arms). SPY carries the full ladder; other symbols
-    // draw their own dealer walls only. Levels are the BRIEF's (from last close) — they
-    // don't move intraday, which is the point: pre-committed terrain, not a repaint.
+    // green (open beyond → that index's gap book arms). Per-index: each symbol draws its
+    // OWN ladder (pivots + prior-day + round grid + its dealer walls) + arm band. Levels are
+    // the BRIEF's (from last close) — they don't move intraday: pre-committed terrain, not a repaint.
     for (const { series, line } of sentLinesRef.current) { try { series.removePriceLine(line); } catch { /* */ } }
     sentLinesRef.current = [];
     if (showSent && !isDaily && sentData) {
@@ -538,16 +549,14 @@ export function IntradayChart({
         const line = tgt.createPriceLine({ price, color, lineWidth: 1, lineStyle, axisLabelVisible: true, title });
         sentLinesRef.current.push({ series: tgt, line });
       };
-      const wallSet = new Set((sentData.walls[symbol] ?? []).map((w) => Math.round(w * 100)));
-      if (symbol === "SPY") {
-        for (const lv of sentData.levels) {
-          const isWall = lv.label.includes("γ") || wallSet.has(Math.round(lv.px * 100));
+      const t = sentData.byIndex[symbol];
+      if (t) {
+        for (const lv of t.levels) {
+          const isWall = lv.label.includes("γ");
           addSent(lv.px, isWall ? "#d9a13c" : "rgba(232,230,227,0.45)", lv.label.slice(0, 18), LineStyle.Dashed);
         }
-        addSent(sentData.armHi, "#5fbf7f", "▲ calls arm", LineStyle.Dotted);
-        addSent(sentData.armLo, "#5fbf7f", "▼ puts arm", LineStyle.Dotted);
-      } else {
-        for (const w of sentData.walls[symbol] ?? []) addSent(w, "#d9a13c", "γ-wall", LineStyle.Dashed);
+        addSent(t.armHi, "#5fbf7f", "▲ calls arm", LineStyle.Dotted);
+        addSent(t.armLo, "#5fbf7f", "▼ puts arm", LineStyle.Dotted);
       }
     }
 

@@ -34,6 +34,8 @@ export type BriefDealer = { sym: string; atmIv: number; impliedMove: number | nu
 export type BriefStat = { n: number; perT: number; win: number };
 export type BriefPrior = { book: string; gap: BriefStat | null; flat: BriefStat | null };
 export type BriefTrap = { label: string; n: number; perTrade: number | null; win: number | null; warn: boolean };
+// per-index SENT overlay terrain (the §01 chart's price-line ladder)
+export type BriefTerrain = { close: number | null; armLo: number | null; armHi: number | null; above: BriefLevel[]; below: BriefLevel[] };
 export interface Brief {
   asOf: string; forDate: string; gapMin: number;
   gap: { spy: number; iwm: number | null; qqq: number | null; cleared: boolean };
@@ -42,6 +44,7 @@ export interface Brief {
   update: { tests: { px: number; label: string; held: boolean }[]; near: BriefLevel | null; gapRegime: { cleared: number; total: number } };
   carry: { band: number | null; bandLo: number | null; bandHi: number | null; above: BriefLevel[]; below: BriefLevel[]; watch: string[] };
   events: string[]; dealer: BriefDealer[]; priors: BriefPrior[]; trap: BriefTrap[]; accrual: string[];
+  sentLevels: Record<string, BriefTerrain>; // per-index chart-overlay ladders (SPY/QQQ/IWM)
 }
 
 // ---- auto S/R levels: swing pivots + prior-day OHLC + round numbers + dealer gamma walls ----
@@ -52,7 +55,7 @@ function recentDailyOHLC(sym: string, upto: string, n: number) {
   if (!fs.existsSync(dir)) return [] as { d: string; o: number; h: number; l: number; c: number }[];
   const days = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && f.slice(0, 10) <= upto).map((f) => f.slice(0, 10)).sort().slice(-n);
   const out: { d: string; o: number; h: number; l: number; c: number }[] = [];
-  for (const d of days) { const o = rth(d); if (o) out.push({ d, ...o }); }
+  for (const d of days) { const o = rth(sym, d); if (o) out.push({ d, ...o }); }
   return out;
 }
 function computeLevels(sym: string, upto: string, spot: number, walls: { strike: number; gex: number }[]) {
@@ -144,19 +147,36 @@ for (const l of byChannel.values()) { l.pnl = r2(l.pnl); (byBook.get(book(l.slug
 const bookOrder: Book[] = ["TREND", "GAP", "EXPANSION", "NEITHER", "OTHER"];
 const dayPnl = r2(day.reduce((s, r) => s + r.pnl, 0));
 
-// ---- levels: SPY RTH OHLC --------------------------------------------------
-function rth(d: string) {
-  const f = path.join(DATA, "bars-archive", "SPY", `${d}.json`);
+// ---- levels: RTH OHLC for any index (bars-archive/<sym>) --------------------
+function rth(sym: string, d: string) {
+  const f = path.join(DATA, "bars-archive", sym, `${d}.json`);
   if (!fs.existsSync(f)) return null;
   const bars = JSON.parse(fs.readFileSync(f, "utf8")) as any[];
   const b = bars.filter((x) => { const t = x.ts.slice(11, 16); return t >= "13:30" && t < "20:00"; });
   if (!b.length) return null;
   return { o: r2(b[0].open), h: r2(Math.max(...b.map((x) => x.high))), l: r2(Math.min(...b.map((x) => x.low))), c: r2(b[b.length - 1].close) };
 }
-const ohlc = rth(date);
+const ohlc = rth("SPY", date);
 const iv = loadIV(date);
 // auto S/R ladder (replaces the hand-anchored one) — SPY, from bars-archive + SPY gamma walls
 const LADDER = ohlc ? computeLevels("SPY", date, ohlc.c, iv["SPY"]?.walls ?? []) : [];
+
+// Per-index SENT terrain for the §01 chart overlay: each index's own auto ladder (pivots +
+// prior-day OHLC + round grid + its own dealer γ-walls) + gap-arm band (close ± gap_min%).
+// The gap gate is per-index, so QQQ/IWM carry their own arm lines (V3/ALT ports, IWM pair).
+function terrainFor(sym: string): BriefTerrain {
+  const o = rth(sym, date);
+  if (!o) return { close: null, armLo: null, armHi: null, above: [], below: [] };
+  const ladder = computeLevels(sym, date, o.c, iv[sym]?.walls ?? []);
+  const band = r2((o.c * GAP_MIN) / 100);
+  return {
+    close: o.c,
+    armLo: r2(o.c - band),
+    armHi: r2(o.c + band),
+    above: ladder.filter((l) => l.px > o.c).slice(0, 6).map((l) => ({ px: l.px, label: l.label })),
+    below: ladder.filter((l) => l.px < o.c).slice(-6).reverse().map((l) => ({ px: l.px, label: l.label })),
+  };
+}
 
 // ---- accrual ---------------------------------------------------------------
 const era4 = dates.filter((d) => d >= ERA4_START && d <= date);
@@ -383,6 +403,7 @@ const brief: Brief = {
     if (!s) return [];
     return [{ sym, atmIv: r2(s.atm_iv * 100), impliedMove: impliedMove(sym, date), gexShort: s.gex_proxy < 0, walls: [...s.walls].sort((a, b) => Math.abs(b.gex) - Math.abs(a.gex)).slice(0, 3).map((w) => w.strike) }];
   }),
+  sentLevels: { SPY: terrainFor("SPY"), QQQ: terrainFor("QQQ"), IWM: terrainFor("IWM") },
   priors: bookOrder.flatMap((b) => {
     const bs = era4Recs.filter((r) => book(r.slug) === b);
     if (!bs.length) return [];

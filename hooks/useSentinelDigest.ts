@@ -25,6 +25,7 @@ export interface Brief {
   update: { tests: { px: number; label: string; held: boolean }[]; near: BriefLevel | null; gapRegime: { cleared: number; total: number } };
   carry: { band: number | null; bandLo: number | null; bandHi: number | null; above: BriefLevel[]; below: BriefLevel[]; watch: string[] };
   events: string[]; dealer: BriefDealer[]; priors: BriefPrior[]; trap: BriefTrap[]; accrual: string[];
+  sentLevels?: Record<string, { close: number | null; armLo: number | null; armHi: number | null; above: BriefLevel[]; below: BriefLevel[] }>;
 }
 
 export interface ScanRow { slug: string; peak: number; win: number; net?: number; give: number | null; pnl?: number; n: number }
