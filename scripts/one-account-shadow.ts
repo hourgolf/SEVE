@@ -64,6 +64,12 @@ export interface ShadowOpts {
   rescale?: boolean;    // size each position by equity/REF_EQUITY (runnable small-pool roster)
   dailyTarget?: number; // per-channel/day PROFIT halt: once a channel's realized-so-far today ≥ $N,
                         // block its further entries (the win-side mirror of daily_stop_usd). 0 = off.
+  // CONCENTRATION budgets (docs/concentration-allocator-spec.md, go-live item 2b) — 0/undef = off.
+  // Admission: qty′ = min(target, cashRoom, occ-contract room, occ-premium room, underlying-premium
+  // room); a cap that zeroes the room rejects ("occ-cap"/"und-cap"); a cap that shaves counts capBound.
+  occMaxCt?: number;    // desk-wide contract ceiling per OCC
+  occMaxUsd?: number;   // desk-wide premium $ ceiling per OCC
+  undMaxUsd?: number;   // premium $ ceiling per underlying (SPY/QQQ/IWM umbrella)
 }
 
 interface PosRow {
@@ -81,13 +87,15 @@ export interface ShadowDay {
 }
 
 export interface ShadowResult {
-  params: { equity: number; from: string; to: string; bucket: string; stackCap: number; rescale: boolean };
+  params: { equity: number; from: string; to: string; bucket: string; stackCap: number; rescale: boolean; occMaxCt: number; occMaxUsd: number; undMaxUsd: number };
   days: ShadowDay[];
   navEnd: number; totalPnl: number; actualPnl: number;
   maxStackChannels: number;
   maxDDusd: number; maxDDpct: number; // day-end peak-to-trough (see caveat: intraday is deeper)
   perChannel: { slug: string; trades: number; admitted: number; downsized: number; rejected: number; shadowPnl: number; actualPnl: number }[];
   openCarry: number; // positions still open at the end (carried at cost in NAV)
+  // concentration-cap accounting (0s when caps off): entries a cap shaved/zeroed + contracts it removed
+  capStats: { capBound: number; capRejected: number; shavedCt: number };
 }
 
 export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<ShadowResult> {
@@ -100,6 +108,8 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
   const rescale = opts.rescale ?? false;
   const scaleRatio = rescale ? equity / REF_EQUITY : 1;
   const dailyTarget = opts.dailyTarget ?? 0;
+  const occMaxCt = opts.occMaxCt ?? 0, occMaxUsd = opts.occMaxUsd ?? 0, undMaxUsd = opts.undMaxUsd ?? 0;
+  const undOf = (occ: string) => occ.match(/^([A-Z]+)\d/)?.[1] ?? occ; // OCC root = underlying
   // per-(channel, ET day) realized-so-far, for the daily-target profit halt. Increments on each
   // EXIT; checked at each ENTRY (events are ts-sorted, exits-before-entries on ties → the value
   // at an entry reflects only trades already CLOSED that day, the honest "banked so far").
@@ -150,6 +160,11 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
   const admittedQty = new Map<string, number>(); // position id → shadow qty
   const openCost = new Map<string, number>();    // position id → deployed $
   const occOpen = new Map<string, Map<string, { contracts: number }>>(); // occ → slug → lot
+  // concentration-cap meters (incremental; only consulted when a cap is on)
+  const occCt = new Map<string, number>();   // occ → open contracts (desk-wide)
+  const occUsd = new Map<string, number>();  // occ → open premium $ (desk-wide)
+  const undUsd = new Map<string, number>();  // underlying → open premium $
+  const capStats = { capBound: 0, capRejected: 0, shavedCt: 0 };
   const perChannel = new Map<string, { trades: number; admitted: number; downsized: number; rejected: number; shadowPnl: number; actualPnl: number }>();
   const chan = (slug: string) => {
     let c = perChannel.get(slug);
@@ -186,8 +201,21 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
       else if (dailyTarget > 0 && (realizedCD.get(`${p.slug}|${date}`) ?? 0) >= dailyTarget) reason = "daily-target";
       else if (stackCap > 0 && (occOpen.get(p.occ_symbol)?.size ?? 0) >= stackCap && !occOpen.get(p.occ_symbol)?.has(p.slug)) reason = "stack-cap";
       else {
-        q = Math.min(targetQty, Math.floor(cash / costPerCt));
-        if (q <= 0) reason = "no-cash";
+        const cashRoom = Math.floor(cash / costPerCt);
+        // CONCENTRATION admission (spec item 3): qty′ = min(target, cash, occ-ct, occ-$, und-$ room)
+        let room = cashRoom;
+        if (occMaxCt > 0) room = Math.min(room, occMaxCt - (occCt.get(p.occ_symbol) ?? 0));
+        if (occMaxUsd > 0) room = Math.min(room, Math.floor((occMaxUsd - (occUsd.get(p.occ_symbol) ?? 0)) / costPerCt));
+        if (undMaxUsd > 0) room = Math.min(room, Math.floor((undMaxUsd - (undUsd.get(undOf(p.occ_symbol)) ?? 0)) / costPerCt));
+        q = Math.min(targetQty, Math.max(0, room));
+        if (q <= 0) {
+          if (cashRoom <= 0) reason = "no-cash";
+          else { reason = (occMaxCt > 0 && occMaxCt - (occCt.get(p.occ_symbol) ?? 0) <= 0) || (occMaxUsd > 0 && occMaxUsd - (occUsd.get(p.occ_symbol) ?? 0) < costPerCt) ? "occ-cap" : "und-cap"; capStats.capRejected++; }
+        } else if (room < cashRoom && q < Math.min(targetQty, cashRoom)) {
+          // a cap (not cash, not the target) shaved this entry
+          capStats.capBound++;
+          capStats.shavedCt += Math.min(targetQty, cashRoom) - q;
+        }
       }
       if (reason) {
         c.rejected++; d!.rejected++;
@@ -200,6 +228,9 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
         const cost = q * costPerCt;
         cash -= cost;
         openCost.set(p.id, cost);
+        occCt.set(p.occ_symbol, (occCt.get(p.occ_symbol) ?? 0) + q);
+        occUsd.set(p.occ_symbol, (occUsd.get(p.occ_symbol) ?? 0) + cost);
+        undUsd.set(undOf(p.occ_symbol), (undUsd.get(undOf(p.occ_symbol)) ?? 0) + cost);
         let m = occOpen.get(p.occ_symbol);
         if (!m) { m = new Map(); occOpen.set(p.occ_symbol, m); }
         const lot = m.get(p.slug) ?? { contracts: 0 };
@@ -226,6 +257,9 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
         const key = `${p.slug}|${etDate(p.closed_at)}`;
         realizedCD.set(key, (realizedCD.get(key) ?? 0) + q * pnlPerCt);
         openCost.delete(p.id);
+        occCt.set(p.occ_symbol, Math.max(0, (occCt.get(p.occ_symbol) ?? 0) - q));
+        occUsd.set(p.occ_symbol, Math.max(0, (occUsd.get(p.occ_symbol) ?? 0) - cost));
+        undUsd.set(undOf(p.occ_symbol), Math.max(0, (undUsd.get(undOf(p.occ_symbol)) ?? 0) - cost));
         const m = occOpen.get(p.occ_symbol);
         if (m) {
           const lot = m.get(p.slug);
@@ -247,13 +281,14 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
     if (draw > maxDDusd) { maxDDusd = draw; maxDDpct = peakNav > 0 ? (100 * draw) / peakNav : 0; }
   }
   return {
-    params: { equity, from, to, bucket: opts.allArmed ? "all-armed" : "FIRST-TEAM", stackCap, rescale },
+    params: { equity, from, to, bucket: opts.allArmed ? "all-armed" : "FIRST-TEAM", stackCap, rescale, occMaxCt, occMaxUsd, undMaxUsd },
     days, navEnd: Math.round(cash + deployed()), totalPnl, actualPnl, maxStackChannels,
     maxDDusd: Math.round(maxDDusd), maxDDpct: Math.round(maxDDpct * 10) / 10,
     perChannel: [...perChannel.entries()].map(([slug, c]) => ({ slug, ...c,
       shadowPnl: Math.round(c.shadowPnl), actualPnl: Math.round(c.actualPnl) }))
       .sort((a, b) => b.shadowPnl - a.shadowPnl),
     openCarry: openCost.size,
+    capStats,
   };
 }
 
@@ -466,9 +501,14 @@ async function cli() {
     stackCap: argNum("stack-cap", 0),
     rescale: process.argv.includes("--rescale"),
     dailyTarget: argNum("daily-target", 0),
+    // concentration budgets (spec 2b): --occ-cap-ct 36 --occ-cap-usd 12000 --und-cap-usd 30000
+    occMaxCt: argNum("occ-cap-ct", 0),
+    occMaxUsd: argNum("occ-cap-usd", 0),
+    undMaxUsd: argNum("und-cap-usd", 0),
   });
   console.log(`\nONE-ACCOUNT SHADOW — the dream team in a single $${r.params.equity.toLocaleString()} account${r.params.rescale ? " (RESCALED — RISK sized to pool)" : ""}`);
-  console.log(`${r.params.bucket} bucket · ${r.params.from} → ${r.params.to} · actual live trades through one cash pool · stack cap ${r.params.stackCap || "OFF (metered)"}\n`);
+  const capLbl = [r.params.occMaxCt && `occ≤${r.params.occMaxCt}ct`, r.params.occMaxUsd && `occ≤$${r.params.occMaxUsd / 1000}k`, r.params.undMaxUsd && `und≤$${r.params.undMaxUsd / 1000}k`].filter(Boolean).join(" ");
+  console.log(`${r.params.bucket} bucket · ${r.params.from} → ${r.params.to} · actual live trades through one cash pool · stack cap ${r.params.stackCap || "OFF (metered)"}${capLbl ? ` · CONC CAPS ${capLbl}` : ""}\n`);
   console.log(`  date        NAV       day P&L   entries adm/dwn/rej   peak deployed   min cash   deepest stack`);
   for (const day of r.days) {
     const po = day.peakOcc ? `${day.peakOcc.channels}ch/${day.peakOcc.contracts}ct ${day.peakOcc.occ.replace(/^SPY|^QQQ|^IWM/, (m) => m + " ")}` : "—";
@@ -477,7 +517,10 @@ async function cli() {
   console.log(`\n  Σ shadow ${sgn(r.totalPnl)} on $${r.params.equity.toLocaleString()} (${((100 * r.totalPnl) / r.params.equity).toFixed(1)}%) vs the same trades' paper P&L ${sgn(r.actualPnl)} · max OCC stack ${r.maxStackChannels} channels${r.openCarry ? ` · ⚠ ${r.openCarry} open carried at cost` : ""}`);
   console.log(`  max drawdown ${sgn(-r.maxDDusd)} (${r.maxDDpct}% of peak, day-end NAV — intraday is deeper)`);
   const contested = r.days.filter((day) => day.rejected + day.downsized > 0).length;
-  console.log(`  contention: ${contested}/${r.days.length} sessions had a downsize/rejection${contested ? "" : " — cash never bound at this equity"}\n`);
+  console.log(`  contention: ${contested}/${r.days.length} sessions had a downsize/rejection${contested ? "" : " — cash never bound at this equity"}`);
+  if (r.params.occMaxCt || r.params.occMaxUsd || r.params.undMaxUsd)
+    console.log(`  concentration caps: shaved ${r.capStats.capBound} entr${r.capStats.capBound === 1 ? "y" : "ies"} (−${r.capStats.shavedCt}ct) · zeroed ${r.capStats.capRejected}`);
+  console.log("");
   console.log(`  per-channel (shadow vs paper):`);
   for (const c of r.perChannel) console.log(`    ${c.slug.padEnd(28)} ${String(c.trades).padStart(3)}t  ${sgn(c.shadowPnl).padStart(9)}  (paper ${sgn(c.actualPnl)})${c.rejected ? `  · ${c.rejected} rejected` : ""}${c.downsized ? ` · ${c.downsized} downsized` : ""}`);
   console.log(`\n  ⚠ capital layer only: actual sizes/fills/exits as lived on paper; no self-cross or fill-impact model; per-channel daily stops as they fired at paper scale.\n`);

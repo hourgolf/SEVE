@@ -167,6 +167,21 @@ export function ForensicsPanel() {
                 ))}
               </div>
             )}
+            {/* concentration-cap grid (spec 2b, shadow-first) — per-OCC ceiling: shaved/zeroed + Δ vs uncapped */}
+            {oas.capScenarios && oas.capScenarios.length > 0 && (
+              <>
+                <div className="brief-mini">conc caps · per-OCC ceiling (grading pre-build)</div>
+                <div className="fx-rows">
+                  {oas.capScenarios.map((s) => (
+                    <div className="fx-row" key={s.occMaxCt}>
+                      <span className="fx-name">≤{s.occMaxCt}ct/OCC</span>
+                      <span className="fx-mid">{s.capBound + s.capRejected ? `${s.capBound} shaved · ${s.capRejected} zeroed · −${s.shavedCt}ct` : "never bound"} · DD {s.maxDDpct}%</span>
+                      <span className={`au-pnl ${cls(s.deltaPnl)}`}>{signedUsd(s.deltaPnl)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="fx-rows">
               {oas.curve.slice(-8).map((p) => (
                 <div className="fx-row" key={p.d}>

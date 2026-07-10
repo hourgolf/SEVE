@@ -588,6 +588,7 @@ async function main() {
   // replay each night → banked curve is idempotent, no state to chain.
   let oas: ShadowResult | null = null;
   let oasScenarios: { equity: number; rescale: boolean; endNav: number; retPct: number; maxDDpct: number; rejected: number; downsized: number }[] = [];
+  let capScenarios: { occMaxCt: number; retPct: number; maxDDpct: number; capBound: number; capRejected: number; shavedCt: number; deltaPnl: number }[] = [];
   try {
     oas = await runOneAccountShadow({ to: DATE });
     const today = oas.days.find((day) => day.date === DATE);
@@ -606,6 +607,15 @@ async function main() {
         maxDDpct: s.maxDDpct, rejected: s.days.reduce((a, x) => a + x.rejected, 0), downsized: s.days.reduce((a, x) => a + x.downsized, 0) });
     }
     console.log(`  rescaled runnable: ${oasScenarios.map((s) => `$${s.equity / 1000}k→${s.retPct >= 0 ? "+" : ""}${s.retPct}%/DD${s.maxDDpct}%${s.rejected ? `/${s.rejected}drop` : ""}`).join(" · ")}`);
+    // CONCENTRATION CAP GRID (spec 2b, shadow-first): per-OCC contract ceilings around the observed
+    // peak stack (54ct) — what each cap would have shaved/cost. Grades ~2wk before any worker build.
+    for (const cap of [24, 36, 48]) {
+      const s = await runOneAccountShadow({ to: DATE, occMaxCt: cap });
+      capScenarios.push({ occMaxCt: cap, retPct: Math.round((1000 * s.totalPnl) / s.params.equity) / 10,
+        maxDDpct: s.maxDDpct, capBound: s.capStats.capBound, capRejected: s.capStats.capRejected,
+        shavedCt: s.capStats.shavedCt, deltaPnl: Math.round(s.totalPnl - oas.totalPnl) });
+    }
+    console.log(`  conc caps (occ ct): ${capScenarios.map((s) => `≤${s.occMaxCt}ct→Δ${sgn(s.deltaPnl)}${s.capBound + s.capRejected ? ` (${s.capBound} shaved/${s.capRejected} zeroed, −${s.shavedCt}ct)` : " (never bound)"}`).join(" · ")}`);
   } catch (e) {
     console.log(`\none-account shadow: failed (${(e as Error).message})`);
   }
@@ -670,6 +680,7 @@ async function main() {
       maxStackChannels: oas.maxStackChannels, maxDDusd: oas.maxDDusd, maxDDpct: oas.maxDDpct,
       curve: oas.days.map((day) => ({ d: day.date, nav: day.navEnd, adm: day.admitted, dwn: day.downsized, rej: day.rejected, peak: day.peakDeployedUsd })),
       scenarios: oasScenarios,
+      capScenarios, // concentration-cap grid (spec 2b, shadow-first — grades ~2wk pre-build)
       today: oas.days.find((day) => day.date === DATE) ?? null } : null,
     ratchetShadow: ratchet ? { ...ratchet, slotAware: slotBanks } : null,
   };

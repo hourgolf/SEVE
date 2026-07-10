@@ -64,6 +64,10 @@ call, never a formula's.
 1. **Extend `one-account-shadow`** with the three budget knobs → nightly emit of would-be
    admit/downsize/reject counts + the P&L delta under caps (the `scenarios` machinery already sweeps
    pool sizes; add cap scenarios beside them). Zero worker change.
+   **✅ DONE 2026-07-10** — `--occ-cap-ct/--occ-cap-usd/--und-cap-usd` CLI knobs; nightly cap grid
+   {24, 36, 48}ct banked in `payload.oneAccountShadow.capScenarios` + rendered in the §04 Shadow Book
+   One-acct breakdown. **First read (era-4, 8 sessions):** ≤48ct **free** (Δ+$60, 3 shaved); ≤36ct
+   −$314 for −86ct of pile-up; ≤24ct −$765 for −130ct. The grade clock started 07-10.
 2. **Grade ~2 weeks**: how often would caps have bound, what did they cost/save, which channels lose
    size (and would the priority ordering have protected the right ones).
 3. **Worker build** in a dedicated session (Fable-tier — near-live-capital trade path, go-live
