@@ -53,6 +53,22 @@ function NavSparkline({ pts, base }: { pts: ShadowCurvePoint[]; base: number }) 
   );
 }
 
+// MODULE-LEVEL frame — an inline `const Frame = …` gets a new component identity every
+// render, so each live-feed tick (~3s spot poll re-renders the surface) would unmount +
+// remount the whole panel subtree: the "glitch on every chart tick" bug. Hoisted = stable.
+function Shell({ folded, onFold, dateTag, children }: { folded: boolean; onFold: () => void; dateTag: string; children: React.ReactNode }) {
+  return (
+    <div className={`panel${folded ? " folded" : ""}`}>
+      <div className="phead">
+        <span className="t">Shadow Book</span>
+        <span className="x">would-haves vs the live book{dateTag}</span>
+        <button type="button" className="pfold" onClick={onFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
+      </div>
+      <div className="pbody">{children}</div>
+    </div>
+  );
+}
+
 // One instrument = one glance row (chevron · label · mid · stat) + a folded breakdown.
 function Inst({ k, label, mid, stat, children }: { k: string; label: string; mid: React.ReactNode; stat: React.ReactNode; children?: React.ReactNode }) {
   const [folded, toggle] = useFold(`sb-${k}`, true);
@@ -79,20 +95,11 @@ export function ForensicsPanel() {
   const [bvWin, setBvWin] = useState<"today" | "cum">("today");
   const [vbWin, setVbWin] = useState<"today" | "cum">("today");
 
-  const Frame = ({ children }: { children: React.ReactNode }) => (
-    <div className={`panel${folded ? " folded" : ""}`}>
-      <div className="phead">
-        <span className="t">Shadow Book</span>
-        <span className="x">would-haves vs the live book{report ? ` · ${shortDate(report.report_date)}` : ""}</span>
-        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
-      </div>
-      <div className="pbody">{children}</div>
-    </div>
-  );
+  const dateTag = report ? ` · ${shortDate(report.report_date)}` : "";
 
-  if (loading) return <Frame><div className="chart-empty">loading forensics…</div></Frame>;
-  if (error) return <Frame><div className="chart-empty">couldn&apos;t load — {error}</div></Frame>;
-  if (!report) return <Frame><div className="chart-empty">no report yet — run <code>npm run day-report</code> same-week (with APP_URL + PUSH_SECRET set) to publish</div></Frame>;
+  if (loading) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}><div className="chart-empty">loading forensics…</div></Shell>;
+  if (error) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}><div className="chart-empty">couldn&apos;t load — {error}</div></Shell>;
+  if (!report) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}><div className="chart-empty">no report yet — run <code>npm run day-report</code> same-week (with APP_URL + PUSH_SECRET set) to publish</div></Shell>;
 
   const scToday = report.payload.overrideToday ?? null;
   const showToday = scWin === "today" && !!scToday;
@@ -118,7 +125,7 @@ export function ForensicsPanel() {
   const vbRed = vbTop.filter((b) => b.pnl < 0).length;
 
   return (
-    <Frame>
+    <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}>
       {/* ── ONE-ACCOUNT — the dream team in a single live-sized cash pool ── */}
       <Inst
         k="oneacct" label="One-acct"
@@ -440,6 +447,6 @@ export function ForensicsPanel() {
       </Inst>
 
       <div className="fx-foot">as of {asOf} ET · mid-basis + capital-blind would-haves — never an arm basis · one day = noise</div>
-    </Frame>
+    </Shell>
   );
 }

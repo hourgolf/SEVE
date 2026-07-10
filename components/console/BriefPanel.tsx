@@ -33,30 +33,34 @@ function PriorCell({ tag, s }: { tag: string; s: BriefStat | null }) {
   return <span>{tag} <b className={cls(s.perT)}>{signedUsd(s.perT)}</b>/t <span className="mut">{s.win}%·{s.n}t</span></span>;
 }
 
+// MODULE-LEVEL frame — an inline `const Frame = …` would get a new component identity on
+// every live-feed tick and remount the subtree (the chart-tick glitch). Hoisted = stable.
+function Shell({ folded, onFold, sub, children }: { folded: boolean; onFold: () => void; sub?: string; children: React.ReactNode }) {
+  return (
+    <div className={`panel${folded ? " folded" : ""}`}>
+      <div className="phead">
+        <span className="t">Brief</span>
+        <span className="x">{sub ?? "next-open prep · log-only"}</span>
+        <button type="button" className="pfold" onClick={onFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
+      </div>
+      <div className="pbody">{children}</div>
+    </div>
+  );
+}
+
 export function BriefPanel() {
   const { brief, digest, date, forDate, state, err } = useSentinelDigest();
   const [folded, toggleFold] = useFold("brief");
   const [baseFolded, toggleBase] = useFold("brief-baserates", true);
 
-  const Frame = ({ children, sub }: { children: React.ReactNode; sub?: string }) => (
-    <div className={`panel${folded ? " folded" : ""}`}>
-      <div className="phead">
-        <span className="t">Brief</span>
-        <span className="x">{sub ?? "next-open prep · log-only"}</span>
-        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
-      </div>
-      <div className="pbody">{children}</div>
-    </div>
-  );
-
-  if (state === "loading") return <Frame><div className="chart-empty">loading brief…</div></Frame>;
-  if (state === "error") return <Frame><div className="chart-empty">couldn&apos;t load — {err}</div></Frame>;
-  if (state === "empty") return <Frame><div className="chart-empty">no brief yet — runs after each close (or <code>npm run sentinel</code>)</div></Frame>;
+  if (state === "loading") return <Shell folded={folded} onFold={toggleFold}><div className="chart-empty">loading brief…</div></Shell>;
+  if (state === "error") return <Shell folded={folded} onFold={toggleFold}><div className="chart-empty">couldn&apos;t load — {err}</div></Shell>;
+  if (state === "empty") return <Shell folded={folded} onFold={toggleFold}><div className="chart-empty">no brief yet — runs after each close (or <code>npm run sentinel</code>)</div></Shell>;
 
   // legacy event (pre-structured meta): show the forward half of the markdown digest
   if (!brief) {
     const terrain = digest ? splitDigest(digest).terrain : "";
-    return <Frame sub="next-open prep · log-only">{terrain ? <SentMd md={terrain} /> : <div className="chart-empty">brief pending next sentinel run</div>}</Frame>;
+    return <Shell folded={folded} onFold={toggleFold}>{terrain ? <SentMd md={terrain} /> : <div className="chart-empty">brief pending next sentinel run</div>}</Shell>;
   }
 
   const b = brief;
@@ -65,7 +69,7 @@ export function BriefPanel() {
   const sub = `next open ${md(forDate || b.forDate)} · ${md(date || b.asOf)} close`;
 
   return (
-    <Frame sub={sub}>
+    <Shell folded={folded} onFold={toggleFold} sub={sub}>
       {/* DAY-TYPE — gap magnitude (direction is noise → neutral) + eligibility + RTH close */}
       <div className="brief-daytype">
         <span className={`snt-gex ${b.gap.cleared ? "short" : "long"}`} title={`gap ${b.gap.spy > 0 ? "+" : ""}${b.gap.spy}% vs the ${b.gapMin}% gate`}>
@@ -150,6 +154,6 @@ export function BriefPanel() {
       )}
 
       <div className="fx-foot">{b.accrual.join("  ·  ")}</div>
-    </Frame>
+    </Shell>
   );
 }

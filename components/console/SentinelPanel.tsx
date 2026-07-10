@@ -36,37 +36,41 @@ function LeakRow({ r }: { r: ScanRow }) {
   );
 }
 
+// MODULE-LEVEL frame — an inline `const Frame = …` would get a new component identity on
+// every live-feed tick and remount the subtree (the chart-tick glitch). Hoisted = stable.
+function Shell({ folded, onFold, date, children }: { folded: boolean; onFold: () => void; date: string; children: React.ReactNode }) {
+  return (
+    <div className={`panel${folded ? " folded" : ""}`}>
+      <div className="phead">
+        <span className="t">Sentinel</span>
+        <span className="x">opportunity + drift{date ? ` · ${md(date)}` : ""} · log-only</span>
+        <button type="button" className="pfold" onClick={onFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
+      </div>
+      <div className="pbody">{children}</div>
+    </div>
+  );
+}
+
 export function SentinelPanel() {
   const { judge, scan, digest, date, state, err } = useSentinelDigest();
   const [folded, toggleFold] = useFold("sentinel");
   const [scanFolded, toggleScan] = useFold("sentinel-scan", true);
 
-  const Frame = ({ children }: { children: React.ReactNode }) => (
-    <div className={`panel${folded ? " folded" : ""}`}>
-      <div className="phead">
-        <span className="t">Sentinel</span>
-        <span className="x">opportunity + drift{date ? ` · ${md(date)}` : ""} · log-only</span>
-        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
-      </div>
-      <div className="pbody">{children}</div>
-    </div>
-  );
-
-  if (state === "loading") return <Frame><div className="chart-empty">loading sentinel…</div></Frame>;
-  if (state === "error") return <Frame><div className="chart-empty">couldn&apos;t load — {err}</div></Frame>;
-  if (state === "empty") return <Frame><div className="chart-empty">no scan yet — runs after each close (or <code>npm run sentinel</code>)</div></Frame>;
+  if (state === "loading") return <Shell folded={folded} onFold={toggleFold} date={date}><div className="chart-empty">loading sentinel…</div></Shell>;
+  if (state === "error") return <Shell folded={folded} onFold={toggleFold} date={date}><div className="chart-empty">couldn&apos;t load — {err}</div></Shell>;
+  if (state === "empty") return <Shell folded={folded} onFold={toggleFold} date={date}><div className="chart-empty">no scan yet — runs after each close (or <code>npm run sentinel</code>)</div></Shell>;
 
   // legacy event (pre-structured meta): render the backward half of the markdown digest
   if (!judge && !scan) {
     const backward = digest ? splitDigest(digest).scan : "";
-    return <Frame>{backward ? <SentMd md={backward} /> : <div className="chart-empty">scan pending next sentinel run</div>}</Frame>;
+    return <Shell folded={folded} onFold={toggleFold} date={date}>{backward ? <SentMd md={backward} /> : <div className="chart-empty">scan pending next sentinel run</div>}</Shell>;
   }
 
   const v = (judge?.verdict ?? "HOLD").toString();
   const vcls = v === "QUEUE" ? "queue" : v === "WATCH" ? "watch" : "hold";
 
   return (
-    <Frame>
+    <Shell folded={folded} onFold={toggleFold} date={date}>
       {/* VERDICT — the read, first */}
       {judge && (
         <>
@@ -119,6 +123,6 @@ export function SentinelPanel() {
           )}
         </>
       )}
-    </Frame>
+    </Shell>
   );
 }
