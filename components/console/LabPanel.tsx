@@ -16,7 +16,7 @@ const cls = (v: number) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 
 export function LabPanel() {
   const { bench, benchToday, todayET, since, gateBlocks, loading } = useVirtualBench();
-  const [folded, toggleFold] = useFold("lab");
+  const [folded, toggleFold] = useFold("lab", true); // secondary — folded by default (§04 tidy)
   // aggregate window: today's ET slice ⇄ the cumulative book (scorecard convention)
   const [win, setWin] = useState<"today" | "cum">("today");
 

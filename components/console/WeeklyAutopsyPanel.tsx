@@ -21,7 +21,7 @@ const md = (d: string) => d.slice(5); // "06-01"
 export function WeeklyAutopsyPanel({ strategists }: { strategists: StrategistState[] }) {
   const { reports, loading, error } = useWeeklyReports(6);
   const [idx, setIdx] = useState(0);
-  const [folded, toggleFold] = useFold("weekly-autopsy");
+  const [folded, toggleFold] = useFold("weekly-autopsy", true); // secondary — folded by default (§04 tidy)
   // learnings/suggestions start FOLDED — expanded reports were monopolizing the column
   const [learnFolded, toggleLearn] = useFold("weekly-learnings", true);
   const [sugFolded, toggleSug] = useFold("weekly-suggestions", true);

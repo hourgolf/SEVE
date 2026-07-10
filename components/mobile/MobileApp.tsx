@@ -21,6 +21,8 @@ import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
 import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
 import { LabPanel } from "@/components/console/LabPanel";
+import { BriefPanel } from "@/components/console/BriefPanel";
+import { SentinelPanel } from "@/components/console/SentinelPanel";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { DayBooksStrip } from "@/components/console/DayBooksStrip";
 import { MasterStopControl } from "@/components/console/MasterStopControl";
@@ -248,9 +250,11 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
         {tab === "tape" && (
           <>
             <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} acctId={acctId} />
-            <LabPanel />
+            <BriefPanel />
+            <SentinelPanel />
             <DailyAutopsyPanel strategists={desk.strategists} />
             <WeeklyAutopsyPanel strategists={desk.strategists} />
+            <LabPanel />
             <ForensicsPanel />
           </>
         )}

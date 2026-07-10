@@ -25,6 +25,25 @@ const FOMC = "2026-07-29";
 const A6_TARGET = 15;
 const GAP_MIN = 0.25; // % — validated spec gate (confirmed by the momo firing pattern)
 
+// ---- structured brief (the §04 Brief panel renders visuals from THIS, not the markdown) ----
+// Emitted to data/sentinel/brief-latest.json alongside the markdown stdout (which is unchanged —
+// it still feeds the standalone CLI + the sentinel LLM prompt + the durable digest copy).
+export type BriefBookPnl = { book: string; pnl: number; channels: { slug: string; pnl: number; muted: boolean }[] };
+export type BriefLevel = { px: number; label: string };
+export type BriefDealer = { sym: string; atmIv: number; impliedMove: number | null; gexShort: boolean; walls: number[] };
+export type BriefStat = { n: number; perT: number; win: number };
+export type BriefPrior = { book: string; gap: BriefStat | null; flat: BriefStat | null };
+export type BriefTrap = { label: string; n: number; perTrade: number | null; win: number | null; warn: boolean };
+export interface Brief {
+  asOf: string; forDate: string; gapMin: number;
+  gap: { spy: number; iwm: number | null; qqq: number | null; cleared: boolean };
+  rth: { o: number; h: number; l: number; c: number } | null;
+  compile: { dayPnl: number; nTrades: number; books: BriefBookPnl[]; flags: string[] };
+  update: { tests: { px: number; label: string; held: boolean }[]; near: BriefLevel | null; gapRegime: { cleared: number; total: number } };
+  carry: { band: number | null; bandLo: number | null; bandHi: number | null; above: BriefLevel[]; below: BriefLevel[]; watch: string[] };
+  events: string[]; dealer: BriefDealer[]; priors: BriefPrior[]; trap: BriefTrap[]; accrual: string[];
+}
+
 // ---- auto S/R levels: swing pivots + prior-day OHLC + round numbers + dealer gamma walls ----
 // Replaces the old hand-anchored ladder. Pure — reads bars-archive; gamma walls come from iv-bank.
 // (function declarations → hoisted; they call rth/r2 at run time, after those are initialized.)
@@ -306,3 +325,83 @@ P(`- **A4** — ${a4.map((x) => `${x.slug} ${x.n}t ${money(x.pnl)}`).join(" vs "
 P(`- **FOMC #6** — ${FOMC} (${fomcDays} days out).`);
 
 console.log(O.join("\n"));
+
+// ---- structured emit → data/sentinel/brief-latest.json (visual source for the §04 Brief panel) ----
+// Built from the same computed vars the markdown above prints; priors/trap re-derived (cheap).
+const bandV = ohlc ? r2((ohlc.c * GAP_MIN) / 100) : null;
+const statOfStruct = (rs: Rec[]): BriefStat | null =>
+  rs.length ? { n: rs.length, perT: r2(rs.reduce((s, r) => s + r.pnl, 0) / rs.length), win: Math.round((100 * rs.filter((r) => r.pnl > 0).length) / rs.length) } : null;
+const brief: Brief = {
+  asOf: date,
+  forDate: nextDay,
+  gapMin: GAP_MIN,
+  gap: { spy: spyGap, iwm: Number.isFinite(gap["IWM"]) ? gap["IWM"] : null, qqq: Number.isFinite(gap["QQQ"]) ? gap["QQQ"] : null, cleared },
+  rth: ohlc,
+  compile: {
+    dayPnl,
+    nTrades: day.length,
+    books: bookOrder.flatMap((b) => {
+      const ls = byBook.get(b);
+      if (!ls) return [];
+      return [{ book: b, pnl: r2(ls.reduce((s, l) => s + l.pnl, 0)), channels: ls.slice().sort((a, c) => a.pnl - c.pnl).map((l) => ({ slug: l.slug, pnl: l.pnl, muted: l.muted })) }];
+    }),
+    flags,
+  },
+  update: {
+    tests: ohlc ? LADDER.filter((lv) => ohlc.l - 0.25 <= lv.px && lv.px <= ohlc.h + 0.25).map((lv) => ({ px: lv.px, label: lv.label, held: ohlc.c >= lv.px })) : [],
+    near: ohlc ? (() => { const n = LADDER.reduce((a, b) => (Math.abs(b.px - ohlc.c) < Math.abs(a.px - ohlc.c) ? b : a)); return { px: n.px, label: n.label }; })() : null,
+    gapRegime: { cleared: clearedDays.length, total: era4.length },
+  },
+  carry: {
+    band: bandV,
+    bandLo: ohlc && bandV != null ? r2(ohlc.c - bandV) : null,
+    bandHi: ohlc && bandV != null ? r2(ohlc.c + bandV) : null,
+    above: ohlc ? LADDER.filter((l) => l.px > ohlc.c).slice(0, 3).map((l) => ({ px: l.px, label: l.label })) : [],
+    below: ohlc ? LADDER.filter((l) => l.px < ohlc.c).slice(-3).reverse().map((l) => ({ px: l.px, label: l.label })) : [],
+    watch: [
+      date < A13_BOUNDARY
+        ? `A13 ratchet goes live ${A13_BOUNDARY} — momo-shape vs -2 control; KILL = one ≥120% tail capped`
+        : `A13 live (ratcheted momo since ${A13_BOUNDARY}) — watch first ≥120% tail capped (KILL)`,
+      `SPY gap book arms only if next open clears the band — else correctly dark`,
+    ],
+  },
+  events: (() => {
+    const e: string[] = [];
+    if (nTags.length) {
+      const notes: string[] = [];
+      if (nTags.includes("fomc")) notes.push("stand-down 13:50→14:30");
+      if (nTags.includes("opex")) notes.push("pin risk on 0DTE");
+      if (nTags.includes("cpi") || nTags.includes("nfp")) notes.push("08:30 print → gaps the open");
+      e.push(`${nextDay}: ${nTags.map((t) => t.toUpperCase()).join(" + ")}${notes.length ? ` — ${notes.join("; ")}` : ""}`);
+    } else e.push(`${nextDay}: no scheduled macro (CPI/NFP/OPEX/FOMC)`);
+    if (isEarlyClose(nextDay)) e.push(`${nextDay} early close 13:00 ET`);
+    if (fomcs.length) e.push(`next FOMC ${fomcs[0].date} (${Math.round((Date.parse(fomcs[0].date) - Date.parse(date)) / 86_400_000)}d out)`);
+    return e;
+  })(),
+  dealer: ["SPY", "QQQ", "IWM"].flatMap((sym) => {
+    const s = iv[sym];
+    if (!s) return [];
+    return [{ sym, atmIv: r2(s.atm_iv * 100), impliedMove: impliedMove(sym, date), gexShort: s.gex_proxy < 0, walls: [...s.walls].sort((a, b) => Math.abs(b.gex) - Math.abs(a.gex)).slice(0, 3).map((w) => w.strike) }];
+  }),
+  priors: bookOrder.flatMap((b) => {
+    const bs = era4Recs.filter((r) => book(r.slug) === b);
+    if (!bs.length) return [];
+    return [{ book: b, gap: statOfStruct(bs.filter((r) => Math.abs(r.gap) >= GAP_MIN)), flat: statOfStruct(bs.filter((r) => Math.abs(r.gap) < GAP_MIN)) }];
+  }),
+  trap: TBUCKETS.map((b) => {
+    const rs = timed.filter((r) => (r.minutesToClose as number) >= b.lo && (r.minutesToClose as number) < b.hi);
+    if (!rs.length) return { label: b.label, n: 0, perTrade: null, win: null, warn: false };
+    const avg = rs.reduce((s, r) => s + r.pnl, 0) / rs.length;
+    return { label: b.label, n: rs.length, perTrade: r2(avg), win: Math.round((100 * rs.filter((r) => r.pnl > 0).length) / rs.length), warn: avg < 0 };
+  }),
+  accrual: [
+    `A6 — ${era4.length}/${A6_TARGET} era-4 sessions`,
+    `A13 — ${date < A13_BOUNDARY ? `session 1 = ${A13_BOUNDARY}` : `live since ${A13_BOUNDARY}`}`,
+    `A4 — ${a4.map((x) => `${x.slug} ${x.n}t ${money(x.pnl)}`).join(" vs ")}`,
+    `FOMC #6 — ${FOMC} (${fomcDays}d out)`,
+  ],
+};
+try {
+  fs.mkdirSync(path.join(DATA, "sentinel"), { recursive: true });
+  fs.writeFileSync(path.join(DATA, "sentinel", "brief-latest.json"), JSON.stringify(brief));
+} catch { /* local artifact only — non-fatal */ }

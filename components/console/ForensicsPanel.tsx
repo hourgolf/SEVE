@@ -59,7 +59,7 @@ function NavSparkline({ pts, base }: { pts: ShadowCurvePoint[]; base: number }) 
 export function ForensicsPanel() {
   const { report, trend, benchedCum, loading, error } = useForensicsReport();
   const ps = usePyramidShadow();
-  const [folded, toggleFold] = useFold("forensics");
+  const [folded, toggleFold] = useFold("forensics", true); // deep-dive — folded by default (§04 tidy)
   const [expanded, setExpanded] = useState(false);
   // scorecard window: TODAY's ledger slice vs the cumulative-since-inception book
   const [scWin, setScWin] = useState<"today" | "cum">("today");
@@ -70,7 +70,7 @@ export function ForensicsPanel() {
 
   const Frame = ({ children, head }: { children: React.ReactNode; head?: React.ReactNode }) => (
     <div className="panel">
-      <div className="phead"><span className="t">Shadow &amp; Override</span>{head ?? <span className="x">did the human beat the ride</span>}</div>
+      <div className="phead"><span className="t">Shadow Book</span>{head ?? <span className="x">would-haves vs the live book</span>}</div>
       <div className="pbody">{children}</div>
     </div>
   );
@@ -93,7 +93,7 @@ export function ForensicsPanel() {
   return (
     <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
-        <span className="t">Shadow &amp; Override</span>
+        <span className="t">Shadow Book</span>
         <button className="au-expand" onClick={toggle} aria-expanded={expanded} title={expanded ? "collapse" : "expand the by-tag / by-channel cuts"}>
           {shortDate(report.report_date)} · {expanded ? "▾ collapse" : "▸ expand"}
         </button>

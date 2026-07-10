@@ -84,13 +84,27 @@ async function benchScan(days: number) {
   });
 }
 
-// ---- judgment layer (LLM) — turns the deterministic facts into an operator digest ----
-// Matches the desk's raw-fetch Anthropic pattern (app/api/compile-strategy, the daily-autopsy
-// edge fn) rather than pulling in the SDK for a script. Key-gated: no ANTHROPIC_API_KEY →
-// deterministic-only (the sensor layer stands alone). Model defaults to opus-4-8, ANTHROPIC_MODEL
-// overrides. Guardrails mirror the autopsy prompt: registry governs, no arm from bench, magnitude
-// not direction.
-async function judge(terrain: string, facts: string): Promise<string | null> {
+// ---- judgment layer (LLM) — turns the deterministic facts into a STRUCTURED operator digest ----
+// Matches the desk's forced-tool-use Anthropic pattern (app/api/compile-strategy). The digest is now
+// a verdict chip + terse bullets (the §04 Sentinel panel renders it visually), not prose. Key-gated:
+// no ANTHROPIC_API_KEY → deterministic-only (the sensor layer stands alone). Guardrails mirror the
+// autopsy prompt: registry governs, no arm from bench, magnitude not direction.
+export type SentinelJudge = { verdict: "HOLD" | "QUEUE" | "WATCH"; opportunities: string[]; drift: string[]; soWhat: string };
+const JUDGE_TOOL = {
+  name: "emit_digest",
+  description: "Emit the operator digest as a verdict + terse one-line bullets.",
+  input_schema: {
+    type: "object",
+    properties: {
+      verdict: { type: "string", enum: ["HOLD", "QUEUE", "WATCH"], description: "HOLD = nothing to do; QUEUE = something to queue for a gate; WATCH = something to monitor" },
+      opportunities: { type: "array", items: { type: "string" }, description: "0-3 terse one-line bullets (<18 words each), avg-peak/book lens, name the gate/venue" },
+      drift: { type: "array", items: { type: "string" }, description: "0-3 terse bullets on anything off vs how the desk should behave; empty if clean" },
+      soWhat: { type: "string", description: "One line: queue-before-gate or hold" },
+    },
+    required: ["verdict", "opportunities", "drift", "soWhat"],
+  },
+} as const;
+async function judge(terrain: string, facts: string): Promise<SentinelJudge | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
@@ -101,27 +115,44 @@ async function judge(terrain: string, facts: string): Promise<string | null> {
     "You are the SEVE desk sentinel. You are given the MORNING TERRAIN briefing (forward — auto S/R levels, event calendar, dealer positioning, regime priors) AND the deterministic opportunity+drift scan (backward — as of last close). Produce a terse operator digest grounded in the DESK CONTEXT above (the avg-peak/book lens, LOCK/RIDE/NEITHER, the live gates).",
     "Reinforced guardrails: registry governs every knob change (say 'queue for the gate', never 'change X now'); NO ARM FROM BENCH (mid-basis, capital-blind — hypotheses only); direction is noise, magnitude is the gate; bench numbers are an upper bound (n<8 thin, giveback>100% = peak-then-loss).",
     "PEAK × WIN is the core read: a high avg-peak is only an edge if the WIN rate confirms it. High peak + high win = reliable (clean promote / RIDE). High peak + LOW win = spike/giveback-carried — a harvest-FIX (tighter TP to bank the peak before the fade), NOT a clean promote; call that out explicitly. Low peak (<5%) = scalp, nothing to harvest.",
-    "Use the TERRAIN as context, never a forecast: an event day changes the stand-down; dealer short-gamma (−GEX) favors the breakout book while long-gamma (+GEX) favors fades/scalps; the regime priors are historical base rates, not predictions. Surface it in SO WHAT only when it changes today's posture. Never predict direction.",
-    "OUTPUT (no preamble, do not restate the raw table verbatim):",
-    "1. OPPORTUNITIES — the 1-3 items worth a human look; each: what it is, why (expected vs anomalous, via the avg-peak/book lens), and the gate/venue it belongs to.",
-    "2. DRIFT — anything that changed or looks off vs how the desk should behave; 'none' if clean.",
-    "3. SO WHAT — one line: anything to queue before the next gate, or hold.",
-    "Terse. The operator scans this in 20 seconds.",
+    "Use the TERRAIN as context, never a forecast: an event day changes the stand-down; dealer short-gamma (−GEX) favors the breakout book while long-gamma (+GEX) favors fades/scalps; the regime priors are historical base rates, not predictions. Surface it in soWhat only when it changes today's posture. Never predict direction.",
+    "Return the digest by calling emit_digest ONCE. Do not restate the raw tables. Bullets terse (the operator scans in 20 seconds); opportunities/drift may be empty arrays when there is nothing worth a look / all clean.",
   ].filter(Boolean).join("\n");
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
-        model, max_tokens: 1024, output_config: { effort: "medium" },
+        model, max_tokens: 1024, tools: [JUDGE_TOOL], tool_choice: { type: "tool", name: "emit_digest" },
         system, messages: [{ role: "user", content: `MORNING TERRAIN (forward):\n\n${terrain || "(none)"}\n\n${"═".repeat(48)}\n\nOPPORTUNITY + DRIFT SCAN (backward, as of last close):\n\n${facts}\n\nProduce the digest.` }],
       }),
     });
     if (!res.ok) { console.error(`sentinel judge: ${res.status} ${(await res.text()).slice(0, 200)}`); return null; }
     const data = (await res.json()) as any;
-    const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
-    return text || null;
+    const tu = (data.content || []).find((b: any) => b.type === "tool_use");
+    if (!tu?.input) { console.error(`sentinel judge: no tool_use in response`); return null; }
+    const i = tu.input as Partial<SentinelJudge>;
+    return {
+      verdict: (["HOLD", "QUEUE", "WATCH"].includes(i.verdict as string) ? i.verdict : "HOLD") as SentinelJudge["verdict"],
+      opportunities: Array.isArray(i.opportunities) ? i.opportunities.filter((x): x is string => typeof x === "string") : [],
+      drift: Array.isArray(i.drift) ? i.drift.filter((x): x is string => typeof x === "string") : [],
+      soWhat: typeof i.soWhat === "string" ? i.soWhat : "",
+    };
   } catch (e) { console.error(`sentinel judge: ${(e as Error).message}`); return null; }
+}
+
+// Render the structured judge back to markdown for the durable digest copy + the legacy-fallback path.
+function judgeToMarkdown(j: SentinelJudge): string {
+  const L: string[] = [`SENTINEL DIGEST — ${j.verdict}`, ""];
+  if (j.opportunities.length) { L.push("**Opportunities**"); j.opportunities.forEach((o) => L.push(`- ${o}`)); L.push(""); }
+  if (j.drift.length) { L.push("**Drift**"); j.drift.forEach((d) => L.push(`- ${d}`)); L.push(""); }
+  if (j.soWhat) L.push(`**So what** — ${j.soWhat}`);
+  return L.join("\n").trim();
+}
+
+// The structured brief the desk-briefing emitter banked this run (visual source for the §04 Brief panel).
+function readBriefStruct(): unknown {
+  try { return JSON.parse(readFileSync(path.join("data", "sentinel", "brief-latest.json"), "utf8")); } catch { return null; }
 }
 
 // FORWARD terrain: fold in the desk-briefing (auto levels, events, dealer positioning, regime priors)
@@ -249,12 +280,22 @@ async function main() {
 
   const facts = O.join("\n");
   const terrain = briefing(); // forward desk-briefing (levels/events/dealer/regime priors), spawned
+  const briefStruct = readBriefStruct(); // structured visual source the spawn just banked
   const judged = await judge(terrain, facts);
   const combined = (terrain ? terrain + "\n\n" + "═".repeat(64) + "\n\n" : "") + facts;
   const full = combined + (judged
-    ? "\n\n" + "─".repeat(64) + "\nSENTINEL DIGEST — judgment layer\n\n" + judged
-    : "\n\n(judgment layer inactive — set ANTHROPIC_API_KEY in .env.local to enable the prose digest)");
+    ? "\n\n" + "─".repeat(64) + "\n" + judgeToMarkdown(judged)
+    : "\n\n(judgment layer inactive — set ANTHROPIC_API_KEY in .env.local to enable the judged digest)");
   console.log(full);
+  // structured scan (the §04 Sentinel panel renders these as colored rows, not markdown)
+  const scan = {
+    benchDays: days,
+    promote: promote.map((c) => ({ slug: c.slug, peak: c.avgPeak, win: c.winPct, net: c.netCt, give: c.avgGive, n: c.n })),
+    fixable: fixable.map((c) => ({ slug: c.slug, peak: c.avgPeak, win: c.winPct, net: c.netCt, give: c.avgGive, n: c.n })),
+    leaks: leaks.map((c) => ({ slug: c.slug, peak: c.avgPeak, win: c.winPct, give: c.avgGive, pnl: c.pnl, n: c.n })),
+    drift: drift.lines.map((l) => l.trim()).filter(Boolean),
+    scalps, craters,
+  };
   const et = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
   // shadow-first: bank the digest as a dated, reviewable artifact (the durable local copy)
   try {
@@ -262,12 +303,13 @@ async function main() {
     writeFileSync(path.join("data", "sentinel", `${et}.md`), full);
     writeFileSync(path.join("data", "sentinel-latest.md"), full);
   } catch (e) { console.error(`sentinel: digest write failed — ${(e as Error).message}`); }
-  // surface to the §03 dashboard: publish the digest to the events table (service role only; the
-  // panel reads the latest `sentinel:` event via anon). Upsert-by-day so a re-run replaces the day.
+  // surface to the §04 dashboard: publish to the events table (service role only; the Brief + Sentinel
+  // panels read the latest `sentinel:` event via anon). meta carries the STRUCTURED brief/scan/judge for
+  // the visual panels; `digest` is kept as the durable markdown + legacy fallback. Upsert-by-day.
   if (HAS_SERVICE) {
     try {
       await sb.from("events").delete().like("message", `sentinel: ${et}%`);
-      await sb.from("events").insert({ level: "INFO", message: `sentinel: ${et}`, meta: { kind: "sentinel", date: et, digest: full } });
+      await sb.from("events").insert({ level: "INFO", message: `sentinel: ${et}`, meta: { kind: "sentinel", date: et, forDate: (briefStruct as { forDate?: string } | null)?.forDate ?? null, digest: full, brief: briefStruct, scan, judge: judged } });
     } catch (e) { console.error(`sentinel: event publish failed — ${(e as Error).message}`); }
   }
 
