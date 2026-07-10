@@ -121,8 +121,10 @@ export function ForensicsPanel() {
   const vbHasToday = vb.benchToday.length > 0;
   const vbShowToday = vbWin === "today" && vbHasToday;
   const vbRows = vbShowToday ? vb.benchToday : vb.bench;
-  const vbTop = [...vbRows].filter((b) => b.scored > 0).sort((a, b) => b.pnl - a.pnl);
-  const vbRed = vbTop.filter((b) => b.pnl < 0).length;
+  // rank + display by AVG $/ct (Σ ÷ scored) — the Σ alone reads as a per-trade number and misleads
+  const vbAvg = (b: { pnl: number; scored: number }) => b.pnl / Math.max(1, b.scored);
+  const vbTop = [...vbRows].filter((b) => b.scored > 0).sort((a, b) => vbAvg(b) - vbAvg(a));
+  const vbRed = vbTop.filter((b) => vbAvg(b) < 0).length;
 
   return (
     <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}>
@@ -436,7 +438,7 @@ export function ForensicsPanel() {
           : (
             <>
               {vbTop.slice(0, 2).map((b) => (
-                <span key={b.slug} className={`sb-chip ${cls(b.pnl)}`}>{b.slug.replace(/^vb-/, "")} {signedUsd(Math.round(b.pnl))}/ct{b.scored ? ` · ${Math.round((100 * b.wins) / b.scored)}%w` : ""}</span>
+                <span key={b.slug} className={`sb-chip ${cls(vbAvg(b))}`}>{b.slug.replace(/^vb-/, "")} {signedUsd(Math.round(vbAvg(b) * 10) / 10)}/ct avg{b.scored ? ` · ${Math.round((100 * b.wins) / b.scored)}%w` : ""}</span>
               ))}
               {vbRed > 0 && <span className="mut">{vbRed} red</span>}
             </>
@@ -450,11 +452,11 @@ export function ForensicsPanel() {
           </span>
         </div>
         <div className="fx-rows">
-          {vbRows.map((b) => (
-            <div className="fx-row" key={b.slug}>
+          {[...vbRows].sort((a, b) => vbAvg(b) - vbAvg(a)).map((b) => (
+            <div className="fx-row vb-row" key={b.slug} title={b.slug}>
               <span className="fx-name">{b.slug.replace(/^vb-/, "")}</span>
-              <span className="fx-mid">{b.scored}/{b.n} scored{b.scored > 0 ? ` · win ${Math.round((100 * b.wins) / b.scored)}%` : ""}{vbShowToday ? "" : ` · last ${b.lastAt.slice(5, 10)}`}</span>
-              <span className={`au-pnl ${cls(b.pnl)}`}>{b.scored ? `${signedUsd(Math.round(b.pnl))}/ct` : "—"}</span>
+              <span className="fx-mid">{b.scored}/{b.n} · win {b.scored > 0 ? `${Math.round((100 * b.wins) / b.scored)}%` : "—"} · Σ {signedUsd(Math.round(b.pnl))}{vbShowToday ? "" : ` · ${b.lastAt.slice(5, 10)}`}</span>
+              <span className={`au-pnl ${cls(vbAvg(b))}`}>{b.scored ? `${signedUsd(Math.round(vbAvg(b) * 10) / 10)}/ct avg` : "—"}</span>
             </div>
           ))}
         </div>

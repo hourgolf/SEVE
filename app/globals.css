@@ -1565,6 +1565,9 @@ td.clk.sel {
 .sb-stat { font-family: var(--mono); font-size: 10px; font-weight: 700; text-align: right; white-space: nowrap; }
 .sb-brk { margin: 1px 0 6px 19px; padding: 6px 9px; background: rgba(0,0,0,.045); border: 1px solid var(--border); border-radius: 4px; }
 .sb-toggle-row { display: flex; justify-content: flex-end; margin-bottom: 3px; }
+/* VB bench rows: the slug is the identity — never ellipsize it (the mid yields instead) */
+.vb-row .fx-name { flex: 0 0 auto; min-width: max-content; overflow: visible; }
+.vb-row .fx-mid { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-chip { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 3px; padding: 0 6px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; white-space: nowrap; }
 /* ratchet paired day-bars: actual (faded) │ ratchet (solid) */
 .sb-pairs { display: flex; align-items: flex-end; gap: 4px; height: 34px; }
