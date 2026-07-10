@@ -12,9 +12,50 @@ durable context for a new session. Read it first.
 > lives in **memory/** (read `desk-doctrine.md` FIRST, then `cockpit-p3-multi-account.md`,
 > `doctrine-drift-and-forward-validation.md`). The block below re-anchors the convention.
 
-## ⚡ SESSION UPDATE — 2026-07-08 (READ FIRST; supersedes stale bits of the 07-03 block below)
+## ⚡ SESSION UPDATE — 2026-07-10 (READ FIRST; supersedes 07-08 below where they conflict)
 
-**Worker is `stream-2026-07-08a`** (not 03a). **Books/data clean.**
+**Worker `stream-2026-07-10a`** (adds `daily_target_usd` win-and-done + skips is_active=false channels —
+the grind tape-spam fix). **Books/data clean.** **NEXT SESSION = the FABLE WEEKEND** — read
+memory/fable-weekend-plan.md FIRST (agreed missions: trade-path audit → PERFORM-mode UI → sentinel
+analyst v2; mock-first for all UI — the operator approves mocks before builds, the §04 pattern).
+
+- **⭐ §04 TAPE v2 SHIPPED (mock-first, operator-approved):** 5 glance panels — P&L (hero number +
+  diverging channel bars + **windowed pk·win columns** from peak_mark; era-4 lens in the tooltip),
+  Autopsy (DAY⇄WEEK merged), Shadow Book (row-per-instrument + expand breakdowns; Lab MERGED in — VB
+  rows show **avg $/ct**, the Σ-labeled-as-/ct mislabel misled a promote call and is fixed), Brief
+  (arm-band strip), Sentinel (verdict chip first, scan behind expand). **SENT chip on the §01 chart**
+  draws the brief's PER-INDEX ladders (γ-walls amber / PD·swing grey / gap-arm green;
+  `brief.sentLevels` = SPY+QQQ+IWM, each from its own bars — `rth()` was SPY-hardcoded, fixed).
+- **Sentinel = a full loop:** nightly + pre-market (launchd `com.seve.morning` 06:00 PT; `pmset` wake
+  05:55 weekdays) → ONE artifact (forward brief + backward scan + LLM judge verdict) → events →
+  §04 panels; **drift baselines** (diff vs prior session snapshot) + **shadow-first paging**
+  (`SENTINEL_PAGE=1` flips live after ~2wk of graded WOULD-PAGE logs); per-channel **lens map**
+  (era-4 pk/win) published in meta for the P&L tooltips.
+- **Registry:** **A14 armed** (vb-ribbon-cross SPY ITM+1 · vb-squeeze-break-qqq QQQ ATM — first
+  sentinel-sourced promotes; kill = revert at N≥15 real net<0). **A15 armed** (win-and-done gate live;
+  `qqq-thrust-trail-wd` MORGUE twin @ target $250). **A16 armed 07-10** (vb-curl-reversal TP-fix probe
+  tp 20→15; corrected basis net −$1.2/ct recorded pre-arm). **R1b registered + BUILT**
+  (`npm run stairstep-shadow`, nightly in capture — 3 arms LOCK/runner/stairstep on identical as-lived
+  sequences; reads behind R1 at A6). **Concentration-allocator spec**
+  (docs/concentration-allocator-spec.md) + **cap-scenario grid live nightly** in one-account-shadow
+  (grade ~2wk → operator picks caps → DARK worker build post-A6).
+- **Fixes w/ lessons:** the slot-aware ratchet read was silently DEAD since ~07-08 (hardcoded `--from
+  2026-07-01` aged out of the 7d quote window → engine fail-fasted nightly; now trailing-window
+  clamped. Fresh read: A4 ratchet still LOSES; **momo ratchet now TRAILS ride** on this window —
+  window-sensitive, A13 live A/B is the arbiter). useWindowedPnl hit the **PostgREST ~1000-row cap**
+  (`.limit(6000)` silently truncated → Week==Month identical curves; now paginated + an honest
+  "NAV since <date>" label — per-account NAV history starts 06-24). **Pagination has bitten twice —
+  every possibly->1000-row fetch must paginate + verify.**
+- **54ct is NOT an Alpaca cap** — it's our own measured worst per-OCC stack (3ch/54ct, 07-02). Broker
+  limits don't bind at desk size; concentration is the self-imposed risk cap the allocator will manage.
+- **Promote playbook settled:** promote = status flip in LAB at A1 size + a registry entry with the
+  standard kill; disarm→draft returns the channel to VIRTUAL tracking (nothing lost); MUTE = soft off;
+  strike lanes = measurement hygiene, not hard walls (row-primary booking keeps shared-OCC books clean).
+  LAB's IWM lane is EMPTY (no vb candidate clears); the sentinel pages when one does.
+
+## SESSION UPDATE — 2026-07-08 (superseded above where it conflicts)
+
+**Worker was `stream-2026-07-08a`.** **Books/data clean.**
 
 - **Data integrity (all fixed this session):** the quote-fetch two-state flicker (statement-timeout → silent
   Black-Scholes) is FIXED — engine `--options quotes|real` now retries pages 4× + verifies row counts +
