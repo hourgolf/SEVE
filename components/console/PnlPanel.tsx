@@ -73,7 +73,9 @@ export function PnlPanel({
         {/* hero: the window's fund number leads; the seg picks the window */}
         <div className="pnl-hero">
           <span className={`pnl-big ${fundVal < 0 ? "neg" : "pos"}`}>{loading ? "…" : signedUsd(fundVal)}</span>
-          <span className="pnl-hero-sub">{winLabel}</span>
+          <span className="pnl-hero-sub" title={windowed?.sinceNote ? "this bucket's NAV history starts here — the fund number + curve span this range; the channel rows below cover the full window" : undefined}>
+            {winLabel}{windowed?.sinceNote ? ` · NAV since ${windowed.sinceNote}` : ""}
+          </span>
           <div className="seg" aria-label="P&L timeframe" style={{ marginLeft: "auto" }}>
             {WINDOWS.map((w) => (
               <button key={w.id} className={win === w.id ? "on" : ""} onClick={() => setWin(w.id)} aria-pressed={win === w.id}>

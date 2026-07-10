@@ -451,12 +451,13 @@ export function ForensicsPanel() {
             <button type="button" className={!vbShowToday ? "on" : ""} onClick={() => setVbWin("cum")}>cumulative</button>
           </span>
         </div>
+        <div className="brief-mini">ranked by <b>avg $/ct</b> (right) · Σ = the cumulative mid-basis book</div>
         <div className="fx-rows">
           {[...vbRows].sort((a, b) => vbAvg(b) - vbAvg(a)).map((b) => (
             <div className="fx-row vb-row" key={b.slug} title={b.slug}>
               <span className="fx-name">{b.slug.replace(/^vb-/, "")}</span>
-              <span className="fx-mid">{b.scored}/{b.n} · win {b.scored > 0 ? `${Math.round((100 * b.wins) / b.scored)}%` : "—"} · Σ {signedUsd(Math.round(b.pnl))}{vbShowToday ? "" : ` · ${b.lastAt.slice(5, 10)}`}</span>
-              <span className={`au-pnl ${cls(vbAvg(b))}`}>{b.scored ? `${signedUsd(Math.round(vbAvg(b) * 10) / 10)}/ct avg` : "—"}</span>
+              <span className="fx-mid">{b.scored}/{b.n} · {b.scored > 0 ? `${Math.round((100 * b.wins) / b.scored)}%w` : "—"} · Σ {signedUsd(Math.round(b.pnl))}{vbShowToday ? "" : ` · ${b.lastAt.slice(5, 10)}`}</span>
+              <span className={`au-pnl ${cls(vbAvg(b))}`}>{b.scored ? `${signedUsd(Math.round(vbAvg(b) * 10) / 10)}/ct` : "—"}</span>
             </div>
           ))}
         </div>

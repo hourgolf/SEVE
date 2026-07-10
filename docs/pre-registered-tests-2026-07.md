@@ -364,6 +364,19 @@ account from the A14 QQQ promote (no cross-account stacking). Twin starts at `da
 - Requires the worker change (migration 67 + decide.ts/store.ts/index.ts + twin INSERT) in
   `docs/promote-candidates-2026-07.md`. IMPLEMENTATION PENDING a worker session.
 
+## A16 · vb-curl-reversal TP-fix probe (armed 2026-07-10, operator's discretionary promote)
+Armed with eyes open, POST-decode: the cumulative bench read is **net ≈ −$1.2/ct** (n=37, 62% win,
+21% avg peak, 252% giveback) — this is NOT a data-backed edge promote. The registered hypothesis is
+the **TP-fix**: the channel wins often and peaks ~21%, but its tp=20 sat above where the move dies
+(giveback >200% = peak-then-loss). Promoted to LAB real-fill paper with **tp 20→15** so the LOCK
+actually fills. SPY **ATM** — shares the lane with orb-ustop (accepted: ORB fires on range breaks,
+curl on stale-extreme reversals; overlap expected low, noted for attribution reads). A1 size.
+- **Read:** N ≥ 15 era real trades. **Kill = revert to `draft` if real-fill net/ct < 0** (the A14
+  standard). Win = the tightened LOCK converts the 60%+ win rate into positive real-fill net.
+- Provenance note: the promote conversation began on a Σ-mislabeled panel read (+$98/ct actually
+  +$5.4 avg — fixed in the UI same day); this entry records the corrected basis so the read can't
+  be flattered later.
+
 ## Instrumentation log (log-only additions — never gates; A7-style rules apply)
 - **2026-07-05 (holiday weekend, worker `stream-2026-07-05a`):** (i) **eventDay day-tags** — CPI/NFP/
   OPEX/FOMC labels stamp `entry_features.eventDay` (engine/market-events `dayTags`; CPI/NFP dates
