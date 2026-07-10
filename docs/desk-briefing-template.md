@@ -55,22 +55,39 @@ Beyond the 3 artifacts, the briefing carries **next-session terrain**, all descr
   + long-gamma = pinned → fade), and the gamma walls (which also feed the S/R ladder).
 - **Regime-conditioned priors** — per-book era-4 base rates split by gap-state (≥0.25% vs flat): n · $/t · win%.
   The doctrine-primary regime axis, IF-THEN framed (tomorrow's regime is unknown until the open).
+- **Trap windows** — all-sessions expectancy by entry time-of-day (open/morning/midday/afternoon/close):
+  n · $/t · win%, ⚠ on negative windows. Descriptive tendency only — NOT an ex-ante stand-down (chop can't
+  be classified ahead of the fact — doctrine). First read: the OPEN hour bleeds worst (−$112/t); midday only +.
 
 ## Deterministic (script) vs judgment (agent)
 The script emits all facts + **mechanical anomaly flags** (gap cleared but its book
 silent; flat-open + EXPANSION traded → A9 exposure). The agent adds the structural read,
 the expected-vs-anomalous prose, and the page-vs-quiet call.
 
-## Paging rule — quiet unless anomaly
-Page on: (a) gap cleared but its book **silent** (fail-closed bug / data hole — the
-coil-vs-gap failure mode); (b) a ladder level **breaks with acceptance**; (c) a channel
-P&L **outside its regime-expected band**; (d) **A13 KILL trip** — one genuine ≥120% tail
-the ratchet caps. Otherwise log-only.
+## Paging rule — quiet unless anomaly (BUILT in the sentinel, shadow-first)
+The sentinel pages (web push via `/api/push-send`, mirrors a6-watch) ONLY on a genuine anomaly,
+**shadow-first**: it logs `WOULD PAGE …` until `SENTINEL_PAGE=1` is set in `.env.local`, then sends.
+Triggers implemented, from the session-over-session **DRIFT diff** + the calendar:
+- a **NEW clean-promote candidate** appears (bench crossed net>0 + peak≥12% + win≥40%);
+- a **NEW live harvest leak** appears;
+- a channel's **peak/win shifts materially** (≥12pt peak or ≥20pt win — outside its band, spec (c));
+- an **event day next session** (FOMC/CPI/NFP/OPEX — the heads-up).
+
+The DRIFT section always shows the full diff on the panel regardless; paging is only the push escalation.
+Fuller spec triggers still TODO (need data the sentinel doesn't yet load): (a) gap-cleared-but-book-silent,
+(b) level-break-with-acceptance, (d) A13 ≥120%-tail KILL trip.
+
+## DRIFT baselines (BUILT) — changes, not static thresholds
+The sentinel snapshots each session's scan (per-channel peak/win, promote/leak/crater sets) to
+`data/sentinel/snapshots.jsonl`, keyed by `through` (latest forensics date, upsert so the twice-daily
+cadence doesn't self-diff), and the DRIFT section reports the diff vs the **prior session** — new/dropped
+candidates, new leaks, material peak/win moves. Those diffs are also what feed paging.
 
 ## Rollout (shadow-first, per desk doctrine)
-`desk-briefing` script (done) → agent wrapper drafts the judgment layer nightly, **log-only**
-→ grade ~2 weeks (was the carry-forward right? were the flags real, or did it cry wolf?)
-→ then it earns standing. Never arms config; proposals phrase as "queue for the gate."
+`desk-briefing` (done) → folded into the sentinel's nightly+morning artifact with the LLM judgment layer
+(done) → DRIFT baselines (done) → **paging shadow-first** (done; logs WOULD-PAGE) → grade ~2 weeks (were
+the flags real, or did it cry wolf?) → flip `SENTINEL_PAGE=1` when calibrated. Never arms config; proposals
+phrase as "queue for the gate."
 
 ---
 

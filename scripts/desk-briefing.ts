@@ -83,7 +83,7 @@ function impliedMove(sym: string, upto: string): number | null {
 // Channels muted as of the template date (config snapshot — verify vs DB).
 const MUTED = new Set(["breakout-alt-v3-qqq", "breakout-smart-entries-qqq", "breakout-qqq"]);
 
-type Rec = { date: string; channel: string; slug: string; sym: string; gap: number; pnl: number };
+type Rec = { date: string; channel: string; slug: string; sym: string; gap: number; pnl: number; minutesToClose?: number };
 type Book = "TREND" | "GAP" | "EXPANSION" | "NEITHER" | "OTHER";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -269,6 +269,33 @@ for (const b of bookOrder) {
 }
 P();
 P(`  *Descriptive base rate, not a forecast — tomorrow's regime is unknown until the open. IF it gaps ≥${GAP_MIN}%, the gap-day column is the prior; IF flat, the flat column.*`);
+P();
+
+// ---- TRAP WINDOWS (descriptive: expectancy by entry time-of-day) ----
+// minutesToClose → entry session-minute (390 = 9:30 open). Structural tendency across ALL sessions
+// (time-of-day microstructure is era-stable); NOT an ex-ante "don't trade now" — chop can't be classified
+// ahead of the fact (doctrine). For attention/sizing only.
+const TBUCKETS: { lo: number; hi: number; label: string }[] = [
+  { lo: 330, hi: 391, label: "09:30–10:30 · open" },
+  { lo: 240, hi: 330, label: "10:30–12:00 · morning" },
+  { lo: 150, hi: 240, label: "12:00–13:30 · midday" },
+  { lo: 60, hi: 150, label: "13:30–15:00 · afternoon" },
+  { lo: 0, hi: 60, label: "15:00–16:00 · close" },
+];
+const timed = all.filter((r) => typeof r.minutesToClose === "number");
+P(`## TRAP WINDOWS (all sessions, expectancy by entry time — descriptive tendency, NOT a signal)`);
+P();
+P(`| Window | n | $/trade | win% |`);
+P(`|---|---|---|---|`);
+for (const b of TBUCKETS) {
+  const rs = timed.filter((r) => (r.minutesToClose as number) >= b.lo && (r.minutesToClose as number) < b.hi);
+  if (!rs.length) { P(`| ${b.label} | 0 | — | — |`); continue; }
+  const avg = rs.reduce((s, r) => s + r.pnl, 0) / rs.length;
+  const win = Math.round((100 * rs.filter((r) => r.pnl > 0).length) / rs.length);
+  P(`| ${b.label}${avg < 0 ? " ⚠" : ""} | ${rs.length} | ${money(r2(avg))} | ${win}% |`);
+}
+P();
+P(`  *⚠ = historically negative expectancy in that window. Descriptive base rate for attention/sizing only — never an ex-ante stand-down (chop can't be classified ahead of the fact — doctrine).*`);
 P();
 
 // accrual

@@ -19,6 +19,8 @@ import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { dayTags } from "../engine/market-events";
+import { nextTradingDay } from "../engine/market-calendar";
 
 // Service role (when present, e.g. the nightly capture / .env.local) lets the digest publish to the
 // events table for the §03 panel; anon still reads virtual_trades fine, just skips the publish.
@@ -134,6 +136,59 @@ function briefing(): string {
   } catch { return ""; }
 }
 
+// ── DRIFT baselines: diff this session's scan vs the prior SESSION's snapshot (changes, not static
+//    thresholds). Snapshots keyed by `through` (latest forensics date), upsert-by-through so the twice-
+//    daily cadence doesn't self-diff. Persisted to data/sentinel/snapshots.jsonl. ──
+type Snap = { through: string; runAt: string; ch: Record<string, { p: number; w: number; n: number }>; promote: string[]; leak: string[]; crater: string[] };
+function throughDate(): string {
+  try { let mx = ""; for (const l of readFileSync(path.join("data", "forensics-dataset.jsonl"), "utf8").trim().split("\n")) { const d = JSON.parse(l).date as string; if (d > mx) mx = d; } return mx; } catch { return ""; }
+}
+function loadSnaps(): Snap[] {
+  try { return readFileSync(path.join("data", "sentinel", "snapshots.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as Snap); } catch { return []; }
+}
+function saveSnap(snaps: Snap[], cur: Snap) {
+  try {
+    const kept = snaps.filter((s) => s.through !== cur.through); kept.push(cur); // upsert-by-through
+    kept.sort((a, b) => (a.through < b.through ? -1 : 1));
+    mkdirSync(path.join("data", "sentinel"), { recursive: true });
+    writeFileSync(path.join("data", "sentinel", "snapshots.jsonl"), kept.map((s) => JSON.stringify(s)).join("\n") + "\n");
+  } catch (e) { console.error(`sentinel: snapshot write failed — ${(e as Error).message}`); }
+}
+function driftDiff(cur: Snap, prior: Snap | null): { lines: string[]; anomalies: string[] } {
+  const lines: string[] = [], anomalies: string[] = [];
+  if (!prior) { lines.push(`   (no prior session snapshot — baseline set for next run)`); return { lines, anomalies }; }
+  const newIn = (a: string[], b: string[]) => a.filter((x) => !b.includes(x));
+  const np = newIn(cur.promote, prior.promote); if (np.length) { const m = `NEW clean-promote candidate: ${np.join(", ")}`; lines.push(`   ⤴ ${m}`); anomalies.push(m); }
+  const nl = newIn(cur.leak, prior.leak); if (nl.length) { const m = `NEW live harvest leak: ${nl.join(", ")}`; lines.push(`   ⤴ ${m}`); anomalies.push(m); }
+  const nc = newIn(cur.crater, prior.crater); if (nc.length) lines.push(`   ⤵ new bench crater: ${nc.join(", ")}`);
+  const gp = newIn(prior.promote, cur.promote); if (gp.length) lines.push(`   ⤵ off the promote list: ${gp.join(", ")}`);
+  for (const slug of Object.keys(cur.ch)) {
+    const a = cur.ch[slug], b = prior.ch[slug]; if (!b) continue;
+    const dp = a.p - b.p, dw = a.w - b.w;
+    if (Math.abs(dp) >= 8 || Math.abs(dw) >= 15) {
+      const m = `${slug}: peak ${b.p}→${a.p}%, win ${b.w}→${a.w}%`;
+      lines.push(`   ~ ${m}`);
+      if (Math.abs(dp) >= 12 || Math.abs(dw) >= 20) anomalies.push(m); // only the big moves page
+    }
+  }
+  if (!lines.length) lines.push(`   (no material change vs ${prior.through})`);
+  return { lines, anomalies };
+}
+// ── PAGING (shadow-first): push on genuine anomaly only. SENTINEL_PAGE=1 actually sends (else logs
+//    WOULD-PAGE). Mirrors the a6-watch / evening-digest push pattern (APP_URL + PUSH_SECRET → /api/push-send). ──
+async function page(anomalies: string[]) {
+  if (!anomalies.length) { console.log(`   sentinel: no page (quiet — nothing anomalous).`); return; }
+  const body = anomalies.slice(0, 4).join(" · ");
+  const title = `SEVE sentinel · ${anomalies.length} flag${anomalies.length > 1 ? "s" : ""}`;
+  if (process.env.SENTINEL_PAGE !== "1") { console.log(`   sentinel: WOULD PAGE (shadow — set SENTINEL_PAGE=1 to send): ${body}`); return; }
+  const appUrl = process.env.APP_URL, secret = process.env.PUSH_SECRET;
+  if (!appUrl || !secret) { console.error(`   sentinel: page skipped — APP_URL/PUSH_SECRET missing`); return; }
+  try {
+    const r = await fetch(`${appUrl}/api/push-send`, { method: "POST", headers: { "content-type": "application/json", "x-push-secret": secret }, body: JSON.stringify({ title, body, tag: "seve-sentinel", url: "/" }) });
+    console.log(r.ok ? `   sentinel: PAGED — ${body}` : `   sentinel: page failed ${r.status}`);
+  } catch (e) { console.error(`   sentinel: page error — ${(e as Error).message}`); }
+}
+
 async function main() {
   const dArg = process.argv.indexOf("--days");
   const days = dArg > 0 ? Number(process.argv[dArg + 1]) || 7 : 7;
@@ -175,15 +230,22 @@ async function main() {
     P(`   ${c.slug.padEnd(24)} peak ${String(c.avgPeak).padStart(5)}%   win ${String(c.winPct).padStart(3)}%   give ${String(c.avgGive).padStart(4)}%   ${money(c.pnl)}   n=${c.n}`);
   P();
 
-  // DRIFT / ANOMALY (v1 mechanical — baseline-diff + regime checks come with the judgment layer)
+  // DRIFT / ANOMALY — diff vs the prior SESSION snapshot (changes, not static thresholds) + a mechanical floor
   P(`## DRIFT / ANOMALY`);
   const scalps = live.filter((c) => c.avgPeak < 5).map((c) => c.slug);
   const craters = bench.filter((c) => c.avgGive != null && (c.avgGive as number) > 500).map((c) => c.slug);
-  if (scalps.length) P(`   live scalps (<5% peak — nothing to harvest): ${scalps.join(", ")}`);
-  if (craters.length) P(`   bench craters (giveback >500% — peak then deep loss): ${craters.join(", ")}`);
-  if (!scalps.length && !craters.length) P(`   (no mechanical flags)`);
+  const through = throughDate();
+  const cur: Snap = { through, runAt: new Date().toISOString(), ch: Object.fromEntries(live.map((c) => [c.slug, { p: c.avgPeak, w: c.winPct, n: c.n }])), promote: promote.map((c) => c.slug), leak: leaks.map((c) => c.slug), crater: craters };
+  const snaps = loadSnaps();
+  const prior = snaps.filter((s) => s.through && s.through < through).sort((a, b) => (a.through < b.through ? 1 : -1))[0] ?? null;
+  const drift = driftDiff(cur, prior);
+  P(`   vs last session (${prior?.through ?? "none"}):`);
+  for (const l of drift.lines) P(l);
+  if (scalps.length) P(`   · mechanical: live scalps (<5% peak) ${scalps.join(", ")}`);
+  if (craters.length) P(`   · mechanical: bench craters (giveback >500%) ${craters.join(", ")}`);
   P();
-  P(`   ⚠ SENSOR LAYER (deterministic). Bench is mid-basis + capital-blind — no arm from it. Paging pending.`);
+  P(`   ⚠ SENSOR LAYER (deterministic). Bench is mid-basis + capital-blind — no arm from it.`);
+  saveSnap(snaps, cur); // advance the baseline (upsert by through)
 
   const facts = O.join("\n");
   const terrain = briefing(); // forward desk-briefing (levels/events/dealer/regime priors), spawned
@@ -208,5 +270,11 @@ async function main() {
       await sb.from("events").insert({ level: "INFO", message: `sentinel: ${et}`, meta: { kind: "sentinel", date: et, digest: full } });
     } catch (e) { console.error(`sentinel: event publish failed — ${(e as Error).message}`); }
   }
+
+  // PAGING (shadow-first) — quiet unless anomaly: drift-detected changes + an event day next session.
+  const nextDay = nextTradingDay(through);
+  const eventTags = dayTags(nextDay);
+  const anomalies = [...drift.anomalies, ...(eventTags.length ? [`event ${nextDay}: ${eventTags.map((t) => t.toUpperCase()).join("+")}`] : [])];
+  await page(anomalies);
 }
 main().catch((e) => { console.error(`sentinel: ${(e as Error).message}`); process.exit(1); });
