@@ -298,7 +298,12 @@ async function slotAware(sb: SupabaseClient, from: string, to: string, sc: SlotC
 // → panel shows the per-trade upper bound alone, clearly labeled.
 export interface SlotAwareBank { slug: string; from: string; to: string; arms: { name: string; usd: number; trades: number }[]; ratchetWins: boolean }
 async function slotAwareRead(sb: SupabaseClient, to: string, slug: string, sc: SlotCfg): Promise<SlotAwareBank | null> {
-  const r = await slotAware(sb, "2026-07-01", to, sc);
+  // --options quotes only reaches the 7d retention window: clamp the start to the newer of the
+  // A4 arm date and (to − 6d), else the engine fail-fasts on the pruned days (honest, no BS fallback)
+  // and the panel shows "pending" forever. The read becomes TRAILING-WINDOW slot-aware — labeled by from/to.
+  const clamp = new Date(Date.parse(`${to}T00:00:00Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
+  const from = clamp > "2026-07-01" ? clamp : "2026-07-01";
+  const r = await slotAware(sb, from, to, sc);
   if (!r || !r.runs.length) return null;
   const arms = r.runs.map((x) => ({ name: x.name, usd: x.pnl, trades: x.trades }));
   const rat = arms.find((a) => a.name === "ratchet");
@@ -315,10 +320,13 @@ async function cli() {
     loadEnv();
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
     const to = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+    // same 7d-retention clamp as slotAwareRead — a from-date older than the quote window fail-fasts
+    const slotClamp = new Date(Date.parse(`${to}T00:00:00Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
+    const slotFrom = slotClamp > "2026-07-01" ? slotClamp : "2026-07-01";
     const sgn = (v: number) => `${v < 0 ? "-" : "+"}$${Math.abs(v).toLocaleString()}`;
     console.log(`\n  RATCHET SHADOW — SLOT-AWARE (re-entry-aware engine · real option_quotes · churn MODELED, tail NOT — 0 tails in window)`);
     for (const [label, sc] of [["A4 (ORB twins)", { specSlug: "orb-ustop", regimes: ORB_REGIMES }], ["momo", { specSlug: "momo-shape", regimes: MOMO_REGIMES }]] as [string, SlotCfg][]) {
-      const r = await slotAware(sb, "2026-07-01", to, sc);
+      const r = await slotAware(sb, slotFrom, to, sc);
       if (!r) { console.log(`\n  ${label}: slot-aware failed`); continue; }
       console.log(`\n  ═ ${label} · ${r.from}→${r.to}`);
       console.log(`  ${"regime".padEnd(18)}${"trades".padStart(8)}${"P&L".padStart(11)}   exits`);
