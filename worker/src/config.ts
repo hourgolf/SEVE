@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-08a"; // A13: per-channel GIVEBACK_TRAIL map (power byte-identical; momo-shape armed arm+50/keep-⅔ for the live ratchet A/B). Prior (07-06a): seed lookback 3→7 days + boot journal line
+export const WORKER_VERSION = "stream-2026-07-09a"; // A15: daily_target_usd win-and-done gate (mirrors daily_stop; 0=off byte-identical). Prior (07-08a): per-channel GIVEBACK_TRAIL map (power byte-identical; momo-shape armed arm+50/keep-⅔ for the live ratchet A/B)
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

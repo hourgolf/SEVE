@@ -292,6 +292,36 @@ fat-near-miss channels via A6b). Requires multi-TRANCHE exit support in the work
 exits currently close the row — touches the shared-OCC ledger; sized as a real build).
 peak_at/trough_at (61) now stamp the exact data this experiment's design needs.
 
+## A14 · VB promote to real fills (pre-registered 2026-07-09 — sentinel-sourced; graduation out of A8)
+The first sentinel-driven promotions: two virtual-bench channels flip `draft→armed` in **LAB** (real
+paper fills, not mid-basis signal), so the bench's `NO ARM FROM BENCH` caveat can finally be settled on
+real NBBO. Not an edge claim — a data upgrade. Full spec + SQL: `docs/promote-candidates-2026-07.md`.
+- **vb-ribbon-cross** → SPY, **ITM+1** (`strike_offset=-1`), native LOCK tp=25/−30. The ITM is
+  load-bearing (OCC-clears orb-ustop's ATM lane) **and** the trend-lift finding; it is part of the
+  registered config, not a separate test. Sentinel prior: peak 28.8% / net +$21/ct / give 60% / n=6.
+- **vb-squeeze-break-qqq** → QQQ, ATM, **LOCK-tighten tp 25→18**. 227% giveback = tp above the ~22%
+  peak (never fills → rides into the fade); tp<peak is the registered lever. Prior: peak 21.8% / net
+  +$4/ct / give 227% / n=23.
+- **Read:** N≥15 era-4 real trades **per channel**. **Kill = revert to `draft` if real-fill net/ct < 0**
+  over the window (bench estimate refuted). OCC-checked: one breakout per index in LAB (level-break-qqq
+  would stack → HELD; level-break-SPY 2nd-SPY-lane + thin → HELD).
+- Preflight PASS (2026-07-09): engine `specEvaluate` covers every kind; `spec_json` present; is_active
+  true. Worker vocab = engine vocab (decide.ts imports `specToStrategyDef`) — no drift surface.
+
+## A15 · Win-and-done daily target (pre-registered 2026-07-09 — new worker mechanic `daily_target_usd`)
+`qqq-thrust-trail-wd` — a MORGUE twin of `qqq-thrust-trail` (the 559%-giveback QQQ churner): identical
+thrust entry + ATR-chandelier trail, but **stops entering once green for the day**. Tests whether the
+giveback is churn (re-entry after a morning win) vs within-trade. Mechanic mirrors the live
+`daily_stop_usd` (halt at realized ≤ −$X) with `daily_target_usd` (halt at realized ≥ +$X);
+shadow-first via `daily_target_usd=0` byte-identical default. MORGUE QQQ lane free → OCC-clean; separate
+account from the A14 QQQ promote (no cross-account stacking). Twin starts at `daily_target_usd=250`
+(≈ one solid green → done; tunable 150–400).
+- **Read:** N≥15 sessions, twin vs control (qqq-thrust-trail). **Win** = giveback drops materially with
+  net ≥ control. **Kill** = twin net < control − (one avg winning trade) — the halt cut winners, not
+  just churn.
+- Requires the worker change (migration 67 + decide.ts/store.ts/index.ts + twin INSERT) in
+  `docs/promote-candidates-2026-07.md`. IMPLEMENTATION PENDING a worker session.
+
 ## Instrumentation log (log-only additions — never gates; A7-style rules apply)
 - **2026-07-05 (holiday weekend, worker `stream-2026-07-05a`):** (i) **eventDay day-tags** — CPI/NFP/
   OPEX/FOMC labels stamp `entry_features.eventDay` (engine/market-events `dayTags`; CPI/NFP dates

@@ -156,7 +156,7 @@ function buildEvaluator(ch: ChannelConfig, ctx: DecisionCtx): Built | null {
   // CODE strategy; a compiled .md/clone finds no registry hit and falls through to its spec_json.
   // Provably safe — no built-in slug ends in -<digits>/-itm, and the spec `-itm` clones (breakout-*-itm)
   // strip to non-builtin base slugs so they still resolve via spec_json.
-  const code = getStrategy(ch.slug) ?? getStrategy(ch.slug.replace(/-\d+$/, "").replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "").replace(/-itm$/i, ""));
+  const code = getStrategy(ch.slug) ?? getStrategy(ch.slug.replace(/-\d+$/, "").replace(/-manual$/i, "").replace(/-(qqq|spy)$/i, "").replace(/-itm$/i, "").replace(/-wd$/i, ""));
   if (code) return { evaluate: code.build(ctx.sessionBars, code.timeframeMin), warmup: code.warmupBars, tf: code.timeframeMin };
   if (ch.spec_json) {
     const spec = ch.spec_json as StrategySpec;
@@ -387,9 +387,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     // max_contracts ceiling, AND the daily-stop floor all double (auto-cleared nightly by
     // the seve-clear-boosts cron). Replaces the inert SOLO. boost=1 when off → no change.
     const boost = ch.boosted ? 2 : 1;
-    if (!blocked && ch.daily_stop_usd > 0) {
+    if (!blocked && (ch.daily_stop_usd > 0 || ch.daily_target_usd > 0)) {
       const realizedToday = await realizedTodayByChannel(ch.id, ctx.todayET);
-      if (realizedToday <= -ch.daily_stop_usd * boost) blocked = "daily_stop";
+      if (ch.daily_stop_usd > 0 && realizedToday <= -ch.daily_stop_usd * boost) blocked = "daily_stop";
+      else if (ch.daily_target_usd > 0 && realizedToday >= ch.daily_target_usd * boost) blocked = "daily_target"; // win-and-done (A15)
     }
 
     let ask = 0, bid = 0, roundTrip = 0, expectedMove = 0, qty = 0;

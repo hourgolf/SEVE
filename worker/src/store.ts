@@ -31,6 +31,7 @@ export interface ChannelConfig {
   aggression: number;           // retired knob (kept for the legacy read)
   max_contracts: number;
   daily_stop_usd: number;
+  daily_target_usd: number;     // A15 win-and-done: halt new entries once realized ≥ this ($/day); 0 = off
   underlying_stop_pct: number;  // 0 = off (config-gated underlying initial stop)
   muted: boolean;
   soloed: boolean;
@@ -156,6 +157,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
       aggression: Number(cfg.aggression),
       max_contracts: Number(cfg.max_contracts),
       daily_stop_usd: Number(cfg.daily_stop_usd),
+      daily_target_usd: Number(cfg.daily_target_usd ?? 0),
       underlying_stop_pct: Number(cfg.underlying_stop_pct ?? 0),
       muted: !!cfg.muted,
       soloed: !!cfg.soloed,
