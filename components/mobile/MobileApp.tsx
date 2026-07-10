@@ -17,10 +17,8 @@ import { ChannelStrip } from "@/components/console/ChannelStrip";
 import { AddChannel } from "@/components/console/AddChannel";
 import { MasterStrip } from "@/components/console/MasterStrip";
 import { SignalsTape } from "@/components/console/SignalsTape";
-import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
-import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
+import { AutopsyPanel } from "@/components/console/AutopsyPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
-import { LabPanel } from "@/components/console/LabPanel";
 import { BriefPanel } from "@/components/console/BriefPanel";
 import { SentinelPanel } from "@/components/console/SentinelPanel";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
@@ -252,9 +250,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} acctId={acctId} />
             <BriefPanel />
             <SentinelPanel />
-            <DailyAutopsyPanel strategists={desk.strategists} />
-            <WeeklyAutopsyPanel strategists={desk.strategists} />
-            <LabPanel />
+            <AutopsyPanel strategists={desk.strategists} />
             <ForensicsPanel />
           </>
         )}

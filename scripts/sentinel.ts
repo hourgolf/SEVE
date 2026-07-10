@@ -309,7 +309,8 @@ async function main() {
   if (HAS_SERVICE) {
     try {
       await sb.from("events").delete().like("message", `sentinel: ${et}%`);
-      await sb.from("events").insert({ level: "INFO", message: `sentinel: ${et}`, meta: { kind: "sentinel", date: et, forDate: (briefStruct as { forDate?: string } | null)?.forDate ?? null, digest: full, brief: briefStruct, scan, judge: judged } });
+      // `lens` = the per-channel avg-peak/win map (era-4, real fills) — the P&L panel's harvest columns.
+      await sb.from("events").insert({ level: "INFO", message: `sentinel: ${et}`, meta: { kind: "sentinel", date: et, forDate: (briefStruct as { forDate?: string } | null)?.forDate ?? null, digest: full, brief: briefStruct, scan, judge: judged, lens: cur.ch } });
     } catch (e) { console.error(`sentinel: event publish failed — ${(e as Error).message}`); }
   }
 

@@ -5,6 +5,7 @@ import { LineChart } from "@/components/charts/LineChart";
 import { useFold } from "@/hooks/useFold";
 import { signedUsd, usd0, timeOfDay } from "@/lib/format";
 import { useWindowedPnl, type PnlWindow, type ChannelStat } from "@/hooks/useWindowedPnl";
+import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
 
@@ -33,6 +34,8 @@ export function PnlPanel({
   // fetch windowed realized P&L (+ open unrealized) + a windowed NAV curve lazily.
   const [win, setWin] = useState<PnlWindow>("today");
   const windowed = useWindowedPnl(win, acctId);
+  // era-4 avg-peak/win per channel (the harvest lens) — published nightly by the sentinel
+  const { lens } = useSentinelDigest();
   const isToday = win === "today";
   const loading = !isToday && (windowed?.loading ?? true);
   const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();
@@ -47,6 +50,17 @@ export function PnlPanel({
   const hasCurve =
     equityValues.length >= 2 && Math.max(...equityValues) !== Math.min(...equityValues);
   const [folded, toggleFold] = useFold("pnl");
+  const [showIdle, setShowIdle] = useState(false);
+
+  // Rows sorted by |window P&L| (the movers first); idle channels (no trades, $0 in
+  // window) collapse behind a count line so the glance is only what moved.
+  const rows = strategists
+    .map((s) => ({ s, st: statFor(s.slug), lens: lens?.[s.slug] ?? null }))
+    .sort((a, b) => Math.abs(b.st.pnl) - Math.abs(a.st.pnl));
+  const active = rows.filter((r) => r.st.trades > 0 || r.st.pnl !== 0);
+  const idle = rows.filter((r) => r.st.trades === 0 && r.st.pnl === 0);
+  const shown = showIdle ? rows : active;
+  const barMax = Math.max(1, ...active.map((r) => Math.abs(r.st.pnl)));
 
   return (
     <div className={`panel${folded ? " folded" : ""}`}>
@@ -56,8 +70,11 @@ export function PnlPanel({
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody">
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-          <div className="seg" aria-label="P&L timeframe">
+        {/* hero: the window's fund number leads; the seg picks the window */}
+        <div className="pnl-hero">
+          <span className={`pnl-big ${fundVal < 0 ? "neg" : "pos"}`}>{loading ? "…" : signedUsd(fundVal)}</span>
+          <span className="pnl-hero-sub">{winLabel}</span>
+          <div className="seg" aria-label="P&L timeframe" style={{ marginLeft: "auto" }}>
             {WINDOWS.map((w) => (
               <button key={w.id} className={win === w.id ? "on" : ""} onClick={() => setWin(w.id)} aria-pressed={win === w.id}>
                 {w.label}
@@ -85,37 +102,39 @@ export function PnlPanel({
             <div className="chart-empty">{loading ? "loading…" : isToday ? "awaiting equity history" : "no equity history in window"}</div>
           )}
         </div>
-        <div className="pnl-rows" style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 8, opacity: loading ? 0.5 : 1, transition: "opacity 0.15s" }}>
-          {strategists.map((s) => {
-            const st = statFor(s.slug);
-            const wr = st.trades > 0 ? Math.round((st.wins / st.trades) * 100) : null;
+        {/* channels — diverging bar (loss left / gain right) + the harvest lens (era-4 pk · win).
+            amber pk = high peak / low win → spike-carried (fix, don't promote). */}
+        <div style={{ marginTop: 8, opacity: loading ? 0.5 : 1, transition: "opacity 0.15s" }}>
+          <div className="dvg dvg-hd">
+            <span />
+            <span />
+            <span className="dvg-val">{winLabel}</span>
+            <span className="dvg-pk">pk</span>
+            <span className="dvg-wn">win</span>
+          </div>
+          {shown.map(({ s, st, lens: L }) => {
+            const w = Math.max(2, Math.round((Math.abs(st.pnl) / barMax) * 100) / 2); // half-width %
+            const hot = L != null && L.p >= 25 && L.w < 40;
             return (
-              <div className="stat" key={s.slug}>
-                <span className="k" style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: pmVar(s.color),
-                      boxShadow: `0 0 6px ${pmVar(s.color)}`,
-                    }}
-                  />
+              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades}t in ${winLabel}${L ? ` · era-4 avg peak ${L.p}% · win ${L.w}% (n=${L.n})` : ""}${hot ? " · high peak / low win — spike-carried" : ""}`}>
+                <span className="dvg-nm">
+                  <span className="dvg-dot" style={{ background: pmVar(s.color), boxShadow: `0 0 5px ${pmVar(s.color)}` }} />
                   {s.name}
                 </span>
-                <span className={`v num ${st.pnl < 0 ? "neg" : "pos"}`}>
-                  {wr != null && <span className="pnl-wr">{wr}% · {st.trades}t</span>}
-                  {signedUsd(st.pnl)}
+                <span className="dvg-axis">
+                  {st.pnl !== 0 && <i className={st.pnl > 0 ? "p" : "n"} style={{ width: `${w}%` }} />}
                 </span>
+                <span className={`dvg-val ${st.pnl < 0 ? "neg" : st.pnl > 0 ? "pos" : "mut"}`}>{st.pnl === 0 ? "—" : signedUsd(st.pnl)}</span>
+                <span className={`dvg-pk${hot ? " hot" : ""}`}>{L ? `${Math.round(L.p)}%` : "—"}</span>
+                <span className={`dvg-wn ${L ? (L.w >= 40 ? "pos" : "neg") : "mut"}`}>{L ? L.w : "—"}</span>
               </div>
             );
           })}
-          <div className="stat" style={{ borderTop: "1px solid var(--border-bright)" }}>
-            <span className="k" style={{ fontWeight: 600, color: "var(--text)" }}>
-              Fund ({winLabel})
-            </span>
-            <span className={`v num ${fundVal < 0 ? "neg" : "pos"}`}>{signedUsd(fundVal)}</span>
-          </div>
+          {idle.length > 0 && (
+            <button type="button" className="dvg-more" onClick={() => setShowIdle((v) => !v)} aria-expanded={showIdle}>
+              {showIdle ? "▾ hide" : "▸"} {idle.length} idle channel{idle.length === 1 ? "" : "s"} ($0 · no trades {winLabel})
+            </button>
+          )}
         </div>
       </div>
     </div>

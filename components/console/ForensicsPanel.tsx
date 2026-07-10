@@ -1,27 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
 import { useForensicsReport, type GivebackTrendPoint, type ShadowCurvePoint } from "@/hooks/useForensicsReport";
 import { usePyramidShadow, pyramidName } from "@/hooks/usePyramidShadow";
+import { useVirtualBench } from "@/hooks/useVirtualBench";
 
-// §03 "Shadow & Override" panel — renders the deterministic forensics the CLI day-report
-// publishes (forensics_reports): the OVERRIDE SCORECARD (did the human's manual close beat
-// ride-to-close, accumulated) + BENCHED would-be-vs-live (did the cut channels earn their
-// bench today). Read-only; collapsed to the headlines, expand for the by-tag/by-channel cuts.
-const EXP_KEY = "seve-forensics-expanded";
+// §04 SHADOW BOOK — every would-have instrument vs the live book, ONE GLANCE ROW each
+// (label · picture · one stat), ▸ expands to the clean breakdown. Instruments: one-account
+// shadow · give-back · override scorecard · benched-vs-live · ratchet shadow · pyramid ·
+// the vb-* virtual bench (the old Lab panel, merged). Read-only, log-only.
 const shortDate = (d: string) => d.slice(5); // "06-15"
 const cls = (v: number) => (v < 0 ? "neg" : "pos");
 const etTime = (iso: string) => { try { return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 const etDay = (iso: string) => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", month: "2-digit", day: "2-digit" }).format(new Date(iso)); } catch { return ""; } };
 
-// inline capture-rate sparkline (kept ÷ peak, %): higher = keeping more of the peak. Cream-scope
-// CSS vars resolve inside the panel; last point colored by trend direction. No chart-lib (house rule).
+// inline capture-rate sparkline (kept ÷ peak, %): higher = keeping more of the peak.
 function CaptureSparkline({ pts }: { pts: GivebackTrendPoint[] }) {
   const vals = pts.map((p) => p.capturePct as number);
   if (vals.length < 2) return null;
-  const W = 168, H = 30, pad = 4;
+  const W = 120, H = 22, pad = 3;
   const lo = Math.min(...vals, 0), hi = Math.max(...vals, 100), span = hi - lo || 1;
   const x = (i: number) => pad + (i * (W - 2 * pad)) / (vals.length - 1);
   const y = (v: number) => pad + (H - 2 * pad) * (1 - (v - lo) / span);
@@ -29,19 +28,17 @@ function CaptureSparkline({ pts }: { pts: GivebackTrendPoint[] }) {
   const up = vals[vals.length - 1] >= vals[vals.length - 2];
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "0 0 auto" }}>
-      <line x1={pad} y1={y(0)} x2={W - pad} y2={y(0)} stroke="var(--border)" strokeDasharray="2 2" strokeWidth={1} />
-      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.5} opacity={0.7} />
-      <circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r={2.6} style={{ fill: up ? "var(--green)" : "var(--red)" }} />
+      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.4} opacity={0.65} />
+      <circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r={2.4} style={{ fill: up ? "var(--green)" : "var(--red)" }} />
     </svg>
   );
 }
 
-// NAV sparkline for the one-account shadow — same house style as CaptureSparkline
-// (no chart lib); dashed baseline = starting equity, end-dot colored by above/below it.
+// NAV sparkline for the one-account shadow — dashed baseline = starting equity.
 function NavSparkline({ pts, base }: { pts: ShadowCurvePoint[]; base: number }) {
   const vals = pts.map((p) => p.nav);
   if (vals.length < 2) return null;
-  const W = 168, H = 30, pad = 4;
+  const W = 120, H = 22, pad = 3;
   const lo = Math.min(...vals, base), hi = Math.max(...vals, base), span = hi - lo || 1;
   const x = (i: number) => pad + (i * (W - 2 * pad)) / (vals.length - 1);
   const y = (v: number) => pad + (H - 2 * pad) * (1 - (v - lo) / span);
@@ -50,27 +47,45 @@ function NavSparkline({ pts, base }: { pts: ShadowCurvePoint[]; base: number }) 
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "0 0 auto" }}>
       <line x1={pad} y1={y(base)} x2={W - pad} y2={y(base)} stroke="var(--border)" strokeDasharray="2 2" strokeWidth={1} />
-      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.5} opacity={0.7} />
-      <circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r={2.6} style={{ fill: up ? "var(--green)" : "var(--red)" }} />
+      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.4} opacity={0.65} />
+      <circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r={2.4} style={{ fill: up ? "var(--green)" : "var(--red)" }} />
     </svg>
+  );
+}
+
+// One instrument = one glance row (chevron · label · mid · stat) + a folded breakdown.
+function Inst({ k, label, mid, stat, children }: { k: string; label: string; mid: React.ReactNode; stat: React.ReactNode; children?: React.ReactNode }) {
+  const [folded, toggle] = useFold(`sb-${k}`, true);
+  return (
+    <>
+      <button type="button" className="sb-row" onClick={toggle} aria-expanded={!folded}>
+        <span className="sb-ch">{folded ? "▸" : "▾"}</span>
+        <span className="sb-lbl">{label}</span>
+        <span className="sb-mid">{mid}</span>
+        <span className="sb-stat">{stat}</span>
+      </button>
+      {!folded && children != null && <div className="sb-brk">{children}</div>}
+    </>
   );
 }
 
 export function ForensicsPanel() {
   const { report, trend, benchedCum, loading, error } = useForensicsReport();
   const ps = usePyramidShadow();
+  const vb = useVirtualBench();
   const [folded, toggleFold] = useFold("forensics", true); // deep-dive — folded by default (§04 tidy)
-  const [expanded, setExpanded] = useState(false);
-  // scorecard window: TODAY's ledger slice vs the cumulative-since-inception book
+  // scorecard / benched-vs-live windows: today's slice vs the cumulative book
   const [scWin, setScWin] = useState<"today" | "cum">("today");
-  // benched-vs-live window: the day's replay vs the book folded across banked reports
   const [bvWin, setBvWin] = useState<"today" | "cum">("today");
-  useEffect(() => { try { if (window.localStorage.getItem(EXP_KEY) === "1") setExpanded(true); } catch { /* */ } }, []);
-  const toggle = () => setExpanded((v) => { try { window.localStorage.setItem(EXP_KEY, v ? "0" : "1"); } catch { /* */ } return !v; });
+  const [vbWin, setVbWin] = useState<"today" | "cum">("today");
 
-  const Frame = ({ children, head }: { children: React.ReactNode; head?: React.ReactNode }) => (
-    <div className="panel">
-      <div className="phead"><span className="t">Shadow Book</span>{head ?? <span className="x">would-haves vs the live book</span>}</div>
+  const Frame = ({ children }: { children: React.ReactNode }) => (
+    <div className={`panel${folded ? " folded" : ""}`}>
+      <div className="phead">
+        <span className="t">Shadow Book</span>
+        <span className="x">would-haves vs the live book{report ? ` · ${shortDate(report.report_date)}` : ""}</span>
+        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
+      </div>
       <div className="pbody">{children}</div>
     </div>
   );
@@ -79,112 +94,106 @@ export function ForensicsPanel() {
   if (error) return <Frame><div className="chart-empty">couldn&apos;t load — {error}</div></Frame>;
   if (!report) return <Frame><div className="chart-empty">no report yet — run <code>npm run day-report</code> same-week (with APP_URL + PUSH_SECRET set) to publish</div></Frame>;
 
-  // today's slice publishes since 07-03; older payloads only carry the cumulative book
   const scToday = report.payload.overrideToday ?? null;
   const showToday = scWin === "today" && !!scToday;
   const sc = showToday ? scToday! : report.payload.overrideScorecard;
   const bvl = report.payload.benchedVsLive;
   const gb = report.payload.giveback ?? null;
+  const oas = report.payload.oneAccountShadow ?? null;
+  const rs = report.payload.ratchetShadow ?? null;
   const trendUp = trend.length >= 2 && (trend[trend.length - 1].capturePct ?? 0) >= (trend[0].capturePct ?? 0);
   const ranAny = bvl?.benched.some((b) => b.ran) ?? false;
-  const showBvToday = bvWin === "today" || !benchedCum; // no banked history yet → today only
+  const showBvToday = bvWin === "today" || !benchedCum;
   const asOf = (() => { try { return new Date(report.payload.generatedAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return report.report_date; } })();
 
-  return (
-    <div className={`panel${folded ? " folded" : ""}`}>
-      <div className="phead">
-        <span className="t">Shadow Book</span>
-        <button className="au-expand" onClick={toggle} aria-expanded={expanded} title={expanded ? "collapse" : "expand the by-tag / by-channel cuts"}>
-          {shortDate(report.report_date)} · {expanded ? "▾ collapse" : "▸ expand"}
-        </button>
-        <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
-      </div>
-      <div className="pbody">
-        {/* ── ONE-ACCOUNT SHADOW — the dream team rehearsing in a single live-sized account ── */}
-        {(() => {
-          const oas = report.payload.oneAccountShadow ?? null;
-          const head = (
-            <div className="au-sub">One-account shadow <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>the dream team in one live-sized account · actual trades, one cash pool</span></div>
-          );
-          if (!oas || oas.curve.length === 0) return (<>{head}<p className="au-market">accruing — banks with the nightly capture (era-4 replay, $50k FIRST-TEAM). First curve lands at the next post-close publish.</p></>);
-          const pctRet = (100 * oas.totalPnl) / oas.params.equity;
-          const contested = oas.curve.filter((p) => p.rej + p.dwn > 0).length;
-          const t = oas.today;
-          return (
-            <>
-              {head}
-              <div className="au-fund">
-                <span>NAV <b className={cls(oas.totalPnl)}>${oas.navEnd.toLocaleString()}</b> on ${(oas.params.equity / 1000).toFixed(0)}k</span>
-                <span className={cls(oas.totalPnl)}>{signedUsd(oas.totalPnl)} ({pctRet >= 0 ? "+" : ""}{pctRet.toFixed(1)}%)</span>
-                <span>{oas.params.bucket} · since {shortDate(oas.params.from)}</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 2px" }}>
-                <NavSparkline pts={oas.curve} base={oas.params.equity} />
-                <span style={{ fontSize: "0.82em", fontWeight: 700 }}>
-                  {contested === 0
-                    ? <span className="pos">cash never bound</span>
-                    : <span className="neg">contention on {contested}/{oas.curve.length}d</span>}
-                  {oas.maxDDpct != null && <span className="neg"> · maxDD {oas.maxDDpct}%</span>}
-                  <span style={{ opacity: 0.55, fontWeight: 400 }}> · peak stack {oas.maxStackChannels}ch · {oas.curve.length} sessions</span>
-                </span>
-              </div>
-              {t && (
-                <div className="au-fund">
-                  <span>today {t.admitted}/{t.entries} admitted{t.downsized ? ` · ${t.downsized} downsized` : ""}{t.rejected ? <b className="neg"> · {t.rejected} rejected</b> : ""}</span>
-                  <span>peak deployed ${Math.round(t.peakDeployedUsd / 100) / 10}k</span>
-                  {t.peakOcc && <span>deepest {t.peakOcc.channels}ch/{t.peakOcc.contracts}ct</span>}
-                </div>
-              )}
-              {oas.scenarios && oas.scenarios.length > 0 && (
-                <>
-                  <div className="au-sub" style={{ borderTop: "none", paddingTop: 2 }}>runnable at pool <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>RISK rescaled per pool · return / max DD / trades dropped</span></div>
-                  <div className="fx-rows">
-                    {oas.scenarios.map((s) => (
-                      <div className="fx-row" key={s.equity}>
-                        <span className="fx-name">${s.equity / 1000}k{s.equity === oas.params.equity ? " (as-lived)" : ""}</span>
-                        <span className="fx-mid">DD {s.maxDDpct}%{s.rejected ? ` · ${s.rejected} dropped` : ""}{s.downsized ? ` · ${s.downsized} dwn` : ""}</span>
-                        <span className={`au-pnl ${cls(s.retPct)}`}>{s.retPct >= 0 ? "+" : ""}{s.retPct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              {expanded && (
-                <div className="fx-rows">
-                  {oas.curve.slice(-8).map((p) => (
-                    <div className="fx-row" key={p.d}>
-                      <span className="fx-name">{shortDate(p.d)}</span>
-                      <span className="fx-mid">{p.adm} adm{p.dwn ? ` · ${p.dwn} dwn` : ""}{p.rej ? ` · ${p.rej} REJ` : ""} · peak ${Math.round(p.peak / 100) / 10}k</span>
-                      <span className="au-pnl">${p.nav.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          );
-        })()}
+  // ratchet paired day-bars: actual│ratchet per session (last 8), height ∝ |value|
+  const rsDays = rs?.byDay.slice(-8) ?? [];
+  const rsMax = Math.max(1, ...rsDays.flatMap((d) => [Math.abs(d.actual), Math.abs(d.ratchet)]));
+  const rsSlots = rs?.slotAware ?? [];
+  // vb bench: today ⇄ cumulative (the old Lab panel's read)
+  const vbHasToday = vb.benchToday.length > 0;
+  const vbShowToday = vbWin === "today" && vbHasToday;
+  const vbRows = vbShowToday ? vb.benchToday : vb.bench;
+  const vbTop = [...vbRows].filter((b) => b.scored > 0).sort((a, b) => b.pnl - a.pnl);
+  const vbRed = vbTop.filter((b) => b.pnl < 0).length;
 
-        {/* ── DAILY GIVE-BACK / CAPTURE — the take-profit policy's success metric (peak → close) ── */}
-        <div className="au-sub">Give-back <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>peak → close · is the desk keeping its peaks?</span></div>
-        {!gb || gb.capturePct == null ? (
-          <p className="au-market">accruing — the first point lands at the next post-close publish (needs trades that peaked + 7d quote coverage).</p>
-        ) : (
+  return (
+    <Frame>
+      {/* ── ONE-ACCOUNT — the dream team in a single live-sized cash pool ── */}
+      <Inst
+        k="oneacct" label="One-acct"
+        mid={oas && oas.curve.length > 0 ? (
+          <>
+            <NavSparkline pts={oas.curve} base={oas.params.equity} />
+            {oas.curve.filter((p) => p.rej + p.dwn > 0).length === 0
+              ? <span className="pos">cash never bound</span>
+              : <span className="neg">contention {oas.curve.filter((p) => p.rej + p.dwn > 0).length}/{oas.curve.length}d</span>}
+          </>
+        ) : <span className="mut">accruing — first curve at the next post-close publish</span>}
+        stat={oas && oas.curve.length > 0 ? (
+          <span className={cls(oas.totalPnl)}>{(100 * oas.totalPnl / oas.params.equity) >= 0 ? "+" : ""}{(100 * oas.totalPnl / oas.params.equity).toFixed(1)}% <span className="mut">${oas.navEnd.toLocaleString()}</span></span>
+        ) : <span className="mut">—</span>}
+      >
+        {oas && oas.curve.length > 0 && (
+          <>
+            <div className="au-fund">
+              <span>{oas.params.bucket} · since {shortDate(oas.params.from)} · {oas.curve.length} sessions</span>
+              <span className={cls(oas.totalPnl)}>{signedUsd(oas.totalPnl)}</span>
+              {oas.maxDDpct != null && <span className="neg">maxDD {oas.maxDDpct}%</span>}
+              <span>peak stack {oas.maxStackChannels}ch</span>
+            </div>
+            {oas.today && (
+              <div className="au-fund">
+                <span>today {oas.today.admitted}/{oas.today.entries} admitted{oas.today.downsized ? ` · ${oas.today.downsized} downsized` : ""}{oas.today.rejected ? <b className="neg"> · {oas.today.rejected} rejected</b> : ""}</span>
+                <span>peak deployed ${Math.round(oas.today.peakDeployedUsd / 100) / 10}k</span>
+                {oas.today.peakOcc && <span>deepest {oas.today.peakOcc.channels}ch/{oas.today.peakOcc.contracts}ct</span>}
+              </div>
+            )}
+            {oas.scenarios && oas.scenarios.length > 0 && (
+              <div className="fx-rows">
+                {oas.scenarios.map((s) => (
+                  <div className="fx-row" key={s.equity}>
+                    <span className="fx-name">${s.equity / 1000}k{s.equity === oas.params.equity ? " (as-lived)" : ""}</span>
+                    <span className="fx-mid">DD {s.maxDDpct}%{s.rejected ? ` · ${s.rejected} dropped` : ""}{s.downsized ? ` · ${s.downsized} dwn` : ""}</span>
+                    <span className={`au-pnl ${cls(s.retPct)}`}>{s.retPct >= 0 ? "+" : ""}{s.retPct}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="fx-rows">
+              {oas.curve.slice(-8).map((p) => (
+                <div className="fx-row" key={p.d}>
+                  <span className="fx-name">{shortDate(p.d)}</span>
+                  <span className="fx-mid">{p.adm} adm{p.dwn ? ` · ${p.dwn} dwn` : ""}{p.rej ? ` · ${p.rej} REJ` : ""} · peak ${Math.round(p.peak / 100) / 10}k</span>
+                  <span className="au-pnl">${p.nav.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Inst>
+
+      {/* ── GIVE-BACK — is the desk keeping its peaks? ── */}
+      <Inst
+        k="giveback" label="Give-back"
+        mid={gb && gb.capturePct != null ? (
+          <>
+            {trend.length >= 2 && <CaptureSparkline pts={trend} />}
+            {trend.length >= 2 && <span className="mut">{trend[0].capturePct}%→<b className={trendUp ? "pos" : "neg"}>{trend[trend.length - 1].capturePct}%</b></span>}
+          </>
+        ) : <span className="mut">accruing — first point at the next post-close publish</span>}
+        stat={gb && gb.capturePct != null
+          ? <span className={gb.capturePct >= 50 ? "pos" : "neg"}>kept {gb.capturePct}% <span className="mut neg">{signedUsd(-gb.givenBackUsd)}</span></span>
+          : <span className="mut">—</span>}
+      >
+        {gb && gb.capturePct != null && (
           <>
             <div className="au-fund">
               <span>kept <b className={gb.capturePct >= 50 ? "pos" : "neg"}>{gb.capturePct}%</b> of peak</span>
               <span>gave back <b className="neg">{signedUsd(-gb.givenBackUsd)}</b></span>
               <span>{gb.nPeakers}/{gb.nClosed} peaked</span>
             </div>
-            {trend.length >= 2 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 2px" }}>
-                <CaptureSparkline pts={trend} />
-                <span style={{ fontSize: "0.82em", fontWeight: 700 }}>
-                  capture {trend[0].capturePct}% → <b className={trendUp ? "pos" : "neg"}>{trend[trend.length - 1].capturePct}%</b>
-                  <span style={{ opacity: 0.55, fontWeight: 400 }}> · {trend.length}d {trendUp ? "↑ keeping more" : "↓ giving back more"}</span>
-                </span>
-              </div>
-            )}
-            {expanded && gb.byChannel.length > 0 && (
+            {gb.byChannel.length > 0 && (
               <div className="fx-rows">
                 {gb.byChannel.map((c) => (
                   <div className="fx-row" key={c.key}>
@@ -197,29 +206,30 @@ export function ForensicsPanel() {
             )}
           </>
         )}
+      </Inst>
 
-        {/* ── OVERRIDE SCORECARD — today's slice ⇄ the cumulative ledger ── */}
-        <div className="au-sub">
-          Override scorecard
+      {/* ── OVERRIDE — manual close vs ride-to-close ── */}
+      <Inst
+        k="override" label="Override"
+        mid={sc.n > 0
+          ? <span>beat <b>{sc.wins}/{sc.n}</b> <span className="mut">manual vs ride{sc.span ? ` · ${sc.span}` : ""}</span></span>
+          : <span className="mut">no overrides recorded yet</span>}
+        stat={sc.n > 0 ? <span className={cls(sc.delta)}>Δ {signedUsd(sc.delta)}</span> : <span className="mut">—</span>}
+      >
+        <div className="sb-toggle-row">
           <span className="roster-toggle sc-toggle" title="today's ledger entries vs the cumulative book">
-            <button type="button" className={showToday ? "on" : ""} disabled={!scToday} onClick={() => setScWin("today")}
-              title={scToday ? undefined : "publishes with the next day-report run"}>today</button>
+            <button type="button" className={showToday ? "on" : ""} disabled={!scToday} onClick={() => setScWin("today")}>today</button>
             <button type="button" className={!showToday ? "on" : ""} onClick={() => setScWin("cum")}>cumulative</button>
           </span>
-          <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}> {showToday ? sc.span || "today" : `cumulative${sc.span ? ` · ${sc.span}` : ""}`}</span> — manual close vs ride-to-close
         </div>
-        {sc.n === 0 ? (
-          <p className="au-market">{showToday ? "no overrides today — the cumulative book is on the toggle." : "no overrides recorded yet — accrues as you manually close ride-channel positions."}</p>
-        ) : (
+        {sc.n > 0 && (
           <>
             <div className="au-fund">
               <span>N={sc.n} · {sc.span}</span>
               <span>actual <b className={cls(sc.actual)}>{signedUsd(sc.actual)}</b> vs ride <b className={cls(sc.ride)}>{signedUsd(sc.ride)}</b></span>
-              <span className={cls(sc.delta)}>Δ {signedUsd(sc.delta)}</span>
-              <span>beat {sc.wins}/{sc.n}</span>
             </div>
             <div className="fx-rows">
-              {(expanded ? sc.byChannel : sc.byChannel.slice(0, 3)).map((c) => (
+              {sc.byChannel.map((c) => (
                 <div className="fx-row" key={c.key}>
                   <span className="fx-name">{c.key}</span>
                   <span className="fx-mid">beat {c.wins}/{c.n}</span>
@@ -227,193 +237,209 @@ export function ForensicsPanel() {
                 </div>
               ))}
             </div>
-            {expanded && sc.byTag.length > 0 && (
-              <>
-                <div className="au-sub">by close-reason tag</div>
-                <div className="fx-rows">
-                  {sc.byTag.map((t) => (
-                    <div className="fx-row" key={t.key}>
-                      <span className="fx-name">{t.key}</span>
-                      <span className="fx-mid">beat {t.wins}/{t.n}</span>
-                      <span className={`au-pnl ${cls(t.delta)}`}>{signedUsd(t.delta)}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </>
-        )}
-
-        {/* ── BENCHED would-be vs LIVE — the day's replay ⇄ the book folded across banked reports ── */}
-        <div className="au-sub" style={{ marginTop: 12 }}>
-          Benched would-be vs live
-          <span className="roster-toggle sc-toggle" title="the day's replay vs the accrued book">
-            <button type="button" className={showBvToday ? "on" : ""} onClick={() => setBvWin("today")}>today</button>
-            <button type="button" className={!showBvToday ? "on" : ""} disabled={!benchedCum} onClick={() => setBvWin("cum")}
-              title={benchedCum ? undefined : "no banked replays yet"}>cumulative</button>
-          </span>
-          <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}> {showBvToday ? `today · ${shortDate(report.report_date)}` : `cumulative · since ${shortDate(benchedCum!.since)}`}</span> — did the cut channels earn their bench?
-        </div>
-        {showBvToday ? (
-          !bvl || !bvl.sameWeek ? (
-            <p className="au-market">same-week only (option_quotes 7d) — re-run day-report same-week to refresh.</p>
-          ) : bvl.benched.length === 0 ? (
-            <p className="au-market">no benched channel signaled {shortDate(report.report_date)}{bvl.skipped.length ? ` (${bvl.skipped.length} silent)` : ""}.</p>
-          ) : (
-            <>
+            {sc.byTag.length > 0 && (
               <div className="fx-rows">
-                {bvl.benched.map((b) => (
-                  <div className="fx-row" key={b.slug}>
-                    <span className="fx-name">{b.name}</span>
-                    {b.ran ? (
-                      <>
-                        <span className="fx-mid">{b.trades}t · {b.useSpec ? "spec" : "builtin"}/{b.underlying}</span>
-                        <span className={`au-pnl ${cls(b.pnl)}`}>{signedUsd(b.pnl)}</span>
-                      </>
-                    ) : (
-                      <span className="fx-note">{b.note}</span>
-                    )}
+                {sc.byTag.map((t) => (
+                  <div className="fx-row" key={t.key}>
+                    <span className="fx-name">{t.key}</span>
+                    <span className="fx-mid">beat {t.wins}/{t.n}</span>
+                    <span className={`au-pnl ${cls(t.delta)}`}>{signedUsd(t.delta)}</span>
                   </div>
                 ))}
               </div>
-              {ranAny && (
-                <div className="au-fund" style={{ marginTop: 6 }}>
-                  <span>Σ bench <b className={cls(bvl.benchedTotal)}>{signedUsd(bvl.benchedTotal)}</b> vs live <b className={cls(bvl.liveTotal)}>{signedUsd(bvl.liveTotal)}</b></span>
-                  <span className={bvl.benchedTotal < 0 ? "neg" : "pos"}>{bvl.benchedTotal < 0 ? "cull validated" : "bench would've added"}</span>
+            )}
+          </>
+        )}
+      </Inst>
+
+      {/* ── BENCHED — did the cut channels earn their bench? ── */}
+      <Inst
+        k="benched" label="Benched"
+        mid={(() => {
+          if (showBvToday) {
+            if (!bvl?.sameWeek) return <span className="mut">same-week only (7d quotes)</span>;
+            if (!bvl.benched.length) return <span className="mut">no benched channel signaled</span>;
+            return <span>Σ bench <b className={cls(bvl.benchedTotal)}>{signedUsd(bvl.benchedTotal)}</b> vs live <b className={cls(bvl.liveTotal)}>{signedUsd(bvl.liveTotal)}</b></span>;
+          }
+          return <span>Σ bench <b className={cls(benchedCum!.benchedTotal)}>{signedUsd(benchedCum!.benchedTotal)}</b> vs live <b className={cls(benchedCum!.liveTotal)}>{signedUsd(benchedCum!.liveTotal)}</b> <span className="mut">{benchedCum!.sessions}s</span></span>;
+        })()}
+        stat={(() => {
+          const tot = showBvToday ? (ranAny ? bvl!.benchedTotal : null) : benchedCum!.benchedTotal;
+          if (tot == null) return <span className="mut">—</span>;
+          return tot < 0 ? <span className="pos">cull ✓</span> : <span className="neg">would&apos;ve added</span>;
+        })()}
+      >
+        <div className="sb-toggle-row">
+          <span className="roster-toggle sc-toggle" title="the day's replay vs the accrued book">
+            <button type="button" className={showBvToday ? "on" : ""} onClick={() => setBvWin("today")}>today</button>
+            <button type="button" className={!showBvToday ? "on" : ""} disabled={!benchedCum} onClick={() => setBvWin("cum")}>cumulative</button>
+          </span>
+        </div>
+        <div className="fx-rows">
+          {showBvToday
+            ? (bvl?.benched ?? []).map((b) => (
+                <div className="fx-row" key={b.slug}>
+                  <span className="fx-name">{b.name}</span>
+                  {b.ran ? (
+                    <>
+                      <span className="fx-mid">{b.trades}t · {b.useSpec ? "spec" : "builtin"}/{b.underlying}</span>
+                      <span className={`au-pnl ${cls(b.pnl)}`}>{signedUsd(b.pnl)}</span>
+                    </>
+                  ) : (
+                    <span className="fx-note">{b.note}</span>
+                  )}
                 </div>
-              )}
-              {expanded && bvl.skipped.length > 0 && <div className="au-dormant">silent: {bvl.skipped.map((s) => s.name).join(" · ")}</div>}
-            </>
-          )
-        ) : (
-          <>
-            <div className="fx-rows">
-              {benchedCum!.rows.map((b) => (
+              ))
+            : benchedCum!.rows.map((b) => (
                 <div className="fx-row" key={b.slug}>
                   <span className="fx-name">{b.name}</span>
                   <span className="fx-mid">{b.trades}t · {b.days}d · {b.useSpec ? "spec" : "builtin"}/{b.underlying}</span>
                   <span className={`au-pnl ${cls(b.pnl)}`}>{signedUsd(b.pnl)}</span>
                 </div>
               ))}
-            </div>
-            <div className="au-fund" style={{ marginTop: 6 }}>
-              <span>{benchedCum!.sessions} session{benchedCum!.sessions === 1 ? "" : "s"}</span>
-              <span>Σ bench <b className={cls(benchedCum!.benchedTotal)}>{signedUsd(benchedCum!.benchedTotal)}</b> vs live <b className={cls(benchedCum!.liveTotal)}>{signedUsd(benchedCum!.liveTotal)}</b></span>
-              <span className={benchedCum!.benchedTotal < 0 ? "neg" : "pos"}>{benchedCum!.benchedTotal < 0 ? "cull validated" : "bench would've added"}</span>
-            </div>
-          </>
-        )}
+        </div>
+        {showBvToday && !!bvl?.skipped.length && <div className="au-dormant">silent: {bvl.skipped.map((s) => s.name).join(" · ")}</div>}
+      </Inst>
 
-        {/* ── RATCHET SHADOW — the A4 twins' virtual third arm (registry instrumentation vi) ── */}
-        {(() => {
-          const rs = report.payload.ratchetShadow ?? null;
-          const head = (
-            <div className="au-sub" style={{ marginTop: 12 }}>Ratchet shadow — ground truth first <span style={{ fontWeight: 700, opacity: 0.6, fontSize: "0.82em" }}>virtual arm-high exit ({rs?.params ?? "arm50/keep67/pre50"}) · log-only</span></div>
-          );
-          if (!rs || rs.scored === 0) return (<>{head}<p className="au-market">accruing — replays each twin/momo trade&apos;s real quote path nightly; banks before the 7d prune.</p></>);
-          const slots = rs.slotAware ?? [];
-          const ctlUsd = (b: typeof slots[number]) => Math.max(...b.arms.filter((a) => a.name !== "ratchet").map((a) => a.usd));
-          const ratUsd = (b: typeof slots[number]) => b.arms.find((a) => a.name === "ratchet")?.usd ?? 0;
-          return (
-            <>
-              {head}
-              {/* GROUND TRUTH: slot-aware, re-entry-aware, real fills — churn modeled (A4 + momo) */}
-              {slots.length > 0 ? slots.map((b) => (
-                <div className="au-fund" key={b.slug}>
-                  <span style={{ fontWeight: 700 }}>{b.slug} slot-aware (real fills, churn modeled):</span>
-                  {b.arms.map((a) => (<span key={a.name}>{a.name} <b className={cls(a.usd)}>{signedUsd(a.usd)}</b></span>))}
-                  <span className={b.ratchetWins ? "pos" : "neg"}>ratchet {b.ratchetWins ? "wins" : "LOSES"} vs control</span>
-                </div>
-              )) : (
-                <p className="au-market" style={{ margin: "2px 0" }}>slot-aware read pending tonight&apos;s close pass — the ground-truth number (per-trade below is an upper bound).</p>
-              )}
-              {/* per-trade = UPPER BOUND, demoted + flagged (no churn/tail model) */}
-              <div className="au-fund" style={{ opacity: 0.82 }}>
-                <span style={{ opacity: 0.7 }}>per-trade upper bound (no churn/tail):</span>
-                <span className={cls(rs.deltaUsd)}>Δ {signedUsd(rs.deltaUsd)}</span>
-                <span>armed {rs.armed}/{rs.scored}</span>
-                <span className={(rs.tails ?? 0) > 0 ? "" : "neg"}>{rs.tails ?? 0} convex tail{(rs.tails ?? 0) === 1 ? "" : "s"}{(rs.tails ?? 0) === 0 ? " — Δ flattered" : ""}</span>
+      {/* ── RATCHET — the virtual arm-high third arm (actual│ratchet per day) ── */}
+      <Inst
+        k="ratchet" label="Ratchet"
+        mid={rs && rs.scored > 0 ? (
+          <>
+            <span className="sb-pairs" title="per session: actual (left, faded) vs ratchet (right) — height ∝ |P&L|">
+              {rsDays.map((d) => (
+                <span className="d" key={d.d}>
+                  <span className="bars">
+                    <i className={d.actual < 0 ? "n" : "g"} style={{ height: `${Math.max(2, Math.round((Math.abs(d.actual) / rsMax) * 30))}px` }} />
+                    <i className={`r ${d.ratchet < 0 ? "n" : "g"}`} style={{ height: `${Math.max(2, Math.round((Math.abs(d.ratchet) / rsMax) * 30))}px` }} />
+                  </span>
+                  <span className="dt">{d.d.slice(8)}</span>
+                </span>
+              ))}
+            </span>
+            <span className="mut">actual│ratchet</span>
+          </>
+        ) : <span className="mut">accruing — replays each twin/momo trade nightly</span>}
+        stat={rs && rs.scored > 0 ? (
+          rsSlots.length > 0
+            ? <span>{rsSlots.map((b) => { const r = b.arms.find((a) => a.name === "ratchet")?.usd ?? 0; const c = Math.max(...b.arms.filter((a) => a.name !== "ratchet").map((a) => a.usd)); return <span key={b.slug} className={cls(r - c)}>{b.slug} {signedUsd(r - c)} </span>; })}</span>
+            : <span className={cls(rs.deltaUsd)}>Δ {signedUsd(rs.deltaUsd)} <span className="mut">ceiling</span></span>
+        ) : <span className="mut">—</span>}
+      >
+        {rs && rs.scored > 0 && (
+          <>
+            <div className="au-flaws" style={{ marginBottom: 5 }}>
+              <span className="au-flaw au-sev-low">{rs.params ?? "arm50/keep67/pre50"}</span>
+              <span className="au-flaw au-sev-low">armed {rs.armed}/{rs.scored}</span>
+              <span className={`au-flaw ${(rs.tails ?? 0) > 0 ? "au-sev-low" : "au-sev-med"}`}>{rs.tails ?? 0} convex tail{(rs.tails ?? 0) === 1 ? "" : "s"}{(rs.tails ?? 0) === 0 ? " — Δ flattered" : ""}</span>
+            </div>
+            {/* GROUND TRUTH first: slot-aware, churn modeled */}
+            {rsSlots.length > 0 ? rsSlots.map((b) => (
+              <div className="au-fund" key={b.slug}>
+                <span style={{ fontWeight: 700 }}>{b.slug} slot-aware:</span>
+                {b.arms.map((a) => (<span key={a.name}>{a.name} <b className={cls(a.usd)}>{signedUsd(a.usd)}</b></span>))}
+                <span className={b.ratchetWins ? "pos" : "neg"}>ratchet {b.ratchetWins ? "wins" : "LOSES"}</span>
               </div>
-              {rs.epochs.length > 1 && (
-                <div className="au-fund" style={{ opacity: 0.82 }}>
-                  {rs.epochs.map((e) => (
-                    <span key={e.key}>{e.key === "a4" ? "A4" : e.key === "momo" ? "momo" : "pre"} {e.n}t <b className={cls(e.ratchetUsd - e.actualUsd)}>{signedUsd(e.ratchetUsd - e.actualUsd)}</b></span>
-                  ))}
-                  <span style={{ opacity: 0.55, fontWeight: 400 }}>per-trade Δ (upper bound)</span>
-                </div>
-              )}
-              {expanded && rs.byDay.length > 0 && (
-                <div className="fx-rows">
-                  {rs.byDay.slice(-8).map((d) => (
-                    <div className="fx-row" key={d.d}>
-                      <span className="fx-name">{shortDate(d.d)}</span>
-                      <span className="fx-mid">{d.n}t · actual {signedUsd(d.actual)}</span>
-                      <span className={`au-pnl ${cls(d.ratchet - d.actual)}`}>{signedUsd(d.ratchet - d.actual)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          );
-        })()}
-
-        {/* ── PYRAMID — live adds (executor armed) + would-be adds (shadow) on V3/ALT winners ── */}
-        {ps.execs.length > 0 && (
-          <>
-            <div className="au-sub" style={{ marginTop: 12 }}>Pyramid — LIVE adds (executor armed) · 14d</div>
-            <div className="au-fund">
-              <span>{ps.execs.length} live add{ps.execs.length === 1 ? "" : "s"}</span>
-              <span>Σ <b className="pos">+{ps.execs.reduce((s, e) => s + e.addQty, 0)}</b> contracts added</span>
-            </div>
-            <div className="fx-rows">
-              {ps.execs.slice(0, 10).map((e, i) => (
-                <div className="fx-row" key={`x${i}`}>
-                  <span className="fx-name">{pyramidName(e.slug)} {e.occ}</span>
-                  <span className="fx-mid">→ ×{e.newQty} @ {e.newAvg.toFixed(2)} · {etDay(e.createdAt)} {etTime(e.createdAt)}</span>
-                  <span className="au-pnl pos">+{e.addQty}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        <div className="au-sub" style={{ marginTop: 12 }}>Pyramid shadow — would-be adds on V3/ALT winners (zero-order; tracking Phase-A graduation)</div>
-        {ps.loading ? (
-          <p className="au-market">loading…</p>
-        ) : ps.error ? (
-          <p className="au-market">couldn&apos;t load — {ps.error}</p>
-        ) : ps.events.length === 0 ? (
-          <p className="au-market">no would-be adds in 14d — fires only when V3/ALT run +30% on a fresh continuation (RTH).</p>
-        ) : (
-          <>
-            <div className="au-fund">
-              <span>{ps.events.length} would-be add{ps.events.length === 1 ? "" : "s"} · 14d</span>
-              <span>Σ <b className="pos">×{ps.byChannel.reduce((s, c) => s + c.contracts, 0)}</b> contracts</span>
-            </div>
-            <div className="fx-rows">
-              {ps.byChannel.map((c) => (
-                <div className="fx-row" key={c.slug}>
-                  <span className="fx-name">{c.name}</span>
-                  <span className="fx-mid">{c.adds} add{c.adds === 1 ? "" : "s"}</span>
-                  <span className="au-pnl pos">×{c.contracts}</span>
-                </div>
-              ))}
-            </div>
-            {expanded && (
-              <div className="fx-rows">
-                {ps.events.slice(0, 10).map((e, i) => (
-                  <div className="fx-row" key={i}>
-                    <span className="fx-name">{pyramidName(e.slug)} {e.occ}</span>
-                    <span className="fx-mid">+{Math.round(e.appreciatedPct)}% · {etDay(e.createdAt)} {etTime(e.createdAt)}</span>
-                    <span className="au-pnl pos">×{e.wouldQty} @ {e.ask.toFixed(2)}</span>
+            )) : (
+              <p className="au-market" style={{ margin: "2px 0" }}>slot-aware read pending tonight&apos;s close pass — the ground-truth number (per-trade below is an upper bound).</p>
+            )}
+            {rs.epochs.length > 1 && (
+              <div className="au-fund" style={{ opacity: 0.82 }}>
+                {rs.epochs.map((e) => (
+                  <span key={e.key}>{e.key === "a4" ? "A4" : e.key === "momo" ? "momo" : "pre"} {e.n}t <b className={cls(e.ratchetUsd - e.actualUsd)}>{signedUsd(e.ratchetUsd - e.actualUsd)}</b></span>
+                ))}
+                <span style={{ opacity: 0.55, fontWeight: 400 }}>per-trade Δ (upper bound)</span>
+              </div>
+            )}
+            {rsDays.length > 0 && (
+              <>
+                <div className="brkhd"><span className="l">day</span><span>t</span><span>actual</span><span>ratchet</span><span>Δ</span></div>
+                {rsDays.map((d) => (
+                  <div className="brkrow" key={d.d}>
+                    <span className="l">{shortDate(d.d)}</span>
+                    <span>{d.n}</span>
+                    <span className={cls(d.actual)}>{signedUsd(d.actual)}</span>
+                    <span className={cls(d.ratchet)}>{signedUsd(d.ratchet)}</span>
+                    <span className={cls(d.ratchet - d.actual)}>{signedUsd(d.ratchet - d.actual)}</span>
                   </div>
                 ))}
-              </div>
+                <div className="brkfoot">per-trade Δ = upper bound (no churn/tail) · slot-aware = ground truth, lands with the close pass</div>
+              </>
             )}
           </>
         )}
+      </Inst>
 
-        <div className="fx-foot">as of {asOf} ET · one day = noise; cull rests on the 5-window evidence</div>
-      </div>
-    </div>
+      {/* ── PYRAMID — live adds + would-be adds on V3/ALT winners ── */}
+      <Inst
+        k="pyramid" label="Pyramid"
+        mid={ps.loading ? <span className="mut">loading…</span>
+          : ps.error ? <span className="mut">couldn&apos;t load</span>
+          : <span>{ps.execs.length} live add{ps.execs.length === 1 ? "" : "s"} · {ps.events.length} would-be · 14d</span>}
+        stat={(ps.execs.length + ps.events.length) > 0
+          ? <span className="pos">+{ps.execs.reduce((s, e) => s + e.addQty, 0)} live · ×{ps.byChannel.reduce((s, c) => s + c.contracts, 0)} shadow</span>
+          : <span className="mut">—</span>}
+      >
+        {ps.execs.length > 0 && (
+          <div className="fx-rows">
+            {ps.execs.slice(0, 10).map((e, i) => (
+              <div className="fx-row" key={`x${i}`}>
+                <span className="fx-name">{pyramidName(e.slug)} {e.occ}</span>
+                <span className="fx-mid">→ ×{e.newQty} @ {e.newAvg.toFixed(2)} · {etDay(e.createdAt)} {etTime(e.createdAt)}</span>
+                <span className="au-pnl pos">+{e.addQty}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {ps.events.length === 0 ? (
+          <p className="au-market">no would-be adds in 14d — fires only when V3/ALT run +30% on a fresh continuation (RTH).</p>
+        ) : (
+          <div className="fx-rows">
+            {ps.events.slice(0, 10).map((e, i) => (
+              <div className="fx-row" key={i}>
+                <span className="fx-name">{pyramidName(e.slug)} {e.occ}</span>
+                <span className="fx-mid">+{Math.round(e.appreciatedPct)}% · {etDay(e.createdAt)} {etTime(e.createdAt)}</span>
+                <span className="au-pnl pos">×{e.wouldQty} @ {e.ask.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Inst>
+
+      {/* ── VB BENCH — the vb-* virtual fleet (the old Lab panel, merged) ── */}
+      <Inst
+        k="vbbench" label="VB Bench"
+        mid={vb.loading ? <span className="mut">loading…</span>
+          : vbTop.length === 0 ? <span className="mut">no reconstructions yet</span>
+          : (
+            <>
+              {vbTop.slice(0, 2).map((b) => (
+                <span key={b.slug} className={`sb-chip ${cls(b.pnl)}`}>{b.slug.replace(/^vb-/, "")} {signedUsd(Math.round(b.pnl))}/ct{b.scored ? ` · ${Math.round((100 * b.wins) / b.scored)}%w` : ""}</span>
+              ))}
+              {vbRed > 0 && <span className="mut">{vbRed} red</span>}
+            </>
+          )}
+        stat={<span className="mut">{vbShowToday ? `today` : `since ${vb.since ? shortDate(vb.since) : "—"}`}</span>}
+      >
+        <div className="sb-toggle-row">
+          <span className="roster-toggle sc-toggle" title="today's signals (ET) vs the accrued book">
+            <button type="button" className={vbShowToday ? "on" : ""} disabled={!vbHasToday} onClick={() => setVbWin("today")}>today</button>
+            <button type="button" className={!vbShowToday ? "on" : ""} onClick={() => setVbWin("cum")}>cumulative</button>
+          </span>
+        </div>
+        <div className="fx-rows">
+          {vbRows.map((b) => (
+            <div className="fx-row" key={b.slug}>
+              <span className="fx-name">{b.slug.replace(/^vb-/, "")}</span>
+              <span className="fx-mid">{b.scored}/{b.n} scored{b.scored > 0 ? ` · win ${Math.round((100 * b.wins) / b.scored)}%` : ""}{vbShowToday ? "" : ` · last ${b.lastAt.slice(5, 10)}`}</span>
+              <span className={`au-pnl ${cls(b.pnl)}`}>{b.scored ? `${signedUsd(Math.round(b.pnl))}/ct` : "—"}</span>
+            </div>
+          ))}
+        </div>
+        <div className="brkfoot">gate-shadow blocks: {vb.gateBlocks.scored}/{vb.gateBlocks.n} scored · Σ {signedUsd(Math.round(vb.gateBlocks.pnl))}/ct — K eval at ≥30</div>
+      </Inst>
+
+      <div className="fx-foot">as of {asOf} ET · mid-basis + capital-blind would-haves — never an arm basis · one day = noise</div>
+    </Frame>
   );
 }

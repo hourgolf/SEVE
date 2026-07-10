@@ -32,10 +32,8 @@ import { NetExposurePanel } from "@/components/console/NetExposurePanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
 import { PushToggle } from "@/components/console/PushToggle";
 import { SignalsTape } from "@/components/console/SignalsTape";
-import { DailyAutopsyPanel } from "@/components/console/DailyAutopsyPanel";
-import { WeeklyAutopsyPanel } from "@/components/console/WeeklyAutopsyPanel";
+import { AutopsyPanel } from "@/components/console/AutopsyPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
-import { LabPanel } from "@/components/console/LabPanel";
 import { SentinelPanel } from "@/components/console/SentinelPanel";
 import { BriefPanel } from "@/components/console/BriefPanel";
 import { padCode } from "@/components/mobile/MixerPads";
@@ -438,14 +436,12 @@ export function DesktopSurface({
           /* TAPE is a RACK — both columns fill; drag ⠿ to arrange the review stack */
           <Rack
             storageKey="seve-rack-tape"
-            defaults={{ a: ["pnl", "daily", "weekly"], b: ["brief", "sentinel", "lab", "forensics"] }}
+            defaults={{ a: ["pnl", "autopsy", "forensics"], b: ["brief", "sentinel"] }}
             panels={{
               pnl: <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} acctId={acctId} />,
-              daily: <DailyAutopsyPanel strategists={desk.strategists} />,
-              weekly: <WeeklyAutopsyPanel strategists={desk.strategists} />,
+              autopsy: <AutopsyPanel strategists={desk.strategists} />,
               brief: <BriefPanel />,
               sentinel: <SentinelPanel />,
-              lab: <LabPanel />,
               forensics: <ForensicsPanel />,
             }}
           />

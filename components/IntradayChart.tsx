@@ -21,12 +21,18 @@ import { ema, macd as computeMacd } from "@/lib/indicators";
 import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 import type { UnderlyingBar } from "@/lib/types";
 import type { Position } from "@/lib/desk/types";
+import { getSupabase } from "@/lib/supabaseClient";
+
+// SENT overlay data — the nightly brief's levels, fetched lazily when the chip first
+// turns on. SPY gets the full ladder (confluence levels + gap-arm lines); every symbol
+// gets its own dealer γ-walls. One tiny read of the latest sentinel event.
+type SentData = { levels: { px: number; label: string }[]; armLo: number | null; armHi: number | null; walls: Record<string, number[]> };
 
 type Mode = "line" | "candles";
 const MODE_KEY = "seve-chart-mode", TF_KEY = "seve-chart-tf", RANGE_KEY = "seve-chart-range";
 const VWAP_KEY = "seve-chart-vwap", EMA_KEY = "seve-chart-ema", VOL_KEY = "seve-chart-vol", MACD_KEY = "seve-chart-macd";
 const EMA_FAST_KEY = "seve-chart-ema-fast", EMA_SLOW_KEY = "seve-chart-ema-slow", EMA_THIRD_KEY = "seve-chart-ema-third";
-const TRADES_KEY = "seve-chart-trades", LEVELS_KEY = "seve-chart-levels", BANDS_KEY = "seve-chart-bands";
+const TRADES_KEY = "seve-chart-trades", LEVELS_KEY = "seve-chart-levels", BANDS_KEY = "seve-chart-bands", SENT_KEY = "seve-chart-sent";
 const EMA_FAST_DEFAULT = 9, EMA_SLOW_DEFAULT = 21, EMA_THIRD_DEFAULT = 50, EMA_MIN = 2, EMA_MAX = 200;
 
 const C = {
@@ -165,6 +171,7 @@ export function IntradayChart({
   const [showTrades, setShowTrades] = useState(true);
   const [showLevels, setShowLevels] = useState(true);
   const [showBands, setShowBands] = useState(false); // VWAP ±σ bands (default off)
+  const [showSent, setShowSent] = useState(false); // SENT: the nightly brief's levels (γ-walls / PD confluences / gap-arm lines)
 
   const elRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -179,6 +186,7 @@ export function IntradayChart({
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markersOnRef = useRef<Mode | null>(null);
   const levelLinesRef = useRef<{ series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">; line: IPriceLine }[]>([]);
+  const sentLinesRef = useRef<{ series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">; line: IPriceLine }[]>([]); // SENT overlay lines
   const bandRefs = useRef<ISeriesApi<"Line">[]>([]); // VWAP ±1σ/±2σ (4 thin lines)
   const posLinesRef = useRef<{ series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">; line: IPriceLine }[]>([]); // open-position entry lines
   const lastRangeRef = useRef<RangeKey | null>(null); // only reset the window on a RANGE change
@@ -217,6 +225,7 @@ export function IntradayChart({
     if (g(TRADES_KEY) === "0") setShowTrades(false);
     if (g(LEVELS_KEY) === "0") setShowLevels(false);
     if (g(BANDS_KEY) === "1") setShowBands(true);
+    if (g(SENT_KEY) === "1") setShowSent(true);
   }, []);
 
   const persist = (k: string, v: string) => { try { window.localStorage.setItem(k, v); } catch { /* */ } };
@@ -318,6 +327,30 @@ export function IntradayChart({
     }
     return { priorClose, pdh, pdl, orbHi, orbLo, hod, lod };
   }, [bars, dailyBars]);
+
+  // ---- SENT overlay data (lazy: fetched once, the first time the chip turns on) ----
+  const [sentData, setSentData] = useState<SentData | null>(null);
+  useEffect(() => {
+    if (!showSent || sentData) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await getSupabase()
+          .from("events").select("meta")
+          .like("message", "sentinel:%").order("created_at", { ascending: false }).limit(1);
+        if (!alive) return;
+        const brief = (data?.[0]?.meta as { brief?: { carry?: { above?: { px: number; label: string }[]; below?: { px: number; label: string }[]; bandLo?: number | null; bandHi?: number | null }; dealer?: { sym: string; walls: number[] }[] } } | undefined)?.brief;
+        if (!brief) { setSentData({ levels: [], armLo: null, armHi: null, walls: {} }); return; }
+        setSentData({
+          levels: [...(brief.carry?.above ?? []), ...(brief.carry?.below ?? [])],
+          armLo: brief.carry?.bandLo ?? null,
+          armHi: brief.carry?.bandHi ?? null,
+          walls: Object.fromEntries((brief.dealer ?? []).map((d) => [d.sym, d.walls ?? []])),
+        });
+      } catch { if (alive) setSentData({ levels: [], armLo: null, armHi: null, walls: {} }); }
+    })();
+    return () => { alive = false; };
+  }, [showSent, sentData]);
 
   // ---- create chart + base series once ----
   useEffect(() => {
@@ -491,6 +524,33 @@ export function IntradayChart({
       add(levels.lod, C.lod, "LOD", LineStyle.Solid);
     }
 
+    // ---- SENT overlay (intraday): the nightly brief's terrain where price lives ----
+    // γ-walls amber · confluence levels grey (label carries the sources) · gap-arm lines
+    // green (open beyond → the gap book arms). SPY carries the full ladder; other symbols
+    // draw their own dealer walls only. Levels are the BRIEF's (from last close) — they
+    // don't move intraday, which is the point: pre-committed terrain, not a repaint.
+    for (const { series, line } of sentLinesRef.current) { try { series.removePriceLine(line); } catch { /* */ } }
+    sentLinesRef.current = [];
+    if (showSent && !isDaily && sentData) {
+      const tgt = activeSeries;
+      const addSent = (price: number | null | undefined, color: string, title: string, lineStyle: LineStyle) => {
+        if (price == null || !Number.isFinite(price)) return;
+        const line = tgt.createPriceLine({ price, color, lineWidth: 1, lineStyle, axisLabelVisible: true, title });
+        sentLinesRef.current.push({ series: tgt, line });
+      };
+      const wallSet = new Set((sentData.walls[symbol] ?? []).map((w) => Math.round(w * 100)));
+      if (symbol === "SPY") {
+        for (const lv of sentData.levels) {
+          const isWall = lv.label.includes("γ") || wallSet.has(Math.round(lv.px * 100));
+          addSent(lv.px, isWall ? "#d9a13c" : "rgba(232,230,227,0.45)", lv.label.slice(0, 18), LineStyle.Dashed);
+        }
+        addSent(sentData.armHi, "#5fbf7f", "▲ calls arm", LineStyle.Dotted);
+        addSent(sentData.armLo, "#5fbf7f", "▼ puts arm", LineStyle.Dotted);
+      } else {
+        for (const w of sentData.walls[symbol] ?? []) addSent(w, "#d9a13c", "γ-wall", LineStyle.Dashed);
+      }
+    }
+
     // ---- OPEN-POSITION entry lines (intraday): the underlying at entry — the
     // ride/giveback reference — direction-colored, labeled with the contract.
     // Rides the TRADES toggle: the marker shows WHEN you got in, the line shows
@@ -607,7 +667,7 @@ export function IntradayChart({
       const manual = chart.priceScale("right").options().autoScale === false;
       setShowJump(away || manual);
     }
-  }, [agg, mode, showVwap, showBands, showEma, showVol, showMacd, efN, esN, etN, showTrades, showLevels, levels, isDaily, range, trades, openPositions, highlightTrade, mobile, symbol]);
+  }, [agg, mode, showVwap, showBands, showEma, showVol, showMacd, efN, esN, etN, showTrades, showLevels, levels, showSent, sentData, isDaily, range, trades, openPositions, highlightTrade, mobile, symbol]);
 
   // ---- highlight a trade drilled into from the Today's-trades list: switch to
   // intraday if needed and (only if off-screen) center the chart on the fill. Lights
@@ -695,6 +755,7 @@ export function IntradayChart({
             <button className={`ind-chip${showMacd ? " on" : ""}`} onClick={toggle(MACD_KEY, setShowMacd)} aria-pressed={showMacd} title="MACD 12/26/9">MACD</button>
             <button className={`ind-chip${showTrades ? " on" : ""}`} onClick={toggle(TRADES_KEY, setShowTrades)} aria-pressed={showTrades} title="Show trade entry/exit markers">TRADES</button>
             <button className={`ind-chip${showLevels ? " on" : ""}`} onClick={toggle(LEVELS_KEY, setShowLevels)} aria-pressed={showLevels} title="Key levels: prior close (PDC), prior-day high/low (PDH/PDL), opening range (ORH/ORL), today's high/low (HOD/LOD) — intraday">LVL</button>
+            <button className={`ind-chip${showSent ? " on" : ""}`} onClick={toggle(SENT_KEY, setShowSent)} aria-pressed={showSent} title="Sentinel brief levels — the nightly terrain: swing/PD confluences (grey), dealer γ-walls (amber), gap-arm lines (green: open beyond → the gap book arms)">SENT</button>
           </span>
           {/* right-justified: editable EMA periods (desktop) + the LINE/CANDLES toggle,
               dropped here from the header so it sits beside the indicator chips, but separated. */}

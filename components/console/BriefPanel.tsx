@@ -87,14 +87,25 @@ export function BriefPanel() {
         </div>
       )}
 
-      {/* CARRY FORWARD — next-open readiness */}
-      <div className="au-sub">Next open</div>
-      {b.carry.band != null && (
-        <div className="brief-band">GAP arms if open <b>≤ {b.carry.bandLo}</b> or <b>≥ {b.carry.bandHi}</b> <span className="mut">(±${b.carry.band})</span></div>
+      {/* CARRY FORWARD — the arm-band strip (shaded = gap book stays dark) + one levels line.
+          The full ladder lives on the §01 chart via the SENT overlay chip. */}
+      <div className="au-sub">Next open <span className="au-subx">shaded = gap book dark · levels → SENT chip on the chart</span></div>
+      {b.carry.band != null && b.rth && (
+        <div className="arm-band">
+          <span className="rail" />
+          <span className="lb g" style={{ left: 0, top: 0 }}>PUTS ≤ {b.carry.bandLo}</span>
+          <span className="lb g" style={{ right: 0, top: 0 }}>CALLS ≥ {b.carry.bandHi}</span>
+          <span className="tk" style={{ left: "27.3%" }} />
+          <span className="tk" style={{ left: "72.7%" }} />
+          <span className="cl" style={{ left: "50%" }} />
+          <span className="lb" style={{ left: "50%", transform: "translateX(-50%)", bottom: 0 }}>close {b.rth.c}</span>
+        </div>
       )}
-      <div className="brief-lvls">
-        <div className="fx-row"><span className="bl">above</span><span className="fx-mid">{b.carry.above.map((l) => `${l.px} ${l.label}`).join("  ·  ") || "—"}</span></div>
-        <div className="fx-row"><span className="bl">below</span><span className="fx-mid">{b.carry.below.map((l) => `${l.px} ${l.label}`).join("  ·  ") || "—"}</span></div>
+      <div className="brief-lvlline">
+        <span className="mut">above:</span>
+        {b.carry.above.slice(0, 3).map((l) => <span key={l.px}><b>{l.px}</b> <span className={l.label.includes("γ") ? "amb" : "mut"}>{l.label}</span></span>)}
+        <span className="mut" style={{ marginLeft: 6 }}>below:</span>
+        {b.carry.below.slice(0, 3).map((l) => <span key={l.px}><b>{l.px}</b> <span className={l.label.includes("γ") ? "amb" : "mut"}>{l.label}</span></span>)}
       </div>
       <ul className="brief-watch">{b.carry.watch.map((w, i) => <li key={i}>{w}</li>)}</ul>
 

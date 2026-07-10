@@ -1530,6 +1530,67 @@ td.clk.sel {
 .snt-bullets.sm { font-size: 10.5px; opacity: .92; }
 .snt-clean { font-size: 11px; color: var(--muted); padding: 1px 0 3px; }
 .fx-n { font-family: var(--mono); font-size: 10.5px; font-weight: 700; text-align: right; min-width: 40px; }
+.amb { color: var(--amber); }
+
+/* §04 v2 — glance visuals: hero numbers, diverging bars + harvest lens, shadow-book rows, arm band */
+.pnl-hero { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.pnl-big { font-family: var(--mono); font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.pnl-hero-sub { color: var(--muted); font-size: 10px; }
+/* diverging channel bars (loss left / gain right — the number-line convention) + pk·win lens */
+.dvg, .dvg-hd { display: grid; grid-template-columns: minmax(80px, 118px) 1fr 58px 34px 28px; gap: 7px; align-items: center; padding: 1.5px 0; font-family: var(--mono); font-size: 10.5px; }
+.dvg-hd { font-size: 8.5px; color: var(--muted); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding-bottom: 2px; }
+.dvg-hd .dvg-val, .dvg-hd .dvg-pk, .dvg-hd .dvg-wn { color: var(--muted); }
+.dvg-nm { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.dvg-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.dvg-axis { position: relative; height: 9px; background: rgba(0,0,0,.08); border-radius: 2px; overflow: hidden; }
+.dvg-axis::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,.28); }
+.dvg-axis i { position: absolute; top: 1.5px; bottom: 1.5px; border-radius: 1px; }
+.dvg-axis i.p { left: 50%; background: var(--green); }
+.dvg-axis i.n { right: 50%; background: var(--red); }
+.dvg-val { text-align: right; font-weight: 700; }
+.dvg-pk { text-align: right; color: var(--muted); font-size: 9.5px; }
+.dvg-pk.hot { color: var(--amber); font-weight: 700; }
+.dvg-wn { text-align: right; font-size: 9.5px; font-weight: 700; }
+.dvg-more { background: none; border: 0; padding: 3px 0 0; color: var(--muted); font-family: var(--mono); font-size: 9.5px; cursor: pointer; text-align: left; }
+.dvg-more:hover { color: var(--text); }
+/* shadow book — one glance row per instrument, ▸ = clean breakdown */
+.sb-row { display: grid; grid-template-columns: 12px 74px 1fr auto; gap: 7px; align-items: center; width: 100%; background: none; border: 0; border-top: 1px dotted var(--border); padding: 5px 0 4px; cursor: pointer; text-align: left; font: inherit; color: var(--text); }
+.sb-row:first-of-type { border-top: 0; }
+.sb-row:hover .sb-lbl { color: var(--text); }
+.sb-ch { color: var(--muted); font-size: 9px; }
+.sb-lbl { font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.sb-mid { font-family: var(--mono); font-size: 10px; display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.sb-stat { font-family: var(--mono); font-size: 10px; font-weight: 700; text-align: right; white-space: nowrap; }
+.sb-brk { margin: 1px 0 6px 19px; padding: 6px 9px; background: rgba(0,0,0,.045); border: 1px solid var(--border); border-radius: 4px; }
+.sb-toggle-row { display: flex; justify-content: flex-end; margin-bottom: 3px; }
+.sb-chip { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 3px; padding: 0 6px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; white-space: nowrap; }
+/* ratchet paired day-bars: actual (faded) │ ratchet (solid) */
+.sb-pairs { display: flex; align-items: flex-end; gap: 4px; height: 34px; }
+.sb-pairs .d { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.sb-pairs .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 30px; }
+.sb-pairs .bars i { width: 4px; border-radius: 1px 1px 0 0; opacity: .5; }
+.sb-pairs .bars i.r { opacity: 1; }
+.sb-pairs .g { background: var(--green); }
+.sb-pairs .n { background: var(--red); }
+.sb-pairs .dt { font-size: 7.5px; color: var(--muted); }
+/* ratchet clean day table */
+.brkhd, .brkrow { display: grid; grid-template-columns: 42px 26px 1fr 1fr 1fr; gap: 8px; font-family: var(--mono); font-size: 10px; padding: 1px 0; }
+.brkhd { color: var(--muted); font-weight: 700; font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; margin-top: 5px; }
+.brkhd span, .brkrow span { text-align: right; }
+.brkhd .l, .brkrow .l { text-align: left; }
+.brkfoot { margin-top: 5px; padding-top: 4px; border-top: 1px dotted var(--border); color: var(--muted); font-size: 9px; }
+/* brief arm-band strip: shaded middle = gap book stays dark; ticks = arm thresholds */
+.arm-band { position: relative; height: 36px; margin: 5px 0 3px; font-family: var(--mono); }
+.arm-band .rail { position: absolute; left: 0; right: 0; top: 14px; height: 8px; border-radius: 2px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--green) 22%, transparent) 0 27.3%,
+    rgba(0,0,0,.13) 27.3% 72.7%,
+    color-mix(in srgb, var(--green) 22%, transparent) 72.7% 100%); }
+.arm-band .tk { position: absolute; top: 11px; width: 1px; height: 14px; background: var(--muted); }
+.arm-band .cl { position: absolute; top: 8px; width: 2px; height: 20px; background: var(--text); }
+.arm-band .lb { position: absolute; font-size: 8.5px; color: var(--muted); white-space: nowrap; }
+.arm-band .lb.g { color: var(--green); font-weight: 700; }
+.brief-lvlline { display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--mono); font-size: 10px; margin: 3px 0 2px; }
 .au-fund {
   display: flex; gap: 14px; font-family: var(--mono); font-size: 11px; color: var(--muted);
   padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 10px;

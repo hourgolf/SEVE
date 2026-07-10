@@ -34,16 +34,19 @@ export interface Scan {
   drift: string[]; scalps: string[]; craters: string[];
 }
 export interface Judge { verdict: "HOLD" | "QUEUE" | "WATCH" | string; opportunities: string[]; drift: string[]; soWhat: string }
+/** Per-channel avg-peak/win map (era-4, real fills) — the harvest lens the P&L panel columns read. */
+export type Lens = Record<string, { p: number; w: number; n: number }>;
 
 export type DigestState = "loading" | "ok" | "empty" | "error";
 
 export function useSentinelDigest(): {
-  brief: Brief | null; scan: Scan | null; judge: Judge | null;
+  brief: Brief | null; scan: Scan | null; judge: Judge | null; lens: Lens | null;
   digest: string | null; date: string; forDate: string; state: DigestState; err: string;
 } {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [scan, setScan] = useState<Scan | null>(null);
   const [judge, setJudge] = useState<Judge | null>(null);
+  const [lens, setLens] = useState<Lens | null>(null);
   const [digest, setDigest] = useState<string | null>(null);
   const [date, setDate] = useState("");
   const [forDate, setForDate] = useState("");
@@ -65,6 +68,7 @@ export function useSentinelDigest(): {
         setBrief((meta.brief as Brief) ?? null);
         setScan((meta.scan as Scan) ?? null);
         setJudge((meta.judge as Judge) ?? null);
+        setLens((meta.lens as Lens) ?? null);
         setDigest((meta.digest as string) ?? null);
         setDate((meta.date as string) ?? row?.created_at?.slice(0, 10) ?? "");
         setForDate((meta.forDate as string) ?? "");
@@ -74,7 +78,7 @@ export function useSentinelDigest(): {
     return () => { alive = false; };
   }, []);
 
-  return { brief, scan, judge, digest, date, forDate, state, err };
+  return { brief, scan, judge, lens, digest, date, forDate, state, err };
 }
 
 // Legacy fallback: split a combined markdown digest into its forward (terrain) + backward
