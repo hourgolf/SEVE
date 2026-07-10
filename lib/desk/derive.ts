@@ -22,11 +22,13 @@ const dayContribution = (p: Position, liveMarks?: Record<string, number>): numbe
 export function channelPnl(positions: Position[], liveMarks?: Record<string, number>): Record<string, ChannelPnl> {
   const out: Record<string, ChannelPnl> = {};
   for (const p of positions) {
-    const c = (out[p.strategist_slug] ??= { dayPnl: 0, openCount: 0, exposure: 0, trades: 0, wins: 0 });
+    const c = (out[p.strategist_slug] ??= { dayPnl: 0, openCount: 0, exposure: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
     c.dayPnl += dayContribution(p, liveMarks);
     if (p.status === "closed") {
       c.trades += 1;
       if ((p.realized_pnl ?? 0) > 0) c.wins += 1;
+      // avg-peak lens (61_peak_marks): peak% since entry on the day's closed trades
+      if (p.peak_mark != null && p.avg_entry_price > 0) { c.pkSum += Math.max(0, (Number(p.peak_mark) / p.avg_entry_price - 1) * 100); c.pkN += 1; }
     } else {
       c.openCount += 1;
       c.exposure += Math.abs(p.qty) * p.current_mark * 100;

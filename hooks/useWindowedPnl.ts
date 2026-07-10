@@ -6,7 +6,7 @@ import { shortDate, timeOfDay } from "@/lib/format";
 
 export type PnlWindow = "today" | "week" | "month" | "all";
 
-export interface ChannelStat { pnl: number; trades: number; wins: number }
+export interface ChannelStat { pnl: number; trades: number; wins: number; pkSum: number; pkN: number }
 export interface WindowedPnl {
   statsBySlug: Record<string, ChannelStat>; // realized (closed in window) + open unrealized + win/trade counts
   fundPnl: number;
@@ -50,19 +50,23 @@ export function useWindowedPnl(window: PnlWindow, acctId: string | null = null):
       const sb = getSupabase();
       const start = startISO(window);
       const stats: Record<string, ChannelStat> = {};
-      const bump = (slug: string): ChannelStat => (stats[slug] ??= { pnl: 0, trades: 0, wins: 0 });
+      const bump = (slug: string): ChannelStat => (stats[slug] ??= { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
       const posSel = acctId ? "strategists!inner(slug,account_id)" : "strategists(slug)";
       /* eslint-disable @typescript-eslint/no-explicit-any */
       const byAcct = (q: any) => (acctId ? q.eq("strategists.account_id", acctId) : q);
 
-      // realized P&L + win/trade counts of closed trades in the window (paginated)
+      // realized P&L + win/trade counts + the avg-peak lens of closed trades in the window (paginated)
       for (let from = 0; from <= 60000; from += 1000) {
-        let q = byAcct(sb.from("positions").select(`realized_pnl,${posSel}`).eq("status", "closed"));
+        let q = byAcct(sb.from("positions").select(`realized_pnl,peak_mark,avg_entry_price,${posSel}`).eq("status", "closed"));
         if (start) q = q.gte("closed_at", start);
         const { data: rows, error } = await q.order("closed_at", { ascending: false }).range(from, from + 999);
         if (error) break;
         const list = (rows ?? []) as Record<string, unknown>[];
-        for (const r of list) { const c = bump(slugOf(r)); const pnl = Number(r.realized_pnl ?? 0); c.pnl += pnl; c.trades += 1; if (pnl > 0) c.wins += 1; }
+        for (const r of list) {
+          const c = bump(slugOf(r)); const pnl = Number(r.realized_pnl ?? 0); c.pnl += pnl; c.trades += 1; if (pnl > 0) c.wins += 1;
+          const pk = Number(r.peak_mark), entry = Number(r.avg_entry_price);
+          if (Number.isFinite(pk) && pk > 0 && entry > 0) { c.pkSum += Math.max(0, (pk / entry - 1) * 100); c.pkN += 1; }
+        }
         if (list.length < 1000) break;
       }
       // open positions' unrealized (current standing, in every window)

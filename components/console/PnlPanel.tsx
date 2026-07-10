@@ -41,8 +41,8 @@ export function PnlPanel({
   const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();
 
   const statFor = (slug: string): ChannelStat => {
-    if (isToday) { const p = pnlByStrategist[slug]; return { pnl: p?.dayPnl ?? 0, trades: p?.trades ?? 0, wins: p?.wins ?? 0 }; }
-    return windowed?.statsBySlug[slug] ?? { pnl: 0, trades: 0, wins: 0 };
+    if (isToday) { const p = pnlByStrategist[slug]; return { pnl: p?.dayPnl ?? 0, trades: p?.trades ?? 0, wins: p?.wins ?? 0, pkSum: p?.pkSum ?? 0, pkN: p?.pkN ?? 0 }; }
+    return windowed?.statsBySlug[slug] ?? { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 };
   };
   const fundVal = isToday ? fundPnl.dayPnl : (windowed?.fundPnl ?? 0);
   const equityValues = isToday ? equityCurve.map((p) => p.equity) : (windowed?.curve ?? []);
@@ -116,9 +116,13 @@ export function PnlPanel({
           </div>
           {shown.map(({ s, st, lens: L }) => {
             const w = Math.max(2, Math.round((Math.abs(st.pnl) / barMax) * 100) / 2); // half-width %
-            const hot = L != null && L.p >= 25 && L.w < 40;
+            // pk·win FOLLOW THE WINDOW (peak_mark on the window's own closed trades);
+            // the era-4 lens stays as tooltip context (stable channel character).
+            const pk = st.pkN > 0 ? Math.round(st.pkSum / st.pkN) : null;
+            const win = st.trades > 0 ? Math.round((100 * st.wins) / st.trades) : null;
+            const hot = pk != null && win != null && st.trades >= 5 && pk >= 25 && win < 40;
             return (
-              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades}t in ${winLabel}${L ? ` · era-4 avg peak ${L.p}% · win ${L.w}% (n=${L.n})` : ""}${hot ? " · high peak / low win — spike-carried" : ""}`}>
+              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades}t in ${winLabel}${L ? ` · era-4 character: peak ${L.p}% · win ${L.w}% (n=${L.n})` : ""}${hot ? " · high peak / low win in window — spike-carried" : ""}`}>
                 <span className="dvg-nm">
                   <span className="dvg-dot" style={{ background: pmVar(s.color), boxShadow: `0 0 5px ${pmVar(s.color)}` }} />
                   {s.name}
@@ -127,8 +131,8 @@ export function PnlPanel({
                   {st.pnl !== 0 && <i className={st.pnl > 0 ? "p" : "n"} style={{ width: `${w}%` }} />}
                 </span>
                 <span className={`dvg-val ${st.pnl < 0 ? "neg" : st.pnl > 0 ? "pos" : "mut"}`}>{st.pnl === 0 ? "—" : signedUsd(st.pnl)}</span>
-                <span className={`dvg-pk${hot ? " hot" : ""}`}>{L ? `${Math.round(L.p)}%` : "—"}</span>
-                <span className={`dvg-wn ${L ? (L.w >= 40 ? "pos" : "neg") : "mut"}`}>{L ? L.w : "—"}</span>
+                <span className={`dvg-pk${hot ? " hot" : ""}`}>{pk != null ? `${pk}%` : "—"}</span>
+                <span className={`dvg-wn ${win != null ? (win >= 40 ? "pos" : "neg") : "mut"}`}>{win ?? "—"}</span>
               </div>
             );
           })}

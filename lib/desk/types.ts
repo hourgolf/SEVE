@@ -138,6 +138,8 @@ export interface ChannelPnl {
   exposure: number; // $ deployed
   trades: number; // CLOSED trades counted in the window (for win-rate)
   wins: number; // of those, how many were realized > 0
+  pkSum: number; // Σ peak% ((peak_mark/entry − 1)·100) over closed trades with peak data — the harvest lens
+  pkN: number;   // closed trades carrying peak_mark (denominator for avg peak)
 }
 
 export interface Signal {
