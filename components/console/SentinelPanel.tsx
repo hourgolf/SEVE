@@ -45,7 +45,7 @@ export function SentinelPanel() {
     <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Sentinel</span>
-        <span className="x">opportunity + drift{date ? ` · ${date.slice(5)}` : ""} · log-only</span>
+        <span className="x">brief + opportunity + drift{date ? ` · ${date.slice(5)}` : ""} · log-only</span>
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody">{children}</div>
@@ -61,7 +61,7 @@ export function SentinelPanel() {
       <div className="sent-md">
         {(digest ?? "").split("\n").map((ln, i) => {
           if (/^#{1,3}\s/.test(ln)) return <div className="sent-h" key={i}>{inlineBold(ln.replace(/^#{1,3}\s/, ""))}</div>;
-          if (/^─{3,}/.test(ln)) return <hr className="sent-hr" key={i} />;
+          if (/^[─═]{3,}/.test(ln)) return <hr className="sent-hr" key={i} />;
           if (ln.trim() === "") return <div className="sent-sp" key={i} />;
           return <div className="sent-ln" key={i}>{inlineBold(ln)}</div>;
         })}

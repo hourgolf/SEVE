@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SEVE morning-brief — pre-market (06:00 local PT, before the 06:30 open): refresh the
+  overnight tape + republish the sentinel (forward briefing + backward scan) to the §04
+  dashboard panel before the first trades. Mirror of com.seve.capture.plist.
+
+  Install:  cp scripts/launchd/com.seve.morning.plist ~/Library/LaunchAgents/
+            launchctl load ~/Library/LaunchAgents/com.seve.morning.plist
+  ⚠ launchd fires only while the Mac is awake. To guarantee a pre-market wake:
+            pmset repeat wake MTWRF 05:55:00
+-->
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>Label</key>
+	<string>com.seve.morning</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/npm</string>
+		<string>run</string>
+		<string>morning-brief</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/mattlynch/Library/Logs/seve-morning.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/mattlynch/Library/Logs/seve-morning.log</string>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>6</integer>
+			<key>Minute</key>
+			<integer>0</integer>
+		</dict>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/mattlynch/seve-dashboard</string>
+</dict>
+</plist>

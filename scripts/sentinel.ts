@@ -17,6 +17,7 @@
 // ---------------------------------------------------------------------------
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 // Service role (when present, e.g. the nightly capture / .env.local) lets the digest publish to the
@@ -87,7 +88,7 @@ async function benchScan(days: number) {
 // deterministic-only (the sensor layer stands alone). Model defaults to opus-4-8, ANTHROPIC_MODEL
 // overrides. Guardrails mirror the autopsy prompt: registry governs, no arm from bench, magnitude
 // not direction.
-async function judge(facts: string): Promise<string | null> {
+async function judge(terrain: string, facts: string): Promise<string | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
@@ -95,9 +96,10 @@ async function judge(facts: string): Promise<string | null> {
   try { brief = readFileSync(path.join("docs", "sentinel-context.md"), "utf8").trim(); } catch { /* no brief → thinner, guardrail-only judge */ }
   const system = [
     brief && `DESK CONTEXT — your durable learnings; reason FROM these, they are the desk's settled doctrine:\n\n${brief}\n───`,
-    "You are the SEVE desk sentinel. Turn the deterministic scan below into a terse nightly operator digest, grounded in the DESK CONTEXT above (the avg-peak/book lens, LOCK/RIDE/NEITHER, the live gates).",
+    "You are the SEVE desk sentinel. You are given the MORNING TERRAIN briefing (forward — auto S/R levels, event calendar, dealer positioning, regime priors) AND the deterministic opportunity+drift scan (backward — as of last close). Produce a terse operator digest grounded in the DESK CONTEXT above (the avg-peak/book lens, LOCK/RIDE/NEITHER, the live gates).",
     "Reinforced guardrails: registry governs every knob change (say 'queue for the gate', never 'change X now'); NO ARM FROM BENCH (mid-basis, capital-blind — hypotheses only); direction is noise, magnitude is the gate; bench numbers are an upper bound (n<8 thin, giveback>100% = peak-then-loss).",
     "PEAK × WIN is the core read: a high avg-peak is only an edge if the WIN rate confirms it. High peak + high win = reliable (clean promote / RIDE). High peak + LOW win = spike/giveback-carried — a harvest-FIX (tighter TP to bank the peak before the fade), NOT a clean promote; call that out explicitly. Low peak (<5%) = scalp, nothing to harvest.",
+    "Use the TERRAIN as context, never a forecast: an event day changes the stand-down; dealer short-gamma (−GEX) favors the breakout book while long-gamma (+GEX) favors fades/scalps; the regime priors are historical base rates, not predictions. Surface it in SO WHAT only when it changes today's posture. Never predict direction.",
     "OUTPUT (no preamble, do not restate the raw table verbatim):",
     "1. OPPORTUNITIES — the 1-3 items worth a human look; each: what it is, why (expected vs anomalous, via the avg-peak/book lens), and the gate/venue it belongs to.",
     "2. DRIFT — anything that changed or looks off vs how the desk should behave; 'none' if clean.",
@@ -110,7 +112,7 @@ async function judge(facts: string): Promise<string | null> {
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
         model, max_tokens: 1024, output_config: { effort: "medium" },
-        system, messages: [{ role: "user", content: `Produce the digest for this scan:\n\n${facts}` }],
+        system, messages: [{ role: "user", content: `MORNING TERRAIN (forward):\n\n${terrain || "(none)"}\n\n${"═".repeat(48)}\n\nOPPORTUNITY + DRIFT SCAN (backward, as of last close):\n\n${facts}\n\nProduce the digest.` }],
       }),
     });
     if (!res.ok) { console.error(`sentinel judge: ${res.status} ${(await res.text()).slice(0, 200)}`); return null; }
@@ -118,6 +120,18 @@ async function judge(facts: string): Promise<string | null> {
     const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
     return text || null;
   } catch (e) { console.error(`sentinel judge: ${(e as Error).message}`); return null; }
+}
+
+// FORWARD terrain: fold in the desk-briefing (auto levels, events, dealer positioning, regime priors)
+// by spawning the standalone emitter (keeps it independently runnable). --silent strips npm's banner;
+// slice from the first header as belt-and-suspenders. Empty string on any failure (the scan stands alone).
+function briefing(): string {
+  try {
+    const r = spawnSync("npm", ["run", "--silent", "desk-briefing"], { encoding: "utf8", env: process.env });
+    const out = (r.stdout || "").trim();
+    const i = out.indexOf("# Desk briefing");
+    return i >= 0 ? out.slice(i).trim() : "";
+  } catch { return ""; }
 }
 
 async function main() {
@@ -169,11 +183,13 @@ async function main() {
   if (craters.length) P(`   bench craters (giveback >500% — peak then deep loss): ${craters.join(", ")}`);
   if (!scalps.length && !craters.length) P(`   (no mechanical flags)`);
   P();
-  P(`   ⚠ SENSOR LAYER (deterministic). Bench is mid-basis + capital-blind — no arm from it. Paging + schedule pending.`);
+  P(`   ⚠ SENSOR LAYER (deterministic). Bench is mid-basis + capital-blind — no arm from it. Paging pending.`);
 
   const facts = O.join("\n");
-  const judged = await judge(facts);
-  const full = facts + (judged
+  const terrain = briefing(); // forward desk-briefing (levels/events/dealer/regime priors), spawned
+  const judged = await judge(terrain, facts);
+  const combined = (terrain ? terrain + "\n\n" + "═".repeat(64) + "\n\n" : "") + facts;
+  const full = combined + (judged
     ? "\n\n" + "─".repeat(64) + "\nSENTINEL DIGEST — judgment layer\n\n" + judged
     : "\n\n(judgment layer inactive — set ANTHROPIC_API_KEY in .env.local to enable the prose digest)");
   console.log(full);

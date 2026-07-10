@@ -86,6 +86,7 @@
     "weekly-readout": "tsx --env-file=.env.local scripts/weekly-readout.ts",
     "desk-briefing": "tsx scripts/desk-briefing.ts",
     "sentinel": "tsx --env-file=.env.local scripts/sentinel.ts",
+    "morning-brief": "caffeinate -i tsx --env-file=.env.local scripts/morning-brief.ts",
     "override-scorecard": "tsx --env-file=.env.local scripts/override-scorecard.ts",
     "import-ledgers": "tsx --env-file=.env.local scripts/import-ledgers-to-cloud.ts",
     "shadow-cron": "tsx scripts/shadow-cron.ts",
