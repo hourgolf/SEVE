@@ -161,25 +161,33 @@ if (d.action === "enter" && d.blocked === "daily_target")
 **5 · Twin INSERT** (run AFTER the migration adds the column):
 
 ```sql
--- clone the channel into MORGUE (995aa327), armed
-insert into strategists (slug, name, underlying, executor, account_id, status, is_active, accent, color, mandate, spec_json, sort_order)
+-- 1. the channel: clone qqq-thrust-trail into MORGUE (995aa327), armed
+insert into strategists (slug, name, underlying, executor, account_id, status, is_active, accent, color, regime, mandate, spec_json, sort_order)
 select 'qqq-thrust-trail-wd', 'QQQ Thrust · win+done', underlying, executor,
-       '995aa327-b0da-4050-bede-97ab462b06cd', 'armed', true, accent, color,
+       '995aa327-b0da-4050-bede-97ab462b06cd', 'armed', true, accent, color, regime,
        'Win-and-done twin of qqq-thrust-trail (A15): identical thrust entry + ATR-chandelier trail, but daily_target_usd halts new entries once green for the day. MORGUE lane, paper.',
        spec_json, (select coalesce(max(sort_order),0)+1 from strategists)
 from strategists where slug = 'qqq-thrust-trail';
 
--- clone its config + set the win target (~one solid green → done; tune 150–400)
-insert into strategist_config (strategist_id, capital_pct, aggression, max_contracts, daily_stop_usd,
-                               daily_target_usd, muted, underlying_stop_pct, event_policy, entry_dte,
-                               take_profit_pct, premium_stop_pct, pyramid_adds, strike_offset)
-select tw.id, sc.capital_pct, sc.aggression, sc.max_contracts, sc.daily_stop_usd,
-       250, false, sc.underlying_stop_pct, sc.event_policy, sc.entry_dte,
-       sc.take_profit_pct, sc.premium_stop_pct, sc.pyramid_adds, sc.strike_offset
+-- 2. the config: clone EVERY column, override only daily_target_usd (250 = ~one solid green → done; tune 150–400)
+insert into strategist_config (
+  strategist_id, muted, soloed, boosted, gap_min, entry_dte, aggression, capital_pct, runner_frac,
+  event_policy, pyramid_adds, max_contracts, stall_minutes, strike_offset, daily_stop_usd,
+  take_profit_pct, daily_target_usd, premium_stop_pct, runner_giveback_pct, stall_max_favor_pct,
+  underlying_stop_pct)
+select tw.id, sc.muted, sc.soloed, sc.boosted, sc.gap_min, sc.entry_dte, sc.aggression, sc.capital_pct,
+       sc.runner_frac, sc.event_policy, sc.pyramid_adds, sc.max_contracts, sc.stall_minutes,
+       sc.strike_offset, sc.daily_stop_usd, sc.take_profit_pct, 250, sc.premium_stop_pct,
+       sc.runner_giveback_pct, sc.stall_max_favor_pct, sc.underlying_stop_pct
 from strategist_config sc
 join strategists src on src.id = sc.strategist_id and src.slug = 'qqq-thrust-trail'
 cross join strategists tw
 where tw.slug = 'qqq-thrust-trail-wd';
+
+-- 3. verify
+select s.slug, s.status, s.account_id, c.daily_target_usd, c.daily_stop_usd, c.max_contracts
+from strategists s join strategist_config c on c.strategist_id = s.id
+where s.slug = 'qqq-thrust-trail-wd';
 ```
 
 > Assumes `strategists.id` defaults to `gen_random_uuid()` (standard here). If the INSERT errors on a
