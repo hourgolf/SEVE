@@ -92,6 +92,23 @@ export function trancheSplit(qty: number, frac: number): { sell: number; retain:
   return sell >= 1 ? { sell, retain } : null;
 }
 
+// ---- QUOTE FRESHNESS for price triggers (audit 2026-07-11, 1b #6 — pure, selftest-covered) ----
+/** The EXECUTABLE sell-side price for a long-option exit trigger, or null when there isn't one.
+ *  We are LONG options — a liquidation SELLS, so the price a stop/target/trail can actually
+ *  realize is the BID; the mid is a price no buyer has posted, and a mid-based stop fires
+ *  late/at a fantasy level on a wide spread (operator decision 2026-07-11: triggers move to
+ *  the bid, mid becomes diagnostic-only). Returns null — the caller SKIPS the price-triggered
+ *  exit this tick, failing toward NOT firing — when:
+ *   · the quote is STALE: ageMs > maxAgeMs (a failing chain refresh; a fast 0DTE has long left
+ *     a 2-min-old print behind), including Infinity for a never-seeded chain and NaN;
+ *   · the bid is missing/zero/negative — no posted buyer = no executable price (a zero-bid
+ *     collapsed option can't be salvaged by a price stop anyway; the mandatory halt/EOD/event
+ *     flattens still clear it — they never price-gate). */
+export function freshExecutableBid(bid: number | null | undefined, ageMs: number, maxAgeMs: number = policy.QUOTE_TRIGGER_MAX_AGE_MS): number | null {
+  if (!(ageMs <= maxAgeMs)) return null; // NaN/Infinity-safe: only a provably fresh quote passes
+  return bid != null && bid > 0 ? bid : null;
+}
+
 // ---- PARTIAL-EXIT remainder arithmetic (audit 2026-07-11, 1b #2 — pure, selftest-covered) ----
 /** How a row's qty splits when its exit sell PARTIALLY filled (partial-then-
  *  canceled, or a late-filled partial recovered via findRowExitFill). null =

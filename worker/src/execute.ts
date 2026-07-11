@@ -24,7 +24,7 @@ import { info } from "./log.js";
 import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
-import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder } from "./exitRules.js";
+import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid } from "./exitRules.js";
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 
@@ -199,7 +199,9 @@ export async function executeExit(
   const heldQty = ctx.remainingByOcc.get(occ) ?? (alp ? Math.max(0, Math.round(alp.qty)) : 0);
   const sellQty = Math.min(heldQty, row.qty);
 
-  const liveBid = ctx.chain.byOcc(occ)?.bid ?? 0;
+  // 1b #6 (audit 2026-07-11): the reconcile ESTIMATE fallback is fresh-quote-guarded — a STALE
+  // bid must never become a silently-booked exit price; alp.current_price (cycle-fresh) backs it.
+  const liveBid = freshExecutableBid(ctx.chain.byOcc(occ)?.bid, ctx.chain.ageMs) ?? 0;
   const reconcileClose = async (why: string, gated = true) => {
     // GATED (the read-based "lot drained" path): require the orphan to persist 2 consecutive cycles
     // before booking, so a transient empty read can't book-and-close a row that reappears next cycle (the
@@ -213,13 +215,30 @@ export async function executeExit(
     // movers as $0: 06-09 V3/ALT, 06-23/24 power-smart "reconciled"). Book the row's share directly from
     // the ROW — (exit − avg_entry)×row.qty — at the price its contracts actually left for: the OCC's
     // unambiguous filled sell, else an ESTIMATE from the live mark (→ close_reason reconciled_estimated).
-    // The row sold nothing itself, so row.qty IS its unsold share → no double-count. $0 only if no mark.
+    // The row sold nothing itself, so row.qty IS its unsold share → no double-count.
     const { px: mark, estimated } = reconcileExitPx(occ, ctx.allOrders, liveBid || (alp?.current_price ?? 0));
-    const realized = mark > 0 ? rowRealized(row, mark, row.qty) : 0;
+    // 1b #10 (audit 2026-07-11 — the LIGHT honest fix; the broker-flat/ledger guarantee is Bucket 2):
+    // NO usable price at ALL (no unambiguous fill, no live mark) used to close the row with an
+    // INVENTED $0 realized — silently erasing a real loss (e.g. an expired-worthless leg). Never
+    // invent: journal LOUD as unresolved_no_price and leave the row OPEN for the next cycle. The
+    // 2-cycle gate re-runs on the retry — deliberate (each attempt re-confirms the orphan); a price
+    // usually reappears with the next successful chain refresh, and the nightly reconcile is the
+    // human backstop for a permanently price-less row.
+    if (!(mark > 0)) {
+      await store.journal("WARN", `${d.slug}: ${occ} ${why} — UNRESOLVED (unresolved_no_price): no unambiguous fill and no live mark — row left OPEN ×${row.qty}, NOT booking an invented $0; verify at nightly reconcile`, { occ, qty: row.qty });
+      void store.writeShadowEvent(`RECONCILE-UNRESOLVED ${d.slug} ${occ} ×${row.qty} — no usable exit price, row left open`, { kind: "unresolved_no_price", slug: d.slug, occ, qty: row.qty });
+      return;
+    }
+    const realized = rowRealized(row, mark, row.qty);
     const closed = await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
     if (!closed) { await store.journal("WARN", `${d.slug}: ${occ} reconcile raced — already closed elsewhere`); return; }
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
     await store.journal("WARN", `${d.slug}: ${occ} ${why} — reconciled @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} (booked $${realized.toFixed(0)} = ${row.qty}-share)`);
+    // 1b #10: an ESTIMATED booking gets a DISTINCT flag event (close_reason 'reconciled_estimated'
+    // is already on the row — verified) so the operator/nightly gate can sweep every invented price.
+    if (estimated) void store.writeShadowEvent(
+      `RECONCILE-ESTIMATE ${d.slug} ${occ} ×${row.qty} booked $${realized.toFixed(0)} @ ${mark.toFixed(2)} — unresolved price, booked at estimate, verify at nightly reconcile`,
+      { kind: "reconciled_estimated", slug: d.slug, occ, qty: row.qty, px: round2(mark), realized: round2(realized) });
   };
 
   if (sellQty <= 0) {
@@ -424,13 +443,27 @@ export async function executeReconcile(d: ShadowDecision, row: store.PositionRow
   }
   // SHARED-OCC FIX (see reconcileClose): book this row's share directly from the ROW —
   // (exit − avg_entry)×row.qty — at the lot's real exit, or an ESTIMATE from the live bid when the
-  // OCC's sell price is ambiguous/absent (→ close_reason reconciled_estimated). row.qty is the unsold share.
-  const { px: mark, estimated } = reconcileExitPx(row.occ_symbol, ctx.allOrders, ctx.chain.byOcc(row.occ_symbol)?.bid ?? 0);
-  const realized = mark > 0 ? rowRealized(row, mark, row.qty) : 0;
+  // OCC's sell price is ambiguous/absent (→ close_reason reconciled_estimated). row.qty is the unsold
+  // share. 1b #6: the live-bid fallback is fresh-quote-guarded (a stale bid is not a bookable price).
+  const { px: mark, estimated } = reconcileExitPx(row.occ_symbol, ctx.allOrders, freshExecutableBid(ctx.chain.byOcc(row.occ_symbol)?.bid, ctx.chain.ageMs) ?? 0);
+  // 1b #10 (audit 2026-07-11 — light honest fix, see reconcileClose): NO usable price → never book
+  // an invented $0 realized. Journal LOUD (unresolved_no_price) and leave the row OPEN; the next
+  // cycle's reconcile decision re-runs the 2-cycle gate (deliberate — each retry re-confirms), and
+  // the nightly reconcile is the human backstop for a permanently price-less row.
+  if (!(mark > 0)) {
+    await store.journal("WARN", `${d.slug}: ${row.occ_symbol} orphan reconcile UNRESOLVED (unresolved_no_price): no unambiguous fill and no live mark — row left OPEN ×${row.qty}, NOT booking an invented $0; verify at nightly reconcile`, { occ: row.occ_symbol, qty: row.qty });
+    void store.writeShadowEvent(`RECONCILE-UNRESOLVED ${d.slug} ${row.occ_symbol} ×${row.qty} — no usable exit price, row left open`, { kind: "unresolved_no_price", slug: d.slug, occ: row.occ_symbol, qty: row.qty });
+    return;
+  }
+  const realized = rowRealized(row, mark, row.qty);
   const closed = await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
   if (!closed) { await store.journal("WARN", `${d.slug}: ${row.occ_symbol} reconcile raced — already closed elsewhere`); return; }
   entryStateByKey.delete(entryKey(row.strategist_id, row.occ_symbol));
   await store.journal("WARN", `${d.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} — no Alpaca position; booked $${realized.toFixed(0)} (${row.qty}-share)`);
+  // 1b #10: distinct flag event for every ESTIMATED booking (see reconcileClose).
+  if (estimated) void store.writeShadowEvent(
+    `RECONCILE-ESTIMATE ${d.slug} ${row.occ_symbol} ×${row.qty} booked $${realized.toFixed(0)} @ ${mark.toFixed(2)} — unresolved price, booked at estimate, verify at nightly reconcile`,
+    { kind: "reconciled_estimated", slug: d.slug, occ: row.occ_symbol, qty: row.qty, px: round2(mark), realized: round2(realized) });
 }
 
 // ---- ENTRY --------------------------------------------------------------------

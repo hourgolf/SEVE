@@ -24,9 +24,10 @@ import { warn } from "./log.js";
 import { inEventWindow, dayTags } from "../../engine/market-events";
 import { isLastSessionBeforeHoliday } from "../../engine/market-calendar";
 import { etParts, occSymbol, type AlpacaPosition, type AlpacaOrder } from "./alpaca.js";
-import { peakMidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
+import { peakBidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
 import { entryStateByKey, entryKey } from "./execute.js";
+import { freshExecutableBid } from "./exitRules.js";
 
 // RTH in ET minutes-since-midnight: 09:30 (570) → 16:00 (960).
 const RTH_OPEN = 570;
@@ -233,7 +234,17 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
 
   let intent = built.evaluate(f, pos);
 
-  const mark = row ? (ctx.chain.byOcc(row.occ_symbol)?.mid ?? alp?.current_price ?? 0) : 0;
+  // audit 2026-07-11 (1b #6): the bar-close premium checks trigger on the EXECUTABLE BID —
+  // we are long, a liquidation SELLS, and the mid is a price no buyer posted (parity with the
+  // fast sweep: one trigger basis, no drift). freshExecutableBid enforces the same quote-age
+  // guard (policy.QUOTE_TRIGGER_MAX_AGE_MS). Fallback when the chain quote is stale/missing/
+  // zero-bid: the broker's CYCLE-FRESH mark (alp.current_price, read from getPositions THIS
+  // cycle — not a stale chain relic), so bar-granularity stop protection survives a chain
+  // outage rather than going dark; the ~10s sweep is the precision path and IT fails toward
+  // not firing. The mid is kept as a diagnostic only (exit detail below).
+  const rowQuote = row ? ctx.chain.byOcc(row.occ_symbol) : undefined;
+  const midDiag = rowQuote?.mid ?? 0; // diagnostic — never a trigger input (1b #6)
+  const mark = row ? (freshExecutableBid(rowQuote?.bid, ctx.chain.ageMs) ?? alp?.current_price ?? 0) : 0;
   const entryPx = row?.avg_entry_price ?? 0;
 
   // ARMABLE TRAIL (compiled specs): underlying ATR-chandelier — once in profit,
@@ -270,7 +281,9 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // of premium; the entry path below re-enters on the next signal when flat → compounding.
   // For channels with NO convex tail (PB: ridden −EV, compound +EV — compound-vs-ride-probe)
   // this beats riding. Applies to ANY channel incl. BUILTINS (built.premiumExit only covers
-  // compiled specs). Mirrors the engine premiumExit.profitPct (mid-based) → parity by construction.
+  // compiled specs). Mirrors the engine premiumExit.profitPct — ⚠ the ENGINE backtests this on
+  // the MID; live triggers on the BID since 1b #6 (audit 2026-07-11), so live TPs fire ~half a
+  // spread later than the backtest models (deliberate: the backtest's mid was never realizable).
   if (pos && row && !row.runner_of && ch.take_profit_pct > 0 && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0
       && mark >= entryPx * (1 + ch.take_profit_pct / 100)) {
     intent = { kind: "exit", reason: "target_premium" };
@@ -308,12 +321,14 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // momo-shape +50%/keep-⅔ (A13). Channels absent from the map have no trail (gt undefined → skip).
   const gt = policy.GIVEBACK_TRAIL[ch.slug];
   if (pos && row && gt && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
-    // audit 2026-07-11 (1b #5): peakMidSince returns NULL on a READ ERROR — skip the trail
+    // audit 2026-07-11 (1b #5): peakBidSince returns NULL on a READ ERROR — skip the trail
     // evaluation this cycle (the old swallowed →0 silently under-armed the A13/power trail).
     // Deliberately warn-and-skip, never throw: decideChannel's catch would drop this
     // channel's OTHER exits along with the trail. Self-heals next cycle; the fast sweep's
     // in-memory peak keeps its own trail arm independent of this read.
-    const histPeak = row.opened_at ? await peakMidSince(row.occ_symbol, row.opened_at) : 0;
+    // 1b #6 (audit 2026-07-11): the historical peak reads the BID column too — same basis as
+    // `mark` and the sweep's bid-based peak ratchet, so arm/giveback lines can't drift apart.
+    const histPeak = row.opened_at ? await peakBidSince(row.occ_symbol, row.opened_at) : 0;
     if (histPeak == null) {
       warn(`decide ${ch.slug}: peak-quote read failed — giveback trail skipped this cycle`);
     } else {
@@ -345,7 +360,9 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // ---- exit ----
   if (intent?.kind === "exit" && row && alp) {
     const realized = (mark - entryPx) * row.qty * 100;
-    return { ...base, action: "exit", reason: intent.reason, occ: row.occ_symbol, qty: row.qty, blocked: exitFrozen, detail: { mark: round2(mark), entryPx: round2(entryPx), realizedEst: Math.round(realized) } };
+    // 1b #6: `mark` is the bid-based trigger price (realizedEst = realizable $); `mid` rides
+    // along as the labeled diagnostic so the tape still shows what the old basis read.
+    return { ...base, action: "exit", reason: intent.reason, occ: row.occ_symbol, qty: row.qty, blocked: exitFrozen, detail: { mark: round2(mark), mid: round2(midDiag), entryPx: round2(entryPx), realizedEst: Math.round(realized) } };
   }
 
   // ---- entry ----

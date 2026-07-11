@@ -297,22 +297,26 @@ export async function realizedTodayByChannel(strategistId: string, etDate: strin
   return sum;
 }
 
-// Peak option mid since `since` (for the power/A13 giveback trail). Read-only.
+// Peak option BID since `since` (for the power/A13 giveback trail). Read-only.
+// audit 2026-07-11 (1b #6): reads the BID column (was mid) — the trail arms and gives back on
+// REALIZABLE prices, one basis with decide.ts's bid mark and the sweep's bid-based peak ratchet
+// (a mid-history peak against a bid mark would arm high and trip the giveback line early).
+// nullsFirst:false so a null-bid capture row can't shadow the real max under `.desc`.
 // ⚠ Returns NULL on a read error (audit 2026-07-11, 1b #5 secondary): the old swallowed →0
 // read as "peak never engaged" and silently UNDER-ARMED the giveback trail through a DB
 // fault. The caller (decide.ts) skips the trail evaluation that cycle with a warn — it must
 // NOT throw, or decideChannel's catch would drop the channel's OTHER exits with it.
-export async function peakMidSince(occ: string, since: string): Promise<number | null> {
+export async function peakBidSince(occ: string, since: string): Promise<number | null> {
   const { data, error } = await sb
     .from("option_quotes")
-    .select("mid")
+    .select("bid")
     .eq("occ_symbol", occ)
     .gte("captured_at", since)
-    .order("mid", { ascending: false })
+    .order("bid", { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle();
-  if (error) { warn(`store: peakMidSince ${occ} read failed — ${error.message}`); return null; }
-  return Number((data as any)?.mid ?? 0);
+  if (error) { warn(`store: peakBidSince ${occ} read failed — ${error.message}`); return null; }
+  return Number((data as any)?.bid ?? 0);
 }
 
 // Realtime KILL-switch / config subscription. Fires onChange on any fund_state /

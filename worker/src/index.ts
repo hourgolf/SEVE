@@ -24,6 +24,7 @@ import { updateShadowManagement } from "./shadowManage.js";
 import { archiveQuotesToStorage, maybeArchiveTick } from "./archive.js";
 import { maybePublishForensicsTick } from "./forensics.js";
 import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, noteRowHeld, type ExecCtx } from "./execute.js";
+import { freshExecutableBid } from "./exitRules.js";
 import { computeFeatures } from "../../engine/engine";
 import { sessionCloseMin } from "../../engine/market-calendar";
 import { inEventWindow } from "../../engine/market-events";
@@ -43,11 +44,27 @@ const liveMode = (): boolean => !config.dryRun && config.liveTrading && config.h
 // behind ONE 'stream' heartbeat — so it must reliably handle every symbol it lists.
 const SYMBOLS = config.symbols;
 const ownedBy = (c: store.ChannelConfig): boolean => c.executor === "stream" && SYMBOLS.includes(c.underlying.toUpperCase());
-// Running peak option mid per open position (power giveback + sweep state).
-const peakMidByKey = new Map<string, number>();
-// Running TROUGH option mid per open position — the MAE twin (58_trough_mark). Instrumentation
-// only: no exit reads it; it makes stop calibration measurable from durable data.
-const troughMidByKey = new Map<string, number>();
+// Running peak option BID per open position (giveback/runner trail arm + sweep state).
+// audit 2026-07-11 (1b #6): BID-based (was mid) — the trail must arm and give back on
+// REALIZABLE prices (bid-side MFE, the desk methodology), so a wide spread can't arm a
+// ratchet at a level no buyer ever paid. The persisted peak_mark/trough_mark columns
+// switch basis with it — see the era-boundary note at the sweep's seed site below.
+const peakBidByKey = new Map<string, number>();
+// Running TROUGH option BID per open position — the MAE twin (58_trough_mark). Instrumentation
+// only: no exit reads it; it makes stop calibration measurable from durable data. BID-based
+// since 1b #6 (a stop-out sells at the bid, so bid-side MAE is the calibration truth).
+const troughBidByKey = new Map<string, number>();
+// 1b #6: per-row throttle (≤1 line/min) for the "price exits skipped" info — a position whose
+// quote is stale/bid-less has NO price protection, which must be visible without flooding the
+// log at the 10s sweep cadence. Cleared with the peak/trough state when the row leaves.
+const sweepSkipLogged = new Map<string, number>();
+// One clear point for a row's sweep price-state (peak/trough/skip-throttle) — every path that
+// retires a row from the price section (flattens + fired exits) must drop all three together.
+function clearSweepPriceState(rowId: string): void {
+  peakBidByKey.delete(rowId);
+  troughBidByKey.delete(rowId);
+  sweepSkipLogged.delete(rowId);
+}
 // Orphan safety-net persistence: `${accountId}|${occ}` → consecutive cycles seen UNCOVERED
 // (held in a bucket with no open desk row). A 2-cycle gate dodges same-cycle fill→insert races.
 const orphanSeen = new Map<string, number>();
@@ -519,6 +536,8 @@ function report(trigger: string, equity: number, ds: ShadowDecision[]): void {
 // exits (ustop / chandelier / strategy intents) stay on the bar-close cycle —
 // they're defined on bars. This is the structural latency win over the minute
 // cron: a crossed stop fires within seconds, not at the next minute boundary.
+// PRICE BASIS (audit 2026-07-11, 1b #6): every price trigger + the MFE/MAE peak
+// state evaluates the fresh EXECUTABLE BID (we sell to close); mid = diagnostic.
 async function fastExitSweep(): Promise<void> {
   // audit 2026-07-11 (1b #8): OWN mutex — the sweep used to bail on (and hold) the full-cycle
   // `cycling` flag, so a slow or HUNG bar-close cycle silenced every backstop below (halt/EOD/
@@ -616,8 +635,7 @@ async function fastExitSweep(): Promise<void> {
           catch (e) { warn(`halt-flatten ${ch.slug} failed — ${(e as Error).message}`); }
           finally { exitGuard.release(r.id); }
         }
-        peakMidByKey.delete(r.id);
-        troughMidByKey.delete(r.id);
+        clearSweepPriceState(r.id);
         continue;
       }
       // ---- EOD HARD-FLATTEN backstop (wall-clock; 2026-06-19 Juneteenth strand fix) ----
@@ -642,8 +660,7 @@ async function fastExitSweep(): Promise<void> {
           catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
           finally { exitGuard.release(r.id); }
         }
-        peakMidByKey.delete(r.id);
-        troughMidByKey.delete(r.id);
+        clearSweepPriceState(r.id);
         continue;
       }
       // ---- EVENT STAND-DOWN wall-clock backstop (audit 2026-07-10) ----
@@ -661,46 +678,76 @@ async function fastExitSweep(): Promise<void> {
           catch (e) { warn(`event-flatten ${ch.slug} failed — ${(e as Error).message}`); }
           finally { exitGuard.release(r.id); }
         }
-        peakMidByKey.delete(r.id);
-        troughMidByKey.delete(r.id);
+        clearSweepPriceState(r.id);
         continue;
       }
-      const mid = chain?.byOcc(r.occ_symbol)?.mid ?? 0;
-      if (!(mid > 0)) continue;
+      // ---- PRICE-TRIGGERED exits below — EXECUTABLE-BID basis (audit 2026-07-11, 1b #6) ----
+      // We are LONG options: a liquidation SELLS, so every trigger evaluates the BID — the
+      // price a buyer will actually pay — NOT the mid (a mid-based stop fires late/at a level
+      // no order can realize on a wide spread; operator decision 2026-07-11). freshExecutableBid
+      // also enforces the QUOTE-AGE guard (policy.QUOTE_TRIGGER_MAX_AGE_MS): a stale chain or a
+      // missing/zero bid SKIPS the price exits this tick — fail toward NOT firing on a fantasy
+      // price. The mandatory halt/EOD/event flattens above already ran (wall-clock/operator-
+      // triggered, never price-gated), so this skip can never strand a position past the bell.
+      // The MID stays computed as a labeled DIAGNOSTIC only (skip + fire info lines).
+      const q = chain?.byOcc(r.occ_symbol);
+      const midDiag = q?.mid ?? 0; // diagnostic only — never a trigger or peak input (1b #6)
+      const chainAgeMs = chain?.ageMs ?? Infinity;
+      const bid = freshExecutableBid(q?.bid, chainAgeMs);
+      if (bid == null) {
+        // Throttled visibility (≤1/min/row): a row skipped here is running WITHOUT price
+        // protection — silent would hide an outage; unthrottled would flood at 10s cadence.
+        const last = sweepSkipLogged.get(r.id) ?? 0;
+        if (Date.now() - last >= 60_000) {
+          sweepSkipLogged.set(r.id, Date.now());
+          info(`fast-exit: ${ch.slug} ${r.occ_symbol} price exits skipped — ${chainAgeMs > policy.QUOTE_TRIGGER_MAX_AGE_MS ? `chain stale (${Number.isFinite(chainAgeMs) ? `${Math.round(chainAgeMs / 1000)}s` : "never seeded"})` : `no executable bid (bid ${q?.bid ?? "—"})`}; mid ${midDiag.toFixed(2)} diagnostic — mandatory flattens unaffected`);
+        }
+        continue;
+      }
       // KEY BY ROW ID (review hardening 2026-07-05): the old entryKey(strategist,occ) key was
       // never cleared on bar-close-cycle/manual exits, so a same-day re-entry into the same
       // strike inherited the PRIOR position's peak — pre-existing latent staleness that the
       // runner ratchet would have turned into instant wrong exits. Row-id keys are per-position
       // by construction and self-seed from the row's own persisted peak/trough on first sight.
       const key = r.id;
-      // seed from the persisted peak_mark so a worker restart doesn't lose the MFE high-water mark
-      const prevPeak = peakMidByKey.get(key) ?? r.peak_mark ?? r.avg_entry_price;
-      const peak = Math.max(prevPeak, mid);
-      peakMidByKey.set(key, peak);
+      // seed from the persisted peak_mark so a worker restart doesn't lose the MFE high-water mark.
+      // ⚠ BASIS NOTE (audit 2026-07-11, 1b #6): peak_mark/trough_mark are BID-based from this
+      // version (were mid) — the trail arms/gives-back on realizable prices and pk·win reads
+      // bid-side MFE. ERA BOUNDARY at the deploy: don't pool pre/post peaks in analysis (bid
+      // peaks sit ~half-spread below the old mid peaks). A row open ACROSS the deploy seeds
+      // from its persisted mid-based peak — the monotonic max keeps it (a one-time ≤half-spread
+      // overstatement on those rows only), then everything is bid-based forever after.
+      const prevPeak = peakBidByKey.get(key) ?? r.peak_mark ?? r.avg_entry_price;
+      const peak = Math.max(prevPeak, bid);
+      peakBidByKey.set(key, peak);
       if (peak > prevPeak) void store.markPeak(r.id, peak); // durable MFE ratchet, NEW-high only (44_trade_forensics; off the trade path)
-      // MAE twin (58_trough_mark): ratchet the running MIN mark, NEW-low-only writes, seeded from
+      // MAE twin (58_trough_mark): ratchet the running MIN bid, NEW-low-only writes, seeded from
       // the persisted value (restart-safe). Instrumentation only — nothing reads it on the trade path.
-      const prevTrough = troughMidByKey.get(key) ?? r.trough_mark ?? r.avg_entry_price;
-      const trough = Math.min(prevTrough, mid);
-      troughMidByKey.set(key, trough);
+      const prevTrough = troughBidByKey.get(key) ?? r.trough_mark ?? r.avg_entry_price;
+      const trough = Math.min(prevTrough, bid);
+      troughBidByKey.set(key, trough);
       if (trough < prevTrough) void store.markTrough(r.id, trough);
       // "The desk summons you" — premium-side pages off the same ~10s sweep state:
       // a ripper crossing +CROSS%, and a meaningful peak giving back ≥ FRAC of the
       // move (the positions panel's 50%-giveback amber, pushed to the phone live).
       const entryPx = r.avg_entry_price;
       if (entryPx > 0) {
-        const retPct = ((mid - entryPx) / entryPx) * 100;
+        // 1b #6: pages read the BID too (same basis as the peak they compare against) —
+        // "up +75%" now means +75% you could actually SELL for, not a mid nobody bid.
+        const retPct = ((bid - entryPx) / entryPx) * 100;
         const peakPct = ((peak - entryPx) / entryPx) * 100;
         // dedup scope = the POSITION ROW id (not the OCC) so a same-day re-entry into the
         // same strike (e.g. two ORB legs on 742C) pages on its OWN +75%/giveback, not once.
         if (retPct >= policy.ALERT_CROSS_PCT)
           alertOnce(todayET, "cross", r.id, `▲ ${ch.slug} +${Math.round(retPct)}%`,
-            `${r.occ_symbol} ×${r.qty} — entry $${entryPx.toFixed(2)} → $${mid.toFixed(2)}. Ride or bank?`);
-        if (peakPct >= policy.ALERT_GIVEBACK_MIN_PEAK_PCT && peak - mid >= policy.ALERT_GIVEBACK_FRAC * (peak - entryPx))
+            `${r.occ_symbol} ×${r.qty} — entry $${entryPx.toFixed(2)} → bid $${bid.toFixed(2)}. Ride or bank?`);
+        if (peakPct >= policy.ALERT_GIVEBACK_MIN_PEAK_PCT && peak - bid >= policy.ALERT_GIVEBACK_FRAC * (peak - entryPx))
           alertOnce(todayET, "giveback", r.id, `▼ ${ch.slug} giving it back`,
-            `${r.occ_symbol} peaked +${Math.round(peakPct)}%, now ${retPct >= 0 ? "+" : ""}${Math.round(retPct)}% — ${Math.round(((peak - mid) / (peak - entryPx)) * 100)}% of the move gone`);
+            `${r.occ_symbol} peaked +${Math.round(peakPct)}%, now ${retPct >= 0 ? "+" : ""}${Math.round(retPct)}% — ${Math.round(((peak - bid) / (peak - entryPx)) * 100)}% of the move gone`);
       }
       const pe = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
+      // 1b #6: `mark` = the fresh EXECUTABLE BID, `peak` = the bid-based MFE ratchet above.
+      // premiumExitReason stays PURE (unchanged comparisons) — only the input price changed.
       const reason = premiumExitReason({
         row: r, slug: ch.slug, premiumExit: pe, takeProfitPct: ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
         givebackTrail: policy.GIVEBACK_TRAIL[ch.slug] ?? null,
@@ -708,7 +755,7 @@ async function fastExitSweep(): Promise<void> {
         minutesToClose: Math.max(0, rthClose - nowMin),
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)
         isRunner: !!r.runner_of, runnerGivebackPct: ch.runner_giveback_pct, // R1 runner ratchet (0 = off)
-      }, mid, peak);
+      }, bid, peak);
       if (!reason) continue;
       // 1b #9: ordinary PRICE exits need the order snapshot (late-fill recovery + working-order
       // idempotency read it) — on a degraded pass only the mandatory flattens above may sell.
@@ -718,12 +765,11 @@ async function fastExitSweep(): Promise<void> {
         info(`fast-exit: ${ch.slug} ${r.occ_symbol} ${reason} suppressed — orders snapshot unavailable (degraded pass)`);
         continue;
       }
-      info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (mid ${mid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)})`);
+      info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (bid ${bid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)}; mid ${midDiag.toFixed(2)} diagnostic)`);
       if (!exitGuard.claim(r.id)) continue; // 1b #8: the concurrent cycle holds this row's exit — skip, retry next sweep
       try {
         await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct });
-        peakMidByKey.delete(key);
-        troughMidByKey.delete(key);
+        clearSweepPriceState(key);
       } finally { exitGuard.release(r.id); }
       }
     }

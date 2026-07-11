@@ -180,6 +180,15 @@ export const policy = {
   // probe (gating halves base power's bleed). ALL channels are cost-gated.
   COST_GATE_EXEMPT: new Set<string>(),
   PREMIUM_STOP_PCT: 50,
+  // QUOTE-AGE guard for PRICE-TRIGGERED exits (audit 2026-07-11, 1b #6): the fast sweep and the
+  // bar-close premium checks only trigger off a chain snapshot at most this old. 120s deliberately
+  // MATCHES decide.ts's stale_chain ENTRY guard (audit L4) — one staleness definition desk-wide.
+  // A healthy chain refreshes every sweep/cycle (seconds old), so 120s ≈ 12 consecutive failed
+  // ~10s sweep refreshes: past transient blips (a tighter bound would drop stop protection on
+  // routine hiccups — fail-toward-not-firing must not become fail-toward-never-protecting) but
+  // well before a fast 0DTE leaves a stale bid behind as a fantasy trigger price. The mandatory
+  // halt/EOD/event flattens are NOT price-gated and ignore this entirely.
+  QUOTE_TRIGGER_MAX_AGE_MS: 120_000,
   // GIVEBACK (arm-high ratchet) trail, per-channel (2026-07-08, A13): engage once the peak mark
   // clears entry × engageMult, then exit if it gives back > givebackPct of the peak GAIN. power is
   // byte-identical to its prior POWER_TRAIL_* scalars (+100% / keep-60%); momo-shape armed for the

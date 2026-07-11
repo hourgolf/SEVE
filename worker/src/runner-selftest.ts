@@ -2,10 +2,12 @@
 // rules (exitRules.ts), the exit late-fill recovery helpers (audit 2026-07-10), the
 // cockpit-P3 account-routing fail-closed invariants (routing.ts), the Batch-1
 // failure-policy guards (exitGuard.ts, audit 2026-07-11: per-row exit claim, the
-// degraded-sweep predicate, the fail-honest open-positions mapping), and the Batch-2
+// degraded-sweep predicate, the fail-honest open-positions mapping), the Batch-2
 // booking-correctness rules (audit 2026-07-11: the is_armed entries-only split
 // acctCanEnter/acctCanManage, the partial-exit remainder arithmetic, the tranche
-// canceled-partial recovery). No env, no network,
+// canceled-partial recovery), and the Batch-3 bid-basis trigger rules (audit
+// 2026-07-11, 1b #6: freshExecutableBid quote-age/zero-bid guard + the caller
+// contract that stops/targets/trails evaluate the executable BID). No env, no network,
 // no Supabase (these modules import only config, which is env-safe) — CI-runnable. This
 // is the WORKER SELFTEST GATE: run it (+ worker typecheck) before any trade-path deploy.
 //
@@ -17,7 +19,7 @@
 process.env.ALPACA_KEY ??= "selftest";
 process.env.ALPACA_SECRET ??= "selftest";
 process.env.SUPABASE_URL ??= "http://localhost";
-const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder } = await import("./exitRules.js");
+const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid } = await import("./exitRules.js");
 const { groupChannelsByAccount, resolveDefaultAccount, unresolvedAccount, acctCanEnter, acctCanManage, SYNTH_DEFAULT } = await import("./routing.js");
 const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./exitGuard.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
@@ -224,6 +226,39 @@ check("fresh orders: mandatory flattens allowed", sweepExitAllowed("halt_flatten
   const mapped = mapOpenPositions({ data: [{ id: "p1", strategist_id: "s1", occ_symbol: "SPY260711C00746000", opt_type: "call", qty: "3", avg_entry_price: "1.25", strike: "746", expiration: "2026-07-11", opened_at: "2026-07-11T14:00:00Z", status: "open", underlying: "SPY", peak_mark: null, trough_mark: "1.10", runner_of: null }], error: null });
   check("open-positions: rows map with numeric coercion", [mapped[0].qty, mapped[0].avg_entry_price, mapped[0].peak_mark, mapped[0].trough_mark], [3, 1.25, null, 1.1]);
 }
+
+// ---- 1b #6 (audit 2026-07-11): bid-basis triggers + the quote-age guard ----
+
+// freshExecutableBid — the executable sell-side price for a price-triggered exit, or null
+// (⇒ the caller skips the trigger this tick, failing toward NOT firing on a fantasy price).
+check("1b#6: fresh positive bid passes", freshExecutableBid(1.25, 5_000), 1.25);
+check("1b#6: stale quote → null (no fantasy trigger price)", freshExecutableBid(1.25, 121_000), null);
+check("1b#6: boundary age (== max, 120s) still fresh", freshExecutableBid(1.25, 120_000), 1.25);
+check("1b#6: never-seeded chain (Infinity age) → null", freshExecutableBid(1.25, Infinity), null);
+check("1b#6: NaN age → null (only a provably fresh quote passes)", freshExecutableBid(1.25, NaN), null);
+check("1b#6: zero bid (no posted buyer) → null", freshExecutableBid(0, 5_000), null);
+check("1b#6: missing bid → null", freshExecutableBid(undefined, 5_000), null);
+check("1b#6: null bid → null", freshExecutableBid(null, 5_000), null);
+check("1b#6: negative/garbage bid → null", freshExecutableBid(-1, 5_000), null);
+check("1b#6: explicit tighter maxAge is honored", freshExecutableBid(1.25, 40_000, 30_000), null);
+
+// premiumExitReason on BID inputs — the function is PURE and price-agnostic (unchanged); these
+// pin the new CALLER CONTRACT: the sweep passes the fresh executable BID as `mark` and a
+// BID-based peak, so triggers evaluate realizable prices. Scenario quotes: entry 1.00 (an
+// ask-side buy fill), channel stop −30% / take +22% (the `base()` fixture above).
+// Wide spread near the stop — quote bid 0.69 / ask 0.85 → mid 0.77: the MID input holds (the
+// old fantasy hold, position bleeding past its realizable stop), the BID input fires.
+check("1b#6: wide-spread stop — BID input fires premium_stop", premiumExitReason(base(), 0.69, 1.1), "premium_stop");
+check("1b#6: same quote's MID input would NOT have fired (documents the behavior change)", premiumExitReason(base(), 0.77, 1.1), null);
+// Take-profit — quote bid 1.18 / ask 1.28 → mid 1.23: the MID cleared +22% (old fire), the BID
+// hasn't → the target now waits for a price a buyer will actually pay.
+check("1b#6: target waits for the BID to clear (bid 1.18 holds where mid 1.23 fired)", premiumExitReason(base(), 1.18, 1.18), null);
+check("1b#6: target fires when the BID itself clears +22%", premiumExitReason(base(), 1.22, 1.22), "target_premium");
+// Giveback trail on a BID-based peak: peak 1.60 (bid MFE) arms at +50%; a bid at the ⅔ floor
+// fires — arm level and giveback line are BOTH realizable prices now.
+check("1b#6: giveback trail arms + fires on bid peak/bid mark", premiumExitReason(momo(), 1.40, 1.60), "trail_giveback");
+// Runner ratchet on bid peaks: 25% off a 1.30 bid peak.
+check("1b#6: runner ratchet fires on bid giveback", premiumExitReason(runner(), 1.30 * 0.75, 1.30), "runner_ratchet");
 
 console.log(`\n  runner-selftest: ${pass}/${pass + fail} checks passed${fail ? ` — ${fail} FAILED` : " ✓"}`);
 process.exit(fail ? 1 : 0);
