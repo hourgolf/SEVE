@@ -2,32 +2,27 @@
 
 import "@/app/studio.css";
 import { useMemo, useState } from "react";
-import { ChannelRackRow } from "@/components/studio/ChannelRackRow";
 import { ChannelInspector } from "@/components/studio/ChannelInspector";
+import { StudioFleet } from "@/components/studio/StudioFleet";
 import { StudioBand } from "@/components/studio/StudioBand";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort } from "@/lib/studio/deriveStudioView";
 
 // =============================================================================
-// STUDIO surface (PERFORM/STUDIO rebuild · slice S3) — the tuning room HERO.
-// A full-height hero under the shared DeskShell top bar: the CHANNEL RACK (one
-// ChannelRackRow per channel) + a selected-channel INSPECTOR (right) + the
-// MASTER · SESSION-TAPE · REGISTRY band (bottom). Mounts INSIDE
+// STUDIO surface (P5 slice 4) — exception-first fleet tuning. The primary pane
+// is a sortable summary table; repeated rack controls moved into the selected
+// channel INSPECTOR. Desk controls + session tape live in the compact lower bar.
+// Mounts INSIDE
 // .shell-root[data-mode="studio"] so every rule in studio.css is scoped there.
 //
-// SCOPE: this is only the HERO. The legacy §01–§04 rooms (chart / chain /
-// ContractDetail / autopsy / shadow book / P&L / OPS) stay REACHABLE, unchanged,
-// as the sibling <DesktopSurface> rendered below the shell-root in page.tsx —
-// that keeps its own anchor strip (the legacy Shell room tabs) and guarantees no
-// functionality loss until each room is natively migrated (follow-on work).
-//
 // DATA: every source is REUSED from the seam (roster = view.desk.strategists
-// scoped to acctId, same rule as DesktopSurface/PerformSurface; livePnl for the
-// per-row day P&L; feed for the master + tape). No new subscriptions.
+// scoped to acctId; livePnl for per-row day P&L; feed for signals + tape). No new
+// subscriptions.
 // =============================================================================
 
 export function StudioSurface({ view, feed, livePnl, liveFund, acctId, symbol }: SurfaceProps) {
   void symbol;
-  const { desk, anySolo, isActive } = view;
+  const { desk } = view;
 
   // Scope the roster to the selected account (identical to DesktopSurface).
   const channels = useMemo(
@@ -35,40 +30,34 @@ export function StudioSurface({ view, feed, livePnl, liveFund, acctId, symbol }:
     [desk.strategists, acctId],
   );
 
-  // Selected row → inspector. Default to the first channel of the visible roster;
-  // fall back cleanly if the selected slug leaves the account scope.
   const [selSlug, setSelSlug] = useState<string | null>(null);
-  const selected = channels.find((s) => s.slug === selSlug) ?? channels[0];
+  const [showAll, setShowAll] = useState(false);
+  const [sort, setSort] = useState<StudioSort>("attention");
+  const rows = useMemo(
+    () => deriveStudioRows(channels, livePnl, feed.signals, feed.updatedAt ? Date.parse(feed.updatedAt) : 0),
+    [channels, livePnl, feed.signals, feed.updatedAt],
+  );
+  const summary = useMemo(() => summarizeStudioFleet(rows), [rows]);
+  const visibleRows = useMemo(
+    () => sortStudioRows(showAll ? rows : rows.filter((row) => row.attentionReasons.length > 0), sort),
+    [rows, showAll, sort],
+  );
+  const selectedRow = rows.find((row) => row.channel.slug === selSlug) ?? visibleRows[0] ?? rows[0];
 
   return (
-    <div className="studio">
-      <section className="rack">
-        <div className="rack-head rgrid">
-          <span>Channel Rack · {channels.length}</span>
-          <span>Mode</span>
-          <span>Fires <span className="rh-stop">−stop</span>·<span className="rh-take">+take</span>·EOD</span>
-          <span>Shape — stop | entry | take</span>
-          <span title="daily realized-loss LATCH — halts NEW entries for the day once realized P&L ≤ −$X">HALT/day</span>
-          <span>Risk/tr</span>
-          <span style={{ textAlign: "right" }}>Day P&amp;L</span>
-          <span>M·B</span>
-        </div>
-        <div className="rack-rows">
-          {channels.map((s) => (
-            <ChannelRackRow
-              key={s.slug}
-              strategist={s}
-              pnl={livePnl[s.slug]}
-              active={isActive(s.slug) && !(anySolo && !s.config.soloed && !s.config.muted)}
-              selected={selected?.slug === s.slug}
-              onSelect={() => setSelSlug(s.slug)}
-            />
-          ))}
-          {channels.length === 0 && <div className="rack-empty">no channels in this account</div>}
-        </div>
-      </section>
+    <div className="studio studio-v4">
+      <StudioFleet
+        rows={visibleRows}
+        summary={summary}
+        selectedSlug={selectedRow?.channel.slug}
+        showAll={showAll}
+        sort={sort}
+        onShowAll={setShowAll}
+        onSort={setSort}
+        onSelect={setSelSlug}
+      />
 
-      <ChannelInspector strategist={selected} />
+      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} />
 
       <StudioBand
         fund={desk.fund}

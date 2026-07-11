@@ -4,21 +4,23 @@ import { useState } from "react";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pmVar } from "@/lib/desk/colors";
+import { signedUsd, usd0 } from "@/lib/format";
 import type { StrategistState, StrategistConfig } from "@/lib/desk/types";
+import type { StudioChannelRow } from "@/lib/studio/deriveStudioView";
 
 // =============================================================================
 // STUDIO · CHANNEL INSPECTOR (PERFORM/STUDIO rebuild · slice S3)
 // The selected channel's advanced knobs — the ChannelStrip flip-card editor
 // RE-LAID-OUT into the right rail (mock F #inspector). Same fields, same write
-// paths: setCfg (dispatch SET_CONFIG + persistConfig) for the config knobs,
-// setChannelExecutor / setChannelStatus / duplicateChannel / deleteChannel for
-// executor + lifecycle. Nothing new is written; only the layout changed. Anon =
+// paths: setCfg (dispatch SET_CONFIG + persistConfig) for the config knobs, plus
+// setChannelStatus / duplicateChannel / deleteChannel for lifecycle. Executor
+// routing is intentionally absent: it belongs in the later admin surface. Anon =
 // read-only (the write helpers no-op without a session; we also gate the UI).
 //
 // Read-only here (no config column to write): STRIKE (there is no strike_offset
 // in strategist_config) and the A13 GIVEBACK TRAIL (a worker config map, not a
 // per-channel column). Both are surfaced honestly as display-only, matching the
-// mock's intent without inventing a write path.
+// inspector's intent without inventing a write path.
 // =============================================================================
 
 // The giveback-trail note is worker-side (worker/src/config.ts GIVEBACK_TRAIL) — display only.
@@ -27,14 +29,12 @@ const GIVEBACK_NOTE: Record<string, string> = {
 };
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, pk, win, n }: {
+export function ChannelInspector({ strategist, summary }: {
   strategist: StrategistState | undefined;
-  pk?: number | null;
-  win?: number | null;
-  n?: number | null;
+  summary?: StudioChannelRow;
 }) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, setChannelExecutor, setChannelStatus, duplicateChannel, deleteChannel, canWrite } = useDeskWrite();
+  const { persistConfig, setChannelStatus, duplicateChannel, deleteChannel, canWrite } = useDeskWrite();
   const [confirmDel, setConfirmDel] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -43,14 +43,13 @@ export function ChannelInspector({ strategist, pk, win, n }: {
   if (!strategist) {
     return (
       <aside className="inspector">
-        <div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">click a rack row to select</span></div>
+        <div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">select a fleet row</span></div>
         <div className="insp-empty">no channel selected</div>
       </aside>
     );
   }
 
   const { id, slug, underlying, color, status, config } = strategist;
-  const executor = strategist.executor ?? "cron";
   const dte = config.entry_dte ?? 0;
   const eventPolicy = config.event_policy ?? "standdown";
   const ustop = config.underlying_stop_pct ?? 0;
@@ -63,11 +62,6 @@ export function ChannelInspector({ strategist, pk, win, n }: {
   const setCfg = (patch: Partial<StrategistConfig>) => {
     dispatch({ type: "SET_CONFIG", slug, patch });
     persistConfig(id, patch);
-  };
-  const flipExecutor = (next: "cron" | "stream") => {
-    if (next === executor) return;
-    dispatch({ type: "SET_EXECUTOR", slug, executor: next });
-    setChannelExecutor(id, next).then((r) => { if (!r.ok) { dispatch({ type: "SET_EXECUTOR", slug, executor }); setErr(r.error ?? "executor change failed"); } });
   };
   const toggleBench = () => {
     const next = status === "armed" ? "draft" : "armed";
@@ -113,13 +107,17 @@ export function ChannelInspector({ strategist, pk, win, n }: {
         <span className="ih-tk">{underlying}</span>
         {giveback && <span className="ih-tag amber">⚡ A13 ratchet</span>}
         <span className="ih-stats">
-          pk <b>{pk != null ? `+${pk}%` : "—"}</b> · win <b>{win != null ? `${win}%` : "—"}</b> · N <b>{n ?? "—"}</b>
+          state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b>
         </span>
       </div>
 
+      <div className="insp-context">
+        <span><small>ATTENTION</small><b>{summary?.attentionReasons.join(" · ") || "none"}</b></span>
+        <span><small>OPEN EXPOSURE</small><b>{usd0(summary?.pnl.exposure ?? 0)}</b></span>
+        <span><small>NON-DEFAULT</small><b>{summary?.configDiffs.join(" · ") || "none"}</b></span>
+      </div>
+
       <div className="insp-grid">
-        <div className="ctl"><span className="cl">executor</span>
-          {seg(executor, [{ v: "stream", label: "STREAM" }, { v: "cron", label: "CRON" }], flipExecutor)}</div>
         <div className="ctl"><span className="cl">entry dte</span>
           {seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
         <div className="ctl"><span className="cl">strike</span>
@@ -165,7 +163,6 @@ export function ChannelInspector({ strategist, pk, win, n }: {
             <button type="button" className="life" onClick={() => setConfirmDel(false)}>CANCEL</button>
           </>
         )}
-        <span className="reg">⚖ registry governs — changes log to calibration</span>
       </div>
       {(msg || err) && <div className={`insp-note${err ? " err" : ""}`}>{err ?? msg}</div>}
     </aside>

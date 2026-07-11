@@ -148,6 +148,7 @@
     "market-calendar-selftest": "tsx engine/market-calendar.selftest.ts",
     "incident-selftest": "tsx lib/incident/incident.selftest.ts",
     "perform-selftest": "tsx lib/perform/perform.selftest.ts",
+    "studio-selftest": "tsx lib/studio/studio.selftest.ts",
     "ride-filter-probe": "tsx --env-file=.env.local engine/ride-filter-probe.ts",
     "gap-orb-gauntlet": "tsx --env-file=.env.local engine/gap-orb-gauntlet.ts",
     "drift-detector-probe": "tsx --env-file=.env.local engine/drift-detector-probe.ts",
