@@ -138,13 +138,16 @@ class SessionLayer implements ISeriesPrimitive<Time> {
 
 export function IntradayChart({
   bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
-  symbol = "SPY", onSymbolChange,
+  symbol = "SPY", onSymbolChange, fill = false,
 }: {
   bars: UnderlyingBar[];
   dailyBars?: UnderlyingBar[];
   spot?: number | null;
   spotUp?: boolean | null;
   mobile?: boolean;
+  /** Fill the parent's height instead of the fixed canvas height (PERFORM hero,
+   *  slice S2 — the full-viewport surface sizes the chart to its grid cell). */
+  fill?: boolean;
   /** §01 instrument label (SPY/QQQ) — titles the chart + the spot LED caption. */
   symbol?: string;
   /** When provided, renders the SPY/QQQ toggle in the chart header. */
@@ -700,7 +703,7 @@ export function IntradayChart({
   };
 
   return (
-    <div className="panel">
+    <div className={`panel${fill ? " chart-fill" : ""}`}>
       <div className="phead">
         <span className="t">{symbol} — {isDaily ? "Daily" : "Intraday"}</span>
         <span className="phead-right chart-controls chart-controls--top">
@@ -744,7 +747,7 @@ export function IntradayChart({
       <div className="pbody">
         <div className="chart-wrap chart-wrap--lw" style={{ position: "relative" }}>
           {/* the exit-timing instrument — sized up (operator: the chart was undersized for how much it's read) */}
-          <div ref={elRef} style={{ height: mobile ? (showMacd ? 420 : 380) : (showMacd ? 500 : 420), width: "100%" }} />
+          <div ref={elRef} style={{ height: fill ? "100%" : (mobile ? (showMacd ? 420 : 380) : (showMacd ? 500 : 420)), width: "100%" }} />
           {ledSpot != null && (
             <div className="chart-led">
               <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption={`${symbol.toLowerCase()} $`} color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"} />

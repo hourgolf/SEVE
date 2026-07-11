@@ -19,7 +19,7 @@ import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileApp } from "@/components/mobile/MobileApp";
 import { DeskShell } from "@/components/shell/DeskShell";
-import { PerformPlaceholder } from "@/components/shell/PerformPlaceholder";
+import { PerformSurface } from "@/components/perform/PerformSurface";
 import { ShellProvider, useShell } from "@/hooks/useShellState";
 import { marketSummary } from "@/lib/marketSummary";
 import type { Room } from "@/components/surfaceTypes";
@@ -109,7 +109,7 @@ function Surface({
           spotUp={spotUp}
           dayChangePct={mkt.dayChangePct}
         />
-        {mode === "perform" && <PerformPlaceholder />}
+        {mode === "perform" && <PerformSurface {...props} />}
       </div>
       {mode === "studio" && <DesktopSurface {...props} />}
     </>

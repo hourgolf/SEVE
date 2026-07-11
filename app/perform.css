@@ -1,0 +1,255 @@
+/* ===========================================================================
+   SEVE — PERFORM surface (PERFORM/STUDIO rebuild · slice S2)
+   The watching room, lifted from mocks/perform-2026-07/perform-mock-F-final.html
+   (#stage · #rail · #dock). EVERYTHING here is scoped under
+   .shell-root[data-mode="perform"] so it never reaches STUDIO or the legacy
+   chassis. The chrome (top bar) is S1's; the FRAME switch (`F`) re-skins it. The
+   interior "screens" (chart canvas, rail panels) stay DARK GLASS in both skins —
+   only local --pf-* tokens (invariant dark) drive them, plus the shell's shared
+   --lcd / --dk / --hw / --fs token layer.
+   =========================================================================== */
+
+/* PERFORM fills the viewport edge-to-edge — drop the studio chassis's 18px body
+   frame (globals.css) + lock page scroll while this mode is active. STUDIO keeps
+   its inset (the :has only matches when a perform shell-root is mounted). */
+body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
+
+/* The watching surface fills the viewport below the shared top bar (h-top) + its
+   2px accent band, so nothing scrolls and no frame-bg shows through. The tokens
+   live HERE (on .perform, not the bare shell-root) and inherit down: interior
+   dark-glass values the mock uses that S1's token layer doesn't define — all
+   invariant (glass readouts stay dark in cream too, so no skin variants). */
+.shell-root[data-mode="perform"] .perform {
+  --pf-scr: #0b0d0f;
+  --pf-plate: #2b2b2e; --pf-plate-2: #1d1d20; --pf-plate-ink: #d7d5cb;
+  --pf-line: rgba(255, 255, 255, 0.07); --pf-line-2: rgba(255, 255, 255, 0.13);
+  --pf-green: #2fd573; --pf-green-soft: #6cc06d; --pf-red-soft: #e07a58; --pf-amber: #e0a23f;
+  --pf-mute: #d98e6e;
+  --pf-fs-slug: calc(var(--dz, 1) * clamp(14px, 1vw, 18px));
+  --pf-fs-dslug: calc(var(--dz, 1) * clamp(11px, 0.78vw, 14px));
+  --h-dock: clamp(84px, 5.8vw, 112px);
+  --rail-w: clamp(392px, 28.5vw, 560px);
+
+  height: calc(100vh - var(--h-top) - 2px);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) var(--h-dock);
+  background: var(--frame-bg);
+  transition: background-color 0.32s ease;
+}
+
+/* ---------- stage: chart hero (~65%) + right rail --------------------------- */
+.shell-root[data-mode="perform"] .pf-stage {
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  gap: 7px;
+  padding: 7px;
+  min-height: 0;
+}
+
+/* the reused IntradayChart panel, made to FILL the hero cell (fill prop) */
+.shell-root[data-mode="perform"] .chart-fill {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.shell-root[data-mode="perform"] .chart-fill > .pbody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.shell-root[data-mode="perform"] .chart-fill .chart-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+/* rail: positions (auto) · sentinel (auto) · tape (fills) */
+.shell-root[data-mode="perform"] .pf-rail {
+  grid-column: 2;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 7px;
+  min-height: 0;
+}
+
+/* ---------- dark-glass "screen" panels ------------------------------------- */
+.shell-root[data-mode="perform"] .pf-screen {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--lcd-ink);
+  background: linear-gradient(180deg, var(--lcd), var(--lcd-2));
+  border: 1px solid var(--lcd-edge);
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+.shell-root[data-mode="perform"] .pf-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0.5em 12px;
+  background: linear-gradient(180deg, var(--pf-plate), var(--pf-plate-2));
+  border-bottom: 1px solid #000;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+.shell-root[data-mode="perform"] .pf-head .t {
+  font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 700;
+  letter-spacing: 0.15em; text-transform: uppercase; color: var(--pf-plate-ink);
+}
+.shell-root[data-mode="perform"] .pf-head .grow { flex: 1; }
+.shell-root[data-mode="perform"] .pf-head .x { font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); white-space: nowrap; }
+.shell-root[data-mode="perform"] .pf-head .x.up { color: var(--pf-green-soft); }
+.shell-root[data-mode="perform"] .pf-head .x.neg { color: var(--hw-red-soft); }
+.shell-root[data-mode="perform"] .pf-ok { color: var(--pf-green-soft); }
+.shell-root[data-mode="perform"] .pf-livedot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--pf-green);
+  box-shadow: 0 0 6px var(--pf-green); margin-right: 6px; vertical-align: 1px; animation: pf-pulse 2s infinite;
+}
+@keyframes pf-pulse { 0% { box-shadow: 0 0 0 0 rgba(47, 213, 115, 0.5); } 70% { box-shadow: 0 0 0 6px rgba(47, 213, 115, 0); } 100% { box-shadow: 0 0 0 0 rgba(47, 213, 115, 0); } }
+.shell-root[data-mode="perform"] .pf-ghost {
+  padding: 1em 12px; text-align: center; font-family: var(--sh-mono); font-size: var(--fs-label);
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--dk-dim);
+}
+
+/* ---------- POSITIONS ------------------------------------------------------- */
+.shell-root[data-mode="perform"] .pfp-body { overflow-y: auto; }
+.shell-root[data-mode="perform"] .pfp-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 0.3em 10px;
+  align-items: baseline;
+  padding: 0.52em 12px;
+  border-bottom: 1px solid var(--pf-line);
+}
+.shell-root[data-mode="perform"] .pfp-row:last-child { border-bottom: none; }
+.shell-root[data-mode="perform"] .pfp-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--pm); align-self: center;
+  box-shadow: 0 0 7px color-mix(in srgb, var(--pm) 75%, transparent);
+}
+.shell-root[data-mode="perform"] .pfp-slug {
+  font-family: var(--sh-mono); font-size: var(--pf-fs-slug); font-weight: 700;
+  color: var(--lcd-ink); white-space: nowrap; /* never ellipsize */
+}
+.shell-root[data-mode="perform"] .pfp-pnl { font-family: var(--sh-mono); font-size: var(--fs-num-lg); font-weight: 800; text-align: right; white-space: nowrap; }
+.shell-root[data-mode="perform"] .pfp-ctr { grid-column: 2; font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); white-space: nowrap; }
+.shell-root[data-mode="perform"] .pfp-meta { grid-column: 3; font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-dim); text-align: right; white-space: nowrap; }
+.shell-root[data-mode="perform"] .pfp-tags { grid-column: 2; display: flex; gap: 7px; flex-wrap: wrap; align-self: center; }
+.shell-root[data-mode="perform"] .pfp-tag {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 0.1em 0.5em; border-radius: 4px; border: 1px solid var(--pf-line-2); color: var(--dk-mut);
+}
+.shell-root[data-mode="perform"] .pfp-tag.amber { color: #ffb224; border-color: rgba(255, 178, 36, 0.5); background: rgba(255, 178, 36, 0.08); }
+.shell-root[data-mode="perform"] .pfp-tag.warn { color: var(--pf-red-soft); border-color: rgba(224, 122, 88, 0.45); background: rgba(224, 122, 88, 0.08); }
+.shell-root[data-mode="perform"] .pfp-tag.ok { color: var(--pf-green-soft); border-color: rgba(108, 192, 109, 0.45); background: rgba(108, 192, 109, 0.08); }
+.shell-root[data-mode="perform"] .pfp-pk { grid-column: 3; display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
+.shell-root[data-mode="perform"] .pfp-pklbl { font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); white-space: nowrap; }
+.shell-root[data-mode="perform"] .pfp-pklbl b { color: var(--pm); font-weight: 800; }
+.shell-root[data-mode="perform"] .pfp-nopk { color: var(--dk-dim); font-family: var(--sh-mono); }
+.shell-root[data-mode="perform"] .pfp-ring { width: calc(var(--fs-num-lg) * 1.35); height: calc(var(--fs-num-lg) * 1.35); display: block; }
+
+/* ---------- SENTINEL -------------------------------------------------------- */
+.shell-root[data-mode="perform"] .pfs-body { padding: 0.55em 12px 0.7em; display: flex; flex-direction: column; gap: 0.5em; }
+.shell-root[data-mode="perform"] .pfs-top { display: flex; align-items: center; gap: 11px; }
+.shell-root[data-mode="perform"] .pfs-verdict {
+  flex: 0 0 auto; font-family: var(--sh-mono); font-size: var(--fs-num); font-weight: 800; letter-spacing: 0.12em;
+  color: #140b00; padding: 0.35em 0.75em; border-radius: 6px; border: 1px solid #000;
+  background: linear-gradient(180deg, #f0b652, var(--pf-amber));
+  box-shadow: 0 0 13px rgba(224, 162, 63, 0.35), 0 1px 0 rgba(255, 255, 255, 0.3) inset;
+}
+.shell-root[data-mode="perform"] .pfs-verdict.queue { background: linear-gradient(180deg, #48d98a, #1f9e54); }
+.shell-root[data-mode="perform"] .pfs-verdict.hold { background: linear-gradient(180deg, #9aa4aa, #6b747a); }
+.shell-root[data-mode="perform"] .pfs-msg { font-size: var(--fs-body); line-height: 1.45; color: #dfe4e6; }
+.shell-root[data-mode="perform"] .pfs-steps { display: flex; gap: 3px; align-items: center; }
+.shell-root[data-mode="perform"] .pfs-steps i {
+  flex: 1; height: 10px; border-radius: 2px; background: #1c1f22; border: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+.shell-root[data-mode="perform"] .pfs-steps i.lit { background: linear-gradient(180deg, #f0b652, #b97f22); box-shadow: 0 0 5px rgba(224, 162, 63, 0.5); }
+.shell-root[data-mode="perform"] .pfs-steps-n { flex: 0 0 auto; font-family: var(--sh-mono); font-size: var(--fs-num); font-weight: 700; color: var(--dk-mut); margin-left: 7px; }
+.shell-root[data-mode="perform"] .pfs-ladder { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.shell-root[data-mode="perform"] .pfs-lvl {
+  font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); letter-spacing: -0.3px;
+  border: 1px solid var(--pf-line); border-radius: 4px; padding: 0.12em 0.38em; display: flex; gap: 5px; align-items: center; white-space: nowrap;
+}
+.shell-root[data-mode="perform"] .pfs-lvl i { width: 10px; height: 2px; border-radius: 1px; }
+.shell-root[data-mode="perform"] .pfs-lvl b { color: var(--lcd-ink); font-weight: 600; }
+
+/* ---------- TAPE ------------------------------------------------------------ */
+.shell-root[data-mode="perform"] .pft-body { flex: 1; min-height: 0; overflow-y: auto; background: var(--pf-scr); padding: 2px 0; }
+.shell-root[data-mode="perform"] .pft-row {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 10px; align-items: baseline;
+  padding: 0.46em 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+}
+.shell-root[data-mode="perform"] .pft-time { font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-dim); }
+.shell-root[data-mode="perform"] .pft-kind {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 800; letter-spacing: 0.1em; text-align: center;
+  border-radius: 4px; padding: 0.05em 0.45em; border: 1px solid; align-self: center;
+}
+.shell-root[data-mode="perform"] .pft-kind.exec { color: var(--pf-green-soft); border-color: rgba(108, 192, 109, 0.4); background: rgba(108, 192, 109, 0.07); }
+.shell-root[data-mode="perform"] .pft-kind.warn { color: #ffb224; border-color: rgba(255, 178, 36, 0.45); background: rgba(255, 178, 36, 0.08); }
+.shell-root[data-mode="perform"] .pft-kind.info { color: var(--dk-mut); border-color: var(--pf-line-2); background: rgba(255, 255, 255, 0.03); }
+.shell-root[data-mode="perform"] .pft-msg { font-family: var(--sh-mono); font-size: var(--fs-body); color: #dfe4e6; line-height: 1.45; letter-spacing: -0.1px; overflow-wrap: anywhere; }
+.shell-root[data-mode="perform"] .pft-ch { font-weight: 700; }
+
+/* ---------- DOCK — one chicklet per channel -------------------------------- */
+.shell-root[data-mode="perform"] .pf-dock {
+  grid-row: 2;
+  border-top: 2px solid var(--chrome-edge);
+  background: var(--chrome-bg);
+  transition: border-color 0.32s, background-color 0.32s;
+}
+.shell-root[data-mode="perform"] .pf-dock-in {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 20px repeat(auto-fit, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: 5px;
+  padding: 6px 8px;
+}
+.shell-root[data-mode="perform"] .pf-cap { display: flex; align-items: center; justify-content: center; }
+.shell-root[data-mode="perform"] .pf-cap .silk { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: 0.2em; }
+.shell-root[data-mode="perform"] .pf-chick {
+  position: relative; display: flex; flex-direction: column; justify-content: space-between;
+  min-width: 0; padding: 0.4em 0.45em 0.35em; border-radius: 6px; border: 1px solid #000;
+  background: linear-gradient(180deg, var(--lcd), var(--lcd-2));
+  border-top: 2px solid color-mix(in srgb, var(--pm) 60%, #111);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -8px 14px rgba(0, 0, 0, 0.28), 0 1px 0 var(--pf-chick-lip, rgba(255, 255, 255, 0.05));
+}
+.shell-root[data-skin="cream"][data-mode="perform"] .pf-chick { --pf-chick-lip: rgba(255, 255, 255, 0.5); }
+.shell-root[data-mode="perform"] .pf-chick.off { opacity: 0.62; }
+.shell-root[data-mode="perform"] .pf-chick.dark { opacity: 0.4; }
+.shell-root[data-mode="perform"] .pfc-r1 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.shell-root[data-mode="perform"] .pfc-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #26282b; border: 1px solid rgba(0, 0, 0, 0.7); }
+.shell-root[data-mode="perform"] .pfc-dot.on { background: var(--pm); border-color: transparent; box-shadow: 0 0 6px color-mix(in srgb, var(--pm) 80%, transparent); }
+.shell-root[data-mode="perform"] .pfc-dot.stby { background: color-mix(in srgb, var(--pf-amber) 55%, #222); box-shadow: 0 0 5px rgba(224, 162, 63, 0.35); }
+.shell-root[data-mode="perform"] .pfc-slug { font-family: var(--sh-mono); font-size: var(--pf-fs-dslug); font-weight: 700; letter-spacing: -0.45px; color: #dfe4e6; white-space: nowrap; min-width: 0; }
+.shell-root[data-mode="perform"] .pfc-a13 {
+  position: absolute; top: -2px; right: 7px; z-index: 2; font-family: var(--sh-mono);
+  font-size: calc(var(--fs-label) * 0.92); font-weight: 800; color: #140b00; background: #ffb224;
+  border-radius: 0 0 3px 3px; padding: 1px 5px 0; box-shadow: 0 0 7px rgba(255, 178, 36, 0.5);
+}
+.shell-root[data-mode="perform"] .pfc-pnl { font-family: var(--sh-mono); font-size: calc(var(--dz, 1) * clamp(15px, 1.05vw, 20px)); font-weight: 800; white-space: nowrap; line-height: 1.05; }
+.shell-root[data-mode="perform"] .pfc-pnl.pos { color: var(--pf-green); }
+.shell-root[data-mode="perform"] .pfc-pnl.neg { color: var(--pf-red-soft); }
+.shell-root[data-mode="perform"] .pfc-pnl.flat { color: var(--dk-mut); }
+.shell-root[data-mode="perform"] .pfc-r3 { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-width: 0; }
+.shell-root[data-mode="perform"] .pfc-pw { font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); white-space: nowrap; letter-spacing: -0.3px; }
+.shell-root[data-mode="perform"] .pfc-pw b { color: color-mix(in srgb, var(--pm) 80%, #fff); font-weight: 800; }
+.shell-root[data-mode="perform"] .pfc-tag { font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 800; letter-spacing: 0.08em; }
+.shell-root[data-mode="perform"] .pfc-tag.muted { color: var(--pf-mute); }
+.shell-root[data-mode="perform"] .pfc-tag.darkch { color: #5c646a; }
+.shell-root[data-mode="perform"] .pfc-mute {
+  flex: 0 0 auto; width: calc(var(--fs-num) * 1.5); height: calc(var(--fs-num) * 1.15); border-radius: 4px; border: 1px solid #000;
+  background: linear-gradient(180deg, #3a3b3e, #232427); color: #8a949a; font-family: var(--sh-mono);
+  font-size: calc(var(--fs-label) * 0.95); font-weight: 800; display: grid; place-items: center; cursor: pointer;
+}
+.shell-root[data-mode="perform"] .pfc-mute.lit { background: linear-gradient(180deg, var(--pf-mute), #a5573c); color: #1c0d07; box-shadow: 0 0 8px rgba(217, 142, 110, 0.55); }
+.shell-root[data-mode="perform"] .pfc-mute:disabled { cursor: default; opacity: 0.7; }
