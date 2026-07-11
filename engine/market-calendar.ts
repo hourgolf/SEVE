@@ -77,6 +77,21 @@ export function sessionCloseMin(dateET: string): number { return EARLY_CLOSES.ha
 export function isMarketHoliday(dateET: string): boolean { return MARKET_HOLIDAYS.has(dateET); }
 export function isWeekend(dateET: string): boolean { const d = dowUTC(dateET); return d === 0 || d === 6; }
 
+// ---- session-time constants (ET minutes-since-midnight) shared with the incident policy ----
+export const RTH_OPEN_MIN = 570;      // 09:30 ET — the same constant the worker gates on (index.ts RTH_OPEN)
+export const PREOPEN_START_MIN = 535; // 08:55 ET — the worker's pre-open heartbeat window start (index.ts:876)
+
+// Explicit supported calendar range (both bounds — the verified years in MARKET_HOLIDAYS/EARLY_CLOSES).
+// Replaces the upper-bound-only horizon test: a date BEFORE 2024 is NOT covered even though it sits below
+// the last holiday. Extend these together with the two tables each year.
+export const SUPPORTED_FROM = "2024-01-01";
+export const SUPPORTED_TO = "2027-12-31";
+/** Is `dateET` inside the maintained calendar range (both bounds)? False ⇒ session classification is
+ *  best-effort clock-based and must be flagged uncertain, not silently asserted. */
+export function calendarCoverageKnown(dateET: string): boolean {
+  return dateET >= SUPPORTED_FROM && dateET <= SUPPORTED_TO;
+}
+
 /** A weekday that is not a holiday. (Weekend OR holiday ⇒ closed.) */
 export function isTradingDay(dateET: string): boolean { return !isWeekend(dateET) && !isMarketHoliday(dateET); }
 
