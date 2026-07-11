@@ -12,6 +12,9 @@ import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useOpsStatus } from "@/hooks/useOpsStatus";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
+import { usePositionPeaks } from "@/hooks/usePositionPeaks";
+import { useSentinelDigest } from "@/hooks/useSentinelDigest";
+import { useWorkerRuns } from "@/hooks/useWorkerRuns";
 import { useKitSounds } from "@/hooks/useKitSounds";
 import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -72,6 +75,13 @@ function Surface({
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
   const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
+  // P5 slice 1 — shared remote reads LIFTED to the seam (called ONCE here, carried through
+  // SurfaceProps). PERFORM + mobile leaves consumed these directly before; now they never
+  // subscribe. sentinel (brief/scan/judge/lens), workerRuns (crash-attribution ledger, wired
+  // for the incident banner — not rendered yet, that's slice 3), positionPeaks (ratcheted MFE).
+  const sentinel = useSentinelDigest();
+  const workerRuns = useWorkerRuns();
+  const positionPeaks = usePositionPeaks(feed.positions, liveMarks);
   // 909 KIT — audible fills (opt-in via the KIT pad; inert while off). At the
   // seam so desktop + mobile share one diff of the same feed.
   useKitSounds(feed.positions, feed.recentTrades);
@@ -86,7 +96,13 @@ function Surface({
   useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks };
+
+  // P5 slice 2 — the legacy §01–§04 product (DesktopSurface) is no longer MOUNTED beneath
+  // STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/nav on one page).
+  // It moves behind ONE explicit entry: a "Legacy rooms" link at the foot of STUDIO opens it
+  // as a full replacement view (reusing the single seam — no re-subscription), with a way back.
+  const [legacyOpen, setLegacyOpen] = useState(false);
 
   // Mobile (S5 rework) — the PERFORM/STUDIO phone shell. Shares the same seam
   // props + the persisted mode/skin (useShell) as desktop; MobileApp is retained
@@ -98,39 +114,52 @@ function Surface({
   // ancestor) so the shell's skin tokens never leak into the untouched STUDIO
   // rooms. STUDIO renders today's DesktopSurface verbatim; PERFORM = the S2 stub.
   const mkt = marketSummary(data.bars, data.spot);
-  return (
-    <>
-      <div className="shell-root" data-mode={mode} data-skin={theme} data-density={density}>
-        <DeskShell
-          fund={view.desk.fund}
-          liveFund={liveFund}
-          ops={ops}
-          accounts={accounts}
-          acctId={acctId}
-          setAcctId={setAcctId}
-          symbol={symbol}
-          spot={data.spot}
-          spotUp={spotUp}
-          dayChangePct={mkt.dayChangePct}
-        />
-        {mode === "perform" && <PerformSurface {...props} />}
-        {mode === "studio" && <StudioSurface {...props} />}
-        {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats
-            over EITHER room. Opens on the shared `seve:command-palette` event that
-            the S1 keydown + the DeskShell ⌘K keycap both fire; owns its own state.
-            The roster is scoped to the selected account (same rule as the surfaces). */}
-        <CommandPalette
-          channels={acctId ? view.desk.strategists.filter((s) => s.account_id === acctId) : view.desk.strategists}
-          setActiveRoom={setActiveRoom}
-          setSelected={setSelected}
-        />
+
+  // LEGACY VIEW (P5 slice 2) — the full DesktopSurface as a REPLACEMENT (not a sibling
+  // beneath STUDIO), so only one product/header/transport/KILL is ever on screen. Rendered
+  // OUTSIDE .shell-root (its own cream chassis; shell skin tokens must not leak in). The seam
+  // hooks live in Surface (above), so DesktopSurface still gets the single-subscription props.
+  if (legacyOpen) {
+    return (
+      <div className="legacy-view">
+        <button type="button" className="legacy-back" onClick={() => setLegacyOpen(false)}>← Back to desk</button>
+        <DesktopSurface {...props} />
       </div>
-      {/* STUDIO's legacy §01–§04 rooms stay reachable as the sibling chassis below
-          the hero (its own Shell = the anchor strip) — no functionality loss until
-          each room is natively migrated. Kept OUTSIDE .shell-root so the shell's
-          skin tokens never leak into the legacy cream chassis. */}
-      {mode === "studio" && <DesktopSurface {...props} />}
-    </>
+    );
+  }
+
+  return (
+    <div className="shell-root" data-mode={mode} data-skin={theme} data-density={density}>
+      <DeskShell
+        fund={view.desk.fund}
+        liveFund={liveFund}
+        ops={ops}
+        accounts={accounts}
+        acctId={acctId}
+        setAcctId={setAcctId}
+        symbol={symbol}
+        spot={data.spot}
+        spotUp={spotUp}
+        dayChangePct={mkt.dayChangePct}
+      />
+      {mode === "perform" && <PerformSurface {...props} />}
+      {mode === "studio" && <StudioSurface {...props} />}
+      {/* Named destination for the legacy §01–§04 rooms — one explicit link, at the foot of
+          STUDIO, opening the full legacy desk as a replacement view. No functionality lost;
+          removed wholesale at slice 7 once each room is natively migrated. */}
+      {mode === "studio" && (
+        <button type="button" className="legacy-entry" onClick={() => setLegacyOpen(true)}>
+          Legacy rooms · §01 live market · §02 composer · §03 book &amp; P&amp;L · §04 tape ▸
+        </button>
+      )}
+      {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats over EITHER
+          room. Opens on the shared `seve:command-palette` event; roster scoped to the account. */}
+      <CommandPalette
+        channels={acctId ? view.desk.strategists.filter((s) => s.account_id === acctId) : view.desk.strategists}
+        setActiveRoom={setActiveRoom}
+        setSelected={setSelected}
+      />
+    </div>
   );
 }
 

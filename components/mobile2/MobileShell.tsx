@@ -3,7 +3,6 @@
 import "@/app/mobile2.css";
 import { useMemo, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
-import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import { MobilePerform } from "@/components/mobile2/MobilePerform";
 import { MobileStudio } from "@/components/mobile2/MobileStudio";
 import { MobileCommandSheet } from "@/components/mobile2/MobileCommandSheet";
@@ -32,7 +31,7 @@ const IcCog = () => (
 export function MobileShell(props: SurfaceProps) {
   const { data, view, accounts, acctId, setAcctId, spotUp, liveFund, livePnl, symbol } = props;
   const { mode, setMode, skin, setSkin } = useShell();
-  const sent = useSentinelDigest(); // one fetch → rail sections + dock lens
+  const sent = props.sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
 
   const [cmdOpen, setCmdOpen] = useState(false);
   const [setOpen, setSetOpen] = useState(false);

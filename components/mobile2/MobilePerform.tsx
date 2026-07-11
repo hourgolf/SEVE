@@ -3,7 +3,6 @@
 import { Fragment } from "react";
 import { IntradayChart } from "@/components/IntradayChart";
 import { MobileDock } from "@/components/mobile2/MobileDock";
-import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
@@ -47,13 +46,13 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 }
 
 function PositionsSection({
-  positions, strategists, liveMarks,
+  positions, strategists, liveMarks, peaks,
 }: {
   positions: Position[];
   strategists: StrategistState[];
   liveMarks?: Record<string, number>;
+  peaks: Record<string, number>; // P5 slice 1 — from the page seam (usePositionPeaks lifted)
 }) {
-  const peaks = usePositionPeaks(positions, liveMarks);
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
   const markOf = (p: Position) => {
     const m = liveMarks?.[p.occ_symbol];
@@ -234,7 +233,7 @@ export function MobilePerform({
           </div>
         </section>
 
-        <PositionsSection positions={feed.positions} strategists={view.desk.strategists} liveMarks={liveMarks} />
+        <PositionsSection positions={feed.positions} strategists={view.desk.strategists} liveMarks={liveMarks} peaks={props.positionPeaks} />
         <SentinelSection symbol={symbol} sent={sent} />
         <TapeSection events={data.events} strategists={view.desk.strategists} />
       </div>

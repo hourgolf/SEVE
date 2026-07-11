@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment } from "react";
-import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
@@ -39,13 +38,13 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 }
 
 function PositionsSection({
-  positions, strategists, liveMarks,
+  positions, strategists, liveMarks, peaks,
 }: {
   positions: Position[];
   strategists: StrategistState[];
   liveMarks?: Record<string, number>;
+  peaks: Record<string, number>; // P5 slice 1 — from the page seam (usePositionPeaks lifted)
 }) {
-  const peaks = usePositionPeaks(positions, liveMarks);
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
   const markOf = (p: Position) => {
     const m = liveMarks?.[p.occ_symbol];
@@ -201,18 +200,19 @@ function TapeSection({ events, strategists }: { events: MarketEvent[]; strategis
 }
 
 export function PerformRail({
-  positions, strategists, liveMarks, events, symbol, sent,
+  positions, strategists, liveMarks, peaks, events, symbol, sent,
 }: {
   positions: Position[];
   strategists: StrategistState[];
   liveMarks?: Record<string, number>;
+  peaks: Record<string, number>;
   events: MarketEvent[];
   symbol: string;
   sent: Digest;
 }) {
   return (
     <aside className="pf-rail">
-      <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} />
+      <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} />
       <SentinelSection symbol={symbol} sent={sent} />
       <TapeSection events={events} strategists={strategists} />
     </aside>

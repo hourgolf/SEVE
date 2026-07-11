@@ -235,3 +235,56 @@
   .shell-bar { gap: 9px; }
   .brand .btxt span { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   P5 slice 2 — legacy-rooms entry + full-screen legacy view.
+   The duplicate DesktopSurface no longer mounts beneath STUDIO; it's reachable
+   via ONE explicit link at the foot of STUDIO that opens the legacy desk as a
+   replacement view (Surface owns the seam hooks, so no re-subscription).
+   --------------------------------------------------------------------------- */
+.shell-root .legacy-entry {
+  display: block;
+  width: 100%;
+  margin: 10px 0 20px;
+  padding: 12px 16px;
+  background: transparent;
+  border: 1px dashed var(--sep-line);
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: var(--sh-mono);
+  font-size: var(--fs-chip, 12px);
+  letter-spacing: 0.04em;
+  color: var(--dk-mut);
+  text-align: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+.shell-root .legacy-entry:hover {
+  color: var(--lcd-ink);
+  border-color: var(--dk-dim);
+}
+
+/* legacy-view is OUTSIDE .shell-root (inside .console-root): DesktopSurface paints its own
+   cream/blackout chassis; only the sticky back control needs standalone styling. */
+.legacy-view {
+  position: relative;
+  min-height: 100vh;
+}
+.legacy-view .legacy-back {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: inline-block;
+  margin: 8px 0 0 8px;
+  padding: 8px 14px;
+  background: #17191c;
+  color: #e9eef0;
+  border: 1px solid #3a3f45;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+}
+.legacy-view .legacy-back:hover {
+  background: #22262b;
+  border-color: #55606a;
+}

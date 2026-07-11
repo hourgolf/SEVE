@@ -2,7 +2,6 @@
 
 import "@/app/perform.css";
 import { IntradayChart } from "@/components/IntradayChart";
-import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import { PerformRail } from "@/components/perform/PerformRail";
 import { PerformDock } from "@/components/perform/PerformDock";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -21,10 +20,10 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 // =============================================================================
 
 export function PerformSurface({
-  data, view, feed, spotUp, symbol, setSymbol, acctId, livePnl, liveMarks,
+  data, view, feed, spotUp, symbol, setSymbol, acctId, livePnl, liveMarks, sentinel, positionPeaks,
 }: SurfaceProps) {
   const { desk } = view;
-  const sent = useSentinelDigest(); // one fetch — lens → dock, judge/brief → rail
+  const sent = sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
 
   // Scope the roster to the selected account (same rule as DesktopSurface).
   const channels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
@@ -47,6 +46,7 @@ export function PerformSurface({
           positions={feed.positions}
           strategists={desk.strategists}
           liveMarks={liveMarks}
+          peaks={positionPeaks}
           events={data.events}
           symbol={symbol}
           sent={sent}

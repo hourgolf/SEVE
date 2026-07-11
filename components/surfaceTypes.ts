@@ -6,6 +6,8 @@ import type { useDeskWrite } from "@/hooks/useDeskWrite";
 import type { useAccounts } from "@/hooks/useAccounts";
 import type { OpsStatus } from "@/hooks/useOpsStatus";
 import type { usePositionMarks } from "@/hooks/usePositionMarks";
+import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
+import type { useWorkerRuns } from "@/hooks/useWorkerRuns";
 import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
@@ -43,4 +45,13 @@ export interface SurfaceProps {
   setActiveRoom: Dispatch<SetStateAction<Room>>;
   collapsedMarket: boolean;
   setCollapsedMarket: Dispatch<SetStateAction<boolean>>;
+  /** Sentinel digest (brief/scan/judge/lens) — LIFTED to the seam (P5 slice 1): PERFORM +
+   *  mobile leaves consume this via props and never call useSentinelDigest themselves. */
+  sentinel: ReturnType<typeof useSentinelDigest>;
+  /** Worker crash-attribution ledger — lifted to the seam for the incident banner / system-health.
+   *  Instability keys on abrupt16h (NOT boots16h — most boots are graceful redeploys). */
+  workerRuns: ReturnType<typeof useWorkerRuns>;
+  /** Ratcheted position peaks (usePositionPeaks over feed.positions × liveMarks) — lifted to the
+   *  seam; the position rows in PERFORM/mobile consume this instead of re-calling the hook. */
+  positionPeaks: Record<string, number>;
 }
