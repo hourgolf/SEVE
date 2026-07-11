@@ -8,20 +8,20 @@ build), WORKER_VERSION bumped once per deploy, heartbeat verified. Money-path ed
 
 | # | sev | status | cat | batch | title |
 |---|---|---|---|---|---|
-| 5 | critical | open | dangerous | 1 | getOpenPositions swallows Supabase errors → worker believes itself flat (plus sw |
-| 8 | critical | open | dangerous | 1 | Fast exit sweep shares the full-cycle mutex — a slow or HUNG cycle suppresses/ki |
-| 7 | high | open | dangerous | 1 | Kill-switch latency: halt only visible to the flatten path at the next bar-close |
-| 9 | medium | partial | dangerous | 1 | getOrders failure: main cycle suppresses ALL actions incl. exits (10b); fast swe |
-| 1 | high | open | dangerous | 2 | is_armed strands exits + reconcile (not just entries) |
-| 3 | high | open | dangerous | 2 | Entry/pyramid assume intended qty on a non-terminal zero-fill |
-| 2 | medium | partial | dangerous | 2 | Partial exit fill closes the whole row; remainder becomes row-less, not a manage |
-| 4 | medium | partial | dangerous | 2 | Tranche split proceeds on a non-terminal (unsettled) order; partial-then-cancele |
-| 6 | high | open | dangerous | 3 | Stops/targets trigger on MID (no quote-age guard) then fill at MARKET |
-| 10 | medium | partial | dangerous | 3 | Reconcile books ESTIMATED (or $0) realized when the OCC's sell price is ambiguou |
-| 11 | medium | partial | mechanical | 4 | realizedTodayByChannel .limit(1000) and sentinel benchScan .limit(5000) — unpagi |
-| 13 | medium | partial | mechanical | 4 | Early-close 16:00 (960) hardcodes remain in session-bar/level construction, onBa |
-| 15 | low | open | mechanical | 4 | daily_stop_usd labeled as a 'Stop' in the UI though it is a realized-loss entry  |
-| 16 | low | open | mechanical | 4 | Sentinel context live-state block is hand-maintained and stale (says worker 09a; |
+| 5 | critical | done-local | dangerous | 1 | getOpenPositions swallows Supabase errors → worker believes itself flat (plus sw |
+| 8 | critical | done-local | dangerous | 1 | Fast exit sweep shares the full-cycle mutex — a slow or HUNG cycle suppresses/ki |
+| 7 | high | done-local | dangerous | 1 | Kill-switch latency: halt only visible to the flatten path at the next bar-close |
+| 9 | medium | done-local | dangerous | 1 | getOrders failure: main cycle suppresses ALL actions incl. exits (10b); fast swe |
+| 1 | high | done-local | dangerous | 2 | is_armed strands exits + reconcile (not just entries) |
+| 3 | high | done-local | dangerous | 2 | Entry/pyramid assume intended qty on a non-terminal zero-fill |
+| 2 | medium | done-local | dangerous | 2 | Partial exit fill closes the whole row; remainder becomes row-less, not a manage |
+| 4 | medium | done-local | dangerous | 2 | Tranche split proceeds on a non-terminal (unsettled) order; partial-then-cancele |
+| 6 | high | done-local | dangerous | 3 | Stops/targets trigger on MID (no quote-age guard) then fill at MARKET |
+| 10 | medium | done-local | dangerous | 3 | Reconcile books ESTIMATED (or $0) realized when the OCC's sell price is ambiguou |
+| 11 | medium | done-local | mechanical | 4 | realizedTodayByChannel .limit(1000) and sentinel benchScan .limit(5000) — unpagi |
+| 13 | medium | done-local | mechanical | 4 | Early-close 16:00 (960) hardcodes remain in session-bar/level construction, onBa |
+| 15 | low | done-local | mechanical | 4 | daily_stop_usd labeled as a 'Stop' in the UI though it is a realized-loss entry  |
+| 16 | low | done-local | mechanical | 4 | Sentinel context live-state block is hand-maintained and stale (says worker 09a; |
 | 12 | high | needs_broker_sample | dangerous | defer | Broker-error regex books a row closed on a rejected sell (reconcileClose gated=f |
 | 14 | low | needs_broker_sample | mechanical | defer | Live books gross Alpaca fills; broker FEE activities never ingested (engine book |
 
@@ -66,3 +66,20 @@ order/fill ledger -> immutable account identity at entry -> restart-safe partial
   unbumped). Weekend/market-closed = zero trade impact. Recovery: finish 3-4, ONE version bump
   (stream-2026-07-11a) + push + heartbeat verify before Monday open. The shared branch means
   worker commits can auto-deploy on any session's push — bump the version at the mission checkpoint.**
+
+## FINAL — all 4 batches gated + composition-verified (2026-07-11)
+Batches 1-4 committed local (9d38254 / b7864cf / 977ca70 / 6c76b75). Closing Fable adversarial
+verify of the complete worker diff (893bfcef..HEAD): **no deploy-blocking composition defect** — all
+8 interaction risks (concurrency×partial-exit, bid-guard×degraded, is_armed-manage×concurrency,
+peak-basis×restart, remainder×2-cycle-gate, getOpenPositions-throw, no-fill-fallback, 10b invariants)
+traced + CLEARED. Gate: runner-selftest 95/95, worker tsc clean, root build clean.
+- **NEW #18 (Medium, follow-up — NOT a 1b regression):** the #6 quote-age guard covers snapshot age,
+  not per-strike staleness — a held strike drifting outside the ±$8 chain window keeps a frozen bid
+  reading "fresh". Strictly better than pre-1b (frozen mid, no guard). Fix = add held OCCs to the
+  snapshot request / clear-on-update / per-quote timestamps. Queue for the next round.
+- Accepted windows (documented, deliberate): late-filled entry/add rides row-less until recovery/orphan
+  page (#3); cycle vs sweep degraded-exit asymmetry (both fail-closed via the deterministic coid);
+  decide.ts outage fallback compares broker mark vs bid thresholds (bounded to outage cycles).
+- **pk·win ERA BOUNDARY at this deploy** (#6 peak basis mid→bid) — §04 pk·win + the sentinel lens
+  need an era-boundary annotation (follow-on; the operator's core promote/cut metric shifts basis).
+- DEPLOY: pending operator go → bump WORKER_VERSION stream-2026-07-11a → push → heartbeat verify.
