@@ -37,7 +37,7 @@ export function RosterTable({
             <th className="rt-num">Stop</th>
             <th className="rt-num">Take</th>
             <th className="rt-num">Risk/tr</th>
-            <th className="rt-num">Stop/day</th>
+            <th className="rt-num" title="daily realized-loss LATCH — halts NEW entries for the day once realized P&L ≤ −$X">HALT/day</th>
             <th className="rt-num">Day P&amp;L</th>
           </tr>
         </thead>
@@ -86,7 +86,7 @@ export function RosterTable({
                   <FiresPill value={c.capital_pct} display={usd0(c.capital_pct)} onCommit={(v) => setCfg(s.slug, s.id, { capital_pct: v })} min={0} max={5000} maxDigits={5} className="chf-amt" canWrite={canWrite} label={`${s.name} risk per trade`} title="risk $/trade" />
                 </td>
                 <td className="rt-num">
-                  <FiresPill value={c.daily_stop_usd} display={usd0(c.daily_stop_usd)} onCommit={(v) => setCfg(s.slug, s.id, { daily_stop_usd: v })} min={0} max={5000} maxDigits={5} className="chf-amt" canWrite={canWrite} label={`${s.name} daily stop`} title="stop $/day — halts entries at this realized loss" />
+                  <FiresPill value={c.daily_stop_usd} display={usd0(c.daily_stop_usd)} onCommit={(v) => setCfg(s.slug, s.id, { daily_stop_usd: v })} min={0} max={5000} maxDigits={5} className="chf-amt" canWrite={canWrite} label={`${s.name} daily latch`} title="daily realized-loss LATCH — halts NEW entries for the day once realized P&L ≤ −$X; does NOT cap an open trade's loss" />
                 </td>
                 <td className={`rt-num ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</td>
               </tr>

@@ -787,8 +787,11 @@ function onBar(symbol: string, bar: Bar): void {
   // Only a NEW *RTH* closed bar triggers a decision (after-hours bars update
   // state but don't re-run the strategies). The cycle re-evaluates ALL symbols —
   // cheap (in-memory decide) and keeps minutesToClose fresh across the roster.
-  const m = alpaca.etParts(bar.ts).min;
-  if (isNew && m >= RTH_OPEN && m < RTH_CLOSE) void cycle(`bar-close ${symbol}`);
+  const p = alpaca.etParts(bar.ts);
+  // audit 2026-07-11 (1b #13): gate on the bar-day's REAL close (sessionCloseMin — 780 half-day),
+  // not a hardcoded 960, so a post-close extended-hours print on a half-day can't trigger an
+  // out-of-session cycle. RTH_CLOSE stays as the constant's home; the gate is close-aware.
+  if (isNew && p.min >= RTH_OPEN && p.min < sessionCloseMin(p.date)) void cycle(`bar-close ${symbol}`);
 }
 async function onReconnect(): Promise<void> {
   warn("stream: reconnected — reseeding state from REST");

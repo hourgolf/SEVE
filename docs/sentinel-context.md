@@ -52,8 +52,8 @@ few (momo — a hard TP would cap the convex tail), scalpers are NEITHER.
 - **Conditions, not outcomes** — forward-project IF-THEN triggers + persistent state, never "tomorrow will."
 - **Real NBBO / empirical greeks, never Black-Scholes** (0DTE/1DTE is where BS is worst).
 
-## Current live state (update as gates read)
-- Worker `stream-2026-07-09a`. **A13 LIVE:** momo-shape runs the arm-high giveback ratchet
+## Current live state (HAND-MAINTAINED, may lag)
+- **Worker version: see `worker_heartbeat` table** (this doc's notes may lag a deploy). **A13 LIVE:** momo-shape runs the arm-high giveback ratchet
   (arm +50% / keep ⅔) vs momo-shape-2 control; era boundary 07-09; kill = one genuine ≥120% tail
   the ratchet caps. **A15 built (07-09):** `daily_target_usd` win-and-done gate — halts a channel's
   entries once green for the day (mirror of daily_stop); the `qqq-thrust-trail-wd` MORGUE twin tests it.

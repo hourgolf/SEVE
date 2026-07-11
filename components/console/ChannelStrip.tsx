@@ -611,12 +611,12 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
               onCommit={(v) => persistConfig(id, { capital_pct: v })}
               size="md" color={cssColor} cap="var(--knob-cream)" tick="#2a2a24" label="Risk/trade" format={usd0} />
           </div>
-          <div className="ch-kunit">
+          <div className="ch-kunit" title="daily realized-loss LATCH — halts NEW entries for the day once realized P&L ≤ −$X; does NOT cap an open trade's loss (that's the premium stop)">
             <LedMeter frac={config.daily_stop_usd / 5000} count={22} />
             <Knob value={config.daily_stop_usd} min={0} max={5000} step={25}
               onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { daily_stop_usd: v } })}
               onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}
-              size="md" color={cssColor} cap="var(--knob-dark)" tick="#d7d5cb" label="Stop/day" format={usd0} />
+              size="md" color={cssColor} cap="var(--knob-dark)" tick="#d7d5cb" label="HALT/day" format={usd0} />
           </div>
         </div>
 
@@ -665,7 +665,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
 
       {/* Two-dial sizing (RISK $/trade + STOP $/day). Exits (TP / premium stop) live in the
           LOCK/RIDE toggle + pills + shape bar above; u-stop / max-contracts in the edit drawer. */}
-      <div className="ch-stack ch-stack--sizing">
+      <div className="ch-stack ch-stack--sizing" title="daily realized-loss LATCH — halts NEW entries for the day once realized P&L ≤ −$X; does NOT cap an open trade's loss (that's the premium stop)">
         <Knob
           value={config.daily_stop_usd}
           min={0}
@@ -676,7 +676,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
           size="md"
           cap="var(--knob-dark)"
           tick="#d7d5cb"
-          label="STOP/day"
+          label="HALT/day"
           format={usd0}
         />
       </div>

@@ -21,6 +21,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { dayTags } from "../engine/market-events";
 import { nextTradingDay } from "../engine/market-calendar";
+import { pageAll } from "../engine/pageAll";
 
 // Service role (when present, e.g. the nightly capture / .env.local) lets the digest publish to the
 // events table for the §03 panel; anon still reads virtual_trades fine, just skips the publish.
@@ -114,12 +115,9 @@ function triggerScan(): string[] {
 // ---- BENCH: avg-peak per vb channel from virtual_trades (mid-basis), netted to real-fill ----
 async function benchScan(days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
-  const { data, error } = await sb.from("virtual_trades")
-    .select("slug,mfe_pct,giveback_pct,pnl_per_contract")
-    .like("slug", "vb-%").gte("signal_at", since).not("mfe_pct", "is", null).limit(5000);
-  if (error) throw new Error(`virtual_trades read: ${error.message}`);
+  const data = await pageAll<{slug:string; mfe_pct:number; giveback_pct:number; pnl_per_contract:number}>((from) => sb.from("virtual_trades").select("slug,mfe_pct,giveback_pct,pnl_per_contract,id").like("slug","vb-%").gte("signal_at", since).not("mfe_pct","is",null).order("signal_at").order("id"));
   const by = new Map<string, any[]>();
-  for (const r of (data ?? []) as any[]) { const a = by.get(r.slug) ?? []; a.push(r); by.set(r.slug, a); }
+  for (const r of data) { const a = by.get(r.slug) ?? []; a.push(r); by.set(r.slug, a); }
   return [...by.entries()].map(([slug, rs]) => {
     const eh = EXIT_HALF[idxOf(slug)] ?? 3;
     const avgPeak = rs.reduce((s, r) => s + (r.mfe_pct || 0), 0) / rs.length;
@@ -162,7 +160,22 @@ async function judge(terrain: string, facts: string): Promise<SentinelJudge | nu
   const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
   let brief = "";
   try { brief = readFileSync(path.join("docs", "sentinel-context.md"), "utf8").trim(); } catch { /* no brief → thinner, guardrail-only judge */ }
+
+  // Inject live worker version from heartbeat (authoritative, may differ from the doc's hand-maintained note)
+  let liveWorkerNote = "LIVE WORKER: (heartbeat unavailable)";
+  try {
+    const { data, error } = await sb.from("worker_heartbeat").select("note,beat_at").eq("id", "stream").order("beat_at", { ascending: false }).limit(1);
+    if (!error && data && data.length > 0) {
+      const note = (data[0] as any).note as string;
+      const beatAt = (data[0] as any).beat_at as string;
+      const version = note.split(" ")[0]; // e.g. "stream-2026-07-10b" from "stream-2026-07-10b cycle..."
+      if (version) liveWorkerNote = `LIVE WORKER (from heartbeat, authoritative): ${version} · as of ${beatAt}`;
+    }
+  } catch { /* heartbeat read failed, use fallback */ }
+
+  const now = new Date().toISOString();
   const system = [
+    `${liveWorkerNote} · context generated: ${now}`,
     brief && `DESK CONTEXT — your durable learnings; reason FROM these, they are the desk's settled doctrine:\n\n${brief}\n───`,
     "You are the SEVE desk sentinel. You are given the MORNING TERRAIN briefing (forward — auto S/R levels, event calendar, dealer positioning, regime priors) AND the deterministic opportunity+drift scan (backward — as of last close). Produce a terse operator digest grounded in the DESK CONTEXT above (the avg-peak/book lens, LOCK/RIDE/NEITHER, the live gates).",
     "Reinforced guardrails: registry governs every knob change (say 'queue for the gate', never 'change X now'); NO ARM FROM BENCH (mid-basis, capital-blind — hypotheses only); direction is noise, magnitude is the gate; bench numbers are an upper bound (n<8 thin, giveback>100% = peak-then-loss).",

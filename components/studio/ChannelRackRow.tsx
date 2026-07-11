@@ -140,15 +140,15 @@ function ChannelRackRowImpl({ strategist, pnl, active, selected, onSelect }: Cha
         />
       </div>
 
-      {/* two-dial sizing — STOP/day · RISK (reused Knob, real drag + write) */}
-      <div className="r-dial" onClick={(e) => e.stopPropagation()}>
+      {/* two-dial sizing — HALT/day · RISK (reused Knob, real drag + write) */}
+      <div className="r-dial" onClick={(e) => e.stopPropagation()} title="daily realized-loss LATCH — halts NEW entries for the day once realized P&L ≤ −$X; does NOT cap an open trade's loss">
         <Knob
           value={config.daily_stop_usd}
           min={0} max={5000} step={25}
           onChange={(v) => dispatch({ type: "SET_CONFIG", slug, patch: { daily_stop_usd: v } })}
           onCommit={(v) => persistConfig(id, { daily_stop_usd: v })}
           size="sm" color={cssColor} cap="var(--knob-dark)" tick="#d7d5cb"
-          label="STOP/day" format={usd0} disabled={!canWrite}
+          label="HALT/day" format={usd0} disabled={!canWrite}
         />
       </div>
       <div className="r-dial" onClick={(e) => e.stopPropagation()}>

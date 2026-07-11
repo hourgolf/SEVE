@@ -22,7 +22,7 @@ import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { policy } from "./config.js";
 import { warn } from "./log.js";
 import { inEventWindow, dayTags } from "../../engine/market-events";
-import { isLastSessionBeforeHoliday } from "../../engine/market-calendar";
+import { isLastSessionBeforeHoliday, sessionCloseMin } from "../../engine/market-calendar";
 import { etParts, occSymbol, type AlpacaPosition, type AlpacaOrder } from "./alpaca.js";
 import { peakBidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
@@ -113,8 +113,13 @@ function atmDeltaProxy(dir: string, spot: number, strike: number): number {
 // Today's RTH bars with CUMULATIVE session VWAP (typical×vol), matching the
 // backtest's bar construction — the edges are tuned on this, not per-minute vw.
 export function buildSessionBars(all: Bar[], todayET: string): Bar[] {
+  // audit 2026-07-11 (1b #13): the session CLOSE is the day's REAL close (sessionCloseMin —
+  // 960 normal / 780 half-day), not a hardcoded 960. On a HALF-DAY with SIP extended-hours
+  // bars in the store, `< 960` folded the post-13:00 extended prints into the RTH session,
+  // skewing VWAP + levels. Scoped to todayET so a single day's close is exact.
+  const closeMin = sessionCloseMin(todayET);
   const rows = all
-    .filter((b) => { const p = etParts(b.ts); return p.date === todayET && p.min >= RTH_OPEN && p.min < RTH_CLOSE; })
+    .filter((b) => { const p = etParts(b.ts); return p.date === todayET && p.min >= RTH_OPEN && p.min < closeMin; })
     .sort((a, b) => a.ts - b.ts);
   let cumPV = 0, cumV = 0;
   return rows.map((r) => {
@@ -133,7 +138,10 @@ export function buildSessionBars(all: Bar[], todayET: string): Bar[] {
 // undefined → a gap_min-gated channel stands down (fail-closed, self-heals next day).
 export function computeLevels(all: Bar[], todayET: string): { pdh?: number; pdl?: number; gap?: number } {
   const byDay = new Map<string, { hi: number; lo: number; firstOpen: number; lastClose: number }>();
-  const sorted = [...all].filter((b) => { const p = etParts(b.ts); return p.min >= RTH_OPEN && p.min < RTH_CLOSE; }).sort((a, b) => a.ts - b.ts);
+  // audit 2026-07-11 (1b #13): filter each bar by ITS OWN day's real close (a prior HALF-DAY
+  // closes 13:00 — `< 960` would pollute that day's hi/lo/lastClose, hence pdh/pdl/gap, with
+  // 13:00–16:00 extended-hours prints). Per-bar-day-aware sessionCloseMin, not a global 960.
+  const sorted = [...all].filter((b) => { const p = etParts(b.ts); return p.min >= RTH_OPEN && p.min < sessionCloseMin(p.date); }).sort((a, b) => a.ts - b.ts);
   for (const b of sorted) {
     const p = etParts(b.ts);
     const e = byDay.get(p.date);

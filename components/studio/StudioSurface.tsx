@@ -48,7 +48,7 @@ export function StudioSurface({ view, feed, livePnl, liveFund, acctId, symbol }:
           <span>Mode</span>
           <span>Fires <span className="rh-stop">−stop</span>·<span className="rh-take">+take</span>·EOD</span>
           <span>Shape — stop | entry | take</span>
-          <span>Stop/day</span>
+          <span title="daily realized-loss LATCH — halts NEW entries for the day once realized P&L ≤ −$X">HALT/day</span>
           <span>Risk/tr</span>
           <span style={{ textAlign: "right" }}>Day P&amp;L</span>
           <span>M·B</span>

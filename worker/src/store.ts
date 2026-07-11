@@ -13,6 +13,7 @@ import WebSocket from "ws";
 import { config } from "./config.js";
 import { info, warn } from "./log.js";
 import { mapOpenPositions } from "./exitGuard.js";
+import { pageAll } from "../../engine/pageAll.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -281,17 +282,21 @@ export async function realizedTodayByChannel(strategistId: string, etDate: strin
   // Server-side date floor + a wide cap (audit L2): the old newest-100 window under-counted a
   // churny channel's realized past 100 closes/day → the daily-stop latched LATE. 00:00Z on the
   // ET date = the prior evening ET — a safe superset; the client-side ET filter below is exact.
-  const { data, error } = await sb
+  // pageAll (audit 2026-07-11, 1b #11): a churny channel can close >1000 rows/day; .limit(1000)
+  // silently capped at PostgREST's max and UNDER-counted the day's realized → the daily-stop /
+  // win-and-done latch read a too-small loss/gain and fired LATE (or never). pageAll fetches every
+  // page or THROWS on a page error — preserving the 10b fail-closed contract (the caller's try/catch
+  // in decide.ts blocks the entry on the throw). id tiebreak: closed_at is not a total order.
+  const data = await pageAll<{ realized_pnl: number | null; closed_at: string | null }>((from) => sb
     .from("positions")
-    .select("realized_pnl,closed_at")
+    .select("realized_pnl,closed_at,id")
     .eq("strategist_id", strategistId)
     .eq("status", "closed")
     .gte("closed_at", `${etDate}T00:00:00Z`)
     .order("closed_at", { ascending: false })
-    .limit(1000);
-  if (error) throw new Error(`realizedTodayByChannel: ${error.message}`);
+    .order("id", { ascending: true }));
   let sum = 0;
-  for (const c of (data ?? []) as any[]) {
+  for (const c of data) {
     if (c.closed_at && etDateOf(Date.parse(c.closed_at)) === etDate) sum += Number(c.realized_pnl ?? 0);
   }
   return sum;
