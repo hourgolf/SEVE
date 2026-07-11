@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { config, policy, WORKER_VERSION } from "./config.js";
+import { BOOT_ID, INSTANCE_ID } from "./runId.js";
 import { info, warn, error, shadow } from "./log.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
@@ -807,7 +808,10 @@ async function main(): Promise<void> {
   // Boot flags → the DB journal (2026-07-06): env-gated safety switches were previously
   // invisible outside Railway logs — an operator flipping ORPHAN_FLATTEN had no in-band
   // confirmation the restarted worker picked it up. One line per boot, queryable in events.
-  void store.journal("EXEC", `boot: ${WORKER_VERSION} · orphanFlatten=${config.orphanFlatten ? "ARMED" : "detect-only"} · symbols=${SYMBOLS.join(",")}`);
+  void store.journal("EXEC", `boot: ${WORKER_VERSION} · orphanFlatten=${config.orphanFlatten ? "ARMED" : "detect-only"} · symbols=${SYMBOLS.join(",")}`, { boot_id: BOOT_ID, instance_id: INSTANCE_ID });
+  // Crash-attribution ledger (external-review P4): open this run + close any prior un-ended run
+  // as abrupt. Fail-open, off the trade path. See store.openRun / worker_runs / 67_worker_runs.sql.
+  void store.openRun(WORKER_VERSION);
 
   // Phase B posture — the TWO-KEY turn. Going live requires DRY_RUN=false AND
   // LIVE_TRADING=true AND the service role, together; a partial flip refuses to
@@ -841,6 +845,10 @@ async function main(): Promise<void> {
 
   store.subscribeConfig(() => { reloadPending = true; });
   setInterval(() => { reloadPending = true; }, 30_000); // poll fallback if realtime is off
+  // Run-liveness beat (external-review P4): freshens worker_runs.last_heartbeat_at + memory_rss
+  // every 60s REGARDLESS of live/shadow, so a crash gap and an RSS climb are both visible even
+  // when the trading heartbeat is silent (shadow / outside RTH). Fail-open telemetry.
+  setInterval(() => { void store.runHeartbeat(); }, 60_000);
 
   // Decide once against the latest known bar at boot (validates the pipeline + is
   // useful when booting mid-session); thereafter every bar-close drives it.
@@ -877,8 +885,17 @@ async function main(): Promise<void> {
   }, 60_000);
 
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
-    process.on(sig, () => { info(`shutdown (${sig})`); stream.stop(); process.exit(0); });
+    process.on(sig, () => { info(`shutdown (${sig})`); stream.stop(); void recordExitAndDie(`graceful_${sig.toLowerCase()}`, 0, sig); });
   }
+}
+
+// Record the run's epitaph (best-effort, ≤1.5s) THEN exit. Bounded so a hung DB write can never
+// wedge shutdown; if it doesn't land, the next boot's openRun still marks this run abrupt — so this
+// only UPGRADES attribution (graceful vs uncaught vs fatal), never gates it. (external-review P4)
+async function recordExitAndDie(kind: string, code: number, signal: string | null, err?: unknown): Promise<never> {
+  try { await Promise.race([store.closeRun(kind, code, signal, err), new Promise((r) => setTimeout(r, 1500))]); }
+  catch { /* fail-open */ }
+  process.exit(code);
 }
 
 // Last-resort safety nets. A stray promise rejection is logged but NOT fatal (the
@@ -889,7 +906,7 @@ process.on("unhandledRejection", (reason) => {
 });
 process.on("uncaughtException", (e) => {
   error(`uncaughtException — ${e.message}; exiting for a clean restart`);
-  process.exit(1);
+  void recordExitAndDie("uncaught_exception", 1, null, e);
 });
 
-main().catch((e) => { error(`fatal — ${(e as Error).message}`); process.exit(1); });
+main().catch((e) => { error(`fatal — ${(e as Error).message}`); void recordExitAndDie("fatal_boot", 1, null, e); });

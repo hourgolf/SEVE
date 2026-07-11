@@ -14,6 +14,7 @@ import { config } from "./config.js";
 import { info, warn } from "./log.js";
 import { mapOpenPositions } from "./exitGuard.js";
 import { pageAll } from "../../engine/pageAll.js";
+import { BOOT_ID, INSTANCE_ID, GIT_SHA, PID, HOSTNAME, RAILWAY_DEPLOYMENT, getPhase, setPhase, rssMb } from "./runId.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -359,8 +360,60 @@ export async function journal(level: "INFO" | "WARN" | "EXEC", message: string, 
  *  while LIVE: a shadow must never beat, or the cron would defer to a worker
  *  that places no orders. */
 export async function heartbeat(note: string): Promise<void> {
+  const ph = note.split(" ").pop(); if (ph) setPhase(ph);   // "cycle" | "sweep" | "pre-open"
+  void runHeartbeat();                                       // freshen the run row alongside the dead-man beat
   try { await sb.from("worker_heartbeat").upsert({ id: "stream", beat_at: new Date().toISOString(), note }); }
   catch (e) { warn(`store: heartbeat failed — ${(e as Error).message}`); }
+}
+
+// ---- worker_runs: per-boot lifecycle for crash attribution (external-review P4) -------------
+// ALL fail-open — instrumentation must NEVER crash the worker it diagnoses. Each write no-ops
+// gracefully if 67_worker_runs.sql isn't applied yet (the catch swallows the missing-table error).
+// The reliable crash detector is openRun() closing the PRIOR un-ended run: a process killed by
+// OOM/SIGKILL can't record its own exit, but the next boot marks it abrupt and the heartbeat gap
+// dates the death. Anon/local (no service role) skips these — worker_runs is a live-worker ledger.
+export async function openRun(version: string): Promise<void> {
+  if (!config.hasServiceRole) return;
+  try {
+    // Close orphans conservatively: prior runs with no ended_at whose heartbeat has gone STALE
+    // (>2 min) died without recording it → abrupt. The staleness guard deliberately leaves a
+    // genuinely-concurrent fresh instance OPEN, so a deploy-overlap window stays visible as evidence
+    // (two runs both un-ended with fresh heartbeats) rather than being papered over.
+    const stale = new Date(Date.now() - 2 * 60_000).toISOString();
+    await sb.from("worker_runs")
+      .update({ ended_at: new Date().toISOString(), termination_kind: "abrupt_or_unknown" })
+      .is("ended_at", null).lt("last_heartbeat_at", stale);
+    await sb.from("worker_runs").insert({
+      boot_id: BOOT_ID, instance_id: INSTANCE_ID, version, git_sha: GIT_SHA,
+      pid: PID, hostname: HOSTNAME, railway_deployment: RAILWAY_DEPLOYMENT,
+      started_at: new Date().toISOString(), last_heartbeat_at: new Date().toISOString(),
+      last_phase: getPhase(), memory_rss_mb: rssMb(),
+    });
+  } catch (e) { warn(`store: openRun failed — ${(e as Error).message}`); }
+}
+
+export async function runHeartbeat(): Promise<void> {
+  if (!config.hasServiceRole) return;
+  try {
+    await sb.from("worker_runs")
+      .update({ last_heartbeat_at: new Date().toISOString(), last_phase: getPhase(), memory_rss_mb: rssMb() })
+      .eq("boot_id", BOOT_ID);
+  } catch { /* fail-open — telemetry only */ }
+}
+
+// Best-effort epitaph for the paths a handler CAN catch (graceful SIGTERM, uncaughtException,
+// fatal boot). Bounded by the caller so shutdown never hangs; if it doesn't land, the next boot's
+// openRun still marks this run abrupt — so this only UPGRADES attribution, never gates it.
+export async function closeRun(kind: string, exitCode: number | null, signal: string | null, err?: unknown): Promise<void> {
+  if (!config.hasServiceRole) return;
+  setPhase("shutdown");
+  try {
+    await sb.from("worker_runs").update({
+      shutdown_started_at: new Date().toISOString(), ended_at: new Date().toISOString(),
+      termination_kind: kind, exit_code: exitCode, signal, last_phase: getPhase(),
+      last_error: err ? String(err instanceof Error ? (err.stack ?? err.message) : err).slice(0, 800) : null,
+    }).eq("boot_id", BOOT_ID);
+  } catch { /* fail-open */ }
 }
 
 export async function insertSignal(row: {
