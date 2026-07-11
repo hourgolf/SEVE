@@ -233,6 +233,38 @@ Pulled the ACTUAL SEVE schema (ref xvdfsxwwedltvdktqdac), not the authored migra
   >1 executor schedule active without a lease). Cheap, on-doctrine (fail-loud), prevents this whole
   class — queued as a go-live infra item.
 
+**Round 4 (P4 runtime/deploy — data/review/P4-BUNDLE.md) + ⚡ a LIVE crash-loop:**
+- "SINGLE INSTANCE ONLY" = `railway.json` `numReplicas:1` + `ON_FAILURE` restart. Config, not a lock;
+  deploy-overlap (new boots before old stops) is an unfenced concurrency window. SIGTERM →
+  `stream.stop(); process.exit(0)` immediately: NO flatten, NO order drain, NO lease release
+  (index.ts:880). Only concurrency guard is `exitGuard` = an in-PROCESS Set (memory-local; zero
+  cross-instance protection). Dockerfile bakes `DRY_RUN=true`; live trading depends on a Railway env
+  override not visible in the repo (safe-default, but out-of-band source of truth).
+- **⚡ THE WORKER IS CRASH-LOOPING (live, found via the PERFORM tape):** 40 `stream: boot:` events in
+  ~16h, same version `stream-2026-07-10b` → crash-restarts (not redeploys), clusters 1–2 min apart. It
+  recovers each time (heartbeat fresh) but restarts ~40×/day, spiking in market hours. Every restart
+  hits the no-drain-shutdown + deploy-overlap + broker-reseed windows — so "restart mid-position" is the
+  STEADY STATE, not a tail risk. Root cause is NOT in the DB (uncaughtException → Railway stdout only);
+  needs Railway logs + memory metrics (likely an uncaught throw per-cycle or an OOM-kill). **Highest-
+  actionability item found: a live-trading worker restarting this often amplifies every lost-write/
+  duplicate-order/reseed-race exposure — diagnose before real money.** Secondary: `shadow-publish:
+  day-report exited 1` recurs (broken post-close §03 child, non-fatal).
+
+**Round 5 (P5 UX audit — I looked directly; data/review/P5-UX-NOTES.md) — matches the operator's
+"genuinely awful" verdict, with one exception:**
+- **Core inversion:** Mission 2 aimed for "909 = TRIM not floorplan"; the build kept the skeuomorphism
+  as the floorplan. PERFORM's **chart hero is genuinely strong** (candles + VWAP/EMA + per-index level
+  ladders, dark, high-signal) — the best thing in the app; keep it. STUDIO is where "awful" lives.
+- STUDIO weak: the rack = a wall of 40 near-identical rows (`LOCK -30% +22% EOD` + tiny dials + `+$0`)
+  — violates the desk's own "one number + one picture" doctrine; the CREAM default is low-contrast
+  (BLACKOUT far more legible → make it default); the 16-step SESSION SEQUENCER is the clearest
+  real-estate-for-the-look case (full-width strip payload = "quiet — no fills"); the INSPECTOR exposes
+  the **EXECUTOR STREAM/CRON toggle frictionlessly** — the duplicate-executor flag as a one-tap control.
+- PERFORM weak: the desktop dock = ~40 illegible micro-chips (the mobile 2-col card grid is BETTER —
+  port it, armed-first); the TAPE should collapse the repeated boot events (×7).
+- Recommendation: re-weight, don't scrap — BLACKOUT default, mobile-card dock, glanceable armed table
+  over the knob wall, sequencer→one-liner, gate the EXECUTOR toggle, 909 as trim on a data-first grid.
+
 ## What the reviewer still hasn't seen
 Migrations 03–67 + schema dump (P3), stream.ts + Railway topology (P4), the §04 UI components (P5),
 the other shadow instruments (one-account / ratchet / stairstep / day-report), a6-read/watch. Offer P3
