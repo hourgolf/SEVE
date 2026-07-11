@@ -10,6 +10,7 @@ import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { useWorkerRuns } from "@/hooks/useWorkerRuns";
 import type { Incident } from "@/lib/incident/deriveIncident";
 import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
+import type { StudioEvidence } from "@/hooks/useStudioEvidence";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
@@ -58,4 +59,6 @@ export interface SurfaceProps {
   /** Deterministic incident (P5 slice 3) — deriveIncident computed ONCE at the page seam from
    *  ops/workerRuns/positions/fund/session. Consumed by the desktop-PERFORM banner + health strip. */
   incident: Incident;
+  /** Recent channel evidence — page-owned, STUDIO-enabled only; no leaf subscription. */
+  studioEvidence: StudioEvidence;
 }

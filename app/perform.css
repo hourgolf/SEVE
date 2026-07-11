@@ -9,9 +9,8 @@
    --lcd / --dk / --hw / --fs token layer.
    =========================================================================== */
 
-/* PERFORM fills the viewport edge-to-edge — drop the studio chassis's 18px body
-   frame (globals.css) + lock page scroll while this mode is active. STUDIO keeps
-   its inset (the :has only matches when a perform shell-root is mounted). */
+/* PERFORM fills the viewport edge-to-edge and locks page scroll. STUDIO now owns
+   the viewport too (studio.css) so the shared header never jogs between modes. */
 body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 
 /* The watching surface fills the viewport below the shared top bar (h-top) + its

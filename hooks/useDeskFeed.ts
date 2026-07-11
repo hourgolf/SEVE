@@ -128,6 +128,9 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
           signal_type: r.signal_type ?? "SIGNAL",
           message: signalMessage(r),
           created_at: r.created_at,
+          direction: r.direction === "call" || r.direction === "put" ? r.direction : null,
+          acted_on: !!r.acted_on,
+          blocked_reason: r.blocked_reason ?? null,
         }));
 
         // "Today" equity curve = the CURRENT trading session only. Take the fetched

@@ -32,6 +32,7 @@ import { deriveIncident } from "@/lib/incident/deriveIncident";
 import { positionsByExecutor } from "@/lib/incident/positionsByExecutor";
 import { devIncidentFixture } from "@/lib/incident/devFixture";
 import { useRefreshTick } from "@/hooks/useRefreshTick";
+import { useStudioEvidence } from "@/hooks/useStudioEvidence";
 import type { Room } from "@/components/surfaceTypes";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
@@ -87,6 +88,7 @@ function Surface({
   const sentinel = useSentinelDigest();
   const workerRuns = useWorkerRuns();
   const positionPeaks = usePositionPeaks(feed.positions, liveMarks);
+  const studioEvidence = useStudioEvidence(acctId, mode === "studio");
   // P5 slice 3 — deterministic incident, derived ONCE at the seam from ops/workerRuns/positions/fund/
   // session. A 15s tick (+ the hook polls) keeps nowMs fresh so time-based escalation re-renders.
   useRefreshTick(15_000);
@@ -123,7 +125,7 @@ function Surface({
   useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

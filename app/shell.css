@@ -88,7 +88,11 @@
 /* ---------- top bar ------------------------------------------------------- */
 .shell-bar {
   height: var(--h-top);
-  display: flex;
+  display: grid;
+  grid-template-columns:
+    max-content max-content max-content 1px max-content max-content max-content
+    minmax(12px, 1fr) max-content 1px max-content max-content max-content 1px
+    max-content max-content max-content;
   align-items: center;
   gap: clamp(8px, 0.9vw, 18px);
   padding: 0 14px;
@@ -101,7 +105,7 @@
 .shell-bar .num { font-family: var(--sh-mono); font-variant-numeric: tabular-nums; }
 
 .tb-mod { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.tb-spacer { flex: 1 1 auto; }
+.tb-spacer { min-width: 0; }
 .vsep { width: 1px; align-self: stretch; margin: 12px 0; background: var(--sep); transition: background-color 0.32s; }
 
 .silk {
@@ -232,8 +236,21 @@
 
 /* collapse the SPY day-change + brand subtitle on tighter desktops (mock F) */
 @media (max-width: 1330px) {
-  .shell-bar { gap: 9px; }
+  .shell-bar { display: flex; gap: 9px; }
+  .tb-spacer { flex: 1 1 auto; }
   .brand .btxt span { display: none; }
+}
+
+/* Keep the wide grid physically stable without extending the document at the
+   common 1440px operator viewport. Density remains available from ⌘K / hotkey D. */
+@media (min-width: 1331px) and (max-width: 1505px) {
+  .shell-bar {
+    grid-template-columns:
+      max-content max-content max-content 1px max-content max-content max-content
+      minmax(12px, 1fr) max-content 1px max-content max-content max-content 1px
+      max-content max-content;
+  }
+  .tb-density { display: none; }
 }
 
 /* P5 Slice 3B — retain the operational core below the original ≥1366 target.

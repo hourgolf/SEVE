@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ChannelInspector } from "@/components/studio/ChannelInspector";
 import { StudioFleet } from "@/components/studio/StudioFleet";
 import { StudioBand } from "@/components/studio/StudioBand";
+import { StudioModules } from "@/components/studio/StudioModules";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort } from "@/lib/studio/deriveStudioView";
 
@@ -20,7 +21,7 @@ import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ view, feed, livePnl, liveFund, acctId, symbol }: SurfaceProps) {
+export function StudioSurface({ view, feed, livePnl, liveFund, acctId, symbol, incident, studioEvidence }: SurfaceProps) {
   void symbol;
   const { desk } = view;
 
@@ -31,7 +32,7 @@ export function StudioSurface({ view, feed, livePnl, liveFund, acctId, symbol }:
   );
 
   const [selSlug, setSelSlug] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(true);
   const [sort, setSort] = useState<StudioSort>("attention");
   const rows = useMemo(
     () => deriveStudioRows(channels, livePnl, feed.signals, feed.updatedAt ? Date.parse(feed.updatedAt) : 0),
@@ -45,7 +46,7 @@ export function StudioSurface({ view, feed, livePnl, liveFund, acctId, symbol }:
   const selectedRow = rows.find((row) => row.channel.slug === selSlug) ?? visibleRows[0] ?? rows[0];
 
   return (
-    <div className="studio studio-v4">
+    <div className="studio studio-v4 studio-v4b">
       <StudioFleet
         rows={visibleRows}
         summary={summary}
@@ -58,6 +59,15 @@ export function StudioSurface({ view, feed, livePnl, liveFund, acctId, symbol }:
       />
 
       <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} />
+
+      <StudioModules
+        selected={selectedRow}
+        evidence={selectedRow ? studioEvidence.bySlug[selectedRow.channel.slug] : undefined}
+        evidenceState={studioEvidence}
+        positions={feed.positions}
+        recentTrades={feed.recentTrades}
+        incident={incident}
+      />
 
       <StudioBand
         fund={desk.fund}

@@ -3,6 +3,7 @@
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { StudioChannelRow, StudioFleetSummary, StudioSort } from "@/lib/studio/deriveStudioView";
+import { channelDecisionState } from "@/lib/studio/channelDecision";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -56,12 +57,13 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShow
           <span role="columnheader">STATE</span>
           <span role="columnheader">POSITION</span>
           <span className="fc-risk" role="columnheader">RISK / TRADE</span>
-          <span className="fc-signal" role="columnheader">LATEST SIGNAL</span>
-          <span className="fc-tune" role="columnheader">EXCEPTION / TUNING</span>
+          <span className="fc-signal" role="columnheader">DECISION</span>
+          <span className="fc-tune" role="columnheader">POSTURE / POLICY</span>
         </div>
         <div className="fleet-rows" role="rowgroup">
           {rows.map((row) => {
             const pnlClass = row.pnl.dayPnl < 0 ? "neg" : row.pnl.dayPnl > 0 ? "pos" : "";
+            const decision = channelDecisionState(row.lastSignal);
             return (
               <button
                 type="button"
@@ -79,14 +81,14 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShow
                 </span>
                 <span className="fc-risk fleet-value" role="cell">{usd0(row.channel.config.capital_pct)}</span>
                 <span className="fc-signal fleet-signal" role="cell" title={row.lastSignal?.message}>
-                  {row.lastSignal ? <><b className={row.lastSignal.level.toLowerCase()}>{row.lastSignal.level}</b><small>{row.lastSignal.signal_type}</small></> : "—"}
+                  <b className={decision.tone}>{decision.label}</b><small>{row.lastSignal?.signal_type ?? "no recent candidate"}</small>
                 </span>
                 <span className="fc-tune fleet-tags" role="cell">
                   {row.attentionReasons.length
                     ? row.attentionReasons.slice(0, 3).map((reason) => <i key={reason}>{reason}</i>)
                     : row.configDiffs.length
-                      ? row.configDiffs.slice(0, 2).map((diff) => <i key={diff}>{diff}</i>)
-                      : <span>—</span>}
+                      ? row.configDiffs.slice(0, 2).map((diff) => <i className="context" key={diff}>{diff}</i>)
+                      : <span>nominal</span>}
                 </span>
               </button>
             );
@@ -94,7 +96,7 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShow
           {rows.length === 0 && (
             <div className="fleet-empty">
               <strong>NO CHANNEL EXCEPTIONS</strong>
-              <span>Open “All” to inspect or tune the healthy fleet.</span>
+              <span>No exposure, risk event, or active boost requires intervention.</span>
               <button type="button" onClick={() => onShowAll(true)}>SHOW ALL CHANNELS</button>
             </div>
           )}

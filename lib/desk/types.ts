@@ -6,6 +6,7 @@
 // ============================================================================
 
 import type { EventLevel, OptionType } from "@/lib/types";
+import type { StrategySpec } from "@/lib/desk/strategySpec";
 
 // A strategist accent color — 12-token LED/909 palette (lib/desk/colors.ts owns
 // the ordered list; app/console.css owns the matching --pm-<token> vars + classes).
@@ -19,8 +20,8 @@ export type PmColor =
 export type ChannelStatus = "draft" | "armed" | "disabled";
 
 // Mirrors strategist_config — the fader/knob/mute/solo positions.
-// Two-dial model (2026-06-04): the operator-facing knobs are RISK $/trade + STOP
-// $/day. `capital_pct` is the LEGACY column name but now holds RISK $/trade (the worker
+// Two-dial model (2026-06-04): the operator-facing knobs are RISK $/trade + ENTRY
+// LATCH $/day. `capital_pct` is the LEGACY column name but now holds RISK $/trade (the worker
 // sizes risk-based: qty = riskUsd ÷ the −50% premium stop, capped by max_contracts).
 // `aggression` is retired (reserved for a future conviction scaler); `max_contracts`
 // is the hidden hard ceiling. No schema migration — just reinterpreted values.
@@ -28,7 +29,7 @@ export interface StrategistConfig {
   capital_pct: number; // RISK $/trade (legacy column name — holds dollars, not a %)
   aggression: number; // RETIRED — unused by sizing; kept for the column / future use
   max_contracts: number; // hidden hard per-trade ceiling
-  daily_stop_usd: number; // STOP $/day — halts new entries at this realized loss (wired)
+  daily_stop_usd: number; // ENTRY LATCH $/day — halts new entries at this realized loss (wired)
   muted: boolean;
   soloed: boolean; // DORMANT — replaced by `boosted`; nothing sets it true now, so solo-ducking never fires
   boosted?: boolean; // BOOST: 2× sizing for the day (RISK + cap + daily-stop); replaces SOLO; auto-cleared nightly
@@ -38,8 +39,13 @@ export interface StrategistConfig {
   event_policy?: "standdown" | "ignore"; // scheduled-event (FOMC) posture
   entry_dte?: number; // 0 = today's expiry + cutoff roll; 1 = always next session's expiry
   take_profit_pct?: number; // 0 = off (ride); >0 = exit at +pct% premium then re-enter (compound)
-  premium_stop_pct?: number | null; // per-trade premium STOP % (null/0 → policy default 50); the binding downside, no knob today
+  premium_stop_pct?: number | null; // per-trade premium STOP % (null/0 → policy default 50); the binding downside
   pyramid_adds?: number; // 0 = off (Phase A shadow); N>0 = the worker adds up to N lots to a winning V3/ALT position (stack capped at max_contracts → the cap12 arm = 3 + max_contracts 12). Only V3/ALT act on it.
+  strike_offset?: number; // signed strike steps from ATM (e.g. −1 = one strike ITM for a long call)
+  gap_min?: number; // config-level overnight-gap threshold; compiled specs may carry their own gate
+  stall_minutes?: number; // 0 = off; exit a stranded trade after N minutes
+  stall_max_favor_pct?: number; // stall exit only if peak favor never cleared this %
+  daily_target_usd?: number; // win-and-done entry latch; 0 = off
 }
 
 // A strategist + its live config (strategists ⋈ strategist_config).
@@ -59,6 +65,8 @@ export interface StrategistState {
   // Which account this channel belongs to (multi-account cockpit, 36_accounts_foundation).
   // Optional = back-compat; the desk filters the visible roster by the selected account.
   account_id?: string | null;
+  /** Compiled thesis when this is a spec channel. Built-ins resolve through engine/registry. */
+  spec?: StrategySpec | null;
   config: StrategistConfig;
   // Factory defaults for this trader — what the channel's RESET restores. Carried
   // per-strategist so future pluggable traders ship their own default behaviour.
@@ -149,6 +157,9 @@ export interface Signal {
   signal_type: string; // e.g. 'MR-FADE', 'ORB-L'
   message: string;
   created_at: string;
+  direction?: "call" | "put" | null;
+  acted_on?: boolean;
+  blocked_reason?: string | null;
 }
 
 // One cell of the 16-step sequencer row.

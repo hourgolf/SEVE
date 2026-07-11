@@ -79,13 +79,11 @@ export function deriveStudioRows(
 
     if (pnl.openCount > 0) { reasons.push(`${pnl.openCount} open`); score += 1000 + Math.min(250, pnl.exposure / 100); }
     const signalAge = signal ? nowMs - Date.parse(signal.created_at) : Number.POSITIVE_INFINITY;
-    if (signal && signalAge >= 0 && signalAge <= 20 * 60_000 && (signal.level === "WARN" || signal.level === "RISK")) {
-      reasons.push(signal.level === "RISK" ? "risk signal" : "blocked signal");
-      score += signal.level === "RISK" ? 700 : 600;
+    if (signal && signalAge >= 0 && signalAge <= 20 * 60_000 && signal.level === "RISK") {
+      reasons.push("risk signal");
+      score += 700;
     }
-    if (channel.config.muted) { reasons.push("muted"); score += 500; }
-    if (channel.config.boosted) { reasons.push("boosted"); score += 450; }
-    if (configDiffs.length > 0) { reasons.push(`${configDiffs.length} tuned`); score += 80 + configDiffs.length; }
+    if (channel.config.boosted) { reasons.push("boost active"); score += 450; }
 
     const stateLabel = pnl.openCount > 0
       ? "OPEN"

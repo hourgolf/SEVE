@@ -24,9 +24,9 @@ const COLOR_BY_SLUG: Record<string, PmColor> = {
 const ORDER = ["fade", "breakout", "power", "grind"];
 
 const CONFIG_COLS =
-  "strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed,boosted,underlying_stop_pct,event_policy,entry_dte,take_profit_pct,premium_stop_pct,pyramid_adds)";
-const NEW_COLS = `id,slug,underlying,executor,account_id,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`;
-const NEW_COLS_NOUL = `id,slug,executor,account_id,name,mandate,regime,status,accent,sort_order,${CONFIG_COLS}`; // DB predates `underlying`
+  "strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed,boosted,underlying_stop_pct,event_policy,entry_dte,take_profit_pct,premium_stop_pct,pyramid_adds,strike_offset,gap_min,stall_minutes,stall_max_favor_pct,daily_target_usd)";
+const NEW_COLS = `id,slug,underlying,executor,account_id,name,mandate,regime,status,accent,sort_order,spec_json,${CONFIG_COLS}`;
+const NEW_COLS_NOUL = `id,slug,executor,account_id,name,mandate,regime,status,accent,sort_order,spec_json,${CONFIG_COLS}`; // DB predates `underlying`
 const LEGACY_COLS = `id,slug,name,mandate,regime,${CONFIG_COLS}`;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -80,6 +80,11 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
           take_profit_pct: cfg.take_profit_pct != null ? Number(cfg.take_profit_pct) : 0,
           premium_stop_pct: cfg.premium_stop_pct != null ? Number(cfg.premium_stop_pct) : null,
           pyramid_adds: cfg.pyramid_adds != null ? Number(cfg.pyramid_adds) : 0,
+          strike_offset: cfg.strike_offset != null ? Number(cfg.strike_offset) : 0,
+          gap_min: cfg.gap_min != null ? Number(cfg.gap_min) : 0,
+          stall_minutes: cfg.stall_minutes != null ? Number(cfg.stall_minutes) : 0,
+          stall_max_favor_pct: cfg.stall_max_favor_pct != null ? Number(cfg.stall_max_favor_pct) : 0,
+          daily_target_usd: cfg.daily_target_usd != null ? Number(cfg.daily_target_usd) : 0,
         } as StrategistConfig;
         // Accent: the row's token if valid → else the legacy slug map → else cycle
         // the palette by position (so an arbitrary new channel still gets a color).
@@ -98,6 +103,7 @@ export async function loadDeskConfig(): Promise<DeskState | null> {
           status: hasNewCols ? normStatus(r.status) : "armed",
           executor: r.executor === "stream" ? "stream" : "cron",
           account_id: r.account_id ?? null,
+          spec: (r.spec_json ?? null) as StrategistState["spec"],
           config,
           // sort key stashed for the sort below (kept off the public type).
           _sort: hasNewCols && r.sort_order != null ? Number(r.sort_order) : ORDER.indexOf(r.slug),

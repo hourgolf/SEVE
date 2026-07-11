@@ -13,7 +13,7 @@ import type { useAccounts } from "@/hooks/useAccounts";
 // =============================================================================
 // DeskShell — the shared top bar over both rooms (PERFORM/STUDIO rebuild · S1).
 // A faithful lift of mock F's #topbar: brand · MODE switch · SPY/DAY LEDs · NAV
-// LCD · FRAME switch · RUN/PAPER pills · KILL · ET clock · ⌘K/D affordances.
+// LCD · FRAME switch · RUN/PAPER pills · KILL · PT clock · ⌘K/D affordances.
 // Desktop only (rendered from Surface's desktop branch). The LEDs/KILL/account
 // switch REUSE the existing hardware components + the live desk state — no new
 // data path, no new kill logic. ⌘K is an S4 stub (broadcasts an event).
@@ -44,11 +44,11 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
   const cream = skin === "cream";
   const running = fund.running && !fund.is_halted;
 
-  // ET clock — ticks every second (effect-only so SSR/first paint agree).
+  // Pacific desk clock — ticks every second (effect-only so SSR/first paint agree).
   const [clock, setClock] = useState<string | null>(null);
   useEffect(() => {
     const tick = () =>
-      setClock(new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/New_York" }));
+      setClock(new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }));
     tick();
     const iv = window.setInterval(tick, 1000);
     return () => window.clearInterval(iv);
@@ -165,10 +165,10 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
 
         <div className="vsep" />
 
-        {/* ET clock */}
+        {/* Pacific desk clock */}
         <div className="tb-mod tb-clock">
           <div className="ledwin neu"><span className="lcdtxt num">{clock ?? "--:--:--"}</span></div>
-          <span className="silk">ET</span>
+          <span className="silk">PT</span>
         </div>
 
         {/* ⌘K palette (S4) + DENSITY (`D`, real) — the keycap fires the same

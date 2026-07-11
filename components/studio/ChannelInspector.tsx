@@ -1,38 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { Knob } from "@/components/console/hw/Knob";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
+import { strikeLabel } from "@/lib/studio/channelDecision";
 import type { StrategistState, StrategistConfig } from "@/lib/desk/types";
 import type { StudioChannelRow } from "@/lib/studio/deriveStudioView";
 
-// =============================================================================
-// STUDIO · CHANNEL INSPECTOR (PERFORM/STUDIO rebuild · slice S3)
-// The selected channel's advanced knobs — the ChannelStrip flip-card editor
-// RE-LAID-OUT into the right rail (mock F #inspector). Same fields, same write
-// paths: setCfg (dispatch SET_CONFIG + persistConfig) for the config knobs, plus
-// setChannelStatus / duplicateChannel / deleteChannel for lifecycle. Executor
-// routing is intentionally absent: it belongs in the later admin surface. Anon =
-// read-only (the write helpers no-op without a session; we also gate the UI).
-//
-// Read-only here (no config column to write): STRIKE (there is no strike_offset
-// in strategist_config) and the A13 GIVEBACK TRAIL (a worker config map, not a
-// per-channel column). Both are surfaced honestly as display-only, matching the
-// inspector's intent without inventing a write path.
-// =============================================================================
-
-// The giveback-trail note is worker-side (worker/src/config.ts GIVEBACK_TRAIL) — display only.
-const GIVEBACK_NOTE: Record<string, string> = {
-  "momo-shape": "arm +50% · keep ⅔",
-};
+const GIVEBACK_NOTE: Record<string, string> = { "momo-shape": "arm +50% · keep ⅔" };
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary }: {
-  strategist: StrategistState | undefined;
-  summary?: StudioChannelRow;
-}) {
+export function ChannelInspector({ strategist, summary }: { strategist: StrategistState | undefined; summary?: StudioChannelRow }) {
   const dispatch = useDeskDispatch();
   const { persistConfig, setChannelStatus, duplicateChannel, deleteChannel, canWrite } = useDeskWrite();
   const [confirmDel, setConfirmDel] = useState(false);
@@ -40,29 +21,21 @@ export function ChannelInspector({ strategist, summary }: {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (!strategist) {
-    return (
-      <aside className="inspector">
-        <div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">select a fleet row</span></div>
-        <div className="insp-empty">no channel selected</div>
-      </aside>
-    );
-  }
+  if (!strategist) return <aside className="inspector mixer-inspector"><div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">select a fleet row</span></div><div className="insp-empty">no channel selected</div></aside>;
 
   const { id, slug, underlying, color, status, config } = strategist;
   const dte = config.entry_dte ?? 0;
   const eventPolicy = config.event_policy ?? "standdown";
   const ustop = config.underlying_stop_pct ?? 0;
   const premStop = config.premium_stop_pct ?? 50;
-  const ustopOff = ustop > 0 && ustop * 180 >= premStop; // premium stop fires first → u-stop never binds
+  const ustopOff = ustop > 0 && ustop * 180 >= premStop;
   const pyr = config.pyramid_adds ?? 0;
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
   const giveback = GIVEBACK_NOTE[slug];
 
-  const setCfg = (patch: Partial<StrategistConfig>) => {
-    dispatch({ type: "SET_CONFIG", slug, patch });
-    persistConfig(id, patch);
-  };
+  const stageCfg = (patch: Partial<StrategistConfig>) => dispatch({ type: "SET_CONFIG", slug, patch });
+  const commitCfg = (patch: Partial<StrategistConfig>) => persistConfig(id, patch);
+  const setCfg = (patch: Partial<StrategistConfig>) => { stageCfg(patch); commitCfg(patch); };
   const toggleBench = () => {
     const next = status === "armed" ? "draft" : "armed";
     dispatch({ type: "SET_STATUS", slug, status: next });
@@ -70,99 +43,66 @@ export function ChannelInspector({ strategist, summary }: {
   };
   const doDuplicate = async () => {
     setErr(null); setMsg(null); setBusy(true);
-    const r = await duplicateChannel(id);
-    setBusy(false);
-    if (r.ok) setMsg(`✓ ${r.name} — drafted on the bench.`);
-    else setErr(r.error ?? "duplicate failed");
+    const r = await duplicateChannel(id); setBusy(false);
+    if (r.ok) setMsg(`✓ ${r.name} — drafted on the bench.`); else setErr(r.error ?? "duplicate failed");
   };
   const doDelete = async () => {
     const r = await deleteChannel(id);
     if (r.ok) { setConfirmDel(false); dispatch({ type: "REMOVE", slug }); }
     else { setConfirmDel(false); setErr(r.error ?? "remove failed"); }
   };
-
-  // a compact segmented control (reads the inspector .iseg styling)
-  const seg = <T extends string | number>(cur: T, opts: { v: T; label: string }[], onPick: (v: T) => void) => (
-    <span className="iseg">
-      {opts.map((o) => (
-        <button key={String(o.v)} type="button" className={o.v === cur ? "on" : ""}
-          disabled={!canWrite} onClick={() => canWrite && onPick(o.v)}>{o.label}</button>
-      ))}
-    </span>
-  );
-  const step = (label: string, value: string, dec: () => void, inc: () => void) => (
-    <span className="istep">
-      <button type="button" disabled={!canWrite} onClick={dec} aria-label={`decrease ${label}`}>−</button>
-      <b>{value}</b>
-      <button type="button" disabled={!canWrite} onClick={inc} aria-label={`increase ${label}`}>+</button>
-    </span>
+  const seg = <T extends string | number>(cur: T, opts: { v: T; label: string }[], onPick: (v: T) => void) => <span className="iseg">{opts.map((o) => <button key={String(o.v)} type="button" className={o.v === cur ? "on" : ""} disabled={!canWrite} onClick={() => canWrite && onPick(o.v)}>{o.label}</button>)}</span>;
+  const step = (label: string, value: string, dec: () => void, inc: () => void) => <span className="istep"><button type="button" disabled={!canWrite} onClick={dec} aria-label={`decrease ${label}`}>−</button><b>{value}</b><button type="button" disabled={!canWrite} onClick={inc} aria-label={`increase ${label}`}>+</button></span>;
+  const knob = (value: number, min: number, max: number, stepBy: number, label: string, format: (v: number) => string, key: keyof StrategistConfig, cap?: string, writable = true) => (
+    <Knob value={value} min={min} max={max} step={stepBy} size="sm" label={label} format={format} disabled={!canWrite || !writable}
+      color="var(--pm)" cap={cap} onChange={(next) => stageCfg({ [key]: next })} onCommit={(next) => commitCfg({ [key]: next })} />
   );
 
   return (
-    <aside className="inspector">
+    <aside className="inspector mixer-inspector" style={{ ["--pm" as string]: pmVar(color) }}>
       <div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">{slug}</span></div>
-
       <div className="insp-hero">
-        <span className="ih-slug" style={{ ["--pm" as string]: pmVar(color) }}>{slug}</span>
-        <span className="ih-tk">{underlying}</span>
+        <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
         {giveback && <span className="ih-tag amber">⚡ A13 ratchet</span>}
-        <span className="ih-stats">
-          state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b>
-        </span>
+        <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
-
-      <div className="insp-context">
-        <span><small>ATTENTION</small><b>{summary?.attentionReasons.join(" · ") || "none"}</b></span>
+      <div className="mixer-meter">
+        <span><small>EXCEPTION</small><b>{summary?.attentionReasons.join(" · ") || "NOMINAL"}</b></span>
         <span><small>OPEN EXPOSURE</small><b>{usd0(summary?.pnl.exposure ?? 0)}</b></span>
-        <span><small>NON-DEFAULT</small><b>{summary?.configDiffs.join(" · ") || "none"}</b></span>
+        <span><small>CONFIG</small><b>{summary?.configDiffs.join(" · ") || "FACTORY"}</b></span>
       </div>
 
-      <div className="insp-grid">
-        <div className="ctl"><span className="cl">entry dte</span>
-          {seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
-        <div className="ctl"><span className="cl">strike</span>
-          <span className="ival" title="no strike-offset column to write — informational">ATM</span></div>
-        <div className="ctl">
-          <span className="cl">u-stop %{ustopOff && <span className="uoff" title="premium stop fires first — the underlying stop never binds">uS·off</span>}</span>
-          {step("u-stop", ustop === 0 ? "off" : `${ustop.toFixed(2)}%`,
-            () => setCfg({ underlying_stop_pct: Math.max(0, +(ustop - 0.05).toFixed(2)) }),
-            () => setCfg({ underlying_stop_pct: Math.min(2, +(ustop + 0.05).toFixed(2)) }))}</div>
-        <div className="ctl"><span className="cl">max contracts</span>
-          {step("max contracts", String(config.max_contracts),
-            () => setCfg({ max_contracts: Math.max(1, config.max_contracts - 1) }),
-            () => setCfg({ max_contracts: Math.min(60, config.max_contracts + 1) }))}</div>
-        <div className="ctl"><span className="cl">take-profit %</span>
-          {step("take profit", config.take_profit_pct ? `+${config.take_profit_pct}%` : "ride",
-            () => setCfg({ take_profit_pct: Math.max(0, (config.take_profit_pct ?? 0) - 5) }),
-            () => setCfg({ take_profit_pct: Math.min(300, (config.take_profit_pct ?? 0) + 5) }))}</div>
-        {pyrEligible ? (
-          <div className="ctl"><span className="cl">pyramid</span>
-            {seg(pyr > 0 ? "on" : "off", [{ v: "off", label: "OFF" }, { v: "on", label: "+3·CAP12" }],
-              (v) => setCfg(v === "on" ? { pyramid_adds: 3, max_contracts: Math.max(config.max_contracts, 12) } : { pyramid_adds: 0 }))}</div>
-        ) : (
-          <div className="ctl"><span className="cl">pyramid</span><span className="ival" style={{ color: "var(--dk-dim)" }}>n/a</span></div>
-        )}
-        <div className="ctl"><span className="cl">event policy · fomc</span>
-          {seg(eventPolicy, [{ v: "standdown", label: "STAND-DOWN" }, { v: "ignore", label: "TRADE-THRU" }], (v) => setCfg({ event_policy: v }))}</div>
-        <div className="ctl insp-wide"><span className="cl">giveback trail{giveback ? " · A13" : ""}</span>
-          <span className="ival" style={giveback ? undefined : { color: "var(--dk-dim)" }}>{giveback ?? "—"}</span></div>
+      <div className="mixer-deck">
+        <section className="mix-bank mix-bank--entry"><header>ENTRY PATCH</header><div className="mix-bank-body">
+          <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
+          <div className="ctl"><span className="cl">strike offset</span><span className="ival" title="effective configured strike offset">{strikeLabel(config.strike_offset ?? 0)}</span></div>
+          <div className="ctl"><span className="cl">event policy</span>{seg(eventPolicy, [{ v: "standdown", label: "STAND-DOWN" }, { v: "ignore", label: "TRADE-THRU" }], (v) => setCfg({ event_policy: v }))}</div>
+        </div></section>
+
+        <section className="mix-bank mix-bank--gain"><header>GAIN STAGING</header><div className="knob-bank">
+          {knob(config.capital_pct, 100, 2500, 50, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
+          {knob(config.daily_stop_usd, 100, 5000, 50, "ENTRY LATCH", (v) => `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
+          {knob(premStop, 10, 90, 5, "PREM STOP · POLICY", (v) => `−${v}%`, "premium_stop_pct", "#25272a", false)}
+          {knob(config.max_contracts, 1, 60, 1, "HARD CAP", (v) => `${v} ct`, "max_contracts")}
+        </div></section>
+
+        <section className="mix-bank"><header>EXIT SHAPE</header><div className="mix-bank-body two-col">
+          <div className="ctl"><span className="cl">u-stop %{ustopOff && <span className="uoff">uS·off</span>}</span>{step("u-stop", ustop === 0 ? "off" : `${ustop.toFixed(2)}%`, () => setCfg({ underlying_stop_pct: Math.max(0, +(ustop - 0.05).toFixed(2)) }), () => setCfg({ underlying_stop_pct: Math.min(2, +(ustop + 0.05).toFixed(2)) }))}</div>
+          <div className="ctl"><span className="cl">take profit</span>{step("take profit", config.take_profit_pct ? `+${config.take_profit_pct}%` : "ride", () => setCfg({ take_profit_pct: Math.max(0, (config.take_profit_pct ?? 0) - 5) }), () => setCfg({ take_profit_pct: Math.min(300, (config.take_profit_pct ?? 0) + 5) }))}</div>
+          {pyrEligible ? <div className="ctl"><span className="cl">pyramid</span>{seg(pyr > 0 ? "on" : "off", [{ v: "off", label: "OFF" }, { v: "on", label: "+3 · CAP12" }], (v) => setCfg(v === "on" ? { pyramid_adds: 3, max_contracts: Math.max(config.max_contracts, 12) } : { pyramid_adds: 0 }))}</div> : <div className="ctl"><span className="cl">pyramid</span><span className="ival muted">n/a</span></div>}
+          <div className="ctl"><span className="cl">giveback trail{giveback ? " · A13" : ""}</span><span className="ival">{giveback ?? "—"}</span></div>
+        </div></section>
+
+        <section className="mix-bank mix-bank--posture"><header>CHANNEL POSTURE</header><div className="posture-pads">
+          <button type="button" className={config.muted ? "on mute" : ""} disabled={!canWrite} onClick={() => setCfg({ muted: !config.muted })}><i />MUTE<small>{config.muted ? "held" : "ready"}</small></button>
+          <button type="button" className={config.boosted ? "on boost" : ""} disabled={!canWrite} onClick={() => setCfg({ boosted: !config.boosted })}><i />BOOST<small>{config.boosted ? "2× today" : "normal"}</small></button>
+        </div></section>
       </div>
 
       <div className="insp-foot">
-        <button type="button" className="life" disabled={!canWrite} onClick={toggleBench}
-          title={status === "armed" ? "bench: stop entries; open positions wind down" : "re-arm: trades again next cycle"}>
-          {status === "armed" ? "BENCH" : "RE-ARM"}
-        </button>
-        <button type="button" className="life" disabled={!canWrite || busy} onClick={doDuplicate}
-          title="clone as a draft for an A/B variant">{busy ? "…" : "DUPLICATE"}</button>
-        {!confirmDel ? (
-          <button type="button" className="life del" disabled={!canWrite} onClick={() => setConfirmDel(true)}>DELETE</button>
-        ) : (
-          <>
-            <button type="button" className="life del" onClick={doDelete}>CONFIRM</button>
-            <button type="button" className="life" onClick={() => setConfirmDel(false)}>CANCEL</button>
-          </>
-        )}
+        <button type="button" className="life" disabled={!canWrite} onClick={toggleBench}>{status === "armed" ? "BENCH" : "RE-ARM"}</button>
+        <button type="button" className="life" disabled={!canWrite || busy} onClick={doDuplicate}>{busy ? "…" : "DUPLICATE"}</button>
+        {!confirmDel ? <button type="button" className="life del" disabled={!canWrite} onClick={() => setConfirmDel(true)}>DELETE</button> : <><button type="button" className="life del" onClick={doDelete}>CONFIRM</button><button type="button" className="life" onClick={() => setConfirmDel(false)}>CANCEL</button></>}
       </div>
       {(msg || err) && <div className={`insp-note${err ? " err" : ""}`}>{err ?? msg}</div>}
     </aside>

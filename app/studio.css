@@ -15,6 +15,10 @@
    .console-root), so the frame toggle themes them for free.
    =========================================================================== */
 
+/* The shared shell owns the viewport in both modes. Keeping STUDIO inside the
+   legacy page's 18px body frame made the entire header jump on mode changes. */
+body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
+
 .shell-root[data-mode="studio"] .studio {
   /* local layout + glass tokens (invariant dark for the inspector/registry) */
   --insp-w: clamp(340px, 25vw, 480px);
@@ -505,4 +509,124 @@
   .shell-root[data-mode="studio"] .studio-v4 .sband { grid-template-columns: 1fr 1fr; }
   .shell-root[data-mode="studio"] .studio-v4 .sband > button { justify-content: center; }
   .shell-root[data-mode="studio"] .studio-v4 .sband > button span { display: none; }
+}
+
+/* ===========================================================================
+   P5 SLICE 4B — modular operating desk + mixer inspector
+   The fleet stays the scan surface; selected-channel decision, evidence and
+   exit context fill the former dead floor space. Leaves remain subscription-free.
+   =========================================================================== */
+.shell-root[data-mode="studio"] .studio-v4b {
+  --insp-w: clamp(390px, 29vw, 520px);
+  --h-band: 52px;
+  grid-template-rows: minmax(270px, 0.95fr) minmax(230px, 0.78fr) var(--h-band);
+}
+.shell-root[data-mode="studio"] .studio-v4b .fleet { grid-column: 1; grid-row: 1; }
+.shell-root[data-mode="studio"] .studio-v4b .inspector { grid-column: 2; grid-row: 1 / 3; }
+.shell-root[data-mode="studio"] .studio-v4b .studio-modules { grid-column: 1; grid-row: 2; }
+.shell-root[data-mode="studio"] .studio-v4b .sband { grid-column: 1 / 3; grid-row: 3; }
+
+/* Dense, reusable consoles — legacy-room information architecture in the new shell. */
+.shell-root[data-mode="studio"] .studio-modules {
+  min-width: 0; min-height: 0; display: grid; grid-template-columns: 1.05fr 1fr 0.95fr; gap: 7px;
+}
+.shell-root[data-mode="studio"] .studio-module {
+  min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+  color: var(--lcd-ink); background: linear-gradient(180deg, var(--lcd), var(--lcd-2));
+  border: 1px solid var(--lcd-edge); border-radius: 9px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 2px 8px rgba(0,0,0,.3);
+}
+.shell-root[data-mode="studio"] .studio-module > header {
+  flex: 0 0 30px; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 9px;
+  border-bottom: 1px solid #000; background: linear-gradient(180deg, #2b2b2e, #1d1d20);
+  font-family: var(--sh-mono);
+}
+.shell-root[data-mode="studio"] .studio-module > header > span { color: var(--accent); font-size: var(--fs-label); font-weight: 800; }
+.shell-root[data-mode="studio"] .studio-module > header > b { color: #d7d5cb; font-size: var(--fs-label); letter-spacing: .12em; }
+.shell-root[data-mode="studio"] .studio-module > header > small { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dk-dim); font-size: var(--fs-label); }
+.shell-root[data-mode="studio"] .studio-module-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: 9px; font-family: var(--sh-mono); }
+.shell-root[data-mode="studio"] .studio-module-body footer { margin-top: auto; padding-top: 7px; color: var(--dk-dim); font-size: var(--fs-label); line-height: 1.25; border-top: 1px solid var(--line); }
+.shell-root[data-mode="studio"] .module-empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--dk-dim); font: 700 var(--fs-chip)/1.4 var(--sh-mono); }
+.shell-root[data-mode="studio"] .module-empty.warn { color: var(--amber); }
+.shell-root[data-mode="studio"] .decision-state { display: grid; gap: 4px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 5px; background: rgba(255,255,255,.025); }
+.shell-root[data-mode="studio"] .decision-state b { color: var(--dk-mut); font-size: var(--fs-chip); letter-spacing: .08em; }
+.shell-root[data-mode="studio"] .decision-state span { color: var(--lcd-ink); font-size: var(--fs-chip); line-height: 1.3; }
+.shell-root[data-mode="studio"] .decision-state.held b { color: var(--amber); }
+.shell-root[data-mode="studio"] .decision-state.fired b { color: var(--green-soft); }
+.shell-root[data-mode="studio"] .decision-state.risk b { color: var(--red-soft); }
+.shell-root[data-mode="studio"] .module-mandate { margin: 7px 0; color: var(--dk-mut); font-size: var(--fs-chip); line-height: 1.35; }
+.shell-root[data-mode="studio"] .condition-bank { display: flex; flex-wrap: wrap; gap: 4px; }
+.shell-root[data-mode="studio"] .condition-bank span { padding: 3px 5px; color: var(--dk-mut); border: 1px solid var(--line-2); border-radius: 3px; font-size: var(--fs-label); }
+.shell-root[data-mode="studio"] .condition-bank i { color: var(--dk-dim); font-size: var(--fs-chip); }
+.shell-root[data-mode="studio"] .evidence-hero { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 2px 8px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.shell-root[data-mode="studio"] .evidence-hero small { color: var(--dk-dim); font-size: var(--fs-label); letter-spacing: .08em; }
+.shell-root[data-mode="studio"] .evidence-hero strong { grid-row: 1 / 3; grid-column: 2; color: var(--lcd-ink); font-size: clamp(17px,1.3vw,23px); }
+.shell-root[data-mode="studio"] .evidence-hero.pos strong { color: var(--green-soft); }
+.shell-root[data-mode="studio"] .evidence-hero.neg strong { color: var(--red-soft); }
+.shell-root[data-mode="studio"] .evidence-hero span { color: var(--dk-mut); font-size: var(--fs-label); }
+.shell-root[data-mode="studio"] .evidence-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; margin-top: 7px; background: var(--line); }
+.shell-root[data-mode="studio"] .evidence-grid > span { min-width: 0; display: grid; gap: 3px; padding: 6px; background: var(--lcd); }
+.shell-root[data-mode="studio"] .evidence-grid small,
+.shell-root[data-mode="studio"] .ops-truth small,
+.shell-root[data-mode="studio"] .exit-shape small { color: var(--dk-dim); font-size: var(--fs-label); letter-spacing: .05em; }
+.shell-root[data-mode="studio"] .evidence-grid b { color: var(--lcd-ink); font-size: var(--fs-chip); }
+.shell-root[data-mode="studio"] .ops-truth { display: grid; grid-template-columns: 56px 82px 1fr; gap: 1px; background: var(--line); }
+.shell-root[data-mode="studio"] .ops-truth > span { min-width: 0; display: grid; gap: 3px; padding: 6px; background: var(--lcd); }
+.shell-root[data-mode="studio"] .ops-truth b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lcd-ink); font-size: var(--fs-chip); }
+.shell-root[data-mode="studio"] .ops-truth b.warning { color: var(--amber); }
+.shell-root[data-mode="studio"] .ops-truth b.high,
+.shell-root[data-mode="studio"] .ops-truth b.critical { color: var(--red-soft); }
+.shell-root[data-mode="studio"] .exit-shape { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin-top: 7px; background: var(--line); }
+.shell-root[data-mode="studio"] .exit-shape > span { min-width: 0; display: grid; gap: 3px; padding: 7px; background: var(--lcd); }
+.shell-root[data-mode="studio"] .exit-shape b { color: var(--lcd-ink); font-size: var(--fs-chip); text-transform: uppercase; }
+
+/* Mixer board: meter bridge, four labelled banks, tactile knobs and pads. */
+.shell-root[data-mode="studio"] .mixer-inspector { background: linear-gradient(180deg, #151719, #0d0f10); }
+.shell-root[data-mode="studio"] .mixer-meter { flex: 0 0 auto; display: grid; grid-template-columns: 1fr .75fr 1.25fr; gap: 1px; padding: 6px; background: #08090a; border-bottom: 1px solid #000; }
+.shell-root[data-mode="studio"] .mixer-meter > span { min-width: 0; display: grid; gap: 3px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 3px; background: linear-gradient(180deg,#171a1c,#101214); }
+.shell-root[data-mode="studio"] .mixer-meter small { color: var(--dk-dim); font: 700 var(--fs-label)/1 var(--sh-mono); letter-spacing: .08em; }
+.shell-root[data-mode="studio"] .mixer-meter b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lcd-ink); font: 750 var(--fs-chip)/1.2 var(--sh-mono); }
+.shell-root[data-mode="studio"] .mixer-deck { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 7px; padding: 8px; align-content: start; background-image: repeating-linear-gradient(90deg,transparent 0,transparent 31px,rgba(255,255,255,.015) 32px); }
+.shell-root[data-mode="studio"] .mix-bank { border: 1px solid #32363a; border-radius: 6px; background: linear-gradient(180deg,#202326,#151719); box-shadow: 0 1px 0 rgba(255,255,255,.05) inset,0 2px 5px rgba(0,0,0,.45); }
+.shell-root[data-mode="studio"] .mix-bank > header { padding: 5px 8px; color: #8d9296; border-bottom: 1px solid #070809; font: 800 var(--fs-label)/1 var(--sh-mono); letter-spacing: .15em; }
+.shell-root[data-mode="studio"] .mix-bank-body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+.shell-root[data-mode="studio"] .mix-bank-body.two-col { grid-template-columns: 1fr 1fr; }
+.shell-root[data-mode="studio"] .mix-bank--entry .mix-bank-body > .ctl:last-child { grid-column: 1 / 3; }
+.shell-root[data-mode="studio"] .knob-bank { display: grid; grid-template-columns: repeat(4,1fr); gap: 3px; padding: 7px 4px 5px; }
+.shell-root[data-mode="studio"] .knob-bank .knob { justify-self: center; }
+.shell-root[data-mode="studio"] .knob-bank .knob-caption { max-width: 82px; }
+.shell-root[data-mode="studio"] .knob-bank .knob-label { font-size: var(--fs-label); white-space: normal; line-height: 1.05; }
+.shell-root[data-mode="studio"] .knob-bank .knob-val { font-size: var(--fs-chip); }
+.shell-root[data-mode="studio"] .mixer-inspector .ctl .cl { color: #73797e; }
+.shell-root[data-mode="studio"] .mixer-inspector .iseg,
+.shell-root[data-mode="studio"] .mixer-inspector .istep { background: #0d0f10; }
+.shell-root[data-mode="studio"] .mixer-inspector .ival.muted { color: var(--dk-dim); }
+.shell-root[data-mode="studio"] .posture-pads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+.shell-root[data-mode="studio"] .posture-pads button { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; padding: 7px 9px; color: var(--dk-mut); border: 1px solid #34383c; border-radius: 5px; background: linear-gradient(180deg,#292c2f,#151719); box-shadow: 0 2px 0 #070809; font: 800 var(--fs-chip)/1 var(--sh-mono); text-align: left; }
+.shell-root[data-mode="studio"] .posture-pads button i { width: 7px; height: 7px; border-radius: 50%; background: #3b3f43; }
+.shell-root[data-mode="studio"] .posture-pads button small { color: var(--dk-dim); font-size: var(--fs-label); }
+.shell-root[data-mode="studio"] .posture-pads button.on.mute { color: var(--red-soft); border-color: rgba(224,122,88,.5); }
+.shell-root[data-mode="studio"] .posture-pads button.on.mute i { background: var(--red-soft); box-shadow: 0 0 7px var(--red-soft); }
+.shell-root[data-mode="studio"] .posture-pads button.on.boost { color: var(--green-soft); border-color: rgba(108,192,109,.5); }
+.shell-root[data-mode="studio"] .posture-pads button.on.boost i { background: var(--green-soft); box-shadow: 0 0 7px var(--green-soft); }
+.shell-root[data-mode="studio"] .fleet-signal b.held { color: var(--amber); }
+.shell-root[data-mode="studio"] .fleet-signal b.fired { color: var(--green-soft); }
+.shell-root[data-mode="studio"] .fleet-signal b.risk { color: var(--red-soft); }
+.shell-root[data-mode="studio"] .fleet-tags i.context { opacity: .72; border-style: dashed; }
+
+@media (max-width: 1180px) {
+  .shell-root[data-mode="studio"] .studio-v4b { --insp-w: 350px; }
+  .shell-root[data-mode="studio"] .studio-modules { grid-template-columns: 1fr 1fr; }
+  .shell-root[data-mode="studio"] .studio-module:last-child { display: none; }
+  .shell-root[data-mode="studio"] .knob-bank { grid-template-columns: 1fr 1fr; }
+  .shell-root[data-mode="studio"] .mixer-meter { grid-template-columns: 1fr 1fr; }
+  .shell-root[data-mode="studio"] .mixer-meter > span:last-child { grid-column: 1 / 3; }
+}
+@media (max-width: 950px) {
+  .shell-root[data-mode="studio"] .studio-v4b { --insp-w: 310px; }
+  .shell-root[data-mode="studio"] .studio-modules { grid-template-columns: 1fr; }
+  .shell-root[data-mode="studio"] .studio-module:not(:first-child) { display: none; }
+  .shell-root[data-mode="studio"] .mix-bank-body,
+  .shell-root[data-mode="studio"] .mix-bank-body.two-col { grid-template-columns: 1fr; }
+  .shell-root[data-mode="studio"] .mix-bank--entry .mix-bank-body > .ctl:last-child { grid-column: 1; }
 }
