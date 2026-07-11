@@ -12,7 +12,28 @@ durable context for a new session. Read it first.
 > lives in **memory/** (read `desk-doctrine.md` FIRST, then `cockpit-p3-multi-account.md`,
 > `doctrine-drift-and-forward-validation.md`). The block below re-anchors the convention.
 
-## ⚡ SESSION UPDATE — 2026-07-10 EVE · FABLE WEEKEND MISSION 1 (READ FIRST)
+## ⚡ SESSION UPDATE — 2026-07-10 NIGHT · FABLE WEEKEND MISSION 2: THE UI REBUILD SHIPPED
+
+**The desktop + mobile re-imagining is BUILT and LIVE (slices S1–S5, commits `c023901`→`d0558ae`;
+spec + approved mocks frozen at `docs/perform-build-spec.md` + `mocks/perform-2026-07/`).** The desk
+is now ONE instrument with TWO ROOMS under a shared DeskShell top bar: **STUDIO** (tune — the
+channel RACK + selected-channel INSPECTOR + master/sequencer/registry band; the legacy §01–§04
+rooms stay mounted + reachable BELOW the hero until natively migrated — zero functionality loss)
+⇄ **PERFORM** (watch — chart hero + positions/sentinel/tape rail + mutable chicklet dock). Keys:
+`S` mode · `F` the GLOBAL BLACKOUT⇄CREAM frame skin (both rooms; = the old data-theme, one source
+of truth, localStorage `seve.mode/skin/density`) · `D` density · `⌘K` the cream COMMAND module
+(shared registry `components/shell/commandRegistry.ts`; KILL = 900ms hold-to-fire, never a stray
+Enter). **Mobile is mobile2/** (STUDIO · COMMAND · PERFORM pads; accordion rack w/ horizontal RISK
+fader; 2-col wrapped dock; hold-2s KILL; auth in the cog sheet) — the old `components/mobile/
+MobileApp.tsx` is UNMOUNTED but on disk (`mobile.css` still supplies the <820px scroll-lock; delete
+both only after mobile2 survives real sessions). New CSS layers: `shell/perform/studio/command/
+mobile2.css`, all scoped; legacy console.css untouched underneath. ⚠ The pane rasterizer
+force-darkens cream — verify cream via computed styles/real browser (known quirk, now bitten twice).
+⚠ OPEN with the operator: signed-in click-through of the write paths (agents verify anon-only);
+the mobile dock's 2-column reading of his "2 rows" ruling; whether sentinel-v2 slides behind the
+external review's Mission 1b (see the 07-11 block below when the parallel session lands it).
+
+## SESSION UPDATE — 2026-07-10 EVE · FABLE WEEKEND MISSION 1 (trade-path audit)
 
 **Trade-path audit DONE.** 7-finder adversarial fan-out → 25 CONFIRMED findings, ALL fixed
 (`f83ea2f`→`8673074`); **worker `stream-2026-07-10b` deployed + heartbeat/boot-verified**. Headliners:
