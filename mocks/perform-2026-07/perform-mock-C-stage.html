@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEVE · PERFORM — STAGE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   SEVE — PERFORM mode, variant C "STAGE".
+   The chart IS the interface. Tokens mirror app/console.css /
+   app/globals.css by NAME so this reads as the same instrument.
+   ============================================================ */
+:root{
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+
+  /* recessed LCD screens — theme-invariant (globals.css) */
+  --lcd:#14181b; --lcd-2:#0f1214; --lcd-edge:#0a0a0b;
+  --lcd-ink:#e9eef0; --lcd-up:#6cc06d; --lcd-down:#e07a58;
+
+  /* LED (console.css) */
+  --led-red:#ff3b2f; --led-bg:#1a0604;
+
+  /* 909 chassis cream — carried into PERFORM on ONE object only */
+  --chassis:#d8d3c4; --chassis-2:#ccc6b5; --chassis-edge:#c5bfae;
+  --ink:#2a2a28; --ink-soft:#55534c;
+  --stripe-orange:#e0552f; --stripe-red:#c5362a; --stripe-cream:#d9d7cc;
+
+  /* strategist accents (lib/desk/colors.ts) */
+  --pm-green:#2fd573; --pm-blue:#3b9eff; --pm-amber:#ffb224;
+  --pm-cyan:#45c4d6; --pm-red:#f0563f; --pm-orange:#ff8a3d;
+  --pm-yellow:#ffe14d; --pm-lime:#a3e635; --pm-teal:#2dd4bf;
+  --pm-indigo:#7c83ff; --pm-violet:#b06bff; --pm-magenta:#ff5fa8;
+
+  /* PERFORM surface tones — layered darks, warm-neutral like the blackout theme */
+  --bg:#0b0d0f; --bar:#15181b; --bar-2:#101315;
+  --hair:rgba(255,255,255,.07); --hair-2:rgba(255,255,255,.045);
+  --mut:#8a929a; --mut-2:#5d646b;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--bg); color:var(--lcd-ink);
+  font-family:var(--sans); font-size:12px;
+  -webkit-font-smoothing:antialiased;
+}
+#app{
+  height:100vh; display:grid;
+  grid-template-rows:46px 30px 1fr 26px 56px 20px;
+  grid-template-columns:minmax(0,1fr); /* never let a nowrap row widen the instrument */
+}
+[data-density="compact"] #app{grid-template-rows:42px 26px 1fr 22px 44px 18px}
+
+/* ---------- silkscreen micro-labels ---------- */
+.silk{
+  font-family:var(--mono); font-size:8px; font-weight:500;
+  letter-spacing:1.8px; text-transform:uppercase; color:var(--mut-2);
+}
+
+/* ============ TOP BAR ============ */
+#topbar{
+  display:flex; align-items:center; gap:18px; padding:0 14px;
+  background:linear-gradient(180deg,var(--bar),var(--bar-2));
+  border-bottom:1px solid #000;
+  box-shadow:0 1px 0 var(--hair-2);
+  white-space:nowrap; min-width:0; overflow:hidden;
+}
+.brand{display:flex; align-items:center; gap:9px}
+.brand b{font:600 15px var(--sans); letter-spacing:2.5px; color:#d9d7cc}
+.stripes{display:inline-flex; flex-direction:column; gap:2px}
+.stripes i{width:22px; height:3px; border-radius:1px; display:block}
+.stripes i:nth-child(1){background:var(--stripe-orange)}
+.stripes i:nth-child(2){background:var(--stripe-red)}
+.stripes i:nth-child(3){background:var(--stripe-cream)}
+
+.modeswitch{
+  display:flex; align-items:stretch; background:var(--lcd-2);
+  border:1px solid var(--lcd-edge); border-radius:6px; overflow:hidden; height:26px;
+}
+.modeswitch button{
+  all:unset; cursor:pointer; padding:0 12px; display:flex; align-items:center;
+  font:500 9px var(--mono); letter-spacing:1.6px; color:var(--mut-2); position:relative;
+}
+.modeswitch button.on{color:var(--pm-amber); text-shadow:0 0 8px rgba(255,178,36,.55); background:rgba(255,178,36,.05)}
+.modeswitch button.on::after{
+  content:""; position:absolute; left:8px; right:8px; bottom:3px; height:2px;
+  border-radius:1px; background:var(--stripe-orange); box-shadow:0 0 6px var(--stripe-orange);
+}
+.modeswitch button + button{border-left:1px solid var(--lcd-edge)}
+
+.readout{display:flex; align-items:center; gap:8px}
+.readout .cap{display:flex; flex-direction:column; gap:2px; align-items:flex-start}
+.led-window{
+  position:relative; display:flex; align-items:center; padding:5px 9px;
+  background:var(--led-bg); border-radius:7px; border:1px solid #000;
+  box-shadow:0 2px 8px rgba(0,0,0,.65) inset, 0 1px 0 rgba(255,255,255,.05);
+}
+.led-window::after{ /* glass */
+  content:""; position:absolute; inset:0; border-radius:7px; pointer-events:none;
+  background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,0) 42%);
+}
+.pct-down{font:500 11px var(--mono); color:var(--lcd-down)}
+.lcd-chip{
+  background:linear-gradient(180deg,var(--lcd),var(--lcd-2));
+  border:1px solid var(--lcd-edge); border-radius:7px; padding:5px 11px;
+  font:700 14px var(--mono);
+  box-shadow:0 2px 8px rgba(0,0,0,.5) inset;
+}
+.lcd-chip.up{color:var(--lcd-up); text-shadow:0 0 9px rgba(108,192,109,.5)}
+.lcd-chip.plain{color:var(--lcd-ink); font-weight:500}
+
+.statechips{display:flex; align-items:center; gap:8px}
+.chip{
+  display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 10px;
+  border-radius:6px; border:1px solid var(--hair);
+  font:500 9.5px var(--mono); letter-spacing:1.4px;
+}
+.chip .dot{width:6px; height:6px; border-radius:50%}
+.chip.run{color:var(--pm-green); border-color:rgba(47,213,115,.35)}
+.chip.run .dot{background:var(--pm-green); box-shadow:0 0 7px var(--pm-green); animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.chip.paper{color:var(--pm-amber); border-color:rgba(255,178,36,.35)}
+.kill{
+  all:unset; cursor:pointer; height:26px; padding:0 13px; border-radius:6px;
+  background:var(--led-bg); border:1px solid #571510;
+  font:700 10px var(--mono); letter-spacing:2.2px; color:var(--led-red);
+  display:inline-flex; align-items:center;
+}
+.kill:hover{box-shadow:0 0 12px rgba(255,59,47,.4); border-color:#8a221a}
+.clock{font:500 13px var(--mono); color:var(--lcd-ink); font-variant-numeric:tabular-nums}
+.clock small{font-size:9px; color:var(--mut-2); margin-left:4px; letter-spacing:1px}
+
+.keychip{
+  all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  height:24px; padding:0 9px; border-radius:6px;
+  background:var(--lcd-2); border:1px solid var(--hair);
+  font:500 9.5px var(--mono); letter-spacing:.8px; color:var(--mut);
+}
+.keychip:hover{color:var(--lcd-ink); border-color:rgba(255,255,255,.16)}
+.keychip kbd{
+  font:600 9px var(--mono); color:var(--lcd-ink); background:rgba(255,255,255,.07);
+  border:1px solid var(--hair); border-radius:3px; padding:1px 4px;
+}
+.keychip.lit{color:var(--pm-amber); border-color:rgba(255,178,36,.4)}
+.spacer{flex:1}
+
+/* ============ SENTINEL STRIP ============ */
+#sentinel{
+  display:flex; align-items:center; gap:12px; padding:0 14px;
+  background:var(--bar-2); border-bottom:1px solid #000;
+}
+.verdict{
+  display:inline-flex; align-items:center; gap:6px; height:18px; padding:0 9px;
+  border-radius:4px; background:rgba(255,178,36,.09); border:1px solid rgba(255,178,36,.4);
+  font:700 9px var(--mono); letter-spacing:2px; color:var(--pm-amber);
+}
+.verdict .dot{width:5px; height:5px; border-radius:50%; background:var(--pm-amber); box-shadow:0 0 6px var(--pm-amber); animation:pulse 3s ease-in-out infinite}
+#sentinel .msg{font:400 11px var(--sans); color:var(--lcd-ink)}
+#sentinel .msg b{font-weight:600; font-family:var(--mono); font-size:10.5px}
+.promobar{display:flex; align-items:center; gap:6px}
+.promobar .track{width:64px; height:4px; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden}
+.promobar .track i{display:block; height:100%; width:80%; background:var(--pm-amber); border-radius:2px; box-shadow:0 0 5px rgba(255,178,36,.6)}
+.promobar span{font:500 9px var(--mono); color:var(--mut)}
+#sentinel .scan{margin-left:auto; font:500 9.5px var(--mono); color:var(--mut); letter-spacing:.6px}
+#sentinel .scan em{font-style:normal; color:var(--pm-green)}
+
+/* ============ STAGE ============ */
+#stage{
+  position:relative; overflow:hidden;
+  background:linear-gradient(180deg,#11161a 0%,#0d1114 78%,#0b0e11 100%);
+  box-shadow:0 10px 24px rgba(0,0,0,.5) inset;
+}
+#stage::after{ /* vignette */
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 40%, transparent 62%, rgba(0,0,0,.28) 100%);
+}
+#chartSvg{position:absolute; inset:0; display:block}
+
+.legend{
+  position:absolute; top:10px; left:12px; display:flex; align-items:center; gap:12px;
+  font:500 9px var(--mono); letter-spacing:1px; color:var(--mut); z-index:3;
+}
+.legend .sym{color:var(--lcd-ink); font-weight:700; letter-spacing:2px}
+.legend .sw{display:inline-block; width:10px; height:2px; border-radius:1px; margin-right:4px; vertical-align:2px}
+
+/* chart-anchored position chips */
+.pos-chip{
+  position:absolute; z-index:4; display:inline-flex; align-items:center; gap:7px;
+  height:22px; padding:0 9px; border-radius:5px;
+  background:rgba(13,16,19,.88); border:1px solid var(--hair);
+  font:500 10px var(--mono); color:var(--lcd-ink); white-space:nowrap;
+  backdrop-filter:blur(3px);
+  box-shadow:0 3px 10px rgba(0,0,0,.5);
+}
+.pos-chip .cdot{width:6px; height:6px; border-radius:50%; flex:none}
+.pos-chip .qty{color:var(--mut)}
+.pos-chip .up{color:var(--lcd-up); font-weight:700}
+.pos-chip .dn{color:var(--lcd-down); font-weight:700}
+.pos-chip .pk{color:var(--mut); font-size:9px}
+.tag-a13{
+  font:700 8px var(--mono); letter-spacing:.8px; color:var(--pm-amber);
+  border:1px solid rgba(255,178,36,.45); border-radius:3px; padding:1px 4px;
+  text-shadow:0 0 6px rgba(255,178,36,.5);
+}
+.offstage{
+  position:absolute; top:10px; right:76px; z-index:4;
+  display:inline-flex; align-items:center; gap:7px; height:22px; padding:0 9px;
+  border-radius:5px; background:rgba(13,16,19,.88); border:1px solid var(--hair);
+  font:500 10px var(--mono); color:var(--lcd-ink); white-space:nowrap;
+  box-shadow:0 3px 10px rgba(0,0,0,.5);
+}
+.offstage .osl{font-size:8px; letter-spacing:1.6px; color:var(--mut-2); font-weight:600}
+
+/* SENT ladder tags (axis-anchored) */
+.lvl-tag{
+  position:absolute; right:6px; z-index:4; transform:translateY(-50%);
+  display:inline-flex; align-items:center; gap:5px; height:16px; padding:0 6px;
+  border-radius:3px; background:rgba(13,16,19,.9);
+  font:600 8.5px var(--mono); letter-spacing:.8px; white-space:nowrap;
+}
+.lvl-tag.gamma{color:var(--pm-amber); border:1px solid rgba(255,178,36,.4)}
+.lvl-tag.pd{color:#9aa3ad; border:1px solid rgba(154,163,173,.35)}
+.lvl-below{
+  position:absolute; right:6px; z-index:4;
+  display:inline-flex; align-items:center; gap:5px; height:16px; padding:0 6px;
+  border-radius:3px; background:rgba(13,16,19,.9); border:1px solid rgba(47,213,115,.35);
+  font:600 8.5px var(--mono); letter-spacing:.8px; color:var(--pm-green); white-space:nowrap;
+}
+.lvl-below.pd{color:#9aa3ad; border-color:rgba(154,163,173,.32)}
+.spot-tag{
+  position:absolute; right:6px; z-index:5; transform:translateY(-50%);
+  height:17px; padding:0 7px; border-radius:3px; display:inline-flex; align-items:center;
+  background:var(--led-bg); border:1px solid #4a120d;
+  font:700 10px var(--mono); color:var(--led-red); text-shadow:0 0 7px rgba(255,59,47,.65);
+}
+
+/* ============ TAPE ============ */
+#tape{
+  position:relative; display:flex; align-items:center; gap:10px; padding:0 14px;
+  background:var(--bar-2); border-top:1px solid #000; overflow:hidden;
+  font:400 10.5px var(--mono); white-space:nowrap;
+}
+#tape::after{
+  content:""; position:absolute; top:0; right:0; bottom:0; width:120px;
+  background:linear-gradient(90deg,transparent,var(--bar-2)); pointer-events:none;
+}
+#tape .livedot{width:5px; height:5px; border-radius:50%; background:var(--pm-green); box-shadow:0 0 6px var(--pm-green); animation:pulse 1.8s ease-in-out infinite; flex:none}
+.t-ev{display:inline-flex; align-items:center; gap:7px}
+.t-ev .tm{color:var(--mut-2)}
+.t-typ{font-weight:700; font-size:8.5px; letter-spacing:1.2px; padding:1px 5px; border-radius:3px}
+.t-typ.exec{color:var(--pm-green); background:rgba(47,213,115,.08)}
+.t-typ.warn{color:var(--pm-amber); background:rgba(255,178,36,.08)}
+.t-typ.info{color:#7d8894; background:rgba(125,136,148,.09)}
+.t-ev .tx{color:#c3cad1}
+.t-ev .tx b{color:var(--lcd-ink); font-weight:500}
+.t-ev .tx .up{color:var(--lcd-up)}
+.t-sep{color:#2c3238; margin:0 2px}
+
+/* ============ DOCK ============ */
+#dock{
+  display:flex; align-items:stretch; background:#101214;
+  border-top:1px solid var(--hair-2);
+}
+#dock .docklbl{
+  flex:none; width:24px; display:flex; align-items:center; justify-content:center;
+  border-right:1px solid var(--hair-2);
+}
+#dock .docklbl span{transform:rotate(180deg); writing-mode:vertical-rl; font-size:7px; letter-spacing:2.4px}
+.ch{
+  flex:1 1 0; min-width:0; padding:7px 9px 6px; position:relative; cursor:default;
+  border-right:1px solid var(--hair-2); overflow:hidden;
+  display:flex; flex-direction:column; justify-content:space-between; gap:2px;
+}
+.ch:hover{background:rgba(255,255,255,.02)}
+.ch .r1{display:flex; align-items:center; gap:6px; min-width:0}
+.ch .cdot{width:6px; height:6px; border-radius:50%; flex:none; box-shadow:0 0 6px var(--c)}
+.ch .slug{font:500 9px var(--mono); letter-spacing:.2px; color:#c9d0d6; white-space:nowrap}
+.ch .mpad{
+  margin-left:auto; width:9px; height:9px; border-radius:2px; flex:none;
+  border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.03);
+}
+.ch .r2{display:flex; align-items:baseline; gap:7px; font-family:var(--mono); white-space:nowrap}
+.ch .pnl{font-size:11px; font-weight:700}
+.ch .pnl.up{color:var(--lcd-up)} .ch .pnl.dn{color:var(--lcd-down)} .ch .pnl.z{color:var(--mut)}
+.ch .pkwin{font-size:8.5px; color:var(--mut-2); letter-spacing:.3px}
+.ch.hot{background:rgba(255,178,36,.035); box-shadow:0 -2px 0 var(--pm-amber) inset}
+.ch.gated{opacity:.55}
+.ch.gated .gatetag{font:600 7.5px var(--mono); letter-spacing:1px; color:var(--mut-2); border:1px dashed rgba(255,255,255,.18); border-radius:3px; padding:0 4px}
+.ch.muted{opacity:.4}
+.ch.muted .mpad{background:var(--pm-amber); border-color:var(--pm-amber); box-shadow:0 0 6px rgba(255,178,36,.7)}
+.ch.muted .state{font:700 8.5px var(--mono); letter-spacing:2px; color:var(--pm-amber)}
+.ch.dark{opacity:.22}
+.ch.dark .state{font:700 8.5px var(--mono); letter-spacing:2px; color:var(--mut-2)}
+[data-density="compact"] .ch{padding:4px 8px 4px}
+[data-density="compact"] .ch .pnl{font-size:10px}
+
+/* ============ HINTS FOOTER ============ */
+#hints{
+  display:flex; align-items:center; padding:0 14px; gap:14px;
+  background:#0c0e10; border-top:1px solid var(--hair-2);
+  font:400 9px var(--mono); letter-spacing:.8px; color:var(--mut-2);
+}
+#hints .right{margin-left:auto; display:flex; gap:14px}
+#hints kbd{color:var(--mut); font-weight:600}
+
+/* ============ ⌘K PALETTE — the hero object ============ */
+#scrim{
+  position:fixed; inset:0; z-index:50; display:flex; justify-content:center;
+  padding-top:108px; background:rgba(4,5,7,.42); /* dim, never blur — the stage stays readable under the palette */
+  opacity:1; transition:opacity .14s ease;
+}
+#scrim.closed{opacity:0; pointer-events:none}
+.palette{
+  width:584px; height:fit-content; border-radius:11px; padding:7px 8px 8px;
+  background:linear-gradient(180deg,var(--chassis),var(--chassis-2));
+  border:1px solid var(--chassis-edge);
+  box-shadow:0 24px 70px rgba(0,0,0,.75), 0 2px 0 rgba(255,255,255,.14) inset, 0 -2px 6px rgba(0,0,0,.18) inset;
+  transform:translateY(0); transition:transform .14s ease;
+}
+#scrim.closed .palette{transform:translateY(-8px)}
+.pal-top{display:flex; align-items:center; gap:9px; padding:2px 3px 7px}
+.pal-top .stripes i{width:16px; height:2.5px}
+.pal-title{font:600 8.5px var(--mono); letter-spacing:3.2px; color:var(--ink-soft)}
+.pal-esc{
+  margin-left:auto; font:600 8px var(--mono); letter-spacing:1.4px; color:var(--ink-soft);
+  border:1px solid rgba(60,52,30,.28); border-radius:3px; padding:2px 6px;
+  box-shadow:0 1px 0 rgba(255,255,255,.35) inset;
+}
+.pal-lcd{
+  background:linear-gradient(180deg,var(--lcd),var(--lcd-2));
+  border:1px solid var(--lcd-edge); border-radius:7px;
+  box-shadow:0 3px 14px rgba(0,0,0,.55) inset;
+  overflow:hidden;
+}
+.pal-input{display:flex; align-items:center; gap:9px; padding:12px 14px 11px; border-bottom:1px solid rgba(255,255,255,.06)}
+.pal-input .prompt{font:700 15px var(--mono); color:var(--pm-amber); text-shadow:0 0 8px rgba(255,178,36,.5)}
+.pal-input .q{font:500 15px var(--mono); color:var(--lcd-ink); letter-spacing:.5px}
+.caret{width:8px; height:17px; background:rgba(233,238,240,.85); animation:blink 1.2s steps(1) infinite}
+@keyframes blink{0%,70%{opacity:1}71%,100%{opacity:.12}}
+.pal-count{margin-left:auto; font:400 9px var(--mono); color:var(--mut-2); letter-spacing:.8px}
+.pal-rows{padding:5px 6px}
+.prow{
+  display:flex; align-items:center; gap:9px; padding:8px 9px; border-radius:5px;
+  font:500 12px var(--mono); color:#c3cad1;
+}
+.prow .pdot{width:6px; height:6px; border-radius:50%; flex:none}
+.prow .m{color:var(--pm-amber); text-shadow:0 0 7px rgba(255,178,36,.45)} /* matched "mo" */
+.prow .verb{color:var(--lcd-ink); font-weight:700}
+.prow .sub{color:var(--mut-2); font-size:10px}
+.prow .khint{margin-left:auto; font:600 9px var(--mono); color:var(--mut-2); border:1px solid var(--hair); border-radius:3px; padding:1px 5px}
+.prow.sel{
+  background:rgba(255,178,36,.07); box-shadow:2.5px 0 0 var(--pm-amber) inset;
+  color:var(--lcd-ink);
+}
+.prow.sel .khint{color:var(--pm-amber); border-color:rgba(255,178,36,.4)}
+.prow .selmark{color:var(--pm-amber); font-size:9px; width:10px; flex:none; text-align:center}
+.pal-sect{font:600 8px var(--mono); letter-spacing:2.4px; color:var(--mut-2); padding:9px 9px 4px}
+.prow.kill{color:var(--led-red)}
+.prow.kill .pdot{background:var(--led-red); box-shadow:0 0 7px rgba(255,59,47,.7)}
+.prow.kill .armtag{
+  margin-left:auto; font:700 8px var(--mono); letter-spacing:1.4px; color:var(--led-red);
+  border:1px solid rgba(255,59,47,.45); border-radius:3px; padding:1.5px 6px;
+  background:rgba(255,59,47,.06);
+}
+.pal-foot{
+  display:flex; gap:16px; padding:8px 14px 9px; border-top:1px solid rgba(255,255,255,.06);
+  font:400 8.5px var(--mono); letter-spacing:.9px; color:var(--mut-2);
+}
+.pal-foot b{color:var(--mut); font-weight:600}
+.pal-foot .r{margin-left:auto}
+
+/* 1280×800 guard — keychips go icon-only, gaps compress; nothing meaningful hides */
+@media (max-width:1330px){
+  #topbar{gap:11px}
+  .clock small{display:none}
+  .legend{gap:9px}
+  .kct{display:none}
+  .readout{gap:6px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ======== TOP BAR ======== -->
+  <header id="topbar">
+    <div class="brand"><span class="stripes"><i></i><i></i><i></i></span><b>SEVE</b></div>
+
+    <div class="modeswitch" title="STUDIO = compose/tune · PERFORM = live ops">
+      <button>STUDIO</button><button class="on">PERFORM</button>
+    </div>
+
+    <div class="readout">
+      <div class="led-window"><svg id="spotLed" height="26" aria-label="SPY 751.64"></svg></div>
+      <div class="cap">
+        <span class="silk">SPY · LAST</span>
+        <span class="pct-down">−0.38%</span>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="cap" style="align-items:flex-end">
+        <span class="silk">DAY P&amp;L</span>
+      </div>
+      <div class="lcd-chip up">+$1,243</div>
+    </div>
+
+    <div class="readout">
+      <div class="cap" style="align-items:flex-end"><span class="silk">NAV</span></div>
+      <div class="lcd-chip plain">$1.94M</div>
+    </div>
+
+    <span class="spacer"></span>
+
+    <div class="statechips">
+      <span class="chip run"><span class="dot"></span>RUN</span>
+      <span class="chip paper">PAPER</span>
+      <button class="kill" title="KILL = FLATTEN — market-close all open positions, freeze entries">KILL</button>
+    </div>
+
+    <span class="clock">12:47:31<small>ET</small></span>
+
+    <button class="keychip lit" id="ckBtn" title="command palette"><kbd>⌘K</kbd><span class="kct">commands</span></button>
+    <button class="keychip" id="denBtn" title="data-density toggle"><kbd>D</kbd><span class="kct" id="denLbl">density</span></button>
+    <button class="keychip" title="pop chart out to its own window"><kbd>P</kbd><span class="kct">pop-out</span>⧉</button>
+  </header>
+
+  <!-- ======== SENTINEL STRIP ======== -->
+  <div id="sentinel">
+    <span class="silk">SENTINEL</span>
+    <span class="verdict"><span class="dot"></span>WATCH</span>
+    <span class="msg"><b>vb-ribbon-cross</b> IWM nearing promote bar</span>
+    <span class="promobar"><span class="track"><i></i></span><span>12/15 sessions</span></span>
+    <span class="scan">last scan 06:00 PT <em>✓</em></span>
+  </div>
+
+  <!-- ======== STAGE ======== -->
+  <main id="stage">
+    <svg id="chartSvg"></svg>
+    <div class="legend">
+      <span class="sym">SPY · 1m</span>
+      <span><span class="sw" style="background:var(--pm-cyan)"></span>VWAP</span>
+      <span><span class="sw" style="background:var(--pm-yellow)"></span>EMA 9</span>
+      <span><span class="sw" style="background:var(--pm-indigo)"></span>EMA 21</span>
+      <span style="color:var(--mut-2)">SENT ladder · per-index</span>
+    </div>
+
+    <div class="offstage" title="QQQ position — off this stage; breakout-alt-v3-qqq">
+      <span class="osl">OFF-STAGE · QQQ</span>
+      <span class="cdot" style="width:6px;height:6px;border-radius:50%;background:var(--pm-cyan);box-shadow:0 0 6px var(--pm-cyan)"></span>
+      breakout-alt-v3-qqq&nbsp;566C&nbsp;<span style="color:var(--mut)">×6</span>
+      <span style="color:var(--lcd-up);font-weight:700">+$310</span>
+      <span style="color:var(--mut);font-size:9px">pk +28%</span>
+    </div>
+
+    <!-- position chips + ladder tags are placed by JS at price-anchored y -->
+    <div class="pos-chip" id="chipPb">
+      <span class="cdot" style="background:var(--pm-green);box-shadow:0 0 6px var(--pm-green)"></span>
+      pb-ride&nbsp;750C·1DTE&nbsp;<span class="qty">×8</span>
+      <span class="dn">−$120</span><span class="pk">pk +9%</span>
+    </div>
+    <div class="pos-chip" id="chipMo">
+      <span class="cdot" style="background:var(--pm-amber);box-shadow:0 0 6px var(--pm-amber)"></span>
+      momo-shape&nbsp;752C&nbsp;<span class="qty">×12</span>
+      <span class="up">+$840</span><span class="pk">pk +62%</span>
+      <span class="tag-a13" title="A13 — arm-high giveback ratchet LIVE (arm +50% / keep ⅔)">⚡A13</span>
+    </div>
+
+    <div class="lvl-tag gamma" id="tagGamma">753.0 · γ-WALL</div>
+    <div class="lvl-below pd" id="tagPd">▾ 748.2 · PD·SWING · −0.46%</div>
+    <div class="lvl-below" id="tagGap">▾ 745.5 · GAP-ARM · −0.81%</div>
+    <div class="spot-tag" id="tagSpot">751.64</div>
+  </main>
+
+  <!-- ======== TAPE ======== -->
+  <div id="tape">
+    <span class="livedot"></span><span class="silk">TAPE</span>
+    <span class="t-ev"><span class="tm">12:41</span><span class="t-typ exec">EXEC</span><span class="tx"><b>momo-shape</b> buy 12× SPY752C @1.86</span></span><span class="t-sep">▪</span>
+    <span class="t-ev"><span class="tm">12:38</span><span class="t-typ warn">WARN</span><span class="tx"><b>pb-ride</b> giveback 41% of peak</span></span><span class="t-sep">▪</span>
+    <span class="t-ev"><span class="tm">12:31</span><span class="t-typ exec">EXEC</span><span class="tx"><b>breakout-alt-v3-qqq</b> TP ×6 @2.41 → <span class="up">+$310</span></span></span><span class="t-sep">▪</span>
+    <span class="t-ev"><span class="tm">12:02</span><span class="t-typ info">INFO</span><span class="tx">gate cost_gate blocked <b>grind</b></span></span><span class="t-sep">▪</span>
+    <span class="t-ev"><span class="tm">11:58</span><span class="t-typ exec">EXEC</span><span class="tx"><b>pb-ride</b> buy 8× SPY750C @2.12</span></span>
+  </div>
+
+  <!-- ======== CHANNEL DOCK ======== -->
+  <div id="dock">
+    <div class="docklbl"><span class="silk">CHANNELS</span></div>
+
+    <div class="ch" style="--c:var(--pm-green)">
+      <div class="r1"><span class="cdot" style="background:var(--pm-green)"></span><span class="slug">pb-ride</span><span class="mpad" title="mute"></span></div>
+      <div class="r2"><span class="pnl up">+$1.1k</span><span class="pkwin">pk22·win70</span></div>
+    </div>
+    <div class="ch" style="--c:var(--pm-teal)">
+      <div class="r1"><span class="cdot" style="background:var(--pm-teal)"></span><span class="slug">pb-ride-2</span><span class="mpad"></span></div>
+      <div class="r2"><span class="pnl up">+$430</span><span class="pkwin">pk18·win66</span></div>
+    </div>
+    <div class="ch" style="--c:var(--pm-lime)">
+      <div class="r1"><span class="cdot" style="background:var(--pm-lime)"></span><span class="slug">pb-ride-itm</span><span class="mpad"></span></div>
+      <div class="r2"><span class="pnl dn">−$60</span><span class="pkwin">pk11·win58</span></div>
+    </div>
+    <div class="ch hot" style="--c:var(--pm-amber)" title="A13 — giveback ratchet LIVE on this channel">
+      <div class="r1"><span class="cdot" style="background:var(--pm-amber)"></span><span class="slug">momo-shape</span><span class="tag-a13" style="font-size:7px;padding:0 3px">⚡A13</span><span class="mpad"></span></div>
+      <div class="r2"><span class="pnl up">+$840</span><span class="pkwin">pk62·win46</span></div>
+    </div>
+    <div class="ch" style="--c:var(--pm-orange)">
+      <div class="r1"><span class="cdot" style="background:var(--pm-orange)"></span><span class="slug">momo-shape-2</span><span class="mpad"></span></div>
+      <div class="r2"><span class="pnl up">+$120</span><span class="pkwin">pk31·win44</span></div>
+    </div>
+    <div class="ch" style="--c:var(--pm-blue)">
+      <div class="r1"><span class="cdot" style="background:var(--pm-blue)"></span><span class="slug">breakout</span><span class="mpad"></span></div>
+      <div class="r2"><span class="pnl up">+$95</span><span class="pkwin">pk14·win52</span></div>
+    </div>
+    <div class="ch gated" style="--c:var(--pm-cyan)" title="gap-gated — no ≥0.25% SPY gap today; correct selectivity, stood down">
+      <div class="r1"><span class="cdot" style="background:var(--pm-cyan)"></span><span class="slug">breakout-alt-v3</span><span class="mpad"></span></div>
+      <div class="r2"><span class="pnl z">$0</span><span class="pkwin">pk—·win—</span><span class="gatetag">GAP-GATED</span></div>
+    </div>
+    <div class="ch" style="--c:var(--pm-indigo)">
+      <div class="r1"><span class="cdot" style="background:var(--pm-indigo)"></span><span class="slug">v3-iwm</span><span class="mpad"></span></div>
+      <div class="r2"><span class="pnl up">+$714</span><span class="pkwin">pk37·win61</span></div>
+    </div>
+    <div class="ch" style="--c:var(--pm-violet)">
+      <div class="r1"><span class="cdot" style="background:var(--pm-violet)"></span><span class="slug">orb-qqq-trail</span><span class="mpad"></span></div>
+      <div class="r2"><span class="pnl dn">−$85</span><span class="pkwin">pk9·win49</span></div>
+    </div>
+    <div class="ch muted" style="--c:var(--pm-magenta)">
+      <div class="r1"><span class="cdot" style="background:var(--pm-magenta)"></span><span class="slug">qqq-thrust-trail</span><span class="mpad"></span></div>
+      <div class="r2"><span class="state">MUTED</span></div>
+    </div>
+    <div class="ch dark" style="--c:#6c6e70">
+      <div class="r1"><span class="cdot" style="background:#6c6e70"></span><span class="slug">fomc-follow</span><span class="mpad"></span></div>
+      <div class="r2"><span class="state">DARK</span></div>
+    </div>
+  </div>
+
+  <!-- ======== HINTS ======== -->
+  <footer id="hints">
+    <span>PERFORM · live-ops surface — STUDIO keeps the strips &amp; knobs</span>
+    <span class="right">
+      <span><kbd>⌘K</kbd> commands</span>
+      <span><kbd>D</kbd> density</span>
+      <span><kbd>P</kbd> pop-out</span>
+      <span><kbd>M</kbd> mute-focus</span>
+    </span>
+  </footer>
+</div>
+
+<!-- ======== ⌘K PALETTE (open = the money shot) ======== -->
+<div id="scrim">
+  <div class="palette" role="dialog" aria-label="command palette">
+    <div class="pal-top">
+      <span class="stripes"><i></i><i></i><i></i></span>
+      <span class="pal-title">COMMAND</span>
+      <span class="pal-esc">ESC</span>
+    </div>
+    <div class="pal-lcd">
+      <div class="pal-input">
+        <span class="prompt">›</span><span class="q">mo</span><span class="caret"></span>
+        <span class="pal-count">4 matches</span>
+      </div>
+      <div class="pal-rows">
+        <div class="prow sel">
+          <span class="selmark">▶</span>
+          <span class="pdot" style="background:var(--pm-amber);box-shadow:0 0 6px var(--pm-amber)"></span>
+          <span><span class="m">mo</span>mo-shape — <span class="verb">MUTE</span></span>
+          <span class="khint">⏎</span>
+        </div>
+        <div class="prow">
+          <span class="selmark"></span>
+          <span class="pdot" style="background:var(--pm-amber)"></span>
+          <span><span class="m">mo</span>mo-shape — <span class="verb">BOOST 2×</span> <span class="sub">risk ×2 · caps ×2 · clears tonight</span></span>
+        </div>
+        <div class="prow">
+          <span class="selmark"></span>
+          <span class="pdot" style="background:var(--pm-amber)"></span>
+          <span><span class="m">mo</span>mo-shape — fold strip</span>
+        </div>
+        <div class="prow">
+          <span class="selmark"></span>
+          <span class="pdot" style="background:transparent;border:1px solid var(--mut-2)"></span>
+          <span>jump §04 <span class="m">mo</span>mo autopsy <span class="sub">day⇄week</span></span>
+        </div>
+
+        <div class="pal-sect">RECENT</div>
+        <div class="prow kill">
+          <span class="selmark"></span>
+          <span class="pdot"></span>
+          <span>KILL DESK <span class="sub" style="color:rgba(255,59,47,.55)">flatten all · freeze entries</span></span>
+          <span class="armtag">ARMED · HOLD ⏎</span>
+        </div>
+        <div class="prow">
+          <span class="selmark"></span>
+          <span class="pdot" style="background:transparent;border:1px solid var(--mut-2)"></span>
+          <span>density: compact</span>
+          <span class="khint">D</span>
+        </div>
+        <div class="prow">
+          <span class="selmark"></span>
+          <span class="pdot" style="background:transparent;border:1px solid var(--mut-2)"></span>
+          <span>pop out chart</span>
+          <span class="khint">P</span>
+        </div>
+      </div>
+      <div class="pal-foot">
+        <span><b>↑↓</b> navigate</span><span><b>⏎</b> run</span><span><b>esc</b> close</span>
+        <span class="r">writes gate on auth · anon read-only</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 7-SEG LED (SPY spot) ================= */
+(function(){
+  const MAP={'0':'abcdef','1':'bc','2':'abged','3':'abgcd','4':'fgbc','5':'afgcd','6':'afgcde','7':'abc','8':'abcdefg','9':'abcdfg'};
+  const t=3.1, w=13.5, h=24;
+  const H=(x,y,len)=>`M${x},${y+t/2} L${x+t/2},${y} L${x+len-t/2},${y} L${x+len},${y+t/2} L${x+len-t/2},${y+t} L${x+t/2},${y+t} Z`;
+  const V=(x,y,len)=>`M${x+t/2},${y} L${x+t},${y+t/2} L${x+t},${y+len-t/2} L${x+t/2},${y+len} L${x},${y+len-t/2} L${x},${y+t/2} Z`;
+  const SEG={a:()=>H(1.4,0,w-2.8), f:()=>V(0,1.2,h/2-1.9), b:()=>V(w-t,1.2,h/2-1.9),
+             g:()=>H(1.4,h/2-t/2,w-2.8), e:()=>V(0,h/2+0.7,h/2-1.9), c:()=>V(w-t,h/2+0.7,h/2-1.9),
+             d:()=>H(1.4,h-t,w-2.8)};
+  const svg=document.getElementById('spotLed');
+  const NS='http://www.w3.org/2000/svg';
+  let x=1, parts=[];
+  parts.push(`<defs><filter id="ledglow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter></defs>`);
+  for(const ch of '751.64'){
+    if(ch==='.'){ parts.push(`<circle cx="${x+2}" cy="${h-1.8+1}" r="1.9" fill="#ff3b2f" filter="url(#ledglow)"/>`); x+=7; continue; }
+    const lit=MAP[ch];
+    for(const s of 'abcdefg'){
+      const d=SEG[s]();
+      const on=lit.includes(s);
+      parts.push(`<path d="${d}" transform="translate(${x},1)" fill="#ff3b2f" opacity="${on?1:0.07}" ${on?'filter="url(#ledglow)"':''}/>`);
+    }
+    x+=w+4.5;
+  }
+  svg.setAttribute('width',x+2); svg.setAttribute('viewBox',`0 0 ${x+2} ${h+2}`);
+  svg.innerHTML=parts.join('');
+})();
+
+/* ================= CHART STAGE ================= */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+const KEY=[[0,754.05],[6,754.38],[12,753.92],[18,753.34],[26,752.78],[34,752.96],[40,753.04],[46,752.86],[52,752.50],[58,752.18],[64,752.06],[67,752.00],[72,751.74],[78,751.53],[82,751.86],[86,751.72],[89,751.64]];
+function pathAt(t){
+  for(let i=0;i<KEY.length-1;i++){
+    const[a,pa]=KEY[i],[b,pb]=KEY[i+1];
+    if(t>=a&&t<=b){const f=(t-a)/(b-a);const s=f*f*(3-2*f);return pa+(pb-pa)*s}
+  }
+  return KEY[KEY.length-1][1];
+}
+function genSeries(){
+  const rnd=mulberry32(909);
+  const candles=[]; let prev=754.02;
+  for(let t=0;t<90;t++){
+    const base=pathAt(t);
+    let close=(t===89)?751.64:base+(rnd()-0.5)*0.13;
+    const open=prev;
+    let hi=Math.max(open,close)+rnd()*0.10;
+    let lo=Math.min(open,close)-rnd()*0.10;
+    if(t===6) hi=754.42;                       // day high
+    if(t>=34&&t<=46) hi=Math.min(hi,753.06);   // candles test the γ-wall, get rejected
+    let vol=210*Math.exp(-t/16)+55+rnd()*32;
+    if(t===0)vol=265; if(t>=50&&t<=54)vol+=68; if(t===82)vol+=52; if(t===86)vol+=76;
+    candles.push({t,open,close,hi,lo,vol});
+    prev=close;
+  }
+  // vwap + emas
+  let cpv=0,cv=0; const vwap=[],e9=[],e21=[];
+  const k9=2/10,k21=2/22;
+  candles.forEach((c,i)=>{
+    const tp=(c.hi+c.lo+c.close)/3; cpv+=tp*c.vol; cv+=c.vol; vwap.push(cpv/cv);
+    e9.push(i===0?c.close:c.close*k9+e9[i-1]*(1-k9));
+    e21.push(i===0?c.close:c.close*k21+e21[i-1]*(1-k21));
+  });
+  return{candles,vwap,e9,e21};
+}
+const SERIES=genSeries();
+/* y-domain hugs the traded range; SENT levels >0.4% below spot pin to the
+   stage edge as distance tags — a 1-min stage should not warehouse dead air */
+const DOM={min:750.05,max:754.75};
+
+function drawChart(){
+  const stage=document.getElementById('stage');
+  const svg=document.getElementById('chartSvg');
+  const W=stage.clientWidth,Ht=stage.clientHeight;
+  svg.setAttribute('width',W);svg.setAttribute('height',Ht);svg.setAttribute('viewBox',`0 0 ${W} ${Ht}`);
+  const padL=10,padR=64,padT=30,timeH=16,volH=52;
+  const pB=Ht-volH-timeH-8, plotW=W-padL-padR;
+  const y=p=>padT+(DOM.max-p)/(DOM.max-DOM.min)*(pB-padT);
+  const x=t=>padL+(t+0.5)/90*plotW;
+  const cw=Math.max(3,plotW/90*0.62);
+  const el=[];
+
+  // horizontal grid + right axis labels
+  for(let p=750;p<=754;p++){
+    el.push(`<line x1="${padL}" x2="${W-padR+8}" y1="${y(p)}" y2="${y(p)}" stroke="rgba(255,255,255,.045)" stroke-width="1"/>`);
+    el.push(`<text x="${W-padR+14}" y="${y(p)+3}" fill="#5d646b" font-family="JetBrains Mono" font-size="9.5">${p}.0</text>`);
+  }
+  // time gridlines
+  const ticks=[['10:00',30],['10:30',60],['11:00',90],['11:30',120],['12:00',150],['12:30',180]];
+  ticks.forEach(([lab,min])=>{
+    const tx=x(min*89/197);
+    el.push(`<line x1="${tx}" x2="${tx}" y1="${padT-6}" y2="${Ht-timeH-4}" stroke="rgba(255,255,255,.035)" stroke-width="1"/>`);
+    el.push(`<text x="${tx}" y="${Ht-5}" text-anchor="middle" fill="#5d646b" font-family="JetBrains Mono" font-size="9">${lab}</text>`);
+  });
+
+  // SENT ladder (under candles) — in-range levels draw; sub-surface levels pin to the edge
+  el.push(`<line x1="${padL}" x2="${W-padR+8}" y1="${y(753)}" y2="${y(753)}" stroke="#ffb224" stroke-width="1.1" stroke-dasharray="7 6" opacity=".5"/>`);
+
+  // volume band
+  const vMax=Math.max(...SERIES.candles.map(c=>c.vol));
+  const vBase=Ht-timeH-6;
+  SERIES.candles.forEach(c=>{
+    const vh=(c.vol/vMax)*(volH-8);
+    const up=c.close>=c.open;
+    el.push(`<rect x="${x(c.t)-cw/2}" y="${vBase-vh}" width="${cw}" height="${vh}" fill="${up?'#4ea06a':'#c8674e'}" opacity=".30"/>`);
+  });
+
+  // candles
+  SERIES.candles.forEach(c=>{
+    const up=c.close>=c.open;
+    const col=up?'#54a873':'#cd6b50';
+    const bT=y(Math.max(c.open,c.close)),bB=y(Math.min(c.open,c.close));
+    el.push(`<line x1="${x(c.t)}" x2="${x(c.t)}" y1="${y(c.hi)}" y2="${y(c.lo)}" stroke="${col}" stroke-width="1" opacity=".8"/>`);
+    el.push(`<rect x="${x(c.t)-cw/2}" y="${bT}" width="${cw}" height="${Math.max(1.2,bB-bT)}" fill="${col}" ${up?'opacity=".95"':''} rx=".5"/>`);
+  });
+
+  // overlays — thin so the tape stays legible under them
+  const line=(arr,col,wd,op)=>{
+    let d='';arr.forEach((v,i)=>{d+=(i?'L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1)+' '});
+    el.push(`<path d="${d}" fill="none" stroke="${col}" stroke-width="${wd}" opacity="${op}" stroke-linejoin="round"/>`);
+  };
+  line(SERIES.e21,'#7c83ff',1,'.5');
+  line(SERIES.e9,'#ffe14d',1,'.5');
+  line(SERIES.vwap,'#45c4d6',1.5,'.9');
+
+  // last price line
+  el.push(`<line x1="${padL}" x2="${W-padR+8}" y1="${y(751.64)}" y2="${y(751.64)}" stroke="#ff3b2f" stroke-width="1" stroke-dasharray="2 4" opacity=".38"/>`);
+
+  // entry markers + dotted leaders to the chips
+  const entries=[{t:67,p:752.00,c:'#2fd573',lab:'PB'},{t:86,p:751.72,c:'#ffb224',lab:'MO'}];
+  entries.forEach(e=>{
+    const ex=x(e.t),ey=y(SERIES.candles[e.t].lo)+7;
+    el.push(`<path d="M${ex},${ey} l-4.5,7 l9,0 Z" fill="${e.c}" stroke="#0b0d0f" stroke-width="1"/>`);
+    el.push(`<text x="${ex}" y="${ey+16}" text-anchor="middle" fill="${e.c}" font-family="JetBrains Mono" font-size="7.5" font-weight="700" letter-spacing="1">${e.lab}</text>`);
+    el.push(`<line x1="${ex+8}" x2="${W-padR-208}" y1="${y(e.p)}" y2="${y(e.p)}" stroke="${e.c}" stroke-width="1" stroke-dasharray="1.5 4" opacity=".4"/>`);
+  });
+
+  svg.innerHTML=el.join('');
+
+  // ---- price-anchored HTML: position chips + ladder/spot tags ----
+  const place=(id,py,mode)=>{
+    const n=document.getElementById(id);
+    if(mode==='above'){n.style.top=(y(py)-25)+'px'} else {n.style.top=(y(py)+3)+'px'}
+    n.style.right=(padR+14)+'px';
+  };
+  place('chipPb',752.00,'above');
+  place('chipMo',751.72,'above');
+  document.getElementById('tagGamma').style.top=y(753)+'px';
+  document.getElementById('tagPd').style.bottom=(volH+timeH+34)+'px';
+  document.getElementById('tagGap').style.bottom=(volH+timeH+14)+'px';
+  document.getElementById('tagSpot').style.top=y(751.64)+'px';
+}
+drawChart();
+addEventListener('resize',drawChart);
+
+/* ================= interactions ================= */
+const scrim=document.getElementById('scrim');
+const setPal=(open)=>{scrim.classList.toggle('closed',!open);document.getElementById('ckBtn').classList.toggle('lit',open)};
+document.getElementById('ckBtn').addEventListener('click',()=>setPal(scrim.classList.contains('closed')));
+scrim.addEventListener('click',e=>{if(e.target===scrim)setPal(false)});
+const denBtn=document.getElementById('denBtn');
+const setDen=()=>{
+  const r=document.documentElement;
+  const c=r.dataset.density==='compact';
+  r.dataset.density=c?'':'compact';
+  document.getElementById('denLbl').textContent=c?'density':'compact';
+  denBtn.classList.toggle('lit',!c);
+  requestAnimationFrame(drawChart);
+};
+denBtn.addEventListener('click',setDen);
+addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setPal(scrim.classList.contains('closed'))}
+  else if(e.key==='Escape')setPal(false);
+  else if(e.key.toLowerCase()==='d'&&!e.metaKey&&!e.ctrlKey)setDen();
+});
+/* default state: ⌘K OPEN — this variant's money shot */
+</script>
+</body>
+</html>

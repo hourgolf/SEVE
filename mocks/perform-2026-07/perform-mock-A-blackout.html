@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEVE · PERFORM — BLACKOUT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   SEVE PERFORM — variant A "BLACKOUT"
+   The 909 survives as trim only: LED dots + glow rings, silkscreen
+   micro-labels, pad-styled buttons, red 7-seg numerals, the accent stripes.
+   No cream anywhere. Full-bleed layered dark, terminal density.
+   ========================================================================== */
+:root{
+  /* layered dark surfaces — never pure #000 for content */
+  --void:#050607;          /* grid seams */
+  --bg:#0a0b0d;            /* page under everything */
+  --srf:#101214;           /* standard panel */
+  --srf-2:#15181b;         /* raised chrome: topbar, dock, panel heads */
+  --scr:#0b0d0f;           /* inset "screen": chart, tape */
+  --line:rgba(255,255,255,.07);
+  --line-2:rgba(255,255,255,.12);
+  --text:#e7e4db;
+  --mut:#8a8c8e;
+  --mut2:#5c5f63;
+  --silk:rgba(226,214,184,.52);   /* parchment silkscreen */
+  --silk-2:rgba(226,214,184,.34);
+  /* desk semantics (blackout values from console.css) */
+  --green:#2fd573; --green-soft:#6cc06d;
+  --red:#f0563f;  --red-soft:#e07a58;
+  --amber:#e0a23f; --blue:#5aa0e6; --indigo:#7c83ff;
+  --accent:#ef5a23;               /* PERFORM orange */
+  --stripe-orange:#e0552f; --stripe-red:#c5362a; --stripe-cream:#d9d7cc;
+  --mute-pad:#d98e6e;
+  /* LED */
+  --led-red:#ff3b2f; --led-bg:#150705; --led-bg-g:#07110a;
+  /* candles */
+  --up:#2fb56b; --dn:#e0563f;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  /* density */
+  --dock-h:60px; --tape-pad:5px; --pos-pad:7px;
+  --rail-w:362px;
+}
+body.compact{ --dock-h:48px; --tape-pad:2px; --pos-pad:4px; }
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:12px;
+  -webkit-font-smoothing:antialiased;
+}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.pos{color:var(--green)} .neg{color:var(--red-soft)} .flat{color:var(--mut)}
+
+/* ---------- app grid: instrument panel, zero page margin ------------------ */
+.app{
+  height:100vh; display:grid; gap:1px; background:var(--void);
+  grid-template-columns:1fr var(--rail-w);
+  grid-template-rows:56px 2px 1fr var(--dock-h) 22px;
+}
+.topbar{grid-column:1/3}
+.band{grid-column:1/3}
+.chart-cell{grid-column:1;grid-row:3}
+.rail{grid-column:2;grid-row:3}
+.dock{grid-column:1/3;grid-row:4}
+.foot{grid-column:1/3;grid-row:5}
+
+/* silkscreen micro-label — the 909's tiny letterspaced print */
+.silk{
+  font-family:var(--mono); font-size:8px; font-weight:700;
+  letter-spacing:1.4px; text-transform:uppercase; color:var(--silk);
+  white-space:nowrap;
+}
+
+/* pad-styled button — the mute/solo pad chrome as pure trim */
+.padbtn{
+  font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:.5px;
+  color:#cfcdc6; border:1px solid #000; border-radius:5px;
+  background:linear-gradient(180deg,#33353a,#1f2124);
+  box-shadow:0 1px 0 rgba(255,255,255,.09) inset,0 2px 4px rgba(0,0,0,.45);
+  cursor:pointer; transition:transform .06s,box-shadow .1s,color .1s;
+}
+.padbtn:active{transform:translateY(1px);box-shadow:0 1px 2px rgba(0,0,0,.5) inset}
+.padbtn.lit{
+  color:#0a0a0a;
+  background:linear-gradient(180deg,var(--pad,#e0a23f),color-mix(in srgb,var(--pad,#e0a23f) 68%,#000));
+  box-shadow:0 0 9px color-mix(in srgb,var(--pad,#e0a23f) 55%,transparent),0 1px 0 rgba(255,255,255,.3) inset;
+}
+kbd{
+  font-family:var(--mono); font-size:8px; color:var(--mut);
+  border:1px solid var(--line-2); border-bottom-width:2px; border-radius:3px;
+  background:#181a1d; padding:0 4px; line-height:12px; display:inline-block;
+}
+
+/* ---------- top bar -------------------------------------------------------- */
+.topbar{
+  background:linear-gradient(180deg,var(--srf-2),#111316);
+  display:flex; align-items:center; gap:14px; padding:0 12px;
+}
+.brand{display:flex;align-items:baseline;gap:7px}
+.brand .mark{font-family:var(--mono);font-weight:700;font-size:17px;letter-spacing:1px;color:var(--stripe-red)}
+.brand .mode-sub{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--silk-2)}
+.vsep{width:1px;height:30px;background:var(--line)}
+/* STUDIO ⇄ PERFORM */
+.modesw{display:inline-flex;border:1px solid #000;border-radius:6px;overflow:hidden;
+  box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 2px 4px rgba(0,0,0,.4)}
+.modesw button{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:1px;
+  padding:6px 11px;border:none;cursor:pointer;background:linear-gradient(180deg,#2c2e32,#1d1f22);color:var(--mut)}
+.modesw button.on{background:linear-gradient(180deg,#ff7038,var(--accent));color:#140700;
+  text-shadow:0 1px 0 rgba(255,255,255,.25);box-shadow:0 0 10px rgba(239,90,35,.45)}
+/* LED clusters */
+.ledblk{display:flex;flex-direction:column;align-items:center;gap:3px}
+.led-window{position:relative;display:flex;align-items:center;gap:2px;padding:4px 8px;border-radius:6px;
+  border:1px solid #000;box-shadow:0 2px 8px rgba(0,0,0,.65) inset,0 1px 0 rgba(255,255,255,.05)}
+.led-window.red{background:var(--led-bg)} .led-window.grn{background:var(--led-bg-g)}
+.led-glass{position:absolute;inset:0;border-radius:6px;pointer-events:none;
+  background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,0) 40%)}
+.seven-seg{display:block}
+.led-unit{font-family:var(--mono);font-weight:700;font-size:13px;line-height:1;text-shadow:0 0 6px currentColor;margin-right:2px}
+.led-cap{font-family:var(--mono);font-size:8px;letter-spacing:1.2px;text-transform:uppercase;color:var(--silk-2)}
+.led-cap b{font-weight:700}
+.led-cap .neg{color:var(--red-soft)}
+/* small readout stacks (NAV / clock) */
+.stack{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.stack .v{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:-.2px}
+/* run / paper pills */
+.pill{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:1px;padding:4px 9px;border-radius:5px;
+  border:1px solid var(--line-2);color:var(--mut);background:rgba(255,255,255,.04);display:flex;align-items:center;gap:6px}
+.pill.run{color:var(--green);border-color:rgba(47,213,115,.5);background:rgba(47,213,115,.12)}
+.pill .pdot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,213,115,.5)}70%{box-shadow:0 0 0 6px rgba(47,213,115,0)}100%{box-shadow:0 0 0 0 rgba(47,213,115,0)}}
+.kill{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1.5px;color:#ffb1a3;
+  padding:7px 14px;border-radius:6px;border:1px solid #000;outline:1px solid rgba(240,86,63,.55);
+  background:linear-gradient(180deg,#3a1512,#200a08);
+  box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 2px 5px rgba(0,0,0,.5);cursor:pointer;
+}
+.kill:hover{outline-color:var(--red);color:#fff;box-shadow:0 0 12px rgba(240,86,63,.35),0 1px 0 rgba(255,255,255,.07) inset}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.padbtn.sq{padding:6px 8px}
+
+/* the 909 accent band — pure trim, 2px */
+.band{display:flex}
+.band i{flex:1}
+.band i:nth-child(1){background:var(--stripe-orange)}
+.band i:nth-child(2){background:var(--stripe-red)}
+.band i:nth-child(3){background:color-mix(in srgb,var(--stripe-cream) 55%,#333)}
+.band i:nth-child(4){background:#3c3e42}
+
+/* ---------- chart hero ------------------------------------------------------ */
+.chart-cell{background:var(--srf);display:flex;flex-direction:column;min-width:0}
+.phead{
+  height:28px;flex:0 0 28px;display:flex;align-items:center;gap:10px;padding:0 10px;
+  background:linear-gradient(180deg,var(--srf-2),#121417);border-bottom:1px solid var(--line);
+}
+.phead .idx{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1px;color:var(--accent)}
+.tfrow{display:flex;gap:2px}
+.tf{font-family:var(--mono);font-size:8px;font-weight:700;color:var(--mut2);padding:2px 5px;border-radius:3px;cursor:pointer}
+.tf.on{color:#140700;background:var(--amber);box-shadow:0 0 6px rgba(224,162,63,.4)}
+.leg{display:flex;gap:9px;align-items:center}
+.leg span{font-family:var(--mono);font-size:8px;letter-spacing:.5px;color:var(--mut)}
+.leg i{display:inline-block;width:9px;height:2px;border-radius:1px;vertical-align:2px;margin-right:3px}
+.ohlc{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--mut);letter-spacing:.2px;white-space:nowrap}
+.ohlc b{color:var(--text);font-weight:500}
+.phead .tools{display:flex;gap:6px;margin-left:10px}
+.chart-body{flex:1;min-height:0;background:var(--scr);position:relative}
+#chart{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+/* ---------- right rail ------------------------------------------------------ */
+.rail{display:grid;grid-template-rows:auto auto 1fr;gap:1px;background:var(--void);min-height:0}
+.panel{background:var(--srf);display:flex;flex-direction:column;min-height:0}
+.panel .phead{justify-content:space-between;gap:8px}
+.phead .ph-r{display:flex;align-items:center;gap:7px}
+.livedot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+
+/* positions */
+.pos-row{
+  display:grid;grid-template-columns:10px 1fr auto auto;gap:4px 9px;align-items:center;
+  padding:var(--pos-pad) 10px;border-bottom:1px solid var(--line);
+}
+.p-dot{width:7px;height:7px;border-radius:50%;background:var(--pm);box-shadow:0 0 6px color-mix(in srgb,var(--pm) 75%,transparent)}
+.p-id{min-width:0}
+.p-slug{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);letter-spacing:.2px;white-space:nowrap}
+.p-ctr{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:1px;white-space:nowrap}
+.p-pnl{font-family:var(--mono);font-size:14px;font-weight:700;text-align:right}
+.p-meta{font-family:var(--mono);font-size:8px;color:var(--mut2);text-align:right;margin-top:1px}
+.p-pk{display:flex;align-items:center;gap:5px;justify-content:flex-end}
+.p-pk .lbl{font-family:var(--mono);font-size:9px;color:var(--mut)}
+.p-pk .lbl b{color:var(--pm);font-weight:700;font-size:10px}
+.ringg{width:20px;height:20px;display:block}
+.p-tags{grid-column:2/5;display:flex;gap:6px;margin-top:-1px}
+.tag{font-family:var(--mono);font-size:7.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+  padding:1px 5px;border-radius:3px;border:1px solid var(--line-2);color:var(--mut)}
+.tag.amber{color:var(--amber);border-color:rgba(224,162,63,.5);background:rgba(224,162,63,.09);box-shadow:0 0 6px rgba(224,162,63,.14)}
+.tag.warn{color:var(--red-soft);border-color:rgba(224,122,88,.45);background:rgba(224,122,88,.08)}
+.tag.ok{color:var(--green-soft);border-color:rgba(108,192,109,.45);background:rgba(108,192,109,.08)}
+
+/* sentinel */
+.sent-body{padding:8px 10px 9px;display:flex;flex-direction:column;gap:7px}
+.sent-top{display:flex;align-items:flex-start;gap:9px}
+.verdict{
+  flex:0 0 auto;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1.5px;
+  color:#140b00;padding:5px 10px;border-radius:5px;border:1px solid #000;
+  background:linear-gradient(180deg,#f0b652,var(--amber));
+  box-shadow:0 0 12px rgba(224,162,63,.35),0 1px 0 rgba(255,255,255,.3) inset;
+}
+.sent-msg{font-size:11px;line-height:1.45;color:var(--text)}
+.sent-msg b{font-family:var(--mono);font-weight:700}
+/* promote progress = 15 step-pads, 12 lit (the sequencer as data) */
+.steps{display:flex;gap:2px;align-items:center}
+.steps i{flex:1;height:7px;border-radius:1.5px;background:#1c1f22;border:1px solid rgba(0,0,0,.6);
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
+.steps i.lit{background:linear-gradient(180deg,#f0b652,#b97f22);box-shadow:0 0 5px rgba(224,162,63,.5)}
+.steps .steps-n{flex:0 0 auto;font-family:var(--mono);font-size:8px;color:var(--mut);margin-left:5px}
+.ladder{display:flex;gap:5px;flex-wrap:nowrap}
+.lvl{font-family:var(--mono);font-size:8px;letter-spacing:.3px;color:var(--mut);
+  border:1px solid var(--line);border-radius:3px;padding:2px 5px;display:flex;gap:4px;align-items:center;white-space:nowrap}
+.lvl i{width:8px;height:2px;border-radius:1px}
+.lvl b{color:var(--text);font-weight:500}
+
+/* tape */
+.tape-body{flex:1;min-height:0;overflow:hidden;background:var(--scr);padding:3px 0}
+.trow{display:grid;grid-template-columns:34px 38px 1fr;gap:8px;align-items:baseline;
+  padding:var(--tape-pad) 10px;border-bottom:1px solid rgba(255,255,255,.04)}
+.t-time{font-family:var(--mono);font-size:9px;color:var(--mut2)}
+.t-kind{font-family:var(--mono);font-size:7.5px;font-weight:700;letter-spacing:1px;text-align:center;
+  border-radius:3px;padding:1px 0;border:1px solid}
+.t-kind.exec{color:var(--green-soft);border-color:rgba(108,192,109,.4);background:rgba(108,192,109,.07)}
+.t-kind.warn{color:var(--amber);border-color:rgba(224,162,63,.45);background:rgba(224,162,63,.08)}
+.t-kind.info{color:var(--mut);border-color:var(--line-2);background:rgba(255,255,255,.03)}
+.t-msg{font-family:var(--mono);font-size:10px;color:var(--text);line-height:1.4;letter-spacing:-.1px}
+.t-msg .ch{font-weight:700}
+.t-msg .dim{color:var(--mut)}
+.t-ghost{padding:8px 10px;text-align:center;font-family:var(--mono);font-size:8px;letter-spacing:1px;color:var(--mut2)}
+
+/* ---------- bottom dock: the mixer as one LED strip per channel ------------- */
+.dock{display:grid;grid-template-columns:26px repeat(11,1fr);gap:1px;background:var(--void);min-width:0}
+.dock-cap{background:var(--srf-2);display:flex;align-items:center;justify-content:center}
+.dock-cap .silk{writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:2px;font-size:7px}
+.strip{
+  background:linear-gradient(180deg,var(--srf-2) 0,var(--srf) 30%);
+  border-top:2px solid color-mix(in srgb,var(--pm) 55%,#111);
+  padding:5px 7px 4px;display:flex;flex-direction:column;justify-content:space-between;
+  min-width:0;position:relative;
+}
+.strip.off{opacity:.62}
+.strip.dark{opacity:.34}
+.s-r1{display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden}
+.s-dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#26282b;border:1px solid rgba(0,0,0,.7)}
+.s-dot.on{background:var(--pm);border-color:transparent;box-shadow:0 0 5px color-mix(in srgb,var(--pm) 80%,transparent)}
+.s-dot.hot{animation:pulse 2s infinite}
+.s-dot.stby{background:color-mix(in srgb,var(--amber) 55%,#222);box-shadow:0 0 4px rgba(224,162,63,.3)}
+.s-slug{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.1px;color:var(--text);white-space:nowrap;min-width:0}
+.s-tag{font-family:var(--mono);font-size:6.5px;font-weight:700;letter-spacing:.5px;padding:0 3px;border-radius:2px;flex:0 0 auto}
+.s-tag.a13{color:#140b00;background:var(--amber);box-shadow:0 0 5px rgba(224,162,63,.5)}
+.s-tag.gated{color:var(--amber);border:1px solid rgba(224,162,63,.5)}
+.s-tag.muted{color:var(--mute-pad);border:1px solid rgba(217,142,110,.5)}
+.s-tag.dark{color:var(--mut2);border:1px solid var(--line)}
+.s-mute{margin-left:auto;flex:0 0 auto;width:17px;height:14px;line-height:12px;font-size:7px;border-radius:3px;padding:0}
+.s-r2{display:flex;align-items:baseline;justify-content:space-between;gap:4px;font-family:var(--mono);white-space:nowrap}
+.s-pnl{font-size:11px;font-weight:700}
+.s-pw{font-size:8px;color:var(--mut);letter-spacing:-.2px}
+.s-pw b{color:color-mix(in srgb,var(--pm) 80%,#fff);font-weight:700}
+body.compact .s-pw{display:none}
+body.compact .strip{padding:3px 7px 3px}
+
+/* ---------- footer ---------------------------------------------------------- */
+.foot{background:var(--srf-2);display:flex;align-items:center;justify-content:space-between;padding:0 12px}
+.foot .l,.foot .r{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:8px;letter-spacing:.6px;color:var(--mut2)}
+.foot .ok{color:var(--green-soft)}
+.foot .r span{color:var(--mut2)}
+
+/* ---------- ⌘K palette ------------------------------------------------------ */
+.pal-ov{position:fixed;inset:0;z-index:50;background:rgba(4,5,6,.68);backdrop-filter:blur(5px);
+  display:none;align-items:flex-start;justify-content:center;padding-top:14vh}
+.pal-ov.open{display:flex}
+.pal{width:540px;max-width:92vw;background:linear-gradient(180deg,#17191c,#101214);
+  border:1px solid var(--line-2);border-radius:9px;overflow:hidden;
+  box-shadow:0 24px 70px rgba(0,0,0,.8),0 1px 0 rgba(255,255,255,.06) inset}
+.pal-in{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:1px solid var(--line)}
+.pal-in .pr{font-family:var(--mono);font-weight:700;color:var(--accent);text-shadow:0 0 7px rgba(239,90,35,.6)}
+.pal-in input{flex:1;background:none;border:none;outline:none;color:var(--text);
+  font-family:var(--mono);font-size:13px;letter-spacing:.2px}
+.pal-in input::placeholder{color:var(--mut2)}
+.pal-grp{padding:7px 13px 2px}
+.pal-row{display:flex;align-items:center;gap:9px;padding:6px 13px;cursor:pointer;position:relative}
+.pal-row .ic{font-family:var(--mono);font-size:10px;width:14px;text-align:center;color:var(--mut)}
+.pal-row .lb{font-size:12px;color:var(--text)}
+.pal-row .lb b{font-family:var(--mono);font-weight:700}
+.pal-row .lb .dim{color:var(--mut);font-size:10px;font-family:var(--mono)}
+.pal-row kbd{margin-left:auto}
+.pal-row.sel{background:rgba(239,90,35,.09)}
+.pal-row.sel::before{content:"";position:absolute;left:0;top:5px;bottom:5px;width:2px;border-radius:1px;
+  background:var(--accent);box-shadow:0 0 7px var(--accent)}
+.pal-row.danger .lb,.pal-row.danger .ic{color:var(--red)}
+.pal-ft{display:flex;gap:12px;padding:7px 13px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:8px;color:var(--mut2);letter-spacing:.5px}
+
+/* ---------- 1280×800 -------------------------------------------------------- */
+@media (max-width:1330px){
+  :root{--rail-w:318px}
+  .topbar{gap:10px}
+  .brand .mode-sub{display:none}
+  .ohlc .o-hl{display:none}
+  .s-slug{font-size:7.5px}
+  .s-pw{font-size:7.5px}
+  .strip{padding:4px 5px 3px}
+  .s-r1{gap:4px}
+  .s-mute{width:14px;height:13px;font-size:6px;line-height:11px}
+  .s-tag.a13{font-size:6px}
+  .s-pnl{font-size:10px}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ================= TOP BAR ================= -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">SEVE</span>
+      <span class="mode-sub silk">0DTE DESK</span>
+    </div>
+    <div class="modesw" title="mode">
+      <button>STUDIO</button><button class="on">PERFORM</button>
+    </div>
+    <div class="vsep"></div>
+
+    <div class="ledblk">
+      <div class="led-window red" id="ledSpot"></div>
+      <div class="led-cap">SPY · <span class="neg">−0.38%</span></div>
+    </div>
+    <div class="ledblk">
+      <div class="led-window grn" id="ledPnl"></div>
+      <div class="led-cap">DAY P&amp;L</div>
+    </div>
+    <div class="stack" style="align-items:flex-start">
+      <span class="silk">NAV</span>
+      <span class="v num">$1.94M</span>
+    </div>
+
+    <div class="tb-right">
+      <span class="pill run"><span class="pdot"></span>RUN</span>
+      <span class="pill">PAPER</span>
+      <button class="kill" title="flatten all — halt entries">KILL</button>
+      <div class="vsep"></div>
+      <div class="stack">
+        <span class="silk">ET</span>
+        <span class="v num">12:47:31</span>
+      </div>
+      <div class="vsep"></div>
+      <button class="padbtn sq" id="btnK" title="command palette">⌘K</button>
+      <button class="padbtn sq" id="btnD" title="data density">D</button>
+    </div>
+  </header>
+
+  <!-- the 909 instrument band, 2px of pure trim -->
+  <div class="band"><i></i><i></i><i></i><i></i></div>
+
+  <!-- ================= CHART HERO ================= -->
+  <section class="chart-cell">
+    <div class="phead">
+      <span class="idx">01</span>
+      <span class="silk">SPY · LIVE</span>
+      <div class="tfrow">
+        <span class="tf">1m</span><span class="tf on">2m</span><span class="tf">5m</span><span class="tf">15m</span><span class="tf">1h</span>
+      </div>
+      <div class="leg">
+        <span><i style="background:var(--amber)"></i>VWAP</span>
+        <span><i style="background:var(--blue)"></i>EMA9</span>
+        <span><i style="background:var(--indigo)"></i>EMA21</span>
+        <span><i style="background:var(--amber);height:1px"></i>SENT γ</span>
+      </div>
+      <div class="ohlc num" id="ohlc"></div>
+      <div class="tools">
+        <button class="padbtn sq" title="pop out chart — P">⧉</button>
+      </div>
+    </div>
+    <div class="chart-body"><svg id="chart" aria-label="SPY 2-minute candles with VWAP, EMA and SENT ladder"></svg></div>
+  </section>
+
+  <!-- ================= RIGHT RAIL ================= -->
+  <aside class="rail">
+
+    <!-- positions -->
+    <div class="panel">
+      <div class="phead">
+        <span class="silk">POSITIONS</span>
+        <span class="ph-r"><span class="silk" style="color:var(--mut2)">3 OPEN · FIRST-TEAM</span></span>
+      </div>
+      <div>
+        <div class="pos-row" style="--pm:#ffb224">
+          <span class="p-dot"></span>
+          <div class="p-id"><div class="p-slug">momo-shape</div><div class="p-ctr">SPY 752C ×12 · 0DTE</div></div>
+          <div><div class="p-pnl pos">+$840</div><div class="p-meta">in @1.86 · 12:41</div></div>
+          <div class="p-pk"><span id="ring1"></span><span class="lbl">pk <b>+62%</b></span></div>
+          <div class="p-tags"><span class="tag amber">⚡ A13 RATCHET ARMED</span><span class="tag">RIDE</span></div>
+        </div>
+        <div class="pos-row" style="--pm:#2fd573">
+          <span class="p-dot"></span>
+          <div class="p-id"><div class="p-slug">pb-ride</div><div class="p-ctr">SPY 750C ×8 · 1DTE</div></div>
+          <div><div class="p-pnl neg">−$120</div><div class="p-meta">in @2.12 · 11:58</div></div>
+          <div class="p-pk"><span id="ring2"></span><span class="lbl">pk <b>+9%</b></span></div>
+          <div class="p-tags"><span class="tag warn">GIVEBACK 41% OF PK</span><span class="tag">RIDE</span></div>
+        </div>
+        <div class="pos-row" style="--pm:#45c4d6;border-bottom:none">
+          <span class="p-dot"></span>
+          <div class="p-id"><div class="p-slug">breakout-alt-v3-qqq</div><div class="p-ctr">QQQ 566C ×6 · 0DTE</div></div>
+          <div><div class="p-pnl pos">+$310</div><div class="p-meta">TP ×6 @2.41 · 12:31</div></div>
+          <div class="p-pk"><span id="ring3"></span><span class="lbl">pk <b>+28%</b></span></div>
+          <div class="p-tags"><span class="tag ok">TP ✓</span><span class="tag">LOCK</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- sentinel -->
+    <div class="panel">
+      <div class="phead">
+        <span class="silk">SENTINEL</span>
+        <span class="ph-r silk" style="color:var(--mut2)">LAST SCAN 06:00 PT <span style="color:var(--green-soft)">✓</span></span>
+      </div>
+      <div class="sent-body">
+        <div class="sent-top">
+          <span class="verdict">WATCH</span>
+          <div class="sent-msg"><b>vb-ribbon-cross IWM</b> nearing promote bar</div>
+        </div>
+        <div class="steps" title="promote bar — 12 of 15 sessions">
+          <i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i>
+          <i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i>
+          <i class="lit"></i><i class="lit"></i><i></i><i></i><i></i>
+          <span class="steps-n">12/15</span>
+        </div>
+        <div class="ladder">
+          <span class="silk" style="align-self:center">SENT</span>
+          <span class="lvl"><i style="background:var(--amber)"></i>γ-wall <b>753.0</b></span>
+          <span class="lvl"><i style="background:var(--mut)"></i>PD·swing <b>748.2</b></span>
+          <span class="lvl"><i style="background:var(--green)"></i>gap-arm <b>745.5</b></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- tape -->
+    <div class="panel">
+      <div class="phead">
+        <span class="silk">TAPE</span>
+        <span class="ph-r"><span class="livedot"></span><span class="silk" style="color:var(--mut2)">LIVE</span></span>
+      </div>
+      <div class="tape-body">
+        <div class="trow"><span class="t-time">12:41</span><span class="t-kind exec">EXEC</span>
+          <span class="t-msg"><span class="ch" style="color:#ffb224">momo-shape</span> buy 12× SPY752C @1.86</span></div>
+        <div class="trow"><span class="t-time">12:38</span><span class="t-kind warn">WARN</span>
+          <span class="t-msg"><span class="ch" style="color:#2fd573">pb-ride</span> giveback <span style="color:var(--amber)">41%</span> of peak</span></div>
+        <div class="trow"><span class="t-time">12:31</span><span class="t-kind exec">EXEC</span>
+          <span class="t-msg"><span class="ch" style="color:#45c4d6">breakout-alt-v3-qqq</span> TP ×6 @2.41 <span class="dim">→</span> <span class="pos">+$310</span></span></div>
+        <div class="trow"><span class="t-time">12:02</span><span class="t-kind info">INFO</span>
+          <span class="t-msg"><span class="dim">gate</span> cost_gate blocked <span class="ch" style="color:#8a8c8e">grind</span></span></div>
+        <div class="trow"><span class="t-time">11:58</span><span class="t-kind exec">EXEC</span>
+          <span class="t-msg"><span class="ch" style="color:#2fd573">pb-ride</span> buy 8× SPY750C @2.12</span></div>
+        <div class="t-ghost">— earlier collapsed · session open 09:30 —</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= DOCK: mixer as LED strips ================= -->
+  <nav class="dock" id="dock">
+    <div class="dock-cap"><span class="silk">MIX</span></div>
+    <!-- strips injected by JS -->
+  </nav>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="foot">
+    <div class="l">
+      <span style="color:var(--accent)">PERFORM</span><span>·</span><span>blackout trim</span><span>·</span>
+      <span>era 4</span><span>·</span><span class="ok">books clean ✓</span><span>reconciled 3/3</span>
+    </div>
+    <div class="r">
+      <kbd>⌘K</kbd><span>commands</span>
+      <kbd>D</kbd><span>density</span>
+      <kbd>P</kbd><span>pop-out</span>
+      <kbd>M</kbd><span>mute-focus</span>
+    </div>
+  </footer>
+</div>
+
+<!-- ================= ⌘K PALETTE (toggle with ⌘K / Ctrl+K / the ⌘K pad) ===== -->
+<div class="pal-ov" id="palOv">
+  <div class="pal">
+    <div class="pal-in"><span class="pr">›</span>
+      <input id="palIn" type="text" placeholder="mute · flatten · lock · arm · density …" autocomplete="off">
+      <kbd>esc</kbd>
+    </div>
+    <div class="pal-grp silk">DESK</div>
+    <div class="pal-row danger" data-l="kill flatten all positions"><span class="ic">⏻</span><span class="lb"><b>KILL</b> — flatten all positions</span><kbd>⇧⌘K</kbd></div>
+    <div class="pal-row" data-l="density compact comfortable"><span class="ic">▤</span><span class="lb">Density — compact ⇄ comfortable</span><kbd>D</kbd></div>
+    <div class="pal-row" data-l="studio mode"><span class="ic">⇄</span><span class="lb">Switch to <b>STUDIO</b> mode</span><kbd>⇧⌘S</kbd></div>
+    <div class="pal-grp silk">CHANNELS</div>
+    <div class="pal-row sel" data-l="mute momo-shape"><span class="ic">M</span><span class="lb">Mute <b>momo-shape</b> <span class="dim">· A13 ratchet stays armed</span></span><kbd>M</kbd></div>
+    <div class="pal-row" data-l="lock pb-ride take stop"><span class="ic">◧</span><span class="lb">LOCK <b>pb-ride</b> <span class="dim">· fires −30% +22% EOD</span></span></div>
+    <div class="pal-row" data-l="boost v3-iwm"><span class="ic">▲</span><span class="lb">Boost <b>v3-iwm</b> 2× today</span></div>
+    <div class="pal-grp silk">VIEWS</div>
+    <div class="pal-row" data-l="pop out chart"><span class="ic">⧉</span><span class="lb">Pop out chart</span><kbd>P</kbd></div>
+    <div class="pal-row" data-l="sentinel brief"><span class="ic">◎</span><span class="lb">Sentinel brief <span class="dim">· 06:00 PT</span></span></div>
+    <div class="pal-ft"><span>↑↓ navigate</span><span>↵ run</span><span>esc close</span></div>
+  </div>
+</div>
+
+<script>
+/* ======================================================================
+   7-SEG LED — the exact segment geometry from components/console/hw/LedDisplay.tsx
+   ====================================================================== */
+const SEG={a:"9,4 31,4 27,8 13,8",b:"32,5 32,33 28,29 28,9",c:"32,39 32,67 28,63 28,43",
+  d:"13,64 27,64 31,68 9,68",e:"8,39 8,67 12,63 12,43",f:"8,5 8,33 12,29 12,9",
+  g:"9,36 13,33 27,33 31,36 27,39 13,39"};
+const DIG={"0":"abcdef","1":"bc","2":"abged","3":"abgcd","4":"fgbc","5":"afgcd",
+  "6":"afgedc","7":"abc","8":"abcdefg","9":"abcfgd","-":"g"," ":""};
+function sevenSeg(ch,dot,color,hpx){
+  const on=DIG[ch]??""; const w=hpx*40/72;
+  let s=`<svg class="seven-seg" width="${w}" height="${hpx}" viewBox="0 0 40 72">`;
+  for(const k in SEG){
+    const lit=on.includes(k);
+    s+=`<polygon points="${SEG[k]}" fill="${color}" opacity="${lit?1:0.06}"${lit?` style="filter:drop-shadow(0 0 2.5px ${color})"`:""}/>`;
+  }
+  s+=`<circle cx="36" cy="66" r="3" fill="${color}" opacity="${dot?1:0.06}"${dot?` style="filter:drop-shadow(0 0 2.5px ${color})"`:""}/></svg>`;
+  return s;
+}
+function led(el,value,color,hpx,prefix){
+  const cells=[];
+  for(const ch of value){ if(ch==="."&&cells.length)cells[cells.length-1].dot=true; else cells.push({ch,dot:false}); }
+  let html=prefix?`<span class="led-unit" style="color:${color}">${prefix}</span>`:"";
+  html+=cells.map(c=>sevenSeg(c.ch,c.dot,color,hpx)).join("");
+  el.innerHTML=html+`<div class="led-glass"></div>`;
+}
+led(document.getElementById("ledSpot"),"751.64","#ff3b2f",24);
+led(document.getElementById("ledPnl"),"1243","#2fd573",24,"+$");
+
+/* ======================================================================
+   pk glow rings (positions)
+   ====================================================================== */
+function ring(el,pct,color){
+  const r=8,c=2*Math.PI*r,off=c*(1-Math.min(pct,100)/100);
+  document.getElementById(el).innerHTML=
+    `<svg class="ringg" viewBox="0 0 22 22"><circle cx="11" cy="11" r="${r}" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="2.5"/>`+
+    `<circle cx="11" cy="11" r="${r}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" `+
+    `stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 11 11)" style="filter:drop-shadow(0 0 2px ${color})"/></svg>`;
+}
+ring("ring1",62,"#ffb224"); ring("ring2",9,"#2fd573"); ring("ring3",28,"#45c4d6");
+
+/* ======================================================================
+   DOCK strips
+   ====================================================================== */
+const CH=[
+ {slug:"pb-ride",       pm:"#2fd573",pnl:"+$1.1k",cls:"pos", pk:"22",win:"70",state:"on"},
+ {slug:"pb-ride-2",     pm:"#a3e635",pnl:"+$430", cls:"pos", pk:"18",win:"66",state:"on"},
+ {slug:"pb-ride-itm",   pm:"#2dd4bf",pnl:"−$60",  cls:"neg", pk:"11",win:"58",state:"on"},
+ {slug:"momo-shape",    pm:"#ffb224",pnl:"+$840", cls:"pos", pk:"62",win:"46",state:"hot",tag:"⚡A13",tagc:"a13"},
+ {slug:"momo-shape-2",  pm:"#ffe14d",pnl:"+$120", cls:"pos", pk:"31",win:"44",state:"on"},
+ {slug:"breakout",      pm:"#3b9eff",pnl:"+$95",  cls:"pos", pk:"14",win:"52",state:"on"},
+ {slug:"breakout-alt-v3",pm:"#45c4d6",pnl:"$0",   cls:"flat",pk:"—",win:"—", state:"stby",tag:"GATED",tagc:"gated"},
+ {slug:"v3-iwm",        pm:"#7c83ff",pnl:"+$714", cls:"pos", pk:"37",win:"61",state:"on"},
+ {slug:"orb-qqq-trail", pm:"#b06bff",pnl:"−$85",  cls:"neg", pk:"9", win:"49",state:"on"},
+ {slug:"qqq-thrust-trail",pm:"#ff5fa8",pnl:"—",   cls:"flat",pk:"—",win:"—", state:"off",tag:"MUTED",tagc:"muted",mute:true},
+ {slug:"fomc-follow",   pm:"#ff8a3d",pnl:"—",     cls:"flat",pk:"—",win:"—", state:"dark",tag:"DARK",tagc:"dark"},
+];
+document.getElementById("dock").insertAdjacentHTML("beforeend",CH.map(c=>{
+  const dot=c.state==="on"?"on":c.state==="hot"?"on hot":c.state==="stby"?"stby":"";
+  const dim=c.state==="off"?" off":c.state==="dark"?" dark":"";
+  const statusTag=c.tag&&c.tagc!=="a13"; /* GATED/MUTED/DARK live on row 2 (their pk·win is empty anyway) */
+  const pw=statusTag?`<span class="s-tag ${c.tagc}">${c.tag}</span>`
+          :(c.pk==="—")?`<span class="s-pw">pk—·win—</span>`
+          :`<span class="s-pw">pk<b>${c.pk}</b>·win<b>${c.win}</b></span>`;
+  return `<div class="strip${dim}" style="--pm:${c.pm}" title="${c.slug} — click to expand">
+    <div class="s-r1"><span class="s-dot ${dot}"></span><span class="s-slug">${c.slug}</span>
+      ${c.tag&&!statusTag?`<span class="s-tag ${c.tagc}">${c.tag}</span>`:""}
+      <button class="padbtn s-mute${c.mute?" lit":""}" style="--pad:#d98e6e">M</button></div>
+    <div class="s-r2"><span class="s-pnl ${c.cls}">${c.pnl}</span>${pw}</div>
+  </div>`;
+}).join(""));
+
+/* ======================================================================
+   CHART — deterministic 2-min SPY session (09:30 → 12:47), seeded PRNG
+   ====================================================================== */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const N=99;
+const W=[[0,754.05],[5,754.28],[14,753.35],[26,752.25],[38,752.72],[48,752.05],
+         [57,752.62],[63,752.98],[68,752.55],[78,751.92],[88,751.42],[94,751.72],[98,751.64]];
+function base(t){for(let i=1;i<W.length;i++){if(t<=W[i][0]){const[a,p0]=W[i-1],[b,p1]=W[i];
+  return p0+(p1-p0)*(t-a)/(b-a);}}return W[W.length-1][1];}
+const rnd=mulberry32(909);
+const candles=[]; let prev=754.05;
+for(let i=0;i<N;i++){
+  let c=base(i)+(rnd()-0.5)*0.2;
+  if(i===N-1)c=751.64;
+  const o=prev, hi=Math.max(o,c)+rnd()*0.13, lo=Math.min(o,c)-rnd()*0.13;
+  const v=42+(i<9?(9-i)*20:0)+Math.abs(c-o)*480+(i>60&&i<67?34:0)+rnd()*26;
+  candles.push({o,c,h:hi,l:lo,v}); prev=c;
+}
+/* indicators */
+const tp=candles.map(k=>(k.h+k.l+k.c)/3);
+let cv=0,cpv=0; const vwap=candles.map((k,i)=>{cv+=k.v;cpv+=tp[i]*k.v;return cpv/cv;});
+function ema(n){const a=2/(n+1);let e=candles[0].c;return candles.map(k=>e=e+(k.c-e)*a);}
+const e9=ema(9),e21=ema(21);
+/* header OHLC */
+const sesH=Math.max(...candles.map(k=>k.h)),sesL=Math.min(...candles.map(k=>k.l));
+document.getElementById("ohlc").innerHTML=
+  `O <b>754.05</b> <span class="o-hl">H <b>${sesH.toFixed(2)}</b> L <b>${sesL.toFixed(2)}</b></span> C <b style="color:#ff6a52">751.64</b>`;
+
+const SENT=[{p:753.0,c:"#e0a23f",lab:"γ 753.0",dash:""},
+            {p:748.2,c:"#8a8c8e",lab:"PD 748.2",dash:"4 4"},
+            {p:745.5,c:"#2fd573",lab:"gap-arm 745.5",dash:"2 3"}];
+const MARK=[{i:74,lab:"pb-ride +8 @2.12",c:"#2fd573"},{i:95,lab:"momo +12 @1.86",c:"#ffb224"}];
+
+function renderChart(){
+  const svg=document.getElementById("chart");
+  const wEl=svg.parentElement, w=wEl.clientWidth, h=wEl.clientHeight;
+  const mR=50,mL=6,mT=10,mB=18, pw=w-mR-mL, ph=h-mT-mB;
+  const volH=Math.min(54,ph*0.13), yMin=747.85,yMax=754.8;
+  const Y=p=>mT+(yMax-p)/(yMax-yMin)*ph, X=i=>mL+(i+0.5)*pw/N;
+  const cw=Math.max(2,pw/N*0.62);
+  let s="";
+  /* h-grid + right axis */
+  for(let p=748;p<=754;p++){
+    s+=`<line x1="${mL}" y1="${Y(p)}" x2="${w-mR}" y2="${Y(p)}" stroke="rgba(255,255,255,.045)"/>`+
+       `<text x="${w-mR+7}" y="${Y(p)+3}" fill="#5c5f63" font-size="9" font-family="JetBrains Mono">${p}.00</text>`;
+  }
+  /* v-grid at 10:00 / 11:00 / 12:00 */
+  [[15,"10:00"],[45,"11:00"],[75,"12:00"]].forEach(([i,t])=>{
+    s+=`<line x1="${X(i)}" y1="${mT}" x2="${X(i)}" y2="${h-mB}" stroke="rgba(255,255,255,.04)"/>`+
+       `<text x="${X(i)}" y="${h-5}" fill="#5c5f63" font-size="9" font-family="JetBrains Mono" text-anchor="middle">${t}</text>`;
+  });
+  /* volume */
+  const vmax=Math.max(...candles.map(k=>k.v));
+  candles.forEach((k,i)=>{
+    const vh=k.v/vmax*volH, col=k.c>=k.o?"#2fb56b":"#e0563f";
+    s+=`<rect x="${X(i)-cw/2}" y="${h-mB-vh}" width="${cw}" height="${vh}" fill="${col}" opacity=".26"/>`;
+  });
+  /* SENT ladder */
+  SENT.forEach(L=>{
+    if(L.p>yMin){
+      s+=`<line x1="${mL}" y1="${Y(L.p)}" x2="${w-mR}" y2="${Y(L.p)}" stroke="${L.c}" stroke-width="1" opacity=".75"${L.dash?` stroke-dasharray="${L.dash}"`:""} style="filter:drop-shadow(0 0 2px ${L.c})"/>`+
+         `<rect x="${w-mR-70}" y="${Y(L.p)-8}" width="66" height="13" rx="2" fill="#0b0d0f" stroke="${L.c}" stroke-opacity=".55"/>`+
+         `<text x="${w-mR-37}" y="${Y(L.p)+2}" fill="${L.c}" font-size="8" font-family="JetBrains Mono" text-anchor="middle">${L.lab}</text>`;
+    }else{ /* below range → pinned at the bottom-right edge */
+      s+=`<rect x="${w-mR-112}" y="${h-mB-15}" width="108" height="13" rx="2" fill="#0b0d0f" stroke="${L.c}" stroke-opacity=".55"/>`+
+         `<text x="${w-mR-58}" y="${h-mB-5}" fill="${L.c}" font-size="8" font-family="JetBrains Mono" text-anchor="middle">${L.lab} ▾ below</text>`;
+    }
+  });
+  /* candles */
+  candles.forEach((k,i)=>{
+    const up=k.c>=k.o, col=up?"#2fb56b":"#e0563f", x=X(i);
+    const t=Y(Math.max(k.o,k.c)), b=Y(Math.min(k.o,k.c));
+    s+=`<line x1="${x}" y1="${Y(k.h)}" x2="${x}" y2="${Y(k.l)}" stroke="${col}" stroke-width="1"/>`+
+       `<rect x="${x-cw/2}" y="${t}" width="${cw}" height="${Math.max(1,b-t)}" fill="${up?col:'#0b0d0f'}" stroke="${col}" stroke-width="1"/>`;
+  });
+  /* overlays */
+  const path=(arr,from)=>arr.map((v,i)=>i<from?null:`${i===from?"M":"L"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).filter(Boolean).join("");
+  s+=`<path d="${path(e21,4)}" fill="none" stroke="#7c83ff" stroke-width="1" opacity=".85"/>`;
+  s+=`<path d="${path(e9,4)}" fill="none" stroke="#5aa0e6" stroke-width="1" opacity=".9"/>`;
+  s+=`<path d="${path(vwap,1)}" fill="none" stroke="#e0a23f" stroke-width="1.3" opacity=".95"/>`;
+  /* last price */
+  const yl=Y(751.64);
+  s+=`<line x1="${mL}" y1="${yl}" x2="${w-mR}" y2="${yl}" stroke="#ff3b2f" stroke-width="1" stroke-dasharray="1 3" opacity=".4"/>`+
+     `<rect x="${w-mR+2}" y="${yl-8}" width="44" height="15" rx="2" fill="#2a0c08" stroke="#ff3b2f" stroke-opacity=".7"/>`+
+     `<text x="${w-mR+24}" y="${yl+3}" fill="#ff6a52" font-size="9" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">751.64</text>`;
+  /* entry markers */
+  MARK.forEach(m=>{
+    const x=X(m.i), y=Y(candles[m.i].l)+7;
+    s+=`<path d="M${x},${y} l-5,8 l10,0 z" fill="${m.c}" style="filter:drop-shadow(0 0 3px ${m.c})"/>`+
+       `<text x="${x}" y="${y+20}" fill="${m.c}" font-size="8" font-family="JetBrains Mono" text-anchor="middle" opacity=".9">${m.lab}</text>`;
+  });
+  svg.setAttribute("viewBox",`0 0 ${w} ${h}`);
+  svg.innerHTML=s;
+}
+renderChart();
+window.addEventListener("resize",renderChart);
+
+/* ======================================================================
+   ⌘K palette + density toggle
+   ====================================================================== */
+const ov=document.getElementById("palOv"), inp=document.getElementById("palIn");
+function palOpen(o){ov.classList.toggle("open",o); if(o){inp.value="";filter("");inp.focus();}}
+document.getElementById("btnK").addEventListener("click",()=>palOpen(true));
+ov.addEventListener("click",e=>{if(e.target===ov)palOpen(false)});
+function rows(){return [...ov.querySelectorAll(".pal-row")].filter(r=>r.style.display!=="none")}
+function filter(q){
+  ov.querySelectorAll(".pal-row").forEach(r=>{r.style.display=r.dataset.l.includes(q.toLowerCase())?"":"none";r.classList.remove("sel")});
+  ov.querySelectorAll(".pal-grp").forEach(g=>{let n=g.nextElementSibling,vis=false;
+    while(n&&n.classList.contains("pal-row")){if(n.style.display!=="none")vis=true;n=n.nextElementSibling}
+    g.style.display=vis?"":"none"});
+  const r=rows(); if(r.length)r[Math.min(3,r.length-1)===3&&!q?3:0].classList.add("sel");
+}
+inp.addEventListener("input",()=>filter(inp.value));
+function toggleDensity(){document.body.classList.toggle("compact");renderChart();}
+document.getElementById("btnD").addEventListener("click",toggleDensity);
+document.addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();palOpen(!ov.classList.contains("open"));return;}
+  if(ov.classList.contains("open")){
+    if(e.key==="Escape")palOpen(false);
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();
+      const r=rows(),i=r.findIndex(x=>x.classList.contains("sel"));
+      r.forEach(x=>x.classList.remove("sel"));
+      r[(i+(e.key==="ArrowDown"?1:r.length-1))%r.length].classList.add("sel");}
+    return;
+  }
+  if(e.key.toLowerCase()==="d"&&!e.metaKey&&!e.ctrlKey)toggleDensity();
+});
+</script>
+</body>
+</html>

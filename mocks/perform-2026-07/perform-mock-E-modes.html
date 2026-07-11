@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en" data-skin="blackout" data-mode="perform">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEVE · STUDIO ⇄ PERFORM — one instrument</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   SEVE — variant E "MODES"
+   Mock D (PERFORM, frame-switchable BLACKOUT ⇄ CREAM) + a WORKING MODE
+   SWITCH: the STUDIO/PERFORM control swaps the body under the identical
+   top-bar shell. STUDIO is a faithful evocation of today's cream 909
+   composer (§02): channel strips with FIRES / LOCK·RIDE / shape bar /
+   STOP knob + RISK fader / MUTE·BOOST pads, the dark master, the 2×8 tape.
+   STUDIO is ALWAYS the cream room — the frame pref (F) governs PERFORM
+   only and renders inert (dimmed, 'perform' tag) while composing.
+   Mode switch = top-bar control or `S`. Patch-switch feel: instant + strike.
+   ========================================================================== */
+:root{
+  color-scheme:dark;
+  /* ---- invariant interior (recessed screens) ---- */
+  --lcd:#14181b; --lcd-2:#0f1214; --lcd-edge:#0a0a0b; --lcd-ink:#e9eef0;
+  --scr:#0b0d0f;
+  --plate:#2b2b2e; --plate-2:#1d1d20; --plate-ink:#d7d5cb;
+  --dk-mut:#8a949a; --dk-dim:#5f6a70;
+  --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.13);
+  --green:#2fd573; --green-soft:#6cc06d; --red:#f0563f; --red-soft:#e07a58;
+  --amber:#e0a23f; --blue:#5aa0e6; --indigo:#7c83ff;
+  --accent:#ef5a23;
+  --stripe-orange:#e0552f; --stripe-red:#c5362a; --stripe-cream:#d9d7cc;
+  --mute-pad:#d98e6e;
+  --led-red:#ff3b2f; --led-bg:#150705; --led-bg-g:#07110a; --led-bg-n:#0c0e10;
+  --up:#2fb56b; --dn:#e0563f;
+  /* ---- cream chassis constants (console.css) — used by STUDIO always ---- */
+  --chassis:#d8d3c4; --chassis-2:#ccc6b5; --chassis-edge:#c5bfae; --chassis-dark:#b3ad9c;
+  --ink:#2a2a28; --ink-soft:#55534c;
+  --cream-green:#0e6132; --cream-red:#9e2d1c;
+  --master-1:#20140a; --master-2:#160d06;
+  --knob-dark:#3a3a38; --knob-cream:#e9e5d6;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  /* ---- chrome tokens — BLACKOUT values ---- */
+  --frame-bg:#060708;
+  --chrome-bg:#15181b;
+  --chrome-edge:#1c1f22;
+  --chrome-ink:#e7e4db;
+  --chrome-soft:#8a8c8e;
+  --silk:rgba(226,214,184,.55);
+  --btn-bg:#2c2e32; --btn-ink:#cfcdc6; --btn-edge:#000;
+  --btn-shadow:0 1px 0 rgba(255,255,255,.09) inset,0 2px 4px rgba(0,0,0,.45);
+  --kbd-bg:#1a1c1f; --kbd-edge:rgba(255,255,255,.16); --kbd-ink:#8a8c8e;
+  --sep:rgba(255,255,255,.09);
+  --neg-chrome:#e07a58;
+  /* ---- readable-first fluid type (numerals never below ~13px) ---- */
+  --dz:1;
+  --fs-label:clamp(9.5px,.68vw,12.5px);
+  --fs-num:  calc(var(--dz)*clamp(13px,.95vw,17px));
+  --fs-num-lg:calc(var(--dz)*clamp(16px,1.18vw,22px));
+  --fs-hero: calc(var(--dz)*clamp(18px,1.32vw,25px));
+  --fs-body: calc(var(--dz)*clamp(13.5px,.98vw,17px));
+  --fs-slug: calc(var(--dz)*clamp(14px,1vw,18px));
+  --fs-dslug:calc(var(--dz)*clamp(10px,.74vw,14px));
+  --fs-chip: calc(var(--dz)*clamp(10px,.72vw,13px));
+  --h-top:clamp(66px,4.7vw,90px);
+  --h-dock:clamp(80px,5.8vw,108px);
+  --h-foot:clamp(25px,1.8vw,34px);
+  --rail-w:clamp(392px,28.5vw,570px);
+}
+/* ============ CREAM CHROME — active when the PERFORM frame pref is cream,
+   and ALWAYS in STUDIO (the studio IS the cream room) ============ */
+:root[data-skin="cream"][data-mode="perform"],
+:root[data-mode="studio"]{
+  color-scheme:only light;
+  --frame-bg:#c9c3b2;
+  --chrome-edge:#c5bfae;
+  --chrome-ink:#2a2a28;
+  --chrome-soft:#55534c;
+  --silk:#55534c;
+  --btn-bg:#e9e4d3; --btn-ink:#2a2a28; --btn-edge:#a9a396;
+  --btn-shadow:0 2px 0 #a9a396,0 1px 0 #fff inset;
+  --kbd-bg:rgba(255,255,255,.5); --kbd-edge:#b3ad9c; --kbd-ink:#2a2a28;
+  --sep:rgba(60,52,30,.25);
+  --neg-chrome:#9e2d1c;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--frame-bg); color:var(--chrome-ink);
+  font-family:var(--sans); font-size:var(--fs-num);
+  -webkit-font-smoothing:antialiased;
+  transition:background-color .32s ease;
+}
+body.compact{--dz:.86}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.pos{color:var(--green)} .neg{color:var(--red-soft)} .flat{color:var(--dk-mut)}
+
+/* ---------- app grid ------------------------------------------------------ */
+.app{height:100vh;display:grid;grid-template-rows:var(--h-top) 2px minmax(0,1fr) var(--h-dock) var(--h-foot)}
+#topbar{grid-row:1} .band{grid-row:2} #stage{grid-row:3} #studio{grid-row:3} #dock{grid-row:4} #foot{grid-row:5}
+:root[data-mode="studio"] .app{grid-template-rows:var(--h-top) 2px minmax(0,1fr) 0 var(--h-foot)}
+:root[data-mode="studio"] #dock,
+:root[data-mode="studio"] #stage{display:none}
+:root[data-mode="perform"] #studio{display:none}
+/* patch-switch strike — quick + physical, no dissolve */
+@keyframes strike{0%{filter:brightness(1.55) saturate(.6)}100%{filter:none}}
+.strike{animation:strike .16s ease-out}
+
+.silk{
+  font-family:var(--mono);font-size:var(--fs-label);font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--silk);
+  white-space:nowrap;transition:color .32s;
+}
+.chrome{position:relative;background:var(--chrome-bg)}
+.chrome::before{
+  content:"";position:absolute;inset:0;z-index:0;opacity:0;pointer-events:none;
+  background:linear-gradient(180deg,#ded9ca,#d2cdbd);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.10);
+  transition:opacity .32s ease;
+}
+:root[data-skin="cream"][data-mode="perform"] .chrome::before,
+:root[data-mode="studio"] .chrome::before{opacity:1}
+.chrome>*{position:relative;z-index:1}
+
+/* ---------- top bar (identical shell in both modes) ------------------------ */
+#topbar{display:flex;align-items:center;gap:clamp(10px,1vw,20px);padding:0 14px;border-bottom:2px solid var(--chrome-edge);transition:border-color .32s}
+.tb-mod{display:flex;flex-direction:column;align-items:center;gap:3px}
+.brand{display:flex;align-items:center;gap:9px}
+.brand .stripes{display:flex;gap:2px}
+.brand .stripes i{width:4px;height:26px;border-radius:1px;border:1px solid rgba(0,0,0,.3)}
+.brand .stripes i:nth-child(1){background:var(--stripe-orange)}
+.brand .stripes i:nth-child(2){background:var(--stripe-red)}
+.brand .stripes i:nth-child(3){background:var(--stripe-cream)}
+.brand .btxt{display:flex;flex-direction:column;line-height:1.1}
+.brand .btxt b{font-family:var(--mono);font-weight:800;font-size:clamp(16px,1.2vw,21px);letter-spacing:2.5px;color:var(--stripe-red)}
+.brand .btxt span{font-family:var(--mono);font-size:var(--fs-label);letter-spacing:2px;color:var(--silk);transition:color .32s}
+.vsep{width:1px;align-self:stretch;margin:10px 0;background:var(--sep);transition:background-color .32s}
+.tb-spacer{flex:1 1 auto}
+/* ⭐ MODE switch — now a WORKING control (also `S`) */
+.modesw{display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--btn-edge);box-shadow:var(--btn-shadow);transition:border-color .32s,box-shadow .32s}
+.modesw button{
+  font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;letter-spacing:1px;
+  padding:.55em 1em;border:none;cursor:pointer;background:var(--btn-bg);color:var(--chrome-soft);
+  transition:background-color .32s,color .32s;
+}
+.modesw button.on{background:linear-gradient(180deg,#ff7038,var(--accent));color:#140700;
+  text-shadow:0 1px 0 rgba(255,255,255,.25);box-shadow:0 0 10px rgba(239,90,35,.45)}
+/* FRAME switch — PERFORM-only pref; inert while composing */
+.framesw{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;transition:opacity .2s}
+.fsw-lab{font-family:var(--mono);font-size:var(--fs-label);font-weight:700;letter-spacing:.14em;color:var(--chrome-soft);transition:color .32s,text-shadow .32s}
+.fsw-lab.lit{color:var(--accent);text-shadow:0 0 8px rgba(239,90,35,.55)}
+.fsw-track{
+  width:clamp(52px,3.6vw,66px);height:clamp(19px,1.35vw,24px);border-radius:99px;position:relative;
+  border:1px solid #000;background:#26221c;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.75),0 1px 0 rgba(255,255,255,.28);
+}
+.fsw-thumb{
+  position:absolute;top:2px;left:2px;width:44%;height:calc(100% - 4px);border-radius:99px;
+  background:linear-gradient(180deg,#ece8d9,#c9c4b2);border:1px solid rgba(0,0,0,.4);
+  box-shadow:0 1px 2px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.75);
+  transition:left .2s cubic-bezier(.4,1.6,.6,1);
+}
+:root[data-skin="cream"] .fsw-thumb{left:calc(56% - 2px)}
+:root[data-mode="studio"] .framesw{opacity:.35;pointer-events:none}
+:root[data-mode="studio"] .framesw .fsw-lab.lit{color:var(--chrome-soft);text-shadow:none}
+.fsw-cap-perform{display:none;font-family:var(--mono);font-size:calc(var(--fs-label)*.92);font-weight:800;
+  letter-spacing:.14em;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);
+  border-radius:3px;padding:0 5px;text-transform:uppercase}
+:root[data-mode="studio"] .fsw-cap{display:none}
+:root[data-mode="studio"] .fsw-cap-perform{display:inline-block}
+/* LED / LCD windows — invariant */
+.ledwin{position:relative;display:flex;align-items:center;gap:2px;border:1px solid #000;border-radius:7px;padding:.32em .55em;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.12)}
+.ledwin.red{background:var(--led-bg)} .ledwin.grn{background:var(--led-bg-g)} .ledwin.neu{background:var(--led-bg-n)}
+.ledwin::after{content:"";position:absolute;inset:0;border-radius:7px;pointer-events:none;
+  background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,0) 42%)}
+.seven-seg{display:block}
+.led-unit{font-family:var(--mono);font-weight:700;font-size:calc(var(--fs-hero)*.62);line-height:1;text-shadow:0 0 6px currentColor;margin-right:2px}
+.lcdtxt{font-family:var(--mono);font-weight:700;font-size:var(--fs-hero);letter-spacing:.5px;
+  color:var(--lcd-ink);text-shadow:0 0 7px rgba(233,238,240,.3)}
+.lcdtxt.amb{color:#ffb224;text-shadow:0 0 7px rgba(255,178,36,.4)}
+.lcdtxt.grn2{color:#2fd573;text-shadow:0 0 7px rgba(47,213,115,.4)}
+.cap-neg{font-family:var(--mono);font-size:var(--fs-num);font-weight:700;color:var(--neg-chrome);transition:color .32s}
+.pill{font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;letter-spacing:.1em;
+  padding:.45em .8em;border-radius:6px;border:1px solid var(--kbd-edge);color:var(--chrome-soft);
+  background:transparent;display:flex;align-items:center;gap:7px;transition:color .32s,border-color .32s}
+.pill.run{color:var(--run-ink,var(--green));border-color:var(--run-edge,rgba(47,213,115,.55));background:var(--run-bg,rgba(47,213,115,.1))}
+:root[data-skin="cream"][data-mode="perform"] .pill.run,
+:root[data-mode="studio"] .pill.run{--run-ink:#0e6132;--run-edge:rgba(14,97,50,.55);--run-bg:rgba(14,97,50,.10)}
+.pill .pdot{width:.55em;height:.55em;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,213,115,.5)}70%{box-shadow:0 0 0 6px rgba(47,213,115,0)}100%{box-shadow:0 0 0 0 rgba(47,213,115,0)}}
+.killbtn{
+  font-family:var(--mono);font-size:var(--fs-chip);font-weight:800;letter-spacing:.14em;color:#fff;
+  padding:.55em 1.1em;border-radius:6px;border:2px solid #7a1a13;cursor:pointer;
+  background:radial-gradient(circle at 50% 30%,#ff5946,#b5281d);
+  box-shadow:0 0 11px rgba(255,59,47,.4),0 2px 4px rgba(0,0,0,.45);
+}
+.killbtn:active{transform:translateY(1px)}
+.keycap{
+  font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;letter-spacing:.5px;
+  padding:.45em .7em;border-radius:6px;color:var(--btn-ink);cursor:pointer;
+  background:var(--btn-bg);border:1px solid var(--btn-edge);box-shadow:var(--btn-shadow);
+  transition:background-color .32s,color .32s,border-color .32s,box-shadow .32s,transform .06s;
+}
+.keycap:active{transform:translateY(1px)}
+.keycap.lit{background:linear-gradient(180deg,#ffd98f,#e8b45a);color:#1a1407;border-color:#a97e2c;
+  box-shadow:0 2px 0 #a97e2c,0 0 10px rgba(255,178,36,.5)}
+.band{display:flex}
+.band i{flex:1}
+.band i:nth-child(1){background:var(--stripe-orange)}
+.band i:nth-child(2){background:var(--stripe-red)}
+.band i:nth-child(3){background:color-mix(in srgb,var(--stripe-cream) 60%,#555)}
+.band i:nth-child(4){background:#4a4c50}
+
+/* ==========================================================================
+   PERFORM stage (unchanged from mock D)
+   ========================================================================== */
+#stage{
+  display:grid;grid-template-columns:minmax(0,1fr) var(--rail-w);gap:7px;padding:7px;
+  min-height:0;background:var(--frame-bg);transition:background-color .32s;
+}
+.screen{
+  position:relative;min-height:0;min-width:0;display:flex;flex-direction:column;color:var(--lcd-ink);
+  background:linear-gradient(180deg,var(--lcd),var(--lcd-2));
+  border:1px solid var(--lcd-edge);border-radius:9px;overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 3px 12px rgba(0,0,0,.35);
+}
+.screen::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:9px;
+  background:linear-gradient(165deg,rgba(255,255,255,.03),rgba(255,255,255,0) 36%)}
+.phead{
+  flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:.5em 12px;position:relative;z-index:1;
+  background:linear-gradient(180deg,var(--plate),var(--plate-2));border-bottom:1px solid #000;
+  box-shadow:0 1px 0 rgba(255,255,255,.05) inset;
+}
+.phead .t{font-family:var(--mono);font-size:var(--fs-label);font-weight:700;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--plate-ink)}
+.phead .idx{font-family:var(--mono);font-size:var(--fs-label);font-weight:700;color:var(--accent)}
+.phead .grow{flex:1}
+.phead .x{font-family:var(--mono);font-size:var(--fs-num);color:var(--dk-mut)}
+.phead .x.up{color:var(--green-soft)}
+.livedot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 6px var(--green);margin-right:6px;vertical-align:1px;animation:pulse 2s infinite}
+.tfrow{display:flex;gap:3px}
+.tf{font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;color:var(--dk-dim);
+  padding:.15em .5em;border-radius:4px;cursor:pointer;border:1px solid transparent}
+.tf.on{color:#140b00;background:var(--amber);box-shadow:0 0 7px rgba(224,162,63,.4)}
+.leg{display:flex;gap:12px;align-items:center}
+.leg span{font-family:var(--mono);font-size:var(--fs-chip);color:var(--dk-mut)}
+.leg i{display:inline-block;width:11px;height:2px;border-radius:1px;vertical-align:3px;margin-right:4px}
+.ohlc{font-family:var(--mono);font-size:var(--fs-num);color:var(--dk-mut);white-space:nowrap}
+.ohlc b{color:var(--lcd-ink);font-weight:600}
+.popout{font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;color:#c8d0d4;
+  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.03);border-radius:5px;
+  padding:.3em .7em;cursor:pointer;display:flex;gap:7px;align-items:center}
+.popout small{font-size:calc(var(--fs-label)*.95);color:var(--dk-dim);border:1px solid rgba(255,255,255,.14);border-radius:3px;padding:0 4px}
+.popout:hover,.popout.flash{border-color:var(--plate-ink);color:var(--lcd-ink)}
+.chart-body{flex:1;min-height:0;background:var(--scr);position:relative}
+#chart{position:absolute;inset:0;width:100%;height:100%;display:block}
+#rail{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:7px;min-height:0}
+.pos-row{
+  display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:.3em 10px;align-items:baseline;
+  padding:.52em 12px;border-bottom:1px solid var(--line);
+}
+.pos-row:last-child{border-bottom:none}
+.p-dot{width:8px;height:8px;border-radius:50%;background:var(--pm);box-shadow:0 0 7px color-mix(in srgb,var(--pm) 75%,transparent);align-self:center}
+.p-slug{font-family:var(--mono);font-size:var(--fs-slug);font-weight:700;letter-spacing:.1px;color:var(--lcd-ink);white-space:nowrap}
+.p-ctr{grid-column:2;font-family:var(--mono);font-size:var(--fs-num);color:var(--dk-mut);white-space:nowrap}
+.p-pnl{font-family:var(--mono);font-size:var(--fs-num-lg);font-weight:800;text-align:right}
+.p-meta{grid-column:3;font-family:var(--mono);font-size:var(--fs-num);color:var(--dk-dim);text-align:right;white-space:nowrap}
+.p-pk{grid-column:3;display:flex;align-items:center;gap:7px;justify-content:flex-end}
+.p-pk .lbl{font-family:var(--mono);font-size:var(--fs-num);color:var(--dk-mut);white-space:nowrap}
+.p-pk .lbl b{color:var(--pm);font-weight:800;font-size:var(--fs-num)}
+.ringg{width:calc(var(--fs-num-lg)*1.35);height:calc(var(--fs-num-lg)*1.35);display:block}
+.p-tags{grid-column:2;display:flex;gap:7px;flex-wrap:wrap;align-self:center}
+.tag{font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:.1em .5em;border-radius:4px;border:1px solid var(--line-2);color:var(--dk-mut)}
+.tag.amber{color:#ffb224;border-color:rgba(255,178,36,.5);background:rgba(255,178,36,.08)}
+.tag.warn{color:var(--red-soft);border-color:rgba(224,122,88,.45);background:rgba(224,122,88,.08)}
+.tag.ok{color:var(--green-soft);border-color:rgba(108,192,109,.45);background:rgba(108,192,109,.08)}
+.sent-body{padding:.55em 12px .65em;display:flex;flex-direction:column;gap:.5em}
+.sent-top{display:flex;align-items:center;gap:11px}
+.verdict{
+  flex:0 0 auto;font-family:var(--mono);font-size:var(--fs-num);font-weight:800;letter-spacing:.12em;
+  color:#140b00;padding:.35em .75em;border-radius:6px;border:1px solid #000;
+  background:linear-gradient(180deg,#f0b652,var(--amber));
+  box-shadow:0 0 13px rgba(224,162,63,.35),0 1px 0 rgba(255,255,255,.3) inset;
+}
+.sent-msg{font-size:var(--fs-body);line-height:1.45;color:#dfe4e6}
+.sent-msg b{font-family:var(--mono);font-weight:700;color:var(--lcd-ink)}
+.steps{display:flex;gap:3px;align-items:center}
+.steps i{flex:1;height:10px;border-radius:2px;background:#1c1f22;border:1px solid rgba(0,0,0,.6);
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
+.steps i.lit{background:linear-gradient(180deg,#f0b652,#b97f22);box-shadow:0 0 5px rgba(224,162,63,.5)}
+.steps .steps-n{flex:0 0 auto;font-family:var(--mono);font-size:var(--fs-num);font-weight:700;color:var(--dk-mut);margin-left:7px}
+.ladder{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.lvl{font-family:var(--mono);font-size:var(--fs-num);color:var(--dk-mut);letter-spacing:-.3px;
+  border:1px solid var(--line);border-radius:4px;padding:.12em .38em;display:flex;gap:5px;align-items:center;white-space:nowrap}
+.lvl i{width:10px;height:2px;border-radius:1px}
+.lvl b{color:var(--lcd-ink);font-weight:600}
+.tape-body{flex:1;min-height:0;overflow:hidden;background:var(--scr);padding:2px 0;position:relative;z-index:1}
+.trow{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:10px;align-items:baseline;
+  padding:.46em 12px;border-bottom:1px solid rgba(255,255,255,.045)}
+.t-time{font-family:var(--mono);font-size:var(--fs-num);color:var(--dk-dim)}
+.t-kind{font-family:var(--mono);font-size:var(--fs-chip);font-weight:800;letter-spacing:.1em;text-align:center;
+  border-radius:4px;padding:.05em .45em;border:1px solid;align-self:center}
+.t-kind.exec{color:var(--green-soft);border-color:rgba(108,192,109,.4);background:rgba(108,192,109,.07)}
+.t-kind.warn{color:#ffb224;border-color:rgba(255,178,36,.45);background:rgba(255,178,36,.08)}
+.t-kind.info{color:var(--dk-mut);border-color:var(--line-2);background:rgba(255,255,255,.03)}
+.t-msg{font-family:var(--mono);font-size:var(--fs-body);color:#dfe4e6;line-height:1.45;letter-spacing:-.1px}
+.t-msg .ch{font-weight:700}
+.t-msg .dim{color:var(--dk-mut)}
+.t-ghost{padding:.8em 12px;text-align:center;font-family:var(--mono);font-size:var(--fs-label);letter-spacing:.12em;text-transform:uppercase;color:var(--dk-dim)}
+/* dock */
+#dock{border-top:2px solid var(--chrome-edge);transition:border-color .32s}
+.dock-in{position:relative;z-index:1;height:100%;display:grid;grid-template-columns:20px repeat(11,minmax(0,1fr));gap:5px;padding:6px 8px}
+.dock-cap{display:flex;align-items:center;justify-content:center}
+.dock-cap .silk{writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.2em}
+.strip{
+  position:relative;display:flex;flex-direction:column;justify-content:space-between;
+  min-width:0;padding:.4em .45em .35em;border-radius:6px;border:1px solid #000;cursor:pointer;
+  background:linear-gradient(180deg,var(--lcd),var(--lcd-2));
+  border-top:2px solid color-mix(in srgb,var(--pm) 60%,#111);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),inset 0 -8px 14px rgba(0,0,0,.28),0 1px 0 var(--chick-lip,rgba(255,255,255,.05));
+  transition:box-shadow .32s;
+}
+:root[data-skin="cream"] .strip{--chick-lip:rgba(255,255,255,.5)}
+.strip.off{opacity:.62} .strip.dark{opacity:.4}
+.s-r1{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden}
+.s-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:#26282b;border:1px solid rgba(0,0,0,.7)}
+.s-dot.on{background:var(--pm);border-color:transparent;box-shadow:0 0 6px color-mix(in srgb,var(--pm) 80%,transparent)}
+.s-dot.hot{animation:pulse 2s infinite}
+.s-dot.stby{background:color-mix(in srgb,var(--amber) 55%,#222);box-shadow:0 0 5px rgba(224,162,63,.35)}
+.s-slug{font-family:var(--mono);font-size:var(--fs-dslug);font-weight:700;letter-spacing:-.45px;color:#dfe4e6;white-space:nowrap;min-width:0}
+.s-a13{position:absolute;top:-2px;right:7px;z-index:2;font-family:var(--mono);
+  font-size:calc(var(--fs-label)*.92);font-weight:800;letter-spacing:.02em;color:#140b00;background:#ffb224;
+  border-radius:0 0 3px 3px;padding:1px 5px 0;box-shadow:0 0 7px rgba(255,178,36,.5)}
+.s-pnl{font-family:var(--mono);font-size:calc(var(--dz)*clamp(15px,1.05vw,20px));font-weight:800;white-space:nowrap;line-height:1.05}
+.s-r3{display:flex;align-items:center;justify-content:space-between;gap:5px;min-width:0}
+.s-pw{font-family:var(--mono);font-size:var(--fs-num);color:var(--dk-mut);white-space:nowrap;letter-spacing:-.3px}
+.s-pw b{color:color-mix(in srgb,var(--pm) 80%,#fff);font-weight:800}
+.s-tag{font-family:var(--mono);font-size:var(--fs-chip);font-weight:800;letter-spacing:.08em}
+.s-tag.gated{color:#ffb224} .s-tag.muted{color:var(--mute-pad)} .s-tag.darkch{color:#5c646a}
+.s-mute{flex:0 0 auto;width:calc(var(--fs-num)*1.5);height:calc(var(--fs-num)*1.15);border-radius:4px;border:1px solid #000;
+  background:linear-gradient(180deg,#3a3b3e,#232427);color:#8a949a;font-family:var(--mono);
+  font-size:calc(var(--fs-label)*.95);font-weight:800;display:grid;place-items:center;cursor:pointer}
+.s-mute.lit{background:linear-gradient(180deg,var(--mute-pad),#a5573c);color:#1c0d07;box-shadow:0 0 8px rgba(217,142,110,.55)}
+
+/* ==========================================================================
+   STUDIO — the cream 909 composer room (§02 evocation)
+   ========================================================================== */
+#studio{
+  min-height:0;display:flex;flex-direction:column;gap:clamp(8px,.8vw,14px);
+  padding:clamp(8px,.8vw,16px) clamp(10px,1vw,18px);
+  background:
+    radial-gradient(1100px 500px at 15% -10%,rgba(255,255,255,.12),transparent 60%),
+    linear-gradient(180deg,#d3cdbd,#c5bfae);
+  color:var(--ink);
+}
+/* silkscreen anchor row — the other rooms exist; this is the composer */
+.anchors{display:flex;align-items:center;gap:8px}
+.anchor{font-family:var(--mono);font-size:var(--fs-label);font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-soft);padding:.35em .8em;border-radius:6px;
+  border:1px solid var(--chassis-edge);background:rgba(255,255,255,.35)}
+.anchor.on{color:#140700;background:linear-gradient(180deg,#ff7038,var(--accent));border-color:#00000055;
+  box-shadow:0 0 9px rgba(239,90,35,.4)}
+.anchors .note{margin-left:auto;font-family:var(--mono);font-size:var(--fs-label);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-soft)}
+/* composer grid: 6 channel strips + the dark MASTER on the right (909 layout) */
+.composer{flex:1;min-height:0;display:grid;gap:clamp(8px,.7vw,14px);
+  grid-template-columns:repeat(6,minmax(0,1fr)) clamp(210px,16vw,300px)}
+.cstrip{
+  position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:space-between; /* mixer strips distribute controls full-height */
+  gap:clamp(6px,.55vw,11px);padding:clamp(10px,1vh,20px) clamp(8px,.7vw,14px) clamp(12px,1.4vh,24px);
+  background:linear-gradient(180deg,#ddd8c9,#cfc9b8);
+  border:1px solid var(--chassis-edge);border-top:3px solid var(--pm);border-radius:10px;
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 -2px 4px rgba(0,0,0,.12) inset,0 2px 8px rgba(0,0,0,.28);
+}
+.cstrip.mutedch{opacity:.55;filter:grayscale(.35)}
+.cs-head{display:flex;align-items:center;gap:7px;max-width:100%}
+.cs-dot{width:8px;height:8px;border-radius:50%;background:#2a2b2e;box-shadow:0 0 0 1px #000 inset;flex:0 0 auto}
+.cs-dot.on{background:var(--pm);box-shadow:0 0 8px var(--pm)}
+.cs-name{font-family:var(--mono);font-size:calc(var(--dz)*clamp(12px,.9vw,16px));font-weight:700;letter-spacing:.3px;
+  color:color-mix(in srgb,var(--pm) 72%,#1c1c1a);white-space:nowrap}
+.cs-ticker{font-family:var(--mono);font-size:calc(var(--fs-label)*.95);font-weight:800;letter-spacing:.06em;
+  padding:1px 5px;border-radius:3px;color:var(--ink-soft);background:rgba(0,0,0,.06);border:1px solid var(--chassis-edge)}
+/* FIRES readout — the binding exits, real vocabulary */
+.cs-fires{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;font-family:var(--mono)}
+.cs-flbl{font-size:var(--fs-label);font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft)}
+.chf{font-size:var(--fs-num);font-weight:700;padding:.05em .45em;border-radius:4px;border:1px solid;white-space:nowrap}
+.chf-stop{color:var(--cream-red);border-color:rgba(158,45,28,.45);background:rgba(158,45,28,.07)}
+.chf-take{color:var(--cream-green);border-color:rgba(14,97,50,.45);background:rgba(14,97,50,.07)}
+.chf-ride{color:var(--ink-soft);border-color:rgba(60,52,30,.3);background:rgba(255,255,255,.3);font-style:italic}
+.chf-flat{color:var(--ink-soft);border-color:rgba(60,52,30,.25);background:transparent}
+/* LOCK / RIDE — writes the matched pair */
+.cs-mode{display:flex}
+.chm{font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;letter-spacing:.08em;
+  padding:.3em 1em;cursor:pointer;background:transparent;color:var(--ink-soft);border:1px solid rgba(0,0,0,.22)}
+.chm-lock{border-radius:5px 0 0 5px}
+.chm-ride{border-radius:0 5px 5px 0;margin-left:-1px}
+.chm.on{color:#fff;border-color:transparent;position:relative;z-index:1}
+.chm-lock.on{background:#1c7a44}
+.chm-ride.on{background:#6b6960}
+/* trade-shape bar — stop (red, left) → entry → take (green, right) */
+.cs-shape{position:relative;height:18px;align-self:stretch;margin:0 6px}
+.shp-track{position:absolute;left:0;right:0;top:50%;height:9px;transform:translateY(-50%);
+  border-radius:5px;background:rgba(0,0,0,.09);overflow:hidden}
+.shp-stop{position:absolute;top:0;bottom:0;background:#d05646}
+.shp-take{position:absolute;top:0;bottom:0;background:#2f9e5c}
+.shp-take.ride{background:linear-gradient(90deg,#2f9e5c,rgba(47,158,92,.05))}
+.shp-entry{position:absolute;top:-3px;bottom:-3px;left:50%;width:2px;transform:translateX(-50%);background:var(--ink);opacity:.55}
+.shp-h{position:absolute;top:50%;width:4px;height:15px;transform:translate(-50%,-50%);border-radius:2px;
+  box-shadow:0 0 0 1.5px rgba(255,255,255,.75)}
+.shp-h.take{background:#1c7a44}
+.shp-h.stop{background:#be3326}
+.shp-rr{position:absolute;right:-4px;top:-8px;font-family:var(--mono);font-size:calc(var(--fs-label)*.95);font-weight:700;
+  color:var(--ink-soft);background:var(--chassis);padding:0 3px;border-radius:2px}
+/* two-dial sizing: STOP/day knob + RISK fader */
+.cs-dials{display:flex;align-items:flex-end;justify-content:center;gap:clamp(8px,.9vw,18px);align-self:stretch}
+.dial{display:flex;flex-direction:column;align-items:center;gap:4px}
+.kcap{width:clamp(54px,4vw,76px);height:clamp(54px,4vw,76px);display:block}
+.dial-cap{display:flex;gap:6px;align-items:baseline}
+.dial-lbl{font-family:var(--mono);font-size:var(--fs-label);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+.dial-val{font-family:var(--mono);font-size:var(--fs-num);font-weight:700;color:var(--ink)}
+.fader{display:flex;flex-direction:column;align-items:center;gap:4px}
+.fader-track{position:relative;width:6px;height:clamp(64px,6.2vh,100px);background:rgba(0,0,0,.32);border-radius:3px;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.fader-fill{position:absolute;left:0;right:0;bottom:0;border-radius:3px;background:var(--accent);opacity:.4}
+.fader-cap{position:absolute;left:50%;width:30px;height:15px;background:var(--knob-cream);
+  border:1px solid var(--chassis-edge);border-radius:3px;transform:translate(-50%,50%);
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 1px 2px rgba(0,0,0,.3)}
+.fader-cap::after{content:"";position:absolute;left:6px;right:6px;top:7px;height:1px;background:var(--chassis-edge)}
+/* P&L meter — recessed dark slot in the cream body */
+.cs-meter{display:flex;align-items:center;gap:9px;justify-content:center}
+.cs-meter-track{width:11px;height:clamp(30px,3vh,44px);background:#161719;border:1px solid #000;border-radius:3px;
+  display:flex;flex-direction:column-reverse;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.6)}
+.cs-meter-fill{width:100%}
+.cs-meter-fill.pos{background:var(--green);box-shadow:0 0 6px var(--green)}
+.cs-meter-fill.neg{background:var(--red);box-shadow:0 0 6px var(--red)}
+.cs-pnl{font-family:var(--mono);font-size:var(--fs-num-lg);font-weight:800}
+.cs-pnl.pos{color:#1f9d57}.cs-pnl.neg{color:#d23a28}.cs-pnl.flat{color:var(--ink-soft)}
+/* MUTE / BOOST pads — ivory on cream, lit keeps the glow */
+.cs-pads{display:flex;gap:9px}
+.cpad{font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;letter-spacing:.5px;
+  width:calc(var(--fs-num)*3);height:calc(var(--fs-num)*2.1);border-radius:6px;cursor:pointer;
+  background:linear-gradient(180deg,#ece9de,#d2cfc4);border:1px solid var(--chassis-edge);color:var(--ink-soft);
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 1px 3px rgba(0,0,0,.25)}
+.cpad:active{transform:translateY(1px)}
+.cpad.lit-m{background:linear-gradient(180deg,var(--mute-pad),#b06246);color:#1c0d07;border-color:#00000044;
+  box-shadow:0 0 10px rgba(217,142,110,.55),0 1px 0 rgba(255,255,255,.3) inset}
+.cs-status{font-family:var(--mono);font-size:calc(var(--fs-label)*.95);font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--amber);border:1px solid rgba(176,125,16,.45);border-radius:3px;padding:0 5px}
+.cs-status.ghost{visibility:hidden} /* keeps rows aligned across strips */
+/* MASTER — deliberately dark (the one dark object in the cream room) */
+.master909{
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  gap:clamp(8px,.8vh,14px);
+  padding:clamp(12px,1.6vh,26px) clamp(10px,.9vw,16px);
+  background:linear-gradient(180deg,var(--master-1),var(--master-2));
+  border:1px solid #000;border-top:3px solid var(--stripe-orange);border-radius:10px;
+  box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 2px 8px rgba(0,0,0,.5);
+}
+.master909 .m-title{font-family:var(--mono);font-size:var(--fs-label);font-weight:700;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--plate-ink)}
+.m-cap{font-family:var(--mono);font-size:calc(var(--fs-label)*.92);letter-spacing:.12em;text-transform:uppercase;color:#9a9a92}
+.m-grp{display:flex;flex-direction:column;align-items:center;gap:4px}
+.xport{display:flex;gap:8px}
+.xbtn{font-family:var(--mono);font-size:var(--fs-chip);font-weight:700;letter-spacing:.1em;color:#f0efe9;
+  padding:.7em 1.2em;border-radius:7px;border:1px solid #000;cursor:pointer;
+  background:linear-gradient(180deg,#4a4b4f,#2a2b2e);
+  box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 3px 5px rgba(0,0,0,.4)}
+.xbtn:active{transform:translateY(1px)}
+.xbtn.start{background:linear-gradient(180deg,#36e07d,#1f9e54);color:#07120b;box-shadow:0 0 11px rgba(47,213,115,.35),0 1px 0 rgba(255,255,255,.3) inset}
+.m-worker{font-family:var(--mono);font-size:calc(var(--fs-label)*.95);letter-spacing:.06em;color:#9a9a92}
+.m-worker b{color:#2fd573;font-weight:700}
+/* 2×8 step tape hint */
+.tapebar{display:flex;flex-direction:column;gap:6px}
+.tapebar .tb-lab{display:flex;align-items:center;gap:10px}
+.tapebar .tb-lab .silk{color:var(--ink-soft)}
+.tapebar .tb-lab .tl{flex:1;height:1px;background:var(--chassis-edge)}
+.steptape{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:clamp(6px,.5vw,10px)}
+.step{position:relative;height:clamp(34px,4.4vh,58px);border-radius:5px;border:1px solid #000;
+  background:linear-gradient(180deg,#e7e5da,#c3c1b6);cursor:pointer;
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 2px 3px rgba(0,0,0,.3)}
+.step:nth-child(4n+1){background:linear-gradient(180deg,#f0a07f,#e0552f)}
+.step.lit{background:linear-gradient(180deg,var(--st),color-mix(in srgb,var(--st) 60%,#000));
+  box-shadow:0 0 12px color-mix(in srgb,var(--st) 70%,transparent),0 1px 0 rgba(255,255,255,.3) inset}
+.step .n{position:absolute;top:4px;left:6px;font-family:var(--mono);font-size:calc(var(--fs-label)*.9);color:rgba(0,0,0,.45)}
+
+/* ---------- footer ---------------------------------------------------------- */
+#foot{display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-top:1px solid var(--chrome-edge);transition:border-color .32s}
+#foot .l,#foot .r{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:var(--fs-label);letter-spacing:.08em;text-transform:uppercase;color:var(--chrome-soft);transition:color .32s}
+#foot .ok{color:var(--green-soft)}
+:root[data-skin="cream"][data-mode="perform"] #foot .ok,
+:root[data-mode="studio"] #foot .ok{color:#0e6132}
+#foot .acc{color:var(--accent)}
+kbd{
+  font-family:var(--mono);font-size:calc(var(--fs-label)*.95);color:var(--kbd-ink);
+  border:1px solid var(--kbd-edge);border-bottom-width:2px;border-radius:3px;
+  background:var(--kbd-bg);padding:0 5px;line-height:1.5;display:inline-block;
+  transition:background-color .32s,color .32s,border-color .32s;
+}
+
+/* ---------- ⌘K palette — cream-bezel COMMAND module (mode/skin-invariant) --- */
+#palOv{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-start;justify-content:center;
+  padding-top:12vh;background:rgba(4,5,7,.5);
+  opacity:0;pointer-events:none;transition:opacity .15s ease}
+#palOv.open{opacity:1;pointer-events:auto}
+.palette{
+  width:min(640px,90vw);border-radius:11px;padding:7px 8px 8px;
+  background:linear-gradient(180deg,#d8d3c4,#ccc6b5);border:1px solid #c5bfae;
+  box-shadow:0 24px 70px rgba(0,0,0,.75),0 2px 0 rgba(255,255,255,.14) inset,0 -2px 6px rgba(0,0,0,.18) inset;
+  transform:translateY(-8px);transition:transform .15s ease;
+}
+#palOv.open .palette{transform:translateY(0)}
+.pal-top{display:flex;align-items:center;gap:9px;padding:2px 3px 7px}
+.pal-top .stripes{display:flex;gap:3px}
+.pal-top .stripes i{width:16px;height:2.5px;border-radius:1px}
+.pal-top .stripes i:nth-child(1){background:var(--stripe-orange)}
+.pal-top .stripes i:nth-child(2){background:var(--stripe-red)}
+.pal-top .stripes i:nth-child(3){background:#8f8a7a}
+.pal-title{font-family:var(--mono);font-size:var(--fs-label);font-weight:600;letter-spacing:.32em;color:#55534c}
+.pal-esc{margin-left:auto;font-family:var(--mono);font-size:var(--fs-label);font-weight:600;letter-spacing:.12em;color:#55534c;
+  border:1px solid rgba(60,52,30,.28);border-radius:3px;padding:2px 7px;box-shadow:0 1px 0 rgba(255,255,255,.35) inset}
+.pal-lcd{background:linear-gradient(180deg,var(--lcd),var(--lcd-2));border:1px solid var(--lcd-edge);border-radius:7px;
+  box-shadow:0 3px 14px rgba(0,0,0,.55) inset;overflow:hidden}
+.pal-in{display:flex;align-items:center;gap:10px;padding:.8em 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.pal-in .pr{font-family:var(--mono);font-weight:800;font-size:var(--fs-body);color:#ffb224;text-shadow:0 0 8px rgba(255,178,36,.5)}
+.pal-in input{flex:1;background:none;border:none;outline:none;color:var(--lcd-ink);
+  font-family:var(--mono);font-size:var(--fs-body);letter-spacing:.3px}
+.pal-in input::placeholder{color:var(--dk-dim)}
+.pal-count{font-family:var(--mono);font-size:var(--fs-chip);color:var(--dk-dim);letter-spacing:.08em}
+.pal-rows{padding:5px 6px 3px}
+.pal-grp{font-family:var(--mono);font-size:var(--fs-label);font-weight:600;letter-spacing:.26em;color:var(--dk-dim);padding:.7em 9px .3em}
+.pal-row{display:flex;align-items:center;gap:10px;padding:.55em 9px;border-radius:5px;cursor:pointer;
+  font-family:var(--mono);font-size:var(--fs-num);color:#c3cad1}
+.pal-row:hover{background:rgba(255,255,255,.035)}
+.pal-row .selmark{color:#ffb224;font-size:var(--fs-chip);width:12px;flex:none;text-align:center;visibility:hidden}
+.pal-row.sel{background:rgba(255,178,36,.07);box-shadow:2.5px 0 0 #ffb224 inset;color:var(--lcd-ink)}
+.pal-row.sel .selmark{visibility:visible}
+.pal-row .pdot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--pm,transparent);
+  border:1px solid color-mix(in srgb,var(--pm,#5f6a70) 70%,transparent)}
+.pal-row .verb{font-weight:800;color:var(--lcd-ink)}
+.pal-row .sub{color:var(--dk-dim);font-size:var(--fs-chip)}
+.pal-row kbd{margin-left:auto}
+.pal-row.kill{color:var(--led-red)}
+.pal-row.kill .verb{color:var(--led-red)}
+.pal-row.kill .pdot{background:var(--led-red);border-color:transparent;box-shadow:0 0 7px rgba(255,59,47,.7)}
+.pal-row .armtag{margin-left:auto;font-size:var(--fs-label);font-weight:800;letter-spacing:.12em;color:var(--led-red);
+  border:1px solid rgba(255,59,47,.45);border-radius:3px;padding:2px 7px;background:rgba(255,59,47,.06)}
+.pal-foot{display:flex;gap:18px;padding:.6em 14px .7em;border-top:1px solid rgba(255,255,255,.06);
+  font-family:var(--mono);font-size:var(--fs-label);letter-spacing:.07em;color:var(--dk-dim)}
+.pal-foot b{color:var(--dk-mut);font-weight:600}
+.pal-foot .r{margin-left:auto}
+
+@media (max-width:1330px){
+  #topbar{gap:9px}
+  .brand .btxt span{display:none}
+  .leg{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ================= TOP BAR — the identical shell over both modes ======= -->
+  <header id="topbar" class="chrome">
+    <div class="brand">
+      <div class="stripes"><i></i><i></i><i></i></div>
+      <div class="btxt"><b>SEVE</b><span>0DTE DESK</span></div>
+    </div>
+    <div class="tb-mod">
+      <div class="modesw" id="modesw">
+        <button id="btnStudio">STUDIO</button><button id="btnPerform" class="on">PERFORM</button>
+      </div>
+      <span class="silk">MODE · S</span>
+    </div>
+    <div class="vsep"></div>
+
+    <div class="tb-mod">
+      <div class="ledwin red" id="ledSpot"></div>
+      <span class="silk">SPY &nbsp;<span class="cap-neg">−0.38%</span></span>
+    </div>
+    <div class="tb-mod">
+      <div class="ledwin grn" id="ledPnl"></div>
+      <span class="silk">DAY P&amp;L</span>
+    </div>
+    <div class="tb-mod">
+      <div class="ledwin neu"><span class="lcdtxt amb num">$1.94M</span></div>
+      <span class="silk">NAV · 3 ACCTS</span>
+    </div>
+
+    <div class="tb-spacer"></div>
+
+    <!-- FRAME switch — PERFORM's skin pref; inert while composing -->
+    <div class="tb-mod">
+      <div class="framesw" id="framesw" role="switch" aria-checked="false"
+           title="frame chrome — BLACKOUT ⇄ CREAM · applies to PERFORM">
+        <span class="fsw-lab lit" id="fswB">BLACKOUT</span>
+        <div class="fsw-track"><div class="fsw-thumb"></div></div>
+        <span class="fsw-lab" id="fswC">CREAM</span>
+      </div>
+      <span class="silk fsw-cap">FRAME · F</span>
+      <span class="fsw-cap-perform">perform</span>
+    </div>
+
+    <div class="vsep"></div>
+
+    <div class="tb-mod">
+      <span class="pill run"><span class="pdot"></span>RUN</span>
+      <span class="silk">stream-07-10a</span>
+    </div>
+    <div class="tb-mod">
+      <span class="pill">PAPER</span>
+      <span class="silk">EXEC</span>
+    </div>
+    <div class="tb-mod">
+      <button class="killbtn" title="flatten all — halt entries">KILL</button>
+      <span class="silk">KILL = FLATTEN</span>
+    </div>
+
+    <div class="vsep"></div>
+
+    <div class="tb-mod">
+      <div class="ledwin neu"><span class="lcdtxt num">12:47:31</span></div>
+      <span class="silk">ET · RTH</span>
+    </div>
+    <div class="tb-mod">
+      <button class="keycap" id="btnK" title="command palette">⌘K</button>
+      <span class="silk">PALETTE</span>
+    </div>
+    <div class="tb-mod">
+      <button class="keycap" id="btnD" title="data density">D</button>
+      <span class="silk">DENSITY</span>
+    </div>
+  </header>
+
+  <div class="band"><i></i><i></i><i></i><i></i></div>
+
+  <!-- ================= PERFORM stage (mock D, unchanged) ==================== -->
+  <main id="stage">
+    <section class="screen">
+      <div class="phead">
+        <span class="idx">01</span>
+        <span class="t">SPY · LIVE</span>
+        <div class="tfrow">
+          <span class="tf">1m</span><span class="tf on">2m</span><span class="tf">5m</span><span class="tf">15m</span><span class="tf">1h</span>
+        </div>
+        <div class="leg">
+          <span><i style="background:var(--amber)"></i>VWAP</span>
+          <span><i style="background:var(--blue)"></i>EMA9</span>
+          <span><i style="background:var(--indigo)"></i>EMA21</span>
+        </div>
+        <div class="grow"></div>
+        <span class="ohlc num" id="ohlc"></span>
+        <button class="popout" id="btnP" title="pop chart out to its own window">⧉ POP-OUT <small>P</small></button>
+      </div>
+      <div class="chart-body"><svg id="chart" aria-label="SPY 2-minute candles with VWAP, EMA and SENT ladder"></svg></div>
+    </section>
+
+    <aside id="rail">
+      <section class="screen">
+        <div class="phead"><span class="t">POSITIONS · 3 OPEN</span><span class="grow"></span><span class="x up num">Σ +$1,030</span></div>
+        <div>
+          <div class="pos-row" style="--pm:#ffb224">
+            <span class="p-dot"></span>
+            <div class="p-slug">momo-shape</div><div class="p-pnl pos">+$840</div>
+            <div class="p-ctr">SPY 752C ×12 · 0DTE</div><div class="p-meta">in @1.86 · 12:41</div>
+            <div class="p-tags"><span class="tag amber">⚡ A13 ratchet armed</span><span class="tag">RIDE</span></div>
+            <div class="p-pk"><span id="ring1"></span><span class="lbl">pk <b>+62%</b></span></div>
+          </div>
+          <div class="pos-row" style="--pm:#2fd573">
+            <span class="p-dot"></span>
+            <div class="p-slug">pb-ride</div><div class="p-pnl neg">−$120</div>
+            <div class="p-ctr">SPY 750C ×8 · 1DTE</div><div class="p-meta">in @2.12 · 11:58</div>
+            <div class="p-tags"><span class="tag warn">giveback 41% of pk</span><span class="tag">RIDE</span></div>
+            <div class="p-pk"><span id="ring2"></span><span class="lbl">pk <b>+9%</b></span></div>
+          </div>
+          <div class="pos-row" style="--pm:#45c4d6">
+            <span class="p-dot"></span>
+            <div class="p-slug">breakout-alt-v3-qqq</div><div class="p-pnl pos">+$310</div>
+            <div class="p-ctr">QQQ 566C ×6 · 0DTE</div><div class="p-meta">TP ×6 @2.41 · 12:31</div>
+            <div class="p-tags"><span class="tag ok">TP ✓</span><span class="tag">LOCK</span></div>
+            <div class="p-pk"><span id="ring3"></span><span class="lbl">pk <b>+28%</b></span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="phead"><span class="t">SENTINEL</span><span class="grow"></span><span class="x">last scan 06:00 PT <span style="color:var(--green-soft)">✓</span></span></div>
+        <div class="sent-body">
+          <div class="sent-top">
+            <span class="verdict">WATCH</span>
+            <span class="sent-msg"><b>vb-ribbon-cross IWM</b> nearing promote bar</span>
+          </div>
+          <div class="steps" title="promote bar — 12 of 15 sessions">
+            <i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i>
+            <i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i>
+            <i class="lit"></i><i class="lit"></i><i></i><i></i><i></i>
+            <span class="steps-n num">12/15</span>
+          </div>
+          <div class="ladder">
+            <span class="lvl"><i style="background:var(--amber)"></i>γ-wall <b>753.0</b></span>
+            <span class="lvl"><i style="background:var(--dk-mut)"></i>PD·swing <b>748.2</b></span>
+            <span class="lvl"><i style="background:var(--green)"></i>gap-arm <b>745.5</b></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="phead"><span class="t">TAPE</span><span class="grow"></span><span class="x"><span class="livedot"></span>LIVE</span></div>
+        <div class="tape-body">
+          <div class="trow"><span class="t-time">12:41</span><span class="t-kind exec">EXEC</span>
+            <span class="t-msg"><span class="ch" style="color:#ffb224">momo-shape</span> buy 12× SPY752C @1.86</span></div>
+          <div class="trow"><span class="t-time">12:38</span><span class="t-kind warn">WARN</span>
+            <span class="t-msg"><span class="ch" style="color:#2fd573">pb-ride</span> giveback <span style="color:#ffb224">41%</span> of peak</span></div>
+          <div class="trow"><span class="t-time">12:31</span><span class="t-kind exec">EXEC</span>
+            <span class="t-msg"><span class="ch" style="color:#45c4d6">breakout-alt-v3-qqq</span> TP ×6 @2.41 <span class="dim">→</span> <span class="pos">+$310</span></span></div>
+          <div class="trow"><span class="t-time">12:02</span><span class="t-kind info">INFO</span>
+            <span class="t-msg"><span class="dim">gate</span> cost_gate blocked <span class="ch" style="color:#8a949a">grind</span></span></div>
+          <div class="trow"><span class="t-time">11:58</span><span class="t-kind exec">EXEC</span>
+            <span class="t-msg"><span class="ch" style="color:#2fd573">pb-ride</span> buy 8× SPY750C @2.12</span></div>
+          <div class="t-ghost">— earlier collapsed · session open 09:30 —</div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- ================= STUDIO — the cream composer room ===================== -->
+  <main id="studio">
+    <div class="anchors">
+      <span class="anchor">01 · Live Market</span>
+      <span class="anchor on">02 · Strategy Composer</span>
+      <span class="anchor">03 · Book &amp; P&amp;L</span>
+      <span class="anchor">04 · Tape</span>
+      <span class="note">composer room — full desk at /</span>
+    </div>
+
+    <div class="composer" id="composer">
+      <!-- 6 channel strips injected by JS -->
+      <div class="master909">
+        <span class="m-title">MASTER</span>
+        <div class="m-grp">
+          <div class="ledwin neu"><span class="lcdtxt amb num">$1.94M</span></div>
+          <span class="m-cap">NAV</span>
+        </div>
+        <div class="m-grp">
+          <div class="ledwin grn"><span class="lcdtxt grn2 num">+$1,243</span></div>
+          <span class="m-cap">DAY P&amp;L</span>
+        </div>
+        <div class="m-grp">
+          <button class="killbtn">KILL</button>
+          <span class="m-cap">KILL = FLATTEN</span>
+        </div>
+        <div class="m-grp">
+          <div class="xport">
+            <button class="xbtn start">START</button>
+            <button class="xbtn">STOP</button>
+          </div>
+          <span class="m-cap">TRANSPORT · PAPER</span>
+        </div>
+        <div class="m-worker">worker <b>stream-2026-07-10a ✓</b></div>
+      </div>
+    </div>
+
+    <div class="tapebar">
+      <div class="tb-lab"><span class="silk">SESSION TAPE · 2×8</span><span class="tl"></span><span class="silk" style="letter-spacing:.08em">lit = today's entries</span></div>
+      <div class="steptape" id="steptape"></div>
+    </div>
+  </main>
+
+  <!-- ================= DOCK (PERFORM only) ================================== -->
+  <nav id="dock" class="chrome">
+    <div class="dock-in" id="dockIn">
+      <div class="dock-cap"><span class="silk">MIX</span></div>
+    </div>
+  </nav>
+
+  <!-- ================= FOOTER ================= -->
+  <footer id="foot" class="chrome">
+    <div class="l">
+      <span class="acc" id="modeLabel">PERFORM</span><span>·</span><span>frame <b id="frameName" style="letter-spacing:.1em">BLACKOUT</b></span><span>·</span>
+      <span>era 4</span><span>·</span><span class="ok">books clean ✓</span><span>reconciled 3/3</span>
+    </div>
+    <div class="r">
+      <kbd>⌘K</kbd><span>commands</span>
+      <kbd>S</kbd><span>studio⇄perform</span>
+      <kbd>F</kbd><span>frame</span>
+      <kbd>D</kbd><span>density</span>
+      <kbd>P</kbd><span>pop-out</span>
+      <kbd>M</kbd><span>mute-focus</span>
+    </div>
+  </footer>
+</div>
+
+<!-- ============ ⌘K — cream-bezel COMMAND module ============ -->
+<div id="palOv">
+  <div class="palette" role="dialog" aria-label="command palette">
+    <div class="pal-top">
+      <span class="stripes"><i></i><i></i><i></i></span>
+      <span class="pal-title">COMMAND</span>
+      <span class="pal-esc">ESC</span>
+    </div>
+    <div class="pal-lcd">
+      <div class="pal-in">
+        <span class="pr">›</span>
+        <input id="palIn" type="text" placeholder="mute · flatten · lock · boost · frame · goto …" autocomplete="off" spellcheck="false">
+        <span class="pal-count"><span id="palN">9</span> commands</span>
+      </div>
+      <div class="pal-rows" id="palRows">
+        <div class="pal-grp">DESK</div>
+        <div class="pal-row kill" data-l="kill flatten all positions desk">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">KILL</span> — flatten all <span class="sub">freeze entries</span></span>
+          <span class="armtag">ARMED · HOLD ⏎</span></div>
+        <div class="pal-row" data-l="goto studio perform mode composer" id="cmdMode">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">GOTO</span> <span id="cmdModeLabel">STUDIO · §02 composer</span></span><kbd>S</kbd></div>
+        <div class="pal-row" data-l="frame blackout cream chrome skin" id="cmdFrame">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">FRAME</span> — BLACKOUT ⇄ CREAM <span class="sub">perform only</span></span><kbd>F</kbd></div>
+        <div class="pal-row" data-l="density compact comfortable" id="cmdDens">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">DENSITY</span> — compact ⇄ comfortable</span><kbd>D</kbd></div>
+        <div class="pal-grp">CHANNELS</div>
+        <div class="pal-row sel" data-l="mute momo-shape channel" style="--pm:#ffb224">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">MUTE</span> momo-shape <span class="sub">soft off · A13 ratchet stays armed</span></span><kbd>M</kbd></div>
+        <div class="pal-row" data-l="lock pb-ride take stop fires" style="--pm:#2fd573">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">LOCK</span> pb-ride <span class="sub">fires −30% +22% EOD</span></span></div>
+        <div class="pal-row" data-l="boost v3-iwm risk" style="--pm:#7c83ff">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">BOOST</span> v3-iwm 2× <span class="sub">risk ×2 · clears tonight</span></span></div>
+        <div class="pal-grp">VIEWS</div>
+        <div class="pal-row" data-l="pop out chart view">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">VIEW</span> pop out chart</span><kbd>P</kbd></div>
+        <div class="pal-row" data-l="sentinel brief view scan">
+          <span class="selmark">▶</span><span class="pdot"></span>
+          <span><span class="verb">VIEW</span> sentinel brief <span class="sub">06:00 PT</span></span></div>
+      </div>
+      <div class="pal-foot">
+        <span><b>↑↓</b> navigate</span><span><b>⏎</b> run</span><span><b>esc</b> close</span>
+        <span class="r">writes gate on auth · anon read-only</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====================== 7-SEG LED (LedDisplay.tsx geometry) ====================== */
+const SEG={a:"9,4 31,4 27,8 13,8",b:"32,5 32,33 28,29 28,9",c:"32,39 32,67 28,63 28,43",
+  d:"13,64 27,64 31,68 9,68",e:"8,39 8,67 12,63 12,43",f:"8,5 8,33 12,29 12,9",
+  g:"9,36 13,33 27,33 31,36 27,39 13,39"};
+const DIG={"0":"abcdef","1":"bc","2":"abged","3":"abgcd","4":"fgbc","5":"afgcd",
+  "6":"afgedc","7":"abc","8":"abcdefg","9":"abcfgd","-":"g"," ":""};
+function sevenSeg(ch,dot,color,hpx){
+  const on=DIG[ch]??""; const w=hpx*40/72;
+  let s=`<svg class="seven-seg" width="${w}" height="${hpx}" viewBox="0 0 40 72">`;
+  for(const k in SEG){
+    const lit=on.includes(k);
+    s+=`<polygon points="${SEG[k]}" fill="${color}" opacity="${lit?1:0.06}"${lit?` style="filter:drop-shadow(0 0 2.5px ${color})"`:""}/>`;
+  }
+  s+=`<circle cx="36" cy="66" r="3" fill="${color}" opacity="${dot?1:0.06}"${dot?` style="filter:drop-shadow(0 0 2.5px ${color})"`:""}/></svg>`;
+  return s;
+}
+function led(el,value,color,hpx,prefix){
+  const cells=[];
+  for(const ch of value){ if(ch==="."&&cells.length)cells[cells.length-1].dot=true; else cells.push({ch,dot:false}); }
+  let html=prefix?`<span class="led-unit" style="color:${color}">${prefix}</span>`:"";
+  html+=cells.map(c=>sevenSeg(c.ch,c.dot,color,hpx)).join("");
+  el.innerHTML=html;
+}
+function renderLeds(){
+  const h=Math.round(Math.max(28,Math.min(40,innerWidth*0.0215)));
+  led(document.getElementById("ledSpot"),"751.64","#ff3b2f",h);
+  led(document.getElementById("ledPnl"),"1243","#2fd573",h,"+$");
+}
+renderLeds();
+function ring(el,pct,color){
+  const r=8,c=2*Math.PI*r,off=c*(1-Math.min(pct,100)/100);
+  document.getElementById(el).innerHTML=
+    `<svg class="ringg" viewBox="0 0 22 22"><circle cx="11" cy="11" r="${r}" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="2.5"/>`+
+    `<circle cx="11" cy="11" r="${r}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" `+
+    `stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 11 11)" style="filter:drop-shadow(0 0 2px ${color})"/></svg>`;
+}
+ring("ring1",62,"#ffb224"); ring("ring2",9,"#2fd573"); ring("ring3",28,"#45c4d6");
+
+/* ====================== PERFORM dock strips ====================== */
+const CH=[
+ {slug:"pb-ride",        pm:"#2fd573",pnl:"+$1.1k",cls:"pos", pk:"22",win:"70",state:"on"},
+ {slug:"pb-ride-2",      pm:"#a3e635",pnl:"+$430", cls:"pos", pk:"18",win:"66",state:"on"},
+ {slug:"pb-ride-itm",    pm:"#2dd4bf",pnl:"−$60",  cls:"neg", pk:"11",win:"58",state:"on"},
+ {slug:"momo-shape",     pm:"#ffb224",pnl:"+$840", cls:"pos", pk:"62",win:"46",state:"hot",a13:true},
+ {slug:"momo-shape-2",   pm:"#ffe14d",pnl:"+$120", cls:"pos", pk:"31",win:"44",state:"on"},
+ {slug:"breakout",       pm:"#3b9eff",pnl:"+$95",  cls:"pos", pk:"14",win:"52",state:"on"},
+ {slug:"breakout-alt-v3",pm:"#45c4d6",pnl:"$0",    cls:"flat",pk:"—",win:"—", state:"stby",tag:"GATED",tagc:"gated",
+   tip:"gap-gated · stood down — no ≥0.25% SPY gap today"},
+ {slug:"v3-iwm",         pm:"#7c83ff",pnl:"+$714", cls:"pos", pk:"37",win:"61",state:"on"},
+ {slug:"orb-qqq-trail",  pm:"#b06bff",pnl:"−$85",  cls:"neg", pk:"9", win:"49",state:"on"},
+ {slug:"qqq-thrust-trail",pm:"#ff5fa8",pnl:"—",    cls:"flat",pk:"—",win:"—", state:"off",tag:"MUTED",tagc:"muted",mute:true,
+   tip:"MUTED — soft off"},
+ {slug:"fomc-follow",    pm:"#ff8a3d",pnl:"—",     cls:"flat",pk:"—",win:"—", state:"dark",tag:"DARK",tagc:"darkch",
+   tip:"DARK — arm per event only"},
+];
+document.getElementById("dockIn").insertAdjacentHTML("beforeend",CH.map(c=>{
+  const dot=c.state==="on"?"on":c.state==="hot"?"on hot":c.state==="stby"?"stby":"";
+  const dim=c.state==="off"?" off":c.state==="dark"?" dark":"";
+  const left=c.tag?`<span class="s-tag ${c.tagc}">${c.tag}</span>`
+            :(c.pk==="—")?`<span class="s-pw">pk—·win—</span>`
+            :`<span class="s-pw">pk<b>${c.pk}</b>·win<b>${c.win}</b></span>`;
+  return `<div class="strip${dim}" style="--pm:${c.pm}" title="${c.tip??c.slug+" — click to expand"}">
+    <div class="s-r1"><span class="s-dot ${dot}"></span><span class="s-slug">${c.slug}</span>${c.a13?`<span class="s-a13">⚡A13</span>`:""}</div>
+    <div class="s-pnl ${c.cls} num">${c.pnl}</div>
+    <div class="s-r3">${left}<button class="s-mute${c.mute?" lit":""}" title="mute ${c.slug}">M</button></div>
+  </div>`;
+}).join(""));
+
+/* ====================== STUDIO composer strips ======================
+   TE flat-cap knob (Knob.tsx geometry: 270° sweep, −135°→+135°, disc+tick)
+   + an LED value arc in the channel accent. */
+function knobSVG(frac,cap,tick,accent){
+  const start=-135,sweep=270,ang=start+Math.max(.02,frac)*sweep;
+  const pt=(a,r)=>[50+r*Math.sin(a*Math.PI/180),50-r*Math.cos(a*Math.PI/180)];
+  const arc=(a0,a1,r)=>{const[x0,y0]=pt(a0,r),[x1,y1]=pt(a1,r);
+    return `M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${(a1-a0)>180?1:0} 1 ${x1.toFixed(1)},${y1.toFixed(1)}`};
+  return `<svg viewBox="0 0 100 100" class="kcap">
+    <path d="${arc(start,start+sweep,45)}" stroke="rgba(0,0,0,.13)" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+    <path d="${arc(start,ang,45)}" stroke="${accent}" stroke-width="4.5" fill="none" stroke-linecap="round" style="filter:drop-shadow(0 0 3px ${accent})"/>
+    <circle cx="50" cy="50" r="35" fill="${cap}" stroke="rgba(0,0,0,.22)" stroke-width="2"/>
+    <g transform="rotate(${ang.toFixed(1)} 50 50)"><rect x="47" y="18" width="6" height="21" rx="3" fill="${tick}"/></g>
+  </svg>`;
+}
+const STUDIO_CH=[
+ {slug:"pb-ride",   tk:"SPY",pm:"#2fd573",mode:"ride",stop:50,take:0, r:"",    knob:1875,kf:.38,risk:750, rf:.38,pnl:"+$1.1k",pc:"pos",mh:62},
+ {slug:"momo-shape",tk:"SPY",pm:"#ffb224",mode:"ride",stop:50,take:0, r:"",    knob:3000,kf:.6, risk:1200,rf:.6, pnl:"+$840",pc:"pos",mh:48,status:"⚡A13"},
+ {slug:"breakout",  tk:"SPY",pm:"#3b9eff",mode:"ride",stop:50,take:0, r:"",    knob:1500,kf:.3, risk:600, rf:.3, pnl:"+$95", pc:"pos",mh:12},
+ {slug:"breakout-alt-v3",tk:"SPY",pm:"#45c4d6",mode:"lock",stop:30,take:22,r:"0.73R",knob:1500,kf:.3,risk:600,rf:.3,pnl:"$0",pc:"flat",mh:0,status:"gap-gated"},
+ {slug:"v3-iwm",    tk:"IWM",pm:"#7c83ff",mode:"lock",stop:30,take:22,r:"0.73R",knob:1875,kf:.38,risk:750,rf:.38,pnl:"+$714",pc:"pos",mh:44},
+ {slug:"qqq-thrust-trail",tk:"QQQ",pm:"#ff5fa8",mode:"ride",stop:50,take:0,r:"",knob:625,kf:.13,risk:250,rf:.13,pnl:"—",pc:"flat",mh:0,muted:true},
+];
+document.getElementById("composer").insertAdjacentHTML("afterbegin",STUDIO_CH.map(c=>{
+  const ride=c.mode==="ride";
+  /* shape bar: stop extent left of entry (50%), take right; ride = open green fade */
+  const stopW=(c.stop/100)*46;           /* % width left of entry */
+  const takeW=ride?46:(c.take/100)*46*2; /* lock: scale take vs stop visually */
+  const fires=`<span class="chf chf-stop">−${c.stop}%</span>`+
+    (ride?`<span class="chf chf-ride">ride</span>`:`<span class="chf chf-take">+${c.take}%</span>`)+
+    `<span class="chf chf-flat">EOD</span>`;
+  return `<div class="cstrip${c.muted?" mutedch":""}" style="--pm:${c.pm}">
+    <div class="cs-head"><span class="cs-dot${c.muted?"":" on"}"></span><span class="cs-name">${c.slug}</span><span class="cs-ticker">${c.tk}</span></div>
+    <span class="cs-status${c.status?"":" ghost"}">${c.status??"·"}</span>
+    <div class="cs-fires" title="what actually fires — the binding exits"><span class="cs-flbl">fires</span>${fires}</div>
+    <div class="cs-mode">
+      <button class="chm chm-lock${ride?"":" on"}">LOCK</button><button class="chm chm-ride${ride?" on":""}">RIDE</button>
+    </div>
+    <div class="cs-shape" title="stop · entry · take — to scale, drag to edit">
+      <div class="shp-track">
+        <div class="shp-stop" style="right:50%;width:${stopW}%"></div>
+        <div class="shp-take${ride?" ride":""}" style="left:50%;width:${takeW}%"></div>
+      </div>
+      <span class="shp-entry"></span>
+      <span class="shp-h stop" style="left:${50-stopW}%"></span>
+      ${ride?"":`<span class="shp-h take" style="left:${50+takeW}%"></span>`}
+      ${c.r?`<span class="shp-rr">${c.r}</span>`:(ride?`<span class="shp-rr">ride →</span>`:"")}
+    </div>
+    <div class="cs-dials">
+      <div class="dial" title="STOP/day — daily loss floor">
+        ${knobSVG(c.kf,"var(--knob-dark)","#e9e5d6",c.pm)}
+        <div class="dial-cap"><span class="dial-lbl">stop/day</span><span class="dial-val num">$${c.knob.toLocaleString()}</span></div>
+      </div>
+      <div class="fader" title="RISK — real $ per trade">
+        <div class="fader-track">
+          <div class="fader-fill" style="height:${c.rf*100}%"></div>
+          <div class="fader-cap" style="bottom:${c.rf*100}%"></div>
+        </div>
+        <div class="dial-cap"><span class="dial-lbl">risk</span><span class="dial-val num">$${c.risk.toLocaleString()}</span></div>
+      </div>
+    </div>
+    <div class="cs-meter">
+      <div class="cs-meter-track"><div class="cs-meter-fill ${c.pc==="neg"?"neg":"pos"}" style="height:${c.mh}%"></div></div>
+      <span class="cs-pnl ${c.pc} num">${c.pnl}</span>
+    </div>
+    <div class="cs-pads">
+      <button class="cpad${c.muted?" lit-m":""}">MUTE</button>
+      <button class="cpad">BOOST</button>
+    </div>
+  </div>`;
+}).join(""));
+/* 2×8 step tape — a few steps lit in today's entry colors */
+const LIT={3:"#45c4d6",5:"#2fd573",11:"#ffb224"};
+document.getElementById("steptape").innerHTML=Array.from({length:16},(_,i)=>
+  `<div class="step${LIT[i]?" lit":""}"${LIT[i]?` style="--st:${LIT[i]}"`:""}><span class="n">${i+1}</span></div>`).join("");
+
+/* ====================== chart (identical to mock D) ====================== */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const N=99;
+const W=[[0,754.05],[5,754.28],[14,753.35],[26,752.25],[38,752.72],[48,752.05],
+         [57,752.62],[63,752.98],[68,752.55],[78,751.92],[88,751.42],[94,751.72],[98,751.64]];
+function base(t){for(let i=1;i<W.length;i++){if(t<=W[i][0]){const[a,p0]=W[i-1],[b,p1]=W[i];
+  return p0+(p1-p0)*(t-a)/(b-a);}}return W[W.length-1][1];}
+const rnd=mulberry32(909);
+const candles=[]; let prev=754.05;
+for(let i=0;i<N;i++){
+  let c=base(i)+(rnd()-0.5)*0.2;
+  if(i===N-1)c=751.64;
+  const o=prev, hi=Math.max(o,c)+rnd()*0.13, lo=Math.min(o,c)-rnd()*0.13;
+  const v=42+(i<9?(9-i)*20:0)+Math.abs(c-o)*480+(i>60&&i<67?34:0)+rnd()*26;
+  candles.push({o,c,h:hi,l:lo,v}); prev=c;
+}
+const tp=candles.map(k=>(k.h+k.l+k.c)/3);
+let cv=0,cpv=0; const vwap=candles.map((k,i)=>{cv+=k.v;cpv+=tp[i]*k.v;return cpv/cv;});
+function ema(n){const a=2/(n+1);let e=candles[0].c;return candles.map(k=>e=e+(k.c-e)*a);}
+const e9=ema(9),e21=ema(21);
+const sesH=Math.max(...candles.map(k=>k.h)),sesL=Math.min(...candles.map(k=>k.l));
+document.getElementById("ohlc").innerHTML=
+  `O <b>754.05</b> H <b>${sesH.toFixed(2)}</b> L <b>${sesL.toFixed(2)}</b> C <b style="color:#ff6a52">751.64</b>`;
+const SENT=[{p:753.0,c:"#e0a23f",lab:"γ 753.0",dash:""},
+            {p:748.2,c:"#8a949a",lab:"PD 748.2",dash:"4 4"},
+            {p:745.5,c:"#2fd573",lab:"gap-arm 745.5",dash:"2 3"}];
+const MARK=[{i:74,lab:"pb-ride +8 @2.12",c:"#2fd573"},{i:95,lab:"momo +12 @1.86",c:"#ffb224"}];
+function renderChart(){
+  const svg=document.getElementById("chart");
+  const wEl=svg.parentElement, w=wEl.clientWidth, h=wEl.clientHeight;
+  if(w<100||h<100)return;
+  const FT=Math.max(13,Math.min(17,w*0.0125));
+  const mR=FT*4.4,mL=8,mT=12,mB=FT+10;
+  const pw=w-mR-mL, ph=h-mT-mB;
+  const volH=Math.min(58,ph*0.13), yMin=747.85,yMax=754.8;
+  const Y=p=>mT+(yMax-p)/(yMax-yMin)*ph, X=i=>mL+(i+0.5)*pw/N;
+  const cw=Math.max(2.5,pw/N*0.62);
+  let s="";
+  for(let p=748;p<=754;p++){
+    s+=`<line x1="${mL}" y1="${Y(p)}" x2="${w-mR}" y2="${Y(p)}" stroke="rgba(255,255,255,.045)"/>`+
+       `<text x="${w-mR+8}" y="${Y(p)+FT*.34}" fill="#6b7278" font-size="${FT}" font-family="JetBrains Mono">${p}.00</text>`;
+  }
+  [[15,"10:00"],[45,"11:00"],[75,"12:00"]].forEach(([i,t])=>{
+    s+=`<line x1="${X(i)}" y1="${mT}" x2="${X(i)}" y2="${h-mB}" stroke="rgba(255,255,255,.04)"/>`+
+       `<text x="${X(i)}" y="${h-6}" fill="#6b7278" font-size="${FT}" font-family="JetBrains Mono" text-anchor="middle">${t}</text>`;
+  });
+  const vmax=Math.max(...candles.map(k=>k.v));
+  candles.forEach((k,i)=>{
+    const vh=k.v/vmax*volH, col=k.c>=k.o?"#2fb56b":"#e0563f";
+    s+=`<rect x="${X(i)-cw/2}" y="${h-mB-vh}" width="${cw}" height="${vh}" fill="${col}" opacity=".26"/>`;
+  });
+  SENT.forEach(L=>{
+    const bw=L.lab.length*FT*.62+14, bh=FT+7;
+    if(L.p>yMin){
+      s+=`<line x1="${mL}" y1="${Y(L.p)}" x2="${w-mR}" y2="${Y(L.p)}" stroke="${L.c}" stroke-width="1" opacity=".75"${L.dash?` stroke-dasharray="${L.dash}"`:""} style="filter:drop-shadow(0 0 2px ${L.c})"/>`+
+         `<rect x="${w-mR-bw-6}" y="${Y(L.p)-bh/2}" width="${bw}" height="${bh}" rx="3" fill="#0b0d0f" stroke="${L.c}" stroke-opacity=".55"/>`+
+         `<text x="${w-mR-bw/2-6}" y="${Y(L.p)+FT*.34}" fill="${L.c}" font-size="${FT-1}" font-family="JetBrains Mono" text-anchor="middle">${L.lab}</text>`;
+    }else{
+      const lab=L.lab+" ▾ below", bw2=lab.length*FT*.62+14;
+      s+=`<rect x="${w-mR-bw2-6}" y="${h-mB-bh-3}" width="${bw2}" height="${bh}" rx="3" fill="#0b0d0f" stroke="${L.c}" stroke-opacity=".55"/>`+
+         `<text x="${w-mR-bw2/2-6}" y="${h-mB-bh/2+FT*.34-3}" fill="${L.c}" font-size="${FT-1}" font-family="JetBrains Mono" text-anchor="middle">${lab}</text>`;
+    }
+  });
+  candles.forEach((k,i)=>{
+    const up=k.c>=k.o, col=up?"#2fb56b":"#e0563f", x=X(i);
+    const t=Y(Math.max(k.o,k.c)), b=Y(Math.min(k.o,k.c));
+    s+=`<line x1="${x}" y1="${Y(k.h)}" x2="${x}" y2="${Y(k.l)}" stroke="${col}" stroke-width="1"/>`+
+       `<rect x="${x-cw/2}" y="${t}" width="${cw}" height="${Math.max(1.2,b-t)}" fill="${up?col:'#0b0d0f'}" stroke="${col}" stroke-width="1"/>`;
+  });
+  const path=(arr,from)=>arr.map((v,i)=>i<from?null:`${i===from?"M":"L"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).filter(Boolean).join("");
+  s+=`<path d="${path(e21,4)}" fill="none" stroke="#7c83ff" stroke-width="1.1" opacity=".85"/>`;
+  s+=`<path d="${path(e9,4)}" fill="none" stroke="#5aa0e6" stroke-width="1.1" opacity=".9"/>`;
+  s+=`<path d="${path(vwap,1)}" fill="none" stroke="#e0a23f" stroke-width="1.5" opacity=".95"/>`;
+  const yl=Y(751.64), lb=6.2*FT*.62+16;
+  s+=`<line x1="${mL}" y1="${yl}" x2="${w-mR}" y2="${yl}" stroke="#ff3b2f" stroke-width="1" stroke-dasharray="1 3" opacity=".4"/>`+
+     `<rect x="${w-mR+2}" y="${yl-(FT+8)/2}" width="${lb}" height="${FT+8}" rx="3" fill="#2a0c08" stroke="#ff3b2f" stroke-opacity=".7"/>`+
+     `<text x="${w-mR+2+lb/2}" y="${yl+FT*.36}" fill="#ff6a52" font-size="${FT}" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">751.64</text>`;
+  MARK.forEach(m=>{
+    const x=X(m.i), y=Y(candles[m.i].l)+8;
+    s+=`<path d="M${x},${y} l-6,10 l12,0 z" fill="${m.c}" style="filter:drop-shadow(0 0 3px ${m.c})"/>`+
+       `<text x="${x}" y="${y+11+FT}" fill="${m.c}" font-size="${FT-1}" font-family="JetBrains Mono" text-anchor="middle" opacity=".92">${m.lab}</text>`;
+  });
+  svg.setAttribute("viewBox",`0 0 ${w} ${h}`);
+  svg.innerHTML=s;
+}
+renderChart();
+window.addEventListener("resize",()=>{renderChart();renderLeds();});
+
+/* ====================== FRAME switch (PERFORM only) ====================== */
+const fsw=document.getElementById("framesw");
+function setSkin(s){
+  document.documentElement.dataset.skin=s;
+  const cream=s==="cream";
+  fsw.setAttribute("aria-checked",cream);
+  document.getElementById("fswB").classList.toggle("lit",!cream);
+  document.getElementById("fswC").classList.toggle("lit",cream);
+  updateFoot();
+}
+function flipSkin(){
+  if(document.documentElement.dataset.mode==="studio")return; /* frame pref is a PERFORM control */
+  setSkin(document.documentElement.dataset.skin==="cream"?"blackout":"cream");
+}
+fsw.addEventListener("click",flipSkin);
+
+/* ====================== MODE switch — the deliverable ====================== */
+const btnStudio=document.getElementById("btnStudio"),btnPerform=document.getElementById("btnPerform");
+function updateFoot(){
+  const mode=document.documentElement.dataset.mode, cream=document.documentElement.dataset.skin==="cream";
+  document.getElementById("modeLabel").textContent=mode==="studio"?"STUDIO":"PERFORM";
+  document.getElementById("frameName").textContent=
+    mode==="studio"?"CREAM · pinned":(cream?"CREAM":"BLACKOUT");
+  document.getElementById("cmdModeLabel").textContent=
+    mode==="studio"?"PERFORM · live ops":"STUDIO · §02 composer";
+}
+function setMode(m){
+  if(document.documentElement.dataset.mode===m)return;
+  document.documentElement.dataset.mode=m;
+  btnStudio.classList.toggle("on",m==="studio");
+  btnPerform.classList.toggle("on",m==="perform");
+  updateFoot();
+  /* patch-switch strike — quick, physical */
+  const app=document.getElementById("app");
+  app.classList.remove("strike"); void app.offsetWidth; app.classList.add("strike");
+  if(m==="perform"){renderChart();} /* the chart re-measures after display:none */
+}
+btnStudio.addEventListener("click",()=>setMode("studio"));
+btnPerform.addEventListener("click",()=>setMode("perform"));
+
+/* ====================== ⌘K palette · density · keys ====================== */
+const ov=document.getElementById("palOv"), inp=document.getElementById("palIn"), palN=document.getElementById("palN");
+function palOpen(o){ov.classList.toggle("open",o); if(o){inp.value="";filter("");setTimeout(()=>inp.focus(),0);}}
+document.getElementById("btnK").addEventListener("click",()=>palOpen(true));
+ov.addEventListener("click",e=>{if(e.target===ov)palOpen(false)});
+function rows(){return [...ov.querySelectorAll(".pal-row")].filter(r=>r.style.display!=="none")}
+function filter(q){
+  ov.querySelectorAll(".pal-row").forEach(r=>{r.style.display=r.dataset.l.includes(q.toLowerCase())?"":"none";r.classList.remove("sel")});
+  ov.querySelectorAll(".pal-grp").forEach(g=>{let n=g.nextElementSibling,vis=false;
+    while(n&&n.classList.contains("pal-row")){if(n.style.display!=="none")vis=true;n=n.nextElementSibling}
+    g.style.display=vis?"":"none"});
+  const r=rows(); palN.textContent=r.length;
+  if(r.length)(q?r[0]:r[4]??r[0]).classList.add("sel");
+}
+inp.addEventListener("input",()=>filter(inp.value));
+/* palette rows that actually run */
+document.getElementById("cmdMode").addEventListener("click",()=>{
+  setMode(document.documentElement.dataset.mode==="studio"?"perform":"studio");palOpen(false);});
+document.getElementById("cmdFrame").addEventListener("click",()=>{flipSkin();palOpen(false);});
+document.getElementById("cmdDens").addEventListener("click",()=>{toggleDensity();palOpen(false);});
+const btnD=document.getElementById("btnD");
+function toggleDensity(){document.body.classList.toggle("compact");btnD.classList.toggle("lit",document.body.classList.contains("compact"));renderChart();}
+btnD.addEventListener("click",toggleDensity);
+const btnP=document.getElementById("btnP");
+function flashPop(){btnP.classList.add("flash");setTimeout(()=>btnP.classList.remove("flash"),450);}
+btnP.addEventListener("click",flashPop);
+document.addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();palOpen(!ov.classList.contains("open"));return;}
+  if(ov.classList.contains("open")){
+    if(e.key==="Escape")palOpen(false);
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();
+      const r=rows(),i=r.findIndex(x=>x.classList.contains("sel"));
+      r.forEach(x=>x.classList.remove("sel"));
+      r[(i+(e.key==="ArrowDown"?1:r.length-1))%r.length].classList.add("sel");}
+    return;
+  }
+  if(e.metaKey||e.ctrlKey)return;
+  const k=e.key.toLowerCase();
+  if(k==="s")setMode(document.documentElement.dataset.mode==="studio"?"perform":"studio");
+  if(k==="f")flipSkin();
+  if(k==="d")toggleDensity();
+  if(k==="p")flashPop();
+});
+</script>
+</body>
+</html>

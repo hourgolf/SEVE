@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEVE · MOBILE — STUDIO ⇄ PERFORM gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   SEVE MOBILE — re-imagined in the PERFORM language (mocks D + E are the law)
+   GALLERY: four 390×844 phone frames (PERFORM·BLACKOUT / PERFORM·CREAM /
+   STUDIO·BLACKOUT / STUDIO·CREAM), each genuinely laid out at 390px and
+   independently scrollable, plus a wider fifth panel with the mobile
+   COMMAND module open.
+
+   NAV MODEL: the old Live/Desk/Mix tabs collapse into the desktop's two
+   modes. PERFORM = watch (chart+SENT · book · sentinel · tape · mute dock).
+   STUDIO = tune (transport · channel rack with an inline inspector · tape).
+   The center pad of the 3-pad bar is the COMMAND module — the phone's ⌘K —
+   rendered as the same cream hardware key in BOTH skins, opening a cream
+   bottom sheet. FRAME (BLACKOUT⇄CREAM) is GLOBAL per the operator's ruling:
+   both modes wear both skins; the interior is dark glass always.
+   ========================================================================== */
+:root{
+  color-scheme:dark;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  /* invariant interior (recessed screens — console.css doctrine) */
+  --lcd:#14181b; --lcd-2:#0f1214; --lcd-edge:#0a0a0b; --lcd-ink:#e9eef0;
+  --scr:#0b0d0f;
+  --plate:#2b2b2e; --plate-2:#1d1d20; --plate-ink:#d7d5cb;
+  --dk-mut:#8a949a; --dk-dim:#5f6a70;
+  --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.13);
+  --green:#2fd573; --green-soft:#6cc06d; --red:#f0563f; --red-soft:#e07a58;
+  --amber:#e0a23f; --blue:#5aa0e6; --indigo:#7c83ff;
+  --accent:#ef5a23;
+  --stripe-orange:#e0552f; --stripe-red:#c5362a; --stripe-cream:#d9d7cc;
+  --mute-pad:#d98e6e;
+  --led-red:#ff3b2f; --led-bg:#150705; --led-bg-g:#07110a; --led-bg-n:#0c0e10;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1200px 600px at 50% -12%, rgba(255,255,255,.035), transparent 60%),
+    #0a0b0c;
+  color:#c9c7be; font-family:var(--sans); font-size:14px;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  padding:34px 24px 60px;
+}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.pos{color:var(--green)} .neg{color:var(--red-soft)} .flat{color:var(--dk-mut)}
+
+/* ================= gallery chrome (neutral — stays out of the way) ======= */
+.g-head{max-width:1400px;margin:0 auto 8px;display:flex;align-items:center;gap:12px}
+.g-head .stripes{display:flex;gap:2px}
+.g-head .stripes i{width:4px;height:24px;border-radius:1px;border:1px solid rgba(0,0,0,.4)}
+.g-head .stripes i:nth-child(1){background:var(--stripe-orange)}
+.g-head .stripes i:nth-child(2){background:var(--stripe-red)}
+.g-head .stripes i:nth-child(3){background:var(--stripe-cream)}
+.g-head b{font-family:var(--mono);font-weight:800;font-size:19px;letter-spacing:3px;color:var(--stripe-red)}
+.g-head span{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#7d7b72}
+.g-navline{
+  max-width:1400px;margin:0 auto 34px;padding:10px 14px;border:1px solid rgba(255,255,255,.09);
+  border-radius:8px;background:rgba(255,255,255,.025);
+  font-family:var(--mono);font-size:11.5px;line-height:1.7;letter-spacing:.08em;
+  text-transform:uppercase;color:#9a978c;
+}
+.g-navline b{color:#e7e4db;font-weight:700}
+.g-navline i{font-style:normal;color:var(--accent)}
+.g-grid{
+  display:grid;grid-template-columns:repeat(2,max-content);gap:44px 36px;
+  justify-content:center;margin-bottom:56px;
+}
+@media (min-width:1860px){.g-grid{grid-template-columns:repeat(4,max-content)}}
+figure{display:flex;flex-direction:column;align-items:center;gap:14px}
+figcaption{
+  max-width:400px;text-align:center;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.14em;text-transform:uppercase;color:#84826f;line-height:1.75;
+}
+figcaption b{color:#d9d6c8;font-weight:700}
+figcaption .amb{color:var(--amber)}
+.g-wide{max-width:1400px;margin:0 auto;display:flex;flex-wrap:wrap;gap:40px;justify-content:center;align-items:flex-start}
+.g-wide-head{max-width:1400px;margin:0 auto 20px;display:flex;align-items:center;gap:12px}
+.g-wide-head .silkline{flex:1;height:1px;background:rgba(255,255,255,.1)}
+.g-wide-head span{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:#84826f}
+.g-note{
+  width:400px;border-radius:10px;overflow:hidden;
+  background:linear-gradient(180deg,var(--lcd),var(--lcd-2));border:1px solid var(--lcd-edge);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 3px 12px rgba(0,0,0,.35);
+}
+.g-note .nh{display:flex;align-items:center;gap:10px;padding:9px 14px;background:linear-gradient(180deg,var(--plate),var(--plate-2));border-bottom:1px solid #000}
+.g-note .nh span{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--plate-ink)}
+.g-note ul{list-style:none;padding:14px 16px 16px;display:flex;flex-direction:column;gap:13px}
+.g-note li{display:grid;grid-template-columns:auto 1fr;gap:10px;font-size:13.5px;line-height:1.55;color:#cfd5d8}
+.g-note li b{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--amber)}
+.g-note li em{font-style:normal;font-family:var(--mono);font-size:12.5px;color:var(--lcd-ink)}
+.g-note li .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 7px var(--accent);margin-top:6px}
+.g-foot{max-width:1400px;margin:44px auto 0;text-align:center;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#5c5a50}
+
+/* ================= device bezel ========================================== */
+.dev{
+  position:relative;border-radius:56px;padding:13px;
+  background:linear-gradient(160deg,#1b1d21,#0b0c0e);
+  border:1px solid #2a2d31;
+  box-shadow:0 30px 70px rgba(0,0,0,.6),0 2px 0 rgba(255,255,255,.05) inset,0 8px 20px rgba(0,0,0,.5);
+}
+.dev::before,.dev::after{content:"";position:absolute;left:-2.5px;width:3px;border-radius:2px;background:#26282c}
+.dev::before{top:150px;height:56px}
+.dev::after{top:220px;height:56px}
+.dev .pwr{position:absolute;right:-2.5px;top:180px;width:3px;height:78px;border-radius:2px;background:#26282c}
+
+/* ================= phone frame =========================================== */
+/* chrome tokens per skin — everything the FRAME toggle flips */
+.phone{
+  width:390px;height:844px;border-radius:44px;overflow:hidden;position:relative;
+  display:flex;flex-direction:column;
+  background:#060708;                                     /* frame seams */
+  --chrome-grad:linear-gradient(180deg,#17191c,#121417);
+  --chrome-edge:#1e2125;
+  --chrome-ink:#e7e4db;
+  --chrome-soft:#8a8c8e;
+  --silk:rgba(226,214,184,.55);
+  --btn-grad:linear-gradient(180deg,#303237,#26282c);
+  --btn-ink:#cfcdc6; --btn-edge:#000;
+  --btn-shadow:0 1px 0 rgba(255,255,255,.09) inset,0 2px 4px rgba(0,0,0,.45);
+  --sep:rgba(255,255,255,.09);
+  --neg-chrome:#e07a58;
+  --run-ink:var(--green); --run-edge:rgba(47,213,115,.55); --run-bg:rgba(47,213,115,.1);
+  font-size:13px;color:var(--chrome-ink);
+}
+.phone[data-skin="cream"]{
+  background:#c9c3b2;
+  --chrome-grad:linear-gradient(180deg,#ded9ca,#d2cdbd);
+  --chrome-edge:#b9b3a2;
+  --chrome-ink:#2a2a28;
+  --chrome-soft:#55534c;
+  --silk:#55534c;
+  --btn-grad:linear-gradient(180deg,#ece8d9,#dcd7c6);
+  --btn-ink:#2a2a28; --btn-edge:#a9a396;
+  --btn-shadow:0 2px 0 #a9a396,0 1px 0 #fff inset;
+  --sep:rgba(60,52,30,.25);
+  --neg-chrome:#9e2d1c;
+  --run-ink:#0e6132; --run-edge:rgba(14,97,50,.55); --run-bg:rgba(14,97,50,.10);
+}
+/* a review pane must never force-darken the cream faceplate */
+.phone[data-skin="cream"] .pchrome,
+.cmd-sheet .cmd-cream{color-scheme:only light}
+
+.pchrome{background:var(--chrome-grad)}
+.silk{
+  font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--silk);white-space:nowrap;
+}
+
+/* ---- status bar (phone OS chrome — follows the skin) ---- */
+.p-sb{
+  flex:0 0 30px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;position:relative;
+}
+.p-sb .t{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--chrome-ink)}
+.p-sb .isl{position:absolute;left:50%;top:5px;transform:translateX(-50%);width:96px;height:22px;border-radius:12px;background:#000;border:1px solid rgba(255,255,255,.06)}
+.p-sb .r{display:flex;align-items:center;gap:6px;color:var(--chrome-ink)}
+.p-sb .sig{display:flex;align-items:flex-end;gap:1.5px}
+.p-sb .sig i{width:3px;border-radius:1px;background:currentColor}
+.p-sb .batt{width:21px;height:10px;border:1px solid currentColor;border-radius:2.5px;position:relative;opacity:.9}
+.p-sb .batt::after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:70%;background:currentColor;border-radius:1px}
+.p-sb .batt::before{content:"";position:absolute;right:-3px;top:2.5px;width:1.5px;height:4px;background:currentColor;border-radius:1px}
+
+/* ---- vitals header (chrome — flips) ---- */
+.p-head{flex:0 0 auto;display:flex;flex-direction:column;gap:7px;padding:4px 12px 9px;border-bottom:2px solid var(--chrome-edge)}
+.ph-r1{display:flex;align-items:center;gap:9px}
+.ph-r1 .stripes{display:flex;gap:2px}
+.ph-r1 .stripes i{width:3.5px;height:20px;border-radius:1px;border:1px solid rgba(0,0,0,.3)}
+.ph-r1 .stripes i:nth-child(1){background:var(--stripe-orange)}
+.ph-r1 .stripes i:nth-child(2){background:var(--stripe-red)}
+.ph-r1 .stripes i:nth-child(3){background:var(--stripe-cream)}
+.ph-r1 b{font-family:var(--mono);font-weight:800;font-size:16px;letter-spacing:2.5px;color:var(--stripe-red)}
+.ph-mode{font-family:var(--mono);font-size:9.5px;font-weight:800;letter-spacing:.16em;color:var(--accent);
+  border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:3px;padding:2px 6px;
+  background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.ph-sp{flex:1}
+.pill{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;
+  padding:5px 8px;border-radius:6px;border:1px solid var(--sep);color:var(--chrome-soft);
+  display:flex;align-items:center;gap:6px}
+.pill.run{color:var(--run-ink);border-color:var(--run-edge);background:var(--run-bg)}
+.pill .pdot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,213,115,.5)}70%{box-shadow:0 0 0 6px rgba(47,213,115,0)}100%{box-shadow:0 0 0 0 rgba(47,213,115,0)}}
+.killbtn{
+  font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.14em;color:#fff;
+  padding:7px 11px;border-radius:6px;border:2px solid #7a1a13;cursor:pointer;
+  background:radial-gradient(circle at 50% 30%,#ff5946,#b5281d);
+  box-shadow:0 0 11px rgba(255,59,47,.4),0 2px 4px rgba(0,0,0,.45);
+}
+.ph-r2{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.tb-mod{display:flex;flex-direction:column;align-items:center;gap:3px}
+.ledwin{position:relative;display:flex;align-items:center;gap:1px;border:1px solid #000;border-radius:7px;padding:5px 8px;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.12)}
+.ledwin.red{background:var(--led-bg)} .ledwin.grn{background:var(--led-bg-g)} .ledwin.neu{background:var(--led-bg-n)}
+.ledwin::after{content:"";position:absolute;inset:0;border-radius:7px;pointer-events:none;
+  background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,0) 42%)}
+.seven-seg{display:block}
+.led-unit{font-family:var(--mono);font-weight:700;font-size:12px;line-height:1;text-shadow:0 0 6px currentColor;margin-right:2px}
+.lcdtxt{font-family:var(--mono);font-weight:700;font-size:16px;letter-spacing:.5px;line-height:22px;
+  color:var(--lcd-ink);text-shadow:0 0 7px rgba(233,238,240,.3)}
+.lcdtxt.amb{color:#ffb224;text-shadow:0 0 7px rgba(255,178,36,.4)}
+.cap-neg{font-family:var(--mono);font-weight:700;color:var(--neg-chrome)}
+
+/* the 909 accent band — 2px trim, both skins */
+.p-band{flex:0 0 2px;display:flex}
+.p-band i{flex:1}
+.p-band i:nth-child(1){background:var(--stripe-orange)}
+.p-band i:nth-child(2){background:var(--stripe-red)}
+.p-band i:nth-child(3){background:color-mix(in srgb,var(--stripe-cream) 60%,#555)}
+.p-band i:nth-child(4){background:#4a4c50}
+
+/* ---- scrolling screen (interior — dark glass, NEVER flips) ---- */
+.p-screen{
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:7px;padding:7px;
+  scrollbar-width:none;
+}
+.p-screen::-webkit-scrollbar{display:none}
+.screen{
+  flex:0 0 auto;position:relative;display:flex;flex-direction:column;color:var(--lcd-ink);
+  background:linear-gradient(180deg,var(--lcd),var(--lcd-2));
+  border:1px solid var(--lcd-edge);border-radius:9px;overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 3px 12px rgba(0,0,0,.35);
+}
+.phead{
+  display:flex;align-items:center;gap:9px;padding:7px 11px;
+  background:linear-gradient(180deg,var(--plate),var(--plate-2));border-bottom:1px solid #000;
+  box-shadow:0 1px 0 rgba(255,255,255,.05) inset;
+}
+.phead .t{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--plate-ink)}
+.phead .idx{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--accent)}
+.phead .grow{flex:1}
+.phead .x{font-family:var(--mono);font-size:13px;color:var(--dk-mut)}
+.phead .x.up{color:var(--green-soft)}
+.livedot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 6px var(--green);margin-right:5px;vertical-align:1px;animation:pulse 2s infinite}
+.tfrow{display:flex;gap:3px}
+.tf{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dk-dim);padding:4px 7px;border-radius:4px}
+.tf.on{color:#140b00;background:var(--amber);box-shadow:0 0 7px rgba(224,162,63,.4)}
+.chart-body{background:var(--scr)}
+.chart-body svg{display:block}
+/* silkscreen seam label — sits on the frame, flips with the skin */
+.seam{display:flex;align-items:center;gap:9px;padding:3px 5px 0}
+.seam .ln{flex:1;height:1px;background:var(--sep)}
+
+/* positions — two cells per line, mock-D grid */
+.pos-row{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:4px 9px;align-items:baseline;padding:9px 11px;border-bottom:1px solid var(--line)}
+.pos-row:last-child{border-bottom:none}
+.p-dot{width:8px;height:8px;border-radius:50%;background:var(--pm);box-shadow:0 0 7px color-mix(in srgb,var(--pm) 75%,transparent);align-self:center}
+.p-slug{font-family:var(--mono);font-size:14.5px;font-weight:700;color:var(--lcd-ink);white-space:nowrap}
+.p-ctr{grid-column:2;font-family:var(--mono);font-size:13px;color:var(--dk-mut);white-space:nowrap}
+.p-pnl{font-family:var(--mono);font-size:16px;font-weight:800;text-align:right}
+.p-meta{grid-column:3;font-family:var(--mono);font-size:13px;color:var(--dk-dim);text-align:right;white-space:nowrap}
+.p-pk{grid-column:3;display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.p-pk .lbl{font-family:var(--mono);font-size:13px;color:var(--dk-mut);white-space:nowrap}
+.p-pk .lbl b{color:var(--pm);font-weight:800}
+.ringg{width:20px;height:20px;display:block}
+.p-tags{grid-column:2;display:flex;gap:6px;flex-wrap:wrap;align-self:center}
+.tag{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 6px;border-radius:4px;border:1px solid var(--line-2);color:var(--dk-mut)}
+.tag.amber{color:#ffb224;border-color:rgba(255,178,36,.5);background:rgba(255,178,36,.08)}
+.tag.warn{color:var(--red-soft);border-color:rgba(224,122,88,.45);background:rgba(224,122,88,.08)}
+.tag.ok{color:var(--green-soft);border-color:rgba(108,192,109,.45);background:rgba(108,192,109,.08)}
+
+/* sentinel */
+.sent-body{padding:8px 11px 10px;display:flex;flex-direction:column;gap:8px}
+.sent-top{display:flex;align-items:center;gap:10px}
+.verdict{flex:0 0 auto;font-family:var(--mono);font-size:13px;font-weight:800;letter-spacing:.12em;
+  color:#140b00;padding:6px 10px;border-radius:6px;border:1px solid #000;
+  background:linear-gradient(180deg,#f0b652,var(--amber));
+  box-shadow:0 0 13px rgba(224,162,63,.35),0 1px 0 rgba(255,255,255,.3) inset}
+.sent-msg{font-size:13.5px;line-height:1.45;color:#dfe4e6}
+.sent-msg b{font-family:var(--mono);font-weight:700;color:var(--lcd-ink)}
+.steps{display:flex;gap:3px;align-items:center}
+.steps i{flex:1;height:11px;border-radius:2px;background:#1c1f22;border:1px solid rgba(0,0,0,.6);box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
+.steps i.lit{background:linear-gradient(180deg,#f0b652,#b97f22);box-shadow:0 0 5px rgba(224,162,63,.5)}
+.steps .steps-n{flex:0 0 auto;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--dk-mut);margin-left:6px}
+.ladder{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.lvl{font-family:var(--mono);font-size:12.5px;color:var(--dk-mut);border:1px solid var(--line);border-radius:4px;
+  padding:2px 6px;display:flex;gap:5px;align-items:center;white-space:nowrap}
+.lvl i{width:10px;height:2px;border-radius:1px}
+.lvl b{color:var(--lcd-ink);font-weight:600}
+
+/* tape */
+.trow{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:8px;align-items:baseline;padding:8px 11px;border-bottom:1px solid rgba(255,255,255,.045)}
+.t-time{font-family:var(--mono);font-size:13px;color:var(--dk-dim)}
+.t-kind{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.1em;text-align:center;border-radius:4px;padding:1px 5px;border:1px solid;align-self:center}
+.t-kind.exec{color:var(--green-soft);border-color:rgba(108,192,109,.4);background:rgba(108,192,109,.07)}
+.t-kind.warn{color:#ffb224;border-color:rgba(255,178,36,.45);background:rgba(255,178,36,.08)}
+.t-kind.info{color:var(--dk-mut);border-color:var(--line-2);background:rgba(255,255,255,.03)}
+.t-msg{font-family:var(--mono);font-size:13px;color:#dfe4e6;line-height:1.5;letter-spacing:-.1px}
+.t-msg .ch{font-weight:700}
+.t-msg .dim{color:var(--dk-mut)}
+.t-ghost{padding:9px 11px;text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dk-dim)}
+
+/* ---- PERFORM dock — chrome tray flips, chicklet strips stay dark glass ---- */
+.p-dock{flex:0 0 auto;display:flex;gap:6px;overflow-x:auto;padding:8px 10px;border-top:2px solid var(--chrome-edge);
+  scrollbar-width:none;align-items:stretch}
+.p-dock::-webkit-scrollbar{display:none}
+.dock-cap{flex:0 0 auto;display:flex;align-items:center}
+.dock-cap .silk{writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.2em}
+.mstrip{
+  flex:0 0 auto;width:170px;display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:0 6px;
+  padding:6px 6px 6px 8px;border-radius:6px;border:1px solid #000;
+  background:linear-gradient(180deg,var(--lcd),var(--lcd-2));
+  border-top:2px solid color-mix(in srgb,var(--pm) 60%,#111);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),inset 0 -8px 14px rgba(0,0,0,.28);
+  position:relative;color:var(--lcd-ink);
+}
+.mstrip.off{opacity:.62} .mstrip.dark{opacity:.4}
+.ms-main{display:flex;flex-direction:column;justify-content:space-between;gap:2px;min-width:0}
+.s-r1{display:flex;align-items:center;gap:4px;min-width:0;overflow:visible}
+.s-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:#26282b;border:1px solid rgba(0,0,0,.7)}
+.s-dot.on{background:var(--pm);border-color:transparent;box-shadow:0 0 6px color-mix(in srgb,var(--pm) 80%,transparent)}
+.s-dot.hot{animation:pulse 2s infinite}
+.s-dot.stby{background:color-mix(in srgb,var(--amber) 55%,#222);box-shadow:0 0 5px rgba(224,162,63,.35)}
+.s-slug{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:-.45px;color:#dfe4e6;white-space:nowrap} /* never ellipsize */
+.s-a13{position:absolute;top:-2px;right:54px;font-family:var(--mono);font-size:9px;font-weight:800;color:#140b00;
+  background:#ffb224;border-radius:0 0 3px 3px;padding:1px 4px 0;box-shadow:0 0 7px rgba(255,178,36,.5)}
+.s-pnl{font-family:var(--mono);font-size:15px;font-weight:800;white-space:nowrap;line-height:1.1}
+.s-pw{font-family:var(--mono);font-size:12.5px;color:var(--dk-mut);white-space:nowrap;letter-spacing:-.3px}
+.s-pw b{color:color-mix(in srgb,var(--pm) 80%,#fff);font-weight:800}
+.s-tag{font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.08em}
+.s-tag.gated{color:#ffb224} .s-tag.muted{color:var(--mute-pad)} .s-tag.darkch{color:#5c646a}
+.ms-mute{align-self:stretch;min-height:44px;border-radius:5px;border:1px solid #000;
+  background:linear-gradient(180deg,#3a3b3e,#232427);color:#8a949a;font-family:var(--mono);
+  font-size:11px;font-weight:800;display:grid;place-items:center;cursor:pointer}
+.ms-mute.lit{background:linear-gradient(180deg,var(--mute-pad),#a5573c);color:#1c0d07;box-shadow:0 0 8px rgba(217,142,110,.55)}
+
+/* ---- pad bar (chrome — flips) — STUDIO · COMMAND · PERFORM ---- */
+.p-padbar{flex:0 0 auto;display:flex;flex-direction:column;border-top:2px solid var(--chrome-edge)}
+.pb-pads{display:flex;gap:10px;padding:9px 12px 4px}
+.modepad{
+  flex:1;min-height:56px;border-radius:10px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  background:var(--btn-grad);border:1px solid var(--btn-edge);box-shadow:var(--btn-shadow);
+  font-family:var(--mono);font-size:11.5px;font-weight:800;letter-spacing:.16em;color:var(--chrome-soft);
+}
+.modepad small{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.14em;color:var(--silk)}
+.modepad.on{background:linear-gradient(180deg,#ff7038,var(--accent));color:#140700;border-color:#00000066;
+  box-shadow:0 0 12px rgba(239,90,35,.5),0 1px 0 rgba(255,255,255,.3) inset}
+.modepad.on small{color:#3d1400}
+/* the COMMAND pad — cream hardware in BOTH skins (it IS the ⌘K module) */
+.cmdpad{
+  flex:0 0 118px;min-height:56px;border-radius:10px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  background:linear-gradient(180deg,#e2ddcd,#cfc9b8);border:1px solid #a9a396;
+  box-shadow:0 2px 0 #a9a396,0 1px 0 #fff inset,0 3px 8px rgba(0,0,0,.35);
+  color-scheme:only light;
+}
+.cmdpad .stripes{display:flex;gap:3px}
+.cmdpad .stripes i{width:14px;height:2.5px;border-radius:1px}
+.cmdpad .stripes i:nth-child(1){background:var(--stripe-orange)}
+.cmdpad .stripes i:nth-child(2){background:var(--stripe-red)}
+.cmdpad .stripes i:nth-child(3){background:#8f8a7a}
+.cmdpad span{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.3em;color:#55534c}
+.homebar{width:124px;height:5px;border-radius:3px;background:var(--chrome-soft);opacity:.55;margin:5px auto 8px}
+
+/* ================= STUDIO interior (dark glass — PERFORM's sibling) ====== */
+.xbtn{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;color:#f0efe9;
+  min-height:44px;padding:0 16px;border-radius:7px;border:1px solid #000;cursor:pointer;
+  background:linear-gradient(180deg,#4a4b4f,#2a2b2e);
+  box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 3px 5px rgba(0,0,0,.4)}
+.xbtn.start{background:linear-gradient(180deg,#36e07d,#1f9e54);color:#07120b;box-shadow:0 0 11px rgba(47,213,115,.35),0 1px 0 rgba(255,255,255,.3) inset}
+.m-worker{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:#9a9a92;line-height:1.6}
+.m-worker b{color:#2fd573;font-weight:700}
+.transport-body{display:flex;align-items:center;gap:10px;padding:10px 11px}
+.transport-body .vsep{width:1px;align-self:stretch;background:var(--line-2)}
+
+/* rack rows — collapsed channel rows + one expanded inspector */
+.rack{border-top:2px solid var(--pm)}
+.rrow{display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 11px;cursor:pointer}
+.rrow .rr-slug{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--lcd-ink);white-space:nowrap} /* never ellipsize */
+.rrow .rr-fires{font-family:var(--mono);font-size:12px;color:var(--dk-mut);white-space:nowrap;letter-spacing:-.2px}
+.rrow .rr-fires b.s{color:var(--red-soft)} .rrow .rr-fires b.k{color:var(--green-soft)}
+.rrow .rr-sp{flex:1}
+.rrow .rr-pnl{font-family:var(--mono);font-size:15px;font-weight:800;white-space:nowrap}
+.rrow .rr-chev{font-size:12px;color:var(--dk-dim)}
+.rrow .rr-tag{font-family:var(--mono);font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.rrow .rr-tag.gated{color:#ffb224}.rrow .rr-tag.muted{color:var(--mute-pad)}
+.rack.mutedch{opacity:.6}
+/* inspector (expanded card) */
+.insp{display:flex;flex-direction:column;gap:11px;padding:4px 11px 13px;border-top:1px solid var(--line)}
+.fireslbl{display:flex;align-items:center;gap:8px}
+.fireslbl .ln{flex:1;height:1px;background:var(--line)}
+.fireslbl .fl{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--dk-dim)}
+.fpills{display:flex;gap:8px}
+.fpill{flex:1;min-height:46px;border-radius:8px;border:1px solid;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;background:rgba(255,255,255,.02)}
+.fpill b{font-family:var(--mono);font-size:15px;font-weight:800}
+.fpill span{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.72}
+.fpill.stop{color:var(--red-soft);border-color:rgba(224,122,88,.45);background:rgba(224,122,88,.06)}
+.fpill.take{color:var(--green-soft);border-color:rgba(108,192,109,.45);background:rgba(108,192,109,.06)}
+.fpill.ride b{font-style:italic}
+.fpill.ride{color:var(--dk-mut);border-color:var(--line-2)}
+.fpill.eod{color:var(--dk-mut);border-color:var(--line-2)}
+/* LOCK / RIDE — writes the matched pair */
+.lr{display:flex}
+.lrbtn{flex:1;min-height:44px;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.12em;cursor:pointer;
+  background:rgba(255,255,255,.03);color:var(--dk-mut);border:1px solid var(--line-2)}
+.lrbtn.lock{border-radius:8px 0 0 8px}
+.lrbtn.ride{border-radius:0 8px 8px 0;margin-left:-1px}
+.lrbtn.on{color:#fff;border-color:transparent;position:relative;z-index:1}
+.lrbtn.lock.on{background:#1c7a44;box-shadow:0 0 10px rgba(28,122,68,.4)}
+.lrbtn.ride.on{background:#5c5f66;box-shadow:0 0 8px rgba(255,255,255,.08)}
+/* trade-shape bar — stop (red, LEFT) → entry → take (green, RIGHT), to scale */
+.shape{position:relative;height:26px;margin:0 4px}
+.shp-track{position:absolute;left:0;right:0;top:50%;height:10px;transform:translateY(-50%);
+  border-radius:5px;background:rgba(255,255,255,.07);overflow:hidden;border:1px solid rgba(0,0,0,.5)}
+.shp-stop{position:absolute;top:0;bottom:0;background:#d05646}
+.shp-take{position:absolute;top:0;bottom:0;background:#2f9e5c}
+.shp-take.ride{background:linear-gradient(90deg,#2f9e5c,rgba(47,158,92,.04))}
+.shp-entry{position:absolute;top:-3px;bottom:-3px;left:50%;width:2px;transform:translateX(-50%);background:#e9eef0;opacity:.65}
+.shp-h{position:absolute;top:50%;width:6px;height:22px;transform:translate(-50%,-50%);border-radius:3px;box-shadow:0 0 0 1.5px rgba(255,255,255,.7)}
+.shp-h.stop{background:#be3326}
+.shp-rr{position:absolute;right:0;top:-11px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dk-mut)}
+/* dials — STOP/day knob + horizontal RISK fader */
+.dials{display:flex;align-items:center;gap:14px}
+.dial{display:flex;flex-direction:column;align-items:center;gap:3px}
+.kcap{width:62px;height:62px;display:block}
+.dial-cap{display:flex;gap:6px;align-items:baseline}
+.dial-lbl{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dk-dim)}
+.dial-val{font-family:var(--mono);font-size:13.5px;font-weight:700;color:var(--lcd-ink)}
+.hfwrap{flex:1;display:flex;flex-direction:column;gap:6px}
+.hfader{position:relative;height:32px}
+.hf-track{position:absolute;left:0;right:0;top:50%;height:8px;transform:translateY(-50%);
+  background:rgba(0,0,0,.5);border:1px solid #000;border-radius:4px;box-shadow:inset 0 1px 2px #000}
+.hf-fill{position:absolute;left:1px;top:50%;height:6px;transform:translateY(-50%);background:var(--accent);opacity:.5;border-radius:3px}
+.hf-cap{position:absolute;top:50%;width:20px;height:32px;transform:translate(-50%,-50%);
+  background:linear-gradient(180deg,#ece8d9,#c9c4b2);border:1px solid #000;border-radius:4px;
+  box-shadow:0 1px 2px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.75)}
+.hf-cap::after{content:"";position:absolute;left:4px;right:4px;top:15px;height:1px;background:#a9a396}
+/* MUTE / BOOST pads */
+.padrow{display:flex;gap:9px}
+.bigpad{flex:1;min-height:46px;border-radius:8px;border:1px solid #000;cursor:pointer;
+  background:linear-gradient(180deg,#3a3b3e,#232427);color:#9aa3a9;
+  font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.14em}
+.bigpad.lit-m{background:linear-gradient(180deg,var(--mute-pad),#a5573c);color:#1c0d07;box-shadow:0 0 10px rgba(217,142,110,.55)}
+.rack-ghost{padding:10px;text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dk-dim)}
+/* session tape 2×8 */
+.steptape{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;padding:10px 11px 12px}
+.step{position:relative;height:40px;border-radius:5px;border:1px solid #000;cursor:pointer;
+  background:linear-gradient(180deg,#26282c,#1a1c1f);box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 2px 3px rgba(0,0,0,.4)}
+.step:nth-child(4n+1){background:linear-gradient(180deg,#8c4a33,#5d2c1c)}
+.step.lit{background:linear-gradient(180deg,var(--st),color-mix(in srgb,var(--st) 55%,#000));
+  box-shadow:0 0 12px color-mix(in srgb,var(--st) 70%,transparent),0 1px 0 rgba(255,255,255,.3) inset}
+.step .n{position:absolute;top:3px;left:5px;font-family:var(--mono);font-size:8.5px;color:rgba(255,255,255,.4)}
+.step.lit .n{color:rgba(0,0,0,.5)}
+
+/* ================= COMMAND sheet — the cream hardware module ============= */
+.cmd-ov{position:absolute;inset:0;z-index:40;background:rgba(4,5,7,.58);display:flex;flex-direction:column;justify-content:flex-end}
+.cmd-sheet{
+  border-radius:18px 18px 0 0;padding:8px 9px 22px;
+  background:linear-gradient(180deg,#d8d3c4,#ccc6b5);border:1px solid #c5bfae;border-bottom:none;
+  box-shadow:0 -18px 60px rgba(0,0,0,.7),0 2px 0 rgba(255,255,255,.14) inset;
+}
+.cmd-grab{width:44px;height:5px;border-radius:3px;background:#a9a396;margin:2px auto 9px}
+.cmd-top{display:flex;align-items:center;gap:9px;padding:0 4px 8px}
+.cmd-top .stripes{display:flex;gap:3px}
+.cmd-top .stripes i{width:15px;height:2.5px;border-radius:1px}
+.cmd-top .stripes i:nth-child(1){background:var(--stripe-orange)}
+.cmd-top .stripes i:nth-child(2){background:var(--stripe-red)}
+.cmd-top .stripes i:nth-child(3){background:#8f8a7a}
+.cmd-title{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.32em;color:#55534c}
+.cmd-x{margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;color:#55534c;
+  border:1px solid rgba(60,52,30,.28);border-radius:4px;padding:4px 10px;box-shadow:0 1px 0 rgba(255,255,255,.35) inset}
+.cmd-lcd{background:linear-gradient(180deg,var(--lcd),var(--lcd-2));border:1px solid var(--lcd-edge);border-radius:10px;
+  box-shadow:0 3px 14px rgba(0,0,0,.55) inset;overflow:hidden;color:var(--lcd-ink)}
+.cmd-in{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:1px solid rgba(255,255,255,.06)}
+.cmd-in .pr{font-family:var(--mono);font-weight:800;font-size:14px;color:#ffb224;text-shadow:0 0 8px rgba(255,178,36,.5)}
+.cmd-in .ph2{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--dk-dim)}
+.cmd-in .cnt{font-family:var(--mono);font-size:10.5px;color:var(--dk-dim);letter-spacing:.08em}
+.cmd-grp{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.26em;color:var(--dk-dim);padding:10px 12px 3px;text-transform:uppercase}
+.cmd-row{display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 12px;font-family:var(--mono);font-size:13.5px;color:#c3cad1;border-radius:6px;cursor:pointer}
+.cmd-row .pdot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--pm,transparent);border:1px solid color-mix(in srgb,var(--pm,#5f6a70) 70%,transparent)}
+.cmd-row .verb{font-weight:800;color:var(--lcd-ink)}
+.cmd-row .sub{color:var(--dk-dim);font-size:11px}
+.cmd-row.sel{background:rgba(255,178,36,.07);box-shadow:2.5px 0 0 #ffb224 inset;color:var(--lcd-ink)}
+.cmd-row.kill,.cmd-row.kill .verb{color:var(--led-red)}
+.cmd-row.kill .pdot{background:var(--led-red);border-color:transparent;box-shadow:0 0 7px rgba(255,59,47,.7)}
+.cmd-row .armtag{margin-left:auto;font-size:9.5px;font-weight:800;letter-spacing:.1em;color:var(--led-red);
+  border:1px solid rgba(255,59,47,.45);border-radius:3px;padding:3px 7px;background:rgba(255,59,47,.06);white-space:nowrap}
+.cmd-row .gotag{margin-left:auto;font-size:10.5px;color:var(--dk-dim)}
+.cmd-row .minisw{margin-left:auto;width:40px;height:16px;border-radius:99px;border:1px solid #000;background:#26221c;position:relative;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.75)}
+.cmd-row .minisw i{position:absolute;top:1.5px;left:1.5px;width:17px;height:11px;border-radius:99px;
+  background:linear-gradient(180deg,#ece8d9,#c9c4b2);border:1px solid rgba(0,0,0,.4)}
+.cmd-foot{display:flex;gap:14px;padding:9px 13px 10px;border-top:1px solid rgba(255,255,255,.06);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;color:var(--dk-dim)}
+.cmd-foot b{color:var(--dk-mut);font-weight:600}
+.cmd-foot .r{margin-left:auto}
+</style>
+</head>
+<body>
+
+<header class="g-head">
+  <span class="stripes"><i></i><i></i><i></i></span>
+  <b>SEVE</b>
+  <span>MOBILE · STUDIO ⇄ PERFORM — four states + the COMMAND module</span>
+</header>
+
+<div class="g-navline">
+  <b>NAV MODEL</b> — LIVE·DESK·MIX collapse into the desktop's two modes on the outer pads:
+  <b>PERFORM</b> (watch: chart+SENT · book · sentinel · tape · mute-dock) ⇄ <b>STUDIO</b> (tune: transport · rack → inline inspector · session tape)
+  · the center <i>CREAM PAD = COMMAND</i>, the phone's ⌘K, a bottom sheet in thumb reach
+  · <b>FRAME</b> BLACKOUT⇄CREAM is <i>GLOBAL</i> (set in COMMAND) — chrome flips, interior stays dark glass.
+</div>
+
+<div class="g-grid">
+  <figure>
+    <div class="dev"><span class="pwr"></span><div class="phone" data-mode="perform" data-skin="blackout"></div></div>
+    <figcaption><b>PERFORM · BLACKOUT</b> — the watch surface: chart + SENT ladder · book · sentinel · tape, with the channel dock's mutes at thumb height</figcaption>
+  </figure>
+  <figure>
+    <div class="dev"><span class="pwr"></span><div class="phone" data-mode="perform" data-skin="cream"></div></div>
+    <figcaption><b>PERFORM · CREAM</b> — same screens, molded cream faceplate; only the chrome (header · dock tray · pads) flips</figcaption>
+  </figure>
+  <figure>
+    <div class="dev"><span class="pwr"></span><div class="phone" data-mode="studio" data-skin="blackout"></div></div>
+    <figcaption><b>STUDIO · BLACKOUT</b> — the tune surface: transport · channel rack (tap a row → inline inspector) · session tape 2×8</figcaption>
+  </figure>
+  <figure>
+    <div class="dev"><span class="pwr"></span><div class="phone" data-mode="studio" data-skin="cream"></div></div>
+    <figcaption><b>STUDIO · CREAM</b> — <span class="amb">frame is global</span>: studio wears both skins too; the rack stays dark glass, the vocabulary unchanged</figcaption>
+  </figure>
+</div>
+
+<div class="g-wide-head"><span class="silkline"></span><span>COMMAND MODULE — OPEN</span><span class="silkline"></span></div>
+<section class="g-wide">
+  <figure>
+    <div class="dev"><span class="pwr"></span><div class="phone" data-mode="perform" data-skin="blackout" data-cmd="open"></div></div>
+    <figcaption><b>COMMAND · over PERFORM</b> — the ⌘K module as a cream bottom sheet; search on top, big rows first, hold-to-run for KILL</figcaption>
+  </figure>
+  <div class="g-note">
+    <div class="nh"><span>MOBILE COMMAND — DESIGN NOTES</span></div>
+    <ul>
+      <li><span class="dot"></span><span><b>SAME HARDWARE.</b> The desktop's cream-bezel palette, verbatim — stripes · COMMAND silkscreen · dark LCD — re-hung as a bottom sheet so every row lands in the thumb arc.</span></li>
+      <li><span class="dot"></span><span><b>TAP-FIRST, TYPE-SECOND.</b> No ⌘K key on glass: the center pad opens it, the grouped rows (DESK / CHANNELS / VIEWS) run on a tap, and the <em>›</em> prompt is still there when you want to filter.</span></li>
+      <li><span class="dot"></span><span><b>HOLD-TO-RUN.</b> Destructive verbs (<em>KILL — flatten all</em>) arm on a 2-second hold, mirroring the desktop's ARMED·HOLD ⏎ — no accidental flatten from a pocket tap.</span></li>
+      <li><span class="dot"></span><span><b>FRAME LIVES HERE.</b> The global BLACKOUT⇄CREAM toggle is a COMMAND row (with the little cream-thumb switch) — one less piece of permanent chrome on a 390px face.</span></li>
+      <li><span class="dot"></span><span><b>THUMB MAP.</b> Edits sit low (mode pads, dock mutes, sheet rows); <em>KILL stays top-right</em> — a deliberate reach for the one button that flattens the desk.</span></li>
+    </ul>
+  </div>
+</section>
+
+<div class="g-foot">mock — static snapshot 2026-07-10 · SPY 751.64 · day +$1,243 · worker stream-2026-07-10a · same data as desktop mocks D/E</div>
+
+<script>
+/* ======================================================================
+   7-SEG LED — exact geometry from components/console/hw/LedDisplay.tsx
+   ====================================================================== */
+const SEG={a:"9,4 31,4 27,8 13,8",b:"32,5 32,33 28,29 28,9",c:"32,39 32,67 28,63 28,43",
+  d:"13,64 27,64 31,68 9,68",e:"8,39 8,67 12,63 12,43",f:"8,5 8,33 12,29 12,9",
+  g:"9,36 13,33 27,33 31,36 27,39 13,39"};
+const DIG={"0":"abcdef","1":"bc","2":"abged","3":"abgcd","4":"fgbc","5":"afgcd",
+  "6":"afgedc","7":"abc","8":"abcdefg","9":"abcfgd","-":"g"," ":""};
+function sevenSeg(ch,dot,color,hpx){
+  const on=DIG[ch]??""; const w=hpx*40/72;
+  let s=`<svg class="seven-seg" width="${w}" height="${hpx}" viewBox="0 0 40 72">`;
+  for(const k in SEG){
+    const lit=on.includes(k);
+    s+=`<polygon points="${SEG[k]}" fill="${color}" opacity="${lit?1:0.06}"${lit?` style="filter:drop-shadow(0 0 2.5px ${color})"`:""}/>`;
+  }
+  s+=`<circle cx="36" cy="66" r="3" fill="${color}" opacity="${dot?1:0.06}"${dot?` style="filter:drop-shadow(0 0 2.5px ${color})"`:""}/></svg>`;
+  return s;
+}
+function led(value,color,hpx,prefix){
+  const cells=[];
+  for(const ch of value){ if(ch==="."&&cells.length)cells[cells.length-1].dot=true; else cells.push({ch,dot:false}); }
+  let html=prefix?`<span class="led-unit" style="color:${color}">${prefix}</span>`:"";
+  html+=cells.map(c=>sevenSeg(c.ch,c.dot,color,hpx)).join("");
+  return html;
+}
+const LED_SPOT=led("751.64","#ff3b2f",22);
+const LED_PNL =led("1243","#2fd573",22,"+$");
+
+/* pk glow ring */
+function ring(pct,color){
+  const r=8,c=2*Math.PI*r,off=c*(1-Math.min(pct,100)/100);
+  return `<svg class="ringg" viewBox="0 0 22 22"><circle cx="11" cy="11" r="${r}" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="2.5"/>`+
+    `<circle cx="11" cy="11" r="${r}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" `+
+    `stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 11 11)" style="filter:drop-shadow(0 0 2px ${color})"/></svg>`;
+}
+
+/* ======================================================================
+   CHART — same deterministic session as mock D (seed 909), windowed to
+   the latest 60 bars so candles stay legible at 390px.
+   ====================================================================== */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const N=99;
+const Wp=[[0,754.05],[5,754.28],[14,753.35],[26,752.25],[38,752.72],[48,752.05],
+         [57,752.62],[63,752.98],[68,752.55],[78,751.92],[88,751.42],[94,751.72],[98,751.64]];
+function base(t){for(let i=1;i<Wp.length;i++){if(t<=Wp[i][0]){const[a,p0]=Wp[i-1],[b,p1]=Wp[i];
+  return p0+(p1-p0)*(t-a)/(b-a);}}return Wp[Wp.length-1][1];}
+const rnd=mulberry32(909);
+const candles=[]; let prev=754.05;
+for(let i=0;i<N;i++){
+  let c=base(i)+(rnd()-0.5)*0.2;
+  if(i===N-1)c=751.64;
+  const o=prev, hi=Math.max(o,c)+rnd()*0.13, lo=Math.min(o,c)-rnd()*0.13;
+  const v=42+(i<9?(9-i)*20:0)+Math.abs(c-o)*480+(i>60&&i<67?34:0)+rnd()*26;
+  candles.push({o,c,h:hi,l:lo,v}); prev=c;
+}
+const tpArr=candles.map(k=>(k.h+k.l+k.c)/3);
+let cv=0,cpv=0; const vwap=candles.map((k,i)=>{cv+=k.v;cpv+=tpArr[i]*k.v;return cpv/cv;});
+function ema(n){const a=2/(n+1);let e=candles[0].c;return candles.map(k=>e=e+(k.c-e)*a);}
+const e9=ema(9),e21=ema(21);
+
+const SENT=[{p:753.0,c:"#e0a23f",lab:"γ 753.0",dash:""},
+            {p:748.2,c:"#8a949a",lab:"PD 748.2",dash:"4 4"},
+            {p:745.5,c:"#2fd573",lab:"gap-arm 745.5",dash:"2 3"}];
+const MARK=[{i:74,lab:"pb +8",c:"#2fd573"},{i:95,lab:"momo +12",c:"#ffb224"}];
+
+function chartSVG(){
+  const w=372,h=252,FT=13,W0=39;
+  const win=candles.slice(W0),n=win.length;
+  const mR=60,mL=8,mT=12,mB=FT+9;
+  const pw=w-mR-mL, ph=h-mT-mB, volH=34;
+  let yMin=Math.min(...win.map(k=>k.l))-0.22, yMax=Math.max(...win.map(k=>k.h))+0.22;
+  const Y=p=>mT+(yMax-p)/(yMax-yMin)*ph, X=i=>mL+(i-W0+0.5)*pw/n;
+  const cw=Math.max(2.6,pw/n*0.62);
+  let s="";
+  for(let p=Math.ceil(yMin*2)/2;p<=yMax;p+=0.5){
+    s+=`<line x1="${mL}" y1="${Y(p)}" x2="${w-mR}" y2="${Y(p)}" stroke="rgba(255,255,255,.045)"/>`+
+       `<text x="${w-mR+7}" y="${Y(p)+FT*.34}" fill="#6b7278" font-size="${FT}" font-family="JetBrains Mono">${p.toFixed(2)}</text>`;
+  }
+  [[45,"11:00"],[60,"11:30"],[75,"12:00"],[90,"12:30"]].forEach(([i,t])=>{
+    if(i<W0)return;
+    s+=`<line x1="${X(i)}" y1="${mT}" x2="${X(i)}" y2="${h-mB}" stroke="rgba(255,255,255,.04)"/>`+
+       `<text x="${X(i)}" y="${h-5}" fill="#6b7278" font-size="${FT}" font-family="JetBrains Mono" text-anchor="middle">${t}</text>`;
+  });
+  const vmax=Math.max(...win.map(k=>k.v));
+  win.forEach((k,j)=>{
+    const vh=k.v/vmax*volH, col=k.c>=k.o?"#2fb56b":"#e0563f";
+    s+=`<rect x="${X(j+W0)-cw/2}" y="${h-mB-vh}" width="${cw}" height="${vh}" fill="${col}" opacity=".26"/>`;
+  });
+  /* SENT ladder — in-range lines + honest below-pills for off-window levels */
+  let belowN=0;
+  SENT.forEach(L=>{
+    const bh=FT+7;
+    if(L.p>yMin&&L.p<yMax){
+      const bw=L.lab.length*FT*.62+12;
+      s+=`<line x1="${mL}" y1="${Y(L.p)}" x2="${w-mR}" y2="${Y(L.p)}" stroke="${L.c}" stroke-width="1" opacity=".75"${L.dash?` stroke-dasharray="${L.dash}"`:""} style="filter:drop-shadow(0 0 2px ${L.c})"/>`+
+         `<rect x="${w-mR-bw-5}" y="${Y(L.p)-bh/2}" width="${bw}" height="${bh}" rx="3" fill="#0b0d0f" stroke="${L.c}" stroke-opacity=".55"/>`+
+         `<text x="${w-mR-bw/2-5}" y="${Y(L.p)+FT*.34}" fill="${L.c}" font-size="${FT-1}" font-family="JetBrains Mono" text-anchor="middle">${L.lab}</text>`;
+    }else if(L.p<=yMin){
+      /* off-window levels stack bottom-LEFT (bottom-right belongs to the marks) */
+      const lab=L.lab+" ▾", bw2=lab.length*FT*.62+12, yb=h-mB-6-(bh+4)*belowN++;
+      s+=`<rect x="${mL+4}" y="${yb-bh}" width="${bw2}" height="${bh}" rx="3" fill="#0b0d0f" stroke="${L.c}" stroke-opacity=".55"/>`+
+         `<text x="${mL+4+bw2/2}" y="${yb-bh/2+FT*.34}" fill="${L.c}" font-size="${FT-1}" font-family="JetBrains Mono" text-anchor="middle">${lab}</text>`;
+    }
+  });
+  win.forEach((k,j)=>{
+    const up=k.c>=k.o, col=up?"#2fb56b":"#e0563f", x=X(j+W0);
+    const t=Y(Math.max(k.o,k.c)), b=Y(Math.min(k.o,k.c));
+    s+=`<line x1="${x}" y1="${Y(k.h)}" x2="${x}" y2="${Y(k.l)}" stroke="${col}" stroke-width="1"/>`+
+       `<rect x="${x-cw/2}" y="${t}" width="${cw}" height="${Math.max(1.2,b-t)}" fill="${up?col:'#0b0d0f'}" stroke="${col}" stroke-width="1"/>`;
+  });
+  const path=(arr)=>arr.map((v,i)=>i<W0?null:`${i===W0?"M":"L"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).filter(Boolean).join("");
+  s+=`<path d="${path(e21)}" fill="none" stroke="#7c83ff" stroke-width="1.1" opacity=".85"/>`;
+  s+=`<path d="${path(e9)}" fill="none" stroke="#5aa0e6" stroke-width="1.1" opacity=".9"/>`;
+  s+=`<path d="${path(vwap)}" fill="none" stroke="#e0a23f" stroke-width="1.5" opacity=".95"/>`;
+  const yl=Y(751.64), lb=6*FT*.62+14;
+  s+=`<line x1="${mL}" y1="${yl}" x2="${w-mR}" y2="${yl}" stroke="#ff3b2f" stroke-width="1" stroke-dasharray="1 3" opacity=".4"/>`+
+     `<rect x="${w-mR+2}" y="${yl-(FT+8)/2}" width="${lb}" height="${FT+8}" rx="3" fill="#2a0c08" stroke="#ff3b2f" stroke-opacity=".7"/>`+
+     `<text x="${w-mR+2+lb/2}" y="${yl+FT*.36}" fill="#ff6a52" font-size="${FT}" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">751.64</text>`;
+  MARK.forEach(m=>{
+    const x=X(m.i), y=Y(candles[m.i].l)+7;
+    s+=`<path d="M${x},${y} l-5.5,9 l11,0 z" fill="${m.c}" style="filter:drop-shadow(0 0 3px ${m.c})"/>`+
+       `<text x="${x}" y="${y+10+FT}" fill="${m.c}" font-size="${FT-1}" font-family="JetBrains Mono" text-anchor="middle" opacity=".92">${m.lab}</text>`;
+  });
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-label="SPY 2-minute candles with VWAP, EMA and SENT ladder">${s}</svg>`;
+}
+const CHART=chartSVG();
+
+/* TE flat-cap knob (Knob.tsx geometry: 270° sweep) */
+function knobSVG(frac,accent){
+  const start=-135,sweep=270,ang=start+Math.max(.02,frac)*sweep;
+  const pt=(a,r)=>[50+r*Math.sin(a*Math.PI/180),50-r*Math.cos(a*Math.PI/180)];
+  const arc=(a0,a1,r)=>{const[x0,y0]=pt(a0,r),[x1,y1]=pt(a1,r);
+    return `M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${(a1-a0)>180?1:0} 1 ${x1.toFixed(1)},${y1.toFixed(1)}`};
+  return `<svg viewBox="0 0 100 100" class="kcap">
+    <path d="${arc(start,start+sweep,45)}" stroke="rgba(255,255,255,.1)" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+    <path d="${arc(start,ang,45)}" stroke="${accent}" stroke-width="4.5" fill="none" stroke-linecap="round" style="filter:drop-shadow(0 0 3px ${accent})"/>
+    <circle cx="50" cy="50" r="35" fill="#3f4045" stroke="#000" stroke-width="2"/>
+    <g transform="rotate(${ang.toFixed(1)} 50 50)"><rect x="47" y="18" width="6" height="21" rx="3" fill="#e9e5d6"/></g>
+  </svg>`;
+}
+
+/* ======================================================================
+   SHARED DATA SNAPSHOT (identical to desktop mocks D/E)
+   ====================================================================== */
+const DOCK_CH=[
+ {slug:"pb-ride",        pm:"#2fd573",pnl:"+$1.1k",cls:"pos", pk:"22",win:"70",state:"on"},
+ {slug:"pb-ride-2",      pm:"#a3e635",pnl:"+$430", cls:"pos", pk:"18",win:"66",state:"on"},
+ {slug:"pb-ride-itm",    pm:"#2dd4bf",pnl:"−$60",  cls:"neg", pk:"11",win:"58",state:"on"},
+ {slug:"momo-shape",     pm:"#ffb224",pnl:"+$840", cls:"pos", pk:"62",win:"46",state:"hot",a13:true},
+ {slug:"momo-shape-2",   pm:"#ffe14d",pnl:"+$120", cls:"pos", pk:"31",win:"44",state:"on"},
+ {slug:"breakout",       pm:"#3b9eff",pnl:"+$95",  cls:"pos", pk:"14",win:"52",state:"on"},
+ {slug:"breakout-alt-v3",pm:"#45c4d6",pnl:"$0",    cls:"flat",pk:"—",win:"—", state:"stby",tag:"GATED",tagc:"gated"},
+ {slug:"v3-iwm",         pm:"#7c83ff",pnl:"+$714", cls:"pos", pk:"37",win:"61",state:"on"},
+ {slug:"orb-qqq-trail",  pm:"#b06bff",pnl:"−$85",  cls:"neg", pk:"9", win:"49",state:"on"},
+ {slug:"qqq-thrust-trail",pm:"#ff5fa8",pnl:"—",    cls:"flat",pk:"—",win:"—", state:"off",tag:"MUTED",tagc:"muted",mute:true},
+ {slug:"fomc-follow",    pm:"#ff8a3d",pnl:"—",     cls:"flat",pk:"—",win:"—", state:"dark",tag:"DARK",tagc:"darkch"},
+];
+const RACK=[
+ {slug:"pb-ride",   tk:"SPY",pm:"#2fd573",mode:"ride",stop:50,take:0, knob:1875,kf:.38,risk:750, rf:.38,pnl:"+$1.1k",pc:"pos"},
+ {slug:"momo-shape",tk:"SPY",pm:"#ffb224",mode:"ride",stop:50,take:0, knob:3000,kf:.6, risk:1200,rf:.6, pnl:"+$840",pc:"pos",a13:true,open:true},
+ {slug:"breakout",  tk:"SPY",pm:"#3b9eff",mode:"ride",stop:50,take:0, knob:1500,kf:.3, risk:600, rf:.3, pnl:"+$95", pc:"pos"},
+ {slug:"breakout-alt-v3",tk:"SPY",pm:"#45c4d6",mode:"lock",stop:30,take:22,knob:1500,kf:.3,risk:600,rf:.3,pnl:"$0",pc:"flat",tag:"GATED",tagc:"gated"},
+ {slug:"v3-iwm",    tk:"IWM",pm:"#7c83ff",mode:"lock",stop:30,take:22,knob:1875,kf:.38,risk:750,rf:.38,pnl:"+$714",pc:"pos"},
+ {slug:"qqq-thrust-trail",tk:"QQQ",pm:"#ff5fa8",mode:"ride",stop:50,take:0,knob:625,kf:.13,risk:250,rf:.13,pnl:"—",pc:"flat",tag:"MUTED",tagc:"muted",muted:true},
+];
+
+/* ======================================================================
+   PHONE BUILDERS
+   ====================================================================== */
+function statusbarHTML(){
+  return `<div class="p-sb pchrome">
+    <span class="t num">12:47</span>
+    <span class="isl"></span>
+    <span class="r">
+      <span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span>
+      <span class="batt"></span>
+    </span>
+  </div>`;
+}
+function headerHTML(mode){
+  return `<header class="p-head pchrome">
+    <div class="ph-r1">
+      <span class="stripes"><i></i><i></i><i></i></span><b>SEVE</b>
+      <span class="ph-mode">${mode==="perform"?"PERFORM":"STUDIO"}</span>
+      <span class="ph-sp"></span>
+      <span class="pill run"><span class="pdot"></span>RUN</span>
+      <span class="pill">PAPER</span>
+      <button class="killbtn" title="flatten all — halt entries">KILL</button>
+    </div>
+    <div class="ph-r2">
+      <div class="tb-mod">
+        <div class="ledwin red">${LED_SPOT}</div>
+        <span class="silk">SPY&nbsp;<span class="cap-neg num" style="font-size:11px">−0.38%</span></span>
+      </div>
+      <div class="tb-mod">
+        <div class="ledwin grn">${LED_PNL}</div>
+        <span class="silk">DAY P&amp;L</span>
+      </div>
+      <div class="tb-mod">
+        <div class="ledwin neu"><span class="lcdtxt amb num">$1.94M</span></div>
+        <span class="silk">NAV · 3 ACCTS</span>
+      </div>
+    </div>
+  </header>
+  <div class="p-band"><i></i><i></i><i></i><i></i></div>`;
+}
+function padbarHTML(mode){
+  return `<nav class="p-padbar pchrome">
+    <div class="pb-pads">
+      <button class="modepad${mode==="studio"?" on":""}">STUDIO<small>TUNE</small></button>
+      <button class="cmdpad"><span class="stripes"><i></i><i></i><i></i></span><span>COMMAND</span></button>
+      <button class="modepad${mode==="perform"?" on":""}">PERFORM<small>WATCH</small></button>
+    </div>
+    <div class="homebar"></div>
+  </nav>`;
+}
+function dockHTML(){
+  return `<div class="p-dock pchrome">
+    <div class="dock-cap"><span class="silk">MIX</span></div>`+
+    DOCK_CH.map(c=>{
+      const dot=c.state==="on"?"on":c.state==="hot"?"on hot":c.state==="stby"?"stby":"";
+      const dim=c.state==="off"?" off":c.state==="dark"?" dark":"";
+      const pw=c.tag?`<span class="s-tag ${c.tagc}">${c.tag}</span>`
+             :(c.pk==="—")?`<span class="s-pw">pk—·win—</span>`
+             :`<span class="s-pw">pk<b>${c.pk}</b>·win<b>${c.win}</b></span>`;
+      return `<div class="mstrip${dim}" style="--pm:${c.pm}">
+        <div class="ms-main">
+          <div class="s-r1"><span class="s-dot ${dot}"></span><span class="s-slug">${c.slug}</span></div>
+          <div class="s-pnl ${c.cls} num">${c.pnl}</div>
+          ${pw}
+        </div>
+        <button class="ms-mute${c.mute?" lit":""}" title="mute ${c.slug}">M</button>
+        ${c.a13?`<span class="s-a13">⚡A13</span>`:""}
+      </div>`;
+    }).join("")+`</div>`;
+}
+
+/* ---- PERFORM screen ---- */
+function performScreenHTML(){
+  return `<main class="p-screen">
+    <section class="screen">
+      <div class="phead">
+        <span class="idx">01</span><span class="t">SPY · LIVE</span>
+        <div class="tfrow"><span class="tf">1m</span><span class="tf on">2m</span><span class="tf">5m</span><span class="tf">15m</span></div>
+        <span class="grow"></span>
+        <span class="x num" style="color:#ff6a52;font-weight:700">C 751.64</span>
+      </div>
+      <div class="chart-body">${CHART}</div>
+    </section>
+
+    <section class="screen">
+      <div class="phead"><span class="t">POSITIONS · 3 OPEN</span><span class="grow"></span><span class="x up num">Σ +$1,030</span></div>
+      <div>
+        <div class="pos-row" style="--pm:#ffb224">
+          <span class="p-dot"></span>
+          <div class="p-slug">momo-shape</div><div class="p-pnl pos num">+$840</div>
+          <div class="p-ctr">SPY 752C ×12 · 0DTE</div><div class="p-meta">in @1.86 · 12:41</div>
+          <div class="p-tags"><span class="tag amber">⚡ A13 ratchet armed</span><span class="tag">RIDE</span></div>
+          <div class="p-pk">${ring(62,"#ffb224")}<span class="lbl">pk <b>+62%</b></span></div>
+        </div>
+        <div class="pos-row" style="--pm:#2fd573">
+          <span class="p-dot"></span>
+          <div class="p-slug">pb-ride</div><div class="p-pnl neg num">−$120</div>
+          <div class="p-ctr">SPY 750C ×8 · 1DTE</div><div class="p-meta">in @2.12 · 11:58</div>
+          <div class="p-tags"><span class="tag warn">giveback 41% of pk</span><span class="tag">RIDE</span></div>
+          <div class="p-pk">${ring(9,"#2fd573")}<span class="lbl">pk <b>+9%</b></span></div>
+        </div>
+        <div class="pos-row" style="--pm:#45c4d6">
+          <span class="p-dot"></span>
+          <div class="p-slug">breakout-alt-v3-qqq</div><div class="p-pnl pos num">+$310</div>
+          <div class="p-ctr">QQQ 566C ×6 · 0DTE</div><div class="p-meta">TP ×6 @2.41 · 12:31</div>
+          <div class="p-tags"><span class="tag ok">TP ✓</span><span class="tag">LOCK</span></div>
+          <div class="p-pk">${ring(28,"#45c4d6")}<span class="lbl">pk <b>+28%</b></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <div class="phead"><span class="t">SENTINEL</span><span class="grow"></span><span class="x">scan 06:00 PT <span style="color:var(--green-soft)">✓</span></span></div>
+      <div class="sent-body">
+        <div class="sent-top">
+          <span class="verdict">WATCH</span>
+          <span class="sent-msg"><b>vb-ribbon-cross IWM</b> nearing promote bar</span>
+        </div>
+        <div class="steps" title="promote bar — 12 of 15 sessions">
+          <i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i>
+          <i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i>
+          <i class="lit"></i><i class="lit"></i><i></i><i></i><i></i>
+          <span class="steps-n num">12/15</span>
+        </div>
+        <div class="ladder">
+          <span class="lvl"><i style="background:var(--amber)"></i>γ-wall <b class="num">753.0</b></span>
+          <span class="lvl"><i style="background:var(--dk-mut)"></i>PD·swing <b class="num">748.2</b></span>
+          <span class="lvl"><i style="background:var(--green)"></i>gap-arm <b class="num">745.5</b></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <div class="phead"><span class="t">TAPE</span><span class="grow"></span><span class="x"><span class="livedot"></span>LIVE</span></div>
+      <div>
+        <div class="trow"><span class="t-time">12:41</span><span class="t-kind exec">EXEC</span>
+          <span class="t-msg"><span class="ch" style="color:#ffb224">momo-shape</span> buy 12× SPY752C @1.86</span></div>
+        <div class="trow"><span class="t-time">12:38</span><span class="t-kind warn">WARN</span>
+          <span class="t-msg"><span class="ch" style="color:#2fd573">pb-ride</span> giveback <span style="color:#ffb224">41%</span> of peak</span></div>
+        <div class="trow"><span class="t-time">12:31</span><span class="t-kind exec">EXEC</span>
+          <span class="t-msg"><span class="ch" style="color:#45c4d6">breakout-alt-v3-qqq</span> TP ×6 @2.41 <span class="dim">→</span> <span class="pos">+$310</span></span></div>
+        <div class="trow"><span class="t-time">12:02</span><span class="t-kind info">INFO</span>
+          <span class="t-msg"><span class="dim">gate</span> cost_gate blocked <span class="ch" style="color:#8a949a">grind</span></span></div>
+        <div class="trow"><span class="t-time">11:58</span><span class="t-kind exec">EXEC</span>
+          <span class="t-msg"><span class="ch" style="color:#2fd573">pb-ride</span> buy 8× SPY750C @2.12</span></div>
+        <div class="t-ghost">— earlier collapsed · session open 09:30 —</div>
+      </div>
+    </section>
+  </main>`;
+}
+
+/* ---- STUDIO screen — transport · rack (inline inspector) · tape ---- */
+function rackItemHTML(c){
+  const ride=c.mode==="ride";
+  const fires=ride?`<b class="s">−${c.stop}%</b> · ride · EOD`:`<b class="s">−${c.stop}</b>/<b class="k">+${c.take}</b> · EOD`;
+  const modeTag=c.tag?`<span class="rr-tag ${c.tagc}">${c.tag}</span>`:"";
+  const row=`<div class="rrow">
+      <span class="s-dot${c.muted?"":" on"}${c.a13?" hot":""}" style="--pm:${c.pm};${c.muted?"":`background:${c.pm};box-shadow:0 0 6px ${c.pm}`}"></span>
+      <span class="rr-slug">${c.slug}</span>
+      ${c.a13?`<span class="s-a13" style="position:static;border-radius:3px;padding:1px 4px">⚡A13</span>`:""}
+      ${modeTag}
+      <span class="rr-sp"></span>
+      <span class="rr-fires">${fires}</span>
+      <span class="rr-pnl ${c.pc} num">${c.pnl}</span>
+      <span class="rr-chev">${c.open?"▾":"▸"}</span>
+    </div>`;
+  if(!c.open) return `<section class="screen rack${c.muted?" mutedch":""}" style="--pm:${c.pm}">${row}</section>`;
+  /* the INSPECTOR — full control vocabulary, honest 44px targets */
+  const stopW=(c.stop/100)*46;
+  const takeW=ride?46:(c.take/100)*46*2;
+  return `<section class="screen rack" style="--pm:${c.pm}">
+    ${row}
+    <div class="insp">
+      <div class="fireslbl"><span class="fl">FIRES — the binding exits · tap a pill to edit</span><span class="ln"></span></div>
+      <div class="fpills">
+        <button class="fpill stop"><b>−${c.stop}%</b><span>PREM STOP</span></button>
+        ${ride?`<button class="fpill ride"><b>ride</b><span>NO TAKE</span></button>`
+              :`<button class="fpill take"><b>+${c.take}%</b><span>TAKE</span></button>`}
+        <button class="fpill eod"><b>EOD</b><span>FLATTEN</span></button>
+      </div>
+      <div class="lr">
+        <button class="lrbtn lock${ride?"":" on"}">LOCK</button><button class="lrbtn ride${ride?" on":""}">RIDE</button>
+      </div>
+      <div class="shape" title="stop · entry · take — to scale, drag the handles">
+        <div class="shp-track">
+          <div class="shp-stop" style="right:50%;width:${stopW}%"></div>
+          <div class="shp-take${ride?" ride":""}" style="left:50%;width:${takeW}%"></div>
+        </div>
+        <span class="shp-entry"></span>
+        <span class="shp-h stop" style="left:${50-stopW}%"></span>
+        <span class="shp-rr">${ride?"ride →":"0.73R"}</span>
+      </div>
+      <div class="dials">
+        <div class="dial" title="STOP/day — daily loss floor">
+          ${knobSVG(c.kf,c.pm)}
+          <div class="dial-cap"><span class="dial-lbl">stop/day</span><span class="dial-val num">$${c.knob.toLocaleString()}</span></div>
+        </div>
+        <div class="hfwrap" title="RISK — real $ per trade">
+          <div class="hfader">
+            <div class="hf-track"></div>
+            <div class="hf-fill" style="width:${c.rf*100}%"></div>
+            <div class="hf-cap" style="left:${c.rf*100}%"></div>
+          </div>
+          <div class="dial-cap" style="justify-content:center"><span class="dial-lbl">risk</span><span class="dial-val num">$${c.risk.toLocaleString()}</span></div>
+        </div>
+      </div>
+      <div class="padrow">
+        <button class="bigpad">MUTE</button>
+        <button class="bigpad">BOOST</button>
+      </div>
+    </div>
+  </section>`;
+}
+function studioScreenHTML(){
+  return `<main class="p-screen">
+    <section class="screen">
+      <div class="phead"><span class="idx">02</span><span class="t">MASTER · TRANSPORT</span><span class="grow"></span><span class="x">PAPER</span></div>
+      <div class="transport-body">
+        <button class="xbtn start">START</button>
+        <button class="xbtn">STOP</button>
+        <span class="vsep"></span>
+        <span class="m-worker">worker <b>stream-07-10a ✓</b><br>era 4 · books clean ✓<br>reconciled 3/3</span>
+      </div>
+    </section>
+
+    <div class="seam"><span class="silk">RACK · 6 ARMED — TAP A ROW TO INSPECT</span><span class="ln"></span></div>
+    ${RACK.map(rackItemHTML).join("")}
+    <div class="rack-ghost">LAB · MORGUE channels — via COMMAND › roster</div>
+
+    <div class="seam"><span class="silk">SESSION TAPE · 2×8 — LIT = TODAY'S ENTRIES</span><span class="ln"></span></div>
+    <section class="screen">
+      <div class="steptape">${Array.from({length:16},(_,i)=>{
+        const LIT={3:"#45c4d6",5:"#2fd573",11:"#ffb224"};
+        return `<div class="step${LIT[i]?" lit":""}"${LIT[i]?` style="--st:${LIT[i]}"`:""}><span class="n num">${i+1}</span></div>`;
+      }).join("")}</div>
+    </section>
+  </main>`;
+}
+
+/* ---- COMMAND sheet (5th frame) ---- */
+function cmdSheetHTML(){
+  return `<div class="cmd-ov">
+    <div class="cmd-sheet cmd-cream" role="dialog" aria-label="command module">
+      <div class="cmd-grab"></div>
+      <div class="cmd-top">
+        <span class="stripes"><i></i><i></i><i></i></span>
+        <span class="cmd-title">COMMAND</span>
+        <span class="cmd-x">✕</span>
+      </div>
+      <div class="cmd-lcd">
+        <div class="cmd-in"><span class="pr">›</span><span class="ph2">mute · lock · frame · goto …</span><span class="cnt">9 commands</span></div>
+        <div class="cmd-grp">DESK</div>
+        <div class="cmd-row kill">
+          <span class="pdot"></span>
+          <span><span class="verb">KILL</span> — flatten all <span class="sub">freeze entries</span></span>
+          <span class="armtag">ARMED · HOLD 2s</span>
+        </div>
+        <div class="cmd-row">
+          <span class="pdot"></span>
+          <span><span class="verb">FRAME</span> — BLACKOUT ⇄ CREAM <span class="sub">global · both modes</span></span>
+          <span class="minisw"><i></i></span>
+        </div>
+        <div class="cmd-row">
+          <span class="pdot"></span>
+          <span><span class="verb">GOTO</span> STUDIO <span class="sub">tune the rack</span></span>
+          <span class="gotag">»</span>
+        </div>
+        <div class="cmd-grp">CHANNELS</div>
+        <div class="cmd-row sel" style="--pm:#ffb224">
+          <span class="pdot"></span>
+          <span><span class="verb">MUTE</span> momo-shape <span class="sub">soft off · A13 stays armed</span></span>
+        </div>
+        <div class="cmd-row" style="--pm:#2fd573">
+          <span class="pdot"></span>
+          <span><span class="verb">LOCK</span> pb-ride <span class="sub">fires −30% +22% EOD</span></span>
+        </div>
+        <div class="cmd-row" style="--pm:#7c83ff">
+          <span class="pdot"></span>
+          <span><span class="verb">BOOST</span> v3-iwm 2× <span class="sub">risk ×2 · clears tonight</span></span>
+        </div>
+        <div class="cmd-grp">VIEWS</div>
+        <div class="cmd-row">
+          <span class="pdot"></span>
+          <span><span class="verb">VIEW</span> sentinel brief <span class="sub">06:00 PT ✓</span></span>
+        </div>
+        <div class="cmd-foot">
+          <span><b>tap</b> run</span><span><b>hold</b> destructive</span><span><b>swipe ↓</b> close</span>
+          <span class="r">writes gate on auth</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---- assemble each phone ---- */
+document.querySelectorAll(".phone").forEach(ph=>{
+  const mode=ph.dataset.mode;
+  let html=statusbarHTML()+headerHTML(mode);
+  html+= mode==="perform" ? performScreenHTML()+dockHTML() : studioScreenHTML();
+  html+=padbarHTML(mode);
+  if(ph.dataset.cmd==="open") html+=cmdSheetHTML();
+  ph.innerHTML=html;
+});
+</script>
+</body>
+</html>
