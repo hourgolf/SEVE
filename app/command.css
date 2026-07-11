@@ -1,0 +1,153 @@
+/* =============================================================================
+   ⌘K COMMAND palette (PERFORM/STUDIO rebuild · slice S4)
+   The cream-bezel COMMAND hardware module — a pulled-out physical module that
+   floats over EITHER room (perform/studio) and in BOTH skins. It is deliberately
+   SKIN-INVARIANT: the bezel + stripes are hard cream values (not --hw-* tokens),
+   so it reads as the same warm module whether the desk is blackout or cream. The
+   inner LCD list uses the invariant interior tokens (--lcd / --dk-* / --led-red),
+   which stay dark in both skins — the "dark-glass screen" behind the cream face.
+   Scoped under .cmdk- classes + mounted inside .shell-root (so the --fs-,
+   --sh-mono and --pm- tokens inherit). A faithful lift of the mock F COMMAND
+   module (palette / rows / kill-arm) treatment.
+   ============================================================================= */
+
+.cmdk-ov {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 12vh; background: rgba(4, 5, 7, 0.5);
+  opacity: 0; pointer-events: none; transition: opacity 0.15s ease;
+}
+.cmdk-ov.open { opacity: 1; pointer-events: auto; }
+
+/* the cream module — hard values, never re-skinned */
+.cmdk-panel {
+  width: min(640px, 90vw); border-radius: 11px; padding: 7px 8px 8px;
+  background: linear-gradient(180deg, #d8d3c4, #ccc6b5); border: 1px solid #c5bfae;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.75),
+    0 2px 0 rgba(255, 255, 255, 0.14) inset, 0 -2px 6px rgba(0, 0, 0, 0.18) inset;
+  transform: translateY(-8px); transition: transform 0.15s ease;
+}
+.cmdk-ov.open .cmdk-panel { transform: translateY(0); }
+
+/* silkscreen top plate — stripes · COMMAND · ESC chip */
+.cmdk-top { display: flex; align-items: center; gap: 9px; padding: 2px 3px 7px; }
+.cmdk-stripes { display: flex; gap: 3px; }
+.cmdk-stripes i { width: 16px; height: 2.5px; border-radius: 1px; }
+.cmdk-stripes i:nth-child(1) { background: var(--stripe-orange); }
+.cmdk-stripes i:nth-child(2) { background: var(--stripe-red); }
+.cmdk-stripes i:nth-child(3) { background: #8f8a7a; }
+.cmdk-title {
+  font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 600;
+  letter-spacing: 0.32em; color: #55534c;
+}
+.cmdk-esc {
+  margin-left: auto; font-family: var(--sh-mono); font-size: var(--fs-label);
+  font-weight: 600; letter-spacing: 0.12em; color: #55534c; cursor: pointer;
+  border: 1px solid rgba(60, 52, 30, 0.28); border-radius: 3px; padding: 2px 7px;
+  background: transparent; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset;
+}
+
+/* the dark-glass LCD wrapping the input + list + foot */
+.cmdk-lcd {
+  background: linear-gradient(180deg, var(--lcd), var(--lcd-2));
+  border: 1px solid var(--lcd-edge); border-radius: 7px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.55) inset; overflow: hidden;
+}
+.cmdk-in {
+  display: flex; align-items: center; gap: 10px; padding: 0.8em 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.cmdk-in .pr {
+  font-family: var(--sh-mono); font-weight: 800; font-size: var(--fs-body);
+  color: #ffb224; text-shadow: 0 0 8px rgba(255, 178, 36, 0.5);
+}
+.cmdk-in input {
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
+  color: var(--lcd-ink); font-family: var(--sh-mono); font-size: var(--fs-body);
+  letter-spacing: 0.3px;
+}
+.cmdk-in input::placeholder { color: var(--dk-dim); }
+.cmdk-count {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); color: var(--dk-dim);
+  letter-spacing: 0.08em; white-space: nowrap;
+}
+
+/* scrolling result list */
+.cmdk-rows { padding: 5px 6px 3px; max-height: 52vh; overflow-y: auto; }
+.cmdk-grp {
+  font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 600;
+  letter-spacing: 0.26em; color: var(--dk-dim); padding: 0.7em 9px 0.3em;
+}
+.cmdk-row {
+  display: flex; align-items: center; gap: 10px; padding: 0.55em 9px;
+  border-radius: 5px; cursor: pointer; border: none; width: 100%; text-align: left;
+  background: transparent; font-family: var(--sh-mono); font-size: var(--fs-num);
+  color: #c3cad1;
+}
+.cmdk-row:hover { background: rgba(255, 255, 255, 0.035); }
+.cmdk-row .selmark {
+  color: #ffb224; font-size: var(--fs-chip); width: 12px; flex: none;
+  text-align: center; visibility: hidden;
+}
+.cmdk-row.sel {
+  background: rgba(255, 178, 36, 0.07); box-shadow: 2.5px 0 0 #ffb224 inset;
+  color: var(--lcd-ink);
+}
+.cmdk-row.sel .selmark { visibility: visible; }
+.cmdk-row .pdot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--pm, transparent);
+  border: 1px solid color-mix(in srgb, var(--pm, #5f6a70) 70%, transparent);
+}
+.cmdk-row .lbl { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; }
+.cmdk-row .verb { font-weight: 800; color: var(--lcd-ink); }
+.cmdk-row .rest { white-space: nowrap; }
+.cmdk-row .sub { color: var(--dk-dim); font-size: var(--fs-chip); }
+.cmdk-row kbd {
+  margin-left: auto; font-family: var(--sh-mono);
+  font-size: calc(var(--fs-label) * 0.95); color: var(--dk-mut);
+  border: 1px solid rgba(255, 255, 255, 0.16); border-bottom-width: 2px;
+  border-radius: 3px; background: rgba(255, 255, 255, 0.03); padding: 0 5px;
+  line-height: 1.5; flex: none;
+}
+/* disabled (anon) — visibly inert, never a fake-success click */
+.cmdk-row.off { cursor: not-allowed; opacity: 0.45; }
+.cmdk-row.off:hover { background: transparent; }
+.cmdk-row .signin {
+  margin-left: auto; font-family: var(--sh-mono); font-size: var(--fs-label);
+  font-weight: 700; letter-spacing: 0.08em; color: var(--dk-dim); flex: none;
+  border: 1px solid var(--line-2, rgba(255, 255, 255, 0.13)); border-radius: 3px; padding: 1px 6px;
+}
+/* the KILL row — red, with the ARMED · HOLD ⏎ tag + a fill-on-hold meter */
+.cmdk-row.kill { color: var(--led-red); position: relative; }
+.cmdk-row.kill .verb { color: var(--led-red); }
+.cmdk-row.kill .pdot {
+  background: var(--led-red); border-color: transparent;
+  box-shadow: 0 0 7px rgba(255, 59, 47, 0.7);
+}
+.cmdk-row .armtag {
+  margin-left: auto; font-family: var(--sh-mono); font-size: var(--fs-label);
+  font-weight: 800; letter-spacing: 0.12em; color: var(--led-red); flex: none;
+  border: 1px solid rgba(255, 59, 47, 0.45); border-radius: 3px; padding: 2px 7px;
+  background: rgba(255, 59, 47, 0.06);
+}
+.cmdk-row.kill.off .armtag { color: var(--dk-dim); border-color: var(--line-2, rgba(255, 255, 255, 0.13)); }
+/* the hold-progress meter — grows left→right along the row while Enter is held */
+.cmdk-hold {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 0%;
+  background: var(--led-red); box-shadow: 0 0 8px rgba(255, 59, 47, 0.8);
+  pointer-events: none;
+}
+
+.cmdk-foot {
+  display: flex; gap: 18px; padding: 0.6em 14px 0.7em;
+  border-top: 1px solid rgba(255, 255, 255, 0.06); font-family: var(--sh-mono);
+  font-size: var(--fs-label); letter-spacing: 0.07em; color: var(--dk-dim);
+}
+.cmdk-foot b { color: var(--dk-mut); font-weight: 600; }
+.cmdk-foot .r { margin-left: auto; }
+.cmdk-empty {
+  padding: 1.4em 12px; text-align: center; font-family: var(--sh-mono);
+  font-size: var(--fs-label); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--dk-dim);
+}

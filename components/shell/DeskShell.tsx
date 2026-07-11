@@ -171,9 +171,11 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
           <span className="silk">ET</span>
         </div>
 
-        {/* ⌘K palette (S4 stub) + DENSITY (`D`, real) */}
+        {/* ⌘K palette (S4) + DENSITY (`D`, real) — the keycap fires the same
+            `seve:command-palette` event the global ⌘K keydown broadcasts; the
+            CommandPalette mounted at the shell level listens + owns open/close. */}
         <div className="tb-mod">
-          <button type="button" className="keycap" title="command palette (coming in S4)" onClick={() => window.dispatchEvent(new CustomEvent("seve:command-palette"))}>⌘K</button>
+          <button type="button" className="keycap" title="command palette (⌘K)" onClick={() => window.dispatchEvent(new CustomEvent("seve:command-palette"))}>⌘K</button>
           <span className="silk">PALETTE</span>
         </div>
         <div className="tb-mod">

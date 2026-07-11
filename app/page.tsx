@@ -19,6 +19,7 @@ import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileApp } from "@/components/mobile/MobileApp";
 import { DeskShell } from "@/components/shell/DeskShell";
+import { CommandPalette } from "@/components/shell/CommandPalette";
 import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
 import { ShellProvider, useShell } from "@/hooks/useShellState";
@@ -112,6 +113,15 @@ function Surface({
         />
         {mode === "perform" && <PerformSurface {...props} />}
         {mode === "studio" && <StudioSurface {...props} />}
+        {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats
+            over EITHER room. Opens on the shared `seve:command-palette` event that
+            the S1 keydown + the DeskShell ⌘K keycap both fire; owns its own state.
+            The roster is scoped to the selected account (same rule as the surfaces). */}
+        <CommandPalette
+          channels={acctId ? view.desk.strategists.filter((s) => s.account_id === acctId) : view.desk.strategists}
+          setActiveRoom={setActiveRoom}
+          setSelected={setSelected}
+        />
       </div>
       {/* STUDIO's legacy §01–§04 rooms stay reachable as the sibling chassis below
           the hero (its own Shell = the anchor strip) — no functionality loss until

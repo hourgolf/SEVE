@@ -88,13 +88,14 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const toggleDensity = useCallback(() => setDensity(density === "compact" ? "comfortable" : "compact"), [density, setDensity]);
 
   // Global keyboard map — S/F/D active only when not typing and no modifier is
-  // held (⌘K / browser shortcuts pass through). ⌘K itself is S4's palette; here
-  // we only broadcast a stub event so the affordance is live but honest.
+  // held (⌘K / browser shortcuts pass through). ⌘K broadcasts the shared open
+  // event that S4's CommandPalette (mounted at the shell level) listens for +
+  // owns; the DeskShell keycap fires the identical event.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent("seve:command-palette")); // S4 stub
+        window.dispatchEvent(new CustomEvent("seve:command-palette"));
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
