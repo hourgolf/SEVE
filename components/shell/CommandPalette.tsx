@@ -6,8 +6,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useShell } from "@/hooks/useShellState";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
-import { playKit } from "@/lib/desk/kit";
-import { pmVar } from "@/lib/desk/colors";
+import { buildCommands, type CommandDef, type RoomNav } from "@/components/shell/commandRegistry";
 import type { StrategistState } from "@/lib/desk/types";
 import type { Room } from "@/components/surfaceTypes";
 
@@ -31,22 +30,8 @@ import type { Room } from "@/components/surfaceTypes";
 
 const HOLD_MS = 900; // Enter must be held this long to fire KILL
 
-// One command. `run` closes over the reused write/setter paths; `needsWrite`
-// gates on auth; `hold` = the KILL arm-hold. `search` is the fuzzy haystack.
-interface CommandDef {
-  id: string;
-  group: string;
-  verb: string;
-  rest?: string;
-  sub?: string;
-  kbd?: string;
-  pm?: string; // channel accent (var(--pm-…)) for the row dot
-  danger?: boolean;
-  needsWrite?: boolean;
-  hold?: boolean;
-  run: () => void;
-  search: string;
-}
+// CommandDef + the registry builder now live in commandRegistry.ts (shared with
+// the mobile COMMAND sheet). This component owns the desktop CHROME only.
 
 export interface CommandPaletteProps {
   /** The account-scoped roster — one mute/boost/goto set per channel. */
@@ -115,14 +100,6 @@ export function CommandPalette({ channels, setActiveRoom, setSelected }: Command
   }, [open, cancelHold]);
 
   // ---- command registry (rebuilt when the roster/skin/mode change) ----------
-  const setCfg = useCallback(
-    (ch: StrategistState, patch: Partial<StrategistState["config"]>) => {
-      dispatch({ type: "SET_CONFIG", slug: ch.slug, patch });
-      persistConfig(ch.id, patch);
-    },
-    [dispatch, persistConfig],
-  );
-
   const gotoRoom = useCallback(
     (r: Room, selectSlug?: string) => {
       setMode("studio");
@@ -133,123 +110,25 @@ export function CommandPalette({ channels, setActiveRoom, setSelected }: Command
     [setMode, setActiveRoom, setSelected],
   );
 
-  const commands = useMemo<CommandDef[]>(() => {
-    const list: CommandDef[] = [];
+  // The desktop §01–§04 room jumps (mobile has no legacy rooms → omits this group).
+  const rooms = useMemo<RoomNav[]>(() => [
+    { id: "nav-play", room: "play", label: "§01 chart", sub: "live market", search: "goto chart live market spy room play 01" },
+    { id: "nav-mix", room: "mix", label: "§02 rack", sub: "composer", search: "goto rack mixer composer channels room mix 02" },
+    { id: "nav-write", room: "write", label: "§03 book", sub: "positions · P&L", search: "goto book pnl positions room write 03" },
+    { id: "nav-tape", room: "tape", label: "§04 tape", sub: "autopsy · shadow book", search: "goto tape autopsy shadow book review room 04" },
+    { id: "nav-ops", room: "ops", label: "OPS", sub: "tend the machine", search: "goto ops settings sign in tend room" },
+  ], []);
 
-    // ---- DESK ----
-    list.push({
-      id: "kill",
-      group: "DESK",
-      verb: "KILL",
-      rest: "— flatten all",
-      sub: "freeze entries",
-      danger: true,
-      needsWrite: true,
-      hold: true,
-      search: "kill flatten all positions desk halt",
-      run: () => {
-        dispatch({ type: "KILL", reason: "command palette" });
-        persistFund({ is_halted: true, halted_reason: "command palette" });
-        playKit("crash"); // the 909 crash on FLATTEN — inert unless the KIT is on
-      },
-    });
-
-    // ---- VIEW ----
-    list.push({
-      id: "mode",
-      group: "VIEW",
-      verb: "GOTO",
-      rest: mode === "studio" ? "PERFORM · watch" : "STUDIO · tune",
-      kbd: "S",
-      search: "goto mode studio perform watch tune room",
-      run: () => setMode(mode === "studio" ? "perform" : "studio"),
-    });
-    list.push({
-      id: "frame",
-      group: "VIEW",
-      verb: "FRAME",
-      rest: "— BLACKOUT ⇄ CREAM",
-      sub: skin === "cream" ? "now cream" : "now blackout",
-      kbd: "F",
-      search: "frame blackout cream chrome skin global theme",
-      run: () => toggleSkin(),
-    });
-    list.push({
-      id: "density",
-      group: "VIEW",
-      verb: "DENSITY",
-      rest: "— compact ⇄ comfortable",
-      sub: density === "compact" ? "now compact" : "now comfortable",
-      kbd: "D",
-      search: "density compact comfortable readable type size",
-      run: () => toggleDensity(),
-    });
-
-    // ---- NAV (goto legacy rooms — flips to studio + scrolls) ----
-    const rooms: Array<{ id: string; room: Room; label: string; sub: string; search: string }> = [
-      { id: "nav-play", room: "play", label: "§01 chart", sub: "live market", search: "goto chart live market spy room play 01" },
-      { id: "nav-mix", room: "mix", label: "§02 rack", sub: "composer", search: "goto rack mixer composer channels room mix 02" },
-      { id: "nav-write", room: "write", label: "§03 book", sub: "positions · P&L", search: "goto book pnl positions room write 03" },
-      { id: "nav-tape", room: "tape", label: "§04 tape", sub: "autopsy · shadow book", search: "goto tape autopsy shadow book review room 04" },
-      { id: "nav-ops", room: "ops", label: "OPS", sub: "tend the machine", search: "goto ops settings sign in tend room" },
-    ];
-    for (const rm of rooms) {
-      list.push({
-        id: rm.id,
-        group: "NAV",
-        verb: "GOTO",
-        rest: rm.label,
-        sub: rm.sub,
-        search: rm.search,
-        run: () => gotoRoom(rm.room),
-      });
-    }
-
-    // ---- CHANNELS (mute/boost/goto per roster channel) ----
-    for (const ch of channels) {
-      const muted = ch.config.muted;
-      const boosted = ch.config.boosted ?? false;
-      const pm = pmVar(ch.color);
-      list.push({
-        id: `mute-${ch.slug}`,
-        group: "CHANNELS",
-        verb: muted ? "UN-MUTE" : "MUTE",
-        rest: ch.slug,
-        sub: muted ? "bring back on the tape" : "soft off · arms stay armed",
-        kbd: "M",
-        pm,
-        needsWrite: true,
-        search: `${muted ? "unmute un-mute" : "mute"} ${ch.slug} channel ${ch.underlying} soft off`,
-        run: () => {
-          dispatch({ type: "TOGGLE_MUTE", slug: ch.slug });
-          persistConfig(ch.id, { muted: !muted });
-        },
-      });
-      list.push({
-        id: `boost-${ch.slug}`,
-        group: "CHANNELS",
-        verb: boosted ? "UN-BOOST" : "BOOST",
-        rest: `${ch.slug}${boosted ? "" : " 2×"}`,
-        sub: boosted ? "back to 1× size" : "risk ×2 · clears tonight",
-        pm,
-        needsWrite: true,
-        search: `${boosted ? "unboost un-boost" : "boost"} ${ch.slug} channel ${ch.underlying} 2x risk size`,
-        run: () => setCfg(ch, { boosted: !boosted }),
-      });
-      list.push({
-        id: `goto-${ch.slug}`,
-        group: "CHANNELS",
-        verb: "GOTO",
-        rest: ch.slug,
-        sub: "open in the rack",
-        pm,
-        search: `goto ${ch.slug} channel ${ch.underlying} rack inspector select`,
-        run: () => gotoRoom("mix", ch.slug),
-      });
-    }
-
-    return list;
-  }, [channels, mode, skin, density, dispatch, persistFund, persistConfig, setMode, toggleSkin, toggleDensity, gotoRoom, setCfg]);
+  const commands = useMemo<CommandDef[]>(
+    () => buildCommands({
+      channels, mode, skin, density, setMode, toggleSkin, toggleDensity,
+      dispatch, persistConfig, persistFund,
+      gotoChannel: (slug) => gotoRoom("mix", slug),
+      rooms,
+      gotoRoom: (r) => gotoRoom(r as Room),
+    }),
+    [channels, mode, skin, density, setMode, toggleSkin, toggleDensity, dispatch, persistConfig, persistFund, gotoRoom, rooms],
+  );
 
   // ---- fuzzy/substring filter (every whitespace token must match) -----------
   const filtered = useMemo(() => {

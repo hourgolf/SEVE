@@ -17,7 +17,7 @@ import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
-import { MobileApp } from "@/components/mobile/MobileApp";
+import { MobileShell } from "@/components/mobile2/MobileShell";
 import { DeskShell } from "@/components/shell/DeskShell";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { PerformSurface } from "@/components/perform/PerformSurface";
@@ -88,8 +88,10 @@ function Surface({
 
   const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket };
 
-  // Mobile is untouched by S1 (its rework is S5) — same one-page phone shell.
-  if (isMobile) return <MobileApp {...props} />;
+  // Mobile (S5 rework) — the PERFORM/STUDIO phone shell. Shares the same seam
+  // props + the persisted mode/skin (useShell) as desktop; MobileApp is retained
+  // on disk (reviewer decides deletion at S6) but no longer mounted.
+  if (isMobile) return <MobileShell {...props} />;
 
   // DESKTOP — the new DeskShell top bar spans both rooms; MODE branches the
   // body under it. .shell-root is a SIBLING of the legacy chassis (not an
