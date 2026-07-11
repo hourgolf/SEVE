@@ -1,110 +1,82 @@
 "use client";
 
-// hooks/useWorkerRuns.ts — reads the worker_runs crash-attribution ledger (67_worker_runs.sql) for
-// the incident banner + system-health panel (external-review P5). THE binding distinction (P4): count
-// ABRUPT terminations, NOT raw boots — most boots are graceful redeploys (SIGTERM), not crashes, so a
-// banner keyed on boot count would false-alarm on every deploy. `unstable` is driven by abrupt16h only.
-//
-// Data seam: this is a once-per-page read hook (call it in page.tsx, pass the result through
-// SurfaceProps) — leaf components stay subscription-free. 60s anon poll (worker_runs has anon SELECT).
+// useWorkerRuns (P5 slice 3) — reads the worker_runs crash-attribution ledger (67_worker_runs.sql) and
+// exposes it in the shape the pure deriveIncident consumes. KEY separations (policy §P.2): the QUERY health
+// (loading/ok/error + when it last succeeded) is distinct from RUN PRESENCE (rows in 16h / an open current
+// run / the freshest observed evidence). instability keys on ABRUPT terminations, never boots. The 60s
+// cadence uses a 150s query-freshness policy in deriveIncident (not 60 — that would false-alarm on jitter).
+// 60s anon poll; worker_runs has an anon SELECT grant. Raw timestamps (epoch ms) — deriveIncident computes
+// ages from nowMs so a stuck poll can't present a frozen "fresh" age.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import type { WorkerRunsInput } from "@/lib/incident/deriveIncident";
 
-export interface WorkerRun {
-  boot_id: string;
-  version: string;
-  started_at: string;
-  last_heartbeat_at: string | null;
-  ended_at: string | null;
-  /** graceful_sigterm | uncaught_exception | fatal_boot | abrupt_or_unknown | null (still running) */
-  termination_kind: string | null;
-  exit_code: number | null;
-  signal: string | null;
-  last_phase: string | null;
-  memory_rss_mb: number | null;
-}
-
-export interface WorkerRuns {
-  loaded: boolean;
-  /** the live run — the open (ended_at null) row with the freshest heartbeat */
-  current: WorkerRun | null;
-  /** newest-first, capped — for the system-health / incident detail */
-  recent: WorkerRun[];
-  /** total boots in the last 16h (mostly redeploys — do NOT surface this as "instability") */
-  boots16h: number;
-  /** termination_kind='abrupt_or_unknown' in 16h — the REAL crash signal */
-  abrupt16h: number;
-  /** current run uptime, seconds */
-  uptimeSec: number | null;
-  /** seconds since the current run's last heartbeat — >~120 ⇒ the worker may be down right now */
-  heartbeatAgeSec: number | null;
-  /** abrupt16h ≥ threshold — the banner's "WORKER UNSTABLE" gate (redeploys excluded) */
-  unstable: boolean;
-  status: "loading" | "ok" | "empty" | "error";
-}
-
-const UNSTABLE_THRESHOLD = 3; // ≥3 ABRUPT terminations / 16h = unstable (graceful redeploys don't count)
 const WINDOW_MS = 16 * 3600_000;
 
-const INITIAL: WorkerRuns = {
-  loaded: false, current: null, recent: [], boots16h: 0, abrupt16h: 0,
-  uptimeSec: null, heartbeatAgeSec: null, unstable: false, status: "loading",
+const INITIAL: WorkerRunsInput = {
+  query: { state: "loading", fetchedAtMs: 0 },
+  rowsIn16h: 0, currentHeartbeatAtMs: null, latestObservedAtMs: null,
+  abrupt16h: 0, boots16h: 0, unstable: false, currentPhase: null,
 };
 
-export function useWorkerRuns(pollMs = 60_000): WorkerRuns {
-  const [s, setS] = useState<WorkerRuns>(INITIAL);
+interface Row {
+  started_at: string; last_heartbeat_at: string | null; ended_at: string | null;
+  termination_kind: string | null; last_phase: string | null;
+}
+
+export function useWorkerRuns(pollMs = 60_000): WorkerRunsInput {
+  const view = useRef<WorkerRunsInput>(INITIAL);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     const sb = getSupabase();
     let alive = true;
-
     async function poll() {
-      try {
-        const since = new Date(Date.now() - WINDOW_MS).toISOString();
-        const { data, error } = await sb
-          .from("worker_runs")
-          .select("boot_id,version,started_at,last_heartbeat_at,ended_at,termination_kind,exit_code,signal,last_phase,memory_rss_mb")
-          .gte("started_at", since)
-          .order("started_at", { ascending: false })
-          .limit(60);
-        if (!alive) return;
-        if (error) { setS((p) => ({ ...p, loaded: true, status: "error" })); return; }
-        const rows = (data ?? []) as WorkerRun[];
-        if (!rows.length) { setS({ ...INITIAL, loaded: true, status: "empty" }); return; }
-
-        // current = the still-open run with the freshest heartbeat (a crashed-not-yet-rebooted worker
-        // shows as open with a STALE heartbeat → heartbeatAgeSec surfaces that to the banner).
-        const open = rows.filter((r) => r.ended_at == null);
-        const current =
-          open.slice().sort((a, b) => (b.last_heartbeat_at ?? "").localeCompare(a.last_heartbeat_at ?? ""))[0] ?? null;
-        const abrupt16h = rows.filter((r) => r.termination_kind === "abrupt_or_unknown").length;
-        const now = Date.now();
-        const uptimeSec = current ? Math.max(0, Math.round((now - Date.parse(current.started_at)) / 1000)) : null;
-        const heartbeatAgeSec = current?.last_heartbeat_at
-          ? Math.max(0, Math.round((now - Date.parse(current.last_heartbeat_at)) / 1000))
-          : null;
-
-        setS({
-          loaded: true,
-          current,
-          recent: rows.slice(0, 12),
-          boots16h: rows.length,
-          abrupt16h,
-          uptimeSec,
-          heartbeatAgeSec,
-          unstable: abrupt16h >= UNSTABLE_THRESHOLD,
-          status: "ok",
-        });
-      } catch {
-        if (alive) setS((p) => ({ ...p, loaded: true, status: "error" }));
+      const now = Date.now();
+      const since = new Date(now - WINDOW_MS).toISOString();
+      const { data, error } = await sb
+        .from("worker_runs")
+        .select("started_at,last_heartbeat_at,ended_at,termination_kind,last_phase")
+        .gte("started_at", since)
+        .order("started_at", { ascending: false })
+        .limit(60);
+      if (!alive) return;
+      if (error) {
+        view.current = { ...view.current, query: { state: "error", fetchedAtMs: now } };
+        setTick((n) => n + 1);
+        return;
       }
+      const rows = (data ?? []) as Row[];
+      const ms = (s: string | null) => (s ? Date.parse(s) : null);
+      // current = the open run (ended_at null) with the freshest heartbeat
+      const open = rows.filter((r) => r.ended_at == null)
+        .sort((a, b) => (b.last_heartbeat_at ?? "").localeCompare(a.last_heartbeat_at ?? ""));
+      const current = open[0] ?? null;
+      // latest observed evidence = the freshest last_heartbeat_at OR ended_at across all recent rows
+      let latestObservedAtMs: number | null = null;
+      for (const r of rows) {
+        for (const cand of [ms(r.last_heartbeat_at), ms(r.ended_at)]) {
+          if (cand != null && (latestObservedAtMs == null || cand > latestObservedAtMs)) latestObservedAtMs = cand;
+        }
+      }
+      const abrupt16h = rows.filter((r) => r.termination_kind === "abrupt_or_unknown").length;
+      view.current = {
+        query: { state: "ok", fetchedAtMs: now },
+        rowsIn16h: rows.length,
+        currentHeartbeatAtMs: current ? ms(current.last_heartbeat_at) : null,
+        latestObservedAtMs,
+        abrupt16h,
+        boots16h: rows.length,
+        unstable: abrupt16h >= 3,
+        currentPhase: current?.last_phase ?? null,
+      };
+      setTick((n) => n + 1);
     }
-
-    poll();
-    const id = setInterval(poll, pollMs);
+    void poll();
+    const id = setInterval(() => void poll(), pollMs);
     return () => { alive = false; clearInterval(id); };
   }, [pollMs]);
 
-  return s;
+  return view.current;
 }
