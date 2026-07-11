@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-10b"; // trade-path audit hardening (8 fixes): accounts-read fail-closed routing (critical — no more default-account fallback on a stale read), getOrders-failure suppresses order actions, daily stop/target gate fails CLOSED, wall-clock event-flatten backstop, per-row exit coid + late-fill recovery, reconnect reseed unbroken, MGMT-TRUNCATED flag, strike from the traded OCC. Prior (07-10a): inactive-channel skip
+export const WORKER_VERSION = "stream-2026-07-11a"; // Mission 1b execution hardening (external-review Bucket 1, 14 fixes, 4 batches): fail-honest getOpenPositions (throw not []), fast sweep off the cycle mutex + 15s fetch abort + per-row exitGuard, kill-latency (sweep consumes reload), degraded-orders (mandatory flattens run, exits keep running), is_armed=entries-only (disarmed keeps exits), partial-exit re-rows the remainder, no row without fill evidence, tranche terminal-state, triggers on executable BID + quote-age (peak basis→bid; pk·win era boundary), honest reconcile (no invented $0), pageAll churny reads, half-day session close, live sentinel version, daily-latch relabel. Deferred: #12/#14 (broker samples), #17 (spread-capture dormant), #18 (per-strike chain staleness). Prior (07-10b): 10b audit
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
