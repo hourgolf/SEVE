@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import "./console.css";
 import "./mobile.css";
+import "./shell.css";
 import { useMarketData } from "@/hooks/useMarketData";
 import { useDeskState } from "@/hooks/useDeskState";
 import { useDeskFeed } from "@/hooks/useDeskFeed";
@@ -17,6 +18,10 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileApp } from "@/components/mobile/MobileApp";
+import { DeskShell } from "@/components/shell/DeskShell";
+import { PerformPlaceholder } from "@/components/shell/PerformPlaceholder";
+import { ShellProvider, useShell } from "@/hooks/useShellState";
+import { marketSummary } from "@/lib/marketSummary";
 import type { Room } from "@/components/surfaceTypes";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
@@ -41,6 +46,7 @@ function Surface({
   const feed = useDeskFeed(acctId);
   const write = useDeskWrite();
   const isMobile = useIsMobile();
+  const { mode, density } = useShell();
   const [selected, setSelected] = useState<string | null>(null);
 
   // SPY up/down on the day: spot vs the PRIOR session's close (the conventional
@@ -79,26 +85,61 @@ function Surface({
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
   const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket };
-  return isMobile ? <MobileApp {...props} /> : <DesktopSurface {...props} />;
+
+  // Mobile is untouched by S1 (its rework is S5) — same one-page phone shell.
+  if (isMobile) return <MobileApp {...props} />;
+
+  // DESKTOP — the new DeskShell top bar spans both rooms; MODE branches the
+  // body under it. .shell-root is a SIBLING of the legacy chassis (not an
+  // ancestor) so the shell's skin tokens never leak into the untouched STUDIO
+  // rooms. STUDIO renders today's DesktopSurface verbatim; PERFORM = the S2 stub.
+  const mkt = marketSummary(data.bars, data.spot);
+  return (
+    <>
+      <div className="shell-root" data-mode={mode} data-skin={theme} data-density={density}>
+        <DeskShell
+          fund={view.desk.fund}
+          liveFund={liveFund}
+          ops={ops}
+          accounts={accounts}
+          acctId={acctId}
+          setAcctId={setAcctId}
+          symbol={symbol}
+          spot={data.spot}
+          spotUp={spotUp}
+          dayChangePct={mkt.dayChangePct}
+        />
+        {mode === "perform" && <PerformPlaceholder />}
+      </div>
+      {mode === "studio" && <DesktopSurface {...props} />}
+    </>
+  );
+}
+
+// The chassis theme (cream | blackout) is now the shell SKIN — the same union,
+// one source of truth. The FRAME switch (`F`) and the OPS settings toggle both
+// flip it; the page stamps it as data-theme on .console-root (the legacy
+// [data-theme="blackout"] override still re-skins the whole chassis) and the
+// shell mirrors it as data-skin. ShellProvider owns the persisted state.
+function PageInner() {
+  const { skin, setSkin } = useShell();
+  // Dispatch-shaped adapter so the shared SurfaceProps type is unchanged — the
+  // OPS/mobile toggles call it value-form, but honour functional updaters too.
+  const setTheme: Dispatch<SetStateAction<"cream" | "blackout">> = (v) =>
+    setSkin(typeof v === "function" ? v(skin) : v);
+  return (
+    <div className="console-root" data-theme={skin}>
+      <DeskProvider>
+        <Surface theme={skin} setTheme={setTheme} />
+      </DeskProvider>
+    </div>
+  );
 }
 
 export default function Page() {
-  // Chassis theme — cream (default) | blackout. Persisted to localStorage; applied
-  // as data-theme on .console-root (the single [data-theme="blackout"] CSS override
-  // re-skins the whole subtree). The toggle control lives in the OPS room.
-  const [theme, setTheme] = useState<"cream" | "blackout">("cream");
-  useEffect(() => {
-    const saved = localStorage.getItem("seve-theme");
-    if (saved === "blackout" || saved === "cream") setTheme(saved);
-  }, []);
-  useEffect(() => {
-    localStorage.setItem("seve-theme", theme);
-  }, [theme]);
   return (
-    <div className="console-root" data-theme={theme}>
-      <DeskProvider>
-        <Surface theme={theme} setTheme={setTheme} />
-      </DeskProvider>
-    </div>
+    <ShellProvider>
+      <PageInner />
+    </ShellProvider>
   );
 }

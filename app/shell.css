@@ -1,0 +1,237 @@
+/* ===========================================================================
+   SEVE — DeskShell (PERFORM/STUDIO rebuild · slice S1)
+   The shared top bar + the skinnable hardware/chrome token layer, lifted from
+   mocks/perform-2026-07/perform-mock-F-final.html. Scoped under .shell-root so
+   NOTHING here reaches the legacy .console-root chassis (S3 replaces that).
+
+   .shell-root is a SIBLING of the legacy chassis (both live inside
+   .console-root) — deliberately NOT an ancestor, because the legacy cream
+   theme inherits generic tokens (--green/--accent/…) from :root and would pick
+   up any redefinition on an ancestor. As a sibling, these tokens stay contained.
+
+   data-skin flips BLACKOUT⇄CREAM (the GLOBAL frame · `F`); data-density flips
+   the fluid-type multiplier (`D`); data-mode is consumed by React branching in
+   Surface (studio → legacy chassis · perform → placeholder), not by CSS here.
+   =========================================================================== */
+
+.shell-root {
+  color-scheme: dark;
+  /* ---- invariant interior (recessed dark-glass screens) ---- */
+  --lcd: #14181b; --lcd-2: #0f1214; --lcd-edge: #0a0a0b; --lcd-ink: #e9eef0;
+  --dk-mut: #8a949a; --dk-dim: #5f6a70;
+  --sep-line: rgba(255, 255, 255, 0.07);
+  --hw-green: #2fd573; --hw-red: #f0563f; --hw-red-soft: #e07a58;
+  --hw-amber: #e0a23f;
+  --led-red: #ff3b2f; --led-bg-r: #150705; --led-bg-g: #07110a; --led-bg-n: #0c0e10;
+  --sh-mono: "JetBrains Mono", ui-monospace, monospace;
+  --sh-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --accent: #ef5a23;
+  --stripe-orange: #e0552f; --stripe-red: #c5362a; --stripe-cream: #d9d7cc;
+
+  /* ---- chrome tokens — BLACKOUT ---- */
+  --frame-bg: #060708;
+  --chrome-bg: #15181b;
+  --chrome-edge: #1c1f22;
+  --chrome-ink: #e7e4db;
+  --chrome-soft: #8a8c8e;
+  --silk: rgba(226, 214, 184, 0.55);
+  --btn-bg: #2c2e32; --btn-ink: #cfcdc6; --btn-edge: #000;
+  --btn-shadow: 0 1px 0 rgba(255, 255, 255, 0.09) inset, 0 2px 4px rgba(0, 0, 0, 0.45);
+  --kbd-bg: #1a1c1f; --kbd-edge: rgba(255, 255, 255, 0.16); --kbd-ink: #8a8c8e;
+  --sep: rgba(255, 255, 255, 0.09);
+  --neg-chrome: #e07a58;
+
+  /* ---- HARDWARE surface tokens — BLACKOUT = black-panel 909 LE ---- */
+  --hw-1: #26272b; --hw-2: #1c1d20; --hw-edge: #0b0c0d;
+  --hw-ink: #dbd9d0; --hw-soft: #93959a;
+  --hw-well: rgba(0, 0, 0, 0.4); --hw-hi: rgba(255, 255, 255, 0.06);
+  --hw-line: rgba(255, 255, 255, 0.07);
+
+  /* ---- readable-first fluid type (numerals never below ~13px @ 1440) ---- */
+  --dz: 1;
+  --fs-label: clamp(9.5px, 0.68vw, 12.5px);
+  --fs-num: calc(var(--dz) * clamp(13px, 0.95vw, 17px));
+  --fs-num-lg: calc(var(--dz) * clamp(16px, 1.18vw, 22px));
+  --fs-hero: calc(var(--dz) * clamp(18px, 1.32vw, 25px));
+  --fs-body: calc(var(--dz) * clamp(13.5px, 0.98vw, 17px));
+  --fs-chip: calc(var(--dz) * clamp(10px, 0.72vw, 13px));
+  --h-top: clamp(66px, 4.7vw, 90px);
+
+  display: block;
+  background: var(--frame-bg);
+  transition: background-color 0.32s ease;
+}
+
+/* ---- density (`D`) — real: shrinks the fluid-type multiplier for the bar ---- */
+.shell-root[data-density="compact"] { --dz: 0.86; }
+
+/* ============ CREAM — GLOBAL frame skin (both modes) ============ */
+.shell-root[data-skin="cream"] {
+  color-scheme: only light;
+  --frame-bg: #c9c3b2;
+  --chrome-bg: #d6d1c1;
+  --chrome-edge: #c5bfae;
+  --chrome-ink: #2a2a28;
+  --chrome-soft: #55534c;
+  --silk: #55534c;
+  --btn-bg: #e9e4d3; --btn-ink: #2a2a28; --btn-edge: #a9a396;
+  --btn-shadow: 0 2px 0 #a9a396, 0 1px 0 #fff inset;
+  --kbd-bg: rgba(255, 255, 255, 0.5); --kbd-edge: #b3ad9c; --kbd-ink: #2a2a28;
+  --sep: rgba(60, 52, 30, 0.25);
+  --neg-chrome: #9e2d1c;
+  --hw-1: #ddd8c9; --hw-2: #cfc9b8; --hw-edge: #b3ad9c;
+  --hw-ink: #2a2a28; --hw-soft: #55534c;
+  --hw-well: rgba(0, 0, 0, 0.1); --hw-hi: rgba(255, 255, 255, 0.55);
+  --hw-line: rgba(60, 52, 30, 0.16);
+}
+
+/* ---------- top bar ------------------------------------------------------- */
+.shell-bar {
+  height: var(--h-top);
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 0.9vw, 18px);
+  padding: 0 14px;
+  background: var(--chrome-bg);
+  color: var(--chrome-ink);
+  border-bottom: 2px solid var(--chrome-edge);
+  font-family: var(--sh-sans);
+  transition: background-color 0.32s, border-color 0.32s, color 0.32s;
+}
+.shell-bar .num { font-family: var(--sh-mono); font-variant-numeric: tabular-nums; }
+
+.tb-mod { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.tb-spacer { flex: 1 1 auto; }
+.vsep { width: 1px; align-self: stretch; margin: 12px 0; background: var(--sep); transition: background-color 0.32s; }
+
+.silk {
+  font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 700;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--silk);
+  white-space: nowrap; transition: color 0.32s;
+}
+.silk .cap-neg { color: var(--neg-chrome); font-weight: 700; letter-spacing: 0; transition: color 0.32s; }
+.silk .cap-pos { color: var(--hw-green); font-weight: 700; letter-spacing: 0; }
+
+/* ---- brand block ---- */
+.brand { display: flex; align-items: center; gap: 9px; }
+.brand .stripes { display: flex; gap: 2px; }
+.brand .stripes i { width: 4px; height: 26px; border-radius: 1px; border: 1px solid rgba(0, 0, 0, 0.3); }
+.brand .stripes i:nth-child(1) { background: var(--stripe-orange); }
+.brand .stripes i:nth-child(2) { background: var(--stripe-red); }
+.brand .stripes i:nth-child(3) { background: var(--stripe-cream); }
+.brand .btxt { display: flex; flex-direction: column; line-height: 1.1; }
+.brand .btxt b { font-family: var(--sh-mono); font-weight: 800; font-size: clamp(16px, 1.2vw, 21px); letter-spacing: 2.5px; color: var(--stripe-red); }
+.brand .btxt span { font-family: var(--sh-mono); font-size: var(--fs-label); letter-spacing: 2px; color: var(--silk); transition: color 0.32s; }
+
+/* ---- MODE segmented switch (also `S`) ---- */
+.modesw { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--btn-edge); box-shadow: var(--btn-shadow); transition: border-color 0.32s, box-shadow 0.32s; }
+.modesw button {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; letter-spacing: 1px;
+  padding: 0.55em 1em; border: none; cursor: pointer; background: var(--btn-bg); color: var(--chrome-soft);
+  transition: background-color 0.32s, color 0.32s;
+}
+.modesw button.on {
+  background: linear-gradient(180deg, #ff7038, var(--accent)); color: #140700;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); box-shadow: 0 0 10px rgba(239, 90, 35, 0.45);
+}
+
+/* ---- FRAME switch — GLOBAL (both rooms · `F`) ---- */
+.framesw { display: flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; background: none; border: none; padding: 0; }
+.fsw-lab { font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.14em; color: var(--chrome-soft); transition: color 0.32s, text-shadow 0.32s; }
+.fsw-lab.lit { color: var(--accent); text-shadow: 0 0 8px rgba(239, 90, 35, 0.55); }
+.fsw-track {
+  width: clamp(52px, 3.6vw, 66px); height: clamp(19px, 1.35vw, 24px); border-radius: 99px; position: relative;
+  border: 1px solid #000; background: #26221c;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75), 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+.fsw-thumb {
+  position: absolute; top: 2px; left: 2px; width: 44%; height: calc(100% - 4px); border-radius: 99px;
+  background: linear-gradient(180deg, #ece8d9, #c9c4b2); border: 1px solid rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  transition: left 0.2s cubic-bezier(0.4, 1.6, 0.6, 1);
+}
+.shell-root[data-skin="cream"] .fsw-thumb { left: calc(56% - 2px); }
+
+/* ---- LED / LCD windows (invariant dark glass) ---- */
+.ledwin {
+  position: relative; display: flex; align-items: center; gap: 2px; border: 1px solid #000; border-radius: 7px;
+  padding: 0.3em 0.5em;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.65), 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.ledwin.red { background: var(--led-bg-r); } .ledwin.grn { background: var(--led-bg-g); } .ledwin.neu { background: var(--led-bg-n); }
+.ledwin::after {
+  content: ""; position: absolute; inset: 0; border-radius: 7px; pointer-events: none;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 42%);
+}
+/* the reused <LedDisplay> renders .led > .led-window inside the .ledwin — flatten
+   its own recessed frame so the .ledwin is the single window; size the segs down
+   for the top bar. */
+.ledwin .led { gap: 0; }
+.ledwin .led-window { padding: 0; background: none; border: none; box-shadow: none; gap: 2px; }
+.ledwin .led-glass { display: none; }
+.ledwin .led-caption { display: none; }
+.ledwin .seven-seg { width: calc(var(--fs-hero) * 0.62); height: calc(var(--fs-hero) * 1.12); }
+.led-dollar { font-family: var(--sh-mono); font-weight: 700; font-size: calc(var(--fs-hero) * 0.6); line-height: 1; text-shadow: 0 0 6px currentColor; }
+.lcdtxt { font-family: var(--sh-mono); font-weight: 700; font-size: var(--fs-hero); letter-spacing: 0.5px; color: var(--lcd-ink); text-shadow: 0 0 7px rgba(233, 238, 240, 0.3); }
+.lcdtxt.amb { color: #ffb224; text-shadow: 0 0 7px rgba(255, 178, 36, 0.4); }
+.lcdtxt.sm { font-size: calc(var(--fs-hero) * 0.82); }
+
+/* ---- RUN / PAPER pills ---- */
+.pill {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; letter-spacing: 0.1em;
+  padding: 0.45em 0.8em; border-radius: 6px; border: 1px solid var(--kbd-edge); color: var(--chrome-soft);
+  background: transparent; display: flex; align-items: center; gap: 7px; transition: color 0.32s, border-color 0.32s;
+}
+.pill.run { color: var(--run-ink, var(--hw-green)); border-color: var(--run-edge, rgba(47, 213, 115, 0.55)); background: var(--run-bg, rgba(47, 213, 115, 0.1)); }
+.shell-root[data-skin="cream"] .pill.run { --run-ink: #0e6132; --run-edge: rgba(14, 97, 50, 0.55); --run-bg: rgba(14, 97, 50, 0.1); }
+.pill.halt { color: var(--led-red); border-color: rgba(255, 59, 47, 0.55); background: rgba(255, 59, 47, 0.1); }
+.pill .pdot { width: 0.55em; height: 0.55em; border-radius: 50%; background: var(--hw-green); box-shadow: 0 0 7px var(--hw-green); animation: shpulse 2s infinite; }
+.shell-root[data-skin="cream"] .pill.run .pdot { background: #0e6132; box-shadow: 0 0 7px #0e6132; }
+@keyframes shpulse { 0% { box-shadow: 0 0 0 0 rgba(47, 213, 115, 0.5); } 70% { box-shadow: 0 0 0 6px rgba(47, 213, 115, 0); } 100% { box-shadow: 0 0 0 0 rgba(47, 213, 115, 0); } }
+
+/* ---- key affordance caps (⌘K palette · D density) ---- */
+.keycap {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; letter-spacing: 0.5px;
+  padding: 0.45em 0.7em; border-radius: 6px; color: var(--btn-ink); cursor: pointer;
+  background: var(--btn-bg); border: 1px solid var(--btn-edge); box-shadow: var(--btn-shadow);
+  transition: background-color 0.32s, color 0.32s, border-color 0.32s, box-shadow 0.32s, transform 0.06s;
+}
+.keycap:active { transform: translateY(1px); }
+.keycap.lit { background: linear-gradient(180deg, #ffd98f, #e8b45a); color: #1a1407; border-color: #a97e2c; box-shadow: 0 2px 0 #a97e2c, 0 0 10px rgba(255, 178, 36, 0.5); }
+
+/* the reused KILL hardware sits in the bar unchanged (styled by console.css);
+   only align it and give the caption room */
+.tb-mod--kill { align-self: center; }
+
+/* ---- accent band under the top bar ---- */
+.shell-band { display: flex; height: 2px; }
+.shell-band i { flex: 1; }
+.shell-band i:nth-child(1) { background: var(--stripe-orange); }
+.shell-band i:nth-child(2) { background: var(--stripe-red); }
+.shell-band i:nth-child(3) { background: color-mix(in srgb, var(--stripe-cream) 60%, #555); }
+.shell-band i:nth-child(4) { background: #4a4c50; }
+
+/* patch-switch strike on mode flip — quick + physical, no dissolve */
+@keyframes shstrike { 0% { filter: brightness(1.55) saturate(0.6); } 100% { filter: none; } }
+.shell-strike { animation: shstrike 0.16s ease-out; }
+
+/* ---------- PERFORM placeholder (S2 lands the real surface here) ----------- */
+.perform-stub {
+  min-height: 62vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; margin: 7px; border-radius: 9px; color: var(--lcd-ink);
+  background: linear-gradient(180deg, var(--lcd), var(--lcd-2));
+  border: 1px solid var(--lcd-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+.perform-stub .ps-mark { font-family: var(--sh-mono); font-weight: 800; font-size: var(--fs-hero); letter-spacing: 0.4em; color: var(--dk-mut); }
+.perform-stub .ps-sub { font-family: var(--sh-mono); font-size: var(--fs-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--dk-dim); }
+.perform-stub .ps-kbd {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); color: var(--dk-mut);
+  border: 1px solid var(--kbd-edge); border-radius: 4px; padding: 0.3em 0.7em; background: rgba(255, 255, 255, 0.03);
+}
+
+/* collapse the SPY day-change + brand subtitle on tighter desktops (mock F) */
+@media (max-width: 1330px) {
+  .shell-bar { gap: 9px; }
+  .brand .btxt span { display: none; }
+}
