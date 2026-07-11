@@ -1,250 +1,338 @@
-# P5 Slice 3 — Deterministic incident policy (design pass, NOT code)
+# P5 Slice 3 — Deterministic incident policy (v2, design pass — NOT code)
 
 Design-only. Drives the PERFORM incident banner + system-health strip. Requires independent approval
-before any implementation. No component/CSS/hook changes in this pass. Every threshold flagged
-**[IN-CODE]** (explicitly set in a source) or **[INFERRED]** (proposed by me from an observed cadence,
-not explicitly established) — the reviewer should ratify the [INFERRED] ones.
+before implementation. No component/CSS/hook changes in this pass.
+
+**Ratified thresholds (reviewer, provisional):** `streamWarnRthSec=45`, `streamStaleRthSec=120`,
+`cronStaleRthSec=180`, `runProcessStaleSec=180`. New thresholds introduced in v2 are flagged
+**[INFERRED-v2 — needs ratification]**.
 
 Constraints honored: `abrupt16h` (not `boots16h`) drives instability; no Sentinel/LLM in the gate; no
 executor-switch/remediation controls; no leaf subscriptions; `IntradayChart` untouched.
 
----
-
-## 0. The load-bearing finding (read first)
-
-**There are TWO liveness clocks and they run on different schedules — the policy MUST be RTH-aware or
-it false-alarms nightly.**
-
-- `worker_heartbeat('stream')` (→ `useOpsStatus.hbAgeSec`): written only while trading — every sweep
-  (~`fastExitSec`=10s) but **gated to RTH** (`worker/src/index.ts:565` returns before the beat at
-  `:568` when `nowMin < RTH_OPEN || nowMin >= sessionCloseMin`), plus a once/min pre-open beat
-  (`:876`, 08:55–09:35 ET). **It is SILENT after-hours / overnight / weekends by design.** A large
-  `hbAgeSec` at 20:00 ET is NORMAL, not a fault.
-- `worker_runs.last_heartbeat_at` (→ `useWorkerRuns.heartbeatAgeSec`): written by `runHeartbeat` on an
-  **unconditional 60s `setInterval`** (`worker/src/index.ts:851`) + folded into every trading beat
-  (`worker/src/store.ts:364`). **It beats 24/7 whenever the process is alive.** This — not
-  `worker_heartbeat` — is the "is the worker process up right now?" signal outside RTH.
-
-So the deterministic reading is: **`worker_runs.heartbeatAgeSec` answers "is the process alive?";
-`worker_heartbeat.hbAgeSec` answers "is the stream trading-live *this session*?" — and only means
-"down" when the market is open.**
+### v2 revision log (what changed from v1, per the blocking findings)
+1. `useOpsStatus` observability metadata is now a **required implementation prerequisite** (§P): per-read
+   status + last-success time for the heartbeat / cron / assignment reads, each inspecting `.error`.
+2. Truth-table precedence/overlap fixed: **C4 precedes C2/C3**; **W4 owns the 45–120s band**; **H2 begins
+   >120s** (trading beat stale, 24/7 process fresh); **W5 removed** (was a duplicate of H2); **telemetry
+   states resolved before any null-heartbeat interpretation**.
+3. New **all-session process-stale** rules (closed-market + `worker_runs` stale): flat→WARNING,
+   desk-open-positions→HIGH; **N3 no longer masks a stale 24/7 heartbeat**.
+4. Telemetry states defined: loading→CHECKING (no claim); empty→WARNING every session; error→observability
+   warning (not down); partial ops-read failure specified.
+5. Premarket readiness defined around the real 08:55–09:35 beat window + grace + the pre-09:30 state.
+6. Wording corrected: "ABRUPT TERMINATIONS" (not "restarts"); KILL "flatten commanded; broker-flat
+   unconfirmed"; positions "desk shows N open positions".
+7. Output is now **`{primaryCode, activeCodes[]}`** — concurrent instability + liveness failures are not
+   discarded.
+8. Session helper spec: accepts a Unix epoch, converts to America/New_York internally (DST-correct),
+   reports **unknown calendar coverage** instead of asserting certainty.
 
 ---
 
-## 1. Data-source inventory
+## 0. The load-bearing finding (unchanged, still governs everything)
 
-| Input (policy field) | Source (table → hook) | Update cadence | Expected freshness | Failure mode | Truthful inference |
-|---|---|---|---|---|---|
-| **Stream trading-liveness** `ops.hbAgeSec` | `worker_heartbeat('stream').beat_at` → `useOpsStatus` (15s poll, `hooks/useOpsStatus.ts:42-53`) | ~10s during RTH (`index.ts:568`), 1/min pre-open (`:876`), **silent after-hours** | RTH: <~15s. Pre-open: <~60s. **After-hours/weekend/holiday: unbounded (expected)** | On read error `useOpsStatus` **keeps the last reading** (no error state; `catch{}` at `:56`) — a stuck value can look "fresh" | During RTH only: fresh ⇒ stream is sweeping/trading-live; stale ⇒ stream not sweeping (degraded). Outside RTH: **says nothing** about up/down |
-| **Process liveness** `workerRuns.heartbeatAgeSec` | `worker_runs.last_heartbeat_at` (freshest open run) → `useWorkerRuns` (60s poll, `hooks/useWorkerRuns.ts`) | **60s, 24/7** (`index.ts:851`) + every RTH beat (`store.ts:364`) | **<~90s whenever the process is alive, any hour** | `status:'error'` on read fail; `status:'empty'` if no rows in 16h | Fresh (<~90–120s) ⇒ worker process alive right now (even 3am). Stale (>~180s) ⇒ process likely down / between boots |
-| **Recent instability** `workerRuns.abrupt16h`, `.unstable` | `worker_runs.termination_kind='abrupt_or_unknown'` over 16h → `useWorkerRuns` | Attribution set at the NEXT boot (2-min stale guard, `store.ts:382`) | n/a (a count) | Same read as above | `abrupt16h` = crashes/OOM/evictions in 16h. `unstable = abrupt16h>=3` **[IN-CODE `useWorkerRuns.ts` UNSTABLE_THRESHOLD=3, WINDOW=16h]**. **Recent instability ≠ currently down** |
-| **Boots (context only)** `workerRuns.boots16h` | count of `worker_runs` rows in 16h | per boot | n/a | — | **Boots include graceful redeploys — NOT crashes.** Display only as "boots", never as instability/crashes |
-| **Current run** `workerRuns.current` | open run (ended_at null) w/ freshest heartbeat | — | — | may be a stale open row after a hard kill (see §7) | Label "latest observed run", not "the executor" — no fencing (§7) |
-| **Cron trading-liveness** `ops.cronAgeSec` | desk-total `equity_snapshots` (both `strategist_id` & `account_id` NULL) → `useOpsStatus` | cron writes ~1/min during RTH (pg_cron `seve-paper-trader` `* 13-20 * * 1-5`, P3 §cron) | RTH: <~90s. **After-hours/weekend: unbounded (expected)** | keeps last reading on error | During RTH: fresh ⇒ the cron executor path is running; stale ⇒ cron path down. Outside RTH: says nothing. (Per-account snapshots are written by the worker, `store.ts:597` — NOT this signal) |
-| **Executor assignment** `ops.streamArmed`, `.cronArmed` | `strategists.executor,status` → `useOpsStatus` | 15s poll | live | keeps last reading | Count of **armed** channels each engine owns. **Configured executor ≠ fenced ownership** (§7). Zero-assigned ⇒ that engine has nothing to do ⇒ its staleness is not an incident |
-| **Fund posture** `fund.is_halted/running/mode` | `fund_state` → `useDeskState` (`lib/desk/types.ts:82-85`) | realtime + poll | live | realtime falls back to poll | `is_halted` ⇒ **HALT** (killed: flatten+freeze); `running&&!halted` ⇒ **RUN**; `!running&&!halted` ⇒ **STOP** (intentional transport, `DeskShell.tsx:45,146-151`). `halted_reason` carries the KILL cause |
-| **Open positions (LOCAL)** `feed.positions` | `positions` → `useDeskFeed` | poll | live-ish | — | Desk's OWN open rows. **NOT proof of broker-flat or reconciled** (no live `/v2/positions` reconciliation — §7) |
-| **Market session** `session` | `engine/market-calendar.ts` (`isWeekend/isMarketHoliday/isEarlyClose/sessionCloseMin`) + `RTH_OPEN=570` (`index.ts:38`) + ET-now | deterministic (pure) | exact | fail-safe: unknown date ⇒ normal 16:00 session | weekend / holiday / premarket / open / after-hours. **[GAP]** the calendar is frontend-importable, but `RTH_OPEN` is a worker const and there is **no existing client "current session" classifier** — a small pure helper is needed (§7) |
-| **Reconciliation / execution-integrity** | **NONE live.** `reconcile-alpaca` is a nightly P&L job (not a live position signal) | nightly | — | — | The UI **cannot** assert "reconciled" or "broker-flat" (§7) |
+**Two liveness clocks on different schedules — the policy MUST be market-session-aware:**
+- `worker_heartbeat('stream')` → `useOpsStatus` heartbeat read: ~10s during RTH (`index.ts:568`, gated
+  by `:565`), once/min in the **pre-open window 08:55–09:35 ET** (`index.ts:876`, `RTH_OPEN-35..+5`),
+  **silent after-hours**. = "is the stream trading-live *this session*?"
+- `worker_runs.last_heartbeat_at` → `useWorkerRuns.heartbeatAgeSec`: **60s, 24/7** (`index.ts:851`). =
+  "is the process alive right now?" — the ONLY liveness signal after-hours.
 
 ---
 
-## 2. Severity truth table (deterministic)
+## P. REQUIRED PREREQUISITE — `useOpsStatus` observability metadata (finding 1)
 
-Precedence: evaluate top-down; the **first** matching row wins (CRITICAL rows are listed first). `S` =
-market session ∈ {weekend, holiday, premarket, open, afterhours}. "RTH" = S=open (or premarket for the
-cron/stream warm-up). All age thresholds in seconds.
-
-### CRITICAL
-| # | Condition | Rationale / source |
-|---|---|---|
-| C1 | `fund.is_halted === true` | Desk is KILLED (flatten+freeze). `fund_state.is_halted`. Show `halted_reason`. |
-| C2 | `S==open` **AND** `streamArmed>0` **AND** `ops.hbAgeSec == null OR hbAgeSec > 120` **[INFERRED: 120s ≈ 12× the 10s sweep]** **AND** `workerRuns.heartbeatAgeSec == null OR > 180` **[INFERRED: 3× the 60s run-beat]** | Market open, stream owns armed channels, **both** liveness clocks stale ⇒ the trading executor is not running during a live session. Requires BOTH stale so an RTH-gated `worker_heartbeat` blip alone doesn't trip it. |
-| C3 | `S==open` **AND** `cronArmed>0` **AND** `ops.cronAgeSec == null OR > 180` **[INFERRED: 3× the ~60s cron]** **AND** the cron is this session's only armed executor (`streamArmed==0`) | The cron owns all armed channels and its dead-man is stale during a live session ⇒ no executor running. (If stream is also armed and healthy, downgrade to HIGH H-cron.) |
-| C4 | `feed.positions.length > 0` **AND** (C2-body OR C3-body true) i.e. open exposure while the responsible executor is unreachable during RTH | Open contracts with no confirmed live manager — the highest-consequence state. (Positions alone are NOT reconciled — §7 — so this is "exposure + degraded health", not "stranded confirmed".) |
-
-### HIGH
-| # | Condition | Rationale |
-|---|---|---|
-| H1 | `workerRuns.unstable === true` (`abrupt16h >= 3`) | Recent instability. **NOT "down"** — pair with the live-liveness read in wording. |
-| H2 | `S==open` **AND** `streamArmed>0` **AND** stream stale (C2 heartbeat test) **BUT** `workerRuns.heartbeatAgeSec` fresh (<180) | Process is alive but not *trading* this session (sweep not beating) — degraded stream, not a dead worker. |
-| H3 | `S==open` **AND** `cronArmed>0` **AND** cron stale (`cronAgeSec>180`) **AND** `streamArmed>0` healthy | Cron-assigned channels lack a live cron, but stream covers the rest — partial executor outage. |
-| H4 | `(streamArmed>0 AND stream-unhealthy) AND (cronArmed>0 AND cron-unhealthy)` during RTH | Both executors degraded but not fully confirmed-null (union of H2/H3). |
-
-### WARNING
-| # | Condition | Rationale |
-|---|---|---|
-| W1 | `abrupt16h` ∈ {1, 2} | Some recent instability, below the unstable gate. |
-| W2 | `workerRuns.status === 'error'` | **Observability degraded — NOT proof the worker is down.** Say exactly that. |
-| W3 | `workerRuns.status === 'empty'` (no runs in 16h) AND `S==open` | No run ledger rows during a session — either instrumentation gap or a long-dead worker; investigate. (Outside RTH with a fresh `worker_heartbeat`? impossible — treat empty+afterhours as NORMAL-with-note.) |
-| W4 | `S==open` AND some armed executor stale for < the CRITICAL window (e.g. stream `hbAgeSec` 45–120) **[INFERRED band]** | Early degradation — a beat has been missed but not enough to call it down. |
-| W5 | conflicting freshness: `ops.hbAgeSec` stale but `workerRuns.heartbeatAgeSec` fresh **during RTH** | The two ledgers disagree (§7). Surface as "stream beat stale / process alive — verifying", never a hard down. |
-
-### NORMAL
-| # | Condition | Rationale |
-|---|---|---|
-| N1 | `fund.running && !is_halted`, `S==open`, responsible executors fresh, `abrupt16h==0`, `status=='ok'` | Healthy live session. Banner hidden (§5). |
-| N2 | `!running && !is_halted` (**STOP** — intentional) | Operator stopped new entries on purpose. Compact "DESK STOPPED (intentional)" — a state note, **not** an incident. |
-| N3 | `S ∈ {afterhours, weekend, holiday}` AND `workerRuns.heartbeatAgeSec` fresh (or `status` not error) | Market closed; stale `worker_heartbeat`/`cronAgeSec` are EXPECTED. Normal. If `workerRuns` also stale → W2/H per liveness, not a market-closed false alarm. |
-| N4 | `S==premarket` AND worker process alive (`workerRuns` fresh) | Pre-session; stream may be warming (pre-open beat). Normal-with-session-note. |
-| N5 | `zero armed channels for an executor` | That executor's staleness is irrelevant — never raise on an idle engine. |
-
-**Note on precedence & `S`:** market-session gating is applied INSIDE each row (not a separate first
-cut) so that C1 (halted) and H1 (recent instability) fire regardless of session, while
-liveness-based rows (C2/C3/H2/H3/W4/W5) only fire when `S==open` (or premarket for warm-up).
-
----
-
-## 3. Truthful operator wording (title + facts per class)
-
-Each: a short **title** (≤ ~40 chars) and up to 3 **facts**. Never conflate the preserved distinctions.
-
-- **C1 halted** — Title: `DESK HALTED — KILL ENGAGED`. Facts: reason (`halted_reason`); open positions count; "entries frozen; kill flattens".
-- **C2/C4 stream down (RTH)** — Title: `STREAM EXECUTOR UNREACHABLE`. Facts: "no stream beat for Xm during market hours"; armed stream channels N; open positions M (if any) — "open exposure, manager unconfirmed". Do **not** say "crashed" (unknown) or "reconciled".
-- **C3 cron down (RTH, sole executor)** — Title: `CRON EXECUTOR UNREACHABLE`. Facts: "no cron snapshot for Xm"; armed cron channels N.
-- **H1 unstable** — Title: `WORKER UNSTABLE — RECENT RESTARTS`. Facts: "N abrupt terminations / 16h"; **"process is currently <alive/last seen Xm ago>"** (the live-liveness read, so "recent instability ≠ currently down" is explicit); "boots (incl. redeploys): B" as secondary context only.
-- **H2 stream degraded** — Title: `STREAM DEGRADED — NOT TRADING`. Facts: "process alive; stream beat stale Xm during market hours"; armed stream N.
-- **W2 observability** — Title: `WORKER TELEMETRY UNAVAILABLE`. Facts: "cannot read the run ledger — this is an observability failure, not proof the worker is down"; last known state if any.
-- **N2 stop** — Title: `DESK STOPPED (intentional)`. Facts: "new entries paused by operator; not a fault".
-- **N3 market-closed** — no banner, or a muted `MARKET CLOSED` chip in the health strip; stale trading beats labeled "expected (closed)".
-
-**Wording invariants (must hold in every string):**
-1. "recent instability" (abrupt16h) and "currently down" (live liveness) are **separate clauses**, never merged into one red state.
-2. `status:'error'` → "observability failure", never "worker down".
-3. `boots16h` is only ever "boots", never "crashes/instability".
-4. executor assignment is "configured executor", never "owner"/"fenced".
-5. open positions are "desk's open positions" — never "reconciled"/"broker-flat"/"confirmed".
-
----
-
-## 4. Pure derivation contract
+`useOpsStatus` today collapses failures dangerously: one `try/catch` around a `Promise.all` of three
+reads, and on error it **keeps the last reading** (`hooks/useOpsStatus.ts:56`). Consequences the policy
+cannot tolerate: a failed heartbeat read **freezes a stale "fresh" age indefinitely**, and a failed
+assignment read **would zero the armed counts** (making a live executor look idle). **The implementation
+slice MUST first refactor `useOpsStatus` to track each read independently** (still no leaf subscriptions —
+this is the single seam hook):
 
 ```ts
-// PURE. No fetch/subscribe/write/LLM/Date.now inside — `nowMs` and `session` are passed in so the
-// function is deterministic and unit-testable. Lives in e.g. lib/incident/deriveIncident.ts.
+interface OpsRead<T> { ok: boolean; value: T | null; lastOkMs: number | null; fetchedMs: number; }
+interface OpsStatus {
+  loaded: boolean;
+  heartbeat:  OpsRead<{ ageSec: number; note: string | null }>; // worker_heartbeat('stream')
+  cron:       OpsRead<{ ageSec: number }>;                       // desk-total equity_snapshots
+  assignment: OpsRead<{ streamArmed: number; cronArmed: number }>;
+}
+```
 
-export type Severity = "normal" | "warning" | "high" | "critical";
+Rules the refactor must obey:
+- **Inspect `result.error` on every read** (Supabase returns `{data,error}` — a `.error` is NOT thrown,
+  so `try/catch` alone misses it). `ok = !error && data != null`.
+- **On a failed read, DO NOT update that read's `value`** (no frozen-fresh age) and **DO NOT substitute a
+  default** (no "zero armed" from a failed assignment query). Set `ok=false`, keep `lastOkMs` from the
+  last success, bump `fetchedMs`.
+- Reads are **independent** — a heartbeat failure must not blank the cron/assignment reads.
+- `deriveIncident` consumes `ok` + `lastOkMs`: a read whose `ok=false` OR whose `lastOkMs` is older than
+  `opsReadStaleSec` **[INFERRED-v2 = 60]** is treated as **observability-degraded for that signal**, never
+  as a health assertion (see W-ops). A stale `assignment` read must not clear an executor incident, and a
+  stale `heartbeat` read must not read as "fresh".
+
+Until this refactor lands, the policy's ops-based branches are **not implementable safely** — this is the
+first task of the build slice.
+
+---
+
+## 1. Data-source inventory (with the v2 observability metadata)
+
+| Input | Source → hook | Cadence | Expected freshness | Failure handling (v2) | Truthful inference |
+|---|---|---|---|---|---|
+| Stream trading-liveness | `worker_heartbeat` → `useOpsStatus.heartbeat` | ~10s RTH; 1/min pre-open; silent after-hours | RTH <15s; pre-open <90s; closed unbounded (expected) | `.error`→`ok=false`, value NOT frozen | RTH only: fresh⇒trading-live; stale⇒degraded. Closed: says nothing |
+| Process liveness | `worker_runs.last_heartbeat_at` → `useWorkerRuns.heartbeatAgeSec` | 60s 24/7 (`index.ts:851`) | <90s if alive, any hour | `status` field: loading/ok/empty/error | fresh⇒process alive; stale>`runProcessStaleSec`⇒likely down |
+| Recent instability | `worker_runs.termination_kind='abrupt_or_unknown'` → `.abrupt16h/.unstable` | attribution at next boot (2-min guard, `store.ts:382`) | count | via `status` | **crashes/OOM/evictions in 16h**; `unstable=abrupt16h>=3` [IN-CODE]. ≠ currently down |
+| Boots (context) | `worker_runs` rows/16h → `.boots16h` | per boot | count | — | includes redeploys — **never** call "crashes/instability" |
+| Cron trading-liveness | desk-total `equity_snapshots` → `useOpsStatus.cron` | ~1/min RTH (pg_cron `* 13-20 * * 1-5`) | RTH <90s; closed unbounded | `.error`→`ok=false` | RTH: fresh⇒cron path live; stale⇒cron down. Closed: says nothing |
+| Executor assignment | `strategists.executor,status` → `useOpsStatus.assignment` | 15s | live | `.error`→`ok=false`, counts NOT zeroed | armed channels per engine. **configured ≠ fenced** (§7). failed read ≠ "zero armed" |
+| Fund posture | `fund_state` → `useDeskState` (`types.ts:82-85`) | realtime+poll | live | realtime→poll | HALT=`is_halted`; RUN=`running&&!halted`; STOP=`!running&&!halted` (`DeskShell:45,146-151`) |
+| Open positions (LOCAL) | `positions` → `useDeskFeed.positions` | poll | live-ish | — | desk's own rows — **NOT broker-flat/reconciled** (§7) |
+| Market session | `engine/market-calendar` + `RTH_OPEN=570` + pre-open 535 + `nowMs` | pure | exact (within calendar horizon) | unknown-date→`coverageKnown=false` (§8) | weekend/holiday/premarket/open/afterhours + coverageKnown |
+| Reconciliation | **NONE live** (`reconcile-alpaca` = nightly P&L) | — | — | — | cannot assert reconciled/broker-flat (§7) |
+
+---
+
+## 2. Severity truth table (v2 — precedence + overlap fixed)
+
+**Evaluation model (finding 7):** compute EVERY rule's boolean, collect all matches into `activeCodes`;
+`primaryCode` = the highest-severity active code, ties broken by the order within a severity below.
+`severity` = the primary's severity. This preserves concurrent conditions (e.g. C2 + H1).
+
+**Telemetry gate FIRST (finding 2 & 4) — resolved before any null-heartbeat interpretation:**
+- `workerRuns.status==='loading'` (or `!ops.loaded`) ⇒ emit **`L` CHECKING**, and **suppress all
+  liveness-based rows** (C2/C3/C4/H2/H3/W4/P-rules). Telemetry-independent rows (C1 halted, H1 unstable
+  only if `status==='ok'`) may still evaluate. No health claim while loading.
+- `workerRuns.status==='error'` ⇒ **`W-obs`** (observability warning). A `null`/absent process heartbeat
+  here means "cannot read", NOT "worker down" — do not raise C2/P from it.
+- `workerRuns.status==='empty'` ⇒ **`W-empty`** in **every** session (no run rows in 16h ⇒ investigate).
+- Any `ops.*.ok===false` OR `ops.*.lastOkMs` older than `opsReadStaleSec` ⇒ **`W-ops`** for that signal,
+  and that signal is not used to assert health (a failed heartbeat read ≠ fresh; a failed assignment ≠
+  zero armed).
+
+### CRITICAL (order = precedence for ties)
+| Code | Condition |
+|---|---|
+| **C1** | `fund.is_halted` — desk KILLED (any session). |
+| **C4** | **(precedes C2/C3)** `session==open` AND `openPositions>0` AND a responsible-executor is unreachable — i.e. (stream body of C2) OR (cron body of C3) is true. Open exposure + no confirmed live manager. |
+| **C2** | `session==open` AND `assignment.ok` AND `streamArmed>0` AND stream unreachable: `heartbeat.ok && hbAgeSec>streamStaleRthSec(120)` **AND** process stale (`workerRuns.status==='ok'` && (`heartbeatAgeSec==null` OR `>runProcessStaleSec(180)`)). BOTH clocks stale ⇒ trading executor down, flat. |
+| **C3** | `session==open` AND `assignment.ok` AND `cronArmed>0` AND `streamArmed==0` AND cron stale (`cron.ok && cronAgeSec>cronStaleRthSec(180)`). Cron is the sole executor and its dead-man is stale. |
+
+### HIGH
+| Code | Condition |
+|---|---|
+| **H1** | `workerRuns.status==='ok'` AND `unstable` (`abrupt16h>=3`) — any session. |
+| **H2** | **(owns >120s, process-fresh)** `session==open` AND `assignment.ok` AND `streamArmed>0` AND `heartbeat.ok && hbAgeSec>streamStaleRthSec(120)` AND process FRESH (`workerRuns.status==='ok'` && `heartbeatAgeSec!=null` && `<=runProcessStaleSec(180)`). Stream not trading, process alive ⇒ degraded, not down. |
+| **H3** | `session==open` AND `assignment.ok` AND `cronArmed>0` AND `cron.ok && cronAgeSec>cronStaleRthSec(180)` AND `streamArmed>0` AND stream healthy. Partial executor outage; stream covers. |
+| **H-proc-exposed** | **(new, finding 3)** `session∈{afterhours,weekend,holiday}` AND process stale (`workerRuns.status==='ok'` && (`heartbeatAgeSec==null` OR `>runProcessStaleSec(180)`)) AND `openPositions>0`. Worker down off-hours with desk-open positions — broker state unconfirmed. |
+| **H-premkt-down** | **(new, finding 5)** `session==premarket` AND `streamArmed>0` AND process stale (`>runProcessStaleSec`). Worker down entering the session; escalates to C2/C4 at 09:30 if unresolved. |
+
+### WARNING
+| Code | Condition |
+|---|---|
+| **W1** | `workerRuns.status==='ok'` AND `abrupt16h∈{1,2}`. |
+| **W-obs** | `workerRuns.status==='error'` (observability failure, not down). |
+| **W-empty** | `workerRuns.status==='empty'` (every session). |
+| **W-ops** | any `ops.*` read failed/stale (§P) — observability warning for that signal. |
+| **W4** | **(owns 45–120s band)** `session==open` AND `assignment.ok` AND `streamArmed>0` AND `heartbeat.ok && streamWarnRthSec(45)<=hbAgeSec<=streamStaleRthSec(120)` AND process fresh. Early stream degradation. |
+| **W-proc-closed** | **(new, finding 3)** `session∈{afterhours,weekend,holiday}` AND process stale (as H-proc-exposed) AND `openPositions==0`. Worker down off-hours, flat. |
+| **W-premkt-ready** | **(new, finding 5)** `session==premarket` AND `streamArmed>0` AND process FRESH AND stream pre-open beat missing beyond grace: `!heartbeat.ok` OR `hbAgeSec>premarketBeatGraceSec` **[INFERRED-v2 = 120]** AND within the last ~10 min before `RTH_OPEN`. Stream up but not warmed for the open. |
+| **W-coverage** | **(finding 8)** `session.coverageKnown===false` — calendar table lapsed; session classification uncertain, verify manually. |
+
+### NORMAL / INCONCLUSIVE
+| Code | Condition |
+|---|---|
+| **L** | loading (telemetry gate) — CHECKING, no claim. |
+| **N2** | `!running && !is_halted` — intentional STOP (state note, not incident). |
+| **N3** | `session∈{afterhours,weekend,holiday}` AND process FRESH (`heartbeatAgeSec<=runProcessStaleSec` && `status==='ok'`). Market closed, worker healthy. **Applies ONLY when the 24/7 process heartbeat is fresh — never masks a stale one** (finding 3). |
+| **N4** | `session==premarket` AND process fresh AND (heartbeat beating within grace OR outside the readiness window). Warming. |
+| **N5** | zero armed channels for an executor ⇒ never raise on that idle engine. |
+| **N1** | `session∈{open}` healthy: running, executors fresh, `abrupt16h==0`, `status==='ok'`. |
+
+---
+
+## 3. Truthful operator wording (v2 corrections)
+
+- **C1** — `DESK HALTED — KILL ENGAGED`. Facts: `halted_reason`; "desk shows N open positions"; **"flatten
+  commanded; broker-flat unconfirmed"** (never assert the flatten completed — §7).
+- **C2/C4** — `STREAM EXECUTOR UNREACHABLE`. Facts: "no stream beat + no process heartbeat for Xm during
+  market hours"; "armed stream channels N"; "desk shows M open positions" (C4). Never "crashed" (unknown).
+- **C3** — `CRON EXECUTOR UNREACHABLE`. Facts: "no cron snapshot for Xm (sole executor)"; "armed cron N".
+- **H1** — `WORKER UNSTABLE — N ABRUPT TERMINATIONS / 16H` (**"ABRUPT TERMINATIONS", not "restarts"**).
+  Facts: **"process currently <alive Xm / last seen Xm ago>"** (instability ≠ down); "boots incl.
+  redeploys: B" as secondary context only.
+- **H2** — `STREAM DEGRADED — NOT TRADING`. Facts: "process alive; stream beat stale Xm during market hours".
+- **H-proc-exposed** — `WORKER DOWN — OPEN POSITIONS`. Facts: "process heartbeat stale Xm (market closed)";
+  "desk shows N open positions — broker state unconfirmed".
+- **W-obs** — `WORKER TELEMETRY UNAVAILABLE`. Facts: "cannot read the run ledger — observability failure,
+  not proof the worker is down".
+- **W-ops** — `OPS READ DEGRADED`. Facts: which read (heartbeat/cron/assignment) is failing/stale.
+- **W-empty** — `NO WORKER RUN LEDGER`. Facts: "no run rows in 16h — instrumentation gap or long-dead worker".
+- **W-premkt-ready** — `STREAM NOT WARMED FOR OPEN`. Facts: "process alive; no pre-open beat; N stream
+  channels armed for 09:30".
+- **W-coverage** — `MARKET CALENDAR COVERAGE LAPSED`. Facts: "session classification uncertain beyond <date>".
+- **N2** — `DESK STOPPED (intentional)`. Facts: "entries paused by operator; not a fault".
+- **N3** — muted `MARKET CLOSED` chip; stale trading beats labeled "expected (closed)".
+- **L** — `CHECKING…` (no severity color).
+
+**Invariants (every string):** (1) recent instability and currently-down are separate clauses; (2)
+`status:'error'`⇒"observability failure", never "down"; (3) `boots16h` only ever "boots"; (4) executor is
+"configured", never "owner/fenced"; (5) positions are "desk shows N open positions", never
+"reconciled/flat".
+
+---
+
+## 4. Pure derivation contract (v2 — activeCodes + ops metadata)
+
+```ts
+export type Severity = "normal" | "warning" | "high" | "critical" | "checking";
 export type MarketSession = "weekend" | "holiday" | "premarket" | "open" | "afterhours";
 
 export interface IncidentInputs {
-  nowMs: number;                       // injected clock (ET-derived elsewhere)
-  session: MarketSession;              // from a pure market-calendar helper (§7 gap)
+  nowMs: number;
+  session: { session: MarketSession; coverageKnown: boolean };  // from marketSession(nowMs) — §8
   fund: { is_halted: boolean; running: boolean; halted_reason: string | null; mode: "paper" | "live" };
-  ops: {                               // useOpsStatus (raw, no severity)
-    hbAgeSec: number | null; cronAgeSec: number | null;
-    streamArmed: number; cronArmed: number;
+  ops: {                                   // §P shape — per-read ok + lastOkMs
+    loaded: boolean;
+    heartbeat:  { ok: boolean; ageSec: number | null; note: string | null; lastOkMs: number | null };
+    cron:       { ok: boolean; ageSec: number | null; lastOkMs: number | null };
+    assignment: { ok: boolean; streamArmed: number | null; cronArmed: number | null; lastOkMs: number | null };
   };
-  workerRuns: {                        // useWorkerRuns
+  workerRuns: {
     status: "loading" | "ok" | "empty" | "error";
-    heartbeatAgeSec: number | null; abrupt16h: number; boots16h: number;
-    unstable: boolean; current: { started_at: string; last_phase: string | null } | null;
+    heartbeatAgeSec: number | null; abrupt16h: number; boots16h: number; unstable: boolean;
+    current: { started_at: string; last_phase: string | null } | null;
   };
-  openPositions: number;               // feed.positions.length
-  // thresholds injected so tests pin them + the reviewer ratifies the [INFERRED] ones:
+  openPositions: number;
   thresholds: {
-    streamStaleRthSec: number;         // [INFERRED] 120
-    streamWarnRthSec: number;          // [INFERRED] 45
-    cronStaleRthSec: number;           // [INFERRED] 180
-    runProcessStaleSec: number;        // [INFERRED] 180
+    streamWarnRthSec: number;   // 45  (ratified)
+    streamStaleRthSec: number;  // 120 (ratified)
+    cronStaleRthSec: number;    // 180 (ratified)
+    runProcessStaleSec: number; // 180 (ratified)
+    opsReadStaleSec: number;    // 60  [INFERRED-v2]
+    premarketBeatGraceSec: number; // 120 [INFERRED-v2]
+    premarketReadyWindowSec: number; // 600 (last 10 min before open) [INFERRED-v2]
   };
 }
 
 export interface Incident {
-  severity: Severity;
-  code: string;                        // "C1"|"C2"|... stable id for tests/telemetry
-  title: string;
-  facts: string[];                     // ≤3
+  severity: Severity;          // = primaryCode's severity ("checking" when primary is L)
+  primaryCode: string;         // highest-severity active code (tie → truth-table order)
+  activeCodes: string[];       // ALL matching codes — concurrent conditions preserved
+  title: string;               // primary's title
+  facts: string[];             // primary's facts, ≤3
   session: MarketSession;
-  openPositions: number;               // carried so the UI always shows exposure (§5)
-  advisoryOnly?: false;                // deterministic; Sentinel is NOT an input here
+  coverageKnown: boolean;
+  openPositions: number;       // ALWAYS carried — exposure visible in every state (§5)
 }
 
-export function deriveIncident(i: IncidentInputs): Incident; // total function; never throws
+export function deriveIncident(i: IncidentInputs): Incident; // total, never throws, no fetch/subscribe/LLM
 ```
 
-`deriveIncident` is called ONCE at the page seam (`app/page.tsx`) with the already-lifted hook results
-+ a session value + `nowMs`, and the resulting `Incident` is passed via `SurfaceProps` to a
-subscription-free `IncidentBanner` / `SystemHealthStrip` (no leaf hooks — constraint honored).
+---
+
+## 5. UI behavior (unchanged intent; severity now from `primaryCode`)
+
+- **Hidden:** primary `normal` in `open`/`premarket` healthy. Market-closed shows only a muted health chip.
+- **CHECKING (compact, neutral):** primary `L` (loading) — no color, no health claim.
+- **Compact (top shell, no chart displacement):** `warning`, plus N2 STOP note + N3 market-closed chip.
+- **Expanded (banner below shell, ≤3 facts + details disclosure listing `activeCodes`):** `high`.
+- **Pre-empt chart space:** `critical` only.
+- **Invariant:** open-position count (from `Incident.openPositions`) visible in EVERY state. No
+  executor-switch/remediation. Sentinel/LLM stays a separate subordinate advisory (not an input).
 
 ---
 
-## 5. UI behavior (banner + health strip)
+## 6. Test matrix (v2 — corrected branches + combinations)
 
-- **Hidden:** `severity==='normal'` AND session∈{open,premarket} healthy. (In market-closed sessions,
-  show only a muted health-strip chip, not a banner.)
-- **Compact (one line, in the top shell, no chart displacement):** `warning`, plus the intentional
-  `STOP` note (N2) and the market-closed chip (N3).
-- **Expanded (banner below the shell, ≤3 facts + a "details" disclosure):** `high`.
-- **Pre-empt chart space (replace the chart's top allocation, per spec §3):** `critical` only.
-- **Invariant:** **open-position truth is visible in EVERY state** — the health strip always shows the
-  open-positions count (from `Incident.openPositions`), so a degraded state never hides exposure. The
-  banner never offers executor-switch/remediation (constraint).
-- Deterministic health leads; any Sentinel/LLM verdict remains a separate, visually-subordinate
-  advisory panel (not an input to this banner).
+Pinned `thresholds` (ratified + INFERRED-v2 defaults). Assert `{severity, primaryCode, activeCodes}` + key facts.
+
+**Telemetry-gate & states (finding 4)**
+1. `workerRuns.status='loading'`, ops.loaded=false → primary `L` CHECKING; no liveness codes in activeCodes.
+2. `status='error'` (RTH, stream armed, heartbeatAgeSec=null) → primary `W-obs`; **NOT** C2 (null heartbeat is a read failure, not down).
+3. `status='empty'`, session=afterhours → `W-empty` (warning after hours too).
+4. `status='empty'`, session=open → `W-empty`.
+
+**Ops-read failures (finding 1)**
+5. assignment read `ok=false` (streamArmed=null) while stream heartbeat stale RTH → `W-ops`; must NOT raise C2/H2 from an unknown armed-count, must NOT read as "zero armed" (no N5 suppression either).
+6. heartbeat read `ok=false` with a previously-fresh cached value, RTH, stream armed → `W-ops`; the frozen age is NOT treated as fresh (no false N1) and NOT as stale-down (no false C2) — observability only.
+7. `ops.heartbeat.lastOkMs` older than `opsReadStaleSec` (stuck poll) → `W-ops`.
+
+**Session boundaries (finding 8, 5)**
+8. 09:29 ET trading day → premarket; 09:30 (`RTH_OPEN`) → open.
+9. Half-day (`EARLY_CLOSES` e.g. 2026-11-27): 12:59 open, 13:01 afterhours (`sessionCloseMin`=780).
+10. Holiday date (2026-06-19) → holiday; weekend → weekend.
+11. Date beyond calendar horizon (`calendarHorizonDays<0`) → `coverageKnown=false` → `W-coverage`.
+
+**Premarket readiness (finding 5)**
+12. premarket, streamArmed>0, process fresh, heartbeat beating within grace → N4.
+13. premarket, streamArmed>0, process fresh, no pre-open beat (`hbAgeSec>120`) within last 10 min before open → `W-premkt-ready`.
+14. premarket, streamArmed>0, process stale (>180) → `H-premkt-down`.
+
+**All-session process-stale (finding 3)**
+15. afterhours, process stale (heartbeatAgeSec=4000, status=ok), openPositions=0 → `W-proc-closed`.
+16. afterhours, process stale, openPositions=3 → `H-proc-exposed` (broker state unconfirmed).
+17. afterhours, process FRESH, all trading beats stale (expected) → N3 (not masked, but process is fresh so genuinely normal).
+18. weekend, process stale, openPositions=2 → `H-proc-exposed`.
+
+**RTH liveness & overlap (finding 2)**
+19. open, stream armed, `hbAgeSec=60` (in 45–120), process fresh → `W4` (owns the band); NOT H2.
+20. open, stream armed, `hbAgeSec=200` (>120), process fresh (heartbeatAgeSec=30) → `H2`; NOT C2 (process alive); W5 no longer exists.
+21. open, stream armed, `hbAgeSec=null/300` AND process stale (>180/null, status=ok), flat → `C2`.
+22. open, stream armed, same as 21 but openPositions=3 → **`C4` primary** (precedes C2), activeCodes include C2.
+23. open, cronArmed=5, streamArmed=0, cronAgeSec=400 → `C3`.
+24. open, cronArmed=5, streamArmed=25 healthy, cronAgeSec=400 → `H3`.
+
+**Instability & wording (finding 6)**
+25. abrupt16h=1 → `W1`; =2 → `W1`; =3 → `H1` (title contains "ABRUPT TERMINATIONS").
+26. H1 with process fresh (heartbeatAgeSec=20) → facts assert "process currently alive".
+27. boots16h=30, abrupt16h=0, healthy RTH → `N1` (boots never drive severity).
+
+**Fund posture**
+28. is_halted=true (any session) → `C1`; facts include "flatten commanded; broker-flat unconfirmed".
+29. running=false, is_halted=false → `N2`.
+
+**Combination / activeCodes (finding 7)**
+30. open, stream unreachable (C2 body, flat) AND abrupt16h=4 → primary `C2`, `activeCodes=[C2,H1,...]` (instability not discarded).
+31. open, C4 (exposure) AND unstable AND W-ops(cron read failing) → primary `C4`; activeCodes include C4, H1, W-ops.
+32. loading + is_halted=true → primary `C1` (telemetry-independent), plus `L` suppresses liveness codes only.
 
 ---
 
-## 6. Test matrix (unit cases — pure, per branch)
+## 7. Unresolved backend gaps (unchanged — frontend cannot determine reliably)
+1. **Fenced executor ownership** — `strategists.executor` is config, not a lease (P3/P4). "configured
+   executor", not "owner"; cannot detect deploy-overlap dual-run.
+2. **Broker-position reconciliation / broker-flat** — no live `/v2/positions` (reconcile-alpaca is nightly
+   P&L). Banner says "desk shows N open positions", never "flat/reconciled". KILL says "flatten commanded;
+   broker-flat unconfirmed".
+3. **Two-clock reconciliation is heuristic** — resolved with the ratified INFERRED thresholds, not a
+   backend truth. A single authoritative "process-up + trading-live" signal would remove H2/W4 tuning.
+4. **`worker_runs` abrupt conflates crash / OOM / eviction** (next-boot, 2-min guard) — banner says "abrupt
+   terminations", not a cause; cause attribution needs Railway-side evidence (triage P4 follow-ons).
+5. **New pure helpers required at implementation** (design-approved, built in the slice): `useOpsStatus`
+   observability-metadata refactor (§P); `marketSession(nowMs)` (§8); `deriveIncident` + tests.
 
-Each row = one `deriveIncident` call with pinned `thresholds`; assert `{severity, code}` and key facts.
+## 8. Session helper contract (finding 8)
+```ts
+// PURE. Unix epoch in; America/New_York conversion internal (DST-correct via Intl, NOT a fixed offset);
+// reports coverage instead of asserting certainty. lib/incident/marketSession.ts.
+export function marketSession(nowMs: number): { session: MarketSession; coverageKnown: boolean };
+```
+- **DST correctness:** derive the ET wall-clock via `Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',
+  ...})` on `new Date(nowMs)` (never a hardcoded UTC−5/−4). Produces the ET `YYYY-MM-DD` + minutes-since-midnight.
+- **Classification:** weekend/holiday from `engine/market-calendar` (`isWeekend`/`isMarketHoliday`);
+  else `premarket` if `min < RTH_OPEN(570)`, `open` if `RTH_OPEN <= min < sessionCloseMin(dateET)`,
+  `afterhours` otherwise. (Half-day handled by `sessionCloseMin` 780.)
+- **Coverage:** `coverageKnown = calendarHorizonDays(dateET) >= 0` (the ET date is within the maintained
+  table). When false, still return a best-effort clock-based session but flag `coverageKnown=false` so the
+  policy raises `W-coverage` rather than silently asserting a holiday/half-day it can't verify.
+- The `nowMs` is injected into `deriveIncident` too (no `Date.now()` inside either function — pure/testable,
+  consistent with the `market-calendar` "no argless-new-Date" rule).
 
-1. **Halted** — `is_halted=true` → C1 (any session; open positions shown).
-2. **Healthy RTH** — session=open, running, hb=8s, cron=20s, abrupt16h=0, status=ok → N1 (hidden).
-3. **Intentional STOP** — running=false, is_halted=false → N2 (compact, "intentional").
-4. **After-hours normal** — session=afterhours, hbAgeSec=40000 (stale), cronAgeSec=40000, workerRuns fresh (heartbeatAgeSec=45), status=ok → N3 (NOT critical — the market-closed false-alarm guard).
-5. **After-hours worker actually down** — session=afterhours, workerRuns.heartbeatAgeSec=4000, status=ok → H/W per process-stale (NOT masked by market-closed).
-6. **Premarket warm** — session=premarket, workerRuns fresh, hb stale → N4.
-7. **Weekend/holiday** — session∈{weekend,holiday}, everything trading-stale, workerRuns fresh → N3. Holiday boundary: a date in `MARKET_HOLIDAYS` (e.g. 2026-06-19) → holiday.
-8. **Half-day close boundary** — session flips open→afterhours at `sessionCloseMin`=780 (13:00) on an `EARLY_CLOSES` date (e.g. 2026-11-27); 12:59 open, 13:01 afterhours.
-9. **RTH open boundary** — 09:29 premarket, 09:30 (`RTH_OPEN`=570) open.
-10. **Stream down, RTH, exposure** — session=open, streamArmed=25, hb=null, workerRuns.heartbeatAgeSec=null/stale, openPositions=3 → C4 (exposure + degraded).
-11. **Stream down, RTH, flat** — same but openPositions=0 → C2.
-12. **Stream beat stale but process alive, RTH** — hb=200, workerRuns.heartbeatAgeSec=30 → H2 (degraded, not down).
-13. **Cron sole executor stale, RTH** — cronArmed=5, streamArmed=0, cronAgeSec=400 → C3.
-14. **Cron stale but stream covers** — cronArmed=5, streamArmed=25 healthy, cronAgeSec=400 → H3.
-15. **1 abrupt** → W1; **2 abrupt** → W1; **3 abrupt** → H1 (unstable boundary).
-16. **H1 wording** — abrupt16h=4 but workerRuns.heartbeatAgeSec=20 → H1 with "process currently alive".
-17. **Ledger read error** — status='error' → W2 ("observability failure", not down).
-18. **Ledger empty, RTH** — status='empty', session=open → W3.
-19. **Zero armed on an executor** — streamArmed=0 with stream stale → does NOT raise on stream (N5); severity from other inputs only.
-20. **Conflicting freshness, RTH** — hb stale, workerRuns fresh → W5 ("verifying"), never a hard down.
-21. **Boots-not-crashes** — boots16h=30, abrupt16h=0 → NORMAL (redeploy churn must not raise). Asserts `boots16h` never drives severity.
-22. **Threshold ratification** — same inputs at streamStaleRthSec=120 vs a reviewer-chosen value flip severity predictably (proves thresholds are injected, not baked).
-
----
-
-## 7. Unresolved backend gaps (frontend cannot determine these reliably today)
-
-1. **Fenced executor ownership.** `strategists.executor` is configuration, not a lease/fencing token
-   (P3/P4). The UI can show "configured executor" + aggregate liveness but **cannot** assert a single
-   authoritative executor or detect a deploy-overlap dual-run. → needs the backend lease/epoch.
-2. **Broker-position reconciliation / broker-flat.** No live `/v2/positions` reconciliation exists
-   (`reconcile-alpaca` is nightly P&L). The banner can say "desk shows N open positions" but **cannot**
-   say "flat/reconciled/stranded-confirmed". → needs the `reconcile-open-positions` service (triage
-   Bucket-2).
-3. **The two-clock reconciliation is heuristic.** `worker_heartbeat` (RTH-gated) vs
-   `worker_runs.last_heartbeat_at` (24/7) can disagree legitimately; the policy resolves it with
-   INFERRED thresholds, not a backend truth. A single authoritative "process up + trading-live" signal
-   would remove the W5 ambiguity.
-4. **`useOpsStatus` has no error/staleness state** — it silently keeps the last reading on a failed
-   read (`hooks/useOpsStatus.ts:56`), so a *stuck* `hbAgeSec` can masquerade as fresh. A small
-   follow-up (add a `status`/`fetchedAt` to `useOpsStatus`, mirroring `useWorkerRuns`) would let the
-   policy detect ops-read failure. **[FLAG: minor hook change — out of scope for this policy pass;
-   noted for the implementation slice.]**
-5. **No client market-session classifier exists.** `engine/market-calendar.ts` gives holiday/weekend/
-   half-day (frontend-importable, pure), but `RTH_OPEN`=570 is a worker constant and there is no
-   client "current session (premarket/open/afterhours)" helper. The policy REQUIRES one small pure
-   helper `marketSession(nowMsET): MarketSession` (buildable from the calendar + RTH_OPEN +
-   `sessionCloseMin`). **[FLAG: new pure helper needed at implementation; no existing source.]**
-6. **`abrupt_or_unknown` conflates crash and platform-eviction/OOM** (attribution is next-boot, 2-min
-   guard). The banner says "abrupt terminations", not a cause — correct given the data. Cause
-   attribution needs the Railway-side evidence (triage P4 instrumentation follow-ons).
-
-## Thresholds summary (for reviewer ratification)
-- **[IN-CODE]** `unstable = abrupt16h >= 3`, `window = 16h` (`useWorkerRuns.ts`); worker_runs abrupt
-  stale-guard `120s` (`store.ts:382`); `fastExitSec=10s` (`config.ts:100`); run-beat `60s`
-  (`index.ts:851`); cron `~60s` RTH (pg_cron); `RTH_OPEN=570`, `sessionCloseMin` 960/780 (market-calendar).
-- **[INFERRED — ratify]** `streamStaleRthSec=120`, `streamWarnRthSec=45`, `cronStaleRthSec=180`,
-  `runProcessStaleSec=180`. All derived as small multiples of the in-code cadences; none is
-  established by current code. Injected via `thresholds` so they are pinned in tests and changeable
-  without touching the policy logic.
+## Thresholds summary
+- **[IN-CODE]** `unstable=abrupt16h>=3`/16h (`useWorkerRuns`); worker_runs 2-min stale guard (`store.ts:382`);
+  `fastExitSec=10`, run-beat 60s, cron ~60s RTH; `RTH_OPEN=570`, pre-open 535–575, `sessionCloseMin` 960/780.
+- **[RATIFIED]** `streamWarnRthSec=45`, `streamStaleRthSec=120`, `cronStaleRthSec=180`, `runProcessStaleSec=180`.
+- **[INFERRED-v2 — ratify]** `opsReadStaleSec=60`, `premarketBeatGraceSec=120`, `premarketReadyWindowSec=600`.
+All injected via `thresholds` (pinned in tests, tunable without touching policy logic).
