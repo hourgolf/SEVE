@@ -15,6 +15,7 @@
 
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { pageAll } from "./pageAll";
 
 function loadEnv() {
   try {
@@ -46,24 +47,28 @@ async function main() {
   const sinceIso = days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
   const span = days > 0 ? `last ${days} day(s)` : "all-time";
 
-  const [stratRes, closedRes, openRes, sigRes] = await Promise.all([
+  // Closed positions + signals PAGINATE (audit 2026-07-10): .limit(20000/50000) silently
+  // capped at PostgREST's ~1000 max-rows, so the all-time scorecard was an arbitrary
+  // ~1000-row slice masquerading as per-channel P&L/win-rate. pageAll + a total order
+  // (.order(col) + id tiebreak) fetches everything or fails loud.
+  const [stratRes, openRes, closed, signals] = await Promise.all([
     sb.from("strategists").select("id,slug,name,status,sort_order").order("sort_order", { ascending: true }),
-    (sinceIso
-      ? sb.from("positions").select("strategist_id,realized_pnl,closed_at").eq("status", "closed").gte("closed_at", sinceIso)
-      : sb.from("positions").select("strategist_id,realized_pnl,closed_at").eq("status", "closed")
-    ).limit(20000),
     sb.from("positions").select("strategist_id,unrealized_pnl").eq("status", "open").limit(2000),
-    (sinceIso
-      ? sb.from("signals").select("strategist_id,signal_type,acted_on,blocked_reason,created_at").gte("created_at", sinceIso)
-      : sb.from("signals").select("strategist_id,signal_type,acted_on,blocked_reason,created_at")
-    ).order("created_at", { ascending: false }).limit(50000),
+    pageAll<any>(() =>
+      (sinceIso
+        ? sb.from("positions").select("strategist_id,realized_pnl,closed_at").eq("status", "closed").gte("closed_at", sinceIso)
+        : sb.from("positions").select("strategist_id,realized_pnl,closed_at").eq("status", "closed")
+      ).order("closed_at", { ascending: true }).order("id")),
+    pageAll<any>(() =>
+      (sinceIso
+        ? sb.from("signals").select("strategist_id,signal_type,acted_on,blocked_reason,created_at").gte("created_at", sinceIso)
+        : sb.from("signals").select("strategist_id,signal_type,acted_on,blocked_reason,created_at")
+      ).order("created_at", { ascending: false }).order("id")),
   ]);
 
   if (stratRes.error) throw new Error("strategists read: " + stratRes.error.message);
   const strategists = (stratRes.data ?? []) as any[];
-  const closed = (closedRes.data ?? []) as any[];
   const open = (openRes.data ?? []) as any[];
-  const signals = (sigRes.data ?? []) as any[];
 
   const groupBy = <T>(rows: T[], keyFn: (r: T) => string) => {
     const m = new Map<string, T[]>();

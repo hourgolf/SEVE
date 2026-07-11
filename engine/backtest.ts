@@ -90,6 +90,14 @@ const FUND: FundState = {
 const findQuote = (chain: Quote[], strike: number, optType: "call" | "put") =>
   chain.find((q) => q.strike === strike && q.optType === optType);
 
+// Intrinsic value from the underlying — the LAST-RESORT exit fill when a held strike is
+// unquotable at session end (audit 2026-07-10: the NTM-only capture drops strikes that
+// drift deep ITM, so the old $0 fallback booked the desk's biggest winners as −100%
+// losses). Deep ITM at the bell ≈ intrinsic, but it's still a MODELED fill — every use
+// tags the trade's exitReason ':intrinsic' so it can never be banked as real NBBO.
+const intrinsicValue = (optType: "call" | "put", strike: number, spot: number) =>
+  Math.max(0, optType === "call" ? spot - strike : strike - spot);
+
 // Defined max loss of a multi-leg structure, per ONE unit ($). Option expiry
 // payoff is piecewise-linear with kinks only at strikes, so the worst case sits
 // at a strike or an unbounded end — evaluate P&L at {0, each strike, far OTM} and
@@ -368,8 +376,21 @@ export function simulateSession(
     // lets us increment the counter only when a position is actually opened this bar.
     const wasFlat = !pos;
     const lateBlocked = !!lateGate && f.minutesToClose <= lateGate.cutoffMin && lateEntries >= lateGate.maxEntries;
+    // UNQUOTABLE EXIT = a DATA HOLE, not a $0 fill (audit 2026-07-10): the captured chain is
+    // NTM-only and drops >180s-stale strikes, so a winner that ran deep ITM is exactly the
+    // strike missing at the 15:5x flatten — the old {fill: 0} fallback booked it as a phantom
+    // −100% loss (and a missing SHORT leg as fictitious max profit), then banked it as "real
+    // NBBO". Defer the exit to the next quotable bar (eod_flatten re-fires every bar inside
+    // its window); on the session's LAST bar, resolve at intrinsic value tagged ':intrinsic'.
+    if (pos && intent?.kind === "exit" && i < bars.length - 1) {
+      const holed = pos.legs
+        ? pos.legs.some((leg) => !findQuote(chain, leg.strike, leg.optType))
+        : !findQuote(chain, pos.strike, pos.optType);
+      if (holed) intent = null; // carry — the pyramid block below can't add either (same missing quote)
+    }
     if (pos && intent && intent.kind === "exit") {
       let exitPrice: number, pnl: number, tradeCost: number;
+      let modeledExit = false; // any leg priced at intrinsic instead of a quote
       const comm = gross ? 0 : costModel.commissionPerContract;
       if (pos.legs) {
         // multi-leg: P&L is the sum of each leg (long = +(exit−entry), short =
@@ -377,7 +398,8 @@ export function simulateSession(
         let net = 0, exitNet = 0, exitEdge = 0;
         for (const leg of pos.legs) {
           const lq = findQuote(chain, leg.strike, leg.optType);
-          const ex = lq ? (gross ? { fill: lq.mid, edgeUsd: 0 } : fillWithCost(leg.side === "long" ? "sell" : "buy", lq, costModel)) : { fill: 0, edgeUsd: 0 };
+          const ex = lq ? (gross ? { fill: lq.mid, edgeUsd: 0 } : fillWithCost(leg.side === "long" ? "sell" : "buy", lq, costModel)) : { fill: intrinsicValue(leg.optType, leg.strike, f.close), edgeUsd: 0 };
+          if (!lq) modeledExit = true;
           net += (leg.side === "long" ? ex.fill - leg.entryPrice : leg.entryPrice - ex.fill) * leg.qty * 100 - comm * leg.qty * 2;
           exitNet += (leg.side === "long" ? ex.fill : -ex.fill) * leg.qty;
           exitEdge += ex.edgeUsd * leg.qty + comm * leg.qty * 2;
@@ -387,7 +409,8 @@ export function simulateSession(
         tradeCost = (pos.entryEdgeUsd ?? 0) + exitEdge;
       } else {
         const q = findQuote(chain, pos.strike, pos.optType);
-        const ex = q ? (gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("sell", q, costModel)) : { fill: 0, edgeUsd: 0 };
+        const ex = q ? (gross ? { fill: q.mid, edgeUsd: 0 } : fillWithCost("sell", q, costModel)) : { fill: intrinsicValue(pos.optType, pos.strike, f.close), edgeUsd: 0 };
+        if (!q) modeledExit = true;
         exitPrice = ex.fill;
         const commTotal = comm * pos.qty * 2;
         pnl = (exitPrice - pos.entryPrice) * pos.qty * 100 - commTotal;
@@ -404,7 +427,9 @@ export function simulateSession(
         entryTs: bars[pos.entryMinute].ts,
         exitTs: bars[i].ts,
         pnl,
-        exitReason: intent.reason,
+        // ':intrinsic' = the exit strike was unquotable and filled at intrinsic value —
+        // a MODELED fill, visibly distinct in every exit-reason rollup, never "real NBBO".
+        exitReason: modeledExit ? `${intent.reason}:intrinsic` : intent.reason,
         cost: tradeCost,
         // R: multi-leg = the structure's DEFINED max loss; single-leg = 50% of premium.
         riskUsd: pos.legs ? (pos.maxLossUsd ?? 0) * pos.qty : 0.5 * pos.entryPrice * pos.qty * 100,
@@ -507,6 +532,36 @@ export function simulateSession(
       }
     }
     if (wasFlat && pos) { entryCount++; if (lateGate && f.minutesToClose <= lateGate.cutoffMin) lateEntries++; }
+  }
+  // ---- SESSION-END FORCE-FLATTEN (audit 2026-07-10): never drop an open position ----
+  // A MANAGED position whose strike drifted off the captured NTM chain can never step
+  // (every exit incl. the EOD flatten lives inside stepManaged, which needs a quote), so
+  // it used to end the loop still open and its whole round-trip silently vanished from
+  // trades[] — under-counting exactly the winners. Same safety net for a built-in `pos`
+  // that somehow reaches session end. Fill = intrinsic at the last bar, tagged ':intrinsic'.
+  if (bars.length) {
+    const li = bars.length - 1;
+    const spot = bars[li].close;
+    if (ms && ms.remaining > 0) {
+      const fill = intrinsicValue(ms.optType, ms.strike, spot);
+      trades.push({
+        slug: cfg.slug, strike: ms.strike, optType: ms.optType, qty: ms.remaining,
+        entryPrice: ms.entryPremium, exitPrice: fill,
+        entryTs: bars[ms.entryMinute].ts, exitTs: bars[li].ts,
+        pnl: (fill - ms.entryPremium) * ms.remaining * 100,
+        exitReason: "eod:intrinsic", cost: 0, riskUsd: ms.R * ms.remaining * 100,
+      });
+    }
+    if (pos && !pos.legs) {
+      const fill = intrinsicValue(pos.optType, pos.strike, spot);
+      trades.push({
+        slug: pos.slug, strike: pos.strike, optType: pos.optType, qty: pos.qty,
+        entryPrice: pos.entryPrice, exitPrice: fill,
+        entryTs: bars[pos.entryMinute].ts, exitTs: bars[li].ts,
+        pnl: (fill - pos.entryPrice) * pos.qty * 100,
+        exitReason: "session_end:intrinsic", cost: 0, riskUsd: 0.5 * pos.entryPrice * pos.qty * 100,
+      });
+    }
   }
   return trades;
 }
