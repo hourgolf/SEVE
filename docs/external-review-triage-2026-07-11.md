@@ -196,6 +196,43 @@ Pulled the ACTUAL SEVE schema (ref xvdfsxwwedltvdktqdac), not the authored migra
 - Minor: all `auth_*` write policies are `using(true) check(true)` — any authenticated user writes any
   channel/fund_state. Fine for single-operator; note for any future multi-user.
 
+**Round 3 P3-FINAL dispositions (reviewer's converged conclusion — ADOPTED, one pushback):**
+- **Kill-list #1 REWRITTEN (good news):** not "rebuild the execution path" but **"activate the
+  already-designed order/fill ledger and make it authoritative."** Implementation order: add identity/
+  idempotency fields → constraints → persist intent before broker submission → deterministic client
+  order IDs → append fills independently of order terminal state → project positions → broker-flat/
+  confirmed-residual before close → retire direct position mutation as truth.
+- **Schema hardening DDL (adopted as the ledger's spec):** `orders` += account_id, client_order_id,
+  logical_execution_id, requested_qty, filled_qty, executor_id, lease_epoch, last_broker_sync_at +
+  `unique(account_id,client_order_id)`, `unique(account_id,broker_order_id) where … not null`,
+  `check(filled_qty between 0 and qty)`. `fills` += broker_fill_id, account_id + `unique(account_id,
+  broker_fill_id)` (else activity-replay dupes fills). `positions` += partial unique index — given the
+  one-slot doctrine, `unique(strategist_id) where status='open'` (add account_id if ownership moves to
+  the row). These go into the ledger build (Bucket 2 item 1), not applied piecemeal.
+- **Revised top architectural risks (adopted, replaces prior ordering):** (1) no broker-flat position
+  invariant; (2) two scheduled executors without fencing; (3) durable ledger modeled-but-unused;
+  (4) no DB uniqueness for open positions / order idempotency; (5) position truth via mutable
+  projection rows. "The schema is partially built in the right direction and then bypassed — arguably
+  more dangerous than no ledger, because orders/fills make it LOOK transactionally mature."
+- **⭐ PUSHBACK (grounded, not defensive) on "disable the cron trader":** the reviewer hedged it
+  "unless demonstrably required as failover." It IS — and it's well-gated. `index.dispatcher.draft.ts:
+  902`: fresh Railway heartbeat → **skip every stream-owned channel entirely** ("skipping is what makes
+  double-execution impossible"); stale heartbeat → act **exit-only** (entries hard-blocked, L900/931).
+  All 25 armed channels are stream-owned, so on a normal minute the cron trader touches ZERO of them.
+  It is a designed exit-only dead-man's-switch (flattens if Railway dies), NOT a naive second trader.
+  **Recommendation: KEEP it** — disabling removes the only failover for the single-Railway-instance
+  topology. The reviewer's STRUCTURAL point stands and is adopted: the gate is heartbeat-TIMING, not a
+  fenced lease; a brief-stale-but-alive heartbeat could still race a double-CLOSE (bounded by exit-only
+  + the idempotent `.eq(status,open)` desk close, but the broker sell isn't fenced). The real fix = the
+  lease/epoch (executor_id + lease_epoch on order intent) folded into kill-list #1; until then the
+  heartbeat gate is a reasonable interim.
+- **Security CLOSED:** 66_revoke_tmp_anon_option_bars.sql applied 07-11; verified **zero anon write
+  policies remain on any table**. Reviewer's meta-point adopted: temp grants survived because no
+  automated control verified revocation → build the **nightly schema-assertion guard** (fail loud if:
+  anon has any write grant; expected unique indexes absent; orders/fills unused while trading enabled;
+  >1 executor schedule active without a lease). Cheap, on-doctrine (fail-loud), prevents this whole
+  class — queued as a go-live infra item.
+
 ## What the reviewer still hasn't seen
 Migrations 03–67 + schema dump (P3), stream.ts + Railway topology (P4), the §04 UI components (P5),
 the other shadow instruments (one-account / ratchet / stairstep / day-report), a6-read/watch. Offer P3
