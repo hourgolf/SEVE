@@ -47,3 +47,22 @@ before Monday 09:30 ET open. Batch 1 committed local (9d38254), unpushed.
 
 ## Not in 1b (Bucket 2 architecture — separate go-live backbone)
 order/fill ledger -> immutable account identity at entry -> restart-safe partials -> independent risk service (absorbs the concentration allocator) -> executor fencing -> policy-epoch stamping -> THEN channel evaluation. Consider retiring MORGUE live order placement.
+
+## Update 2026-07-11 PM — evidence round + coordination
+- **Evidence round (parallel session, c42eba7) validated Batch 2:** 2 partial fills / 2,507 orders
+  (both MORGUE), 0 ever stranded → #2/#3/#4 are CONFIRMED-LATENT (correct fix, ~0.08% incidence).
+  Reviewer's sharper #2 framing: the real invariant is a broker-flat (Σ fills == requested) check
+  before closing — the deeper version is Bucket 2 (needs /v2/positions); Batch 2's re-row is the
+  valid Bucket-1 form.
+- **NEW #17 (Medium): synthetic-price exit booking** — multi-rung spread-capture exits book ONE
+  price, not the qty-weighted rung fills (≤$1 observed; contaminates attribution). Dormant if
+  SPREAD_CAPTURE is off live. Add to punch list; likely a follow-on (needs limitLadderFill to
+  return per-rung fills).
+- **#10 reframed:** reconcile never reads /v2/positions → can't detect a stranded remainder; the
+  real guarantee is the order/fill ledger + broker-flat close (Bucket 2). Batch-3 #10 = the light
+  honest-labeling fix only.
+- **⚠ COORDINATION: Batch 1 (9d38254) reached origin via the parallel session's push and Railway
+  redeployed it — the worker is running Batch-1 code labeled "stream-2026-07-10b" (WORKER_VERSION
+  unbumped). Weekend/market-closed = zero trade impact. Recovery: finish 3-4, ONE version bump
+  (stream-2026-07-11a) + push + heartbeat verify before Monday open. The shared branch means
+  worker commits can auto-deploy on any session's push — bump the version at the mission checkpoint.**
