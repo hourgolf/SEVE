@@ -25,6 +25,13 @@ build), WORKER_VERSION bumped once per deploy, heartbeat verified. Money-path ed
 | 12 | high | needs_broker_sample | dangerous | defer | Broker-error regex books a row closed on a rejected sell (reconcileClose gated=f |
 | 14 | low | needs_broker_sample | mechanical | defer | Live books gross Alpaca fills; broker FEE activities never ingested (engine book |
 
+
+## Deploy plan (operator decision 2026-07-11)
+WHOLE MISSION, ONE DEPLOY. Land + gate all worker batches (1-4) as LOCAL commits (push = Railway
+auto-deploy, so we hold). Then: final Fable adversarial-verify of the complete worker diff -> ONE
+WORKER_VERSION bump -> push (deploys) -> `select note from worker_heartbeat` shows the new version,
+before Monday 09:30 ET open. Batch 1 committed local (9d38254), unpushed.
+
 ## Batches
 
 - **Batch 1 (CRITICAL, coupled failure-policy + risk-pass timing):** #5 getOpenPositions throw · #8 lock-split + per-row exitInFlight guard + alpaca fetch timeout · #7 fast sweep consumes kill/config immediately (halt visible without waiting for a bar cycle) · #9 getOrders retry + let mandatory flattens run degraded. The heart — do first.
