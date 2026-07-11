@@ -170,6 +170,32 @@ point. CLAUDE.md's "Books: CLEAN" is re-affirmed true (the gate was wrong, not t
   the grind scalpers — the *loser* bucket generates the most broker-state churn, sharpening the
   reviewer's "stop placing paper orders for known losers / shadow-replay them" kill-list item.
 
+**Round 3 (P3 — LIVE schema pull via Management API — data/review/P3-SCHEMA.md):**
+Pulled the ACTUAL SEVE schema (ref xvdfsxwwedltvdktqdac), not the authored migrations. Answers the
+"does the schema permit contradictory order/position states?" question decisively:
+- **`orders`=0 rows, `fills`=0 rows CONFIRMED** — ledger tables exist, never written; execution state
+  lives only in `positions` + broker snapshots.
+- **`positions` has NO unique/partial constraint** (only the `id` PK) — nothing stops duplicate open
+  rows for the same channel+OCC; the worker's in-memory `Map` is the ONLY dedup. **`orders` has no
+  idempotency key** (no unique client_order_id). The schema PERMITS the contradictory states.
+- ⭐ **POSITIVE (makes kill-list #1 cheap): the order/fill ledger is already fully MODELED** — `orders`
+  has a 7-state `order_status` enum (pending/working/partially_filled/filled/rejected/canceled/expired),
+  open/close-aware `order_side`, `rejected_reason`; `fills` has `fees` + `cash_delta`. Kill-list #1 is a
+  WIRING job, not a design. `fills.fees` closes the fee-omission Medium; `orders.rejected_reason` would
+  make the reject path persist evidence (currently untestable).
+- **Duplicate-executor (review #14) CONFIRMED-LATENT with data:** pg_cron [4] `seve-paper-trader` fires
+  the paper-trader edge fn EVERY market minute while the Railway stream worker also runs. Inert today
+  because the partition is the mutable `strategists.executor` flag (25/25 armed = 'stream'; the 1 'cron'
+  channel is disabled) — but there is NO lease/fence/constraint binding a channel to one executor. Flip
+  one flag → both act. The guarantee is a config flag, not a lock.
+- **⚠ NEW SECURITY FINDING (CONFIRMED, fix written):** four leftover `tmp_anon_*` policies grant the
+  PUBLIC anon key INSERT/UPDATE on `option_bars` (backfill temp grants, CLAUDE.md said "revoke after",
+  never done). Low blast radius (research table, off money path) but a live unintended public write
+  surface. Fix = **66_revoke_tmp_anon_option_bars.sql** (operator applies in SQL editor). No other table
+  has an anon write grant; RLS is on for all 22 tables; reads are correctly anon-SELECT.
+- Minor: all `auth_*` write policies are `using(true) check(true)` — any authenticated user writes any
+  channel/fund_state. Fine for single-operator; note for any future multi-user.
+
 ## What the reviewer still hasn't seen
 Migrations 03–67 + schema dump (P3), stream.ts + Railway topology (P4), the §04 UI components (P5),
 the other shadow instruments (one-account / ratchet / stairstep / day-report), a6-read/watch. Offer P3
