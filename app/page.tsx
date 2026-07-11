@@ -98,10 +98,13 @@ function Surface({
 
   const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks };
 
-  // P5 slice 2 — the legacy §01–§04 product (DesktopSurface) is no longer MOUNTED beneath
-  // STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/nav on one page).
-  // It moves behind ONE explicit entry: a "Legacy rooms" link at the foot of STUDIO opens it
-  // as a full replacement view (reusing the single seam — no re-subscription), with a way back.
+  // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
+  // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/
+  // nav on one page). It moves behind ONE explicit entry: a "Legacy rooms" link at the foot of
+  // STUDIO opens it as a full replacement view, with a way back. The PAGE-OWNED seam
+  // (sentinel/workerRuns/positionPeaks) stays singular; the legacy view's OWN lazy panels
+  // (Brief/Pnl/Sentinel/Positions) still perform their documented reads while it is mounted —
+  // a transitional double-read that goes away when the legacy view is retired (slice 7).
   const [legacyOpen, setLegacyOpen] = useState(false);
 
   // Mobile (S5 rework) — the PERFORM/STUDIO phone shell. Shares the same seam
@@ -117,8 +120,9 @@ function Surface({
 
   // LEGACY VIEW (P5 slice 2) — the full DesktopSurface as a REPLACEMENT (not a sibling
   // beneath STUDIO), so only one product/header/transport/KILL is ever on screen. Rendered
-  // OUTSIDE .shell-root (its own cream chassis; shell skin tokens must not leak in). The seam
-  // hooks live in Surface (above), so DesktopSurface still gets the single-subscription props.
+  // OUTSIDE .shell-root (its own cream chassis; shell skin tokens must not leak in). It receives
+  // the page-owned seam props; note its own lazy panels still do their documented reads while
+  // mounted (the transitional double-read noted above, retired with the legacy view at slice 7).
   if (legacyOpen) {
     return (
       <div className="legacy-view">
@@ -144,12 +148,12 @@ function Surface({
       />
       {mode === "perform" && <PerformSurface {...props} />}
       {mode === "studio" && <StudioSurface {...props} />}
-      {/* Named destination for the legacy §01–§04 rooms — one explicit link, at the foot of
-          STUDIO, opening the full legacy desk as a replacement view. No functionality lost;
-          removed wholesale at slice 7 once each room is natively migrated. */}
+      {/* Named destination for the legacy five rooms (Play/Mix/Write/Tape/Ops) — one explicit
+          link, at the foot of STUDIO, opening the full legacy desk as a replacement view. No
+          functionality lost; removed wholesale at slice 7 once each room is natively migrated. */}
       {mode === "studio" && (
         <button type="button" className="legacy-entry" onClick={() => setLegacyOpen(true)}>
-          Legacy rooms · §01 live market · §02 composer · §03 book &amp; P&amp;L · §04 tape ▸
+          Legacy rooms · 01 Play · 02 Mix · 03 Write · 04 Tape · 05 Ops ▸
         </button>
       )}
       {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats over EITHER
