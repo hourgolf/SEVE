@@ -30,6 +30,7 @@ import { marketSummary } from "@/lib/marketSummary";
 import { marketSession } from "@/lib/incident/marketSession";
 import { deriveIncident } from "@/lib/incident/deriveIncident";
 import { positionsByExecutor } from "@/lib/incident/positionsByExecutor";
+import { devIncidentFixture } from "@/lib/incident/devFixture";
 import { useRefreshTick } from "@/hooks/useRefreshTick";
 import type { Room } from "@/components/surfaceTypes";
 
@@ -90,7 +91,7 @@ function Surface({
   // session. A 15s tick (+ the hook polls) keeps nowMs fresh so time-based escalation re-renders.
   useRefreshTick(15_000);
   const positionsBE = positionsByExecutor(feed.positions, view.desk.strategists);
-  const incident = deriveIncident({
+  const derivedIncident = deriveIncident({
     nowMs: Date.now(),
     session: marketSession(Date.now()),
     fund: view.desk.fund,
@@ -98,6 +99,16 @@ function Surface({
     workerRuns,
     positions: positionsBE,
   });
+  // DEV-ONLY (?incident=<sev>) — force a fixture incident to verify HIGH/CRITICAL in the REAL PerformSurface
+  // layout. Compile-time gated by NODE_ENV, so it is dead-code-eliminated from the production bundle.
+  const [devSev, setDevSev] = useState<string | null>(null);
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    setDevSev(new URLSearchParams(window.location.search).get("incident"));
+  }, []);
+  const incident = process.env.NODE_ENV !== "production" && devSev
+    ? devIncidentFixture(devSev, positionsBE, derivedIncident.session)
+    : derivedIncident;
   // 909 KIT — audible fills (opt-in via the KIT pad; inert while off). At the
   // seam so desktop + mobile share one diff of the same feed.
   useKitSounds(feed.positions, feed.recentTrades);

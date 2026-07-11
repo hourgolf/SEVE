@@ -124,8 +124,14 @@ export function deriveIncident(i: IncidentInputs): Incident {
   const execConcern =
     (asgOk && ((streamArmed! > 0 && streamStale) || (cronArmed! > 0 && cronUnreachable))) || processNotObserved;
 
-  const hbAge = ageSec(i.ops.heartbeat);
-  const cronAge = ageSec(i.ops.cron);
+  // stale labels use missingForSec for a missing read (never renders "?") and ageSec for an ok read.
+  const staleLabel = <T,>(r: Read<T>) => (r.state === "missing" ? fmtAge(missingForSec(r)) : fmtAge(ageSec(r)));
+  const hbLabel = staleLabel(i.ops.heartbeat);
+  const cronLabel = staleLabel(i.ops.cron);
+  // streamHealthy = a POSITIVELY fresh, successful stream observation within threshold + a fresh process
+  // observation. NOT `!streamStale` (which is also true for error / stale-read / loading / missing-in-grace).
+  const hbAgeVal = ageSec(i.ops.heartbeat);
+  const streamHealthy = readFresh(i.ops.heartbeat, t.opsReadStaleSec) && i.ops.heartbeat.state === "ok" && hbAgeVal != null && hbAgeVal <= t.streamStaleRthSec && processFresh;
   const procLabel = processFresh ? "process currently observed" : `process last observed ${fmtAge(processAgeSec)} ago`;
   const posFact = `desk shows ${P.total} open position${P.total === 1 ? "" : "s"}`;
 
@@ -148,13 +154,13 @@ export function deriveIncident(i: IncidentInputs): Incident {
   const liveness = !loading; // liveness rows only once telemetry is resolved (not loading)
   if (liveness && S === "open" && asgOk) {
     if (streamArmed! > 0 && streamUnreachable && P.streamConfigured > 0)
-      push({ code: "C4-stream", severity: "critical", trading: true, title: "STREAM HEARTBEAT STALE", facts: [`no stream beat ${fmtAge(hbAge)} + ${procLabel}, market hours`, `${P.streamConfigured} stream-configured open position${P.streamConfigured === 1 ? "" : "s"} — manager not observed`, "broker state unconfirmed"] });
+      push({ code: "C4-stream", severity: "critical", trading: true, title: "STREAM HEARTBEAT STALE", facts: [`no stream beat ${hbLabel} + ${procLabel}, market hours`, `${P.streamConfigured} stream-configured open position${P.streamConfigured === 1 ? "" : "s"} — manager not observed`, "broker state unconfirmed"] });
     if (cronArmed! > 0 && cronUnreachable && P.cronConfigured > 0)
-      push({ code: "C4-cron", severity: "critical", trading: true, title: "CRON HEARTBEAT STALE", facts: [`no cron snapshot ${fmtAge(cronAge)}, market hours`, `${P.cronConfigured} cron-configured open position${P.cronConfigured === 1 ? "" : "s"} — manager not observed`] });
+      push({ code: "C4-cron", severity: "critical", trading: true, title: "CRON HEARTBEAT STALE", facts: [`no cron snapshot ${cronLabel}, market hours`, `${P.cronConfigured} cron-configured open position${P.cronConfigured === 1 ? "" : "s"} — manager not observed`] });
     if (streamArmed! > 0 && streamUnreachable && P.streamConfigured === 0)
-      push({ code: "C2", severity: "critical", trading: true, title: "STREAM HEARTBEAT STALE", facts: [`no stream beat ${fmtAge(hbAge)} + ${procLabel}, market hours`, `${streamArmed} stream channels armed`] });
+      push({ code: "C2", severity: "critical", trading: true, title: "STREAM HEARTBEAT STALE", facts: [`no stream beat ${hbLabel} + ${procLabel}, market hours`, `${streamArmed} stream channels armed`] });
     if (cronArmed! > 0 && streamArmed === 0 && cronUnreachable && P.cronConfigured === 0)
-      push({ code: "C3", severity: "critical", trading: true, title: "CRON HEARTBEAT STALE", facts: [`no cron snapshot ${fmtAge(cronAge)} — cron is the sole armed executor`, `${cronArmed} cron channels armed`] });
+      push({ code: "C3", severity: "critical", trading: true, title: "CRON HEARTBEAT STALE", facts: [`no cron snapshot ${cronLabel} — cron is the sole armed executor`, `${cronArmed} cron channels armed`] });
   }
 
   // ============ HIGH ============
@@ -162,9 +168,9 @@ export function deriveIncident(i: IncidentInputs): Incident {
     push({ code: "H1", severity: "high", trading: false, title: `WORKER UNSTABLE — ${wr.abrupt16h} ABRUPT TERMINATIONS / 16H`, facts: [procLabel, `boots incl. redeploys: ${wr.boots16h}`] });
   if (liveness && S === "open" && asgOk) {
     if (streamArmed! > 0 && streamStale && processFresh)
-      push({ code: "H2", severity: "high", trading: true, title: "STREAM HEARTBEAT STALE — PROCESS OBSERVED", facts: [`${procLabel}; stream beat stale ${fmtAge(hbAge)}, market hours`] });
-    if (cronArmed! > 0 && cronUnreachable && streamArmed! > 0 && !streamStale && P.cronConfigured === 0)
-      push({ code: "H3", severity: "high", trading: true, title: "CRON DEGRADED — PARTIAL OUTAGE", facts: [`cron snapshot stale ${fmtAge(cronAge)}; no cron-configured open positions`] });
+      push({ code: "H2", severity: "high", trading: true, title: "STREAM HEARTBEAT STALE — PROCESS OBSERVED", facts: [`${procLabel}; stream beat stale ${hbLabel}, market hours`] });
+    if (cronArmed! > 0 && cronUnreachable && streamArmed! > 0 && streamHealthy && P.cronConfigured === 0)
+      push({ code: "H3", severity: "high", trading: true, title: "CRON DEGRADED — PARTIAL OUTAGE", facts: [`cron snapshot stale ${cronLabel}; no cron-configured open positions`] });
   }
   if (liveness && closed && processNotObserved && P.total > 0)
     push({ code: "H-proc-exposed", severity: "high", trading: false, title: "PROCESS NOT OBSERVED — OPEN POSITIONS", facts: [`worker heartbeat not observed ${fmtAge(processAgeSec)} (market closed) — telemetry is fail-open, death not confirmed`, `${posFact} — broker state unconfirmed`] });
@@ -179,11 +185,11 @@ export function deriveIncident(i: IncidentInputs): Incident {
   if (wr.query.state === "ok" && wr.rowsIn16h === 0)
     push({ code: "W-empty", severity: "warning", trading: false, title: "NO WORKER RUN LEDGER", facts: ["no run rows in 16h — instrumentation gap or long-dead worker"] });
   if (liveness && S === "open" && asgOk && streamArmed! > 0 && warnBand(i.ops.heartbeat, t.streamWarnRthSec, t.streamStaleRthSec) && processFresh)
-    push({ code: "W4", severity: "warning", trading: true, title: "STREAM BEAT LAGGING", facts: [`stream beat ${fmtAge(hbAge)}, market hours; process observed`] });
+    push({ code: "W4", severity: "warning", trading: true, title: "STREAM BEAT LAGGING", facts: [`stream beat ${hbLabel}, market hours; process observed`] });
   if (liveness && closed && processNotObserved && P.total === 0)
     push({ code: "W-proc-closed", severity: "warning", trading: false, title: "PROCESS NOT OBSERVED (market closed)", facts: [`worker heartbeat not observed ${fmtAge(processAgeSec)} — fail-open telemetry, death not confirmed`, "desk flat"] });
   if (liveness && S === "premarket" && asgOk && streamArmed! > 0 && processFresh && staleForLiveness(i.ops.heartbeat, t.premarketBeatGraceSec) && secondsToOpen != null && secondsToOpen <= t.premarketReadyWindowSec)
-    push({ code: "W-premkt-ready", severity: "warning", trading: true, title: "STREAM NOT WARMED FOR OPEN", facts: [`process observed; no pre-open beat for ${fmtAge(hbAge ?? missingForSec(i.ops.heartbeat))}`, `${streamArmed} stream channels armed for open`] });
+    push({ code: "W-premkt-ready", severity: "warning", trading: true, title: "STREAM NOT WARMED FOR OPEN", facts: [`process observed; no pre-open beat for ${hbLabel}`, `${streamArmed} stream channels armed for open`] });
   if (liveness && (S === "open" || S === "premarket") && P.unknown > 0 && !execConcern)
     push({ code: "W-unknown-pos", severity: "warning", trading: false, title: "POSITIONS NOT ATTRIBUTED", facts: [`${P.unknown} open position${P.unknown === 1 ? "" : "s"} can't be mapped to an executor (config gap)`] });
   if (!coverageKnown)

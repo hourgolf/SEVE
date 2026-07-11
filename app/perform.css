@@ -33,14 +33,18 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   height: calc(100vh - var(--h-top) - 2px);
   overflow: hidden;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) var(--h-dock);
+  /* P5 slice 3 — explicit 3-row grid: incident banner (auto, collapses to 0 when absent) /
+     stage (1fr) / dock. Rows are assigned by grid-row below, so a hidden banner never shifts
+     the stage/dock rows. */
+  grid-template-rows: auto minmax(0, 1fr) var(--h-dock);
   background: var(--frame-bg);
   transition: background-color 0.32s ease;
 }
+.shell-root[data-mode="perform"] .perform > .inc-banner { grid-row: 1; }
 
 /* ---------- stage: chart hero (~65%) + right rail --------------------------- */
 .shell-root[data-mode="perform"] .pf-stage {
-  grid-row: 1;
+  grid-row: 2;
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--rail-w);
   gap: 7px;
@@ -201,7 +205,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 
 /* ---------- DOCK — one chicklet per channel -------------------------------- */
 .shell-root[data-mode="perform"] .pf-dock {
-  grid-row: 2;
+  grid-row: 3;
   border-top: 2px solid var(--chrome-edge);
   background: var(--chrome-bg);
   transition: border-color 0.32s, background-color 0.32s;

@@ -4,9 +4,10 @@
 // coverage), and positionsByExecutor (slug join). No env / network / Supabase / React. CI-runnable.
 //   npm run incident-selftest
 
-import { deriveIncident, DEFAULT_THRESHOLDS, type IncidentInputs, type Read } from "./deriveIncident";
+import { deriveIncident, DEFAULT_THRESHOLDS, type IncidentInputs, type Read, type WorkerRunsInput } from "./deriveIncident";
 import { marketSession } from "./marketSession";
 import { positionsByExecutor } from "./positionsByExecutor";
+import { applyOpsRead, applyWorkerRuns, type Settled } from "./readModel";
 
 let pass = 0, fail = 0;
 function check(label: string, got: unknown, want: unknown): void {
@@ -143,6 +144,39 @@ check("premarket secondsToOpen > 0", (marketSession(Date.UTC(2026, 6, 14, 13, 20
     [{ strategist_slug: "pb-ride" }, { strategist_slug: "pb-ride" }, { strategist_slug: "grind" }, { strategist_slug: "no-exec" }, { strategist_slug: "ghost" }],
     strat);
   check("attribution: stream/cron/unknown(absent-exec)/unknown(unmatched)", pbe, { total: 5, streamConfigured: 2, cronConfigured: 1, unknown: 2 }); }
+
+// ======== readModel — actual promise REJECTION safety (finding 1) ========
+const okPrev: Read<{ note: string | null }> = { state: "ok", value: { note: "x" }, atMs: NOW - 10_000, lastSeenAtMs: NOW - 10_000, missingSinceMs: null, fetchedAtMs: NOW - 5_000 };
+const ext = () => ({ value: { note: null }, atMs: NOW });
+{ const r = applyOpsRead(okPrev, { status: "rejected", reason: new Error("net") } as Settled<{ data: unknown; error: unknown }>, ext, NOW);
+  check("applyOpsRead REJECTED → error, preserves prior atMs", [r.state, r.atMs], ["error", NOW - 10_000]); }
+{ const r = applyOpsRead(okPrev, { status: "fulfilled", value: { data: null, error: { message: "x" } } }, ext, NOW);
+  check("applyOpsRead fulfilled-{error} → error", r.state, "error"); }
+{ const r = applyOpsRead(okPrev, { status: "fulfilled", value: { data: null, error: null } }, ext, NOW);
+  check("applyOpsRead fulfilled-null → missing (sets missingSinceMs)", [r.state, r.missingSinceMs], ["missing", NOW]); }
+{ const r = applyOpsRead(okPrev, { status: "fulfilled", value: { data: { note: "y" }, error: null } }, ext, NOW);
+  check("applyOpsRead fulfilled-data → ok (clears missingSinceMs)", [r.state, r.missingSinceMs], ["ok", null]); }
+// independence: one rejected read does not affect a separately-applied ok read
+{ const a = applyOpsRead(okPrev, { status: "rejected", reason: 1 } as Settled<{ data: unknown; error: unknown }>, ext, NOW);
+  const b = applyOpsRead(okPrev, { status: "fulfilled", value: { data: { note: "z" }, error: null } }, ext, NOW);
+  check("independent reads: reject→error while other→ok", [a.state, b.state], ["error", "ok"]); }
+// workerRuns rejection
+const wrPrev: WorkerRunsInput = { query: { state: "ok", fetchedAtMs: NOW - 5_000 }, rowsIn16h: 4, currentHeartbeatAtMs: NOW - 30_000, latestObservedAtMs: NOW - 30_000, abrupt16h: 1, boots16h: 4, unstable: false, currentPhase: "sweep" };
+{ const r = applyWorkerRuns(wrPrev, { status: "rejected", reason: new Error() } as Settled<{ data: unknown; error: unknown }>, NOW);
+  check("applyWorkerRuns REJECTED → query error, preserves prior rows", [r.query.state, r.rowsIn16h], ["error", 4]); }
+{ const r = applyWorkerRuns(wrPrev, { status: "fulfilled", value: { data: [{ started_at: "x", last_heartbeat_at: new Date(NOW - 20_000).toISOString(), ended_at: null, termination_kind: null, last_phase: "cycle" }], error: null } }, NOW);
+  check("applyWorkerRuns fulfilled ok → query ok, rows=1, currentHeartbeat set", [r.query.state, r.rowsIn16h, r.currentHeartbeatAtMs != null], ["ok", 1, true]); }
+
+// ======== H3 requires POSITIVELY healthy stream telemetry (finding 3) ========
+{ const i = { ...withOps(cronStale(), { heartbeat: errRead() }), positions: { total: 0, streamConfigured: 0, cronConfigured: 0, unknown: 0 } };
+  check("cronUnreachable + cronConfigured=0 + stream heartbeat ERROR → NOT H3 (stream not positively healthy)", code(i) !== "H3", true); }
+{ const i = { ...withOps(cronStale(), { heartbeat: missingRead(60) }), positions: { total: 0, streamConfigured: 0, cronConfigured: 0, unknown: 0 } };
+  check("cronUnreachable + stream heartbeat MISSING-in-grace → NOT H3", code(i) !== "H3", true); }
+
+// ======== missing-heartbeat facts use missingForSec, never "?" (finding: wording) ========
+{ const inc = deriveIncident({ ...withOps(base(), { heartbeat: missingRead(200) }), positions: { total: 0, streamConfigured: 0, cronConfigured: 0, unknown: 0 }, workerRuns: { ...base().workerRuns, currentHeartbeatAtMs: NOW - 300_000, latestObservedAtMs: NOW - 300_000 } });
+  check("C2 missing-hb fact contains no '?'", inc.facts.some((f) => f.includes("?")), false);
+  check("C2 missing-hb fact shows a duration (3m)", inc.facts[0].includes("3m"), true); }
 
 console.log(`\n  incident-selftest: ${pass}/${pass + fail} checks passed${fail ? ` — ${fail} FAILED` : " ✓"}`);
 console.log(`  (thresholds: ${JSON.stringify(DEFAULT_THRESHOLDS)})`);

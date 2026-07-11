@@ -13,30 +13,33 @@ import { useState } from "react";
 import type { Incident } from "@/lib/incident/deriveIncident";
 
 export function IncidentBanner({ incident }: { incident: Incident }) {
-  const { severity, title, facts, activeCodes, stopSuppressed } = incident;
-  const expandable = severity === "high" || severity === "critical";
-  const [open, setOpen] = useState(true);
+  const { severity, title, facts, activeCodes, stopSuppressed, primaryCode } = incident;
+  // Only HIGH is collapsible. CRITICAL is ALWAYS expanded (it must not inherit a previously-collapsed
+  // HIGH `open` state). WARNING/CHECKING show their fact(s) inline with no (nonfunctional) toggle button.
+  const collapsible = severity === "high";
+  const [highOpen, setHighOpen] = useState(true);
   if (severity === "normal") return null;
 
-  const showDetails = expandable && open;
-  const extraCodes = activeCodes.filter((c) => c !== incident.primaryCode);
+  const expanded = severity === "critical" ? true : collapsible ? highOpen : true;
+  const extraCodes = activeCodes.filter((c) => c !== primaryCode);
+  const critHigh = severity === "critical" || severity === "high";
 
   return (
-    <div className={`inc-banner inc-${severity}`} role={expandable ? "alert" : "status"} aria-live={severity === "critical" ? "assertive" : "polite"}>
+    <div className={`inc-banner inc-${severity}`} role={critHigh ? "alert" : "status"} aria-live={severity === "critical" ? "assertive" : "polite"}>
       <div className="inc-row">
         <span className="inc-dot" aria-hidden />
         <span className="inc-title">{title}</span>
         <span className="inc-grow" />
-        {facts.length > 0 && (
-          <button type="button" className="inc-toggle" onClick={() => setOpen((o) => !o)}>
-            {open ? "hide" : "details"}
+        {collapsible && facts.length > 0 && (
+          <button type="button" className="inc-toggle" onClick={() => setHighOpen((o) => !o)}>
+            {highOpen ? "hide" : "details"}
           </button>
         )}
       </div>
-      {(showDetails || severity === "warning" || severity === "checking") && facts.length > 0 && (
+      {expanded && facts.length > 0 && (
         <ul className="inc-facts">{facts.map((f, i) => <li key={i}>{f}</li>)}</ul>
       )}
-      {showDetails && (extraCodes.length > 0 || stopSuppressed.length > 0) && (
+      {expanded && (extraCodes.length > 0 || stopSuppressed.length > 0) && (
         <div className="inc-codes">
           {extraCodes.length > 0 && <span>also: {extraCodes.join(" · ")}</span>}
           {stopSuppressed.length > 0 && <span> · suppressed by STOP: {stopSuppressed.join(", ")}</span>}
