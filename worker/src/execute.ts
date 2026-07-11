@@ -24,7 +24,7 @@ import { info } from "./log.js";
 import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
-import { trancheSplit, findRowExitFill, countCoidAttempts } from "./exitRules.js";
+import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder } from "./exitRules.js";
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 
@@ -144,6 +144,52 @@ function reconcileExitPx(occ: string, allOrders: alpaca.AlpacaOrder[], liveFallb
   return prices.length === 1 ? { px: prices[0], estimated: false } : { px: liveFallback, estimated: true };
 }
 
+// ---- PARTIAL-EXIT booking (audit 2026-07-11, 1b #2) -----------------------------
+// A partial exit fill (0 < sold < row.qty) used to close the WHOLE row — the unsold
+// remainder became row-less, i.e. an UNMANAGED live position (no stops, no EOD; only
+// the orphan sweep caught it, late, as a page). Now: close the parent on the SOLD qty
+// only (trancheClosePositionRow — status-guarded, books at most once — with reason
+// 'partial_exit') and re-row the remainder WITHOUT runner_of, so it keeps NORMAL
+// TP/stop semantics (a partial-exit remainder is not a runner — no ride mode).
+// WRITE ORDER mirrors executeTranche deliberately: parent-close FIRST (the booking
+// can never double), remainder-insert SECOND — an insert failure leaves the remainder
+// UNCOVERED by rows, which is precisely the orphan sweep's page-and-reconcile class
+// (loud + self-healing, never drift). The fresh row id gives the remainder a fresh
+// deterministic exit coid (x<rowid8>) so the next sweep re-fires its exit cleanly
+// instead of colliding with the parent's spent coid. Row-primary invariant intact:
+// parent books (exit − entry) × sold exactly once; the remainder books its own share
+// when IT closes; parent + remainder sum to the original qty exactly.
+// Shared by BOTH the fresh-fill book path and the late-fill recovery path so the two
+// can never diverge. Callers own the remainingByOcc adjustment (fresh fill: the cycle
+// snapshot still counts the sold contracts; late fill: it already excludes them).
+async function bookPartialExit(
+  d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx,
+  pr: { sold: number; remain: number }, exitPx: number, via: string,
+): Promise<boolean> {
+  const occ = row.occ_symbol;
+  const realized = rowRealized(row, exitPx, pr.sold);
+  const closed = await store.trancheClosePositionRow(row.id, pr.sold, exitPx, realized, "partial_exit");
+  if (!closed) {
+    await store.journal("WARN", `${d.slug}: partial exit ${occ} close raced — already closed elsewhere (sold ${pr.sold})`);
+    return false;
+  }
+  // Row coverage: parent (row.qty) out, remainder (remain) in ⇒ net −sold. Keeps the
+  // same-cycle 09d arithmetic (uncovered = alpHeld − openRowQty) exact, the
+  // executeTranche convention (parent −qty, remainder +remain).
+  ctx.openRowQty.set(occ, Math.max(0, (ctx.openRowQty.get(occ) ?? row.qty) - pr.sold));
+  // entryStateByKey deliberately KEPT (keyed strategist|occ): the remainder continues
+  // the same contract, so ustop/trail state stays valid — the tranche-path convention.
+  const err = await store.insertPartialRemainderRow(row, pr.remain, exitPx);
+  if (err) {
+    await store.journal("WARN",
+      `${d.slug}: PARTIAL-EXIT REMAINDER INSERT FAILED ${occ} ×${pr.remain} — ${err}. Remainder is UNCOVERED by rows; the orphan sweep will page + reconcile.`);
+    return true; // the parent's booking stands — the failure is the remainder's coverage, handled loud above
+  }
+  await store.journal("EXEC",
+    `${d.slug}: partial exit ${occ} sold ×${pr.sold}/${row.qty} @ ${exitPx.toFixed(2)} (${d.reason}${via ? ` · ${via}` : ""}) → $${realized.toFixed(0)}; remainder ×${pr.remain} re-rowed (normal TP/stop, fresh exit coid)`);
+  return true;
+}
+
 // ---- EXIT ---------------------------------------------------------------------
 export async function executeExit(
   d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx, runner?: RunnerCfg,
@@ -197,6 +243,16 @@ export async function executeExit(
   const coidBase = `${d.slug}-${occ}-x${row.id.slice(0, 8)}`;
   const prior = findRowExitFill(ctx.allOrders, coidBase);
   if (prior) {
+    // 1b #2 (audit 2026-07-11): a late-filled PARTIAL (partial-then-canceled sell) books the
+    // sold qty and RE-ROWS the remainder — the same split as the fresh-fill path below (the
+    // two paths must not diverge, or a recovered partial still closes the whole row). The
+    // contracts left BEFORE this cycle's position snapshot, so remainingByOcc already
+    // excludes them — no counter adjustment here (openRowQty is handled inside the split).
+    const pr = partialRemainder(row.qty, prior.filledQty);
+    if (pr) {
+      await bookPartialExit(d, row, ctx, pr, prior.fillPx, "late-fill recovery");
+      return;
+    }
     const soldQty = Math.min(prior.filledQty, row.qty);
     const realized = rowRealized(row, prior.fillPx, soldQty);
     const closed = await store.closePositionRow(row.id, prior.fillPx, realized, d.reason);
@@ -239,9 +295,20 @@ export async function executeExit(
       await store.journal("WARN", `${d.slug}: exit ${occ} ${r.status || "unsettled"} ×0 — row stays open to retry`);
       return;
     }
-    // Book the ACTUAL sold qty (terminal-final): a partial→canceled sell realizes only what crossed; the
-    // 09d reconstruct re-rows any leftover contracts next cycle. Row-primary: (exit − avg_entry)×soldQty.
+    // Book the ACTUAL sold qty (terminal-final): a partial→canceled sell realizes only what crossed.
+    // Row-primary: (exit − avg_entry)×soldQty.
+    // 1b #2 (audit 2026-07-11): a PARTIAL fill no longer closes the whole row — the parent books
+    // the sold qty and the unsold remainder re-rows as a managed position (bookPartialExit). The
+    // old path left the remainder row-less (the 09d reconstruct only fires on a later ENTER
+    // decision, and the orphan sweep pages late); soldQty === row.qty falls through UNCHANGED.
     const soldQty = r.filledQty;
+    const pr = partialRemainder(row.qty, soldQty);
+    if (pr) {
+      if (await bookPartialExit(d, row, ctx, pr, exitPx, "")) {
+        ctx.remainingByOcc.set(occ, Math.max(0, heldQty - pr.sold)); // 09c fix 2 — fresh sell: the cycle snapshot still counted the sold contracts
+      }
+      return; // (the order-tag cross-check below compares full-share magnitudes — skipped on a partial)
+    }
     const realized = rowRealized(row, exitPx, soldQty);
     const closed = await store.closePositionRow(row.id, exitPx, realized, d.reason);
     if (!closed) { await store.journal("WARN", `${d.slug}: exit ${occ} close raced — already closed (sold ${soldQty}) — reconcile`); return; }
@@ -279,20 +346,35 @@ async function executeTranche(
   // duplicate-coid rejection backstops the race. Keeps the `${slug}-${occ}-` tag prefix.
   const coid = `${d.slug}-${occ}-r${row.id.slice(0, 8)}-t`;
   try {
-    // RECOVERY: a prior tranche sell for THIS row already FILLED (a non-terminal poll returned
-    // ×0 while the market order crossed) → book from ITS fill instead of selling again.
-    const prior = ctx.allOrders.find((o) => o.client_order_id === coid && o.status === "filled" && o.filled_qty > 0);
+    // RECOVERY (1b #4, audit 2026-07-11): a prior tranche sell for THIS row already moved
+    // contracts — a non-terminal poll returned ×0 while the market order crossed, OR it
+    // filled PARTIALLY then canceled → book from ITS fill instead of selling again.
+    // findRowExitFill aggregates ANY fill evidence on the coid prefix (spread-capture
+    // rungs sum; status-blind, so a canceled-partial is recovered too — the old
+    // status==='filled' scan missed those, leaving them permanently unrecoverable).
+    // Safe from working-order confusion: executeExit's working-sell guard (the
+    // `${slug}-${occ}-` prefix covers this coid) returns before the tranche path runs,
+    // so a still-working tranche order never reaches this scan.
+    const prior = findRowExitFill(ctx.allOrders, coid);
     let soldQty: number, fillPx: number;
     if (prior) {
-      soldQty = prior.filled_qty; fillPx = prior.filled_avg_price;
+      soldQty = prior.filledQty; fillPx = prior.fillPx;
       await store.journal("WARN", `${d.slug}: tranche ${occ} recovering a late-filled prior sell ×${soldQty} @ ${fillPx.toFixed(2)} — booking, not re-selling`);
     } else {
       const r = await placeFill(d.slug, occ, "sell", split.sell, coid, "target_tranche", ctx);
+      // 1b #4 (audit 2026-07-11): require TERMINAL state before splitting parent→runner —
+      // a still-working order can fill ANY qty after this poll, so splitting now would
+      // book a tranche that hasn't finished happening (and remainQty would be wrong).
+      // Defer whole: the working-sell guard blocks a re-issue while it works, and the
+      // recovery scan above books whatever it ends up filling on a later sweep.
+      if (!alpaca.TERMINAL_ORDER_STATUS.has(r.status)) {
+        await store.journal("WARN", `${d.slug}: tranche ${occ} unsettled (${r.status || "?"}) ×${r.filledQty} — deferring split, recovery next sweep`);
+        return;
+      }
       if (r.filledQty <= 0) {
-        // No positive fill evidence → nothing changed; the row stays whole and the next
-        // sweep retries (same book-only-on-evidence rule as the all-out exit path). If the
-        // sell actually filled late, the recovery scan above books it next sweep.
-        await store.journal("WARN", `${d.slug}: tranche ${occ} ${r.status || "unsettled"} ×0 — row stays whole to retry`);
+        // Terminal with no fill → nothing changed; the row stays whole and the next
+        // sweep retries (same book-only-on-evidence rule as the all-out exit path).
+        await store.journal("WARN", `${d.slug}: tranche ${occ} ${r.status} ×0 — row stays whole to retry`);
         return;
       }
       soldQty = r.filledQty; fillPx = r.fill;
@@ -300,6 +382,8 @@ async function executeTranche(
     if (fillPx > 0) exitPx = fillPx;
     // remainder = the SELLABLE share minus what sold (== row.qty − soldQty here, since the
     // gate requires sellQty === row.qty; spelled from the split so the invariant is explicit).
+    // Tolerates soldQty < split.sell (1b #4: a recovered canceled-partial) — the unsold
+    // slice of the tranche just rides with the runner; parent + runner still sum exactly.
     const remainQty = split.sell + split.retain - soldQty;
     const realized = rowRealized(row, exitPx, soldQty);
     const closed = await store.trancheClosePositionRow(row.id, soldQty, exitPx, realized);
@@ -409,11 +493,17 @@ export async function executeEntry(
     const o = await placeFill(d.slug, occ, "buy", qty, `${d.slug}-${occ}-${ctx.etMin}`, d.reason, ctx);
     const ask = (d.detail?.ask as number) ?? 0;
     const entryPx = o.fill > 0 ? o.fill : ask;
-    // 09c fix 1: row mirrors the REAL fill. 2026-06-11a: terminal-final 0 = nothing
-    // filled → no row (a ghost otherwise); intended-qty fallback only if status unknown.
-    const fillQty = o.filledQty > 0 ? o.filledQty : (alpaca.TERMINAL_ORDER_STATUS.has(o.status) ? 0 : qty);
+    // 09c fix 1: row mirrors the REAL fill — and ONLY the real fill. 1b #3 (audit
+    // 2026-07-11): the old non-terminal fallback assumed the INTENDED qty on a poll
+    // timeout, rowing contracts that may never have filled (a phantom position whose
+    // "exit" then sells someone else's share on a shared OCC). NEVER row without fill
+    // evidence. A late fill self-heals: the lost-insert recovery above re-rows the
+    // uncovered net from this slug-tagged filled buy on the next enter decision (and
+    // blocks a re-buy via net>0), with the orphan sweep paging at 2 cycles as backstop.
+    const fillQty = o.filledQty;
     if (fillQty <= 0) {
-      await store.journal("WARN", `${d.slug}: buy ${occ} ended ${o.status || "unfilled"} ×0 — no contracts, no row`, { order_id: o.id });
+      const nonTerminal = !alpaca.TERMINAL_ORDER_STATUS.has(o.status);
+      await store.journal("WARN", `${d.slug}: buy ${occ} ${o.status || "unfilled"} ×0 — no fill evidence, no row${nonTerminal ? "; non-terminal — recovery next cycle" : ""}`, { order_id: o.id });
       return;
     }
     const eq = ctx.chain.byOcc(occ); // ATM delta at fill (durable entry greek)
@@ -473,12 +563,16 @@ export async function executeAdd(
     const o = await placeFill(d.slug, occ, "buy", buyQty, addCoid, d.reason, ctx);
     const ask = (d.detail?.ask as number) ?? 0;
     const fillPx = o.fill > 0 ? o.fill : ask;
-    // terminal-final 0 = nothing filled → no growth (a ghost otherwise); non-terminal (poll didn't
-    // settle) → assume the intended qty filled (executeEntry parity — over-record + reconcile beats
-    // orphaning the add: executeExit then sells the actual held and books fill-net correctly).
-    const fillQty = o.filledQty > 0 ? o.filledQty : (alpaca.TERMINAL_ORDER_STATUS.has(o.status) ? 0 : buyQty);
+    // Grow the row on the REAL fill only. 1b #3 (audit 2026-07-11): the old non-terminal
+    // fallback assumed the intended qty and ENLARGED the row for contracts that may never
+    // have filled — a phantom stack whose exit then over-sells the sibling's share on a
+    // shared OCC (executeEntry parity; same fix). Never grow without fill evidence. A late
+    // add fill shows up as broker contracts beyond row coverage: the orphan sweep pages it
+    // at 2 cycles, and the maxStack recheck above (alpHeld-based) keeps any re-add bounded.
+    const fillQty = o.filledQty;
     if (fillQty <= 0 || !(fillPx > 0)) {
-      await store.journal("WARN", `${d.slug}: PYRAMID add ${occ} ×0 (${o.status || "unfilled"}) — no add`, { order_id: o.id });
+      const nonTerminal = !alpaca.TERMINAL_ORDER_STATUS.has(o.status);
+      await store.journal("WARN", `${d.slug}: PYRAMID add ${occ} ×0 (${o.status || "unfilled"}) — no fill evidence, no add${nonTerminal ? "; non-terminal — recovery next cycle" : ""}`, { order_id: o.id });
       return;
     }
     const newQty = row.qty + fillQty;

@@ -1,8 +1,11 @@
 // runner-selftest — hermetic checks on the PURE trade-path rules: the R1 runner exit
 // rules (exitRules.ts), the exit late-fill recovery helpers (audit 2026-07-10), the
-// cockpit-P3 account-routing fail-closed invariants (routing.ts), and the Batch-1
+// cockpit-P3 account-routing fail-closed invariants (routing.ts), the Batch-1
 // failure-policy guards (exitGuard.ts, audit 2026-07-11: per-row exit claim, the
-// degraded-sweep predicate, the fail-honest open-positions mapping). No env, no network,
+// degraded-sweep predicate, the fail-honest open-positions mapping), and the Batch-2
+// booking-correctness rules (audit 2026-07-11: the is_armed entries-only split
+// acctCanEnter/acctCanManage, the partial-exit remainder arithmetic, the tranche
+// canceled-partial recovery). No env, no network,
 // no Supabase (these modules import only config, which is env-safe) — CI-runnable. This
 // is the WORKER SELFTEST GATE: run it (+ worker typecheck) before any trade-path deploy.
 //
@@ -14,8 +17,8 @@
 process.env.ALPACA_KEY ??= "selftest";
 process.env.ALPACA_SECRET ??= "selftest";
 process.env.SUPABASE_URL ??= "http://localhost";
-const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts } = await import("./exitRules.js");
-const { groupChannelsByAccount, resolveDefaultAccount, SYNTH_DEFAULT } = await import("./routing.js");
+const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder } = await import("./exitRules.js");
+const { groupChannelsByAccount, resolveDefaultAccount, unresolvedAccount, acctCanEnter, acctCanManage, SYNTH_DEFAULT } = await import("./routing.js");
 const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./exitGuard.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
 type OrderLike = import("./exitRules.js").OrderLike;
@@ -117,6 +120,38 @@ const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
   check("routing: cred_ref-null row is the default", def.id, "acct-1");
 }
 
+// ---- 1b #1 (audit 2026-07-11): the is_armed split — acctCanEnter / acctCanManage ----
+// OPERATOR DECISION: is_armed gates ENTRIES ONLY. The old single acctLive predicate gated
+// exits/reconcile too, so disarming an account STRANDED its open positions (no stops, no
+// EOD flatten) until re-arm. canManage must ignore is_armed/is_halted; both must stay
+// fail-closed on no-api / not-live / the unresolved account (the 10b phantom-close class).
+{
+  check("1b#1: armed+live+api may enter", acctCanEnter(acct(), true, true), true);
+  check("1b#1: armed+live+api may manage", acctCanManage(acct(), true, true), true);
+  check("1b#1: DISARMED may NOT enter", acctCanEnter(acct({ is_armed: false }), true, true), false);
+  check("1b#1: DISARMED still MANAGES (exits keep running — the operator decision)", acctCanManage(acct({ is_armed: false }), true, true), true);
+  check("1b#1: halted may NOT enter", acctCanEnter(acct({ is_halted: true }), true, true), false);
+  check("1b#1: halted still MANAGES (the halt-flatten path needs it)", acctCanManage(acct({ is_halted: true }), true, true), true);
+  const u = unresolvedAccount("acct-x");
+  check("1b#1: unresolved account never enters", acctCanEnter(u, true, true), false);
+  check("1b#1: unresolved account never manages (phantom-close class), even with a hypothetical api", acctCanManage(u, true, true), false);
+  check("1b#1: no api → no enter (never wrong-account orders)", acctCanEnter(acct(), true, false), false);
+  check("1b#1: no api → no manage", acctCanManage(acct(), true, false), false);
+  check("1b#1: not live → no enter", acctCanEnter(acct(), false, true), false);
+  check("1b#1: not live → no manage", acctCanManage(acct(), false, true), false);
+}
+
+// ---- 1b #2 (audit 2026-07-11): partial-exit remainder arithmetic ----
+// A partial sell fill must close ONLY the sold qty; the unsold remainder re-rows as a
+// managed position. null = not a partial (the caller's unchanged full/zero paths).
+check("1b#2: 4 of 6 → sold 4, remainder 2 re-rows", partialRemainder(6, 4), { sold: 4, remain: 2 });
+check("1b#2: 1 of 2 → both legs ≥ 1", partialRemainder(2, 1), { sold: 1, remain: 1 });
+check("1b#2: full fill → null (unchanged full-close path)", partialRemainder(6, 6), null);
+check("1b#2: recovery over-fill capped at the row → null (full path)", partialRemainder(6, 9), null);
+check("1b#2: zero fill → null (row stays open to retry)", partialRemainder(6, 0), null);
+check("1b#2: negative/garbage fill → null", partialRemainder(6, -1), null);
+check("1b#2: qty-1 row can never split", partialRemainder(1, 1), null);
+
 // ---- exit late-fill recovery (exitRules.ts) — audit 2026-07-10 ----
 const ord = (over: Partial<OrderLike> = {}): OrderLike => ({
   client_order_id: "test-SPY260710C00746000-x12345678", side: "sell", status: "filled",
@@ -139,6 +174,11 @@ const ord = (over: Partial<OrderLike> = {}): OrderLike => ({
   // coid versioning: dead attempts bump the retry suffix
   check("recovery: no attempts → base coid reusable", countCoidAttempts([], base), 0);
   check("recovery: dead attempt counted for versioning", countCoidAttempts([ord({ filled_qty: 0, status: "canceled" })], base), 1);
+  // 1b #4 (audit 2026-07-11): the TRANCHE recovery scan now uses findRowExitFill too — a
+  // partial-then-CANCELED tranche sell (the old status==='filled' scan missed it) recovers.
+  const tcoid = "test-SPY260710C00746000-r12345678-t";
+  check("1b#4: canceled-partial tranche sell recovered", findRowExitFill([ord({ client_order_id: tcoid, status: "canceled", filled_qty: 2 })], tcoid), { filledQty: 2, fillPx: 1.5 });
+  check("1b#4: zero-fill canceled tranche → no recovery (row stays whole)", findRowExitFill([ord({ client_order_id: tcoid, status: "canceled", filled_qty: 0 })], tcoid), null);
 }
 
 // ---- Batch-1 failure-policy guards (exitGuard.ts) — audit 2026-07-11 ----

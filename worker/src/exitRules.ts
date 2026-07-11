@@ -92,6 +92,20 @@ export function trancheSplit(qty: number, frac: number): { sell: number; retain:
   return sell >= 1 ? { sell, retain } : null;
 }
 
+// ---- PARTIAL-EXIT remainder arithmetic (audit 2026-07-11, 1b #2 — pure, selftest-covered) ----
+/** How a row's qty splits when its exit sell PARTIALLY filled (partial-then-
+ *  canceled, or a late-filled partial recovered via findRowExitFill). null =
+ *  NOT a partial — nothing filled (retry path) or the fill covers the whole
+ *  row (the unchanged full-close path). sold is capped at rowQty (an
+ *  aggregated recovery fill on a shared OCC can exceed this row's share);
+ *  when non-null, both sold ≥ 1 and remain ≥ 1 by construction. */
+export function partialRemainder(rowQty: number, filledQty: number): { sold: number; remain: number } | null {
+  if (!(filledQty > 0)) return null;
+  const sold = Math.min(Math.round(filledQty), Math.round(rowQty));
+  const remain = Math.round(rowQty) - sold;
+  return sold >= 1 && remain >= 1 ? { sold, remain } : null;
+}
+
 // ---- EXIT late-fill recovery (audit 2026-07-10, pure so the selftest covers it) ----
 // executeExit now uses a DETERMINISTIC per-row exit coid (`${slug}-${occ}-x${rowId8}`,
 // mirroring the tranche path's hardening): a timed-out sell that fills LATE shows up

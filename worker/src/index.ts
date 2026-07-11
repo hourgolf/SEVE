@@ -27,7 +27,7 @@ import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitRea
 import { computeFeatures } from "../../engine/engine";
 import { sessionCloseMin } from "../../engine/market-calendar";
 import { inEventWindow } from "../../engine/market-events";
-import { groupChannelsByAccount, rowAccountIdOf } from "./routing.js";
+import { groupChannelsByAccount, rowAccountIdOf, acctCanEnter, acctCanManage } from "./routing.js";
 import { makeExitGuard, sweepExitAllowed } from "./exitGuard.js";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
@@ -201,7 +201,7 @@ async function orphanSweep(
   g: AccountGroup,
   alpacaByOcc: Map<string, alpaca.AlpacaPosition>,
   groupRows: store.PositionRow[],
-  acctLive: boolean,
+  canManage: boolean, // 1b #1: orphan-flatten is risk-REDUCING management — runs on a disarmed account too
   todayET: string,
 ): Promise<void> {
   if (!alpacaByOcc.size) return;
@@ -218,7 +218,7 @@ async function orphanSweep(
     warn(`orphan: ${g.account.name} holds ${uncovered}× ${occ} with no open desk row (held ${held}, desk-open ${covered.get(occ) ?? 0})`);
     await store.journal("WARN", `orphan: ${g.account.name} holds ${uncovered}× ${occ} the desk thinks is flat`, { account: g.account.name, occ, uncovered, held });
     alertOnce(todayET, "orphan", key, "⚠ orphaned lot", `${g.account.name} holds ${uncovered} ${occ} the desk thinks is flat — close it / check the bucket`);
-    if (config.orphanFlatten && acctLive && g.api) {
+    if (config.orphanFlatten && canManage && g.api) {
       try {
         const o = await alpaca.orderAndFill(
           { symbol: occ, qty: String(uncovered), side: "sell", type: "market", time_in_force: "day", client_order_id: `orphan-${occ}-${Date.now()}` },
@@ -264,13 +264,14 @@ async function cycle(trigger: string): Promise<void> {
     let totEquity = 0, totCash = 0, totUnreal = 0, snappedAny = false;
     // Per-account orphan-sweep inputs, captured on each bucket's PRE-cycle snapshot and swept
     // AFTER the decision pass (so same-cycle entries/exits don't false-positive).
-    const sweepInputs: { g: AccountGroup; alpacaByOcc: Map<string, alpaca.AlpacaPosition>; groupRows: store.PositionRow[]; acctLive: boolean }[] = [];
+    const sweepInputs: { g: AccountGroup; alpacaByOcc: Map<string, alpaca.AlpacaPosition>; groupRows: store.PositionRow[]; canManage: boolean }[] = [];
 
     // ---- PER-ACCOUNT pass (cockpit P3) ----
     // Each bucket reads ITS OWN positions/orders/equity (the same OCC can be held in two
     // accounts as separate lots — netting must be per-account) and executes only its own
-    // channels via its own Api. A non-armed bucket (or one whose creds are absent) is fully
-    // decided + shadow-logged but places NO orders — the shadow-first gate.
+    // channels via its own Api. A bucket whose creds are absent is fully decided +
+    // shadow-logged but places NO orders — the shadow-first gate. A NON-ARMED bucket with
+    // creds is MANAGE-ONLY (1b #1): exits/reconcile/marks run, entries/adds don't.
     for (const g of groupByAccount(cfg.channels, cfg.accounts)) {
       const api = g.api;
       let account: alpaca.AlpacaAccount = { equity: 0, cash: 0 };
@@ -284,14 +285,19 @@ async function cycle(trigger: string): Promise<void> {
       const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
       const groupRows = openRowsArr.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
       const openRows = new Map(groupRows.map((r) => [r.strategist_id, r]));
-      // EXECUTE only when fully live AND this bucket is armed AND not halted AND its creds resolve.
-      const acctLive = live && g.account.is_armed && !g.account.is_halted && api != null;
-      sweepInputs.push({ g, alpacaByOcc, groupRows, acctLive }); // orphan net (swept post-decision)
+      // audit 2026-07-11 (1b #1): is_armed = ENTRIES ONLY (operator decision — see routing.ts).
+      // canManage (live + creds resolve + not the fail-closed unresolved account) gates the
+      // whole read/execute pass below, so a DISARMED (or halted) account keeps running exits,
+      // reconcile, marks and the orphan sweep — its open positions never lose stop/EOD/event
+      // protection. canEnter (adds is_armed + !is_halted) gates only enter/add decisions.
+      const canManage = acctCanManage(g.account, live, api != null);
+      const canEnter = acctCanEnter(g.account, live, api != null);
+      sweepInputs.push({ g, alpacaByOcc, groupRows, canManage }); // orphan net (swept post-decision)
       let allOrders: alpaca.AlpacaOrder[] = [];
       let ordersFresh = true; // audit 2026-07-10: the idempotency / lost-insert guards are BLIND without the order snapshot
       let remainingByOcc = new Map<string, number>();
       const openRowQty = new Map<string, number>();
-      if (acctLive) {
+      if (canManage) {
         // audit 2026-07-11 (1b #9): bounded retry (3 × ~500ms backoff, the boot retry() shape)
         // so a transient orders-API blip never even degrades the cycle; a persistent failure
         // still lands in the !ordersFresh path below + the noteOrdersRead escalation.
@@ -327,7 +333,7 @@ async function cycle(trigger: string): Promise<void> {
           next1DTE: chain.nextExpiryAfter(todayET),
           ...computeLevels(bars.all(), todayET),
           openRows, alpacaByOcc,
-          allOrders, // empty unless acctLive — the PYRAMID executor reconstructs the lot stack from it
+          allOrders, // empty unless canManage — the PYRAMID executor reconstructs the lot stack from it
           deskStack, // C1 stack-cap input (desk-wide, cycle-scoped)
         };
         const symDecisions: ShadowDecision[] = [];
@@ -337,8 +343,10 @@ async function cycle(trigger: string): Promise<void> {
         }
         decisions.push(...symDecisions);
 
-        // ---- PHASE B: EXECUTE the decisions for channels this worker OWNS, on an ARMED bucket ----
-        if (acctLive) {
+        // ---- PHASE B: EXECUTE the decisions for channels this worker OWNS ----
+        // 1b #1: the block runs under canManage (exits/reconcile/marks on any account whose
+        // creds resolve, armed or not); enter/add are individually gated on canEnter below.
+        if (canManage) {
           // STALE-BAR ORDER GUARD (per symbol): a boot/restart decides on the last KNOWN
           // bar — orders need a fresh decision bar; reconcile + mark are always safe.
           const barFresh = Date.now() - lastSession.ts < 180_000;
@@ -352,12 +360,16 @@ async function cycle(trigger: string): Promise<void> {
             if (barFresh) {
               if (d.action === "exit" && d.reason === "event_flatten")
                 alertOnce(todayET, "event", "standdown", "⚑ event stand-down", `${d.slug} flattening ${d.occ ?? ""} — entries blocked through the window`);
-              if (d.action === "enter" && d.blocked === "daily_stop")
-                alertOnce(todayET, "latch", d.slug, `⛔ ${d.slug} daily stop latched`, `realized ≤ −$${Math.round(ch.daily_stop_usd)} — its entries are done for the day`);
-              if (d.action === "enter" && d.blocked === "daily_target")
-                alertOnce(todayET, "latch", d.slug, `✅ ${d.slug} banked its day`, `realized ≥ +$${Math.round(ch.daily_target_usd)} — win-and-done, no more entries today`);
-              if (d.action === "enter" && d.blocked === "insufficient_capital")
-                alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
+              // entry-latch pages only where entries can actually happen (1b #1: a manage-only
+              // account's blocked entries are expected, not news).
+              if (canEnter) {
+                if (d.action === "enter" && d.blocked === "daily_stop")
+                  alertOnce(todayET, "latch", d.slug, `⛔ ${d.slug} daily stop latched`, `realized ≤ −$${Math.round(ch.daily_stop_usd)} — its entries are done for the day`);
+                if (d.action === "enter" && d.blocked === "daily_target")
+                  alertOnce(todayET, "latch", d.slug, `✅ ${d.slug} banked its day`, `realized ≥ +$${Math.round(ch.daily_target_usd)} — win-and-done, no more entries today`);
+                if (d.action === "enter" && d.blocked === "insufficient_capital")
+                  alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
+              }
             }
             const row = openRows.get(ch.id);
             // No order snapshot → entry idempotency / lost-insert recovery / reconcile pricing
@@ -381,6 +393,11 @@ async function cycle(trigger: string): Promise<void> {
                   try { await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }); }
                   finally { exitGuard.release(row.id); }
                 }
+              }
+              // 1b #1: is_armed (and per-account halt) gates NEW RISK only — a manage-only
+              // account skips enter/add here while every exit/reconcile/mark above kept running.
+              else if ((d.action === "add" || d.action === "enter") && !canEnter) {
+                if (barFresh) info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
               }
               else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
               else if (d.action === "enter" && barFresh) {
@@ -460,7 +477,7 @@ async function cycle(trigger: string): Promise<void> {
     // Orphan safety-net: flag (and, when armed, flatten) Alpaca lots the desk thinks are flat.
     // Live-only (no pages on shadow/boot); each sweep is isolated so it can never break the cycle.
     if (live) for (const si of sweepInputs) {
-      try { await orphanSweep(si.g, si.alpacaByOcc, si.groupRows, si.acctLive, todayET); }
+      try { await orphanSweep(si.g, si.alpacaByOcc, si.groupRows, si.canManage, todayET); }
       catch (e) { warn(`orphan-sweep[${si.g.account.name}] failed — ${(e as Error).message}`); }
     }
     // Desk-wide TOTAL snapshot (account_id null = the sum across buckets) — the existing
@@ -548,7 +565,11 @@ async function fastExitSweep(): Promise<void> {
     for (const g of groupByAccount(owned, cfg.accounts)) {
       const api = g.api;
       // A halted bucket is NOT skipped anymore — it enters flatten mode below (kill = close all).
-      if (!api || !g.account.is_armed) continue;
+      // 1b #1 (audit 2026-07-11): is_armed dropped too — the sweep is EXITS-ONLY, and a
+      // DISARMED account's open positions must keep their halt/EOD/event + price exits
+      // (is_armed used to strand them here until re-arm). Creds must still resolve (!api →
+      // skip: never a wrong-account order; the unresolved account's api is null by design).
+      if (!api) continue;
       const acctFlatten = haltFlatten || g.account.is_halted;
       const rows = allRows.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
       if (!rows.length) continue;
@@ -764,7 +785,7 @@ async function main(): Promise<void> {
   // Cockpit P3 routing summary: each bucket's posture — LIVE (armed + creds), shadow (decided,
   // no orders), or no-creds (cred_ref set but env keys absent). The shadow-first verification view.
   const acctSummary = groupByAccount(cfg.channels, cfg.accounts)
-    .map((g) => `${g.account.name}[${g.api ? (liveMode() && g.account.is_armed && !g.account.is_halted ? "LIVE" : "shadow") : "no-creds"}]×${g.channels.length}`).join(", ");
+    .map((g) => `${g.account.name}[${g.api ? (liveMode() ? (g.account.is_armed && !g.account.is_halted ? "LIVE" : "manage-only") : "shadow") : "no-creds"}]×${g.channels.length}`).join(", ");
   info(`accounts (cockpit P3): ${acctSummary || "single-account"}; alt-creds: [${Object.keys(config.altAccounts).join(",") || "none"}]`);
   try { await seed(); }
   catch (e) { error(`seed failed after retries — continuing; the websocket will populate bars live (${(e as Error).message})`); }

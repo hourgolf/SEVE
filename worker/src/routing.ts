@@ -19,10 +19,45 @@ import type { AccountRow, ChannelConfig } from "./store.js";
 
 export const SYNTH_DEFAULT: AccountRow = { id: "__default__", name: "default", cred_ref: null, is_armed: true, is_halted: false, master_daily_stop_usd: 0 };
 
+/** The sentinel cred_ref of a fail-closed unresolved account — can never match
+ *  env creds, and acctCanManage refuses it explicitly (belt-and-suspenders). */
+export const UNRESOLVED_CRED_REF = "__unresolved__";
+
 /** Fail-closed placeholder for an account_id that doesn't resolve: never armed,
  *  halted, and a cred_ref that can never match env creds (api resolves null). */
 export function unresolvedAccount(accountId: string): AccountRow {
-  return { id: accountId, name: `unresolved:${accountId.slice(0, 8)}`, cred_ref: "__unresolved__", is_armed: false, is_halted: true, master_daily_stop_usd: 0 };
+  return { id: accountId, name: `unresolved:${accountId.slice(0, 8)}`, cred_ref: UNRESOLVED_CRED_REF, is_armed: false, is_halted: true, master_daily_stop_usd: 0 };
+}
+
+// ---- is_armed split (audit 2026-07-11, 1b #1) --------------------------------
+// OPERATOR DECISION (docs/mission-1b-status.md, resolved #1): is_armed gates
+// ENTRIES ONLY. The old single acctLive predicate gated the WHOLE execute block
+// (entries AND exits AND reconcile), so disarming an account STRANDED its open
+// positions — no stops, no EOD flatten, no reconcile — until re-armed. Split:
+//
+//   acctCanEnter  — may this account OPEN new risk (entries + pyramid adds)?
+//                   live + is_armed + !is_halted + creds resolve (as before).
+//   acctCanManage — may this account MANAGE what it already holds (exits,
+//                   reconcile, marks, orphan sweep)? live + creds resolve.
+//                   Deliberately IGNORES is_armed and is_halted: a disarmed
+//                   account keeps its stop/EOD/event protection, and a halted
+//                   one must still reach the flatten path (KILL = FLATTEN).
+//
+// PRESERVED invariants: api==null → neither predicate passes (never a wrong-
+// account order), and an UNRESOLVED account (cred_ref sentinel) never manages —
+// reconciling its rows against another account's positions is exactly the 10b
+// phantom-close class (its api is null anyway; the check is belt-and-suspenders).
+// NOT implemented (operator's explicit call): flatten-on-disarm.
+
+/** May this account OPEN new risk (entries + pyramid adds)? */
+export function acctCanEnter(account: AccountRow, live: boolean, hasApi: boolean): boolean {
+  return live && account.is_armed && !account.is_halted && hasApi;
+}
+
+/** May this account MANAGE what it holds (exits, reconcile, marks, orphan sweep)?
+ *  Runs even when disarmed or halted — see the block comment above. */
+export function acctCanManage(account: AccountRow, live: boolean, hasApi: boolean): boolean {
+  return live && hasApi && account.cred_ref !== UNRESOLVED_CRED_REF;
 }
 
 export function resolveDefaultAccount(accounts: AccountRow[]): AccountRow {

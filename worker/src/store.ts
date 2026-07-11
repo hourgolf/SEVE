@@ -391,13 +391,15 @@ export async function updatePositionStack(id: string, newQty: number, newAvgEntr
   return error ? error.message : null;
 }
 
-/** RUNNER tranche close (R1): close the parent on the SOLD qty — the runner remainder
- *  becomes its own row via insertRunnerRow. Status-guarded like closePositionRow (books
- *  at most once); qty is rewritten to the sold share so the closed row's realized and
- *  qty agree (the parent+runner pair sums to the original share exactly). */
-export async function trancheClosePositionRow(id: string, soldQty: number, mark: number, realized: number): Promise<boolean> {
+/** Partial-qty close (R1 runner tranche + 1b #2 partial exits): close the parent on the
+ *  SOLD qty — the remainder becomes its own row via insertRunnerRow / insertPartialRemainderRow.
+ *  Status-guarded like closePositionRow (books at most once); qty is rewritten to the sold
+ *  share so the closed row's realized and qty agree (the parent+remainder pair sums to the
+ *  original share exactly). closeReason: 'target_tranche' (the R1 default) or 'partial_exit'
+ *  (audit 2026-07-11, 1b #2 — a partial sell fill no longer closes the whole row). */
+export async function trancheClosePositionRow(id: string, soldQty: number, mark: number, realized: number, closeReason: string = "target_tranche"): Promise<boolean> {
   const { data, error } = await sb.from("positions")
-    .update({ status: "closed", closed_at: new Date().toISOString(), qty: soldQty, current_mark: mark, realized_pnl: realized, close_reason: "target_tranche" })
+    .update({ status: "closed", closed_at: new Date().toISOString(), qty: soldQty, current_mark: mark, realized_pnl: realized, close_reason: closeReason })
     .eq("id", id).eq("status", "open").select("id");
   if (error) { warn(`store: tranche close failed — ${error.message}`); return false; }
   return (data ?? []).length > 0;
@@ -409,6 +411,20 @@ export async function trancheClosePositionRow(id: string, soldQty: number, mark:
  *  the insert error message (null = ok) so the caller journals LOUD on failure — an
  *  uncovered remainder is the orphan-sweep's job to catch. */
 export async function insertRunnerRow(parent: PositionRow, remainQty: number, mark: number): Promise<string | null> {
+  return insertRemainderRow(parent, remainQty, mark, { runnerOf: parent.id, entryReason: "runner_tranche" });
+}
+
+/** PARTIAL-EXIT remainder row (audit 2026-07-11, 1b #2): a partial sell fill closes the
+ *  parent on the SOLD qty only; the unsold contracts re-row HERE so they stay a managed
+ *  position (the old whole-row close left them row-less — only the orphan sweep caught
+ *  them, late). UNLIKE a runner, runner_of stays NULL: the remainder keeps NORMAL
+ *  take-profit/stop semantics, not ride mode. The fresh row id gives it a fresh
+ *  deterministic exit coid (x<rowid8>), so the next sweep re-fires its exit cleanly. */
+export async function insertPartialRemainderRow(parent: PositionRow, remainQty: number, mark: number): Promise<string | null> {
+  return insertRemainderRow(parent, remainQty, mark, { runnerOf: null, entryReason: "partial_exit_remainder" });
+}
+
+async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: number, o: { runnerOf: string | null; entryReason: string }): Promise<string | null> {
   const { error } = await sb.from("positions").insert({
     strategist_id: parent.strategist_id, occ_symbol: parent.occ_symbol,
     underlying: parent.underlying || parent.occ_symbol.slice(0, parent.occ_symbol.length - 15),
@@ -416,13 +432,15 @@ export async function insertRunnerRow(parent: PositionRow, remainQty: number, ma
     strike: parent.strike, opt_type: parent.opt_type, qty: remainQty,
     avg_entry_price: parent.avg_entry_price, current_mark: mark, unrealized_pnl: 0, status: "open",
     opened_at: parent.opened_at ?? new Date().toISOString(),
-    // Peak floor = the tranche fill (review hardening): the parent's DB peak_mark can be a
+    // Peak floor = the exit fill (review hardening): the parent's DB peak_mark can be a
     // sweep stale (markPeak is fire-and-forget; the in-memory row never updates), and a runner
     // whose peak ≤ entry NEVER arms its ratchet. The tranche filled at/near the TP level, so
-    // flooring on it guarantees the ratchet is armed above water from birth.
+    // flooring on it guarantees the ratchet is armed above water from birth. For a 1b #2
+    // partial-exit remainder the fill is a real traded price too (a stop fill sits below the
+    // parent peak, so max() just carries the parent's honest MFE).
     peak_mark: Math.max(parent.peak_mark ?? parent.avg_entry_price, mark), trough_mark: parent.trough_mark ?? parent.avg_entry_price,
     peak_at: new Date().toISOString(), trough_at: new Date().toISOString(),
-    entry_reason: "runner_tranche", runner_of: parent.id,
+    entry_reason: o.entryReason, runner_of: o.runnerOf,
   });
   return error ? error.message : null;
 }
