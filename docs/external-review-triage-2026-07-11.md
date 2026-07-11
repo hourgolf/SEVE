@@ -265,6 +265,41 @@ Pulled the ACTUAL SEVE schema (ref xvdfsxwwedltvdktqdac), not the authored migra
 - Recommendation: re-weight, don't scrap — BLACKOUT default, mobile-card dock, glanceable armed table
   over the knob wall, sequencer→one-liner, gate the EXECUTOR toggle, 909 as trim on a data-first grid.
 
+**Round 4-5 reviewer verdict (P4/P5 — ADOPTED; reshapes both the crash response and the UI decision):**
+- **P4 — crash-loop is reclassified CRITICAL-ACTIVE, the #1 live defect: "an incident, not an
+  architecture footnote."** Directive: do NOT do UI work until termination is attributed. Instrument
+  before guessing (the app code can't distinguish uncaught-throw vs OOM vs SIGTERM/deploy vs external
+  kill). The plan (adopted): (1) boot-instance identity — `boot_id`/`instance_id`/git_sha on every
+  heartbeat/event/order-intent → makes deploy-overlap provable (two boot_ids heartbeating in overlapping
+  windows); (2) a `worker_runs` table (termination_kind/exit_code/signal/last_phase/memory; prior
+  unclosed run → `abrupt_or_unknown` on next boot); (3) last-operation breadcrumb; (4) crash capsule
+  (NOT Supabase-only — DB failure may be the cause); (5) Railway-level evidence (exit 137→OOM, 143→
+  SIGTERM/deploy, no-log→external kill); (6) 30-60s resource telemetry.
+- **P4 pushbacks on my read (adopted):** (a) shutdown should **DRAIN, not flatten** — flattening on
+  every deploy turns deploys into trading decisions; the drain = mark draining, stop entries, await
+  in-flight broker+DB ops with a bounded deadline, journal unresolved executions, then exit; resolve
+  them on boot before new entries. (b) The cron failover is acceptable ONLY as narrowly-mandatory
+  flatten, stale-heartbeat-gated, broker-position-re-read, deterministic exit IDs, never-enter, ideally
+  under a DB advisory lock — "a failover that cannot prove exclusive authority is another failure source"
+  (refines, doesn't reverse, the KEEP-the-cron call).
+- **P5 — reviewer OVERRULES the full-scrap lean: "do not revert the whole weekend build; use a surgical
+  rollback."** The weekend splits into 3 separable things: (1) the watch/tune MODE SPLIT — KEEP; (2)
+  PERFORM's structure (chart hero + right rail + BLACKOUT + mobile cards) — KEEP; (3) the 40-channel
+  STUDIO rack — CUT + REBUILD as an armed-first EXCEPTION TABLE (show only what differs/needs attention;
+  one-row-expand to edit; executor toggle moved to a gated admin workflow, not a tuning control).
+- **P5 new idea (adopted): ADAPTIVE HIERARCHY.** "A chart can be excellent and still be the wrong hero
+  during an incident." During the crash-loop, PERFORM's hero should be a `WORKER UNSTABLE — N RESTARTS/
+  16H` health banner that pre-empts the chart; system integrity > market context when degraded. This is
+  the missing element in BOTH my §04 audit and my P5 notes.
+- **KEEP/CUT/REBUILD (reviewer's explicit list, adopted):** KEEP — PERFORM mode, chart hero + level
+  ladders, positions→sentinel→tape rail, BLACKOUT default, mobile card treatment, mode separation, 909
+  as trim only (LED numerals/labels/pads). CUT — desktop micro-chip dock, 40-row always-expanded rack,
+  decorative knobs, full-width quiet sequencer, direct executor toggle, drafts equal to armed, repeated
+  static text, cream-as-default. REBUILD — STUDIO as fleet-summary + sortable armed-first exception
+  table + side inspector + a separate gated admin surface for executor/account/live-paper.
+- **Sequencing (my synthesis, both agree):** crash-loop diagnosis BEFORE any UI work; the weekend's real
+  payoff (Mission 1b worker hardening + PERFORM mode) is NOT waste; the miss was one room's rack.
+
 ## What the reviewer still hasn't seen
 Migrations 03–67 + schema dump (P3), stream.ts + Railway topology (P4), the §04 UI components (P5),
 the other shadow instruments (one-account / ratchet / stairstep / day-report), a6-read/watch. Offer P3
