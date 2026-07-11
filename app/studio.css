@@ -1,0 +1,344 @@
+/* ===========================================================================
+   SEVE — STUDIO surface (PERFORM/STUDIO rebuild · slice S3)
+   The tuning room, lifted from mocks/perform-2026-07/perform-mock-F-final.html
+   (#studio: .rack · .inspector · .sband). EVERYTHING is scoped under
+   .shell-root[data-mode="studio"] so it never reaches the legacy chassis (the
+   sibling <DesktopSurface> below the hero keeps its own console.css styling).
+
+   HARDWARE surfaces (the rack, its rows) skin with the GLOBAL frame toggle via
+   the shell's --hw-* tokens; GLASS readouts (inspector, registry) stay dark in
+   both skins (local invariant tokens, like perform.css). The reused hardware
+   controls — FiresPill, TradeShapeBar, Knob, PadButton, MasterStrip,
+   SessionSequencer — carry console.css base rules (shell-root lives inside
+   .console-root); the scoped rules below win by specificity and re-fit them to
+   the rack. Their skin follows data-theme (page stamps data-theme = skin on
+   .console-root), so the frame toggle themes them for free.
+   =========================================================================== */
+
+.shell-root[data-mode="studio"] .studio {
+  /* local layout + glass tokens (invariant dark for the inspector/registry) */
+  --insp-w: clamp(340px, 25vw, 480px);
+  --h-band: clamp(150px, 20vh, 214px);
+  --fs-slug: calc(var(--dz, 1) * clamp(14px, 1vw, 18px));
+  --fs-dslug: calc(var(--dz, 1) * clamp(12px, 0.82vw, 15px));
+  --line: rgba(255, 255, 255, 0.07); --line-2: rgba(255, 255, 255, 0.13);
+  --amber: #e0a23f; --red-soft: #e07a58; --green-soft: #6cc06d;
+  /* fires colours + P&L — BLACKOUT defaults (readable on dark); cream overrides below */
+  --fire-stop: #e07a58; --fire-take: #6cc06d;
+  --st-pos: #2fd573; --st-neg: #e07a58;
+  --pad-well: rgba(0, 0, 0, 0.4);
+
+  height: calc(100vh - var(--h-top) - 2px);
+  min-height: 480px;
+  display: grid;
+  gap: 7px;
+  padding: 7px;
+  grid-template-columns: minmax(0, 1fr) var(--insp-w);
+  grid-template-rows: minmax(0, 1fr) var(--h-band);
+  background: var(--frame-bg);
+  transition: background-color 0.32s ease;
+}
+.shell-root[data-skin="cream"][data-mode="studio"] .studio {
+  --line: rgba(60, 52, 30, 0.16); --line-2: rgba(60, 52, 30, 0.28);
+  --fire-stop: #be3326; --fire-take: #1c7a44;
+  --st-pos: #0e6132; --st-neg: #9e2d1c;
+}
+
+/* ---------- CHANNEL RACK — the hardware bezel ------------------------------- */
+.shell-root[data-mode="studio"] .rack {
+  grid-column: 1; grid-row: 1;
+  position: relative; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  color: var(--hw-ink);
+  background: linear-gradient(180deg, var(--hw-1), var(--hw-2));
+  border: 1px solid var(--hw-edge); border-radius: 9px;
+  box-shadow: 0 1px 0 var(--hw-hi) inset, 0 -2px 4px rgba(0, 0, 0, 0.14) inset, 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: background 0.32s, border-color 0.32s, color 0.32s;
+}
+.shell-root[data-mode="studio"] .rgrid {
+  display: grid; align-items: center; column-gap: clamp(8px, 0.8vw, 18px);
+  grid-template-columns:
+    minmax(150px, 1.1fr)   /* channel id */
+    auto                   /* lock/ride */
+    auto                   /* fires */
+    minmax(140px, 1.5fr)   /* shape bar */
+    auto auto              /* stop/day · risk dials */
+    minmax(72px, 0.6fr)    /* day pnl */
+    auto;                  /* pads */
+  padding: 0 clamp(10px, 1vw, 20px);
+}
+.shell-root[data-mode="studio"] .rack-head {
+  flex: 0 0 auto; height: clamp(26px, 3vh, 36px); border-bottom: 1px solid var(--hw-line);
+}
+.shell-root[data-mode="studio"] .rack-head span {
+  font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--hw-soft); white-space: nowrap;
+}
+.shell-root[data-mode="studio"] .rack-head .rh-stop { color: var(--fire-stop); }
+.shell-root[data-mode="studio"] .rack-head .rh-take { color: var(--fire-take); }
+.shell-root[data-mode="studio"] .rack-rows { flex: 1; min-height: 0; overflow-y: auto; }
+.shell-root[data-mode="studio"] .rack-empty {
+  padding: 2em 12px; text-align: center; font-family: var(--sh-mono); font-size: var(--fs-label);
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--hw-soft);
+}
+.shell-root[data-mode="studio"] .rrow {
+  border-bottom: 1px solid var(--hw-line); position: relative; cursor: pointer;
+  min-height: clamp(52px, 6.6vh, 74px);
+}
+.shell-root[data-mode="studio"] .rrow:last-child { border-bottom: none; }
+.shell-root[data-mode="studio"] .rrow.sel {
+  background: color-mix(in srgb, var(--pm) 8%, transparent);
+  box-shadow: 3px 0 0 var(--pm) inset;
+}
+.shell-root[data-mode="studio"] .rrow.mut > *:not(.r-pads) { opacity: 0.5; }
+
+/* id cell */
+.shell-root[data-mode="studio"] .r-id {
+  display: flex; align-items: center; gap: 7px; min-width: 0; height: 100%;
+  background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+}
+.shell-root[data-mode="studio"] .r-dot {
+  flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%;
+  background: color-mix(in srgb, var(--hw-ink) 20%, transparent); border: 1px solid rgba(0, 0, 0, 0.4);
+}
+.shell-root[data-mode="studio"] .r-dot.on {
+  background: var(--pm); border-color: transparent; box-shadow: 0 0 7px color-mix(in srgb, var(--pm) 80%, transparent);
+}
+.shell-root[data-mode="studio"] .r-slug {
+  font-family: var(--sh-mono); font-size: var(--fs-dslug); font-weight: 700; letter-spacing: -0.3px;
+  white-space: nowrap; /* never ellipsize a slug */ color: color-mix(in srgb, var(--pm) 62%, var(--hw-ink));
+}
+.shell-root[data-mode="studio"] .r-tk {
+  font-family: var(--sh-mono); font-size: calc(var(--fs-label) * 0.95); font-weight: 800; letter-spacing: 0.06em;
+  padding: 0 4px; border-radius: 3px; color: var(--hw-soft); border: 1px solid var(--hw-line);
+}
+.shell-root[data-mode="studio"] .r-tag {
+  font-family: var(--sh-mono); font-size: calc(var(--fs-label) * 0.92); font-weight: 800; letter-spacing: 0.08em;
+  color: #ffb224; border: 1px solid rgba(255, 178, 36, 0.45); border-radius: 3px; padding: 0 4px;
+  text-transform: uppercase; white-space: nowrap;
+}
+.shell-root[data-mode="studio"] .r-tag.mgrey { color: var(--red-soft); border-color: color-mix(in srgb, var(--red-soft) 45%, transparent); }
+.shell-root[data-mode="studio"] .r-tag.dgrey { color: var(--hw-soft); border-color: var(--hw-line); }
+
+/* LOCK/RIDE — override console.css .chm to the rack size/skin */
+.shell-root[data-mode="studio"] .r-mode { display: inline-flex; margin: 0; }
+.shell-root[data-mode="studio"] .chm {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; letter-spacing: 0.08em;
+  padding: 0.3em 0.85em; line-height: 1.2; cursor: pointer; background: transparent; color: var(--hw-soft);
+  border: 1px solid var(--hw-line);
+}
+.shell-root[data-mode="studio"] .chm-lock { border-radius: 5px 0 0 5px; }
+.shell-root[data-mode="studio"] .chm-ride { border-radius: 0 5px 5px 0; margin-left: -1px; }
+.shell-root[data-mode="studio"] .chm.on { color: #fff; border-color: transparent; position: relative; z-index: 1; }
+.shell-root[data-mode="studio"] .chm-lock.on { background: #1c7a44; }
+.shell-root[data-mode="studio"] .chm-ride.on { background: #6b6960; }
+
+/* FIRES pills — override console.css .chf colours/size for the rack */
+.shell-root[data-mode="studio"] .r-fires {
+  display: flex; align-items: center; gap: 5px; font-family: var(--sh-mono); white-space: nowrap;
+}
+.shell-root[data-mode="studio"] .chf,
+.shell-root[data-mode="studio"] .chf-edit,
+.shell-root[data-mode="studio"] .chf-input {
+  font-family: var(--sh-mono); font-size: var(--fs-num); font-weight: 700; letter-spacing: 0;
+  padding: 0.05em 0.4em; border-radius: 4px; white-space: nowrap;
+}
+.shell-root[data-mode="studio"] .chf-edit { border-bottom: none; border: 1px solid; }
+.shell-root[data-mode="studio"] .chf-stop {
+  color: var(--fire-stop); border-color: color-mix(in srgb, var(--fire-stop) 45%, transparent);
+  background: color-mix(in srgb, var(--fire-stop) 9%, transparent);
+}
+.shell-root[data-mode="studio"] .chf-take {
+  color: var(--fire-take); border-color: color-mix(in srgb, var(--fire-take) 45%, transparent);
+  background: color-mix(in srgb, var(--fire-take) 9%, transparent);
+}
+.shell-root[data-mode="studio"] .chf-take.ridep {
+  color: var(--hw-soft); border-color: var(--hw-line); background: transparent; font-style: italic;
+}
+.shell-root[data-mode="studio"] .chf-input { background: var(--lcd); color: var(--lcd-ink); }
+.shell-root[data-mode="studio"] .chf-flat {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; color: var(--hw-soft);
+}
+
+/* trade-shape bar — refit the reused TradeShapeBar (.ch-shape) to the rack cell */
+.shell-root[data-mode="studio"] .r-shape { min-width: 0; align-self: center; }
+.shell-root[data-mode="studio"] .ch-shape { margin: 0; height: 22px; align-self: center; }
+.shell-root[data-mode="studio"] .shp-track { height: 9px; background: var(--hw-well); }
+.shell-root[data-mode="studio"] .shp-entry { background: var(--hw-ink); }
+.shell-root[data-mode="studio"] .shp-rr {
+  background: transparent; color: var(--hw-soft); font-family: var(--sh-mono);
+  font-size: calc(var(--fs-label) * 0.95); top: -9px; transform: none;
+}
+
+/* two dials — refit the reused Knob (knob-sm) + its caption to the rack skin */
+.shell-root[data-mode="studio"] .r-dial { display: flex; align-items: center; justify-content: center; }
+.shell-root[data-mode="studio"] .r-dial .knob { flex-direction: column; }
+.shell-root[data-mode="studio"] .r-dial .knob-label { color: var(--hw-soft); }
+/* readable-first ruling: the dial VALUE ($3,000 stop / $1,250 risk) is data the
+   operator reads while sizing — lift it off the shared 11px base to the fluid
+   data token (≥13px @ 1440). Scoped to the rack so legacy chassis knobs are
+   untouched. The R-multiple on the shape bar gets the same floor. */
+.shell-root[data-mode="studio"] .r-dial .knob-val { color: var(--hw-ink); font-size: var(--fs-num); }
+.shell-root[data-mode="studio"] .shp-rr { font-size: var(--fs-num); }
+
+/* day P&L */
+.shell-root[data-mode="studio"] .r-pnl {
+  font-family: var(--sh-mono); font-size: var(--fs-num-lg); font-weight: 800; text-align: right; white-space: nowrap;
+}
+.shell-root[data-mode="studio"] .r-pnl.pos { color: var(--st-pos); }
+.shell-root[data-mode="studio"] .r-pnl.neg { color: var(--st-neg); }
+.shell-root[data-mode="studio"] .r-pnl.flat { color: var(--hw-soft); }
+
+/* pads — the reused PadButton (.pad) at rack scale */
+.shell-root[data-mode="studio"] .r-pads { display: flex; gap: 6px; }
+.shell-root[data-mode="studio"] .r-pads .pad { width: calc(var(--fs-num) * 2.4); height: calc(var(--fs-num) * 1.9); }
+
+/* ---------- INSPECTOR + REGISTRY — dark glass (invariant) ------------------- */
+.shell-root[data-mode="studio"] .inspector { grid-column: 2; grid-row: 1; }
+.shell-root[data-mode="studio"] .inspector,
+.shell-root[data-mode="studio"] .registry {
+  position: relative; min-height: 0; min-width: 0; display: flex; flex-direction: column;
+  color: var(--lcd-ink); background: linear-gradient(180deg, var(--lcd), var(--lcd-2));
+  border: 1px solid var(--lcd-edge); border-radius: 9px; overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+.shell-root[data-mode="studio"] .insp-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 9px; padding: 0.5em 12px;
+  background: linear-gradient(180deg, #2b2b2e, #1d1d20); border-bottom: 1px solid #000;
+}
+.shell-root[data-mode="studio"] .insp-head .idx {
+  font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 800; color: var(--accent);
+}
+.shell-root[data-mode="studio"] .insp-head .t {
+  font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.15em;
+  text-transform: uppercase; color: #d7d5cb;
+}
+.shell-root[data-mode="studio"] .insp-head .grow { flex: 1; }
+.shell-root[data-mode="studio"] .insp-head .x {
+  font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); white-space: nowrap;
+}
+.shell-root[data-mode="studio"] .insp-empty {
+  flex: 1; display: grid; place-items: center; font-family: var(--sh-mono); font-size: var(--fs-label);
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--dk-dim);
+}
+.shell-root[data-mode="studio"] .insp-hero {
+  display: flex; align-items: center; gap: 9px; padding: 0.6em 12px 0.5em; border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.shell-root[data-mode="studio"] .ih-slug {
+  font-family: var(--sh-mono); font-size: var(--fs-slug); font-weight: 700;
+  color: color-mix(in srgb, var(--pm) 75%, #fff);
+}
+.shell-root[data-mode="studio"] .ih-tk {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 800; letter-spacing: 0.06em;
+  padding: 0 5px; border-radius: 3px; color: var(--dk-mut); border: 1px solid var(--line-2);
+}
+.shell-root[data-mode="studio"] .ih-tag {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 800; letter-spacing: 0.06em;
+  padding: 0 5px; border-radius: 3px;
+}
+.shell-root[data-mode="studio"] .ih-tag.amber { color: #ffb224; border: 1px solid rgba(255, 178, 36, 0.45); background: rgba(255, 178, 36, 0.08); }
+.shell-root[data-mode="studio"] .ih-stats {
+  margin-left: auto; font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); white-space: nowrap;
+}
+.shell-root[data-mode="studio"] .ih-stats b { color: var(--lcd-ink); font-weight: 700; }
+.shell-root[data-mode="studio"] .insp-grid {
+  flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr;
+  gap: clamp(7px, 1.1vh, 15px) 14px; padding: clamp(9px, 1.3vh, 16px) 12px; align-content: start;
+}
+.shell-root[data-mode="studio"] .ctl { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.shell-root[data-mode="studio"] .ctl.insp-wide { grid-column: 1 / 3; }
+.shell-root[data-mode="studio"] .ctl .cl {
+  font-family: var(--sh-mono); font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--dk-dim); display: flex; gap: 6px; align-items: center;
+}
+.shell-root[data-mode="studio"] .uoff {
+  font-size: calc(var(--fs-label) * 0.9); font-weight: 800; color: #ffb224;
+  border: 1px solid rgba(255, 178, 36, 0.45); border-radius: 3px; padding: 0 4px; letter-spacing: 0.06em;
+}
+.shell-root[data-mode="studio"] .iseg {
+  display: inline-flex; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; width: max-content;
+}
+.shell-root[data-mode="studio"] .iseg button {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; letter-spacing: 0.05em;
+  padding: 0.38em 0.8em; background: transparent; border: none; color: var(--dk-mut); cursor: pointer;
+}
+.shell-root[data-mode="studio"] .iseg button.on { background: var(--amber); color: #140b00; }
+.shell-root[data-mode="studio"] .iseg button:disabled { cursor: default; }
+.shell-root[data-mode="studio"] .istep {
+  display: inline-flex; align-items: center; border: 1px solid var(--line-2); border-radius: 5px; width: max-content;
+}
+.shell-root[data-mode="studio"] .istep button {
+  font-family: var(--sh-mono); font-size: var(--fs-num); font-weight: 800; width: 1.8em; padding: 0.2em 0;
+  background: transparent; border: none; color: var(--dk-mut); cursor: pointer;
+}
+.shell-root[data-mode="studio"] .istep button:hover:not(:disabled) { color: var(--lcd-ink); }
+.shell-root[data-mode="studio"] .istep button:disabled { cursor: default; }
+.shell-root[data-mode="studio"] .istep b {
+  min-width: 3.6em; text-align: center; font-family: var(--sh-mono); font-size: var(--fs-num); font-weight: 700; color: var(--lcd-ink);
+}
+.shell-root[data-mode="studio"] .ival {
+  font-family: var(--sh-mono); font-size: var(--fs-num); font-weight: 700; color: var(--lcd-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.shell-root[data-mode="studio"] .insp-foot {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0.55em 12px; border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.shell-root[data-mode="studio"] .life {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; letter-spacing: 0.08em;
+  padding: 0.35em 0.8em; border-radius: 5px; border: 1px solid var(--line-2); background: transparent;
+  color: var(--dk-mut); cursor: pointer;
+}
+.shell-root[data-mode="studio"] .life:hover:not(:disabled) { color: var(--lcd-ink); border-color: var(--dk-mut); }
+.shell-root[data-mode="studio"] .life:disabled { opacity: 0.5; cursor: default; }
+.shell-root[data-mode="studio"] .life.del { color: var(--red-soft); border-color: rgba(224, 122, 88, 0.4); }
+.shell-root[data-mode="studio"] .insp-foot .reg {
+  margin-left: auto; font-family: var(--sh-mono); font-size: calc(var(--fs-label) * 0.95); color: var(--dk-dim); letter-spacing: 0.04em;
+}
+.shell-root[data-mode="studio"] .insp-note {
+  flex: 0 0 auto; padding: 0.4em 12px; font-family: var(--sh-mono); font-size: var(--fs-chip); color: var(--green-soft);
+  border-top: 1px solid var(--line); background: rgba(108, 192, 109, 0.06);
+}
+.shell-root[data-mode="studio"] .insp-note.err { color: var(--red-soft); background: rgba(224, 122, 88, 0.06); }
+
+/* ---------- bottom band: MASTER · SESSION TAPE · REGISTRY ------------------- */
+.shell-root[data-mode="studio"] .sband {
+  grid-column: 1 / 3; grid-row: 2; display: grid; gap: 7px; min-height: 0;
+  grid-template-columns: auto minmax(0, 1fr) clamp(300px, 24vw, 460px);
+}
+.shell-root[data-mode="studio"] .sband-master,
+.shell-root[data-mode="studio"] .sband-tape {
+  min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+}
+/* the reused MasterStrip (.master, self-dark) fills its band cell */
+.shell-root[data-mode="studio"] .sband-master .master { height: 100%; margin: 0; }
+/* the reused SessionSequencer (.sqz, self-styled) fills + scrolls within the band */
+.shell-root[data-mode="studio"] .sband-tape .sqz { height: 100%; margin: 0; overflow: auto; }
+
+/* registry — dark glass */
+.shell-root[data-mode="studio"] .reg-body {
+  flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: space-evenly; padding: 3px 0;
+}
+.shell-root[data-mode="studio"] .regrow {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 0.28em 12px;
+}
+.shell-root[data-mode="studio"] .rid {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 800; letter-spacing: 0.06em; color: #ffb224;
+  border: 1px solid rgba(255, 178, 36, 0.45); border-radius: 3px; padding: 0 5px; background: rgba(255, 178, 36, 0.07);
+}
+.shell-root[data-mode="studio"] .rid.grn { color: var(--green-soft); border-color: rgba(108, 192, 109, 0.4); background: rgba(108, 192, 109, 0.06); }
+.shell-root[data-mode="studio"] .rtxt {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); color: var(--lcd-ink); line-height: 1.35;
+  overflow: hidden; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.shell-root[data-mode="studio"] .rtxt .dim { color: var(--dk-dim); }
+.shell-root[data-mode="studio"] .regbar { display: inline-flex; gap: 1.5px; align-items: center; }
+.shell-root[data-mode="studio"] .regbar i {
+  width: 4px; height: 9px; border-radius: 1px; background: rgba(255, 255, 255, 0.1);
+}
+.shell-root[data-mode="studio"] .regbar i.lit { background: var(--green-soft); box-shadow: 0 0 4px rgba(108, 192, 109, 0.5); }
+.shell-root[data-mode="studio"] .reta {
+  font-family: var(--sh-mono); font-size: var(--fs-chip); color: var(--dk-mut); white-space: nowrap;
+}
+.shell-root[data-mode="studio"] .reta b { color: var(--lcd-ink); font-weight: 700; }

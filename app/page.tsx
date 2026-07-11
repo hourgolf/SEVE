@@ -20,6 +20,7 @@ import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileApp } from "@/components/mobile/MobileApp";
 import { DeskShell } from "@/components/shell/DeskShell";
 import { PerformSurface } from "@/components/perform/PerformSurface";
+import { StudioSurface } from "@/components/studio/StudioSurface";
 import { ShellProvider, useShell } from "@/hooks/useShellState";
 import { marketSummary } from "@/lib/marketSummary";
 import type { Room } from "@/components/surfaceTypes";
@@ -110,7 +111,12 @@ function Surface({
           dayChangePct={mkt.dayChangePct}
         />
         {mode === "perform" && <PerformSurface {...props} />}
+        {mode === "studio" && <StudioSurface {...props} />}
       </div>
+      {/* STUDIO's legacy §01–§04 rooms stay reachable as the sibling chassis below
+          the hero (its own Shell = the anchor strip) — no functionality loss until
+          each room is natively migrated. Kept OUTSIDE .shell-root so the shell's
+          skin tokens never leak into the legacy cream chassis. */}
       {mode === "studio" && <DesktopSurface {...props} />}
     </>
   );

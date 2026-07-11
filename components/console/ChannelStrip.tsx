@@ -113,7 +113,7 @@ export function FiresPill({
 // Drag a handle to set the value (the same tp / premium_stop the pills edit); no take =
 // no green zone (riding). Read-only visual when signed out (no handles).
 const SHAPE_FULL = 100; // the % that fills half the track (visual scale; larger values clamp)
-function TradeShapeBar({
+export function TradeShapeBar({
   tp, premStop, canWrite, onChange, onCommit,
 }: {
   tp: number;
