@@ -1,7 +1,9 @@
 "use client";
 
 import { Fragment } from "react";
+import { SystemHealthStrip } from "@/components/perform/SystemHealthStrip";
 import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
+import type { Incident } from "@/lib/incident/deriveIncident";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import type { Position, StrategistState } from "@/lib/desk/types";
@@ -200,7 +202,7 @@ function TapeSection({ events, strategists }: { events: MarketEvent[]; strategis
 }
 
 export function PerformRail({
-  positions, strategists, liveMarks, peaks, events, symbol, sent,
+  positions, strategists, liveMarks, peaks, events, symbol, sent, incident,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -209,9 +211,12 @@ export function PerformRail({
   events: MarketEvent[];
   symbol: string;
   sent: Digest;
+  incident: Incident;
 }) {
   return (
     <aside className="pf-rail">
+      {/* P5 slice 3 — deterministic system-health strip; open-position truth visible in every state. */}
+      <SystemHealthStrip incident={incident} />
       <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} />
       <SentinelSection symbol={symbol} sent={sent} />
       <TapeSection events={events} strategists={strategists} />

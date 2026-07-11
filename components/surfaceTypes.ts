@@ -8,6 +8,7 @@ import type { OpsStatus } from "@/hooks/useOpsStatus";
 import type { usePositionMarks } from "@/hooks/usePositionMarks";
 import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { useWorkerRuns } from "@/hooks/useWorkerRuns";
+import type { Incident } from "@/lib/incident/deriveIncident";
 import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
@@ -54,4 +55,7 @@ export interface SurfaceProps {
   /** Ratcheted position peaks (usePositionPeaks over feed.positions × liveMarks) — lifted to the
    *  seam; the position rows in PERFORM/mobile consume this instead of re-calling the hook. */
   positionPeaks: Record<string, number>;
+  /** Deterministic incident (P5 slice 3) — deriveIncident computed ONCE at the page seam from
+   *  ops/workerRuns/positions/fund/session. Consumed by the desktop-PERFORM banner + health strip. */
+  incident: Incident;
 }

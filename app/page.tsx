@@ -27,6 +27,10 @@ import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
 import { ShellProvider, useShell } from "@/hooks/useShellState";
 import { marketSummary } from "@/lib/marketSummary";
+import { marketSession } from "@/lib/incident/marketSession";
+import { deriveIncident } from "@/lib/incident/deriveIncident";
+import { positionsByExecutor } from "@/lib/incident/positionsByExecutor";
+import { useRefreshTick } from "@/hooks/useRefreshTick";
 import type { Room } from "@/components/surfaceTypes";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
@@ -82,6 +86,18 @@ function Surface({
   const sentinel = useSentinelDigest();
   const workerRuns = useWorkerRuns();
   const positionPeaks = usePositionPeaks(feed.positions, liveMarks);
+  // P5 slice 3 — deterministic incident, derived ONCE at the seam from ops/workerRuns/positions/fund/
+  // session. A 15s tick (+ the hook polls) keeps nowMs fresh so time-based escalation re-renders.
+  useRefreshTick(15_000);
+  const positionsBE = positionsByExecutor(feed.positions, view.desk.strategists);
+  const incident = deriveIncident({
+    nowMs: Date.now(),
+    session: marketSession(Date.now()),
+    fund: view.desk.fund,
+    ops,
+    workerRuns,
+    positions: positionsBE,
+  });
   // 909 KIT — audible fills (opt-in via the KIT pad; inert while off). At the
   // seam so desktop + mobile share one diff of the same feed.
   useKitSounds(feed.positions, feed.recentTrades);
@@ -96,7 +112,7 @@ function Surface({
   useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/
@@ -112,10 +128,10 @@ function Surface({
   // on disk (reviewer decides deletion at S6) but no longer mounted.
   if (isMobile) return <MobileShell {...props} />;
 
-  // DESKTOP — the new DeskShell top bar spans both rooms; MODE branches the
-  // body under it. .shell-root is a SIBLING of the legacy chassis (not an
-  // ancestor) so the shell's skin tokens never leak into the untouched STUDIO
-  // rooms. STUDIO renders today's DesktopSurface verbatim; PERFORM = the S2 stub.
+  // DESKTOP — the DeskShell top bar spans both rooms; MODE branches the body under
+  // it. STUDIO renders StudioSurface (rack + inspector + band); PERFORM renders
+  // PerformSurface (chart hero + rail + the slice-3 incident banner/health strip).
+  // The legacy DesktopSurface is reachable only via the "Legacy rooms" link (slice 2).
   const mkt = marketSummary(data.bars, data.spot);
 
   // LEGACY VIEW (P5 slice 2) — the full DesktopSurface as a REPLACEMENT (not a sibling

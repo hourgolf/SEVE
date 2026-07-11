@@ -1,0 +1,63 @@
+/* ===========================================================================
+   P5 slice 3 — incident banner + system-health strip (desktop PERFORM only).
+   Scoped under .perform / .pf-rail (inside .shell-root[data-mode="perform"]).
+   Theme-aware via the shell tokens (--hw-red/--hw-amber/--hw-green/--dk-mut/…),
+   which flip with data-skin. Deterministic health only — no Sentinel styling here.
+   =========================================================================== */
+
+.perform .inc-banner {
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--sep-line, rgba(255, 255, 255, 0.08));
+  border-left-width: 4px;
+  background: var(--lcd, #14181b);
+  font-family: var(--sh-mono, ui-monospace, monospace);
+  color: var(--lcd-ink, #e9eef0);
+}
+.perform .inc-row { display: flex; align-items: center; gap: 10px; }
+.perform .inc-grow { flex: 1; }
+.perform .inc-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: 0 0 auto; box-shadow: 0 0 6px currentColor; }
+.perform .inc-title { font-size: 13px; font-weight: 700; letter-spacing: 0.03em; }
+.perform .inc-toggle {
+  font: inherit; font-size: 11px; letter-spacing: 0.04em; text-transform: lowercase;
+  background: transparent; border: 1px solid var(--sep-line, rgba(255, 255, 255, 0.14));
+  color: var(--dk-mut, #8a949a); border-radius: 6px; padding: 2px 8px; cursor: pointer;
+}
+.perform .inc-toggle:hover { color: var(--lcd-ink, #e9eef0); }
+.perform .inc-facts { margin: 8px 0 0; padding: 0 0 0 18px; font-size: 12px; line-height: 1.5; color: var(--dk-mut, #b5bec4); }
+.perform .inc-codes { margin-top: 6px; font-size: 10.5px; letter-spacing: 0.03em; color: var(--dk-dim, #5f6a70); }
+
+/* severity tones — the dot + left border carry the color */
+.perform .inc-critical { color: var(--hw-red, #f0563f); border-left-color: var(--hw-red, #f0563f); background: color-mix(in srgb, var(--hw-red, #f0563f) 12%, var(--lcd, #14181b)); }
+.perform .inc-high     { color: var(--hw-red, #f0563f); border-left-color: var(--hw-red, #f0563f); }
+.perform .inc-warning  { color: var(--hw-amber, #e0a23f); border-left-color: var(--hw-amber, #e0a23f); }
+.perform .inc-checking { color: var(--dk-mut, #8a949a); border-left-color: var(--dk-mut, #8a949a); }
+.perform .inc-critical .inc-title { font-size: 15px; }
+
+/* CRITICAL pre-empts chart space: the tall banner + a hard cap on the chart stage. */
+.perform[data-incident="critical"] .inc-banner { min-height: 92px; }
+.perform[data-incident="critical"] .pf-stage { max-height: 62vh; }
+
+/* ---- system-health strip (always visible, top of the rail) ---- */
+.pf-rail .sys-health {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 7px 10px; margin-bottom: 8px;
+  border: 1px solid var(--sep-line, rgba(255, 255, 255, 0.08)); border-radius: 8px;
+  background: var(--lcd-2, #0f1214);
+  font-family: var(--sh-mono, ui-monospace, monospace); font-size: 11.5px;
+}
+.pf-rail .sys-chip {
+  font-weight: 700; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 5px;
+  border: 1px solid currentColor;
+}
+.pf-rail .sys-ok  { color: var(--hw-green, #2fd573); }
+.pf-rail .sys-warn { color: var(--hw-amber, #e0a23f); }
+.pf-rail .sys-bad { color: var(--hw-red, #f0563f); }
+.pf-rail .sys-dim { color: var(--dk-mut, #8a949a); }
+.pf-rail .sys-item { display: inline-flex; align-items: baseline; gap: 6px; color: var(--dk-mut, #8a949a); }
+.pf-rail .sys-k { font-size: 9.5px; letter-spacing: 0.08em; }
+.pf-rail .sys-v { color: var(--lcd-ink, #e9eef0); font-weight: 600; }
+.pf-rail .sys-attr { color: var(--dk-dim, #5f6a70); }
+.pf-rail .sys-attr i { font-style: normal; opacity: 0.6; }
+.pf-rail .sys-unk { color: var(--hw-amber, #e0a23f); }

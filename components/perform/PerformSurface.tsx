@@ -1,7 +1,9 @@
 "use client";
 
 import "@/app/perform.css";
+import "@/app/incident.css";
 import { IntradayChart } from "@/components/IntradayChart";
+import { IncidentBanner } from "@/components/perform/IncidentBanner";
 import { PerformRail } from "@/components/perform/PerformRail";
 import { PerformDock } from "@/components/perform/PerformDock";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -20,7 +22,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 // =============================================================================
 
 export function PerformSurface({
-  data, view, feed, spotUp, symbol, setSymbol, acctId, livePnl, liveMarks, sentinel, positionPeaks,
+  data, view, feed, spotUp, symbol, setSymbol, acctId, livePnl, liveMarks, sentinel, positionPeaks, incident,
 }: SurfaceProps) {
   const { desk } = view;
   const sent = sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
@@ -29,7 +31,9 @@ export function PerformSurface({
   const channels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
 
   return (
-    <div className="perform">
+    <div className="perform" data-incident={incident.severity}>
+      {/* P5 slice 3 — deterministic incident banner (hidden on normal; critical pre-empts chart space). */}
+      <IncidentBanner incident={incident} />
       <main className="pf-stage">
         <IntradayChart
           bars={data.bars}
@@ -50,6 +54,7 @@ export function PerformSurface({
           events={data.events}
           symbol={symbol}
           sent={sent}
+          incident={incident}
         />
       </main>
       <PerformDock channels={channels} livePnl={livePnl} lens={sent.lens} />
