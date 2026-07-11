@@ -174,11 +174,14 @@ async function main() {
   const ledger = loadLedger();
   let fresh = 0;
   const bank = async (s: any, base: ShadowRow) => {
-    ledger.set(base.signalId, base);
-    fresh++;
-    if (!HAS_SERVICE) return;
-    try {
-      await sb.from("virtual_trades").upsert({
+    if (HAS_SERVICE) {
+      // Upsert the virtual_trades row FIRST and LEDGER (= the later-runs dedup) only if it lands.
+      // supabase-js returns API errors via `.error` — it does NOT throw — so the old try/catch
+      // guarded nothing: a validation / rate-limit / statement-timeout / lagged-migration failure
+      // was swallowed, yet the ledger (set before the upsert) still deduped the signal → it was
+      // NEVER retried → a PERMANENT gap in virtual_trades (the §03 LAB panel + the sentinel
+      // bench-promote scan). Fail LOUD instead (audit [9]); the capture chain surfaces the exit code.
+      const { error } = await sb.from("virtual_trades").upsert({
         signal_id: base.signalId, strategist_id: s.strategist_id, slug: base.slug, occ: base.occ,
         signal_at: base.createdAt, blocked: base.blocked,
         entry_px: base.entryAsk > 0 ? base.entryAsk : null,
@@ -186,17 +189,22 @@ async function main() {
         pnl_per_contract: base.pnlPerContract, tp_pct: base.tpPct, stop_pct: base.stopPct, n_quotes: base.nQuotes,
         mfe_pct: base.mfePct, giveback_pct: base.giveback, // avg-peak lens on the bench (cols added 2026-07-09)
       }, { onConflict: "signal_id" });
-    } catch { /* best-effort */ }
-    // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
-    if (base.blocked !== "not_armed" && base.pnlPerContract != null) {
-      try {
-        await sb.from("events").insert({
-          level: "INFO",
-          message: `gate-shadow: ${base.slug} ${base.occ} blocked(${base.blocked}) → ${base.exitReason} $${base.pnlPerContract.toFixed(0)}/ct (mid-basis)`,
-          meta: { kind: "gate-shadow", ...base },
-        });
-      } catch { /* best-effort */ }
+      if (error) { console.error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`); process.exit(1); }
+      // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
+      if (base.blocked !== "not_armed" && base.pnlPerContract != null) {
+        try {
+          await sb.from("events").insert({
+            level: "INFO",
+            message: `gate-shadow: ${base.slug} ${base.occ} blocked(${base.blocked}) → ${base.exitReason} $${base.pnlPerContract.toFixed(0)}/ct (mid-basis)`,
+            meta: { kind: "gate-shadow", ...base },
+          });
+        } catch { /* best-effort — journal only, non-load-bearing */ }
+      }
     }
+    // Ledger + fresh count AFTER the DB row lands (or immediately in the anon ledger-only mode with
+    // no service role) — a failed night exits above WITHOUT ledgering, so the signal re-tries next run.
+    ledger.set(base.signalId, base);
+    fresh++;
   };
 
   // ── armed-channel gate blocks: every one is a forgone entry ──

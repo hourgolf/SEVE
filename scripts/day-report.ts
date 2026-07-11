@@ -26,6 +26,7 @@ import {
 import { benchedVsLive, type BenchedVsLive } from "./benched-sim";
 import { runOneAccountShadow, type ShadowResult } from "./one-account-shadow";
 import { ratchetShadowSummary, slotAwareA4, slotAwareMomo, type RatchetSummary, type SlotAwareBank } from "./ratchet-shadow";
+import { pageAll } from "../engine/pageAll";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
@@ -135,10 +136,16 @@ async function main() {
   if (ahead.length || horizon < 120) console.log("");
 
   // ---- tape shape (per underlying traded today) -------------------------------
-  const { data: barsRaw } = await sb.from("underlying_bars").select("symbol,ts,close")
-    .gte("ts", `${DATE}T13:25:00Z`).lte("ts", `${DATE}T20:05:00Z`).order("ts");
+  // pageAll (audit [5]): underlying_bars carries SPY+QQQ+IWM, so a normal 3-symbol RTH session
+  // (~391 bars × 3 ≈ 1,173) exceeds PostgREST's silent 1000-row cap — ordered by ts, the old
+  // single fetch dropped the tail ~hour, so close / range / whipsaw were computed on a truncated
+  // day. Page to completion with an id tiebreak (ts alone is not a total order); pageAll fails LOUD.
+  const barsRaw = await pageAll<{ symbol: string; ts: string; close: number | null }>((from) => sb
+    .from("underlying_bars").select("symbol,ts,close")
+    .gte("ts", `${DATE}T13:25:00Z`).lte("ts", `${DATE}T20:05:00Z`)
+    .order("ts", { ascending: true }).order("id", { ascending: true }));
   const bySym = new Map<string, Array<{ ts: number; c: number }>>();
-  for (const b of (barsRaw ?? []) as Array<{ symbol: string; ts: string; close: number | null }>) {
+  for (const b of barsRaw) {
     if (b.close == null) continue;
     const arr = bySym.get(b.symbol) ?? [];
     arr.push({ ts: Date.parse(b.ts), c: Number(b.close) });
@@ -172,13 +179,14 @@ async function main() {
   const acctName = new Map(((acctRows ?? []) as Array<{ id: string; name: string }>).map((a) => [a.id, String(a.name)]));
   // Paginated (audit M5): the worker snapshots every cycle per bucket — a full session easily
   // exceeds PostgREST's silent 1000-row cap, which cut off the CLOSING snapshots and understated
-  // every bucket's NAV delta. Same loop pattern as the events read below.
+  // every bucket's NAV delta. Same loop pattern as the events read below. id tiebreak (audit [18]):
+  // captured_at alone is not a total order — a same-second cluster could shuffle across a page edge.
   const snapRaw: Array<{ account_id: string; net_liquidation: number }> = [];
   for (let from = 0; from < 50_000; from += 1000) {
     const { data } = await sb.from("equity_snapshots").select("account_id,net_liquidation,captured_at")
       .not("account_id", "is", null).is("strategist_id", null)
       .gte("captured_at", `${DATE}T13:00:00Z`).lte("captured_at", `${DATE}T22:00:00Z`)
-      .order("captured_at").range(from, from + 999);
+      .order("captured_at").order("id").range(from, from + 999);
     const batch = (data ?? []) as typeof snapRaw;
     snapRaw.push(...batch);
     if (batch.length < 1000) break;
@@ -202,7 +210,7 @@ async function main() {
     const { data } = await sb.from("positions")
       .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,strategists(slug,name)")
       .eq("status", "closed").gte("closed_at", `${DATE}T13:00:00Z`).lte("closed_at", `${DATE}T22:00:00Z`)
-      .order("opened_at").range(from, from + 999);
+      .order("opened_at").order("id").range(from, from + 999); // id tiebreak (audit [18]): opened_at is not a total order
     const batch = (data ?? []) as typeof posRaw;
     posRaw.push(...batch);
     if (batch.length < 1000) break;
@@ -214,7 +222,7 @@ async function main() {
   for (let from = 0; from < 50_000; from += 1000) {
     const { data } = await sb.from("events").select("message,created_at,meta")
       .gte("created_at", `${DATE}T13:00:00Z`).lte("created_at", `${DATE}T22:00:00Z`)
-      .order("created_at", { ascending: true }).range(from, from + 999);
+      .order("created_at", { ascending: true }).order("id", { ascending: true }).range(from, from + 999); // id tiebreak (audit [18])
     const batch = (data ?? []) as typeof events;
     events.push(...batch);
     if (batch.length < 1000) break;
@@ -302,11 +310,13 @@ async function main() {
     }
     return m;
   };
-  const { data: openedRaw } = await sb.from("positions").select("strategist_id,occ_symbol,qty")
-    .gte("opened_at", `${DATE}T13:00:00Z`).lte("opened_at", `${DATE}T22:00:00Z`);
-  const { data: openRowsRaw } = await sb.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open");
-  const boughtByAcct = grpByAcct((openedRaw ?? []) as Array<{ strategist_id: string; occ_symbol: string; qty: number }>);
-  const openByAcct = grpByAcct((openRowsRaw ?? []) as Array<{ strategist_id: string; occ_symbol: string; qty: number }>);
+  type CovRow = { strategist_id: string; occ_symbol: string; qty: number };
+  const openedRaw = await pageAll<CovRow>(() => sb.from("positions").select("strategist_id,occ_symbol,qty")
+    .gte("opened_at", `${DATE}T13:00:00Z`).lte("opened_at", `${DATE}T22:00:00Z`).order("opened_at").order("id"));
+  const openRowsRaw = await pageAll<CovRow>(() => sb.from("positions").select("strategist_id,occ_symbol,qty")
+    .eq("status", "open").order("opened_at").order("id"));
+  const boughtByAcct = grpByAcct(openedRaw);
+  const openByAcct = grpByAcct(openRowsRaw);
 
   console.log(`\ncoverage (per bucket — account fills vs desk rows)`);
   const PAPER = "https://paper-api.alpaca.markets";

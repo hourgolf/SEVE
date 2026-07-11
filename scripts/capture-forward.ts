@@ -168,9 +168,14 @@ async function main() {
   if (booksOk) console.log(`\n  ✓ clean books — desk P&L ties out to the broker; forensics dataset regenerated off clean books.`);
   else { console.log(`\n  ⚠ CLEAN BOOKS — reconcile-alpaca flagged drift or unreachable accounts (see above). The books may NOT tie out; investigate the worker's booking before trusting the dataset, then 'npm run reconcile-alpaca -- --fix --write' once confirmed.`); exit = exit || 3; }
 
-  const t1Fail = results.some((r) => r.tier === 1 && !r.ok);
+  // EXIT CODE (0/1/2/3): only the irreplaceable RAW-TAPE Tier-1 steps (export-quotes/export-bars)
+  // map to exit 1 ("tape at risk"). reconcile-alpaca is Tier 1 in IMPORTANCE, but a books drift or a
+  // transient Alpaca outage is a DISTINCT failure that already surfaces through the dedicated exit=3
+  // path above — folding it into a blanket t1Fail forced exit 1 and made exit=3 unreachable (a broker
+  // blip then read identically to irreplaceable-tape loss). Key the exit-1 gate on the tape steps only.
+  const tapeFail = results.some((r) => r.tier === 1 && r.label !== "reconcile-alpaca" && !r.ok);
   const t2Fail = results.filter((r) => r.tier === 2 && !r.ok).length;
   if (t2Fail) console.log(`  · ${t2Fail} best-effort step(s) failed (non-fatal — the raw tape is what's irreplaceable).`);
-  process.exit(t1Fail ? 1 : exit);
+  process.exit(tapeFail ? 1 : exit);
 }
 main().catch((e) => { console.error(`capture-forward fatal — ${(e as Error).message}`); process.exit(1); });

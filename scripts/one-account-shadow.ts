@@ -35,6 +35,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { pageAll } from "../engine/pageAll";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -126,25 +127,22 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
   }
   if (!roster.size) throw new Error("no armed channels matched the bucket filter");
 
-  // era-4 closed positions for the roster, chronological. Same-week page sizes are
-  // small (a few hundred rows) — one range fetch with a sanity re-page if capped.
+  // era-4 closed positions for the roster, chronological. pageAll past PostgREST's silent 1000-row
+  // cap — the era-4 window grows monotonically from a fixed epoch across all 3 accounts (the roster
+  // filter is client-side below), so it WILL cross the cap. id tiebreak (audit [18]): opened_at alone
+  // is not a total order, so a same-minute cluster straddling a page edge could drop/double a
+  // position and silently skew shadow cash / NAV / the concentration-cap read.
   const rows: PosRow[] = [];
-  for (let fromIdx = 0; ; fromIdx += 1000) {
-    const { data, error } = await sb.from("positions")
-      .select("id,runner_of,occ_symbol,qty,avg_entry_price,realized_pnl,opened_at,closed_at,strategist_id")
-      .eq("status", "closed")
-      .gte("opened_at", `${from}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`)
-      .order("opened_at", { ascending: true }).range(fromIdx, fromIdx + 999);
-    if (error) throw new Error("positions read: " + error.message);
-    const page = (data ?? []) as any[];
-    for (const p of page) {
-      const slug = roster.get(p.strategist_id);
-      if (!slug || p.closed_at == null) continue;
-      rows.push({ id: p.id, runner_of: p.runner_of, occ_symbol: p.occ_symbol, qty: Number(p.qty),
-        avg_entry_price: Number(p.avg_entry_price), realized_pnl: Number(p.realized_pnl),
-        opened_at: p.opened_at, closed_at: p.closed_at, slug });
-    }
-    if (page.length < 1000) break;
+  for (const p of await pageAll<any>((off) => sb.from("positions")
+    .select("id,runner_of,occ_symbol,qty,avg_entry_price,realized_pnl,opened_at,closed_at,strategist_id")
+    .eq("status", "closed")
+    .gte("opened_at", `${from}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`)
+    .order("opened_at", { ascending: true }).order("id", { ascending: true }))) {
+    const slug = roster.get(p.strategist_id);
+    if (!slug || p.closed_at == null) continue;
+    rows.push({ id: p.id, runner_of: p.runner_of, occ_symbol: p.occ_symbol, qty: Number(p.qty),
+      avg_entry_price: Number(p.avg_entry_price), realized_pnl: Number(p.realized_pnl),
+      opened_at: p.opened_at, closed_at: p.closed_at, slug });
   }
 
   // event stream — exits release cash before entries consume it on timestamp ties
@@ -357,9 +355,16 @@ async function handsOff(to: string): Promise<void> {
     const c = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
     ft.set(s.id, { slug: s.slug, underlying: (s.underlying ?? "SPY").toUpperCase(), tp: Number(c?.take_profit_pct ?? 0), stop: c?.premium_stop_pct == null ? 50 : Number(c.premium_stop_pct), ustop: Number(c?.underlying_stop_pct ?? 0), dte: Number(c?.entry_dte ?? 0) });
   }
-  const { data: pos } = await sb.from("positions").select("id,strategist_id,occ_symbol,qty,avg_entry_price,realized_pnl,close_reason,opened_at,opt_type,entry_features")
-    .eq("status", "closed").gte("opened_at", `${ERA4_EPOCH}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`).in("strategist_id", [...ft.keys()]);
-  const rows = (pos ?? []) as any[];
+  // pageAll + id tiebreak (audit [6]): the era-4→to window grows monotonically from a fixed epoch
+  // across ~13 FIRST-TEAM channels. The old un-paginated, UN-ORDERED read silently capped at ~1000
+  // rows in ARBITRARY (physical) order — dropping some `manual` closes — so asLivedTotal / actManual /
+  // progManual and the printed hands-off overlay (the go-live read's input) were computed on a
+  // partial book with no warning. opened_at is not a total order → id disambiguates page edges.
+  const rows = await pageAll<any>((off) => sb.from("positions")
+    .select("id,strategist_id,occ_symbol,qty,avg_entry_price,realized_pnl,close_reason,opened_at,opt_type,entry_features")
+    .eq("status", "closed").gte("opened_at", `${ERA4_EPOCH}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`)
+    .in("strategist_id", [...ft.keys()])
+    .order("opened_at", { ascending: true }).order("id", { ascending: true }));
   const manual = rows.filter((r) => String(r.close_reason ?? "").startsWith("manual"));
   const asLivedTotal = Math.round(rows.reduce((a, r) => a + Number(r.realized_pnl), 0));
   // Load underlying minute bars for the ustop leg (all ustop>0 dream-team channels are SPY, but
@@ -370,7 +375,8 @@ async function handsOff(to: string): Promise<void> {
     const arr: { ms: number; c: number }[] = [];
     for (let from = 0; ; from += 1000) {
       const { data } = await sb.from("underlying_bars").select("ts,close").eq("symbol", sym)
-        .gte("ts", `${ERA4_EPOCH}T04:00:00Z`).lte("ts", `${to}T23:59:59Z`).order("ts", { ascending: true }).range(from, from + 999);
+        .gte("ts", `${ERA4_EPOCH}T04:00:00Z`).lte("ts", `${to}T23:59:59Z`)
+        .order("ts", { ascending: true }).order("id", { ascending: true }).range(from, from + 999); // id tiebreak (audit [18])
       for (const b of (data ?? []) as any[]) if (b.close != null) arr.push({ ms: Date.parse(b.ts), c: Number(b.close) });
       if ((data ?? []).length < 1000) break;
     }
@@ -430,8 +436,13 @@ async function crossAudit(to: string): Promise<void> {
   const { data: strat } = await sb.from("strategists").select("id,slug,accounts(cred_ref)").eq("status", "armed");
   const ft = new Map<string, string>();
   for (const s of (strat ?? []) as any[]) if (((Array.isArray(s.accounts) ? s.accounts[0] : s.accounts)?.cred_ref) === "2") ft.set(s.id, s.slug);
-  const { data: pos } = await sb.from("positions").select("strategist_id,occ_symbol,qty,avg_entry_price,current_mark,opened_at,closed_at")
-    .eq("status", "closed").gte("opened_at", `${ERA4_EPOCH}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`).in("strategist_id", [...ft.keys()]);
+  // pageAll + id tiebreak (audit [6]): same growing era-4→to window as handsOff — un-paginated it
+  // silently caps at ~1000 arbitrary rows and UNDER-counts the self-cross / coalescing cost (the
+  // infra-item-1 decision input). opened_at is not a total order.
+  const pos = await pageAll<any>((off) => sb.from("positions").select("strategist_id,occ_symbol,qty,avg_entry_price,current_mark,opened_at,closed_at")
+    .eq("status", "closed").gte("opened_at", `${ERA4_EPOCH}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`)
+    .in("strategist_id", [...ft.keys()])
+    .order("opened_at", { ascending: true }).order("id", { ascending: true }));
   const minute = (iso: string) => String(iso).slice(0, 16); // to the minute (UTC)
   // BUY events (entries) and SELL events (exits), keyed occ|minute
   const buys = new Map<string, { slug: string; qty: number; px: number }[]>();

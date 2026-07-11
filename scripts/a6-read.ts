@@ -73,7 +73,7 @@ async function main() {
     const { data, error } = await sb.from("positions")
       .select("strategist_id,realized_pnl,avg_entry_price,peak_mark,qty,close_reason,opened_at,entry_features")
       .eq("status", "closed").gte("opened_at", ERA4_START)
-      .order("opened_at", { ascending: true }).range(from, from + 999);
+      .order("opened_at", { ascending: true }).order("id").range(from, from + 999); // id tiebreak: opened_at alone is not a total order — equal-timestamp rows straddling a page boundary drop/dupe
     if (error) { console.error(`positions read failed: ${error.message}`); process.exit(1); }
     rows.push(...((data ?? []) as any[]));
     if (!data || data.length < 1000) break;

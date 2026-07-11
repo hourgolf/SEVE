@@ -38,6 +38,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { pageAll } from "../engine/pageAll";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -121,13 +122,16 @@ async function main() {
   if (se) throw new Error(`strategists read: ${se.message}`);
   const slugById = new Map((strat ?? []).map((s: any) => [s.id, s.slug]));
 
-  const { data: pos, error: pe } = await sb.from("positions")
+  // pageAll + id tiebreak (audit [17]): SINCE is the fixed era-4 epoch, so this window grows
+  // monotonically. Ordered ascending, an un-paginated read past the 1000-row cap would silently drop
+  // the NEWEST sessions — and the ledger is rewritten wholesale each night (no merge), so the
+  // truncation is NOT self-healing. opened_at alone is not a total order.
+  const pos = await pageAll<any>((off) => sb.from("positions")
     .select("id,strategist_id,occ_symbol,qty,avg_entry_price,realized_pnl,close_reason,opened_at,closed_at")
     .in("strategist_id", [...slugById.keys()]).eq("status", "closed").gte("opened_at", SINCE)
-    .order("opened_at", { ascending: true });
-  if (pe) throw new Error(`positions read: ${pe.message}`);
+    .order("opened_at", { ascending: true }).order("id", { ascending: true }));
 
-  const trades: Trade[] = ((pos ?? []) as any[]).map((p) => ({
+  const trades: Trade[] = (pos as any[]).map((p) => ({
     posId: p.id, slug: slugById.get(p.strategist_id)!, occ: p.occ_symbol,
     openedAt: p.opened_at, closedAt: p.closed_at ?? null,
     entry: Number(p.avg_entry_price), qty: Number(p.qty),

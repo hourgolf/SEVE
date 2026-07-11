@@ -70,6 +70,7 @@
     "export-bars": "tsx scripts/export-bars.ts",
     "repair-bars-archive": "tsx scripts/repair-bars-archive.ts",
     "verify-bars-archive": "tsx scripts/verify-bars-archive.ts",
+    "verify-quotes-archive": "tsx scripts/verify-quotes-archive.ts",
     "day-report": "tsx --env-file=.env.local scripts/day-report.ts",
     "one-account-shadow": "tsx --env-file=.env.local scripts/one-account-shadow.ts",
     "ratchet-shadow": "tsx --env-file=.env.local scripts/ratchet-shadow.ts",

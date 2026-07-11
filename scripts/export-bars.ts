@@ -19,6 +19,7 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { pageAll } from "../engine/pageAll";
 
 function loadEnv() { try { for (const line of readFileSync(".env.local", "utf8").split("\n")) { const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim(); } } catch { /* */ } }
 loadEnv();
@@ -37,10 +38,17 @@ const etDate = (iso: string) => ET.format(new Date(iso));
 
 async function symbols(): Promise<string[]> {
   if (ONLY) return [ONLY];
-  // cheap distinct via the daily view (small)
-  const { data, error } = await sb.from("underlying_bars_daily").select("symbol");
-  if (error) throw new Error(error.message);
-  return [...new Set(((data ?? []) as Array<{ symbol: string }>).map((r) => r.symbol))].sort();
+  // distinct symbols from the daily view. It is one row per symbol per session (32_bars_retention.sql:
+  // the live 60d rollup ∪ the never-pruned daily_bars_hist), so it ALREADY exceeds PostgREST's ~1000-row
+  // cap — an un-ranged select was silently truncated, and whether every LIVE symbol survived the dedup
+  // hung on unspecified executor ordering. Page to exhaustion under a TOTAL order ((symbol, ts) is unique
+  // per row) so no traded symbol can be dropped from the nightly TIER-1 archive.
+  const rows = await pageAll<{ symbol: string }>((from) => sb
+    .from("underlying_bars_daily")
+    .select("symbol")
+    .order("symbol", { ascending: true })
+    .order("ts", { ascending: true }));
+  return [...new Set(rows.map((r) => r.symbol))].sort();
 }
 
 async function exportSymbol(sym: string): Promise<void> {

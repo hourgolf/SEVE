@@ -23,7 +23,10 @@ function digest(ss: RealSession[]): string {
 
 async function main() {
   let fail = 0;
-  for (const sym of ["SPY", "QQQ"]) {
+  // SPY+QQQ+IWM = the live traded books (brief.sentLevels); IWM (the FIRST-TEAM pair) is read
+  // archive-first by the cross-index probes, so its archive must be golden too. (RSP lives in the
+  // archive as research history but isn't live-ingested, so it has no DB-only path to compare.)
+  for (const sym of ["SPY", "QQQ", "IWM"]) {
     process.env.SEVE_BARS_ARCHIVE = "0";
     const db = await loadRealSessions({ symbol: sym, sinceDaysAgo: 900 });
     process.env.SEVE_BARS_ARCHIVE = "1";

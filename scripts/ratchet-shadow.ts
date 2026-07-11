@@ -44,6 +44,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { pageAll } from "../engine/pageAll";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -149,15 +150,18 @@ async function buildRows(sb: SupabaseClient, opts: { allowArchive: boolean; prio
   const { data: strat, error: se } = await sb.from("strategists").select("id,slug").in("slug", slugs);
   if (se) throw new Error(`strategists read: ${se.message}`);
   const slugById = new Map((strat ?? []).map((s: any) => [s.id, s.slug]));
-  const { data: pos, error: pe } = await sb.from("positions")
+  // pageAll + id tiebreak (audit [20]): SINCE is a fixed epoch so this set grows monotonically.
+  // Ordered ascending, an un-paginated read past 1000 rows would silently drop the NEWEST trades —
+  // never banked on the ledger path, and a truncated recompute on the ledger-less worker path.
+  // opened_at alone is not a total order (fix the class even though today's count is well under cap).
+  const pos = await pageAll<any>((off) => sb.from("positions")
     .select("id,strategist_id,occ_symbol,qty,avg_entry_price,realized_pnl,close_reason,opened_at,peak_mark")
     .in("strategist_id", [...slugById.keys()]).eq("status", "closed").gte("opened_at", SINCE)
-    .order("opened_at", { ascending: true });
-  if (pe) throw new Error(`positions read: ${pe.message}`);
+    .order("opened_at", { ascending: true }).order("id", { ascending: true }));
 
   const ledger = new Map(opts.prior);
   let fresh = 0;
-  for (const p of (pos ?? []) as any[]) {
+  for (const p of pos as any[]) {
     const prior = ledger.get(p.id);
     if (prior && prior.ratchetPnlCt != null) continue; // scored rows are final; retry unscored
     const slug = slugById.get(p.strategist_id)!;
@@ -261,10 +265,15 @@ const MOMO_REGIMES = [
 interface SlotCfg { specSlug: string; regimes: { name: string; flags: string[] }[] }
 
 async function slotAware(sb: SupabaseClient, from: string, to: string, sc: SlotCfg): Promise<{ from: string; to: string; runs: RegimeRun[] } | null> {
-  const { data, error } = await sb.from("strategists").select("spec_json,strategist_config(capital_pct,max_contracts,daily_stop_usd)").eq("slug", sc.specSlug).single();
+  const { data, error } = await sb.from("strategists").select("underlying,spec_json,strategist_config(capital_pct,max_contracts,daily_stop_usd)").eq("slug", sc.specSlug).single();
   if (error || !(data as any)?.spec_json) { console.error(`slot-aware: ${sc.specSlug} spec unavailable (${error?.message ?? "no spec"})`); return null; }
   const cfg = Array.isArray((data as any).strategist_config) ? (data as any).strategist_config[0] : (data as any).strategist_config;
   const risk = String(Number(cfg?.capital_pct ?? 500)), maxC = String(Number(cfg?.max_contracts ?? 6)), dstop = String(Number(cfg?.daily_stop_usd ?? 500));
+  // The channel's REAL instrument (audit [24]): the engine resolves bars + option quotes from
+  // --underlying (the --spec path never reads the spec's own underlying), so a hardcoded "SPY" would
+  // silently backtest any future QQQ/IWM ratchet candidate on SPY. Default 'SPY' → SPY channels
+  // (orb-ustop, momo-shape today) are byte-identical to before; a cross-index candidate runs its own.
+  const underlying = String((data as any).underlying ?? "SPY").toUpperCase();
   const specPath = join(tmpdir(), `ratchet-slot-${sc.specSlug}.json`);
   writeFileSync(specPath, JSON.stringify((data as any).spec_json)); // entries + EOD timeET only; stops layered via CLI
   const daysBack = Math.ceil((Date.now() - Date.parse(from + "T00:00:00Z")) / 86_400_000) + 3;
@@ -273,7 +282,7 @@ async function slotAware(sb: SupabaseClient, from: string, to: string, sc: SlotC
   for (const rg of regimes) {
     const emit = join(tmpdir(), `ratchet-slot-${rg.name.replace(/[^a-z0-9]/gi, "_")}.json`);
     try { if (existsSync(emit)) rmSync(emit); } catch { /* */ }
-    const args = ["engine/backtest.ts", "--spec", specPath, "--strat", "breakout", "--underlying", "SPY",
+    const args = ["engine/backtest.ts", "--spec", specPath, "--strat", "breakout", "--underlying", underlying,
       "--source", "real", "--options", "quotes", "--from", from, "--to", to, "--days", String(daysBack),
       "--risk", risk, "--max-contracts", maxC, "--daily-stop", dstop, "--cost-gate", "3.0", ...rg.flags, "--emit-trades", emit];
     let stdout = "";

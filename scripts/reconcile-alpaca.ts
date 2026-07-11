@@ -27,12 +27,25 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 interface Order { id: string; symbol: string; side: "buy" | "sell"; status: string; filled_qty: string; filled_avg_price: string | null; submitted_at: string; }
 interface Leg { bq: number; bc: number; sq: number; sp: number; accts: Set<string>; }
 
+// Reconcile's contract (see main()): desk rows opened ≥ 2026-06-01, so broker fills must
+// reach back to 2026-05-31 (one day of margin). We page ASCENDING from that anchor and stop
+// only when the window is EXHAUSTED (a short/empty page). The old hard `page < 80` (40k orders)
+// SILENTLY dropped the NEWEST orders once an account crossed the cap — the fresh trades reconcile
+// most needs. The cap is now generous and hitting it THROWS (loud) instead of truncating, so the
+// nightly gate can never quietly under-cover recent trades. Raise MAX_PAGES / advance the anchor
+// if a busy account legitimately outgrows it.
 async function accountFills(hdr: Record<string, string>): Promise<Order[]> {
   const out = new Map<string, Order>();
-  let after = "2026-05-31T00:00:00Z";
-  for (let page = 0; page < 80; page++) {
+  const after0 = "2026-05-31T00:00:00Z";
+  let after = after0;
+  const MAX_PAGES = 400; // 200k orders; keyset via after= is index-backed, so paging deep is cheap
+  let page = 0;
+  for (; page < MAX_PAGES; page++) {
     const r = await fetch(`${PAPER}/v2/orders?status=all&limit=500&direction=asc&nested=false&after=${after}`, { headers: hdr });
-    if (!r.ok) { console.error(`  alpaca orders ${r.status}: ${(await r.text()).slice(0, 160)}`); break; }
+    // THROW, never break-with-partial (audit 2026-07-10, bug class 8): a mid-pagination HTTP
+    // error used to return the partial order set as if complete — the drift gate then diffed
+    // desk rows against half a broker history and reported phantom drift (or phantom clean).
+    if (!r.ok) throw new Error(`accountFills: alpaca orders ${r.status} at page ${page} — ${(await r.text()).slice(0, 160)} (partial fetch would corrupt the drift gate)`);
     const batch = (await r.json()) as Order[];
     if (!Array.isArray(batch) || batch.length === 0) break;
     let added = 0;
@@ -40,6 +53,7 @@ async function accountFills(hdr: Record<string, string>): Promise<Order[]> {
     after = batch[batch.length - 1].submitted_at;
     if (batch.length < 500 || added === 0) break;
   }
+  if (page >= MAX_PAGES) throw new Error(`accountFills: hit the ${MAX_PAGES}-page cap (${out.size} orders since ${after0}) without exhausting the window — the NEWEST orders would be silently dropped. Raise MAX_PAGES or advance the anchor.`);
   return [...out.values()];
 }
 
@@ -61,7 +75,11 @@ async function main() {
     const hdr = { "APCA-API-KEY-ID": AK, "APCA-API-SECRET-KEY": AS };
     const acct = await fetch(`${PAPER}/v2/account`, { headers: hdr }).then((r) => r.json());
     equities.push({ name: a.name, equity: Number(acct.equity), reachable: true });
-    const fills = (await accountFills(hdr)).filter((o) => o.status === "filled" && Number(o.filled_qty) > 0 && Number(o.filled_avg_price) > 0);
+    // Include ANY order with an executed portion regardless of terminal status — a partial→canceled
+    // sell (the worker's own 3s cancel path, and the 06-11 partial-fill incident) still moved real
+    // contracts at the broker and IS booked by the desk. Excluding non-'filled' drops those legs and
+    // unbalances the OCC (bq≠sq → looks open → silently excluded from the drift gate).
+    const fills = (await accountFills(hdr)).filter((o) => Number(o.filled_qty) > 0 && Number(o.filled_avg_price) > 0);
     for (const o of fills) {
       const q = Number(o.filled_qty), px = Number(o.filled_avg_price);
       const e = byOcc.get(o.symbol) ?? { bq: 0, bc: 0, sq: 0, sp: 0, accts: new Set() };
@@ -84,13 +102,13 @@ async function main() {
 
   // ---- diagnose ----
   const diffs: { occ: string; broker: number; desk: number; delta: number }[] = [];
-  let brokerTot = 0, deskTot = 0, deltaTot = 0;
+  let brokerTot = 0, deskTot = 0, deltaTot = 0, absDeltaTot = 0;
   const onlyDesk: string[] = [];
   for (const occ of new Set([...truth.keys(), ...deskByOcc.keys()])) {
     const t = truth.get(occ), d = deskByOcc.get(occ);
     if (t && !t.closed) continue;
     if (!t && d != null) { onlyDesk.push(occ); continue; }
-    if (t && d != null) { brokerTot += t.realized; deskTot += d; deltaTot += d - t.realized; if (Math.abs(d - t.realized) >= 1) diffs.push({ occ, broker: t.realized, desk: d, delta: d - t.realized }); }
+    if (t && d != null) { brokerTot += t.realized; deskTot += d; const delta = d - t.realized; deltaTot += delta; absDeltaTot += Math.abs(delta); if (Math.abs(delta) >= 1) diffs.push({ occ, broker: t.realized, desk: d, delta }); }
   }
   diffs.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
@@ -99,7 +117,8 @@ async function main() {
   for (const e of equities) console.log(`    ${e.reachable ? "✓" : "—"} ${e.name.padEnd(22)} ${e.reachable ? "equity " + usd(e.equity) : "(skipped — add keys)"}`);
   console.log(`\n  Σ realized — broker fills:  ${usd(brokerTot)}`);
   console.log(`  Σ realized — desk booked:   ${usd(deskTot)}   (matched OCCs)`);
-  console.log(`  ⇒ BOOKING ERROR (desk − broker): ${usd(deltaTot)}   ${Math.abs(deltaTot) < 200 ? "✓ books tie out" : "⚠ books DIVERGE"}  (+ over-reported · − under, the $0 phantoms)`);
+  console.log(`  ⇒ BOOKING ERROR — signed net (desk − broker): ${usd(deltaTot)}   (+ over-reported · − under, the $0 phantoms)`);
+  console.log(`  ⇒ Σ|per-OCC Δ| (the drift GATE): $${Math.round(absDeltaTot).toLocaleString()}   ${absDeltaTot < 200 ? "✓ books tie out" : "⚠ books DIVERGE"}  (equal-and-opposite mis-books can't cancel here)`);
   console.log(`\n  TOP PER-OCC DIVERGENCES:`);
   for (const d of diffs.slice(0, 12)) console.log(`    ${d.occ}  broker ${usd(d.broker).padStart(9)}  desk ${usd(d.desk).padStart(9)}  Δ ${usd(d.delta).padStart(9)}`);
   if (onlyDesk.length) console.log(`\n  ⚠ ${onlyDesk.length} OCC(s) booked by the desk but NOT in any reached broker account — add the missing account keys (not corrected).`);
@@ -124,11 +143,14 @@ async function main() {
   if (!FIX) {
     // Health gate for the nightly clean-books cron: fail loud (non-zero) on unreachable accounts or
     // real drift, so launchd/capture-forward surfaces it. The worker books row-primary going forward,
-    // so |error| should stay ~$0; a drift ≥ $200 means investigate the worker BEFORE auto-correcting.
+    // so per-OCC error should stay ~$0. The gate keys on Σ|per-OCC Δ| (NOT the signed net — equal-and-
+    // opposite mis-books between two shared-OCC lots net to ~$0 and would falsely certify clean books,
+    // exactly the shared-OCC class behind the +$5,060 phantom); a drift ≥ $200 means investigate the
+    // worker BEFORE auto-correcting. (deltaTot, the signed net, is still reported — it's informative.)
     const reachableN = equities.filter((e) => e.reachable).length;
     if (reachableN === 0) { console.log(`\n  ✗ no Alpaca accounts reachable — cannot verify books (check keys/network).\n`); process.exit(4); }
-    if (Math.abs(deltaTot) >= 200) { console.log(`\n  ⚠ BOOKS DRIFT ${usd(deltaTot)} ≥ $200 — review the worker's booking, then 'reconcile-alpaca --fix --write' once confirmed.\n`); process.exit(3); }
-    console.log(`\n  ✓ books clean (|error| ${usd(deltaTot)} < $200). (add --fix for the per-row correction preview, --fix --write to apply.)\n`);
+    if (absDeltaTot >= 200) { console.log(`\n  ⚠ BOOKS DRIFT Σ|Δ| $${Math.round(absDeltaTot).toLocaleString()} ≥ $200 (signed net ${usd(deltaTot)}) — review the worker's booking, then 'reconcile-alpaca --fix --write' once confirmed.\n`); process.exit(3); }
+    console.log(`\n  ✓ books clean (Σ|per-OCC Δ| $${Math.round(absDeltaTot).toLocaleString()} < $200; signed net ${usd(deltaTot)}). (add --fix for the per-row correction preview, --fix --write to apply.)\n`);
     return;
   }
   // DISTRIBUTE each OCC's TRUE broker realized across its desk rows by qty share → the books tie out to

@@ -18,6 +18,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { pageAll } from "../engine/pageAll";
 
 const ERA4_START = "2026-06-30";
 const TRIGGER_SESSIONS = 15;
@@ -94,8 +95,15 @@ read — no action.
 `;
 
 async function main() {
-  const { data } = await sb.from("positions").select("opened_at").eq("status", "closed").gte("opened_at", ERA4_START);
-  const sessions = new Set(((data ?? []) as { opened_at: string }[]).map((r) => r.opened_at.slice(0, 10))).size;
+  // pageAll (audit [8]): era-4 grows unbounded (nightly, ~20 channels), so an un-paginated read
+  // silently caps at the earliest ~1000 rows — the distinct-session count then plateaus below the
+  // real total and the autopilot fires late or never. pageAll also fails LOUD on a read error (the
+  // old discarded `error` would have counted a failed read as 0 sessions — the same silent skip).
+  // id tiebreak: opened_at alone is not a total order.
+  const posRows = await pageAll<{ opened_at: string }>((from) => sb
+    .from("positions").select("opened_at,id").eq("status", "closed").gte("opened_at", ERA4_START)
+    .order("opened_at", { ascending: true }).order("id", { ascending: true }));
+  const sessions = new Set(posRows.map((r) => r.opened_at.slice(0, 10))).size;
   const state = FORCE ? {} : loadState();
   console.log(`  a6-watch: era-4 sessions ${sessions}/${TRIGGER_SESSIONS}${state.firedMemo ? ` · memo already fired (${state.firedMemo})` : ""}`);
 
