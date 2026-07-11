@@ -37,6 +37,11 @@ drop policy if exists worker_runs_read on public.worker_runs;
 create policy worker_runs_read on public.worker_runs for select to anon, authenticated using (true);
 -- writes are service-role only (RLS-bypass); no anon/auth write policy by design.
 
+-- Raw-SQL-created tables do NOT inherit Supabase's default role GRANTs, so the RLS SELECT policy
+-- above is unreachable for anon/authenticated without this (the dashboard read 42501's otherwise).
+-- service_role already carries full privileges (the worker writes fine); this is the read side.
+grant select on public.worker_runs to anon, authenticated;
+
 -- Handy diagnosis view: recent runs with their uptime and the gap to the prior boot.
 -- select boot_id, version, started_at, last_heartbeat_at, ended_at, termination_kind, exit_code,
 --        signal, last_phase, memory_rss_mb,
