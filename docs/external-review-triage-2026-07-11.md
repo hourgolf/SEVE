@@ -112,6 +112,20 @@ fills. Measured magnitude: Case 1 **$1.00** (booked 2@1.77 vs true 1@1.76+1@1.77
 strategy-attribution comparisons the registry runs on — fix = persist every rung fill, realize P&L
 from the weighted aggregate. → add to Bucket-1 punch list.
 
+**⚡ LIVE BUG FOUND + FIXED while running reconcile to answer the review (2026-07-11):**
+Running `reconcile-alpaca` read-only to verify 3/3 account coverage surfaced a REAL bug — its own
+desk-rows read (`reconcile-alpaca.ts:99`) was **un-paginated** and silently truncated at PostgREST's
+1,000-row cap the moment closed-since-06-01 crossed 1,000 (1,082 rows on 07-11). deskByOcc under-counted
+→ the drift gate reported a **phantom $8,390 divergence and exit(3), failing the nightly capture chain
+on a false alarm.** Books are actually CLEAN: complete paginated Σ|per-OCC Δ| = **$2**, signed net $0,
+verified apples-to-apples on the top-5 "divergent" OCCs (each ties to the broker exactly). Smoking gun:
+reconcile reported desk +$948 for an OCC whose 4 rows are −864/−864/+468/+480 — it saw only the +468/+480
+pair (truncation dropped the two momo-shape rows). **Fixed** via pageAll + .order(id) tiebreak (commit
+scoped to scripts/reconcile-alpaca.ts); gate now reports books clean, exit 0. This is the pagination law
+(the review's finding #11 class) biting a NINTH time, inside the very tool meant to guarantee books
+integrity — the strongest possible argument for the review's "make pageAll structurally unavoidable"
+point. CLAUDE.md's "Books: CLEAN" is re-affirmed true (the gate was wrong, not the books).
+
 **Round 2c (reconcile-alpaca + 6 answers — data/review/P2-BUNDLE.md / RECONCILE-QA.md):**
 - reconcile is a solid nightly **P&L-drift gate**: independent broker-fill truth, fail-closed reads
   (throws on partial pages / page-cap — the 07-10 audit fix), audited reversible writes, correct
@@ -123,6 +137,30 @@ from the weighted aggregate. → add to Bucket-1 punch list.
   "broker position == expected after close."** That elevates the order/fill ledger + broker-flat
   close invariant (Bucket 2 items 1+3) from good-practice to THE missing structural guarantee —
   confirms the reviewer's gate order from an independent second angle.
+
+**Reviewer's P2-final dispositions (ADOPTED):**
+- The partial-fill CRITICAL's precise final wording — anchored at `alpaca.ts:orderAndFill/
+  limitLadderFill` + `execute.ts:exit booking` + `reconcile-alpaca.ts:82–109`: *no independent
+  broker-position invariant at close; ladder assumes the terminal market rung completes; reconcile
+  skips unbalanced OCCs rather than comparing to live broker positions.* Fix = require confirmed
+  logical-exit fills == requested qty (or read /v2/positions) before closing the row; else
+  exit_state=unresolved + keep managing. **"broker-flat before close" = the single highest-ROI
+  invariant before real capital.**
+- **NEW two-reconciler design (adopted into Bucket 2):** keep the current script but RENAME it
+  `reconcile-realized-pnl`; ADD `reconcile-open-positions` — per account+OCC compare broker_position_qty
+  vs Σ open desk-row qty ± confirmed working-order remainder, classifying: flat / managed /
+  **stranded-broker** / phantom-desk-row / qty-drift / routing-account-drift. During an active ladder,
+  working orders explain the temp diff; once no working order exists, any mismatch pages + blocks new
+  entries in that account/OCC. This is the intraday position safety net both layers currently lack.
+- **Account-coverage gate (CONFIRMED code weakness, logged, not yet fixed):** reconcile only exit(4)s
+  on ZERO reachable accounts; a MISSING key skips+flags that account but the run can still print
+  "books clean" if the reachable subset ties. Reviewer's fix: make `reachable set == configured active
+  account set` a hard gate ("reconciliation incomplete" ≠ "books clean"). Current coverage is 3/3
+  (verified 07-11 post key-resync), so not live-degraded now — but this is exactly how the stale
+  FIRST-TEAM/LAB keys could have hidden real drift, so worth hardening alongside the pagination fix.
+- **Basis-error finding DOWNGRADED** (reviewer): Low operational severity today (observed total $1
+  across both cases) / Medium methodological (can pollute execution-quality studies). Kept on the
+  punch list as a booking-precision fix (weighted actual fills), not an integrity emergency.
 
 **Two operator side-notes logged (both sharpen the reviewer's own findings):**
 - The FIRST-TEAM/LAB Alpaca keys in `.env.local` were stale (401) and had to be re-synced from Railway
