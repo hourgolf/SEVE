@@ -12,7 +12,23 @@ durable context for a new session. Read it first.
 > lives in **memory/** (read `desk-doctrine.md` FIRST, then `cockpit-p3-multi-account.md`,
 > `doctrine-drift-and-forward-validation.md`). The block below re-anchors the convention.
 
-## ⚡ SESSION UPDATE — 2026-07-10 (READ FIRST; supersedes 07-08 below where they conflict)
+## ⚡ SESSION UPDATE — 2026-07-10 EVE · FABLE WEEKEND MISSION 1 (READ FIRST)
+
+**Trade-path audit DONE.** 7-finder adversarial fan-out → 25 CONFIRMED findings, ALL fixed
+(`f83ea2f`→`8673074`); **worker `stream-2026-07-10b` deployed + heartbeat/boot-verified**. Headliners:
+a CRITICAL wrong-account routing hole (transient `accounts` read failure → every channel traded via the
+DEFAULT account's keys while real lots rode unmanaged — now fail-closed two ways, selftest-covered in
+`worker/src/routing.ts`); the 1000-row truncation class in SIX more readers incl. **a6-watch** (the A6
+autopilot was counting era-4 sessions on a capped read) — **`engine/pageAll.ts` is now THE law** for any
+possibly->1000-row fetch (+ `.order(id)` tiebreak); reconcile's drift gate keyed on the SIGNED net
+(equal-and-opposite mis-books certified "clean" — now Σ|per-OCC Δ|); backtest booked unquotable deep-ITM
+exits at $0 (phantom −100% on the biggest winners feeding promote reads — now defer + `:intrinsic` tag);
+the quotes archive got its first golden check (`npm run verify-quotes-archive`, 7/7 days tie 100%).
+Fail-closed law: daily stop/target gate now blocks (`daily_gate_unreadable`) instead of failing open;
+FOMC window got its wall-clock flatten twin. `npm run runner-selftest` = 41 checks, the pre-deploy gate.
+Deferred residue in memory/trade-path-audit-2026-07-10.md. **Next: Mission 2 (PERFORM-mode mocks).**
+
+## SESSION UPDATE — 2026-07-10 (supersedes 07-08 below where they conflict)
 
 **Worker `stream-2026-07-10a`** (adds `daily_target_usd` win-and-done + skips is_active=false channels —
 the grind tape-spam fix). **Books/data clean.** **NEXT SESSION = the FABLE WEEKEND** — read
