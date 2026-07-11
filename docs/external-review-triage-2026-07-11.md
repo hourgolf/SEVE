@@ -80,11 +80,63 @@ data value stands but broker-state complexity isn't paying its way.
   epoch, coverage, completeness; all-time NAV always visible next to windowed views; LLM judge output
   visually subordinate to deterministic evidence (invert the current verdict-first Sentinel panel).
 
-## What the reviewer couldn't see (context, not defense)
-alpaca.ts, reconcile-alpaca, the shadow instruments, migrations 03–67, the UI components, and the
-10b audit diffs were omitted from the bundle. Three CRITICALs are conditionally-confirmed pending
-alpaca.ts (their Priority-1 request). Next review round: send alpaca.ts + raw order samples +
-migrations + the instruments (their priorities 1–3).
+## EXCHANGE LOG — evidence rounds after the initial response (2026-07-11)
+The review became a live back-and-forth. What the evidence rounds settled:
+
+**Round 2 (alpaca.ts + raw broker orders, all 3 accounts — data/review/ROUND2-BUNDLE.md):**
+- **Incidence reframes the partial-fill CRITICALs to CONFIRMED-LATENT.** Across all 3 accounts since
+  06-01: 2,507 closed orders, only **2 partial fills** (both MORGUE), **0** short-qty fills, **0**
+  rejected. Market orders on liquid SPY/QQQ/IWM options fill-or-cancel whole. The partial-exit /
+  nonterminal-fill defects are LATENT (wrong code path, ~0.08% incidence), not active book corruption.
+- **The reject-regex finding (execute.ts:255) is UNTESTABLE** — 0 rejects exist and raw reject bodies
+  are never persisted. That absence itself argues for the durable ledger.
+- **Structural fact the samples surfaced:** our exit is a 3-rung spread-capture ladder (limit r0 →
+  repriced r1 → market backstop `-x-m`); a "canceled partial" is rung r0's NORMAL behavior, and the
+  454 zero-fill cancels are the same ladder repricing.
+
+**Round 2b (forensic trace of both partial order IDs — data/review/PARTIAL-FILL-FORENSICS.md):**
+- **Neither partial ever stranded a contract.** Both reached broker-flat within seconds; the desk row
+  booked full qty closed. Case 1 finished via the repriced limit; **Case 2 finished via the market
+  backstop** — i.e. the reviewer's finding #4 in the wild (the remainder cleared only because the
+  market rung filled 6/6 whole; its completion is empirical, not guaranteed).
+- Reviewer's revised severity, ADOPTED: **"critical blast radius / confirmed-latent / zero realized
+  incidents in reviewed history."** The precise defect is narrower than first stated: *the ladder
+  closes the logical position on its accumulated in-memory result without a final invariant that
+  broker-held qty is zero.* The fix = a broker-flat (or Σ confirmed-fills == requested-qty) check
+  before marking the row closed; else `exit_state=unresolved, remaining_qty=…` and keep managing.
+
+**NEW CONFIRMED finding (Medium) — synthetic-price exit booking:**
+Multi-rung exits book ONE synthetic price across the whole position instead of the qty-weighted actual
+fills. Measured magnitude: Case 1 **$1.00** (booked 2@1.77 vs true 1@1.76+1@1.77), Case 2 **$0.00**
+(backstop filled at the limit). Real defect, ≤$1 observed, but it contaminates the exit-quality /
+strategy-attribution comparisons the registry runs on — fix = persist every rung fill, realize P&L
+from the weighted aggregate. → add to Bucket-1 punch list.
+
+**Round 2c (reconcile-alpaca + 6 answers — data/review/P2-BUNDLE.md / RECONCILE-QA.md):**
+- reconcile is a solid nightly **P&L-drift gate**: independent broker-fill truth, fail-closed reads
+  (throws on partial pages / page-cap — the 07-10 audit fix), audited reversible writes, correct
+  Σ|per-OCC Δ| gate (not signed net). Those are genuine strengths.
+- **BUT it is NOT a stranded-position detector and never reads `/v2/positions`.** An OCC with
+  buyQty≠sellQty is skipped as "not closed" (L109) — a stranded remainder, a transient ladder, and a
+  still-open position are indistinguishable. It repairs `realized_pnl` only (by qty-share), never qty/
+  account/row-existence. It's nightly, not intraday. **So neither the ladder NOR reconcile enforces
+  "broker position == expected after close."** That elevates the order/fill ledger + broker-flat
+  close invariant (Bucket 2 items 1+3) from good-practice to THE missing structural guarantee —
+  confirms the reviewer's gate order from an independent second angle.
+
+**Two operator side-notes logged (both sharpen the reviewer's own findings):**
+- The FIRST-TEAM/LAB Alpaca keys in `.env.local` were stale (401) and had to be re-synced from Railway
+  — a live instance of the secrets finding: 3 unsynced key stores (`.env.local`/Railway/Vercel), no
+  rotation ledger, silent fat-finger risk.
+- **MORGUE is the highest-churn account** (1,718 orders vs LAB 466, FIRST-TEAM 323) because it holds
+  the grind scalpers — the *loser* bucket generates the most broker-state churn, sharpening the
+  reviewer's "stop placing paper orders for known losers / shadow-replay them" kill-list item.
+
+## What the reviewer still hasn't seen
+Migrations 03–67 + schema dump (P3), stream.ts + Railway topology (P4), the §04 UI components (P5),
+the other shadow instruments (one-account / ratchet / stairstep / day-report), a6-read/watch. Offer P3
+next if they keep going — the duplicate-executor / idempotency-constraint questions need the real
+constraints, not the base schema.
 
 ## Recommended plan change (operator to confirm)
 The weekend's Mission 3 (sentinel analyst v2) **slides behind the execution substrate**: after the
