@@ -1,13 +1,14 @@
 "use client";
 
-import { Fragment } from "react";
 import { SystemHealthStrip } from "@/components/perform/SystemHealthStrip";
+import { IncidentDetail } from "@/components/perform/IncidentDetail";
 import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { Incident } from "@/lib/incident/deriveIncident";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
+import { collapseEvents } from "@/lib/perform/derivePerformView";
 
 // PERFORM right rail (slice S2): POSITIONS (row-per-leg with pk glow ring +
 // ratchet/LOCK-RIDE/giveback badges) · SENTINEL (verdict chip + one-line digest
@@ -60,6 +61,7 @@ function PositionsSection({
       <div className="pf-head">
         <span className="t">POSITIONS · {positions.length} OPEN</span>
         <span className="grow" />
+        <span className="pf-basis" title="Desk marks are operational estimates; broker-flat reconciliation is not available here.">desk marks · unreconciled</span>
         {positions.length > 0 && <span className={`x num ${total < 0 ? "neg" : "up"}`}>Σ {signedUsd(total)}</span>}
       </div>
       <div className="pfp-body">
@@ -128,6 +130,7 @@ function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
       <div className="pf-head">
         <span className="t">SENTINEL</span>
         <span className="grow" />
+        <span className="pf-basis">interpretive</span>
         <span className="x">{state === "ok" && date ? `scan ${date.slice(5)} ` : "no scan "}
           {state === "ok" ? <span className="pf-ok">✓</span> : ""}</span>
       </div>
@@ -137,6 +140,7 @@ function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
         ) : (
           <>
             <div className="pfs-top">
+              <span className="pfs-source">LLM</span>
               <span className={`pfs-verdict ${vcls}`}>{verdict}</span>
               <span className="pfs-msg">{judge.soWhat}</span>
             </div>
@@ -177,24 +181,25 @@ function TapeMsg({ message, strategists }: { message: string; strategists: Strat
 }
 
 function TapeSection({ events, strategists }: { events: MarketEvent[]; strategists: StrategistState[] }) {
+  const collapsed = collapseEvents(events);
   return (
     <section className="pf-screen">
       <div className="pf-head">
         <span className="t">TAPE</span>
         <span className="grow" />
+        <span className="pf-basis">adjacent repeats collapsed</span>
         <span className="x"><span className="pf-livedot" />LIVE</span>
       </div>
       <div className="pft-body">
-        {events.length === 0 ? (
+        {collapsed.length === 0 ? (
           <div className="pf-ghost">no events yet</div>
-        ) : events.map((e) => (
-          <Fragment key={e.id}>
-            <div className="pft-row">
-              <span className="pft-time num">{timeOfDay(e.created_at)}</span>
-              <span className={`pft-kind ${KIND[e.level] ?? "info"}`}>{e.level === "RISK" ? "RISK" : e.level === "OK" ? "OK" : e.level}</span>
-              <TapeMsg message={e.message} strategists={strategists} />
-            </div>
-          </Fragment>
+        ) : collapsed.map((e) => (
+          <div className="pft-row" key={e.id}>
+            <span className="pft-time num">{timeOfDay(e.created_at)}</span>
+            <span className={`pft-kind ${KIND[e.level] ?? "info"}`}>{e.level === "RISK" ? "RISK" : e.level === "OK" ? "OK" : e.level}</span>
+            <TapeMsg message={e.message} strategists={strategists} />
+            {e.count > 1 && <span className="pft-count" title={`${e.count} adjacent identical events`}>×{e.count}</span>}
+          </div>
         ))}
       </div>
     </section>
@@ -217,6 +222,7 @@ export function PerformRail({
     <aside className="pf-rail">
       {/* P5 slice 3 — deterministic system-health strip; open-position truth visible in every state. */}
       <SystemHealthStrip incident={incident} />
+      <IncidentDetail incident={incident} />
       <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} />
       <SentinelSection symbol={symbol} sent={sent} />
       <TapeSection events={events} strategists={strategists} />

@@ -81,7 +81,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
         <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
 
         {/* MODE — segmented switch (also `S`) */}
-        <div className="tb-mod">
+        <div className="tb-mod tb-mode">
           <div className="modesw" role="tablist" aria-label="desk mode">
             <button type="button" className={mode === "studio" ? "on" : ""} onClick={() => flipMode("studio")} aria-pressed={mode === "studio"}>STUDIO</button>
             <button type="button" className={mode === "perform" ? "on" : ""} onClick={() => flipMode("perform")} aria-pressed={mode === "perform"}>PERFORM</button>
@@ -92,7 +92,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
         <div className="vsep" />
 
         {/* SPY spot LED */}
-        <div className="tb-mod">
+        <div className="tb-mod tb-spot">
           <div className="ledwin red"><LedDisplay value={spotStr} digits={spotStr.replace(".", "").length} color="var(--led-red)" /></div>
           <span className="silk">
             {symbol}&nbsp;
@@ -105,7 +105,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
         </div>
 
         {/* DAY P&L LED */}
-        <div className="tb-mod">
+        <div className="tb-mod tb-day">
           <div className={`ledwin ${dayVal < 0 ? "red" : "grn"}`}>
             <span className="led-dollar" style={{ color: dayColor }}>$</span>
             <LedDisplay value={String(dayVal)} digits={String(Math.abs(dayVal)).length + (dayVal < 0 ? 1 : 0)} color={dayColor} />
@@ -114,7 +114,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
         </div>
 
         {/* NAV LCD */}
-        <div className="tb-mod">
+        <div className="tb-mod tb-nav">
           <div className="ledwin neu"><span className={`lcdtxt ${fund.is_halted ? "amb" : ""} sm num`}>{navStr}</span></div>
           <span className="silk">NAV{acctId ? "" : " · ALL"}</span>
         </div>
@@ -122,7 +122,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
         <div className="tb-spacer" />
 
         {/* FRAME switch — GLOBAL blackout⇄cream (also `F`) */}
-        <div className="tb-mod">
+        <div className="tb-mod tb-frame">
           <button
             type="button"
             className="framesw"
@@ -142,7 +142,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
         <div className="vsep" />
 
         {/* RUN / PAPER indicators */}
-        <div className="tb-mod">
+        <div className="tb-mod tb-run">
           {fund.is_halted ? (
             <span className="pill halt">HALT</span>
           ) : running ? (
@@ -152,7 +152,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
           )}
           <span className="silk">{worker}</span>
         </div>
-        <div className="tb-mod">
+        <div className="tb-mod tb-exec">
           <span className="pill">{fund.mode === "live" ? "LIVE" : "PAPER"}</span>
           <span className="silk">EXEC</span>
         </div>
@@ -166,7 +166,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
         <div className="vsep" />
 
         {/* ET clock */}
-        <div className="tb-mod">
+        <div className="tb-mod tb-clock">
           <div className="ledwin neu"><span className="lcdtxt num">{clock ?? "--:--:--"}</span></div>
           <span className="silk">ET</span>
         </div>
@@ -174,11 +174,11 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
         {/* ⌘K palette (S4) + DENSITY (`D`, real) — the keycap fires the same
             `seve:command-palette` event the global ⌘K keydown broadcasts; the
             CommandPalette mounted at the shell level listens + owns open/close. */}
-        <div className="tb-mod">
+        <div className="tb-mod tb-palette">
           <button type="button" className="keycap" title="command palette (⌘K)" onClick={() => window.dispatchEvent(new CustomEvent("seve:command-palette"))}>⌘K</button>
           <span className="silk">PALETTE</span>
         </div>
-        <div className="tb-mod">
+        <div className="tb-mod tb-density">
           <button type="button" className={`keycap${density === "compact" ? " lit" : ""}`} title="data density — comfortable ⇄ compact" onClick={toggleDensity}>D</button>
           <span className="silk">DENSITY</span>
         </div>

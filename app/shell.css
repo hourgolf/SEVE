@@ -236,6 +236,33 @@
   .brand .btxt span { display: none; }
 }
 
+/* P5 Slice 3B — retain the operational core below the original ≥1366 target.
+   Optional clock/palette/density chrome yields first; account, mode, day P&L,
+   NAV, run mode, paper/live and KILL remain visible throughout desktop mode. */
+@media (max-width: 1180px) {
+  .shell-root { --h-top: 66px; --dz: 0.9; }
+  .shell-bar { gap: 6px; padding-inline: 8px; }
+  .shell-bar .vsep { margin-block: 9px; }
+  .tb-clock, .tb-palette, .tb-density { display: none; }
+  .tb-run > .silk, .tb-frame > .silk { display: none; }
+  .framesw { gap: 4px; }
+  .framesw .fsw-lab { display: none; }
+  .acct-opt { padding-inline: 6px; }
+}
+
+@media (max-width: 980px) {
+  .shell-bar { gap: 4px; padding-inline: 5px; }
+  .shell-bar > .vsep { display: none; }
+  .tb-spot, .tb-frame { display: none; }
+  .brand .stripes { display: none; }
+  .brand { gap: 3px; }
+  .brand .btxt b { font-size: 15px; letter-spacing: 1px; }
+  .modesw button { padding-inline: 0.62em; }
+  .acct-opt { font-size: 9px; padding-inline: 4px; }
+  .tb-mod { gap: 1px; }
+  .tb-mod--kill .silk, .tb-exec .silk, .tb-day .silk, .tb-nav .silk { display: none; }
+}
+
 /* ---------------------------------------------------------------------------
    P5 slice 2 — legacy-rooms entry + full-screen legacy view.
    The duplicate DesktopSurface no longer mounts beneath STUDIO; it's reachable

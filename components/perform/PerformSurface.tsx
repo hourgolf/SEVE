@@ -6,6 +6,7 @@ import { IntradayChart } from "@/components/IntradayChart";
 import { IncidentBanner } from "@/components/perform/IncidentBanner";
 import { PerformRail } from "@/components/perform/PerformRail";
 import { PerformDock } from "@/components/perform/PerformDock";
+import { derivePerformFocus } from "@/lib/perform/derivePerformView";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
 // =============================================================================
@@ -29,9 +30,10 @@ export function PerformSurface({
 
   // Scope the roster to the selected account (same rule as DesktopSurface).
   const channels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
+  const focus = derivePerformFocus(incident.severity, feed.positions.length);
 
   return (
-    <div className="perform" data-incident={incident.severity}>
+    <div className="perform" data-incident={incident.severity} data-focus={focus}>
       {/* P5 slice 3 — deterministic incident banner (hidden on normal; critical pre-empts chart space). */}
       <IncidentBanner incident={incident} />
       <main className="pf-stage">
@@ -57,7 +59,7 @@ export function PerformSurface({
           incident={incident}
         />
       </main>
-      <PerformDock channels={channels} livePnl={livePnl} lens={sent.lens} />
+      <PerformDock channels={channels} livePnl={livePnl} />
     </div>
   );
 }

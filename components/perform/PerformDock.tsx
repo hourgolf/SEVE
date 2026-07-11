@@ -1,46 +1,37 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
-import type { Lens } from "@/hooks/useSentinelDigest";
+import { prioritizeChannels } from "@/lib/perform/derivePerformView";
 
 // PERFORM bottom dock (slice S2) — one chicklet per roster channel, the same
-// source (useDeskState) that drives STUDIO's rack. Each carries: state dot
-// (armed/muted/dark via color+opacity), the slug (NEVER ellipsized), day P&L,
-// pk·win (era-4 lens, day-P&L fallback), and a real MUTE pad. The mute pad is
-// the ONLY interactive control — a chicklet click is a no-op stub (expansion is
-// later). Writes = optimistic dispatch(TOGGLE_MUTE) + persistConfig, RLS-gated.
+// source (useDeskState) that drives STUDIO's rack. Exposure/exceptions sort first;
+// inert draft/disabled channels live behind one explicit fold. pk·win is omitted
+// here on purpose: it is an exit diagnostic, not a promotion/status score. The
+// only write remains the existing auth-gated MUTE pad.
 
 // A13 = the momo giveback ratchet, live A/B (docs/pre-registered-tests-2026-07 · registry A13).
 // The one sentinel-sourced ratchet armed today; a small documented constant, not a config column.
 const A13_SLUGS = new Set(["momo-shape"]);
 
-function pkWin(slug: string, lens: Lens | null, pnl?: ChannelPnl): { pk: number | null; win: number | null } {
-  const l = lens?.[slug];
-  if (l && l.n > 0) return { pk: l.p, win: l.w };
-  if (pnl && pnl.trades > 0) {
-    return { pk: pnl.pkN > 0 ? pnl.pkSum / pnl.pkN : null, win: (pnl.wins / pnl.trades) * 100 };
-  }
-  return { pk: null, win: null };
-}
-
 function Chicklet({
-  ch, pnl, lens, canWrite, onMute,
+  ch, pnl, canWrite, onMute,
 }: {
   ch: StrategistState;
   pnl?: ChannelPnl;
-  lens: Lens | null;
   canWrite: boolean;
   onMute: () => void;
 }) {
   const muted = ch.config.muted;
   const armed = ch.status === "armed" && !muted;
   const dim = muted ? " off" : ch.status !== "armed" ? " dark" : "";
-  const tag = muted ? "MUTED" : ch.status !== "armed" ? (ch.status === "disabled" ? "DARK" : "DRAFT") : null;
-  const { pk, win } = pkWin(ch.slug, lens, pnl);
+  const open = pnl?.openCount ?? 0;
+  const tag = open > 0 ? `OPEN ${open}` : muted ? "MUTED" : ch.config.boosted ? "BOOSTED" : ch.status !== "armed" ? (ch.status === "disabled" ? "DARK" : "DRAFT") : "ARMED";
+  const tagClass = muted ? "muted" : tag === "DARK" || tag === "DRAFT" ? "darkch" : open > 0 ? "open" : tag === "BOOSTED" ? "boosted" : "armed";
   const day = pnl?.dayPnl;
   const dayCls = day == null || day === 0 ? "flat" : day < 0 ? "neg" : "pos";
 
@@ -51,15 +42,12 @@ function Chicklet({
         <span className="pfc-slug">{ch.slug}</span>
         {A13_SLUGS.has(ch.slug) && <span className="pfc-a13">⚡A13</span>}
       </div>
-      <div className={`pfc-pnl num ${dayCls}`}>{day != null ? signedUsd(day) : "—"}</div>
+      <div className="pfc-mid">
+        <div className={`pfc-pnl num ${dayCls}`} title="Desk-derived today P&L; not broker-reconciled.">{day != null ? signedUsd(day) : "—"}</div>
+        <span className="pfc-basis">desk today</span>
+      </div>
       <div className="pfc-r3">
-        {tag ? (
-          <span className={`pfc-tag ${tag === "MUTED" ? "muted" : "darkch"}`}>{tag}</span>
-        ) : pk == null && win == null ? (
-          <span className="pfc-pw">pk—·win—</span>
-        ) : (
-          <span className="pfc-pw">pk<b>{pk != null ? Math.round(pk) : "—"}</b>·win<b>{win != null ? Math.round(win) : "—"}</b></span>
-        )}
+        <span className={`pfc-tag ${tagClass}`}>{tag}</span>
         <button
           type="button"
           className={`pfc-mute${muted ? " lit" : ""}`}
@@ -76,14 +64,16 @@ function Chicklet({
 }
 
 export function PerformDock({
-  channels, livePnl, lens,
+  channels, livePnl,
 }: {
   channels: StrategistState[];
   livePnl: Record<string, ChannelPnl>;
-  lens: Lens | null;
 }) {
   const dispatch = useDeskDispatch();
   const { canWrite, persistConfig } = useDeskWrite();
+  const [showInactive, setShowInactive] = useState(false);
+  const prioritized = useMemo(() => prioritizeChannels(channels, livePnl), [channels, livePnl]);
+  const shown = showInactive ? [...prioritized.visible, ...prioritized.inactive] : prioritized.visible;
 
   // Optimistic mute — the same write the STUDIO strip/pad fires.
   const mute = (ch: StrategistState) => {
@@ -95,17 +85,25 @@ export function PerformDock({
   return (
     <nav className="pf-dock chrome">
       <div className="pf-dock-in">
-        <div className="pf-cap"><span className="silk">MIX</span></div>
-        {channels.map((ch) => (
-          <Chicklet
-            key={ch.slug}
-            ch={ch}
-            pnl={livePnl[ch.slug]}
-            lens={lens}
-            canWrite={canWrite}
-            onMute={() => mute(ch)}
-          />
-        ))}
+        <div className="pf-cap">
+          <span className="silk">MIX · {prioritized.visible.length}/{channels.length}</span>
+          {prioritized.inactive.length > 0 && (
+            <button type="button" className="pf-fold" aria-expanded={showInactive} onClick={() => setShowInactive((v) => !v)}>
+              {showInactive ? "hide inactive" : `+${prioritized.inactive.length} inactive`}
+            </button>
+          )}
+        </div>
+        <div className="pf-cards">
+          {shown.map((ch) => (
+            <Chicklet
+              key={ch.slug}
+              ch={ch}
+              pnl={livePnl[ch.slug]}
+              canWrite={canWrite}
+              onMute={() => mute(ch)}
+            />
+          ))}
+        </div>
       </div>
     </nav>
   );
