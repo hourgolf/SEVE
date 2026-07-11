@@ -28,6 +28,7 @@ import { computeFeatures } from "../../engine/engine";
 import { sessionCloseMin } from "../../engine/market-calendar";
 import { inEventWindow } from "../../engine/market-events";
 import { groupChannelsByAccount, rowAccountIdOf } from "./routing.js";
+import { makeExitGuard, sweepExitAllowed } from "./exitGuard.js";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
@@ -59,6 +60,29 @@ const gammaLogged = new Set<string>(); // `${sym}|${etDate}` — once-per-day ga
 let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[]; accounts: store.AccountRow[] } = { fund: null, channels: [], accounts: [] };
 let reloadPending = false;
 let cycling = false;
+// audit 2026-07-11 (1b #8): the fast exit sweep runs on its OWN mutex — it used to share
+// `cycling`, so a slow/hung bar-close cycle disabled every safety backstop (halt/EOD/event
+// flatten + premium stops) for its whole duration. Now cycle and sweep run CONCURRENTLY;
+// the per-row exitGuard below makes a same-row double-exit structurally impossible
+// (belt-and-suspenders on execute.ts's deterministic per-row exit coid).
+let sweeping = false;
+const exitGuard = makeExitGuard();
+
+// audit 2026-07-11 (1b #9) — escalation: consecutive orders-read failure streak per account
+// (the bar-close cycle and the fast sweep share it). At ≥3 the operator gets paged once per
+// day: the desk is running DEGRADED (entries/adds suppressed; sweep exits limited to the
+// mandatory flattens) and KILL still works — halt-flatten needs no order snapshot.
+const ordersFailStreak = new Map<string, number>();
+function noteOrdersRead(acctId: string, acctName: string, ok: boolean, todayET: string): void {
+  if (ok) {
+    if (ordersFailStreak.delete(acctId)) alertClear("ordersdown", acctId); // recovered — a later outage re-pages
+    return;
+  }
+  const n = (ordersFailStreak.get(acctId) ?? 0) + 1;
+  ordersFailStreak.set(acctId, n);
+  if (n >= 3) alertOnce(todayET, "ordersdown", acctId, "⚠ orders API down — exits degraded",
+    `${acctName}: ${n} consecutive order-snapshot read failures — entries/adds and price exits suppressed (mandatory flattens still fire); consider KILL`);
+}
 
 function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -268,8 +292,18 @@ async function cycle(trigger: string): Promise<void> {
       let remainingByOcc = new Map<string, number>();
       const openRowQty = new Map<string, number>();
       if (acctLive) {
-        try { allOrders = await alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()); }
-        catch (e) { ordersFresh = false; warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; order actions suppressed this cycle (marks only)`); }
+        // audit 2026-07-11 (1b #9): bounded retry (3 × ~500ms backoff, the boot retry() shape)
+        // so a transient orders-API blip never even degrades the cycle; a persistent failure
+        // still lands in the !ordersFresh path below + the noteOrdersRead escalation.
+        try {
+          allOrders = await retry(`cycle orders ${g.account.name}`, () => alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()), 3, 500);
+          noteOrdersRead(g.account.id, g.account.name, true, todayET);
+        }
+        catch (e) {
+          ordersFresh = false;
+          noteOrdersRead(g.account.id, g.account.name, false, todayET);
+          warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; entries/adds/reconcile suppressed this cycle (exits still run)`);
+        }
         remainingByOcc = seedRemaining(positions);
         for (const r of groupRows) openRowQty.set(r.occ_symbol, (openRowQty.get(r.occ_symbol) ?? 0) + Math.abs(Math.round(r.qty)));
       }
@@ -326,17 +360,28 @@ async function cycle(trigger: string): Promise<void> {
                 alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
             }
             const row = openRows.get(ch.id);
-            // No order snapshot → entry idempotency / lost-insert recovery / exit late-fill
-            // recovery / reconcile pricing are all blind (audit 2026-07-10: an empty allOrders
-            // made the 09d guard silently pass and re-buy an orphan lot). Marks-only this cycle;
-            // the fast sweep (own reads, fail-closed) still covers catastrophic premium stops.
-            if (!ordersFresh && d.action !== "hold" && d.action !== "skip") {
+            // No order snapshot → entry idempotency / lost-insert recovery / reconcile pricing
+            // are all blind (audit 2026-07-10: an empty allOrders made the 09d guard silently
+            // pass and re-buy an orphan lot) — those stay suppressed. EXITS now PROCEED (audit
+            // 2026-07-11, 1b #9): they're risk-REDUCING and route through executeExit, whose
+            // deterministic per-row coid (Alpaca rejects a duplicate) + min(held,row) sell-cap
+            // + status-guarded close make a degraded re-issue safe even blind to late fills.
+            if (!ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit") {
               info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
               continue;
             }
             try {
               if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
-              else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct });
+              else if (d.action === "exit" && row && !d.blocked && barFresh) {
+                // 1b #8: per-row claim — the sweep runs concurrently now; if it already holds
+                // this row's exit, skip (never wait). Release in finally so a throw can't wedge.
+                if (!exitGuard.claim(row.id)) {
+                  info(`live pass[${g.account.name}/${sym}]: ${d.slug} exit skipped — an exit for this row is already in flight (sweep)`);
+                } else {
+                  try { await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }); }
+                  finally { exitGuard.release(row.id); }
+                }
+              }
               else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
               else if (d.action === "enter" && barFresh) {
                 await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
@@ -458,15 +503,31 @@ function report(trigger: string, equity: number, ds: ShadowDecision[]): void {
 // they're defined on bars. This is the structural latency win over the minute
 // cron: a crossed stop fires within seconds, not at the next minute boundary.
 async function fastExitSweep(): Promise<void> {
-  if (!liveMode() || cycling) return;
-  const nowMin = alpaca.etParts(Date.now()).min;
-  const todayET = alpaca.etParts(Date.now()).date;
-  const rthClose = sessionCloseMin(todayET); // 960 normal / 780 half-day — the sweep must stop AT the real close
-  if (nowMin < RTH_OPEN || nowMin >= rthClose) return;
-  const owned = cfg.channels.filter(ownedBy);
-  if (!owned.length || !cfg.fund) return;
-  cycling = true;
+  // audit 2026-07-11 (1b #8): OWN mutex — the sweep used to bail on (and hold) the full-cycle
+  // `cycling` flag, so a slow or HUNG bar-close cycle silenced every backstop below (halt/EOD/
+  // event flatten + premium stops), and a wedged sweep blocked cycles right back. Now the sweep
+  // only guards against overlapping ITSELF; alpaca.ts's bounded fetches (15s abort) guarantee
+  // neither loop can hold its mutex forever, and the per-row exitGuard prevents the now-
+  // concurrent cycle + sweep from double-exiting one row.
+  if (!liveMode() || sweeping) return;
+  sweeping = true;
   try {
+    // audit 2026-07-11 (1b #7): consume a pending config reload HERE too — is_halted was only
+    // read into cfg by cycle()'s consume, so a KILL flipped mid-bar waited up to a full bar
+    // (~60s) before the flatten path could see it. The sweep runs every ~10s, so the halt now
+    // bites within one sweep. Skip when a cycle is mid-flight (it consumes on its own; a lost
+    // reload just waits for the next 10s tick / 30s poll — reloadPending is re-set on failure).
+    if (reloadPending && !cycling) {
+      reloadPending = false;
+      try { await reloadConfig(); }
+      catch (e) { reloadPending = true; warn(`fast-exit: config reload failed — ${(e as Error).message}; retrying next sweep`); }
+    }
+    const nowMin = alpaca.etParts(Date.now()).min;
+    const todayET = alpaca.etParts(Date.now()).date;
+    const rthClose = sessionCloseMin(todayET); // 960 normal / 780 half-day — the sweep must stop AT the real close
+    if (nowMin < RTH_OPEN || nowMin >= rthClose) return;
+    const owned = cfg.channels.filter(ownedBy);
+    if (!owned.length || !cfg.fund) return;
     await store.heartbeat(`${WORKER_VERSION} sweep`);
     if (cfg.fund.mode !== "paper") return; // a non-paper mode freezes everything (live-$ safety wall)
     // KILL = FLATTEN (operator's word, 2026-07-01): flipping the kill switch closes every open
@@ -491,9 +552,27 @@ async function fastExitSweep(): Promise<void> {
       const acctFlatten = haltFlatten || g.account.is_halted;
       const rows = allRows.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
       if (!rows.length) continue;
+      // audit 2026-07-11 (1b #9): SPLIT reads — the old single Promise.all `continue`d the whole
+      // bucket on ANY failure, so an orders-API blip meant NO exits fired anywhere. Positions are
+      // load-bearing for every sell (sellQty = min(held, row)) → a failed positions read still
+      // skips the bucket. A failed ORDERS read only DEGRADES the pass: the mandatory operator/
+      // calendar flattens below still run (each fires at most once per row per pass; executeExit's
+      // min(held,row) sell-cap + deterministic per-row coid — Alpaca rejects duplicates — bound
+      // the damage even with an empty allOrders), while ordinary price-triggered exits stay
+      // suppressed (they need the snapshot for late-fill recovery / working-order idempotency).
       let positions: alpaca.AlpacaPosition[] = [], allOrders: alpaca.AlpacaOrder[] = [];
-      try { [positions, allOrders] = await Promise.all([alpaca.getPositions(api), alpaca.getOrders(500, api, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString())]); }
-      catch (e) { warn(`fast-exit[${g.account.name}] read failed — ${(e as Error).message}`); continue; }
+      let ordersFresh = true;
+      const ordersAfterIso = new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString();
+      try { positions = await retry(`fast-exit positions ${g.account.name}`, () => alpaca.getPositions(api), 3, 500); }
+      catch (e) { warn(`fast-exit[${g.account.name}] positions read failed — ${(e as Error).message}; skip bucket`); continue; }
+      try {
+        allOrders = await retry(`fast-exit orders ${g.account.name}`, () => alpaca.getOrders(500, api, ordersAfterIso), 3, 500);
+        noteOrdersRead(g.account.id, g.account.name, true, todayET);
+      } catch (e) {
+        ordersFresh = false;
+        noteOrdersRead(g.account.id, g.account.name, false, todayET);
+        warn(`fast-exit[${g.account.name}] orders read failed — ${(e as Error).message}; DEGRADED pass (mandatory flattens only)`);
+      }
       const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
       const remainingByOcc = seedRemaining(positions);
       const openRowQty = new Map<string, number>();
@@ -507,10 +586,15 @@ async function fastExitSweep(): Promise<void> {
       // switch overrides the human-owns-exits experiment; safety beats the A/B). executeExit's
       // idempotency (working-order check, min(held,row), status-guarded close) makes the 10s
       // retry loop safe until each row books; a rejected/drained lot reconciles via 09b.
+      // MANDATORY flatten (1b #9: runs even on a degraded orders pass — sweepExitAllowed('halt_flatten', ·) is always true).
+      // 1b #8: per-row exitGuard claim on every sweep exit — the concurrent cycle may hold this row.
       if (acctFlatten) {
         info(`halt-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — kill switch (${haltFlatten ? "fund" : g.account.name})`);
-        try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "halt_flatten" }, r, exec); }
-        catch (e) { warn(`halt-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+        if (exitGuard.claim(r.id)) {
+          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "halt_flatten" }, r, exec); }
+          catch (e) { warn(`halt-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+          finally { exitGuard.release(r.id); }
+        }
         peakMidByKey.delete(r.id);
         troughMidByKey.delete(r.id);
         continue;
@@ -529,10 +613,14 @@ async function fastExitSweep(): Promise<void> {
       // bar-relative eod_flatten, the exact gapped-near-bell-bar failure this wall-clock backstop
       // was built for. A genuine multi-day hold (expiration > today) stays exempt.
       const expiresToday = String(r.expiration ?? todayET) <= todayET;
+      // MANDATORY flatten (1b #9: runs even on a degraded orders pass). 1b #8: exitGuard-claimed.
       if (wallMtc <= policy.EOD_HARD_FLATTEN_MIN && (openedET === todayET || expiresToday) && !/-manual$/i.test(ch.slug)) {
         info(`eod-hard-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — ${openedET === todayET ? "same-session" : "expires today"}, wall-clock mtc ${wallMtc} (pre-bell backstop, bars-independent)`);
-        try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
-        catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+        if (exitGuard.claim(r.id)) {
+          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
+          catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+          finally { exitGuard.release(r.id); }
+        }
         peakMidByKey.delete(r.id);
         troughMidByKey.delete(r.id);
         continue;
@@ -543,11 +631,15 @@ async function fastExitSweep(): Promise<void> {
       // the EOD hard-flatten above already fixed for the bell. Mirror it here: this 10s
       // wall-clock sweep flattens inside the event window even when bars stop. Same
       // exemptions as the bar-close intent (event_policy='ignore', manual twins).
+      // MANDATORY flatten (1b #9: runs even on a degraded orders pass). 1b #8: exitGuard-claimed.
       if (policy.EVENT_STANDDOWN && ch.event_policy !== "ignore" && !/-manual$/i.test(ch.slug)
           && inEventWindow(todayET, nowMin, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
         info(`event-flatten (wall-clock): ${ch.slug} ${r.occ_symbol} ×${r.qty} — event window, bars-independent backstop`);
-        try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "event_flatten" }, r, exec); }
-        catch (e) { warn(`event-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+        if (exitGuard.claim(r.id)) {
+          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "event_flatten" }, r, exec); }
+          catch (e) { warn(`event-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+          finally { exitGuard.release(r.id); }
+        }
         peakMidByKey.delete(r.id);
         troughMidByKey.delete(r.id);
         continue;
@@ -597,16 +689,27 @@ async function fastExitSweep(): Promise<void> {
         isRunner: !!r.runner_of, runnerGivebackPct: ch.runner_giveback_pct, // R1 runner ratchet (0 = off)
       }, mid, peak);
       if (!reason) continue;
+      // 1b #9: ordinary PRICE exits need the order snapshot (late-fill recovery + working-order
+      // idempotency read it) — on a degraded pass only the mandatory flattens above may sell.
+      // The predicate is pure + selftest-covered (exitGuard.sweepExitAllowed); peak/trough
+      // ratchets and the operator pages above keep running degraded (marks need no orders).
+      if (!sweepExitAllowed(reason, ordersFresh)) {
+        info(`fast-exit: ${ch.slug} ${r.occ_symbol} ${reason} suppressed — orders snapshot unavailable (degraded pass)`);
+        continue;
+      }
       info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (mid ${mid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)})`);
-      await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct });
-      peakMidByKey.delete(key);
-      troughMidByKey.delete(key);
+      if (!exitGuard.claim(r.id)) continue; // 1b #8: the concurrent cycle holds this row's exit — skip, retry next sweep
+      try {
+        await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct });
+        peakMidByKey.delete(key);
+        troughMidByKey.delete(key);
+      } finally { exitGuard.release(r.id); }
       }
     }
   } catch (e) {
     warn(`fast-exit sweep failed — ${(e as Error).message}`);
   } finally {
-    cycling = false;
+    sweeping = false; // 1b #8: the sweep's OWN mutex (never touches `cycling`)
   }
 }
 

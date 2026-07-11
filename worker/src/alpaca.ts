@@ -29,26 +29,48 @@ export function makeApi(key: string, secret: string, paperHost = config.alpacaPa
 // Data host always rides account 1's creds (it holds the data subscription).
 const DATA_HEADERS = credHeaders(config.alpacaKey, config.alpacaSecret);
 
+// BOUNDED fetches (audit 2026-07-11, 1b #8): every Alpaca REST call carries a hard
+// 15s abort — a hung socket used to hold whichever loop awaited it FOREVER (with the
+// old shared `cycling` mutex that meant EVERY safety backstop was dead until a
+// restart). 15s ≫ any healthy call; the abort surfaces as a clear timeout error the
+// call sites already catch (skip-bucket / retry / journal — never a crash).
+const FETCH_TIMEOUT_MS = 15_000;
+const asTimeoutErr = (verb: string, path: string, e: unknown): Error =>
+  e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")
+    ? new Error(`timeout ${FETCH_TIMEOUT_MS / 1000}s ${verb} ${path.split("?")[0]}`)
+    : (e as Error);
+
 async function get(host: string, path: string, headers: Record<string, string>): Promise<any> {
-  const r = await fetch(host + path, { headers });
-  const body = await r.text();
-  if (!r.ok) throw new Error(`${r.status} GET ${path.split("?")[0]} → ${body.slice(0, 200)}`);
+  let ok: boolean, status: number, body: string;
+  try {
+    const r = await fetch(host + path, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    ok = r.ok; status = r.status;
+    body = await r.text(); // the body read shares the signal — a stalled stream aborts too
+  } catch (e) { throw asTimeoutErr("GET", path, e); }
+  if (!ok) throw new Error(`${status} GET ${path.split("?")[0]} → ${body.slice(0, 200)}`);
   return body ? JSON.parse(body) : {};
 }
 
 async function post(host: string, path: string, payload: unknown, headers: Record<string, string>): Promise<any> {
-  const r = await fetch(host + path, {
-    method: "POST",
-    headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const body = await r.text();
-  if (!r.ok) throw new Error(`${r.status} POST ${path.split("?")[0]} → ${body.slice(0, 200)}`);
+  let ok: boolean, status: number, body: string;
+  try {
+    const r = await fetch(host + path, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    ok = r.ok; status = r.status;
+    body = await r.text();
+  } catch (e) { throw asTimeoutErr("POST", path, e); }
+  if (!ok) throw new Error(`${status} POST ${path.split("?")[0]} → ${body.slice(0, 200)}`);
   return body ? JSON.parse(body) : {};
 }
 
 async function del(host: string, path: string, headers: Record<string, string>): Promise<void> {
-  const r = await fetch(host + path, { method: "DELETE", headers });
+  let r: Response;
+  try { r = await fetch(host + path, { method: "DELETE", headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }); }
+  catch (e) { throw asTimeoutErr("DELETE", path, e); }
   if (!r.ok) throw new Error(`${r.status} DELETE ${path.split("?")[0]}`);
 }
 

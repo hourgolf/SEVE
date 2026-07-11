@@ -12,6 +12,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import WebSocket from "ws";
 import { config } from "./config.js";
 import { info, warn } from "./log.js";
+import { mapOpenPositions } from "./exitGuard.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -238,24 +239,21 @@ export async function reconstructRideToClose(occ: string, entry: number, qty: nu
   return { ride, rideStop, rideOk: reached, rideExitMs };
 }
 
+// ⚠ THROWS on a read error (audit 2026-07-11, 1b #5): the old `const { data }` swallowed a
+// Supabase failure into [] and the worker believed itself FLAT — executeEntry's lost-insert
+// recovery inserted a DUPLICATE row, the orphan sweep read every held lot as uncovered (the
+// mass-flatten class under ORPHAN_FLATTEN), and the fast sweep exited nothing. Both callers
+// catch safely: cycle() skips the whole pass BEFORE any decide/execute (never act on
+// fabricated flat state — exits are keyed off these rows, so there is nothing to "fail toward
+// exit" with), and fastExitSweep logs + retries ~10s later. Mapping + the throw are pure in
+// exitGuard.mapOpenPositions (selftest-covered, the realizedTodayByChannel pattern).
 export async function getOpenPositions(): Promise<PositionRow[]> {
-  const { data } = await sb.from("positions").select("*").eq("status", "open");
-  return ((data ?? []) as any[]).map((p) => ({
-    id: p.id,
-    strategist_id: p.strategist_id,
-    occ_symbol: p.occ_symbol,
-    opt_type: p.opt_type,
-    qty: Number(p.qty),
-    avg_entry_price: Number(p.avg_entry_price ?? 0),
-    strike: Number(p.strike ?? 0),
-    expiration: p.expiration ?? null,
-    opened_at: p.opened_at ?? null,
-    status: p.status,
-    underlying: String(p.underlying ?? ""),
-    peak_mark: p.peak_mark != null ? Number(p.peak_mark) : null,
-    trough_mark: p.trough_mark != null ? Number(p.trough_mark) : null,
-    runner_of: p.runner_of ?? null,
-  }));
+  const { data, error } = await sb.from("positions").select("*").eq("status", "open");
+  if (error) {
+    warn(`store: open-positions read failed — ${error.message}; caller skips this pass (row state unknown)`);
+    void journal("WARN", `open-positions read FAILED — ${error.message}; cycle/sweep skipped (never act on a fabricated flat book)`);
+  }
+  return mapOpenPositions({ data: data as unknown[] | null, error });
 }
 
 /** Durable MFE: persist the running peak option mark (the fast-exit sweep ratchets it).
@@ -299,9 +297,13 @@ export async function realizedTodayByChannel(strategistId: string, etDate: strin
   return sum;
 }
 
-// Peak option mid since `since` (for the power giveback trail). Read-only.
-export async function peakMidSince(occ: string, since: string): Promise<number> {
-  const { data } = await sb
+// Peak option mid since `since` (for the power/A13 giveback trail). Read-only.
+// ⚠ Returns NULL on a read error (audit 2026-07-11, 1b #5 secondary): the old swallowed →0
+// read as "peak never engaged" and silently UNDER-ARMED the giveback trail through a DB
+// fault. The caller (decide.ts) skips the trail evaluation that cycle with a warn — it must
+// NOT throw, or decideChannel's catch would drop the channel's OTHER exits with it.
+export async function peakMidSince(occ: string, since: string): Promise<number | null> {
+  const { data, error } = await sb
     .from("option_quotes")
     .select("mid")
     .eq("occ_symbol", occ)
@@ -309,6 +311,7 @@ export async function peakMidSince(occ: string, since: string): Promise<number> 
     .order("mid", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error) { warn(`store: peakMidSince ${occ} read failed — ${error.message}`); return null; }
   return Number((data as any)?.mid ?? 0);
 }
 

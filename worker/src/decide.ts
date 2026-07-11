@@ -20,6 +20,7 @@ import type { Bar, Evaluate, Features, OptType, Position } from "../../engine/ty
 import { decidePyramidAdd } from "../../engine/pyramid"; // shared add-gate (pyramid shadow Phase A → no engine drift)
 import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { policy } from "./config.js";
+import { warn } from "./log.js";
 import { inEventWindow, dayTags } from "../../engine/market-events";
 import { isLastSessionBeforeHoliday } from "../../engine/market-calendar";
 import { etParts, occSymbol, type AlpacaPosition, type AlpacaOrder } from "./alpaca.js";
@@ -307,11 +308,20 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // momo-shape +50%/keep-⅔ (A13). Channels absent from the map have no trail (gt undefined → skip).
   const gt = policy.GIVEBACK_TRAIL[ch.slug];
   if (pos && row && gt && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
+    // audit 2026-07-11 (1b #5): peakMidSince returns NULL on a READ ERROR — skip the trail
+    // evaluation this cycle (the old swallowed →0 silently under-armed the A13/power trail).
+    // Deliberately warn-and-skip, never throw: decideChannel's catch would drop this
+    // channel's OTHER exits along with the trail. Self-heals next cycle; the fast sweep's
+    // in-memory peak keeps its own trail arm independent of this read.
     const histPeak = row.opened_at ? await peakMidSince(row.occ_symbol, row.opened_at) : 0;
-    const peak = Math.max(mark, histPeak);
-    if (peak >= entryPx * gt.engageMult) {
-      const giveback = entryPx + (peak - entryPx) * (1 - gt.givebackPct / 100);
-      if (mark <= giveback) intent = { kind: "exit", reason: "trail_giveback" };
+    if (histPeak == null) {
+      warn(`decide ${ch.slug}: peak-quote read failed — giveback trail skipped this cycle`);
+    } else {
+      const peak = Math.max(mark, histPeak);
+      if (peak >= entryPx * gt.engageMult) {
+        const giveback = entryPx + (peak - entryPx) * (1 - gt.givebackPct / 100);
+        if (mark <= giveback) intent = { kind: "exit", reason: "trail_giveback" };
+      }
     }
   }
 

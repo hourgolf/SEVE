@@ -1,8 +1,10 @@
 // runner-selftest — hermetic checks on the PURE trade-path rules: the R1 runner exit
-// rules (exitRules.ts), the exit late-fill recovery helpers (audit 2026-07-10), and the
-// cockpit-P3 account-routing fail-closed invariants (routing.ts). No env, no network, no
-// Supabase (these modules import only config, which is env-safe) — CI-runnable. This is
-// the WORKER SELFTEST GATE: run it (+ worker typecheck) before any trade-path deploy.
+// rules (exitRules.ts), the exit late-fill recovery helpers (audit 2026-07-10), the
+// cockpit-P3 account-routing fail-closed invariants (routing.ts), and the Batch-1
+// failure-policy guards (exitGuard.ts, audit 2026-07-11: per-row exit claim, the
+// degraded-sweep predicate, the fail-honest open-positions mapping). No env, no network,
+// no Supabase (these modules import only config, which is env-safe) — CI-runnable. This
+// is the WORKER SELFTEST GATE: run it (+ worker typecheck) before any trade-path deploy.
 //
 //   npm run runner-selftest
 
@@ -14,6 +16,7 @@ process.env.ALPACA_SECRET ??= "selftest";
 process.env.SUPABASE_URL ??= "http://localhost";
 const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts } = await import("./exitRules.js");
 const { groupChannelsByAccount, resolveDefaultAccount, SYNTH_DEFAULT } = await import("./routing.js");
+const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./exitGuard.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
 type OrderLike = import("./exitRules.js").OrderLike;
 import type { PositionRow, AccountRow, ChannelConfig } from "./store.js";
@@ -136,6 +139,50 @@ const ord = (over: Partial<OrderLike> = {}): OrderLike => ({
   // coid versioning: dead attempts bump the retry suffix
   check("recovery: no attempts → base coid reusable", countCoidAttempts([], base), 0);
   check("recovery: dead attempt counted for versioning", countCoidAttempts([ord({ filled_qty: 0, status: "canceled" })], base), 1);
+}
+
+// ---- Batch-1 failure-policy guards (exitGuard.ts) — audit 2026-07-11 ----
+
+// 1b #8: per-row exit in-flight claim — with the sweep off the full-cycle mutex, a cycle and
+// a sweep can BOTH reach an executeExit for the same row; two concurrent claims must never
+// both proceed, and a release (the `finally`) must re-open the row for the next pass.
+{
+  const g = makeExitGuard();
+  check("exitGuard: first claim proceeds", g.claim("row-1"), true);
+  check("exitGuard: concurrent second claim of the SAME row rejected", g.claim("row-1"), false);
+  check("exitGuard: a different row is independent", g.claim("row-2"), true);
+  g.release("row-1");
+  check("exitGuard: released row claimable again", g.claim("row-1"), true);
+  check("exitGuard: release of an unclaimed row is a no-op", (() => { g.release("row-9"); return g.size(); })(), 2);
+}
+
+// 1b #9: degraded-sweep predicate — an orders-API outage suppresses ordinary price exits
+// (they need the snapshot) but must NEVER suppress the mandatory operator/calendar flattens
+// (bounded by min(held,row) + the deterministic per-row coid).
+check("degraded sweep: halt_flatten fires without an order snapshot", sweepExitAllowed("halt_flatten", false), true);
+check("degraded sweep: eod_hard_flatten fires without an order snapshot", sweepExitAllowed("eod_hard_flatten", false), true);
+check("degraded sweep: event_flatten fires without an order snapshot", sweepExitAllowed("event_flatten", false), true);
+check("degraded sweep: premium_stop suppressed without orders", sweepExitAllowed("premium_stop", false), false);
+check("degraded sweep: target_premium suppressed without orders", sweepExitAllowed("target_premium", false), false);
+check("degraded sweep: runner_ratchet suppressed without orders", sweepExitAllowed("runner_ratchet", false), false);
+check("fresh orders: price exits allowed", sweepExitAllowed("premium_stop", true), true);
+check("fresh orders: mandatory flattens allowed", sweepExitAllowed("halt_flatten", true), true);
+
+// 1b #5: fail-honest open-positions read — a Supabase error must THROW (the caller skips the
+// pass), never dissolve into [] (the "worker believes itself flat" class: duplicate lost-insert
+// rows, an orphan sweep reading every held lot as uncovered, a sweep that exits nothing).
+{
+  let threw: string | null = null;
+  try { mapOpenPositions({ data: null, error: { message: "statement timeout" } }); }
+  catch (e) { threw = (e as Error).message; }
+  check("open-positions: read error THROWS (never a fabricated flat book)", threw, "getOpenPositions: statement timeout");
+  // an error with data present STILL throws — partial rows are as dangerous as none
+  let threw2 = false;
+  try { mapOpenPositions({ data: [{}], error: { message: "boom" } }); } catch { threw2 = true; }
+  check("open-positions: error + partial data still throws", threw2, true);
+  check("open-positions: empty data + no error → genuinely flat []", mapOpenPositions({ data: null, error: null }), []);
+  const mapped = mapOpenPositions({ data: [{ id: "p1", strategist_id: "s1", occ_symbol: "SPY260711C00746000", opt_type: "call", qty: "3", avg_entry_price: "1.25", strike: "746", expiration: "2026-07-11", opened_at: "2026-07-11T14:00:00Z", status: "open", underlying: "SPY", peak_mark: null, trough_mark: "1.10", runner_of: null }], error: null });
+  check("open-positions: rows map with numeric coercion", [mapped[0].qty, mapped[0].avg_entry_price, mapped[0].peak_mark, mapped[0].trough_mark], [3, 1.25, null, 1.1]);
 }
 
 console.log(`\n  runner-selftest: ${pass}/${pass + fail} checks passed${fail ? ` — ${fail} FAILED` : " ✓"}`);
