@@ -33,10 +33,10 @@ build), WORKER_VERSION bumped once per deploy, heartbeat verified. Money-path ed
 - **Batch 4 (mechanical/safe):** #11 pageAll realizedToday + sentinel · #13 sessionCloseMin (kill the 960 hardcodes) · #16 auto-generate sentinel live-state block · #15 UI relabel daily_stop_usd (latch, not stop).
 - **Deferred — need raw broker samples:** #12 rejected-sell regex (verify vs real Alpaca error text) · #14 broker-fee ingest (gross->net).
 
-## Operator decisions (genuine forks)
-1. **#1 disarm semantics:** recommended is_armed = entries-only (exits keep running); alternative = disarm means flatten-then-freeze. Affects manual-twin hand-management.
-2. **#6 trigger pricing:** MID -> executable BID + quote-age guard (reviewer-recommended; changes every exit trigger + fill timing).
-3. **#12/#14:** provide raw Alpaca order + rejection JSON, or defer to the next review round.
+## Operator decisions (RESOLVED 2026-07-11)
+1. **#1 disarm semantics → EXITS KEEP RUNNING.** is_armed becomes entries-only; stops/targets/EOD still fire on a disarmed account. (Batch 2 #1 implements; consistent with Batch 1 #9's degraded-flatten shape.)
+2. **#6 trigger pricing → EXECUTABLE BID + quote-age guard.** Triggers move off mid (mid = diagnostic only). Batch 3 implements — a behavior change to every stop/target trigger + fill timing.
+3. **#12/#14 → DEFERRED** to the external reviewer's next round (which already gets alpaca.ts + raw order/error samples). Not built this weekend.
 
 ## Not in 1b (Bucket 2 architecture — separate go-live backbone)
 order/fill ledger -> immutable account identity at entry -> restart-safe partials -> independent risk service (absorbs the concentration allocator) -> executor fencing -> policy-epoch stamping -> THEN channel evaluation. Consider retiring MORGUE live order placement.
