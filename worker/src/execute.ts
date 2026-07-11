@@ -24,7 +24,7 @@ import { info } from "./log.js";
 import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
-import { trancheSplit } from "./exitRules.js";
+import { trancheSplit, findRowExitFill, countCoidAttempts } from "./exitRules.js";
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 
@@ -187,6 +187,31 @@ export async function executeExit(
     await store.journal("WARN", `${d.slug}: exit ${occ} — a prior sell is still working, not re-issuing`);
     return;
   }
+  // DETERMINISTIC per-row exit coid + LATE-FILL recovery (audit 2026-07-10, mirrors the
+  // tranche path's hardening): a timed-out sell that fills late is 'filled' next sweep — the
+  // working-order guard above no longer blocks it, and on a SHARED OCC the sibling's contracts
+  // keep sellQty > 0, so the old minute-suffixed coid re-sold and drained the sibling's share.
+  // One coid per row makes that fill discoverable: book from it instead of re-selling. The
+  // contracts already left BEFORE this cycle's position snapshot, so remainingByOcc/openRowQty
+  // already exclude them — no counter adjustment here.
+  const coidBase = `${d.slug}-${occ}-x${row.id.slice(0, 8)}`;
+  const prior = findRowExitFill(ctx.allOrders, coidBase);
+  if (prior) {
+    const soldQty = Math.min(prior.filledQty, row.qty);
+    const realized = rowRealized(row, prior.fillPx, soldQty);
+    const closed = await store.closePositionRow(row.id, prior.fillPx, realized, d.reason);
+    if (closed) {
+      entryStateByKey.delete(entryKey(row.strategist_id, occ));
+      await store.journal("WARN", `${d.slug}: exit ${occ} recovering a late-filled prior sell ×${soldQty} @ ${prior.fillPx.toFixed(2)} — booked $${realized.toFixed(0)}, not re-selling`);
+    } else {
+      await store.journal("WARN", `${d.slug}: exit ${occ} late-fill recovery raced — already closed elsewhere`);
+    }
+    return;
+  }
+  // A dead prior attempt (terminal, 0 filled) can't reuse its coid (Alpaca duplicate rejection)
+  // → version the retry. attempts counts spread-capture rungs too — only uniqueness matters.
+  const attempts = countCoidAttempts(ctx.allOrders, coidBase);
+  const exitCoid = attempts ? `${coidBase}-${attempts}` : coidBase;
   // ---- RUNNER TRANCHE (R1, 64_runner_tranche — DARK until runner_frac > 0) ----
   // At the take-profit, bank a tranche and let a remainder row ride the peak ratchet.
   // SPLIT-ROW by design: the row-primary invariant ("each row books once, its full share,
@@ -205,7 +230,7 @@ export async function executeExit(
   }
   try {
     let exitPx = alp?.current_price ?? liveBid;
-    const r = await placeFill(d.slug, occ, "sell", sellQty, `${d.slug}-${occ}-${ctx.etMin}-x`, d.reason, ctx);
+    const r = await placeFill(d.slug, occ, "sell", sellQty, exitCoid, d.reason, ctx);
     if (r.fill > 0) exitPx = r.fill;
     if (r.filledQty <= 0) {
       // book ONLY on positive fill evidence: a terminal-0 (nothing crossed) OR a non-terminal timeout
@@ -330,7 +355,11 @@ export async function executeEntry(
 ): Promise<void> {
   const occ = d.occ!;
   const dir = d.direction!;
-  const strike = Math.round(spotClose) + (dir === "call" ? 1 : -1) * (ch.strike_offset ?? 0);
+  // Strike from the OCC we actually trade — the SINGLE source of truth (audit 2026-07-10):
+  // re-rounding the round2'd spotClose diverged from decide's raw-close rounding when the
+  // bar close's fractional part sat in [0.495, 0.500) (sub-cent closes are live-real), so
+  // the row recorded a strike ≠ the traded contract's. OCC tail = 8-digit strike × 1000.
+  const strike = Number(occ.slice(-8)) / 1000;
   let blocked = d.blocked ?? null;
 
   // Per-channel idempotency + the lost-insert recovery (cron parity, incl. 09d).

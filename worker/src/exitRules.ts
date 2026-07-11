@@ -91,3 +91,31 @@ export function trancheSplit(qty: number, frac: number): { sell: number; retain:
   const sell = qty - retain;
   return sell >= 1 ? { sell, retain } : null;
 }
+
+// ---- EXIT late-fill recovery (audit 2026-07-10, pure so the selftest covers it) ----
+// executeExit now uses a DETERMINISTIC per-row exit coid (`${slug}-${occ}-x${rowId8}`,
+// mirroring the tranche path's hardening): a timed-out sell that fills LATE shows up
+// 'filled' next sweep — the working-order guard no longer blocks it, and on a SHARED
+// OCC the sibling's contracts keep sellQty > 0, so a second sell would over-drain the
+// sibling's share. These helpers make the late fill discoverable instead.
+export interface OrderLike { client_order_id: string; side: string; status: string; filled_qty: number; filled_avg_price: number }
+
+/** Aggregate fill evidence for THIS row's exit coid (any terminal status — a
+ *  partial-then-canceled sell still moved contracts; spread-capture rungs share
+ *  the prefix and sum). null = no contracts provably left via this row's exit. */
+export function findRowExitFill(orders: OrderLike[], coidBase: string): { filledQty: number; fillPx: number } | null {
+  let qty = 0, cost = 0;
+  for (const o of orders) {
+    if (o.side === "sell" && o.filled_qty > 0 && o.filled_avg_price > 0 && o.client_order_id.startsWith(coidBase)) {
+      qty += o.filled_qty; cost += o.filled_qty * o.filled_avg_price;
+    }
+  }
+  return qty > 0 ? { filledQty: qty, fillPx: cost / qty } : null;
+}
+
+/** Prior orders on this row's exit coid (any side-effect of past attempts). A dead
+ *  attempt (terminal, 0 filled) can't reuse its coid — Alpaca rejects duplicates —
+ *  so the retry versions the coid with this count (`-1`, `-2`, …). */
+export function countCoidAttempts(orders: OrderLike[], coidBase: string): number {
+  return orders.filter((o) => o.client_order_id.startsWith(coidBase)).length;
+}

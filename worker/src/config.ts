@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-10a"; // inactive-channel skip: soft-deleted (is_active=false) channels get no entry evaluation / no signal rows (tape spam fix); exits untouched. Prior (07-09a): daily_target_usd win-and-done gate
+export const WORKER_VERSION = "stream-2026-07-10b"; // trade-path audit hardening (8 fixes): accounts-read fail-closed routing (critical — no more default-account fallback on a stale read), getOrders-failure suppresses order actions, daily stop/target gate fails CLOSED, wall-clock event-flatten backstop, per-row exit coid + late-fill recovery, reconnect reseed unbroken, MGMT-TRUNCATED flag, strike from the traded OCC. Prior (07-10a): inactive-channel skip
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

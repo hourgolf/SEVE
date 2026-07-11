@@ -1,8 +1,8 @@
-// runner-selftest — hermetic checks on the R1 runner exit rules (exitRules.ts).
-// No env, no network, no Supabase (exitRules imports only config, which is env-safe) —
-// CI-runnable. Covers: trancheSplit arithmetic + the premiumExitReason runner semantics
-// (runner skips take-profit, ratchet fires at the peak-giveback line, stops still protect,
-// and NON-runner behavior is unchanged by the new fields).
+// runner-selftest — hermetic checks on the PURE trade-path rules: the R1 runner exit
+// rules (exitRules.ts), the exit late-fill recovery helpers (audit 2026-07-10), and the
+// cockpit-P3 account-routing fail-closed invariants (routing.ts). No env, no network, no
+// Supabase (these modules import only config, which is env-safe) — CI-runnable. This is
+// the WORKER SELFTEST GATE: run it (+ worker typecheck) before any trade-path deploy.
 //
 //   npm run runner-selftest
 
@@ -12,9 +12,11 @@
 process.env.ALPACA_KEY ??= "selftest";
 process.env.ALPACA_SECRET ??= "selftest";
 process.env.SUPABASE_URL ??= "http://localhost";
-const { premiumExitReason, trancheSplit } = await import("./exitRules.js");
+const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts } = await import("./exitRules.js");
+const { groupChannelsByAccount, resolveDefaultAccount, SYNTH_DEFAULT } = await import("./routing.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
-import type { PositionRow } from "./store.js";
+type OrderLike = import("./exitRules.js").OrderLike;
+import type { PositionRow, AccountRow, ChannelConfig } from "./store.js";
 
 let pass = 0, fail = 0;
 function check(label: string, got: unknown, want: unknown): void {
@@ -78,6 +80,63 @@ check("momo giveback holds above the floor", premiumExitReason(momo(), 1.45, 1.6
 check("momo giveback does NOT arm below +50% (sub-arm peaker rides)", premiumExitReason(momo(), 1.05, 1.40), null);
 check("momo not-armed → premium stop still protects", premiumExitReason(momo(), 0.49, 1.40), "premium_stop");
 check("momo absent from map (no trail) = plain ride", premiumExitReason(base({ takeProfitPct: 0, premiumStopPct: 50 }), 1.40, 1.60), null);
+
+// ---- account routing (routing.ts) — the wrong-account fail-closed invariants ----
+// (audit 2026-07-10, critical): a channel with account_id SET must NEVER group onto the
+// default account — an empty/stale accounts table used to route acct-2/3 channels through
+// the default keys and phantom-reconcile their real rows closed.
+const acct = (over: Partial<AccountRow> = {}): AccountRow => ({
+  id: "acct-2", name: "FIRST-TEAM", cred_ref: "2", is_armed: true, is_halted: false, master_daily_stop_usd: 0, ...over,
+});
+const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
+  id: "ch1", slug: "test", name: "test", status: "armed", spec_json: null, underlying: "SPY",
+  executor: "stream", account_id: null, is_active: true, capital_pct: 750, aggression: 0,
+  max_contracts: 10, daily_stop_usd: 0, daily_target_usd: 0, underlying_stop_pct: 0,
+  muted: false, soloed: false, boosted: false, event_policy: "standdown", entry_dte: 0,
+  strike_offset: 0, premium_stop_pct: null, take_profit_pct: 22, pyramid_adds: 0,
+  stall_minutes: 0, stall_max_favor_pct: 0, gap_min: 0, runner_frac: 0, runner_giveback_pct: 0, ...over,
+});
+{
+  // known account_id → routes to that account
+  const g1 = groupChannelsByAccount([chan({ account_id: "acct-2" })], [acct()]);
+  check("routing: known account_id resolves", g1.map((g) => [g.account.id, g.account.is_armed]), [["acct-2", true]]);
+  // account_id null → the default account (that IS the single-account contract)
+  const g2 = groupChannelsByAccount([chan()], []);
+  check("routing: null account_id → synth default", g2.map((g) => g.account.id), [SYNTH_DEFAULT.id]);
+  // ⚠ THE INVARIANT: account_id set + empty accounts (stale/failed read) → NEVER the armed
+  // default; the group is a fail-closed unresolved account (not armed, halted, own id kept
+  // so its rows scope to a group where nothing executes).
+  const g3 = groupChannelsByAccount([chan({ account_id: "acct-2" })], []);
+  check("routing: unresolved account_id fail-closes (not default)", g3.map((g) => [g.account.id, g.account.is_armed, g.account.is_halted]), [["acct-2", false, true]]);
+  check("routing: unresolved cred_ref can never match env creds", g3[0].account.cred_ref !== null && g3[0].account.cred_ref !== "2", true);
+  // default resolution prefers the cred_ref-null accounts row over the synthetic
+  const def = resolveDefaultAccount([acct({ id: "acct-1", cred_ref: null })]);
+  check("routing: cred_ref-null row is the default", def.id, "acct-1");
+}
+
+// ---- exit late-fill recovery (exitRules.ts) — audit 2026-07-10 ----
+const ord = (over: Partial<OrderLike> = {}): OrderLike => ({
+  client_order_id: "test-SPY260710C00746000-x12345678", side: "sell", status: "filled",
+  filled_qty: 5, filled_avg_price: 1.5, ...over,
+});
+{
+  const base = "test-SPY260710C00746000-x12345678";
+  check("recovery: filled prior sell found", findRowExitFill([ord()], base), { filledQty: 5, fillPx: 1.5 });
+  // partial-then-canceled still moved contracts — status doesn't matter, filled_qty does
+  check("recovery: partial-then-canceled counts", findRowExitFill([ord({ status: "canceled", filled_qty: 3 })], base), { filledQty: 3, fillPx: 1.5 });
+  // spread-capture rungs share the prefix and aggregate (weighted price)
+  check("recovery: ladder rungs aggregate", findRowExitFill([
+    ord({ client_order_id: `${base}-r0`, filled_qty: 2, filled_avg_price: 1.0 }),
+    ord({ client_order_id: `${base}-m`, filled_qty: 2, filled_avg_price: 2.0 }),
+  ], base), { filledQty: 4, fillPx: 1.5 });
+  // a DIFFERENT row's exit (other row-id suffix) and buys never match
+  check("recovery: other row's coid ignored", findRowExitFill([ord({ client_order_id: "test-SPY260710C00746000-x87654321" })], base), null);
+  check("recovery: buys ignored", findRowExitFill([ord({ side: "buy" })], base), null);
+  check("recovery: zero-fill terminal ignored", findRowExitFill([ord({ filled_qty: 0 })], base), null);
+  // coid versioning: dead attempts bump the retry suffix
+  check("recovery: no attempts → base coid reusable", countCoidAttempts([], base), 0);
+  check("recovery: dead attempt counted for versioning", countCoidAttempts([ord({ filled_qty: 0, status: "canceled" })], base), 1);
+}
 
 console.log(`\n  runner-selftest: ${pass}/${pass + fail} checks passed${fail ? ` — ${fail} FAILED` : " ✓"}`);
 process.exit(fail ? 1 : 0);

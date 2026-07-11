@@ -392,9 +392,17 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     // the seve-clear-boosts cron). Replaces the inert SOLO. boost=1 when off → no change.
     const boost = ch.boosted ? 2 : 1;
     if (!blocked && (ch.daily_stop_usd > 0 || ch.daily_target_usd > 0)) {
-      const realizedToday = await realizedTodayByChannel(ch.id, ctx.todayET);
-      if (ch.daily_stop_usd > 0 && realizedToday <= -ch.daily_stop_usd * boost) blocked = "daily_stop";
-      else if (ch.daily_target_usd > 0 && realizedToday >= ch.daily_target_usd * boost) blocked = "daily_target"; // win-and-done (A15)
+      try {
+        const realizedToday = await realizedTodayByChannel(ch.id, ctx.todayET);
+        if (ch.daily_stop_usd > 0 && realizedToday <= -ch.daily_stop_usd * boost) blocked = "daily_stop";
+        else if (ch.daily_target_usd > 0 && realizedToday >= ch.daily_target_usd * boost) blocked = "daily_target"; // win-and-done (A15)
+      } catch {
+        // FAIL CLOSED (audit 2026-07-10): a swallowed read error used to return 0 → both the
+        // daily_stop loss floor AND the win-and-done target no-oped (fail-open) and a bled-out
+        // channel kept adding risk through the outage. Can't read the floor → don't add risk;
+        // self-heals next cycle. The blocked signal row keeps the outage visible.
+        blocked = "daily_gate_unreadable";
+      }
     }
 
     let ask = 0, bid = 0, roundTrip = 0, expectedMove = 0, qty = 0;

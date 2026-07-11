@@ -23,8 +23,13 @@ import { info } from "./log.js";
 const COST: CostModel = { spreadSource: "option_bars", modeledSpreadPct: 0.03, modeledSpreadFloorUsd: 0.03, slippageTicksPerSide: 0.25, commissionPerContract: 0.04, crossSpread: true };
 const sgn = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(0)}`;
 
-interface Tracked { slug: string; occ: string; sym: string; st: ManagedState; managedPnl: number; managedClosed: boolean; lastReason?: string; }
-const tracked = new Map<string, Tracked>(); // keyed by desk-row id (persists across cycles)
+interface Tracked { slug: string; occ: string; sym: string; st: ManagedState; managedPnl: number; managedClosed: boolean; lastReason?: string; truncated: boolean; }
+// Keyed by desk-row id. ⚠ Persists across CYCLES only, not restarts (audit 2026-07-10): a
+// Railway redeploy mid-hold re-opens the sim blind to banked partials / the armed BE-trail
+// floor, so the finalize would compare a truncated managed side against a DB-true actual.
+// Such sims are flagged `truncated` at open and their finalize is banked as MGMT-TRUNCATED —
+// excluded from the clean managed-vs-actual evidence (day-report filters on "MGMT ").
+const tracked = new Map<string, Tracked>();
 
 // RIDE channels (managementFor null — pb-ride, base grind/power) have no scale/BE/trail to
 // shadow, but the operator OVERRIDES them (manual close). We track each while open so an
@@ -85,7 +90,11 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
       const entryAtr = computeFeatures(sessionBars, ei).atr || atr;
       const entryEdge = fillWithCost("buy", quote, COST).edgeUsd;
       const st = openManaged(m, r.opt_type as OptType, r.strike, r.qty, r.avg_entry_price, sessionBars[ei]?.close ?? r.strike, ei, entryAtr, entryEdge);
-      t = { slug, occ: r.occ_symbol, sym, st, managedPnl: 0, managedClosed: false };
+      // TRUNCATED detection: first sight normally lands on the NEXT bar-close after the fill
+      // (≤ ~90s). A sim opening > 3 min after opened_at missed part of the hold (restart /
+      // mid-hold config change) — its managed side is not comparable to the full actual.
+      const truncated = Number.isFinite(entryMs) && Date.now() - entryMs > 3 * 60_000;
+      t = { slug, occ: r.occ_symbol, sym, st, managedPnl: 0, managedClosed: false, truncated };
       tracked.set(r.id, t);
     }
     if (t.managedClosed) continue;
@@ -109,8 +118,11 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
     const actual = await getPositionById(id);
     const actualPnl = Number(actual?.realized_pnl ?? 0);
     const delta = t.managedPnl - actualPnl;
-    info(`mgmt-shadow ${t.slug} ${t.occ} DONE — managed ${sgn(t.managedPnl)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`);
-    void writeShadowEvent(`MGMT ${t.slug} ${t.occ} — managed ${sgn(t.managedPnl)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`, { managed: Math.round(t.managedPnl), actual: Math.round(actualPnl), delta: Math.round(delta), slug: t.slug });
+    // MGMT-TRUNCATED (no space after MGMT) deliberately fails day-report's `includes("MGMT ")`
+    // filter — a restart-truncated sim is banked for inspection, never as clean evidence.
+    const kind = t.truncated ? "MGMT-TRUNCATED" : "MGMT";
+    info(`mgmt-shadow ${t.slug} ${t.occ} DONE — managed ${sgn(t.managedPnl)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})${t.truncated ? " [TRUNCATED — sim opened mid-hold; not clean evidence]" : ""}`);
+    void writeShadowEvent(`${kind} ${t.slug} ${t.occ} — managed ${sgn(t.managedPnl)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`, { managed: Math.round(t.managedPnl), actual: Math.round(actualPnl), delta: Math.round(delta), slug: t.slug, truncated: t.truncated });
     tracked.delete(id);
   }
 

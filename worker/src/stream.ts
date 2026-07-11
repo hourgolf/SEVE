@@ -36,6 +36,11 @@ export class StockBarStream {
   private retry = 0;
   private alive = false;
   private closing = false;
+  // Reconnect detector (audit 2026-07-10): `alive` is cleared by the close handler on EVERY
+  // reconnect path, so gating the reseed on it made onReconnect unreachable — RTH outage bars
+  // were never REST-backfilled and session VWAP/EMA/levels computed over a permanent hole.
+  // This flag marks "have we EVER subscribed" and deliberately survives close.
+  private hasSubscribed = false;
   private lastMsgMs = 0;
   private hbTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -107,8 +112,11 @@ export class StockBarStream {
       case "subscription":
         info("stream: subscribed", { bars: m.bars });
         // A (re)subscription means the socket is live again. After the very first
-        // connect this is a reconnect → reseed in-memory state from REST.
-        if (this.alive) this.onReconnect();
+        // connect this is a reconnect → reseed in-memory state from REST. Keyed on
+        // hasSubscribed, NOT alive (alive is false here on every reconnect — the
+        // close handler cleared it — so the old gate never fired; audit 2026-07-10).
+        if (this.hasSubscribed) this.onReconnect();
+        this.hasSubscribed = true;
         this.alive = true;
         this.retry = 0;
         break;

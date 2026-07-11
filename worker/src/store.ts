@@ -127,19 +127,25 @@ const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServi
   realtime: { transport: WebSocket as unknown as WSTransport },
 });
 
-export async function loadConfig(): Promise<{ fund: FundState | null; channels: ChannelConfig[]; accounts: AccountRow[] }> {
+export async function loadConfig(): Promise<{ fund: FundState | null; channels: ChannelConfig[]; accounts: AccountRow[]; accountsFresh: boolean }> {
   const { data: fundRow, error: fundErr } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
   if (fundErr) warn(`store: fund_state read failed — ${fundErr.message}`);
   const { data: rows, error } = await sb
     .from("strategists")
     .select("id,slug,name,status,spec_json,underlying,executor,account_id,is_active,strategist_config(*)");
-  if (error) { warn(`store: strategists read failed — ${error.message}`); return { fund: null, channels: [], accounts: [] }; }
+  if (error) { warn(`store: strategists read failed — ${error.message}`); return { fund: null, channels: [], accounts: [], accountsFresh: false }; }
   if (!fundRow) warn("store: fund_state id=1 not found (check SUPABASE_URL / service-role key point at the right project)");
   // Accounts (cockpit P3) — optional; a project without the table just runs single-account.
+  // ⚠ Distinguish MISSING TABLE (genuine single-account project → accounts=[] is correct)
+  // from a TRANSIENT read failure (audit 2026-07-10, critical): conflating them replaced a
+  // good routing table with [] — every channel regrouped onto the DEFAULT account (wrong-
+  // account live orders) while the real acct-2/3 lots rode unmanaged and their rows got
+  // phantom-reconcile-closed. accountsFresh=false → reloadConfig keeps the prior table.
   const { data: acctRows, error: acctErr } = await sb
     .from("accounts")
     .select("id,name,cred_ref,is_armed,is_halted,master_daily_stop_usd");
-  if (acctErr) warn(`store: accounts read failed — ${acctErr.message}; single-account fallback`);
+  const acctMissingTable = !!acctErr && (acctErr.code === "42P01" || /does not exist|could not find the table|schema cache/i.test(acctErr.message ?? ""));
+  if (acctErr) warn(`store: accounts read failed — ${acctErr.message}${acctMissingTable ? "; single-account fallback" : "; STALE (transient) — caller keeps prior routing"}`);
 
   const channels: ChannelConfig[] = [];
   for (const r of (rows ?? []) as any[]) {
@@ -195,7 +201,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
     is_halted: !!a.is_halted,
     master_daily_stop_usd: Number(a.master_daily_stop_usd ?? 0),
   }));
-  return { fund, channels, accounts };
+  return { fund, channels, accounts, accountsFresh: !acctErr || acctMissingTable };
 }
 
 // A closed position's realized P&L (for the shadow-management A/B finalize).
@@ -270,11 +276,14 @@ export async function markTrough(id: string, trough: number): Promise<void> {
 
 // Today's realized P&L for a channel (for the Stop knob gate). closedAfterDate is
 // the ET date string; we filter client-side like the cron worker.
+// ⚠ THROWS on a read error (audit 2026-07-10): swallowing it returned 0, which read as "no
+// realized P&L today" and let BOTH the daily_stop loss floor and the daily_target win-and-done
+// fail OPEN during a transient DB fault. The caller (decide.ts) fails CLOSED on the throw.
 export async function realizedTodayByChannel(strategistId: string, etDate: string): Promise<number> {
   // Server-side date floor + a wide cap (audit L2): the old newest-100 window under-counted a
   // churny channel's realized past 100 closes/day → the daily-stop latched LATE. 00:00Z on the
   // ET date = the prior evening ET — a safe superset; the client-side ET filter below is exact.
-  const { data } = await sb
+  const { data, error } = await sb
     .from("positions")
     .select("realized_pnl,closed_at")
     .eq("strategist_id", strategistId)
@@ -282,6 +291,7 @@ export async function realizedTodayByChannel(strategistId: string, etDate: strin
     .gte("closed_at", `${etDate}T00:00:00Z`)
     .order("closed_at", { ascending: false })
     .limit(1000);
+  if (error) throw new Error(`realizedTodayByChannel: ${error.message}`);
   let sum = 0;
   for (const c of (data ?? []) as any[]) {
     if (c.closed_at && etDateOf(Date.parse(c.closed_at)) === etDate) sum += Number(c.realized_pnl ?? 0);

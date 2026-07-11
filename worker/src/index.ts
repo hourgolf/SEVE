@@ -26,6 +26,8 @@ import { maybePublishForensicsTick } from "./forensics.js";
 import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, noteRowHeld, type ExecCtx } from "./execute.js";
 import { computeFeatures } from "../../engine/engine";
 import { sessionCloseMin } from "../../engine/market-calendar";
+import { inEventWindow } from "../../engine/market-events";
+import { groupChannelsByAccount, rowAccountIdOf } from "./routing.js";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
@@ -62,15 +64,13 @@ function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout
 
 // ---- accounts (cockpit P3) -------------------------------------------------
 // Each channel routes its orders to ONE Alpaca paper account (strategists.account_id
-// → accounts row → cred_ref → config.altAccounts creds). A channel with no/unknown
-// account_id falls back to the DEFAULT account (the accounts row with cred_ref null =
-// the original paper account). With one account holding every channel this is exactly
-// today's single-account path. The whole point of separate accounts: per-bucket NAV is
-// clean (no shared-OCC netting ACROSS buckets — only within one).
-const SYNTH_DEFAULT: store.AccountRow = { id: "__default__", name: "default", cred_ref: null, is_armed: true, is_halted: false, master_daily_stop_usd: 0 };
-function resolveDefaultAccount(accounts: store.AccountRow[]): store.AccountRow {
-  return accounts.find((a) => !a.cred_ref) ?? SYNTH_DEFAULT;
-}
+// → accounts row → cred_ref → config.altAccounts creds). A channel with account_id
+// NULL routes to the DEFAULT account (the accounts row with cred_ref null = the
+// original paper account). An account_id that DOESN'T RESOLVE is fail-closed to a
+// never-armed synthetic account (routing.ts — audit 2026-07-10 critical: the old
+// fallback-to-default traded acct-2/3 channels through the default keys whenever the
+// accounts read failed transiently). Routing logic itself is PURE in routing.ts so
+// the invariant is selftest-covered; this wrapper only attaches the Api.
 /** The Api for an account, or null if it's a non-default account whose creds are
  *  absent from env — null = SHADOW ONLY (decide+log, never route an order to the
  *  wrong account). The default account always resolves to ACCT1_API. */
@@ -82,24 +82,10 @@ function apiForAccount(acct: store.AccountRow): alpaca.Api | null {
 type AccountGroup = { account: store.AccountRow; api: alpaca.Api | null; channels: store.ChannelConfig[] };
 /** Group channels by their effective account (cockpit P3). */
 function groupByAccount(channels: store.ChannelConfig[], accounts: store.AccountRow[]): AccountGroup[] {
-  const def = resolveDefaultAccount(accounts);
-  const byId = new Map(accounts.map((a) => [a.id, a]));
-  const groups = new Map<string, AccountGroup>();
-  for (const ch of channels) {
-    const acct = (ch.account_id && byId.get(ch.account_id)) || def;
-    let g = groups.get(acct.id);
-    if (!g) { g = { account: acct, api: apiForAccount(acct), channels: [] }; groups.set(acct.id, g); }
-    g.channels.push(ch);
-  }
-  return [...groups.values()];
+  return groupChannelsByAccount(channels, accounts).map((g) => ({ account: g.account, api: apiForAccount(g.account), channels: g.channels }));
 }
 /** The account id a position row belongs to (via its channel) — for per-account row scoping. */
-function rowAccountId(row: store.PositionRow, byChannelId: Map<string, store.ChannelConfig>, accounts: store.AccountRow[]): string {
-  const ch = byChannelId.get(row.strategist_id);
-  const def = resolveDefaultAccount(accounts);
-  const byId = new Map(accounts.map((a) => [a.id, a]));
-  return (ch?.account_id && byId.has(ch.account_id)) ? ch.account_id : def.id;
-}
+const rowAccountId = rowAccountIdOf;
 
 // Retry a transient async op with exponential backoff. Used for boot-time REST
 // calls so a flaky Alpaca/network moment doesn't crash-loop the container.
@@ -127,7 +113,15 @@ async function reloadConfig(): Promise<void> {
   const hadFund = !!cfg.fund;
   const prevHalted = cfg.fund?.is_halted ?? false;
   const c = await store.loadConfig();
-  if (c.fund) cfg = c;
+  if (c.fund) {
+    // Audit 2026-07-10 (critical): a TRANSIENT accounts-read failure must not replace a
+    // good routing table with [] — every channel would regroup onto the default account
+    // (wrong-account live orders) while the real lots ride unmanaged. Keep the prior
+    // table; routing.ts fail-closes any account_id that still can't resolve.
+    const accounts = !c.accountsFresh && cfg.accounts.length ? cfg.accounts : c.accounts;
+    if (accounts !== c.accounts) warn("config: accounts read stale — keeping the prior routing table");
+    cfg = { fund: c.fund, channels: c.channels, accounts };
+  }
   else warn("config: reload returned no fund_state — keeping previous");
   const nowHalted = cfg.fund?.is_halted ?? false;
   if (hadFund && !prevHalted && nowHalted)
@@ -270,11 +264,12 @@ async function cycle(trigger: string): Promise<void> {
       const acctLive = live && g.account.is_armed && !g.account.is_halted && api != null;
       sweepInputs.push({ g, alpacaByOcc, groupRows, acctLive }); // orphan net (swept post-decision)
       let allOrders: alpaca.AlpacaOrder[] = [];
+      let ordersFresh = true; // audit 2026-07-10: the idempotency / lost-insert guards are BLIND without the order snapshot
       let remainingByOcc = new Map<string, number>();
       const openRowQty = new Map<string, number>();
       if (acctLive) {
         try { allOrders = await alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()); }
-        catch (e) { warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; bookkeeping only`); }
+        catch (e) { ordersFresh = false; warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; order actions suppressed this cycle (marks only)`); }
         remainingByOcc = seedRemaining(positions);
         for (const r of groupRows) openRowQty.set(r.occ_symbol, (openRowQty.get(r.occ_symbol) ?? 0) + Math.abs(Math.round(r.qty)));
       }
@@ -331,6 +326,14 @@ async function cycle(trigger: string): Promise<void> {
                 alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
             }
             const row = openRows.get(ch.id);
+            // No order snapshot → entry idempotency / lost-insert recovery / exit late-fill
+            // recovery / reconcile pricing are all blind (audit 2026-07-10: an empty allOrders
+            // made the 09d guard silently pass and re-buy an orphan lot). Marks-only this cycle;
+            // the fast sweep (own reads, fail-closed) still covers catastrophic premium stops.
+            if (!ordersFresh && d.action !== "hold" && d.action !== "skip") {
+              info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
+              continue;
+            }
             try {
               if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
               else if (d.action === "exit" && row && !d.blocked && barFresh) await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct });
@@ -530,6 +533,21 @@ async function fastExitSweep(): Promise<void> {
         info(`eod-hard-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — ${openedET === todayET ? "same-session" : "expires today"}, wall-clock mtc ${wallMtc} (pre-bell backstop, bars-independent)`);
         try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
         catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+        peakMidByKey.delete(r.id);
+        troughMidByKey.delete(r.id);
+        continue;
+      }
+      // ---- EVENT STAND-DOWN wall-clock backstop (audit 2026-07-10) ----
+      // The bar-close event_flatten (decide.ts) is BAR-anchored — a bar-stream stall through
+      // 13:50 on an FOMC day leaves the position held into the 14:00 binary, the exact class
+      // the EOD hard-flatten above already fixed for the bell. Mirror it here: this 10s
+      // wall-clock sweep flattens inside the event window even when bars stop. Same
+      // exemptions as the bar-close intent (event_policy='ignore', manual twins).
+      if (policy.EVENT_STANDDOWN && ch.event_policy !== "ignore" && !/-manual$/i.test(ch.slug)
+          && inEventWindow(todayET, nowMin, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
+        info(`event-flatten (wall-clock): ${ch.slug} ${r.occ_symbol} ×${r.qty} — event window, bars-independent backstop`);
+        try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "event_flatten" }, r, exec); }
+        catch (e) { warn(`event-flatten ${ch.slug} failed — ${(e as Error).message}`); }
         peakMidByKey.delete(r.id);
         troughMidByKey.delete(r.id);
         continue;
