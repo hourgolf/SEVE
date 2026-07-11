@@ -54,7 +54,7 @@ export function ChannelInspector({ strategist, summary }: { strategist: Strategi
   const seg = <T extends string | number>(cur: T, opts: { v: T; label: string }[], onPick: (v: T) => void) => <span className="iseg">{opts.map((o) => <button key={String(o.v)} type="button" className={o.v === cur ? "on" : ""} disabled={!canWrite} onClick={() => canWrite && onPick(o.v)}>{o.label}</button>)}</span>;
   const step = (label: string, value: string, dec: () => void, inc: () => void) => <span className="istep"><button type="button" disabled={!canWrite} onClick={dec} aria-label={`decrease ${label}`}>−</button><b>{value}</b><button type="button" disabled={!canWrite} onClick={inc} aria-label={`increase ${label}`}>+</button></span>;
   const knob = (value: number, min: number, max: number, stepBy: number, label: string, format: (v: number) => string, key: keyof StrategistConfig, cap?: string, writable = true) => (
-    <Knob value={value} min={min} max={max} step={stepBy} size="sm" label={label} format={format} disabled={!canWrite || !writable}
+    <Knob value={value} min={min} max={max} step={stepBy} size="md" label={label} format={format} disabled={!canWrite || !writable}
       color="var(--pm)" cap={cap} onChange={(next) => stageCfg({ [key]: next })} onCommit={(next) => commitCfg({ [key]: next })} />
   );
 

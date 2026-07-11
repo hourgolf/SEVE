@@ -45,7 +45,7 @@ export function StudioModules({ selected, evidence, evidenceState, positions, re
           <div className="condition-bank">
             {conditions.length ? conditions.map((condition) => <span key={condition}>{condition}</span>) : <i>built-in policy detail not exported</i>}
           </div>
-          <footer>effective context · current config + compiled thesis</footer>
+          <footer className="basis-row"><span>EFFECTIVE CONTEXT</span><span>CONFIG + THESIS</span></footer>
         </> : <div className="module-empty">select a fleet row</div>}
       </Panel>
 
@@ -64,7 +64,7 @@ export function StudioModules({ selected, evidence, evidenceState, positions, re
                 <span><small>MAX DRAWDOWN</small><b>{usd0(evidence.maxDrawdown)}</b></span>
                 <span><small>WIN % · SECONDARY</small><b>{evidence.winPct.toFixed(0)}%</b></span>
               </div>
-              <footer>latest {evidenceState.sessionDates.length} account sessions · gross attribution · fees and broker-net unavailable</footer>
+              <footer className="basis-row"><span>{evidenceState.sessionDates.length} SESSIONS</span><span>GROSS ATTRIBUTION</span><span>FEES EXCLUDED</span></footer>
             </> : <div className="module-empty">no closed rows in the recent account window</div>}
       </Panel>
 
@@ -81,7 +81,7 @@ export function StudioModules({ selected, evidence, evidenceState, positions, re
             <span><small>STALL</small><b>{channel.config.stall_minutes ? `${channel.config.stall_minutes}m / +${channel.config.stall_max_favor_pct ?? 0}%` : "OFF"}</b></span>
             <span><small>LAST EXIT</small><b>{lastClosed?.close_reason?.replaceAll("_", " ") ?? "—"}</b></span>
           </div>
-          <footer>desk positions ≠ broker reconciliation · policy epoch not stamped · peak data is era-dependent</footer>
+          <footer className="basis-row"><span>DESK ≠ BROKER</span><span>POLICY EPOCH UNSTAMPED</span><span>PEAK ERA-DEPENDENT</span></footer>
         </> : <div className="module-empty">select a fleet row</div>}
       </Panel>
     </div>

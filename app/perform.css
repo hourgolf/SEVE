@@ -321,3 +321,43 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   .shell-root[data-mode="perform"] .pf-dock-in { grid-template-columns: 96px minmax(0, 1fr); }
   .shell-root[data-mode="perform"] .pf-cards { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
 }
+
+/* ===========================================================================
+   P5 SLICE 4C — Perform/Studio visual harmonization (no layout semantics)
+   =========================================================================== */
+.shell-root[data-mode="perform"] .perform {
+  --pf-line: rgba(255,255,255,.085);
+  --pf-line-2: rgba(255,255,255,.16);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.025), transparent 28%),
+    var(--frame-bg);
+}
+.shell-root[data-mode="perform"] .pf-stage { gap: 8px; padding: 8px; }
+.shell-root[data-mode="perform"] .pf-screen,
+.shell-root[data-mode="perform"] .chart-fill {
+  border-width: 2px;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.07) inset,
+    0 0 0 1px color-mix(in srgb, var(--hw-edge) 72%, transparent),
+    0 4px 11px rgba(0,0,0,.38);
+}
+.shell-root[data-mode="perform"] .pf-head {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.055), transparent 45%),
+    linear-gradient(180deg, #303135, #1c1d20);
+}
+.shell-root[data-mode="perform"] .pf-head .t { letter-spacing: .15em; }
+.shell-root[data-mode="perform"] .pf-dock {
+  border-top-width: 2px;
+  box-shadow: 0 1px 0 var(--hw-hi) inset, 0 -3px 9px rgba(0,0,0,.18);
+}
+.shell-root[data-mode="perform"] .pf-dock-in { gap: 7px; padding: 7px 9px; }
+.shell-root[data-mode="perform"] .pf-cards { gap: 7px; }
+.shell-root[data-mode="perform"] .pf-chick {
+  border-radius: 7px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), inset 0 -8px 14px rgba(0,0,0,.3), 0 2px 4px rgba(0,0,0,.28);
+}
+@media (max-width: 1330px) {
+  .shell-root[data-mode="perform"] .pf-stage { gap: 5px; padding: 5px; }
+  .shell-root[data-mode="perform"] .pf-dock-in { gap: 5px; padding: 6px 8px; }
+}

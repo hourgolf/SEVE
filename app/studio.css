@@ -512,6 +512,180 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 }
 
 /* ===========================================================================
+   P5 SLICE 4C — cosmetic convergence toward the finished 909 mock
+   =========================================================================== */
+.shell-root[data-mode="studio"] .studio-v4b {
+  --fs-label: clamp(10.5px, .75vw, 12.5px);
+  --fs-chip: calc(var(--dz, 1) * clamp(11px, .79vw, 13.5px));
+  --fs-num: calc(var(--dz, 1) * clamp(14px, 1vw, 18px));
+  --fs-body: calc(var(--dz, 1) * clamp(14px, 1vw, 17.5px));
+  gap: 9px;
+  padding: 9px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.13), transparent 30%),
+    var(--frame-bg);
+}
+.shell-root[data-mode="studio"] .studio-v4b .fleet,
+.shell-root[data-mode="studio"] .studio-v4b .sband {
+  border-color: color-mix(in srgb, var(--hw-edge) 88%, #000);
+  box-shadow:
+    0 1px 0 var(--hw-hi) inset,
+    0 -2px 5px rgba(0,0,0,.16) inset,
+    0 4px 12px rgba(39,34,25,.24);
+}
+.shell-root[data-skin="cream"][data-mode="studio"] .fleet {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.34), transparent 20%),
+    linear-gradient(180deg, #ddd8c8, #cec8b7);
+}
+.shell-root[data-mode="studio"] .fleet-summary {
+  min-height: 78px;
+  padding-block: 11px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--hw-hi) 28%, transparent), transparent);
+}
+.shell-root[data-mode="studio"] .fleet-title strong {
+  font-size: clamp(19px, 1.45vw, 24px);
+  font-weight: 800;
+  letter-spacing: -.025em;
+}
+.shell-root[data-mode="studio"] .fleet-metrics { gap: 7px; }
+.shell-root[data-mode="studio"] .fleet-metrics > span {
+  min-width: 62px;
+  padding: 7px 9px;
+  border-color: color-mix(in srgb, var(--hw-line) 85%, #625b4b);
+  box-shadow: 0 1px 0 var(--hw-hi) inset, 0 1px 2px rgba(0,0,0,.08);
+}
+.shell-root[data-mode="studio"] .fleet-tools { height: 42px; }
+.shell-root[data-mode="studio"] .fleet-head { flex-basis: 31px; }
+.shell-root[data-mode="studio"] .fleet-row {
+  min-height: 58px;
+  transition: background-color .12s ease, box-shadow .12s ease;
+}
+.shell-root[data-skin="cream"][data-mode="studio"] .fleet-row:hover {
+  background: rgba(255,255,255,.22);
+}
+.shell-root[data-skin="cream"][data-mode="studio"] .fleet-row.selected {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--pm) 10%, #c7cfcc), rgba(201,207,203,.54) 72%, transparent);
+  box-shadow: 4px 0 0 var(--pm) inset, 0 1px 0 rgba(255,255,255,.36) inset;
+}
+.shell-root[data-mode="studio"] .fleet-channel i {
+  width: 8px; height: 8px;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--pm) 72%, transparent);
+}
+.shell-root[data-mode="studio"] .fleet-channel b { font-weight: 800; }
+.shell-root[data-mode="studio"] .fleet-state,
+.shell-root[data-mode="studio"] .fleet-tags i {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--hw-hi) 55%, transparent) inset;
+}
+
+/* Selected-channel consoles: dark glass seated inside a shared hardware bay. */
+.shell-root[data-mode="studio"] .studio-modules {
+  gap: 8px;
+  padding: 0;
+}
+.shell-root[data-mode="studio"] .studio-module,
+.shell-root[data-mode="studio"] .mixer-inspector {
+  border-width: 2px;
+  border-color: #08090a;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.08) inset,
+    0 0 0 1px color-mix(in srgb, var(--hw-edge) 78%, transparent),
+    0 4px 11px rgba(0,0,0,.36);
+}
+.shell-root[data-mode="studio"] .studio-module > header,
+.shell-root[data-mode="studio"] .insp-head {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.055), transparent 45%),
+    linear-gradient(180deg, #303135, #1c1d20);
+}
+.shell-root[data-mode="studio"] .studio-module > header { flex-basis: 34px; }
+.shell-root[data-mode="studio"] .studio-module > header > b,
+.shell-root[data-mode="studio"] .insp-head .t { letter-spacing: .16em; }
+.shell-root[data-mode="studio"] .studio-module-body { padding: 11px; }
+.shell-root[data-mode="studio"] .decision-state {
+  border-left: 3px solid var(--dk-dim);
+  padding: 8px 10px;
+}
+.shell-root[data-mode="studio"] .decision-state.held { border-left-color: var(--amber); }
+.shell-root[data-mode="studio"] .decision-state.fired { border-left-color: var(--green-soft); }
+.shell-root[data-mode="studio"] .decision-state.risk { border-left-color: var(--red-soft); }
+.shell-root[data-mode="studio"] .module-mandate { font-family: var(--sh-sans); font-size: var(--fs-chip); line-height: 1.42; }
+.shell-root[data-mode="studio"] .evidence-hero { padding: 2px 2px 9px; }
+.shell-root[data-mode="studio"] .evidence-hero strong {
+  font-size: clamp(21px, 1.6vw, 28px);
+  letter-spacing: -.04em;
+}
+.shell-root[data-mode="studio"] .evidence-grid { margin-top: 9px; }
+.shell-root[data-mode="studio"] .evidence-grid > span,
+.shell-root[data-mode="studio"] .exit-shape > span,
+.shell-root[data-mode="studio"] .ops-truth > span { padding: 8px; }
+.shell-root[data-mode="studio"] .basis-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  border-top: 1px solid var(--line);
+}
+.shell-root[data-mode="studio"] .basis-row span {
+  padding: 2px 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  color: var(--dk-dim);
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+/* Mixer physicality: taller banks, larger controls and readable value plates. */
+.shell-root[data-mode="studio"] .mixer-meter { padding: 7px; }
+.shell-root[data-mode="studio"] .mixer-meter > span { padding: 7px 8px; }
+.shell-root[data-mode="studio"] .mixer-deck { gap: 9px; padding: 10px; }
+.shell-root[data-mode="studio"] .mix-bank {
+  border-color: #3a3d40;
+  box-shadow: 0 1px 0 rgba(255,255,255,.075) inset, 0 3px 7px rgba(0,0,0,.52);
+}
+.shell-root[data-mode="studio"] .mix-bank > header { padding: 6px 9px; }
+.shell-root[data-mode="studio"] .mix-bank-body { gap: 10px 14px; padding: 10px; }
+.shell-root[data-mode="studio"] .knob-bank { gap: 8px; padding: 10px 6px 8px; }
+.shell-root[data-mode="studio"] .knob-bank .knob-well {
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%, #26292c, #090a0b 72%);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.82), 0 1px 0 rgba(255,255,255,.08);
+}
+.shell-root[data-mode="studio"] .knob-bank .knob-caption {
+  max-width: 92px;
+  min-height: 30px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  text-align: center;
+}
+.shell-root[data-mode="studio"] .knob-bank .knob-label {
+  color: #858b8f;
+  font-size: 9px;
+  line-height: 1.12;
+  letter-spacing: .08em;
+}
+.shell-root[data-mode="studio"] .knob-bank .knob-val {
+  color: #eef1ef;
+  font-size: 12px;
+  font-weight: 750;
+}
+.shell-root[data-mode="studio"] .posture-pads button {
+  min-height: 36px;
+  box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 3px 0 #070809;
+}
+.shell-root[data-mode="studio"] .insp-foot { min-height: 42px; }
+
+@media (max-width: 1180px) {
+  .shell-root[data-mode="studio"] .studio-v4b { gap: 6px; padding: 6px; }
+  .shell-root[data-mode="studio"] .fleet-summary { min-height: 68px; }
+  .shell-root[data-mode="studio"] .fleet-row { min-height: 54px; }
+  .shell-root[data-mode="studio"] .studio-module-body { padding: 8px; }
+  .shell-root[data-mode="studio"] .mixer-deck { padding: 7px; gap: 7px; }
+}
+
+/* ===========================================================================
    P5 SLICE 4B — modular operating desk + mixer inspector
    The fleet stays the scan surface; selected-channel decision, evidence and
    exit context fill the former dead floor space. Leaves remain subscription-free.

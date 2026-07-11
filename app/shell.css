@@ -332,3 +332,56 @@
   background: #22262b;
   border-color: #55606a;
 }
+
+/* ===========================================================================
+   P5 SLICE 4C — finished 909 chassis pass
+   Cosmetic tokens only: shared geometry and behavior remain unchanged.
+   =========================================================================== */
+.shell-root {
+  --h-top: clamp(72px, 5.15vw, 96px);
+}
+.shell-root[data-skin="cream"] {
+  --frame-bg: #c9c3b2;
+  --chrome-bg: #d9d4c4;
+  --chrome-edge: #a9a391;
+  --chrome-ink: #292925;
+  --chrome-soft: #59574f;
+  --silk: #5f5b51;
+  --hw-1: #e0dccd;
+  --hw-2: #cec8b7;
+  --hw-edge: #a9a28f;
+  --hw-well: rgba(68, 61, 45, 0.11);
+  --hw-hi: rgba(255, 255, 255, 0.72);
+  --hw-line: rgba(67, 58, 39, 0.19);
+}
+.shell-bar {
+  position: relative;
+  box-shadow: 0 1px 0 rgba(255,255,255,.52) inset, 0 -1px 0 rgba(0,0,0,.18) inset;
+}
+.shell-root[data-skin="cream"] .shell-bar {
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.16), transparent 28%, rgba(255,255,255,.08) 68%, transparent),
+    var(--chrome-bg);
+}
+.shell-root[data-skin="cream"] .modesw,
+.shell-root[data-skin="cream"] .keycap,
+.shell-root[data-skin="cream"] .pill {
+  box-shadow: 0 1px 0 rgba(255,255,255,.72) inset, 0 2px 0 rgba(78,70,53,.24);
+}
+.shell-root[data-skin="cream"] .ledwin {
+  border-color: #080909;
+  box-shadow: inset 0 2px 9px rgba(0,0,0,.78), 0 1px 0 rgba(255,255,255,.62);
+}
+.shell-band { height: 3px; box-shadow: 0 1px 0 rgba(255,255,255,.28); }
+
+/* A patch-switch response, not a whole-header flash. */
+.shell-strike { animation: none; }
+@keyframes shpatch {
+  0% { filter: brightness(1.65); box-shadow: 0 0 14px rgba(239,90,35,.7); }
+  100% { filter: none; box-shadow: var(--btn-shadow); }
+}
+.shell-strike .modesw { animation: shpatch .18s ease-out; }
+
+@media (max-width: 1180px) {
+  .shell-root { --h-top: 66px; }
+}
