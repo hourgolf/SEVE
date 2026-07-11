@@ -1,5 +1,25 @@
 # SEVE — project memory / session handoff
 
+## ⚡ SESSION UPDATE — 2026-07-11 · MISSION 1b: EXECUTION HARDENING SHIPPED (READ FIRST)
+
+**Worker is now `stream-2026-07-11a`** (deployed + heartbeat-verified 07-11). The external reviewer's
+Bucket-1 punch list — 14 of 16 execution point-fixes — shipped in 4 gated batches, composition-verified
+(memory/mission-1b-execution-hardening.md; tracker docs/mission-1b-status.md). Headliners: getOpenPositions
+THROWS on error (no more "worker believes itself flat"); the fast sweep runs on its OWN mutex + 15s fetch
+abort + a per-row exitGuard (a hung API call could previously wedge every safety backstop); **is_armed =
+ENTRIES ONLY** (a disarmed account keeps its stops/EOD — operator decision); partial-exit re-rows the
+remainder; no row without fill evidence; **exit triggers moved MID → executable BID** + quote-age guard.
+⚠ **pk·win ERA BOUNDARY at this deploy** (peak_mark/trough_mark mid→bid, required for A13 trail coherence)
+— §04 pk·win + the sentinel lens must not pool pre/post-07-11 peaks (annotation is a follow-on).
+Deferred: #12/#14 (need raw broker samples), #17 (spread-capture dormant), #18 (per-strike chain
+staleness — a held strike drifting outside the ±$8 window keeps a frozen bid reading fresh). **NEXT big
+effort = Bucket 2 = the go-live backbone** (order/fill ledger → positions as a projection → immutable
+account identity → independent risk service → executor fencing → policy epochs → THEN channel eval;
+reconcile is a P&L gate, never reads /v2/positions, so nothing enforces broker-flat-after-close today).
+⚠ **Shared branch: a push to main auto-deploys the worker to Railway — bump WORKER_VERSION at the
+checkpoint + verify the heartbeat, or worker code deploys mislabeled.** Also note: Mission 2 (the
+STUDIO/PERFORM + mobile UI rebuild) shipped 07-10 night — see that block below.
+
 SEVE is a SPY 0DTE/1DTE paper-trading "desk": a Next.js dashboard over a Supabase
 Postgres DB, a backtest engine, and a live paper-trading worker. This file is the
 durable context for a new session. Read it first.
