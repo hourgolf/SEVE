@@ -13,6 +13,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { writeFileSync, readFileSync, existsSync } from "fs";
+import { pageAll } from "../engine/pageAll";
 
 const PAPER = "https://paper-api.alpaca.markets";
 const FIX = process.argv.includes("--fix");
@@ -96,7 +97,14 @@ async function main() {
   }
 
   // ---- desk rows (per OCC) ----
-  const { data: rows } = await sb.from("positions").select("id,occ_symbol,realized_pnl,avg_entry_price,qty,strategist_id").eq("status", "closed").gte("opened_at", "2026-06-01");
+  // pageAll + id tiebreak (audit 2026-07-11, pagination law): this read was UN-paginated and silently
+  // truncated at PostgREST's ~1000-row cap the moment closed-since-06-01 crossed 1,000 rows (1,082 on
+  // 07-11). The truncation dropped whichever OCCs' rows fell outside the window → deskByOcc under-counted
+  // → the drift gate cried PHANTOM drift ($8,390 reported vs $2 true, books actually clean). The
+  // books-integrity tool must itself obey the law. opened_at is not unique, so .order(id) is the tiebreak.
+  const rows = await pageAll<{ id: string; occ_symbol: string; realized_pnl: number; avg_entry_price: number; qty: number; strategist_id: string }>(
+    (from) => sb.from("positions").select("id,occ_symbol,realized_pnl,avg_entry_price,qty,strategist_id").eq("status", "closed").gte("opened_at", "2026-06-01").order("opened_at", { ascending: true }).order("id", { ascending: true }),
+  );
   const deskByOcc = new Map<string, number>();
   for (const r of rows ?? []) deskByOcc.set(r.occ_symbol, (deskByOcc.get(r.occ_symbol) ?? 0) + Number(r.realized_pnl ?? 0));
 
