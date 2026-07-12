@@ -124,6 +124,7 @@
     "databento:resolve": "tsx scripts/databento-resolve-contracts.ts",
     "databento:target-quote": "tsx scripts/databento-target-quote.ts",
     "databento:download-target": "tsx scripts/databento-download-target.ts",
+    "databento:r2-sync": "tsx scripts/databento-r2-sync.ts",
     "fomc-resolution-probe": "tsx engine/fomc-resolution-probe.ts",
     "fomc-costgate-probe": "tsx engine/fomc-costgate-probe.ts",
     "cross-gap-probe": "tsx engine/cross-gap-probe.ts",
@@ -173,6 +174,8 @@
     "momo-evolve-probe": "tsx --env-file=.env.local engine/momo-evolve-probe.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1085.0",
+    "@aws-sdk/lib-storage": "^3.1085.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

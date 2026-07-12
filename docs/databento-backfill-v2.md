@@ -110,3 +110,9 @@ For the durable copy, Cloudflare R2 Standard is the current default recommendati
 - Reserve $1/month initially; request counts should remain inside the included operation tiers because the archive uses coarse partitions rather than millions of tiny objects.
 
 No R2 account or bucket is created by this slice. Until credentials and lifecycle policy are approved, the local copy remains staging only and no paid Databento batch should be ordered.
+
+## R2 durable copy
+
+Create a private Standard-class bucket named `seve-market-archive`. Create an R2 S3 token with Object Read & Write scoped only to that bucket. Put the account ID, S3 Access Key ID, S3 Secret Access Key, bucket, and optional prefix into `.env.local` using `.env.local.example`; never paste them into chat or any `NEXT_PUBLIC_` variable.
+
+After the acquisition receipt is green, run `npm run databento:r2-sync`. It refuses partial acquisitions, uploads raw DBN plus provenance receipts, attaches a SHA-256 to every object, verifies every object with `HeadObject`, skips already-matching objects on resume, and never deletes local or remote data.
