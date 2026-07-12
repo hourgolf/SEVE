@@ -1,6 +1,6 @@
 # Phase 1D — Market-truth foundation
 
-Status: implementation branch, shadow/research only. No strategy promotion and no production deployment are authorized by this work.
+Status: migrated and deployed to the paper worker as `stream-2026-07-12d`. Shadow/research only; no strategy promotion is authorized by this work.
 
 ## What data remains
 
