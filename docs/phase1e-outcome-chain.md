@@ -1,6 +1,6 @@
 # Phase 1E — Paper outcome chain
 
-Status: implemented and verified on `phase1e-outcome-chain`; migration unapplied and worker undeployed pending review. Shadow-only; no evidence row is read by entry, sizing, order placement, or position management.
+Status: implemented and verified on `phase1e-outcome-chain`; migration applied as `20260712170502_phase_1e_position_outcomes`; worker stamped `stream-2026-07-12e` pending merge/deploy. Shadow-only; no evidence row is read by entry, sizing, order placement, or position management.
 
 ## Objective
 
@@ -63,4 +63,4 @@ The worker may maintain the existing convenience columns on `position_plans` onl
 - Manual close/tag updates now verify that their status-guarded update actually changed a row before emitting evidence.
 - The migration uses explicit grants, RLS, an app-metadata operator policy, and indexes for every foreign key and analytical join. Deterministic `plan_id` remains deliberately unconstrained to avoid cross-queue arrival-order loss.
 
-Verification: worker typecheck clean; application typecheck clean; production build clean; runner self-test 141/141; position-plan 7/7; Phase 1D market-truth 4/4; manual-close 6/6. Remote prerequisite inspection confirmed `positions`, `position_plans`, `worker_runs`, `positions.entry_features`, and `positions.runner_of` exist. The migration has not been applied.
+Verification: worker typecheck clean; application typecheck clean; production build clean; runner self-test 141/141; position-plan 7/7; Phase 1D market-truth 4/4; manual-close 6/6. Remote prerequisite inspection confirmed `positions`, `position_plans`, `worker_runs`, `positions.entry_features`, and `positions.runner_of` exist. Post-migration verification confirmed zero starting rows, RLS enabled, authenticated operator SELECT only, service-role INSERT/SELECT only, one operator-read policy, three foreign keys, eight checks, and seven indexes.
