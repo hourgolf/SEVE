@@ -25,6 +25,7 @@ const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./ex
 const { shadowLifecycleAction } = await import("./shadowManageModel.js");
 const { classifyPriorOpenRun } = await import("./runReconcile.js");
 const { decodeDurableShadow, encodeDurableShadow } = await import("./shadowPersistence.js");
+const { buildShadowPlanEvidence } = await import("./planShadowModel.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
 type OrderLike = import("./exitRules.js").OrderLike;
 import type { PositionRow, AccountRow, ChannelConfig } from "./store.js";
@@ -144,6 +145,40 @@ const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
   strike_offset: 0, premium_stop_pct: null, take_profit_pct: 22, pyramid_adds: 0,
   stall_minutes: 0, stall_max_favor_pct: 0, gap_min: 0, runner_frac: 0, runner_giveback_pct: 0, ...over,
 });
+
+// ---- Phase 1C: deterministic observed policy epochs + initial plans ----
+{
+  const strategistId = "11111111-1111-4111-8111-111111111111";
+  const accountId = "22222222-2222-4222-8222-222222222222";
+  const decision = {
+    slug: "test", status: "armed", action: "enter", reason: "break_high",
+    direction: "call", occ: "SPY260713C00600000", qty: 2, blocked: null,
+    detail: { ask: 1.5 },
+  } as const;
+  const input = {
+    channel: chan({ id: strategistId, slug: "test", capital_pct: 750, take_profit_pct: 22, pyramid_adds: 3, max_contracts: 12 }),
+    decision, accountId, decisionAtMs: Date.parse("2026-07-13T14:31:00.000Z"),
+    workerVersion: "stream-test", defaultPremiumStopPct: 50,
+  };
+  const a = buildShadowPlanEvidence(input)!;
+  const b = buildShadowPlanEvidence(input)!;
+  check("phase1c: accepted entry produces evidence", !!a, true);
+  check("phase1c: same evidence is deterministic across retries", [a.epoch.id, a.plan.id, a.plan.opportunity_id], [b.epoch.id, b.plan.id, b.plan.opportunity_id]);
+  check("phase1c: resolved account is stamped in epoch + plan", [a.epoch.account_id, a.plan.plan_json.identity.accountId], [accountId, accountId]);
+  check("phase1c: max risk is honest full long-option debit", a.plan.plan_json.entry.maxRiskUsd, 300);
+  check("phase1c: stop-budget risk remains labeled diagnostic", (a.epoch.policy_json.provenance as { sizingStopRiskUsd: number }).sizingStopRiskUsd, 150);
+  check("phase1c: take-profit policy maps to truthful all-out harvest", [a.epoch.manager_id, a.plan.plan_json.harvest], ["premium-all-out", "all_out"]);
+  check("phase1c: dynamic adds are captured without fabricated R stages", [a.plan.plan_json.adds.length, (a.epoch.policy_json.dynamicAdds as { capturedInEpochOnly: boolean }).capturedInEpochOnly], [0, true]);
+  check("phase1c: observed plan is deeply frozen", [Object.isFrozen(a.plan.plan_json), Object.isFrozen(a.plan.plan_json.identity)], [true, true]);
+  const changedManager = buildShadowPlanEvidence({ ...input, channel: { ...input.channel, take_profit_pct: 30 } })!;
+  check("phase1c: manager change creates a new epoch", changedManager.epoch.id === a.epoch.id, false);
+  check("phase1c: manager change does not rewrite alpha version", changedManager.epoch.channel_version, a.epoch.channel_version);
+  const changedWorker = buildShadowPlanEvidence({ ...input, workerVersion: "stream-test-2" })!;
+  check("phase1c: worker release changes builtin channel version", changedWorker.epoch.channel_version === a.epoch.channel_version, false);
+  check("phase1c: blocked decisions never become plans", buildShadowPlanEvidence({ ...input, decision: { ...decision, blocked: "daily_stop" } }), null);
+  check("phase1c: unresolved synthetic account never becomes FK evidence", buildShadowPlanEvidence({ ...input, accountId: "__default__" }), null);
+  check("phase1c: invalid source timestamp fails closed", buildShadowPlanEvidence({ ...input, decisionAtMs: Number.NaN }), null);
+}
 {
   // known account_id → routes to that account
   const g1 = groupChannelsByAccount([chan({ account_id: "acct-2" })], [acct()]);

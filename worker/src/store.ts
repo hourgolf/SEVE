@@ -17,6 +17,7 @@ import { pageAll } from "../../engine/pageAll.js";
 import { BOOT_ID, STARTED_AT, INSTANCE_ID, GIT_SHA, PID, HOSTNAME, RAILWAY_DEPLOYMENT, getPhase, setPhase, rssMb } from "./runId.js";
 import { classifyPriorOpenRun } from "./runReconcile.js";
 import type { DurableShadowRow } from "./shadowPersistence.js";
+import type { PolicyEpochDraft, PositionPlanDraft } from "./planShadowModel.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -480,6 +481,31 @@ export async function insertSignal(row: {
 }): Promise<void> {
   try { await sb.from("signals").insert(row); }
   catch (e) { warn(`store: signal insert failed — ${(e as Error).message}`); }
+}
+
+let planTablesAvailable: boolean | null = null;
+const duplicate = (error: { code?: string } | null): boolean => error?.code === "23505";
+
+/** Phase 1C immutable epoch insert. A deterministic id makes retries and
+ *  restarts idempotent; duplicate means the exact epoch is already durable. */
+export async function insertObservedPolicyEpoch(row: PolicyEpochDraft): Promise<boolean> {
+  if (!config.hasServiceRole || planTablesAvailable === false) return false;
+  const { error } = await sb.from("policy_epochs").insert({ ...row, created_by_boot_id: BOOT_ID });
+  if (!error || duplicate(error)) { planTablesAvailable = true; return true; }
+  if (missingRelation(error)) planTablesAvailable = false;
+  else warn(`store: policy epoch insert failed — ${error.message}`);
+  return false;
+}
+
+/** Phase 1C observed initial-allocation plan. It is mode=observe and remains
+ *  unreferenced by execution; opportunity_id makes retries idempotent. */
+export async function insertObservedPositionPlan(row: PositionPlanDraft): Promise<boolean> {
+  if (!config.hasServiceRole || planTablesAvailable === false) return false;
+  const { error } = await sb.from("position_plans").insert({ ...row, position_id: null });
+  if (!error || duplicate(error)) { planTablesAvailable = true; return true; }
+  if (missingRelation(error)) planTablesAvailable = false;
+  else warn(`store: position plan insert failed — ${error.message}`);
+  return false;
 }
 
 export async function insertPosition(row: {

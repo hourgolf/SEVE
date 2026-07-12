@@ -369,7 +369,7 @@ async function cycle(trigger: string): Promise<void> {
           // bar — orders need a fresh decision bar; reconcile + mark are always safe.
           const barFresh = Date.now() - lastSession.ts < 180_000;
           if (!barFresh) info(`live pass[${g.account.name}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
-          const exec: ExecCtx = { api: api!, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+          const exec: ExecCtx = { api: api!, accountId: g.account.id, decisionAtMs: lastSession.ts, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
           const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
           for (const d of symDecisions) {
             const ch = bySlug.get(d.slug);
@@ -621,7 +621,7 @@ async function fastExitSweep(): Promise<void> {
       for (const r of rows) {
       const ch = byId.get(r.strategist_id)!;
       const chain = chainBySym.get(ch.underlying.toUpperCase());
-      const exec: ExecCtx = { api, chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+      const exec: ExecCtx = { api, accountId: g.account.id, decisionAtMs: Date.now(), chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
       // ---- KILL/HALT FLATTEN (operator's word, 2026-07-01): close EVERYTHING at market ----
       // Highest priority — runs before every other exit check, incl. the manual twins (a kill
       // switch overrides the human-owns-exits experiment; safety beats the A/B). executeExit's

@@ -27,6 +27,7 @@ import * as store from "./store.js";
 import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid } from "./exitRules.js";
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
+import { captureObservedPositionPlan } from "./planShadow.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -57,6 +58,8 @@ const reconcileConfirmed = (rowId: string): boolean => {
 
 export interface ExecCtx {
   api: alpaca.Api;                        // cockpit P3: the account this channel's orders route to (default acct 1)
+  accountId: string;                      // resolved routing identity stamped into Phase 1C evidence
+  decisionAtMs: number;                   // source bar timestamp; deterministic opportunity identity
   chain: ChainStore;
   todayET: string;
   etMin: number;
@@ -516,9 +519,12 @@ export async function executeEntry(
   }
 
   const qty = d.qty ?? 0;
+  const opportunityId = !blocked && qty > 0
+    ? captureObservedPositionPlan({ channel: ch, decision: d, accountId: ctx.accountId, decisionAtMs: ctx.decisionAtMs })
+    : null;
   await store.insertSignal({
     strategist_id: ch.id, signal_type: d.reason, underlying_price: spotClose, direction: dir,
-    acted_on: !blocked, blocked_reason: blocked, rationale: { occ, qty, executor: "stream", ...(d.detail ?? {}) },
+    acted_on: !blocked, blocked_reason: blocked, rationale: { occ, qty, executor: "stream", opportunity_id: opportunityId, ...(d.detail ?? {}) },
   });
   if (blocked || qty <= 0) { if (blocked !== d.blocked) info(`entry ${d.slug} blocked: ${blocked}`); return; }
 
@@ -544,7 +550,9 @@ export async function executeEntry(
       strategist_id: ch.id, occ_symbol: occ, underlying: ch.underlying,
       expiration: (d.detail?.expiry as string) ?? ctx.todayET, strike, opt_type: dir, qty: fillQty, avg_entry_price: entryPx,
       // durable per-trade forensics (44_trade_forensics): the entry side of the dataset.
-      entry_reason: d.reason, entry_features: (d.detail ?? null) as Record<string, unknown> | null, entry_delta: eq?.delta ?? null,
+      entry_reason: d.reason,
+      entry_features: { ...(d.detail ?? {}), opportunity_id: opportunityId },
+      entry_delta: eq?.delta ?? null,
     });
     if (err) {
       await store.journal("WARN", `${d.slug}: ORDER FILLED but position insert FAILED (${err}) — reconcile manually`, { occ, order_id: o.id });

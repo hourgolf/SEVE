@@ -1,6 +1,8 @@
 # Phase 1B — durable truth foundation
 
-Status: review branch only. Dark/unwired. No live trading policy changes.
+Status: shipped on `main` at `7d7a3d0` (`stream-2026-07-12b`). The policy and
+plan tables remain non-authoritative; Phase 1C only begins writing observed
+evidence into them. No live trading policy changes.
 
 ## Scope
 
