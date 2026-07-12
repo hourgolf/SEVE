@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { relative } from "node:path";
-import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { HeadBucketCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 
 function loadLocalEnv(): void {
@@ -45,6 +45,11 @@ function sha256(path: string): string {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--check")) {
+    await s3.send(new HeadBucketCommand({ Bucket: BUCKET }));
+    console.log(`R2 connection green · private bucket '${BUCKET}' is reachable`);
+    return;
+  }
   if (!existsSync(RECEIPT)) throw new Error("Databento download receipt is missing; acquisition is not complete");
   const receipt = JSON.parse(readFileSync(RECEIPT, "utf8")) as { files?: unknown[]; failures?: unknown[] };
   if (receipt.files?.length !== 1133 || (receipt.failures?.length ?? 0) !== 0) {

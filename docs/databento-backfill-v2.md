@@ -116,3 +116,5 @@ No R2 account or bucket is created by this slice. Until credentials and lifecycl
 Create a private Standard-class bucket named `seve-market-archive`. Create an R2 S3 token with Object Read & Write scoped only to that bucket. Put the account ID, S3 Access Key ID, S3 Secret Access Key, bucket, and optional prefix into `.env.local` using `.env.local.example`; never paste them into chat or any `NEXT_PUBLIC_` variable.
 
 After the acquisition receipt is green, run `npm run databento:r2-sync`. It refuses partial acquisitions, uploads raw DBN plus provenance receipts, attaches a SHA-256 to every object, verifies every object with `HeadObject`, skips already-matching objects on resume, and never deletes local or remote data.
+
+Completed 2026-07-12: 1,133/1,133 Databento sessions (4.11 GiB compressed) plus two provenance receipts were uploaded to the private `seve-market-archive` bucket under `seve/databento-v2`. All 1,135 objects passed post-upload byte-size and SHA-256 metadata verification. `npm run databento:r2-sync -- --check` provides a read-only credential/bucket reachability test.
