@@ -58,6 +58,12 @@ Request the no-spend, full-chain price ceiling from Databento:
 
 The cost-envelope command can only call `metadata.get_cost`; it contains no data-download or batch-submit path.
 
+Build the exact strategy-tradable quote from local SIP ranges:
+
+`npm run databento:target-quote`
+
+This requests one cost estimate per real session for standard integer-strike SPY/QQQ/IWM contracts within the session's RTH low/high plus $10, for expirations 0–2 sessions forward. The worker's live chain window is $8 and the widest current research structure is five strikes from its anchor, so $10 is a conservative replay boundary. This command also has no data-download or batch-submit endpoint.
+
 ## Spend gates
 
 1. Inventory existing coverage and calculate the storage projection.
@@ -79,7 +85,19 @@ There are three separate budgets:
 
 The planner's `peakWorkingGiB` is the number to reserve locally. It includes compressed raw data, a derived copy, manifests, and one in-progress batch. It is deliberately higher than the final canonical archive size.
 
-The 2026-07-12 Databento metadata quote established a deliberately broad full-chain ceiling of $1,470.57 for `cbbo-1m` plus $41.99 for definitions. That is not an approved order and is evidence that a parent-symbol full-chain pull is wasteful. V2 must resolve and filter the listed contracts first, then quote the exact filtered symbol set under a hard maximum.
+The 2026-07-12 Databento metadata quote established a deliberately broad full-chain ceiling of $1,470.57 for `cbbo-1m` plus $41.99 for definitions. That is not an approved order and is evidence that a parent-symbol full-chain pull is wasteful.
+
+The exact strategy-tradable quote then reduced the request to:
+
+- 1,133 common SPY/QQQ/IWM sessions from 2022-01-03 through 2026-07-10.
+- 560,922 symbol-days.
+- Standard integer-strike contracts within each underlying's RTH low/high plus $10.
+- Expirations from the session through two trading sessions forward.
+- Exact Databento `metadata.get_cost` result: **$29.79**.
+
+The $29.79 is still a quote, not an approved or submitted order. The local quote receipt is gitignored at `data/databento-v2/manifests/quotes/target-2022-01-03_2026-07-10-w10-dte2.json`.
+
+The underlying scope was built from production-consistent Alpaca SIP minute bars. The local archives now contain 1,133 sessions for each of SPY, QQQ, and IWM over the target interval. Using the completed session's RTH range to define the acquisition universe does not enter the replay's decision logic; it only ensures the stored corpus contains every strike the causal strategy could have selected at signal time.
 
 For the durable copy, Cloudflare R2 Standard is the current default recommendation because it is S3-compatible, includes 10 GB-month, charges $0.015/GB-month beyond that, and does not charge internet egress. At the current projection:
 
