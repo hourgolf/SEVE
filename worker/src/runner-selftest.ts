@@ -22,6 +22,7 @@ process.env.SUPABASE_URL ??= "http://localhost";
 const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid } = await import("./exitRules.js");
 const { groupChannelsByAccount, resolveDefaultAccount, unresolvedAccount, acctCanEnter, acctCanManage, SYNTH_DEFAULT } = await import("./routing.js");
 const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./exitGuard.js");
+const { shadowLifecycleAction } = await import("./shadowManageModel.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
 type OrderLike = import("./exitRules.js").OrderLike;
 import type { PositionRow, AccountRow, ChannelConfig } from "./store.js";
@@ -32,6 +33,15 @@ function check(label: string, got: unknown, want: unknown): void {
   if (ok) pass++;
   else { fail++; console.error(`  ✗ ${label} — got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`); }
 }
+
+// ---- management counterfactual lifecycle ----
+// Actual and simulated exits are independent clocks. In particular, an actual close
+// must not finalize a still-open manager (the old behavior produced false $0 shadows).
+check("mgmt clock: both open + quote -> step", shadowLifecycleAction({ actualOpen: true, managedClosed: false, hasExecutableQuote: true }), "step");
+check("mgmt clock: actual closed + manager open + quote -> keep stepping", shadowLifecycleAction({ actualOpen: false, managedClosed: false, hasExecutableQuote: true }), "step");
+check("mgmt clock: actual closed + manager open + no quote -> wait", shadowLifecycleAction({ actualOpen: false, managedClosed: false, hasExecutableQuote: false }), "wait");
+check("mgmt clock: manager closed + actual open -> wait for actual", shadowLifecycleAction({ actualOpen: true, managedClosed: true, hasExecutableQuote: true }), "wait");
+check("mgmt clock: both closed -> finalize", shadowLifecycleAction({ actualOpen: false, managedClosed: true, hasExecutableQuote: true }), "finalize");
 
 // ---- trancheSplit ----
 check("split 6 @ 0.5", trancheSplit(6, 0.5), { sell: 3, retain: 3 });

@@ -83,6 +83,7 @@
     "iv-bank": "tsx --env-file=.env.local scripts/iv-bank.ts",
     "evening-digest": "tsx --env-file=.env.local scripts/evening-digest.ts",
     "runner-selftest": "tsx worker/src/runner-selftest.ts",
+    "position-plan-selftest": "tsx lib/desk/positionPlan.selftest.ts",
     "a6-watch": "tsx --env-file=.env.local scripts/a6-watch.ts",
     "weekly-readout": "tsx --env-file=.env.local scripts/weekly-readout.ts",
     "desk-briefing": "tsx scripts/desk-briefing.ts",

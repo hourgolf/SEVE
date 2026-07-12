@@ -19,11 +19,25 @@ import type { Bar, OptType } from "../../engine/types";
 import type { ChainStore } from "./state.js";
 import { getPositionById, reconstructRideToClose, writeShadowEvent, type PositionRow } from "./store.js";
 import { info } from "./log.js";
+import { shadowLifecycleAction } from "./shadowManageModel.js";
 
 const COST: CostModel = { spreadSource: "option_bars", modeledSpreadPct: 0.03, modeledSpreadFloorUsd: 0.03, slippageTicksPerSide: 0.25, commissionPerContract: 0.04, crossSpread: true };
 const sgn = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(0)}`;
 
-interface Tracked { slug: string; occ: string; sym: string; st: ManagedState; managedPnl: number; managedClosed: boolean; lastReason?: string; truncated: boolean; }
+interface Tracked {
+  slug: string;
+  occ: string;
+  sym: string;
+  st: ManagedState;
+  managedPnl: number;
+  managedClosed: boolean;
+  lastReason?: string;
+  truncated: boolean;
+  // Captured once the real row closes. The counterfactual can then keep walking
+  // market quotes until its OWN policy closes instead of being cut off at the
+  // actual exit. Undefined means the actual outcome is not confirmed yet.
+  actualPnl?: number;
+}
 // Keyed by desk-row id. ⚠ Persists across CYCLES only, not restarts (audit 2026-07-10): a
 // Railway redeploy mid-hold re-opens the sim blind to banked partials / the armed BE-trail
 // floor, so the finalize would compare a truncated managed side against a DB-true actual.
@@ -109,14 +123,51 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
     t.managedClosed = t.managedClosed || res.closed;
   }
 
-  // ---- finalize: a tracked position that's no longer open → actual vs managed ----
+  // ---- continue counterfactuals after the actual position closes ----
+  // The prior implementation finalized as soon as the desk row disappeared. If the
+  // simulated manager still held contracts, only already-banked partials were counted
+  // (often $0) and compared with the completed actual trade. Actual and simulated exits
+  // are independent clocks: capture the real outcome, then keep stepping the simulation
+  // on live quotes until its own manager is flat.
+  for (const [id, t] of tracked.entries()) {
+    if (t.sym !== sym || openIds.has(id) || t.managedClosed) continue;
+
+    if (t.actualPnl === undefined) {
+      const actual = await getPositionById(id);
+      // A missing row/read or an input snapshot race is not proof of a close. Wait for
+      // a positively observed closed row before advancing the post-actual simulation.
+      if (!actual || actual.status === "open") continue;
+      t.actualPnl = Number(actual.realized_pnl ?? 0);
+    }
+
+    const q = chain.byOcc(t.occ);
+    const action = shadowLifecycleAction({ actualOpen: false, managedClosed: t.managedClosed, hasExecutableQuote: !!q && q.mid > 0 });
+    if (action !== "step" || !q) continue;
+
+    const quote = { strike: t.st.strike, optType: t.st.optType, bid: q.bid, ask: q.ask, mid: q.mid };
+    const res = stepManaged(t.st, quote, underlying, atr, etMin, minutesToClose, COST);
+    for (const pe of res.partials) {
+      t.managedPnl += pe.pnl;
+      t.lastReason = pe.reason;
+      info(`mgmt-shadow ${t.slug} ${t.occ}: post-actual would ${pe.reason} ×${pe.qty} @ ${pe.exitPremium.toFixed(2)} (${sgn(pe.pnl)})`);
+    }
+    if (res.closed) info(`mgmt-shadow ${t.slug} ${t.occ}: management would be FLAT after actual exit — total ${sgn(t.managedPnl)} (${t.lastReason})`);
+    t.managedClosed = t.managedClosed || res.closed;
+  }
+
+  // ---- finalize only when BOTH clocks have completed ----
   // Scoped to THIS symbol's pass (the maps are module-global; without the sym guard a
   // SPY position would be mis-finalized while still open during the QQQ pass).
   for (const [id, t] of [...tracked.entries()]) {
     if (t.sym !== sym) continue;
-    if (openIds.has(id)) continue;
-    const actual = await getPositionById(id);
-    const actualPnl = Number(actual?.realized_pnl ?? 0);
+    const action = shadowLifecycleAction({ actualOpen: openIds.has(id), managedClosed: t.managedClosed, hasExecutableQuote: false });
+    if (action !== "finalize") continue;
+    if (t.actualPnl === undefined) {
+      const actual = await getPositionById(id);
+      if (!actual || actual.status === "open") continue;
+      t.actualPnl = Number(actual.realized_pnl ?? 0);
+    }
+    const actualPnl = t.actualPnl;
     const delta = t.managedPnl - actualPnl;
     // MGMT-TRUNCATED (no space after MGMT) deliberately fails day-report's `includes("MGMT ")`
     // filter — a restart-truncated sim is banked for inspection, never as clean evidence.
