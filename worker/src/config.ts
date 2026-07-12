@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-12a"; // shadow management actual/sim clocks now finish independently; immutable position-plan foundation remains unwired. Prior (07-11b): crash-attribution worker_runs ledger. Prior (07-11a): Mission 1b execution hardening. Deferred: #12/#14 (broker samples), #17 (spread-capture dormant), #18 (per-strike chain staleness).
+export const WORKER_VERSION = "stream-2026-07-12b"; // durable shadow state + deploy-aware run classification; position plans remain dark/unwired. Prior (07-12a): independent actual/sim clocks. Prior (07-11b): crash-attribution worker_runs ledger. Deferred: #12/#14 (broker samples), #17 (spread-capture dormant), #18 (per-strike chain staleness).
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
