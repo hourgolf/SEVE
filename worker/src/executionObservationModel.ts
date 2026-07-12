@@ -44,9 +44,17 @@ export interface ExecutionObservationDraft {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const numberOrNull = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
+const nonnegativeOrNull = (value: unknown): number | null => {
+  const n = numberOrNull(value);
+  return n != null && n >= 0 ? n : null;
+};
+const deltaOrNull = (value: unknown): number | null => {
+  const n = numberOrNull(value);
+  return n != null && n >= -1 && n <= 1 ? n : null;
+};
 const integerOrNull = (value: unknown): number | null => {
   const n = numberOrNull(value);
-  return n == null ? null : Math.trunc(n);
+  return n == null || n < 0 ? null : Math.trunc(n);
 };
 function jsonSafe(value: unknown): unknown {
   if (value == null || typeof value === "string" || typeof value === "boolean") return value;
@@ -86,7 +94,7 @@ export function executionTraceId(input: DecisionObservationInput): string {
 export function buildDecisionObservation(input: DecisionObservationInput): ExecutionObservationDraft | null {
   const { channel: ch, decision: d } = input;
   if (d.action === "hold" || d.action === "skip") return null;
-  if (!UUID.test(ch.id) || !UUID.test(input.accountId)) return null;
+  if (!UUID.test(ch.id) || !UUID.test(input.accountId) || !ch.slug || !ch.underlying || !d.reason) return null;
   const eventAt = new Date(input.observedAtMs), sourceBarAt = new Date(input.decisionAtMs);
   if (Number.isNaN(eventAt.getTime()) || Number.isNaN(sourceBarAt.getTime())) return null;
   const traceId = executionTraceId(input);
@@ -120,14 +128,14 @@ export function buildDecisionObservation(input: DecisionObservationInput): Execu
     // Alpaca's snapshot does not expose one authoritative per-contract source
     // timestamp here. Preserve measured snapshot age; do not invent quote_at.
     quote_age_ms: age,
-    bid: numberOrNull(d.detail?.bid),
-    ask: numberOrNull(d.detail?.ask),
-    mid: numberOrNull(d.detail?.mid) ?? (() => {
-      const bid = numberOrNull(d.detail?.bid), ask = numberOrNull(d.detail?.ask);
+    bid: nonnegativeOrNull(d.detail?.bid),
+    ask: nonnegativeOrNull(d.detail?.ask),
+    mid: nonnegativeOrNull(d.detail?.mid) ?? (() => {
+      const bid = nonnegativeOrNull(d.detail?.bid), ask = nonnegativeOrNull(d.detail?.ask);
       return bid != null && ask != null ? (bid + ask) / 2 : null;
     })(),
-    delta: numberOrNull(d.detail?.delta),
-    underlying_price: numberOrNull(d.detail?.spotClose),
+    delta: deltaOrNull(d.detail?.delta),
+    underlying_price: nonnegativeOrNull(d.detail?.spotClose),
     requested_qty: integerOrNull(d.qty),
     client_order_id: null,
     broker_order_id: null,
@@ -150,7 +158,8 @@ export interface BrokerObservationInput extends DecisionObservationInput {
 
 export function buildBrokerObservation(input: BrokerObservationInput): ExecutionObservationDraft | null {
   const decision = buildDecisionObservation(input);
-  if (!decision || !input.clientOrderId) return null;
+  const filledQty = integerOrNull(input.filledQty), fillPrice = nonnegativeOrNull(input.fillPrice);
+  if (!decision || !input.clientOrderId || !input.brokerStatus || filledQty == null || fillPrice == null) return null;
   const eventKey = {
     traceId: decision.trace_id,
     eventKind: "broker_result",
@@ -165,8 +174,8 @@ export function buildBrokerObservation(input: BrokerObservationInput): Execution
     client_order_id: input.clientOrderId,
     broker_order_id: input.brokerOrderId ?? null,
     broker_status: input.brokerStatus,
-    filled_qty: integerOrNull(input.filledQty),
-    fill_price: numberOrNull(input.fillPrice),
+    filled_qty: filledQty,
+    fill_price: fillPrice,
     payload: {
       ...decision.payload,
       error: input.error ?? null,

@@ -67,6 +67,31 @@ Decision, plan, and broker events share deterministic trace/opportunity identiti
 
 An important provenance limit is explicit: the current Alpaca chain snapshot does not supply one authoritative per-contract source timestamp through this seam. The ledger stores measured snapshot age and source, but does not invent an exact quote timestamp.
 
-The Supabase migration is not yet generated. The required pinned CLI download was blocked pending explicit operator authorization. Until the migration exists and is applied first, the table writer fails open and then disables itself for that worker boot. Do not merge or deploy Stage B before the migration, grants, RLS, and verification queries are reviewed.
+The Supabase migration is generated at `supabase/migrations/20260712160901_phase_1d_execution_observations.sql` but remains unapplied. It creates one append-only table with explicit Data API grants: service role gets `SELECT/INSERT` only, authenticated operators get `SELECT` through an `app_metadata.seve_role='operator'` RLS policy, and anonymous/public access is revoked. Until it is applied first, the table writer fails open and then disables itself for that worker boot. Do not merge or deploy Stage B before the migration and verification queries are reviewed.
+
+Pre-application checks confirmed that every referenced production relation and key exists: `strategists(id)`, `accounts(id)`, `positions(id)`, and `worker_runs(boot_id)`. Existing Phase 1B tables are present with RLS enabled. The migration adds covering indexes for every foreign key to avoid introducing new database-advisor warnings.
+
+After manual application and before worker deployment, verify:
+
+```sql
+select to_regclass('public.execution_observations');
+
+select relrowsecurity
+from pg_class
+where oid = 'public.execution_observations'::regclass;
+
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name = 'execution_observations'
+order by grantee, privilege_type;
+
+select policyname, roles, cmd, qual
+from pg_policies
+where schemaname = 'public'
+  and tablename = 'execution_observations';
+```
+
+Expected: relation exists; RLS is true; `service_role` has only `INSERT/SELECT`; `authenticated` has only `SELECT`; `anon` has no grant; and the only authenticated policy is operator-read.
 
 After Stage B accrues paper evidence, the next increment links successfully inserted position rows back to observed plans and appends booking/reconciliation outcomes. That will complete the queryable chain from candidate opportunity through realized result without making the plan authoritative.

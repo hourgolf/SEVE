@@ -222,6 +222,9 @@ const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
     filledQty: 0, fillPrice: 0, error: "paper broker unavailable",
   })!;
   check("phase1d: rejected request is evidence, not a fabricated fill", [rejected.filled_qty, rejected.fill_price, rejected.payload.error], [0, 0, "paper broker unavailable"]);
+  check("phase1d: malformed negative fill fails closed", buildBrokerObservation({
+    ...input, clientOrderId: "bad", brokerStatus: "filled", filledQty: -1, fillPrice: 1,
+  }), null);
 }
 {
   // known account_id → routes to that account
