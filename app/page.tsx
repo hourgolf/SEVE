@@ -21,10 +21,8 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileShell } from "@/components/mobile2/MobileShell";
-import { DeskShell } from "@/components/shell/DeskShell";
+import { WorkstationShell } from "@/components/shell/WorkstationShell";
 import { CommandPalette } from "@/components/shell/CommandPalette";
-import { PerformSurface } from "@/components/perform/PerformSurface";
-import { StudioSurface } from "@/components/studio/StudioSurface";
 import { ShellProvider, useShell } from "@/hooks/useShellState";
 import { marketSummary } from "@/lib/marketSummary";
 import { marketSession } from "@/lib/incident/marketSession";
@@ -57,7 +55,7 @@ function Surface({
   const feed = useDeskFeed(acctId);
   const write = useDeskWrite();
   const isMobile = useIsMobile();
-  const { mode, density } = useShell();
+  const { mode } = useShell();
   const [selected, setSelected] = useState<string | null>(null);
 
   // SPY up/down on the day: spot vs the PRIOR session's close (the conventional
@@ -141,10 +139,10 @@ function Surface({
   // on disk (reviewer decides deletion at S6) but no longer mounted.
   if (isMobile) return <MobileShell {...props} />;
 
-  // DESKTOP — the DeskShell top bar spans both rooms; MODE branches the body under
-  // it. STUDIO renders StudioSurface (rack + inspector + band); PERFORM renders
-  // PerformSurface (chart hero + rail + the slice-3 incident banner/health strip).
-  // The legacy DesktopSurface is reachable only via the "Legacy rooms" link (slice 2).
+  // DESKTOP — one fixed workstation chassis spans both modes. Its inset display
+  // composes the subscription-free Studio/Perform surfaces; the hardware frame,
+  // telemetry, PT clock, guarded KILL, and mode switch never move between them.
+  // The legacy DesktopSurface remains reachable as a replacement view (slice 2).
   const mkt = marketSummary(data.bars, data.spot);
 
   // LEGACY VIEW (P5 slice 2) — the full DesktopSurface as a REPLACEMENT (not a sibling
@@ -162,29 +160,8 @@ function Surface({
   }
 
   return (
-    <div className="shell-root" data-mode={mode} data-skin={theme} data-density={density}>
-      <DeskShell
-        fund={view.desk.fund}
-        liveFund={liveFund}
-        ops={ops}
-        accounts={accounts}
-        acctId={acctId}
-        setAcctId={setAcctId}
-        symbol={symbol}
-        spot={data.spot}
-        spotUp={spotUp}
-        dayChangePct={mkt.dayChangePct}
-      />
-      {mode === "perform" && <PerformSurface {...props} />}
-      {mode === "studio" && <StudioSurface {...props} />}
-      {/* Named destination for the legacy five rooms (Play/Mix/Write/Tape/Ops) — one explicit
-          link, at the foot of STUDIO, opening the full legacy desk as a replacement view. No
-          functionality lost; removed wholesale at slice 7 once each room is natively migrated. */}
-      {mode === "studio" && (
-        <button type="button" className="legacy-entry" onClick={() => setLegacyOpen(true)}>
-          Legacy rooms · 01 Play · 02 Mix · 03 Write · 04 Tape · 05 Ops ▸
-        </button>
-      )}
+    <>
+      <WorkstationShell surface={props} dayChangePct={mkt.dayChangePct} onLegacy={() => setLegacyOpen(true)} />
       {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats over EITHER
           room. Opens on the shared `seve:command-palette` event; roster scoped to the account. */}
       <CommandPalette
@@ -192,7 +169,7 @@ function Surface({
         setActiveRoom={setActiveRoom}
         setSelected={setSelected}
       />
-    </div>
+    </>
   );
 }
 
