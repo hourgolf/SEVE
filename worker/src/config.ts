@@ -165,7 +165,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-12c"; // observed policy epochs + initial position plans remain mode=observe and non-authoritative. Prior (07-12b): durable shadow state + deploy-aware run classification. Prior (07-12a): independent actual/sim clocks. Deferred: #12/#14 (broker samples), #17 (spread-capture dormant), #18 (per-strike chain staleness).
+export const WORKER_VERSION = "stream-2026-07-12d"; // append-only paper decision/quote/order/fill observations; fail-isolated and non-authoritative. Prior (07-12c): observed policy epochs + initial plans. Prior (07-12b): durable shadow state + deploy-aware run classification. Deferred: #12/#14 (broker samples), #17 (spread-capture dormant), #18 (per-strike chain staleness).
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

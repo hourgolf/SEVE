@@ -67,9 +67,11 @@ Decision, plan, and broker events share deterministic trace/opportunity identiti
 
 An important provenance limit is explicit: the current Alpaca chain snapshot does not supply one authoritative per-contract source timestamp through this seam. The ledger stores measured snapshot age and source, but does not invent an exact quote timestamp.
 
-The Supabase migration is generated at `supabase/migrations/20260712160901_phase_1d_execution_observations.sql` but remains unapplied. It creates one append-only table with explicit Data API grants: service role gets `SELECT/INSERT` only, authenticated operators get `SELECT` through an `app_metadata.seve_role='operator'` RLS policy, and anonymous/public access is revoked. Until it is applied first, the table writer fails open and then disables itself for that worker boot. Do not merge or deploy Stage B before the migration and verification queries are reviewed.
+The Supabase migration is applied and recorded as `supabase/migrations/20260712162135_phase_1d_execution_observations.sql`. It creates one append-only table with explicit Data API grants: service role gets `SELECT/INSERT` only, authenticated operators get `SELECT` through an `app_metadata.seve_role='operator'` RLS policy, and anonymous/public access is revoked. The worker still treats storage as best-effort and disables observation writes for that boot if the relation becomes unavailable.
 
 Pre-application checks confirmed that every referenced production relation and key exists: `strategists(id)`, `accounts(id)`, `positions(id)`, and `worker_runs(boot_id)`. Existing Phase 1B tables are present with RLS enabled. The migration adds covering indexes for every foreign key to avoid introducing new database-advisor warnings.
+
+Post-application verification: relation exists with zero starting rows; RLS is enabled; `service_role` has only `INSERT/SELECT`; `authenticated` has only `SELECT`; `anon` has no grant; the sole authenticated policy is operator-read; 22 constraints and 9 indexes are present. Security advisors reported no new finding. Performance advisors report the expected unused-index notices on the new empty table; reassess only after evidence accrues.
 
 After manual application and before worker deployment, verify:
 
