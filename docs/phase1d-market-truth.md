@@ -51,4 +51,22 @@ No channel is promoted from pooled profit alone. A candidate must survive:
 4. an entry-locked comparison when evaluating exits;
 5. forward paper observation with quote and policy provenance.
 
-The next Phase 1D increment is a versioned observation ledger for every decision and broker event: account, channel, opportunity, policy/config version, worker boot, quote timestamp/source/age, bid/ask, decision, order, fill, and exit attribution. This is additive and shadow-first; it must not share a failure path with execution.
+## Stage B: execution-observation ledger
+
+The worker-side contract is implemented but remains schema-gated and unshipped. It records immutable events for actionable decisions and broker results:
+
+- accepted and blocked entry opportunities (the latter are essential to avoid selection bias);
+- add, exit, and reconcile decisions;
+- infrastructure suppression such as a stale decision bar, unavailable order snapshot, manage-only account, or missing position row;
+- measured chain-snapshot age plus bid, ask, midpoint, delta, underlying price, requested quantity, client-order identity, broker identity/status, actual filled quantity, and fill price;
+- request failures as zero-fill error evidence, never as fabricated executions.
+
+Routine hold/skip ticks are intentionally excluded. They add enormous volume without defining a distinct opportunity.
+
+Decision, plan, and broker events share deterministic trace/opportunity identities. Retries and restarts are idempotent. The writer is a separate serialized best-effort queue that no order path awaits; a missing table or failed insert can only lose evidence.
+
+An important provenance limit is explicit: the current Alpaca chain snapshot does not supply one authoritative per-contract source timestamp through this seam. The ledger stores measured snapshot age and source, but does not invent an exact quote timestamp.
+
+The Supabase migration is not yet generated. The required pinned CLI download was blocked pending explicit operator authorization. Until the migration exists and is applied first, the table writer fails open and then disables itself for that worker boot. Do not merge or deploy Stage B before the migration, grants, RLS, and verification queries are reviewed.
+
+After Stage B accrues paper evidence, the next increment links successfully inserted position rows back to observed plans and appends booking/reconciliation outcomes. That will complete the queryable chain from candidate opportunity through realized result without making the plan authoritative.

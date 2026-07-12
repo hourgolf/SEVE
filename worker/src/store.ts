@@ -18,6 +18,7 @@ import { BOOT_ID, STARTED_AT, INSTANCE_ID, GIT_SHA, PID, HOSTNAME, RAILWAY_DEPLO
 import { classifyPriorOpenRun } from "./runReconcile.js";
 import type { DurableShadowRow } from "./shadowPersistence.js";
 import type { PolicyEpochDraft, PositionPlanDraft } from "./planShadowModel.js";
+import type { ExecutionObservationDraft } from "./executionObservationModel.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -505,6 +506,23 @@ export async function insertObservedPositionPlan(row: PositionPlanDraft): Promis
   if (!error || duplicate(error)) { planTablesAvailable = true; return true; }
   if (missingRelation(error)) planTablesAvailable = false;
   else warn(`store: position plan insert failed — ${error.message}`);
+  return false;
+}
+
+let executionObservationTableAvailable: boolean | null = null;
+
+/** Phase 1D append-only market/decision/order/fill evidence. Deterministic ids
+ *  make retries idempotent. No execution path awaits this function. */
+export async function insertExecutionObservation(row: ExecutionObservationDraft): Promise<boolean> {
+  if (!config.hasServiceRole || executionObservationTableAvailable === false) return false;
+  try {
+    const { error } = await sb.from("execution_observations").insert({ ...row, source_boot_id: BOOT_ID });
+    if (!error || duplicate(error)) { executionObservationTableAvailable = true; return true; }
+    if (missingRelation(error)) executionObservationTableAvailable = false;
+    else warn(`store: execution observation insert failed — ${error.message}`);
+  } catch (e) {
+    warn(`store: execution observation rejected — ${(e as Error).message}`);
+  }
   return false;
 }
 

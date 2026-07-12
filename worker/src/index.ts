@@ -31,6 +31,7 @@ import { sessionCloseMin } from "../../engine/market-calendar";
 import { inEventWindow } from "../../engine/market-events";
 import { groupChannelsByAccount, rowAccountIdOf, acctCanEnter, acctCanManage } from "./routing.js";
 import { makeExitGuard, sweepExitAllowed } from "./exitGuard.js";
+import { captureDecisionObservation } from "./executionObservation.js";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
@@ -390,6 +391,26 @@ async function cycle(trigger: string): Promise<void> {
               }
             }
             const row = openRows.get(ch.id);
+            // Phase 1D: record the actionable decision plus any infrastructure
+            // suppression that prevents it reaching the broker. Routine hold/skip
+            // ticks are rejected by the pure model to avoid telemetry flooding.
+            let evidenceBlocked = d.blocked ?? null;
+            if (!evidenceBlocked && (d.action === "enter" || d.action === "add" || d.action === "exit") && !barFresh)
+              evidenceBlocked = "stale_decision_bar";
+            else if (!evidenceBlocked && !ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit")
+              evidenceBlocked = "orders_snapshot_unavailable";
+            else if (!evidenceBlocked && (d.action === "enter" || d.action === "add") && !canEnter)
+              evidenceBlocked = "account_manage_only";
+            else if (!evidenceBlocked && (d.action === "exit" || d.action === "add" || d.action === "reconcile") && !row)
+              evidenceBlocked = "position_row_missing";
+            captureDecisionObservation({
+              channel: ch,
+              decision: evidenceBlocked === (d.blocked ?? null) ? d : { ...d, blocked: evidenceBlocked },
+              accountId: g.account.id,
+              decisionAtMs: lastSession.ts,
+              observedAtMs: Date.now(),
+              chainAgeMs: chain.ageMs,
+            });
             // No order snapshot → entry idempotency / lost-insert recovery / reconcile pricing
             // are all blind (audit 2026-07-10: an empty allOrders made the 09d guard silently
             // pass and re-buy an orphan lot) — those stay suppressed. EXITS now PROCEED (audit

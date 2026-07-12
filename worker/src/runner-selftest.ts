@@ -26,6 +26,7 @@ const { shadowLifecycleAction } = await import("./shadowManageModel.js");
 const { classifyPriorOpenRun } = await import("./runReconcile.js");
 const { decodeDurableShadow, encodeDurableShadow } = await import("./shadowPersistence.js");
 const { buildShadowPlanEvidence } = await import("./planShadowModel.js");
+const { buildDecisionObservation, buildBrokerObservation } = await import("./executionObservationModel.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
 type OrderLike = import("./exitRules.js").OrderLike;
 import type { PositionRow, AccountRow, ChannelConfig } from "./store.js";
@@ -178,6 +179,49 @@ const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
   check("phase1c: blocked decisions never become plans", buildShadowPlanEvidence({ ...input, decision: { ...decision, blocked: "daily_stop" } }), null);
   check("phase1c: unresolved synthetic account never becomes FK evidence", buildShadowPlanEvidence({ ...input, accountId: "__default__" }), null);
   check("phase1c: invalid source timestamp fails closed", buildShadowPlanEvidence({ ...input, decisionAtMs: Number.NaN }), null);
+}
+
+// ---- Phase 1D: immutable decision → quote → broker evidence ----
+{
+  const strategistId = "11111111-1111-4111-8111-111111111111";
+  const accountId = "22222222-2222-4222-8222-222222222222";
+  const channel = chan({ id: strategistId, slug: "test", underlying: "SPY" });
+  const decision = {
+    slug: "test", status: "armed", action: "enter", reason: "break_high",
+    direction: "call", occ: "SPY260713C00600000", qty: 2, blocked: null,
+    detail: { bid: 1.4, ask: 1.5, delta: 0.52, spotClose: 600.1, poison: Number.NaN },
+  } as const;
+  const input = {
+    channel, decision, accountId,
+    decisionAtMs: Date.parse("2026-07-13T14:31:00.000Z"),
+    observedAtMs: Date.parse("2026-07-13T14:31:01.250Z"),
+    chainAgeMs: 1250,
+  };
+  const a = buildDecisionObservation(input)!;
+  const retry = buildDecisionObservation({ ...input, observedAtMs: input.observedAtMs + 5000 })!;
+  check("phase1d: actionable entry creates decision evidence", !!a, true);
+  check("phase1d: retry identity ignores polling-time jitter", retry.id, a.id);
+  check("phase1d: executable quote is relationally queryable", [a.bid, a.ask, a.mid, a.delta, a.quote_age_ms], [1.4, 1.5, 1.45, 0.52, 1250]);
+  check("phase1d: non-finite payload cannot poison JSON", (a.payload.decisionDetail as { poison: unknown }).poison, null);
+  const plan = buildShadowPlanEvidence({
+    channel, decision, accountId, decisionAtMs: input.decisionAtMs,
+    workerVersion: "stream-test", defaultPremiumStopPct: 50,
+  })!;
+  check("phase1d: accepted decision joins the Phase1C plan", a.opportunity_id, plan.plan.opportunity_id);
+  const blocked = buildDecisionObservation({ ...input, decision: { ...decision, blocked: "cost_gate" } })!;
+  check("phase1d: blocked opportunity is retained for selection-bias analysis", [blocked.blocked_reason, blocked.opportunity_id != null], ["cost_gate", true]);
+  check("phase1d: routine holds are excluded", buildDecisionObservation({ ...input, decision: { ...decision, action: "hold" } }), null);
+  const broker = buildBrokerObservation({
+    ...input, clientOrderId: "test-SPY260713C00600000-571", brokerOrderId: "alpaca-1",
+    brokerStatus: "filled", filledQty: 2, fillPrice: 1.51,
+  })!;
+  check("phase1d: broker result shares the decision trace", broker.trace_id, a.trace_id);
+  check("phase1d: broker truth retains requested vs filled", [broker.requested_qty, broker.filled_qty, broker.fill_price, broker.broker_status], [2, 2, 1.51, "filled"]);
+  const rejected = buildBrokerObservation({
+    ...input, clientOrderId: "test-SPY260713C00600000-571", brokerStatus: "request_error",
+    filledQty: 0, fillPrice: 0, error: "paper broker unavailable",
+  })!;
+  check("phase1d: rejected request is evidence, not a fabricated fill", [rejected.filled_qty, rejected.fill_price, rejected.payload.error], [0, 0, "paper broker unavailable"]);
 }
 {
   // known account_id → routes to that account

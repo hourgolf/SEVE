@@ -28,6 +28,7 @@ import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, fre
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 import { captureObservedPositionPlan } from "./planShadow.js";
+import { captureBrokerObservation, captureDecisionObservation } from "./executionObservation.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -87,22 +88,66 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // final rung always crosses, so the order completes regardless. The cost gate is never
 // consulted here (it ran at the cross price in decide.ts), so capture can't loosen it.
 async function placeFill(
+  strategistId: string, underlying: string, action: "enter" | "add" | "exit",
   slug: string, occ: string, side: "buy" | "sell", qty: number, coidBase: string, reason: string, ctx: ExecCtx,
+  positionId: string | null = null,
 ): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
   const q = ctx.chain.byOcc(occ);
-  if (config.spreadCapture && q && q.ask > q.bid && q.bid > 0) {
-    const r = await alpaca.limitLadderFill({ symbol: occ, side, qty, coidBase, bid: q.bid, ask: q.ask, ladder: config.spreadCaptureLadder }, ctx.api);
-    if (r.filledQty > 0) {
-      const ref = side === "buy" ? "ask" : "bid";
-      await store.journal("EXEC",
-        `${slug}: spread-capture ${side} ${occ} ×${r.filledQty} @ ${r.fill.toFixed(2)} vs ${ref} ${r.crossRef.toFixed(2)} → captured $${r.capturedUsd.toFixed(0)} (${r.crossedQty} crossed, ${reason})`,
-        { kind: "spread-capture", slug, occ, side, reason, fill: round2(r.fill), crossRef: round2(r.crossRef), capturedUsd: round2(r.capturedUsd), filledQty: r.filledQty, crossedQty: r.crossedQty });
-      void store.writeShadowEvent(`SPREAD-CAPTURE ${slug} ${side} ${occ} ×${r.filledQty} captured $${r.capturedUsd.toFixed(0)}`,
-        { kind: "spread-capture", slug, occ, side, reason, capturedUsd: round2(r.capturedUsd), filledQty: r.filledQty, crossedQty: r.crossedQty });
+  const direction = occ.slice(-9, -8) === "P" ? "put" : "call";
+  const observedAtMs = Date.now();
+  const observationBase = {
+    channel: { id: strategistId, slug, underlying },
+    decision: {
+      slug, status: "armed", action, reason, direction, occ, qty, blocked: null,
+      detail: { bid: q?.bid ?? null, ask: q?.ask ?? null, mid: q?.mid ?? null, delta: q?.delta ?? null },
+    } as ShadowDecision,
+    accountId: ctx.accountId,
+    decisionAtMs: ctx.decisionAtMs,
+    observedAtMs,
+    chainAgeMs: ctx.chain.ageMs,
+  };
+  // Direct fast-sweep exits do not pass through the bar-close decision loop.
+  // Deterministic ids make this a harmless no-op when that loop already wrote it.
+  captureDecisionObservation(observationBase);
+  try {
+    let result: { id: string; fill: number; filledQty: number; status: string };
+    if (config.spreadCapture && q && q.ask > q.bid && q.bid > 0) {
+      const r = await alpaca.limitLadderFill({ symbol: occ, side, qty, coidBase, bid: q.bid, ask: q.ask, ladder: config.spreadCaptureLadder }, ctx.api);
+      if (r.filledQty > 0) {
+        const ref = side === "buy" ? "ask" : "bid";
+        await store.journal("EXEC",
+          `${slug}: spread-capture ${side} ${occ} ×${r.filledQty} @ ${r.fill.toFixed(2)} vs ${ref} ${r.crossRef.toFixed(2)} → captured $${r.capturedUsd.toFixed(0)} (${r.crossedQty} crossed, ${reason})`,
+          { kind: "spread-capture", slug, occ, side, reason, fill: round2(r.fill), crossRef: round2(r.crossRef), capturedUsd: round2(r.capturedUsd), filledQty: r.filledQty, crossedQty: r.crossedQty });
+        void store.writeShadowEvent(`SPREAD-CAPTURE ${slug} ${side} ${occ} ×${r.filledQty} captured $${r.capturedUsd.toFixed(0)}`,
+          { kind: "spread-capture", slug, occ, side, reason, capturedUsd: round2(r.capturedUsd), filledQty: r.filledQty, crossedQty: r.crossedQty });
+      }
+      result = { id: r.id, fill: r.fill, filledQty: r.filledQty, status: r.status };
+    } else {
+      result = await alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase }, ctx.api);
     }
-    return { id: r.id, fill: r.fill, filledQty: r.filledQty, status: r.status };
+    captureBrokerObservation({
+      ...observationBase,
+      clientOrderId: coidBase,
+      brokerOrderId: result.id,
+      brokerStatus: result.status,
+      filledQty: result.filledQty,
+      fillPrice: result.fill,
+      positionId,
+    });
+    return result;
+  } catch (e) {
+    captureBrokerObservation({
+      ...observationBase,
+      clientOrderId: coidBase,
+      brokerOrderId: null,
+      brokerStatus: "request_error",
+      filledQty: 0,
+      fillPrice: 0,
+      positionId,
+      error: (e as Error).message,
+    });
+    throw e;
   }
-  return alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase }, ctx.api);
 }
 
 // ROW-PRIMARY realized (the hardened booking, 2026-06-24): the position ROW is the source of truth for
@@ -308,7 +353,7 @@ export async function executeExit(
   }
   try {
     let exitPx = alp?.current_price ?? liveBid;
-    const r = await placeFill(d.slug, occ, "sell", sellQty, exitCoid, d.reason, ctx);
+    const r = await placeFill(row.strategist_id, row.underlying, "exit", d.slug, occ, "sell", sellQty, exitCoid, d.reason, ctx, row.id);
     if (r.fill > 0) exitPx = r.fill;
     if (r.filledQty <= 0) {
       // book ONLY on positive fill evidence: a terminal-0 (nothing crossed) OR a non-terminal timeout
@@ -383,7 +428,7 @@ async function executeTranche(
       soldQty = prior.filledQty; fillPx = prior.fillPx;
       await store.journal("WARN", `${d.slug}: tranche ${occ} recovering a late-filled prior sell ×${soldQty} @ ${fillPx.toFixed(2)} — booking, not re-selling`);
     } else {
-      const r = await placeFill(d.slug, occ, "sell", split.sell, coid, "target_tranche", ctx);
+      const r = await placeFill(row.strategist_id, row.underlying, "exit", d.slug, occ, "sell", split.sell, coid, "target_tranche", ctx, row.id);
       // 1b #4 (audit 2026-07-11): require TERMINAL state before splitting parent→runner —
       // a still-working order can fill ANY qty after this poll, so splitting now would
       // book a tranche that hasn't finished happening (and remainQty would be wrong).
@@ -529,7 +574,7 @@ export async function executeEntry(
   if (blocked || qty <= 0) { if (blocked !== d.blocked) info(`entry ${d.slug} blocked: ${blocked}`); return; }
 
   try {
-    const o = await placeFill(d.slug, occ, "buy", qty, `${d.slug}-${occ}-${ctx.etMin}`, d.reason, ctx);
+    const o = await placeFill(ch.id, ch.underlying, "enter", d.slug, occ, "buy", qty, `${d.slug}-${occ}-${ctx.etMin}`, d.reason, ctx);
     const ask = (d.detail?.ask as number) ?? 0;
     const entryPx = o.fill > 0 ? o.fill : ask;
     // 09c fix 1: row mirrors the REAL fill — and ONLY the real fill. 1b #3 (audit
@@ -601,7 +646,7 @@ export async function executeAdd(
   const buyQty = Math.min(want, Math.max(0, ch.max_contracts * addBoost - heldNow));
   if (buyQty <= 0) return;
   try {
-    const o = await placeFill(d.slug, occ, "buy", buyQty, addCoid, d.reason, ctx);
+    const o = await placeFill(ch.id, ch.underlying, "add", d.slug, occ, "buy", buyQty, addCoid, d.reason, ctx, row.id);
     const ask = (d.detail?.ask as number) ?? 0;
     const fillPx = o.fill > 0 ? o.fill : ask;
     // Grow the row on the REAL fill only. 1b #3 (audit 2026-07-11): the old non-terminal
