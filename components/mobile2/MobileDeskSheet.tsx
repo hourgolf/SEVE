@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
 import { OptionChain } from "@/components/OptionChain";
+import { MobilePositions } from "@/components/mobile2/MobilePositions";
 import { computeNetExposure } from "@/lib/desk/netExposure";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay, usd0 } from "@/lib/format";
@@ -25,13 +26,15 @@ function Section({ title, meta, children }: { title: string; meta?: string; chil
   return <section className="m2-desk-section"><header><b>{title}</b>{meta && <span>{meta}</span>}</header><div className="m2-desk-body">{children}</div></section>;
 }
 
-function BookView({ props }: { props: SurfaceProps }) {
+function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: () => void }) {
   const { data, feed, liveMarks, selected, setSelected, symbol } = props;
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
   const selectedQuote = selected ? data.snapshot.find((quote) => quote.occ_symbol === selected) : undefined;
   const signals = feed.signals.slice(0, 18);
 
   return <>
+    <div className="m2-book-nav"><span><b>LIVE BOOK</b><small>positions first · exposure second</small></span>{onViewChart && <button type="button" onClick={onViewChart}>VIEW CHART</button>}</div>
+    <MobilePositions props={props} strategists={props.view.desk.strategists} compact />
     <div className="m2-desk-hero">
       <span><small>OPEN</small><b>{feed.positions.length}</b></span>
       <span><small>CONTRACTS</small><b>{exposure.totalContracts}</b></span>
@@ -67,7 +70,7 @@ function BookView({ props }: { props: SurfaceProps }) {
         <OptionChain snapshot={data.snapshot} spot={data.spot} deltasModeled={data.deltasModeled} selected={selected}
           onSelect={(occ) => setSelected((current) => current === occ ? null : occ)} compact symbol={symbol} />
         {selectedQuote && <div className="m2-quote-detail">
-          <b>{selectedQuote.occ_symbol}</b><button type="button" onClick={() => setSelected(null)}>CLOSE</button>
+          <b>{selectedQuote.occ_symbol}</b><button type="button" onClick={() => setSelected(null)}>CLEAR</button>
           <span><small>BID</small>{selectedQuote.bid?.toFixed(2) ?? "—"}</span>
           <span><small>ASK</small>{selectedQuote.ask?.toFixed(2) ?? "—"}</span>
           <span><small>MID</small>{selectedQuote.mid?.toFixed(2) ?? "—"}</span>
@@ -192,4 +195,19 @@ export function MobileDeskSheet({ open, onClose, props, channels, livePnl, onOpe
       </div>
     </section>
   </div>;
+}
+
+export function MobileDeskRoom({ room, props, channels, livePnl, onViewChart, onOpenSettings }: {
+  room: "book" | "review" | "ops";
+  props: SurfaceProps;
+  channels: StrategistState[];
+  livePnl: Record<string, ChannelPnl>;
+  onViewChart: () => void;
+  onOpenSettings: () => void;
+}) {
+  return <div className="m2-scroll m2-room-scroll"><div className="m2-desk-scroll">
+    {room === "book" && <BookView props={props} onViewChart={onViewChart} />}
+    {room === "review" && <ReviewView props={props} channels={channels} livePnl={livePnl} />}
+    {room === "ops" && <OpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
+  </div></div>;
 }

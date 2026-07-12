@@ -3,10 +3,11 @@
 import { Fragment } from "react";
 import { IntradayChart } from "@/components/IntradayChart";
 import { MobileDock } from "@/components/mobile2/MobileDock";
+import { MobilePositions } from "@/components/mobile2/MobilePositions";
 import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import { pmVar } from "@/lib/desk/colors";
-import { signedUsd, timeOfDay } from "@/lib/format";
-import type { ChannelPnl, Position, StrategistState } from "@/lib/desk/types";
+import { timeOfDay } from "@/lib/format";
+import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
@@ -20,92 +21,6 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 // =============================================================================
 
 type Digest = ReturnType<typeof useSentinelDigest>;
-const A13_SLUGS = new Set(["momo-shape"]); // registry A13 — momo giveback ratchet
-const ONE_DAY = 86_400_000;
-
-function dteOf(exp?: string | null): number | null {
-  if (!exp) return null;
-  const e = Date.parse(exp.slice(0, 10));
-  const t = new Date();
-  const today = Date.UTC(t.getFullYear(), t.getMonth(), t.getDate());
-  const d = Math.round((e - today) / ONE_DAY);
-  return Number.isFinite(d) ? Math.max(0, d) : null;
-}
-const occRoot = (occ: string, fallback: string) => (occ.match(/^([A-Z]+)\d/)?.[1] ?? fallback).toUpperCase();
-
-// pk% glow ring — the channel-accent progress arc (mock ring()).
-function Ring({ pct, color }: { pct: number; color: string }) {
-  const r = 8, c = 2 * Math.PI * r, off = c * (1 - Math.min(Math.max(pct, 0), 100) / 100);
-  return (
-    <svg className="m2-ring" viewBox="0 0 22 22" aria-hidden>
-      <circle cx="11" cy="11" r={r} fill="none" stroke="rgba(255,255,255,.09)" strokeWidth="2.5" />
-      <circle cx="11" cy="11" r={r} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round"
-        strokeDasharray={c} strokeDashoffset={off} transform="rotate(-90 11 11)" style={{ filter: `drop-shadow(0 0 2px ${color})` }} />
-    </svg>
-  );
-}
-
-function PositionsSection({
-  positions, strategists, liveMarks, peaks,
-}: {
-  positions: Position[];
-  strategists: StrategistState[];
-  liveMarks?: Record<string, number>;
-  peaks: Record<string, number>; // P5 slice 1 — from the page seam (usePositionPeaks lifted)
-}) {
-  const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
-  const markOf = (p: Position) => {
-    const m = liveMarks?.[p.occ_symbol];
-    if (m != null && Number.isFinite(m) && m > 0) return { mark: m, unreal: (m - p.avg_entry_price) * p.qty * 100 };
-    return { mark: p.current_mark, unreal: p.unrealized_pnl };
-  };
-  const total = positions.reduce((a, p) => a + markOf(p).unreal, 0);
-
-  return (
-    <section className="m2-screen m2-hardware">
-      <div className="m2-phead">
-        <span className="t">POSITIONS · {positions.length} OPEN</span>
-        <span className="grow" />
-        {positions.length > 0 && <span className={`x num ${total < 0 ? "neg" : "up"}`}>Σ {signedUsd(total)}</span>}
-      </div>
-      <div>
-        {positions.length === 0 ? (
-          <div className="m2-ghost">flat — no open positions</div>
-        ) : positions.map((p) => {
-          const s = stratOf(p.strategist_slug);
-          const pm = pmVar(s?.color ?? "green");
-          const { mark, unreal } = markOf(p);
-          const entry = p.avg_entry_price;
-          const peak = peaks[p.occ_symbol] ?? 0;
-          const peakPct = entry > 0 && peak > entry ? ((peak - entry) / entry) * 100 : null;
-          const gavePct = peakPct != null && mark < peak ? Math.min(999, ((peak - mark) / (peak - entry)) * 100) : null;
-          const lock = (s?.config.take_profit_pct ?? 0) > 0;
-          const dte = dteOf(p.expiration);
-          return (
-            <div className="m2-pos-row" key={p.id} style={{ ["--pm" as string]: pm }}>
-              <span className="m2-p-dot" />
-              <div className="m2-p-slug">{p.strategist_slug}</div>
-              <div className={`m2-p-pnl num ${unreal < 0 ? "neg" : "pos"}`}>{signedUsd(unreal)}</div>
-              <div className="m2-p-ctr">
-                {occRoot(p.occ_symbol, s?.underlying ?? "SPY")} {p.strike.toFixed(0)}{p.opt_type === "call" ? "C" : "P"} ×{p.qty}{dte != null ? ` · ${dte}DTE` : ""}
-              </div>
-              <div className="m2-p-meta">in @{entry.toFixed(2)}{p.opened_at ? ` · ${timeOfDay(p.opened_at)}` : ""}</div>
-              <div className="m2-p-tags">
-                {A13_SLUGS.has(p.strategist_slug) && <span className="m2-tag amber">⚡ A13 ratchet</span>}
-                <span className="m2-tag">{lock ? "LOCK" : "RIDE"}</span>
-                {gavePct != null && gavePct >= 40 && <span className="m2-tag warn">giveback {Math.round(gavePct)}% of pk</span>}
-              </div>
-              <div className="m2-p-pk">
-                {peakPct != null ? <Ring pct={peakPct} color={pm} /> : null}
-                <span className="lbl">pk <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
 
 function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
   const { judge, scan, brief, date, state } = sent;
@@ -207,7 +122,7 @@ export function MobilePerform({
   sent: Digest;
   livePnl: Record<string, ChannelPnl>;
 }) {
-  const { data, view, feed, spotUp, symbol, setSymbol, liveMarks } = props;
+  const { data, view, feed, spotUp, symbol, setSymbol } = props;
 
   return (
     <>
@@ -233,7 +148,7 @@ export function MobilePerform({
           </div>
         </section>
 
-        <PositionsSection positions={feed.positions} strategists={view.desk.strategists} liveMarks={liveMarks} peaks={props.positionPeaks} />
+        <MobilePositions props={props} strategists={view.desk.strategists} />
         <SentinelSection symbol={symbol} sent={sent} />
         <TapeSection events={data.events} strategists={view.desk.strategists} />
       </div>

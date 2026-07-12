@@ -4,7 +4,6 @@ import { useState } from "react";
 import { MobileRackRow } from "@/components/mobile2/MobileRackRow";
 import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { useDeskDispatch } from "@/hooks/useDeskState";
-import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { signedUsd } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -13,23 +12,24 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 // MOBILE · STUDIO (S5) — the tune surface (the gallery mock's studio frame):
 // transport strip → accordion rack (ONE inline inspector open at a time) →
 // session tape. Roster is the account-scoped slice (same rule as the desktop
-// StudioSurface). START/STOP/KILL: START/STOP live here; KILL lives in COMMAND
-// (hold-2s) per the operator ruling. All writes reuse the seam paths.
+// StudioSurface). START/STOP live here; emergency KILL remains in the persistent
+// workstation hardware. All writes reuse the page-owned seam paths.
 // =============================================================================
 
 export function MobileStudio({
-  props, channels, livePnl, openSlug, setOpenSlug,
+  props, channels, livePnl, openSlug, setOpenSlug, onAddChannel,
 }: {
   props: SurfaceProps;
   channels: StrategistState[];
   livePnl: Record<string, ChannelPnl>;
   openSlug: string | null;
   setOpenSlug: (s: string | null) => void;
+  onAddChannel: () => void;
 }) {
   const { view, feed, liveFund } = props;
   const { desk, anySolo, isActive } = view;
   const dispatch = useDeskDispatch();
-  const { canWrite, persistFund } = useDeskWrite();
+  const { canWrite, persistFund } = props.write;
   const [busy, setBusy] = useState(false);
 
   const running = desk.fund.running && !desk.fund.is_halted;
@@ -62,7 +62,8 @@ export function MobileStudio({
         </div>
       </section>
 
-      <div className="m2-seam"><span className="m2-silk">RACK · {channels.length} — TAP A ROW TO INSPECT</span><span className="ln" /></div>
+      <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" disabled={!canWrite} onClick={onAddChannel}>{canWrite ? "+ ADD CHANNEL" : "SIGN IN TO ADD"}</button></div>
+      <div className="m2-seam"><span className="m2-silk">TAP A ROW TO INSPECT</span><span className="ln" /></div>
       {channels.length === 0 ? (
         <div className="m2-ghost">no channels in this account</div>
       ) : channels.map((s) => (
