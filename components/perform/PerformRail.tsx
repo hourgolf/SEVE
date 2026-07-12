@@ -57,7 +57,7 @@ function PositionsSection({
   const total = positions.reduce((a, p) => a + markOf(p).unreal, 0);
 
   return (
-    <section className="pf-screen">
+    <section className="pf-screen pf-hardware">
       <div className="pf-head">
         <span className="t">POSITIONS · {positions.length} OPEN</span>
         <span className="grow" />
@@ -126,7 +126,7 @@ function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
   const vcls = verdict === "QUEUE" ? "queue" : verdict === "WATCH" ? "watch" : "hold";
 
   return (
-    <section className="pf-screen">
+    <section className="pf-screen pf-hardware">
       <div className="pf-head">
         <span className="t">SENTINEL</span>
         <span className="grow" />
@@ -183,7 +183,7 @@ function TapeMsg({ message, strategists }: { message: string; strategists: Strat
 function TapeSection({ events, strategists }: { events: MarketEvent[]; strategists: StrategistState[] }) {
   const collapsed = collapseEvents(events);
   return (
-    <section className="pf-screen">
+    <section className="pf-screen pf-glass">
       <div className="pf-head">
         <span className="t">TAPE</span>
         <span className="grow" />

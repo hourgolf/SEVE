@@ -354,6 +354,54 @@
 .m2-bigpad.lit-b { background: linear-gradient(180deg, #f0b652, #b97f22); color: #140b00; box-shadow: 0 0 10px rgba(224, 162, 63, .5); }
 .m2-tape-screen { padding: 4px; }
 
+/* Cream material hierarchy: channel work and decision support live on hardware;
+   charts, tape, command input and incidents remain dark glass. */
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-main {
+  --lcd:#ddd8ca; --lcd-2:#c9c3b4; --lcd-edge:#8d877a; --lcd-ink:#292925;
+  --plate:#cbc5b7; --plate-2:#b7b1a3; --plate-ink:#34332e;
+  --dk-mut:#5f5d55; --dk-dim:#777269;
+  --line:rgba(60,52,30,.14); --line-2:rgba(60,52,30,.26);
+  background:#c5bfae;
+}
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-scroll { background:#c5bfae; }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-screen {
+  color:#292925; border-color:#8d877a; box-shadow:inset 0 1px 0 #fff,0 2px 7px rgba(0,0,0,.2);
+}
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-phead {
+  border-color:#918b7e; box-shadow:inset 0 1px 0 rgba(255,255,255,.65);
+}
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-rr-slug { color:color-mix(in srgb,var(--pm) 62%,#292925); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-rack { background:linear-gradient(180deg,#ddd8ca,#c9c3b4); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-rrow { border-bottom:1px solid rgba(60,52,30,.14); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-insp { border-color:rgba(60,52,30,.16); background:rgba(255,255,255,.12); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-fp { background:rgba(255,255,255,.24); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-lrbtn { background:rgba(255,255,255,.22); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-seam .ln { background:rgba(60,52,30,.24); }
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-main,
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-scroll { background:#c5bfae; }
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-hardware {
+  --lcd-ink:#292925; --dk-mut:#5f5d55; --dk-dim:#777269;
+  --line:rgba(60,52,30,.14); --line-2:rgba(60,52,30,.26);
+  color:#292925; background:linear-gradient(180deg,#ddd8ca,#c9c3b4); border-color:#8d877a;
+  box-shadow:inset 0 1px 0 #fff,0 2px 7px rgba(0,0,0,.2);
+}
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-hardware .m2-phead {
+  --plate-ink:#34332e; background:linear-gradient(180deg,#cbc5b7,#b7b1a3); border-color:#918b7e;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.65);
+}
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-hardware .m2-sent-msg { color:#33342f; }
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-hardware .m2-steps i:not(.lit) { background:#aca697; border-color:#898377; }
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-hardware .m2-lvl { border-color:rgba(60,52,30,.18); }
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-chick {
+  background:linear-gradient(180deg,#ddd8ca,#c3bdad); border-color:#8c8679;
+  border-top-color:color-mix(in srgb,var(--pm) 72%,#6f695d);
+  box-shadow:inset 0 1px 0 #fff,inset 0 -6px 12px rgba(70,63,50,.08),0 1px 1px rgba(0,0,0,.2);
+}
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-chick-slug { color:#2e2e2a; }
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-chick-pw { color:#6d6960; }
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-chick-pw b { color:color-mix(in srgb,var(--pm) 70%,#282824); }
+
 /* ================= tab bar (chrome — flips) ============================= */
 .m2-padbar {
   flex: 0 0 auto; display: flex; gap: 7px; padding: 9px 9px calc(8px + env(safe-area-inset-bottom)); margin-top:4px;
