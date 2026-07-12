@@ -1,7 +1,7 @@
 "use client";
 
 import "@/app/mobile2.css";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { MobilePerform } from "@/components/mobile2/MobilePerform";
 import { MobileStudio } from "@/components/mobile2/MobileStudio";
@@ -36,6 +36,14 @@ export function MobileShell(props: SurfaceProps) {
   const [cmdOpen, setCmdOpen] = useState(false);
   const [setOpen, setSetOpen] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>(null); // studio accordion — one at a time
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    tick();
+    const id = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const { desk } = view;
   const channels = useMemo(
@@ -53,21 +61,32 @@ export function MobileShell(props: SurfaceProps) {
   const spotStr = data.spot != null ? data.spot.toFixed(2) : "----";
   const spotColor = spotUp == null ? "var(--led-red)" : spotUp ? "var(--pm-green)" : "var(--led-red)";
   const navK = (liveFund.nav / 1000).toFixed(1);
+  const statusOn = props.incident.severity !== "normal";
+  const clock = now?.toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles",
+  }) ?? "--:--";
 
   // COMMAND · goto channel → open the rack accordion for that slug.
   const gotoChannel = (slug: string) => { setMode("studio"); setOpenSlug(slug); };
 
   return (
     <div className="m2-app" data-mode={mode} data-skin={skin}>
+      <span className="m2-screw m2-screw--tl" /><span className="m2-screw m2-screw--tr" />
+      <span className="m2-screw m2-screw--bl" /><span className="m2-screw m2-screw--br" />
       <header className="m2-head">
         <div className="m2-head-r1">
-          <span className="m2-brand">SEVE</span>
-          <span className="m2-mode-chip">{mode === "perform" ? "PERFORM" : "STUDIO"}</span>
-          <span className="grow" />
+          <span className="m2-brand"><b>SEVE DESK</b><small>MOBILE WORKSTATION</small></span>
+          <button type="button" className={`m2-status m2-status--${props.incident.severity}`} onClick={() => setMode("perform")}>
+            <i /><span><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {props.feed.positions.length} · {props.incident.session.replaceAll("_", " ")}</small></span>
+            <em>{clock} PT</em>
+          </button>
+          <button type="button" className="m2-cog" onClick={() => setSetOpen(true)} aria-label="settings and log"><IcCog /></button>
+        </div>
+        <div className="m2-head-meta">
           <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
+          <span className="grow" />
           <span className={`m2-pill m2-run ${runCls}`}>{runLabel}</span>
           <span className={`m2-pill m2-md ${desk.fund.mode}`}>{desk.fund.mode === "live" ? "LIVE" : "PAPER"}</span>
-          <button type="button" className="m2-cog" onClick={() => setSetOpen(true)} aria-label="settings and log"><IcCog /></button>
         </div>
         <div className="m2-head-r2">
           <div className="m2-led-mod">
