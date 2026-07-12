@@ -117,7 +117,7 @@ export function MobileShell(props: SurfaceProps) {
         {room === "play" ? (
           <MobilePerform props={props} channels={channels} sent={sent} livePnl={livePnl} />
         ) : room === "studio" ? (
-          <MobileStudio props={props} channels={channels} livePnl={livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={() => setAddOpen(true)} />
+          <MobileStudio props={props} channels={channels} livePnl={livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={() => setAddOpen(true)} onOpenSettings={() => setSetOpen(true)} />
         ) : <MobileDeskRoom room={room} props={props} channels={channels} livePnl={livePnl} onViewChart={() => setRoom("play")} onOpenSettings={() => setSetOpen(true)} />}
       </main>
 

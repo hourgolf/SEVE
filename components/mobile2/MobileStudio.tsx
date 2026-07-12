@@ -17,7 +17,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 // =============================================================================
 
 export function MobileStudio({
-  props, channels, livePnl, openSlug, setOpenSlug, onAddChannel,
+  props, channels, livePnl, openSlug, setOpenSlug, onAddChannel, onOpenSettings,
 }: {
   props: SurfaceProps;
   channels: StrategistState[];
@@ -25,6 +25,7 @@ export function MobileStudio({
   openSlug: string | null;
   setOpenSlug: (s: string | null) => void;
   onAddChannel: () => void;
+  onOpenSettings: () => void;
 }) {
   const { view, feed, liveFund } = props;
   const { desk, anySolo, isActive } = view;
@@ -62,8 +63,8 @@ export function MobileStudio({
         </div>
       </section>
 
-      <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" disabled={!canWrite} onClick={onAddChannel}>{canWrite ? "+ ADD CHANNEL" : "SIGN IN TO ADD"}</button></div>
-      <div className="m2-seam"><span className="m2-silk">TAP A ROW TO INSPECT</span><span className="ln" /></div>
+      <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" onClick={canWrite ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD CHANNEL" : "SIGN IN TO TUNE"}</button></div>
+      <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · EDIT STOP / TAKE / RISK" : "READ ONLY · SIGN IN TO CHANGE CONTROLS"}</span><span className="ln" /></div>
       {channels.length === 0 ? (
         <div className="m2-ghost">no channels in this account</div>
       ) : channels.map((s) => (
@@ -72,6 +73,7 @@ export function MobileStudio({
           strategist={s}
           pnl={livePnl[s.slug]}
           active={isActive(s.slug) && !(anySolo && !s.config.soloed && !s.config.muted)}
+          write={props.write}
           open={openSlug === s.slug}
           onToggle={() => setOpenSlug(openSlug === s.slug ? null : s.slug)}
         />

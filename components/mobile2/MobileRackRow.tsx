@@ -3,10 +3,10 @@
 import { useRef } from "react";
 import { FiresPill, TradeShapeBar } from "@/components/console/ChannelStrip";
 import { useDeskDispatch } from "@/hooks/useDeskState";
-import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState, StrategistConfig } from "@/lib/desk/types";
+import type { SurfaceProps } from "@/components/surfaceTypes";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -24,16 +24,17 @@ const A13_SLUGS = new Set(["momo-shape"]);
 const RISK_MIN = 0, RISK_MAX = 5000, RISK_STEP = 25;
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle,
+  strategist, pnl, active, open, onToggle, write,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
   active: boolean;
   open: boolean;
   onToggle: () => void;
+  write: SurfaceProps["write"];
 }) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, canWrite } = useDeskWrite();
+  const { persistConfig, canWrite } = write;
   const faderRef = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
   const { id, slug, color, status, config } = strategist;

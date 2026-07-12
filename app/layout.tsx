@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/hooks/useAuth";
 
@@ -9,6 +9,14 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   // standalone PWA — required for iOS web-push (the manual-exit alerts).
   appleWebApp: { capable: true, title: "SEVE", statusBarStyle: "black-translucent" },
+};
+
+// Let the mobile chassis paint through the iPhone safe-area while its own
+// padding keeps controls clear of the Dynamic Island/home indicator.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
