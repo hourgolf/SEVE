@@ -87,5 +87,6 @@ export function mapOpenPositions(res: RowsReadResult): PositionRow[] {
     peak_mark: p.peak_mark != null ? Number(p.peak_mark) : null,
     trough_mark: p.trough_mark != null ? Number(p.trough_mark) : null,
     runner_of: p.runner_of ?? null,
+    entry_features: p.entry_features && typeof p.entry_features === "object" ? p.entry_features : null,
   }));
 }

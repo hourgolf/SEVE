@@ -3,6 +3,8 @@
 // orders, or mutate live policy. The runtime adapter owns persistence.
 
 import { createHash } from "node:crypto";
+import { deterministicEvidenceUuid } from "../../lib/evidence/identity";
+export { deterministicEvidenceUuid } from "../../lib/evidence/identity";
 import { sealPositionPlan, type HarvestPolicy, type PositionPlanV1 } from "../../lib/desk/positionPlan";
 import type { ShadowDecision } from "./decide.js";
 import type { ChannelConfig } from "./store.js";
@@ -55,14 +57,6 @@ function digest(value: unknown): string {
   return createHash("sha256").update(stable(value)).digest("hex");
 }
 
-export function deterministicEvidenceUuid(namespace: string, value: unknown): string {
-  const bytes = Buffer.from(createHash("sha256").update(namespace).update("\0").update(stable(value)).digest().subarray(0, 16));
-  bytes[6] = (bytes[6] & 0x0f) | 0x50;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = bytes.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
 export function observedOpportunityId(input: {
   strategistId: string;
   accountId: string;
@@ -72,6 +66,10 @@ export function observedOpportunityId(input: {
   decisionAtMs: number;
 }): string {
   return `opp:${deterministicEvidenceUuid("seve-opportunity-v1", input)}`;
+}
+
+export function observedPlanId(opportunityId: string): string {
+  return deterministicEvidenceUuid("seve-position-plan-v1", opportunityId);
 }
 
 function managerPolicy(ch: ChannelConfig): { id: string; harvest: HarvestPolicy; body: Record<string, unknown> } {
@@ -150,7 +148,7 @@ export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvide
     strategistId: ch.id, accountId: input.accountId, occ: d.occ, direction: d.direction,
     reason: d.reason, decisionAtMs: input.decisionAtMs,
   });
-  const planId = deterministicEvidenceUuid("seve-position-plan-v1", opportunityId);
+  const planId = observedPlanId(opportunityId);
   const stopPct = ch.premium_stop_pct ?? input.defaultPremiumStopPct;
   const sizingStopFrac = (stopPct > 0 ? stopPct : input.defaultPremiumStopPct) / 100;
   const maxRiskUsd = round2(qty * ask * 100);

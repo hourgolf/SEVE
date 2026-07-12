@@ -29,6 +29,7 @@ import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 import { captureObservedPositionPlan } from "./planShadow.js";
 import { captureBrokerObservation, captureDecisionObservation } from "./executionObservation.js";
+import { capturePositionOutcome } from "./positionOutcome.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -79,6 +80,23 @@ export function seedRemaining(positions: alpaca.AlpacaPosition[]): Map<string, n
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const opportunityFor = (row: store.PositionRow): string | null => {
+  const value = row.entry_features?.opportunity_id;
+  return typeof value === "string" && value.startsWith("opp:") ? value : null;
+};
+
+function captureBookedOutcome(
+  row: store.PositionRow, quantity: number, exitPrice: number, realized: number,
+  closeReason: string, estimated = false,
+): void {
+  capturePositionOutcome({
+    eventKind: estimated ? "reconciliation_estimated" : "position_booked",
+    eventAtMs: Date.now(), positionId: row.id, opportunityId: opportunityFor(row),
+    quantity, avgEntryPrice: row.avg_entry_price, exitPrice, realizedPnl: realized,
+    closeReason,
+  });
+}
 
 // Place a BUY/SELL for one of the execute fns. With SPREAD_CAPTURE off (default) this
 // is exactly alpaca.orderAndFill with the caller's client_order_id (byte-identical to
@@ -227,12 +245,18 @@ async function bookPartialExit(
   ctx.openRowQty.set(occ, Math.max(0, (ctx.openRowQty.get(occ) ?? row.qty) - pr.sold));
   // entryStateByKey deliberately KEPT (keyed strategist|occ): the remainder continues
   // the same contract, so ustop/trail state stays valid — the tranche-path convention.
-  const err = await store.insertPartialRemainderRow(row, pr.remain, exitPx);
-  if (err) {
+  captureBookedOutcome(row, pr.sold, exitPx, realized, "partial_exit");
+  const remainder = await store.insertPartialRemainderRow(row, pr.remain, exitPx);
+  if (remainder.error) {
     await store.journal("WARN",
-      `${d.slug}: PARTIAL-EXIT REMAINDER INSERT FAILED ${occ} ×${pr.remain} — ${err}. Remainder is UNCOVERED by rows; the orphan sweep will page + reconcile.`);
+      `${d.slug}: PARTIAL-EXIT REMAINDER INSERT FAILED ${occ} ×${pr.remain} — ${remainder.error}. Remainder is UNCOVERED by rows; the orphan sweep will page + reconcile.`);
     return true; // the parent's booking stands — the failure is the remainder's coverage, handled loud above
   }
+  if (remainder.id) capturePositionOutcome({
+    eventKind: "position_remainder_opened", eventAtMs: Date.now(), positionId: remainder.id,
+    parentPositionId: row.id, opportunityId: opportunityFor(row), quantity: pr.remain,
+    avgEntryPrice: row.avg_entry_price, payload: { remainderKind: "partial_exit" },
+  });
   await store.journal("EXEC",
     `${d.slug}: partial exit ${occ} sold ×${pr.sold}/${row.qty} @ ${exitPx.toFixed(2)} (${d.reason}${via ? ` · ${via}` : ""}) → $${realized.toFixed(0)}; remainder ×${pr.remain} re-rowed (normal TP/stop, fresh exit coid)`);
   return true;
@@ -273,6 +297,9 @@ export async function executeExit(
     // usually reappears with the next successful chain refresh, and the nightly reconcile is the
     // human backstop for a permanently price-less row.
     if (!(mark > 0)) {
+      capturePositionOutcome({ eventKind: "reconciliation_unresolved", eventAtMs: Date.now(), positionId: row.id,
+        opportunityId: opportunityFor(row), quantity: row.qty, avgEntryPrice: row.avg_entry_price,
+        closeReason: "unresolved_no_price", payload: { trigger: why } });
       await store.journal("WARN", `${d.slug}: ${occ} ${why} — UNRESOLVED (unresolved_no_price): no unambiguous fill and no live mark — row left OPEN ×${row.qty}, NOT booking an invented $0; verify at nightly reconcile`, { occ, qty: row.qty });
       void store.writeShadowEvent(`RECONCILE-UNRESOLVED ${d.slug} ${occ} ×${row.qty} — no usable exit price, row left open`, { kind: "unresolved_no_price", slug: d.slug, occ, qty: row.qty });
       return;
@@ -281,6 +308,7 @@ export async function executeExit(
     const closed = await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
     if (!closed) { await store.journal("WARN", `${d.slug}: ${occ} reconcile raced — already closed elsewhere`); return; }
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
+    captureBookedOutcome(row, row.qty, mark, realized, estimated ? "reconciled_estimated" : "reconciled", estimated);
     await store.journal("WARN", `${d.slug}: ${occ} ${why} — reconciled @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} (booked $${realized.toFixed(0)} = ${row.qty}-share)`);
     // 1b #10: an ESTIMATED booking gets a DISTINCT flag event (close_reason 'reconciled_estimated'
     // is already on the row — verified) so the operator/nightly gate can sweep every invented price.
@@ -324,6 +352,7 @@ export async function executeExit(
     const realized = rowRealized(row, prior.fillPx, soldQty);
     const closed = await store.closePositionRow(row.id, prior.fillPx, realized, d.reason);
     if (closed) {
+      captureBookedOutcome(row, soldQty, prior.fillPx, realized, d.reason);
       entryStateByKey.delete(entryKey(row.strategist_id, occ));
       await store.journal("WARN", `${d.slug}: exit ${occ} recovering a late-filled prior sell ×${soldQty} @ ${prior.fillPx.toFixed(2)} — booked $${realized.toFixed(0)}, not re-selling`);
     } else {
@@ -380,6 +409,7 @@ export async function executeExit(
     const closed = await store.closePositionRow(row.id, exitPx, realized, d.reason);
     if (!closed) { await store.journal("WARN", `${d.slug}: exit ${occ} close raced — already closed (sold ${soldQty}) — reconcile`); return; }
     ctx.remainingByOcc.set(occ, Math.max(0, heldQty - soldQty)); // 09c fix 2
+    captureBookedOutcome(row, soldQty, exitPx, realized, d.reason);
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
     await store.journal("EXEC", `${d.slug}: exit ${occ} ×${soldQty} @ ${exitPx.toFixed(2)} (${d.reason}) → $${realized.toFixed(0)}`);
     // cross-check vs the legacy order-tag P&L — equal on a clean exit; a divergence flags the tag bug
@@ -457,15 +487,21 @@ async function executeTranche(
     if (!closed) { await store.journal("WARN", `${d.slug}: tranche ${occ} close raced — already closed elsewhere (sold ${soldQty})`); return; }
     ctx.remainingByOcc.set(occ, Math.max(0, (ctx.remainingByOcc.get(occ) ?? soldQty) - soldQty)); // 09c fix 2
     ctx.openRowQty.set(occ, Math.max(0, (ctx.openRowQty.get(occ) ?? row.qty) - soldQty)); // parent −qty, runner +remain
+    captureBookedOutcome(row, soldQty, exitPx, realized, "target_tranche");
     // entryStateByKey deliberately KEPT: keyed strategist|occ — the runner continues the same
     // contract, so ustop/trail state stays valid for the remainder.
     if (remainQty >= 1) {
-      const err = await store.insertRunnerRow(row, remainQty, exitPx);
-      if (err) {
+      const remainder = await store.insertRunnerRow(row, remainQty, exitPx);
+      if (remainder.error) {
         await store.journal("WARN",
-          `${d.slug}: RUNNER ROW INSERT FAILED ${occ} ×${remainQty} — ${err}. Remainder is UNCOVERED by rows; the orphan sweep will page + reconcile.`);
+          `${d.slug}: RUNNER ROW INSERT FAILED ${occ} ×${remainQty} — ${remainder.error}. Remainder is UNCOVERED by rows; the orphan sweep will page + reconcile.`);
         return;
       }
+      if (remainder.id) capturePositionOutcome({
+        eventKind: "position_remainder_opened", eventAtMs: Date.now(), positionId: remainder.id,
+        parentPositionId: row.id, opportunityId: opportunityFor(row), quantity: remainQty,
+        avgEntryPrice: row.avg_entry_price, payload: { remainderKind: "runner" },
+      });
       await store.journal("EXEC",
         `${d.slug}: runner tranche ${occ} banked ×${soldQty} @ ${exitPx.toFixed(2)} → $${realized.toFixed(0)}; runner ×${remainQty} rides (ratchet ${runner.givebackPct}% off peak)`);
       void store.writeShadowEvent(`RUNNER ${d.slug} ${occ} banked ×${soldQty} → $${realized.toFixed(0)}, riding ×${remainQty}`,
@@ -499,6 +535,9 @@ export async function executeReconcile(d: ShadowDecision, row: store.PositionRow
   // cycle's reconcile decision re-runs the 2-cycle gate (deliberate — each retry re-confirms), and
   // the nightly reconcile is the human backstop for a permanently price-less row.
   if (!(mark > 0)) {
+    capturePositionOutcome({ eventKind: "reconciliation_unresolved", eventAtMs: Date.now(), positionId: row.id,
+      opportunityId: opportunityFor(row), quantity: row.qty, avgEntryPrice: row.avg_entry_price,
+      closeReason: "unresolved_no_price" });
     await store.journal("WARN", `${d.slug}: ${row.occ_symbol} orphan reconcile UNRESOLVED (unresolved_no_price): no unambiguous fill and no live mark — row left OPEN ×${row.qty}, NOT booking an invented $0; verify at nightly reconcile`, { occ: row.occ_symbol, qty: row.qty });
     void store.writeShadowEvent(`RECONCILE-UNRESOLVED ${d.slug} ${row.occ_symbol} ×${row.qty} — no usable exit price, row left open`, { kind: "unresolved_no_price", slug: d.slug, occ: row.occ_symbol, qty: row.qty });
     return;
@@ -507,6 +546,7 @@ export async function executeReconcile(d: ShadowDecision, row: store.PositionRow
   const closed = await store.closePositionRow(row.id, mark, realized, estimated ? "reconciled_estimated" : "reconciled");
   if (!closed) { await store.journal("WARN", `${d.slug}: ${row.occ_symbol} reconcile raced — already closed elsewhere`); return; }
   entryStateByKey.delete(entryKey(row.strategist_id, row.occ_symbol));
+  captureBookedOutcome(row, row.qty, mark, realized, estimated ? "reconciled_estimated" : "reconciled", estimated);
   await store.journal("WARN", `${d.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)}${estimated ? " (est)" : ""} — no Alpaca position; booked $${realized.toFixed(0)} (${row.qty}-share)`);
   // 1b #10: distinct flag event for every ESTIMATED booking (see reconcileClose).
   if (estimated) void store.writeShadowEvent(
@@ -548,11 +588,11 @@ export async function executeEntry(
           coveredQty += take; coveredCost += take * o.filled_avg_price; need -= take;
         }
         const avg = coveredQty ? coveredCost / coveredQty : 0;
-        const err = await store.insertPosition({
+        const inserted = await store.insertPosition({
           strategist_id: ch.id, occ_symbol: occ, underlying: ch.underlying,
           expiration: d.detail?.expiry as string ?? ctx.todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg,
         });
-        if (!err) {
+        if (!inserted.error) {
           ctx.openRowQty.set(occ, (ctx.openRowQty.get(occ) ?? 0) + net);
           await store.journal("WARN", `${d.slug}: recovered ${net} ${occ} from filled orders (lost insert) — not re-buying`);
         }
@@ -591,7 +631,7 @@ export async function executeEntry(
       return;
     }
     const eq = ctx.chain.byOcc(occ); // ATM delta at fill (durable entry greek)
-    const err = await store.insertPosition({
+    const inserted = await store.insertPosition({
       strategist_id: ch.id, occ_symbol: occ, underlying: ch.underlying,
       expiration: (d.detail?.expiry as string) ?? ctx.todayET, strike, opt_type: dir, qty: fillQty, avg_entry_price: entryPx,
       // durable per-trade forensics (44_trade_forensics): the entry side of the dataset.
@@ -599,10 +639,15 @@ export async function executeEntry(
       entry_features: { ...(d.detail ?? {}), opportunity_id: opportunityId },
       entry_delta: eq?.delta ?? null,
     });
-    if (err) {
-      await store.journal("WARN", `${d.slug}: ORDER FILLED but position insert FAILED (${err}) — reconcile manually`, { occ, order_id: o.id });
+    if (inserted.error) {
+      await store.journal("WARN", `${d.slug}: ORDER FILLED but position insert FAILED (${inserted.error}) — reconcile manually`, { occ, order_id: o.id });
       return;
     }
+    if (inserted.id) capturePositionOutcome({
+      eventKind: "position_opened", eventAtMs: Date.now(), positionId: inserted.id,
+      opportunityId, quantity: fillQty, avgEntryPrice: entryPx,
+      payload: { brokerOrderId: o.id, brokerStatus: o.status },
+    });
     // The stateful win: remember the REAL entry context (no reconstruction drift).
     entryStateByKey.set(entryKey(ch.id, occ), { entryUnderlying: spotClose, entryTs: Date.now(), peakFavorable: spotClose });
     ctx.remainingByOcc.set(occ, (ctx.remainingByOcc.get(occ) ?? 0) + fillQty); // 09c fix 2

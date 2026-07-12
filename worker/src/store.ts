@@ -19,6 +19,7 @@ import { classifyPriorOpenRun } from "./runReconcile.js";
 import type { DurableShadowRow } from "./shadowPersistence.js";
 import type { PolicyEpochDraft, PositionPlanDraft } from "./planShadowModel.js";
 import type { ExecutionObservationDraft } from "./executionObservationModel.js";
+import type { PositionOutcomeDraft } from "./positionOutcomeModel.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -127,6 +128,7 @@ export interface PositionRow {
   peak_mark: number | null; // durable MFE source — the running MAX option mark over the hold (44_trade_forensics)
   trough_mark: number | null; // durable MAE twin — the running MIN option mark over the hold (58_trough_mark; stop-calibration instrumentation)
   runner_of: string | null; // R1 (64_runner_tranche): parent row id when this row is a runner remainder — rides, never re-tranches
+  entry_features?: Record<string, unknown> | null;
 }
 
 const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServiceKey, {
@@ -526,21 +528,39 @@ export async function insertExecutionObservation(row: ExecutionObservationDraft)
   return false;
 }
 
+let positionOutcomeTableAvailable: boolean | null = null;
+
+/** Phase 1E append-only lineage/booking evidence. Never awaited by execution. */
+export async function insertPositionOutcome(row: PositionOutcomeDraft): Promise<boolean> {
+  if (!config.hasServiceRole || positionOutcomeTableAvailable === false) return false;
+  try {
+    const { error } = await sb.from("position_outcome_events").insert({ ...row, source_boot_id: BOOT_ID });
+    if (!error || duplicate(error)) { positionOutcomeTableAvailable = true; return true; }
+    if (missingRelation(error)) positionOutcomeTableAvailable = false;
+    else warn(`store: position outcome insert failed — ${error.message}`);
+  } catch (e) {
+    warn(`store: position outcome rejected — ${(e as Error).message}`);
+  }
+  return false;
+}
+
+export interface PositionInsertResult { id: string | null; error: string | null }
+
 export async function insertPosition(row: {
   strategist_id: string; occ_symbol: string; underlying: string; expiration: string;
   strike: number; opt_type: "call" | "put"; qty: number; avg_entry_price: number;
   // durable per-trade forensics (44_trade_forensics) — the entry side of the dataset.
   entry_reason?: string; entry_features?: Record<string, unknown> | null; entry_delta?: number | null;
-}): Promise<string | null> {
+}): Promise<PositionInsertResult> {
   const { entry_reason, entry_features, entry_delta, ...core } = row;
-  const { error } = await sb.from("positions").insert({
+  const { data, error } = await sb.from("positions").insert({
     ...core, current_mark: core.avg_entry_price, unrealized_pnl: 0, status: "open",
     peak_mark: core.avg_entry_price, // MFE ratchet starts at entry
     trough_mark: core.avg_entry_price, // MAE ratchet starts at entry (58_trough_mark)
     peak_at: new Date().toISOString(), trough_at: new Date().toISOString(), // extremes = entry at t0 (61)
     entry_reason: entry_reason ?? null, entry_features: entry_features ?? null, entry_delta: entry_delta ?? null,
-  });
-  return error ? error.message : null;
+  }).select("id").single();
+  return { id: data?.id ?? null, error: error ? error.message : null };
 }
 
 /** PYRAMID add (Phase B): grow the SINGLE position row to the new weighted-avg entry + summed
@@ -574,7 +594,7 @@ export async function trancheClosePositionRow(id: string, soldQty: number, mark:
  *  trough marks (the ratchet anchors on the true MFE), runner_of = parent id. Returns
  *  the insert error message (null = ok) so the caller journals LOUD on failure — an
  *  uncovered remainder is the orphan-sweep's job to catch. */
-export async function insertRunnerRow(parent: PositionRow, remainQty: number, mark: number): Promise<string | null> {
+export async function insertRunnerRow(parent: PositionRow, remainQty: number, mark: number): Promise<PositionInsertResult> {
   return insertRemainderRow(parent, remainQty, mark, { runnerOf: parent.id, entryReason: "runner_tranche" });
 }
 
@@ -584,12 +604,12 @@ export async function insertRunnerRow(parent: PositionRow, remainQty: number, ma
  *  them, late). UNLIKE a runner, runner_of stays NULL: the remainder keeps NORMAL
  *  take-profit/stop semantics, not ride mode. The fresh row id gives it a fresh
  *  deterministic exit coid (x<rowid8>), so the next sweep re-fires its exit cleanly. */
-export async function insertPartialRemainderRow(parent: PositionRow, remainQty: number, mark: number): Promise<string | null> {
+export async function insertPartialRemainderRow(parent: PositionRow, remainQty: number, mark: number): Promise<PositionInsertResult> {
   return insertRemainderRow(parent, remainQty, mark, { runnerOf: null, entryReason: "partial_exit_remainder" });
 }
 
-async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: number, o: { runnerOf: string | null; entryReason: string }): Promise<string | null> {
-  const { error } = await sb.from("positions").insert({
+async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: number, o: { runnerOf: string | null; entryReason: string }): Promise<PositionInsertResult> {
+  const { data, error } = await sb.from("positions").insert({
     strategist_id: parent.strategist_id, occ_symbol: parent.occ_symbol,
     underlying: parent.underlying || parent.occ_symbol.slice(0, parent.occ_symbol.length - 15),
     expiration: parent.expiration ?? new Date().toISOString().slice(0, 10),
@@ -604,9 +624,9 @@ async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: 
     // parent peak, so max() just carries the parent's honest MFE).
     peak_mark: Math.max(parent.peak_mark ?? parent.avg_entry_price, mark), trough_mark: parent.trough_mark ?? parent.avg_entry_price,
     peak_at: new Date().toISOString(), trough_at: new Date().toISOString(),
-    entry_reason: o.entryReason, runner_of: o.runnerOf,
-  });
-  return error ? error.message : null;
+    entry_reason: o.entryReason, entry_features: parent.entry_features ?? null, runner_of: o.runnerOf,
+  }).select("id").single();
+  return { id: data?.id ?? null, error: error ? error.message : null };
 }
 
 export async function closePositionRow(id: string, mark: number, realized: number, reason?: string): Promise<boolean> {

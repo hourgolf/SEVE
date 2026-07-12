@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isDeskOperator } from "@/lib/auth/operator";
 import { normalizeManualCloseTag } from "@/lib/positions/manualClose";
+import { buildPositionOutcome } from "@/lib/positions/positionOutcome";
 
 export const dynamic = "force-dynamic";
 
@@ -48,14 +49,19 @@ export async function POST(req: Request) {
   if (tag !== undefined) {
     const t = normalizeManualCloseTag(tag);
     if (!t) return NextResponse.json({ ok: false, error: "bad tag" }, { status: 400 });
-    const { data: row } = await sb.from("positions").select("status,close_reason").eq("id", id).maybeSingle();
+    const { data: row } = await sb.from("positions").select("status,close_reason,entry_features").eq("id", id).maybeSingle();
     if (!row) return NextResponse.json({ ok: false, error: "position not found" }, { status: 404 });
     if (row.status !== "closed") return NextResponse.json({ ok: false, error: "tag applies to closed positions" }, { status: 409 });
     if (row.close_reason && !String(row.close_reason).startsWith("manual")) {
       return NextResponse.json({ ok: false, error: `machine close (${row.close_reason}) — not taggable` }, { status: 409 });
     }
-    const { error: tagErr } = await sb.from("positions").update({ close_reason: `manual:${t}` }).eq("id", id).eq("status", "closed");
+    const { data: taggedRows, error: tagErr } = await sb.from("positions").update({ close_reason: `manual:${t}` }).eq("id", id).eq("status", "closed").select("id");
     if (tagErr) return NextResponse.json({ ok: false, error: tagErr.message }, { status: 500 });
+    if (!taggedRows?.length) return NextResponse.json({ ok: false, error: "position changed before tag was saved" }, { status: 409 });
+    const tagged = buildPositionOutcome({ eventKind: "manual_reason_tagged", eventAtMs: Date.now(), positionId: id,
+      opportunityId: typeof row.entry_features?.opportunity_id === "string" ? row.entry_features.opportunity_id : null,
+      closeReason: `manual:${t}` });
+    if (tagged) { try { await sb.from("position_outcome_events").insert(tagged); } catch { /* evidence-only */ } }
     return NextResponse.json({ ok: true, tagged: t });
   }
 
@@ -172,12 +178,20 @@ export async function POST(req: Request) {
 
   // ---- book the row closed (status-guarded → idempotent) ----
   // close_reason 'manual' = operator close (the post-close chips refine it to 'manual:<tag>').
-  const { error: upErr } = await sb
+  const { data: closedRows, error: upErr } = await sb
     .from("positions")
     .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: fill, realized_pnl: realized, close_reason: "manual" })
     .eq("id", id)
-    .eq("status", "open");
+    .eq("status", "open")
+    .select("id");
   if (upErr) return NextResponse.json({ ok: false, error: `db update: ${upErr.message}` }, { status: 500 });
+  if (!closedRows?.length) return NextResponse.json({ ok: false, error: "position closed elsewhere before booking" }, { status: 409 });
+
+  const outcome = buildPositionOutcome({ eventKind: "position_booked", eventAtMs: Date.now(), positionId: id,
+    opportunityId: typeof pos.entry_features?.opportunity_id === "string" ? pos.entry_features.opportunity_id : null,
+    quantity: soldQty, avgEntryPrice: entry, exitPrice: fill, realizedPnl: realized, closeReason: "manual",
+    payload: { brokerOrderId: orderId, operatorEmail: userData.user.email ?? null, rowQuantity: qty } });
+  if (outcome) { try { await sb.from("position_outcome_events").insert(outcome); } catch { /* evidence-only */ } }
 
   await sb.from("events").insert({
     level: "EXEC",

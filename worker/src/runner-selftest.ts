@@ -27,6 +27,7 @@ const { classifyPriorOpenRun } = await import("./runReconcile.js");
 const { decodeDurableShadow, encodeDurableShadow } = await import("./shadowPersistence.js");
 const { buildShadowPlanEvidence } = await import("./planShadowModel.js");
 const { buildDecisionObservation, buildBrokerObservation } = await import("./executionObservationModel.js");
+const { buildPositionOutcome } = await import("./positionOutcomeModel.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
 type OrderLike = import("./exitRules.js").OrderLike;
 import type { PositionRow, AccountRow, ChannelConfig } from "./store.js";
@@ -36,6 +37,33 @@ function check(label: string, got: unknown, want: unknown): void {
   const ok = JSON.stringify(got) === JSON.stringify(want);
   if (ok) pass++;
   else { fail++; console.error(`  ✗ ${label} — got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`); }
+}
+
+// ---- Phase 1E: deterministic position lineage + booking outcomes ----
+{
+  const positionId = "33333333-3333-4333-8333-333333333333";
+  const parentId = "44444444-4444-4444-8444-444444444444";
+  const opportunityId = "opp:55555555-5555-4555-8555-555555555555";
+  const opened = buildPositionOutcome({ eventKind: "position_opened", eventAtMs: 1_720_000_000_000,
+    positionId, opportunityId, quantity: 3, avgEntryPrice: 1.25 })!;
+  const openedRetry = buildPositionOutcome({ eventKind: "position_opened", eventAtMs: 1_720_000_005_000,
+    positionId, opportunityId, quantity: 3, avgEntryPrice: 1.25 })!;
+  check("phase1e: retry identity ignores persistence-time jitter", openedRetry.id, opened.id);
+  check("phase1e: opportunity deterministically resolves plan", [opened.opportunity_id, !!opened.plan_id], [opportunityId, true]);
+  const remainder = buildPositionOutcome({ eventKind: "position_remainder_opened", eventAtMs: 1_720_000_010_000,
+    positionId, parentPositionId: parentId, opportunityId, quantity: 2, avgEntryPrice: 1.25 })!;
+  check("phase1e: remainder preserves parent lineage", [remainder.parent_position_id, remainder.quantity], [parentId, 2]);
+  const booked = buildPositionOutcome({ eventKind: "position_booked", eventAtMs: 1_720_000_020_000,
+    positionId, opportunityId, quantity: 1, avgEntryPrice: 1.25, exitPrice: 1.5,
+    realizedPnl: 25, closeReason: "target_tranche" })!;
+  check("phase1e: booking carries executable result", [booked.exit_price, booked.realized_pnl, booked.close_reason], [1.5, 25, "target_tranche"]);
+  const tagged = buildPositionOutcome({ eventKind: "manual_reason_tagged", eventAtMs: 1_720_000_030_000,
+    positionId, opportunityId, closeReason: "manual:thesis_broken" })!;
+  check("phase1e: manual rationale remains append-only evidence", tagged.close_reason, "manual:thesis_broken");
+  check("phase1e: malformed position identity fails closed", buildPositionOutcome({ eventKind: "position_opened",
+    eventAtMs: 1, positionId: "not-a-uuid" }), null);
+  check("phase1e: negative quantity fails closed", buildPositionOutcome({ eventKind: "position_opened",
+    eventAtMs: 1, positionId, quantity: -1 }), null);
 }
 
 // ---- restart-safe management shadow serialization ----
