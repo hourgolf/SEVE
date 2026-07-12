@@ -125,6 +125,8 @@
     "databento:target-quote": "tsx scripts/databento-target-quote.ts",
     "databento:download-target": "tsx scripts/databento-download-target.ts",
     "databento:r2-sync": "tsx scripts/databento-r2-sync.ts",
+    "databento:validate": ".venv-databento/bin/python scripts/databento_validate_convert.py --validate",
+    "databento:convert": ".venv-databento/bin/python scripts/databento_validate_convert.py --convert",
     "fomc-resolution-probe": "tsx engine/fomc-resolution-probe.ts",
     "fomc-costgate-probe": "tsx engine/fomc-costgate-probe.ts",
     "cross-gap-probe": "tsx engine/cross-gap-probe.ts",

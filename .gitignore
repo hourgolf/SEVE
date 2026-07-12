@@ -2,6 +2,7 @@
 /node_modules
 /worker/node_modules
 /worker/dist
+.venv-databento/
 
 # next.js
 /.next/

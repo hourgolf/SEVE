@@ -118,3 +118,9 @@ Create a private Standard-class bucket named `seve-market-archive`. Create an R2
 After the acquisition receipt is green, run `npm run databento:r2-sync`. It refuses partial acquisitions, uploads raw DBN plus provenance receipts, attaches a SHA-256 to every object, verifies every object with `HeadObject`, skips already-matching objects on resume, and never deletes local or remote data.
 
 Completed 2026-07-12: 1,133/1,133 Databento sessions (4.11 GiB compressed) plus two provenance receipts were uploaded to the private `seve-market-archive` bucket under `seve/databento-v2`. All 1,135 objects passed post-upload byte-size and SHA-256 metadata verification. `npm run databento:r2-sync -- --check` provides a read-only credential/bucket reachability test.
+
+The local decode environment is isolated in `.venv-databento` and reproducible from `requirements-databento.txt`. `npm run databento:validate` verifies every raw file against the acquisition receipt and decodes representative sessions across every year. Only after that gate passes may `npm run databento:convert` create atomic, resumable daily Zstd Parquet partitions under `data/databento-v2/derived/parquet`.
+
+Validation and conversion completed 2026-07-12: all 1,133 raw hashes matched; 15 cross-year sample sessions decoded through Databento's official library; and 1,133 daily Parquet partitions were written with zero partial files. The derived layer is 1.1 GiB (1,192,197,155 bytes). Cross-year Parquet reads match raw row counts and expose the pinned replay schema (`ts_recv`, OCC symbol, underlying, expiration, strike, option type, bid/ask, sizes, publisher/instrument IDs, flags).
+
+The feed contains a small number of crossed snapshots (`ask < bid`; about 0.05% in the validation sample). They remain in immutable/derived evidence for provenance. The replay adapter must reject or quarantine them for executable fill simulation rather than silently repairing or deleting source rows.
