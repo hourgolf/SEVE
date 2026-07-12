@@ -29,6 +29,11 @@ export interface Quote {
   expiration?: string;
 }
 
+// The observable price used to decide whether a long-option management rule has
+// fired. `bid` mirrors what the position can actually be sold for; `mid` remains
+// available only so older research can be reproduced and compared explicitly.
+export type PremiumTriggerBasis = "mid" | "bid";
+
 // The operator's mixer settings (mirrors strategist_config).
 export interface StrategistConfig {
   slug: string;

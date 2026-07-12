@@ -62,6 +62,8 @@
     "band-squeeze-probe": "tsx engine/band-squeeze-probe.ts",
     "one-dte-probe": "tsx engine/one-dte-probe.ts",
     "pb-selftest": "tsx engine/pb-selftest.ts",
+    "phase1d-selftest": "tsx engine/market-truth.selftest.ts",
+    "phase1d-pb-replay": "tsx --env-file=.env.local engine/phase1d-pb-truth-replay.ts",
     "pb-qqq-probe": "tsx engine/pb-qqq-probe.ts",
     "gap-min-selftest": "tsx engine/gap-min-selftest.ts",
     "macd-align-selftest": "tsx --env-file=.env.local engine/macd-align-selftest.ts",

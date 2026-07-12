@@ -67,7 +67,7 @@ import { makeCrossover } from "./strategies/crossover";
 import { specToStrategyDef, specPremiumExit, type CompiledStrategy } from "./specEvaluate";
 import type { StrategySpec } from "../lib/desk/strategySpec";
 import { specTrail } from "../lib/desk/strategySpec";
-import type { Bar, Evaluate, FundState, OptType, Position, Quote, StrategistConfig, Trade } from "./types";
+import type { Bar, Evaluate, FundState, OptType, Position, PremiumTriggerBasis, Quote, StrategistConfig, Trade } from "./types";
 
 const BASE_MS = 1_780_000_000_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -89,6 +89,12 @@ const FUND: FundState = {
 
 const findQuote = (chain: Quote[], strike: number, optType: "call" | "put") =>
   chain.find((q) => q.strike === strike && q.optType === optType);
+
+/** Management observation used for long-option exit decisions. Exported so a
+ *  truth replay can pin and test the same semantic without duplicating it. */
+export function premiumTriggerMark(quote: Quote, basis: PremiumTriggerBasis): number {
+  return quote[basis];
+}
 
 // Intrinsic value from the underlying — the LAST-RESORT exit fill when a held strike is
 // unquotable at session end (audit 2026-07-10: the NTM-only capture drops strikes that
@@ -221,6 +227,11 @@ export function simulateSession(
   // only (pyramid adds don't count); the open position still exits normally. 0 = uncapped =
   // byte-identical with every prior caller.
   maxEntriesPerDay = 0,
+  // EXIT-TRIGGER BASIS. Historical research used midpoint observations even
+  // though a held long option can only exit at/through the bid. `mid` remains
+  // the default solely for backward-compatible reproduction; truth replays and
+  // the live-faithful path must pass `bid` explicitly.
+  premiumTriggerBasis: PremiumTriggerBasis = "mid",
 ): Trade[] {
   const trades: Trade[] = [];
   let pos: Position | null = null;
@@ -243,7 +254,7 @@ export function simulateSession(
       if (ms) {
         const q = findQuote(chain, ms.strike, ms.optType);
         if (q) {
-          const r = stepManaged(ms, q, f.close, f.atr, etMin[i], f.minutesToClose, cm, underlyingStopPct ?? 0);
+          const r = stepManaged(ms, q, f.close, f.atr, etMin[i], f.minutesToClose, cm, underlyingStopPct ?? 0, premiumTriggerBasis);
           for (const p of r.partials) {
             dayPnl += p.pnl;
             trades.push({
@@ -291,17 +302,19 @@ export function simulateSession(
     if (pos && !pos.legs && (premiumExit || trailExit || breakevenExit || stallExit || (underlyingStopPct && underlyingStopPct > 0)) && (!intent || intent.kind !== "exit")) {
       const q = findQuote(chain, pos.strike, pos.optType);
       if (q) {
-        // ratchet the peak option mid (the trail's / breakeven's high-water mark)
-        pos.peakPremium = Math.max(pos.peakPremium ?? pos.entryPrice, q.mid);
-        if (premiumExit?.profitPct != null && q.mid >= pos.entryPrice * (1 + premiumExit.profitPct / 100))
+        const triggerMark = premiumTriggerMark(q, premiumTriggerBasis);
+        // Ratchet the observable liquidation mark used by the selected research
+        // contract (bid for live-faithful truth; midpoint for legacy reproduction).
+        pos.peakPremium = Math.max(pos.peakPremium ?? pos.entryPrice, triggerMark);
+        if (premiumExit?.profitPct != null && triggerMark >= pos.entryPrice * (1 + premiumExit.profitPct / 100))
           intent = { kind: "exit", reason: "target_premium" };
         // underlying initial stop — fires before the premium stop (loss stop only).
         else if (underlyingStopPct && underlyingStopPct > 0 && pos.entryUnderlying > 0
             && ((pos.optType === "call" ? pos.entryUnderlying - f.close : f.close - pos.entryUnderlying) / pos.entryUnderlying) * 100 >= underlyingStopPct)
           intent = { kind: "exit", reason: "underlying_stop" };
-        else if (premiumExit?.stopPct != null && q.mid <= pos.entryPrice * (1 - premiumExit.stopPct / 100))
+        else if (premiumExit?.stopPct != null && triggerMark <= pos.entryPrice * (1 - premiumExit.stopPct / 100))
           intent = { kind: "exit", reason: "stop_premium" };
-        // TRAIL: once the position has been in profit, exit when the mid retraces
+        // TRAIL: once the position has been in profit, exit when the selected mark retraces
         // > givebackPct of the PEAK GAIN (giveback-of-gain, like manage.ts) — locks
         // in a fraction of profit at ANY size, not only on huge winners.
         // TRAIL (armable). Underlying ATR-chandelier FIRST (ignores premium noise —
@@ -320,7 +333,7 @@ export function simulateSession(
           // gives back X% of the peak GAIN. Arming high means noise pops don't trigger an early exit — wait for
           // a REAL peak, bank the mid-MFE round-trips, leave a never-armed runner's convex tail untouched.
           const givebackLevel = pos.entryPrice + (pos.peakPremium - pos.entryPrice) * (1 - trailExit.premiumGivebackPct / 100);
-          if (q.mid <= givebackLevel) intent = { kind: "exit", reason: "trail_giveback" };
+          if (triggerMark <= givebackLevel) intent = { kind: "exit", reason: "trail_giveback" };
         }
         // BREAKEVEN-once-in-profit (checked AFTER the premium stop so a violent
         // gap-through still fills at the real worse mark, not a fictitious entry).
@@ -329,7 +342,7 @@ export function simulateSession(
         // works on a built-in strat whose only other exits are its own ATR/EOD rules.
         if ((!intent || intent.kind !== "exit") && breakevenExit && pos.peakPremium != null
             && pos.peakPremium >= pos.entryPrice * (1 + breakevenExit.engagePct / 100)
-            && q.mid <= pos.entryPrice * (1 + (breakevenExit.lockPct ?? 0) / 100)) {
+            && triggerMark <= pos.entryPrice * (1 + (breakevenExit.lockPct ?? 0) / 100)) {
           intent = { kind: "exit", reason: "breakeven_stop" };
         }
         // STALL-EXIT (strand-4): held ≥ minMinutes AND the peak mark NEVER popped past

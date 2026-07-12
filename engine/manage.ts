@@ -15,7 +15,7 @@
 //  follow-up. Everything else in the brief's state diagram is here.
 // ============================================================================
 
-import type { OptType, Quote } from "./types";
+import type { OptType, PremiumTriggerBasis, Quote } from "./types";
 import type { Management } from "../lib/desk/strategySpec";
 import { fillWithCost, roundTripCostUsd, type CostModel, DEFAULT_COST_MODEL } from "./cost";
 
@@ -104,12 +104,13 @@ export function stepManaged(
   etMinOfDay: number,
   minutesToClose: number,
   costModel: CostModel = DEFAULT_COST_MODEL,
-  underlyingStopPct = 0 // config-gated underlying initial stop (mirrors the live worker); 0 = off
+  underlyingStopPct = 0, // config-gated underlying initial stop (mirrors the live worker); 0 = off
+  premiumTriggerBasis: PremiumTriggerBasis = "mid"
 ): { partials: PartialExit[]; closed: boolean } {
   const partials: PartialExit[] = [];
   if (s.remaining <= 0) return { partials, closed: true };
 
-  const premium = num(quote.mid, 0);
+  const premium = num(quote[premiumTriggerBasis], 0);
   const long = true; // we only hold long options
   // ratchet peaks
   s.peakPremium = Math.max(s.peakPremium, premium);
