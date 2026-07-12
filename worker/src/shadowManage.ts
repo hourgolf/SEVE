@@ -13,37 +13,53 @@
 
 import { computeFeatures } from "../../engine/engine";
 import { fillWithCost, type CostModel } from "../../engine/cost";
-import { openManaged, stepManaged, type ManagedState } from "../../engine/manage";
+import { openManaged, stepManaged } from "../../engine/manage";
 import { managementFor } from "../../engine/management";
 import type { Bar, OptType } from "../../engine/types";
 import type { ChainStore } from "./state.js";
-import { getPositionById, reconstructRideToClose, writeShadowEvent, type PositionRow } from "./store.js";
+import { deleteShadowManagementState, getPositionById, loadShadowManagementStates, reconstructRideToClose, saveShadowManagementState, writeShadowEvent, type PositionRow } from "./store.js";
 import { info } from "./log.js";
 import { shadowLifecycleAction } from "./shadowManageModel.js";
+import { BOOT_ID } from "./runId.js";
+import { decodeDurableShadow, encodeDurableShadow, type TrackedShadowState } from "./shadowPersistence.js";
 
 const COST: CostModel = { spreadSource: "option_bars", modeledSpreadPct: 0.03, modeledSpreadFloorUsd: 0.03, slippageTicksPerSide: 0.25, commissionPerContract: 0.04, crossSpread: true };
 const sgn = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(0)}`;
 
-interface Tracked {
-  slug: string;
-  occ: string;
-  sym: string;
-  st: ManagedState;
-  managedPnl: number;
-  managedClosed: boolean;
-  lastReason?: string;
-  truncated: boolean;
-  // Captured once the real row closes. The counterfactual can then keep walking
-  // market quotes until its OWN policy closes instead of being cut off at the
-  // actual exit. Undefined means the actual outcome is not confirmed yet.
-  actualPnl?: number;
+// Keyed by desk-row id. Phase 1B makes this map restart-safe; without the
+// table it degrades to the prior in-memory/TRUNCATED behavior.
+const tracked = new Map<string, TrackedShadowState>();
+let shadowHydrated = false;
+
+async function hydrateShadowState(): Promise<void> {
+  if (shadowHydrated) return;
+  const rows = await loadShadowManagementStates();
+  for (const row of rows) {
+    const decoded = decodeDurableShadow(row);
+    if (decoded) tracked.set(row.position_id, decoded);
+  }
+  shadowHydrated = true;
+  if (tracked.size) info(`mgmt-shadow: restored ${tracked.size} durable simulation(s)`);
 }
-// Keyed by desk-row id. ⚠ Persists across CYCLES only, not restarts (audit 2026-07-10): a
-// Railway redeploy mid-hold re-opens the sim blind to banked partials / the armed BE-trail
-// floor, so the finalize would compare a truncated managed side against a DB-true actual.
-// Such sims are flagged `truncated` at open and their finalize is banked as MGMT-TRUNCATED —
-// excluded from the clean managed-vs-actual evidence (day-report filters on "MGMT ").
-const tracked = new Map<string, Tracked>();
+
+// Ordered, coalescible background persistence: never put Supabase latency on the
+// live bar-close decision path. Per-position promise chains prevent an older
+// snapshot from landing after a newer one.
+const shadowPersistChains = new Map<string, Promise<void>>();
+function persistShadow(id: string, t: TrackedShadowState): void {
+  const row = encodeDurableShadow(id, t, BOOT_ID);
+  const prior = shadowPersistChains.get(id) ?? Promise.resolve();
+  let next: Promise<void>;
+  next = prior.catch(() => undefined).then(() => saveShadowManagementState(row)).finally(() => {
+    if (shadowPersistChains.get(id) === next) shadowPersistChains.delete(id);
+  });
+  shadowPersistChains.set(id, next);
+}
+
+async function finishShadowPersistence(id: string): Promise<void> {
+  await shadowPersistChains.get(id)?.catch(() => undefined);
+  await deleteShadowManagementState(id);
+}
 
 // RIDE channels (managementFor null — pb-ride, base grind/power) have no scale/BE/trail to
 // shadow, but the operator OVERRIDES them (manual close). We track each while open so an
@@ -79,6 +95,7 @@ export interface MgmtUpdateCtx {
 export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> {
   const { rows, slugById, sym, chain, sessionBars, atr, etMin, minutesToClose } = ctx;
   if (!sessionBars.length) return;
+  await hydrateShadowState();
   const underlying = sessionBars[sessionBars.length - 1].close;
   const openIds = new Set(rows.map((r) => r.id));
 
@@ -110,6 +127,7 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
       const truncated = Number.isFinite(entryMs) && Date.now() - entryMs > 3 * 60_000;
       t = { slug, occ: r.occ_symbol, sym, st, managedPnl: 0, managedClosed: false, truncated };
       tracked.set(r.id, t);
+      persistShadow(r.id, t);
     }
     if (t.managedClosed) continue;
 
@@ -121,6 +139,7 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
     }
     if (res.closed) info(`mgmt-shadow ${t.slug} ${t.occ}: management would be FLAT — total ${sgn(t.managedPnl)} (${t.lastReason})`);
     t.managedClosed = t.managedClosed || res.closed;
+    persistShadow(r.id, t);
   }
 
   // ---- continue counterfactuals after the actual position closes ----
@@ -138,6 +157,7 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
       // a positively observed closed row before advancing the post-actual simulation.
       if (!actual || actual.status === "open") continue;
       t.actualPnl = Number(actual.realized_pnl ?? 0);
+      persistShadow(id, t);
     }
 
     const q = chain.byOcc(t.occ);
@@ -153,6 +173,7 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
     }
     if (res.closed) info(`mgmt-shadow ${t.slug} ${t.occ}: management would be FLAT after actual exit — total ${sgn(t.managedPnl)} (${t.lastReason})`);
     t.managedClosed = t.managedClosed || res.closed;
+    persistShadow(id, t);
   }
 
   // ---- finalize only when BOTH clocks have completed ----
@@ -174,6 +195,7 @@ export async function updateShadowManagement(ctx: MgmtUpdateCtx): Promise<void> 
     const kind = t.truncated ? "MGMT-TRUNCATED" : "MGMT";
     info(`mgmt-shadow ${t.slug} ${t.occ} DONE — managed ${sgn(t.managedPnl)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})${t.truncated ? " [TRUNCATED — sim opened mid-hold; not clean evidence]" : ""}`);
     void writeShadowEvent(`${kind} ${t.slug} ${t.occ} — managed ${sgn(t.managedPnl)} vs actual ${sgn(actualPnl)} (Δ ${sgn(delta)})`, { managed: Math.round(t.managedPnl), actual: Math.round(actualPnl), delta: Math.round(delta), slug: t.slug, truncated: t.truncated });
+    await finishShadowPersistence(id);
     tracked.delete(id);
   }
 

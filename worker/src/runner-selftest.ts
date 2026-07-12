@@ -23,6 +23,8 @@ const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, par
 const { groupChannelsByAccount, resolveDefaultAccount, unresolvedAccount, acctCanEnter, acctCanManage, SYNTH_DEFAULT } = await import("./routing.js");
 const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./exitGuard.js");
 const { shadowLifecycleAction } = await import("./shadowManageModel.js");
+const { classifyPriorOpenRun } = await import("./runReconcile.js");
+const { decodeDurableShadow, encodeDurableShadow } = await import("./shadowPersistence.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
 type OrderLike = import("./exitRules.js").OrderLike;
 import type { PositionRow, AccountRow, ChannelConfig } from "./store.js";
@@ -34,6 +36,23 @@ function check(label: string, got: unknown, want: unknown): void {
   else { fail++; console.error(`  ✗ ${label} — got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`); }
 }
 
+// ---- restart-safe management shadow serialization ----
+{
+  const st = {
+    optType: "call", strike: 600, qty0: 3, entryPremium: 1.2, entryUnderlying: 600,
+    entryMinute: 1, entryAtr: 2, R: 0.6, premiumStopLevel: 0.6, remaining: 2,
+    peakPremium: 1.8, peakUnderlying: 603, stopBasis: "TRAIL", scaledOut: [true, false],
+    entryEdgeUsdPerC: 2, m: { risk: { defineR: "premium_stop", premiumStopPct: 50 } },
+  } as import("../../engine/manage.js").ManagedState;
+  const trackedState = { slug: "breakout", occ: "SPY260713C00600000", sym: "SPY", st, managedPnl: 42, managedClosed: false, lastReason: "scale_1R", truncated: false, actualPnl: 20 };
+  const encoded = encodeDurableShadow("position-1", trackedState, "boot-1");
+  const decoded = decodeDurableShadow(encoded);
+  check("shadow durable: round-trips managed remainder", decoded?.st.remaining, 2);
+  check("shadow durable: round-trips banked P&L", decoded?.managedPnl, 42);
+  check("shadow durable: round-trips actual outcome", decoded?.actualPnl, 20);
+  check("shadow durable: malformed state fails closed", decodeDurableShadow({ ...encoded, managed_state: { remaining: 2 } }), null);
+}
+
 // ---- management counterfactual lifecycle ----
 // Actual and simulated exits are independent clocks. In particular, an actual close
 // must not finalize a still-open manager (the old behavior produced false $0 shadows).
@@ -42,6 +61,17 @@ check("mgmt clock: actual closed + manager open + quote -> keep stepping", shado
 check("mgmt clock: actual closed + manager open + no quote -> wait", shadowLifecycleAction({ actualOpen: false, managedClosed: false, hasExecutableQuote: false }), "wait");
 check("mgmt clock: manager closed + actual open -> wait for actual", shadowLifecycleAction({ actualOpen: true, managedClosed: true, hasExecutableQuote: true }), "wait");
 check("mgmt clock: both closed -> finalize", shadowLifecycleAction({ actualOpen: false, managedClosed: true, hasExecutableQuote: true }), "finalize");
+
+// ---- worker-run deploy overlap attribution ----
+{
+  const current = { bootId: "new", railwayDeployment: "dep-new", startedAt: "2026-07-12T13:15:06.000Z" };
+  const now = Date.parse("2026-07-12T13:18:00.000Z");
+  check("run ledger: fresh predecessor remains open", classifyPriorOpenRun({ bootId: "old", railwayDeployment: "dep-old", lastHeartbeatAt: "2026-07-12T13:17:00.000Z" }, current, now), null);
+  check("run ledger: different deployment near boot -> superseded", classifyPriorOpenRun({ bootId: "old", railwayDeployment: "dep-old", lastHeartbeatAt: "2026-07-12T13:14:31.000Z" }, current, now), "superseded_deploy");
+  check("run ledger: same deployment restart -> abrupt", classifyPriorOpenRun({ bootId: "old", railwayDeployment: "dep-new", lastHeartbeatAt: "2026-07-12T13:14:31.000Z" }, current, now), "abrupt_or_unknown");
+  check("run ledger: old unrelated stale run -> abrupt", classifyPriorOpenRun({ bootId: "old", railwayDeployment: "dep-old", lastHeartbeatAt: "2026-07-12T12:00:00.000Z" }, current, now), "abrupt_or_unknown");
+  check("run ledger: missing heartbeat is not guessed", classifyPriorOpenRun({ bootId: "old", railwayDeployment: "dep-old", lastHeartbeatAt: null }, current, now), null);
+}
 
 // ---- trancheSplit ----
 check("split 6 @ 0.5", trancheSplit(6, 0.5), { sell: 3, retain: 3 });

@@ -14,7 +14,9 @@ import { config } from "./config.js";
 import { info, warn } from "./log.js";
 import { mapOpenPositions } from "./exitGuard.js";
 import { pageAll } from "../../engine/pageAll.js";
-import { BOOT_ID, INSTANCE_ID, GIT_SHA, PID, HOSTNAME, RAILWAY_DEPLOYMENT, getPhase, setPhase, rssMb } from "./runId.js";
+import { BOOT_ID, STARTED_AT, INSTANCE_ID, GIT_SHA, PID, HOSTNAME, RAILWAY_DEPLOYMENT, getPhase, setPhase, rssMb } from "./runId.js";
+import { classifyPriorOpenRun } from "./runReconcile.js";
+import type { DurableShadowRow } from "./shadowPersistence.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -345,6 +347,42 @@ export async function writeShadowEvent(message: string, meta?: unknown): Promise
   } catch { /* best-effort */ }
 }
 
+// ---- Restart-safe management counterfactual state --------------------------
+// Feature-detected so a worker built before Phase 1B stays byte-identical:
+// a missing table disables persistence once per boot without log spam or impact
+// to the in-memory shadow simulation.
+let shadowStateAvailable: boolean | null = null;
+const missingRelation = (e: { code?: string; message?: string } | null): boolean =>
+  !!e && (e.code === "42P01" || /does not exist|schema cache/i.test(e.message ?? ""));
+
+export async function loadShadowManagementStates(): Promise<DurableShadowRow[]> {
+  if (!config.hasServiceRole || shadowStateAvailable === false) return [];
+  const { data, error } = await sb.from("shadow_management_state").select("position_id,slug,occ_symbol,underlying,managed_state,managed_pnl,managed_closed,last_reason,actual_pnl,truncated,source_boot_id");
+  if (error) {
+    if (missingRelation(error)) shadowStateAvailable = false;
+    else warn(`store: shadow state load failed — ${error.message}`);
+    return [];
+  }
+  shadowStateAvailable = true;
+  return (data ?? []) as DurableShadowRow[];
+}
+
+export async function saveShadowManagementState(row: DurableShadowRow): Promise<void> {
+  if (!config.hasServiceRole || shadowStateAvailable === false) return;
+  const { error } = await sb.from("shadow_management_state").upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: "position_id" });
+  if (!error) { shadowStateAvailable = true; return; }
+  if (missingRelation(error)) shadowStateAvailable = false;
+  else warn(`store: shadow state save failed — ${error.message}`);
+}
+
+export async function deleteShadowManagementState(positionId: string): Promise<void> {
+  if (!config.hasServiceRole || shadowStateAvailable === false) return;
+  const { error } = await sb.from("shadow_management_state").delete().eq("position_id", positionId);
+  if (!error) { shadowStateAvailable = true; return; }
+  if (missingRelation(error)) shadowStateAvailable = false;
+  else warn(`store: shadow state delete failed — ${error.message}`);
+}
+
 // ---- Phase B (live executor) writes -----------------------------------------
 // All best-effort-logged but NOT swallowed where correctness depends on the
 // result (insertPosition returns the error so the caller can journal LOUD —
@@ -369,27 +407,46 @@ export async function heartbeat(note: string): Promise<void> {
 // ---- worker_runs: per-boot lifecycle for crash attribution (external-review P4) -------------
 // ALL fail-open — instrumentation must NEVER crash the worker it diagnoses. Each write no-ops
 // gracefully if 67_worker_runs.sql isn't applied yet (the catch swallows the missing-table error).
-// The reliable crash detector is openRun() closing the PRIOR un-ended run: a process killed by
-// OOM/SIGKILL can't record its own exit, but the next boot marks it abrupt and the heartbeat gap
-// dates the death. Anon/local (no service role) skips these — worker_runs is a live-worker ledger.
+// A process killed by OOM/SIGKILL can't record its own exit, so the successor reconciles stale
+// predecessors. Distinct Railway deployments near the successor boot are `superseded_deploy`;
+// same-deployment/old gaps remain abrupt. Anon/local skips this live-worker ledger.
 export async function openRun(version: string): Promise<void> {
   if (!config.hasServiceRole) return;
   try {
-    // Close orphans conservatively: prior runs with no ended_at whose heartbeat has gone STALE
-    // (>2 min) died without recording it → abrupt. The staleness guard deliberately leaves a
-    // genuinely-concurrent fresh instance OPEN, so a deploy-overlap window stays visible as evidence
-    // (two runs both un-ended with fresh heartbeats) rather than being papered over.
-    const stale = new Date(Date.now() - 2 * 60_000).toISOString();
-    await sb.from("worker_runs")
-      .update({ ended_at: new Date().toISOString(), termination_kind: "abrupt_or_unknown" })
-      .is("ended_at", null).lt("last_heartbeat_at", stale);
     await sb.from("worker_runs").insert({
       boot_id: BOOT_ID, instance_id: INSTANCE_ID, version, git_sha: GIT_SHA,
       pid: PID, hostname: HOSTNAME, railway_deployment: RAILWAY_DEPLOYMENT,
-      started_at: new Date().toISOString(), last_heartbeat_at: new Date().toISOString(),
+      started_at: STARTED_AT, last_heartbeat_at: STARTED_AT,
       last_phase: getPhase(), memory_rss_mb: rssMb(),
     });
+    await reconcilePriorRuns();
   } catch (e) { warn(`store: openRun failed — ${(e as Error).message}`); }
+}
+
+async function reconcilePriorRuns(): Promise<void> {
+  const { data, error } = await sb.from("worker_runs")
+    .select("boot_id,railway_deployment,last_heartbeat_at")
+    .is("ended_at", null).neq("boot_id", BOOT_ID);
+  if (error) return;
+  const nowMs = Date.now();
+  for (const row of (data ?? []) as Array<{ boot_id: string; railway_deployment: string | null; last_heartbeat_at: string | null }>) {
+    const termination = classifyPriorOpenRun({
+      bootId: row.boot_id,
+      railwayDeployment: row.railway_deployment,
+      lastHeartbeatAt: row.last_heartbeat_at,
+    }, {
+      bootId: BOOT_ID,
+      railwayDeployment: RAILWAY_DEPLOYMENT,
+      startedAt: STARTED_AT,
+    }, nowMs);
+    if (!termination) continue;
+    await sb.from("worker_runs").update({
+      ended_at: row.last_heartbeat_at ?? new Date(nowMs).toISOString(),
+      termination_kind: termination,
+      superseded_by_boot_id: termination === "superseded_deploy" ? BOOT_ID : null,
+      classified_at: new Date(nowMs).toISOString(),
+    }).eq("boot_id", row.boot_id).is("ended_at", null);
+  }
 }
 
 export async function runHeartbeat(): Promise<void> {
@@ -398,6 +455,7 @@ export async function runHeartbeat(): Promise<void> {
     await sb.from("worker_runs")
       .update({ last_heartbeat_at: new Date().toISOString(), last_phase: getPhase(), memory_rss_mb: rssMb() })
       .eq("boot_id", BOOT_ID);
+    await reconcilePriorRuns();
   } catch { /* fail-open — telemetry only */ }
 }
 

@@ -4,8 +4,8 @@
 //  The worker has been crash-restarting (~40 boots/16h, external-review P4). A
 //  dying process cannot reliably write its own epitaph — OOM/SIGKILL/container
 //  eviction bypass every handler. So termination is attributed the RELIABLE way
-//  (store.openRun): each boot opens a worker_runs row and closes any prior
-//  un-ended run as `abrupt_or_unknown`. Then:
+//  (store.openRun/runHeartbeat): each boot opens a worker_runs row and classifies
+//  a stale predecessor as deploy-superseded or `abrupt_or_unknown`. Then:
 //    · the gap between a run's last_heartbeat_at and the next boot localizes the death;
 //    · rising memory_rss_mb across a run's heartbeats fingerprints an OOM;
 //    · two runs with overlapping [started_at, last_heartbeat_at] prove deploy-overlap
@@ -16,6 +16,7 @@ import os from "node:os";
 import { randomUUID } from "node:crypto";
 
 export const BOOT_ID = randomUUID();
+export const STARTED_AT = new Date().toISOString();
 export const PID = process.pid;
 export const HOSTNAME = os.hostname();
 // Railway injects these per deploy/replica; fall back to hostname:pid so it's never empty.
