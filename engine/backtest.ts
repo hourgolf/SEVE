@@ -55,7 +55,7 @@ function etMinuteOfDay(ms: number): number {
 import { generateSession, priceChain } from "./market";
 import { loadRealSessions } from "./realsource";
 import { loadOptionBarsByDay, makeRealChain, loadOptionQuotesByDay, makeQuotesChain, type ChainProvider } from "./optionsource";
-import { loadDatabentoByDay, makeDatabentoChain } from "./databentosource";
+import { hasDatabentoV2Day, loadDatabentoByDay, loadDatabentoV2Day, makeDatabentoChain, makeMultiDteChain } from "./databentosource";
 import { DEFAULT_FADE_PARAMS, fadeEvaluate } from "./strategies/fade";
 import { DEFAULT_FADE_V2_PARAMS, fadeV2Evaluate } from "./strategies/fade-v2";
 import { DEFAULT_BREAKOUT_PARAMS, breakoutEvaluate } from "./strategies/breakout";
@@ -849,6 +849,7 @@ async function main() {
     // spread. else → Black-Scholes modeled chains off the day's realized IV.
     const optMode = argStr("options", "synthetic");
     const useDatabento = optMode === "databento";
+    const useDatabentoV2 = optMode === "databento-v2";
     const useRealOptions = optMode === "real";
     const useQuotes = optMode === "quotes"; // SAME-WEEK real NBBO from option_quotes (benched-sim)
     // Databento gives REAL bid/ask → cross the ACTUAL spread, not the 3% model.
@@ -867,7 +868,7 @@ async function main() {
       // benched sim's fills + cost gate use the same costs the channel runs live — not 1 tick/side.
       ...(useQuotes
         ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars", slippageTicksPerSide: 0.25 }
-        : useDatabento ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL),
+        : useDatabento || useDatabentoV2 ? { ...DEFAULT_COST_MODEL, spreadSource: "option_bars" } : DEFAULT_COST_MODEL),
       ...(fillCross != null ? { spreadCrossFrac: fillCross } : {}),
     };
     // gate keeps its own (stricter) spread assumption when --gate-fill-cross is set
@@ -898,10 +899,12 @@ async function main() {
     // silently sim on modeled chains either (the per-day fallback below stays for --options
     // real, whose option_bars coverage is legitimately partial and disclosed by the N/M
     // label). --allow-modeled-days opts back into the labeled blend for exploratory runs.
-    if (useQuotes && !process.argv.includes("--allow-modeled-days")) {
-      const missing = sessions.filter((s) => !(byDay.get(s.dateET) as unknown[] | undefined)?.length).map((s) => s.dateET);
+    if ((useQuotes || useDatabentoV2) && !process.argv.includes("--allow-modeled-days")) {
+      const missing = sessions.filter((s) => useDatabentoV2
+        ? !hasDatabentoV2Day(s.dateET, underlying)
+        : !(byDay.get(s.dateET) as unknown[] | undefined)?.length).map((s) => s.dateET);
       if (missing.length) {
-        console.error(`backtest: --options quotes but no option_quotes rows for ${missing.join(", ")} (7d retention — run same-week) — refusing the silent per-day Black-Scholes fallback. Pass --allow-modeled-days to blend modeled chains for the gap days.`);
+        console.error(`backtest: --options ${optMode} but no real NBBO rows for ${missing.join(", ")} — refusing the silent per-day Black-Scholes fallback. Pass --allow-modeled-days to blend modeled chains for the gap days.`);
         process.exit(1);
       }
     }
@@ -913,10 +916,18 @@ async function main() {
     // single source of truth for trade generation (montecarlo.ts never re-simulates).
     const perDay: { date: string; pnl: number; trades: number }[] = [];
     for (const s of sessions) {
-      const contracts = byDay.get(s.dateET);
+      // v2 is intentionally session-lazy: a full 1,133-day replay must not inflate
+      // and retain the entire gzip corpus before the first simulated decision.
+      const contracts = useDatabentoV2
+        ? loadDatabentoV2Day(s.dateET, underlying)
+        : byDay.get(s.dateET);
       let chainAt: ChainProvider;
       if (useDatabento && contracts && contracts.length) {
         chainAt = makeDatabentoChain(contracts as Parameters<typeof makeDatabentoChain>[0]);
+        realDays++;
+      } else if (useDatabentoV2 && contracts && contracts.length) {
+        const all = makeMultiDteChain(contracts as Parameters<typeof makeMultiDteChain>[0]);
+        chainAt = (_spot, _mtc, tsMs) => all(tsMs).filter((quote) => quote.expiration === s.dateET);
         realDays++;
       } else if (useQuotes && contracts && contracts.length) {
         chainAt = makeQuotesChain(contracts as Parameters<typeof makeQuotesChain>[0]);
@@ -931,7 +942,9 @@ async function main() {
       all.push(...dayTrades);
       perDay.push({ date: s.dateET, pnl: Math.round(dayTrades.reduce((a, t) => a + t.pnl, 0) * 100) / 100, trades: dayTrades.length });
     }
-    const optLabel = useDatabento
+    const optLabel = useDatabentoV2
+      ? `REAL NBBO · Databento v2 Parquet corpus (${realDays}/${sessions.length} days) + real spread`
+      : useDatabento
       ? `REAL NBBO · Databento cbbo-1m (${realDays}/${sessions.length} days) + real spread`
       : useQuotes
       ? `REAL NBBO · option_quotes same-week (${realDays}/${sessions.length} days) + real spread`

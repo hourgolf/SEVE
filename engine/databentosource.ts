@@ -8,6 +8,7 @@
 // ============================================================================
 
 import { readFileSync, existsSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import type { OptType, Quote } from "./types";
 
 const DIR = "data/databento";
@@ -99,10 +100,15 @@ function expFromOcc(occ: string): string {
 export function loadMultiDteByDay(dates: string[], dir = MDTE_DIR): Map<string, MdteSeries[]> {
   const out = new Map<string, MdteSeries[]>();
   for (const date of dates) {
-    const path = `${dir}/${date}.json`;
-    if (!existsSync(path)) continue;
+    const jsonPath = `${dir}/${date}.json`;
+    const gzipPath = `${dir}/${date}.json.gz`;
+    if (!existsSync(jsonPath) && !existsSync(gzipPath)) continue;
     let rows: Row[];
-    try { rows = JSON.parse(readFileSync(path, "utf8")) as Row[]; } catch { continue; }
+    try {
+      rows = JSON.parse(existsSync(gzipPath)
+        ? gunzipSync(readFileSync(gzipPath)).toString("utf8")
+        : readFileSync(jsonPath, "utf8")) as Row[];
+    } catch { continue; }
     const bySym = new Map<string, MdteSeries>();
     for (const r of rows) {
       if (r.bid == null || r.ask == null) continue;
@@ -119,6 +125,30 @@ export function loadMultiDteByDay(dates: string[], dir = MDTE_DIR): Map<string, 
     if (bySym.size) out.set(date, [...bySym.values()]);
   }
   return out;
+}
+
+const DATABENTO_V2_COMPAT_DIR = "data/databento-v2/compat";
+
+function databentoV2Path(date: string, underlying: string): string {
+  return `${DATABENTO_V2_COMPAT_DIR}/${underlying.toLowerCase()}/${date}.json.gz`;
+}
+
+/** Cheap coverage check used before a fail-closed replay; does not inflate the gzip. */
+export function hasDatabentoV2Day(date: string, underlying: string): boolean {
+  return existsSync(databentoV2Path(date, underlying));
+}
+
+/** Load one session only so multi-year replays do not retain the whole corpus in RAM. */
+export function loadDatabentoV2Day(date: string, underlying: string): MdteSeries[] | undefined {
+  if (!hasDatabentoV2Day(date, underlying)) return undefined;
+  const series = loadMultiDteByDay([date], `${DATABENTO_V2_COMPAT_DIR}/${underlying.toLowerCase()}`).get(date);
+  if (!series?.length) throw new Error(`Databento v2 cache is unreadable or empty for ${underlying} ${date}`);
+  return series;
+}
+
+/** Strategy-tradable v2 compatibility cache derived from the validated Parquet corpus. */
+export function loadDatabentoV2ByDay(dates: string[], underlying: string): Map<string, MdteSeries[]> {
+  return loadMultiDteByDay(dates, `${DATABENTO_V2_COMPAT_DIR}/${underlying.toLowerCase()}`);
 }
 
 // Multi-DTE chain provider: serves REAL bid/ask for ALL cached expirations at the

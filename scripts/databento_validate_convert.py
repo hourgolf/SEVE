@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import os
@@ -18,6 +19,8 @@ DERIVED = ROOT / "derived/parquet"
 DOWNLOAD_RECEIPT = ROOT / "manifests/download-2022-01-03_2026-07-10-w10-dte2.json"
 VALIDATION_RECEIPT = ROOT / "manifests/validation.json"
 CONVERSION_RECEIPT = ROOT / "manifests/parquet-conversion.json"
+COMPAT = ROOT / "compat"
+COMPAT_RECEIPT = ROOT / "manifests/compat-conversion.json"
 
 
 def sha256(path: Path) -> str:
@@ -147,11 +150,82 @@ def convert() -> None:
     print(f"conversion green · {len(converted)} daily Parquet partitions")
 
 
+def build_compat() -> None:
+    conversion = json.loads(CONVERSION_RECEIPT.read_text())
+    if conversion.get("totals", {}).get("files") != 1133:
+        raise RuntimeError("Parquet conversion receipt is not green")
+    partitions = sorted(DERIVED.glob("*/*.parquet"))
+    completed: list[dict[str, Any]] = []
+    rejected_crossed = 0
+    rejected_invalid = 0
+    rejected_missing = 0
+    rejected_nonpositive = 0
+    for index, source in enumerate(partitions, 1):
+        date = source.stem
+        frame = pd.read_parquet(source)
+        required = ("symbol", "underlying", "ts_recv", "bid", "ask", "strike", "opt_type")
+        base_valid = frame[list(required)].notna().all(axis=1)
+        missing_required = ~base_valid
+        nonpositive = base_valid & ((frame["bid"] < 0) | (frame["ask"] <= 0))
+        invalid = missing_required | nonpositive
+        crossed = base_valid & ~invalid & (frame["ask"] < frame["bid"])
+        executable = frame[base_valid & ~invalid & ~crossed].copy()
+        rejected_invalid += int(invalid.sum())
+        rejected_missing += int(missing_required.sum())
+        rejected_nonpositive += int(nonpositive.sum())
+        rejected_crossed += int(crossed.sum())
+        for underlying in ("SPY", "QQQ", "IWM"):
+            part = executable[executable["underlying"] == underlying].copy()
+            target_dir = COMPAT / underlying.lower()
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / f"{date}.json.gz"
+            if not target.exists():
+                compact = pd.DataFrame({
+                    "occ_symbol": part["symbol"].str.replace(" ", "", regex=False),
+                    "ts": part["ts_recv"].astype("int64") // 1_000_000,
+                    "bid": part["bid"], "ask": part["ask"],
+                    "strike": part["strike"], "opt_type": part["opt_type"],
+                })
+                temp = target.with_suffix(".json.gz.partial")
+                with gzip.open(temp, "wt", encoding="utf-8", compresslevel=6) as handle:
+                    handle.write(compact.to_json(orient="records"))
+                os.replace(temp, target)
+            completed.append({
+                "source": str(source), "path": str(target), "underlying": underlying,
+                "rows": len(part), "bytes": target.stat().st_size, "sha256": sha256(target),
+            })
+        if index % 25 == 0 or index == len(partitions):
+            COMPAT_RECEIPT.write_text(json.dumps({
+                "updatedAt": pd.Timestamp.now(tz="UTC").isoformat(),
+                "files": completed,
+                "totals": {
+                    "sessions": index,
+                    "files": len(completed),
+                    "rows": sum(item["rows"] for item in completed),
+                    "bytes": sum(item["bytes"] for item in completed),
+                },
+                "rejections": {
+                    "crossed": rejected_crossed,
+                    "invalid": rejected_invalid,
+                    "missingRequired": rejected_missing,
+                    "nonpositive": rejected_nonpositive,
+                },
+            }, separators=(",", ":")))
+            print(f"compat {index}/{len(partitions)}")
+    print(f"compat green · {len(completed)} files · rejected crossed={rejected_crossed:,} invalid={rejected_invalid:,}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--validate", action="store_true")
     parser.add_argument("--convert", action="store_true")
+    parser.add_argument("--compat", action="store_true")
     args = parser.parse_args()
-    if args.validate == args.convert:
-        parser.error("choose exactly one of --validate or --convert")
-    validate() if args.validate else convert()
+    if sum((args.validate, args.convert, args.compat)) != 1:
+        parser.error("choose exactly one of --validate, --convert, or --compat")
+    if args.validate:
+        validate()
+    elif args.convert:
+        convert()
+    else:
+        build_compat()

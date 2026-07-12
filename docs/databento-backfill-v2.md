@@ -128,3 +128,11 @@ When the conversion receipt is green, the R2 sync also mirrors all derived Parqu
 Final R2 verification: 2,270 objects / 5,601,840,536 bytes. The second sync uploaded 1,135 new derived/receipt objects and independently re-verified all 1,135 existing raw/provenance objects as matching skips. The local working tree occupies approximately 5.2 GiB across raw, derived, and manifests.
 
 The feed contains a small number of crossed snapshots (`ask < bid`; about 0.05% in the validation sample). They remain in immutable/derived evidence for provenance. The replay adapter must reject or quarantine them for executable fill simulation rather than silently repairing or deleting source rows.
+
+`npm run databento:compat` builds a gzip compatibility cache for the existing TypeScript engine. It records every crossed/invalid rejection, writes atomically, and never mutates Parquet. The backtest opts into this source explicitly with `--options databento-v2`; this mode preserves the existing one-minute causal fill lag and three-minute stale-quote guard, crosses the observed spread, and fails closed on missing real-NBBO sessions. It checks coverage up front, then inflates one session at a time so multi-year studies remain memory-bounded. The legacy `--options databento` behavior remains available for controlled comparisons.
+
+The completed compatibility build contains 3,399 underlying/session files and 195,523,086 executable snapshots (1,709,269,682 bytes compressed). It excluded 26,994 crossed snapshots, 56,971 nonpositive quotes, and 4,321,298 rows missing a required executable field. Every excluded row remains preserved in raw DBN and Parquet evidence.
+
+The gzip compatibility cache is disposable local acceleration and can be regenerated from Parquet. R2 stores its checksum-rich conversion receipt, not the 1.6 GiB cache itself.
+
+Post-adapter R2 verification: 2,271 objects / 5,602,693,941 bytes. The compatibility receipt was uploaded and all 2,270 pre-existing objects were independently verified as checksum-matching skips.

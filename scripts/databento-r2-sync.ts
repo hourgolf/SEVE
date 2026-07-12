@@ -22,6 +22,7 @@ const ROOT = "data/databento-v2";
 const RECEIPT = `${ROOT}/manifests/download-2022-01-03_2026-07-10-w10-dte2.json`;
 const VALIDATION_RECEIPT = `${ROOT}/manifests/validation.json`;
 const CONVERSION_RECEIPT = `${ROOT}/manifests/parquet-conversion.json`;
+const COMPAT_RECEIPT = `${ROOT}/manifests/compat-conversion.json`;
 const UPLOAD_RECEIPT = `${ROOT}/manifests/r2-upload.json`;
 
 const s3 = new S3Client({
@@ -68,6 +69,7 @@ async function main(): Promise<void> {
     `${ROOT}/manifests/quotes/target-2022-01-03_2026-07-10-w10-dte2.json`,
     VALIDATION_RECEIPT,
     CONVERSION_RECEIPT,
+    COMPAT_RECEIPT,
   ]).filter(existsSync).sort();
   const completed: Array<{ path: string; key: string; bytes: number; sha256: string }> = [];
   let uploaded = 0;
