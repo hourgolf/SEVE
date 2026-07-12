@@ -20,6 +20,8 @@ const BUCKET = process.env.R2_BUCKET!;
 const PREFIX = (process.env.R2_PREFIX || "seve/databento-v2").replace(/^\/+|\/+$/g, "");
 const ROOT = "data/databento-v2";
 const RECEIPT = `${ROOT}/manifests/download-2022-01-03_2026-07-10-w10-dte2.json`;
+const VALIDATION_RECEIPT = `${ROOT}/manifests/validation.json`;
+const CONVERSION_RECEIPT = `${ROOT}/manifests/parquet-conversion.json`;
 const UPLOAD_RECEIPT = `${ROOT}/manifests/r2-upload.json`;
 
 const s3 = new S3Client({
@@ -55,9 +57,17 @@ async function main(): Promise<void> {
   if (receipt.files?.length !== 1133 || (receipt.failures?.length ?? 0) !== 0) {
     throw new Error(`Acquisition is not green: ${receipt.files?.length ?? 0}/1133 files, ${receipt.failures?.length ?? 0} failures`);
   }
-  const files = walk(`${ROOT}/raw`).concat([
+  const conversion = existsSync(CONVERSION_RECEIPT)
+    ? JSON.parse(readFileSync(CONVERSION_RECEIPT, "utf8")) as { totals?: { files?: number } }
+    : null;
+  const derived = conversion?.totals?.files === 1133 && existsSync(`${ROOT}/derived`)
+    ? walk(`${ROOT}/derived`)
+    : [];
+  const files = walk(`${ROOT}/raw`).concat(derived, [
     RECEIPT,
     `${ROOT}/manifests/quotes/target-2022-01-03_2026-07-10-w10-dte2.json`,
+    VALIDATION_RECEIPT,
+    CONVERSION_RECEIPT,
   ]).filter(existsSync).sort();
   const completed: Array<{ path: string; key: string; bytes: number; sha256: string }> = [];
   let uploaded = 0;

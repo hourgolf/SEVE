@@ -123,4 +123,8 @@ The local decode environment is isolated in `.venv-databento` and reproducible f
 
 Validation and conversion completed 2026-07-12: all 1,133 raw hashes matched; 15 cross-year sample sessions decoded through Databento's official library; and 1,133 daily Parquet partitions were written with zero partial files. The derived layer is 1.1 GiB (1,192,197,155 bytes). Cross-year Parquet reads match raw row counts and expose the pinned replay schema (`ts_recv`, OCC symbol, underlying, expiration, strike, option type, bid/ask, sizes, publisher/instrument IDs, flags).
 
+When the conversion receipt is green, the R2 sync also mirrors all derived Parquet partitions plus the validation and conversion receipts. Raw remains canonical; derived partitions are included so the workstation copy can eventually be offloaded without paying the decode cost again.
+
+Final R2 verification: 2,270 objects / 5,601,840,536 bytes. The second sync uploaded 1,135 new derived/receipt objects and independently re-verified all 1,135 existing raw/provenance objects as matching skips. The local working tree occupies approximately 5.2 GiB across raw, derived, and manifests.
+
 The feed contains a small number of crossed snapshots (`ask < bid`; about 0.05% in the validation sample). They remain in immutable/derived evidence for provenance. The replay adapter must reject or quarantine them for executable fill simulation rather than silently repairing or deleting source rows.
