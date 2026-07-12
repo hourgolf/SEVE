@@ -97,6 +97,10 @@ The exact strategy-tradable quote then reduced the request to:
 
 The $29.79 is still a quote, not an approved or submitted order. The local quote receipt is gitignored at `data/databento-v2/manifests/quotes/target-2022-01-03_2026-07-10-w10-dte2.json`.
 
+The operator approved a $35 hard ceiling on 2026-07-12. Acquisition uses one compressed DBN stream per session rather than 1,133 tiny batch jobs. Combining sessions into larger jobs was rejected because each date has a different causal 0–2 DTE/strike universe; a combined request would purchase irrelevant pre-expiry history and invalidate the exact quote. The downloader has no automatic paid retry, writes atomically, verifies the quoted symbol count before each request, checksums every completed file, and resumes by skipping completed files.
+
+`npm run databento:download-target -- --max-usd 35`
+
 The underlying scope was built from production-consistent Alpaca SIP minute bars. The local archives now contain 1,133 sessions for each of SPY, QQQ, and IWM over the target interval. Using the completed session's RTH range to define the acquisition universe does not enter the replay's decision logic; it only ensures the stored corpus contains every strike the causal strategy could have selected at signal time.
 
 For the durable copy, Cloudflare R2 Standard is the current default recommendation because it is S3-compatible, includes 10 GB-month, charges $0.015/GB-month beyond that, and does not charge internet egress. At the current projection:
