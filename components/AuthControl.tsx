@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 // browser and the PKCE exchange fails) just type the code — verifyOtp needs no
 // redirect, so it works in the same screen. Signed in → email + "Sign out".
 export function AuthControl() {
-  const { email, ready, signIn, verifyCode, signOut } = useAuth();
+  const { email, operator, ready, signIn, verifyCode, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [code, setCode] = useState("");
@@ -21,7 +21,7 @@ export function AuthControl() {
   if (email) {
     return (
       <div className="auth">
-        <span className="auth-email" title={email}>● {email}</span>
+        <span className="auth-email" title={email}>{operator ? "●" : "○"} {email}{operator ? "" : " · NOT AUTHORIZED"}</span>
         <button className="auth-btn" onClick={() => signOut()}>Sign out</button>
       </div>
     );

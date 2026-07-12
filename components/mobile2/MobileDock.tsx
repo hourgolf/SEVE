@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useDeskDispatch } from "@/hooks/useDeskState";
-import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { Lens } from "@/hooks/useSentinelDigest";
+import type { SurfaceProps } from "@/components/surfaceTypes";
 
 // =============================================================================
 // MOBILE · PERFORM DOCK (S5) — the chicklet dock pinned above the tab bar. Per
@@ -77,28 +77,35 @@ function Chicklet({
 }
 
 export function MobileDock({
-  channels, livePnl, lens,
+  channels, livePnl, lens, write,
 }: {
   channels: StrategistState[];
   livePnl: Record<string, ChannelPnl>;
   lens: Lens | null;
+  write: SurfaceProps["write"];
 }) {
   const dispatch = useDeskDispatch();
-  const { canWrite, persistConfig } = useDeskWrite();
+  const { canWrite, persistConfig } = write;
   const [open, setOpen] = useState(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
   const muted = channels.filter((channel) => channel.config.muted).length;
 
   const mute = (ch: StrategistState) => {
     if (!canWrite) return;
+    setWriteError(null);
     dispatch({ type: "TOGGLE_MUTE", slug: ch.slug });
-    persistConfig(ch.id, { muted: !ch.config.muted });
+    void persistConfig(ch.id, { muted: !ch.config.muted }).then((result) => {
+      if (result.ok) return;
+      dispatch({ type: "TOGGLE_MUTE", slug: ch.slug });
+      setWriteError(result.error ?? "mute write failed");
+    });
   };
 
   return (
     <nav className={`m2-dock${open ? " open" : " collapsed"}`} aria-label="channel dock">
       <button type="button" className="m2-dock-cap" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
         <span className="m2-silk">MIX · {channels.length}</span>
-        <small>{muted ? `${muted} MUTED · ` : ""}{open ? "TAP TO COLLAPSE" : "TAP TO EXPAND"}</small>
+        <small className={writeError ? "error" : ""} title={writeError ?? undefined}>{writeError ? "WRITE FAILED" : `${muted ? `${muted} MUTED · ` : ""}${open ? "TAP TO COLLAPSE" : "TAP TO EXPAND"}`}</small>
         <b>{open ? "▾" : "▴"}</b>
       </button>
       {open && <div className="m2-dock-grid">

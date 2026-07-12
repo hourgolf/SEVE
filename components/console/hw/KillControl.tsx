@@ -13,21 +13,35 @@ export function KillControl({ halted }: { halted: boolean }) {
   const dispatch = useDeskDispatch();
   const { persistFund } = useDeskWrite();
   const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
-    <KillSwitch
-      halted={halted}
-      armed={armed}
-      onArm={() => setArmed((v) => !v)}
-      onFire={() => {
-        dispatch({ type: "KILL", reason: "manual kill switch" });
-        persistFund({ is_halted: true, halted_reason: "manual kill switch" });
-        playKit("crash"); // the 909 crash on FLATTEN — alert-only, no-op unless the KIT is on
-        setArmed(false);
-      }}
-      onReset={() => {
-        dispatch({ type: "RESET_HALT" });
-        persistFund({ is_halted: false, halted_reason: null });
-      }}
-    />
+    <div className="kill-wrap">
+      <KillSwitch
+        halted={halted}
+        armed={armed}
+        busy={busy}
+        onArm={() => { setError(null); setArmed((v) => !v); }}
+        onFire={() => {
+          setBusy(true); setError(null);
+          void persistFund({ is_halted: true, halted_reason: "manual kill switch" }).then((result) => {
+            setBusy(false);
+            if (!result.ok) { setError(result.error ?? "halt write failed"); return; }
+            dispatch({ type: "KILL", reason: "manual kill switch" });
+            playKit("crash");
+            setArmed(false);
+          });
+        }}
+        onReset={() => {
+          setBusy(true); setError(null);
+          void persistFund({ is_halted: false, halted_reason: null }).then((result) => {
+            setBusy(false);
+            if (!result.ok) { setError(result.error ?? "reset write failed"); return; }
+            dispatch({ type: "RESET_HALT" });
+          });
+        }}
+      />
+      {error && <span className="kill-write-error" role="alert" title={error}>WRITE FAILED</span>}
+    </div>
   );
 }

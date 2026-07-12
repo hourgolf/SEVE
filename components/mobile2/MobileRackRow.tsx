@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { FiresPill, TradeShapeBar } from "@/components/console/ChannelStrip";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { pmVar } from "@/lib/desk/colors";
@@ -37,6 +37,7 @@ export function MobileRackRow({
   const { persistConfig, canWrite } = write;
   const faderRef = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
   const { id, slug, color, status, config } = strategist;
 
   const tp = config.take_profit_pct ?? 0;
@@ -47,9 +48,15 @@ export function MobileRackRow({
   const pnlCls = day > 0 ? "pos" : day < 0 ? "neg" : "flat";
   const pm = pmVar(color);
 
+  const persistPatch = (patch: Partial<StrategistConfig>) => {
+    setWriteError(null);
+    void persistConfig(id, patch).then((result) => {
+      if (!result.ok) setWriteError(result.error ?? "config write failed");
+    });
+  };
   const setCfg = (patch: Partial<StrategistConfig>) => {
     dispatch({ type: "SET_CONFIG", slug, patch });
-    persistConfig(id, patch);
+    persistPatch(patch);
   };
   // LOCK/RIDE writes the matched pair (giveback doctrine) — verbatim from ChannelRackRow.
   const applyLock = () => {
@@ -73,7 +80,7 @@ export function MobileRackRow({
     const v = valueFromX(clientX);
     if (v === config.capital_pct && !commit) return;
     dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } });
-    if (commit) persistConfig(id, { capital_pct: v });
+    if (commit) persistPatch({ capital_pct: v });
   };
 
   const stepStop = (delta: number) => {
@@ -146,7 +153,7 @@ export function MobileRackRow({
             <TradeShapeBar
               tp={tp} premStop={premStop} canWrite={canWrite}
               onChange={(patch) => dispatch({ type: "SET_CONFIG", slug, patch })}
-              onCommit={(patch) => persistConfig(id, patch)}
+              onCommit={persistPatch}
             />
           </div>
 
@@ -177,14 +184,15 @@ export function MobileRackRow({
 
           <div className="m2-padrow">
             <button type="button" className={`m2-bigpad${config.muted ? " lit-m" : ""}`} disabled={!canWrite}
-              onClick={() => { dispatch({ type: "TOGGLE_MUTE", slug }); persistConfig(id, { muted: !config.muted }); }}>
+              onClick={() => { dispatch({ type: "TOGGLE_MUTE", slug }); persistPatch({ muted: !config.muted }); }}>
               {config.muted ? "MUTED" : "MUTE"}
             </button>
             <button type="button" className={`m2-bigpad${boosted ? " lit-b" : ""}`} disabled={!canWrite}
-              onClick={() => { const next = !boosted; dispatch({ type: "SET_CONFIG", slug, patch: { boosted: next } }); persistConfig(id, { boosted: next }); }}>
+              onClick={() => { const next = !boosted; dispatch({ type: "SET_CONFIG", slug, patch: { boosted: next } }); persistPatch({ boosted: next }); }}>
               {boosted ? "BOOST 2×" : "BOOST"}
             </button>
           </div>
+          {writeError && <div className="m2-write-error" role="alert" title={writeError}>WRITE FAILED · CHANGE NOT CONFIRMED</div>}
         </div>
       )}
     </section>

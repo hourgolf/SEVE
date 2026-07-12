@@ -10,10 +10,12 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabaseClient";
+import { isDeskOperator } from "@/lib/auth/operator";
 
 interface AuthValue {
   session: Session | null;
   email: string | null;
+  operator: boolean;
   ready: boolean;
   /** Sends a magic link + 6-digit code to `email`. Returns an error or null. */
   signIn: (email: string) => Promise<string | null>;
@@ -50,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       session,
       email: session?.user?.email ?? null,
+      operator: isDeskOperator(session?.user),
       ready,
       async signIn(email: string) {
         try {
@@ -58,7 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email,
             // single-route app now — "/console" was merged into "/" (the old
             // route 404'd the magic link and bounced sign-in in a loop).
-            options: { emailRedirectTo: window.location.origin + "/" },
+            // This is an operator console, not a public sign-up surface. Only
+            // users provisioned in Supabase Auth may request a desk login.
+            options: { shouldCreateUser: false, emailRedirectTo: window.location.origin + "/" },
           });
           return error ? error.message : null;
         } catch (e) {

@@ -17,6 +17,7 @@ import { pmVar } from "@/lib/desk/colors";
 import type { DeskAction } from "@/hooks/useDeskState";
 import type { StrategistState, StrategistConfig, FundState } from "@/lib/desk/types";
 import type { Mode, Skin, Density } from "@/hooks/useShellState";
+import type { DeskWriteResult } from "@/hooks/useDeskWrite";
 
 // One command. `run` closes over the reused write/setter paths; `needsWrite`
 // gates on auth; `hold` = the KILL arm-hold (ARMED·HOLD ⏎ / hold-2s on phone).
@@ -32,7 +33,7 @@ export interface CommandDef {
   danger?: boolean;
   needsWrite?: boolean;
   hold?: boolean;
-  run: () => void;
+  run: () => void | Promise<void>;
   search: string;
 }
 
@@ -49,8 +50,8 @@ export interface CommandCtx {
   toggleSkin: () => void;
   toggleDensity: () => void;
   dispatch: Dispatch<DeskAction>;
-  persistConfig: (id: string, patch: Partial<StrategistConfig>) => void;
-  persistFund: (patch: Partial<FundState>) => void;
+  persistConfig: (id: string, patch: Partial<StrategistConfig>) => Promise<DeskWriteResult>;
+  persistFund: (patch: Partial<FundState>) => Promise<DeskWriteResult>;
   /** Open a channel in the rack (desktop = goto MIX + select; mobile = studio accordion). */
   gotoChannel: (slug: string) => void;
   /** Legacy §01–§04 room jumps (desktop). Omit on platforms without those rooms. */
@@ -76,9 +77,10 @@ export function buildCommands(ctx: CommandCtx): CommandDef[] {
     needsWrite: true,
     hold: true,
     search: "kill flatten all positions desk halt",
-    run: () => {
+    run: async () => {
+      const result = await persistFund({ is_halted: true, halted_reason: "command palette" });
+      if (!result.ok) return;
       dispatch({ type: "KILL", reason: "command palette" });
-      persistFund({ is_halted: true, halted_reason: "command palette" });
       playKit("crash"); // the 909 crash on FLATTEN — inert unless the KIT is on
     },
   });

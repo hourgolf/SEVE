@@ -6,6 +6,8 @@ import { useAuth } from "@/hooks/useAuth";
 import type { ChannelStatus, FundState, PmColor, StrategistConfig } from "@/lib/desk/types";
 import type { StrategySpec } from "@/lib/desk/strategySpec";
 
+export interface DeskWriteResult { ok: boolean; error?: string }
+
 // A new compiled channel to persist (strategists row + its strategist_config).
 export interface NewChannelInput {
   slug: string;
@@ -26,38 +28,40 @@ export interface NewChannelInput {
 // (05_console_write_policies.sql). Fire-and-forget on the knob's onCommit (and
 // pad/toggle clicks), so writes happen on release, not on every drag frame.
 export function useDeskWrite() {
-  const { session } = useAuth();
-  const canWrite = !!session;
+  const { session, operator } = useAuth();
+  const canWrite = !!session && operator;
 
   const persistConfig = useCallback(
-    async (strategistId: string, patch: Partial<StrategistConfig>) => {
-      if (!session || !strategistId) return;
+    async (strategistId: string, patch: Partial<StrategistConfig>): Promise<DeskWriteResult> => {
+      if (!session || !operator || !strategistId) return { ok: false, error: "operator authorization required" };
       try {
-        await getSupabase()
+        const { error } = await getSupabase()
           .from("strategist_config")
           .update(patch)
           .eq("strategist_id", strategistId);
-      } catch {
-        /* best-effort; local state already reflects the change */
+        return error ? { ok: false, error: error.message } : { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "config write failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   const persistFund = useCallback(
-    async (patch: Partial<FundState>) => {
-      if (!session) return;
+    async (patch: Partial<FundState>): Promise<DeskWriteResult> => {
+      if (!session || !operator) return { ok: false, error: "operator authorization required" };
       // `running` is a UI-only transport flag — never a DB column.
       const { running: _running, ...dbPatch } = patch;
       void _running;
-      if (Object.keys(dbPatch).length === 0) return;
+      if (Object.keys(dbPatch).length === 0) return { ok: true };
       try {
-        await getSupabase().from("fund_state").update(dbPatch).eq("id", 1);
-      } catch {
-        /* best-effort */
+        const { error } = await getSupabase().from("fund_state").update(dbPatch).eq("id", 1);
+        return error ? { ok: false, error: error.message } : { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "desk write failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // Persist a newly-compiled channel: insert the strategists row, then its

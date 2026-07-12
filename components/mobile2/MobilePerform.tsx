@@ -153,7 +153,7 @@ export function MobilePerform({
         <TapeSection events={data.events} strategists={view.desk.strategists} />
       </div>
 
-      <MobileDock channels={channels} livePnl={livePnl} lens={sent.lens} />
+      <MobileDock channels={channels} livePnl={livePnl} lens={sent.lens} write={props.write} />
     </>
   );
 }

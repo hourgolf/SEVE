@@ -1726,6 +1726,8 @@
 }
 
 /* ---------- KILL switch --------------------------------------------------- */
+.kill-wrap { display:flex; flex-direction:column; align-items:center; gap:3px; }
+.kill-write-error { color:var(--led-red); font:800 7px/1 var(--mono); letter-spacing:.08em; }
 .kill {
   display: flex;
   align-items: center;

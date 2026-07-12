@@ -10,6 +10,8 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { isDeskOperator } from "@/lib/auth/operator";
+import { normalizeManualCloseTag } from "@/lib/positions/manualClose";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +24,6 @@ const AS = process.env.ALPACA_SECRET;
 
 export async function POST(req: Request) {
   if (!SB_URL || !SB_ANON) return NextResponse.json({ ok: false, error: "supabase env missing" }, { status: 500 });
-  if (!SB_SERVICE) return NextResponse.json({ ok: false, error: "SUPABASE_SERVICE_ROLE_KEY not set in Vercel — add it to enable manual close" }, { status: 503 });
-  if (!AK || !AS) return NextResponse.json({ ok: false, error: "Alpaca keys missing" }, { status: 500 });
 
   // ---- auth: require a valid signed-in Supabase user ----
   const authz = req.headers.get("authorization") ?? "";
@@ -31,6 +31,9 @@ export async function POST(req: Request) {
   if (!token) return NextResponse.json({ ok: false, error: "not signed in" }, { status: 401 });
   const { data: userData, error: authErr } = await createClient(SB_URL, SB_ANON).auth.getUser(token);
   if (authErr || !userData?.user) return NextResponse.json({ ok: false, error: "invalid session" }, { status: 401 });
+  if (!isDeskOperator(userData.user)) return NextResponse.json({ ok: false, error: "operator authorization required" }, { status: 403 });
+  if (!SB_SERVICE) return NextResponse.json({ ok: false, error: "manual close is not configured" }, { status: 503 });
+  if (!AK || !AS) return NextResponse.json({ ok: false, error: "paper broker is not configured" }, { status: 503 });
 
   let id: string | undefined, tag: string | undefined;
   try { const b = await req.json(); id = b?.id; tag = b?.tag; } catch { /* */ }
@@ -43,7 +46,7 @@ export async function POST(req: Request) {
   // close itself. Only refines an OPERATOR close ('manual' / legacy null); a machine
   // reason (stop_premium / eod_flatten / …) is never overwritten.
   if (tag !== undefined) {
-    const t = String(tag).toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
+    const t = normalizeManualCloseTag(tag);
     if (!t) return NextResponse.json({ ok: false, error: "bad tag" }, { status: 400 });
     const { data: row } = await sb.from("positions").select("status,close_reason").eq("id", id).maybeSingle();
     if (!row) return NextResponse.json({ ok: false, error: "position not found" }, { status: 404 });

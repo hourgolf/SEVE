@@ -147,6 +147,8 @@
     "pb-trigger-probe": "tsx --env-file=.env.local engine/pb-trigger-probe.ts",
     "market-calendar-selftest": "tsx engine/market-calendar.selftest.ts",
     "incident-selftest": "tsx lib/incident/incident.selftest.ts",
+    "operator-selftest": "tsx lib/auth/operator.selftest.ts",
+    "manual-close-selftest": "tsx lib/positions/manualClose.selftest.ts",
     "perform-selftest": "tsx lib/perform/perform.selftest.ts",
     "studio-selftest": "tsx lib/studio/studio.selftest.ts",
     "ride-filter-probe": "tsx --env-file=.env.local engine/ride-filter-probe.ts",

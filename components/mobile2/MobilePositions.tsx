@@ -5,16 +5,10 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
 
 const A13_SLUGS = new Set(["momo-shape"]);
 const ONE_DAY = 86_400_000;
-const REASONS = [
-  { value: "target", label: "BANKED", hint: "banked the move" },
-  { value: "reversal", label: "TAPE TURNED", hint: "setup reversed" },
-  { value: "risk", label: "RISK CUT", hint: "defensive exit" },
-  { value: "stall", label: "STALLED", hint: "no follow-through" },
-] as const;
-
 function dteOf(exp?: string | null): number | null {
   if (!exp) return null;
   const e = Date.parse(exp.slice(0, 10));
@@ -83,8 +77,9 @@ export function MobilePositions({ props, strategists, compact = false }: {
   const tagClose = async (value: string) => {
     if (!tagPrompt) return;
     setTagging(true);
-    await write.tagClose(tagPrompt.id, value);
+    const result = await write.tagClose(tagPrompt.id, value);
     setTagging(false);
+    if (!result.ok) { setCloseErr(result.error ?? "reason tag failed"); return; }
     setTagPrompt(null);
   };
 
@@ -127,7 +122,7 @@ export function MobilePositions({ props, strategists, compact = false }: {
     {closeErr && <div className="m2-close-error">close failed — {closeErr}</div>}
     {tagPrompt && <div className="m2-close-reasons">
       <header><b>{tagPrompt.label} CLOSED</b><span>WHY DID YOU EXIT?</span></header>
-      <div>{REASONS.map((reason) => <button type="button" key={reason.value} disabled={tagging} title={reason.hint} onClick={() => tagClose(reason.value)}><b>{reason.label}</b><small>{reason.hint}</small></button>)}</div>
+      <div>{MANUAL_CLOSE_REASONS.map((reason) => <button type="button" key={reason.value} disabled={tagging} title={reason.hint} onClick={() => tagClose(reason.value)}><b>{reason.label}</b><small>{reason.hint}</small></button>)}</div>
       <button type="button" className="skip" onClick={() => setTagPrompt(null)}>SKIP · LEAVE AS MANUAL</button>
     </div>}
   </section>;

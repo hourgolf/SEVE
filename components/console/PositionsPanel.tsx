@@ -7,6 +7,7 @@ import { useTradeInsight } from "@/hooks/useTradeInsight";
 import { useTradeTriggers } from "@/hooks/useTradeTriggers";
 import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
+import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
 import { useChangeFlash } from "@/hooks/useChangeFlash";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
@@ -141,8 +142,9 @@ export function PositionsPanel({
   const applyTag = async (tag: string) => {
     if (!tagPrompt) return;
     setTagging(true);
-    await tagClose(tagPrompt.id, tag); // soft-fail: untagged rows just stay 'manual'
+    const result = await tagClose(tagPrompt.id, tag);
     setTagging(false);
+    if (!result.ok) { setCloseErr(result.error ?? "reason tag failed"); return; }
     setTagPrompt(null);
   };
 
@@ -286,8 +288,8 @@ export function PositionsPanel({
       {tagPrompt && (
         <div className="pos-tagbar">
           <span className="tb-lbl">{tagPrompt.label} closed — why?</span>
-          {(["target", "reversal", "risk", "stall"] as const).map((t) => (
-            <button key={t} className="tb-chip" disabled={tagging} onClick={() => applyTag(t)}>{t}</button>
+          {MANUAL_CLOSE_REASONS.map((reason) => (
+            <button key={reason.value} className="tb-chip" disabled={tagging} title={reason.hint} onClick={() => applyTag(reason.value)}>{reason.label}</button>
           ))}
           <button className="tb-x" onClick={() => setTagPrompt(null)} title="skip — stays untagged" aria-label="dismiss tag chips">✕</button>
         </div>
