@@ -28,12 +28,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
 const rounded = (n: number): number => Math.round(n * 10_000) / 10_000;
 
-export function managerShadowTraceId(input: Pick<ManagerShadowObservationInput, "position" | "exit">): string {
+export function managerShadowTraceIdFor(positionId: string, managerId: ManagerExit["managerId"]): string {
   return deterministicEvidenceUuid("seve-manager-shadow-trace-v1", {
-    positionId: input.position.id,
-    managerId: input.exit.managerId,
+    positionId,
+    managerId,
     managerPolicyVersion: MANAGER_POLICY_VERSION,
   });
+}
+
+export function managerShadowTraceId(input: Pick<ManagerShadowObservationInput, "position" | "exit">): string {
+  return managerShadowTraceIdFor(input.position.id, input.exit.managerId);
 }
 
 export function buildManagerShadowObservation(input: ManagerShadowObservationInput): ExecutionObservationDraft | null {
