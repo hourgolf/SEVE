@@ -87,6 +87,14 @@ export function MobileRackRow({
     const v = Math.max(0, Math.min(5000, config.daily_stop_usd + delta));
     if (v !== config.daily_stop_usd) setCfg({ daily_stop_usd: v });
   };
+  const stepPremiumStop = (delta: number) => {
+    const v = Math.max(10, Math.min(90, premStop + delta));
+    if (v !== premStop) setCfg({ premium_stop_pct: v });
+  };
+  const stepTakeProfit = (delta: number) => {
+    const v = Math.max(0, Math.min(300, tp + delta));
+    if (v !== tp) setCfg({ take_profit_pct: v });
+  };
 
   const tag = config.muted ? { txt: "MUTED", cls: "muted" }
     : status === "draft" ? { txt: "BENCH", cls: "darkch" }
@@ -113,24 +121,32 @@ export function MobileRackRow({
 
       {open && (
         <div className="m2-insp">
-          <div className="m2-fireslbl"><span className="fl">FIRES — the binding exits · tap a pill to edit</span><span className="ln" /></div>
+          <div className="m2-fireslbl"><span className="fl">FIRES — binding exits · use − / + or tap value</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
-              <FiresPill
-                value={premStop} display={`−${premStop}%`}
-                onCommit={(v) => setCfg({ premium_stop_pct: v })}
-                min={10} max={90} className="m2-fp-val"
-                canWrite={canWrite} label="premium stop percent" title="premium stop % — the binding downside"
-              />
+              <div className="m2-exit-stepper">
+                <button type="button" disabled={!canWrite || premStop <= 10} onClick={() => stepPremiumStop(-5)} aria-label="decrease premium stop by 5 percent">−</button>
+                <FiresPill
+                  value={premStop} display={`−${premStop}%`}
+                  onCommit={(v) => setCfg({ premium_stop_pct: v })}
+                  min={10} max={90} className="m2-fp-val"
+                  canWrite={canWrite} label="premium stop percent" title="premium stop % — the binding downside"
+                />
+                <button type="button" disabled={!canWrite || premStop >= 90} onClick={() => stepPremiumStop(5)} aria-label="increase premium stop by 5 percent">+</button>
+              </div>
               <span className="m2-fp-cap">prem stop</span>
             </div>
             <div className={`m2-fp ${tp > 0 ? "take" : "ride"}`}>
-              <FiresPill
-                value={tp} display={tp > 0 ? `+${tp}%` : "ride"}
-                onCommit={(v) => setCfg({ take_profit_pct: v })}
-                min={0} max={300} className="m2-fp-val"
-                canWrite={canWrite} label="take profit percent" title="take-profit % (0 = ride)"
-              />
+              <div className="m2-exit-stepper">
+                <button type="button" disabled={!canWrite || tp <= 0} onClick={() => stepTakeProfit(-5)} aria-label="decrease take profit by 5 percent">−</button>
+                <FiresPill
+                  value={tp} display={tp > 0 ? `+${tp}%` : "ride"}
+                  onCommit={(v) => setCfg({ take_profit_pct: v })}
+                  min={0} max={300} className="m2-fp-val"
+                  canWrite={canWrite} label="take profit percent" title="take-profit % (0 = ride)"
+                />
+                <button type="button" disabled={!canWrite || tp >= 300} onClick={() => stepTakeProfit(5)} aria-label="increase take profit by 5 percent">+</button>
+              </div>
               <span className="m2-fp-cap">{tp > 0 ? "take" : "no take"}</span>
             </div>
             <span className="m2-fp eod"><b>EOD</b><span className="m2-fp-cap">flatten</span></span>
