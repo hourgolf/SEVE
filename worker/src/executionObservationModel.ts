@@ -20,7 +20,7 @@ export interface ExecutionObservationDraft {
   channel_slug: string;
   opportunity_id: string | null;
   position_id: string | null;
-  action: string;
+  action: "enter" | "add" | "exit" | "reconcile";
   reason: string;
   blocked_reason: string | null;
   underlying: string;

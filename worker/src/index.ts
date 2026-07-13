@@ -31,7 +31,8 @@ import { sessionCloseMin } from "../../engine/market-calendar";
 import { inEventWindow } from "../../engine/market-events";
 import { groupChannelsByAccount, rowAccountIdOf, acctCanEnter, acctCanManage } from "./routing.js";
 import { makeExitGuard, sweepExitAllowed } from "./exitGuard.js";
-import { captureDecisionObservation } from "./executionObservation.js";
+import { captureDecisionObservation, captureManagerShadowObservation } from "./executionObservation.js";
+import { advanceManager, MANAGER_IDS, recoverManagerState, type ManagerState } from "../../engine/managerPolicy.js";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
@@ -56,6 +57,9 @@ const peakBidByKey = new Map<string, number>();
 // only: no exit reads it; it makes stop calibration measurable from durable data. BID-based
 // since 1b #6 (a stop-out sells at the bid, so bid-side MAE is the calibration truth).
 const troughBidByKey = new Map<string, number>();
+// Counterfactual manager state is deliberately separate from the active exit
+// policy. It can only feed append-only evidence; executeExit never reads it.
+const managerShadowState = new Map<string, ManagerState>();
 // 1b #6: per-row throttle (≤1 line/min) for the "price exits skipped" info — a position whose
 // quote is stale/bid-less has NO price protection, which must be visible without flooding the
 // log at the 10s sweep cadence. Cleared with the peak/trough state when the row leaves.
@@ -66,6 +70,42 @@ function clearSweepPriceState(rowId: string): void {
   peakBidByKey.delete(rowId);
   troughBidByKey.delete(rowId);
   sweepSkipLogged.delete(rowId);
+  for (const managerId of MANAGER_IDS) managerShadowState.delete(`${rowId}|${managerId}`);
+}
+
+function observeShadowManagers(input: {
+  ch: store.ChannelConfig;
+  row: store.PositionRow;
+  accountId: string;
+  bid: number;
+  mid: number | null;
+  chainAgeMs: number;
+  peak: number;
+  observedAtMs: number;
+  isBell: boolean;
+}): void {
+  const { ch, row, accountId, bid, mid, chainAgeMs, peak, observedAtMs, isBell } = input;
+  if (!(row.avg_entry_price > 0)) return;
+  const retPct = ((bid - row.avg_entry_price) / row.avg_entry_price) * 100;
+  const peakPct = ((peak - row.avg_entry_price) / row.avg_entry_price) * 100;
+  const durablePeakPct = (((row.peak_mark ?? row.avg_entry_price) - row.avg_entry_price) / row.avg_entry_price) * 100;
+  const openedMs = row.opened_at ? Date.parse(row.opened_at) : NaN;
+  const minutesHeld = Number.isFinite(openedMs) ? Math.max(0, (observedAtMs - openedMs) / 60_000) : null;
+  for (const managerId of MANAGER_IDS) {
+    const key = `${row.id}|${managerId}`;
+    // Recover only from the peak that pre-dated this process observation. Using
+    // the just-computed current peak here would turn a fresh +24 crossing into
+    // an imprecise restart assumption instead of observing the real crossing.
+    const prior = managerShadowState.get(key) ?? recoverManagerState(managerId, durablePeakPct);
+    const result = advanceManager(managerId, prior, retPct, isBell);
+    managerShadowState.set(key, result.state);
+    if (!result.exit) continue;
+    captureManagerShadowObservation({
+      channel: ch, position: row, accountId, exit: result.exit, observedAtMs,
+      quoteAgeMs: chainAgeMs, bid, mid, currentReturnPct: retPct,
+      peakReturnPct: peakPct, minutesHeld,
+    });
+  }
 }
 // Orphan safety-net persistence: `${accountId}|${occ}` → consecutive cycles seen UNCOVERED
 // (held in a bucket with no open desk row). A 2-cycle gate dodges same-cycle fill→insert races.
@@ -676,6 +716,17 @@ async function fastExitSweep(): Promise<void> {
       const expiresToday = String(r.expiration ?? todayET) <= todayET;
       // MANDATORY flatten (1b #9: runs even on a degraded orders pass). 1b #8: exitGuard-claimed.
       if (wallMtc <= policy.EOD_HARD_FLATTEN_MIN && (openedET === todayET || expiresToday) && !/-manual$/i.test(ch.slug)) {
+        // Evaluate the dark controls at the same executable observation that
+        // precedes the real wall-clock flatten. This call writes evidence only.
+        const bellQ = chain?.byOcc(r.occ_symbol);
+        const bellAge = chain?.ageMs ?? Infinity;
+        const bellBid = freshExecutableBid(bellQ?.bid, bellAge);
+        if (bellBid != null) {
+          const bellPeak = Math.max(peakBidByKey.get(r.id) ?? r.peak_mark ?? r.avg_entry_price, bellBid);
+          observeShadowManagers({ ch, row: r, accountId: g.account.id, bid: bellBid,
+            mid: bellQ?.mid ?? null, chainAgeMs: bellAge, peak: bellPeak,
+            observedAtMs: Date.now(), isBell: true });
+        }
         info(`eod-hard-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — ${openedET === todayET ? "same-session" : "expires today"}, wall-clock mtc ${wallMtc} (pre-bell backstop, bars-independent)`);
         if (exitGuard.claim(r.id)) {
           try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
@@ -749,6 +800,9 @@ async function fastExitSweep(): Promise<void> {
       const trough = Math.min(prevTrough, bid);
       troughBidByKey.set(key, trough);
       if (trough < prevTrough) void store.markTrough(r.id, trough);
+      observeShadowManagers({ ch, row: r, accountId: g.account.id, bid, mid: midDiag,
+        chainAgeMs, peak, observedAtMs: Date.now(),
+        isBell: /-manual$/i.test(ch.slug) && wallMtc <= policy.MANUAL_BACKSTOP_MIN });
       // "The desk summons you" — premium-side pages off the same ~10s sweep state:
       // a ripper crossing +CROSS%, and a meaningful peak giving back ≥ FRAC of the
       // move (the positions panel's 50%-giveback amber, pushed to the phone live).
