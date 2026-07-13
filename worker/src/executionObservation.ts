@@ -12,6 +12,10 @@ import {
   type DecisionObservationInput,
   type ExecutionObservationDraft,
 } from "./executionObservationModel.js";
+import {
+  buildManagerShadowObservation,
+  type ManagerShadowObservationInput,
+} from "./managerShadowObservationModel.js";
 
 const seen = new Set<string>();
 const pending = new Set<string>();
@@ -39,6 +43,11 @@ export function captureDecisionObservation(input: DecisionObservationInput): str
 export function captureBrokerObservation(input: BrokerObservationInput): string | null {
   try { return enqueue(buildBrokerObservation(input)); }
   catch (e) { warn(`execution-observation: broker draft rejected — ${(e as Error).message}`); return null; }
+}
+
+export function captureManagerShadowObservation(input: ManagerShadowObservationInput): string | null {
+  try { return enqueue(buildManagerShadowObservation(input)); }
+  catch (e) { warn(`execution-observation: manager shadow draft rejected — ${(e as Error).message}`); return null; }
 }
 
 export type { ChannelConfig, ShadowDecision };

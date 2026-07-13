@@ -3,6 +3,7 @@
 // docs/manager-lab-preregister-2026-07-12.md.
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { advanceManager, MANAGER_IDS, type ManagerId, type ManagerState } from "./managerPolicy";
 
 const SOURCE = "data/databento-v2/manifests/entry-path-study.json";
 const RECEIPT = "data/databento-v2/manifests/manager-lab.json";
@@ -29,61 +30,20 @@ function last(path: EntryPath): [number, number] {
   return path.returnPath.at(-1) ?? [0, -100];
 }
 
-function lockManager(name: string, target: number | null, stop: number | null): Manager {
-  return {
-    name,
-    run: (path) => {
-      for (const [min, ret] of path.returnPath) {
-        if (stop != null && ret <= -stop) return finish(path, ret, min, "stop");
-        if (target != null && ret >= target) return finish(path, ret, min, "target");
-      }
-      const [min, ret] = last(path); return finish(path, ret, min, "bell");
-    },
-  };
+function policyManager(name: ManagerId): Manager {
+  return { name, run: (path) => {
+    let state: ManagerState = {};
+    for (let i = 0; i < path.returnPath.length; i++) {
+      const [min, ret] = path.returnPath[i];
+      const result = advanceManager(name, state, ret, i === path.returnPath.length - 1);
+      state = result.state;
+      if (result.exit) return finish(path, result.exit.returnPct, min, result.exit.reason);
+    }
+    const [min, ret] = last(path); return finish(path, ret, min, "bell");
+  } };
 }
 
-export const managers: Manager[] = [
-  lockManager("LOCK20/30", 20, 30),
-  lockManager("LOCK30/30", 30, 30),
-  lockManager("LOCK50/30", 50, 30),
-  lockManager("WIDE20/50", 20, 50),
-  {
-    name: "BANK20/RUN50",
-    run: (path) => {
-      let bank: { ret: number; min: number } | null = null;
-      for (const [min, ret] of path.returnPath) {
-        if (!bank) {
-          if (ret <= -30) return finish(path, ret, min, "prebank_stop");
-          if (ret >= 20) bank = { ret, min };
-        }
-        if (bank) {
-          if (ret >= 50) return finish(path, (bank.ret + ret) / 2, min, "runner_target");
-          if (ret <= 0) return finish(path, (bank.ret + ret) / 2, min, "runner_floor");
-        }
-      }
-      const [min, ret] = last(path);
-      return bank ? finish(path, (bank.ret + ret) / 2, min, "runner_bell") : finish(path, ret, min, "bell");
-    },
-  },
-  {
-    name: "ARM20/HALF-GIVEBACK",
-    run: (path) => {
-      let armed = false, peak = 0;
-      for (const [min, ret] of path.returnPath) {
-        if (!armed) {
-          if (ret <= -30) return finish(path, ret, min, "prearm_stop");
-          if (ret >= 20) { armed = true; peak = ret; }
-        } else {
-          peak = Math.max(peak, ret);
-          if (ret <= Math.max(0, peak * 0.5)) return finish(path, ret, min, "giveback");
-        }
-      }
-      const [min, ret] = last(path); return finish(path, ret, min, armed ? "armed_bell" : "bell");
-    },
-  },
-  lockManager("BELL/-30", null, 30),
-  lockManager("BELL/no-stop", null, null),
-];
+export const managers: Manager[] = MANAGER_IDS.map(policyManager);
 
 function median(values: number[]): number | null {
   if (!values.length) return null;
