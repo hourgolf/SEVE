@@ -2,24 +2,21 @@
 
 import { Knob } from "@/components/console/hw/Knob";
 import { useFold } from "@/hooks/useFold";
-import { useDeskDispatch } from "@/hooks/useDeskState";
-import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { usd0 } from "@/lib/format";
 import type { FundState } from "@/lib/desk/types";
 
-// OPS · RISK — the desk-wide master daily-stop. Writes fund_state.master_daily_
-// stop_usd (the account-level loss halt) via the same SET_FUND dispatch +
-// persistFund path the other master controls use. Previously SQL/seed-only.
+// OPS · RISK — historical master-stop field. The live cron/stream decision path
+// intentionally does NOT enforce fund.master_daily_stop_usd; entries are latched
+// by each channel's strategist_config.daily_stop_usd. Keep the stored value
+// visible for provenance, but never present it as an operable safety control.
 export function MasterStopControl({ fund }: { fund: FundState }) {
-  const dispatch = useDeskDispatch();
-  const { canWrite, persistFund } = useDeskWrite();
   const v = fund.master_daily_stop_usd ?? 0;
   const [folded, toggleFold] = useFold("masterstop");
   return (
     <div className={`panel mstop${folded ? " folded" : ""}`}>
       <div className="phead">
-        <span className="t">Risk · Master Stop</span>
-        <span className="x">desk-wide</span>
+        <span className="t">Risk · Legacy Master</span>
+        <span className="x">not enforced</span>
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody mstop-body">
@@ -28,18 +25,18 @@ export function MasterStopControl({ fund }: { fund: FundState }) {
           min={0}
           max={20000}
           step={100}
-          onChange={(val) => dispatch({ type: "SET_FUND", patch: { master_daily_stop_usd: val } })}
-          onCommit={(val) => persistFund({ master_daily_stop_usd: val })}
+          onChange={() => undefined}
+          onCommit={() => undefined}
           size="lg"
-          label="Stop / day"
+          label="Stored value"
           format={usd0}
           cap="var(--knob-dark)"
           tick="#d7d5cb"
-          disabled={!canWrite}
+          disabled
         />
         <div className="mstop-note">
           <div className="mstop-v">{usd0(v)}</div>
-          <div className="mstop-hint">the whole desk halts after this realized loss on the day{!canWrite ? " · sign in to change" : ""}</div>
+          <div className="mstop-hint">stored legacy value only · live entries use each channel&apos;s ENTRY LATCH in STUDIO · KILL/HALT remains desk-wide</div>
         </div>
       </div>
     </div>
