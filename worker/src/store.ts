@@ -20,6 +20,12 @@ import type { DurableShadowRow } from "./shadowPersistence.js";
 import type { PolicyEpochDraft, PositionPlanDraft } from "./planShadowModel.js";
 import type { ExecutionObservationDraft } from "./executionObservationModel.js";
 import type { PositionOutcomeDraft } from "./positionOutcomeModel.js";
+import {
+  MANAGER_SHADOW_BOOK_VERSION,
+  encodeManagerShadowRun,
+  type ManagerShadowDbRow,
+  type ManagerShadowRun,
+} from "./managerShadowBookModel.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -526,6 +532,82 @@ export async function insertExecutionObservation(row: ExecutionObservationDraft)
     warn(`store: execution observation rejected — ${(e as Error).message}`);
   }
   return false;
+}
+
+// ---- Phase 1G-B durable portable-manager shadow book ----------------------
+// This adapter is backend-only research persistence. It is never imported by
+// execute.ts and none of its failures can alter an order or desk position row.
+let managerShadowTableAvailable: boolean | null = null;
+
+export async function loadManagerShadowRows(): Promise<ManagerShadowDbRow[] | null> {
+  if (!config.hasServiceRole || managerShadowTableAvailable === false) return null;
+  // Load retained terminals/censors too so an open actual position cannot
+  // re-enroll a manager that already reached its deterministic first terminal.
+  const { data, error } = await sb.from("manager_shadow_runs").select("*")
+    .eq("shadow_book_version", MANAGER_SHADOW_BOOK_VERSION);
+  if (!error) { managerShadowTableAvailable = true; return (data ?? []) as ManagerShadowDbRow[]; }
+  if (missingRelation(error)) managerShadowTableAvailable = false;
+  else warn(`store: manager shadow hydration failed — ${error.message}`);
+  return null;
+}
+
+export async function insertManagerShadowRuns(runs: readonly ManagerShadowRun[]): Promise<boolean> {
+  if (!config.hasServiceRole || managerShadowTableAvailable === false || !runs.length) return false;
+  const rows = runs.map((run) => encodeManagerShadowRun(run, { sourceBootId: BOOT_ID }));
+  if (rows.some((row) => row == null)) return false;
+  const { error } = await sb.from("manager_shadow_runs")
+    .upsert(rows as ManagerShadowDbRow[], { onConflict: "id", ignoreDuplicates: true });
+  if (!error) { managerShadowTableAvailable = true; return true; }
+  if (missingRelation(error)) managerShadowTableAvailable = false;
+  else warn(`store: manager shadow enrollment failed — ${error.message}`);
+  return false;
+}
+
+/** Optimistic active→active/terminal/censored update. The active predicate is
+ *  the first-terminal-wins guard; a stale retry cannot rewrite a terminal. */
+export async function saveManagerShadowRun(
+  run: ManagerShadowRun,
+  sourceBootId: string,
+): Promise<boolean> {
+  if (!config.hasServiceRole || managerShadowTableAvailable === false) return false;
+  const row = encodeManagerShadowRun(run, {
+    sourceBootId,
+    terminalBootId: run.status === "terminal" ? BOOT_ID : null,
+  });
+  if (!row) return false;
+  const { id, ...payload } = row;
+  const { data, error } = await sb.from("manager_shadow_runs")
+    .update({ ...payload, updated_at: new Date().toISOString() })
+    .eq("id", id).eq("status", "active").select("id").maybeSingle();
+  if (!error) { managerShadowTableAvailable = true; return !!data; }
+  if (missingRelation(error)) managerShadowTableAvailable = false;
+  else warn(`store: manager shadow state save failed — ${error.message}`);
+  return false;
+}
+
+export interface ManagerShadowActualPosition {
+  id: string;
+  status: string;
+  closed_at: string | null;
+  close_reason: string | null;
+  realized_pnl: number;
+}
+
+export async function loadManagerShadowActualPositions(ids: readonly string[]): Promise<ManagerShadowActualPosition[] | null> {
+  if (!ids.length) return [];
+  const out: ManagerShadowActualPosition[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await sb.from("positions")
+      .select("id,status,closed_at,close_reason,realized_pnl")
+      .in("id", ids.slice(i, i + 100));
+    if (error) { warn(`store: manager shadow actual-close read failed — ${error.message}`); return null; }
+    for (const row of data ?? []) out.push({
+      id: String((row as any).id), status: String((row as any).status),
+      closed_at: (row as any).closed_at ?? null, close_reason: (row as any).close_reason ?? null,
+      realized_pnl: Number((row as any).realized_pnl ?? 0),
+    });
+  }
+  return out;
 }
 
 let positionOutcomeTableAvailable: boolean | null = null;

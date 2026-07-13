@@ -34,6 +34,7 @@ import { makeExitGuard, sweepExitAllowed } from "./exitGuard.js";
 import { captureDecisionObservation, captureManagerShadowObservation } from "./executionObservation.js";
 import { advanceManager, MANAGER_IDS, recoverManagerState, type ManagerState } from "../../engine/managerPolicy.js";
 import { specPremiumExit } from "../../engine/specEvaluate";
+import { shadowManagerBookTick } from "./managerShadowBook.js";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
 
@@ -934,6 +935,14 @@ async function main(): Promise<void> {
 
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
   setInterval(() => { void fastExitSweep(); }, Math.max(5, config.fastExitSec) * 1000);
+
+  // Phase 1G-B portable-manager shadow book: a separate, observation-only
+  // clock which keeps running after the actual position closes. DARK unless the
+  // explicit env flag is enabled; it owns no execution or broker-order imports.
+  setInterval(() => { void shadowManagerBookTick({
+    paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+    channels: cfg.channels, accounts: cfg.accounts,
+  }); }, Math.max(5, config.fastExitSec) * 1000);
 
   // FORWARD-DATA DURABILITY: upload each complete day's option_quotes (gz) to Supabase Storage,
   // post-close, from this always-on worker — the Mac-independent backstop against the 7d prune

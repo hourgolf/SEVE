@@ -18,6 +18,15 @@ import {
   type ManagerShadowDbRow,
   type ManagerShadowRun,
 } from "./managerShadowBookModel.js";
+import {
+  normalizeTargetedOptionSnapshots,
+  targetedOptionBatches,
+} from "./managerShadowQuoteModel.js";
+import {
+  MANAGER_SHADOW_QUOTE_MAX_AGE_MS,
+  managerShadowMeaningfulChange,
+  managerShadowSessionPhase,
+} from "./managerShadowRuntimeModel.js";
 
 let passed = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -213,6 +222,41 @@ truth("migration has active partial OCC index", migration.includes("where status
 truth("migration enforces integer source quantity", migration.includes("original_qty             integer not null"));
 truth("migration requires source-boot provenance", migration.includes("source_boot_id           uuid not null"));
 truth("model contains no execution imports", !readFileSync(new URL("./managerShadowBookModel.ts", import.meta.url), "utf8").match(/executeExit|orderAndFill|broker order/i));
+
+check("targeted quotes deduplicate and sort", targetedOptionBatches(["Z", "A", "z"], 2, 10), [["A", "Z"]]);
+check("targeted quotes batch at provider limit", targetedOptionBatches(Array.from({ length: 101 }, (_, i) => `O${i}`), 100, 500)?.map((b) => b.length), [100, 1]);
+check("targeted quote hard cap fails closed", targetedOptionBatches(["A", "B", "C"], 2, 2), null);
+check("invalid provider batch size fails closed", targetedOptionBatches(["A"], 101, 500), null);
+const normalized = normalizeTargetedOptionSnapshots({ snapshots: {
+  SPY260713C00600000: { latestQuote: { bp: 1.2, ap: 1.24, t: "2026-07-13T14:32:00.000Z" } },
+  ZERO: { latestQuote: { bp: 0, ap: 1, t: "2026-07-13T14:32:00.000Z" } },
+  CROSSED: { latestQuote: { bp: 1.2, ap: 1.1, t: "2026-07-13T14:32:00.000Z" } },
+  NOTIME: { latestQuote: { bp: 1.2, ap: 1.3 } },
+} }, "opra");
+check("provider normalization retains source timestamp", normalized.get(base.occSymbol), {
+  occSymbol: base.occSymbol, bid: 1.2, ask: 1.24,
+  quoteAtMs: Date.parse("2026-07-13T14:32:00.000Z"), feed: "opra",
+});
+check("invalid provider quotes are omitted", [...normalized.keys()], [base.occSymbol]);
+check("missing snapshot body is empty", normalizeTargetedOptionSnapshots({}, "opra").size, 0);
+
+check("regular session observes before 15:55", managerShadowSessionPhase({ date: "2026-07-13", minute: 954, second: 59 }), "observe");
+check("regular session enters cutoff at 15:55", managerShadowSessionPhase({ date: "2026-07-13", minute: 955, second: 0 }), "cutoff");
+check("cutoff grace settles after 30 seconds", managerShadowSessionPhase({ date: "2026-07-13", minute: 955, second: 30 }), "settle");
+check("half-day cutoff is 12:55", managerShadowSessionPhase({ date: "2026-11-27", minute: 775, second: 0 }), "cutoff");
+check("holiday never observes", managerShadowSessionPhase({ date: "2026-12-25", minute: 600, second: 0 }), "closed");
+check("weekend never observes", managerShadowSessionPhase({ date: "2026-07-12", minute: 600, second: 0 }), "closed");
+check("pre-open is closed", managerShadowSessionPhase({ date: "2026-07-13", minute: 569, second: 59 }), "closed");
+check("dark cohort quote freshness is stamped at 15 seconds", MANAGER_SHADOW_QUOTE_MAX_AGE_MS, 15_000);
+check("passive bid alone is not a durable write", managerShadowMeaningfulChange(lock, { ...lock, lastBid: 1.01 }), false);
+check("first quote miss is durable", managerShadowMeaningfulChange(lock, recordManagerQuoteMiss(lock)), true);
+check("second quote miss is coalesced", managerShadowMeaningfulChange({ ...lock, consecutiveQuoteMisses: 1 }, { ...lock, consecutiveQuoteMisses: 2 }), false);
+check("sixth quote miss is a durable checkpoint", managerShadowMeaningfulChange({ ...lock, consecutiveQuoteMisses: 5 }, { ...lock, consecutiveQuoteMisses: 6 }), true);
+check("quote recovery is durable", managerShadowMeaningfulChange({ ...lock, consecutiveQuoteMisses: 6 }, lock), true);
+check("actual close is a durable transition", managerShadowMeaningfulChange(lock, actualBeforeManager), true);
+check("bank crossing is a durable transition", managerShadowMeaningfulChange(run("BANK20/RUN50"), bankStart4.run), true);
+check("terminal is a durable transition", managerShadowMeaningfulChange(lock, lockExit.run), true);
+truth("runtime module contains no execution/order import", !readFileSync(new URL("./managerShadowBook.ts", import.meta.url), "utf8").match(/from ["']\.\/execute|orderAndFill|getOrders|getPositions/));
 
 check("declared operating minimum remains four", MIN_MODELED_SOURCE_QTY, 4);
 console.log(`manager-shadow-book-selftest: ${passed}/${passed} PASS`);

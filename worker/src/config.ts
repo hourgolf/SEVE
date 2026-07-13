@@ -98,6 +98,12 @@ export const config = {
   // Fast EXIT poll cadence (seconds) while live with open stream-owned positions:
   // premium stop/target/giveback checked on the live chain between bar closes.
   fastExitSec: Number(opt("FAST_EXIT_SEC", "10")),
+  // Phase 1G-B durable portable-manager lab. Observation-only and DARK by
+  // default: enabling it still cannot place an order, but requires the private
+  // manager_shadow_runs migration and a service-role backend. The 15s evidence
+  // bound is cohort-stamped; changing it requires a new shadow-book version.
+  managerShadowBookEnabled: flag("MANAGER_SHADOW_BOOK_ENABLED", false),
+  managerShadowQuoteMaxAgeMs: Number(opt("MANAGER_SHADOW_QUOTE_MAX_AGE_MS", "15000")),
   // Fund-level equity snapshots stay with the cron until full cutover (else two
   // writers double-snapshot). Flip at Phase B4 when the cron is unscheduled.
   writeEquitySnapshots: flag("WRITE_EQUITY_SNAPSHOTS", false),
