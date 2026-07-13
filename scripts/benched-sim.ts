@@ -27,6 +27,7 @@ import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isPositionExcludedFromStrategyResearch } from "../lib/research/positionAnnotations";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return; // day-report runs with --env-file already
@@ -115,10 +116,11 @@ export async function benchedVsLive(date: string): Promise<BenchedVsLive> {
 
   // live actual P&L (armed roster) for the day
   const { data: posRaw } = await sb.from("positions")
-    .select("realized_pnl,strategists(slug,name,status)")
+    .select("id,realized_pnl,strategists(slug,name,status)")
     .eq("status", "closed").gte("closed_at", `${date}T13:00:00Z`).lte("closed_at", `${date}T22:00:00Z`);
   const live = new Map<string, LiveResult>();
   for (const p of (posRaw ?? []) as any[]) {
+    if (isPositionExcludedFromStrategyResearch(p.id)) continue;
     if (p.strategists?.status !== "armed") continue;
     const slug = p.strategists.slug, name = p.strategists.name ?? slug;
     const r = live.get(slug) ?? { slug, name, pnl: 0, trades: 0 };

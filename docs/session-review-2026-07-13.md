@@ -18,10 +18,12 @@ the session review. All amounts below are gross paper-ledger results.
 - worker `stream-2026-07-12g` / git `b0e1f9a` remained healthy, with no
   recorded worker error or crash
 
-One known operator close must not receive native-strategy credit:
+One known operator test must not receive native-strategy credit:
 `momo-shape-2` position `2c103468-da30-407f-8e39-b5ecf8b2a956`, +$348.
-The durable row currently says `target_premium`; manual provenance is a later
-separate correction, so analyses in this review exclude that row where noted.
+The durable row correctly says `target_premium`: the operator initiated a
+manual-close test, but the native target filled first. The separate versioned
+research-annotation registry preserves that execution truth while excluding the
+intervention from strategy, exit, giveback, and portfolio-shadow scoring.
 
 ## Exit ledger
 

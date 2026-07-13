@@ -45,6 +45,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { pageAll } from "../engine/pageAll";
+import { isPositionExcludedFromStrategyResearch } from "../lib/research/positionAnnotations";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -162,6 +163,7 @@ async function buildRows(sb: SupabaseClient, opts: { allowArchive: boolean; prio
   const ledger = new Map(opts.prior);
   let fresh = 0;
   for (const p of pos as any[]) {
+    if (isPositionExcludedFromStrategyResearch(p.id)) continue;
     const prior = ledger.get(p.id);
     if (prior && prior.ratchetPnlCt != null) continue; // scored rows are final; retry unscored
     const slug = slugById.get(p.strategist_id)!;
@@ -199,6 +201,7 @@ export interface RatchetSummary {
 }
 
 function summarize(rows: RatchetRow[], source: "ledger" | "live"): RatchetSummary {
+  rows = rows.filter((r) => !isPositionExcludedFromStrategyResearch(r.posId));
   const scored = rows.filter((r) => r.ratchetPnlCt != null);
   const usd = (f: (r: RatchetRow) => number) => Math.round(scored.reduce((a, r) => a + f(r) * r.qty, 0));
   const byDayMap = new Map<string, { n: number; actual: number; ratchet: number }>();

@@ -36,6 +36,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { pageAll } from "../engine/pageAll";
+import { isPositionExcludedFromStrategyResearch } from "../lib/research/positionAnnotations";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -138,6 +139,7 @@ export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<Shadow
     .eq("status", "closed")
     .gte("opened_at", `${from}T04:00:00Z`).lte("opened_at", `${to}T23:59:59Z`)
     .order("opened_at", { ascending: true }).order("id", { ascending: true }))) {
+    if (isPositionExcludedFromStrategyResearch(p.id)) continue;
     const slug = roster.get(p.strategist_id);
     if (!slug || p.closed_at == null) continue;
     rows.push({ id: p.id, runner_of: p.runner_of, occ_symbol: p.occ_symbol, qty: Number(p.qty),

@@ -12,9 +12,12 @@
 //
 //    npm run day-report                  (today ET)
 //    npm run day-report -- --date 2026-06-10
+//    npm run day-report -- --date 2026-06-10 --read-only
 //
-//  Read-only (anon). Peaks come from option_quotes (7-day retention — run it
-//  same-week). Exit reasons parsed from the worker journal in `events`.
+//  Reads use the anon client. Default mode may persist eligible override/foulout
+//  ledgers and publish the dashboard payload when private env is present;
+//  --read-only suppresses every report write. Peaks come from option_quotes
+//  (7-day retention — run it same-week). Exit reasons parse the `events` journal.
 // ============================================================================
 
 import { createClient } from "@supabase/supabase-js";
@@ -27,10 +30,12 @@ import { benchedVsLive, type BenchedVsLive } from "./benched-sim";
 import { runOneAccountShadow, type ShadowResult } from "./one-account-shadow";
 import { ratchetShadowSummary, slotAwareA4, slotAwareMomo, type RatchetSummary, type SlotAwareBank } from "./ratchet-shadow";
 import { pageAll } from "../engine/pageAll";
+import { getPositionResearchAnnotation, type PositionResearchAnnotation } from "../lib/research/positionAnnotations";
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
 const di = process.argv.indexOf("--date");
+const READ_ONLY = process.argv.includes("--read-only");
 const ET_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" });
 const DATE = di >= 0 && process.argv[di + 1] ? process.argv[di + 1] : ET_DATE.format(new Date());
 
@@ -60,6 +65,7 @@ interface Trade {
   peak: number | null; mfePct: number | null; gavePct: number | null; reason: string;
   manual: boolean;
   closeReason: string | null; // durable column (31_close_reason.sql) — authoritative once stamped
+  researchAnnotation: PositionResearchAnnotation | null;
   // ride-to-close counterfactual (reconstructed from option_quotes, same-week only):
   ride: number | null;        // P&L if held from entry to the native 15:25 flatten / −50% stop
   rideDelta: number | null;   // actual pnl − ride  (>0 ⇒ the actual exit beat riding)
@@ -243,7 +249,7 @@ async function main() {
   }
   const execOf = (slug: string) => execBySlug.get(slug)?.executor ?? "cron";
 
-  const trades: Trade[] = [];
+  const allTrades: Trade[] = [];
   for (const p of (posRaw ?? []) as any[]) {
     const slug = p.strategists?.slug ?? "?";
     const name = p.strategists?.name ?? slug; // operator's display label (slug stays the internal key)
@@ -263,25 +269,34 @@ async function main() {
       && Math.abs(Date.parse(e.created_at) - Date.parse(p.closed_at)) < 180_000
       && /exit|reconcil/i.test(e.message));
     const reason = ev?.message.match(/\(([a-z_0-9]+)\)\s*$/i)?.[1] ?? (ev && /reconcil/i.test(ev.message) ? "reconciled" : "—");
-    trades.push({
+    allTrades.push({
       id: p.id, slug, name, cp: p.opt_type, strike: Number(p.strike), qty, occ: p.occ_symbol,
       entry, exit, pnl, openedAt: p.opened_at, closedAt: p.closed_at,
       peak, mfePct, gavePct,
       reason: p.close_reason ?? reason, // column beats journal-parse once stamped
       manual: /-manual$/i.test(slug),
       closeReason: p.close_reason ?? null,
+      researchAnnotation: getPositionResearchAnnotation(p.id),
       ride, rideDelta: ride != null ? pnl - ride : null, rideStop: !!r?.rideStop, rideOk: !!r?.rideOk, rideExitMs: r?.rideExitMs ?? null,
     });
   }
 
+  // Execution truth and research eligibility are deliberately separate. The ledger/NAV
+  // reconciliation retains every real fill. Operator tests and execution corrections remain
+  // visible below, but cannot teach channel, exit, giveback, or portfolio-shadow statistics.
+  const excludedTrades = allTrades.filter((t) => t.researchAnnotation != null);
+  const trades = allTrades.filter((t) => t.researchAnnotation == null);
   const auto = trades.filter((t) => !t.manual);
-  const tot = trades.reduce((a, t) => a + t.pnl, 0);
+  const ledgerTot = allTrades.reduce((a, t) => a + t.pnl, 0);
+  const scoredTot = trades.reduce((a, t) => a + t.pnl, 0);
   console.log(`\nNAV truth — per bucket (cockpit P3, the 3-hypothesis forward test):`);
   if (!buckets.length) console.log(`  (no per-account snapshots for ${DATE} — worker down, or pre-cockpit date)`);
   for (const b of buckets)
     console.log(`  ${b.name.padEnd(14)} ${Math.round(b.open).toLocaleString().padStart(11)} → ${Math.round(b.close).toLocaleString().padStart(11)}   ${sgn(b.delta).padStart(7)}`);
-  console.log(`  ── TOTAL ${navDelta == null ? "n/a" : sgn(navDelta)} · Σ attribution ${sgn(tot)} (auto ${sgn(auto.reduce((a, t) => a + t.pnl, 0))}, manual ${sgn(trades.filter((t) => t.manual).reduce((a, t) => a + t.pnl, 0))}) · ${trades.length} trades`);
-  if (navDelta != null && Math.abs(navDelta - tot) > 300) console.log(`  ⚠ attribution drifts ${sgn(tot - navDelta)} from NAV (per-account snapshot timing / shared-OCC residue / a mis-booked close — e.g. the close-route account bug)`);
+  console.log(`  ── TOTAL ${navDelta == null ? "n/a" : sgn(navDelta)} · Σ ledger attribution ${sgn(ledgerTot)} · ${allTrades.length} executed trades`);
+  console.log(`  ── strategy-scored ${sgn(scoredTot)} (auto ${sgn(auto.reduce((a, t) => a + t.pnl, 0))}, manual ${sgn(trades.filter((t) => t.manual).reduce((a, t) => a + t.pnl, 0))}) · ${trades.length} eligible trades · ${excludedTrades.length} excluded`);
+  if (navDelta != null && Math.abs(navDelta - ledgerTot) > 300) console.log(`  ⚠ attribution drifts ${sgn(ledgerTot - navDelta)} from NAV (per-account snapshot timing / shared-OCC residue / a mis-booked close — e.g. the close-route account bug)`);
+  for (const t of excludedTrades) console.log(`  ↳ EXCLUDED ${t.id} · ${t.slug} ${sgn(t.pnl)} · ${t.researchAnnotation!.analysisClass}: ${t.researchAnnotation!.note}`);
 
   // ---- coverage: per-bucket account fills vs desk rows (cockpit P3 account-aware) --
   // Each channel routes to its bucket (strategists.account_id → accounts.cred_ref →
@@ -362,12 +377,13 @@ async function main() {
   // ---- per-trade table ------------------------------------------------------------
   console.log(`\ntime        channel                 trade        entry→peak→exit      P&L     MFE   gave   hold  exit`);
   console.log(`  (MFE/gave are option-MID based — an UPPER BOUND on what a sell would have realized at the bid)`);
-  for (const t of trades) {
+  for (const t of allTrades) {
     const hold = Math.round((Date.parse(t.closedAt) - Date.parse(t.openedAt)) / 60000);
+    const researchMark = t.researchAnnotation ? ` · EXCLUDED:${t.researchAnnotation.analysisClass}` : "";
     console.log(
       `${hhmm(t.openedAt)}–${hhmm(t.closedAt)}  ${(t.name + (t.manual ? " ✋" : "")).padEnd(22)} ${(t.strike.toFixed(0) + (t.cp === "call" ? "C" : "P") + "×" + t.qty).padEnd(12)} ` +
       `${t.entry.toFixed(2)}→${t.peak != null ? t.peak.toFixed(2) : "  ? "}→${t.exit.toFixed(2)}`.padEnd(20) +
-      ` ${sgn(t.pnl).padStart(6)}  ${pct(t.mfePct).padStart(5)} ${(t.gavePct != null ? Math.round(t.gavePct) + "%" : "—").padStart(6)} ${String(hold).padStart(4)}m  ${t.reason}`,
+      ` ${sgn(t.pnl).padStart(6)}  ${pct(t.mfePct).padStart(5)} ${(t.gavePct != null ? Math.round(t.gavePct) + "%" : "—").padStart(6)} ${String(hold).padStart(4)}m  ${t.reason}${researchMark}`,
     );
   }
 
@@ -494,8 +510,11 @@ async function main() {
         rideHoldMin: t.rideExitMs != null ? Math.round((t.rideExitMs - Date.parse(t.openedAt)) / 60000) : null,
         recordedAt: new Date().toISOString(),
       }));
-      const { added, updated } = await upsertLedger(entries);
-      console.log(`  ── ledger: +${added} new / ${updated} refreshed → override_ledger (Supabase)`);
+      if (READ_ONLY) console.log(`  ── ledger: read-only run — ${entries.length} eligible update(s) not persisted`);
+      else {
+        const { added, updated } = await upsertLedger(entries);
+        console.log(`  ── ledger: +${added} new / ${updated} refreshed → override_ledger (Supabase)`);
+      }
     }
     const stale = recon.filter((t) => isOverride(t) && !t.rideOk);
     if (stale.length) console.log(`  ⚠ ${stale.length} override(s) not ledgered — quote stream didn't reach the flatten (re-run earlier in the week / off-chain OCC)`);
@@ -541,10 +560,11 @@ async function main() {
         blockedSlot: r.blockedSlot, blockedStop: r.blockedStop, recordedAt: new Date().toISOString(),
       });
     }
-    const { added, updated } = await upsertFoulout(fouloutEntries);
+    const persisted = READ_ONLY ? null : await upsertFoulout(fouloutEntries);
     const dg = fouloutEntries.reduce((s, e) => s + e.deltaGross, 0), df = fouloutEntries.reduce((s, e) => s + e.deltaFoulAware, 0);
     console.log(`  ── today: ride beats you (gross) ${sgn(-dg)} → (foul-aware) ${sgn(-df)} · foul-out adjustment ${sgn(df - dg)} (phantom re-entries riding can't take)`);
-    console.log(`  ── foulout ledger: +${added} new / ${updated} refreshed → foulout_ledger (Supabase)`);
+    if (persisted) console.log(`  ── foulout ledger: +${persisted.added} new / ${persisted.updated} refreshed → foulout_ledger (Supabase)`);
+    else console.log(`  ── foulout ledger: read-only run — ${fouloutEntries.length} eligible update(s) not persisted`);
   }
 
   // ---- managed-exit shadow (shadowManage MGMT) — the OTHER counterfactual --------------
@@ -694,7 +714,7 @@ async function main() {
       today: oas.days.find((day) => day.date === DATE) ?? null } : null,
     ratchetShadow: ratchet ? { ...ratchet, slotAware: slotBanks } : null,
   };
-  console.log(`\n  dashboard: ${await publishForensics(DATE, payload)}`);
+  console.log(`\n  dashboard: ${READ_ONLY ? "read-only run — not published" : await publishForensics(DATE, payload)}`);
 
   console.log("");
 }

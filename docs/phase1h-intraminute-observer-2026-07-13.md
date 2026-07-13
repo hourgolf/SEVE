@@ -1,0 +1,202 @@
+# Phase 1H — intraminute entry and execution observer
+
+Status: proposed, observation-only. No production worker, order path, channel
+parameter, or database schema change is included in the current branch.
+
+## 1. The problem this phase must answer
+
+The current worker receives real-time SIP **completed one-minute bars** and runs
+the entry engine when a new RTH bar closes. It does not subscribe to underlying
+trades or quotes. Entry decisions can therefore be nearly one minute late to a
+condition that crossed early in the bar, and the stored one-minute bar cannot
+tell us whether the condition was durable, transient, or already exhausted.
+
+The options side has a different clock. The NTM OPRA chain is refreshed by REST
+at the bar-close cycle, while held contracts receive targeted OPRA snapshots on
+the approximately ten-second manager/exit clocks. This is adequate to observe
+many exits, but it cannot reconstruct the option NBBO that existed when an
+underlying entry condition first formed inside the minute.
+
+Phase 1H first measures this latency and path dependence. It does not assume
+that faster is better: intraminute triggers may improve entry price, or they may
+overtrade noise that the completed bar correctly filters.
+
+## 2. Questions and preregistered comparisons
+
+For each native channel signal, retain the current completed-bar decision as
+the control and observe three non-trading candidate clocks:
+
+1. **5-second forming-bar:** evaluate the same compiled/native strategy against
+   a forming one-minute OHLCV view every five seconds.
+2. **Persistent forming-bar:** the same candidate must remain true for two
+   consecutive five-second evaluations before it is considered observable.
+3. **First durable crossing:** record the first provider event at which every
+   entry predicate is true, then whether it remains true at the minute close.
+
+These are observer arms, not tunable live settings. Five seconds and two samples
+must be cohort-stamped. Changing either creates a new observer version rather
+than silently pooling evidence.
+
+Primary outcomes:
+
+- time from first durable crossing to current bar-close decision;
+- underlying move and executable option ask change over that interval;
+- fraction of intraminute candidates confirmed versus invalidated at close;
+- realized result under the current exit, using an observed candidate-time ask;
+- slot conflicts and duplicate/correlated channel entries created by acting
+  earlier;
+- performance by channel, market regime, time of day, spread, and signal family.
+
+No arm graduates from a faster fill alone. It must improve out-of-sample net
+expectancy after spread/slippage and must not merely multiply correlated bets.
+
+## 3. Clock and provenance contract
+
+Every observation carries separate timestamps:
+
+- `provider_event_at`: SIP trade/quote event time;
+- `received_at`: worker receipt time;
+- `evaluated_at`: observer evaluation time;
+- `candidate_at`: first all-predicates-true time;
+- `confirmed_at` or `invalidated_at`;
+- `option_quote_at`: OPRA source quote time for the candidate OCC;
+- `native_decision_at`: existing completed-bar decision time;
+- for actual trades, broker submit, accepted, filled, and desk-row timestamps.
+
+Provider event time is never replaced by receipt time. A REST response time is
+never presented as the option quote time. Missing, zero, crossed, delayed, or
+timestamp-less NBBOs create an unpriced/censored observation, not a synthetic
+fill.
+
+The observer stamps feed (`sip`, `opra`), worker version, git SHA, strategy
+config hash, observer version, account/paper context, and the exact option
+contract-selection inputs. Operator tests and execution corrections use the
+durable research annotation registry and are excluded from scoring without
+rewriting execution history.
+
+## 4. Data acquisition shape
+
+### Underlying
+
+Extend the worker's **existing single SIP socket** rather than opening a second
+stock connection. Subscribe to trades and quotes alongside bars for SPY, QQQ,
+and IWM, then route them into an isolated observer accumulator. The active
+engine continues to consume completed `b` messages exactly as it does now.
+
+The observer builds forming OHLCV from SIP trades and retains quote/spread
+context. A reconnect backfills the completed minute-bar baseline and marks the
+raw intraminute gap; it may not fabricate missing ticks.
+
+### Options
+
+When a forming candidate can identify its expiry/strike/side, request or
+subscribe to that targeted OCC and record the fresh executable ask and bid with
+source timestamps. Deduplicate identical OCCs across channels/accounts. Do not
+widen and repeatedly persist the entire option chain.
+
+The existing Phase 1G targeted-snapshot adapter is reusable for a conservative
+first observer, but its approximately ten-second REST clock bounds precision.
+An OPRA push adapter may be evaluated later under a new source version. The two
+sources must not be silently pooled.
+
+## 5. Storage: R2 raw, Supabase compact
+
+Raw SIP/OPRA events do not belong in high-churn Supabase tables. Write compressed
+daily partitions to R2, for example:
+
+`intraminute/v1/date=YYYY-MM-DD/symbol=SPY/hour=09/*.parquet`
+
+R2 is the immutable replay substrate. Supabase receives only compact indexed
+receipts: one row per observer candidate/transition and one outcome row per
+observer arm. The UI reads those receipts, not the raw tick lake.
+
+Required compact entities:
+
+- `intraminute_candidates`: identity, channel/config/version, timestamps,
+  predicate state, candidate OCC and quote provenance;
+- `intraminute_outcomes`: observer arm, terminal/censor state, executable entry
+  price, counterfactual exit linkage, integer quantity, costs, and P&L;
+- `intraminute_capture_health`: per-session gaps, source lag percentiles,
+  dropped/invalid events, R2 object receipt and checksum.
+
+Raw files are append-only. A manifest records row count, min/max provider time,
+checksum, compressed bytes, schema version, and upload completion. Partial
+objects are not marked complete.
+
+## 6. Four-plus-contract and portfolio realism
+
+All executable rankings use integer quantities of at least four. An observer
+arm must pass the same channel risk/cap/cost gates at its observed ask; it may
+not inherit the native trade's quantity if the earlier option price would have
+changed sizing.
+
+If risk-first sizing produces fewer than four contracts, label the candidate
+`ineligible_below_min_qty` and exclude it from the four-plus cohort. Never
+silently upsize beyond channel risk. Scale-out policies use the Phase 1G whole-
+lot rules (4→2/2, 5→2/3) and quantity-weighted economics.
+
+Counterfactuals must replay one-at-a-time channel occupancy, channel daily
+stops, shared account buying power, same-OCC concentration, and correlated
+same-minute entries. Per-trade gross deltas are diagnostics, not portfolio
+claims.
+
+## 7. Isolation and failure behavior
+
+1. The observer cannot import order placement, execution, close, reconcile, or
+   live position mutation modules.
+2. Active decisions continue to run only on completed bars until a separately
+   reviewed future phase explicitly changes that contract.
+3. Capture, R2, Supabase, or option-quote failure drops research evidence and
+   raises health; it cannot delay or suppress an order/exit cycle.
+4. Use a separate bounded queue and mutex. Apply explicit byte/event caps and
+   shed observer data before memory pressure reaches execution.
+5. A socket reconnect, deploy, or data gap is stamped and censors affected
+   comparisons. It is not interpreted as a quiet market.
+6. Paper mode is required. Any non-paper fund/account disables enrollment.
+
+## 8. Delivery slices
+
+### 1H-A — pure model and local replay
+
+- provider-event normalizers, forming-bar accumulator, candidate state machine,
+  timestamp/provenance types, deterministic IDs;
+- tests for out-of-order/duplicate trades, crossed/stale quotes, reconnect gaps,
+  DST/half days, five-second persistence, same-OCC dedupe, and four/five-lot
+  sizing;
+- replay one archived session locally. No worker wiring or external writes.
+
+### 1H-B — dark capture
+
+- extend the existing SIP socket with trades/quotes;
+- isolated bounded capture queue, R2 partitions/manifests, compact private
+  Supabase receipts and health;
+- deployed observation-only behind a default-off flag; no strategy evaluation
+  result can reach execution.
+
+### 1H-C — paired outcome replay
+
+- run native close versus the three preregistered intraminute arms on the same
+  observed option data and Phase 1G managers;
+- enforce slot, daily-stop, buying-power, concentration, and integer-lot paths;
+- produce channel/window/regime scorecards with bootstrap uncertainty and a
+  holdout period.
+
+Only after a stable capture cohort and out-of-sample evidence would a later
+phase consider a paper-only execution experiment. Phase 1H itself never trades.
+
+## 9. Acceptance gates before dark deployment
+
+- completed-bar decisions are byte-for-byte unchanged with the observer flag on
+  or off;
+- raw event ordering is deterministic and provider-time based;
+- a forming signal that disappears before close is recorded as invalidated;
+- no fresh candidate-time ask means no counterfactual fill;
+- reconnect gaps and stale OPRA quotes censor rather than fabricate;
+- four- and five-contract scale paths are integer and risk-valid;
+- same OCC across channels produces one market-data subscription/request but
+  separate candidate identities;
+- R2 manifest checksum and row/time bounds verify after upload;
+- observer backpressure/failure changes zero execution calls, payloads, or
+  timings in deterministic tests;
+- a repository dependency check proves the observer cannot import execution
+  modules.
