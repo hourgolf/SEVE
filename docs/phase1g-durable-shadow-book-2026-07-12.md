@@ -1,8 +1,10 @@
 # Phase 1G — durable post-close manager book
 
-Status: **1G-A plus the 1G-B dark runtime are built locally; not applied,
-enabled, pushed, merged, or deployed**. Phase 1F remains the active production
-paper observer.
+Status: **1G-A plus the 1G-B dark runtime are merged and deployed as an
+observation-only paper research service**. The durable schema is applied and
+the guarded runtime is enabled; it cannot place or modify orders. Phase 1F
+remains the active execution observer while Phase 1G records independent,
+post-close manager outcomes.
 The operator ratified the dedicated table, five-minute cutoff, retained terminal
 rows, and separated economics by authorizing 1G-A on 2026-07-12. The same
 authorization confirmed that go-forward paper entries will use at least four
@@ -356,3 +358,36 @@ The local implementation adds:
 The module imports no execution or broker order/position functions. Database,
 quote, hydration, and receipt failures only reduce research coverage. They do
 not share the execution mutex, mutate a position, or alter an order payload.
+
+## 14. Production deployment receipt — 2026-07-13
+
+Phase 1G was promoted only after the combined candidate passed the durable-book
+selftest (133/133), runner selftest (146/146), manual-close selftest (8/8),
+manager-shadow selftest (14/14), market-calendar selftest, TypeScript check, and
+Next production build.
+
+Production changes and evidence:
+
+- Supabase migrations `20260713062859_phase_1g_durable_shadow_book.sql` and
+  `20260713220640_phase_1g_shadow_book_least_privilege.sql` were applied to
+  project `xvdfsxwwedltvdktqdac`.
+- `manager_shadow_runs` has RLS enabled. Authenticated operator reads use the
+  existing `app_metadata.seve_role=operator` claim; anonymous reads fail. The
+  worker service role has only SELECT/INSERT/UPDATE/DELETE, without TRUNCATE,
+  REFERENCES, or TRIGGER privileges.
+- `main` was deployed to Railway from commit `64bf3a5` as worker
+  `stream-2026-07-13a`, deployment
+  `1ebaf866-71d7-4a5d-b513-d975bd7f1de4`.
+- Railway variable `MANAGER_SHADOW_BOOK_ENABLED=true` is set. The runtime kept
+  its code-pinned `quote_max_age_ms=15000`; no trading variable was changed.
+- Startup verified OPRA option quotes, successful stream subscription, and
+  `manager-shadow-book: hydrated 0 retained runs`, followed by a healthy
+  `active=0` status. Zero rows is correct because deployment occurred after the
+  session with no open qualifying positions.
+- Supabase `worker_runs` confirms the new worker is fresh with no error. The
+  prior `stream-2026-07-12g` run ended as `superseded_deploy`, not an abrupt
+  termination.
+
+This deployment does not promote a manager or alter entry, sizing, stop,
+target, scale, manual-close, or order behavior. It begins the prospective paper
+evidence cohort on the next qualifying position of at least four contracts.
