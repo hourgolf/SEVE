@@ -13,6 +13,16 @@ WORKDIR /app
 COPY worker/package.json worker/package-lock.json ./worker/
 RUN cd worker && npm ci --no-audit --no-fund
 
+# The post-close publisher intentionally runs the repository-level scripts from
+# /app (scripts/day-report.ts -> scripts/benched-sim.ts). Node resolves a
+# package import from the importing file's ancestors, so those scripts cannot
+# see dependencies installed only at /app/worker/node_modules. Expose the same
+# reproducible worker install at the repository root; this is a symlink, not a
+# second install or an independent dependency graph.
+RUN ln -s /app/worker/node_modules /app/node_modules \
+    && cd /app \
+    && node --input-type=module --eval "await import('@supabase/supabase-js')"
+
 # Shared engine + lib (imported directly — the whole point of this driver) and
 # the worker source.
 COPY engine ./engine
