@@ -115,7 +115,8 @@ export function PositionsPanel({
   // the fill is already booked, so tagging adds zero friction to the exit itself.
   // Untagged stays 'manual'; a tap refines it to 'manual:<tag>'. The vocabulary is
   // the exit-study's: target (banked the pop) / reversal (tape turned) / risk
-  // (defensive cut) / stall (no follow-through).
+  // (defensive cut) / stall (no follow-through), plus non-strategy test and
+  // execution-correction tags so those rows never receive native edge credit.
   const [tagPrompt, setTagPrompt] = useState<{ id: string; label: string } | null>(null);
   const [tagging, setTagging] = useState(false);
   const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
