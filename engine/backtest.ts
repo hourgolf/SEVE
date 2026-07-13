@@ -921,6 +921,9 @@ async function main() {
       const contracts = useDatabentoV2
         ? loadDatabentoV2Day(s.dateET, underlying)
         : byDay.get(s.dateET);
+      if (useDatabentoV2 && !contracts?.length && !process.argv.includes("--allow-modeled-days")) {
+        throw new Error(`Databento v2 has no executable NBBO rows for ${underlying} ${s.dateET}`);
+      }
       let chainAt: ChainProvider;
       if (useDatabento && contracts && contracts.length) {
         chainAt = makeDatabentoChain(contracts as Parameters<typeof makeDatabentoChain>[0]);

@@ -141,8 +141,18 @@ export function hasDatabentoV2Day(date: string, underlying: string): boolean {
 /** Load one session only so multi-year replays do not retain the whole corpus in RAM. */
 export function loadDatabentoV2Day(date: string, underlying: string): MdteSeries[] | undefined {
   if (!hasDatabentoV2Day(date, underlying)) return undefined;
+  const path = databentoV2Path(date, underlying);
   const series = loadMultiDteByDay([date], `${DATABENTO_V2_COMPAT_DIR}/${underlying.toLowerCase()}`).get(date);
-  if (!series?.length) throw new Error(`Databento v2 cache is unreadable or empty for ${underlying} ${date}`);
+  if (!series?.length) {
+    // A valid [] is a documented acquisition-coverage gap, not corruption. Preserve
+    // that distinction so research can count/skip it while production-style replay
+    // still fails closed unless the caller explicitly allows modeled days.
+    try {
+      const rows = JSON.parse(gunzipSync(readFileSync(path)).toString("utf8")) as unknown;
+      if (Array.isArray(rows) && rows.length === 0) return undefined;
+    } catch { /* throw the single fail-closed error below */ }
+    throw new Error(`Databento v2 cache is unreadable for ${underlying} ${date}`);
+  }
   return series;
 }
 
