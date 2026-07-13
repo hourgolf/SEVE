@@ -131,6 +131,56 @@ export function partialRemainder(rowQty: number, filledQty: number): { sold: num
 // sibling's share. These helpers make the late fill discoverable instead.
 export interface OrderLike { client_order_id: string; side: string; status: string; filled_qty: number; filled_avg_price: number }
 
+// ---- ORDER-TAG current-lot cross-check (2026-07-13 session-1 audit) ---------
+// `allOrders` is newest-first and can contain several completed round trips for
+// the same channel + OCC. Averaging every buy and sell together produces the
+// cumulative session P&L, which is NOT comparable with the one current row's
+// row-primary P&L (e.g. an earlier -$600 plus a later +$348 became -$252 and
+// emitted a false WARN). Reconstruct the still-open tagged inventory FIFO, then
+// price only the proposed current sell. A structurally ambiguous tag ledger
+// returns null; row-primary remains authoritative and no fake comparison fires.
+export interface CurrentLotCrossCheckInput {
+  slug: string;
+  occ: string;
+  ordersNewestFirst: OrderLike[];
+  rowQty: number;
+  rowAvgEntry: number;
+  sellQty: number;
+  sellPx: number;
+}
+
+export function currentLotOrderTagPnl(input: CurrentLotCrossCheckInput): number | null {
+  const prefix = `${input.slug}-${input.occ}-`;
+  const lots: Array<{ qty: number; px: number }> = [];
+  let unmatchedSell = 0;
+  // Alpaca returns newest-first. FIFO cost reconstruction needs oldest-first.
+  for (const o of [...input.ordersNewestFirst].reverse()) {
+    if (!o.client_order_id.startsWith(prefix) || !(o.filled_qty > 0) || !(o.filled_avg_price > 0)) continue;
+    if (o.side === "buy") {
+      lots.push({ qty: o.filled_qty, px: o.filled_avg_price });
+      continue;
+    }
+    if (o.side !== "sell") continue;
+    let remaining = o.filled_qty;
+    while (remaining > 0 && lots.length) {
+      const take = Math.min(remaining, lots[0].qty);
+      lots[0].qty -= take;
+      remaining -= take;
+      if (lots[0].qty <= 0) lots.shift();
+    }
+    unmatchedSell += remaining;
+  }
+  const openQty = lots.reduce((n, lot) => n + lot.qty, 0);
+  const openCost = lots.reduce((n, lot) => n + lot.qty * lot.px, 0);
+  const openAvg = openQty > 0 ? openCost / openQty : 0;
+  // A sibling/manual sell can make the tag ledger diverge from row ownership;
+  // in that case it is not an independent comparable basis and must stay quiet.
+  if (unmatchedSell > 0 || openQty !== input.rowQty || !(input.rowAvgEntry > 0)
+      || Math.abs(openAvg - input.rowAvgEntry) > 0.005
+      || input.sellQty !== input.rowQty || !(input.sellPx > 0)) return null;
+  return Math.round((input.sellPx - openAvg) * input.sellQty * 100 * 100) / 100;
+}
+
 /** Aggregate fill evidence for THIS row's exit coid (any terminal status — a
  *  partial-then-canceled sell still moved contracts; spread-capture rungs share
  *  the prefix and sum). null = no contracts provably left via this row's exit. */

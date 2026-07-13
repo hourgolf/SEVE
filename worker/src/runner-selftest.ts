@@ -19,7 +19,7 @@
 process.env.ALPACA_KEY ??= "selftest";
 process.env.ALPACA_SECRET ??= "selftest";
 process.env.SUPABASE_URL ??= "http://localhost";
-const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid } = await import("./exitRules.js");
+const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid, currentLotOrderTagPnl } = await import("./exitRules.js");
 const { groupChannelsByAccount, resolveDefaultAccount, unresolvedAccount, acctCanEnter, acctCanManage, SYNTH_DEFAULT } = await import("./routing.js");
 const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./exitGuard.js");
 const { shadowLifecycleAction } = await import("./shadowManageModel.js");
@@ -113,6 +113,38 @@ check("qty 1 → unsplittable", trancheSplit(1, 0.5), null);
 check("frac 0 → off", trancheSplit(10, 0), null);
 check("retain rounds to whole lot → unsplittable", trancheSplit(2, 0.9), null);
 check("both legs ≥1 at tiny frac", trancheSplit(3, 0.1), { sell: 2, retain: 1 });
+
+// ---- current-lot order-tag booking cross-check (session-1 audit) ----
+{
+  const order = (side: "buy" | "sell", qty: number, px: number, id: string): OrderLike => ({
+    client_order_id: `momo-shape-2-SPY260713P00752000-${id}`,
+    side, status: "filled", filled_qty: qty, filled_avg_price: px,
+  });
+  // allOrders is newest-first. The first round trip lost $600; the current row
+  // made $348. The old cumulative blend returned -$252 and raised a false WARN.
+  const repeated = [order("buy", 12, 1.01, "635"), order("sell", 12, 0.63, "xold"), order("buy", 12, 1.13, "585")];
+  check("booking cross-check: repeated OCC scores current lot only", currentLotOrderTagPnl({
+    slug: "momo-shape-2", occ: "SPY260713P00752000", ordersNewestFirst: repeated,
+    rowQty: 12, rowAvgEntry: 1.01, sellQty: 12, sellPx: 1.30,
+  }), 348);
+  check("booking cross-check: clean first round trip", currentLotOrderTagPnl({
+    slug: "momo-shape-2", occ: "SPY260713P00752000", ordersNewestFirst: [order("buy", 12, 1.13, "585")],
+    rowQty: 12, rowAvgEntry: 1.13, sellQty: 12, sellPx: 0.63,
+  }), -600);
+  check("booking cross-check: pyramid uses executable weighted basis", currentLotOrderTagPnl({
+    slug: "momo-shape-2", occ: "SPY260713P00752000",
+    ordersNewestFirst: [order("buy", 2, 1.20, "add"), order("buy", 2, 1.00, "base")],
+    rowQty: 4, rowAvgEntry: 1.10, sellQty: 4, sellPx: 1.30,
+  }), 80);
+  check("booking cross-check: shared/manual ambiguity is incomparable", currentLotOrderTagPnl({
+    slug: "momo-shape-2", occ: "SPY260713P00752000", ordersNewestFirst: [order("buy", 12, 1.01, "635"), order("buy", 12, 1.13, "585")],
+    rowQty: 12, rowAvgEntry: 1.01, sellQty: 12, sellPx: 1.30,
+  }), null);
+  check("booking cross-check: partial current sell stays out of full-row comparison", currentLotOrderTagPnl({
+    slug: "momo-shape-2", occ: "SPY260713P00752000", ordersNewestFirst: [order("buy", 12, 1.01, "635")],
+    rowQty: 12, rowAvgEntry: 1.01, sellQty: 6, sellPx: 1.30,
+  }), null);
+}
 
 // ---- premiumExitReason ----
 const row = (over: Partial<PositionRow> = {}): PositionRow => ({

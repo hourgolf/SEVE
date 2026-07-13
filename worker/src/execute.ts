@@ -24,7 +24,7 @@ import { info } from "./log.js";
 import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
-import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid } from "./exitRules.js";
+import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid, currentLotOrderTagPnl } from "./exitRules.js";
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 import { captureObservedPositionPlan } from "./planShadow.js";
@@ -178,23 +178,6 @@ async function placeFill(
 // own qty exactly once (status-guarded close), so re-entries and shared lots can't double-count.
 function rowRealized(row: store.PositionRow, exitPx: number, soldQty: number): number {
   return Math.round((exitPx - row.avg_entry_price) * soldQty * 100 * 100) / 100;
-}
-
-// The legacy order-tag P&L (this channel's slug-tagged buys/sells, blended). Kept ONLY as a sync
-// CROSS-CHECK against rowRealized so a divergence — the very tag bug that used to book $0 — gets
-// journaled. Never the booking path now. (The cap keeps any injected sell ≤ the unsold share.)
-function orderTagTarget(slug: string, occ: string, allOrders: alpaca.AlpacaOrder[], extraSell?: { qty: number; px: number }): number {
-  let bq = 0, bc = 0, sq = 0, sp = 0;
-  for (const o of allOrders) {
-    if (o.status !== "filled" || !o.client_order_id.startsWith(`${slug}-${occ}-`)) continue;
-    if (o.side === "buy") { bq += o.filled_qty; bc += o.filled_qty * o.filled_avg_price; }
-    else { sq += o.filled_qty; sp += o.filled_qty * o.filled_avg_price; }
-  }
-  if (extraSell && extraSell.qty > 0 && extraSell.px > 0) {
-    const inject = Math.max(0, Math.min(extraSell.qty, bq - sq));
-    if (inject > 0) { sq += inject; sp += inject * extraSell.px; }
-  }
-  return sq > 0 && bq > 0 ? Math.round(sq * (sp / sq - bc / bq) * 100 * 100) / 100 : 0;
 }
 
 // The price a reconciled (sibling-drained) row's contracts ACTUALLY left for, + whether it's a real
@@ -412,10 +395,17 @@ export async function executeExit(
     captureBookedOutcome(row, soldQty, exitPx, realized, d.reason);
     entryStateByKey.delete(entryKey(row.strategist_id, occ));
     await store.journal("EXEC", `${d.slug}: exit ${occ} ×${soldQty} @ ${exitPx.toFixed(2)} (${d.reason}) → $${realized.toFixed(0)}`);
-    // cross-check vs the legacy order-tag P&L — equal on a clean exit; a divergence flags the tag bug
-    // that used to book $0. Row-primary is authoritative; the WARN only surfaces the anomaly for audit.
-    const tagChk = orderTagTarget(d.slug, occ, ctx.allOrders, { qty: soldQty, px: exitPx });
-    if (Math.abs(realized - tagChk) > 5) await store.journal("WARN", `${d.slug}: booking cross-check Δ ${occ} — row $${realized.toFixed(0)} vs order-tag $${tagChk.toFixed(0)} (row-primary booked)`);
+    // Independent order-tag cross-check, scoped to THIS open lot. The prior
+    // cumulative-session blend emitted false WARNs on same-day re-entries.
+    // Ambiguous shared/manual tag ledgers return null and never challenge the
+    // authoritative row booking with a non-comparable number.
+    const tagChk = currentLotOrderTagPnl({
+      slug: d.slug, occ, ordersNewestFirst: ctx.allOrders,
+      rowQty: row.qty, rowAvgEntry: row.avg_entry_price,
+      sellQty: soldQty, sellPx: exitPx,
+    });
+    if (tagChk != null && Math.abs(realized - tagChk) > 5)
+      await store.journal("WARN", `${d.slug}: booking cross-check Δ ${occ} — row $${realized.toFixed(0)} vs current-lot tag $${tagChk.toFixed(0)} (row-primary booked)`);
   } catch (e) {
     const msg = (e as Error).message;
     if (/insufficient|cash.?secured|not enough|40310000/i.test(msg)) await reconcileClose(`sell rejected (${msg.slice(0, 50)})`, false); // Alpaca rejected → contracts provably gone, book now (no 2-cycle wait)
