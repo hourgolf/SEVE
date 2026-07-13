@@ -65,6 +65,7 @@
     "phase1d-selftest": "tsx engine/market-truth.selftest.ts",
     "phase1d-pb-replay": "tsx --env-file=.env.local engine/phase1d-pb-truth-replay.ts",
     "manager-shadow-selftest": "tsx worker/src/managerShadow.selftest.ts",
+    "manager-shadow-book-selftest": "tsx worker/src/managerShadowBook.selftest.ts",
     "pb-qqq-probe": "tsx engine/pb-qqq-probe.ts",
     "gap-min-selftest": "tsx engine/gap-min-selftest.ts",
     "macd-align-selftest": "tsx --env-file=.env.local engine/macd-align-selftest.ts",

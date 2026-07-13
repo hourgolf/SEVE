@@ -1,8 +1,11 @@
 # Phase 1G — durable post-close manager book
 
-Status: **design only; implementation not started**. Phase 1F remains the active
-paper observer. This specification requires operator ratification before a
-migration or runtime change.
+Status: **1G-A authorized for an isolated local build; not applied, wired,
+pushed, or deployed**. Phase 1F remains the active production paper observer.
+The operator ratified the dedicated table, five-minute cutoff, retained terminal
+rows, and separated economics by authorizing 1G-A on 2026-07-12. The same
+authorization confirmed that go-forward paper entries will use at least four
+contracts and that scaling must be modeled as executable integer lots.
 
 ## 1. Decision this phase is meant to unlock
 
@@ -68,14 +71,15 @@ eight concurrent policies.
 
 ## 4. Durable model
 
-Add a private operational table, tentatively `manager_shadow_runs`, with one row
-per `(position_id, manager_id, manager_policy_version)`.
+Add a private operational table, `manager_shadow_runs`, with one row per
+`(position_id, manager_id, manager_policy_version, shadow_book_version)`.
 
 Required identity and provenance:
 
 - deterministic `id` UUID; `position_id`, `strategist_id`, `account_id`
 - `channel_slug`, `occ_symbol`, `underlying`, `option_side`
-- `manager_id`, `manager_policy_version`, `cohort_from`
+- `manager_id`, `manager_policy_version`, `shadow_book_version`, `cohort_from`
+- injected `quote_max_age_ms` and fixed `cutoff_minutes_before_close`
 - `entry_price`, `entry_price_basis`, `entry_at`, `original_qty`, `actual_close_at`,
   `actual_close_reason`, and `actual_realized_pnl`
 - `source_boot_id` and created / updated timestamps
@@ -110,7 +114,9 @@ On the first fresh bid observed for a qualifying newly opened paper position:
 2. upsert immutable entry/provenance fields and initial manager state;
 3. stamp the actual entry price used by the position as `entry_price` and label
    whether it is a broker fill or an observation; do not mislabel a fill as bid;
-4. do not advance a manager whose durable enrollment failed.
+4. inject and stamp the quote-freshness limit; 1G-A deliberately chooses no
+   production value for this parameter;
+5. do not advance a manager whose durable enrollment failed.
 
 Boot hydration loads every `active` run for the supported cohort. A restart no
 longer infers bank/arm state from the actual position's `peak_mark`; it restores
@@ -144,8 +150,13 @@ happened to flatten. Phase 1G must introduce a named, versioned cutoff and use
   settlement grace and then mark `censored: no_fresh_cutoff_bid`; never use a
   stale last value.
 
-The five-minute value is **[INFERRED — requires ratification]**. Changing it
-creates a new policy version; it is not a tunable dashboard preference.
+The five-minute value was ratified with 1G-A. Changing it creates a new
+`shadow_book_version`; it is not a tunable dashboard preference.
+
+The quote-freshness limit is also a stamped shadow-book input. The pure 1G-A
+model requires it but does not select a live value. 1G-B must ratify that value
+before runtime wiring; changing it creates a new `shadow_book_version` and
+evidence cohort.
 
 ## 6. Quote path
 
@@ -166,12 +177,27 @@ hard cap and a loud degraded-health event before allowing unbounded growth. A
 request failure skips the whole affected batch for that tick and leaves prior
 state untouched.
 
-## 7. The one-contract / fractional-manager fallacy
+## 7. Confirmed four-plus-contract scaling contract
 
-`BANK20/RUN50` mathematically averages a half bank and half runner. That is a
-useful normalized policy experiment, but it is not executable when the source
-position contains one contract. Calling that outcome “tradable” would repeat
-the old mistake of turning a research convenience into an operational claim.
+The operating plan now confirms at least four contracts on every go-forward
+paper entry. Phase 1G therefore models quantities, fills, returns, and P&L as
+integer-executable lots rather than continuing the one-contract normalization.
+The cohort constant is `MIN_MODELED_SOURCE_QTY=4`; a smaller source position is
+ineligible for the go-forward executable cohort and cannot silently enter its
+rankings.
+
+For `BANK20/RUN50`, v1 uses a deterministic whole-lot split:
+
+- `bankQty = floor(originalQty / 2)`;
+- `runnerQty = originalQty - bankQty`;
+- four contracts become 2 bank / 2 runner;
+- five contracts become 2 bank / 3 runner;
+- terminal return and P&L are quantity-weighted across the two fills, never a
+  naive average of bank and runner returns.
+
+Every all-out stop, target, trail, and bell manager records `exitQty` equal to
+the original integer quantity. `ARM20/HALF-GIVEBACK` is an all-out exit whose
+threshold is half of peak return; “HALF” does not mean half of the contracts.
 
 Phase 1G must publish two explicit classes:
 
@@ -182,10 +208,10 @@ Phase 1G must publish two explicit classes:
   runner when source quantity is one. These help compare shapes and choose a
   future sizing experiment, but are excluded from executable P&L rankings.
 
-No conviction sizing or scale policy is authorized by 1G. After evidence grows,
-a later preregistered paper experiment may deliberately enter two or more lots
-to test integer scale-outs. It must not retrofit fractional history as if those
-fills occurred.
+No conviction multiplier or pyramiding policy is authorized by 1G-A. The fixed
+four-plus operating size makes registered scale-outs testable, but does not let
+the shadow book choose trade size. Historical one-lot normalized outcomes stay
+clearly separated and may not be retrofitted as if integer fills occurred.
 
 ## 8. Failure isolation and observability
 
@@ -224,8 +250,9 @@ The implementation is not reviewable without deterministic tests for at least:
 10. no fresh cutoff bid produces an explicit censor after grace;
 11. a rejected database write changes no execution call count, order payload,
     active position state, or sweep timing;
-12. a one-contract `BANK20/RUN50` result is labeled
-    `normalized_fractional` and excluded from executable ranking;
+12. four- and five-contract `BANK20/RUN50` runs allocate 2/2 and 2/3; the
+    five-lot return is quantity-weighted rather than averaged, while a one-lot
+    allocation is labeled `normalized_fractional` and excluded;
 13. duplicate/retried terminal inserts preserve the first terminal receipt;
 14. deployment between actual close and shadow terminal resumes without censor;
 15. non-paper mode enrolls and advances nothing.
@@ -253,7 +280,7 @@ The implementation is not reviewable without deterministic tests for at least:
 - minimum sample / session coverage and censor-rate reporting;
 - no promotion switch. Any manager change remains a later, explicit paper A/B.
 
-## 11. Ratification required before 1G-A
+## 11. Ratification record for 1G-A
 
 1. Approve a dedicated `manager_shadow_runs` table rather than repurposing
    `shadow_management_state`.
@@ -264,5 +291,32 @@ The implementation is not reviewable without deterministic tests for at least:
 4. Approve the hard separation between executable whole-lot rankings and
    normalized fractional research.
 
-Until those four items are ratified, Phase 1G is a spec only and Phase 1F keeps
-collecting right-censored paper evidence without changing Monday's trade flow.
+All four items were ratified when the operator authorized 1G-A on 2026-07-12.
+That authorization is limited to the local schema and pure lifecycle slice: the
+migration must not be applied, no runtime may be wired, no branch may be merged
+or deployed, and Monday's production trade flow remains Phase 1F until a later
+explicit review and approval.
+
+## 12. Local 1G-A implementation receipt
+
+Built on isolated branch `phase1ga-durable-shadow-book` with no production
+mutation:
+
+- additive, unapplied `manager_shadow_runs` migration with UUID foreign keys,
+  lifecycle constraints, query indexes, RLS, explicit grants, operator-only
+  authenticated reads, required source-boot provenance, and retained terminals;
+- pure enrollment, integer-allocation, bid-advance, actual-close attribution,
+  censor, terminal-receipt, encode, and strict hydration functions;
+- deterministic run and append-only receipt identities compatible with the
+  existing Phase 1F trace namespace, plus a separate versioned durable-receipt
+  identity so unlike observation rules cannot collide;
+- 109 deterministic checks, including 4-lot 2/2 and 5-lot 2/3 allocation,
+  quantity-weighted return/P&L, overshoots, stale/crossed/out-of-order quotes,
+  terminal immutability, restart recovery, provenance failures, and static
+  migration security invariants.
+
+The live database was inspected read-only to verify the referenced IDs are UUIDs
+and that `manager_shadow_runs` does not exist. The migration has not been
+applied. No market-data adapter, timer, persistence call, worker configuration,
+or execution path was added; those remain 1G-B work requiring a separate review.
+The live `quote_max_age_ms` remains intentionally unresolved until that review.
