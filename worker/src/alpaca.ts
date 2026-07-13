@@ -6,6 +6,11 @@
 
 import { config } from "./config.js";
 import type { Bar, OptType } from "../../engine/types";
+import {
+  normalizeTargetedOptionSnapshots,
+  targetedOptionBatches,
+  type TargetedOptionQuote,
+} from "./managerShadowQuoteModel.js";
 
 // ---- per-account routing (cockpit P3) --------------------------------------
 // An Api bundles ONE Alpaca paper account's creds + host. Paper-host calls
@@ -292,6 +297,27 @@ export async function snapshotChain(symbol: string, spot: number, fromDate: stri
       last: s.latestTrade?.p != null ? Number(s.latestTrade.p) : null,
       delta: s.greeks?.delta != null ? Number(s.greeks.delta) : null,
     });
+  }
+  return out;
+}
+
+/** Phase 1G-B: targeted multi-contract snapshots. Unlike snapshotChain this
+ *  does not lose a held contract when its strike drifts outside the NTM window.
+ *  Alpaca documents a maximum of 100 requested symbols per call; batching and
+ *  the 500-contract hard cap are pure/tested at the provider boundary. */
+export async function snapshotOptionsTargeted(symbols: readonly string[]): Promise<Map<string, TargetedOptionQuote>> {
+  const batches = targetedOptionBatches(symbols);
+  if (batches == null) throw new Error(`targeted option snapshot hard cap exceeded (${symbols.length})`);
+  const out = new Map<string, TargetedOptionQuote>();
+  for (const batch of batches) {
+    if (!batch.length) continue;
+    const path = `/v1beta1/options/snapshots?symbols=${encodeURIComponent(batch.join(","))}`
+      + `&feed=${config.optFeed}&limit=${batch.length}`;
+    const normalized = normalizeTargetedOptionSnapshots(
+      await get(config.alpacaDataHost, path, DATA_HEADERS),
+      config.optFeed,
+    );
+    for (const [symbol, quote] of normalized) out.set(symbol, quote);
   }
   return out;
 }

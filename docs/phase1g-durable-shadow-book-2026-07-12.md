@@ -1,7 +1,8 @@
 # Phase 1G — durable post-close manager book
 
-Status: **1G-A authorized for an isolated local build; not applied, wired,
-pushed, or deployed**. Phase 1F remains the active production paper observer.
+Status: **1G-A plus the 1G-B dark runtime are built locally; not applied,
+enabled, pushed, merged, or deployed**. Phase 1F remains the active production
+paper observer.
 The operator ratified the dedicated table, five-minute cutoff, retained terminal
 rows, and separated economics by authorizing 1G-A on 2026-07-12. The same
 authorization confirmed that go-forward paper entries will use at least four
@@ -320,3 +321,38 @@ and that `manager_shadow_runs` does not exist. The migration has not been
 applied. No market-data adapter, timer, persistence call, worker configuration,
 or execution path was added; those remain 1G-B work requiring a separate review.
 The live `quote_max_age_ms` remains intentionally unresolved until that review.
+
+## 13. Local 1G-B dark-runtime receipt
+
+Built on isolated branch `phase1gb-dark-shadow-runtime`; not applied, enabled,
+pushed, merged, or deployed. The runtime flag defaults to false.
+
+The 1G-B evidence cohort uses `quote_max_age_ms=15000`. This was selected from
+the first full paper session's 1,706 Alpaca snapshot observations: median age
+1.514s, p95 4.071s, p99 9.552s, and maximum 17.137s. Fifteen seconds admits the
+normal distribution while deliberately rejecting the observed extreme tail.
+The value is stamped into every run and the runtime refuses a mismatched env
+override; changing it requires a new shadow-book version.
+
+The local implementation adds:
+
+- an official multi-contract Alpaca snapshot adapter, deduplicated and batched
+  to 100 OCC symbols, with a 500-contract hard cap and independent batch-failure
+  isolation;
+- strict normalization of executable OPRA bid/ask plus `latestQuote.t`; response
+  time, last trade, mid, zero, crossed, timestamp-less, future, and stale values
+  cannot advance a manager;
+- boot hydration of active and retained terminal/censored rows, deterministic
+  enrollment for paper positions of at least four contracts, exact state
+  restoration, and first-terminal optimistic persistence;
+- a separate mutex/timer from the live fast-exit sweep, continuing after the
+  actual row closes and copying the actual result as attribution only;
+- regular/half-day five-minute cutoffs, a 30-second fresh-quote settlement
+  grace, explicit censoring for a missing cutoff bid or a process that resumes
+  after the enrolled session, and retry-safe terminal evidence receipts;
+- rate-limited health output for active, terminal, censored, pending-receipt,
+  quote, and last-success counts.
+
+The module imports no execution or broker order/position functions. Database,
+quote, hydration, and receipt failures only reduce research coverage. They do
+not share the execution mutex, mutate a position, or alter an order payload.
