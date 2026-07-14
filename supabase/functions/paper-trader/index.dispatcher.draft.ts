@@ -1,3 +1,7 @@
+// ⚑ WORKER VERSION: 2026-07-14a  (RTH-SCOPED STREAM FAILOVER — worker_heartbeat intentionally stops
+//   after the cash session, so cron must not interpret the expected overnight silence as a worker
+//   outage. Stream stale pages and exit-only stream-channel failover now run only 09:30–16:00 ET;
+//   the existing 09:00 long-dead readiness page remains. No RTH decision or order behavior changed.)
 // ⚑ WORKER VERSION: 2026-07-01a  (STATUS-GUARDED CLOSES — audit H3: all three position-close
 //   UPDATEs now carry .eq("status","open") (worker store.closePositionRow parity), so the exit-only
 //   failover racing the stream worker on the same row can no longer OVERWRITE an already-booked
@@ -809,6 +813,7 @@ Deno.serve(async () => {
     // stream-owned channels are ENTIRELY its business this run. Stale/missing →
     // exit-only failover below (never entries). Read once per run.
     let streamFresh = false;
+    let streamFailoverEligible = false;
     try {
       const { data: hb } = await sb.from("worker_heartbeat").select("beat_at").eq("id", "stream").maybeSingle();
       const hbAge = hb ? Date.now() - Date.parse(String((hb as { beat_at?: string }).beat_at ?? 0)) : NaN;
@@ -821,11 +826,15 @@ Deno.serve(async () => {
       // Informational only — the EXIT-ONLY failover below never waits on a push.
       const inWin = (mark: number) => Number.isFinite(hbAge) && hbAge >= mark && hbAge < mark + 60_000;
       const nowMinET = etParts(Date.now()).min;
+      // The trading heartbeat is intentionally RTH-scoped. Once the cash session
+      // closes it becomes stale by design, so neither the death page nor cron's
+      // stream-channel failover may interpret that silence as an outage.
+      streamFailoverEligible = nowMinET >= 570 && nowMinET < 960;
       const longDeadAtOpen = nowMinET === 540 && (!Number.isFinite(hbAge) || hbAge >= 121 * 60_000);
       // Suppress the page on a market holiday — the worker correctly doesn't beat with no data,
       // so a "stale" heartbeat on a closed day is expected, not an alarm (2026-06-19 fix).
       const holidayToday = CRON_MARKET_HOLIDAYS.has(etParts(Date.now()).date);
-      if (!holidayToday && (inWin(5 * 60_000) || inWin(60 * 60_000) || inWin(120 * 60_000) || longDeadAtOpen)) {
+      if (!holidayToday && ((streamFailoverEligible && (inWin(5 * 60_000) || inWin(60 * 60_000) || inWin(120 * 60_000))) || longDeadAtOpen)) {
         const ageTxt = Number.isFinite(hbAge) ? `${Math.round(hbAge / 60_000)}m old` : "never seen";
         await firePush("⚠ STREAM STALE", `Railway worker heartbeat ${ageTxt} — cron exit-only failover on stream channels`, "seve-alert");
       }
@@ -899,7 +908,10 @@ Deno.serve(async () => {
       // makes double-execution impossible). Heartbeat stale → fall through in EXIT-ONLY
       // failover: exits/reconcile/mark-to-market still run, entries are hard-blocked below.
       const streamOwned = String((s as { executor?: string }).executor ?? "cron") === "stream";
-      if (streamOwned && streamFresh) { out.push({ slug: s.slug, note: "stream_owned" }); continue; }
+      if (streamOwned && (streamFresh || !streamFailoverEligible)) {
+        out.push({ slug: s.slug, note: streamFresh ? "stream_owned" : "stream_owned_outside_rth" });
+        continue;
+      }
       if (streamOwned) await journal("WARN", `${s.slug}: stream heartbeat STALE — cron exit-only failover this cycle`);
       // MULTI-INSTRUMENT: this channel's market. Default SPY for legacy rows. If the
       // ticker has no session bars yet (e.g. QQQ not ingested this session), skip —
