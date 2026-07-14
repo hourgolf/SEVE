@@ -56,7 +56,7 @@ check("capture runtime cannot import broad trading store", /from\s+["']\.\/store
 check("capture runtime cannot write new evidence into the v1 prefix", runtimeSource.includes("/v1/"), false);
 const captureStoreSource = readFileSync(new URL("./intraminuteCaptureStore.ts", import.meta.url), "utf8");
 check("receipt adapter is append-only and isolated", /from\s+["'][^"']*(?:execute|alpaca|store|position|order|reconcile)[^"']*["']/i.test(captureStoreSource), false);
-const migrationSource = readFileSync(new URL("../../supabase/migrations/20260715043000_phase_1h_trade_provenance.sql", import.meta.url), "utf8");
+const migrationSource = readFileSync(new URL("../../supabase/migrations/20260714213229_phase_1h_trade_provenance.sql", import.meta.url), "utf8");
 check("receipt migration preserves immutable v1 and admits v2", /schema_version\s+in\s*\(1,\s*2\)/i.test(migrationSource), true);
 const streamSource = readFileSync(new URL("./stream.ts", import.meta.url), "utf8");
 check("trade and quote traffic cannot mask bar watchdog", [streamSource.includes("lastBarMs"), streamSource.includes("lastMsgMs")], [true, false]);
