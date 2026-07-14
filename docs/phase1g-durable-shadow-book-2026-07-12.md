@@ -10,6 +10,12 @@ rows, and separated economics by authorizing 1G-A on 2026-07-12. The same
 authorization confirmed that go-forward paper entries will use at least four
 contracts and that scaling must be modeled as executable integer lots.
 
+Clarification recorded 2026-07-13: four was an example of a clean 2/2 split,
+not a permanent minimum. The durable v1 cohort remains stamped at four and must
+not be redefined in place; a future v2 may lower the executable minimum to two
+with a new `shadow_book_version`. The enduring requirement is multi-contract,
+integer-executable scaling rather than a fixed four-lot trade size.
+
 ## 1. Decision this phase is meant to unlock
 
 Phase 1F can answer which registered exit manager fires first while the real

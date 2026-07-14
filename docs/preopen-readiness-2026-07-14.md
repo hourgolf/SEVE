@@ -15,7 +15,8 @@ the hard gate to run immediately before the next market open.
   `stream-2026-07-13a`; Railway auto-deploy remains disabled.
 - The current armed/active book contains 25 configurations across three paper
   accounts: 20 entry-enabled and 5 intentionally muted. Every configuration is
-  stream-owned and has a contract ceiling of at least four.
+  stream-owned and has a contract ceiling of at least two, so a scale-out is
+  structurally possible.
 - The first paper session produced 54 round trips with quantities from 5 to 30
   contracts (average 10.59); no trade was below four contracts.
 
@@ -23,23 +24,25 @@ the hard gate to run immediately before the next market open.
 writing the database. It prints the effective channel/account/risk/contract-cap
 manifest and exits nonzero on a broken paper boundary, stale/error worker,
 unresolved route, broker/desk book mismatch, missing credentials, wrong
-executor, or a contract cap below four.
+executor, or a contract cap that cannot support multiple lots.
 
-## Four-contract honesty note
+## Multi-contract scaling note
 
 The current sizing formula remains risk-first:
 
 `floor(channel risk / per-contract stop risk)`, capped by `max_contracts`.
 
 It rejects only a zero-contract result; it does not forcibly upsize a calculated
-one-to-three-contract trade to four. Forcing four could exceed the channel's
-risk budget. The pre-open manifest therefore prints the maximum option ask at
-which each channel can express four contracts. The first live-paper session
-cleared the requirement naturally, but this is not yet a hard runtime guarantee.
+one-contract trade to two. The operator's clarification is not a hard four-lot
+minimum: the intent is to trade multiple contracts so partial exits and runners
+are executable. Forcing extra contracts could exceed the channel's risk budget.
+The pre-open manifest therefore prints the maximum option ask at which each
+channel can express two contracts. The first live-paper session happened to
+trade 5–30 contracts, but four is not a gate or cohort requirement.
 
-If a future candidate calculates below four, the safe policy choices are:
+If a future candidate calculates only one contract, the safe policy choices are:
 
-1. skip it as ineligible for the four-plus research cohort; or
+1. treat it as non-scalable in research and keep it out of scale-out rankings; or
 2. explicitly raise that channel's risk budget before the session.
 
 Silently exceeding the configured risk budget is not an acceptable third

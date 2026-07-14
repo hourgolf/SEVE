@@ -13,6 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 const REQUIRED_PAPER_HOST = "https://paper-api.alpaca.markets";
 const WORKER_FRESH_SEC = 150;
 const DEFAULT_PREMIUM_STOP_PCT = 50;
+const MIN_SCALABLE_QTY = 2;
 
 type AccountRow = {
   id: string;
@@ -210,7 +211,7 @@ async function main(): Promise<void> {
   }
 
   console.log("\nEffective armed-channel manifest:");
-  console.log(`  ${pad("CHANNEL", 28)} ${pad("ACCOUNT", 12)} ${pad("SYM", 4)} ${padL("RISK", 7)} ${padL("CAP", 4)} ${padL("4-LOT ASK≤", 11)} ${padL("STOP", 7)} ${padL("TAKE", 7)} ${pad("STATE", 8)}`);
+  console.log(`  ${pad("CHANNEL", 28)} ${pad("ACCOUNT", 12)} ${pad("SYM", 4)} ${padL("RISK", 7)} ${padL("CAP", 4)} ${padL("2-LOT ASK≤", 11)} ${padL("STOP", 7)} ${padL("TAKE", 7)} ${pad("STATE", 8)}`);
 
   let effective = 0;
   let muted = 0;
@@ -225,18 +226,18 @@ async function main(): Promise<void> {
     const risk = num(cfg?.capital_pct) * (cfg?.boosted ? 2 : 1);
     const rawStop = cfg?.premium_stop_pct == null ? DEFAULT_PREMIUM_STOP_PCT : num(cfg.premium_stop_pct);
     const stopPct = rawStop > 0 ? rawStop : DEFAULT_PREMIUM_STOP_PCT;
-    const fourLotAsk = risk / ((stopPct / 100) * 100 * 4);
+    const scalableAsk = risk / ((stopPct / 100) * 100 * MIN_SCALABLE_QTY);
     const state = cfg?.muted ? "MUTED" : account?.is_armed && !account?.is_halted ? "READY" : "OFF";
     if (cfg?.muted) muted++; else effective++;
 
     if (!account) failures.push(`${channel.slug}: account_id does not resolve`);
     if (channel.executor !== "stream") failures.push(`${channel.slug}: executor is ${channel.executor ?? "missing"}, expected stream`);
-    if (maxContracts < 4) failures.push(`${channel.slug}: max_contracts ${maxContracts} cannot support four-lot modeling`);
-    if (fourLotAsk < 1) warnings.push(`${channel.slug}: four-lot sizing requires ask <= $${fourLotAsk.toFixed(2)}`);
+    if (maxContracts < MIN_SCALABLE_QTY) failures.push(`${channel.slug}: max_contracts ${maxContracts} cannot support a multi-contract scale-out`);
+    if (scalableAsk < 1) warnings.push(`${channel.slug}: two-lot scaling requires ask <= $${scalableAsk.toFixed(2)}`);
 
     const stop = rawStop > 0 ? `-${rawStop}%` : "U-STOP";
     const take = num(cfg?.take_profit_pct) > 0 ? `+${num(cfg?.take_profit_pct)}%` : "RIDE";
-    console.log(`  ${pad(channel.slug, 28)} ${pad(account?.name ?? "UNRESOLVED", 12)} ${pad(String(channel.underlying ?? "?"), 4)} ${padL(usd(risk), 7)} ${padL(String(maxContracts), 4)} ${padL(`$${fourLotAsk.toFixed(2)}`, 11)} ${padL(stop, 7)} ${padL(take, 7)} ${pad(state, 8)}`);
+    console.log(`  ${pad(channel.slug, 28)} ${pad(account?.name ?? "UNRESOLVED", 12)} ${pad(String(channel.underlying ?? "?"), 4)} ${padL(usd(risk), 7)} ${padL(String(maxContracts), 4)} ${padL(`$${scalableAsk.toFixed(2)}`, 11)} ${padL(stop, 7)} ${padL(take, 7)} ${pad(state, 8)}`);
   }
 
   console.log(`\nChannels    : ${channels.length} armed/active configs · ${effective} entry-enabled · ${muted} muted`);
@@ -247,7 +248,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  console.log("\n✓ PRE-OPEN HARD GATES PASS — paper boundary, broker/desk books, worker, routing, and four-lot caps\n");
+  console.log("\n✓ PRE-OPEN HARD GATES PASS — paper boundary, broker/desk books, worker, routing, and multi-contract caps\n");
 }
 
 main().catch((error) => {

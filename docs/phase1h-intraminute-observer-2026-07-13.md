@@ -1,7 +1,9 @@
 # Phase 1H — intraminute entry and execution observer
 
-Status: proposed, observation-only. No production worker, order path, channel
-parameter, or database schema change is included in the current branch.
+Status: 1H-A pure foundation implemented on an isolated branch, observation-only.
+No production worker, socket subscription, order path, channel parameter,
+database schema, or external write is included in the current branch. Local
+archived-session replay remains the final 1H-A task before 1H-B is considered.
 
 ## 1. The problem this phase must answer
 
@@ -123,17 +125,18 @@ Raw files are append-only. A manifest records row count, min/max provider time,
 checksum, compressed bytes, schema version, and upload completion. Partial
 objects are not marked complete.
 
-## 6. Four-plus-contract and portfolio realism
+## 6. Multi-contract scaling and portfolio realism
 
-All executable rankings use integer quantities of at least four. An observer
-arm must pass the same channel risk/cap/cost gates at its observed ask; it may
-not inherit the native trade's quantity if the earlier option price would have
-changed sizing.
+There is no hard four-contract minimum. The operating intent is multiple
+contracts so scale-outs and runners are executable. An observer arm must pass
+the same channel risk/cap/cost gates at its observed ask; it may not inherit the
+native trade's quantity if the earlier option price would have changed sizing.
 
-If risk-first sizing produces fewer than four contracts, label the candidate
-`ineligible_below_min_qty` and exclude it from the four-plus cohort. Never
-silently upsize beyond channel risk. Scale-out policies use the Phase 1G whole-
-lot rules (4→2/2, 5→2/3) and quantity-weighted economics.
+If risk-first sizing produces one contract, label the candidate
+`single_lot_non_scalable` and exclude it only from scale-out rankings; it may
+still inform all-out entry/exit analysis. Never silently upsize beyond channel
+risk. Multi-lot policies split deterministically (2→1/1, 3→1/2, 4→2/2,
+5→2/3) and use quantity-weighted economics.
 
 Counterfactuals must replay one-at-a-time channel occupancy, channel daily
 stops, shared account buying power, same-OCC concentration, and correlated
@@ -162,7 +165,7 @@ claims.
   timestamp/provenance types, deterministic IDs;
 - tests for out-of-order/duplicate trades, crossed/stale quotes, reconnect gaps,
   DST/half days, five-second persistence, same-OCC dedupe, and four/five-lot
-  sizing;
+  sizing (the durable minimum is two, not four);
 - replay one archived session locally. No worker wiring or external writes.
 
 ### 1H-B — dark capture
@@ -192,7 +195,7 @@ phase consider a paper-only execution experiment. Phase 1H itself never trades.
 - a forming signal that disappears before close is recorded as invalidated;
 - no fresh candidate-time ask means no counterfactual fill;
 - reconnect gaps and stale OPRA quotes censor rather than fabricate;
-- four- and five-contract scale paths are integer and risk-valid;
+- two-, three-, four-, and five-contract scale paths are integer and risk-valid;
 - same OCC across channels produces one market-data subscription/request but
   separate candidate identities;
 - R2 manifest checksum and row/time bounds verify after upload;
