@@ -192,10 +192,13 @@ Activation is a separate reviewed operation:
    Verified RLS on both tables, service-role `INSERT,SELECT` only, authenticated
    `SELECT` behind the `app_metadata.seve_role=operator` policy, anonymous denial
    (`42501`), migration-history alignment, and zero rows after cleanup;
-2. copy `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`,
-   and `R2_PREFIX` into the Railway service (never into source control);
-3. bump `WORKER_VERSION`, set `INTRAMINUTE_CAPTURE_ENABLED=true`, and manually
-   deploy Railway (auto-deploy remains disabled);
+2. **Complete, staged but not deployed:** copied `R2_ACCOUNT_ID`,
+   `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and `R2_PREFIX` into
+   Railway project `enchanting-appreciation`, service `SEVE`, environment
+   `production` (never into source control). Capture remains explicitly `false`;
+3. **Prepared:** bumped `WORKER_VERSION` to `stream-2026-07-13b`. Set
+   `INTRAMINUTE_CAPTURE_ENABLED=true` only for the single reviewed manual Railway
+   deployment (auto-deploy remains disabled);
 4. verify the subscription acknowledges bars/trades/quotes, the completed-bar
    watchdog remains bar-specific, R2 object+manifest HEAD checks pass, receipt
    counts match manifests, and execution payloads remain unchanged;
