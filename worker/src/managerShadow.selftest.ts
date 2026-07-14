@@ -1,4 +1,4 @@
-import { advanceManager, recoverManagerState, type ManagerExit } from "../../engine/managerPolicy.js";
+import { advanceManager, managerIdsForChannel, recoverManagerState, type ManagerExit } from "../../engine/managerPolicy.js";
 import { buildManagerShadowObservation, managerShadowTraceId } from "./managerShadowObservationModel.js";
 
 let passed = 0;
@@ -19,6 +19,11 @@ check("giveback uses running peak", advanceManager("ARM20/HALF-GIVEBACK", higher
 check("restart recovery is explicit", recoverManagerState("BANK20/RUN50", 80), { bankReturnPct: 20, recovered: true });
 check("bell control waits", advanceManager("BELL/no-stop", {}, -50, false).exit, null);
 check("bell control exits at bell", advanceManager("BELL/no-stop", {}, -50, true).exit?.reason, "bell");
+const pb2Bank = advanceManager("PB2-BANK15/HALF-GIVEBACK", {}, 16, false);
+const pb2Peak = advanceManager("PB2-BANK15/HALF-GIVEBACK", pb2Bank.state, 60, false);
+check("pb2 candidate banks then follows runner peak", pb2Peak.state, { bankReturnPct: 16, armedPeakPct: 60 });
+check("pb2 candidate exits runner at half peak", advanceManager("PB2-BANK15/HALF-GIVEBACK", pb2Peak.state, 30, false).exit?.reason, "runner_half_giveback");
+check("pb2 candidate is channel scoped", [managerIdsForChannel("pb-ride-2").length, managerIdsForChannel("pb-ride").length], [9, 8]);
 
 const position = {
   id: "11111111-1111-4111-8111-111111111111", occ_symbol: "SPY260713C00600000",
@@ -41,4 +46,4 @@ const other = advanceManager("LOCK30/30", {}, 31, false).exit as ManagerExit;
 check("manager identity is independent", managerShadowTraceId({ position, exit: other }) === row.trace_id, false);
 check("pre-cohort positions are excluded", buildManagerShadowObservation({ ...base, position: { ...position, opened_at: "2026-07-12T14:31:00Z" } }), null);
 
-console.log(`manager-shadow-selftest: ${passed}/14 PASS`);
+console.log(`manager-shadow-selftest: ${passed}/${passed} PASS`);

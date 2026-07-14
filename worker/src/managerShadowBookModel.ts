@@ -5,6 +5,7 @@ import {
   MANAGER_IDS,
   MANAGER_POLICY_VERSION,
   advanceManager,
+  managerIdsForChannel,
   type ManagerId,
   type ManagerState,
 } from "../../engine/managerPolicy.js";
@@ -14,6 +15,7 @@ import type { ExecutionObservationDraft } from "./executionObservationModel.js";
 
 export const MANAGER_SHADOW_SCHEMA_VERSION = 1 as const;
 export const MIN_MODELED_SOURCE_QTY = 4;
+export const MIN_STAGED_SOURCE_QTY = 2;
 export const MANAGER_SHADOW_BOOK_VERSION = "manager-shadow-book-v1" as const;
 export const SHADOW_CUTOFF_MINUTES_BEFORE_CLOSE = 5;
 
@@ -177,7 +179,7 @@ export function managerShadowTerminalObservationId(positionId: string, managerId
 
 export function managerAllocation(originalQty: number, managerId: ManagerId): ManagerAllocation | null {
   if (!Number.isInteger(originalQty) || originalQty < 1) return null;
-  if (managerId !== "BANK20/RUN50") {
+  if (managerId !== "BANK20/RUN50" && managerId !== "PB2-BANK15/HALF-GIVEBACK") {
     return { kind: "all_out", totalQty: originalQty, exitQty: originalQty, bankQty: 0, runnerQty: 0 };
   }
   if (originalQty === 1) {
@@ -193,6 +195,15 @@ export function managerAllocation(originalQty: number, managerId: ManagerId): Ma
   };
 }
 
+export function minimumModeledQty(managerId: ManagerId): number {
+  return managerId === "PB2-BANK15/HALF-GIVEBACK" ? MIN_STAGED_SOURCE_QTY : MIN_MODELED_SOURCE_QTY;
+}
+
+export function managerEnrollmentEligible(channelSlug: string, originalQty: number): boolean {
+  return Number.isInteger(originalQty) && originalQty >= 1
+    && managerIdsForChannel(channelSlug).some((managerId) => originalQty >= minimumModeledQty(managerId));
+}
+
 export function managerEconomicMode(allocation: ManagerAllocation): ManagerEconomicMode {
   return Number.isInteger(allocation.bankQty) && Number.isInteger(allocation.runnerQty)
     ? "whole_lot_executable"
@@ -204,7 +215,7 @@ function enrollmentValid(input: ManagerEnrollmentInput): boolean {
     && UUID.test(input.positionId) && UUID.test(input.strategistId) && UUID.test(input.accountId)
     && !!input.channelSlug && !!input.occSymbol && !!input.underlying
     && finite(input.entryPrice) && input.entryPrice > 0
-    && Number.isInteger(input.originalQty) && input.originalQty >= MIN_MODELED_SOURCE_QTY
+    && Number.isInteger(input.originalQty) && input.originalQty >= 1
     && Number.isInteger(input.quoteMaxAgeMs) && input.quoteMaxAgeMs > 0
     && iso(input.entryAt) != null;
 }
@@ -212,7 +223,9 @@ function enrollmentValid(input: ManagerEnrollmentInput): boolean {
 export function buildManagerShadowEnrollments(input: ManagerEnrollmentInput): ManagerShadowRun[] {
   if (!enrollmentValid(input)) return [];
   const entryAt = iso(input.entryAt) as string;
-  return MANAGER_IDS.map((managerId) => {
+  return managerIdsForChannel(input.channelSlug)
+    .filter((managerId) => input.originalQty >= minimumModeledQty(managerId))
+    .map((managerId) => {
     const allocation = managerAllocation(input.originalQty, managerId) as ManagerAllocation;
     return {
       id: managerShadowRunId(input.positionId, managerId),
@@ -234,7 +247,7 @@ export function buildManagerShadowEnrollments(input: ManagerEnrollmentInput): Ma
       entryPriceBasis: input.entryPriceBasis,
       entryAt,
       originalQty: input.originalQty,
-      minimumModeledQty: MIN_MODELED_SOURCE_QTY,
+      minimumModeledQty: minimumModeledQty(managerId),
       economicMode: managerEconomicMode(allocation),
       allocation,
       status: "active",
@@ -267,7 +280,8 @@ export function quantityWeightedReturnPct(
   currentReturnPct: number,
 ): number | null {
   if (!finite(currentReturnPct)) return null;
-  if (run.managerId !== "BANK20/RUN50") return rounded(currentReturnPct);
+  if (run.managerId !== "BANK20/RUN50" && run.managerId !== "PB2-BANK15/HALF-GIVEBACK")
+    return rounded(currentReturnPct);
   if (!finite(state.bankReturnPct) || state.bankReturnPct == null) return rounded(currentReturnPct);
   const { totalQty, bankQty, runnerQty } = run.allocation;
   if (!(totalQty > 0) || bankQty < 0 || runnerQty < 0 || bankQty + runnerQty !== totalQty) return null;
@@ -499,10 +513,11 @@ function allocationFrom(value: unknown, qty: number, managerId: ManagerId): Mana
 
 function stateFrom(value: unknown): ManagerState | null {
   if (!isRecord(value)) return null;
-  const allowed = new Set(["bankReturnPct", "armedPeakPct"]);
+  const allowed = new Set(["bankReturnPct", "armedPeakPct", "recovered"]);
   if (Object.keys(value).some((key) => !allowed.has(key))) return null;
   if (value.bankReturnPct != null && !finite(value.bankReturnPct)) return null;
   if (value.armedPeakPct != null && !finite(value.armedPeakPct)) return null;
+  if (value.recovered != null && typeof value.recovered !== "boolean") return null;
   return { ...value } as ManagerState;
 }
 
@@ -518,7 +533,7 @@ export function decodeManagerShadowRun(row: ManagerShadowDbRow): ManagerShadowRu
       || (row.option_side !== "call" && row.option_side !== "put")
       || !(row.entry_price > 0) || (row.entry_price_basis !== "broker_fill" && row.entry_price_basis !== "execution_observation")
       || !Number.isInteger(row.original_qty) || row.original_qty < 1
-      || row.minimum_modeled_qty !== MIN_MODELED_SOURCE_QTY
+      || row.minimum_modeled_qty !== minimumModeledQty(row.manager_id)
       || (row.economic_mode !== "whole_lot_executable" && row.economic_mode !== "normalized_fractional")
       || (row.status !== "active" && row.status !== "terminal" && row.status !== "censored")
       || !Number.isInteger(row.consecutive_quote_misses) || row.consecutive_quote_misses < 0) return null;

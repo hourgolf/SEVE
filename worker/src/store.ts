@@ -20,6 +20,7 @@ import type { DurableShadowRow } from "./shadowPersistence.js";
 import type { PolicyEpochDraft, PositionPlanDraft } from "./planShadowModel.js";
 import type { ExecutionObservationDraft } from "./executionObservationModel.js";
 import type { PositionOutcomeDraft } from "./positionOutcomeModel.js";
+import type { FamilyAdmissionObservationDraft } from "./familyAdmissionModel.js";
 import {
   MANAGER_SHADOW_BOOK_VERSION,
   encodeManagerShadowRun,
@@ -530,6 +531,23 @@ export async function insertExecutionObservation(row: ExecutionObservationDraft)
     else warn(`store: execution observation insert failed — ${error.message}`);
   } catch (e) {
     warn(`store: execution observation rejected — ${(e as Error).message}`);
+  }
+  return false;
+}
+
+let familyAdmissionTableAvailable: boolean | null = null;
+
+/** Phase 1I append-only family collision evidence. Best effort and never
+ * awaited by the order path; a missing table can only lose dark evidence. */
+export async function insertFamilyAdmissionObservation(row: FamilyAdmissionObservationDraft): Promise<boolean> {
+  if (!config.hasServiceRole || familyAdmissionTableAvailable === false) return false;
+  try {
+    const { error } = await sb.from("family_admission_observations").insert({ ...row, source_boot_id: BOOT_ID });
+    if (!error || duplicate(error)) { familyAdmissionTableAvailable = true; return true; }
+    if (missingRelation(error)) familyAdmissionTableAvailable = false;
+    else warn(`store: family admission observation insert failed — ${error.message}`);
+  } catch (e) {
+    warn(`store: family admission observation rejected — ${(e as Error).message}`);
   }
   return false;
 }

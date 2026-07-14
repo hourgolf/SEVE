@@ -2,7 +2,7 @@
 // live worker's observation-only fast sweep. A tick can produce evidence; it
 // cannot place an order or mutate an active channel manager.
 
-export const MANAGER_IDS = [
+export const BASE_MANAGER_IDS = [
   "LOCK20/30",
   "LOCK30/30",
   "LOCK50/30",
@@ -13,12 +13,30 @@ export const MANAGER_IDS = [
   "BELL/no-stop",
 ] as const;
 
+export const PB_RIDE_2_MANAGER_ID = "PB2-BANK15/HALF-GIVEBACK" as const;
+
+export const MANAGER_IDS = [
+  ...BASE_MANAGER_IDS,
+  PB_RIDE_2_MANAGER_ID,
+] as const;
+
 export type ManagerId = typeof MANAGER_IDS[number];
 
 export interface ManagerState {
   bankReturnPct?: number;
   armedPeakPct?: number;
   recovered?: boolean;
+}
+
+/**
+ * Candidate enrollment is explicit. The July 14 replay supports observing the
+ * +15% staged exit on pb-ride-2 only; silently pooling it across the fleet
+ * would recreate the global-exit fallacy the replay rejected.
+ */
+export function managerIdsForChannel(channelSlug: string): readonly ManagerId[] {
+  return channelSlug.toLowerCase() === "pb-ride-2"
+    ? MANAGER_IDS
+    : BASE_MANAGER_IDS;
 }
 
 export interface ManagerExit {
@@ -68,6 +86,26 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
       } else if (isBell) return terminal(managerId, "bell", ret, state);
       return { state, exit: null };
     }
+    case "PB2-BANK15/HALF-GIVEBACK": {
+      if (state.bankReturnPct == null) {
+        if (ret <= -30) return terminal(managerId, "prebank_stop", ret, state);
+        if (ret >= 15) {
+          state.bankReturnPct = ret;
+          state.armedPeakPct = ret;
+        }
+      } else {
+        state.armedPeakPct = Math.max(state.armedPeakPct ?? ret, ret);
+      }
+      if (state.bankReturnPct != null && state.armedPeakPct != null
+          && ret <= Math.max(0, state.armedPeakPct * 0.5)) {
+        return terminal(managerId, "runner_half_giveback", (state.bankReturnPct + ret) / 2, state);
+      }
+      if (isBell) {
+        const blended = state.bankReturnPct == null ? ret : (state.bankReturnPct + ret) / 2;
+        return terminal(managerId, state.bankReturnPct == null ? "bell" : "runner_bell", blended, state);
+      }
+      return { state, exit: null };
+    }
     case "ARM20/HALF-GIVEBACK": {
       if (state.armedPeakPct == null) {
         if (ret <= -30) return terminal(managerId, "prearm_stop", ret, state);
@@ -92,6 +130,7 @@ export function recoverManagerState(managerId: ManagerId, peakReturnPct: number)
     return { bankReturnPct: 20, recovered: true };
   if (managerId === "ARM20/HALF-GIVEBACK" && peakReturnPct >= 20)
     return { armedPeakPct: peakReturnPct, recovered: true };
+  if (managerId === PB_RIDE_2_MANAGER_ID && peakReturnPct >= 15)
+    return { bankReturnPct: 15, armedPeakPct: peakReturnPct, recovered: true };
   return {};
 }
-

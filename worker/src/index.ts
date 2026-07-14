@@ -33,9 +33,11 @@ import { inEventWindow } from "../../engine/market-events";
 import { groupChannelsByAccount, rowAccountIdOf, acctCanEnter, acctCanManage } from "./routing.js";
 import { makeExitGuard, sweepExitAllowed } from "./exitGuard.js";
 import { captureDecisionObservation, captureManagerShadowObservation } from "./executionObservation.js";
-import { advanceManager, MANAGER_IDS, recoverManagerState, type ManagerState } from "../../engine/managerPolicy.js";
+import { advanceManager, MANAGER_IDS, managerIdsForChannel, PB_RIDE_2_MANAGER_ID, recoverManagerState, type ManagerState } from "../../engine/managerPolicy.js";
 import { specPremiumExit } from "../../engine/specEvaluate";
 import { shadowManagerBookTick } from "./managerShadowBook.js";
+import { captureFamilyAdmissionObservations } from "./familyAdmission.js";
+import type { FamilyAdmissionInput } from "./familyAdmissionModel.js";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
 
@@ -93,7 +95,8 @@ function observeShadowManagers(input: {
   const durablePeakPct = (((row.peak_mark ?? row.avg_entry_price) - row.avg_entry_price) / row.avg_entry_price) * 100;
   const openedMs = row.opened_at ? Date.parse(row.opened_at) : NaN;
   const minutesHeld = Number.isFinite(openedMs) ? Math.max(0, (observedAtMs - openedMs) / 60_000) : null;
-  for (const managerId of MANAGER_IDS) {
+  for (const managerId of managerIdsForChannel(ch.slug)) {
+    if (managerId === PB_RIDE_2_MANAGER_ID && row.qty < 2) continue;
     const key = `${row.id}|${managerId}`;
     // Recover only from the peak that pre-dated this process observation. Using
     // the just-computed current peak here would turn a fresh +24 crossing into
@@ -322,6 +325,7 @@ async function cycle(trigger: string): Promise<void> {
     for (const sym of SYMBOLS) await refreshChain(sym);
 
     const decisions: ShadowDecision[] = [];
+    const familyAdmissionInputs: FamilyAdmissionInput[] = [];
     let totEquity = 0, totCash = 0, totUnreal = 0, snappedAny = false;
     // Per-account orphan-sweep inputs, captured on each bucket's PRE-cycle snapshot and swept
     // AFTER the decision pass (so same-cycle entries/exits don't false-positive).
@@ -403,6 +407,14 @@ async function cycle(trigger: string): Promise<void> {
           catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
         }
         decisions.push(...symDecisions);
+        const familyObservedAtMs = Date.now();
+        for (const decision of symDecisions) {
+          const channel = symChannels.find((candidate) => candidate.slug === decision.slug);
+          if (channel) familyAdmissionInputs.push({
+            channel, accountId: g.account.id, decision,
+            sourceBarAtMs: lastSession.ts, observedAtMs: familyObservedAtMs,
+          });
+        }
 
         // ---- PHASE B: EXECUTE the decisions for channels this worker OWNS ----
         // 1b #1: the block runs under canManage (exits/reconcile/marks on any account whose
@@ -554,6 +566,7 @@ async function cycle(trigger: string): Promise<void> {
       } catch (e) { warn(`shadow-management[${sym}] failed — ${(e as Error).message}`); }
     }
 
+    captureFamilyAdmissionObservations(familyAdmissionInputs);
     report(trigger, totEquity, decisions);
     // Orphan safety-net: flag (and, when armed, flatten) Alpaca lots the desk thinks are flat.
     // Live-only (no pages on shadow/boot); each sweep is isolated so it can never break the cycle.
