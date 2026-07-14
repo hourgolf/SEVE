@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
   MIN_MODELED_SOURCE_QTY,
+  MIN_STAGED_SOURCE_QTY,
   advanceManagerShadowRun,
   attachActualClose,
   buildManagerShadowEnrollments,
@@ -10,6 +11,8 @@ import {
   encodeManagerShadowRun,
   managerAllocation,
   managerEconomicMode,
+  managerEnrollmentEligible,
+  minimumModeledQty,
   managerPnl,
   managerShadowRunId,
   managerShadowTerminalObservationId,
@@ -59,6 +62,11 @@ check("underlying is normalized", runs[0]?.underlying, "SPY");
 truth("all confirmed-size managers are integer executable", runs.every((r) => r.economicMode === "whole_lot_executable"));
 check("non-paper enrolls nothing", buildManagerShadowEnrollments({ ...base, paperMode: false }).length, 0);
 check("three contracts fail the confirmed cohort gate", buildManagerShadowEnrollments({ ...base, originalQty: 3 }).length, 0);
+const pb2Two = buildManagerShadowEnrollments({ ...base, channelSlug: "pb-ride-2", originalQty: 2 });
+check("two-contract pb2 enrolls only its staged candidate", pb2Two.map((r) => r.managerId), ["PB2-BANK15/HALF-GIVEBACK"]);
+check("pb2 staged candidate stamps a two-contract minimum", pb2Two[0]?.minimumModeledQty, 2);
+check("one contract cannot model an integer staged exit", buildManagerShadowEnrollments({ ...base, channelSlug: "pb-ride-2", originalQty: 1 }).length, 0);
+check("runtime enrollment gate avoids extra quotes for ineligible small lots", [managerEnrollmentEligible("pb-ride-2", 2), managerEnrollmentEligible("pb-ride", 2)], [true, false]);
 check("fractional quantities fail enrollment", buildManagerShadowEnrollments({ ...base, originalQty: 4.5 }).length, 0);
 check("invalid position identity fails enrollment", buildManagerShadowEnrollments({ ...base, positionId: "bad" }).length, 0);
 check("invalid entry price fails enrollment", buildManagerShadowEnrollments({ ...base, entryPrice: 0 }).length, 0);
@@ -70,6 +78,8 @@ const bank5 = managerAllocation(5, "BANK20/RUN50");
 check("five contracts split 2 bank / 3 runner", bank5, { kind: "bank_runner", totalQty: 5, exitQty: 0, bankQty: 2, runnerQty: 3 });
 check("all-out manager exits all five", managerAllocation(5, "LOCK20/30"), { kind: "all_out", totalQty: 5, exitQty: 5, bankQty: 0, runnerQty: 0 });
 check("one-lot bank is explicitly fractional", managerEconomicMode(managerAllocation(1, "BANK20/RUN50")!), "normalized_fractional");
+check("pb2 five-contract split is quantity-aware", managerAllocation(5, "PB2-BANK15/HALF-GIVEBACK"), { kind: "bank_runner", totalQty: 5, exitQty: 0, bankQty: 2, runnerQty: 3 });
+check("manager-specific minimums retain the old cohort", [minimumModeledQty("LOCK20/30"), minimumModeledQty("PB2-BANK15/HALF-GIVEBACK"), MIN_MODELED_SOURCE_QTY, MIN_STAGED_SOURCE_QTY], [4, 2, 4, 2]);
 check("bad quantity has no allocation", managerAllocation(0, "BANK20/RUN50"), null);
 
 const ids = runs.map((r) => r.id);
@@ -133,6 +143,8 @@ const bankStart5 = advanceManagerShadowRun(run("BANK20/RUN50", 5), tick(1.24));
 const bankEnd5 = advanceManagerShadowRun(bankStart5.run, laterTick(1, 10));
 check("five-lot 2/3 bank-run is not naive average", bankEnd5.run.terminalReturnPct, 9.6);
 check("five-lot quantity-weighted pnl", bankEnd5.run.terminalPnl, 48);
+const recoveredPb2 = { ...pb2Two[0]!, managerState: { bankReturnPct: 15, armedPeakPct: 35, recovered: true }, bankReturnPct: 15 };
+truth("restart-recovery provenance survives durable encode/decode", decodeManagerShadowRun(encodeManagerShadowRun(recoveredPb2, { sourceBootId: "77777777-7777-4777-8777-777777777777" })!)?.managerState.recovered);
 const bankReceipt5 = buildManagerShadowTerminalObservation(bankEnd5.run);
 truth("five-lot terminal creates append-only receipt draft", bankReceipt5);
 check("receipt carries quantity-weighted return", bankReceipt5?.payload.counterfactualReturnPct, 9.6);

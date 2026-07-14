@@ -13,6 +13,7 @@ import {
   buildManagerShadowTerminalObservation,
   censorManagerShadowRun,
   decodeManagerShadowRun,
+  managerEnrollmentEligible,
   recordManagerQuoteMiss,
   type ManagerShadowRun,
 } from "./managerShadowBookModel.js";
@@ -155,10 +156,10 @@ async function enrollOpenPositions(
   const channels = new Map(ctx.channels.map((channel) => [channel.id, channel]));
   const defaultAccount = ctx.accounts.find((account) => !account.cred_ref) ?? ctx.accounts[0];
   for (const row of openRows) {
-    if (!row.opened_at || row.qty < 4 || Date.parse(row.opened_at) < Date.parse(SHADOW_MANAGER_COHORT_FROM)) continue;
+    if (!row.opened_at || Date.parse(row.opened_at) < Date.parse(SHADOW_MANAGER_COHORT_FROM)) continue;
     const channel = channels.get(row.strategist_id);
     const accountId = channel?.account_id ?? defaultAccount?.id;
-    if (!channel || !accountId || enrolledPositions.has(row.id)) continue;
+    if (!channel || !managerEnrollmentEligible(channel.slug, row.qty) || !accountId || enrolledPositions.has(row.id)) continue;
     const probeId = buildManagerShadowEnrollments({
       positionId: row.id, strategistId: row.strategist_id, accountId,
       channelSlug: channel.slug, occSymbol: row.occ_symbol, underlying: row.underlying,
@@ -199,9 +200,13 @@ export async function shadowManagerBookTick(ctx: ManagerShadowBookContext): Prom
     if (phase === "closed") return;
     let openRows: store.PositionRow[] = [];
     try { openRows = await store.getOpenPositions(); } catch { /* enrollment helper logs on its own read */ }
+    const channelById = new Map(ctx.channels.map((channel) => [channel.id, channel]));
     const symbols = [...new Set([
       ...activeRuns().map((item) => item.run.occSymbol),
-      ...openRows.filter((row) => row.qty >= 4).map((row) => row.occ_symbol),
+      ...openRows.filter((row) => {
+        const channel = channelById.get(row.strategist_id);
+        return !!channel && managerEnrollmentEligible(channel.slug, row.qty);
+      }).map((row) => row.occ_symbol),
     ])];
     const quotes = await targetedQuotes(symbols);
     await enrollOpenPositions(ctx, openRows, quotes, nowMs);
