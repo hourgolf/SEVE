@@ -19,6 +19,7 @@ import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
 import { BarStore, ChainStore } from "./state.js";
 import { StockBarStream } from "./stream.js";
+import type { IntraminuteCaptureRuntime } from "./intraminuteCapture.js";
 import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type ShadowDecision } from "./decide.js";
 import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
@@ -930,7 +931,18 @@ async function main(): Promise<void> {
   // useful when booting mid-session); thereafter every bar-close drives it.
   await cycle("boot");
 
-  const stream = new StockBarStream(SYMBOLS, onBar, onReconnect);
+  // Dynamic import keeps the default-off worker byte path free of the R2/S3
+  // runtime and its memory footprint. Only the explicit flag can load it.
+  let intraminuteCapture: IntraminuteCaptureRuntime | null = null;
+  if (config.intraminuteCaptureEnabled) {
+    const { IntraminuteCaptureRuntime: CaptureRuntime } = await import("./intraminuteCapture.js");
+    intraminuteCapture = await CaptureRuntime.create({
+      symbols: SYMBOLS,
+      paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+    });
+  }
+  const stream = new StockBarStream(SYMBOLS, onBar, onReconnect, intraminuteCapture?.observer());
+  intraminuteCapture?.start();
   stream.start();
 
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
@@ -969,7 +981,14 @@ async function main(): Promise<void> {
   }, 60_000);
 
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
-    process.on(sig, () => { info(`shutdown (${sig})`); stream.stop(); void recordExitAndDie(`graceful_${sig.toLowerCase()}`, 0, sig); });
+    process.on(sig, () => {
+      info(`shutdown (${sig})`);
+      stream.stop();
+      void (async () => {
+        await intraminuteCapture?.stop();
+        await recordExitAndDie(`graceful_${sig.toLowerCase()}`, 0, sig);
+      })();
+    });
   }
 }
 

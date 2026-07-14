@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1086.0",
     "@supabase/supabase-js": "^2.45.4",
     "dotenv": "^16.4.5",
     "tsx": "^4.22.3",

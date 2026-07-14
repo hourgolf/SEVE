@@ -5,8 +5,9 @@
 //  instant a bar closes — zero cron lag. Auto-reconnects with reseed.
 //
 //  Feed-selectable: "iex" (free, runs NOW) → "sip" (real-time, Algo Trader
-//  Plus). v1 consumes completed minute bars (`b.SPY`); the trade stream (`t.SPY`,
-//  for sub-minute / live forming bars) is a Phase C option.
+//  Plus). Decisions consume completed minute bars (`b.SPY`). Phase 1H may attach
+//  a default-off DARK observer to the same socket's `t`/`q` messages; those
+//  messages never enter onBar or the execution path.
 // ============================================================================
 
 import WebSocket from "ws";
@@ -31,6 +32,11 @@ function isRthNow(): boolean {
 
 interface RawBar { T: string; S: string; o: number; h: number; l: number; c: number; v: number; vw?: number; t: string; }
 
+export interface StockStreamObserver {
+  onEvent: (raw: unknown, receivedAtMs: number) => void;
+  onGap: (startedAtMs: number, endedAtMs: number) => void;
+}
+
 export class StockBarStream {
   private ws: WebSocket | null = null;
   private retry = 0;
@@ -41,13 +47,17 @@ export class StockBarStream {
   // were never REST-backfilled and session VWAP/EMA/levels computed over a permanent hole.
   // This flag marks "have we EVER subscribed" and deliberately survives close.
   private hasSubscribed = false;
-  private lastMsgMs = 0;
+  // Bar-specific by design. When the dark observer is enabled, high-rate trade
+  // and quote traffic must not mask a missing completed-bar stream.
+  private lastBarMs = 0;
   private hbTimer: ReturnType<typeof setInterval> | null = null;
+  private disconnectedAtMs: number | null = null;
 
   constructor(
     private readonly symbols: string[],
     private readonly onBar: (symbol: string, bar: Bar) => void,
     private readonly onReconnect: () => void,
+    private readonly observer?: StockStreamObserver,
   ) {}
 
   start(): void {
@@ -56,7 +66,7 @@ export class StockBarStream {
     // Heartbeat / stale-socket watchdog: if no message for 90s during what should
     // be an active socket, force a reconnect (Alpaca pushes frequently).
     this.hbTimer = setInterval(() => {
-      if (this.alive && isRthNow() && this.lastMsgMs && Date.now() - this.lastMsgMs > 90_000) {
+      if (this.alive && isRthNow() && this.lastBarMs && Date.now() - this.lastBarMs > 90_000) {
         warn("stream: no bars for >90s during RTH — forcing reconnect");
         this.ws?.terminate();
       }
@@ -80,11 +90,11 @@ export class StockBarStream {
     ws.on("open", () => info("stream: socket open — awaiting connected"));
 
     ws.on("message", (data: WebSocket.RawData) => {
-      this.lastMsgMs = Date.now();
+      const receivedAtMs = Date.now();
       let msgs: any[];
       try { msgs = JSON.parse(data.toString()); } catch { return; }
       if (!Array.isArray(msgs)) return;
-      for (const m of msgs) this.handle(m);
+      for (const m of msgs) this.handle(m, receivedAtMs);
     });
 
     ws.on("error", (e: Error) => error(`stream: socket error — ${e.message}`));
@@ -92,6 +102,7 @@ export class StockBarStream {
     ws.on("close", (code: number) => {
       this.alive = false;
       if (this.closing) { info("stream: closed (shutdown)"); return; }
+      if (this.hasSubscribed && this.disconnectedAtMs == null) this.disconnectedAtMs = Date.now();
       this.retry++;
       const delay = Math.min(30_000, 1000 * 2 ** Math.min(this.retry, 5));
       warn(`stream: closed (code ${code}) — reconnecting in ${delay}ms (attempt ${this.retry})`);
@@ -99,25 +110,33 @@ export class StockBarStream {
     });
   }
 
-  private handle(m: any): void {
+  private handle(m: any, receivedAtMs: number): void {
     switch (m.T) {
       case "success":
         if (m.msg === "connected") {
           this.ws?.send(JSON.stringify({ action: "auth", key: config.alpacaKey, secret: config.alpacaSecret }));
         } else if (m.msg === "authenticated") {
-          info(`stream: authenticated — subscribing bars ${this.symbols.join(",")}`);
-          this.ws?.send(JSON.stringify({ action: "subscribe", bars: this.symbols }));
+          info(`stream: authenticated — subscribing bars ${this.symbols.join(",")}${this.observer ? "; DARK trades+quotes observer" : ""}`);
+          this.ws?.send(JSON.stringify({
+            action: "subscribe", bars: this.symbols,
+            ...(this.observer ? { trades: this.symbols, quotes: this.symbols } : {}),
+          }));
         }
         break;
       case "subscription":
-        info("stream: subscribed", { bars: m.bars });
+        info("stream: subscribed", { bars: m.bars, trades: m.trades, quotes: m.quotes });
         // A (re)subscription means the socket is live again. After the very first
         // connect this is a reconnect → reseed in-memory state from REST. Keyed on
         // hasSubscribed, NOT alive (alive is false here on every reconnect — the
         // close handler cleared it — so the old gate never fired; audit 2026-07-10).
-        if (this.hasSubscribed) this.onReconnect();
+        if (this.hasSubscribed) {
+          if (this.disconnectedAtMs != null) this.observer?.onGap(this.disconnectedAtMs, receivedAtMs);
+          this.onReconnect();
+        }
+        this.disconnectedAtMs = null;
         this.hasSubscribed = true;
         this.alive = true;
+        this.lastBarMs = receivedAtMs;
         this.retry = 0;
         break;
       case "error":
@@ -127,6 +146,7 @@ export class StockBarStream {
       case "b": {
         const b = m as RawBar;
         if (!this.symbols.includes(b.S)) return;
+        this.lastBarMs = receivedAtMs;
         this.onBar(b.S, {
           ts: Date.parse(b.t),
           open: Number(b.o), high: Number(b.h), low: Number(b.l), close: Number(b.c),
@@ -134,6 +154,11 @@ export class StockBarStream {
         });
         break;
       }
+      case "t":
+      case "q":
+        // A capture exception must never escape into the socket/order driver.
+        try { this.observer?.onEvent(m, receivedAtMs); } catch { /* evidence-only */ }
+        break;
       default:
         break; // ignore quotes/trades/etc. (not subscribed in v1)
     }

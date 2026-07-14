@@ -104,6 +104,19 @@ export const config = {
   // bound is cohort-stamped; changing it requires a new shadow-book version.
   managerShadowBookEnabled: flag("MANAGER_SHADOW_BOOK_ENABLED", false),
   managerShadowQuoteMaxAgeMs: Number(opt("MANAGER_SHADOW_QUOTE_MAX_AGE_MS", "15000")),
+  // Phase 1H-B raw SIP trade/quote capture. DARK by default and observation-only.
+  // Enabling requires paper mode, the SIP feed, the private receipt migration,
+  // and a complete R2 credential set. Queue pressure drops evidence before it
+  // can consume memory needed by execution.
+  intraminuteCaptureEnabled: flag("INTRAMINUTE_CAPTURE_ENABLED", false),
+  intraminuteCaptureFlushMs: Number(opt("INTRAMINUTE_CAPTURE_FLUSH_MS", "30000")),
+  intraminuteCaptureMaxEvents: Number(opt("INTRAMINUTE_CAPTURE_MAX_EVENTS", "50000")),
+  intraminuteCaptureMaxBytes: Number(opt("INTRAMINUTE_CAPTURE_MAX_BYTES", String(32 * 1024 * 1024))),
+  r2AccountId: opt("R2_ACCOUNT_ID", ""),
+  r2AccessKeyId: opt("R2_ACCESS_KEY_ID", ""),
+  r2SecretAccessKey: opt("R2_SECRET_ACCESS_KEY", ""),
+  r2Bucket: opt("R2_BUCKET", ""),
+  r2Prefix: opt("R2_PREFIX", "intraminute"),
   // Fund-level equity snapshots stay with the cron until full cutover (else two
   // writers double-snapshot). Flip at Phase B4 when the cron is unscheduled.
   writeEquitySnapshots: flag("WRITE_EQUITY_SNAPSHOTS", false),

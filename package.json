@@ -115,6 +115,7 @@
     "preopen": "tsx --env-file=.env.local scripts/preopen-readiness.ts",
     "research-annotations-selftest": "tsx lib/research/positionAnnotations.selftest.ts",
     "intraminute-observer-selftest": "tsx worker/src/intraminuteObserver.selftest.ts",
+    "intraminute-capture-selftest": "tsx worker/src/intraminuteCapture.selftest.ts",
     "latency": "tsx scripts/latency.ts",
     "sweep": "tsx engine/sweep.ts",
     "sweep:cross": "tsx engine/sweep-cross.ts",

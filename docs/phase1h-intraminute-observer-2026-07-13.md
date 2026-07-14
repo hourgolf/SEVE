@@ -1,9 +1,10 @@
 # Phase 1H — intraminute entry and execution observer
 
-Status: 1H-A pure foundation implemented on an isolated branch, observation-only.
-No production worker, socket subscription, order path, channel parameter,
-database schema, or external write is included in the current branch. Local
-archived-session replay remains the final 1H-A task before 1H-B is considered.
+Status: 1H-A pure foundation landed. The 1H-B dark-capture adapter is implemented
+on an isolated branch but remains default-off, unmigrated, undeployed, and
+unsubscribed. No order path or channel parameter changes. Local archived-session
+replay remains unavailable because the existing archive contains minute bars and
+option snapshots, not provider-time underlying trades/quotes.
 
 ## 1. The problem this phase must answer
 
@@ -175,6 +176,27 @@ claims.
   Supabase receipts and health;
 - deployed observation-only behind a default-off flag; no strategy evaluation
   result can reach execution.
+
+Implementation note: the first capture format is schema-stamped gzip NDJSON,
+partitioned by ET date/hour/symbol. Each immutable object has a separate JSON
+manifest and is verified with an R2 HEAD read before its compact Supabase receipt
+is attempted. Parquet conversion can happen downstream without modifying the raw
+evidence. The migration and Railway flag/credentials must be reviewed separately;
+merging code alone does not subscribe to trades or quotes.
+
+Activation is a separate reviewed operation:
+
+1. apply `20260714012904_phase_1h_intraminute_capture_receipts.sql` and verify
+   service-role insert plus operator-only read behavior;
+2. copy `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`,
+   and `R2_PREFIX` into the Railway service (never into source control);
+3. bump `WORKER_VERSION`, set `INTRAMINUTE_CAPTURE_ENABLED=true`, and manually
+   deploy Railway (auto-deploy remains disabled);
+4. verify the subscription acknowledges bars/trades/quotes, the completed-bar
+   watchdog remains bar-specific, R2 object+manifest HEAD checks pass, receipt
+   counts match manifests, and execution payloads remain unchanged;
+5. rollback is `INTRAMINUTE_CAPTURE_ENABLED=false` plus a manual redeploy. Raw
+   evidence already written remains immutable.
 
 ### 1H-C — paired outcome replay
 
