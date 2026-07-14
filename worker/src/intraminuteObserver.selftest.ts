@@ -27,11 +27,12 @@ function check(name: string, actual: unknown, expected: unknown): void {
 
 const t0 = Date.parse("2026-07-13T13:30:01.000Z");
 const trade = (id: string, at: number, price: number, size = 1, symbol = "SPY"): SipTradeEvent => ({
-  symbol, tradeId: id, providerAtMs: at, receivedAtMs: at + 20, receiveLagMs: 20, price, size,
+  symbol, tradeId: id, exchange: null, tape: null, conditions: [],
+  providerAtMs: at, receivedAtMs: at + 20, receiveLagMs: 20, price, size,
 });
 
-const nt = normalizeSipTrade({ T: "t", S: "spy", i: 7, p: 750.25, s: 3, t: new Date(t0).toISOString() }, t0 + 25)!;
-check("trade normalizes provider facts", [nt.symbol, nt.tradeId, nt.price, nt.size, nt.receiveLagMs], ["SPY", "7", 750.25, 3, 25]);
+const nt = normalizeSipTrade({ T: "t", S: "spy", i: 7, x: "V", z: "C", c: ["@", "I"], p: 750.25, s: 3, t: new Date(t0).toISOString() }, t0 + 25)!;
+check("trade retains bar-eligibility provenance", [nt.symbol, nt.tradeId, nt.exchange, nt.tape, nt.conditions, nt.price, nt.size, nt.receiveLagMs], ["SPY", "7", "V", "C", ["@", "I"], 750.25, 3, 25]);
 check("invalid trade is not repaired", normalizeSipTrade({ T: "t", S: "SPY", i: 8, p: 0, s: 1, t: new Date(t0).toISOString() }, t0), null);
 
 const nq = normalizeSipQuote({ T: "q", S: "qqq", bp: 710, ap: 710.02, bs: 4, as: 5, t: new Date(t0).toISOString() }, t0 + 30)!;

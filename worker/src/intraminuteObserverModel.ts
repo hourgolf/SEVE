@@ -3,7 +3,7 @@
 
 import { deterministicEvidenceUuid } from "../../lib/evidence/identity";
 
-export const INTRAMINUTE_OBSERVER_VERSION = "intraminute-observer-v1" as const;
+export const INTRAMINUTE_OBSERVER_VERSION = "intraminute-observer-v2" as const;
 export const FORMING_EVALUATION_INTERVAL_MS = 5_000;
 export const FORMING_PERSISTENCE_SAMPLES = 2;
 export const MIN_SCALABLE_QTY = 2;
@@ -12,6 +12,9 @@ const MAX_DEDUPE_IDS = 2_048;
 export interface SipTradeEvent {
   symbol: string;
   tradeId: string;
+  exchange: string | null;
+  tape: string | null;
+  conditions: readonly string[];
   price: number;
   size: number;
   providerAtMs: number;
@@ -132,7 +135,11 @@ export function normalizeSipTrade(raw: unknown, receivedAtMs: number): SipTradeE
   const tradeId = raw.i == null ? "" : String(raw.i);
   if (!symbol || !tradeId || !positive(raw.p) || !positive(raw.s) || providerAtMs == null) return null;
   return {
-    symbol, tradeId, price: raw.p, size: raw.s, providerAtMs, receivedAtMs,
+    symbol, tradeId,
+    exchange: typeof raw.x === "string" ? raw.x : raw.x == null ? null : String(raw.x),
+    tape: typeof raw.z === "string" ? raw.z : raw.z == null ? null : String(raw.z),
+    conditions: Array.isArray(raw.c) ? raw.c.map(String) : [],
+    price: raw.p, size: raw.s, providerAtMs, receivedAtMs,
     receiveLagMs: receivedAtMs - providerAtMs,
   };
 }

@@ -3,12 +3,12 @@
 
 import type { IntraminuteCaptureGap, SipQuoteEvent, SipTradeEvent } from "./intraminuteObserverModel.js";
 
-export const INTRAMINUTE_CAPTURE_SCHEMA_VERSION = 1 as const;
+export const INTRAMINUTE_CAPTURE_SCHEMA_VERSION = 2 as const;
 
 export type IntraminuteCaptureEvent =
-  | { schemaVersion: 1; kind: "trade"; symbol: string; providerAtMs: number; receivedAtMs: number; payload: SipTradeEvent }
-  | { schemaVersion: 1; kind: "quote"; symbol: string; providerAtMs: number; receivedAtMs: number; payload: SipQuoteEvent }
-  | { schemaVersion: 1; kind: "gap"; symbol: string; providerAtMs: number; receivedAtMs: number; payload: IntraminuteCaptureGap };
+  | { schemaVersion: 2; kind: "trade"; symbol: string; providerAtMs: number; receivedAtMs: number; payload: SipTradeEvent }
+  | { schemaVersion: 2; kind: "quote"; symbol: string; providerAtMs: number; receivedAtMs: number; payload: SipQuoteEvent }
+  | { schemaVersion: 2; kind: "gap"; symbol: string; providerAtMs: number; receivedAtMs: number; payload: IntraminuteCaptureGap };
 
 export interface CaptureQueueDrain {
   events: readonly IntraminuteCaptureEvent[];

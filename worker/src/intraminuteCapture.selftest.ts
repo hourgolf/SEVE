@@ -14,14 +14,14 @@ function check(name: string, actual: unknown, expected: unknown): void {
 }
 
 const event = (kind: "trade" | "quote", symbol: string, providerAtMs: number): IntraminuteCaptureEvent => kind === "trade" ? {
-  schemaVersion: 1, kind, symbol, providerAtMs, receivedAtMs: providerAtMs + 20,
-  payload: { symbol, tradeId: `${providerAtMs}`, price: 100, size: 2, providerAtMs, receivedAtMs: providerAtMs + 20, receiveLagMs: 20 },
+  schemaVersion: INTRAMINUTE_CAPTURE_SCHEMA_VERSION, kind, symbol, providerAtMs, receivedAtMs: providerAtMs + 20,
+  payload: { symbol, tradeId: `${providerAtMs}`, exchange: "V", tape: "C", conditions: ["@"], price: 100, size: 2, providerAtMs, receivedAtMs: providerAtMs + 20, receiveLagMs: 20 },
 } : {
-  schemaVersion: 1, kind, symbol, providerAtMs, receivedAtMs: providerAtMs + 20,
+  schemaVersion: INTRAMINUTE_CAPTURE_SCHEMA_VERSION, kind, symbol, providerAtMs, receivedAtMs: providerAtMs + 20,
   payload: { symbol, bid: 99, ask: 101, bidSize: 2, askSize: 3, providerAtMs, receivedAtMs: providerAtMs + 20, receiveLagMs: 20 },
 };
 
-check("schema version is cohort stamped", INTRAMINUTE_CAPTURE_SCHEMA_VERSION, 1);
+check("schema version is cohort stamped", INTRAMINUTE_CAPTURE_SCHEMA_VERSION, 2);
 const q = new BoundedIntraminuteCaptureQueue(2, 10_000);
 check("first event queues synchronously", q.enqueue(event("trade", "SPY", Date.parse("2026-07-13T13:30:01Z"))).accepted, true);
 check("second event reaches event cap", q.enqueue(event("quote", "SPY", Date.parse("2026-07-13T13:30:02Z"))).accepted, true);
@@ -53,8 +53,11 @@ check("pure queue cannot import runtime mutation modules", /from\s+["'][^"']*(?:
 const runtimeSource = readFileSync(new URL("./intraminuteCapture.ts", import.meta.url), "utf8");
 check("capture runtime cannot import broker or execution modules", /from\s+["'][^"']*(?:execute|alpaca|position|order|reconcile)[^"']*["']/i.test(runtimeSource), false);
 check("capture runtime cannot import broad trading store", /from\s+["']\.\/store(?:\.js)?["']/.test(runtimeSource), false);
+check("capture runtime cannot write new evidence into the v1 prefix", runtimeSource.includes("/v1/"), false);
 const captureStoreSource = readFileSync(new URL("./intraminuteCaptureStore.ts", import.meta.url), "utf8");
 check("receipt adapter is append-only and isolated", /from\s+["'][^"']*(?:execute|alpaca|store|position|order|reconcile)[^"']*["']/i.test(captureStoreSource), false);
+const migrationSource = readFileSync(new URL("../../supabase/migrations/20260715043000_phase_1h_trade_provenance.sql", import.meta.url), "utf8");
+check("receipt migration preserves immutable v1 and admits v2", /schema_version\s+in\s*\(1,\s*2\)/i.test(migrationSource), true);
 const streamSource = readFileSync(new URL("./stream.ts", import.meta.url), "utf8");
 check("trade and quote traffic cannot mask bar watchdog", [streamSource.includes("lastBarMs"), streamSource.includes("lastMsgMs")], [true, false]);
 

@@ -8,7 +8,7 @@ import { warn } from "./log.js";
 export interface IntraminuteCaptureReceiptRow {
   object_key: string;
   manifest_key: string;
-  schema_version: 1;
+  schema_version: 1 | 2;
   observer_version: string;
   source_boot_id: string;
   source_feed: "sip";

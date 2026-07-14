@@ -184,7 +184,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-13b"; // Phase 1H intraminute trade/quote capture (dark/observation-only; default-off env gate). Prior (07-13a): Phase 1G durable post-close manager shadow book. Deferred: #12/#14 (broker samples), #17 (spread-capture dormant), #18 (per-strike chain staleness).
+export const WORKER_VERSION = "stream-2026-07-14a"; // Phase 1H capture v2 retains SIP exchange/tape/sale conditions so forming bars can follow official aggregation rules. Prior (07-13b): v1 intraminute trade/quote capture omitted that provenance. Deferred: #12/#14 (broker samples), #17 (spread-capture dormant), #18 (per-strike chain staleness).
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

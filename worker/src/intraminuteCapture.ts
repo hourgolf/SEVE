@@ -105,12 +105,12 @@ export class IntraminuteCaptureRuntime {
     try {
       const trade = normalizeSipTrade(raw, receivedAtMs);
       if (trade && this.symbols.includes(trade.symbol)) {
-        this.enqueue({ schemaVersion: 1, kind: "trade", symbol: trade.symbol, providerAtMs: trade.providerAtMs, receivedAtMs, payload: trade });
+        this.enqueue({ schemaVersion: INTRAMINUTE_CAPTURE_SCHEMA_VERSION, kind: "trade", symbol: trade.symbol, providerAtMs: trade.providerAtMs, receivedAtMs, payload: trade });
         return;
       }
       const quote = normalizeSipQuote(raw, receivedAtMs);
       if (quote && this.symbols.includes(quote.symbol)) {
-        this.enqueue({ schemaVersion: 1, kind: "quote", symbol: quote.symbol, providerAtMs: quote.providerAtMs, receivedAtMs, payload: quote });
+        this.enqueue({ schemaVersion: INTRAMINUTE_CAPTURE_SCHEMA_VERSION, kind: "quote", symbol: quote.symbol, providerAtMs: quote.providerAtMs, receivedAtMs, payload: quote });
       }
     } catch {
       // Capture parsing is fail-open and may never escape into the stream loop.
@@ -141,7 +141,7 @@ export class IntraminuteCaptureRuntime {
         const partition = partitions[i];
         const seq = String(++this.sequence).padStart(8, "0");
         const hour = String(partition.hourEt).padStart(2, "0");
-        const base = `${cleanPrefix(config.r2Prefix)}/v1/date=${partition.dateEt}/symbol=${partition.symbol}/hour=${hour}/${BOOT_ID}-${seq}`;
+        const base = `${cleanPrefix(config.r2Prefix)}/v${INTRAMINUTE_CAPTURE_SCHEMA_VERSION}/date=${partition.dateEt}/symbol=${partition.symbol}/hour=${hour}/${BOOT_ID}-${seq}`;
         const objectKey = `${base}.jsonl.gz`;
         const manifestKey = `${base}.manifest.json`;
         const raw = Buffer.from(`${partition.events.map((event) => JSON.stringify(event)).join("\n")}\n`, "utf8");
@@ -173,7 +173,7 @@ export class IntraminuteCaptureRuntime {
         await this.s3.send(new PutObjectCommand({
           Bucket: config.r2Bucket, Key: objectKey, Body: compressed,
           ContentType: "application/x-ndjson", ContentEncoding: "gzip",
-          Metadata: { sha256: checksum, schema: "1", observer: INTRAMINUTE_OBSERVER_VERSION },
+          Metadata: { sha256: checksum, schema: String(INTRAMINUTE_CAPTURE_SCHEMA_VERSION), observer: INTRAMINUTE_OBSERVER_VERSION },
         }));
         const objectHead = await this.s3.send(new HeadObjectCommand({ Bucket: config.r2Bucket, Key: objectKey }));
         if (objectHead.ContentLength !== compressed.byteLength || objectHead.Metadata?.sha256 !== checksum) {
@@ -189,7 +189,7 @@ export class IntraminuteCaptureRuntime {
           throw new Error(`R2 manifest verification mismatch for ${manifestKey}`);
         }
         const receipted = await captureStore.insertIntraminuteCaptureReceipt({
-          object_key: objectKey, manifest_key: manifestKey, schema_version: 1,
+          object_key: objectKey, manifest_key: manifestKey, schema_version: INTRAMINUTE_CAPTURE_SCHEMA_VERSION,
           observer_version: INTRAMINUTE_OBSERVER_VERSION, source_boot_id: BOOT_ID,
           source_feed: "sip", symbol: partition.symbol, session_date_et: partition.dateEt,
           hour_et: partition.hourEt, row_count: partition.events.length,

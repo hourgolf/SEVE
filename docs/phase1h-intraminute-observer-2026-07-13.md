@@ -1,12 +1,18 @@
 # Phase 1H — intraminute entry and execution observer
 
 Status: 1H-A pure foundation landed. The 1H-B dark-capture adapter is implemented
-on an isolated branch and remains default-off, undeployed, and unsubscribed. Its
+and its v1 capture cohort ran on 2026-07-14. Its
 private Supabase migration was applied and verified on 2026-07-13; both tables
 were empty after disposable access tests. No order path or channel parameter
-changes. Local archived-session replay remains unavailable because the existing
-archive contains minute bars and option snapshots, not provider-time underlying
-trades/quotes.
+changed. The first cohort captured 13.6 million provider-time SIP trade/quote
+rows into checksum-verifiable R2 objects with zero reported gaps or drops.
+
+The v1 cohort also exposed an important provenance omission: normalized trades
+did not retain Alpaca's exchange, tape, or sale-condition fields. Those fields
+control official bar eligibility, so v1 raw data may not be used for forming-bar
+timing conclusions unless the reconstructed completed OHLCV independently
+matches the official minute. Capture schema v2 is staged to retain those fields
+in new immutable objects; v1 objects remain immutable and readable.
 
 ## 1. The problem this phase must answer
 
@@ -110,6 +116,10 @@ Raw SIP/OPRA events do not belong in high-churn Supabase tables. Write compresse
 daily partitions to R2, for example:
 
 `intraminute/v1/date=YYYY-MM-DD/symbol=SPY/hour=09/*.parquet`
+
+The first implementation uses gzip NDJSON rather than Parquet. New schema-v2
+objects use an isolated `/v2/` key prefix; a receipt's schema version always
+identifies the raw envelope and prevents silent pooling.
 
 R2 is the immutable replay substrate. Supabase receives only compact indexed
 receipts: one row per observer candidate/transition and one outcome row per
@@ -215,6 +225,23 @@ Activation is a separate reviewed operation:
 
 Only after a stable capture cohort and out-of-sample evidence would a later
 phase consider a paper-only execution experiment. Phase 1H itself never trades.
+
+## 10. First-cohort result — 2026-07-14
+
+- 48/48 actual native entries were linked to 29/29 source minutes and 481,562
+  checksum-verified overlapping raw events.
+- A replay without a completed-bar gate reproduced 40/48 final predicates, but
+  this is not a qualified timing result because v1 omitted bar-eligibility
+  provenance.
+- Requiring reconstructed OHLCV to match the official minute leaves 8/48
+  timing-qualified entries. All eight are PB-family observations, with the
+  durable predicate appearing 27.0–53.5 seconds before the native decision.
+- The cohort is conditioned on actual entries and lacks candidate-time OPRA
+  asks, so it cannot estimate intraminute false positives or counterfactual P&L.
+
+The next evidence gate is a stable v2 capture cohort plus fresh targeted OPRA
+marks (or T+1 exact-contract OPRA backfill). No entry-clock change is authorized
+by the first cohort.
 
 ## 9. Acceptance gates before dark deployment
 
