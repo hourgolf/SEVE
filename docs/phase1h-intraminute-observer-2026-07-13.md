@@ -1,10 +1,12 @@
 # Phase 1H — intraminute entry and execution observer
 
 Status: 1H-A pure foundation landed. The 1H-B dark-capture adapter is implemented
-on an isolated branch but remains default-off, unmigrated, undeployed, and
-unsubscribed. No order path or channel parameter changes. Local archived-session
-replay remains unavailable because the existing archive contains minute bars and
-option snapshots, not provider-time underlying trades/quotes.
+on an isolated branch and remains default-off, undeployed, and unsubscribed. Its
+private Supabase migration was applied and verified on 2026-07-13; both tables
+were empty after disposable access tests. No order path or channel parameter
+changes. Local archived-session replay remains unavailable because the existing
+archive contains minute bars and option snapshots, not provider-time underlying
+trades/quotes.
 
 ## 1. The problem this phase must answer
 
@@ -181,13 +183,15 @@ Implementation note: the first capture format is schema-stamped gzip NDJSON,
 partitioned by ET date/hour/symbol. Each immutable object has a separate JSON
 manifest and is verified with an R2 HEAD read before its compact Supabase receipt
 is attempted. Parquet conversion can happen downstream without modifying the raw
-evidence. The migration and Railway flag/credentials must be reviewed separately;
-merging code alone does not subscribe to trades or quotes.
+evidence. Railway flag/credentials and the manual worker deployment remain a
+separate activation gate; merging code alone does not subscribe to trades or quotes.
 
 Activation is a separate reviewed operation:
 
-1. apply `20260714012904_phase_1h_intraminute_capture_receipts.sql` and verify
-   service-role insert plus operator-only read behavior;
+1. **Complete:** apply `20260714012904_phase_1h_intraminute_capture_receipts.sql`.
+   Verified RLS on both tables, service-role `INSERT,SELECT` only, authenticated
+   `SELECT` behind the `app_metadata.seve_role=operator` policy, anonymous denial
+   (`42501`), migration-history alignment, and zero rows after cleanup;
 2. copy `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`,
    and `R2_PREFIX` into the Railway service (never into source control);
 3. bump `WORKER_VERSION`, set `INTRAMINUTE_CAPTURE_ENABLED=true`, and manually
