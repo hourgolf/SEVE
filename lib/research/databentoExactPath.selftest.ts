@@ -4,6 +4,7 @@ import {
   compactOccToDatabentoRaw,
   databentoRawToCompactOcc,
   dedupeCbboQuotes,
+  heldContractsFromTradePathReceipt,
   parseDatabentoCbboJsonLine,
   type HeldContractReceipt,
 } from "./databentoExactPath.js";
@@ -17,6 +18,25 @@ const check = (name: string, actual: unknown, expected: unknown): void => {
 check("compact OCC converts to padded raw OSI", compactOccToDatabentoRaw("SPY260715C00600000", "SPY"), "SPY   260715C00600000");
 check("padded raw OSI converts to compact OCC", databentoRawToCompactOcc("SPY   260715C00600000"), "SPY260715C00600000");
 check("invalid OCC is rejected", compactOccToDatabentoRaw("SPY-NOT-OSI", "SPY"), null);
+
+const frozen = heldContractsFromTradePathReceipt({ audit: { trades: [
+  { positionId: "p2", underlying: "SPY", occSymbol: "SPY260715C00600000", openedAtMs: 20, closedAtMs: 30 },
+  { positionId: "p1", underlying: "QQQ", occSymbol: "QQQ260715P00450000", openedAtMs: 10, closedAtMs: 15 },
+] } });
+check("frozen trade-path receipt extracts and sorts held contracts", frozen.map((row) => row.positionId), ["p1", "p2"]);
+check("frozen receipt rejects duplicate positions", (() => {
+  try {
+    heldContractsFromTradePathReceipt({ audit: { trades: [
+      { positionId: "p1", underlying: "SPY", occSymbol: "SPY260715C00600000", openedAtMs: 10, closedAtMs: 20 },
+      { positionId: "p1", underlying: "SPY", occSymbol: "SPY260715C00600000", openedAtMs: 11, closedAtMs: 21 },
+    ] } });
+    return false;
+  } catch { return true; }
+})(), true);
+check("frozen receipt rejects malformed contract facts", (() => {
+  try { heldContractsFromTradePathReceipt({ audit: { trades: [{ positionId: "p1", underlying: "SPY", occSymbol: "bad", openedAtMs: 10, closedAtMs: 20 }] } }); return false; }
+  catch { return true; }
+})(), true);
 
 const receipts: HeldContractReceipt[] = [
   { positionId: "p2", underlying: "SPY", occSymbol: "SPY260715C00600000", openedAtMs: Date.parse("2026-07-14T14:00:10Z"), closedAtMs: Date.parse("2026-07-14T14:01:00Z") },
