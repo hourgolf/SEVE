@@ -67,6 +67,8 @@
     "manager-shadow-selftest": "tsx worker/src/managerShadow.selftest.ts",
     "manager-shadow-book-selftest": "tsx worker/src/managerShadowBook.selftest.ts",
     "family-admission-selftest": "tsx worker/src/familyAdmission.selftest.ts",
+    "observer-scorecard-selftest": "tsx lib/research/observerScorecard.selftest.ts",
+    "observer-scorecard": "tsx --env-file=.env.local scripts/observer-scorecard.ts",
     "pb-qqq-probe": "tsx engine/pb-qqq-probe.ts",
     "gap-min-selftest": "tsx engine/gap-min-selftest.ts",
     "macd-align-selftest": "tsx --env-file=.env.local engine/macd-align-selftest.ts",

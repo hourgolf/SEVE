@@ -1,8 +1,9 @@
 # Phase 1I — dark channel-specific exits and family admission
 
-Status: implementation branch only. No strategy configuration, paper order,
-production database, worker deployment, or dashboard behavior is changed by
-this branch until a separate reviewed release.
+Status: merged and deployed for dark production observation at main
+`386f4c620f347739f0ddd8c7509486998f2b4468`. The database migration and worker
+observer are live. Strategy configuration, paper orders, and dashboard behavior
+remain unchanged.
 
 ## Why this exists
 
