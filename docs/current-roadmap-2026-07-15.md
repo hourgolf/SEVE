@@ -54,7 +54,7 @@ without changing the frozen selectors or thresholds.
 
 ## 3. Current implementation state
 
-Production baseline before the current review branch: `main@8989c52`.
+Production baseline before the current review branch: `main@3895b43`.
 
 | Area | State | Receipt / remaining gate |
 |---|---|---|
@@ -67,12 +67,12 @@ Production baseline before the current review branch: `main@8989c52`.
 | Manual close + reason | Merged | Desktop/mobile actionable positions share the deliberate close flow. |
 | Markets workspace | Merged | Chart, option chain, contract detail; open risk stays pinned. |
 | Positions workspace | Merged | Actionable book, aggregate exposure, recent exit context. |
-| Worker incident ledger | **In review** | Fix long-running-current-run false `W-empty`; 59/59 pure checks. |
+| Worker incident ledger | Merged + production green | Long-running-current-run false `W-empty` fixed; 59/59 pure checks. |
 | Sentinel workspace | Not started | Full evidence, provenance, freshness, deterministic vs interpretive split. |
 | Event Tape / Review | Not started | Live execution versus after-action evidence. |
 | Ops workspace | Not started | Auth/settings/preflight/health/safety consolidation. |
-| Strategy cartridge/passport | **In review** | Pure V1 types, fail-closed validation, exact whole-lot scaling, and evidence display contract; no runtime wiring. |
-| Phase 1K-D | Next research gate | Acquire July 15 exact paths and score frozen v1 arms unchanged. |
+| Strategy cartridge/passport | **In review** | Pure V1 + read-only 68-channel inventory complete; systemic policy stamps identified; no runtime wiring. |
+| Phase 1K-D | Frozen for T+1 | July 15 ledger receipt frozen at `e4546fd`; acquire exact paths and score unchanged when historical CBBO is available July 16 ET. |
 
 The seam remains load-bearing:
 
@@ -157,9 +157,9 @@ development/prospective status. `pk` and win rate can be useful, but neither is 
 
 ## 7. Ordered work from here
 
-1. **Now:** finish and preview the worker-ledger long-run correction; merge only after browser review.
-2. **Now:** check July 15 historical CBBO availability and run Phase 1K-D unchanged when available.
-3. **In review:** ratify cartridge/passport V1 types and pure self-tests; next step is a read-only current-channel adapter.
+1. **Complete:** worker-ledger long-run correction is merged, deployed, and production-smoked green.
+2. **T+1 gate:** run Phase 1K-D unchanged when July 15 historical CBBO becomes available July 16 ET.
+3. **In review:** ratify cartridge/passport V1 and the read-only fleet inventory; next step is an explicit mapping decision for seven systemic fields, not guessed per-slug defaults.
 4. **Next dashboard slice:** build Sentinel with provenance and freshness; no LLM claim in health logic.
 5. **Then:** build Event Tape / Review with live versus after-action separation.
 6. **Then:** consolidate Ops/auth/preflight/safety and complete authenticated operator drills.

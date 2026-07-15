@@ -59,7 +59,8 @@ collision/risk identity; it must not be inferred from `inferResearchFamily`, whi
 ### Admission
 
 The cartridge does not copy the full `Condition` vocabulary. It points to an immutable registry or compiled-spec
-source by reference and content hash, then records the operator-readable conditions summary. The existing
+source by reference and content hash, and separately stamps the deployed worker version + source commit, then
+records the operator-readable conditions summary. The existing
 `StrategySpec`, capability checks, and registry remain the executable admission authority.
 
 Admission additionally pins what those older types did not fully own:
@@ -83,14 +84,15 @@ it does not replace the channel's stop or policy.
 
 The manager is identified by ID + semantic version. It owns:
 
-- a premium, underlying, or structural initial stop;
+- an explicit first-match set of premium, underlying, and/or structural initial stops;
 - whole-contract harvest tranches with explicit allocations and triggers;
 - earned-conviction adds, when enabled, with increasing favorable-R thresholds and a structural ban on
   averaging down long premium;
 - optional stall behavior;
 - a session-relative EOD flatten offset, so early-close days use the market calendar rather than a fixed 16:00 assumption.
 
-A structural stop must still carry a catastrophic premium fallback. A runner can use a bid-side peak giveback,
+A structural stop must still carry a catastrophic premium fallback. Premium and underlying stops can coexist;
+neither is inherited from an account-wide label. A runner can use a bid-side peak giveback,
 underlying ATR trail, or an immutable versioned rule. The exact selection is channel evidence, not dashboard
 decoration.
 
@@ -135,6 +137,7 @@ means “promote.” Sample-size and economic decision rules remain preregistere
 |---|---|---|
 | `strategists.slug/name/underlying/executor/status` | identity + lifecycle | Direct after normalization; status `armed` maps to `paper`, never live. |
 | registry or `spec_json` | `admission.strategyRef` | Reference and hash the exact source; do not duplicate conditions. |
+| `worker_runs.version/git_sha` | `admission.runtimeRef` | Pin the deployed interpreter/feature runtime separately from the strategy payload. |
 | `entry_dte` | option selector DTE | Direct only when the range is truly exact. |
 | `strike_offset` | ATM-offset selector | Direct; dynamic selectors require a versioned rule. |
 | `event_policy` | event posture | `standdown` → `stand_down`; `ignore` needs operator review before `trade_through`. |
@@ -183,9 +186,46 @@ the opportunity. The runtime must not improvise.
 Legacy Rooms stays until the native Channels, Review, Sentinel, Event Tape, and Ops workspaces cover the operator
 jobs with equal or better utility.
 
+## Read-only current-fleet inventory
+
+The new command:
+
+```text
+npm run current-channel-inventory -- --out data/channel-cartridge-inventories/YYYY-MM-DD.json
+```
+
+performs Supabase `SELECT`s only and writes a gitignored local receipt. It hashes canonical compiled `spec_json`,
+hashes the current built-in registry/strategy source bundle, and reads the active `worker_runs.version/git_sha` as
+the deployed interpreter stamp. Railway environment values are deliberately not inferred from `.env.local`.
+
+July 15 result:
+
+- 68 channels across three accounts: 25 paper, 38 draft, five disabled;
+- all 68 have complete identity and internally consistent lifecycle state;
+- 62 have a directly resolvable strategy source: 56 compiled specs and six registry strategies;
+- six lack an explicit source link: three operator twins plus `grind-v3-2`, `pb-ride-2`, and `pb-ride-itm`;
+- 67 stream channels map to deployed runtime `stream-2026-07-14a` at commit
+  `386f4c620f347739f0ddd8c7509486998f2b4468`; the lone cron `grind` channel has no equivalent runtime stamp;
+- 20 channels have an active policy epoch (54 historical epoch rows); 48 do not;
+- 55 channels have an explicit configured premium stop; 13 currently inherit the runtime default;
+- 10 channels also have an underlying stop, proving the cartridge needs a first-match stop set rather than one
+  global stop field;
+- two channels have `pyramid_adds=3`, but the row still lacks the favorable-R, allocation, and cap-reservation
+  details required to call that a complete scaling policy;
+- 14 channels are closest to the contract, each with the same seven remaining systemic blockers;
+- zero are fully cartridge-ready because the prior model stamped none of these fleet-wide: production
+  feed/freshness profile, decision-lag bound, collision family, per-channel open limit, family concurrency,
+  whole-lot harvest allocation/minimum, or calendar-relative EOD policy.
+
+The zero is an architecture inventory result, not a trading-health incident and not a recommendation to stop paper
+collection. Existing runtime behavior remains unchanged. The next adapter must ratify those seven systemic fields
+once, then address the smaller channel-specific exceptions without copying a guessed family or manager into all 68.
+
 ## Verification
 
-- pure channel-contract self-test: 58/58 at initial implementation;
+- pure channel-contract self-test: 60/60 at initial implementation;
+- pure current-channel inventory self-test: 25/25;
+- live SELECT-only inventory completed for all 68 channels; local receipt is gitignored;
 - half, third, and all-out whole-lot derivation pinned;
 - invalid version/hash/clock/input/risk/stop/allocation/add/receipt/display cases rejected;
 - development/holdout mixing, provenance gaps, partition errors, and auto-promotion rejected;

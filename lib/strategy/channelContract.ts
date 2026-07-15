@@ -130,6 +130,7 @@ export interface StrategyCartridgeV1 {
     strategyRef:
       | { kind: "registry"; ref: string; contentHash: string }
       | { kind: "compiled_spec"; ref: string; contentHash: string };
+    runtimeRef: { workerVersion: string; sourceCommit: string };
     decisionClock: {
       id: string;
       mode: "bar_close" | "intraminute_event" | "hybrid";
@@ -159,7 +160,7 @@ export interface StrategyCartridgeV1 {
   management: {
     managerId: string;
     managerVersion: string;
-    initialStop: InitialStopRule;
+    initialStops: readonly InitialStopRule[];
     harvest: {
       allocationMode: "whole_contract_exact";
       minimumQuantity: number;
@@ -279,6 +280,7 @@ export interface StrategyEvidencePassportV1 {
 
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const HASH = /^(?:sha256:)?[a-f0-9]{64}$/i;
+const GIT_COMMIT = /^[a-f0-9]{7,40}$/i;
 const CLOCK = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const present = (value: string): boolean => value.trim().length > 0;
@@ -398,6 +400,9 @@ export function validateStrategyCartridge(cartridge: StrategyCartridgeV1): Chann
   if (!present(cartridge.admission.strategyRef.ref) || !HASH.test(cartridge.admission.strategyRef.contentHash)) {
     issues.push({ field: "admission.strategyRef", message: "ref and SHA-256 content hash are required" });
   }
+  if (!present(cartridge.admission.runtimeRef.workerVersion) || !GIT_COMMIT.test(cartridge.admission.runtimeRef.sourceCommit)) {
+    issues.push({ field: "admission.runtimeRef", message: "worker version and immutable source commit are required" });
+  }
   if (!present(cartridge.admission.decisionClock.id)) issues.push({ field: "admission.decisionClock.id", message: "required for matched-clock analysis" });
   if (!positiveInt(cartridge.admission.decisionClock.cadenceMs)) issues.push({ field: "admission.decisionClock.cadenceMs", message: "must be a positive integer" });
   if (!positiveInt(cartridge.admission.decisionClock.maxDecisionLagMs)) issues.push({ field: "admission.decisionClock.maxDecisionLagMs", message: "must be a positive integer" });
@@ -435,10 +440,15 @@ export function validateStrategyCartridge(cartridge: StrategyCartridgeV1): Chann
 
   const management = cartridge.management;
   if (!present(management.managerId) || !VERSION.test(management.managerVersion)) issues.push({ field: "management", message: "managerId and semantic managerVersion are required" });
-  const stop = management.initialStop;
-  if (stop.kind === "premium_loss_pct" && !(Number.isFinite(stop.lossPct) && stop.lossPct > 0 && stop.lossPct < 100)) issues.push({ field: "management.initialStop.lossPct", message: "must be in (0,100)" });
-  if (stop.kind === "underlying_adverse_pct" && !(Number.isFinite(stop.adversePct) && stop.adversePct > 0)) issues.push({ field: "management.initialStop.adversePct", message: "must be positive" });
-  if (stop.kind === "structural" && (!present(stop.ruleRef) || !present(stop.description) || !(stop.catastrophicPremiumLossPct > 0 && stop.catastrophicPremiumLossPct < 100))) issues.push({ field: "management.initialStop", message: "structural stop needs a versioned rule, description, and catastrophic premium fallback" });
+  const stops = management.initialStops;
+  if (!stops.length) issues.push({ field: "management.initialStops", message: "at least one per-channel initial stop is required" });
+  if (duplicates(stops.map((stop) => stop.kind)).length) issues.push({ field: "management.initialStops", message: "stop kinds must be unique; the first matching stop wins" });
+  stops.forEach((stop, index) => {
+    const field = `management.initialStops[${index}]`;
+    if (stop.kind === "premium_loss_pct" && !(Number.isFinite(stop.lossPct) && stop.lossPct > 0 && stop.lossPct < 100)) issues.push({ field: `${field}.lossPct`, message: "must be in (0,100)" });
+    if (stop.kind === "underlying_adverse_pct" && !(Number.isFinite(stop.adversePct) && stop.adversePct > 0)) issues.push({ field: `${field}.adversePct`, message: "must be positive" });
+    if (stop.kind === "structural" && (!present(stop.ruleRef) || !present(stop.description) || !(stop.catastrophicPremiumLossPct > 0 && stop.catastrophicPremiumLossPct < 100))) issues.push({ field, message: "structural stop needs a versioned rule, description, and catastrophic premium fallback" });
+  });
 
   const tranches = management.harvest.tranches;
   if (!tranches.length) issues.push({ field: "management.harvest.tranches", message: "at least one tranche is required" });

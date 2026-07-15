@@ -36,6 +36,7 @@ const cartridge = (): StrategyCartridgeV1 => ({
   lifecycle: { stage: "paper", promotionAuthority: "operator_only", liveMoneyAuthorized: false },
   admission: {
     strategyRef: { kind: "registry", ref: "engine/registry:pb-ride", contentHash: "a".repeat(64) },
+    runtimeRef: { workerVersion: "stream-2026-07-14a", sourceCommit: "1".repeat(40) },
     decisionClock: { id: "SPY:SIP:1m-close", mode: "bar_close", cadenceMs: 60_000, maxDecisionLagMs: 5_000 },
     conditionsSummary: "Ribbon-stacked trend, band-tag retrace, and with-trend bounce during the admitted session window.",
     requiredInputs: [
@@ -59,7 +60,10 @@ const cartridge = (): StrategyCartridgeV1 => ({
   management: {
     managerId: "PB-BANK20/HALF-GIVEBACK",
     managerVersion: "1.0.0",
-    initialStop: { kind: "premium_loss_pct", lossPct: 30, basis: "bid" },
+    initialStops: [
+      { kind: "premium_loss_pct", lossPct: 30, basis: "bid" },
+      { kind: "underlying_adverse_pct", adversePct: 0.35 },
+    ],
     harvest: {
       allocationMode: "whole_contract_exact",
       minimumQuantity: 2,
@@ -152,6 +156,8 @@ const invalidVersion = cartridge(); invalidVersion.identity.version = "latest";
 check("channel version must be immutable", has(validateStrategyCartridge(invalidVersion), "identity.version"), true);
 const invalidHash = cartridge(); invalidHash.admission.strategyRef.contentHash = "abc";
 check("admission source needs content hash", has(validateStrategyCartridge(invalidHash), "admission.strategyRef"), true);
+const invalidRuntime = cartridge(); invalidRuntime.admission.runtimeRef.sourceCommit = "unknown";
+check("admission runtime needs an immutable deployed commit", has(validateStrategyCartridge(invalidRuntime), "admission.runtimeRef"), true);
 const duplicateUnderlying = cartridge(); duplicateUnderlying.identity.underlyings = ["SPY", "SPY"];
 check("underlyings stay unique", has(validateStrategyCartridge(duplicateUnderlying), "identity.underlyings"), true);
 const noClock = cartridge(); noClock.admission.decisionClock.id = "";
@@ -172,10 +178,12 @@ const zeroRisk = cartridge(); zeroRisk.risk.riskPerTradeUsd = 0;
 check("risk budget must be positive", has(validateStrategyCartridge(zeroRisk), "risk.riskPerTradeUsd"), true);
 const noCollisionFamily = cartridge(); noCollisionFamily.risk.collisionFamily = "";
 check("collision family is explicit", has(validateStrategyCartridge(noCollisionFamily), "risk.collisionFamily"), true);
-const badStop = cartridge(); badStop.management.initialStop = { kind: "premium_loss_pct", lossPct: 100, basis: "bid" };
-check("per-channel stop is bounded", has(validateStrategyCartridge(badStop), "management.initialStop.lossPct"), true);
-const badStructuralStop = cartridge(); badStructuralStop.management.initialStop = { kind: "structural", ruleRef: "", description: "", catastrophicPremiumLossPct: 0 };
-check("structural stop needs a catastrophic fallback", has(validateStrategyCartridge(badStructuralStop), "management.initialStop"), true);
+const badStop = cartridge(); badStop.management.initialStops = [{ kind: "premium_loss_pct", lossPct: 100, basis: "bid" }];
+check("per-channel stop is bounded", has(validateStrategyCartridge(badStop), "management.initialStops[0].lossPct"), true);
+const badStructuralStop = cartridge(); badStructuralStop.management.initialStops = [{ kind: "structural", ruleRef: "", description: "", catastrophicPremiumLossPct: 0 }];
+check("structural stop needs a catastrophic fallback", has(validateStrategyCartridge(badStructuralStop), "management.initialStops[0]"), true);
+const noStop = cartridge(); noStop.management.initialStops = [];
+check("a channel cannot inherit an invisible account stop", has(validateStrategyCartridge(noStop), "management.initialStops"), true);
 const allocationGap = cartridge(); allocationGap.management.harvest.tranches = [allocationGap.management.harvest.tranches[0]];
 check("harvest must allocate the whole position", has(validateStrategyCartridge(allocationGap), "management.harvest.tranches"), true);
 const wrongMinimum = cartridge(); wrongMinimum.management.harvest.minimumQuantity = 4;
