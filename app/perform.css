@@ -111,7 +111,9 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   min-width:0; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); gap:6px;
 }
 .shell-root.ws909[data-mode="perform"] .pf-markets-console[data-selected-contract] {
-  grid-template-rows:auto minmax(180px,.92fr) minmax(210px,1.08fr);
+  /* Keep the exposure strip non-collapsible on short desktop viewports. The
+     chain and detail panes own the remaining height and scroll internally. */
+  grid-template-rows:max-content minmax(130px,.8fr) minmax(170px,1.2fr);
 }
 .shell-root.ws909[data-mode="perform"] .pf-market-risk { border-radius:6px; }
 .shell-root.ws909[data-mode="perform"] .pf-market-risk-body { max-height:150px; overflow-y:auto; background:var(--pf-scr); }
