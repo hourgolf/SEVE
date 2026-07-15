@@ -71,7 +71,7 @@ Production baseline before the current review branch: `main@8989c52`.
 | Sentinel workspace | Not started | Full evidence, provenance, freshness, deterministic vs interpretive split. |
 | Event Tape / Review | Not started | Live execution versus after-action evidence. |
 | Ops workspace | Not started | Auth/settings/preflight/health/safety consolidation. |
-| Strategy cartridge/passport | Spec next | Pure versioned contract before dashboard research surfaces. |
+| Strategy cartridge/passport | **In review** | Pure V1 types, fail-closed validation, exact whole-lot scaling, and evidence display contract; no runtime wiring. |
 | Phase 1K-D | Next research gate | Acquire July 15 exact paths and score frozen v1 arms unchanged. |
 
 The seam remains load-bearing:
@@ -159,7 +159,7 @@ development/prospective status. `pk` and win rate can be useful, but neither is 
 
 1. **Now:** finish and preview the worker-ledger long-run correction; merge only after browser review.
 2. **Now:** check July 15 historical CBBO availability and run Phase 1K-D unchanged when available.
-3. **Next architecture slice:** specify cartridge/passport types and pure self-tests.
+3. **In review:** ratify cartridge/passport V1 types and pure self-tests; next step is a read-only current-channel adapter.
 4. **Next dashboard slice:** build Sentinel with provenance and freshness; no LLM claim in health logic.
 5. **Then:** build Event Tape / Review with live versus after-action separation.
 6. **Then:** consolidate Ops/auth/preflight/safety and complete authenticated operator drills.
