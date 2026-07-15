@@ -497,6 +497,7 @@
 .m2-desk-empty { padding:13px;text-align:center;color:#777269;font:700 9px/1.35 var(--mono);letter-spacing:.07em;text-transform:uppercase; }
 .m2-desk-directions { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:7px; }.m2-desk-directions>span{display:flex;align-items:center;gap:6px;padding:5px 7px;border:1px solid rgba(60,52,30,.2);border-radius:4px;background:rgba(255,255,255,.22);font:700 9px/1 var(--mono)}.m2-desk-directions i,.m2-desk-directions em{font-style:normal}.m2-desk-directions em{color:#6e6a61}
 .m2-desk-rows { display:grid; gap:1px; background:rgba(60,52,30,.14); }.m2-desk-rows>div{display:grid;grid-template-columns:1fr auto auto auto;gap:9px;padding:7px;background:rgba(255,255,255,.2);font:700 9px/1 var(--mono)}.m2-desk-rows>div.hot{box-shadow:3px 0 0 #d47a22 inset}.m2-desk-rows span,.m2-desk-rows em{color:#6d6960;font-style:normal}
+.m2-recent-exits{display:grid}.m2-recent-exits>div{display:grid;grid-template-columns:7px minmax(0,1fr) auto;gap:4px 7px;align-items:center;padding:8px 2px;border-bottom:1px solid rgba(60,52,30,.16);font-family:var(--mono)}.m2-recent-exits>div>i{width:7px;height:7px;border-radius:50%;background:var(--pm);box-shadow:0 0 5px var(--pm)}.m2-recent-exits span{min-width:0;display:grid;gap:3px}.m2-recent-exits b{overflow:hidden;text-overflow:ellipsis;color:#34332e;font-size:9px}.m2-recent-exits small{color:#5f5b53;font-size:7px;line-height:1.3}.m2-recent-exits em{font:800 10px/1 var(--mono);font-style:normal}.m2-recent-exits p{grid-column:2/4;margin:1px 0 0;color:#6d6960;font:700 7px/1.35 var(--mono)}
 .m2-desk-signals { display:grid; }.m2-desk-signals>div{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:7px;padding:7px 2px;border-bottom:1px solid rgba(60,52,30,.16);align-items:start}.m2-desk-signals time,.m2-desk-signals>div>b{font:800 8px/1.3 var(--mono)}.m2-desk-signals time{color:#5f5b53}.m2-desk-signals>div>b{padding:2px 4px;border:1px solid;border-radius:3px;background:rgba(255,255,255,.26)}.m2-desk-signals>div>b.exec,.m2-desk-signals>div>b.ok{color:#0b5d2d}.m2-desk-signals>div>b.warn,.m2-desk-signals>div>b.risk{color:#8f2718;background:rgba(158,45,28,.08)}.m2-desk-signals>div>span{color:#34332e;font:600 9px/1.35 var(--mono);overflow-wrap:anywhere}.m2-desk-signals strong{color:#1f1f1c}
 .m2-desk-chain { --panel:#101516;--panel-2:#0b0f10;--text:#e6eef0;--muted:#89949a;--muted-2:#5f6a70;--border:#273238;--border-bright:#3a484f;--green:#2fd573;--amber:#e0a23f; }.m2-desk-chain>.panel{margin:0;background:linear-gradient(180deg,#111719,#0b1011);color:#e6eef0;border-radius:6px}.m2-desk-chain .phead{border-radius:6px 6px 0 0}.m2-desk-chain .table-fit{max-height:none}.m2-desk-chain .chain-table{font-size:10px}
 .m2-quote-detail { margin-top:6px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#273238;border:1px solid #050606;border-radius:6px;overflow:hidden;color:#e6eef0}.m2-quote-detail>b{grid-column:1/3;padding:8px;font:700 8px/1.2 var(--mono);overflow-wrap:anywhere}.m2-quote-detail>button{border:0;background:#23282a;color:#9da6aa;font:700 7px/1 var(--mono)}.m2-quote-detail>span{display:grid;gap:3px;padding:7px;background:#101516;font:700 10px/1 var(--mono)}.m2-quote-detail small{color:#657177;font-size:7px}
@@ -534,11 +535,13 @@
 .m2-app[data-skin="blackout"] .m2-desk-rows span,
 .m2-app[data-skin="blackout"] .m2-desk-rows em { color:#9aa3a8; }
 .m2-app[data-skin="blackout"] .m2-desk-signals>div,
+.m2-app[data-skin="blackout"] .m2-recent-exits>div,
 .m2-app[data-skin="blackout"] .m2-review-rows>div,
 .m2-app[data-skin="blackout"] .m2-daybooks>span { border-color:rgba(255,255,255,.08); }
 .m2-app[data-skin="blackout"] .m2-desk-signals time { color:#89949a; }
 .m2-app[data-skin="blackout"] .m2-desk-signals>div>span,
 .m2-app[data-skin="blackout"] .m2-desk-signals strong,
+.m2-app[data-skin="blackout"] .m2-recent-exits b,
 .m2-app[data-skin="blackout"] .m2-review-rows>div,
 .m2-app[data-skin="blackout"] .m2-review-rows b,
 .m2-app[data-skin="blackout"] .m2-nightly,
@@ -546,6 +549,8 @@
 .m2-app[data-skin="blackout"] .m2-nightly p { color:#d8dcdd; }
 .m2-app[data-skin="blackout"] .m2-review-rows span,
 .m2-app[data-skin="blackout"] .m2-review-rows small,
+.m2-app[data-skin="blackout"] .m2-recent-exits small,
+.m2-app[data-skin="blackout"] .m2-recent-exits p,
 .m2-app[data-skin="blackout"] .m2-nightly>div>small { color:#8e989d; }
 .m2-app[data-skin="blackout"] .m2-desk-signals>div>b { background:rgba(255,255,255,.04); }
 .m2-app[data-skin="blackout"] .m2-desk-signals>div>b.exec,

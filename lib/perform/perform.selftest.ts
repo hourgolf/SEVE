@@ -1,5 +1,6 @@
 import { collapseEvents, derivePerformFocus, prioritizeChannels } from "./derivePerformView";
 import { deriveMarketRisk, operationalMark } from "./deriveMarketWorkspace";
+import { derivePositionsWorkspace, deriveRecentExits } from "./derivePositionsWorkspace";
 import type { ChannelPnl, Position, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
 
@@ -45,5 +46,31 @@ check("market risk rejects an invalid live mark", operationalMark(openPosition()
 const marketRisk = deriveMarketRisk([openPosition()], [channel("open", "armed")], { QQQ260715C00718000: 1.5 });
 check("market risk preserves contract ownership label", marketRisk.rows[0].contractLabel, "QQQ 718C ×4");
 check("market risk uses marked quantity P&L", marketRisk.totalUnrealized, 200);
+
+const secondOpen = openPosition({
+  id: "pos-2", strategist_slug: "armed", qty: 2, avg_entry_price: 1.25, current_mark: 1.3,
+});
+const positionWorkspace = derivePositionsWorkspace(
+  [openPosition(), secondOpen],
+  [],
+  { QQQ260715C00718000: 1.5 },
+);
+check("positions workspace totals absolute contracts", positionWorkspace.open.contracts, 6);
+check("positions workspace marks every attributed row", positionWorkspace.open.unrealized, 250);
+check("positions workspace exposes shared OCC concentration", [positionWorkspace.exposure.occCount, positionWorkspace.exposure.stackedOccCount], [1, 1]);
+
+const closedTrade = openPosition({
+  id: "closed-1", status: "closed", qty: 4, avg_entry_price: 1, current_mark: 1.5,
+  realized_pnl: 200, peak_mark: 2, opened_at: "2026-07-15T14:30:00Z", closed_at: "2026-07-15T15:00:00Z",
+  close_reason: "manual:target",
+});
+const exitSummary = deriveRecentExits([closedTrade]);
+check("recent exit computes premium return", Math.round(exitSummary.rows[0].returnPct ?? 0), 50);
+check("recent exit computes peak giveback", Math.round(exitSummary.rows[0].givebackPct ?? 0), 50);
+check("recent exit computes peak capture", Math.round(exitSummary.rows[0].capturePct ?? 0), 50);
+check("recent exit computes hold minutes", exitSummary.rows[0].holdMinutes, 30);
+check("recent exit preserves realized attribution", [exitSummary.realized, exitSummary.wins, exitSummary.losses], [200, 1, 0]);
+const incompletePeak = deriveRecentExits([{ ...closedTrade, current_mark: 2.1, peak_mark: 2 }]);
+check("exit above recorded peak is flagged, not over-captured", [incompletePeak.rows[0].peakExceeded, incompletePeak.rows[0].capturePct], [true, null]);
 
 console.log(`perform-selftest: ${passed}/${passed} passed`);

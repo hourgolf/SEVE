@@ -43,7 +43,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
   );
 }
 
-function PositionsSection({
+export function PositionsSection({
   positions, strategists, liveMarks, peaks, write, targeted,
 }: {
   positions: Position[];

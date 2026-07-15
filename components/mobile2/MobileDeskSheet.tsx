@@ -10,6 +10,7 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { deriveRecentExits } from "@/lib/perform/derivePositionsWorkspace";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -30,6 +31,7 @@ function Section({ title, meta, children }: { title: string; meta?: string; chil
 function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: () => void }) {
   const { data, feed, liveMarks, selected, setSelected, contractHistory, symbol } = props;
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
+  const recentExits = useMemo(() => deriveRecentExits(feed.recentTrades), [feed.recentTrades]);
   const selectedQuote = selected ? data.snapshot.find((quote) => quote.occ_symbol === selected) : undefined;
   const signals = feed.signals.slice(0, 18);
 
@@ -55,6 +57,22 @@ function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: (
           </div>)}
         </div>
       </>}
+    </Section>
+
+    <Section title="RECENT EXITS" meta={`${recentExits.rows.length} today · ${signedUsd(recentExits.realized)}`}>
+      <div className="m2-recent-exits">
+        {recentExits.rows.length === 0 ? <div className="m2-desk-empty">no completed exits in the current feed</div> : recentExits.rows.slice(0, 10).map((row) => {
+          const trade = row.position;
+          const realized = trade.realized_pnl ?? 0;
+          const root = trade.occ_symbol.match(/^([A-Z]+)\d/)?.[1] ?? "?";
+          const closeReason = trade.close_reason ? trade.close_reason.replace(/^manual:?/, "operator · ").replaceAll("_", " ") : "unclassified";
+          return <div key={trade.id} style={{ ["--pm" as string]: pmVar(props.view.desk.strategists.find((channel) => channel.slug === trade.strategist_slug)?.color ?? "green") }}>
+            <i /><span><b>{trade.strategist_slug}</b><small>{root} {trade.strike.toFixed(0)}{trade.opt_type === "call" ? "C" : "P"} ×{Math.abs(trade.qty)} · {closeReason}</small></span>
+            <em className={realized < 0 ? "neg" : "pos"}>{signedUsd(realized)}</em>
+            <p>in {trade.avg_entry_price.toFixed(2)} → out {trade.current_mark.toFixed(2)} · {row.returnPct == null ? "ret —" : `ret ${row.returnPct >= 0 ? "+" : ""}${Math.round(row.returnPct)}%`} · {row.peakPct == null ? "pk —" : `pk +${Math.round(row.peakPct)}%`}{row.peakExceeded ? " · exit > recorded pk" : row.capturePct == null ? "" : ` · kept ${Math.round(row.capturePct)}%`}</p>
+          </div>;
+        })}
+      </div>
     </Section>
 
     <Section title="SIGNALS" meta="latest · repeats retained">

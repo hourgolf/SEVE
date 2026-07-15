@@ -93,6 +93,74 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909[data-mode="perform"] .perform[data-section="sentinel"] #perform-sentinel,
 .shell-root.ws909[data-mode="perform"] .perform[data-section="tape"] #perform-tape { flex:1; }
 
+/* ---------- POSITIONS workspace ------------------------------------------
+   The actionable per-channel book remains the primary surface. Correlated
+   aggregate exposure and today's completed exits stay visible beside it. */
+.shell-root.ws909[data-mode="perform"] .pf-positions-workspace {
+  min-width:0; min-height:0; height:100%; display:grid;
+  grid-template-columns:minmax(0,1.2fr) clamp(420px,34vw,610px); gap:7px;
+  outline:2px solid transparent; outline-offset:-2px; border-radius:9px;
+}
+.shell-root.ws909[data-mode="perform"] .pf-positions-workspace>#perform-positions .pfp-body { flex:1; min-height:0; }
+.shell-root.ws909[data-mode="perform"] .pf-positions-context {
+  min-width:0; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); gap:7px;
+}
+.shell-root.ws909[data-mode="perform"] .pf-positions-workspace[data-flat] {
+  grid-template-columns:clamp(270px,25vw,380px) minmax(0,1fr);
+  grid-template-rows:auto minmax(0,1fr);
+  grid-template-areas:"book exits" "exposure exits";
+}
+.shell-root.ws909[data-mode="perform"] .pf-positions-workspace[data-flat]>#perform-positions { grid-area:book; flex:none; }
+.shell-root.ws909[data-mode="perform"] .pf-positions-workspace[data-flat]>.pf-positions-context { display:contents; }
+.shell-root.ws909[data-mode="perform"] .pf-positions-workspace[data-flat] .pf-position-exposure { grid-area:exposure; }
+.shell-root.ws909[data-mode="perform"] .pf-positions-workspace[data-flat] .pf-recent-exits { grid-area:exits; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-metrics {
+  display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; background:var(--pf-line-2);
+}
+.shell-root.ws909[data-mode="perform"] .pf-pos-metrics>span,
+.shell-root.ws909[data-mode="perform"] .pf-exit-summary>span { min-width:0; display:grid; gap:4px; padding:8px 9px; background:#101516; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-metrics small,
+.shell-root.ws909[data-mode="perform"] .pf-exit-summary small { color:var(--dk-dim); font:700 var(--fs-chip)/1 var(--sh-mono); letter-spacing:.08em; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-metrics b,
+.shell-root.ws909[data-mode="perform"] .pf-exit-summary b { color:var(--lcd-ink); font:800 var(--fs-num-lg)/1 var(--sh-mono); }
+.shell-root.ws909[data-mode="perform"] .pf-pos-metrics b.pos { color:var(--pf-green-soft); }
+.shell-root.ws909[data-mode="perform"] .pf-pos-metrics b.neg { color:var(--pf-red-soft); }
+.shell-root.ws909[data-mode="perform"] .pf-position-exposure-body { max-height:180px; overflow:auto; padding:7px 9px 9px; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-directions { display:flex; gap:5px; flex-wrap:wrap; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-directions>span {
+  display:flex; align-items:center; gap:7px; padding:5px 7px; border:1px solid var(--pf-line-2); border-radius:4px;
+  background:rgba(255,255,255,.03); font:700 var(--fs-chip)/1 var(--sh-mono);
+}
+.shell-root.ws909[data-mode="perform"] .pf-pos-directions i,
+.shell-root.ws909[data-mode="perform"] .pf-pos-directions em { font-style:normal; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-directions em { color:var(--dk-mut); }
+.shell-root.ws909[data-mode="perform"] .pf-pos-stacks { display:grid; margin-top:6px; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-stacks>div {
+  display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:10px; padding:6px 2px;
+  border-top:1px solid var(--pf-line); font:700 var(--fs-chip)/1 var(--sh-mono);
+}
+.shell-root.ws909[data-mode="perform"] .pf-pos-stacks>div.hot { box-shadow:inset 3px 0 0 var(--pf-amber); padding-left:7px; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-stacks span,
+.shell-root.ws909[data-mode="perform"] .pf-pos-stacks em { color:var(--dk-mut); font-style:normal; }
+.shell-root.ws909[data-mode="perform"] .pf-pos-stack-note { margin:6px 0 0; color:var(--pf-amber); font:700 var(--fs-chip)/1.35 var(--sh-mono); }
+.shell-root.ws909[data-mode="perform"] .pf-recent-exits { min-height:0; }
+.shell-root.ws909[data-mode="perform"] .pf-exit-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--pf-line-2); }
+.shell-root.ws909[data-mode="perform"] .pf-exit-list { flex:1; min-height:0; overflow:auto; }
+.shell-root.ws909[data-mode="perform"] .pf-exit-list>article {
+  display:grid; grid-template-columns:8px minmax(0,1fr) auto; gap:4px 8px; align-items:center;
+  padding:8px 10px; border-bottom:1px solid var(--pf-line); font-family:var(--sh-mono);
+}
+.shell-root.ws909[data-mode="perform"] .pf-exit-list>article>i { width:7px; height:7px; border-radius:50%; background:var(--pm); box-shadow:0 0 6px var(--pm); }
+.shell-root.ws909[data-mode="perform"] .pf-exit-title { min-width:0; display:flex; align-items:baseline; gap:8px; }
+.shell-root.ws909[data-mode="perform"] .pf-exit-title b { min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--lcd-ink); font-size:var(--fs-num); }
+.shell-root.ws909[data-mode="perform"] .pf-exit-title span { color:var(--dk-mut); font-size:var(--fs-chip); white-space:nowrap; }
+.shell-root.ws909[data-mode="perform"] .pf-exit-list>article>strong { font-size:var(--fs-num-lg); }
+.shell-root.ws909[data-mode="perform"] .pf-exit-list>article>small { grid-column:2/4; color:var(--dk-dim); font-size:var(--fs-chip); }
+.shell-root.ws909[data-mode="perform"] .pf-exit-stats { grid-column:2/4; display:flex; flex-wrap:wrap; gap:5px; }
+.shell-root.ws909[data-mode="perform"] .pf-exit-stats span { padding:3px 5px; border:1px solid var(--pf-line); border-radius:3px; color:var(--dk-mut); font-size:var(--fs-chip); }
+.shell-root.ws909[data-mode="perform"] .pf-exit-stats span.warn { color:var(--pf-amber); border-color:rgba(224,162,63,.35); }
+.shell-root.ws909[data-mode="perform"] .pf-recent-exits>footer { padding:6px 9px; border-top:1px solid var(--pf-line); color:var(--dk-dim); font:700 var(--fs-chip)/1.25 var(--sh-mono); }
+
 /* ---------- MARKETS workspace ---------------------------------------------
    Chart and chain are peers. Open risk remains pinned above the chain while a
    contract drill-down opens beneath it, so inspection never hides exposure. */
