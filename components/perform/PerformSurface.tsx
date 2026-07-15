@@ -6,7 +6,7 @@ import { IntradayChart } from "@/components/IntradayChart";
 import { IncidentBanner } from "@/components/perform/IncidentBanner";
 import { PerformRail } from "@/components/perform/PerformRail";
 import { PerformDock } from "@/components/perform/PerformDock";
-import { derivePerformFocus } from "@/lib/perform/derivePerformView";
+import { derivePerformFocus, type PerformSection } from "@/lib/perform/derivePerformView";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
 // =============================================================================
@@ -23,31 +23,37 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 // =============================================================================
 
 export function PerformSurface({
-  data, view, feed, spotUp, symbol, setSymbol, acctId, livePnl, liveMarks, sentinel, positionPeaks, incident,
-}: SurfaceProps) {
+  section = "overview",
+  ...surface
+}: SurfaceProps & { section?: PerformSection }) {
+  const {
+    data, view, feed, write, spotUp, symbol, setSymbol, acctId, livePnl, liveMarks, sentinel, positionPeaks, incident,
+  } = surface;
   const { desk } = view;
   const sent = sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
 
   // Scope the roster to the selected account (same rule as DesktopSurface).
   const channels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
-  const focus = derivePerformFocus(incident.severity, feed.positions.length);
+  const focus = section === "positions" ? "positions" : derivePerformFocus(incident.severity, feed.positions.length);
 
   return (
-    <div className="perform" data-incident={incident.severity} data-focus={focus}>
+    <div className="perform" data-incident={incident.severity} data-focus={focus} data-section={section}>
       {/* P5 slice 3 — deterministic incident banner (hidden on normal; critical pre-empts chart space). */}
       <IncidentBanner incident={incident} />
       <main className="pf-stage">
-        <IntradayChart
-          bars={data.bars}
-          dailyBars={data.dailyBars}
-          spot={data.spot}
-          spotUp={spotUp}
-          trades={feed.recentTrades}
-          openPositions={feed.positions}
-          symbol={symbol}
-          onSymbolChange={setSymbol}
-          fill
-        />
+        <div className="pf-market-target" id="perform-market" data-nav-target={section === "market" || undefined} tabIndex={-1}>
+          <IntradayChart
+            bars={data.bars}
+            dailyBars={data.dailyBars}
+            spot={data.spot}
+            spotUp={spotUp}
+            trades={feed.recentTrades}
+            openPositions={feed.positions}
+            symbol={symbol}
+            onSymbolChange={setSymbol}
+            fill
+          />
+        </div>
         <PerformRail
           positions={feed.positions}
           strategists={desk.strategists}
@@ -57,6 +63,8 @@ export function PerformSurface({
           symbol={symbol}
           sent={sent}
           incident={incident}
+          write={write}
+          section={section}
         />
       </main>
       <PerformDock channels={channels} livePnl={livePnl} />

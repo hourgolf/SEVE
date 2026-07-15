@@ -7,8 +7,8 @@
 // It is a pure builder — no React, no hooks. Every side-effect is a REUSED write
 // path injected via the context: mode/skin/density setters (useShell), the desk
 // dispatch + persistConfig/persistFund (useDeskWrite), and platform navigation
-// callbacks (gotoRoom on desktop = flip to studio + scroll; gotoChannel = open
-// the channel in the rack). Nothing here re-forks a write.
+// callbacks (when a surface intentionally supports contextual navigation).
+// Nothing here re-forks a write.
 // =============================================================================
 
 import type { Dispatch } from "react";
@@ -37,11 +37,11 @@ export interface CommandDef {
   search: string;
 }
 
-// A legacy-room jump (desktop only — the §01–§04 rooms live in DesktopSurface).
+// An optional room jump for a surface that exposes room navigation in COMMAND.
 export interface RoomNav { id: string; room: string; label: string; sub: string; search: string }
 
 export interface CommandCtx {
-  /** The account-scoped roster — one mute/boost/goto set per channel. */
+  /** The account-scoped roster — one mute/boost set, plus optional goto, per channel. */
   channels: StrategistState[];
   mode: Mode;
   skin: Skin;
@@ -52,9 +52,9 @@ export interface CommandCtx {
   dispatch: Dispatch<DeskAction>;
   persistConfig: (id: string, patch: Partial<StrategistConfig>) => Promise<DeskWriteResult>;
   persistFund: (patch: Partial<FundState>) => Promise<DeskWriteResult>;
-  /** Open a channel in the rack (desktop = goto MIX + select; mobile = studio accordion). */
-  gotoChannel: (slug: string) => void;
-  /** Legacy §01–§04 room jumps (desktop). Omit on platforms without those rooms. */
+  /** Open a channel in a surface that provides a meaningful channel destination. */
+  gotoChannel?: (slug: string) => void;
+  /** Optional room jumps. Omit unless every destination is rendered by the caller. */
   rooms?: RoomNav[];
   gotoRoom?: (room: string) => void;
 }
@@ -116,7 +116,7 @@ export function buildCommands(ctx: CommandCtx): CommandDef[] {
     run: () => toggleDensity(),
   });
 
-  // ---- NAV (desktop legacy rooms — flips to studio + scrolls) ----
+  // ---- NAV (only when the calling surface supplies real room destinations) ----
   if (rooms && gotoRoom) {
     for (const rm of rooms) {
       list.push({
@@ -165,16 +165,18 @@ export function buildCommands(ctx: CommandCtx): CommandDef[] {
         persistConfig(ch.id, { boosted: !boosted });
       },
     });
-    list.push({
-      id: `goto-${ch.slug}`,
-      group: "CHANNELS",
-      verb: "GOTO",
-      rest: ch.slug,
-      sub: "open in the rack",
-      pm,
-      search: `goto ${ch.slug} channel ${ch.underlying} rack inspector select`,
-      run: () => gotoChannel(ch.slug),
-    });
+    if (gotoChannel) {
+      list.push({
+        id: `goto-${ch.slug}`,
+        group: "CHANNELS",
+        verb: "GOTO",
+        rest: ch.slug,
+        sub: "open in the rack",
+        pm,
+        search: `goto ${ch.slug} channel ${ch.underlying} rack inspector select`,
+        run: () => gotoChannel(ch.slug),
+      });
+    }
   }
 
   return list;

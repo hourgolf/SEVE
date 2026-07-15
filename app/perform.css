@@ -52,6 +52,16 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 }
 .shell-root[data-mode="perform"] .perform[data-focus="positions"] { --rail-w: clamp(440px, 35vw, 650px); }
 .shell-root[data-mode="perform"] .perform[data-focus="incident"] { --rail-w: clamp(500px, 42vw, 760px); }
+.shell-root[data-mode="perform"] .pf-market-target {
+  min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column;
+  border-radius: 9px; outline: 2px solid transparent; outline-offset: -2px;
+}
+.shell-root[data-mode="perform"] [data-nav-target="true"] {
+  outline: 2px solid color-mix(in srgb, var(--pf-green) 72%, white 10%);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 1px rgba(47, 213, 115, .15), 0 0 14px rgba(47, 213, 115, .16);
+}
+.shell-root[data-mode="perform"] .pf-market-target > .chart-fill { flex: 1; }
 
 /* the reused IntradayChart panel, made to FILL the hero cell (fill prop) */
 .shell-root[data-mode="perform"] .chart-fill {
@@ -166,6 +176,39 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root[data-mode="perform"] .pfp-pklbl b { color: var(--pm); font-weight: 800; }
 .shell-root[data-mode="perform"] .pfp-nopk { color: var(--dk-dim); font-family: var(--sh-mono); }
 .shell-root[data-mode="perform"] .pfp-ring { width: calc(var(--fs-num-lg) * 1.35); height: calc(var(--fs-num-lg) * 1.35); display: block; }
+.shell-root[data-mode="perform"] .pfp-actions {
+  grid-column: 2 / 4; display: flex; justify-content: flex-end; align-items: center; gap: 6px; min-height: 26px;
+}
+.shell-root[data-mode="perform"] .pfp-actions button {
+  min-height: 26px; padding: 0 9px; border: 1px solid var(--pf-line-2); border-radius: 4px;
+  color: var(--dk-mut); background: linear-gradient(180deg, #272b2c, #151819);
+  font: 800 var(--fs-chip)/1 var(--sh-mono); letter-spacing: .08em; cursor: pointer;
+}
+.shell-root[data-mode="perform"] .pfp-actions button.arm { color: var(--pf-red-soft); border-color: rgba(224,122,88,.42); }
+.shell-root[data-mode="perform"] .pfp-actions button.confirm { color: #fff; border-color: #b64d35; background: linear-gradient(180deg,#9d3d2d,#5f2119); }
+.shell-root[data-mode="perform"] .pfp-closing {
+  color: var(--pf-amber); font: 800 var(--fs-chip)/1 var(--sh-mono); letter-spacing: .1em;
+}
+.shell-root[data-mode="perform"] .pfp-close-error {
+  padding: 7px 10px; border-top: 1px solid rgba(224,122,88,.36); color: #ff8d70; background: rgba(113,31,20,.3);
+  font: 800 var(--fs-chip)/1.35 var(--sh-mono); letter-spacing: .05em;
+}
+.shell-root[data-mode="perform"] .pfp-close-reasons {
+  padding: 8px 10px; border-top: 1px solid var(--pf-line-2); background: #0a0d0e;
+}
+.shell-root[data-mode="perform"] .pfp-close-reasons header { display:flex; justify-content:space-between; gap:8px; margin-bottom:7px; font-family:var(--sh-mono); }
+.shell-root[data-mode="perform"] .pfp-close-reasons header b { color:var(--pf-green); font-size:var(--fs-num); }
+.shell-root[data-mode="perform"] .pfp-close-reasons header span { color:var(--dk-mut); font-size:var(--fs-chip); letter-spacing:.08em; }
+.shell-root[data-mode="perform"] .pfp-close-reasons > div { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+.shell-root[data-mode="perform"] .pfp-close-reasons > div button {
+  min-height:34px; display:grid; gap:2px; place-content:center; border:1px solid var(--pf-line-2); border-radius:4px;
+  background:rgba(255,255,255,.04); color:var(--lcd-ink); cursor:pointer;
+}
+.shell-root[data-mode="perform"] .pfp-close-reasons button b,
+.shell-root[data-mode="perform"] .pfp-close-reasons button small { font-family:var(--sh-mono); }
+.shell-root[data-mode="perform"] .pfp-close-reasons button b { font-size:var(--fs-chip); letter-spacing:.05em; }
+.shell-root[data-mode="perform"] .pfp-close-reasons button small { font-size:calc(var(--fs-chip) * .9); color:var(--dk-mut); }
+.shell-root[data-mode="perform"] .pfp-close-reasons .skip { width:100%; margin-top:5px; padding:6px; border:0; background:transparent; color:var(--dk-dim); font:700 var(--fs-chip)/1 var(--sh-mono); cursor:pointer; }
 
 /* ---------- SENTINEL -------------------------------------------------------- */
 .shell-root[data-mode="perform"] .pfs-body { padding: 0.55em 12px 0.7em; display: flex; flex-direction: column; gap: 0.5em; }

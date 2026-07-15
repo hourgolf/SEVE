@@ -10,6 +10,7 @@ import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useShell } from "@/hooks/useShellState";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import type { PerformSection } from "@/lib/perform/derivePerformView";
 
 interface WorkstationShellProps {
   surface: SurfaceProps;
@@ -18,12 +19,12 @@ interface WorkstationShellProps {
 }
 
 const NAV = [
-  { key: "perform", label: "Dashboard", icon: "▣", mode: "perform" as const },
-  { key: "markets", label: "Markets", icon: "▤", mode: "perform" as const },
-  { key: "positions", label: "Positions", icon: "⌁", mode: "perform" as const },
+  { key: "overview", label: "Dashboard", icon: "▣", mode: "perform" as const, section: "overview" as const },
+  { key: "market", label: "Markets", icon: "▤", mode: "perform" as const, section: "market" as const },
+  { key: "positions", label: "Positions", icon: "⌁", mode: "perform" as const, section: "positions" as const },
   { key: "studio", label: "Channels", icon: "◉", mode: "studio" as const },
-  { key: "sentinel", label: "Sentinel", icon: "◇", mode: "perform" as const },
-  { key: "tape", label: "Event Tape", icon: "≋", mode: "perform" as const },
+  { key: "sentinel", label: "Sentinel", icon: "◇", mode: "perform" as const, section: "sentinel" as const },
+  { key: "tape", label: "Event Tape", icon: "≋", mode: "perform" as const, section: "tape" as const },
 ];
 
 const compactUsd = (value: number): string => {
@@ -46,6 +47,7 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   const { mode, setMode, skin, toggleSkin, density, toggleDensity } = useShell();
   const dispatch = useDeskDispatch();
   const [now, setNow] = useState<Date | null>(null);
+  const [performSection, setPerformSection] = useState<PerformSection>("overview");
 
   useEffect(() => {
     const tick = () => setNow(new Date());
@@ -64,6 +66,13 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   const incidentOn = incident.severity !== "normal";
   const step = now ? sessionStep(now) : 0;
   const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
+  const navigate = (item: (typeof NAV)[number]) => {
+    setMode(item.mode);
+    if (item.mode !== "perform" || !("section" in item)) return;
+    setPerformSection(item.section);
+    if (item.section === "overview") return;
+    window.setTimeout(() => document.getElementById(`perform-${item.section}`)?.focus({ preventScroll: true }), 0);
+  };
 
   return (
     <div className="shell-root ws909" data-mode={mode} data-skin={skin} data-density={density} data-incident={incident.severity}>
@@ -76,7 +85,7 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
           <button type="button" className={mode === "perform" ? "on" : ""} onClick={() => setMode("perform")}>PERFORM</button>
           <button type="button" className={mode === "studio" ? "on" : ""} onClick={() => setMode("studio")}>STUDIO</button>
         </div>
-        <button type="button" className={`ws-alert ws-alert--${incident.severity}`} onClick={() => setMode("perform")}>
+        <button type="button" className={`ws-alert ws-alert--${incident.severity}`} onClick={() => { setMode("perform"); setPerformSection("overview"); }}>
           <span>{incidentOn ? "▲" : "●"}</span><b>{incidentOn ? incident.title : "SYSTEM NOMINAL"}</b>
           <small>{incidentOn ? incident.facts[0] : `${roster.length} channels · process ${processObserved ? "observed" : "checking"}`}</small>
           <em>{incidentOn ? "VIEW INCIDENT" : "LIVE"}</em>
@@ -108,7 +117,7 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
         <nav className="ws-left" aria-label="Workstation sections">
           <div className="ws-left-label"><i />SECTIONS<span /></div>
           {NAV.map((item) => (
-            <button key={item.key} type="button" className={mode === item.mode && (item.key === mode || item.key === "perform") ? "on" : ""} onClick={() => setMode(item.mode)}>
+            <button key={item.key} type="button" className={mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section)) ? "on" : ""} onClick={() => navigate(item)}>
               <span>{item.icon}</span><b>{item.label}</b>
             </button>
           ))}
@@ -121,13 +130,13 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
         </nav>
 
         <section className="ws-display" aria-label={`${mode} workstation display`}>
-          {mode === "perform" ? <PerformSurface {...surface} /> : <StudioSurface {...surface} />}
+          {mode === "perform" ? <PerformSurface {...surface} section={performSection} /> : <StudioSurface {...surface} />}
         </section>
       </main>
 
       <footer className="ws-deck">
         <section className="ws-deck-mode"><small>MODE</small><div>
-          <button type="button" className={mode === "perform" ? "on" : ""} onClick={() => setMode("perform")}><i />PERFORM</button>
+          <button type="button" className={mode === "perform" ? "on" : ""} onClick={() => { setMode("perform"); setPerformSection("overview"); }}><i />PERFORM</button>
           <button type="button" className={mode === "studio" ? "on" : ""} onClick={() => setMode("studio")}><i />STUDIO</button>
           <button type="button" onClick={onLegacy}><i />ROOMS</button>
         </div></section>

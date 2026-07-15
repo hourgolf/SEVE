@@ -166,8 +166,6 @@ function Surface({
           room. Opens on the shared `seve:command-palette` event; roster scoped to the account. */}
       <CommandPalette
         channels={acctId ? view.desk.strategists.filter((s) => s.account_id === acctId) : view.desk.strategists}
-        setActiveRoom={setActiveRoom}
-        setSelected={setSelected}
       />
     </>
   );

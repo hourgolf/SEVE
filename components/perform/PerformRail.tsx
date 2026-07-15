@@ -8,7 +8,10 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
-import { collapseEvents } from "@/lib/perform/derivePerformView";
+import { collapseEvents, type PerformSection } from "@/lib/perform/derivePerformView";
+import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
+import { usePositionCloseFlow } from "@/hooks/usePositionCloseFlow";
+import type { SurfaceProps } from "@/components/surfaceTypes";
 
 // PERFORM right rail (slice S2): POSITIONS (row-per-leg with pk glow ring +
 // ratchet/LOCK-RIDE/giveback badges) · SENTINEL (verdict chip + one-line digest
@@ -41,13 +44,16 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 }
 
 function PositionsSection({
-  positions, strategists, liveMarks, peaks,
+  positions, strategists, liveMarks, peaks, write, targeted,
 }: {
   positions: Position[];
   strategists: StrategistState[];
   liveMarks?: Record<string, number>;
   peaks: Record<string, number>; // P5 slice 1 — from the page seam (usePositionPeaks lifted)
+  write: SurfaceProps["write"];
+  targeted: boolean;
 }) {
+  const closeFlow = usePositionCloseFlow(write);
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
   const markOf = (p: Position) => {
     const m = liveMarks?.[p.occ_symbol];
@@ -57,7 +63,7 @@ function PositionsSection({
   const total = positions.reduce((a, p) => a + markOf(p).unreal, 0);
 
   return (
-    <section className="pf-screen pf-hardware">
+    <section className="pf-screen pf-hardware" id="perform-positions" data-nav-target={targeted || undefined} tabIndex={-1}>
       <div className="pf-head">
         <span className="t">POSITIONS · {positions.length} OPEN</span>
         <span className="grow" />
@@ -95,17 +101,30 @@ function PositionsSection({
                 {peakPct != null ? <Ring pct={peakPct} color={pm} /> : <span className="pfp-nopk">—</span>}
                 <span className="pfp-pklbl">pk <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span>
               </div>
+              {write.canWrite && <div className="pfp-actions">
+                {closeFlow.closingId === p.id ? <span className="pfp-closing">CLOSING…</span>
+                  : closeFlow.confirmId === p.id ? <>
+                    <button type="button" className="confirm" onClick={() => closeFlow.confirmClose(p)}>CONFIRM MARKET CLOSE</button>
+                    <button type="button" onClick={closeFlow.cancelClose}>CANCEL</button>
+                  </> : <button type="button" className="arm" onClick={() => closeFlow.armClose(p.id)}>CLOSE POSITION</button>}
+              </div>}
             </div>
           );
         })}
       </div>
+      {closeFlow.error && <div className="pfp-close-error" role="alert">POSITION ACTION FAILED · {closeFlow.error}</div>}
+      {closeFlow.tagPrompt && <div className="pfp-close-reasons">
+        <header><b>{closeFlow.tagPrompt.label} CLOSED</b><span>WHY DID YOU EXIT?</span></header>
+        <div>{MANUAL_CLOSE_REASONS.map((reason) => <button type="button" key={reason.value} disabled={closeFlow.tagging} title={reason.hint} onClick={() => closeFlow.tagClose(reason.value)}><b>{reason.label}</b><small>{reason.hint}</small></button>)}</div>
+        <button type="button" className="skip" onClick={closeFlow.dismissTag}>SKIP · LEAVE AS MANUAL</button>
+      </div>}
     </section>
   );
 }
 
 type Digest = ReturnType<typeof useSentinelDigest>;
 
-function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
+function SentinelSection({ symbol, sent, targeted }: { symbol: string; sent: Digest; targeted: boolean }) {
   const { judge, scan, brief, date, state } = sent;
 
   // SENT level legend — the same terrain the §01 SENT chip draws (per-index
@@ -126,7 +145,7 @@ function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
   const vcls = verdict === "QUEUE" ? "queue" : verdict === "WATCH" ? "watch" : "hold";
 
   return (
-    <section className="pf-screen pf-hardware">
+    <section className="pf-screen pf-hardware" id="perform-sentinel" data-nav-target={targeted || undefined} tabIndex={-1}>
       <div className="pf-head">
         <span className="t">SENTINEL</span>
         <span className="grow" />
@@ -180,10 +199,10 @@ function TapeMsg({ message, strategists }: { message: string; strategists: Strat
   );
 }
 
-function TapeSection({ events, strategists }: { events: MarketEvent[]; strategists: StrategistState[] }) {
+function TapeSection({ events, strategists, targeted }: { events: MarketEvent[]; strategists: StrategistState[]; targeted: boolean }) {
   const collapsed = collapseEvents(events);
   return (
-    <section className="pf-screen pf-glass">
+    <section className="pf-screen pf-glass" id="perform-tape" data-nav-target={targeted || undefined} tabIndex={-1}>
       <div className="pf-head">
         <span className="t">TAPE</span>
         <span className="grow" />
@@ -207,7 +226,7 @@ function TapeSection({ events, strategists }: { events: MarketEvent[]; strategis
 }
 
 export function PerformRail({
-  positions, strategists, liveMarks, peaks, events, symbol, sent, incident,
+  positions, strategists, liveMarks, peaks, events, symbol, sent, incident, write, section,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -217,15 +236,17 @@ export function PerformRail({
   symbol: string;
   sent: Digest;
   incident: Incident;
+  write: SurfaceProps["write"];
+  section: PerformSection;
 }) {
   return (
     <aside className="pf-rail">
       {/* P5 slice 3 — deterministic system-health strip; open-position truth visible in every state. */}
       <SystemHealthStrip incident={incident} />
       <IncidentDetail incident={incident} />
-      <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} />
-      <SentinelSection symbol={symbol} sent={sent} />
-      <TapeSection events={events} strategists={strategists} />
+      <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} write={write} targeted={section === "positions"} />
+      <SentinelSection symbol={symbol} sent={sent} targeted={section === "sentinel"} />
+      <TapeSection events={events} strategists={strategists} targeted={section === "tape"} />
     </aside>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import type { Position, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
+import { usePositionCloseFlow } from "@/hooks/usePositionCloseFlow";
 
 const A13_SLUGS = new Set(["momo-shape"]);
 const ONE_DAY = 86_400_000;
@@ -36,18 +36,7 @@ export function MobilePositions({ props, strategists, compact = false }: {
 }) {
   const { feed, liveMarks, positionPeaks, write } = props;
   const positions = feed.positions;
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [closingId, setClosingId] = useState<string | null>(null);
-  const [closeErr, setCloseErr] = useState<string | null>(null);
-  const [tagPrompt, setTagPrompt] = useState<{ id: string; label: string } | null>(null);
-  const [tagging, setTagging] = useState(false);
-  const disarmTimer = useRef<number | null>(null);
-
-  const clearDisarm = () => {
-    if (disarmTimer.current) window.clearTimeout(disarmTimer.current);
-    disarmTimer.current = null;
-  };
-  useEffect(() => () => clearDisarm(), []);
+  const closeFlow = usePositionCloseFlow(write);
 
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
   const markOf = (p: Position) => {
@@ -56,32 +45,6 @@ export function MobilePositions({ props, strategists, compact = false }: {
     return { mark: p.current_mark, unreal: p.unrealized_pnl };
   };
   const total = positions.reduce((sum, position) => sum + markOf(position).unreal, 0);
-
-  const armClose = (id: string) => {
-    setCloseErr(null);
-    setConfirmId(id);
-    clearDisarm();
-    disarmTimer.current = window.setTimeout(() => setConfirmId((current) => current === id ? null : current), 4_000);
-  };
-  const cancelClose = () => { clearDisarm(); setConfirmId(null); };
-  const confirmClose = async (position: Position) => {
-    clearDisarm();
-    setConfirmId(null);
-    setClosingId(position.id);
-    setCloseErr(null);
-    const result = await write.closePosition(position.id);
-    setClosingId(null);
-    if (!result.ok) setCloseErr(result.error ?? "close failed");
-    else setTagPrompt({ id: position.id, label: `${position.strike.toFixed(0)}${position.opt_type === "call" ? "C" : "P"}` });
-  };
-  const tagClose = async (value: string) => {
-    if (!tagPrompt) return;
-    setTagging(true);
-    const result = await write.tagClose(tagPrompt.id, value);
-    setTagging(false);
-    if (!result.ok) { setCloseErr(result.error ?? "reason tag failed"); return; }
-    setTagPrompt(null);
-  };
 
   return <section className={`m2-screen m2-hardware m2-position-book${compact ? " compact" : ""}`}>
     <div className="m2-phead">
@@ -112,18 +75,18 @@ export function MobilePositions({ props, strategists, compact = false }: {
           </div>
           <div className="m2-p-pk">{peakPct != null ? <Ring pct={peakPct} color={pm} /> : null}<span className="lbl">pk <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span></div>
           {write.canWrite && <div className="m2-pos-actions">
-            {closingId === position.id ? <span className="m2-pos-closing">CLOSING…</span>
-              : confirmId === position.id ? <><button type="button" className="confirm" onClick={() => confirmClose(position)}>CONFIRM CLOSE</button><button type="button" onClick={cancelClose}>CANCEL</button></>
-              : <button type="button" className="arm" onClick={() => armClose(position.id)}>CLOSE POSITION</button>}
+            {closeFlow.closingId === position.id ? <span className="m2-pos-closing">CLOSING…</span>
+              : closeFlow.confirmId === position.id ? <><button type="button" className="confirm" onClick={() => closeFlow.confirmClose(position)}>CONFIRM CLOSE</button><button type="button" onClick={closeFlow.cancelClose}>CANCEL</button></>
+              : <button type="button" className="arm" onClick={() => closeFlow.armClose(position.id)}>CLOSE POSITION</button>}
           </div>}
         </div>;
       })}
     </div>
-    {closeErr && <div className="m2-close-error">close failed — {closeErr}</div>}
-    {tagPrompt && <div className="m2-close-reasons">
-      <header><b>{tagPrompt.label} CLOSED</b><span>WHY DID YOU EXIT?</span></header>
-      <div>{MANUAL_CLOSE_REASONS.map((reason) => <button type="button" key={reason.value} disabled={tagging} title={reason.hint} onClick={() => tagClose(reason.value)}><b>{reason.label}</b><small>{reason.hint}</small></button>)}</div>
-      <button type="button" className="skip" onClick={() => setTagPrompt(null)}>SKIP · LEAVE AS MANUAL</button>
+    {closeFlow.error && <div className="m2-close-error">position action failed — {closeFlow.error}</div>}
+    {closeFlow.tagPrompt && <div className="m2-close-reasons">
+      <header><b>{closeFlow.tagPrompt.label} CLOSED</b><span>WHY DID YOU EXIT?</span></header>
+      <div>{MANUAL_CLOSE_REASONS.map((reason) => <button type="button" key={reason.value} disabled={closeFlow.tagging} title={reason.hint} onClick={() => closeFlow.tagClose(reason.value)}><b>{reason.label}</b><small>{reason.hint}</small></button>)}</div>
+      <button type="button" className="skip" onClick={closeFlow.dismissTag}>SKIP · LEAVE AS MANUAL</button>
     </div>}
   </section>;
 }

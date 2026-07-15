@@ -2,13 +2,11 @@
 
 import "@/app/command.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
 import { useShell } from "@/hooks/useShellState";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
-import { buildCommands, type CommandDef, type RoomNav } from "@/components/shell/commandRegistry";
+import { buildCommands, type CommandDef } from "@/components/shell/commandRegistry";
 import type { StrategistState } from "@/lib/desk/types";
-import type { Room } from "@/components/surfaceTypes";
 
 // =============================================================================
 // ⌘K COMMAND palette (PERFORM/STUDIO rebuild · slice S4) — the cream hardware
@@ -23,9 +21,9 @@ import type { Room } from "@/components/surfaceTypes";
 //   · KILL              → the identical dispatch({type:"KILL"}) + persistFund halt
 //                         KillControl uses — behind an ARMED·HOLD-⏎ confirm so a
 //                         stray Enter can never flatten the desk.
-//   · goto              → setMode + setActiveRoom + scroll to the legacy room id.
 // Writes are canWrite-gated; anon sees them disabled with a "sign in" hint (never
-// a fake-success no-op). VIEW/NAV commands always work.
+// a fake-success no-op). VIEW commands always work. Desktop navigation belongs
+// to the workstation sidebar so the palette never advertises dead destinations.
 // =============================================================================
 
 const HOLD_MS = 900; // Enter must be held this long to fire KILL
@@ -34,21 +32,11 @@ const HOLD_MS = 900; // Enter must be held this long to fire KILL
 // the mobile COMMAND sheet). This component owns the desktop CHROME only.
 
 export interface CommandPaletteProps {
-  /** The account-scoped roster — one mute/boost/goto set per channel. */
+  /** The account-scoped roster — one mute/boost set per channel. */
   channels: StrategistState[];
-  setActiveRoom: Dispatch<SetStateAction<Room>>;
-  setSelected: Dispatch<SetStateAction<string | null>>;
 }
 
-// Flip to STUDIO and scroll the legacy room into view. The room-<id> nodes live
-// in DesktopSurface, which only mounts in studio mode — so switch first, then
-// scroll on the next frames (mirrors DesktopSurface.jumpToRoom's double-tick).
-function scrollToRoom(r: Room) {
-  window.setTimeout(() => document.getElementById(`room-${r}`)?.scrollIntoView({ block: "start" }), 40);
-  window.setTimeout(() => document.getElementById(`room-${r}`)?.scrollIntoView({ block: "start" }), 560);
-}
-
-export function CommandPalette({ channels, setActiveRoom, setSelected }: CommandPaletteProps) {
+export function CommandPalette({ channels }: CommandPaletteProps) {
   const { mode, setMode, skin, toggleSkin, density, toggleDensity } = useShell();
   const dispatch = useDeskDispatch();
   const { canWrite, persistConfig, persistFund } = useDeskWrite();
@@ -100,34 +88,12 @@ export function CommandPalette({ channels, setActiveRoom, setSelected }: Command
   }, [open, cancelHold]);
 
   // ---- command registry (rebuilt when the roster/skin/mode change) ----------
-  const gotoRoom = useCallback(
-    (r: Room, selectSlug?: string) => {
-      setMode("studio");
-      setActiveRoom(r);
-      if (selectSlug) setSelected(selectSlug);
-      scrollToRoom(r);
-    },
-    [setMode, setActiveRoom, setSelected],
-  );
-
-  // The desktop §01–§04 room jumps (mobile has no legacy rooms → omits this group).
-  const rooms = useMemo<RoomNav[]>(() => [
-    { id: "nav-play", room: "play", label: "§01 chart", sub: "live market", search: "goto chart live market spy room play 01" },
-    { id: "nav-mix", room: "mix", label: "§02 rack", sub: "composer", search: "goto rack mixer composer channels room mix 02" },
-    { id: "nav-write", room: "write", label: "§03 book", sub: "positions · P&L", search: "goto book pnl positions room write 03" },
-    { id: "nav-tape", room: "tape", label: "§04 tape", sub: "autopsy · shadow book", search: "goto tape autopsy shadow book review room 04" },
-    { id: "nav-ops", room: "ops", label: "OPS", sub: "tend the machine", search: "goto ops settings sign in tend room" },
-  ], []);
-
   const commands = useMemo<CommandDef[]>(
     () => buildCommands({
       channels, mode, skin, density, setMode, toggleSkin, toggleDensity,
       dispatch, persistConfig, persistFund,
-      gotoChannel: (slug) => gotoRoom("mix", slug),
-      rooms,
-      gotoRoom: (r) => gotoRoom(r as Room),
     }),
-    [channels, mode, skin, density, setMode, toggleSkin, toggleDensity, dispatch, persistConfig, persistFund, gotoRoom, rooms],
+    [channels, mode, skin, density, setMode, toggleSkin, toggleDensity, dispatch, persistConfig, persistFund],
   );
 
   // ---- fuzzy/substring filter (every whitespace token must match) -----------
