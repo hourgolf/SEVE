@@ -1,21 +1,29 @@
-# P5 Slice 3 — Deterministic incident policy (v4, design pass — NOT code)
+# P5 Slice 3 — Deterministic incident policy (v5 operational amendment)
 
-Design-only. Drives the PERFORM incident banner + system-health strip. Requires independent approval
-before implementation. No component/CSS/hook changes in this pass.
+Implemented in Slice 3A and amended after production evidence. Drives the PERFORM incident banner +
+system-health strip. This document is the operator-facing contract for the implemented pure policy and
+its seam reads.
 
 **Ratified (thresholds + architecture):** `streamWarnRthSec=45`, `streamStaleRthSec=120`,
 `cronStaleRthSec=180`, `runProcessStaleSec=180`, `opsReadStaleSec=60`, `premarketBeatGraceSec=120`,
-`premarketReadyWindowSec=600`. `useOpsStatus`/`useWorkerRuns` observability-metadata refactor = required
+`workerRunsReadStaleSec=150`, `premarketReadyWindowSec=600`. `useOpsStatus`/`useWorkerRuns` observability-metadata refactor = required
 Slice-3 scope. Constraints: `abrupt16h` (not `boots16h`) drives instability; no Sentinel/LLM in the gate;
 no executor-switch/remediation; no leaf subscriptions; `IntradayChart` untouched.
+
+### v5 operational amendment — long-running worker ledger
+The 16h instability window is an **event window**, not a current-process lookup. The worker-runs read now
+always includes any open run, plus rows whose `started_at` or `ended_at` falls inside the window. Boots
+are counted by `started_at`; abrupt terminations by `ended_at`. This prevents two false classifications:
+a healthy process older than 16h no longer raises `W-empty`, and a process started before the window but
+terminated abruptly inside it is no longer omitted from `abrupt16h`.
 
 ### v4 revision log (four surgical corrections)
 1. **Missing-state grace** — `Read` gains `missingSinceMs` (+ `lastSeenAtMs` for wording). `missing`
    contributes to liveness only after `nowMs - missingSinceMs >= threshold`; repeated missing preserves the
    original time; `ok` clears it; `error` does not reset it; a `missing` read does NOT keep a stale
    `value/atMs`.
-2. **Worker-ledger query health ≠ current-run presence** — split into: query loading/ok/error; zero rows in
-   16h (`W-empty`, only meaning); historical rows but no open run (redeploy gap → 180s grace off
+2. **Worker-ledger query health ≠ current-run presence** — split into: query loading/ok/error; zero event
+   rows in 16h with no open run (`W-empty`, only meaning); historical rows but no open run (redeploy gap → 180s grace off
    `latestObservedAtMs` before PROCESS NOT OBSERVED); current run with fresh/stale heartbeat. Query error =
    observability-only.
 3. **Attribution by `strategist_slug`** — `Position.strategist_slug` joins `strategist.slug`; unmatched slug
@@ -67,16 +75,19 @@ Refactor rules — inspect `result.error` on **every** read (`.error` is not thr
 ```ts
 interface WorkerRunsView {
   query: { state: "loading" | "ok" | "error"; fetchedAtMs: number }; // the READ health
-  rowsIn16h: number;                   // W-empty iff query 'ok' AND rowsIn16h===0
+  rowsIn16h: number;                   // rows with started_at OR ended_at inside the event window
+  hasOpenRun: boolean;                 // any returned run with ended_at null, regardless of start time
   currentHeartbeatAtMs: number | null; // open run (ended_at null) last_heartbeat_at; null if no open run
-  latestObservedAtMs: number | null;   // freshest heartbeat OR ended_at across recent runs (redeploy-gap grace)
+  latestObservedAtMs: number | null;   // freshest started_at/heartbeat/ended_at evidence returned
   abrupt16h: number; boots16h: number; unstable: boolean;
   currentPhase: string | null;
 }
 ```
-Rules: `query.state` reflects the READ (error/loading/ok). `rowsIn16h` counts rows in the window.
-`currentHeartbeatAtMs` = the open run's raw timestamp (null if none). `latestObservedAtMs` = the most recent
-evidence (heartbeat or ended_at) among recent rows — used only for the no-open-run redeploy gap.
+Rules: `query.state` reflects the READ (error/loading/ok). Query rows are the union of `started_at>=since`,
+`ended_at>=since`, and `ended_at IS NULL`. `rowsIn16h` counts the first two event predicates, while
+`hasOpenRun` reflects the third. `currentHeartbeatAtMs` = the open run's raw timestamp (null if none).
+`latestObservedAtMs` = the most recent start/heartbeat/end evidence returned. `boots16h` keys on start time;
+`abrupt16h` keys on abrupt termination kind **and end time**.
 
 ### P.3 Derived predicates (computed in `deriveIncident` from the above + `nowMs`)
 ```
@@ -91,15 +102,15 @@ warnBand(r, lo, hi) = readFresh(r) && r.state === "ok" && ageSec(r) != null && l
 obsDegraded(r) = r.state === "error" || (r.state !== "loading" && !readFresh(r))
 
 // worker-ledger process liveness (§P.2) — never a claim when the query itself is unhealthy:
-runReadUsable = workerRuns.query.state === "ok" && (nowMs - workerRuns.query.fetchedAtMs)/1000 <= opsReadStaleSec
+runReadUsable = workerRuns.query.state === "ok" && (nowMs - workerRuns.query.fetchedAtMs)/1000 <= workerRunsReadStaleSec
 processFresh(thr) = runReadUsable && workerRuns.currentHeartbeatAtMs != null
                     && (nowMs - workerRuns.currentHeartbeatAtMs)/1000 <= thr
 processNotObserved(thr) = runReadUsable && (
      (workerRuns.currentHeartbeatAtMs != null && (nowMs - workerRuns.currentHeartbeatAtMs)/1000 > thr)  // open run, stale
-  || (workerRuns.currentHeartbeatAtMs == null && workerRuns.rowsIn16h > 0                                // redeploy gap
+  || (workerRuns.currentHeartbeatAtMs == null && (workerRuns.hasOpenRun || workerRuns.rowsIn16h > 0)     // no-beat open run or redeploy gap
         && workerRuns.latestObservedAtMs != null && (nowMs - workerRuns.latestObservedAtMs)/1000 >= thr) // ...past 180s grace
   )
-// zero rows (rowsIn16h===0) is W-empty ONLY — NOT processNotObserved (avoids escalating an empty ledger);
+// zero recent rows AND no open run is W-empty ONLY — NOT processNotObserved (avoids escalating an empty ledger);
 // query error/stale-read is obs-only (W-obs) — NEVER processNotObserved.
 ```
 
@@ -159,7 +170,7 @@ Helper defs: `streamUnreachable = staleForLiveness(ops.heartbeat, streamStaleRth
 |---|---|
 | **W1** | `workerRuns.query.state==='ok'` & `abrupt16h∈{1,2}`. |
 | **W-obs** | `workerRuns.query.state==='error'` OR `!runReadUsable`. |
-| **W-empty** | `workerRuns.query.state==='ok'` & `rowsIn16h===0`. (**only** meaning) |
+| **W-empty** | `workerRuns.query.state==='ok'` & `rowsIn16h===0` & `hasOpenRun===false`. (**only** meaning) |
 | **W-ops** | `obsDegraded(ops.*)` per signal. |
 | **W4** | `open` & `assignment.state==='ok'` & `streamArmed>0` & `warnBand(ops.heartbeat, streamWarnRthSec, streamStaleRthSec)` & `processFresh`. |
 | **W-proc-closed** | `session∈{afterhours,weekend,holiday}` & `processNotObserved(runProcessStaleSec)` & `P.total==0`. |
@@ -233,7 +244,7 @@ export interface IncidentInputs {
   };
   workerRuns: {
     query: { state: "loading" | "ok" | "error"; fetchedAtMs: number };
-    rowsIn16h: number; currentHeartbeatAtMs: number | null; latestObservedAtMs: number | null;
+    rowsIn16h: number; hasOpenRun: boolean; currentHeartbeatAtMs: number | null; latestObservedAtMs: number | null;
     abrupt16h: number; boots16h: number; unstable: boolean; currentPhase: string | null;
   };
   positions: PositionsByExecutor;
@@ -279,11 +290,14 @@ surfaced on the health strip rather than silently assumed.)
 
 **Worker-ledger split (finding 2)**
 7. `query.state='error'` → `W-obs`; NOT processNotObserved (obs-only), even RTH with positions.
-8. `query.state='ok'`, `rowsIn16h=0` → `W-empty` ONLY; NOT H-proc-exposed/C2 from it.
+8. `query.state='ok'`, `rowsIn16h=0`, `hasOpenRun=false` → `W-empty` ONLY; NOT H-proc-exposed/C2 from it.
 9. `query.state='ok'`, no current run, `rowsIn16h>0`, `latestObservedAtMs=nowMs−90s` (< 180 grace) → NOT processNotObserved (graceful redeploy gap).
 10. same but `latestObservedAtMs=nowMs−200s` (> grace) → processNotObserved.
 11. `query.state='ok'`, current run, `currentHeartbeatAtMs=nowMs−30s` → processFresh; `=nowMs−200s` → processNotObserved.
-12. `!runReadUsable` (query fetchedAtMs older than opsReadStaleSec, stuck poll) → `W-obs`, not a liveness claim.
+12. `!runReadUsable` (query fetchedAtMs older than workerRunsReadStaleSec, stuck poll) → `W-obs`, not a liveness claim.
+12a. open run started 20h ago, heartbeat `nowMs−30s` → `rowsIn16h=0`, `boots16h=0`, `hasOpenRun=true`, processFresh; NOT `W-empty`.
+12b. same open run with heartbeat `nowMs−10m`, closed session + flat → `W-proc-closed`; NOT `W-empty`.
+12c. run started 20h ago and ended abruptly 10m ago → `rowsIn16h=1`, `boots16h=0`, `abrupt16h=1`.
 
 **Attribution by strategist_slug (finding 3)**
 13. position `strategist_slug='pb-ride'` maps to a stream strategist → streamConfigured++. cron slug → cronConfigured++.

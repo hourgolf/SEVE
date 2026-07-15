@@ -34,7 +34,7 @@ function base(): IncidentInputs {
       cron: okRead(20, {}),
       assignment: okRead(0, { streamArmed: 25, cronArmed: 0 }),
     },
-    workerRuns: { query: { state: "ok", fetchedAtMs: NOW }, rowsIn16h: 5, currentHeartbeatAtMs: NOW - 30_000, latestObservedAtMs: NOW - 30_000, abrupt16h: 0, boots16h: 3, unstable: false, currentPhase: "sweep" },
+    workerRuns: { query: { state: "ok", fetchedAtMs: NOW }, rowsIn16h: 5, hasOpenRun: true, currentHeartbeatAtMs: NOW - 30_000, latestObservedAtMs: NOW - 30_000, abrupt16h: 0, boots16h: 3, unstable: false, currentPhase: "sweep" },
     positions: { total: 0, streamConfigured: 0, cronConfigured: 0, unknown: 0 },
   };
 }
@@ -57,7 +57,7 @@ check("halted → C1 critical", code({ ...base(), fund: { is_halted: true, runni
 // ---------- worker-ledger query health vs run presence ----------
 { const i = { ...withOps(base(), { heartbeat: okRead(300, { note: "x" }) }), workerRuns: { ...base().workerRuns, query: { state: "error" as const, fetchedAtMs: NOW }, currentHeartbeatAtMs: null } };
   check("ledger query error → W-obs (not C2)", code(i), "W-obs"); }
-{ const i = { ...base(), session: { session: "afterhours" as const, coverageKnown: true, secondsToOpen: null }, positions: { total: 2, streamConfigured: 2, cronConfigured: 0, unknown: 0 }, workerRuns: { ...base().workerRuns, rowsIn16h: 0, currentHeartbeatAtMs: null, latestObservedAtMs: null } };
+{ const i = { ...base(), session: { session: "afterhours" as const, coverageKnown: true, secondsToOpen: null }, positions: { total: 2, streamConfigured: 2, cronConfigured: 0, unknown: 0 }, workerRuns: { ...base().workerRuns, rowsIn16h: 0, hasOpenRun: false, currentHeartbeatAtMs: null, latestObservedAtMs: null } };
   check("rowsIn16h=0 (query ok) → W-empty only (not H-proc-exposed)", code(i), "W-empty"); }
 { const i = { ...base(), session: { session: "afterhours" as const, coverageKnown: true, secondsToOpen: null }, positions: { total: 2, streamConfigured: 2, cronConfigured: 0, unknown: 0 }, workerRuns: { ...base().workerRuns, currentHeartbeatAtMs: null, rowsIn16h: 3, latestObservedAtMs: NOW - 90_000 } };
   check("redeploy gap <180s (no current run) → no PROCESS NOT OBSERVED (N1)", code(i), "N1"); }
@@ -161,11 +161,19 @@ const ext = () => ({ value: { note: null }, atMs: NOW });
   const b = applyOpsRead(okPrev, { status: "fulfilled", value: { data: { note: "z" }, error: null } }, ext, NOW);
   check("independent reads: reject→error while other→ok", [a.state, b.state], ["error", "ok"]); }
 // workerRuns rejection
-const wrPrev: WorkerRunsInput = { query: { state: "ok", fetchedAtMs: NOW - 5_000 }, rowsIn16h: 4, currentHeartbeatAtMs: NOW - 30_000, latestObservedAtMs: NOW - 30_000, abrupt16h: 1, boots16h: 4, unstable: false, currentPhase: "sweep" };
+const wrPrev: WorkerRunsInput = { query: { state: "ok", fetchedAtMs: NOW - 5_000 }, rowsIn16h: 4, hasOpenRun: true, currentHeartbeatAtMs: NOW - 30_000, latestObservedAtMs: NOW - 30_000, abrupt16h: 1, boots16h: 4, unstable: false, currentPhase: "sweep" };
 { const r = applyWorkerRuns(wrPrev, { status: "rejected", reason: new Error() } as Settled<{ data: unknown; error: unknown }>, NOW);
   check("applyWorkerRuns REJECTED → query error, preserves prior rows", [r.query.state, r.rowsIn16h], ["error", 4]); }
-{ const r = applyWorkerRuns(wrPrev, { status: "fulfilled", value: { data: [{ started_at: "x", last_heartbeat_at: new Date(NOW - 20_000).toISOString(), ended_at: null, termination_kind: null, last_phase: "cycle" }], error: null } }, NOW);
-  check("applyWorkerRuns fulfilled ok → query ok, rows=1, currentHeartbeat set", [r.query.state, r.rowsIn16h, r.currentHeartbeatAtMs != null], ["ok", 1, true]); }
+{ const r = applyWorkerRuns(wrPrev, { status: "fulfilled", value: { data: [{ started_at: new Date(NOW - 60_000).toISOString(), last_heartbeat_at: new Date(NOW - 20_000).toISOString(), ended_at: null, termination_kind: null, last_phase: "cycle" }], error: null } }, NOW);
+  check("applyWorkerRuns recent open run → row/boot/current counted", [r.query.state, r.rowsIn16h, r.boots16h, r.hasOpenRun, r.currentHeartbeatAtMs != null], ["ok", 1, 1, true, true]); }
+{ const r = applyWorkerRuns(wrPrev, { status: "fulfilled", value: { data: [{ started_at: new Date(NOW - 20 * 3600_000).toISOString(), last_heartbeat_at: new Date(NOW - 20_000).toISOString(), ended_at: null, termination_kind: null, last_phase: "cycle" }], error: null } }, NOW);
+  const i = { ...base(), session: { session: "afterhours" as const, coverageKnown: true, secondsToOpen: null }, workerRuns: r };
+  check("long-running current process → no recent boot, heartbeat still current", [r.rowsIn16h, r.boots16h, r.hasOpenRun, code(i)], [0, 0, true, "N1"]); }
+{ const r = applyWorkerRuns(wrPrev, { status: "fulfilled", value: { data: [{ started_at: new Date(NOW - 20 * 3600_000).toISOString(), last_heartbeat_at: new Date(NOW - 10 * 60_000).toISOString(), ended_at: null, termination_kind: null, last_phase: "cycle" }], error: null } }, NOW);
+  const i = { ...base(), session: { session: "afterhours" as const, coverageKnown: true, secondsToOpen: null }, workerRuns: r };
+  check("long-running stale current process → process warning, not empty ledger", [code(i), deriveIncident(i).activeCodes.includes("W-empty")], ["W-proc-closed", false]); }
+{ const r = applyWorkerRuns(wrPrev, { status: "fulfilled", value: { data: [{ started_at: new Date(NOW - 20 * 3600_000).toISOString(), last_heartbeat_at: new Date(NOW - 11 * 60_000).toISOString(), ended_at: new Date(NOW - 10 * 60_000).toISOString(), termination_kind: "abrupt_or_unknown", last_phase: "cycle" }], error: null } }, NOW);
+  check("long-running process ending abruptly in window → termination counted, boot not counted", [r.rowsIn16h, r.boots16h, r.abrupt16h, r.hasOpenRun], [1, 0, 1, false]); }
 
 // ======== H3 requires POSITIVELY healthy stream telemetry (finding 3) ========
 { const i = { ...withOps(cronStale(), { heartbeat: errRead() }), positions: { total: 0, streamConfigured: 0, cronConfigured: 0, unknown: 0 } };

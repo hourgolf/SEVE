@@ -32,6 +32,7 @@ export interface OpsInputs {
 export interface WorkerRunsInput {
   query: { state: "loading" | "ok" | "error"; fetchedAtMs: number };
   rowsIn16h: number;
+  hasOpenRun: boolean;
   currentHeartbeatAtMs: number | null;
   latestObservedAtMs: number | null;
   abrupt16h: number;
@@ -110,7 +111,7 @@ export function deriveIncident(i: IncidentInputs): Incident {
   const processNotObserved =
     runReadUsable &&
     ((wr.currentHeartbeatAtMs != null && (now - wr.currentHeartbeatAtMs) / 1000 > t.runProcessStaleSec) ||
-      (wr.currentHeartbeatAtMs == null && wr.rowsIn16h > 0 && wr.latestObservedAtMs != null &&
+      (wr.currentHeartbeatAtMs == null && (wr.hasOpenRun || wr.rowsIn16h > 0) && wr.latestObservedAtMs != null &&
         (now - wr.latestObservedAtMs) / 1000 >= t.runProcessStaleSec));
 
   // ---- assignment (never zero on failure — null when not ok) ----
@@ -182,7 +183,7 @@ export function deriveIncident(i: IncidentInputs): Incident {
   // ============ WARNING ============
   if (wr.query.state === "ok" && (i.workerRuns.abrupt16h === 1 || i.workerRuns.abrupt16h === 2))
     push({ code: "W1", severity: "warning", trading: false, title: `WORKER — ${wr.abrupt16h} ABRUPT TERMINATION${wr.abrupt16h === 1 ? "" : "S"} / 16H`, facts: [procLabel] });
-  if (wr.query.state === "ok" && wr.rowsIn16h === 0)
+  if (wr.query.state === "ok" && wr.rowsIn16h === 0 && !wr.hasOpenRun)
     push({ code: "W-empty", severity: "warning", trading: false, title: "NO WORKER RUN LEDGER", facts: ["no run rows in 16h — instrumentation gap or long-dead worker"] });
   if (liveness && S === "open" && asgOk && streamArmed! > 0 && warnBand(i.ops.heartbeat, t.streamWarnRthSec, t.streamStaleRthSec) && processFresh)
     push({ code: "W4", severity: "warning", trading: true, title: "STREAM BEAT LAGGING", facts: [`stream beat ${hbLabel}, market hours; process observed`] });

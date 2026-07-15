@@ -25,25 +25,37 @@ export interface RunRow {
   termination_kind: string | null; last_phase: string | null;
 }
 
+const RUN_WINDOW_MS = 16 * 3600_000;
+
 /** prior WorkerRunsInput + a settled worker_runs query → next view (query health vs run presence). */
 export function applyWorkerRuns(prev: WorkerRunsInput, res: Settled<QueryResult>, now: number): WorkerRunsInput {
   if (failed(res)) return { ...prev, query: { state: "error", fetchedAtMs: now } }; // preserve prior observations (unused)
   const rows = ((res as { value: QueryResult }).value.data ?? []) as RunRow[];
-  const ms = (s: string | null) => (s ? Date.parse(s) : null);
-  const open = rows.filter((r) => r.ended_at == null).sort((a, b) => (b.last_heartbeat_at ?? "").localeCompare(a.last_heartbeat_at ?? ""));
+  const ms = (s: string | null): number | null => {
+    if (!s) return null;
+    const parsed = Date.parse(s);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const since = now - RUN_WINDOW_MS;
+  const inWindow = (atMs: number | null) => atMs != null && atMs >= since;
+  const open = rows.filter((r) => r.ended_at == null).sort((a, b) =>
+    (ms(b.last_heartbeat_at) ?? ms(b.started_at) ?? 0) - (ms(a.last_heartbeat_at) ?? ms(a.started_at) ?? 0));
   const current = open[0] ?? null;
+  const recentRows = rows.filter((r) => inWindow(ms(r.started_at)) || inWindow(ms(r.ended_at)));
   let latestObservedAtMs: number | null = null;
-  for (const r of rows) for (const cand of [ms(r.last_heartbeat_at), ms(r.ended_at)]) {
+  for (const r of rows) for (const cand of [ms(r.last_heartbeat_at), ms(r.ended_at), ms(r.started_at)]) {
     if (cand != null && (latestObservedAtMs == null || cand > latestObservedAtMs)) latestObservedAtMs = cand;
   }
-  const abrupt16h = rows.filter((r) => r.termination_kind === "abrupt_or_unknown").length;
+  const abrupt16h = rows.filter((r) => r.termination_kind === "abrupt_or_unknown" && inWindow(ms(r.ended_at))).length;
+  const boots16h = rows.filter((r) => inWindow(ms(r.started_at))).length;
   return {
     query: { state: "ok", fetchedAtMs: now },
-    rowsIn16h: rows.length,
+    rowsIn16h: recentRows.length,
+    hasOpenRun: current != null,
     currentHeartbeatAtMs: current ? ms(current.last_heartbeat_at) : null,
     latestObservedAtMs,
     abrupt16h,
-    boots16h: rows.length,
+    boots16h,
     unstable: abrupt16h >= 3,
     currentPhase: current?.last_phase ?? null,
   };
