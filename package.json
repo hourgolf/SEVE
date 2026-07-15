@@ -69,6 +69,8 @@
     "family-admission-selftest": "tsx worker/src/familyAdmission.selftest.ts",
     "observer-scorecard-selftest": "tsx lib/research/observerScorecard.selftest.ts",
     "observer-scorecard": "tsx --env-file=.env.local scripts/observer-scorecard.ts",
+    "fleet-evidence-audit-selftest": "tsx lib/research/fleetEvidenceAudit.selftest.ts",
+    "fleet-evidence-audit": "tsx --env-file=.env.local scripts/fleet-evidence-audit.ts",
     "pb-qqq-probe": "tsx engine/pb-qqq-probe.ts",
     "gap-min-selftest": "tsx engine/gap-min-selftest.ts",
     "macd-align-selftest": "tsx --env-file=.env.local engine/macd-align-selftest.ts",
