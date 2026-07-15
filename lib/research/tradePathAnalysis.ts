@@ -6,7 +6,7 @@ import type { OutcomeClass } from "./fleetEvidenceAudit.js";
 
 export const TRADE_PATH_AUDIT_SCHEMA_VERSION = 1 as const;
 
-export type OptionPathSource = "supabase_live" | "local_archive" | "forward_data" | "databento_cbbo_1m" | "mixed";
+export type OptionPathSource = "supabase_live" | "local_archive" | "forward_data" | "databento_cbbo_1s" | "databento_cbbo_1m" | "mixed";
 
 export interface TradePathQuote {
   atMs: number;
@@ -34,6 +34,7 @@ export interface IntraminuteReceiptCoverage {
 
 export interface TradePathPosition {
   id: string;
+  opportunityId: string | null;
   strategistId: string;
   channel: string;
   familyId: string;
@@ -42,6 +43,7 @@ export interface TradePathPosition {
   quantity: number | null;
   entryPrice: number | null;
   openedAtMs: number;
+  sourceBarAtMs: number | null;
   closedAtMs: number | null;
   realizedPnl: number | null;
   closeReason: string | null;
@@ -94,6 +96,7 @@ export interface TargetTouch {
 
 export interface TradePathResult {
   positionId: string;
+  opportunityId: string | null;
   channel: string;
   familyId: string;
   underlying: string;
@@ -101,6 +104,7 @@ export interface TradePathResult {
   outcomeClass: OutcomeClass;
   quantity: number | null;
   openedAtMs: number;
+  sourceBarAtMs: number | null;
   closedAtMs: number | null;
   realizedPnl: number | null;
   closeReason: string | null;
@@ -335,6 +339,7 @@ export function analyzeTradePath(
 
   return {
     positionId: position.id,
+    opportunityId: position.opportunityId,
     channel: position.channel,
     familyId: position.familyId,
     underlying: position.underlying,
@@ -342,6 +347,7 @@ export function analyzeTradePath(
     outcomeClass: position.outcomeClass,
     quantity,
     openedAtMs: position.openedAtMs,
+    sourceBarAtMs: position.sourceBarAtMs,
     closedAtMs: closed ? position.closedAtMs : null,
     realizedPnl: finite(position.realizedPnl) ? position.realizedPnl : null,
     closeReason: position.closeReason,

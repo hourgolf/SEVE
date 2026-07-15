@@ -15,6 +15,7 @@ const check = (name: string, actual: unknown, expected: unknown): void => {
 
 const base: TradePathPosition = {
   id: "p1",
+  opportunityId: "o1",
   strategistId: "s1",
   channel: "pb-ride",
   familyId: "PB",
@@ -23,6 +24,7 @@ const base: TradePathPosition = {
   quantity: 5,
   entryPrice: 1,
   openedAtMs: 0,
+  sourceBarAtMs: 0,
   closedAtMs: 100_000,
   realizedPnl: 50,
   closeReason: "target_premium",

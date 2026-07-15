@@ -2,6 +2,7 @@
 // intraminute receipts, and verbatim executable option-quote archives into a
 // local research artifact. It never writes Supabase/R2 or changes execution.
 
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -32,6 +33,7 @@ const FROM = arg("from", "2026-07-13");
 const THROUGH = arg("through", todayEt);
 const ARCHIVE_DIR = arg("archive-dir", "data/quotes-archive");
 const VERIFIED_INTRAMINUTE_DIR = arg("verified-intraminute-dir", "data/intraminute-replay");
+const DATABENTO_PATH_DIR = arg("databento-path-dir", "data/trade-option-paths/cbbo-1s");
 const OUT = arg("out", `data/trade-path-audits/${FROM}_${THROUGH}.json`);
 const MAX_GAP_SEC = Number(arg("max-gap-sec", String(DEFAULT_TRADE_PATH_THRESHOLDS.maxInternalGapMs / 1_000)));
 for (const [label, value] of [["from", FROM], ["through", THROUGH]] as const) {
@@ -126,6 +128,22 @@ interface QuoteDbRow {
   bid: number | string | null;
   ask: number | string | null;
   underlying_price: number | string | null;
+}
+interface ExactPathManifest {
+  schemaVersion: number;
+  dataset: string;
+  schema: string;
+  dateEt: string;
+  rows: number;
+  sha256: string;
+  objectFile: string;
+}
+interface ExactPathRow {
+  occSymbol: string;
+  atMs: number;
+  bid: number;
+  ask: number;
+  source: "databento_cbbo_1s";
 }
 
 const joinedStrategist = (value: PositionDbRow["strategists"]): { slug: string; name: string } => {
@@ -236,6 +254,35 @@ async function liveFallbackQuotes(sb: SupabaseClient, dates: readonly string[], 
   return quotesByOcc;
 }
 
+function exactDatabentoQuotes(dates: readonly string[], occs: ReadonlySet<string>): {
+  quotesByOcc: Map<string, TradePathQuote[]>;
+  manifests: Array<{ dateEt: string; rows: number; sha256: string; objectFile: string }>;
+} {
+  const quotesByOcc = new Map<string, TradePathQuote[]>();
+  const manifests: Array<{ dateEt: string; rows: number; sha256: string; objectFile: string }> = [];
+  for (const date of dates) {
+    const manifestPath = join(DATABENTO_PATH_DIR, `${date}.manifest.json`);
+    if (!existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ExactPathManifest;
+    if (manifest.schemaVersion !== 1 || manifest.dataset !== "OPRA.PILLAR" || manifest.schema !== "cbbo-1s" || manifest.dateEt !== date)
+      throw new Error(`unsupported exact-path manifest ${manifestPath}`);
+    const objectPath = join(DATABENTO_PATH_DIR, manifest.objectFile);
+    const compressed = readFileSync(objectPath);
+    const sha256 = createHash("sha256").update(compressed).digest("hex");
+    if (sha256 !== manifest.sha256) throw new Error(`exact-path checksum mismatch ${objectPath}`);
+    const rows = JSON.parse(gunzipSync(compressed).toString("utf8")) as ExactPathRow[];
+    if (rows.length !== manifest.rows) throw new Error(`exact-path row-count mismatch ${objectPath}`);
+    for (const row of rows) {
+      if (!occs.has(row.occSymbol) || !Number.isFinite(row.atMs)) continue;
+      const group = quotesByOcc.get(row.occSymbol) ?? [];
+      group.push({ atMs: row.atMs, bid: row.bid, ask: row.ask, source: "databento_cbbo_1s" });
+      quotesByOcc.set(row.occSymbol, group);
+    }
+    manifests.push({ dateEt: date, rows: manifest.rows, sha256, objectFile: manifest.objectFile });
+  }
+  return { quotesByOcc, manifests };
+}
+
 function verifiedIntraminutePositions(dates: readonly string[]): { positionIds: Set<string>; fixtures: Array<{ date: string; entries: number; verifiedRows: number }> } {
   const positionIds = new Set<string>();
   const fixtures: Array<{ date: string; entries: number; verifiedRows: number }> = [];
@@ -295,6 +342,7 @@ async function main(): Promise<void> {
       && Date.parse(receipt.provider_min_at) <= sourceBarAtMs + 60_000);
     const fleetPosition: FleetPositionReceipt = {
       id: row.id,
+      opportunityId,
       strategistId: row.strategist_id,
       openedAt: row.opened_at,
       closedAt: row.closed_at,
@@ -313,6 +361,7 @@ async function main(): Promise<void> {
       quantity: numeric(row.qty),
       entryPrice: numeric(row.avg_entry_price),
       openedAtMs: Date.parse(row.opened_at),
+      sourceBarAtMs: Number.isFinite(sourceBarAtMs) ? sourceBarAtMs : null,
       closedAtMs: row.closed_at ? Date.parse(row.closed_at) : null,
       realizedPnl: numeric(row.realized_pnl),
       closeReason: row.close_reason,
@@ -339,6 +388,10 @@ async function main(): Promise<void> {
     : new Map<string, TradePathQuote[]>();
   const quotesByOcc = new Map(archive.quotesByOcc);
   for (const [occ, rows] of fallback) quotesByOcc.set(occ, [...(quotesByOcc.get(occ) ?? []), ...rows]);
+  const exact = exactDatabentoQuotes(dates, new Set(occs));
+  // Exact one-second paths replace snapshot archives contract-by-contract. Two
+  // sources at the same timestamp must not silently compete for the high/low.
+  for (const [occ, rows] of exact.quotesByOcc) quotesByOcc.set(occ, rows);
 
   const thresholds = {
     ...DEFAULT_TRADE_PATH_THRESHOLDS,
@@ -364,6 +417,8 @@ async function main(): Promise<void> {
       verifiedIntraminuteDir: VERIFIED_INTRAMINUTE_DIR,
       verifiedIntraminuteFixtures: verifiedIntraminute.fixtures,
       rawR2DownloadedAndVerifiedThisRun: false,
+      databentoPathDir: DATABENTO_PATH_DIR,
+      exactDatabentoManifests: exact.manifests,
     },
     audit,
   };
