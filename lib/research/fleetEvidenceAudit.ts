@@ -244,7 +244,7 @@ export function inferResearchFamily(slug: string, underlying: string | null): st
   return (value.split("-")[0] || "UNCLASSIFIED").toUpperCase();
 }
 
-function outcomeClass(
+export function classifyFleetOutcome(
   position: FleetPositionReceipt,
   mode: ChannelMode,
   annotations: ReadonlyMap<string, FleetAnnotationReceipt>,
@@ -335,7 +335,7 @@ export function buildFleetEvidenceAudit(input: {
       ["execution_correction", []],
       ["legacy_unattributed", []],
     ]);
-    for (const position of closed) classified.get(outcomeClass(position, mode, annotations))?.push(position);
+    for (const position of closed) classified.get(classifyFleetOutcome(position, mode, annotations))?.push(position);
 
     const openedIds = new Set<string>();
     const bookedIds = new Set<string>();

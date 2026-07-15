@@ -71,6 +71,8 @@
     "observer-scorecard": "tsx --env-file=.env.local scripts/observer-scorecard.ts",
     "fleet-evidence-audit-selftest": "tsx lib/research/fleetEvidenceAudit.selftest.ts",
     "fleet-evidence-audit": "tsx --env-file=.env.local scripts/fleet-evidence-audit.ts",
+    "trade-path-audit-selftest": "tsx lib/research/tradePathAnalysis.selftest.ts",
+    "trade-path-audit": "tsx --env-file=.env.local scripts/trade-path-audit.ts",
     "pb-qqq-probe": "tsx engine/pb-qqq-probe.ts",
     "gap-min-selftest": "tsx engine/gap-min-selftest.ts",
     "macd-align-selftest": "tsx --env-file=.env.local engine/macd-align-selftest.ts",
