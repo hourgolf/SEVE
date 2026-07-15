@@ -63,6 +63,32 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 }
 .shell-root[data-mode="perform"] .pf-market-target > .chart-fill { flex: 1; }
 
+/* Sidebar sections are real workspaces, not focus-only aliases. Overview keeps
+   the chart+rail composition. Markets expands the chart. Positions, Sentinel,
+   and Tape each take the full stage while reusing the same seam-owned leaves. */
+.shell-root.ws909[data-mode="perform"] .perform[data-section="market"] .pf-stage { grid-template-columns:minmax(0,1fr); }
+.shell-root.ws909[data-mode="perform"] .perform[data-section="market"] .pf-rail { display:none; }
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"]) {
+  grid-template-rows:auto minmax(0,1fr) 0;
+}
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"]) .pf-stage {
+  grid-template-columns:minmax(0,1fr);
+}
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"]) .pf-market-target,
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"]) .pf-dock { display:none; }
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"]) .pf-rail {
+  grid-column:1; display:flex; flex-direction:column;
+}
+.shell-root.ws909[data-mode="perform"] .perform[data-section="positions"] #perform-sentinel,
+.shell-root.ws909[data-mode="perform"] .perform[data-section="positions"] #perform-tape,
+.shell-root.ws909[data-mode="perform"] .perform[data-section="sentinel"] #perform-positions,
+.shell-root.ws909[data-mode="perform"] .perform[data-section="sentinel"] #perform-tape,
+.shell-root.ws909[data-mode="perform"] .perform[data-section="tape"] #perform-positions,
+.shell-root.ws909[data-mode="perform"] .perform[data-section="tape"] #perform-sentinel { display:none; }
+.shell-root.ws909[data-mode="perform"] .perform[data-section="positions"] #perform-positions,
+.shell-root.ws909[data-mode="perform"] .perform[data-section="sentinel"] #perform-sentinel,
+.shell-root.ws909[data-mode="perform"] .perform[data-section="tape"] #perform-tape { flex:1; }
+
 /* the reused IntradayChart panel, made to FILL the hero cell (fill prop) */
 .shell-root[data-mode="perform"] .chart-fill {
   min-width: 0;

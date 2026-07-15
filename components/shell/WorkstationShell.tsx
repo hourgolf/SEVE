@@ -3,6 +3,7 @@
 import "@/app/workstation.css";
 import { useEffect, useMemo, useState } from "react";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
+import { AuthControl } from "@/components/AuthControl";
 import { KillControl } from "@/components/console/hw/KillControl";
 import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
@@ -48,6 +49,7 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   const dispatch = useDeskDispatch();
   const [now, setNow] = useState<Date | null>(null);
   const [performSection, setPerformSection] = useState<PerformSection>("overview");
+  const [authOpen, setAuthOpen] = useState(false);
 
   useEffect(() => {
     const tick = () => setNow(new Date());
@@ -93,7 +95,14 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
         <div className="ws-utility">
           <button type="button" title="frame skin" onClick={toggleSkin}>{skin === "cream" ? "☼" : "◐"}</button>
           <button type="button" title="command palette" onClick={() => window.dispatchEvent(new CustomEvent("seve:command-palette"))}>⌘K</button>
-          <button type="button" className={write.canWrite ? "op on" : "op"} title={write.canWrite ? "operator authenticated" : "read-only operator"}>OP</button>
+          <button
+            type="button"
+            className={write.canWrite ? "op on" : "op"}
+            title={write.canWrite ? "operator authenticated" : "sign in for operator controls"}
+            aria-expanded={authOpen}
+            aria-controls="workstation-operator-access"
+            onClick={() => setAuthOpen(true)}
+          >{write.canWrite ? "OP" : "LOGIN"}</button>
         </div>
       </header>
 
@@ -122,6 +131,9 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
             </button>
           ))}
           <button type="button" onClick={onLegacy}><span>⌗</span><b>Legacy Rooms</b></button>
+          <button type="button" className="ws-auth-launch" onClick={() => setAuthOpen(true)}>
+            <span>OP</span><b>{write.canWrite ? "Operator" : "Sign In"}</b>
+          </button>
           <div className="ws-system">
             <small>SYSTEM</small>
             <span>BOOT {workerRuns.boots16h}</span><span>ABRUPT {workerRuns.abrupt16h}</span>
@@ -154,6 +166,19 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
         </div></section>
         <section className="ws-master"><small>MASTER</small><div className="ws-master-knob"><i /></div><KillControl halted={fund.is_halted} /></section>
       </footer>
+
+      {authOpen && (
+        <div className="ws-auth-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuthOpen(false); }}>
+          <section id="workstation-operator-access" className="ws-auth-panel" role="dialog" aria-modal="true" aria-label="operator access">
+            <header>
+              <div><b>OPERATOR ACCESS</b><span>{write.canWrite ? "authenticated · writes enabled" : "read only · sign in to control the desk"}</span></div>
+              <button type="button" aria-label="close operator access" onClick={() => setAuthOpen(false)}>×</button>
+            </header>
+            <AuthControl defaultOpen />
+            <p>Closing positions, changing channel controls, transport, and KILL remain unavailable until an authorized operator session is verified.</p>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

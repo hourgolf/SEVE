@@ -7,9 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 // CODE. On desktop tap the link; on mobile (where the link opens in a different
 // browser and the PKCE exchange fails) just type the code — verifyOtp needs no
 // redirect, so it works in the same screen. Signed in → email + "Sign out".
-export function AuthControl() {
+export function AuthControl({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
   const { email, operator, ready, signIn, verifyCode, signOut } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [value, setValue] = useState("");
   const [code, setCode] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
