@@ -13,6 +13,39 @@ export interface HeldContractReceipt {
   closedAtMs: number;
 }
 
+type JsonRecord = Record<string, unknown>;
+const record = (value: unknown): JsonRecord | null =>
+  value != null && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
+
+/**
+ * Strictly extracts the immutable contract/time facts needed by the T+1 downloader from a frozen
+ * trade-path audit. Invalid or duplicate rows fail closed rather than silently changing the holdout.
+ */
+export function heldContractsFromTradePathReceipt(input: unknown): HeldContractReceipt[] {
+  const root = record(input);
+  const audit = record(root?.audit);
+  const trades = audit?.trades;
+  if (!Array.isArray(trades) || trades.length === 0) throw new Error("frozen trade-path receipt has no audit.trades");
+  const receipts: HeldContractReceipt[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < trades.length; index++) {
+    const trade = record(trades[index]);
+    const positionId = typeof trade?.positionId === "string" ? trade.positionId : "";
+    const underlying = typeof trade?.underlying === "string" ? trade.underlying : "";
+    const occSymbol = typeof trade?.occSymbol === "string" ? trade.occSymbol : "";
+    const openedAtMs = trade?.openedAtMs;
+    const closedAtMs = trade?.closedAtMs;
+    if (!positionId || !underlying || !occSymbol || !finite(openedAtMs) || !finite(closedAtMs)
+        || closedAtMs < openedAtMs || compactOccToDatabentoRaw(occSymbol, underlying) == null) {
+      throw new Error(`invalid frozen trade-path row ${index}`);
+    }
+    if (seen.has(positionId)) throw new Error(`duplicate frozen position ${positionId}`);
+    seen.add(positionId);
+    receipts.push({ positionId, underlying, occSymbol, openedAtMs, closedAtMs });
+  }
+  return receipts.sort((a, b) => a.openedAtMs - b.openedAtMs || a.positionId.localeCompare(b.positionId));
+}
+
 export interface ExactContractRequest {
   sessionDateEt: string;
   occSymbol: string;

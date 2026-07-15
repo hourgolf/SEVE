@@ -10,6 +10,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   buildExactContractRequests,
   dedupeCbboQuotes,
+  heldContractsFromTradePathReceipt,
   EXACT_OPTION_PATH_DATASET,
   EXACT_OPTION_PATH_SCHEMA,
   EXACT_OPTION_PATH_SCHEMA_VERSION,
@@ -27,6 +28,7 @@ const flag = (name: string): boolean => process.argv.includes(`--${name}`);
 const FROM = arg("from", "");
 const THROUGH = arg("through", "");
 const OUTDIR = arg("outdir", "data/trade-option-paths/cbbo-1s");
+const HELD_RECEIPT = arg("held-receipt", "");
 const DOWNLOAD = flag("download");
 const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 for (const [name, value] of [["from", FROM], ["through", THROUGH]] as const) {
@@ -90,6 +92,18 @@ async function readHeldContracts(sb: SupabaseClient): Promise<HeldContractReceip
       closedAtMs,
     }] : [];
   });
+}
+
+let heldReceiptSha256: string | null = null;
+function readFrozenHeldContracts(path: string): HeldContractReceipt[] {
+  const bytes = readFileSync(path);
+  heldReceiptSha256 = createHash("sha256").update(bytes).digest("hex");
+  const input = JSON.parse(bytes.toString("utf8")) as unknown;
+  const root = input != null && typeof input === "object" ? input as Record<string, unknown> : {};
+  const window = root.window != null && typeof root.window === "object" ? root.window as Record<string, unknown> : {};
+  if (window.fromDateEt !== FROM || window.throughDateEt !== THROUGH)
+    throw new Error(`frozen receipt window must equal ${FROM} through ${THROUGH}`);
+  return heldContractsFromTradePathReceipt(input);
 }
 
 interface SessionRequest {
@@ -193,6 +207,8 @@ function persist(request: SessionRequest, quotes: readonly DatabentoCbboQuote[],
     compressedBytes: compressed.byteLength,
     estimatedCostUsd: costUsd,
     objectFile: basename(objectPath),
+    heldContractSource: HELD_RECEIPT ? `frozen_trade_path_receipt:${basename(HELD_RECEIPT)}` : "supabase_positions_read",
+    heldReceiptSha256,
     externalWrites: false,
   };
   writeFileSync(join(OUTDIR, `${request.dateEt}.manifest.json`), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -201,15 +217,21 @@ function persist(request: SessionRequest, quotes: readonly DatabentoCbboQuote[],
 
 async function main(): Promise<void> {
   if (!apiKey) throw new Error("DATABENTO_API_KEY missing");
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-  if (!url || !key) throw new Error("Supabase backend credentials missing");
-  const sb = createClient(url, key, { auth: { persistSession: false } });
-  const held = await readHeldContracts(sb);
+  let held: HeldContractReceipt[];
+  if (HELD_RECEIPT) {
+    held = readFrozenHeldContracts(HELD_RECEIPT);
+  } else {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "";
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+    if (!url || !key) throw new Error("Supabase backend credentials missing");
+    const sb = createClient(url, key, { auth: { persistSession: false } });
+    held = await readHeldContracts(sb);
+  }
   const exact = buildExactContractRequests(held);
   const sessions = groupSessions(exact);
   if (!sessions.length) throw new Error(`no closed positions found from ${FROM} through ${THROUGH}`);
-  console.log(`exact-option-path-backfill: ${FROM} → ${THROUGH} · ${held.length} positions · ${exact.length} session-contracts · ${EXACT_OPTION_PATH_SCHEMA}`);
+  console.log(`exact-option-path-backfill: ${FROM} → ${THROUGH} · ${held.length} frozen positions · ${exact.length} session-contracts · ${EXACT_OPTION_PATH_SCHEMA}`);
+  console.log(`  held-contract source: ${HELD_RECEIPT ? `frozen receipt ${basename(HELD_RECEIPT)} · sha256 ${heldReceiptSha256}` : "live Supabase SELECT"}`);
   let totalCost = 0;
   for (const session of sessions) {
     const cost = await estimatedCost(session);
