@@ -5,7 +5,7 @@ import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { KillControl } from "@/components/console/hw/KillControl";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
-import { ContractDetail } from "@/components/ContractDetail";
+import { ContractDetailView } from "@/components/ContractDetail";
 import { PositionsPanel } from "@/components/console/PositionsPanel";
 import { GAP_MIN } from "@/components/console/TodayStrip";
 import { useTodayReadiness } from "@/hooks/useTodayReadiness";
@@ -75,7 +75,7 @@ function inRth(): boolean {
   return d >= 1 && d <= 5 && m >= 570 && m < 960;
 }
 
-export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund }: SurfaceProps) {
+export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
@@ -224,7 +224,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
                   compact
                   symbol={symbol}
                 />
-                {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
+                {selected && <ContractDetailView occSymbol={selected} onClose={() => setSelected(null)} history={contractHistory} />}
               </>
             )}
           </>

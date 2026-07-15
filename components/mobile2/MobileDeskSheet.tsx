@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
 import { OptionChain } from "@/components/OptionChain";
+import { ContractDetailView } from "@/components/ContractDetail";
 import { MobilePositions } from "@/components/mobile2/MobilePositions";
 import { computeNetExposure } from "@/lib/desk/netExposure";
 import { pmVar } from "@/lib/desk/colors";
@@ -27,7 +28,7 @@ function Section({ title, meta, children }: { title: string; meta?: string; chil
 }
 
 function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: () => void }) {
-  const { data, feed, liveMarks, selected, setSelected, symbol } = props;
+  const { data, feed, liveMarks, selected, setSelected, contractHistory, symbol } = props;
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
   const selectedQuote = selected ? data.snapshot.find((quote) => quote.occ_symbol === selected) : undefined;
   const signals = feed.signals.slice(0, 18);
@@ -78,6 +79,7 @@ function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: (
           <span><small>IV</small>{selectedQuote.iv != null ? `${(selectedQuote.iv * 100).toFixed(1)}%` : "—"}</span>
           <span><small>SPOT</small>{selectedQuote.underlying_price?.toFixed(2) ?? "—"}</span>
         </div>}
+        {selected && <ContractDetailView occSymbol={selected} onClose={() => setSelected(null)} history={contractHistory} />}
       </div>
     </Section>
   </>;

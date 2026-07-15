@@ -31,6 +31,7 @@ import { positionsByExecutor } from "@/lib/incident/positionsByExecutor";
 import { devIncidentFixture } from "@/lib/incident/devFixture";
 import { useRefreshTick } from "@/hooks/useRefreshTick";
 import { useStudioEvidence } from "@/hooks/useStudioEvidence";
+import { useContractHistory } from "@/hooks/useContractHistory";
 import type { Room } from "@/components/surfaceTypes";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
@@ -57,6 +58,7 @@ function Surface({
   const isMobile = useIsMobile();
   const { mode } = useShell();
   const [selected, setSelected] = useState<string | null>(null);
+  const contractHistory = useContractHistory(selected);
 
   // SPY up/down on the day: spot vs the PRIOR session's close (the conventional
   // day-change reference). Using today's first bar mis-colored it — that bar can
@@ -123,7 +125,7 @@ function Surface({
   useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

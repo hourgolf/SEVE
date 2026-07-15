@@ -1,5 +1,6 @@
 import { collapseEvents, derivePerformFocus, prioritizeChannels } from "./derivePerformView";
-import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
+import { deriveMarketRisk, operationalMark } from "./deriveMarketWorkspace";
+import type { ChannelPnl, Position, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
 
 let passed = 0;
@@ -33,5 +34,16 @@ const ranked = prioritizeChannels(
 );
 check("dock orders exposure then exception then armed", ranked.visible.map((c) => c.slug), ["open", "muted", "armed"]);
 check("dock folds inert drafts", ranked.inactive.map((c) => c.slug), ["draft"]);
+
+const openPosition = (overrides: Partial<Position> = {}): Position => ({
+  id: "pos-1", strategist_slug: "open", occ_symbol: "QQQ260715C00718000", expiration: "2026-07-15",
+  strike: 718, opt_type: "call", qty: 4, avg_entry_price: 1, current_mark: 1.2, unrealized_pnl: 80,
+  status: "open", ...overrides,
+});
+check("market risk prefers a positive live mark", operationalMark(openPosition(), { QQQ260715C00718000: 1.5 }), 1.5);
+check("market risk rejects an invalid live mark", operationalMark(openPosition(), { QQQ260715C00718000: 0 }), 1.2);
+const marketRisk = deriveMarketRisk([openPosition()], [channel("open", "armed")], { QQQ260715C00718000: 1.5 });
+check("market risk preserves contract ownership label", marketRisk.rows[0].contractLabel, "QQQ 718C ×4");
+check("market risk uses marked quantity P&L", marketRisk.totalUnrealized, 200);
 
 console.log(`perform-selftest: ${passed}/${passed} passed`);

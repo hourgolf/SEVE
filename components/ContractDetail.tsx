@@ -2,6 +2,7 @@
 
 import { LineChart } from "@/components/charts/LineChart";
 import { useContractHistory } from "@/hooks/useContractHistory";
+import type { ContractHistory } from "@/hooks/useContractHistory";
 import { num2, timeOfDay } from "@/lib/format";
 import type { OptionQuote } from "@/lib/types";
 
@@ -23,7 +24,22 @@ export function ContractDetail({
   occSymbol: string;
   onClose: () => void;
 }) {
-  const { rows, loading, error } = useContractHistory(occSymbol);
+  const history = useContractHistory(occSymbol);
+  return <ContractDetailView occSymbol={occSymbol} onClose={onClose} history={history} />;
+}
+
+/** Subscription-free contract drill-down for rebuilt surfaces. The legacy
+ * wrapper above remains for compatibility, while the page seam owns the read. */
+export function ContractDetailView({
+  occSymbol,
+  onClose,
+  history,
+}: {
+  occSymbol: string;
+  onClose: () => void;
+  history: ContractHistory;
+}) {
+  const { rows, loading, error } = history;
   const last: OptionQuote | undefined = rows[rows.length - 1];
   const mids = rows
     .map((r) => r.mid)

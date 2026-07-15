@@ -9,7 +9,7 @@ import { AddChannel } from "@/components/console/AddChannel";
 import { AuthControl } from "@/components/AuthControl";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
-import { ContractDetail } from "@/components/ContractDetail";
+import { ContractDetailView } from "@/components/ContractDetail";
 import { OpsPreflight } from "@/components/console/OpsPreflight";
 import { DayBooksStrip } from "@/components/console/DayBooksStrip";
 import { MasterStopControl } from "@/components/console/MasterStopControl";
@@ -116,6 +116,7 @@ export function DesktopSurface({
   spotUp,
   selected,
   setSelected,
+  contractHistory,
   symbol,
   setSymbol,
   theme,
@@ -319,7 +320,7 @@ export function DesktopSurface({
                         symbol={symbol}
                         compact
                       />
-                      {selected && <ContractDetail occSymbol={selected} onClose={() => setSelected(null)} />}
+                      {selected && <ContractDetailView occSymbol={selected} onClose={() => setSelected(null)} history={contractHistory} />}
                     </>
                   ),
                 }}

@@ -6,6 +6,7 @@ import { IntradayChart } from "@/components/IntradayChart";
 import { IncidentBanner } from "@/components/perform/IncidentBanner";
 import { PerformRail } from "@/components/perform/PerformRail";
 import { PerformDock } from "@/components/perform/PerformDock";
+import { PerformMarketsWorkspace } from "@/components/perform/PerformMarketsWorkspace";
 import { derivePerformFocus, type PerformSection } from "@/lib/perform/derivePerformView";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
@@ -41,31 +42,33 @@ export function PerformSurface({
       {/* P5 slice 3 — deterministic incident banner (hidden on normal; critical pre-empts chart space). */}
       <IncidentBanner incident={incident} />
       <main className="pf-stage">
-        <div className="pf-market-target" id="perform-market" data-nav-target={section === "market" || undefined} tabIndex={-1}>
-          <IntradayChart
-            bars={data.bars}
-            dailyBars={data.dailyBars}
-            spot={data.spot}
-            spotUp={spotUp}
-            trades={feed.recentTrades}
-            openPositions={feed.positions}
+        {section === "market" ? <PerformMarketsWorkspace surface={surface} /> : <>
+          <div className="pf-market-target" tabIndex={-1}>
+            <IntradayChart
+              bars={data.bars}
+              dailyBars={data.dailyBars}
+              spot={data.spot}
+              spotUp={spotUp}
+              trades={feed.recentTrades}
+              openPositions={feed.positions}
+              symbol={symbol}
+              onSymbolChange={setSymbol}
+              fill
+            />
+          </div>
+          <PerformRail
+            positions={feed.positions}
+            strategists={desk.strategists}
+            liveMarks={liveMarks}
+            peaks={positionPeaks}
+            events={data.events}
             symbol={symbol}
-            onSymbolChange={setSymbol}
-            fill
+            sent={sent}
+            incident={incident}
+            write={write}
+            section={section}
           />
-        </div>
-        <PerformRail
-          positions={feed.positions}
-          strategists={desk.strategists}
-          liveMarks={liveMarks}
-          peaks={positionPeaks}
-          events={data.events}
-          symbol={symbol}
-          sent={sent}
-          incident={incident}
-          write={write}
-          section={section}
-        />
+        </>}
       </main>
       <PerformDock channels={channels} livePnl={livePnl} />
     </div>

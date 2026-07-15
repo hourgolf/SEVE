@@ -11,6 +11,7 @@ import type { useWorkerRuns } from "@/hooks/useWorkerRuns";
 import type { Incident } from "@/lib/incident/deriveIncident";
 import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import type { StudioEvidence } from "@/hooks/useStudioEvidence";
+import type { ContractHistory } from "@/hooks/useContractHistory";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
@@ -26,6 +27,9 @@ export interface SurfaceProps {
   spotUp: boolean | null;
   selected: string | null;
   setSelected: Dispatch<SetStateAction<string | null>>;
+  /** Selected option-contract history, fetched once at the page seam. Markets and
+   *  mobile Book render this as a pure drill-down instead of subscribing locally. */
+  contractHistory: ContractHistory;
   /** §01 market instrument (SPY default, QQQ); the chart/chain/spot follow it. */
   symbol: string;
   setSymbol: Dispatch<SetStateAction<string>>;
