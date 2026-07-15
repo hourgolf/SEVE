@@ -102,6 +102,8 @@
     "channel-contract-selftest": "tsx lib/strategy/channelContract.selftest.ts",
     "current-channel-inventory-selftest": "tsx lib/strategy/currentChannelInventory.selftest.ts",
     "current-channel-inventory": "tsx --env-file=.env.local scripts/current-channel-inventory.ts",
+    "current-channel-drafts-selftest": "tsx lib/strategy/currentChannelDrafts.selftest.ts",
+    "current-channel-drafts": "tsx --env-file=.env.local scripts/current-channel-drafts.ts",
     "a6-watch": "tsx --env-file=.env.local scripts/a6-watch.ts",
     "weekly-readout": "tsx --env-file=.env.local scripts/weekly-readout.ts",
     "desk-briefing": "tsx scripts/desk-briefing.ts",

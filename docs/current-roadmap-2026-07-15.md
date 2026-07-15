@@ -71,7 +71,7 @@ Production baseline before the current review branch: `main@3895b43`.
 | Sentinel workspace | Not started | Full evidence, provenance, freshness, deterministic vs interpretive split. |
 | Event Tape / Review | Not started | Live execution versus after-action evidence. |
 | Ops workspace | Not started | Auth/settings/preflight/health/safety consolidation. |
-| Strategy cartridge/passport | **In review** | Pure V1 + read-only 68-channel inventory complete; systemic policy stamps identified; no runtime wiring. |
+| Strategy cartridge/passport | **Merged; draft adapter in progress** | Pure V1 + read-only 68-channel inventory merged; 14 closest paper channels now materialize as evidence-only drafts with measured/observed/proposed/unresolved provenance; no runtime wiring. |
 | Phase 1K-D | Frozen for T+1 | July 15 ledger receipt frozen at `e4546fd`; acquire exact paths and score unchanged when historical CBBO is available July 16 ET. |
 
 The seam remains load-bearing:
@@ -159,7 +159,7 @@ development/prospective status. `pk` and win rate can be useful, but neither is 
 
 1. **Complete:** worker-ledger long-run correction is merged, deployed, and production-smoked green.
 2. **T+1 gate:** run Phase 1K-D unchanged when July 15 historical CBBO becomes available July 16 ET.
-3. **In review:** ratify cartridge/passport V1 and the read-only fleet inventory; next step is an explicit mapping decision for seven systemic fields, not guessed per-slug defaults.
+3. **Draft review:** inspect the 14 evidence-only cartridge drafts. Ratify one-row/EOD proposals separately; keep market inputs and harvest managers unresolved until durable deployment stamps and 1K-D exact paths exist.
 4. **Next dashboard slice:** build Sentinel with provenance and freshness; no LLM claim in health logic.
 5. **Then:** build Event Tape / Review with live versus after-action separation.
 6. **Then:** consolidate Ops/auth/preflight/safety and complete authenticated operator drills.

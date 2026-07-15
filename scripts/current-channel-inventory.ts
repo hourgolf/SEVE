@@ -84,6 +84,8 @@ interface ConfigRow {
   underlying_stop_pct: unknown;
   premium_stop_pct: unknown;
   take_profit_pct: unknown;
+  runner_frac: unknown;
+  runner_giveback_pct: unknown;
   entry_dte: unknown;
   strike_offset: unknown;
   event_policy: string | null;
@@ -122,6 +124,8 @@ function mapConfig(row: ConfigRow | undefined): CurrentChannelConfigSnapshot | n
     premiumStopPct: configuredPremium && configuredPremium > 0 ? configuredPremium : 50,
     premiumStopUsesRuntimeDefault: !(configuredPremium && configuredPremium > 0),
     takeProfitPct: numeric(row.take_profit_pct),
+    runnerFraction: numeric(row.runner_frac),
+    runnerGivebackPct: numeric(row.runner_giveback_pct),
     entryDte: numeric(row.entry_dte),
     strikeOffset: numeric(row.strike_offset),
     eventPolicy: row.event_policy,
@@ -141,7 +145,7 @@ async function readSnapshots(sb: SupabaseClient): Promise<{ snapshots: CurrentCh
       .order("slug").order("id").range(from, to), "strategists"),
     page<AccountRow>((from, to) => sb.from("accounts").select("id,name,mode").order("id").range(from, to), "accounts"),
     page<ConfigRow>((from, to) => sb.from("strategist_config")
-      .select("strategist_id,capital_pct,max_contracts,daily_stop_usd,underlying_stop_pct,premium_stop_pct,take_profit_pct,entry_dte,strike_offset,event_policy,pyramid_adds,stall_minutes,stall_max_favor_pct,daily_target_usd,muted,boosted")
+      .select("strategist_id,capital_pct,max_contracts,daily_stop_usd,underlying_stop_pct,premium_stop_pct,take_profit_pct,runner_frac,runner_giveback_pct,entry_dte,strike_offset,event_policy,pyramid_adds,stall_minutes,stall_max_favor_pct,daily_target_usd,muted,boosted")
       .order("strategist_id").range(from, to), "strategist_config"),
     page<PolicyEpochRow>((from, to) => sb.from("policy_epochs")
       .select("id,strategist_id,channel_version,manager_id,manager_version,mode,created_at,retired_at")
@@ -217,7 +221,7 @@ async function main(): Promise<void> {
   const { snapshots, sourceRows } = await readSnapshots(sb);
   const inventory = buildCurrentFleetInventory(snapshots);
   const receipt = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     source: "read_only_supabase_current_channel_inventory",
     sourceRows,

@@ -44,6 +44,8 @@ const ready = (): CurrentChannelSnapshot => ({
     premiumStopPct: 30,
     premiumStopUsesRuntimeDefault: false,
     takeProfitPct: 0,
+    runnerFraction: 0.5,
+    runnerGivebackPct: 50,
     entryDte: 1,
     strikeOffset: 0,
     eventPolicy: "standdown",
@@ -60,6 +62,7 @@ const complete = inventoryCurrentChannel(ready());
 check("fully stamped row is cartridge-ready", [complete.blockers, complete.readiness.cartridgeReady], [[], true]);
 check("armed paper row maps to paper lifecycle", complete.mapped.lifecycle, "paper");
 check("premium and underlying stops both survive inventory", [complete.mapped.management.premiumStopPct, complete.mapped.management.underlyingStopPct], [30, 0.35]);
+check("legacy runner settings survive as observations", [complete.mapped.management.runnerFraction, complete.mapped.management.runnerGivebackPct], [0.5, 50]);
 check("inventory never authorizes policy", [complete.policyChangeAuthorized, complete.paperRuntimeUnchanged], [false, true]);
 
 const nonPaper = ready(); nonPaper.accountMode = "live";

@@ -2,7 +2,7 @@
 // cartridge contract. It maps only fields whose current meaning is established
 // and names everything else as a blocker; it never invents a policy.
 
-export const CURRENT_CHANNEL_INVENTORY_SCHEMA_VERSION = 1 as const;
+export const CURRENT_CHANNEL_INVENTORY_SCHEMA_VERSION = 2 as const;
 
 export interface CurrentChannelConfigSnapshot {
   riskPerTradeUsd: number | null;
@@ -12,6 +12,8 @@ export interface CurrentChannelConfigSnapshot {
   premiumStopPct: number | null;
   premiumStopUsesRuntimeDefault: boolean;
   takeProfitPct: number | null;
+  runnerFraction: number | null;
+  runnerGivebackPct: number | null;
   entryDte: number | null;
   strikeOffset: number | null;
   eventPolicy: string | null;
@@ -145,6 +147,8 @@ export interface CurrentChannelInventory {
       premiumStopPct: number | null;
       underlyingStopPct: number | null;
       takeProfitPct: number | null;
+      runnerFraction: number | null;
+      runnerGivebackPct: number | null;
       pyramidAdds: number | null;
       stallMinutes: number | null;
       stallMaxFavorablePct: number | null;
@@ -231,7 +235,7 @@ export function inventoryCurrentChannel(snapshot: CurrentChannelSnapshot): Curre
     cartridgeReady: blockers.length === 0,
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     identity: {
       strategistId: snapshot.strategistId,
       slug: snapshot.slug,
@@ -273,6 +277,8 @@ export function inventoryCurrentChannel(snapshot: CurrentChannelSnapshot): Curre
         premiumStopPct: premiumStop,
         underlyingStopPct: underlyingStop,
         takeProfitPct: cfg?.takeProfitPct ?? null,
+        runnerFraction: cfg?.runnerFraction ?? null,
+        runnerGivebackPct: cfg?.runnerGivebackPct ?? null,
         pyramidAdds: cfg?.pyramidAdds ?? null,
         stallMinutes: cfg?.stallMinutes ?? null,
         stallMaxFavorablePct: cfg?.stallMaxFavorablePct ?? null,
@@ -314,7 +320,7 @@ export function buildCurrentFleetInventory(snapshots: readonly CurrentChannelSna
   const counts = new Map<InventoryBlockerCode, number>();
   for (const channel of channels) for (const code of new Set(channel.blockers.map((blocker) => blocker.code))) counts.set(code, (counts.get(code) ?? 0) + 1);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     summary: {
       channels: channels.length,
       cartridgeReady: channels.filter((channel) => channel.readiness.cartridgeReady).length,
