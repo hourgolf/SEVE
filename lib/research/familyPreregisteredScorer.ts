@@ -15,6 +15,7 @@ export interface CollisionScoreInput {
   family: string;
   nativeClusterPnl: number;
   arms: ReadonlyArray<{ channel: string; survivorPnl: number }>;
+  eligible?: boolean;
 }
 
 export interface MatchedPairScoreInput {
@@ -25,6 +26,7 @@ export interface MatchedPairScoreInput {
   challengerChannel: string;
   control: PairMetrics;
   challenger: PairMetrics;
+  eligible?: boolean;
 }
 
 export interface PairMetrics {
@@ -45,6 +47,7 @@ export interface PathViabilityScoreInput {
   secondsToPeak: number | null;
   touched10Pct: boolean;
   touched15Pct: boolean;
+  eligible?: boolean;
 }
 
 export interface ReviewGate {
@@ -186,7 +189,7 @@ function commonEvidenceBlockers(input: {
 function scoreCollision(test: FamilyPreregisteredTest, input: readonly CollisionScoreInput[]): CollisionTestScore {
   const observed = input.filter((row) => row.testId === test.id);
   const observedCohort = cohort(observed.map((row) => row.sessionDateEt));
-  const complete = observed.filter((row) => row.family === test.family
+  const complete = observed.filter((row) => row.eligible !== false && row.family === test.family
     && finite(row.nativeClusterPnl)
     && row.arms.length === test.channels.length
     && new Set(row.arms.map((arm) => arm.channel)).size === test.channels.length
@@ -258,7 +261,7 @@ function scoreCollision(test: FamilyPreregisteredTest, input: readonly Collision
 function scorePair(test: FamilyPreregisteredTest, input: readonly MatchedPairScoreInput[]): MatchedPairTestScore {
   const observed = input.filter((row) => row.testId === test.id);
   const observedCohort = cohort(observed.map((row) => row.sessionDateEt));
-  const complete = observed.filter((row) => row.controlChannel === test.controlChannel
+  const complete = observed.filter((row) => row.eligible !== false && row.controlChannel === test.controlChannel
     && row.challengerChannel === test.challengerChannel
     && [row.control.realizedPnl, row.control.mfePct, row.control.maePct,
       row.challenger.realizedPnl, row.challenger.mfePct, row.challenger.maePct].every(finite));
@@ -327,7 +330,7 @@ function scorePair(test: FamilyPreregisteredTest, input: readonly MatchedPairSco
 function scorePath(test: FamilyPreregisteredTest, input: readonly PathViabilityScoreInput[]): PathViabilityTestScore {
   const observed = input.filter((row) => row.testId === test.id);
   const observedCohort = cohort(observed.map((row) => row.sessionDateEt));
-  const complete = observed.filter((row) => row.channel === test.channels[0]
+  const complete = observed.filter((row) => row.eligible !== false && row.channel === test.channels[0]
     && [row.realizedPnl, row.mfePct, row.maePct].every(finite)
     && (row.secondsToPeak == null || (finite(row.secondsToPeak) && row.secondsToPeak >= 0)));
   const dates = complete.map((row) => row.sessionDateEt);

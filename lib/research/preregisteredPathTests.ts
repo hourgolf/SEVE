@@ -166,13 +166,13 @@ function maxDrawdown(rows: ReadonlyArray<{ closedAtMs: number; positionId: strin
   return money(maximum);
 }
 
-function optionSide(trade: TradePathResult): "call" | "put" | null {
+export function optionSideForTrade(trade: TradePathResult): "call" | "put" | null {
   const suffix = trade.occSymbol.slice(trade.underlying.length);
   const cp = suffix.slice(6, 7);
   return cp === "C" ? "call" : cp === "P" ? "put" : null;
 }
 
-function exactPathEligible(trade: TradePathResult): boolean {
+export function isExactDatabentoPathEligible(trade: TradePathResult): boolean {
   return trade.nativeExitEligible
     && trade.coverage.sources.length === 1
     && trade.coverage.sources[0] === "databento_cbbo_1s"
@@ -193,7 +193,7 @@ export function buildPreregisteredPathReport(input: {
   trades: readonly TradePathResult[];
   quotesByOcc: ReadonlyMap<string, readonly TradePathQuote[]>;
 }): PreregisteredPathReport {
-  const exact = input.trades.filter(exactPathEligible);
+  const exact = input.trades.filter(isExactDatabentoPathEligible);
   const cohort = cohortFor(exact);
   const scalePolicies = PREREGISTERED_SCALE_POLICIES.map((spec): ScalePolicyResult => {
     const eligible = exact.filter((trade) => trade.familyId === spec.familyId
@@ -284,7 +284,7 @@ export function buildPreregisteredPathReport(input: {
 
   const clockGroups = new Map<string, TradePathResult[]>();
   for (const trade of exact) {
-    const side = optionSide(trade);
+    const side = optionSideForTrade(trade);
     if (trade.sourceBarAtMs == null || !side) continue;
     const key = `${trade.underlying}|${side}|${trade.sourceBarAtMs}`;
     clockGroups.set(key, [...(clockGroups.get(key) ?? []), trade]);
@@ -294,7 +294,7 @@ export function buildPreregisteredPathReport(input: {
     key,
     sourceBarAtMs: rows[0].sourceBarAtMs as number,
     underlying: rows[0].underlying,
-    optionSide: optionSide(rows[0]) as "call" | "put",
+    optionSide: optionSideForTrade(rows[0]) as "call" | "put",
     channels: [...new Set(rows.map((row) => row.channel))].sort(),
     families: [...new Set(rows.map((row) => row.familyId))].sort(),
     positions: rows.length,
