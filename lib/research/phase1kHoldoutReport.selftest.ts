@@ -29,11 +29,20 @@ const trades = [
 ];
 const analysis = buildPreregisteredPathReport({ trades, quotesByOcc: new Map([[occ, path]]) });
 const hash = "1".repeat(64);
+const ledgerAudit = {
+  positions: 2, uniquePositionIds: 2,
+  outcomeClasses: [{ outcomeClass: "native", positions: 2, realizedPnl: -300 }],
+  operatorReasons: [],
+  censoredNativePaths: [{ positionId: "c1", channel: "momo-shape", realizedPnl: 1, censorCodes: ["no_window_quotes"] }],
+  occStacks: [{ occSymbol: occ, maximumConcurrentPositions: 2, maximumConcurrentContracts: 8, channels: ["momo-shape", "momo-shape-2"] }],
+  maximumConcurrentPositionsOnOneOcc: 2, maximumConcurrentContractsOnOneOcc: 8, blockingIssues: [],
+};
 const report = buildPhase1kHoldoutReport({
   analysis,
   heldReceiptSha256: PHASE1K_D_HELD_RECEIPT_SHA256,
   tradePathReceiptSha256: hash,
   exactManifests: [{ dateEt: "2026-07-15", rows: 4, sha256: "2".repeat(64), objectFile: "fixture.json.gz" }],
+  ledgerAudit,
 });
 
 check("prospective report is ready", [report.cohort, report.reportReady], ["prospective_holdout", true]);
@@ -53,6 +62,8 @@ check("no result authorizes changes", [report.decisionClass, report.policyChange
 const markdown = renderPhase1kHoldoutMarkdown(report);
 check("markdown names channel-separated section", markdown.includes("## Channel-separated scale results"), true);
 check("markdown repeats safety boundary", markdown.includes("no policy or production authority"), true);
+check("markdown renders best/worst and censor detail", [markdown.includes("Best native → modeled"), markdown.includes("no_window_quotes")], [true, true]);
+check("markdown renders concentration beside results", markdown.includes("2 positions / 8 contracts on one OCC"), true);
 
 assert.throws(() => buildPhase1kHoldoutReport({ ...reportFixture(), heldReceiptSha256: "0".repeat(64) }), /checksum mismatch/); checks += 1;
 assert.throws(() => buildPhase1kHoldoutReport({ ...reportFixture(), analysis: { ...analysis, cohort: "development" } }), /prospective holdout/); checks += 1;
@@ -63,6 +74,7 @@ function reportFixture() {
     heldReceiptSha256: PHASE1K_D_HELD_RECEIPT_SHA256,
     tradePathReceiptSha256: hash,
     exactManifests: [{ dateEt: "2026-07-15", rows: 4, sha256: "2".repeat(64), objectFile: "fixture.json.gz" }],
+    ledgerAudit,
   };
 }
 
