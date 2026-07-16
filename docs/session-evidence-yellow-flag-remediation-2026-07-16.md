@@ -2,7 +2,7 @@
 
 **Status:** code-constrained design only. No production, database, strategy, or execution change.
 
-**Evidence window:** July 16, 2026, through 10:15 ET.
+**Evidence window:** July 16, 2026, through 10:35 ET.
 
 ## 1. Why this slice exists
 
@@ -19,10 +19,13 @@ These are evidence and truthfulness defects. They are not authorization to alter
 
 At 10:15 ET the desk was paper-only, worker `stream-2026-07-14a` was current and clean, all three paper accounts reconciled broker/desk at zero open OCCs, and the ledger contained five closed positions for net realized P&L of +$534.
 
+By 10:35 ET the ledger had expanded to 16 positions, five still open, and +$1,193 realized. A fresh quantity-aware paper-broker reconciliation passed for FIRST-TEAM, LAB, and MORGUE. All five open rows were shares of the same OCC distributed across three accounts, which further exercised the shared-OCC ledger successfully.
+
 The load-bearing receipts are:
 
 - `grind-smart-entries` position `3b59605c-220b-49ec-8383-b9f2d8ec1fa5` opened at 09:50:02 ET, but its eight durable manager rows were created 422 seconds later at 09:57:04 ET. Their first accepted bid already showed -33.33%.
 - The four later positions had zero `manager_shadow_runs` rows, although their lots were eligible and some observation-only manager exit events were emitted.
+- The next 11 positions also had zero durable manager rows at 10:35 ET. This included five positions still open 5-7 minutes after entry, so the omission is not limited to trades that close between polls; it reproduces while eligible rows remain visible.
 - The two MOMO rows shared `SPY260716C00752000` in one account, opened 12 contracts each, then closed as two separately attributed 12-contract manual actions. Broker and desk both returned to zero. The shared-OCC fix held.
 - The GRIND premium stop was configured at -35%. Its trigger-side bid was about $1.00 against a $1.56 entry, but the 10-contract sell filled at $0.91: -41.67% realized and roughly $90 worse than the trigger-side bid.
 - `option_quotes` supplied 4-11 samples per held contract, with average and maximum gaps near 60 seconds.
