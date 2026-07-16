@@ -4,6 +4,7 @@
 export const EXACT_OPTION_PATH_SCHEMA_VERSION = 1 as const;
 export const EXACT_OPTION_PATH_DATASET = "OPRA.PILLAR" as const;
 export const EXACT_OPTION_PATH_SCHEMA = "cbbo-1s" as const;
+export const DEFAULT_HISTORICAL_AGE_HOURS = 24 as const;
 
 export interface HeldContractReceipt {
   positionId: string;
@@ -66,6 +67,13 @@ export interface DatabentoCbboQuote {
   source: "databento_cbbo_1s";
 }
 
+export interface HistoricalAccessGate {
+  ready: boolean;
+  latestRequestedAtMs: number;
+  readyAtMs: number;
+  waitMs: number;
+}
+
 const ET_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" });
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const numeric = (value: unknown): number | null => {
@@ -73,6 +81,33 @@ const numeric = (value: unknown): number | null => {
   const parsed = Number(value);
   return finite(parsed) ? parsed : null;
 };
+
+/**
+ * Databento treats the latest rolling window as live data. A completed ET date is therefore not
+ * sufficient proof that an unlicensed historical request is downloadable. Gate on the newest
+ * timestamp in the exact request so the adapter fails locally before making a premature range call.
+ */
+export function historicalAccessGate(
+  requestEndIsos: readonly string[],
+  nowMs: number,
+  minimumAgeHours: number = DEFAULT_HISTORICAL_AGE_HOURS,
+): HistoricalAccessGate {
+  const endTimes = requestEndIsos.map(Date.parse);
+  if (endTimes.length === 0 || endTimes.some((value) => !finite(value))) {
+    throw new Error("historical access gate requires valid request end timestamps");
+  }
+  if (!finite(nowMs) || !finite(minimumAgeHours) || minimumAgeHours <= 0) {
+    throw new Error("historical access gate requires a valid clock and positive minimum age");
+  }
+  const latestRequestedAtMs = Math.max(...endTimes);
+  const readyAtMs = latestRequestedAtMs + minimumAgeHours * 60 * 60_000;
+  return {
+    ready: nowMs >= readyAtMs,
+    latestRequestedAtMs,
+    readyAtMs,
+    waitMs: Math.max(0, readyAtMs - nowMs),
+  };
+}
 
 export function compactOccToDatabentoRaw(occSymbol: string, underlying: string): string | null {
   const root = underlying.trim().toUpperCase();

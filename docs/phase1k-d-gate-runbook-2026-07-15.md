@@ -1,4 +1,4 @@
-# Phase 1K-D — 21:05 PDT gate runbook
+# Phase 1K-D — rolling historical gate runbook
 
 Status: research-only preparation. No Supabase write, R2 write, strategy,
 worker, dashboard, order, merge, deploy, or production change is authorized.
@@ -73,6 +73,33 @@ Run from the Phase 1K-D worktree. Stop on the first failed integrity check.
 All generated objects and reports stay local and git-ignored. No R2 upload is
 part of this gate.
 
+## July 15 gate receipt and corrected timing
+
+The first attempt ran at `2026-07-15 21:05 PDT`, after the ET date changed but
+before the exact quotes were old enough for unlicensed historical access.
+
+- frozen receipt checksum: PASS;
+- ledger integrity audit: PASS;
+- exact-contract estimate: 30 session-contracts, **$0.085053**;
+- range request: HTTP 403 `license_not_found_unauthorized`;
+- provider wording: a live-data license was required for the requested
+  `OPRA.PILLAR` range;
+- local object/manifest writes: none;
+- Supabase/R2/production writes: none.
+
+Databento separates the latest rolling 24 hours from pay-as-you-go historical
+access. Midnight ET is not the gate. The frozen cohort's newest requested quote
+is `2026-07-15T18:58:46.610Z`, so the pure download preflight opens at
+`2026-07-16T18:58:46.610Z` (11:58:46 PDT). The retry is intentionally buffered
+until 12:15 PDT. The preflight derives this boundary from the exact frozen
+request and fails locally before any premature range call.
+
+Provider references: Databento's [market-data licensing
+guide](https://databento.com/blog/introduction-market-data-licensing) defines
+historical access as data at least 24 hours old, while its
+[quickstart](https://databento.com/docs/quickstart) describes the latest 24
+hours as live coverage subject to exchange restrictions.
+
 ## Required output
 
 The report must show:
@@ -106,5 +133,6 @@ untouched day. It may not establish an edge.
   automatically assumed to be redeployed.
 - No result promotes, benches, resizes, arms, mutes, or deploys anything.
 
-If Databento is not ready at 21:05 PDT, record the provider response and retry
-later. Do not weaken the T+1 date guard or substitute minute snapshots.
+If Databento is not ready after the derived rolling boundary, record the
+provider response and stop. Do not weaken the date/age guards, buy a live
+license for this test, or substitute minute snapshots.

@@ -14,6 +14,8 @@ import {
   EXACT_OPTION_PATH_DATASET,
   EXACT_OPTION_PATH_SCHEMA,
   EXACT_OPTION_PATH_SCHEMA_VERSION,
+  DEFAULT_HISTORICAL_AGE_HOURS,
+  historicalAccessGate,
   parseDatabentoCbboJsonLine,
   type DatabentoCbboQuote,
   type ExactContractRequest,
@@ -30,6 +32,7 @@ const THROUGH = arg("through", "");
 const OUTDIR = arg("outdir", "data/trade-option-paths/cbbo-1s");
 const HELD_RECEIPT = arg("held-receipt", "");
 const DOWNLOAD = flag("download");
+const MINIMUM_HISTORY_AGE_HOURS = Number(arg("minimum-history-age-hours", String(DEFAULT_HISTORICAL_AGE_HOURS)));
 const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 for (const [name, value] of [["from", FROM], ["through", THROUGH]] as const) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`--${name} YYYY-MM-DD is required`);
@@ -230,8 +233,13 @@ async function main(): Promise<void> {
   const exact = buildExactContractRequests(held);
   const sessions = groupSessions(exact);
   if (!sessions.length) throw new Error(`no closed positions found from ${FROM} through ${THROUGH}`);
+  const access = historicalAccessGate(sessions.map((session) => session.endIso), Date.now(), MINIMUM_HISTORY_AGE_HOURS);
   console.log(`exact-option-path-backfill: ${FROM} → ${THROUGH} · ${held.length} frozen positions · ${exact.length} session-contracts · ${EXACT_OPTION_PATH_SCHEMA}`);
   console.log(`  held-contract source: ${HELD_RECEIPT ? `frozen receipt ${basename(HELD_RECEIPT)} · sha256 ${heldReceiptSha256}` : "live Supabase SELECT"}`);
+  console.log(`  newest requested quote: ${new Date(access.latestRequestedAtMs).toISOString()} · historical gate: ${new Date(access.readyAtMs).toISOString()} (${MINIMUM_HISTORY_AGE_HOURS}h rolling age)`);
+  if (DOWNLOAD && !access.ready) {
+    throw new Error(`historical download not ready until ${new Date(access.readyAtMs).toISOString()} (${Math.ceil(access.waitMs / 60_000)} minutes remain); cost estimation is available without --download`);
+  }
   let totalCost = 0;
   for (const session of sessions) {
     const cost = await estimatedCost(session);
