@@ -201,6 +201,10 @@ async function main(): Promise<void> {
       source: "append_only_phase1i_receipts",
       priceBasis: "native booked pnl plus durable executable-bid manager shadow",
     },
+    receipts: {
+      familyObservations,
+      opportunityOutcomes,
+    },
     caveats: [
       "Evidence floors are review gates, never automatic promotion rules.",
       "Incomplete collision groups are censored rather than scored from a partial family.",

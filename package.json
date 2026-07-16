@@ -78,6 +78,8 @@
     "preregistered-path-tests-selftest": "tsx lib/research/preregisteredPathTests.selftest.ts",
     "family-preregistration-selftest": "tsx lib/research/familyPreregistration.selftest.ts",
     "family-preregistered-scorer-selftest": "tsx lib/research/familyPreregisteredScorer.selftest.ts",
+    "family-preregistered-receipt-adapter-selftest": "tsx lib/research/familyPreregisteredReceiptAdapter.selftest.ts",
+    "family-preregistered-scorecard": "tsx scripts/family-preregistered-scorecard.ts",
     "preregistered-path-tests": "tsx scripts/preregistered-path-tests.ts",
     "pb-qqq-probe": "tsx engine/pb-qqq-probe.ts",
     "gap-min-selftest": "tsx engine/gap-min-selftest.ts",

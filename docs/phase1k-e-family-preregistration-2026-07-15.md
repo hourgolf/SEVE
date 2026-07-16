@@ -80,3 +80,23 @@ The exact test list, channel membership, evidence floors, endpoints, review
 rules, provenance boundary, and safety flags live in
 `lib/research/familyPreregistration.ts`. Its self-test pins a canonical SHA-256
 of the complete contract so a silent edit fails verification.
+
+## Durable receipt adapter
+
+The frozen scorer now has a local-only adapter from two authoritative receipts:
+
+- an exact-CBBO trade-path audit, with native eligibility and path provenance
+  retained per position;
+- a Phase 1I observer receipt containing the original family observations and
+  admission arms.
+
+It matches sibling channels only on the frozen source-bar/underlying/option-side
+clock. Multiple rows for one channel at a clock are censored as ambiguous rather
+than silently choosing the first row. Collision groups require the exact frozen
+candidate set, one valid admission arm per candidate, matching opportunity
+clock/channel/quantity, and exact native paths. Every failed predicate produces
+an explicit censor code.
+
+The adapter does not read a database or provider, and the report runner writes
+only a local ignored artifact. July 16+ receipts can therefore be scored later
+without changing the contract or teaching the adapter from their outcomes.
