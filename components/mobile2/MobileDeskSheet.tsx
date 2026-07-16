@@ -125,24 +125,6 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
       <span><small>OPEN</small><b>{feed.positions.length}</b></span>
     </div>
 
-    <Section title="EQUITY" meta="desk feed · today">
-      {equity.length >= 2 ? <LineChart values={equity} height={92} id="m2-desk-equity" baseline={equity[0]} format={usd0} formatDelta={signedUsd} labels={feed.equityCurve.map((point) => timeOfDay(point.ts))} />
-        : <div className="m2-desk-empty">awaiting equity history</div>}
-    </Section>
-
-    <Section title="CHANNEL ATTRIBUTION" meta="gross desk marks">
-      <div className="m2-review-rows">
-        {rows.map(({ channel, pnl }) => {
-          const trades = pnl?.trades ?? 0;
-          const peak = pnl?.pkN ? Math.round(pnl.pkSum / pnl.pkN) : null;
-          const win = trades ? Math.round((100 * pnl.wins) / trades) : null;
-          return <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b>
-            <span className={(pnl?.dayPnl ?? 0) < 0 ? "neg" : (pnl?.dayPnl ?? 0) > 0 ? "pos" : ""}>{signedUsd(pnl?.dayPnl ?? 0)}</span>
-            <small>{trades}t · pk {peak ?? "—"}% · win {win ?? "—"}%</small></div>;
-        })}
-      </div>
-    </Section>
-
     <Section title="SENTINEL" meta={sentView.freshnessLabel.toLowerCase()}>
       <div className={`m2-sentinel-ready ${sentView.freshness}`}><b>{sentView.freshnessLabel}</b><span>for {sentinel.forDate || "unstamped"} · receipt {age(sentView.ageSec)}</span></div>
       <div className="m2-sentinel-provenance">
@@ -160,6 +142,24 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
         </>}
         <p className="m2-sentinel-caveat">Interpretive output cannot alter health, channel state, policy, orders, or promotion.</p>
       </div>}
+    </Section>
+
+    <Section title="EQUITY" meta="desk feed · today">
+      {equity.length >= 2 ? <LineChart values={equity} height={92} id="m2-desk-equity" baseline={equity[0]} format={usd0} formatDelta={signedUsd} labels={feed.equityCurve.map((point) => timeOfDay(point.ts))} />
+        : <div className="m2-desk-empty">awaiting equity history</div>}
+    </Section>
+
+    <Section title="CHANNEL ATTRIBUTION" meta="gross desk marks">
+      <div className="m2-review-rows">
+        {rows.map(({ channel, pnl }) => {
+          const trades = pnl?.trades ?? 0;
+          const peak = pnl?.pkN ? Math.round(pnl.pkSum / pnl.pkN) : null;
+          const win = trades ? Math.round((100 * pnl.wins) / trades) : null;
+          return <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b>
+            <span className={(pnl?.dayPnl ?? 0) < 0 ? "neg" : (pnl?.dayPnl ?? 0) > 0 ? "pos" : ""}>{signedUsd(pnl?.dayPnl ?? 0)}</span>
+            <small>{trades}t · pk {peak ?? "—"}% · win {win ?? "—"}%</small></div>;
+        })}
+      </div>
     </Section>
   </>;
 }
