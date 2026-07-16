@@ -48,7 +48,8 @@ function loadQuotes(receipt: TradePathReceipt): Map<string, TradePathQuote[]> {
 }
 
 function main(): void {
-  const receipt = JSON.parse(readFileSync(INPUT, "utf8")) as TradePathReceipt;
+  const receiptBytes = readFileSync(INPUT);
+  const receipt = JSON.parse(receiptBytes.toString("utf8")) as TradePathReceipt;
   const quotesByOcc = loadQuotes(receipt);
   const analysis = buildPreregisteredPathReport({ trades: receipt.audit.trades, quotesByOcc });
   const report = {
@@ -56,9 +57,11 @@ function main(): void {
     generatedAt: new Date().toISOString(),
     input: {
       tradePathReceipt: INPUT,
+      tradePathReceiptSha256: createHash("sha256").update(receiptBytes).digest("hex"),
       sourceGeneratedAt: receipt.generatedAt,
       window: receipt.window,
       exactPathObjects: receipt.sources.exactDatabentoManifests?.length ?? 0,
+      exactManifests: receipt.sources.exactDatabentoManifests ?? [],
     },
     analysis,
   };
@@ -70,7 +73,7 @@ function main(): void {
   for (const row of analysis.scalePolicies) {
     console.log(`    ${row.spec.id}: triggered ${row.triggered}/${row.eligible} · native $${row.nativePnl} · modeled $${row.modeledPnl} · delta $${row.deltaVsNative}`);
   }
-  console.log("  policy: NO CHANGE AUTHORIZED · July 13–14 is development evidence; prospective holdout begins July 15");
+  console.log(`  policy: NO CHANGE AUTHORIZED · ${analysis.cohort === "development" ? "July 13–14 is development evidence" : "July 15 is prospective holdout evidence"}`);
   console.log(`  wrote ${OUT}`);
 }
 

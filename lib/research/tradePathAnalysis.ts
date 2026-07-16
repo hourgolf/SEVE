@@ -420,6 +420,16 @@ export function buildTradePathAudit(input: {
     thresholds,
   )).sort((a, b) => a.familyId.localeCompare(b.familyId) || a.channel.localeCompare(b.channel) || a.positionId.localeCompare(b.positionId));
 
+  return buildTradePathAuditFromResults({ trades, thresholds });
+}
+
+export function buildTradePathAuditFromResults(input: {
+  trades: readonly TradePathResult[];
+  thresholds?: TradePathThresholds;
+}): TradePathAudit {
+  const thresholds = input.thresholds ?? DEFAULT_TRADE_PATH_THRESHOLDS;
+  const trades = [...input.trades].sort((a, b) => a.familyId.localeCompare(b.familyId) || a.channel.localeCompare(b.channel) || a.positionId.localeCompare(b.positionId));
+
   const summarize = (rows: readonly TradePathResult[]): Omit<TradePathFamilySummary, "familyId" | "channels"> => {
     const comparable = rows.filter((trade) => trade.nativeExitEligible);
     const nativeClosed = rows.filter((trade) => trade.outcomeClass === "native" && trade.closedAtMs != null && trade.realizedPnl != null);

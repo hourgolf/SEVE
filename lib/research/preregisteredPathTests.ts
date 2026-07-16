@@ -39,6 +39,9 @@ export interface ScalePolicyResult {
   positiveDelta: number;
   negativeDelta: number;
   unchanged: number;
+  triggerRate: number | null;
+  distribution: ScalePolicyDistribution;
+  tradeResults: ScalePolicyTradeResult[];
   byChannel: ScalePolicyChannelResult[];
   policyChangeAuthorized: false;
 }
@@ -53,6 +56,35 @@ export interface ScalePolicyChannelResult {
   positiveDelta: number;
   negativeDelta: number;
   unchanged: number;
+  triggerRate: number | null;
+  distribution: ScalePolicyDistribution;
+}
+
+export interface ScalePolicyTradeResult {
+  positionId: string;
+  channel: string;
+  openedAtMs: number;
+  closedAtMs: number;
+  quantity: number;
+  triggered: boolean;
+  nativePnl: number;
+  modeledPnl: number;
+  deltaVsNative: number;
+  bankAtMs: number | null;
+  runnerAtMs: number;
+  runnerReason: "native" | "breakeven" | "half_giveback";
+}
+
+export interface ScalePolicyDistribution {
+  nativeMedianTradePnl: number | null;
+  modeledMedianTradePnl: number | null;
+  deltaMedian: number | null;
+  nativeWorstTradePnl: number | null;
+  modeledWorstTradePnl: number | null;
+  nativeBestTradePnl: number | null;
+  modeledBestTradePnl: number | null;
+  nativeMaxDrawdown: number;
+  modeledMaxDrawdown: number;
 }
 
 export interface MatchedClockGroup {
@@ -122,6 +154,18 @@ function median(values: readonly number[]): number | null {
   return round(ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2);
 }
 
+function maxDrawdown(rows: ReadonlyArray<{ closedAtMs: number; positionId: string; pnl: number }>): number {
+  let equity = 0;
+  let peak = 0;
+  let maximum = 0;
+  for (const row of [...rows].sort((a, b) => a.closedAtMs - b.closedAtMs || a.positionId.localeCompare(b.positionId))) {
+    equity += row.pnl;
+    peak = Math.max(peak, equity);
+    maximum = Math.max(maximum, peak - equity);
+  }
+  return money(maximum);
+}
+
 function optionSide(trade: TradePathResult): "call" | "put" | null {
   const suffix = trade.occSymbol.slice(trade.underlying.length);
   const cp = suffix.slice(6, 7);
@@ -158,6 +202,7 @@ export function buildPreregisteredPathReport(input: {
       && trade.path.entryPrice != null && trade.path.actualExitPrice != null
       && trade.closedAtMs != null && trade.realizedPnl != null);
     const rows = eligible.map((trade) => ({
+      trade,
       channel: trade.channel,
       result: replayScaleBeforeNativeClose({
         id: trade.positionId,
@@ -174,6 +219,18 @@ export function buildPreregisteredPathReport(input: {
     const summarizeScale = (group: typeof rows): Omit<ScalePolicyChannelResult, "channel"> => {
       const nativePnl = money(group.reduce((sum, row) => sum + (row.result.modeledPnl - row.result.deltaVsNative), 0));
       const modeledPnl = money(group.reduce((sum, row) => sum + row.result.modeledPnl, 0));
+      const nativeRows = group.map((row) => ({
+        closedAtMs: row.trade.closedAtMs as number,
+        positionId: row.trade.positionId,
+        pnl: row.result.modeledPnl - row.result.deltaVsNative,
+      }));
+      const modeledRows = group.map((row) => ({
+        closedAtMs: row.trade.closedAtMs as number,
+        positionId: row.trade.positionId,
+        pnl: row.result.modeledPnl,
+      }));
+      const nativeTradePnls = nativeRows.map((row) => row.pnl);
+      const modeledTradePnls = modeledRows.map((row) => row.pnl);
       return {
         eligible: group.length,
         triggered: group.filter((row) => row.result.triggered).length,
@@ -183,6 +240,18 @@ export function buildPreregisteredPathReport(input: {
         positiveDelta: group.filter((row) => row.result.deltaVsNative > 0).length,
         negativeDelta: group.filter((row) => row.result.deltaVsNative < 0).length,
         unchanged: group.filter((row) => row.result.deltaVsNative === 0).length,
+        triggerRate: group.length ? round(group.filter((row) => row.result.triggered).length / group.length) : null,
+        distribution: {
+          nativeMedianTradePnl: median(nativeTradePnls),
+          modeledMedianTradePnl: median(modeledTradePnls),
+          deltaMedian: median(group.map((row) => row.result.deltaVsNative)),
+          nativeWorstTradePnl: nativeTradePnls.length ? money(Math.min(...nativeTradePnls)) : null,
+          modeledWorstTradePnl: modeledTradePnls.length ? money(Math.min(...modeledTradePnls)) : null,
+          nativeBestTradePnl: nativeTradePnls.length ? money(Math.max(...nativeTradePnls)) : null,
+          modeledBestTradePnl: modeledTradePnls.length ? money(Math.max(...modeledTradePnls)) : null,
+          nativeMaxDrawdown: maxDrawdown(nativeRows),
+          modeledMaxDrawdown: maxDrawdown(modeledRows),
+        },
       };
     };
     const aggregate = summarizeScale(rows);
@@ -194,6 +263,20 @@ export function buildPreregisteredPathReport(input: {
       spec,
       cohort,
       ...aggregate,
+      tradeResults: rows.map((row): ScalePolicyTradeResult => ({
+        positionId: row.trade.positionId,
+        channel: row.trade.channel,
+        openedAtMs: row.trade.openedAtMs,
+        closedAtMs: row.trade.closedAtMs as number,
+        quantity: row.trade.quantity as number,
+        triggered: row.result.triggered,
+        nativePnl: money(row.result.modeledPnl - row.result.deltaVsNative),
+        modeledPnl: row.result.modeledPnl,
+        deltaVsNative: row.result.deltaVsNative,
+        bankAtMs: row.result.bankAtMs,
+        runnerAtMs: row.result.runnerAtMs,
+        runnerReason: row.result.runnerReason,
+      })).sort((a, b) => a.closedAtMs - b.closedAtMs || a.positionId.localeCompare(b.positionId)),
       byChannel,
       policyChangeAuthorized: false,
     };
