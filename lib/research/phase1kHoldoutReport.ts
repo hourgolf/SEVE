@@ -16,6 +16,18 @@ export interface Phase1kManifestReceipt {
   objectFile: string;
 }
 
+export interface Phase1kLedgerAudit {
+  positions: number;
+  uniquePositionIds: number;
+  outcomeClasses: Array<{ outcomeClass: string; positions: number; realizedPnl: number }>;
+  operatorReasons: Array<{ reason: string; positions: number; realizedPnl: number }>;
+  censoredNativePaths: Array<{ positionId: string; channel: string; realizedPnl: number; censorCodes: string[] }>;
+  occStacks: Array<{ occSymbol: string; maximumConcurrentPositions: number; maximumConcurrentContracts: number; channels: string[] }>;
+  maximumConcurrentPositionsOnOneOcc: number;
+  maximumConcurrentContractsOnOneOcc: number;
+  blockingIssues: string[];
+}
+
 export interface Phase1kHoldoutReport {
   phase: "1K-D";
   policyVersion: typeof PREREGISTERED_PATH_TEST_VERSION;
@@ -38,6 +50,7 @@ export interface Phase1kHoldoutReport {
   scalePolicies: PreregisteredPathReport["scalePolicies"];
   matchedChannelPairs: PreregisteredPathReport["matchedChannelPairs"];
   admissionDiagnostics: PreregisteredPathReport["admissionDiagnostics"];
+  ledgerAudit: Phase1kLedgerAudit;
   reportReady: boolean;
   decisionClass: "review_only";
   policyChangeAuthorized: false;
@@ -52,6 +65,7 @@ export function buildPhase1kHoldoutReport(input: {
   heldReceiptSha256: string;
   tradePathReceiptSha256: string;
   exactManifests: readonly Phase1kManifestReceipt[];
+  ledgerAudit: Phase1kLedgerAudit;
 }): Phase1kHoldoutReport {
   if (input.analysis.version !== PREREGISTERED_PATH_TEST_VERSION) throw new Error("unexpected Phase 1K-D policy version");
   if (input.analysis.cohort !== "prospective_holdout") throw new Error("Phase 1K-D report requires prospective holdout evidence");
@@ -60,6 +74,8 @@ export function buildPhase1kHoldoutReport(input: {
   if (input.exactManifests.some((manifest) => !manifest.dateEt || manifest.rows < 1 || !SHA256.test(manifest.sha256) || !manifest.objectFile)) {
     throw new Error("exact Databento manifest receipt is invalid");
   }
+  if (input.ledgerAudit.positions < 1 || input.ledgerAudit.positions !== input.ledgerAudit.uniquePositionIds
+      || input.ledgerAudit.blockingIssues.length > 0) throw new Error("held-ledger integrity audit is not clean");
   const selectorIds = input.analysis.scalePolicies.map((row) => row.spec.id);
   const expectedSelectors = PREREGISTERED_SCALE_POLICIES.map((spec) => spec.id);
   if (JSON.stringify(selectorIds) !== JSON.stringify(expectedSelectors)) throw new Error("frozen selector set changed");
@@ -86,6 +102,7 @@ export function buildPhase1kHoldoutReport(input: {
     scalePolicies: input.analysis.scalePolicies,
     matchedChannelPairs: input.analysis.matchedChannelPairs,
     admissionDiagnostics: input.analysis.admissionDiagnostics,
+    ledgerAudit: input.ledgerAudit,
     reportReady: input.exactManifests.length > 0 && exactRows > 0 && input.analysis.exactPathEligible > 0,
     decisionClass: "review_only",
     policyChangeAuthorized: false,
@@ -102,6 +119,7 @@ export function buildPhase1kHoldoutReport(input: {
 
 const dollars = (value: number | null): string => value == null ? "—" : `${value < 0 ? "-" : "+"}$${Math.abs(value).toFixed(0)}`;
 const pct = (value: number | null): string => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
+const pctPoint = (value: number | null): string => value == null ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}pp`;
 
 export function renderPhase1kHoldoutMarkdown(report: Phase1kHoldoutReport): string {
   const lines: string[] = [
@@ -118,13 +136,25 @@ export function renderPhase1kHoldoutMarkdown(report: Phase1kHoldoutReport): stri
     "",
     "## Frozen MOMO / VB arms",
     "",
-    "| Arm | Triggered | Native | Modeled | Delta | Better / worse / same | Median delta | Max DD native → modeled |",
-    "|---|---:|---:|---:|---:|---:|---:|---:|",
+    "| Arm | Triggered | Native | Modeled | Delta | Better / worse / same | Median delta | Best native → modeled | Worst native → modeled | Max DD native → modeled |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
   ];
-  for (const row of report.scalePolicies) lines.push(`| \`${row.spec.id}\` | ${row.triggered}/${row.eligible} (${pct(row.triggerRate)}) | ${dollars(row.nativePnl)} | ${dollars(row.modeledPnl)} | ${dollars(row.deltaVsNative)} | ${row.positiveDelta} / ${row.negativeDelta} / ${row.unchanged} | ${dollars(row.distribution.deltaMedian)} | ${dollars(row.distribution.nativeMaxDrawdown)} → ${dollars(row.distribution.modeledMaxDrawdown)} |`);
+  for (const row of report.scalePolicies) lines.push(`| \`${row.spec.id}\` | ${row.triggered}/${row.eligible} (${pct(row.triggerRate)}) | ${dollars(row.nativePnl)} | ${dollars(row.modeledPnl)} | ${dollars(row.deltaVsNative)} | ${row.positiveDelta} / ${row.negativeDelta} / ${row.unchanged} | ${dollars(row.distribution.deltaMedian)} | ${dollars(row.distribution.nativeBestTradePnl)} → ${dollars(row.distribution.modeledBestTradePnl)} | ${dollars(row.distribution.nativeWorstTradePnl)} → ${dollars(row.distribution.modeledWorstTradePnl)} | ${dollars(row.distribution.nativeMaxDrawdown)} → ${dollars(row.distribution.modeledMaxDrawdown)} |`);
 
   lines.push("", "## Channel-separated scale results", "", "| Arm | Channel | Triggered | Native | Modeled | Delta | Better / worse / same | Max DD native → modeled |", "|---|---|---:|---:|---:|---:|---:|---:|");
   for (const row of report.scalePolicies) for (const channel of row.byChannel) lines.push(`| \`${row.spec.id}\` | \`${channel.channel}\` | ${channel.triggered}/${channel.eligible} | ${dollars(channel.nativePnl)} | ${dollars(channel.modeledPnl)} | ${dollars(channel.deltaVsNative)} | ${channel.positiveDelta} / ${channel.negativeDelta} / ${channel.unchanged} | ${dollars(channel.distribution.nativeMaxDrawdown)} → ${dollars(channel.distribution.modeledMaxDrawdown)} |`);
+
+  lines.push("", "## Held-ledger accounting and censoring", "", `- held positions: ${report.ledgerAudit.positions} / ${report.ledgerAudit.uniquePositionIds} unique;`);
+  for (const row of report.ledgerAudit.outcomeClasses) lines.push(`- ${row.outcomeClass}: ${row.positions} positions, ${dollars(row.realizedPnl)} realized;`);
+  for (const row of report.ledgerAudit.operatorReasons) lines.push(`- operator exclusion \`${row.reason}\`: ${row.positions}, ${dollars(row.realizedPnl)}.`);
+  lines.push("", "| Censored position | Channel | Native P&L | Reason |", "|---|---|---:|---|");
+  for (const row of report.ledgerAudit.censoredNativePaths) lines.push(`| \`${row.positionId}\` | \`${row.channel}\` | ${dollars(row.realizedPnl)} | ${row.censorCodes.map((code) => `\`${code}\``).join(", ")} |`);
+
+  lines.push("", "## Same-OCC concentration", "", `Maximum overlap: **${report.ledgerAudit.maximumConcurrentPositionsOnOneOcc} positions / ${report.ledgerAudit.maximumConcurrentContractsOnOneOcc} contracts on one OCC**. This is portfolio concentration, not independent evidence.`, "", "| OCC | Max positions | Max contracts | Channels |", "|---|---:|---:|---|");
+  for (const row of [...report.ledgerAudit.occStacks].sort((a, b) => b.maximumConcurrentContracts - a.maximumConcurrentContracts).slice(0, 8)) lines.push(`| \`${row.occSymbol}\` | ${row.maximumConcurrentPositions} | ${row.maximumConcurrentContracts} | ${row.channels.map((channel) => `\`${channel}\``).join(", ")} |`);
+
+  lines.push("", "## Matched-clock sibling diagnostics", "", "| Channel A | Channel B | Clocks | MFE wins A/B/tie | Realized wins A/B/tie | Median MFE B−A | Median realized B−A |", "|---|---|---:|---:|---:|---:|---:|");
+  for (const row of report.matchedChannelPairs) lines.push(`| \`${row.channelA}\` | \`${row.channelB}\` | ${row.matchedClocks} | ${row.channelAMfeWins}/${row.channelBMfeWins}/${row.tiedMfe} | ${row.channelARealizedWins}/${row.channelBRealizedWins}/${row.tiedRealized} | ${pctPoint(row.medianMfeDeltaBMinusA)} | ${dollars(row.medianRealizedPnlDeltaBMinusA)} |`);
 
   lines.push("", "## Admission diagnostics", "", "| Family | Channel | Exact | +10 | +15 | MAE ≤ -30 | Native P&L |", "|---|---|---:|---:|---:|---:|---:|");
   for (const row of report.admissionDiagnostics) lines.push(`| ${row.familyId} | \`${row.channel}\` | ${row.eligible} | ${row.reached10Pct} | ${row.reached15Pct} | ${row.observedMaeAtOrBelowMinus30} | ${dollars(row.realizedPnl)} |`);
