@@ -2,16 +2,17 @@
 
 **Status:** code-constrained design only. No production, database, strategy, or execution change.
 
-**Evidence window:** July 16, 2026, through 10:35 ET.
+**Evidence window:** July 16, 2026, through 11:25 ET.
 
 ## 1. Why this slice exists
 
-The July 16 paper session proved that order routing, multi-contract fills, shared-OCC bookkeeping, manual close attribution, and broker/desk reconciliation are working. It also exposed four evidence-quality defects that must be fixed before manager comparisons can be treated as decision-grade:
+The July 16 paper session proved that order routing, multi-contract fills, shared-OCC bookkeeping, manual close attribution, and broker/desk reconciliation are working. It also exposed five evidence/observability defects that must be fixed before manager comparisons can be treated as decision-grade:
 
 1. Durable manager enrollment can occur minutes after entry or not at all.
 2. The broad `option_quotes` history remains approximately one sample per minute, despite the underlying SIP capture being intraminute.
 3. Closed position rows retain stale `unrealized_pnl` values.
 4. Stop fills can land materially beyond the configured threshold without a first-class execution-quality receipt.
+5. A non-essential market-data diagnostic can time out and falsely present the entire mobile workspace as disconnected while Book data remains usable.
 
 These are evidence and truthfulness defects. They are not authorization to alter any channel entry, exit, sizing, or account policy.
 
@@ -31,6 +32,7 @@ The load-bearing receipts are:
 - `option_quotes` supplied 4-11 samples per held contract, with average and maximum gaps near 60 seconds.
 - The underlying SIP observer remained current with zero receipt gaps and zero dropped events. Dense underlying evidence does not substitute for a dense option-contract path.
 - Closed rows retained nonzero `unrealized_pnl` even though the authoritative book was flat.
+- At 08:25:18 PT, mobile Book displayed `Connection error: canceling statement due to statement timeout`. The PostgreSQL log contains the same timeout at that exact second. Book remained populated and the banner later cleared on a successful 60-second retry.
 
 ## 3. Root causes in current source
 
@@ -58,6 +60,17 @@ The durable book polls `getOpenPositions()`. A position that opens and closes be
 
 Execution observations retain decision quotes and broker fills, and spread-capture events retain cross-reference facts. There is no single durable per-fill result that states trigger bid, fill, latency, crossed quantity, dollar leakage, and percentage-point overshoot together.
 
+### 3.6 A diagnostic read can poison the shared market state
+
+`useMarketData()` runs four independent Supabase reads in one `Promise.all`. It treats failure of either the option-chain read or an exact `option_quotes` row count as a failure of the whole market state, retains the last good data, and exposes the raw database error through the global `ErrorBanner`. The next successful poll clears the error. This produces the observed transient banner over a healthy Book workspace.
+
+The database receipts show two avoidable costs:
+
+- `option_quotes` currently contains approximately 365,000 rows (202 MB including indexes). The exact SPY count plans an index-only scan across approximately 126,000 rows every 60 seconds. The count is used only for an Ops diagnostic.
+- The latest-200 SPY query plans a bitmap heap scan and sort across approximately 74,000 rows. Existing `idx_oq_chain (underlying, expiration, captured_at desc)` cannot provide global `captured_at desc` order across expirations, despite the old migration note claiming it serves that dashboard shape.
+
+This is not evidence of a failed positions feed, worker, broker, or mobile connection. Raising `statement_timeout` would hide the query-design defect and is not an acceptable fix.
+
 ## 4. Invariants
 
 1. Paper only. This slice cannot widen live authorization.
@@ -68,6 +81,7 @@ Execution observations retain decision quotes and broker fills, and spread-captu
 6. Every position row has an independent manager identity even when multiple channels share one OCC in one broker account.
 7. Existing v1 manager rows remain immutable and are never pooled with the new cohort without an explicit era label.
 8. The current minute chain remains available for dashboard/research continuity; targeted held-contract capture is additive.
+9. A failed optional diagnostic cannot downgrade an otherwise healthy workspace to a global connection failure.
 
 ## 5. Proposed build slices
 
@@ -147,6 +161,17 @@ A stop fill beyond its configured threshold is not mislabeled a policy failure. 
 
 Initial alert proposal, to ratify before implementation: yellow when stop-fill leakage exceeds both $25 and 3 percentage points; red when it exceeds both $100 and 8 percentage points. Alerts are observability only.
 
+### YF-E — scoped, resilient market reads
+
+1. Remove the exact `option_quotes` count from the page-owned 60-second market poll. Prefer eliminating it from operator runtime; if an approximate row count remains useful in Ops, load it lazily there with a planned/estimated count or a small server-side health receipt.
+2. Add an index that exactly serves the core chain shape: `(underlying, captured_at desc)`. Validate with `EXPLAIN` before applying and re-check database size after creation. Do not remove the expiration-aware research index without auditing its other consumers.
+3. Settle the chain, bars, events, and optional diagnostics independently. A non-critical failure keeps its last successful value and records source-specific health; it does not throw away successful sibling reads.
+4. Preserve last-good market data on a transient chain failure. While the last successful chain is still within its explicit freshness window, render a scoped amber `market refresh delayed` fact in Play/Ops rather than a red global connection banner over Book.
+5. A chain read with no prior success, or one whose last-good evidence has exceeded the freshness threshold, remains a visible error. Recovery clears the active warning but retains occurrence count, failing source, first/last failure time, and last success for diagnosis.
+6. Scope workspace errors to their owner. Book positions/exits derive their health from `useDeskFeed`; they must not claim disconnection because the option-chain diagnostic timed out. System-level incident wording must remain observability-only unless independent liveness evidence agrees.
+7. Add query identity to client diagnostics (`option_chain`, `bars`, `events`, `row_count`) without exposing secrets or raw SQL. Mobile and desktop must report the same source-specific state.
+8. Do not increase PostgreSQL `statement_timeout` as remediation. The acceptance proof is a cheaper plan plus correct partial-failure behavior.
+
 ## 6. Required tests
 
 1. Eligible fill creates all deterministic manager rows without a quote.
@@ -164,6 +189,11 @@ Initial alert proposal, to ratify before implementation: yellow when stop-fill l
 13. Shared-OCC partial/manual closes preserve per-row realized attribution and broker/desk reconciliation.
 14. Execution-quality math reproduces the July 16 GRIND receipt: $1.56 entry, approximately $1.00 trigger bid, $0.91 fill, 10 contracts, -$650 realized, and about $90 fill leakage versus the trigger-side bid.
 15. July 16's five positions become fixed regression fixtures; no production strategy decision is replayed or rewritten.
+16. An exact/estimated row-count failure cannot set the global market error or hide successful chain, bars, or events reads.
+17. A transient chain timeout with a fresh last-good snapshot yields a scoped warning while Book remains healthy and usable.
+18. A chain timeout with no prior success, and a repeated timeout beyond the freshness threshold, each produce the correct visible error.
+19. Recovery on the next successful chain poll clears the active warning without erasing its diagnostic occurrence receipt.
+20. `EXPLAIN` for latest-200 by underlying uses `(underlying, captured_at desc)` without sorting the underlying's full retained history.
 
 ## 7. Rollout and acceptance gates
 
@@ -178,6 +208,6 @@ Initial alert proposal, to ratify before implementation: yellow when stop-fill l
 
 ## 8. Priority
 
-YF-A and YF-C are the smallest correctness fixes and should land first. YF-D should follow in the same evidence tranche if its schema can remain append-only. YF-B is the durable research substrate and is the highest-value larger build; it should not be rushed into the execution path.
+YF-E is a small, operator-facing reliability fix and can be built independently after the session. YF-A and YF-C are the smallest evidence-correctness fixes and should land first. YF-D should follow in the same evidence tranche if its schema can remain append-only. YF-B is the durable research substrate and is the highest-value larger build; it should not be rushed into the execution path.
 
 Until these land, today's trade ledger and actual fills are valid, but live manager comparisons must be labeled incomplete whenever admission is delayed or absent.
