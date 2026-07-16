@@ -25,7 +25,7 @@ The file is intentionally git-ignored. Its immutable receipt is:
 The preliminary path numbers are readiness diagnostics, not the holdout score. Missing exact paths are
 censored, never zero.
 
-## T+1 input hardening
+## Historical-input hardening
 
 `backfill-trade-option-paths.ts` now accepts `--held-receipt`. With that flag it:
 
@@ -33,6 +33,8 @@ censored, never zero.
 - rejects malformed rows, invalid OCC symbols, duplicate position IDs, and a mismatched date window;
 - hashes the frozen receipt and records its SHA-256 plus source filename in the Databento manifest;
 - still estimates cost before download;
+- computes the newest exact quote requested and blocks `--download` locally
+  until the full request is at least 24 hours old;
 - remains Databento read-only and writes only local content-addressed objects/manifests.
 
 This prevents a later reason-tag edit or other ledger change from silently changing the prospective
@@ -51,9 +53,10 @@ The July 15 exact paths will be scored with `phase1k-c-preregister-v1` unchanged
 MOMO Shape and Shape-2 remain separate. VB native management remains the control. Any new threshold
 becomes a new policy version and must use a later untouched session.
 
-## T+1 runbook
+## Rolling historical runbook
 
-Once the ET date is later than July 15 and Databento reports a cost:
+Once the newest exact quote in the frozen request is at least 24 hours old and
+Databento reports a cost:
 
 ```text
 npm run backfill:trade-option-paths -- \
@@ -68,7 +71,9 @@ path scorer against the holdout-only receipt.
 ## Verification so far
 
 - frozen receipt: 94 rows; checksum recorded above;
-- exact-path pure self-test: 13/13;
+- exact-path pure self-test: 17/17, including rolling-boundary checks;
 - root TypeScript: clean after dependency setup;
 - same-day guard remains intact: July 15 cannot be requested as historical input on July 15;
+- rolling-age guard remains intact: changing the ET date alone cannot expose a
+  still-licensed range to an unlicensed download;
 - no holdout result viewed; no frozen selector or threshold changed.

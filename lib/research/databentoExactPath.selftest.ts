@@ -5,6 +5,7 @@ import {
   databentoRawToCompactOcc,
   dedupeCbboQuotes,
   heldContractsFromTradePathReceipt,
+  historicalAccessGate,
   parseDatabentoCbboJsonLine,
   type HeldContractReceipt,
 } from "./databentoExactPath.js";
@@ -60,5 +61,34 @@ check("crossed CBBO line is rejected", parseDatabentoCbboJsonLine(JSON.stringify
 
 const deduped = dedupeCbboQuotes([quote!, quote!, { ...quote!, atMs: quote!.atMs + 1_000 }]);
 check("CBBO rows dedupe by contract and timestamp", deduped.length, 2);
+
+const newestRequestEnd = "2026-07-15T18:58:46.000Z";
+check("historical gate blocks one millisecond before the rolling boundary", historicalAccessGate(
+  ["2026-07-15T15:00:00.000Z", newestRequestEnd],
+  Date.parse("2026-07-16T18:58:45.999Z"),
+), {
+  ready: false,
+  latestRequestedAtMs: Date.parse(newestRequestEnd),
+  readyAtMs: Date.parse("2026-07-16T18:58:46.000Z"),
+  waitMs: 1,
+});
+check("historical gate opens exactly at the rolling boundary", historicalAccessGate(
+  [newestRequestEnd],
+  Date.parse("2026-07-16T18:58:46.000Z"),
+), {
+  ready: true,
+  latestRequestedAtMs: Date.parse(newestRequestEnd),
+  readyAtMs: Date.parse("2026-07-16T18:58:46.000Z"),
+  waitMs: 0,
+});
+check("historical gate supports an injected provider age", historicalAccessGate(
+  [newestRequestEnd],
+  Date.parse("2026-07-16T04:58:46.000Z"),
+  10,
+).ready, true);
+check("historical gate rejects an empty request", (() => {
+  try { historicalAccessGate([], Date.now()); return false; }
+  catch { return true; }
+})(), true);
 
 console.log(`databento-exact-path-selftest: ${checks}/${checks} PASS`);
