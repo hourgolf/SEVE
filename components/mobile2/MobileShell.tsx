@@ -114,6 +114,7 @@ export function MobileShell(props: SurfaceProps) {
 
       <main className="m2-main">
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
+        {data.warning && (room === "play" || room === "ops") && <div className="market-read-warning" role="status">{data.warning}</div>}
         {room === "play" ? (
           <MobilePerform props={props} channels={channels} sent={sent} livePnl={livePnl} />
         ) : room === "studio" ? (

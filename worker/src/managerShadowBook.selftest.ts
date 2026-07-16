@@ -50,6 +50,8 @@ const base = {
   entryPrice: 1,
   entryPriceBasis: "broker_fill" as const,
   entryAt: "2026-07-13T14:31:00.000Z",
+  admissionSource: "fill_hook" as const,
+  admittedAt: "2026-07-13T14:31:00.250Z",
   originalQty: 4,
   quoteMaxAgeMs: 15_000,
   paperMode: true,
@@ -59,6 +61,7 @@ const runs = buildManagerShadowEnrollments(base);
 check("one paper position enrolls eight managers", runs.length, 8);
 check("minimum operating size is stamped", runs[0]?.minimumModeledQty, 4);
 check("underlying is normalized", runs[0]?.underlying, "SPY");
+check("admission is durable before any quote", [runs[0]?.admissionSource, runs[0]?.admissionDelayMs, runs[0]?.evidenceState, runs[0]?.lastBid], ["fill_hook", 250, "pending_quote", null]);
 truth("all confirmed-size managers are integer executable", runs.every((r) => r.economicMode === "whole_lot_executable"));
 check("non-paper enrolls nothing", buildManagerShadowEnrollments({ ...base, paperMode: false }).length, 0);
 check("three contracts fail the confirmed cohort gate", buildManagerShadowEnrollments({ ...base, originalQty: 3 }).length, 0);
@@ -103,7 +106,8 @@ function run(managerId: ManagerShadowRun["managerId"], qty = 4): ManagerShadowRu
 }
 const tick = (bid: number, extra: Partial<Parameters<typeof advanceManagerShadowRun>[1]> = {}) => ({
   bid, ask: bid + 0.04, quoteAtMs: Date.parse("2026-07-13T14:32:00.000Z"),
-  observedAtMs: Date.parse("2026-07-13T14:32:00.500Z"), isBell: false, ...extra,
+  observedAtMs: Date.parse("2026-07-13T14:32:00.500Z"),
+  snapshotFetchedAtMs: Date.parse("2026-07-13T14:32:00.450Z"), isBell: false, ...extra,
 });
 const laterTick = (bid: number, seconds: number) => tick(bid, {
   quoteAtMs: Date.parse("2026-07-13T14:32:00.000Z") + seconds * 1_000,
@@ -118,6 +122,7 @@ check("target overshoot return is observed +27", lockExit.run.terminalReturnPct,
 check("four-lot +27 percent pnl is exact", lockExit.run.terminalPnl, 108);
 check("terminal time uses source quote time", lockExit.run.terminalAt, "2026-07-13T14:32:00.000Z");
 check("terminal quote age is observed", lockExit.run.terminalQuoteAgeMs, 500);
+check("first quote keeps event and snapshot clocks separate", [lockExit.run.firstQuoteEventAgeMs, lockExit.run.firstSnapshotFetchAgeMs, lockExit.run.evidenceState], [500, 50, "observing"]);
 check("terminal run cannot advance again", advanceManagerShadowRun(lockExit.run, tick(0.5)).kind, "skipped");
 
 check("zero bid skips", advanceManagerShadowRun(lock, tick(0)).kind, "skipped");
@@ -167,6 +172,8 @@ const actual = attachActualClose(bankStart5.run, { atMs: Date.parse("2026-07-13T
 check("actual close does not terminate shadow manager", actual.status, "active");
 check("actual close provenance is retained", [actual.actualCloseReason, actual.actualRealizedPnl], ["operator_tp", 120]);
 check("first actual-close attribution wins", attachActualClose(actual, { atMs: Date.parse("2026-07-13T14:34:00Z"), reason: "later", realizedPnl: -1 }), actual);
+const closedBeforeQuote = attachActualClose(run("LOCK30/30"), { atMs: Date.parse("2026-07-13T14:31:30Z"), reason: "operator_test", realizedPnl: 0 });
+check("close before first quote is explicit evidence", closedBeforeQuote.evidenceState, "no_eligible_quote_before_actual_close");
 check("pre-entry actual close is rejected", attachActualClose(run("LOCK30/30"), { atMs: Date.parse("2026-07-13T14:30:00Z"), reason: "bad", realizedPnl: 1 }), run("LOCK30/30"));
 const actualBeforeManager = attachActualClose(run("LOCK20/30"), {
   atMs: Date.parse("2026-07-13T14:31:30Z"), reason: "operator_rationale_tp", realizedPnl: 48,
@@ -174,6 +181,9 @@ const actualBeforeManager = attachActualClose(run("LOCK20/30"), {
 const terminalAfterActual = advanceManagerShadowRun(actualBeforeManager, tick(1.23));
 check("shadow manager continues after actual close", [terminalAfterActual.kind, terminalAfterActual.run.terminalReturnPct], ["terminal", 23]);
 check("actual outcome remains context after shadow terminal", [terminalAfterActual.run.actualCloseReason, terminalAfterActual.run.actualRealizedPnl], ["operator_rationale_tp", 48]);
+check("actual close may attach after manager terminal", attachActualClose(lockExit.run, {
+  atMs: Date.parse("2026-07-13T14:33:00Z"), reason: "later_actual", realizedPnl: 50,
+}).actualCloseReason, "later_actual");
 
 const missed = recordManagerQuoteMiss(recordManagerQuoteMiss(actual));
 check("quote misses accumulate on active run", missed.consecutiveQuoteMisses, 2);
@@ -209,7 +219,7 @@ check("wrong policy epoch fails hydration", decodeManagerShadowRun(mutate(encode
 check("wrong shadow-book epoch fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { shadow_book_version: "future" })), null);
 check("invalid quote-age policy fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { quote_max_age_ms: 0 })), null);
 check("wrong cutoff policy fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { cutoff_minutes_before_close: 10 })), null);
-check("wrong schema fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { schema_version: 2 })), null);
+check("wrong schema fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { schema_version: 1 })), null);
 check("fractional allocation cannot masquerade as integer", decodeManagerShadowRun(mutate(encodedBank!, { allocation: { ...bank5!, bankQty: 2.5, runnerQty: 2.5 } })), null);
 check("terminal missing trigger fails hydration", decodeManagerShadowRun(mutate(encodedTerminal!, { terminal_trigger: null })), null);
 check("active row with terminal evidence fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { terminal_bid: 1 })), null);
@@ -226,6 +236,7 @@ check("bank mirror cannot diverge from durable state", decodeManagerShadowRun(mu
 check("terminal pnl cannot diverge from integer economics", decodeManagerShadowRun(mutate(encodedTerminal!, { terminal_pnl: 999 })), null);
 
 const migration = readFileSync(new URL("../../supabase/migrations/20260713062859_phase_1g_durable_shadow_book.sql", import.meta.url), "utf8");
+const v2Migration = readFileSync(new URL("../../supabase/migrations/20260716205844_manager_shadow_book_v2_admission_provenance.sql", import.meta.url), "utf8");
 truth("migration enables RLS", migration.includes("alter table public.manager_shadow_runs enable row level security"));
 truth("migration revokes anonymous access", migration.includes("revoke all on public.manager_shadow_runs from public, anon, authenticated"));
 truth("migration grants service writes", migration.includes("grant select, insert, update, delete on public.manager_shadow_runs to service_role"));
@@ -234,6 +245,8 @@ truth("migration has active partial OCC index", migration.includes("where status
 truth("migration enforces integer source quantity", migration.includes("original_qty             integer not null"));
 truth("migration requires source-boot provenance", migration.includes("source_boot_id           uuid not null"));
 truth("model contains no execution imports", !readFileSync(new URL("./managerShadowBookModel.ts", import.meta.url), "utf8").match(/executeExit|orderAndFill|broker order/i));
+truth("v2 migration preserves versioned provenance", v2Migration.includes("manager-shadow-book-v2") && v2Migration.includes("admission_source"));
+truth("v2 migration permits the staged two-lot candidate", v2Migration.includes("minimum_modeled_qty in (2, 4)"));
 
 check("targeted quotes deduplicate and sort", targetedOptionBatches(["Z", "A", "z"], 2, 10), [["A", "Z"]]);
 check("targeted quotes batch at provider limit", targetedOptionBatches(Array.from({ length: 101 }, (_, i) => `O${i}`), 100, 500)?.map((b) => b.length), [100, 1]);
@@ -269,6 +282,9 @@ check("actual close is a durable transition", managerShadowMeaningfulChange(lock
 check("bank crossing is a durable transition", managerShadowMeaningfulChange(run("BANK20/RUN50"), bankStart4.run), true);
 check("terminal is a durable transition", managerShadowMeaningfulChange(lock, lockExit.run), true);
 truth("runtime module contains no execution/order import", !readFileSync(new URL("./managerShadowBook.ts", import.meta.url), "utf8").match(/from ["']\.\/execute|orderAndFill|getOrders|getPositions/));
+truth("fill path queues observer without awaiting it", readFileSync(new URL("./execute.ts", import.meta.url), "utf8").includes("queueManagerShadowAdmission({"));
+truth("recovery includes closed rows", readFileSync(new URL("./store.ts", import.meta.url), "utf8").includes("loadManagerShadowRecoveryPositions"));
+truth("terminal managers can receive later actual outcomes", readFileSync(new URL("./store.ts", import.meta.url), "utf8").includes("saveManagerShadowActualClose"));
 
 check("declared operating minimum remains four", MIN_MODELED_SOURCE_QTY, 4);
 console.log(`manager-shadow-book-selftest: ${passed}/${passed} PASS`);

@@ -36,7 +36,6 @@ function Row({ label, tone, value, hint }: { label: string; tone: Tone; value: s
 }
 
 export interface TapeVitals {
-  rowCount: number;
   lastIngestTs: string | null;
   snapCount: number;
   expirations: number;
@@ -108,7 +107,7 @@ export function OpsPreflight({ strategists, tape, ops }: { strategists: Strategi
             label="TAPE"
             tone={tTone}
             value={tVal}
-            hint={`market-ingest vitals — ${tape.rowCount.toLocaleString()} rows in option_quotes (7d window)`}
+            hint="market-ingest vitals — latest snapshot freshness and contract coverage"
           />
         )}
       </div>

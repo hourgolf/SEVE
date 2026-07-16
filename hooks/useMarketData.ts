@@ -57,14 +57,16 @@ export interface MarketData {
   bars: UnderlyingBar[];
   /** Latest ~14 system events, newest first. */
   events: MarketEvent[];
-  /** Total rows in option_quotes. */
-  rowCount: number;
   /** Distinct expirations present in the latest pull. */
   expirations: number;
   /** Wall-clock time of the last completed poll. */
   updatedAt: string | null;
   /** Human-readable error for the banner; null when healthy. */
   error: string | null;
+  /** Non-blocking source degradation; shown only in market/ops workspaces. */
+  warning: string | null;
+  /** Per-query diagnostics retained across recovery (no SQL or secrets). */
+  readHealth: Record<MarketReadSource, MarketReadHealth>;
   /** True when the error looks like an auth / RLS / key problem. */
   isAccessError: boolean;
   /** True when ≥1 delta in the snapshot was modeled (Alpaca had none — 0DTE). */
@@ -74,8 +76,41 @@ export interface MarketData {
   dailyBars: UnderlyingBar[];
 }
 
+export type MarketReadSource = "option_chain" | "bars" | "events";
+export interface MarketReadHealth {
+  failureCount: number;
+  firstFailureAt: string | null;
+  lastFailureAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+}
+
+const EMPTY_READ_HEALTH: MarketReadHealth = {
+  failureCount: 0, firstFailureAt: null, lastFailureAt: null, lastSuccessAt: null, lastError: null,
+};
+const INITIAL_READ_HEALTH: Record<MarketReadSource, MarketReadHealth> = {
+  option_chain: { ...EMPTY_READ_HEALTH }, bars: { ...EMPTY_READ_HEALTH }, events: { ...EMPTY_READ_HEALTH },
+};
+
+function markReadFailure(health: MarketReadHealth, at: string, error: string): MarketReadHealth {
+  return { ...health, failureCount: health.failureCount + 1, firstFailureAt: health.firstFailureAt ?? at, lastFailureAt: at, lastError: error };
+}
+function markReadSuccess(health: MarketReadHealth, at: string): MarketReadHealth {
+  return { ...health, lastSuccessAt: at, lastError: null };
+}
+
 const ACCESS_ERROR_RE =
   /permission denied|row-level|JWT|apikey|Invalid API key|Missing Supabase env/i;
+
+function readErrorMessage(err: unknown): string {
+  const raw = err && typeof err === "object" && "message" in err &&
+    typeof (err as { message: unknown }).message === "string"
+    ? (err as { message: string }).message
+    : String(err ?? "");
+  return raw.trim() === "" || raw === "[object Object]"
+    ? "Read rejected (likely an invalid API key or missing RLS policy)."
+    : raw;
+}
 
 const INITIAL: MarketData = {
   status: "live",
@@ -84,10 +119,11 @@ const INITIAL: MarketData = {
   snapshot: [],
   bars: [],
   events: [],
-  rowCount: 0,
   expirations: 0,
   updatedAt: null,
   error: null,
+  warning: null,
+  readHealth: INITIAL_READ_HEALTH,
   isAccessError: false,
   deltasModeled: false,
   dailyBars: [],
@@ -138,52 +174,69 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
 
     async function poll() {
       try {
-        const sb = getSupabase();
-        const [countRes, quotesRes, barsRes, eventsRes] = await Promise.all([
-          sb.from("option_quotes").select("*", { count: "exact", head: true }).eq("underlying", symbol),
-          sb
-            .from("option_quotes")
-            .select("*")
-            .eq("underlying", symbol)
-            .order("captured_at", { ascending: false })
-            .limit(200),
-          sb
-            .from("underlying_bars")
-            .select("ts,open,high,low,close,volume,vwap")
-            .eq("symbol", symbol)
-            .order("ts", { ascending: false })
-            .limit(RECENT_BARS),
-          sb
-            .from("events")
-            .select("*")
-            .order("created_at", { ascending: false })
-            .limit(14),
-        ]);
+      const sb = getSupabase();
+      // These reads have different operational importance. Settling them
+      // independently keeps an optional event/bar timeout from poisoning a
+      // healthy options chain. The old exact COUNT scanned the whole symbol
+      // partition every minute and was removed from the live path entirely.
+      const [quotesSettled, barsSettled, eventsSettled] = await Promise.allSettled([
+        sb.from("option_quotes").select("*").eq("underlying", symbol).order("captured_at", { ascending: false }).limit(200),
+        sb.from("underlying_bars").select("ts,open,high,low,close,volume,vwap").eq("symbol", symbol).order("ts", { ascending: false }).limit(RECENT_BARS),
+        sb.from("events").select("*").order("created_at", { ascending: false }).limit(14),
+      ]);
 
-        // A failing HEAD count request comes back with an empty message, so
-        // prefer whichever error actually carries text for the banner.
-        const readError = quotesRes.error ?? countRes.error;
-        if (readError) throw readError;
+      const quotesRes = quotesSettled.status === "fulfilled" ? quotesSettled.value : null;
+      const quoteError = quotesSettled.status === "rejected" ? quotesSettled.reason : quotesRes?.error;
+      if (quoteError) {
+        const message = readErrorMessage(quoteError);
+        const isAccessError = ACCESS_ERROR_RE.test(message);
+        const failedAt = new Date().toISOString();
+        if (!live()) return;
+        setData((prev) => {
+          const lastGoodFresh = prev.snapshot.length > 0 && prev.lastIngestTs != null
+            && Date.now() - Date.parse(prev.lastIngestTs) <= STALE_AFTER_MIN * 60_000;
+          return {
+            ...prev,
+            // With fresh prior evidence, retain it and expose a scoped
+            // degradation instead of replacing the desk with a global banner.
+            status: lastGoodFresh ? "stale" : "err",
+            error: lastGoodFresh ? null : message,
+            warning: lastGoodFresh ? `OPTIONS CHAIN READ DEGRADED · ${message}` : null,
+            isAccessError,
+            readHealth: { ...prev.readHealth, option_chain: markReadFailure(prev.readHealth.option_chain, failedAt, message) },
+          };
+        });
+        return;
+      }
 
-        const quotes = (quotesRes.data ?? []) as OptionQuote[];
-        const recentDesc = (barsRes.data ?? []) as UnderlyingBar[];
-        const recent = [...recentDesc].reverse(); // oldest → newest
-        const bars = mergeBars(historyBars.current, recent);
-        const events = (eventsRes.data ?? []) as MarketEvent[];
+      const barsRes = barsSettled.status === "fulfilled" ? barsSettled.value : null;
+      const eventsRes = eventsSettled.status === "fulfilled" ? eventsSettled.value : null;
+      const barsError = barsSettled.status === "rejected" ? barsSettled.reason : barsRes?.error;
+      const eventsError = eventsSettled.status === "rejected" ? eventsSettled.reason : eventsRes?.error;
+      const warnings = [
+        barsError ? `CHART ${readErrorMessage(barsError)}` : null,
+        eventsError ? `EVENT TAPE ${readErrorMessage(eventsError)}` : null,
+      ].filter((value): value is string => value != null);
 
-        let status: FeedStatus = "stale";
-        let spot: number | null = null;
-        let lastIngestTs: string | null = null;
-        let snapshot: OptionQuote[] = [];
-        let deltasModeled = false;
+      const quotes = (quotesRes?.data ?? []) as OptionQuote[];
+      const recentDesc = barsError ? [] : ((barsRes?.data ?? []) as UnderlyingBar[]);
+      const recent = [...recentDesc].reverse(); // oldest → newest
+      const bars = recent.length ? mergeBars(historyBars.current, recent) : null;
+      const events = eventsError ? null : ((eventsRes?.data ?? []) as MarketEvent[]);
 
-        if (quotes.length) {
+      let status: FeedStatus = "stale";
+      let spot: number | null = null;
+      let lastIngestTs: string | null = null;
+      let snapshot: OptionQuote[] = [];
+      let deltasModeled = false;
+
+      if (quotes.length) {
           lastIngestTs = quotes[0].captured_at;
           snapshot = quotes.filter((r) => r.captured_at === lastIngestTs);
           const head = snapshot[0];
           spot =
             head?.underlying_price ??
-            (bars.length ? bars[bars.length - 1].close : null);
+            (bars?.length ? bars[bars.length - 1].close : null);
           const ageMin =
             (Date.now() - new Date(lastIngestTs).getTime()) / 60000;
           status = ageMin > STALE_AFTER_MIN ? "stale" : "live";
@@ -227,55 +280,54 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
               });
             }
           }
-        }
+      }
 
-        const expirations = new Set(quotes.map((r) => r.expiration)).size;
+      const expirations = new Set(quotes.map((r) => r.expiration)).size;
+      const completedAt = new Date().toISOString();
 
-        if (!live()) return;
-        setData((prev) => ({
-          ...prev,
-          status,
-          // Live-tick precedence: keep the fast /api/spot price while that path
-          // is healthy; the minute-derived spot only fills in when it's not.
-          spot: Date.now() - fastSpotAt.current < 15_000 && prev.spot != null ? prev.spot : spot,
-          lastIngestTs,
-          snapshot,
-          bars,
-          events,
-          rowCount: countRes.count ?? 0,
-          expirations,
-          updatedAt: new Date().toISOString(),
-          error: null,
-          isAccessError: false,
-          deltasModeled,
-        }));
+      if (!live()) return;
+      setData((prev) => ({
+        ...prev,
+        status,
+        // Live-tick precedence: keep the fast /api/spot price while that path
+        // is healthy; the minute-derived spot only fills in when it's not.
+        spot: Date.now() - fastSpotAt.current < 15_000 && prev.spot != null ? prev.spot : spot,
+        lastIngestTs,
+        snapshot,
+        bars: bars ?? prev.bars,
+        events: events ?? prev.events,
+        expirations,
+        updatedAt: completedAt,
+        error: null,
+        warning: warnings.length ? `MARKET READ DEGRADED · ${warnings.join(" · ")}` : null,
+        isAccessError: false,
+        deltasModeled,
+        readHealth: {
+          option_chain: markReadSuccess(prev.readHealth.option_chain, completedAt),
+          bars: barsError
+            ? markReadFailure(prev.readHealth.bars, completedAt, readErrorMessage(barsError))
+            : markReadSuccess(prev.readHealth.bars, completedAt),
+          events: eventsError
+            ? markReadFailure(prev.readHealth.events, completedAt, readErrorMessage(eventsError))
+            : markReadSuccess(prev.readHealth.events, completedAt),
+        },
+      }));
       } catch (err) {
-        // Supabase/PostgREST errors are plain objects with a `.message`, not
-        // Error instances — mirror the reference's `e.message || String(e)`.
-        const rawMessage =
-          (err &&
-            typeof err === "object" &&
-            "message" in err &&
-            typeof (err as { message: unknown }).message === "string"
-            ? (err as { message: string }).message
-            : null) ?? String(err);
-        // Empty/unhelpful errors on a failed read are almost always an auth/RLS
-        // problem (e.g. a 401 HEAD request returns no body) — surface that.
-        const isAccessError =
-          rawMessage.trim() === "" ||
-          rawMessage === "[object Object]" ||
-          ACCESS_ERROR_RE.test(rawMessage);
-        const message =
-          rawMessage.trim() === "" || rawMessage === "[object Object]"
-            ? "Read rejected (likely an invalid API key or missing RLS policy)."
-            : rawMessage;
+        const message = readErrorMessage(err);
+        const failedAt = new Date().toISOString();
         if (!live()) return;
-        setData((prev) => ({
-          ...prev,
-          status: "err",
-          error: message,
-          isAccessError,
-        }));
+        setData((prev) => {
+          const lastGoodFresh = prev.snapshot.length > 0 && prev.lastIngestTs != null
+            && Date.now() - Date.parse(prev.lastIngestTs) <= STALE_AFTER_MIN * 60_000;
+          return {
+            ...prev,
+            status: lastGoodFresh ? "stale" : "err",
+            error: lastGoodFresh ? null : message,
+            warning: lastGoodFresh ? `OPTIONS CHAIN READ DEGRADED · ${message}` : null,
+            isAccessError: ACCESS_ERROR_RE.test(message),
+            readHealth: { ...prev.readHealth, option_chain: markReadFailure(prev.readHealth.option_chain, failedAt, message) },
+          };
+        });
       }
     }
 

@@ -471,7 +471,7 @@ export function DesktopSurface({
                 preflight: (
                   <OpsPreflight
                     strategists={desk.strategists}
-                    tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
+                    tape={{ lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
                     ops={ops}
                   />
                 ),

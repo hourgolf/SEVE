@@ -15,6 +15,7 @@ import {
   decodeManagerShadowRun,
   managerEnrollmentEligible,
   recordManagerQuoteMiss,
+  type ManagerEnrollmentInput,
   type ManagerShadowRun,
 } from "./managerShadowBookModel.js";
 import { targetedOptionBatches, type TargetedOptionQuote } from "./managerShadowQuoteModel.js";
@@ -42,6 +43,8 @@ let ticking = false;
 let lastHealthLogMs = 0;
 let lastSuccessfulTickMs: number | null = null;
 const pendingTerminalReceipts = new Set<string>();
+const admissionInFlight = new Set<string>();
+const admissionHealthWarned = new Set<string>();
 
 const ET_CLOCK = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
@@ -120,18 +123,20 @@ async function flushTerminalReceipts(): Promise<void> {
 }
 
 async function attributeActualCloses(): Promise<void> {
-  const active = [...runs.values()].filter((item) => item.run.status === "active" && item.run.actualCloseAt == null);
-  const ids = [...new Set(active.map((item) => item.run.positionId))];
+  const pending = [...runs.values()].filter((item) => item.run.actualCloseAt == null);
+  const ids = [...new Set(pending.map((item) => item.run.positionId))];
   const positions = await store.loadManagerShadowActualPositions(ids);
   if (positions == null) return;
   const byId = new Map(positions.map((position) => [position.id, position]));
-  for (const item of active) {
+  for (const item of pending) {
     const actual = byId.get(item.run.positionId);
-    if (!actual || actual.status !== "closed" || !actual.closed_at || !actual.close_reason) continue;
+    if (!actual || actual.status !== "closed" || !actual.closed_at) continue;
     const next = attachActualClose(item.run, {
-      atMs: Date.parse(actual.closed_at), reason: actual.close_reason, realizedPnl: actual.realized_pnl,
+      atMs: Date.parse(actual.closed_at), reason: actual.close_reason ?? "unattributed_close", realizedPnl: actual.realized_pnl,
     });
-    if (next !== item.run) await persistTransition(item, next);
+    if (next === item.run) continue;
+    if (item.run.status === "active") await persistTransition(item, next);
+    else if (await store.saveManagerShadowActualClose(next)) runs.set(next.id, { ...item, run: next });
   }
 }
 
@@ -147,31 +152,67 @@ async function censorPriorSessionRuns(dateEt: string, nowMs: number): Promise<vo
   }
 }
 
-async function enrollOpenPositions(
+async function persistAdmission(input: ManagerEnrollmentInput): Promise<boolean> {
+  if (enrolledPositions.has(input.positionId) || admissionInFlight.has(input.positionId)) return true;
+  admissionInFlight.add(input.positionId);
+  try {
+    const candidates = buildManagerShadowEnrollments(input);
+    if (!candidates.length) return false;
+    if (!await store.insertManagerShadowRuns(candidates)) return false;
+    for (const run of candidates) runs.set(run.id, { run, sourceBootId: BOOT_ID });
+    enrolledPositions.add(input.positionId);
+    admissionHealthWarned.delete(input.positionId);
+    return true;
+  } finally {
+    admissionInFlight.delete(input.positionId);
+  }
+}
+
+/** Fill-path hook: enqueue observation persistence only. It returns before any
+ * database work begins and can neither reject nor delay the completed order. */
+export function queueManagerShadowAdmission(
+  input: Omit<ManagerEnrollmentInput, "admissionSource" | "admittedAt">,
+  admissionSource: "fill_hook" | "recovery_open" = "fill_hook",
+): void {
+  if (!config.managerShadowBookEnabled || disabled || !config.hasServiceRole
+      || config.optFeed !== "opra" || !input.paperMode) return;
+  const admittedAt = new Date().toISOString();
+  void Promise.resolve().then(async () => {
+    try {
+      await persistAdmission({ ...input, admissionSource, admittedAt });
+    } catch (error) {
+      warn(`manager-shadow-book: fill admission rejected — ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+}
+
+async function enrollRecoveryPositions(
   ctx: ManagerShadowBookContext,
-  openRows: readonly store.PositionRow[],
-  quotes: Map<string, TargetedOptionQuote>,
+  rows: readonly store.PositionRow[],
   nowMs: number,
 ): Promise<void> {
   const channels = new Map(ctx.channels.map((channel) => [channel.id, channel]));
   const defaultAccount = ctx.accounts.find((account) => !account.cred_ref) ?? ctx.accounts[0];
-  for (const row of openRows) {
+  for (const row of rows) {
     if (!row.opened_at || Date.parse(row.opened_at) < Date.parse(SHADOW_MANAGER_COHORT_FROM)) continue;
     const channel = channels.get(row.strategist_id);
     const accountId = channel?.account_id ?? defaultAccount?.id;
     if (!channel || !managerEnrollmentEligible(channel.slug, row.qty) || !accountId || enrolledPositions.has(row.id)) continue;
-    const probeId = buildManagerShadowEnrollments({
+    const input: ManagerEnrollmentInput = {
       positionId: row.id, strategistId: row.strategist_id, accountId,
       channelSlug: channel.slug, occSymbol: row.occ_symbol, underlying: row.underlying,
       optionSide: row.opt_type, entryPrice: row.avg_entry_price, entryPriceBasis: "broker_fill",
       entryAt: row.opened_at, originalQty: row.qty,
       quoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs, paperMode: ctx.paperMode,
-    });
-    if (!probeId.length || probeId.some((run) => runs.has(run.id))) continue;
-    if (!freshQuote(quotes.get(row.occ_symbol), nowMs)) continue;
-    if (!await store.insertManagerShadowRuns(probeId)) continue;
-    for (const run of probeId) runs.set(run.id, { run, sourceBootId: BOOT_ID });
-    enrolledPositions.add(row.id);
+      admissionSource: row.status === "closed" ? "recovery_closed" : "recovery_open",
+      admittedAt: new Date(nowMs).toISOString(),
+    };
+    if (await persistAdmission(input)) continue;
+    if (nowMs - Date.parse(row.opened_at) > 20_000 && !admissionHealthWarned.has(row.id)) {
+      admissionHealthWarned.add(row.id);
+      warn(`manager-shadow-book: eligible position ${row.id} lacks v2 admission >20s after open`);
+      void store.journal("WARN", `manager observer admission delayed >20s — ${channel.slug} ${row.occ_symbol}`, { position_id: row.id });
+    }
   }
 }
 
@@ -197,23 +238,20 @@ export async function shadowManagerBookTick(ctx: ManagerShadowBookContext): Prom
     await flushTerminalReceipts();
     await attributeActualCloses();
     await censorPriorSessionRuns(clock.date, nowMs);
+    const recentSince = new Date(nowMs - 20 * 60 * 60_000).toISOString();
+    const recoveryRows = (await store.loadManagerShadowRecoveryPositions(recentSince) ?? [])
+      .filter((row) => row.opened_at && etClock(Date.parse(row.opened_at)).date === clock.date);
+    await enrollRecoveryPositions(ctx, recoveryRows, nowMs);
+    // A recovered closed row must receive its actual outcome in the same tick.
+    await attributeActualCloses();
     if (phase === "closed") return;
-    let openRows: store.PositionRow[] = [];
-    try { openRows = await store.getOpenPositions(); } catch { /* enrollment helper logs on its own read */ }
-    const channelById = new Map(ctx.channels.map((channel) => [channel.id, channel]));
-    const symbols = [...new Set([
-      ...activeRuns().map((item) => item.run.occSymbol),
-      ...openRows.filter((row) => {
-        const channel = channelById.get(row.strategist_id);
-        return !!channel && managerEnrollmentEligible(channel.slug, row.qty);
-      }).map((row) => row.occ_symbol),
-    ])];
+    const symbols = [...new Set(activeRuns().map((item) => item.run.occSymbol))];
     const quotes = await targetedQuotes(symbols);
-    await enrollOpenPositions(ctx, openRows, quotes, nowMs);
+    const observedAtMs = Date.now();
 
     for (const item of activeRuns()) {
       const quote = quotes.get(item.run.occSymbol);
-      if (!freshQuote(quote, nowMs)) {
+      if (!freshQuote(quote, observedAtMs)) {
         const missed = recordManagerQuoteMiss(item.run);
         await persistTransition(item, missed);
         if (phase === "settle") {
@@ -228,7 +266,8 @@ export async function shadowManagerBookTick(ctx: ManagerShadowBookContext): Prom
       }
       const result = advanceManagerShadowRun(item.run, {
         bid: quote.bid, ask: quote.ask, quoteAtMs: quote.quoteAtMs,
-        observedAtMs: nowMs, isBell: phase === "cutoff" || phase === "settle",
+        observedAtMs, snapshotFetchedAtMs: observedAtMs,
+        isBell: phase === "cutoff" || phase === "settle",
       });
       if (result.kind === "skipped") continue;
       await persistTransition(item, result.run);

@@ -43,6 +43,7 @@ export function PerformSurface({
       {/* P5 slice 3 — deterministic incident banner (hidden on normal; critical pre-empts chart space). */}
       <IncidentBanner incident={incident} />
       <main className="pf-stage">
+        {data.warning && <div className="market-read-warning" role="status">{data.warning}</div>}
         {section === "market" ? <PerformMarketsWorkspace surface={surface} /> : section === "positions" ? <PerformPositionsWorkspace surface={surface} /> : <>
           <div className="pf-market-target" tabIndex={-1}>
             <IntradayChart

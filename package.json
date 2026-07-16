@@ -179,6 +179,7 @@
     "incident-selftest": "tsx lib/incident/incident.selftest.ts",
     "operator-selftest": "tsx lib/auth/operator.selftest.ts",
     "manual-close-selftest": "tsx lib/positions/manualClose.selftest.ts",
+    "closed-position-invariant-selftest": "tsx worker/src/closedPositionInvariant.selftest.ts",
     "position-close-flow-selftest": "tsx lib/positions/positionCloseFlow.selftest.ts",
     "perform-selftest": "tsx lib/perform/perform.selftest.ts",
     "studio-selftest": "tsx lib/studio/studio.selftest.ts",

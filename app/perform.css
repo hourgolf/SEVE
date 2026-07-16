@@ -528,3 +528,22 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   .shell-root[data-mode="perform"] .pf-dock-in { grid-template-columns: 96px minmax(0, 1fr); }
   .shell-root[data-mode="perform"] .pf-cards { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
 }
+.market-read-warning {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--amber, #e3a62f) 58%, transparent);
+  background: color-mix(in srgb, var(--amber, #e3a62f) 12%, transparent);
+  color: var(--amber, #e3a62f);
+  font: 700 10px/1.25 var(--mono, monospace);
+  letter-spacing: .08em;
+}
+
+.perform .pf-stage { position: relative; }
+.perform .pf-stage > .market-read-warning {
+  position: absolute;
+  z-index: 8;
+  top: 12px;
+  left: 50%;
+  max-width: min(760px, 80%);
+  transform: translateX(-50%);
+  border-radius: 4px;
+}

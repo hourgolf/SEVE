@@ -30,6 +30,7 @@ import type { ShadowDecision } from "./decide.js";
 import { captureObservedPositionPlan } from "./planShadow.js";
 import { captureBrokerObservation, captureDecisionObservation } from "./executionObservation.js";
 import { capturePositionOutcome } from "./positionOutcome.js";
+import { queueManagerShadowAdmission } from "./managerShadowBook.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -61,6 +62,7 @@ const reconcileConfirmed = (rowId: string): boolean => {
 export interface ExecCtx {
   api: alpaca.Api;                        // cockpit P3: the account this channel's orders route to (default acct 1)
   accountId: string;                      // resolved routing identity stamped into Phase 1C evidence
+  paperMode: boolean;                     // explicit observer admission safety gate
   decisionAtMs: number;                   // source bar timestamp; deterministic opportunity identity
   chain: ChainStore;
   todayET: string;
@@ -583,6 +585,13 @@ export async function executeEntry(
           expiration: d.detail?.expiry as string ?? ctx.todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg,
         });
         if (!inserted.error) {
+          if (inserted.id && inserted.openedAt) queueManagerShadowAdmission({
+            positionId: inserted.id, strategistId: ch.id, accountId: ctx.accountId,
+            channelSlug: ch.slug, occSymbol: occ, underlying: ch.underlying,
+            optionSide: dir, entryPrice: avg, entryPriceBasis: "broker_fill",
+            entryAt: inserted.openedAt, originalQty: net,
+            quoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs, paperMode: ctx.paperMode,
+          }, "recovery_open");
           ctx.openRowQty.set(occ, (ctx.openRowQty.get(occ) ?? 0) + net);
           await store.journal("WARN", `${d.slug}: recovered ${net} ${occ} from filled orders (lost insert) — not re-buying`);
         }
@@ -637,6 +646,13 @@ export async function executeEntry(
       eventKind: "position_opened", eventAtMs: Date.now(), positionId: inserted.id,
       opportunityId, quantity: fillQty, avgEntryPrice: entryPx,
       payload: { brokerOrderId: o.id, brokerStatus: o.status },
+    });
+    if (inserted.id && inserted.openedAt) queueManagerShadowAdmission({
+      positionId: inserted.id, strategistId: ch.id, accountId: ctx.accountId,
+      channelSlug: ch.slug, occSymbol: occ, underlying: ch.underlying,
+      optionSide: dir, entryPrice: entryPx, entryPriceBasis: "broker_fill",
+      entryAt: inserted.openedAt, originalQty: fillQty,
+      quoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs, paperMode: ctx.paperMode,
     });
     // The stateful win: remember the REAL entry context (no reconstruction drift).
     entryStateByKey.set(entryKey(ch.id, occ), { entryUnderlying: spotClose, entryTs: Date.now(), peakFavorable: spotClose });

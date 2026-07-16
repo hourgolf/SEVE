@@ -246,8 +246,9 @@ Deno.serve(async () => {
       // position is gone on Alpaca → it closed; book it (best-effort realized = last mark)
       await sb.from("positions").update({
         status: "closed", closed_at: new Date().toISOString(),
+        unrealized_pnl: 0,
         realized_pnl: Number(openRow.unrealized_pnl ?? 0),
-      }).eq("id", openRow.id);
+      }).eq("id", openRow.id).eq("status", "open");
       await journal("OK", `paper-trader: closed ${openRow.occ_symbol} · realized ~$${Number(openRow.unrealized_pnl ?? 0).toFixed(0)}`);
     }
 

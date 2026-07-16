@@ -13,15 +13,17 @@ import { deterministicEvidenceUuid } from "./planShadowModel.js";
 import { managerShadowTraceIdFor, SHADOW_MANAGER_COHORT_FROM } from "./managerShadowObservationModel.js";
 import type { ExecutionObservationDraft } from "./executionObservationModel.js";
 
-export const MANAGER_SHADOW_SCHEMA_VERSION = 1 as const;
+export const MANAGER_SHADOW_SCHEMA_VERSION = 2 as const;
 export const MIN_MODELED_SOURCE_QTY = 4;
 export const MIN_STAGED_SOURCE_QTY = 2;
-export const MANAGER_SHADOW_BOOK_VERSION = "manager-shadow-book-v1" as const;
+export const MANAGER_SHADOW_BOOK_VERSION = "manager-shadow-book-v2" as const;
 export const SHADOW_CUTOFF_MINUTES_BEFORE_CLOSE = 5;
 
 export type ManagerShadowStatus = "active" | "terminal" | "censored";
 export type ManagerEconomicMode = "whole_lot_executable" | "normalized_fractional";
 export type EntryPriceBasis = "broker_fill" | "execution_observation";
+export type ManagerAdmissionSource = "fill_hook" | "recovery_open" | "recovery_closed" | "hydration";
+export type ManagerEvidenceState = "pending_quote" | "observing" | "no_eligible_quote_before_actual_close";
 
 export interface ManagerAllocation {
   kind: "all_out" | "bank_runner";
@@ -50,6 +52,13 @@ export interface ManagerShadowRun {
   entryPrice: number;
   entryPriceBasis: EntryPriceBasis;
   entryAt: string;
+  admissionSource: ManagerAdmissionSource;
+  admittedAt: string;
+  admissionDelayMs: number;
+  firstQuoteAt: string | null;
+  firstQuoteEventAgeMs: number | null;
+  firstSnapshotFetchAgeMs: number | null;
+  evidenceState: ManagerEvidenceState;
   originalQty: number;
   minimumModeledQty: number;
   economicMode: ManagerEconomicMode;
@@ -97,6 +106,13 @@ export interface ManagerShadowDbRow {
   entry_price: number;
   entry_price_basis: string;
   entry_at: string;
+  admission_source: string | null;
+  admitted_at: string | null;
+  admission_delay_ms: number | null;
+  first_quote_at: string | null;
+  first_quote_event_age_ms: number | null;
+  first_snapshot_fetch_age_ms: number | null;
+  evidence_state: string | null;
   original_qty: number;
   minimum_modeled_qty: number;
   economic_mode: string;
@@ -134,6 +150,8 @@ export interface ManagerEnrollmentInput {
   entryPrice: number;
   entryPriceBasis: EntryPriceBasis;
   entryAt: string;
+  admissionSource: ManagerAdmissionSource;
+  admittedAt: string;
   originalQty: number;
   quoteMaxAgeMs: number;
   paperMode: boolean;
@@ -144,6 +162,7 @@ export interface ManagerQuoteTick {
   ask: number;
   quoteAtMs: number;
   observedAtMs: number;
+  snapshotFetchedAtMs: number;
   isBell: boolean;
 }
 
@@ -163,7 +182,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 const isManagerId = (v: unknown): v is ManagerId => typeof v === "string" && (MANAGER_IDS as readonly string[]).includes(v);
 
 export function managerShadowRunId(positionId: string, managerId: ManagerId): string {
-  return deterministicEvidenceUuid("seve-manager-shadow-run-v1", {
+  return deterministicEvidenceUuid("seve-manager-shadow-run-v2", {
     positionId,
     managerId,
     managerPolicyVersion: MANAGER_POLICY_VERSION,
@@ -172,7 +191,7 @@ export function managerShadowRunId(positionId: string, managerId: ManagerId): st
 }
 
 export function managerShadowTerminalObservationId(positionId: string, managerId: ManagerId): string {
-  return deterministicEvidenceUuid("seve-manager-shadow-book-exit-v1", {
+  return deterministicEvidenceUuid("seve-manager-shadow-book-exit-v2", {
     runId: managerShadowRunId(positionId, managerId),
   });
 }
@@ -217,12 +236,15 @@ function enrollmentValid(input: ManagerEnrollmentInput): boolean {
     && finite(input.entryPrice) && input.entryPrice > 0
     && Number.isInteger(input.originalQty) && input.originalQty >= 1
     && Number.isInteger(input.quoteMaxAgeMs) && input.quoteMaxAgeMs > 0
-    && iso(input.entryAt) != null;
+    && iso(input.entryAt) != null && iso(input.admittedAt) != null
+    && ["fill_hook", "recovery_open", "recovery_closed", "hydration"].includes(input.admissionSource);
 }
 
 export function buildManagerShadowEnrollments(input: ManagerEnrollmentInput): ManagerShadowRun[] {
   if (!enrollmentValid(input)) return [];
   const entryAt = iso(input.entryAt) as string;
+  const admittedAt = iso(input.admittedAt) as string;
+  const admissionDelayMs = Math.max(0, Date.parse(admittedAt) - Date.parse(entryAt));
   return managerIdsForChannel(input.channelSlug)
     .filter((managerId) => input.originalQty >= minimumModeledQty(managerId))
     .map((managerId) => {
@@ -246,6 +268,13 @@ export function buildManagerShadowEnrollments(input: ManagerEnrollmentInput): Ma
       entryPrice: rounded(input.entryPrice),
       entryPriceBasis: input.entryPriceBasis,
       entryAt,
+      admissionSource: input.admissionSource,
+      admittedAt,
+      admissionDelayMs,
+      firstQuoteAt: null,
+      firstQuoteEventAgeMs: null,
+      firstSnapshotFetchAgeMs: null,
+      evidenceState: "pending_quote",
       originalQty: input.originalQty,
       minimumModeledQty: minimumModeledQty(managerId),
       economicMode: managerEconomicMode(allocation),
@@ -351,6 +380,13 @@ export function buildManagerShadowTerminalObservation(run: ManagerShadowRun): Ex
       observedBid: run.terminalBid,
       entryPrice: run.entryPrice,
       entryPriceBasis: run.entryPriceBasis,
+      admissionSource: run.admissionSource,
+      admittedAt: run.admittedAt,
+      admissionDelayMs: run.admissionDelayMs,
+      firstQuoteAt: run.firstQuoteAt,
+      firstQuoteEventAgeMs: run.firstQuoteEventAgeMs,
+      firstSnapshotFetchAgeMs: run.firstSnapshotFetchAgeMs,
+      evidenceState: run.evidenceState,
       originalQty: run.originalQty,
       minimumModeledQty: run.minimumModeledQty,
       economicMode: run.economicMode,
@@ -371,7 +407,7 @@ export function buildManagerShadowTerminalObservation(run: ManagerShadowRun): Ex
 export function advanceManagerShadowRun(run: ManagerShadowRun, tick: ManagerQuoteTick): ManagerAdvanceResult {
   if (run.status !== "active") return { kind: "skipped", reason: "not_active", run };
   if (!finite(tick.bid) || !finite(tick.ask) || tick.bid <= 0 || tick.ask <= 0
-      || !finite(tick.quoteAtMs) || !finite(tick.observedAtMs))
+      || !finite(tick.quoteAtMs) || !finite(tick.observedAtMs) || !finite(tick.snapshotFetchedAtMs))
     return { kind: "skipped", reason: "invalid_quote", run };
   if (tick.ask < tick.bid) return { kind: "skipped", reason: "crossed_quote", run };
   if (tick.quoteAtMs > tick.observedAtMs) return { kind: "skipped", reason: "future_quote", run };
@@ -388,6 +424,11 @@ export function advanceManagerShadowRun(run: ManagerShadowRun, tick: ManagerQuot
   const peakReturnPct = run.peakReturnPct == null ? currentReturnPct : Math.max(run.peakReturnPct, currentReturnPct);
   const observed: ManagerShadowRun = {
     ...run,
+    evidenceState: "observing",
+    firstQuoteAt: run.firstQuoteAt ?? new Date(tick.quoteAtMs).toISOString(),
+    firstQuoteEventAgeMs: run.firstQuoteEventAgeMs ?? quoteAgeMs,
+    firstSnapshotFetchAgeMs: run.firstSnapshotFetchAgeMs
+      ?? Math.max(0, Math.round(tick.observedAtMs - tick.snapshotFetchedAtMs)),
     managerState: advanced.state,
     peakReturnPct: rounded(peakReturnPct),
     bankReturnPct: advanced.state.bankReturnPct != null ? rounded(advanced.state.bankReturnPct) : run.bankReturnPct,
@@ -431,6 +472,7 @@ export function attachActualClose(
   const at = new Date(input.atMs);
   return Number.isNaN(at.getTime()) || at.getTime() < Date.parse(run.entryAt) ? run : {
     ...run,
+    evidenceState: run.firstQuoteAt == null ? "no_eligible_quote_before_actual_close" : run.evidenceState,
     actualCloseAt: at.toISOString(),
     actualCloseReason: input.reason,
     actualRealizedPnl: rounded(input.realizedPnl),
@@ -466,6 +508,10 @@ export function encodeManagerShadowRun(
     cohort_from: run.cohortFrom, quote_max_age_ms: run.quoteMaxAgeMs,
     cutoff_minutes_before_close: run.cutoffMinutesBeforeClose,
     entry_price: run.entryPrice, entry_price_basis: run.entryPriceBasis, entry_at: run.entryAt,
+    admission_source: run.admissionSource, admitted_at: run.admittedAt,
+    admission_delay_ms: run.admissionDelayMs, first_quote_at: run.firstQuoteAt,
+    first_quote_event_age_ms: run.firstQuoteEventAgeMs,
+    first_snapshot_fetch_age_ms: run.firstSnapshotFetchAgeMs, evidence_state: run.evidenceState,
     original_qty: run.originalQty, minimum_modeled_qty: run.minimumModeledQty,
     economic_mode: run.economicMode, allocation: run.allocation, status: run.status,
     manager_state: run.managerState, peak_return_pct: run.peakReturnPct,
@@ -488,6 +534,10 @@ export function encodeManagerShadowRun(
     cohort_from: run.cohortFrom, quote_max_age_ms: run.quoteMaxAgeMs,
     cutoff_minutes_before_close: run.cutoffMinutesBeforeClose,
     entry_price: run.entryPrice, entry_price_basis: run.entryPriceBasis, entry_at: run.entryAt,
+    admission_source: run.admissionSource, admitted_at: run.admittedAt,
+    admission_delay_ms: run.admissionDelayMs, first_quote_at: run.firstQuoteAt,
+    first_quote_event_age_ms: run.firstQuoteEventAgeMs,
+    first_snapshot_fetch_age_ms: run.firstSnapshotFetchAgeMs, evidence_state: run.evidenceState,
     original_qty: run.originalQty, minimum_modeled_qty: run.minimumModeledQty,
     economic_mode: run.economicMode, allocation: run.allocation, status: run.status,
     manager_state: run.managerState, peak_return_pct: run.peakReturnPct,
@@ -532,20 +582,27 @@ export function decodeManagerShadowRun(row: ManagerShadowDbRow): ManagerShadowRu
       || !row.channel_slug || !row.occ_symbol || !row.underlying
       || (row.option_side !== "call" && row.option_side !== "put")
       || !(row.entry_price > 0) || (row.entry_price_basis !== "broker_fill" && row.entry_price_basis !== "execution_observation")
+      || !["fill_hook", "recovery_open", "recovery_closed", "hydration"].includes(row.admission_source ?? "")
+      || !Number.isInteger(row.admission_delay_ms) || (row.admission_delay_ms as number) < 0
+      || !["pending_quote", "observing", "no_eligible_quote_before_actual_close"].includes(row.evidence_state ?? "")
       || !Number.isInteger(row.original_qty) || row.original_qty < 1
       || row.minimum_modeled_qty !== minimumModeledQty(row.manager_id)
       || (row.economic_mode !== "whole_lot_executable" && row.economic_mode !== "normalized_fractional")
       || (row.status !== "active" && row.status !== "terminal" && row.status !== "censored")
       || !Number.isInteger(row.consecutive_quote_misses) || row.consecutive_quote_misses < 0) return null;
-  const entryAt = iso(row.entry_at), cohortFrom = iso(row.cohort_from), allocation = allocationFrom(row.allocation, row.original_qty, row.manager_id);
+  const entryAt = iso(row.entry_at), admittedAt = iso(row.admitted_at), cohortFrom = iso(row.cohort_from), allocation = allocationFrom(row.allocation, row.original_qty, row.manager_id);
   const managerState = stateFrom(row.manager_state);
-  if (!entryAt || !cohortFrom || !allocation || !managerState || managerEconomicMode(allocation) !== row.economic_mode) return null;
-  const dateFields = [row.last_quote_at, row.last_observed_at, row.actual_close_at, row.terminal_at, row.censored_at];
+  if (!entryAt || !admittedAt || !cohortFrom || !allocation || !managerState || managerEconomicMode(allocation) !== row.economic_mode) return null;
+  if (Math.max(0, Date.parse(admittedAt) - Date.parse(entryAt)) !== row.admission_delay_ms) return null;
+  const dateFields = [row.first_quote_at, row.last_quote_at, row.last_observed_at, row.actual_close_at, row.terminal_at, row.censored_at];
   if (dateFields.some((value) => value != null && iso(value) == null)) return null;
-  const numericNullable = [row.peak_return_pct, row.bank_return_pct, row.last_bid, row.actual_realized_pnl,
+  const numericNullable = [row.first_quote_event_age_ms, row.first_snapshot_fetch_age_ms,
+    row.peak_return_pct, row.bank_return_pct, row.last_bid, row.actual_realized_pnl,
     row.terminal_bid, row.terminal_return_pct, row.terminal_pnl, row.terminal_quote_age_ms];
   if (numericNullable.some((value) => value != null && !finite(value))) return null;
-  if ((row.last_bid != null && row.last_bid <= 0) || (row.terminal_bid != null && row.terminal_bid <= 0)
+  if ((row.first_quote_event_age_ms != null && (!Number.isInteger(row.first_quote_event_age_ms) || row.first_quote_event_age_ms < 0))
+      || (row.first_snapshot_fetch_age_ms != null && (!Number.isInteger(row.first_snapshot_fetch_age_ms) || row.first_snapshot_fetch_age_ms < 0))
+      || (row.last_bid != null && row.last_bid <= 0) || (row.terminal_bid != null && row.terminal_bid <= 0)
       || (row.terminal_quote_age_ms != null && (!Number.isInteger(row.terminal_quote_age_ms) || row.terminal_quote_age_ms < 0))) return null;
   const activeClean = row.status === "active" && row.terminal_at == null && row.terminal_bid == null
     && row.terminal_return_pct == null && row.terminal_pnl == null && row.terminal_trigger == null
@@ -564,6 +621,11 @@ export function decodeManagerShadowRun(row: ManagerShadowDbRow): ManagerShadowRu
   const actualAllNull = row.actual_close_at == null && row.actual_close_reason == null && row.actual_realized_pnl == null;
   const actualComplete = row.actual_close_at != null && !!row.actual_close_reason && row.actual_realized_pnl != null;
   if (!actualAllNull && !actualComplete) return null;
+  const firstQuoteAllNull = row.first_quote_at == null && row.first_quote_event_age_ms == null && row.first_snapshot_fetch_age_ms == null;
+  const firstQuoteComplete = row.first_quote_at != null && row.first_quote_event_age_ms != null && row.first_snapshot_fetch_age_ms != null;
+  if (!firstQuoteAllNull && !firstQuoteComplete) return null;
+  if ((row.evidence_state === "pending_quote") !== firstQuoteAllNull && row.evidence_state !== "no_eligible_quote_before_actual_close") return null;
+  if (row.evidence_state === "no_eligible_quote_before_actual_close" && (row.actual_close_at == null || !firstQuoteAllNull)) return null;
   if (row.last_quote_at != null && Date.parse(row.last_quote_at) < Date.parse(entryAt)) return null;
   if (row.actual_close_at != null && Date.parse(row.actual_close_at) < Date.parse(entryAt)) return null;
   if (row.censored_at != null && Date.parse(row.censored_at) < Date.parse(entryAt)) return null;
@@ -585,6 +647,12 @@ export function decodeManagerShadowRun(row: ManagerShadowDbRow): ManagerShadowRu
     shadowBookVersion: MANAGER_SHADOW_BOOK_VERSION, cohortFrom, quoteMaxAgeMs: row.quote_max_age_ms,
     cutoffMinutesBeforeClose: row.cutoff_minutes_before_close,
     entryPrice: row.entry_price, entryPriceBasis: row.entry_price_basis, entryAt,
+    admissionSource: row.admission_source as ManagerAdmissionSource, admittedAt,
+    admissionDelayMs: row.admission_delay_ms as number,
+    firstQuoteAt: row.first_quote_at ? iso(row.first_quote_at) : null,
+    firstQuoteEventAgeMs: row.first_quote_event_age_ms,
+    firstSnapshotFetchAgeMs: row.first_snapshot_fetch_age_ms,
+    evidenceState: row.evidence_state as ManagerEvidenceState,
     originalQty: row.original_qty, minimumModeledQty: row.minimum_modeled_qty,
     economicMode: row.economic_mode, allocation, status: row.status, managerState,
     peakReturnPct: row.peak_return_pct, bankReturnPct: row.bank_return_pct,

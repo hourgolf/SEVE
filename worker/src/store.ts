@@ -553,8 +553,8 @@ export async function insertFamilyAdmissionObservation(row: FamilyAdmissionObser
 }
 
 // ---- Phase 1G-B durable portable-manager shadow book ----------------------
-// This adapter is backend-only research persistence. It is never imported by
-// execute.ts and none of its failures can alter an order or desk position row.
+// This adapter is backend-only research persistence. The fill observer queues
+// it fire-and-forget; none of its failures can alter an order or desk row.
 let managerShadowTableAvailable: boolean | null = null;
 
 export async function loadManagerShadowRows(): Promise<ManagerShadowDbRow[] | null> {
@@ -603,6 +603,25 @@ export async function saveManagerShadowRun(
   return false;
 }
 
+/** Actual outcome may arrive after a counterfactual manager already reached a
+ * terminal/censored state. Attach only previously-null actual fields; do not
+ * reopen or rewrite the deterministic manager terminal. */
+export async function saveManagerShadowActualClose(run: ManagerShadowRun): Promise<boolean> {
+  if (!config.hasServiceRole || managerShadowTableAvailable === false
+      || run.actualCloseAt == null || !run.actualCloseReason || run.actualRealizedPnl == null) return false;
+  const { data, error } = await sb.from("manager_shadow_runs").update({
+    actual_close_at: run.actualCloseAt,
+    actual_close_reason: run.actualCloseReason,
+    actual_realized_pnl: run.actualRealizedPnl,
+    evidence_state: run.evidenceState,
+    updated_at: new Date().toISOString(),
+  }).eq("id", run.id).is("actual_close_at", null).select("id").maybeSingle();
+  if (!error) { managerShadowTableAvailable = true; return !!data; }
+  if (missingRelation(error)) managerShadowTableAvailable = false;
+  else warn(`store: manager shadow actual-close save failed — ${error.message}`);
+  return false;
+}
+
 export interface ManagerShadowActualPosition {
   id: string;
   status: string;
@@ -628,6 +647,21 @@ export async function loadManagerShadowActualPositions(ids: readonly string[]): 
   return out;
 }
 
+/** Observer-only restart/short-trade recovery. Unlike getOpenPositions this
+ * deliberately returns both open and closed rows from a bounded recent window,
+ * so a trade shorter than one manager poll cannot disappear before admission. */
+export async function loadManagerShadowRecoveryPositions(sinceIso: string): Promise<PositionRow[] | null> {
+  const { data, error } = await sb.from("positions").select("*")
+    .gte("opened_at", sinceIso)
+    .order("opened_at", { ascending: true })
+    .limit(1000);
+  if (error) {
+    warn(`store: manager shadow recovery read failed — ${error.message}`);
+    return null;
+  }
+  return mapOpenPositions({ data: data as unknown[] | null, error: null });
+}
+
 let positionOutcomeTableAvailable: boolean | null = null;
 
 /** Phase 1E append-only lineage/booking evidence. Never awaited by execution. */
@@ -644,7 +678,7 @@ export async function insertPositionOutcome(row: PositionOutcomeDraft): Promise<
   return false;
 }
 
-export interface PositionInsertResult { id: string | null; error: string | null }
+export interface PositionInsertResult { id: string | null; openedAt: string | null; error: string | null }
 
 export async function insertPosition(row: {
   strategist_id: string; occ_symbol: string; underlying: string; expiration: string;
@@ -659,8 +693,8 @@ export async function insertPosition(row: {
     trough_mark: core.avg_entry_price, // MAE ratchet starts at entry (58_trough_mark)
     peak_at: new Date().toISOString(), trough_at: new Date().toISOString(), // extremes = entry at t0 (61)
     entry_reason: entry_reason ?? null, entry_features: entry_features ?? null, entry_delta: entry_delta ?? null,
-  }).select("id").single();
-  return { id: data?.id ?? null, error: error ? error.message : null };
+  }).select("id,opened_at").single();
+  return { id: data?.id ?? null, openedAt: data?.opened_at ?? null, error: error ? error.message : null };
 }
 
 /** PYRAMID add (Phase B): grow the SINGLE position row to the new weighted-avg entry + summed
@@ -683,7 +717,7 @@ export async function updatePositionStack(id: string, newQty: number, newAvgEntr
  *  (audit 2026-07-11, 1b #2 — a partial sell fill no longer closes the whole row). */
 export async function trancheClosePositionRow(id: string, soldQty: number, mark: number, realized: number, closeReason: string = "target_tranche"): Promise<boolean> {
   const { data, error } = await sb.from("positions")
-    .update({ status: "closed", closed_at: new Date().toISOString(), qty: soldQty, current_mark: mark, realized_pnl: realized, close_reason: closeReason })
+    .update({ status: "closed", closed_at: new Date().toISOString(), qty: soldQty, current_mark: mark, unrealized_pnl: 0, realized_pnl: realized, close_reason: closeReason })
     .eq("id", id).eq("status", "open").select("id");
   if (error) { warn(`store: tranche close failed — ${error.message}`); return false; }
   return (data ?? []).length > 0;
@@ -725,8 +759,8 @@ async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: 
     peak_mark: Math.max(parent.peak_mark ?? parent.avg_entry_price, mark), trough_mark: parent.trough_mark ?? parent.avg_entry_price,
     peak_at: new Date().toISOString(), trough_at: new Date().toISOString(),
     entry_reason: o.entryReason, entry_features: parent.entry_features ?? null, runner_of: o.runnerOf,
-  }).select("id").single();
-  return { id: data?.id ?? null, error: error ? error.message : null };
+  }).select("id,opened_at").single();
+  return { id: data?.id ?? null, openedAt: data?.opened_at ?? null, error: error ? error.message : null };
 }
 
 export async function closePositionRow(id: string, mark: number, realized: number, reason?: string): Promise<boolean> {
@@ -737,14 +771,16 @@ export async function closePositionRow(id: string, mark: number, realized: numbe
   // already closed by another path (manual route, a raced cycle) is a no-op → returns false, so the
   // caller skips re-journaling a phantom second booking. Mirrors the manual close-position route.
   const { data, error } = await sb.from("positions")
-    .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: reason ?? null })
+    .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, unrealized_pnl: 0, realized_pnl: realized, close_reason: reason ?? null })
     .eq("id", id).eq("status", "open").select("id");
   if (error) { warn(`store: close update failed — ${error.message}`); return false; }
   return Array.isArray(data) && data.length > 0;
 }
 
 export async function markPositionRow(id: string, mark: number, unrealized: number): Promise<void> {
-  try { await sb.from("positions").update({ current_mark: mark, unrealized_pnl: unrealized }).eq("id", id); }
+  // The status guard prevents a late display-only mark from racing a close and
+  // restoring non-zero unrealized P&L on an already-closed row.
+  try { await sb.from("positions").update({ current_mark: mark, unrealized_pnl: unrealized }).eq("id", id).eq("status", "open"); }
   catch { /* display-only */ }
 }
 

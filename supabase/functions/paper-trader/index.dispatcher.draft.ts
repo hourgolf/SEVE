@@ -1118,7 +1118,7 @@ Deno.serve(async () => {
         // STATUS-GUARDED close (audit H3, worker parity): the failover can race the stream worker
         // on the same row — without .eq(status,'open') a later cron write OVERWROTE the worker's
         // booked realized/mark with a different value. Already-closed → no-op.
-        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id).eq("status", "open");
+        await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, unrealized_pnl: 0, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id).eq("status", "open");
         await journal("WARN", `${s.slug}: reconciled ${row.occ_symbol} @ ${mark.toFixed(2)} (${src}) — no Alpaca position; booked $${realized.toFixed(0)} (fill-net)`);
         out.push({ slug: s.slug, note: "reconciled" });
         continue;
@@ -1166,7 +1166,7 @@ Deno.serve(async () => {
           const { data: q } = await sb.from("option_quotes").select("bid,mid").eq("occ_symbol", row.occ_symbol).order("captured_at", { ascending: false }).limit(1).maybeSingle();
           const mark = Number(q?.bid ?? q?.mid ?? alp.current_price ?? 0);
           // STATUS-GUARDED close (audit H3, worker parity) — a raced already-closed row is a no-op.
-          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id).eq("status", "open");
+          await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, unrealized_pnl: 0, realized_pnl: realized, close_reason: "reconciled" }).eq("id", row.id).eq("status", "open");
           await journal("WARN", `${s.slug}: ${row.occ_symbol} ${why} — reconciled closed @ ${mark.toFixed(2)} (booked $${realized.toFixed(0)} fill-net)`);
         };
         if (sellQty <= 0) {
@@ -1199,7 +1199,7 @@ Deno.serve(async () => {
               // close_reason (31_close_reason.sql): durable exit attribution — the journal
               // says the same but events expire (30d); the column is the dataset.
               // STATUS-GUARDED close (audit H3, worker parity) — a raced already-closed row is a no-op.
-              await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, realized_pnl: realized, close_reason: intent.reason }).eq("id", row.id).eq("status", "open");
+              await sb.from("positions").update({ status: "closed", closed_at: new Date().toISOString(), current_mark: exitPx, unrealized_pnl: 0, realized_pnl: realized, close_reason: intent.reason }).eq("id", row.id).eq("status", "open");
               // de-dup Fix 2: drop this OCC's remaining by what we just sold so a sibling
               // exiting the same lot later this cycle sees the true leftover.
               remainingByOcc.set(String(row.occ_symbol), Math.max(0, heldQty - soldQty));
@@ -1351,7 +1351,7 @@ Deno.serve(async () => {
         // unrealized_pnl (exits use the mark; the fund snapshot still uses Alpaca's net).
         const markPx = Number(alp.current_price ?? 0);
         const unreal = Math.round((markPx - Number(row.avg_entry_price ?? 0)) * Number(row.qty) * 10000) / 100;
-        await sb.from("positions").update({ current_mark: markPx, unrealized_pnl: unreal }).eq("id", row.id);
+        await sb.from("positions").update({ current_mark: markPx, unrealized_pnl: unreal }).eq("id", row.id).eq("status", "open");
       }
      } catch (chErr) {
        // Isolate this channel's failure; the rest of the fleet still runs this minute.

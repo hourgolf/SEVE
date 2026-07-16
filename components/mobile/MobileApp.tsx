@@ -260,7 +260,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             <DayBooksStrip strategists={desk.strategists} pnl={livePnl} fund={liveFund} closedToday={feed.recentTrades.length} openCount={feed.positions.length} />
             <OpsPreflight
               strategists={desk.strategists}
-              tape={{ rowCount: data.rowCount, lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
+              tape={{ lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}
               ops={ops}
             />
             <MasterStopControl fund={desk.fund} />

@@ -180,7 +180,7 @@ export async function POST(req: Request) {
   // close_reason 'manual' = operator close (the post-close chips refine it to 'manual:<tag>').
   const { data: closedRows, error: upErr } = await sb
     .from("positions")
-    .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: fill, realized_pnl: realized, close_reason: "manual" })
+    .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: fill, unrealized_pnl: 0, realized_pnl: realized, close_reason: "manual" })
     .eq("id", id)
     .eq("status", "open")
     .select("id");
