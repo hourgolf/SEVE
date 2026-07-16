@@ -144,6 +144,7 @@ export function MobilePerform({
               openPositions={feed.positions}
               symbol={symbol}
               onSymbolChange={setSymbol}
+              sentinelBrief={props.sentinel.brief}
             />
           </div>
         </section>

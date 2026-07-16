@@ -132,6 +132,7 @@ export function DesktopSurface({
   setActiveRoom,
   collapsedMarket,
   setCollapsedMarket,
+  sentinel,
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
@@ -289,7 +290,7 @@ export function DesktopSurface({
               </button>
             </div>
             <div className="mkt-chart" style={{ display: collapsedMarket ? "none" : "block" }}>
-              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} />
+              <IntradayChart bars={data.bars} dailyBars={data.dailyBars} spot={data.spot} spotUp={spotUp} trades={feed.recentTrades} openPositions={feed.positions} highlightTrade={hlTrade} symbol={symbol} onSymbolChange={setSymbol} sentinelBrief={sentinel.brief} />
             </div>
             {/* LIVE BOOK — directly under the chart so open positions ↔ price are visible together
                 for exit timing (no scroll). Positions LEFT; signals tape stacked over the chain RIGHT.

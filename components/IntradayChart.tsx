@@ -21,13 +21,29 @@ import { ema, macd as computeMacd } from "@/lib/indicators";
 import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 import type { UnderlyingBar } from "@/lib/types";
 import type { Position } from "@/lib/desk/types";
-import { getSupabase } from "@/lib/supabaseClient";
+import type { Brief } from "@/hooks/useSentinelDigest";
 
 // SENT overlay data — the nightly brief's levels, fetched lazily when the chip first
 // turns on. SPY gets the full ladder (confluence levels + gap-arm lines); every symbol
 // gets its own dealer γ-walls. One tiny read of the latest sentinel event.
 type SentTerrain = { levels: { px: number; label: string }[]; armLo: number | null; armHi: number | null };
 type SentData = { byIndex: Record<string, SentTerrain> };
+
+export function deriveSentinelTerrain(brief: Brief | null | undefined): SentData | null {
+  if (!brief) return null;
+  const byIndex: Record<string, SentTerrain> = {};
+  if (brief.sentLevels) {
+    for (const [sym, terrain] of Object.entries(brief.sentLevels)) {
+      byIndex[sym] = { levels: [...terrain.above, ...terrain.below], armLo: terrain.armLo, armHi: terrain.armHi };
+    }
+  } else {
+    byIndex.SPY = { levels: [...brief.carry.above, ...brief.carry.below], armLo: brief.carry.bandLo, armHi: brief.carry.bandHi };
+    for (const dealer of brief.dealer) if (dealer.sym !== "SPY") {
+      byIndex[dealer.sym] = { levels: dealer.walls.map((px) => ({ px, label: "γ-wall" })), armLo: null, armHi: null };
+    }
+  }
+  return { byIndex };
+}
 
 type Mode = "line" | "candles";
 const MODE_KEY = "seve-chart-mode", TF_KEY = "seve-chart-tf", RANGE_KEY = "seve-chart-range";
@@ -139,6 +155,7 @@ class SessionLayer implements ISeriesPrimitive<Time> {
 export function IntradayChart({
   bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
   symbol = "SPY", onSymbolChange, fill = false,
+  sentinelBrief = null,
 }: {
   bars: UnderlyingBar[];
   dailyBars?: UnderlyingBar[];
@@ -158,6 +175,8 @@ export function IntradayChart({
   /** A trade the operator opened in the Today's-trades list → emphasize its marker
    *  and center the view on it (so the fill is shown on the chart). */
   highlightTrade?: Position | null;
+  /** Page-owned Sentinel terrain. The chart never performs its own remote read. */
+  sentinelBrief?: Brief | null;
 }) {
   const [mode, setMode] = useState<Mode>("line");
   // mobile: the control chrome collapses behind a CFG chip (one row instead of
@@ -332,39 +351,10 @@ export function IntradayChart({
     return { priorClose, pdh, pdl, orbHi, orbLo, hod, lod };
   }, [bars, dailyBars]);
 
-  // ---- SENT overlay data (lazy: fetched once, the first time the chip turns on) ----
-  const [sentData, setSentData] = useState<SentData | null>(null);
-  useEffect(() => {
-    if (!showSent || sentData) return;
-    let alive = true;
-    (async () => {
-      try {
-        const { data } = await getSupabase()
-          .from("events").select("meta")
-          .like("message", "sentinel:%").order("created_at", { ascending: false }).limit(1);
-        if (!alive) return;
-        type Lvl = { px: number; label: string };
-        const brief = (data?.[0]?.meta as { brief?: {
-          sentLevels?: Record<string, { above?: Lvl[]; below?: Lvl[]; armLo?: number | null; armHi?: number | null }>;
-          carry?: { above?: Lvl[]; below?: Lvl[]; bandLo?: number | null; bandHi?: number | null };
-          dealer?: { sym: string; walls: number[] }[];
-        } } | undefined)?.brief;
-        const byIndex: Record<string, SentTerrain> = {};
-        if (brief?.sentLevels) {
-          // NEW path: each index's own full ladder + gap-arm band
-          for (const [sym, t] of Object.entries(brief.sentLevels)) {
-            byIndex[sym] = { levels: [...(t.above ?? []), ...(t.below ?? [])], armLo: t.armLo ?? null, armHi: t.armHi ?? null };
-          }
-        } else if (brief) {
-          // legacy fallback: SPY ladder from carry, others walls-only from dealer
-          byIndex.SPY = { levels: [...(brief.carry?.above ?? []), ...(brief.carry?.below ?? [])], armLo: brief.carry?.bandLo ?? null, armHi: brief.carry?.bandHi ?? null };
-          for (const d of brief.dealer ?? []) if (d.sym !== "SPY") byIndex[d.sym] = { levels: (d.walls ?? []).map((px) => ({ px, label: "γ-wall" })), armLo: null, armHi: null };
-        }
-        setSentData({ byIndex });
-      } catch { if (alive) setSentData({ byIndex: {} }); }
-    })();
-    return () => { alive = false; };
-  }, [showSent, sentData]);
+  // SENT consumes the page-owned digest. This preserves the hook → SurfaceProps →
+  // shell → subscription-free leaf invariant and makes the overlay's provenance
+  // identical to the dedicated Sentinel workspace.
+  const sentData = useMemo(() => deriveSentinelTerrain(sentinelBrief), [sentinelBrief]);
 
   // ---- create chart + base series once ----
   useEffect(() => {

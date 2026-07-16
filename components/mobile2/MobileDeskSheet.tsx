@@ -11,6 +11,7 @@ import { signedUsd, timeOfDay, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveRecentExits } from "@/lib/perform/derivePositionsWorkspace";
+import { deriveSentinelWorkspace } from "@/lib/sentinel/deriveSentinelWorkspace";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -109,6 +110,12 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
   const equity = feed.equityCurve.map((point) => point.equity);
   const brief = sentinel.brief;
   const judge = sentinel.judge;
+  const scan = sentinel.scan;
+  const sentView = deriveSentinelWorkspace({
+    nowMs: Date.now(), state: sentinel.state, createdAt: sentinel.createdAt, fetchedAtMs: sentinel.fetchedAtMs,
+    forDate: sentinel.forDate, date: sentinel.date, hasBrief: Boolean(brief), hasScan: Boolean(scan),
+    hasJudge: Boolean(judge), benchDays: scan?.benchDays ?? null,
+  });
 
   return <>
     <div className="m2-desk-hero">
@@ -136,8 +143,14 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
       </div>
     </Section>
 
-    <Section title="NIGHTLY READ" meta={sentinel.date ? `scan ${sentinel.date.slice(5)}` : sentinel.state}>
-      {sentinel.state !== "ok" ? <div className="m2-desk-empty">nightly review {sentinel.state}</div> : <div className="m2-nightly">
+    <Section title="SENTINEL" meta={sentView.freshnessLabel.toLowerCase()}>
+      <div className={`m2-sentinel-ready ${sentView.freshness}`}><b>{sentView.freshnessLabel}</b><span>for {sentinel.forDate || "unstamped"} · receipt {age(sentView.ageSec)}</span></div>
+      <div className="m2-sentinel-provenance">
+        {sentView.provenance.map((row) => <p key={row.label}><b className={row.kind}>{row.kind}</b><span>{row.label}</span><small>{row.basis}</small></p>)}
+      </div>
+      {sentinel.state !== "ok" ? <div className="m2-desk-empty">sentinel evidence {sentinel.state}; no liveness claim</div> : <div className="m2-nightly">
+        {scan && <><div><small>DETERMINISTIC SENSOR · {scan.benchDays} SESSIONS</small><p>{scan.promote.length} promote candidates · {scan.fixable.length} exit-fixable · {scan.leaks.length} leaks</p></div>
+          {(scan.patterns?.length ?? 0) > 0 && <div><small>PATTERN FLAGS · DESCRIPTIVE</small>{scan.patterns!.slice(0, 5).map((item, index) => <p key={index}>{item}</p>)}</div>}</>}
         {judge && <><div className="verdict"><b>{judge.verdict}</b><span>{judge.soWhat}</span></div>
           {judge.opportunities.length > 0 && <div><small>OPPORTUNITIES</small>{judge.opportunities.map((item, index) => <p key={index}>{item}</p>)}</div>}
           {judge.drift.length > 0 && <div><small>DRIFT</small>{judge.drift.map((item, index) => <p key={index}>{item}</p>)}</div>}</>}
@@ -145,6 +158,7 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
           <div><small>NEXT OPEN</small>{brief.carry.watch.map((item, index) => <p key={index}>{item}</p>)}</div>
           {brief.events.length > 0 && <div><small>EVENTS</small>{brief.events.map((item, index) => <p key={index}>{item}</p>)}</div>}
         </>}
+        <p className="m2-sentinel-caveat">Interpretive output cannot alter health, channel state, policy, orders, or promotion.</p>
       </div>}
     </Section>
   </>;

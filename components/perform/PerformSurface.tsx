@@ -8,6 +8,7 @@ import { PerformRail } from "@/components/perform/PerformRail";
 import { PerformDock } from "@/components/perform/PerformDock";
 import { PerformMarketsWorkspace } from "@/components/perform/PerformMarketsWorkspace";
 import { PerformPositionsWorkspace } from "@/components/perform/PerformPositionsWorkspace";
+import { SentinelWorkspace } from "@/components/perform/SentinelWorkspace";
 import { derivePerformFocus, type PerformSection } from "@/lib/perform/derivePerformView";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
@@ -43,7 +44,7 @@ export function PerformSurface({
       {/* P5 slice 3 — deterministic incident banner (hidden on normal; critical pre-empts chart space). */}
       <IncidentBanner incident={incident} />
       <main className="pf-stage">
-        {section === "market" ? <PerformMarketsWorkspace surface={surface} /> : section === "positions" ? <PerformPositionsWorkspace surface={surface} /> : <>
+        {section === "market" ? <PerformMarketsWorkspace surface={surface} /> : section === "positions" ? <PerformPositionsWorkspace surface={surface} /> : section === "sentinel" ? <SentinelWorkspace surface={surface} /> : <>
           <div className="pf-market-target" tabIndex={-1}>
             <IntradayChart
               bars={data.bars}
@@ -54,6 +55,7 @@ export function PerformSurface({
               openPositions={feed.positions}
               symbol={symbol}
               onSymbolChange={setSymbol}
+              sentinelBrief={sentinel.brief}
               fill
             />
           </div>

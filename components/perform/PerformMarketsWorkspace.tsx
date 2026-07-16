@@ -58,6 +58,7 @@ export function PerformMarketsWorkspace({ surface }: { surface: SurfaceProps }) 
           openPositions={feed.positions}
           symbol={symbol}
           onSymbolChange={changeSymbol}
+          sentinelBrief={surface.sentinel.brief}
           fill
         />
       </div>
