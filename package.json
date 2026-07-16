@@ -106,6 +106,8 @@
     "weekly-readout": "tsx --env-file=.env.local scripts/weekly-readout.ts",
     "desk-briefing": "tsx scripts/desk-briefing.ts",
     "sentinel": "tsx --env-file=.env.local scripts/sentinel.ts",
+    "sentinel-query-selftest": "tsx lib/sentinel/virtualTradeQuery.selftest.ts",
+    "sentinel-query-smoke": "tsx --env-file=.env.local scripts/sentinel-query-smoke.ts",
     "morning-brief": "caffeinate -i tsx --env-file=.env.local scripts/morning-brief.ts",
     "stairstep-shadow": "tsx --env-file=.env.local scripts/stairstep-shadow.ts",
     "override-scorecard": "tsx --env-file=.env.local scripts/override-scorecard.ts",

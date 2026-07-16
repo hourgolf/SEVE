@@ -22,6 +22,11 @@ import path from "node:path";
 import { dayTags } from "../engine/market-events";
 import { nextTradingDay } from "../engine/market-calendar";
 import { pageAll } from "../engine/pageAll";
+import {
+  SENTINEL_VIRTUAL_TRADE_ORDER,
+  SENTINEL_VIRTUAL_TRADE_SELECT,
+  type SentinelVirtualTradeRow,
+} from "../lib/sentinel/virtualTradeQuery";
 
 // Service role (when present, e.g. the nightly capture / .env.local) lets the digest publish to the
 // events table for the §03 panel; anon still reads virtual_trades fine, just skips the publish.
@@ -115,7 +120,14 @@ function triggerScan(): string[] {
 // ---- BENCH: avg-peak per vb channel from virtual_trades (mid-basis), netted to real-fill ----
 async function benchScan(days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
-  const data = await pageAll<{slug:string; mfe_pct:number; giveback_pct:number; pnl_per_contract:number}>((from) => sb.from("virtual_trades").select("slug,mfe_pct,giveback_pct,pnl_per_contract,id").like("slug","vb-%").gte("signal_at", since).not("mfe_pct","is",null).order("signal_at").order("id"));
+  const data = await pageAll<SentinelVirtualTradeRow>((from) => sb
+    .from("virtual_trades")
+    .select(SENTINEL_VIRTUAL_TRADE_SELECT)
+    .like("slug", "vb-%")
+    .gte("signal_at", since)
+    .not("mfe_pct", "is", null)
+    .order(SENTINEL_VIRTUAL_TRADE_ORDER[0])
+    .order(SENTINEL_VIRTUAL_TRADE_ORDER[1]));
   const by = new Map<string, any[]>();
   for (const r of data) { const a = by.get(r.slug) ?? []; a.push(r); by.set(r.slug, a); }
   return [...by.entries()].map(([slug, rs]) => {
