@@ -1,6 +1,6 @@
-# SEVE current-state roadmap — 2026-07-15
+# SEVE current-state roadmap — updated 2026-07-16
 
-Status: canonical operating roadmap after the July 15 paper session. This supersedes dated status
+Status: canonical operating roadmap after the July 16 paper session. This supersedes dated status
 sections in earlier handoffs and implementation logs; those remain historical receipts.
 
 SEVE remains paper-only. Nothing here authorizes live-money trading, automatic channel promotion,
@@ -54,7 +54,7 @@ without changing the frozen selectors or thresholds.
 
 ## 3. Current implementation state
 
-Production baseline before this research-only review branch: `main@9c13672`.
+Production baseline before this research-only review branch: `main@241525d`.
 
 | Area | State | Receipt / remaining gate |
 |---|---|---|
@@ -75,6 +75,8 @@ Production baseline before this research-only review branch: `main@9c13672`.
 | Session evidence correctness | Merged + deployed | V2 immediate manager admission, closed-row truth, and resilient market reads are live; strategy and execution policy remain unchanged. |
 | Phase 1K-D | Complete; review only | July 15 exact holdout scored unchanged against `phase1k-c-preregister-v1`; receipt and results are preserved in the research review branch. |
 | Phase 1K-E | Frozen; accumulating | PB, ORB, Grind, QQQ, and IWM tests were frozen before the July 16+ prospective window; evidence floors require at least five independent sessions. |
+| Phase 1K-F | Merged + deployed; first-session validation pending | Execution-quality receipts are observation-only and live. Reconcile the next session's eligible exits before activating any alert thresholds. |
+| Phase 1K-G | Pure foundation in review | Held-contract OPRA sample contract, bounded buffer, deterministic R2 segment descriptor, 36-check self-test, and unapplied private receipt migration exist. No runtime adapter or production write is enabled. |
 
 The seam remains load-bearing:
 
@@ -174,14 +176,15 @@ development/prospective status. `pk` and win rate can be useful, but neither is 
 1. **Complete:** worker-ledger long-run correction is merged, deployed, and production-smoked green.
 2. **Complete; human review required:** Phase 1K-D scored the July 15 holdout unchanged. No policy or production change is authorized.
 3. **Frozen and accumulating:** Phase 1K-E evaluates PB, ORB, Grind, QQQ, and IWM beginning July 16; do not score a final verdict before its minimum five-session evidence floors are met.
-4. **Next evidence build:** execution-quality receipts (YF-D) and held-contract option capture (YF-B), both observation-only.
-5. **Next dashboard slice:** build Sentinel with provenance and freshness; no LLM claim in health logic.
-6. **Then:** build Event Tape / Review with live versus after-action separation.
-7. **Then:** consolidate Ops/auth/preflight/safety and complete authenticated operator drills.
-8. **Then:** reshape Channels around cartridge controls and evidence passports; test PB, ORB, Grind,
+4. **Next evidence gate:** reconcile Phase 1K-F receipts against the next paper session's eligible exits; missing cron-failover and late-recovery evidence stays explicit.
+5. **Next evidence build:** complete Phase 1K-G held-contract OPRA capture from the reviewed pure foundation. Wire it observation-only, off the order path, behind a default-off flag; preserve strict manager-v1 quote semantics.
+6. **Next dashboard slice:** build Sentinel with provenance and freshness; no LLM claim in health logic.
+7. **Then:** build Event Tape / Review with live versus after-action separation.
+8. **Then:** consolidate Ops/auth/preflight/safety and complete authenticated operator drills.
+9. **Then:** reshape Channels around cartridge controls and evidence passports; test PB, ORB, Grind,
    MOMO, QQQ/IWM, and VB as separate hypotheses and policy eras.
-9. **Only after parity:** retire Legacy Rooms.
-10. **Finally:** finish exact 909 aesthetic tuning, responsive sizing, contrast, density, and blackout skin.
+10. **Only after parity:** retire Legacy Rooms.
+11. **Finally:** finish exact 909 aesthetic tuning, responsive sizing, contrast, density, and blackout skin.
 
 ## 8. Release gates
 

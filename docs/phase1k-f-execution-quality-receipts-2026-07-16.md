@@ -1,7 +1,9 @@
 # Phase 1K-F — execution-quality receipts
 
-Status: review branch only. The migration is local and unapplied. Railway, Vercel, Supabase, strategy
-configuration, paper orders, and production behavior are unchanged.
+Status: merged and deployed at `main@241525d`. The private migration is applied and Railway is running
+`stream-2026-07-16a`. The release changed observation only: strategy configuration, order sizing,
+entry/exit policy, and paper posture remain unchanged. The first live-session receipt reconciliation is
+still required before any alert thresholds can be ratified.
 
 ## Purpose
 
@@ -85,16 +87,11 @@ A missing table or failed write loses evidence only.
 - No historical backfill is asserted from incomplete evidence.
 - No exact provider quote timestamp is inferred.
 
-## Review and rollout gates
+## Remaining validation gates
 
-1. Review pure math, schema, RLS/grants, and every exit call site.
-2. Apply the migration only after confirming the paper desk is flat.
-3. Verify relation, constraints, grants, policy, and indexes; run Supabase security/performance advisors.
-4. Bump `WORKER_VERSION` in a separate deployment commit.
-5. Deploy the correct Railway service manually; auto-deploy remains disabled.
-6. Confirm heartbeat/run ledger, paper-only posture, and broker/desk reconciliation.
-7. During the next paper session, verify each stream-observed or authenticated-manual positive exit fill
+1. During the next paper session, verify each stream-observed or authenticated-manual positive exit fill
    creates one receipt and that no order timing or booking result changes.
-8. Reconcile receipt counts against broker exit fills, classifying cron-failover and late-recovered fills
+2. Reconcile receipt counts against broker exit fills, classifying cron-failover and late-recovered fills
    as explicit missing-evidence cases.
-9. Keep alerts and dashboard judgments off until receipt coverage and missing-evidence counts are reviewed.
+3. Confirm heartbeat/run ledger, paper-only posture, and broker/desk reconciliation remain green.
+4. Keep alerts and dashboard judgments off until receipt coverage and missing-evidence counts are reviewed.
