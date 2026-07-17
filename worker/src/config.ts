@@ -184,7 +184,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-14a"; // Phase 1H capture v2 retains SIP exchange/tape/sale conditions so forming bars can follow official aggregation rules. Prior (07-13b): v1 intraminute trade/quote capture omitted that provenance. Deferred: #12/#14 (broker samples), #17 (spread-capture dormant), #18 (per-strike chain staleness).
+export const WORKER_VERSION = "stream-2026-07-16a"; // Phase 1K-F adds append-only, non-blocking exit execution-quality receipts. Prior (07-14a): Phase 1H capture v2 retained SIP exchange/tape/sale conditions. Deferred: cron-failover/late-recovery receipt coverage and authoritative per-contract provider quote time.
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
