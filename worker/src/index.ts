@@ -25,7 +25,7 @@ import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
 import { archiveQuotesToStorage, maybeArchiveTick } from "./archive.js";
 import { maybePublishForensicsTick } from "./forensics.js";
-import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, noteRowHeld, type ExecCtx } from "./execute.js";
+import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, noteRowHeld, type ExecCtx, type ExitQualityPolicy } from "./execute.js";
 import { freshExecutableBid } from "./exitRules.js";
 import { computeFeatures } from "../../engine/engine";
 import { sessionCloseMin } from "../../engine/market-calendar";
@@ -75,6 +75,22 @@ function clearSweepPriceState(rowId: string): void {
   troughBidByKey.delete(rowId);
   sweepSkipLogged.delete(rowId);
   for (const managerId of MANAGER_IDS) managerShadowState.delete(`${rowId}|${managerId}`);
+}
+
+function exitQualityPolicyFor(ch: store.ChannelConfig): ExitQualityPolicy {
+  const premiumGate = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
+  const specExit = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
+  const takeProfitCandidates = [ch.take_profit_pct, specExit?.profitPct]
+    .filter((value): value is number => typeof value === "number" && value > 0);
+  return {
+    premiumStopPct: premiumGate > 0 ? premiumGate : null,
+    specPremiumStopPct: premiumGate > 0 && (specExit?.stopPct ?? 0) > 0 ? specExit?.stopPct ?? null : null,
+    underlyingStopPct: ch.underlying_stop_pct > 0 ? ch.underlying_stop_pct : null,
+    // Both compiled-spec and channel-config targets can be active. The first
+    // threshold reached is the smaller positive value, which is the truthful
+    // configured target for an otherwise identical target_premium reason.
+    takeProfitPct: takeProfitCandidates.length ? Math.min(...takeProfitCandidates) : null,
+  };
 }
 
 function observeShadowManagers(input: {
@@ -483,7 +499,7 @@ async function cycle(trigger: string): Promise<void> {
                 if (!exitGuard.claim(row.id)) {
                   info(`live pass[${g.account.name}/${sym}]: ${d.slug} exit skipped — an exit for this row is already in flight (sweep)`);
                 } else {
-                  try { await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }); }
+                  try { await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }, exitQualityPolicyFor(ch)); }
                   finally { exitGuard.release(row.id); }
                 }
               }
@@ -708,7 +724,7 @@ async function fastExitSweep(): Promise<void> {
       if (acctFlatten) {
         info(`halt-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — kill switch (${haltFlatten ? "fund" : g.account.name})`);
         if (exitGuard.claim(r.id)) {
-          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "halt_flatten" }, r, exec); }
+          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "halt_flatten" }, r, exec, undefined, exitQualityPolicyFor(ch)); }
           catch (e) { warn(`halt-flatten ${ch.slug} failed — ${(e as Error).message}`); }
           finally { exitGuard.release(r.id); }
         }
@@ -744,7 +760,7 @@ async function fastExitSweep(): Promise<void> {
         }
         info(`eod-hard-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — ${openedET === todayET ? "same-session" : "expires today"}, wall-clock mtc ${wallMtc} (pre-bell backstop, bars-independent)`);
         if (exitGuard.claim(r.id)) {
-          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec); }
+          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "eod_hard_flatten" }, r, exec, undefined, exitQualityPolicyFor(ch)); }
           catch (e) { warn(`eod-hard-flatten ${ch.slug} failed — ${(e as Error).message}`); }
           finally { exitGuard.release(r.id); }
         }
@@ -762,7 +778,7 @@ async function fastExitSweep(): Promise<void> {
           && inEventWindow(todayET, nowMin, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
         info(`event-flatten (wall-clock): ${ch.slug} ${r.occ_symbol} ×${r.qty} — event window, bars-independent backstop`);
         if (exitGuard.claim(r.id)) {
-          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "event_flatten" }, r, exec); }
+          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "event_flatten" }, r, exec, undefined, exitQualityPolicyFor(ch)); }
           catch (e) { warn(`event-flatten ${ch.slug} failed — ${(e as Error).message}`); }
           finally { exitGuard.release(r.id); }
         }
@@ -859,7 +875,7 @@ async function fastExitSweep(): Promise<void> {
       info(`fast-exit: ${ch.slug} ${r.occ_symbol} → ${reason} (bid ${bid.toFixed(2)} vs entry ${r.avg_entry_price.toFixed(2)}; mid ${midDiag.toFixed(2)} diagnostic)`);
       if (!exitGuard.claim(r.id)) continue; // 1b #8: the concurrent cycle holds this row's exit — skip, retry next sweep
       try {
-        await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct });
+        await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason }, r, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }, exitQualityPolicyFor(ch));
         clearSweepPriceState(key);
       } finally { exitGuard.release(r.id); }
       }

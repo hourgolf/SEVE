@@ -13,6 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 import { isDeskOperator } from "@/lib/auth/operator";
 import { normalizeManualCloseTag } from "@/lib/positions/manualClose";
 import { buildPositionOutcome } from "@/lib/positions/positionOutcome";
+import { buildExecutionQualityReceipt } from "@/lib/execution/executionQualityModel";
 
 export const dynamic = "force-dynamic";
 
@@ -83,12 +84,22 @@ export async function POST(req: Request) {
   // keys → closing a Core/Resurrected position queried the WRONG Alpaca account, saw 0 held,
   // placed NO sell, and booked $0 while the real lot rode on ORPHANED in its bucket. Mirror the
   // worker's resolveDefaultAccount/apiForAccount: cred_ref null/empty = default keys.
-  const { data: strat } = await sb.from("strategists").select("slug,account_id").eq("id", pos.strategist_id).maybeSingle();
+  // Keep the money-path routing lookup narrow. Quality metadata is fetched
+  // separately after booking so a relationship/schema-cache issue cannot route
+  // a risk-reducing sell through the fallback account.
+  const { data: strat } = await sb.from("strategists")
+    .select("slug,account_id")
+    .eq("id", pos.strategist_id).maybeSingle();
   const slug = String(strat?.slug ?? "manual");
   let credRef = "";
+  let effectiveAccountId = strat?.account_id ? String(strat.account_id) : "";
   if (strat?.account_id) {
     const { data: acct } = await sb.from("accounts").select("cred_ref").eq("id", strat.account_id).maybeSingle();
     credRef = acct?.cred_ref ? String(acct.cred_ref) : "";
+  } else {
+    const { data: accounts } = await sb.from("accounts").select("id,cred_ref").limit(20);
+    const defaultAccount = accounts?.find((account) => !account.cred_ref);
+    effectiveAccountId = defaultAccount?.id ? String(defaultAccount.id) : "";
   }
   const acctKey = credRef ? process.env[`ALPACA_KEY_${credRef}`] : AK;
   const acctSecret = credRef ? process.env[`ALPACA_SECRET_${credRef}`] : AS;
@@ -116,12 +127,17 @@ export async function POST(req: Request) {
 
   // ---- place the market sell on Alpaca paper (only if a lot is actually held) ----
   let orderId = "";
+  let clientOrderId = "";
+  const triggerAtMs = Date.now();
+  let submittedAtMs = triggerAtMs;
   if (sellQty > 0) {
     try {
+      clientOrderId = `${slug}-${occ}-${Date.now()}`;
+      submittedAtMs = Date.now();
       const r = await fetch(`${PAPER}/v2/orders`, {
         method: "POST",
         headers: aHdr,
-        body: JSON.stringify({ symbol: occ, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: `${slug}-${occ}-${Date.now()}` }),
+        body: JSON.stringify({ symbol: occ, qty: String(sellQty), side: "sell", type: "market", time_in_force: "day", client_order_id: clientOrderId }),
       });
       const txt = await r.text();
       if (!r.ok) return NextResponse.json({ ok: false, error: `alpaca rejected: ${txt.slice(0, 200)}` }, { status: 502 });
@@ -160,6 +176,8 @@ export async function POST(req: Request) {
     const why = TERMINAL.has(status) ? `sell ended ${status} with 0 filled` : `sell still ${status || "working"} after the poll window — no confirmed fill`;
     return NextResponse.json({ ok: false, error: `${why} — position left open` }, { status: 502 });
   }
+  const fillObservedAtMs = Date.now();
+  const brokerFillObserved = fill > 0;
   // Fallback to the latest real-time option mark if the fill didn't post in time.
   if (!fill) {
     const { data: q } = await sb.from("option_quotes").select("mid,bid").eq("occ_symbol", occ).order("captured_at", { ascending: false }).limit(1).maybeSingle();
@@ -192,6 +210,57 @@ export async function POST(req: Request) {
     quantity: soldQty, avgEntryPrice: entry, exitPrice: fill, realizedPnl: realized, closeReason: "manual",
     payload: { brokerOrderId: orderId, operatorEmail: userData.user.email ?? null, rowQuantity: qty } });
   if (outcome) { try { await sb.from("position_outcome_events").insert(outcome); } catch { /* evidence-only */ } }
+
+  // Post-booking evidence only: the sell and status-guarded close are already
+  // complete. Manual close intentionally does not delay the risk-reducing order
+  // to fetch a quote, so quote/leakage fields remain null rather than invented.
+  const { data: stratCfg } = await sb.from("strategist_config")
+    .select("premium_stop_pct,underlying_stop_pct,take_profit_pct")
+    .eq("strategist_id", pos.strategist_id)
+    .maybeSingle();
+  const rawOptionSide = String(pos.opt_type ?? "").toLowerCase();
+  const optionSide = rawOptionSide === "put" || rawOptionSide === "p"
+    ? "put"
+    : rawOptionSide === "call" || rawOptionSide === "c"
+      ? "call"
+      : null;
+  const quality = brokerFillObserved && soldQty > 0 && optionSide && effectiveAccountId
+    ? buildExecutionQualityReceipt({
+        strategistId: String(pos.strategist_id),
+        accountId: effectiveAccountId,
+        positionId: id,
+        channelSlug: slug,
+        underlying: String(pos.underlying ?? occ.slice(0, -15)),
+        occSymbol: occ,
+        optionSide,
+        reason: "manual",
+        triggerAtMs,
+        submittedAtMs,
+        fillObservedAtMs,
+        clientOrderId,
+        brokerOrderId: orderId,
+        brokerStatus: status,
+        requestedQty: sellQty,
+        filledQty: soldQty,
+        crossedQty: soldQty,
+        entryPrice: entry,
+        decisionBid: null,
+        decisionAsk: null,
+        fillPrice: fill,
+        configuredPremiumStopPct: Number(stratCfg?.premium_stop_pct ?? 0),
+        configuredUnderlyingStopPct: Number(stratCfg?.underlying_stop_pct ?? 0),
+        configuredTakeProfitPct: Number(stratCfg?.take_profit_pct ?? 0),
+        snapshotAgeMs: null,
+        providerQuoteEventAgeMs: null,
+        sourceVersion: `web:${process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? "manual-close-v1"}`,
+        payload: {
+          operatorEmail: userData.user.email ?? null,
+          decisionQuoteAvailable: false,
+          fillTimeBasis: "local_terminal_observation",
+        },
+      })
+    : null;
+  if (quality) { try { await sb.from("execution_quality_receipts").insert(quality); } catch { /* evidence-only */ } }
 
   await sb.from("events").insert({
     level: "EXEC",

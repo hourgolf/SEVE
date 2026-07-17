@@ -19,6 +19,7 @@ import { classifyPriorOpenRun } from "./runReconcile.js";
 import type { DurableShadowRow } from "./shadowPersistence.js";
 import type { PolicyEpochDraft, PositionPlanDraft } from "./planShadowModel.js";
 import type { ExecutionObservationDraft } from "./executionObservationModel.js";
+import type { ExecutionQualityReceiptDraft } from "../../lib/execution/executionQualityModel.js";
 import type { PositionOutcomeDraft } from "./positionOutcomeModel.js";
 import type { FamilyAdmissionObservationDraft } from "./familyAdmissionModel.js";
 import {
@@ -531,6 +532,23 @@ export async function insertExecutionObservation(row: ExecutionObservationDraft)
     else warn(`store: execution observation insert failed — ${error.message}`);
   } catch (e) {
     warn(`store: execution observation rejected — ${(e as Error).message}`);
+  }
+  return false;
+}
+
+let executionQualityTableAvailable: boolean | null = null;
+
+/** Phase 1K-F append-only fill-quality evidence. Deterministic ids make
+ * retries idempotent. No order or booking path awaits this function. */
+export async function insertExecutionQualityReceipt(row: ExecutionQualityReceiptDraft): Promise<boolean> {
+  if (!config.hasServiceRole || executionQualityTableAvailable === false) return false;
+  try {
+    const { error } = await sb.from("execution_quality_receipts").insert({ ...row, source_boot_id: BOOT_ID });
+    if (!error || duplicate(error)) { executionQualityTableAvailable = true; return true; }
+    if (missingRelation(error)) executionQualityTableAvailable = false;
+    else warn(`store: execution quality receipt insert failed — ${error.message}`);
+  } catch (error) {
+    warn(`store: execution quality receipt rejected — ${(error as Error).message}`);
   }
   return false;
 }

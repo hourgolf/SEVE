@@ -19,7 +19,7 @@
 //  the cron-style reconstruction as the restart fallback.
 // ============================================================================
 
-import { config, policy } from "./config.js";
+import { config, policy, WORKER_VERSION } from "./config.js";
 import { info } from "./log.js";
 import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
@@ -29,6 +29,7 @@ import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 import { captureObservedPositionPlan } from "./planShadow.js";
 import { captureBrokerObservation, captureDecisionObservation } from "./executionObservation.js";
+import { captureExecutionQualityReceipt } from "./executionQuality.js";
 import { capturePositionOutcome } from "./positionOutcome.js";
 import { queueManagerShadowAdmission } from "./managerShadowBook.js";
 
@@ -36,6 +37,17 @@ import { queueManagerShadowAdmission } from "./managerShadowBook.js";
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
 // is byte-identical to the pre-runner behavior.
 export interface RunnerCfg { frac: number; givebackPct: number }
+
+export interface ExitQualityPolicy {
+  premiumStopPct: number | null;
+  specPremiumStopPct: number | null;
+  underlyingStopPct: number | null;
+  takeProfitPct: number | null;
+}
+
+interface ExitQualityContext extends ExitQualityPolicy {
+  entryPrice: number;
+}
 
 const WORKING_ORDER = new Set(["new", "accepted", "pending_new", "partially_filled", "held", "calculated", "accepted_for_bidding"]);
 
@@ -111,10 +123,12 @@ async function placeFill(
   strategistId: string, underlying: string, action: "enter" | "add" | "exit",
   slug: string, occ: string, side: "buy" | "sell", qty: number, coidBase: string, reason: string, ctx: ExecCtx,
   positionId: string | null = null,
-): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
+  quality: ExitQualityContext | null = null,
+): Promise<{ id: string; fill: number; filledQty: number; status: string; crossedQty: number }> {
   const q = ctx.chain.byOcc(occ);
   const direction = occ.slice(-9, -8) === "P" ? "put" : "call";
   const observedAtMs = Date.now();
+  const snapshotAgeAtTriggerMs = ctx.chain.ageMs;
   const observationBase = {
     channel: { id: strategistId, slug, underlying },
     decision: {
@@ -129,8 +143,9 @@ async function placeFill(
   // Direct fast-sweep exits do not pass through the bar-close decision loop.
   // Deterministic ids make this a harmless no-op when that loop already wrote it.
   captureDecisionObservation(observationBase);
+  const submittedAtMs = Date.now();
   try {
-    let result: { id: string; fill: number; filledQty: number; status: string };
+    let result: { id: string; fill: number; filledQty: number; status: string; crossedQty: number };
     if (config.spreadCapture && q && q.ask > q.bid && q.bid > 0) {
       const r = await alpaca.limitLadderFill({ symbol: occ, side, qty, coidBase, bid: q.bid, ask: q.ask, ladder: config.spreadCaptureLadder }, ctx.api);
       if (r.filledQty > 0) {
@@ -141,9 +156,10 @@ async function placeFill(
         void store.writeShadowEvent(`SPREAD-CAPTURE ${slug} ${side} ${occ} ×${r.filledQty} captured $${r.capturedUsd.toFixed(0)}`,
           { kind: "spread-capture", slug, occ, side, reason, capturedUsd: round2(r.capturedUsd), filledQty: r.filledQty, crossedQty: r.crossedQty });
       }
-      result = { id: r.id, fill: r.fill, filledQty: r.filledQty, status: r.status };
+      result = { id: r.id, fill: r.fill, filledQty: r.filledQty, status: r.status, crossedQty: r.crossedQty };
     } else {
-      result = await alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase }, ctx.api);
+      const market = await alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase }, ctx.api);
+      result = { ...market, crossedQty: market.filledQty };
     }
     captureBrokerObservation({
       ...observationBase,
@@ -154,6 +170,47 @@ async function placeFill(
       fillPrice: result.fill,
       positionId,
     });
+    if (action === "exit" && side === "sell" && positionId && quality && result.filledQty > 0 && result.fill > 0) {
+      const effectivePremiumStop = reason === "stop_premium"
+        ? quality.specPremiumStopPct
+        : quality.premiumStopPct;
+      captureExecutionQualityReceipt({
+        strategistId,
+        accountId: ctx.accountId,
+        positionId,
+        channelSlug: slug,
+        underlying,
+        occSymbol: occ,
+        optionSide: direction,
+        reason,
+        triggerAtMs: observedAtMs,
+        submittedAtMs,
+        fillObservedAtMs: Date.now(),
+        clientOrderId: coidBase,
+        brokerOrderId: result.id,
+        brokerStatus: result.status,
+        requestedQty: qty,
+        filledQty: result.filledQty,
+        crossedQty: result.crossedQty,
+        entryPrice: quality.entryPrice,
+        decisionBid: q?.bid ?? null,
+        decisionAsk: q?.ask ?? null,
+        fillPrice: result.fill,
+        configuredPremiumStopPct: effectivePremiumStop,
+        configuredUnderlyingStopPct: quality.underlyingStopPct,
+        configuredTakeProfitPct: quality.takeProfitPct,
+        snapshotAgeMs: snapshotAgeAtTriggerMs,
+        // ChainStore does not expose an authoritative per-contract exchange
+        // timestamp. YF-B held-contract capture will supply this second clock.
+        providerQuoteEventAgeMs: null,
+        sourceVersion: WORKER_VERSION,
+        payload: {
+          decisionSourceBarAt: new Date(ctx.decisionAtMs).toISOString(),
+          fillTimeBasis: "local_terminal_observation",
+          providerQuoteTimestampAvailable: false,
+        },
+      });
+    }
     return result;
   } catch (e) {
     captureBrokerObservation({
@@ -250,11 +307,13 @@ async function bookPartialExit(
 // ---- EXIT ---------------------------------------------------------------------
 export async function executeExit(
   d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx, runner?: RunnerCfg,
+  qualityPolicy?: ExitQualityPolicy,
 ): Promise<void> {
   const occ = row.occ_symbol;
   const alp = ctx.alpacaByOcc.get(occ);
   const heldQty = ctx.remainingByOcc.get(occ) ?? (alp ? Math.max(0, Math.round(alp.qty)) : 0);
   const sellQty = Math.min(heldQty, row.qty);
+  const quality = qualityPolicy ? { ...qualityPolicy, entryPrice: row.avg_entry_price } : null;
 
   // 1b #6 (audit 2026-07-11): the reconcile ESTIMATE fallback is fresh-quote-guarded — a STALE
   // bid must never become a silently-booked exit price; alp.current_price (cycle-fresh) backs it.
@@ -363,11 +422,11 @@ export async function executeExit(
   // gates, and over-books on a later reconcile (confirmed finding, shared-occ lens).
   if (d.reason === "target_premium" && runner && runner.frac > 0 && !row.runner_of && sellQty === row.qty) {
     const split = trancheSplit(sellQty, runner.frac);
-    if (split) { await executeTranche(d, row, ctx, split, runner); return; }
+    if (split) { await executeTranche(d, row, ctx, split, runner, quality); return; }
   }
   try {
     let exitPx = alp?.current_price ?? liveBid;
-    const r = await placeFill(row.strategist_id, row.underlying, "exit", d.slug, occ, "sell", sellQty, exitCoid, d.reason, ctx, row.id);
+    const r = await placeFill(row.strategist_id, row.underlying, "exit", d.slug, occ, "sell", sellQty, exitCoid, d.reason, ctx, row.id, quality);
     if (r.fill > 0) exitPx = r.fill;
     if (r.filledQty <= 0) {
       // book ONLY on positive fill evidence: a terminal-0 (nothing crossed) OR a non-terminal timeout
@@ -425,7 +484,7 @@ export async function executeExit(
 // sweep — drift instead of a loud, self-healing failure.
 async function executeTranche(
   d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx,
-  split: { sell: number; retain: number }, runner: RunnerCfg,
+  split: { sell: number; retain: number }, runner: RunnerCfg, quality: ExitQualityContext | null,
 ): Promise<void> {
   const occ = row.occ_symbol;
   let exitPx = ctx.alpacaByOcc.get(occ)?.current_price ?? (ctx.chain.byOcc(occ)?.bid ?? 0);
@@ -450,7 +509,7 @@ async function executeTranche(
       soldQty = prior.filledQty; fillPx = prior.fillPx;
       await store.journal("WARN", `${d.slug}: tranche ${occ} recovering a late-filled prior sell ×${soldQty} @ ${fillPx.toFixed(2)} — booking, not re-selling`);
     } else {
-      const r = await placeFill(row.strategist_id, row.underlying, "exit", d.slug, occ, "sell", split.sell, coid, "target_tranche", ctx, row.id);
+      const r = await placeFill(row.strategist_id, row.underlying, "exit", d.slug, occ, "sell", split.sell, coid, "target_tranche", ctx, row.id, quality);
       // 1b #4 (audit 2026-07-11): require TERMINAL state before splitting parent→runner —
       // a still-working order can fill ANY qty after this poll, so splitting now would
       // book a tranche that hasn't finished happening (and remainQty would be wrong).
