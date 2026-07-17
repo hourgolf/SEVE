@@ -2,6 +2,11 @@
 
 Status: **SELECT-only audit complete; configuration change not authorized**.
 
+Correction note: the inventory and historical classifications below remain the frozen audit of current
+state. Its earlier idea of carrying root numeric settings as an operational baseline is superseded by the
+corrected Gate 4 proposal. Current arbitrary settings are evidence about availability only and are not a
+Monday recommendation.
+
 Snapshot: `2026-07-17T21:06:22.744Z`; 68 strategists, 68 configs, three accounts, 78 policy epochs,
 16 worker runs. The ignored local source receipt is
 `data/channel-cartridge-inventories/2026-07-17.json`, SHA-256
@@ -104,12 +109,14 @@ not as a deployed fact.
 | `vb-vwap-revert-iwm` | LAB | IWM | draft | spec / no | VWAP reversion / IWM 1m | 350/6 | 0/0/SD | 30/—·15·0 | dark |
 | `vb-vwap-revert-qqq` | LAB | QQQ | draft | spec / no | VWAP reversion / QQQ 1m | 350/6 | 0/0/SD | 30/—·15·0 | dark |
 
-## Monday baseline proposal, not an authorization
+## Monday proposal boundary, not an authorization
 
-The smallest complementary candidate set is `pb-ride`, `orb-ustop-ctl`, `grind-v3`, `momo-shape`,
-`orb-qqq-trail`, and `breakout-alt-v3-iwm`. Each keeps its current numeric configuration as an explicit
-unlearned baseline. PB DTE/ITM siblings, other exit-only siblings, and QQQ/IWM siblings remain shadow/dark.
-No mean-reversion or power root is proposed. No VB paper arm is justified by the exact-path floor yet.
+The corrected Gate 4 design retains `pb-ride`, `orb-ustop-ctl`, `grind-v3`, `momo-shape`,
+`orb-qqq-trail`, and `breakout-alt-v3-iwm` only as complementary entry/contract hypotheses. It does **not**
+carry their current risk, contract, stop, target, structural-stop, pyramid, or runner values forward. It
+separately proposes conservative safety bounds and labels every numeric choice prospective and unlearned.
+PB DTE/ITM siblings, exit-only siblings, and QQQ/IWM contrasts remain dark. No VB candidate may execute
+until its exact-path evidence contract passes.
 
 This is not a final roster. It cannot be applied until the missing collision/concurrency, market provenance,
 decision lag, open limit, harvest allocation, EOD, and stop-default fields are sealed and the operator

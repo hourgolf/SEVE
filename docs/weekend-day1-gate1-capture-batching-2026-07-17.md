@@ -33,7 +33,11 @@ the immutable segment schema:
 5. R2 or receipt failure retains the sealed batch for retry. A receipt acknowledgement removes only the
    exact sealed token that reached durable append-only receipt state.
 6. Duplicate sample identities across drains coalesce deterministically.
-7. Drop-only drains remain attached to an existing open partition, while queue-drop health remains
+7. Open plus sealed/retry state is jointly bounded at 10,000 retained samples and 8 MiB of estimated
+   in-memory evidence. The ingress queue remains independently bounded.
+8. At either state bound, only the incoming research observation is shed. Execution and manager state are
+   untouched, while the retained partition and health facts record truthful sample/byte shedding.
+9. Drop-only drains remain attached to an existing open partition, while queue/state-drop health remains
    explicit immediately.
 
 Provider requests, manager advancement, execution, orders, channel configuration, source clocks, dual
@@ -49,53 +53,59 @@ are unchanged. The receipt schema and RLS/grant contract are unchanged; no datab
 - New samples never join a sealed retry batch.
 - High water and shutdown seal all open batches.
 - Execution and manager state do not import or await the batcher or storage adapters.
+- A failed batch is attempted at most five times. Normal flushes use exponential retry times of 0, 30, 90,
+  210, and 450 seconds after sealing; a failed batch is then explicitly censored and released. It is not
+  retried on every 30-second flush forever.
+- Shutdown bypasses delay but not the finite retry budget. It serially awaits all pending partitions through
+  at most five forced passes. The former 1.5-second race is removed; shutdown either completes all receipts
+  or logs the exact remaining censored sample/byte count after budget exhaustion.
 
-Abrupt process death can still lose an in-memory open or sealed batch. With the proposed defaults, the
-normal open-batch exposure is bounded by the 120-second age plus at most one 30-second timer phase. This
-is a larger crash window than V1's immediate 30-second segment persistence and remains a deployment
-yellow. A reviewed deploy must either explicitly accept that bounded research-evidence exposure with
-gap detection or add durable staging/recovery. It must not claim crash-proof capture.
+Abrupt process death can still lose an in-memory open or sealed batch. The sample and byte caps prevent
+unbounded memory, but they are not durable staging. The measured windows below include the open timer phase
+and the full normal retry schedule. Adapter call duration itself has no local upper bound, so a deploy also
+needs platform shutdown grace long enough for the awaited calls or a later durable staging design. It must
+not claim crash-proof capture.
 
 ## July 17 sequence replay and storage projection
 
 A SELECT-only replay at `2026-07-17T20:56:54.375Z` grouped the actual July 17 receipt sequence within
 the immutable partition keys and sealed at the proposed 24-sample/120-second bounds:
 
-| Measure | July 17 V1 | Projected batcher |
-|---|---:|---:|
-| Receipts | 20,794 | 6,022 |
-| Samples per receipt | 4.9315 | 17.0284 |
-| Receipt reduction | — | 71.04% |
-| Supabase bytes/session, linear | 37,724,160 | 10,925,022 |
-| Manifest bytes/session, linear | 33,965,189 | 9,836,413 |
-| Raw gzip bytes/session | 16,139,289 | 16,139,289 conservative |
-| Supabase bytes/20 sessions | 754,483,200 | 218,500,425 |
-| R2 bytes/20 sessions | 1,002,089,560 | 519,514,037 conservative |
+| Measure | July 17 V1 | 24 samples / 120 sec | 12 samples / 60 sec |
+|---|---:|---:|---:|
+| Receipts | 20,794 | 6,022 | 9,218 |
+| Receipt reduction | — | 71.04% | 55.67% |
+| Maximum open loss window | about 30 sec | 150 sec | 90 sec |
+| Retry attempts / schedule after seal | immediate segment | 5 / 0,30,90,210,450 sec | 5 / 0,30,90,210,450 sec |
+| Maximum retained evidence-loss exposure | about 30 sec | 600 sec | 540 sec |
+| Supabase bytes/session, linear | 37,724,160 | 10,925,022 | 16,723,156 |
+| Raw gzip bytes/session | 16,139,289 | 16,139,289 conservative | 16,139,289 conservative |
 
-The replay gives no gzip-compression credit and scales receipt/manifest bytes linearly. It is a planning
-projection, not a post-deploy measurement. Short-lived positions, high-water pressure, retries, and real
-shutdown timing can produce different segment counts. Acceptance still requires a dark post-deploy
-smoke receipt after operator review.
+The replay gives no gzip-compression credit and scales receipt bytes linearly. It is a planning projection,
+not a post-deploy measurement. Short-lived positions, state pressure, retries, and real shutdown timing can
+produce different segment counts. The **recommendation is 12 samples / 60 seconds**: it still removes 55.67%
+of July 17 receipts while reducing the normal open window by 60 seconds and total bounded retained exposure
+by 60 seconds versus 24/120. This is a review recommendation only; defaults remain 24/120 and nothing was
+deployed.
 
 ## Verification completed
 
 - root TypeScript: pass;
 - worker TypeScript: pass;
-- held-contract capture: 67/67 pass;
+- held-contract capture: 79/79 pass;
 - runner: 146/146 pass;
 - manager shadow: 17/17 pass;
 - manager shadow book: 149/149 pass.
 
-The focused tests pin the July 17 fragmentation fixture, timer batching, age seal, high-water seal,
-shutdown seal, hour boundary, ET session boundary, shared-OCC position isolation, queue pressure,
-drop-only attribution, deterministic retry identity, receipt-only acknowledgement, and later-sample
-isolation.
+The focused tests additionally prove combined open/sealed sample and byte bounds, sustained R2 outage,
+sustained Supabase-receipt outage, finite backoff/eviction, research-only shedding, truthful attribution,
+multi-partition shutdown, and forced shutdown retry without the former timeout race.
 
 ## Review gates before deployment
 
-1. Decide whether the bounded 150-second worst-phase crash exposure is acceptable or require durable
-   staging/recovery.
-2. Review the proposed 24-sample/120-second batch defaults.
+1. Decide whether the recommended 12/60 option and its 540-second maximum retained exposure are acceptable,
+   whether to retain 24/120 and 600 seconds, or require durable staging/recovery.
+2. Review the 10,000-sample/8-MiB state bounds and five-attempt retry budget.
 3. Verify the prepared `stream-2026-07-17b` identity against the final reviewed diff.
 4. Re-run the complete Gate 6 suite and flat broker/desk gate.
 5. Manually deploy Railway only after explicit operator approval.

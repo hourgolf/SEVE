@@ -1,53 +1,62 @@
-# Weekend Day 1 — Gate 6 verification and deployment preparation
+# Weekend Day 1 — corrected Gate 6 verification preparation
 
-Status: **local verification green; migration, configuration, final roster, merge, and deploy stopped for
-operator review**.
+Status: **correction-pass local verification green; migration, configuration, roster finalization, Day 1
+seal, merge, push, and deployment stopped for operator review**.
 
-## Green local checks
+## Gate 0 preservation
 
-- root `tsc --noEmit`;
-- worker `tsc --noEmit`;
-- Next.js production build;
-- VB candidate evidence 22/22;
-- Day 1 canonical preregistration seal 5/5;
-- runner 148/148;
-- manager shadow 17/17;
-- manager shadow book 149/149;
-- family admission 13/13;
-- held-contract capture 67/67;
-- session exit replay 6/6;
-- channel contract 60/60;
-- current channel inventory 25/25;
-- family preregistration 15/15;
-- family preregistered scorer 19/19;
-- market calendar 16/16;
-- production build completed all static/dynamic routes;
-- `git diff --check` clean.
+The machine receipt remains byte-identical to commit `746407a`:
+SHA-256 `967f342378922b4e8c12e1d9bef01739bde40ae014cb54dd65c56cc021c7f819`.
 
-The Gate 2 read-only adapter smoke authenticated against Supabase but disabled all external writes. It
-reconstructed 139 rows and censored 136 legacy VB candidates for missing pre-stamp provenance, producing
-zero false exact receipts.
+## Checks rerun after corrections
+
+- root `tsc --noEmit`: pass;
+- worker `tsc --noEmit`: pass;
+- Next.js production build: pass, including type validation and all static/dynamic route generation;
+- held-contract capture: 79/79 pass;
+- VB candidate exact evidence: 32/32 pass;
+- deterministic Gate 2 exact dry-run: pass, `externalWrites=false`;
+- new prospective versioned scorer: 12/12 pass;
+- legacy family scorer: 19/19 pass, unchanged;
+- Databento exact path: 17/17 pass;
+- Day 1 canonical receipt model: 5/5 pass; no receipt rendered or sealed;
+- runner: 148/148 pass;
+- manager shadow: 17/17 pass;
+- manager shadow book: 149/149 pass;
+- family admission: 13/13 pass;
+- session exit replay: 6/6 pass;
+- channel contract: 60/60 pass;
+- current channel inventory: 25/25 pass;
+- family preregistration: 15/15 pass;
+- market calendar: 16/16 pass;
+- `git diff --check`: clean after the documentation correction; the earlier inaccurate claim is superseded.
+
+The adversarial matrix covers sustained R2 and Supabase-receipt outages, combined open/sealed sample and
+byte bounds, retry backoff and exhaustion, multi-segment shutdown, left/right path boundaries, internal
+gaps, invalid and wrong-contract Databento quotes, stale/unproven live asks, approximate contracts, exact
+SQL/payload field alignment, prospective version separation, and the zero-delta denominator.
 
 ## Deliberately not performed
 
-- no migration applied;
-- no Supabase/R2 receipt or object written;
-- no Supabase advisor claim for the unapplied schema;
-- no strategy, lifecycle, risk, stop, target, manager, family, or roster configuration changed;
+- no migration applied and no Supabase advisor/runtime-insert claim;
+- no Supabase or R2 object, manifest, candidate, exact-path, or receipt written;
+- no strategy, lifecycle, risk, stop, target, manager, family, collision, or roster setting changed;
 - no order placed or closed;
-- no Monday roster finalized or preregistration receipt sealed;
-- no merge, Vercel deployment, or Railway deployment;
-- no Sunday rehearsal against an unratified configuration.
+- no Monday roster finalized and no Day 1 receipt sealed;
+- no merge, push, Vercel deployment, or Railway deployment;
+- no rehearsal against an unratified configuration.
 
-## Review sequence
+## Remaining review sequence
 
-1. Operator reviews the Gate 1 abrupt-crash window and Gate 2 migration.
-2. If migration is authorized: confirm flat books; apply it; run Supabase security/performance advisors;
-   verify grants, RLS, composite identity, and append-only inserts; then review R2 publication separately.
-3. Operator resolves every Gate 3 cartridge blocker and ratifies the full Gate 4 root/shadow/risk table.
-4. Add a later versioned scorer contract for configuration identity and the zero-delta denominator; do not
-   alter Phase 1K-C/1K-E retrospectively.
-5. Render and hash the canonical Gate 5 receipt, then compare the applied SELECT-only identities exactly.
-6. Re-run this matrix, flat reconciliation, browser/mobile smoke if UI changed, and the complete Sunday
-   pre-open rehearsal without placing or closing an order.
-7. Merge and manual deployments remain separate explicit approvals.
+1. Choose Gate 1's 24/120 or recommended 12/60 batching window and accept its loss exposure, or require
+   durable staging; separately ratify state/retry bounds.
+2. Review Gate 2's unapplied SQL and zero-write adapter. Migration, advisors, RLS/grant insert checks, and
+   R2 publication remain later, separately authorized actions.
+3. Ratify or revise every Gate 4 root, debit/contract/stop/EOD bound, manager arm, dark sibling, max-open
+   rule, and SPY collision rule.
+4. Freeze exact channel/manager/configuration identities and evidence floors into the new prospective
+   scorer contract.
+5. Only then render and review a canonical Gate 5 receipt. Sealing is a separate stop point before any
+   configuration application.
+6. Re-run this matrix and flat broker/desk reconciliation after any approved change. Merge, push, and each
+   manual deployment remain separate explicit approvals.

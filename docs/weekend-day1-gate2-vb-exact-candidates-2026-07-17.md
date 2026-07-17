@@ -1,67 +1,92 @@
-# Weekend Day 1 — Gate 2 exact VB candidate extension
+# Weekend Day 1 — corrected Gate 2 exact VB candidate extension
 
-Status: **local implementation complete; migration, R2 publication, and deployment not authorized**.
+Status: **local dry-run implementation complete; migration, R2 publication, Supabase writes, strategy
+changes, and deployment are not authorized**.
 
-This extends the existing `signals` → `gate-shadow` → `virtual_trades` lane. It does not create another
-shadow fleet, does not read from an order path, and cannot authorize a strategy or policy change.
+This extends the existing `signals` → `gate-shadow` → `virtual_trades` research lane. It cannot authorize
+an order or policy change and imports no R2 or Supabase write client in the canonical dry-run adapter.
 
-## Provenance decision
+## Canonical candidate and provenance
 
-The existing worker has the exact source-bar clock in `ExecCtx.decisionAtMs`, but historical blocked
-signals did not persist it. `signals.created_at` is an insert clock and is not substituted. Existing rows
-without the new stamps are therefore censored.
+Future worker rationale stamps the exact completed source-bar clock, its observation clock, strategist and
+account identities, channel/configuration/manager/worker versions, underlying, side, and exact OCC. The
+canonical TypeScript candidate payload and proposed SQL table now match exactly, including
+`strategist_id` and `source_version`.
 
-Future signal rationale now records:
+The live Alpaca snapshot ask is retained only as provenance:
 
-- exact `decision_source_bar_at`;
-- channel and manager versions;
-- an account-independent configuration epoch plus the account-bearing policy epoch;
-- underlying, option side, OCC, and worker version.
+- feed: `alpaca_snapshot`;
+- provider timestamp: null unless actually proven;
+- worker observation timestamp and freshness retained;
+- `live_ask_exact=false` by invariant.
 
-The canonical candidate identity is a deterministic function of channel version, exact source clock,
-underlying, option side, OCC, and configuration epoch. Account remains provenance and is excluded from
-market-opportunity identity. The existing accepted-position opportunity identity remains unchanged.
+It is never called an exact executable entry ask and is never substituted into scoring. Candidate identity
+is channel version + exact source clock + underlying + option side + OCC + configuration epoch. Account and
+strategist remain provenance; a later valid re-entry receives a new deterministic ordinal.
 
-## Re-entry and exact-path contract
+## Exact path acceptance contract
 
-The existing sequential VB walk remains canonical. Per-minute repeats while the prior virtual position is
-open are coalesced. A later signal at or after the prior exit receives a deterministic re-entry ordinal and
-a distinct opportunity ID. Ordinals reset by ET session and candidate lane.
+The adapter requests the compact candidate OCC as one exact Databento raw symbol from `OPRA.PILLAR` /
+`cbbo-1s`. It validates contract identity, source, finite positive executable quotes, and ordered timestamps.
+It requires:
 
-Exact paths are `OPRA.PILLAR` / `cbbo-1s`, content addressed by compressed SHA-256, and intended for the
-existing T+1 Databento adapter. The scorecard requires a verified checksum, valid exact OCC, strictly
-ordered positive executable bids, a candidate-time executable ask, and exact candidate/opportunity joins.
-Missing or invalid evidence is censored. It is never replaced with `option_quotes`, a snapshot, a mid, or
-the synthetic VB result.
+- an actual quote at/after the candidate decision boundary with lag <= 1,100 ms;
+- an actual quote at/after the requested exit boundary with lag <= 1,100 ms;
+- no internal observed quote gap above 5,000 ms through the right boundary;
+- a positive, non-crossed Databento entry ask from the accepted left-boundary quote.
 
-Manager replay uses the preregistered manager suite and candidate-time executable ask to executable bid.
-The native mid-based result remains separately labeled `native_mid_synthetic_development_only`.
+Failures retain explicit `left_boundary_censored`, `right_boundary_censored`, `internal_gap_censored`,
+`path_identity_mismatch`, `invalid_exact_quote`, or `invalid_exact_entry_ask` codes. Missing paths are never
+replaced with snapshots, mids, `option_quotes`, approximate OCCs, or synthetic VB results.
 
-## Local changes
+## End-to-end zero-write adapter proof
 
-- `lib/research/vbCandidateEvidence.ts`: pure identity, coalescing, content-addressing, censor, and manager
-  scorecard model;
-- `scripts/gate-shadow.ts`: emits `data/vb-candidates.json` and `data/vb-candidate-censors.json` beside the
-  existing ledger; legacy rows fail closed; `--read-only` disables every external write branch even when
-  the process authenticates with a backend credential;
-- `worker/src/execute.ts` and `worker/src/planShadowModel.ts`: future provenance stamps and a reusable,
-  account-independent configuration identity;
-- `supabase/migrations/20260717210403_gate2_vb_exact_candidate_receipts.sql`: review-only compact receipt
-  schema with RLS and least-privilege grants. It has not been applied.
+`buildVbExactCandidateDryRun` performs the complete in-memory chain:
+
+candidate ledger → exact contract request → Databento response validation → canonical content-addressed
+object and manifest → proposed Supabase payload → eight-arm manager scorecard.
+
+The deterministic proof produced:
+
+| Fact | Dry-run result |
+|---|---|
+| External writes | `false` |
+| Exact OCC / raw symbol | `QQQ260720C00600000` / `QQQ   260720C00600000` |
+| Candidate decision / exact entry quote | `13:35:00.000Z` / `13:35:00.500Z` |
+| Live observed ask / exact Databento entry ask | `9.99` non-exact / `1.05` exact |
+| Boundary lags / maximum internal gap | `500 ms` / `500 ms` / `1,000 ms` |
+| Canonical content SHA-256 | `eb04d3307e4b0894cb3d65c20042181516549361194790e28fc52912d18e00b5` |
+| Compressed SHA-256 | `e75188295a47f9398740ce734c120345ad02f2fc49b4267b27c89feaa6252946` |
+| Manager arms | 8/8 exact ask-to-executable-bid arms |
+| Censors / eligible | none / true |
+| Order path authorized | false |
+
+The proof is deterministic fixture evidence, not a historical result and not an external publication.
+
+## SQL payload alignment
+
+The self-test parses both proposed `create table` statements and compares their ordered SQL columns to the
+canonical TypeScript field contracts and to the actual generated payload keys. All four comparisons are
+exact:
+
+- candidate SQL columns = `VB_CANDIDATE_SQL_FIELDS` = generated candidate keys;
+- exact-path SQL columns = `VB_EXACT_PATH_SQL_FIELDS` = generated exact-path keys.
+
+The exact-path payload includes entry quote time/ask, both boundary lags, maximum internal gap, source
+version, content and compressed checksums, content-addressed keys, and verification flags. The migration
+remains only a local proposal and has not been applied.
 
 ## Verification
 
-- root TypeScript: pass;
-- VB candidate evidence: 22/22 pass;
-- runner self-test: 148/148 pass;
-- enforced read-only live adapter smoke: 139 reconstructed rows, zero external writes, zero exact receipts,
-  and 136 legacy candidate censors as expected because July 17 signals predate the exact provenance stamps;
-- migration: generated with `supabase migration new`; not applied and therefore advisors/runtime insert
-  verification remain blocked pending operator authorization.
+- VB candidate adversarial evidence self-test: 32/32 pass;
+- left/right boundary, internal-gap, invalid quote, response-contract mismatch, stale/unproven live ask,
+  and approximate-contract cases fail closed;
+- deterministic end-to-end dry-run: eligible, 8/8 manager arms, zero external writes;
+- candidate and exact-path SQL/payload field alignment: pass;
+- legacy live adapter stays read-only and historical pre-stamp rows stay censored.
 
 ## Operator-review boundary
 
-Before this can publish exact path receipts, an operator must review and authorize the migration. After
-authorization, the required order is: flat paper/broker reconciliation, apply migration, run Supabase
-security/performance advisors, verify RLS/grants and append-only inserts, then separately review any worker
-deployment. No R2 object or Supabase row was written during this implementation.
+An operator must review the proposed schema and separately authorize any migration. Only after that approval
+could a later change apply it, run Supabase advisors, verify grants/RLS/append-only insert behavior, and
+consider R2 publication. This correction pass performed none of those actions.

@@ -5,6 +5,19 @@ Status: **not sealed; prospective cohort cannot start until operator review and 
 Prospective start, if authorized: Monday, `2026-07-20` ET. Paper only. No automatic promotion authority.
 Existing Phase 1K-C and Phase 1K-E contracts remain unchanged.
 
+## New prospective scorer contract
+
+`weekend-day1-prospective-scorer-v1` applies only to sessions on or after `2026-07-20` ET. Every result key
+contains the control and challenger channel slug/version, manager version, and configuration epoch. Rows
+with different identity tuples produce separate scores and can never be pooled. Pre-cohort rows are rejected,
+so the new scorer cannot reinterpret Phase 1K-C/1K-E evidence.
+
+The prospective zero-delta rule is
+`all_complete_groups_including_zero_delta`: zero deltas remain in the complete-group denominator but do not
+count as positive outcomes. Thus one positive, one zero, and one negative row yield a positive share of
+1/3. The prior scorer and every prior result remain byte-for-byte and semantically unchanged. The new scorer
+has no policy, production, or promotion authority.
+
 ## Proposed immutable content
 
 The final receipt must include only canonical decision content:
@@ -25,17 +38,17 @@ timing, and other machine-dependent metadata. Those belong in an envelope outsid
 ## Blocking items
 
 1. The Gate 4 roster is not operator-ratified.
-2. All 68 channels lack complete collision/concurrency, market-input, open-limit, harvest, and EOD stamps.
-3. `orb-ustop-ctl` relies on the unstamped 50% premium-stop default.
-4. Cross-family SPY same-clock admission is unresolved.
+2. The corrected Gate 4 values, debit admission guard, collision/concurrency, market-input, open-limit,
+   whole-lot, and EOD stamps are proposed but not implemented or ratified.
+3. `orb-ustop-ctl` currently relies on an unstamped 50% default; the proposal replaces it with explicit
+   -30%, but no configuration change is authorized.
+4. The proposed cross-family SPY order `PB > Grind > MOMO > ORB` requires operator ratification.
 5. Gate 2 receipt migration is review-only and unapplied; Supabase advisors and insert/RLS verification have
    not run.
-6. Gate 1 has an in-memory abrupt-crash window bounded by the two-minute batch age plus drain phase; the
-   operator must explicitly accept monitored loss bounds or require durable staging/recovery.
-7. Phase 1K-E would pool pre-Monday and Monday configurations because its key omits channel/manager/config
-   versions. A later versioned contract is required for changed policies.
-8. The positive-share denominator discrepancy must be resolved in that later contract; existing results
-   cannot be retrospectively reinterpreted.
+6. Gate 1 is memory-bounded but not durable. The operator must choose 24/120 with a 600-second maximum
+   retained exposure, the recommended 12/60 with 540 seconds, or require durable staging/recovery.
+7. The new scorer resolves version identity and zero deltas prospectively, but its exact test roster,
+   evidence floors, and final configuration identities cannot be frozen before Gate 4 ratification.
 
 ## Seal procedure after authorization
 
@@ -43,3 +56,5 @@ Render the canonical JSON, validate every root against the live SELECT-only inve
 and flat books, compute SHA-256, and commit the receipt before applying configuration. Then apply only the
 operator-ratified diff, re-read the fleet, and require the applied identities to match the seal exactly.
 Any mismatch invalidates the prospective start; it is not patched intraday.
+
+No Day 1 receipt was rendered or sealed in this correction pass.
