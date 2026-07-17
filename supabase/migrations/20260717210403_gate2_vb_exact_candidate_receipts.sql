@@ -19,6 +19,7 @@ create table public.vb_candidate_receipts (
   configuration_epoch_id   text not null check (configuration_epoch_id ~ '^sha256:[0-9a-f]{64}$'),
   source_bar_at            timestamptz not null,
   session_date_et          date not null,
+  decision_observed_at     timestamptz not null,
   underlying               text not null check (underlying ~ '^[A-Z][A-Z0-9.-]{0,14}$'),
   option_side              text not null check (option_side in ('call', 'put')),
   occ_symbol               text not null check (occ_symbol ~ '^[A-Z]{1,6}[0-9]{6}[CP][0-9]{8}$'),
@@ -38,7 +39,8 @@ create table public.vb_candidate_receipts (
   source_version           text not null check (length(source_version) between 1 and 120),
   created_at               timestamptz not null default now(),
 
-  check (virtual_exit_at >= source_bar_at),
+  check (decision_observed_at >= source_bar_at),
+  check (virtual_exit_at >= decision_observed_at),
   unique (id, opportunity_id)
 );
 
@@ -86,7 +88,7 @@ create table public.vb_exact_path_receipts (
   checksum_verified        boolean not null check (checksum_verified),
   contract_valid           boolean not null check (contract_valid),
   source                   text not null check (source = 'databento_historical'),
-  source_version           text not null check (length(source_version) between 1 and 120),
+  path_builder_version     text not null check (length(path_builder_version) between 1 and 120),
   completed_at             timestamptz not null,
   created_at               timestamptz not null default now(),
 

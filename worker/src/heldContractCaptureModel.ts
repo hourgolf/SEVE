@@ -142,7 +142,7 @@ export interface HeldContractCaptureBatch {
 }
 
 export interface HeldContractBatcherShed {
-  reason: "state_samples" | "state_bytes" | "retry_budget";
+  reason: "state_samples" | "state_bytes" | "retry_budget" | "shutdown_abandoned";
   samples: number;
   estimatedBytes: number;
   positionId: string | null;
@@ -621,6 +621,39 @@ export class HeldContractCaptureBatcher {
     const delay = Math.min(this.retryMaxDelayMs, this.retryBaseDelayMs * 2 ** (batch.attempts - 1));
     batch.nextAttemptAtMs = nowMs + delay;
     return null;
+  }
+
+  abandonAll(): HeldContractBatcherShed[] {
+    const shed: HeldContractBatcherShed[] = [];
+    for (const partition of this.open.values()) {
+      shed.push({
+        reason: "shutdown_abandoned",
+        samples: partition.samples.length,
+        estimatedBytes: estimatedPartitionBytes(partition),
+        positionId: partition.positionId,
+        occSymbol: partition.occSymbol,
+        token: null,
+      });
+    }
+    for (const batch of this.sealed.values()) {
+      shed.push({
+        reason: "shutdown_abandoned",
+        samples: batch.partition.samples.length,
+        estimatedBytes: batch.estimatedBytes,
+        positionId: batch.partition.positionId,
+        occSymbol: batch.partition.occSymbol,
+        token: batch.token,
+      });
+    }
+    const samples = shed.reduce((sum, row) => sum + row.samples, 0);
+    const bytes = shed.reduce((sum, row) => sum + row.estimatedBytes, 0);
+    this.totalShedSamples += samples;
+    this.totalShedBytes += bytes;
+    this.retainedSamples = 0;
+    this.retainedBytes = 0;
+    this.open.clear();
+    this.sealed.clear();
+    return shed;
   }
 
   openPartitionCount(): number { return this.open.size; }

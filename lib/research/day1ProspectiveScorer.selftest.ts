@@ -24,6 +24,7 @@ const row = (delta: number, overrides: Partial<ProspectiveMatchedPairInput> = {}
   comparisonId: `comparison-${delta}-${overrides.clockId ?? "clock"}`,
   sessionDateEt: "2026-07-20",
   clockId: overrides.clockId ?? `2026-07-20T10:00:0${Math.abs(delta)}-04:00`,
+  provenanceId: overrides.provenanceId ?? `receipt-${delta}-${overrides.clockId ?? "clock"}`,
   controlIdentity: identity(),
   challengerIdentity: identity({ channelSlug: "shadow" }),
   controlPnl: 100,
@@ -55,6 +56,38 @@ const censored = buildDay1ProspectiveScorecard([
 ]);
 equal(censored.scores[0].completedGroups, 1, "valid prospective row remains scoreable");
 equal(censored.censoredRows, 2, "malformed and ineligible rows are censored");
+equal(censored.scores[0].censoredGroups, 1, "grouped ineligible identity is a truthful censored group");
+
+const duplicateReceipt = row(5, { comparisonId: "duplicate", clockId: "duplicate-clock", provenanceId: "receipt-1" });
+const duplicates = buildDay1ProspectiveScorecard([duplicateReceipt, { ...duplicateReceipt }, { ...duplicateReceipt }]);
+equal(duplicates.scores[0].completedGroups, 1, "exact duplicate input is counted once");
+equal(duplicates.scores[0].exactDuplicatesIgnored, 2, "repeated ingestion of the same receipt is ignored deterministically");
+equal(duplicates.censoredRows, 0, "exact repeats are not mislabeled as censors");
+
+const conflict = buildDay1ProspectiveScorecard([
+  duplicateReceipt,
+  { ...duplicateReceipt, challengerPnl: duplicateReceipt.challengerPnl + 10 },
+]);
+equal(conflict.scores[0].completedGroups, 0, "conflicting duplicate identity is never counted");
+equal(conflict.scores[0].censoredGroups, 1, "conflicting duplicate creates one censored comparison group");
+equal(conflict.censoredRows, 2, "both conflicting inputs remain visible as censored rows");
+equal(conflict.conflictingDuplicateGroups, 1, "conflict summary is explicit");
+
+const siblingClock = buildDay1ProspectiveScorecard([
+  row(2, { comparisonId: "sibling-a", clockId: "shared-opportunity", provenanceId: "sibling-receipt-a" }),
+  row(-1, { comparisonId: "sibling-b", clockId: "shared-opportunity", provenanceId: "sibling-receipt-b" }),
+]);
+equal(siblingClock.scores[0].completedGroups, 2, "distinct sibling comparisons remain distinct groups");
+equal(siblingClock.scores[0].independentOpportunities, 1, "siblings on one clock count as one independent opportunity");
+equal(siblingClock.scores[0].independentSessions, 1, "shared-clock siblings count as one independent session");
+
+const invalidDates = buildDay1ProspectiveScorecard([
+  row(1),
+  row(2, { sessionDateEt: "2026-02-30", comparisonId: "bad-calendar", clockId: "bad-calendar" }),
+  row(3, { sessionDateEt: "not-a-date", comparisonId: "bad-format", clockId: "bad-format" }),
+]);
+equal(invalidDates.scores[0].completedGroups, 1, "valid session remains scoreable beside invalid dates");
+equal(invalidDates.censoredRows, 2, "invalid calendar and format dates are censored");
 
 assert.throws(
   () => buildDay1ProspectiveScorecard([row(1, { sessionDateEt: "2026-07-17" })]),

@@ -11,6 +11,14 @@ import { info, warn } from "./log.js";
 import { BOOT_ID } from "./runId.js";
 import * as captureStore from "./heldContractCaptureStore.js";
 import {
+  HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+  HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
+  HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
+  isResearchAdapterTimeout,
+  withResearchAdapterDeadline,
+  type HeldCaptureAdapterStage,
+} from "./researchAdapterDeadline.js";
+import {
   BoundedHeldContractCaptureQueue,
   HeldContractCaptureBatcher,
   buildHeldContractSegmentDescriptor,
@@ -21,6 +29,7 @@ import {
 } from "./heldContractCaptureModel.js";
 
 const FLUSH_HIGH_WATER = 0.75;
+const SHUTDOWN_HEALTH_RESERVE_MS = 5_000;
 const gzipAsync = promisify(gzip);
 
 function manifestFor(descriptor: HeldContractSegmentDescriptor, compressedSha256: string, compressedBytes: number, completedAt: string): Record<string, unknown> {
@@ -49,6 +58,7 @@ export class HeldContractCaptureRuntime {
   });
   private timer: ReturnType<typeof setInterval> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
+  private normalFlushPending = false;
   private highWaterScheduled = false;
   private lastDropLogMs = 0;
 
@@ -79,10 +89,11 @@ export class HeldContractCaptureRuntime {
       warn("held-contract-capture: disabled — invalid queue/flush bounds");
       return null;
     }
-    const schemaReady = await Promise.race([
-      captureStore.heldContractCaptureSchemaReady(),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
-    ]);
+    let schemaReady = false;
+    try { schemaReady = await captureStore.heldContractCaptureSchemaReady(Date.now() + 2_000); }
+    catch (error) {
+      warn(`held-contract-capture: disabled — censor=adapter_timeout stage=${isResearchAdapterTimeout(error) ? error.stage : "supabase_schema_probe"}`);
+    }
     if (!schemaReady) {
       warn("held-contract-capture: disabled — private receipt schema unavailable");
       return null;
@@ -119,25 +130,60 @@ export class HeldContractCaptureRuntime {
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => { void this.flush("timer"); }, config.heldContractCaptureFlushMs);
-    info(`held-contract-capture: DARK enabled · targeted OPRA snapshots · queue=${config.heldContractCaptureMaxSamples} samples/${Math.round(config.heldContractCaptureMaxBytes / 1_048_576)}MiB · retained=${config.heldContractCaptureStateMaxSamples} samples/${Math.round(config.heldContractCaptureStateMaxBytes / 1_048_576)}MiB · drain=${config.heldContractCaptureFlushMs}ms · batch=${config.heldContractCaptureBatchTargetSamples} samples/${config.heldContractCaptureBatchMaxAgeMs}ms · retry=${config.heldContractCaptureRetryMaxAttempts}`);
+    info(`held-contract-capture: DARK enabled · targeted OPRA snapshots · queue=${config.heldContractCaptureMaxSamples} samples/${Math.round(config.heldContractCaptureMaxBytes / 1_048_576)}MiB · retained=${config.heldContractCaptureStateMaxSamples} samples/${Math.round(config.heldContractCaptureStateMaxBytes / 1_048_576)}MiB · drain=${config.heldContractCaptureFlushMs}ms · batch=${config.heldContractCaptureBatchTargetSamples} samples/${config.heldContractCaptureBatchMaxAgeMs}ms · retry=${config.heldContractCaptureRetryMaxAttempts} · adapterDeadline=${HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS}ms · shutdownCeiling=${HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS}ms`);
   }
 
   async stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    // A normal deploy drains every open and sealed segment. Shutdown bypasses
-    // retry backoff but not the finite retry budget; exhausted segments are
-    // explicitly censored before process exit instead of losing a timeout race.
+    const shutdownDeadlineAtMs = Date.now() + HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS;
+    const workDeadlineAtMs = shutdownDeadlineAtMs - SHUTDOWN_HEALTH_RESERVE_MS;
     for (let attempt = 0; attempt < config.heldContractCaptureRetryMaxAttempts
+      && Date.now() < workDeadlineAtMs
       && (this.queue.hasPending() || this.batcher.sampleCount() > 0); attempt++) {
-      await this.flush("shutdown");
+      await this.flush("shutdown", workDeadlineAtMs);
     }
-    const remaining = this.batcher.sampleCount() + this.queue.size();
-    if (remaining) warn(`held-contract-capture: shutdown incomplete · ${remaining} research samples remain explicitly unpersisted; execution shutdown continues`);
-    else info(`held-contract-capture: shutdown drained · shed=${this.batcher.shedTotals().samples} research samples`);
+    const queued = this.queue.drain();
+    const abandoned = this.batcher.abandonAll();
+    const queueDrops = Object.values(queued.droppedByPartition).reduce((sum, row) => sum + row.dropped, 0);
+    const abandonedSamples = queued.samples.length + queueDrops + abandoned.reduce((sum, row) => sum + row.samples, 0);
+    const abandonedBytes = queued.estimatedBytes + abandoned.reduce((sum, row) => sum + row.estimatedBytes, 0);
+    if (abandonedSamples) {
+      warn(`held-contract-capture: censor=shutdown_abandoned samples=${abandonedSamples} bytes=${abandonedBytes}; execution shutdown continues`);
+      await this.emitHealth({
+        id: randomUUID(), source_boot_id: BOOT_ID, observed_at: new Date().toISOString(),
+        severity: "high", code: "queue_drop", position_id: null, occ_symbol: null,
+        affected_samples: abandonedSamples,
+        facts: { censorCode: "shutdown_abandoned", estimatedBytes: abandonedBytes, wallClockCeilingMs: HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS },
+      }, shutdownDeadlineAtMs);
+    } else info(`held-contract-capture: shutdown drained · shed=${this.batcher.shedTotals().samples} research samples`);
   }
 
-  private async writePartition(descriptor: HeldContractSegmentDescriptor): Promise<boolean> {
+  private async r2<T>(stage: HeldCaptureAdapterStage, deadlineAtMs: number, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    return withResearchAdapterDeadline({
+      stage, requestTimeoutMs: HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS, overallDeadlineAtMs: deadlineAtMs, operation,
+    });
+  }
+
+  private async emitHealth(row: captureStore.HeldContractCaptureHealthRow, deadlineAtMs: number): Promise<void> {
+    try { await captureStore.insertHeldContractCaptureHealth(row, deadlineAtMs); }
+    catch (error) {
+      warn(`held-contract-capture: censor=adapter_timeout stage=${isResearchAdapterTimeout(error) ? error.stage : "supabase_health_write"} original=${String(row.facts.censorCode ?? row.code)}`);
+    }
+  }
+
+  private async emitRetryExhausted(descriptor: HeldContractSegmentDescriptor, deadlineAtMs: number, stage: string): Promise<void> {
+    warn(`held-contract-capture: censor=retry_exhausted stage=${stage} samples=${descriptor.sampleCount + descriptor.droppedSamples}`);
+    await this.emitHealth({
+      id: randomUUID(), source_boot_id: BOOT_ID, observed_at: new Date().toISOString(),
+      severity: "high", code: stage.startsWith("supabase") ? "receipt_write_failed" : "r2_flush_failed",
+      position_id: descriptor.positionId, occ_symbol: descriptor.occSymbol,
+      affected_samples: descriptor.sampleCount + descriptor.droppedSamples,
+      facts: { censorCode: "retry_exhausted", stage, objectKey: descriptor.objectKey, retryMaxAttempts: config.heldContractCaptureRetryMaxAttempts },
+    }, deadlineAtMs);
+  }
+
+  private async writePartition(descriptor: HeldContractSegmentDescriptor, deadlineAtMs: number): Promise<boolean> {
     const compressed = await gzipAsync(descriptor.rawNdjson, { level: 6 });
     const compressedSha256 = createHash("sha256").update(compressed).digest("hex");
     // Segment identity and manifest bytes stay retry-stable. The last included
@@ -147,7 +193,7 @@ export class HeldContractCaptureRuntime {
     const manifest = manifestFor(descriptor, compressedSha256, compressed.byteLength, completedAt);
     const manifestBody = Buffer.from(JSON.stringify(manifest), "utf8");
 
-    await this.s3.send(new PutObjectCommand({
+    await this.r2("r2_object_write", deadlineAtMs, (abortSignal) => this.s3.send(new PutObjectCommand({
       Bucket: config.r2Bucket, Key: descriptor.objectKey, Body: compressed,
       ContentType: "application/x-ndjson", ContentEncoding: "gzip",
       Metadata: {
@@ -156,18 +202,22 @@ export class HeldContractCaptureRuntime {
         schema: String(descriptor.schemaVersion),
         capture: descriptor.captureVersion,
       },
-    }));
-    const objectHead = await this.s3.send(new HeadObjectCommand({ Bucket: config.r2Bucket, Key: descriptor.objectKey }));
+    }), { abortSignal }));
+    const objectHead = await this.r2("r2_object_head", deadlineAtMs, (abortSignal) => this.s3.send(
+      new HeadObjectCommand({ Bucket: config.r2Bucket, Key: descriptor.objectKey }), { abortSignal },
+    ));
     if (objectHead.ContentLength !== compressed.byteLength
         || objectHead.Metadata?.content_sha256 !== descriptor.contentSha256
         || objectHead.Metadata?.compressed_sha256 !== compressedSha256) {
       throw new Error(`R2 verification mismatch for ${descriptor.objectKey}`);
     }
 
-    await this.s3.send(new PutObjectCommand({
+    await this.r2("r2_manifest_write", deadlineAtMs, (abortSignal) => this.s3.send(new PutObjectCommand({
       Bucket: config.r2Bucket, Key: descriptor.manifestKey, Body: manifestBody, ContentType: "application/json",
-    }));
-    const manifestHead = await this.s3.send(new HeadObjectCommand({ Bucket: config.r2Bucket, Key: descriptor.manifestKey }));
+    }), { abortSignal }));
+    const manifestHead = await this.r2("r2_manifest_head", deadlineAtMs, (abortSignal) => this.s3.send(
+      new HeadObjectCommand({ Bucket: config.r2Bucket, Key: descriptor.manifestKey }), { abortSignal },
+    ));
     if (manifestHead.ContentLength !== manifestBody.byteLength) {
       throw new Error(`R2 manifest verification mismatch for ${descriptor.manifestKey}`);
     }
@@ -192,77 +242,86 @@ export class HeldContractCaptureRuntime {
       provider_age_p50_ms: descriptor.providerAgeP50Ms, provider_age_p95_ms: descriptor.providerAgeP95Ms,
       provider_age_max_ms: descriptor.providerAgeMaxMs, dropped_samples: descriptor.droppedSamples,
       rejected_oversize: descriptor.rejectedOversize, completed_at: completedAt,
-    });
+    }, deadlineAtMs);
     if (!receipted) {
-      await captureStore.insertHeldContractCaptureHealth({
+      await this.emitHealth({
         id: randomUUID(), source_boot_id: BOOT_ID, observed_at: completedAt,
         severity: "warning", code: "receipt_write_failed", position_id: descriptor.positionId,
         occ_symbol: descriptor.occSymbol, affected_samples: descriptor.sampleCount,
-        facts: { objectKey: descriptor.objectKey, manifestKey: descriptor.manifestKey, rawEvidenceVerified: true },
-      });
+        facts: { censorCode: "receipt_write_failed", objectKey: descriptor.objectKey, manifestKey: descriptor.manifestKey, rawEvidenceVerified: true },
+      }, deadlineAtMs);
     }
     return receipted;
   }
 
-  private flush(reason: HeldContractCaptureFlushReason): Promise<void> {
-    const scheduled = this.flushChain.then(() => this.flushOnce(reason));
+  private flush(reason: HeldContractCaptureFlushReason, deadlineAtMs?: number): Promise<void> {
+    if (reason !== "shutdown" && this.normalFlushPending) return this.flushChain;
+    if (reason !== "shutdown") this.normalFlushPending = true;
+    const scheduled = this.flushChain.then(() => this.flushOnce(
+      reason, deadlineAtMs ?? Date.now() + HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
+    )).finally(() => { if (reason !== "shutdown") this.normalFlushPending = false; });
     this.flushChain = scheduled.catch(() => undefined);
     return scheduled;
   }
 
-  private async flushOnce(reason: HeldContractCaptureFlushReason): Promise<void> {
+  private async flushOnce(reason: HeldContractCaptureFlushReason, deadlineAtMs: number): Promise<void> {
     if (!this.queue.hasPending() && this.batcher.sampleCount() === 0) return;
     const drain = this.queue.hasPending()
       ? this.queue.drain()
       : { samples: [], estimatedBytes: 0, droppedByPartition: {} };
     try {
+      const accepted = this.batcher.accept(drain);
       const dropFacts = Object.entries(drain.droppedByPartition);
       const totalDropped = dropFacts.reduce((sum, [, value]) => sum + value.dropped, 0);
       if (totalDropped) {
-        await captureStore.insertHeldContractCaptureHealth({
+        await this.emitHealth({
           id: randomUUID(), source_boot_id: BOOT_ID, observed_at: new Date().toISOString(),
           severity: "warning", code: "queue_drop", position_id: null, occ_symbol: null,
           affected_samples: totalDropped,
           facts: { reason, partitions: dropFacts.length, rejectedOversize: dropFacts.reduce((sum, [, value]) => sum + value.rejectedOversize, 0) },
-        });
+        }, deadlineAtMs);
       }
-      const accepted = this.batcher.accept(drain);
       if (accepted.shed.length) {
         const shedSamples = accepted.shed.reduce((sum, row) => sum + row.samples, 0);
         const shedBytes = accepted.shed.reduce((sum, row) => sum + row.estimatedBytes, 0);
-        await captureStore.insertHeldContractCaptureHealth({
+        await this.emitHealth({
           id: randomUUID(), source_boot_id: BOOT_ID, observed_at: new Date().toISOString(),
           severity: "high", code: "queue_drop", position_id: null, occ_symbol: null,
           affected_samples: shedSamples,
           facts: { reason: "retained_state_capacity", estimatedBytes: shedBytes, stateSamples: this.batcher.sampleCount(), stateBytes: this.batcher.estimatedBytes() },
-        });
+        }, deadlineAtMs);
       }
       const nowMs = Date.now();
       const batches = this.batcher.sealReady(reason, nowMs);
       let completed = 0;
       for (const batch of batches) {
+        if (Date.now() >= deadlineAtMs) break;
         const descriptor = buildHeldContractSegmentDescriptor(batch.partition, config.heldContractCaptureR2Prefix);
         if (!descriptor) { this.batcher.acknowledge(batch.token); continue; }
         try {
-          const receipted = await this.writePartition(descriptor);
+          const receipted = await this.writePartition(descriptor, deadlineAtMs);
           if (receipted) {
             this.batcher.acknowledge(batch.token);
             completed++;
           } else {
             const evicted = this.batcher.recordFailure(batch.token, Date.now());
+            if (evicted) await this.emitRetryExhausted(descriptor, deadlineAtMs, "supabase_receipt_write");
             warn(`held-contract-capture: receipt ${evicted ? "retry budget exhausted; evidence censored" : "retry retained with backoff"} · ${descriptor.sampleCount} samples · ${descriptor.objectKey}`);
           }
         } catch (error) {
           const evicted = this.batcher.recordFailure(batch.token, Date.now());
-          await captureStore.insertHeldContractCaptureHealth({
+          const timeout = isResearchAdapterTimeout(error);
+          const stage = timeout ? error.stage : "r2_adapter";
+          await this.emitHealth({
             id: randomUUID(), source_boot_id: BOOT_ID, observed_at: new Date().toISOString(),
-            severity: "high", code: "r2_flush_failed", position_id: descriptor.positionId,
+            severity: "high", code: stage.startsWith("supabase") ? "receipt_write_failed" : "r2_flush_failed", position_id: descriptor.positionId,
             occ_symbol: descriptor.occSymbol, affected_samples: descriptor.sampleCount + descriptor.droppedSamples,
             facts: {
-              reason, objectKey: descriptor.objectKey, retryBudgetExhausted: Boolean(evicted),
+              reason, objectKey: descriptor.objectKey, censorCode: timeout ? "adapter_timeout" : "adapter_failed", stage,
               message: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
             },
-          });
+          }, deadlineAtMs);
+          if (evicted) await this.emitRetryExhausted(descriptor, deadlineAtMs, stage);
           warn(`held-contract-capture: segment ${evicted ? "retry budget exhausted; evidence censored" : "retry retained with backoff"}; execution unaffected — ${error instanceof Error ? error.message : String(error)}`);
         }
       }

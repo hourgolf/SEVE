@@ -17,12 +17,14 @@ import {
 
 export const VB_CANDIDATE_SCHEMA_VERSION = 1 as const;
 export const VB_EXACT_PATH_RECEIPT_SCHEMA_VERSION = 1 as const;
+export const VB_EXACT_PATH_BUILDER_VERSION = "vb-exact-path-builder-v1" as const;
 export const VB_BOUNDARY_MAX_LAG_MS = 1_100;
 export const VB_INTERNAL_MAX_GAP_MS = 5_000;
 
 export const VB_CANDIDATE_SQL_FIELDS = [
   "id", "opportunity_id", "schema_version", "signal_id", "strategist_id", "account_id",
   "channel_slug", "channel_version", "configuration_epoch_id", "source_bar_at", "session_date_et",
+  "decision_observed_at",
   "underlying", "option_side", "occ_symbol", "live_observed_ask", "live_ask_feed",
   "live_ask_provider_at", "live_ask_observed_at", "live_ask_freshness_ms", "live_ask_exact",
   "blocked_reason", "virtual_exit_at", "reentry_ordinal", "exact_path_required",
@@ -34,7 +36,7 @@ export const VB_EXACT_PATH_SQL_FIELDS = [
   "manifest_key", "content_sha256", "compressed_sha256", "compressed_bytes", "row_count",
   "first_quote_at", "last_quote_at", "entry_quote_at", "entry_ask", "left_boundary_lag_ms",
   "right_boundary_lag_ms", "max_internal_gap_ms", "checksum_verified", "contract_valid", "source",
-  "source_version", "completed_at",
+  "path_builder_version", "completed_at",
 ] as const;
 
 export interface VbLiveObservedAsk {
@@ -55,6 +57,7 @@ export interface VbCandidateDecision {
   configurationEpochId: string;
   sourceVersion: string;
   sourceBarAtMs: number;
+  decisionObservedAtMs: number;
   underlying: string;
   side: "call" | "put";
   occSymbol: string;
@@ -151,7 +154,8 @@ function validCandidate(candidate: VbCandidateReceipt): boolean {
     && UUID.test(candidate.signalId) && UUID.test(candidate.strategistId)
     && (candidate.accountId == null || UUID.test(candidate.accountId))
     && Boolean(candidate.channelSlug && candidate.sourceVersion && candidate.opportunityId)
-    && finite(candidate.virtualExitAtMs) && candidate.virtualExitAtMs >= candidate.sourceBarAtMs;
+    && finite(candidate.decisionObservedAtMs) && candidate.decisionObservedAtMs >= candidate.sourceBarAtMs
+    && finite(candidate.virtualExitAtMs) && candidate.virtualExitAtMs >= candidate.decisionObservedAtMs;
 }
 
 export function canonicalVbCandidateId(input: Pick<VbCandidateDecision,
@@ -183,7 +187,8 @@ export function coalesceVbCandidateDecisions(input: readonly VbCandidateDecision
     const candidateId = canonicalVbCandidateId(row);
     if (!candidateId || !UUID.test(row.signalId) || !UUID.test(row.strategistId)
         || (row.accountId != null && !UUID.test(row.accountId)) || !row.channelSlug || !row.sourceVersion
-        || !finite(row.virtualExitAtMs) || row.virtualExitAtMs < row.sourceBarAtMs) continue;
+        || !finite(row.decisionObservedAtMs) || row.decisionObservedAtMs < row.sourceBarAtMs
+        || !finite(row.virtualExitAtMs) || row.virtualExitAtMs < row.decisionObservedAtMs) continue;
     const sessionDateEt = ET_DATE.format(new Date(row.sourceBarAtMs));
     const lane = `${sessionDateEt}\u0000${row.channelVersion}\u0000${row.configurationEpochId}\u0000${row.underlying}\u0000${row.side}\u0000${row.occSymbol}`;
     if (row.sourceBarAtMs < (activeUntil.get(lane) ?? -Infinity)) continue;
@@ -219,6 +224,7 @@ export function candidateDbPayload(candidate: VbCandidateReceipt): VbCandidateDb
     configuration_epoch_id: candidate.configurationEpochId,
     source_bar_at: new Date(candidate.sourceBarAtMs).toISOString(),
     session_date_et: candidate.sessionDateEt,
+    decision_observed_at: new Date(candidate.decisionObservedAtMs).toISOString(),
     underlying: candidate.underlying,
     option_side: candidate.side,
     occ_symbol: candidate.occSymbol,
@@ -270,12 +276,12 @@ export function buildVbExactCandidateDryRun(input: {
     sessionDateEt: candidate.sessionDateEt,
     occSymbol: candidate.occSymbol,
     rawSymbol,
-    startIso: new Date(candidate.sourceBarAtMs).toISOString(),
+    startIso: new Date(candidate.decisionObservedAtMs).toISOString(),
     endIso: new Date(candidate.virtualExitAtMs + VB_BOUNDARY_MAX_LAG_MS + 1).toISOString(),
     positionIds: [candidate.opportunityId],
   } : null;
 
-  const responseWindow = input.databentoQuotes.filter((quote) => quote.atMs >= candidate.sourceBarAtMs
+  const responseWindow = input.databentoQuotes.filter((quote) => quote.atMs >= candidate.decisionObservedAtMs
     && quote.atMs <= candidate.virtualExitAtMs + VB_BOUNDARY_MAX_LAG_MS);
   if (responseWindow.some((quote) => quote.occSymbol !== candidate.occSymbol
       || quote.source !== "databento_cbbo_1s")) censors.add("path_identity_mismatch");
@@ -287,7 +293,7 @@ export function buildVbExactCandidateDryRun(input: {
   if (!quotes.length) censors.add("missing_exact_path");
   const left = quotes[0];
   const right = quotes.find((quote) => quote.atMs >= candidate.virtualExitAtMs);
-  const leftLag = left ? left.atMs - candidate.sourceBarAtMs : Number.POSITIVE_INFINITY;
+  const leftLag = left ? left.atMs - candidate.decisionObservedAtMs : Number.POSITIVE_INFINITY;
   const rightLag = right ? right.atMs - candidate.virtualExitAtMs : Number.POSITIVE_INFINITY;
   if (!left || leftLag < 0 || leftLag > VB_BOUNDARY_MAX_LAG_MS) censors.add("left_boundary_censored");
   if (!right || rightLag < 0 || rightLag > VB_BOUNDARY_MAX_LAG_MS) censors.add("right_boundary_censored");
@@ -309,8 +315,10 @@ export function buildVbExactCandidateDryRun(input: {
     opportunityId: candidate.opportunityId,
     dataset: EXACT_OPTION_PATH_DATASET,
     schema: EXACT_OPTION_PATH_SCHEMA,
+    pathBuilderVersion: VB_EXACT_PATH_BUILDER_VERSION,
     occSymbol: candidate.occSymbol,
     sourceBarAt: new Date(candidate.sourceBarAtMs).toISOString(),
+    decisionObservedAt: new Date(candidate.decisionObservedAtMs).toISOString(),
     requestedExitAt: new Date(candidate.virtualExitAtMs).toISOString(),
     quotes: throughRight,
   };
@@ -328,6 +336,7 @@ export function buildVbExactCandidateDryRun(input: {
     opportunityId: candidate.opportunityId,
     dataset: EXACT_OPTION_PATH_DATASET,
     schema: EXACT_OPTION_PATH_SCHEMA,
+    pathBuilderVersion: VB_EXACT_PATH_BUILDER_VERSION,
     objectKey,
     contentSha256,
     compressedSha256,
@@ -340,7 +349,6 @@ export function buildVbExactCandidateDryRun(input: {
     leftBoundaryLagMs: leftLag,
     rightBoundaryLagMs: rightLag,
     maxInternalGapMs,
-    sourceVersion: candidate.sourceVersion,
     completedAt,
     externalWrites: false,
   };
@@ -368,7 +376,7 @@ export function buildVbExactCandidateDryRun(input: {
       && createHash("sha256").update(compressed).digest("hex") === compressedSha256,
     contract_valid: true,
     source: "databento_historical",
-    source_version: candidate.sourceVersion,
+    path_builder_version: VB_EXACT_PATH_BUILDER_VERSION,
     completed_at: completedAt,
   };
 

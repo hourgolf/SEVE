@@ -7,6 +7,7 @@ import {
   heldContractsFromTradePathReceipt,
   historicalAccessGate,
   parseDatabentoCbboJsonLine,
+  parsePersistedDatabentoCbboObject,
   type HeldContractReceipt,
 } from "./databentoExactPath.js";
 
@@ -61,6 +62,17 @@ check("crossed CBBO line is rejected", parseDatabentoCbboJsonLine(JSON.stringify
 
 const deduped = dedupeCbboQuotes([quote!, quote!, { ...quote!, atMs: quote!.atMs + 1_000 }]);
 check("CBBO rows dedupe by contract and timestamp", deduped.length, 2);
+
+const persisted = parsePersistedDatabentoCbboObject(Buffer.from(JSON.stringify([
+  quote,
+  quote,
+  { ...quote, ask: 1.1 },
+])));
+check("persisted CBBO bytes use the strict real-object parser", [persisted.quotes.length, persisted.invalidRows], [1, 1]);
+check("persisted CBBO parser rejects non-JSON bytes", (() => {
+  try { parsePersistedDatabentoCbboObject(Buffer.from("not-json")); return false; }
+  catch { return true; }
+})(), true);
 
 const newestRequestEnd = "2026-07-15T18:58:46.000Z";
 check("historical gate blocks one millisecond before the rolling boundary", historicalAccessGate(

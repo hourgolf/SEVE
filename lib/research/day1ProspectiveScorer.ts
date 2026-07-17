@@ -17,6 +17,7 @@ export interface ProspectiveMatchedPairInput {
   comparisonId: string;
   sessionDateEt: string;
   clockId: string;
+  provenanceId: string;
   controlIdentity: ProspectivePolicyIdentity;
   challengerIdentity: ProspectivePolicyIdentity;
   controlPnl: number;
@@ -35,6 +36,9 @@ export interface ProspectiveMatchedPairScore {
   completedGroups: number;
   censoredGroups: number;
   independentSessions: number;
+  independentOpportunities: number;
+  exactDuplicatesIgnored: number;
+  conflictingDuplicateGroups: number;
   totalDelta: number;
   medianDelta: number | null;
   positiveDelta: number;
@@ -51,6 +55,8 @@ export interface ProspectiveScorecard {
   positiveDeltaShareDenominator: typeof DAY1_ZERO_DELTA_RULE;
   scores: ProspectiveMatchedPairScore[];
   censoredRows: number;
+  exactDuplicatesIgnored: number;
+  conflictingDuplicateGroups: number;
   policyChangeAuthorized: false;
   productionChangeAuthorized: false;
 }
@@ -61,6 +67,13 @@ const round = (value: number, digits = 4): number => {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
 };
+
+function validEtDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
 
 export function prospectivePolicyIdentityKey(identity: ProspectivePolicyIdentity): string {
   if (![identity.channelSlug, identity.channelVersion, identity.managerVersion, identity.configurationEpoch].every(clean)) {
@@ -78,48 +91,94 @@ function median(values: readonly number[]): number | null {
   return round(ordered.length % 2 === 1 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2);
 }
 
+interface CanonicalRow {
+  row: ProspectiveMatchedPairInput;
+  policyKey: string;
+  controlKey: string;
+  challengerKey: string;
+  identityKey: string;
+  fingerprint: string;
+  inputRows: number;
+  exactDuplicates: number;
+  conflict: boolean;
+}
+
 export function buildDay1ProspectiveScorecard(rows: readonly ProspectiveMatchedPairInput[]): ProspectiveScorecard {
-  const preCohort = rows.find((row) => row.sessionDateEt < DAY1_PROSPECTIVE_COHORT_START_ET);
-  if (preCohort) {
-    throw new Error(`Prospective scorer rejects pre-${DAY1_PROSPECTIVE_COHORT_START_ET} row ${preCohort.comparisonId}`);
+  const canonical = new Map<string, CanonicalRow>();
+  let invalidRows = 0;
+
+  for (const row of rows) {
+    if (!validEtDate(row.sessionDateEt)) { invalidRows++; continue; }
+    if (row.sessionDateEt < DAY1_PROSPECTIVE_COHORT_START_ET) {
+      throw new Error(`Prospective scorer rejects pre-${DAY1_PROSPECTIVE_COHORT_START_ET} row ${row.comparisonId}`);
+    }
+    let controlKey: string;
+    let challengerKey: string;
+    try {
+      controlKey = prospectivePolicyIdentityKey(row.controlIdentity);
+      challengerKey = prospectivePolicyIdentityKey(row.challengerIdentity);
+    } catch { invalidRows++; continue; }
+    if (!clean(row.testId) || !clean(row.comparisonId) || !clean(row.clockId) || !clean(row.provenanceId)
+        || !finite(row.controlPnl) || !finite(row.challengerPnl)) {
+      invalidRows++;
+      continue;
+    }
+    const policyKey = `${encodeURIComponent(row.testId)}::${controlKey}::${challengerKey}`;
+    const identityKey = [row.testId, row.comparisonId, row.clockId, row.sessionDateEt, controlKey, challengerKey]
+      .map(encodeURIComponent).join("::");
+    const fingerprint = JSON.stringify({
+      provenanceId: row.provenanceId,
+      controlPnl: row.controlPnl,
+      challengerPnl: row.challengerPnl,
+      eligible: row.eligible !== false,
+    });
+    const prior = canonical.get(identityKey);
+    if (!prior) {
+      canonical.set(identityKey, {
+        row, policyKey, controlKey, challengerKey, identityKey, fingerprint,
+        inputRows: 1, exactDuplicates: 0, conflict: false,
+      });
+      continue;
+    }
+    prior.inputRows++;
+    if (prior.fingerprint === fingerprint) prior.exactDuplicates++;
+    else prior.conflict = true;
   }
 
   const groups = new Map<string, {
     testId: string;
     controlIdentity: ProspectivePolicyIdentity;
     challengerIdentity: ProspectivePolicyIdentity;
-    rows: ProspectiveMatchedPairInput[];
+    complete: ProspectiveMatchedPairInput[];
+    censoredGroups: number;
+    censoredRows: number;
+    exactDuplicates: number;
+    conflictingGroups: number;
   }>();
-  let censoredRows = 0;
-
-  for (const row of rows) {
-    let controlKey: string;
-    let challengerKey: string;
-    try {
-      controlKey = prospectivePolicyIdentityKey(row.controlIdentity);
-      challengerKey = prospectivePolicyIdentityKey(row.challengerIdentity);
-    } catch {
-      censoredRows += 1;
-      continue;
-    }
-    if (row.eligible === false || !clean(row.testId) || !clean(row.comparisonId) || !clean(row.clockId)
-      || !finite(row.controlPnl) || !finite(row.challengerPnl)) {
-      censoredRows += 1;
-      continue;
-    }
-    const key = `${encodeURIComponent(row.testId)}::${controlKey}::${challengerKey}`;
-    const group = groups.get(key) ?? {
-      testId: row.testId,
-      controlIdentity: row.controlIdentity,
-      challengerIdentity: row.challengerIdentity,
-      rows: [],
+  for (const item of canonical.values()) {
+    const group = groups.get(item.policyKey) ?? {
+      testId: item.row.testId,
+      controlIdentity: item.row.controlIdentity,
+      challengerIdentity: item.row.challengerIdentity,
+      complete: [], censoredGroups: 0, censoredRows: 0, exactDuplicates: 0, conflictingGroups: 0,
     };
-    group.rows.push(row);
-    groups.set(key, group);
+    if (item.conflict) {
+      group.censoredGroups++;
+      group.censoredRows += item.inputRows;
+      group.conflictingGroups++;
+    } else if (item.row.eligible === false) {
+      group.censoredGroups++;
+      group.censoredRows++;
+      group.exactDuplicates += item.exactDuplicates;
+    } else {
+      group.complete.push(item.row);
+      group.exactDuplicates += item.exactDuplicates;
+    }
+    groups.set(item.policyKey, group);
   }
 
   const scores = [...groups.entries()].map(([policyKey, group]): ProspectiveMatchedPairScore => {
-    const deltas = group.rows.map((row) => round(row.challengerPnl - row.controlPnl, 2));
+    const deltas = group.complete.map((row) => round(row.challengerPnl - row.controlPnl, 2));
     const positiveDelta = deltas.filter((delta) => delta > 0).length;
     return {
       scorerVersion: DAY1_PROSPECTIVE_SCORER_VERSION,
@@ -129,9 +188,12 @@ export function buildDay1ProspectiveScorecard(rows: readonly ProspectiveMatchedP
       controlIdentity: group.controlIdentity,
       challengerIdentity: group.challengerIdentity,
       policyKey,
-      completedGroups: group.rows.length,
-      censoredGroups: 0,
-      independentSessions: new Set(group.rows.map((row) => row.sessionDateEt)).size,
+      completedGroups: group.complete.length,
+      censoredGroups: group.censoredGroups,
+      independentSessions: new Set(group.complete.map((row) => row.sessionDateEt)).size,
+      independentOpportunities: new Set(group.complete.map((row) => `${row.sessionDateEt}|${row.clockId}`)).size,
+      exactDuplicatesIgnored: group.exactDuplicates,
+      conflictingDuplicateGroups: group.conflictingGroups,
       totalDelta: round(deltas.reduce((sum, delta) => sum + delta, 0), 2),
       medianDelta: median(deltas),
       positiveDelta,
@@ -148,7 +210,9 @@ export function buildDay1ProspectiveScorecard(rows: readonly ProspectiveMatchedP
     cohortStartEt: DAY1_PROSPECTIVE_COHORT_START_ET,
     positiveDeltaShareDenominator: DAY1_ZERO_DELTA_RULE,
     scores,
-    censoredRows,
+    censoredRows: invalidRows + [...groups.values()].reduce((sum, group) => sum + group.censoredRows, 0),
+    exactDuplicatesIgnored: scores.reduce((sum, score) => sum + score.exactDuplicatesIgnored, 0),
+    conflictingDuplicateGroups: scores.reduce((sum, score) => sum + score.conflictingDuplicateGroups, 0),
     policyChangeAuthorized: false,
     productionChangeAuthorized: false,
   };

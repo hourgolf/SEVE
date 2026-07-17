@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+  HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
+  isResearchAdapterTimeout,
+  withResearchAdapterDeadline,
+} from "./researchAdapterDeadline.js";
+import {
   BoundedHeldContractCaptureQueue,
   HeldContractCaptureBatcher,
   HELD_CONTRACT_CAPTURE_SCHEMA_VERSION,
@@ -242,6 +248,35 @@ shutdownMany.accept({ samples: [sample, otherPosition], estimatedBytes: 0, dropp
 check("shutdown seals every pending partition in one forced pass", shutdownMany.sealReady("shutdown", t0 + 2_000).length, 2);
 shutdownMany.recordFailure(shutdownMany.pending()[0].token, t0 + 2_000);
 check("shutdown bypasses retry backoff for explicit final attempts", shutdownMany.sealReady("shutdown", t0 + 2_001).length, 2);
+const abandoned = shutdownMany.abandonAll();
+check("shutdown abandonment releases all retained samples with a distinct censor", [
+  abandoned.reduce((sum, row) => sum + row.samples, 0),
+  abandoned.every((row) => row.reason === "shutdown_abandoned"),
+  shutdownMany.sampleCount(),
+  shutdownMany.estimatedBytes(),
+], [2, true, 0, 0]);
+
+for (const stage of ["r2_object_write", "supabase_receipt_write"] as const) {
+  let aborted = false;
+  const started = Date.now();
+  let rejected: unknown = null;
+  try {
+    await withResearchAdapterDeadline({
+      stage,
+      requestTimeoutMs: 15,
+      operation: (signal) => {
+        signal.addEventListener("abort", () => { aborted = true; });
+        return new Promise<never>(() => undefined);
+      },
+    });
+  } catch (error) { rejected = error; }
+  check(`never-resolving ${stage} is aborted and returns`, [
+    isResearchAdapterTimeout(rejected),
+    isResearchAdapterTimeout(rejected) ? rejected.stage : null,
+    aborted,
+    Date.now() - started < 1_000,
+  ], [true, stage, true, true]);
+}
 
 const dropBatcher = new HeldContractCaptureBatcher(24, 120_000);
 dropBatcher.accept(firstDrain);
@@ -281,9 +316,20 @@ check("manifest completion is retry-stable", /const completedAt = descriptor\.la
 check("runtime acknowledges a batch only after a durable receipt", /if \(receipted\)\s*{[\s\S]*?batcher\.acknowledge\(batch\.token\)/.test(runtimeSource), true);
 check("R2 and receipt failures retain a retry batch with backoff", /retry retained with backoff/.test(runtimeSource), true);
 check("R2 and receipt failures use bounded backoff budgets", /batcher\.recordFailure/.test(runtimeSource) && /RetryMaxAttempts/.test(runtimeSource), true);
+check("all R2 stages use abortable research deadlines", [
+  "r2_object_write", "r2_object_head", "r2_manifest_write", "r2_manifest_head",
+].every((stage) => runtimeSource.includes(`this.r2("${stage}"`)), true);
+check("timeout, exhaustion, and shutdown abandonment have distinct censors", [
+  "adapter_timeout", "retry_exhausted", "shutdown_abandoned",
+].every((code) => runtimeSource.includes(`censor=${code}`) || runtimeSource.includes(`censorCode: "${code}"`)), true);
+check("shutdown has a hard total wall-clock ceiling", [
+  HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+  HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
+  /Date\.now\(\) \+ HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS/.test(runtimeSource),
+], [5_000, 30_000, true]);
 check("shutdown awaits all bounded attempts without a silent timeout race", [
   /Promise\.race\(\[this\.flush\("shutdown"\)/.test(runtimeSource),
-  /await this\.flush\("shutdown"\)/.test(runtimeSource),
+  /await this\.flush\("shutdown", workDeadlineAtMs\)/.test(runtimeSource),
 ], [false, true]);
 check("runtime cannot import provider, broker, execution, position, or order modules", /from\s+["'][^"']*(?:alpaca|execute|position|order|reconcile)[^"']*["']/i.test(runtimeSource), false);
 const managerRuntimeSource = readFileSync(new URL("./managerShadowBook.ts", import.meta.url), "utf8");
@@ -294,6 +340,10 @@ check("capture store is append-only and isolated", [
   /\.update\(|\.delete\(|\.upsert\(/.test(captureStoreSource),
   /from\s+["'][^"']*(?:execute|alpaca|store|position|order|reconcile)[^"']*["']/i.test(captureStoreSource),
 ], [false, false]);
+check("Supabase schema, receipt, and health operations carry abort signals", [
+  "supabase_schema_probe", "supabase_receipt_write", "supabase_health_write",
+].every((stage) => captureStoreSource.includes(`stage: "${stage}"`))
+  && (captureStoreSource.match(/\.abortSignal\(signal\)/g)?.length ?? 0) === 3, true);
 const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
 check("held capture is default off", /heldContractCaptureEnabled:\s*flag\("HELD_CONTRACT_CAPTURE_ENABLED", false\)/.test(configSource), true);
 check("batching has bounded sample and age targets", [

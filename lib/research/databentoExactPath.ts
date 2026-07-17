@@ -67,6 +67,42 @@ export interface DatabentoCbboQuote {
   source: "databento_cbbo_1s";
 }
 
+/** Strict parser for the checksum-verified normalized bytes written by the
+ * historical Databento downloader. Malformed rows are counted, never repaired. */
+export function parsePersistedDatabentoCbboObject(input: Buffer | string): {
+  quotes: DatabentoCbboQuote[];
+  invalidRows: number;
+} {
+  let value: unknown;
+  try { value = JSON.parse(typeof input === "string" ? input : input.toString("utf8")); }
+  catch { throw new Error("persisted Databento CBBO object is not valid JSON"); }
+  if (!Array.isArray(value)) throw new Error("persisted Databento CBBO object must be an array");
+  const quotes: DatabentoCbboQuote[] = [];
+  let invalidRows = 0;
+  for (const item of value) {
+    const row = record(item);
+    const occSymbol = typeof row?.occSymbol === "string" ? row.occSymbol : "";
+    const root = occSymbol.match(/^[A-Z]{1,6}/)?.[0] ?? "";
+    const atMs = numeric(row?.atMs);
+    const bid = numeric(row?.bid);
+    const ask = numeric(row?.ask);
+    if (!occSymbol || compactOccToDatabentoRaw(occSymbol, root) == null
+        || atMs == null || bid == null || ask == null || bid <= 0 || ask < bid
+        || row?.source !== "databento_cbbo_1s") {
+      invalidRows++;
+      continue;
+    }
+    quotes.push({
+      occSymbol, atMs, bid, ask,
+      bidSize: numeric(row?.bidSize),
+      askSize: numeric(row?.askSize),
+      publisherId: numeric(row?.publisherId),
+      source: "databento_cbbo_1s",
+    });
+  }
+  return { quotes: dedupeCbboQuotes(quotes), invalidRows };
+}
+
 export interface HistoricalAccessGate {
   ready: boolean;
   latestRequestedAtMs: number;

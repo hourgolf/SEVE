@@ -68,6 +68,7 @@ function exactCandidateDecision(s: any, base: ShadowRow): VbCandidateDecision | 
   const observedAtMs = Date.parse(String(rationale.decision_observed_at ?? ""));
   const liveAsk = Number(rationale.ask ?? 0);
   if (!Number.isFinite(sourceBarAtMs)) return { signalId: String(s.id), code: "missing_exact_source_bar_clock" };
+  if (!Number.isFinite(observedAtMs)) return { signalId: String(s.id), code: "missing_decision_observation_clock" };
   if (typeof rationale.channel_version !== "string" || !rationale.channel_version)
     return { signalId: String(s.id), code: "missing_channel_version" };
   if (typeof rationale.configuration_epoch_id !== "string" || !/^sha256:[0-9a-f]{64}$/.test(rationale.configuration_epoch_id))
@@ -85,6 +86,7 @@ function exactCandidateDecision(s: any, base: ShadowRow): VbCandidateDecision | 
     configurationEpochId: rationale.configuration_epoch_id,
     sourceVersion: rationale.worker_version,
     sourceBarAtMs,
+    decisionObservedAtMs: observedAtMs,
     underlying: String(rationale.candidate_underlying ?? ""),
     side,
     occSymbol: base.occ,
