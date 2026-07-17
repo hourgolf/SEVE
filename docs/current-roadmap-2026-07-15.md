@@ -76,7 +76,7 @@ Production baseline before this research-only review branch: `main@241525d`.
 | Phase 1K-D | Complete; review only | July 15 exact holdout scored unchanged against `phase1k-c-preregister-v1`; receipt and results are preserved in the research review branch. |
 | Phase 1K-E | Frozen; accumulating | PB, ORB, Grind, QQQ, and IWM tests were frozen before the July 16+ prospective window; evidence floors require at least five independent sessions. |
 | Phase 1K-F | Merged + deployed; first-session validation pending | Execution-quality receipts are observation-only and live. Reconcile the next session's eligible exits before activating any alert thresholds. |
-| Phase 1K-G | Pure foundation in review | Held-contract OPRA sample contract, bounded buffer, deterministic R2 segment descriptor, 36-check self-test, and unapplied private receipt migration exist. No runtime adapter or production write is enabled. |
+| Phase 1K-G | Default-off runtime in review | Held-contract OPRA capture reuses manager-book requests, buffers position-scoped evidence off-path, and writes verified R2 segments plus private receipts. The 52-check suite is green; migration is unapplied and production flag remains absent/off. |
 
 The seam remains load-bearing:
 

@@ -12,7 +12,7 @@ export const HELD_CONTRACT_MAX_OBSERVATION_GAP_MS = 15_000;
 export const HELD_CONTRACT_QUOTE_EVENT_MAX_AGE_MS = 15_000;
 export const HELD_CONTRACT_SNAPSHOT_MAX_AGE_MS = 15_000;
 
-export type HeldContractRequestOutcome = "success" | "provider_error";
+export type HeldContractRequestOutcome = "success" | "provider_error" | "not_requested";
 export type HeldContractSampleQuality =
   | "eligible"
   | "snapshot_stale"
@@ -43,6 +43,37 @@ export interface HeldContractCaptureInput {
   ask?: number | null;
   bidSize?: number | null;
   askSize?: number | null;
+}
+
+export interface HeldContractCaptureTarget {
+  positionId: string;
+  strategistId: string;
+  accountId: string;
+  channelSlug: string;
+  occSymbol: string;
+  underlying: string;
+}
+
+export interface HeldContractFetchQuote {
+  occSymbol: string;
+  bid: number;
+  ask: number;
+  bidSize: number | null;
+  askSize: number | null;
+  quoteAtMs: number;
+  feed: "opra" | "indicative";
+}
+
+export interface HeldContractFetchObservation {
+  requestedSymbols: readonly string[];
+  requestOutcome: HeldContractRequestOutcome;
+  failureCode?: string | null;
+  fetchStartedAtMs: number;
+  fetchCompletedAtMs: number;
+  observedAtMs: number;
+  quotes: ReadonlyMap<string, HeldContractFetchQuote>;
+  sourceBootId: string;
+  sourceVersion: string;
 }
 
 export interface HeldContractCaptureSample {
@@ -224,9 +255,9 @@ export function normalizeHeldContractCaptureSample(
   let askSize: number | null = null;
   let failureCode = text(input.failureCode) ? input.failureCode!.trim().slice(0, 120) : null;
 
-  if (input.requestOutcome === "provider_error") {
+  if (input.requestOutcome !== "success") {
     quality = "request_failed";
-    failureCode ??= "provider_error";
+    failureCode ??= input.requestOutcome === "provider_error" ? "provider_error" : "not_requested";
   } else if (!finite(input.providerQuoteAtMs) || input.providerQuoteAtMs <= 0
       || input.bid == null || input.ask == null) {
     quality = "missing_quote";
@@ -288,6 +319,41 @@ export function normalizeHeldContractCaptureSample(
   };
 }
 
+/** Fan one provider request out to position-scoped evidence. Multiple manager
+ * arms for the same position/OCC collapse to one sample, while two positions
+ * sharing an OCC remain independent. */
+export function heldContractCaptureInputsForFetch(
+  targets: readonly HeldContractCaptureTarget[],
+  fetch: HeldContractFetchObservation,
+): HeldContractCaptureInput[] {
+  const requested = new Set(fetch.requestedSymbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean));
+  const unique = new Map<string, HeldContractCaptureTarget>();
+  for (const target of targets) {
+    const occSymbol = target.occSymbol.trim().toUpperCase();
+    if (!requested.has(occSymbol)) continue;
+    unique.set(`${target.positionId}|${occSymbol}`, { ...target, occSymbol });
+  }
+  return [...unique.values()].sort((a, b) => `${a.positionId}|${a.occSymbol}`.localeCompare(`${b.positionId}|${b.occSymbol}`)).map((target) => {
+    const quote = fetch.quotes.get(target.occSymbol);
+    return {
+      ...target,
+      sourceBootId: fetch.sourceBootId,
+      sourceVersion: fetch.sourceVersion,
+      feed: "opra" as const,
+      requestOutcome: fetch.requestOutcome,
+      failureCode: fetch.failureCode ?? null,
+      fetchStartedAtMs: fetch.fetchStartedAtMs,
+      fetchCompletedAtMs: fetch.fetchCompletedAtMs,
+      observedAtMs: fetch.observedAtMs,
+      providerQuoteAtMs: quote?.feed === "opra" ? quote.quoteAtMs : null,
+      bid: quote?.feed === "opra" ? quote.bid : null,
+      ask: quote?.feed === "opra" ? quote.ask : null,
+      bidSize: quote?.feed === "opra" ? quote.bidSize : null,
+      askSize: quote?.feed === "opra" ? quote.askSize : null,
+    };
+  });
+}
+
 /** A synchronous bounded queue. Capacity pressure sheds research evidence and
  * records the affected position/OCC; it never waits for storage or execution. */
 export class BoundedHeldContractCaptureQueue {
@@ -324,6 +390,8 @@ export class BoundedHeldContractCaptureQueue {
   }
 
   size(): number { return this.samples.length; }
+  droppedCount(): number { return [...this.drops.values()].reduce((sum, value) => sum + value.dropped, 0); }
+  hasPending(): boolean { return this.samples.length > 0 || this.drops.size > 0; }
   utilization(): number { return Math.max(this.samples.length / this.maxSamples, this.estimatedBytes / this.maxBytes); }
 
   drain(): HeldContractCaptureDrain {

@@ -5,6 +5,7 @@ import {
   HELD_CONTRACT_CAPTURE_SCHEMA_VERSION,
   HELD_CONTRACT_CAPTURE_VERSION,
   buildHeldContractSegmentDescriptor,
+  heldContractCaptureInputsForFetch,
   normalizeHeldContractCaptureSample,
   partitionHeldContractCapture,
   type HeldContractCaptureInput,
@@ -66,6 +67,45 @@ check("negative size fails closed", normalizeHeldContractCaptureSample({ ...base
 check("backwards fetch clocks reject sample", normalizeHeldContractCaptureSample({ ...base, fetchCompletedAtMs: t0 - 1 }), null);
 check("non-OPRA contract form rejects sample", normalizeHeldContractCaptureSample({ ...base, occSymbol: "SPY" }), null);
 
+const sharedOccTarget = {
+  positionId: "55555555-5555-4555-8555-555555555555",
+  strategistId: "66666666-6666-4666-8666-666666666666",
+  accountId: "77777777-7777-4777-8777-777777777777",
+  channelSlug: "pb-ride-2", occSymbol: base.occSymbol, underlying: "SPY",
+};
+const fetch = {
+  requestedSymbols: [base.occSymbol], requestOutcome: "success" as const,
+  fetchStartedAtMs: base.fetchStartedAtMs, fetchCompletedAtMs: base.fetchCompletedAtMs,
+  observedAtMs: base.observedAtMs, sourceBootId: base.sourceBootId, sourceVersion: base.sourceVersion,
+  quotes: new Map([[base.occSymbol, {
+    occSymbol: base.occSymbol, bid: 1.1, ask: 1.15, bidSize: 12, askSize: 8,
+    quoteAtMs: base.providerQuoteAtMs!, feed: "opra" as const,
+  }]]),
+};
+const fanout = heldContractCaptureInputsForFetch([
+  base, base, // duplicate manager arms for one position
+  sharedOccTarget,
+], fetch);
+check("manager-arm duplicates collapse but shared OCC positions remain independent", fanout.map((row) => row.positionId), [base.positionId, sharedOccTarget.positionId]);
+check("one provider quote fans to both position identities", fanout.map((row) => [row.occSymbol, row.bid, row.bidSize]), [
+  [base.occSymbol, 1.1, 12], [base.occSymbol, 1.1, 12],
+]);
+const failedFanout = heldContractCaptureInputsForFetch([base, sharedOccTarget], {
+  ...fetch, requestOutcome: "provider_error", failureCode: "provider_request_failed", quotes: new Map(),
+});
+check("provider failure remains position-scoped without invented quotes", failedFanout.map((row) => [row.positionId, row.requestOutcome, row.bid]), [
+  [base.positionId, "provider_error", null], [sharedOccTarget.positionId, "provider_error", null],
+]);
+const shedFanout = heldContractCaptureInputsForFetch([base], {
+  ...fetch, requestOutcome: "not_requested", failureCode: "targeted_option_hard_cap_shed", quotes: new Map(),
+});
+check("provider-cap shedding is explicit rather than silent or mislabeled", [
+  shedFanout[0]?.requestOutcome,
+  normalizeHeldContractCaptureSample(shedFanout[0])?.quality,
+  normalizeHeldContractCaptureSample(shedFanout[0])?.failureCode,
+], ["not_requested", "request_failed", "targeted_option_hard_cap_shed"]);
+check("unrequested OCC is not misattributed", heldContractCaptureInputsForFetch([{ ...sharedOccTarget, occSymbol: "QQQ260716C00755000" }], fetch), []);
+
 const queue = new BoundedHeldContractCaptureQueue(2, 20_000);
 check("first sample queues synchronously", queue.enqueue(sample).accepted, true);
 check("duplicate is idempotent, not a drop", queue.enqueue(sample).reason, "duplicate");
@@ -80,6 +120,7 @@ check("drain resets sample and drop state", [queue.size(), queue.drain().dropped
 
 const tiny = new BoundedHeldContractCaptureQueue(10, 20);
 check("oversize is explicit", tiny.enqueue(sample).reason, "oversize");
+check("drop-only queue remains flushable", [tiny.size(), tiny.droppedCount(), tiny.hasPending()], [0, 1, true]);
 check("oversize increments both counters", tiny.drain().droppedByPartition[partitionDropKey], { dropped: 1, rejectedOversize: 1 });
 
 const laterQueue = new BoundedHeldContractCaptureQueue(10, 50_000);
@@ -106,6 +147,24 @@ check("failed requests remain in immutable evidence", [mixed.sampleCount, mixed.
 
 const source = readFileSync(new URL("./heldContractCaptureModel.ts", import.meta.url), "utf8");
 check("pure capture cannot import runtime mutation or I/O adapters", /from\s+["'][^"']*(?:alpaca|execute|store|position|order|reconcile|s3|supabase)[^"']*["']/i.test(source), false);
+const runtimeSource = readFileSync(new URL("./heldContractCapture.ts", import.meta.url), "utf8");
+check("capture enqueue is synchronous", /capture\(input: HeldContractCaptureInput\): void/.test(runtimeSource), true);
+check("held-contract compression is asynchronous", [runtimeSource.includes("gzipSync"), runtimeSource.includes("await gzipAsync")], [false, true]);
+check("high-water persistence is deferred past the manager callback", /setImmediate\(\(\)\s*=>\s*{[\s\S]*?this\.flush\("high-water"\)/.test(runtimeSource), true);
+check("manifest completion is retry-stable", /const completedAt = descriptor\.lastFetchAt/.test(runtimeSource), true);
+check("runtime cannot import provider, broker, execution, position, or order modules", /from\s+["'][^"']*(?:alpaca|execute|position|order|reconcile)[^"']*["']/i.test(runtimeSource), false);
+const managerRuntimeSource = readFileSync(new URL("./managerShadowBook.ts", import.meta.url), "utf8");
+check("manager capture handoff is not awaited", /await\s+capture\.capture/.test(managerRuntimeSource), false);
+check("manager contains a synchronous capture failure boundary", /try\s*{[\s\S]*?capture\.capture\(input\);[\s\S]*?}\s*catch/.test(managerRuntimeSource), true);
+const captureStoreSource = readFileSync(new URL("./heldContractCaptureStore.ts", import.meta.url), "utf8");
+check("capture store is append-only and isolated", [
+  /\.update\(|\.delete\(|\.upsert\(/.test(captureStoreSource),
+  /from\s+["'][^"']*(?:execute|alpaca|store|position|order|reconcile)[^"']*["']/i.test(captureStoreSource),
+], [false, false]);
+const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
+check("held capture is default off", /heldContractCaptureEnabled:\s*flag\("HELD_CONTRACT_CAPTURE_ENABLED", false\)/.test(configSource), true);
+const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+check("default worker loads held R2 runtime dynamically", /await import\("\.\/heldContractCapture\.js"\)/.test(indexSource), true);
 const migration = readFileSync(new URL("../../supabase/migrations/20260717052246_phase_1k_g_held_contract_capture_receipts.sql", import.meta.url), "utf8");
 check("capture receipt table is RLS protected", /alter table public\.held_contract_capture_receipts enable row level security/i.test(migration), true);
 check("anonymous capture access is revoked", /revoke all on public\.held_contract_capture_receipts from public, anon, authenticated, service_role/i.test(migration), true);

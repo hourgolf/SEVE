@@ -1,7 +1,7 @@
 // Phase 1G-B dark durable manager runtime. Observation-only by construction:
 // no execution, broker account, broker position, or broker order imports.
 
-import { config } from "./config.js";
+import { config, WORKER_VERSION } from "./config.js";
 import { BOOT_ID } from "./runId.js";
 import { info, warn } from "./log.js";
 import * as alpaca from "./alpaca.js";
@@ -18,7 +18,12 @@ import {
   type ManagerEnrollmentInput,
   type ManagerShadowRun,
 } from "./managerShadowBookModel.js";
-import { targetedOptionBatches, type TargetedOptionQuote } from "./managerShadowQuoteModel.js";
+import { TARGETED_OPTION_HARD_CAP, targetedOptionBatches, type TargetedOptionQuote } from "./managerShadowQuoteModel.js";
+import {
+  heldContractCaptureInputsForFetch,
+  type HeldContractCaptureInput,
+  type HeldContractCaptureTarget,
+} from "./heldContractCaptureModel.js";
 import {
   MANAGER_SHADOW_CUTOFF_GRACE_MS,
   MANAGER_SHADOW_QUOTE_MAX_AGE_MS,
@@ -32,6 +37,7 @@ export interface ManagerShadowBookContext {
   paperMode: boolean;
   channels: readonly store.ChannelConfig[];
   accounts: readonly store.AccountRow[];
+  heldContractCapture?: { capture(input: HeldContractCaptureInput): void } | null;
   nowMs?: number;
 }
 
@@ -42,6 +48,7 @@ let disabled = false;
 let ticking = false;
 let lastHealthLogMs = 0;
 let lastSuccessfulTickMs: number | null = null;
+let lastCaptureCapWarnMs = 0;
 const pendingTerminalReceipts = new Set<string>();
 const admissionInFlight = new Set<string>();
 const admissionHealthWarned = new Set<string>();
@@ -85,17 +92,44 @@ function freshQuote(quote: TargetedOptionQuote | undefined, nowMs: number): quot
   return nowMs - quote.quoteAtMs <= config.managerShadowQuoteMaxAgeMs;
 }
 
-async function targetedQuotes(symbols: readonly string[]): Promise<Map<string, TargetedOptionQuote>> {
+async function targetedQuotes(
+  symbols: readonly string[],
+  targets: readonly HeldContractCaptureTarget[],
+  capture: ManagerShadowBookContext["heldContractCapture"],
+): Promise<Map<string, TargetedOptionQuote>> {
   const batches = targetedOptionBatches(symbols);
   if (batches == null) throw new Error(`active contract hard cap exceeded (${symbols.length})`);
-  const settled = await Promise.allSettled(batches.map((batch) => alpaca.snapshotOptionsTargeted(batch)));
+  const settled = await Promise.all(batches.map(async (batch) => {
+    const fetchStartedAtMs = Date.now();
+    try {
+      const quotes = await alpaca.snapshotOptionsTargeted(batch);
+      const fetchCompletedAtMs = Date.now();
+      return { batch, quotes, requestOutcome: "success" as const, failureCode: null, fetchStartedAtMs, fetchCompletedAtMs };
+    } catch (error) {
+      const fetchCompletedAtMs = Date.now();
+      warn(`manager-shadow-book: targeted quote batch failed — ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        batch, quotes: new Map<string, TargetedOptionQuote>(), requestOutcome: "provider_error" as const,
+        failureCode: "provider_request_failed", fetchStartedAtMs, fetchCompletedAtMs,
+      };
+    }
+  }));
   const out = new Map<string, TargetedOptionQuote>();
   for (const result of settled) {
-    if (result.status === "rejected") {
-      warn(`manager-shadow-book: targeted quote batch failed — ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
-      continue;
+    if (capture) {
+      try {
+        const inputs = heldContractCaptureInputsForFetch(targets, {
+          requestedSymbols: result.batch, requestOutcome: result.requestOutcome, failureCode: result.failureCode,
+          fetchStartedAtMs: result.fetchStartedAtMs, fetchCompletedAtMs: result.fetchCompletedAtMs,
+          observedAtMs: result.fetchCompletedAtMs, quotes: result.quotes,
+          sourceBootId: BOOT_ID, sourceVersion: WORKER_VERSION,
+        });
+        for (const input of inputs) capture.capture(input);
+      } catch (error) {
+        warn(`manager-shadow-book: held-contract capture rejected synchronously — ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
-    for (const [symbol, quote] of result.value) out.set(symbol, quote);
+    for (const [symbol, quote] of result.quotes) out.set(symbol, quote);
   }
   return out;
 }
@@ -216,6 +250,25 @@ async function enrollRecoveryPositions(
   }
 }
 
+function openPositionCaptureTargets(
+  ctx: ManagerShadowBookContext,
+  rows: readonly store.PositionRow[],
+): HeldContractCaptureTarget[] {
+  if (!ctx.heldContractCapture) return [];
+  const channels = new Map(ctx.channels.map((channel) => [channel.id, channel]));
+  const defaultAccount = ctx.accounts.find((account) => !account.cred_ref) ?? ctx.accounts[0];
+  return rows.flatMap((row): HeldContractCaptureTarget[] => {
+    if (row.status !== "open") return [];
+    const channel = channels.get(row.strategist_id);
+    const accountId = channel?.account_id ?? defaultAccount?.id;
+    if (!channel || !accountId) return [];
+    return [{
+      positionId: row.id, strategistId: row.strategist_id, accountId,
+      channelSlug: channel.slug, occSymbol: row.occ_symbol, underlying: row.underlying,
+    }];
+  });
+}
+
 function activeRuns(): RuntimeRun[] {
   return [...runs.values()].filter((item) => item.run.status === "active");
 }
@@ -245,8 +298,43 @@ export async function shadowManagerBookTick(ctx: ManagerShadowBookContext): Prom
     // A recovered closed row must receive its actual outcome in the same tick.
     await attributeActualCloses();
     if (phase === "closed") return;
-    const symbols = [...new Set(activeRuns().map((item) => item.run.occSymbol))];
-    const quotes = await targetedQuotes(symbols);
+    const active = activeRuns();
+    const activeManagerTargets = active.map(({ run }): HeldContractCaptureTarget => ({
+      positionId: run.positionId, strategistId: run.strategistId, accountId: run.accountId,
+      channelSlug: run.channelSlug, occSymbol: run.occSymbol, underlying: run.underlying,
+    }));
+    // Capture every open position, including lots below the manager cohort's
+    // modeled-size floor, plus manager runs that continue after actual close.
+    const captureTargets = [...activeManagerTargets, ...openPositionCaptureTargets(ctx, recoveryRows)];
+    const managerSymbols = [...new Set(active.map((item) => item.run.occSymbol))].sort();
+    const managerSet = new Set(managerSymbols);
+    const captureOnlySymbols = [...new Set(captureTargets.map((target) => target.occSymbol))]
+      .filter((symbol) => !managerSet.has(symbol)).sort();
+    const captureCapacity = Math.max(0, TARGETED_OPTION_HARD_CAP - managerSymbols.length);
+    const admittedCaptureSymbols = captureOnlySymbols.slice(0, captureCapacity);
+    const omittedCaptureSymbols = captureOnlySymbols.slice(captureCapacity);
+    if (ctx.heldContractCapture && omittedCaptureSymbols.length) {
+      const omittedAtMs = Date.now();
+      try {
+        const omissions = heldContractCaptureInputsForFetch(captureTargets, {
+          requestedSymbols: omittedCaptureSymbols, requestOutcome: "not_requested",
+          failureCode: "targeted_option_hard_cap_shed", fetchStartedAtMs: omittedAtMs,
+          fetchCompletedAtMs: omittedAtMs, observedAtMs: omittedAtMs,
+          quotes: new Map(), sourceBootId: BOOT_ID, sourceVersion: WORKER_VERSION,
+        });
+        for (const input of omissions) ctx.heldContractCapture.capture(input);
+      } catch (error) {
+        warn(`manager-shadow-book: capture hard-cap evidence rejected — ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (omittedAtMs - lastCaptureCapWarnMs >= 5 * 60_000) {
+        lastCaptureCapWarnMs = omittedAtMs;
+        warn(`held-contract-capture: ${omittedCaptureSymbols.length} open-position OCC(s) omitted at provider hard cap; manager symbols retained`);
+      }
+    }
+    // Capture-only expansion can never crowd an active manager OCC out of the
+    // provider's tested 500-symbol boundary.
+    const symbols = [...managerSymbols, ...admittedCaptureSymbols];
+    const quotes = await targetedQuotes(symbols, captureTargets, ctx.heldContractCapture);
     const observedAtMs = Date.now();
 
     for (const item of activeRuns()) {

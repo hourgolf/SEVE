@@ -8,6 +8,8 @@ export interface TargetedOptionQuote {
   occSymbol: string;
   bid: number;
   ask: number;
+  bidSize: number | null;
+  askSize: number | null;
   quoteAtMs: number;
   feed: "opra" | "indicative";
 }
@@ -43,11 +45,20 @@ export function normalizeTargetedOptionSnapshots(
     const symbol = rawSymbol.trim().toUpperCase();
     const bid = Number(rawSnapshot.latestQuote.bp);
     const ask = Number(rawSnapshot.latestQuote.ap);
+    const rawBidSize = rawSnapshot.latestQuote.bs;
+    const rawAskSize = rawSnapshot.latestQuote.as;
+    const bidSize = rawBidSize == null ? null : Number(rawBidSize);
+    const askSize = rawAskSize == null ? null : Number(rawAskSize);
     const quoteAtMs = typeof rawSnapshot.latestQuote.t === "string"
       ? Date.parse(rawSnapshot.latestQuote.t)
       : NaN;
     if (!symbol || !(bid > 0) || !(ask >= bid) || !Number.isFinite(quoteAtMs)) continue;
-    out.set(symbol, { occSymbol: symbol, bid, ask, quoteAtMs, feed });
+    out.set(symbol, {
+      occSymbol: symbol, bid, ask,
+      bidSize: typeof bidSize === "number" && Number.isInteger(bidSize) && bidSize >= 0 ? bidSize : null,
+      askSize: typeof askSize === "number" && Number.isInteger(askSize) && askSize >= 0 ? askSize : null,
+      quoteAtMs, feed,
+    });
   }
   return out;
 }

@@ -20,6 +20,7 @@ import * as store from "./store.js";
 import { BarStore, ChainStore } from "./state.js";
 import { StockBarStream } from "./stream.js";
 import type { IntraminuteCaptureRuntime } from "./intraminuteCapture.js";
+import type { HeldContractCaptureRuntime } from "./heldContractCapture.js";
 import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type ShadowDecision } from "./decide.js";
 import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
@@ -972,6 +973,16 @@ async function main(): Promise<void> {
   }
   const stream = new StockBarStream(SYMBOLS, onBar, onReconnect, intraminuteCapture?.observer());
   intraminuteCapture?.start();
+  // Phase 1K-G reuses manager-book targeted OPRA requests. Dynamic loading
+  // keeps the default-off R2 adapter out of the normal worker path.
+  let heldContractCapture: HeldContractCaptureRuntime | null = null;
+  if (config.heldContractCaptureEnabled) {
+    const { HeldContractCaptureRuntime: CaptureRuntime } = await import("./heldContractCapture.js");
+    heldContractCapture = await CaptureRuntime.create({
+      paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+    });
+    heldContractCapture?.start();
+  }
   stream.start();
 
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
@@ -983,6 +994,7 @@ async function main(): Promise<void> {
   setInterval(() => { void shadowManagerBookTick({
     paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
     channels: cfg.channels, accounts: cfg.accounts,
+    heldContractCapture,
   }); }, Math.max(5, config.fastExitSec) * 1000);
 
   // FORWARD-DATA DURABILITY: upload each complete day's option_quotes (gz) to Supabase Storage,
@@ -1014,7 +1026,7 @@ async function main(): Promise<void> {
       info(`shutdown (${sig})`);
       stream.stop();
       void (async () => {
-        await intraminuteCapture?.stop();
+        await Promise.allSettled([intraminuteCapture?.stop(), heldContractCapture?.stop()]);
         await recordExitAndDie(`graceful_${sig.toLowerCase()}`, 0, sig);
       })();
     });

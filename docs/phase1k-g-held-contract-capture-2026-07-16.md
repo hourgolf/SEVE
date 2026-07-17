@@ -2,9 +2,9 @@
 
 ## Status
 
-Pure foundation and private schema draft only. The runtime adapter is not built, the migration is not
-applied, the feature has no Railway flag, and no Supabase or R2 write is enabled. Production remains at
-`main@241525d`.
+Review branch only. The pure model, private schema, and default-off runtime adapter are built. The
+migration is not applied, Railway has no enabled flag, no worker-version bump was made, and no Supabase
+or R2 write is active. Production remains at `main@241525d`.
 
 This phase is observation-only. It cannot place, alter, cancel, resize, or close an order. It does not
 change the strict 15-second provider-event rule used by `manager-shadow-book-v1/v2`.
@@ -42,9 +42,10 @@ never substitutes one for the other.
 - gap counts, maximum observation gap, drop/oversize counts, and provider-age p50/p95/max;
 - deterministic R2 object and manifest keys.
 
-The 36-check self-test pins invalid/future/crossed/missing behavior, dual freshness clocks, bounded queue
-pressure, position-scoped drop attribution, DST partitioning, canonical content hashes, gap math, and the
-absence of provider, storage, database, broker, position, or order imports in the pure model.
+The 52-check self-test pins invalid/future/crossed/missing behavior, dual freshness clocks, bounded queue
+pressure, position-scoped drop attribution, DST partitioning, canonical content hashes, gap math,
+position fan-out, shared-OCC isolation, default-off loading, asynchronous compression, retry-stable
+manifests, and the absence of provider, broker, position, or order imports in the capture path.
 
 ## Draft storage contract
 
@@ -60,25 +61,34 @@ Both tables enable RLS, revoke public/anonymous access, grant the service role `
 allow authenticated reads only for operator JWTs using `app_metadata.seve_role`. Raw samples remain in
 R2; Supabase receives compact verification receipts, not the high-cadence quote path.
 
-## Runtime boundary still to build
+## Runtime adapter now implemented
 
-The reviewed runtime adapter should:
+The default-off adapter now:
 
-1. Extend the targeted snapshot normalization to retain optional sizes and fetch start/end timestamps.
-2. Fan each OCC observation to every active position that owns that OCC without pooling position identity.
-3. Enqueue synchronously after a targeted request settles; never await storage from a manager or exit tick.
-4. Flush on a timer/high-water mark through a narrow R2 adapter patterned after Phase 1H capture.
-5. Compress canonical NDJSON, calculate the compressed checksum, upload object then manifest, `HEAD`-verify
-   both, and only then append the Supabase receipt.
-6. Emit health evidence if R2 or receipt persistence fails; never retry in a way that blocks the heartbeat.
-7. Remain default-off and refuse activation unless paper mode, OPRA, service role, R2 credentials, schema,
+1. Extends targeted snapshot normalization to retain optional sizes while the manager seam stamps fetch start/end timestamps.
+2. Fans each OCC observation to every open position that owns it, including lots below the manager cohort's modeled-size floor, without pooling position identity.
+3. Continues capturing active shadow-manager paths after the actual position closes.
+4. Enqueues synchronously after a targeted request settles; manager code never awaits storage, and high-water work is deferred beyond the callback.
+5. Flushes on a timer/high-water mark through a narrow adapter patterned after Phase 1H capture.
+6. Compresses canonical NDJSON asynchronously, calculates the compressed checksum, uploads object then manifest, `HEAD`-verifies
+   both, and only then appends the Supabase receipt.
+7. Emits health evidence for queue, R2, receipt, and schema failures; persistence failures cannot escape into manager state.
+8. Remains default-off and refuses activation unless the manager observer, paper mode, OPRA, service role, R2 credentials, schema,
    and safe queue bounds all pass.
-8. Continue observing manager runs after the actual close until each shadow manager terminates or censors.
+
+If open-position-only OCCs would exceed the tested 500-symbol provider cap, active manager OCCs retain
+priority. Omitted capture targets receive an explicit `not_requested / targeted_option_hard_cap_shed`
+sample and a rate-limited warning; the capture expansion cannot suppress a manager quote request.
+
+The runtime is dynamically imported only when `HELD_CONTRACT_CAPTURE_ENABLED=true`. Its own prefix,
+flush cadence, sample cap, and byte cap are separate from the Phase 1H SIP capture. R2 objects and
+manifests are content-addressed; manifest completion uses the last included fetch clock so an idempotent
+retry cannot rewrite evidence identity with a new wall-clock timestamp.
 
 ## Acceptance gates before activation
 
 - migration review plus Supabase security/performance advisors;
-- runtime adapter self-tests proving storage rejection cannot delay manager/exit ticks;
+- runtime isolation tests proving capture fan-out/enqueue failures cannot suppress manager advancement and storage work starts outside the manager callback;
 - root and worker TypeScript clean, full runner/manager/capture suites green;
 - flat paper desk before applying the private migration;
 - separately approved worker-version bump and manual Railway deploy;

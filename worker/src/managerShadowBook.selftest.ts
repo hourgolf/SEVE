@@ -253,13 +253,14 @@ check("targeted quotes batch at provider limit", targetedOptionBatches(Array.fro
 check("targeted quote hard cap fails closed", targetedOptionBatches(["A", "B", "C"], 2, 2), null);
 check("invalid provider batch size fails closed", targetedOptionBatches(["A"], 101, 500), null);
 const normalized = normalizeTargetedOptionSnapshots({ snapshots: {
-  SPY260713C00600000: { latestQuote: { bp: 1.2, ap: 1.24, t: "2026-07-13T14:32:00.000Z" } },
+  SPY260713C00600000: { latestQuote: { bp: 1.2, ap: 1.24, bs: 12, as: 8, t: "2026-07-13T14:32:00.000Z" } },
   ZERO: { latestQuote: { bp: 0, ap: 1, t: "2026-07-13T14:32:00.000Z" } },
   CROSSED: { latestQuote: { bp: 1.2, ap: 1.1, t: "2026-07-13T14:32:00.000Z" } },
   NOTIME: { latestQuote: { bp: 1.2, ap: 1.3 } },
 } }, "opra");
 check("provider normalization retains source timestamp", normalized.get(base.occSymbol), {
   occSymbol: base.occSymbol, bid: 1.2, ask: 1.24,
+  bidSize: 12, askSize: 8,
   quoteAtMs: Date.parse("2026-07-13T14:32:00.000Z"), feed: "opra",
 });
 check("invalid provider quotes are omitted", [...normalized.keys()], [base.occSymbol]);

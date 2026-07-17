@@ -104,6 +104,14 @@ export const config = {
   // bound is cohort-stamped; changing it requires a new shadow-book version.
   managerShadowBookEnabled: flag("MANAGER_SHADOW_BOOK_ENABLED", false),
   managerShadowQuoteMaxAgeMs: Number(opt("MANAGER_SHADOW_QUOTE_MAX_AGE_MS", "15000")),
+  // Phase 1K-G position-scoped OPRA path capture. DARK/default-off and fed by
+  // the manager book's existing targeted requests; it never opens a second
+  // provider request or enters the execution call graph.
+  heldContractCaptureEnabled: flag("HELD_CONTRACT_CAPTURE_ENABLED", false),
+  heldContractCaptureFlushMs: Number(opt("HELD_CONTRACT_CAPTURE_FLUSH_MS", "30000")),
+  heldContractCaptureMaxSamples: Number(opt("HELD_CONTRACT_CAPTURE_MAX_SAMPLES", "10000")),
+  heldContractCaptureMaxBytes: Number(opt("HELD_CONTRACT_CAPTURE_MAX_BYTES", String(8 * 1024 * 1024))),
+  heldContractCaptureR2Prefix: opt("HELD_CONTRACT_CAPTURE_R2_PREFIX", "held-contracts"),
   // Phase 1H-B raw SIP trade/quote capture. DARK by default and observation-only.
   // Enabling requires paper mode, the SIP feed, the private receipt migration,
   // and a complete R2 credential set. Queue pressure drops evidence before it

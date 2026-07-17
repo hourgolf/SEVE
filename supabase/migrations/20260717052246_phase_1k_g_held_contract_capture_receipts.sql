@@ -74,6 +74,8 @@ create index idx_held_contract_capture_boot
 
 comment on table public.held_contract_capture_receipts is
   'Append-only verification receipts for immutable held-contract OPRA evidence in R2; never an execution instruction.';
+comment on column public.held_contract_capture_receipts.request_failure_count is
+  'Provider request errors plus explicit not-requested capacity shedding; raw samples retain the distinct outcome and failure code.';
 
 alter table public.held_contract_capture_receipts enable row level security;
 revoke all on public.held_contract_capture_receipts from public, anon, authenticated, service_role;
