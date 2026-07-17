@@ -15,6 +15,7 @@ import {
   HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
   HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
   isResearchAdapterTimeout,
+  NormalFlushFollowupLatch,
   withResearchAdapterDeadline,
   type HeldCaptureAdapterStage,
 } from "./researchAdapterDeadline.js";
@@ -58,7 +59,8 @@ export class HeldContractCaptureRuntime {
   });
   private timer: ReturnType<typeof setInterval> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
-  private normalFlushPending = false;
+  private readonly normalFlushLatch = new NormalFlushFollowupLatch();
+  private stopping = false;
   private highWaterScheduled = false;
   private lastDropLogMs = 0;
 
@@ -134,6 +136,7 @@ export class HeldContractCaptureRuntime {
   }
 
   async stop(): Promise<void> {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     const shutdownDeadlineAtMs = Date.now() + HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS;
@@ -255,11 +258,17 @@ export class HeldContractCaptureRuntime {
   }
 
   private flush(reason: HeldContractCaptureFlushReason, deadlineAtMs?: number): Promise<void> {
-    if (reason !== "shutdown" && this.normalFlushPending) return this.flushChain;
-    if (reason !== "shutdown") this.normalFlushPending = true;
+    if (reason !== "shutdown" && this.stopping) return this.flushChain;
+    if (reason !== "shutdown" && !this.normalFlushLatch.begin()) return this.flushChain;
     const scheduled = this.flushChain.then(() => this.flushOnce(
       reason, deadlineAtMs ?? Date.now() + HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
-    )).finally(() => { if (reason !== "shutdown") this.normalFlushPending = false; });
+    )).finally(() => {
+      if (reason === "shutdown") return;
+      const followup = this.normalFlushLatch.finish(
+        this.queue.hasPending() || this.batcher.sampleCount() > 0,
+      );
+      if (followup && !this.stopping) setImmediate(() => { void this.flush("high-water"); });
+    });
     this.flushChain = scheduled.catch(() => undefined);
     return scheduled;
   }

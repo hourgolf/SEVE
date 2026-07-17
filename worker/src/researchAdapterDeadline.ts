@@ -26,6 +26,33 @@ export function isResearchAdapterTimeout(error: unknown): error is ResearchAdapt
   return error instanceof ResearchAdapterTimeoutError;
 }
 
+/**
+ * Pure state latch for normal-flush coalescing. A request arriving while a
+ * flush is active cannot start another writer, but it must force one prompt
+ * follow-up after the active pass releases the latch.
+ */
+export class NormalFlushFollowupLatch {
+  private active = false;
+  private followupRequested = false;
+
+  begin(): boolean {
+    if (this.active) {
+      this.followupRequested = true;
+      return false;
+    }
+    this.active = true;
+    return true;
+  }
+
+  finish(hasPendingEvidence: boolean): boolean {
+    if (!this.active) return false;
+    this.active = false;
+    const followup = this.followupRequested && hasPendingEvidence;
+    this.followupRequested = false;
+    return followup;
+  }
+}
+
 export async function withResearchAdapterDeadline<T>(input: {
   stage: HeldCaptureAdapterStage;
   requestTimeoutMs: number;

@@ -4,6 +4,7 @@ import {
   HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
   HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
   isResearchAdapterTimeout,
+  NormalFlushFollowupLatch,
   withResearchAdapterDeadline,
 } from "./researchAdapterDeadline.js";
 import {
@@ -278,6 +279,13 @@ for (const stage of ["r2_object_write", "supabase_receipt_write"] as const) {
   ], [true, stage, true, true]);
 }
 
+const followupLatch = new NormalFlushFollowupLatch();
+check("normal flush starts exactly one active writer", followupLatch.begin(), true);
+check("samples arriving during the active flush request a follow-up without overlapping", followupLatch.begin(), false);
+check("pending evidence forces a prompt follow-up after the active flush clears", followupLatch.finish(true), true);
+check("the prompt follow-up can acquire the released flush latch", followupLatch.begin(), true);
+check("a drained follow-up does not schedule an empty third pass", followupLatch.finish(false), false);
+
 const dropBatcher = new HeldContractCaptureBatcher(24, 120_000);
 dropBatcher.accept(firstDrain);
 dropBatcher.accept({ samples: [], estimatedBytes: 0, droppedByPartition: { [partitionDropKey]: { dropped: 2, rejectedOversize: 1 } } });
@@ -346,9 +354,13 @@ check("Supabase schema, receipt, and health operations carry abort signals", [
   && (captureStoreSource.match(/\.abortSignal\(signal\)/g)?.length ?? 0) === 3, true);
 const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
 check("held capture is default off", /heldContractCaptureEnabled:\s*flag\("HELD_CONTRACT_CAPTURE_ENABLED", false\)/.test(configSource), true);
-check("batching has bounded sample and age targets", [
-  /heldContractCaptureBatchTargetSamples:\s*Number\(opt\("HELD_CONTRACT_CAPTURE_BATCH_TARGET_SAMPLES", "24"\)\)/.test(configSource),
-  /heldContractCaptureBatchMaxAgeMs:\s*Number\(opt\("HELD_CONTRACT_CAPTURE_BATCH_MAX_AGE_MS", "120000"\)\)/.test(configSource),
+check("ratified Day 1 batching defaults to 12 samples and 60 seconds", [
+  /heldContractCaptureBatchTargetSamples:\s*Number\(opt\("HELD_CONTRACT_CAPTURE_BATCH_TARGET_SAMPLES", "12"\)\)/.test(configSource),
+  /heldContractCaptureBatchMaxAgeMs:\s*Number\(opt\("HELD_CONTRACT_CAPTURE_BATCH_MAX_AGE_MS", "60000"\)\)/.test(configSource),
+], [true, true]);
+check("in-flight high-water arrivals schedule a post-flush drain", [
+  runtimeSource.includes("normalFlushLatch.finish"),
+  /setImmediate\(\(\)\s*=>\s*{\s*void this\.flush\("high-water"\)/.test(runtimeSource),
 ], [true, true]);
 check("combined open and retry state has sample and byte bounds", [
   /HELD_CONTRACT_CAPTURE_STATE_MAX_SAMPLES/.test(configSource),

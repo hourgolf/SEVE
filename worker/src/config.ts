@@ -109,8 +109,8 @@ export const config = {
   // provider request or enters the execution call graph.
   heldContractCaptureEnabled: flag("HELD_CONTRACT_CAPTURE_ENABLED", false),
   heldContractCaptureFlushMs: Number(opt("HELD_CONTRACT_CAPTURE_FLUSH_MS", "30000")),
-  heldContractCaptureBatchTargetSamples: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_TARGET_SAMPLES", "24")),
-  heldContractCaptureBatchMaxAgeMs: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_MAX_AGE_MS", "120000")),
+  heldContractCaptureBatchTargetSamples: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_TARGET_SAMPLES", "12")),
+  heldContractCaptureBatchMaxAgeMs: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_MAX_AGE_MS", "60000")),
   heldContractCaptureMaxSamples: Number(opt("HELD_CONTRACT_CAPTURE_MAX_SAMPLES", "10000")),
   heldContractCaptureMaxBytes: Number(opt("HELD_CONTRACT_CAPTURE_MAX_BYTES", String(8 * 1024 * 1024))),
   heldContractCaptureStateMaxSamples: Number(opt("HELD_CONTRACT_CAPTURE_STATE_MAX_SAMPLES", "10000")),
@@ -199,7 +199,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-17b"; // Weekend Gate 1 batches held-contract receipts off-path with retry-stable identity. Paper-only; manual Railway review/deploy required. Prior (07-17a): Phase 1K-G held-contract OPRA evidence capture.
+export const WORKER_VERSION = "stream-2026-07-17c"; // Weekend Day 1 release candidate: ratified 12/60 evidence batching plus bounded adapter/shutdown behavior. Paper-only; manual Railway review/deploy required. Prior (07-17b): Gate 1 correction pass.
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
