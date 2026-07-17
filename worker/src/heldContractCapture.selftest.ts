@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   BoundedHeldContractCaptureQueue,
+  HeldContractCaptureBatcher,
   HELD_CONTRACT_CAPTURE_SCHEMA_VERSION,
   HELD_CONTRACT_CAPTURE_VERSION,
   buildHeldContractSegmentDescriptor,
@@ -123,6 +124,75 @@ check("oversize is explicit", tiny.enqueue(sample).reason, "oversize");
 check("drop-only queue remains flushable", [tiny.size(), tiny.droppedCount(), tiny.hasPending()], [0, 1, true]);
 check("oversize increments both counters", tiny.drain().droppedByPartition[partitionDropKey], { dropped: 1, rejectedOversize: 1 });
 
+const july17Fragmentation = [
+  { hourEt: 9, samples: 144, receipts: 48 },
+  { hourEt: 10, samples: 7_247, receipts: 2_418 },
+  { hourEt: 11, samples: 12_014, receipts: 3_930 },
+  { hourEt: 12, samples: 17_393, receipts: 3_387 },
+  { hourEt: 13, samples: 20_765, receipts: 3_461 },
+  { hourEt: 14, samples: 23_124, receipts: 3_854 },
+  { hourEt: 15, samples: 21_858, receipts: 3_696 },
+];
+const july17Samples = july17Fragmentation.reduce((sum, row) => sum + row.samples, 0);
+const july17Receipts = july17Fragmentation.reduce((sum, row) => sum + row.receipts, 0);
+check("July 17 fixture reproduces receipt fragmentation", [
+  july17Samples, july17Receipts, Number((july17Samples / july17Receipts).toFixed(4)),
+], [102_545, 20_794, 4.9315]);
+
+const batcher = new HeldContractCaptureBatcher(24, 120_000);
+const firstDrain = { samples: [sample, second], estimatedBytes: 0, droppedByPartition: {} };
+batcher.accept(firstDrain);
+check("timer keeps a young undersized batch open", [batcher.sealReady("timer", t0 + 30_000).length, batcher.openPartitionCount()], [0, 1]);
+batcher.accept({ samples: [third], estimatedBytes: 0, droppedByPartition: {} });
+const agedBatches = batcher.sealReady("timer", t0 + 120_100);
+check("max age seals samples across timer drains", [agedBatches.length, agedBatches[0]?.partition.samples.length], [1, 3]);
+const agedDescriptor = buildHeldContractSegmentDescriptor(agedBatches[0].partition)!;
+check("failed persistence retry keeps identity stable", [
+  batcher.pending()[0]?.token,
+  buildHeldContractSegmentDescriptor(batcher.pending()[0].partition)?.contentSha256,
+], [agedBatches[0].token, agedDescriptor.contentSha256]);
+const fourth = normalizeHeldContractCaptureSample({
+  ...base, fetchStartedAtMs: t0 + 130_000, fetchCompletedAtMs: t0 + 130_080,
+  observedAtMs: t0 + 130_100, providerQuoteAtMs: t0 + 130_040,
+})!;
+batcher.accept({ samples: [fourth], estimatedBytes: 0, droppedByPartition: {} });
+check("later samples cannot mutate a sealed retry", [batcher.sealedBatchCount(), batcher.openPartitionCount(), batcher.sampleCount()], [1, 1, 4]);
+check("receipt acknowledgement retires only the sealed batch", [batcher.acknowledge(agedBatches[0].token), batcher.sealedBatchCount(), batcher.sampleCount()], [true, 0, 1]);
+check("shutdown seals every remaining batch", batcher.sealReady("shutdown", t0 + 130_100).map((row) => row.partition.samples.length), [1]);
+
+const boundaryAt = Date.parse("2026-07-16T14:59:50.000Z");
+const boundarySample = normalizeHeldContractCaptureSample({
+  ...base, fetchStartedAtMs: boundaryAt, fetchCompletedAtMs: boundaryAt + 80,
+  observedAtMs: boundaryAt + 100, providerQuoteAtMs: boundaryAt + 40,
+})!;
+const boundaryBatcher = new HeldContractCaptureBatcher(24, 120_000);
+boundaryBatcher.accept({ samples: [boundarySample], estimatedBytes: 0, droppedByPartition: {} });
+check("hour boundary seals without mixing partitions", boundaryBatcher.sealReady("timer", Date.parse("2026-07-16T15:00:01.000Z")).length, 1);
+
+const sessionBoundaryAt = Date.parse("2026-07-17T03:59:50.000Z");
+const sessionBoundarySample = normalizeHeldContractCaptureSample({
+  ...base, fetchStartedAtMs: sessionBoundaryAt, fetchCompletedAtMs: sessionBoundaryAt + 80,
+  observedAtMs: sessionBoundaryAt + 100, providerQuoteAtMs: sessionBoundaryAt + 40,
+})!;
+const sessionBoundaryBatcher = new HeldContractCaptureBatcher(24, 120_000);
+sessionBoundaryBatcher.accept({ samples: [sessionBoundarySample], estimatedBytes: 0, droppedByPartition: {} });
+check("ET session boundary seals without mixing dates", sessionBoundaryBatcher.sealReady("timer", Date.parse("2026-07-17T04:00:01.000Z")).length, 1);
+
+const duplicateBatcher = new HeldContractCaptureBatcher(24, 120_000);
+duplicateBatcher.accept(firstDrain);
+duplicateBatcher.accept({ samples: [sample], estimatedBytes: 0, droppedByPartition: {} });
+check("duplicate sample identity across drains is coalesced", duplicateBatcher.sampleCount(), 2);
+
+const pressureBatcher = new HeldContractCaptureBatcher(24, 120_000);
+pressureBatcher.accept(firstDrain);
+check("high water seals immediately off the callback", pressureBatcher.sealReady("high-water", t0 + 10_100).length, 1);
+
+const dropBatcher = new HeldContractCaptureBatcher(24, 120_000);
+dropBatcher.accept(firstDrain);
+dropBatcher.accept({ samples: [], estimatedBytes: 0, droppedByPartition: { [partitionDropKey]: { dropped: 2, rejectedOversize: 1 } } });
+const dropBatch = dropBatcher.sealReady("shutdown", t0 + 10_100)[0];
+check("drop-only drains attach to an open partition", [dropBatch.partition.droppedSamples, dropBatch.partition.rejectedOversize], [2, 1]);
+
 const laterQueue = new BoundedHeldContractCaptureQueue(10, 50_000);
 laterQueue.enqueue(third);
 laterQueue.enqueue(sample);
@@ -152,6 +222,8 @@ check("capture enqueue is synchronous", /capture\(input: HeldContractCaptureInpu
 check("held-contract compression is asynchronous", [runtimeSource.includes("gzipSync"), runtimeSource.includes("await gzipAsync")], [false, true]);
 check("high-water persistence is deferred past the manager callback", /setImmediate\(\(\)\s*=>\s*{[\s\S]*?this\.flush\("high-water"\)/.test(runtimeSource), true);
 check("manifest completion is retry-stable", /const completedAt = descriptor\.lastFetchAt/.test(runtimeSource), true);
+check("runtime acknowledges a batch only after a durable receipt", /if \(receipted\)\s*{[\s\S]*?batcher\.acknowledge\(batch\.token\)/.test(runtimeSource), true);
+check("R2 and receipt failures retain a retry batch", /segment retry retained/.test(runtimeSource) && /receipt retry retained/.test(runtimeSource), true);
 check("runtime cannot import provider, broker, execution, position, or order modules", /from\s+["'][^"']*(?:alpaca|execute|position|order|reconcile)[^"']*["']/i.test(runtimeSource), false);
 const managerRuntimeSource = readFileSync(new URL("./managerShadowBook.ts", import.meta.url), "utf8");
 check("manager capture handoff is not awaited", /await\s+capture\.capture/.test(managerRuntimeSource), false);
@@ -163,6 +235,10 @@ check("capture store is append-only and isolated", [
 ], [false, false]);
 const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
 check("held capture is default off", /heldContractCaptureEnabled:\s*flag\("HELD_CONTRACT_CAPTURE_ENABLED", false\)/.test(configSource), true);
+check("batching has bounded sample and age targets", [
+  /heldContractCaptureBatchTargetSamples:\s*Number\(opt\("HELD_CONTRACT_CAPTURE_BATCH_TARGET_SAMPLES", "24"\)\)/.test(configSource),
+  /heldContractCaptureBatchMaxAgeMs:\s*Number\(opt\("HELD_CONTRACT_CAPTURE_BATCH_MAX_AGE_MS", "120000"\)\)/.test(configSource),
+], [true, true]);
 const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
 check("default worker loads held R2 runtime dynamically", /await import\("\.\/heldContractCapture\.js"\)/.test(indexSource), true);
 const migration = readFileSync(new URL("../../supabase/migrations/20260717061821_phase_1k_g_held_contract_capture_receipts.sql", import.meta.url), "utf8");

@@ -109,6 +109,8 @@ export const config = {
   // provider request or enters the execution call graph.
   heldContractCaptureEnabled: flag("HELD_CONTRACT_CAPTURE_ENABLED", false),
   heldContractCaptureFlushMs: Number(opt("HELD_CONTRACT_CAPTURE_FLUSH_MS", "30000")),
+  heldContractCaptureBatchTargetSamples: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_TARGET_SAMPLES", "24")),
+  heldContractCaptureBatchMaxAgeMs: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_MAX_AGE_MS", "120000")),
   heldContractCaptureMaxSamples: Number(opt("HELD_CONTRACT_CAPTURE_MAX_SAMPLES", "10000")),
   heldContractCaptureMaxBytes: Number(opt("HELD_CONTRACT_CAPTURE_MAX_BYTES", String(8 * 1024 * 1024))),
   heldContractCaptureR2Prefix: opt("HELD_CONTRACT_CAPTURE_R2_PREFIX", "held-contracts"),
@@ -192,7 +194,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-17a"; // Phase 1K-G adds default-off, position-scoped held-contract OPRA evidence capture. Enable only in the paper Railway worker after the private receipt migration is verified. Prior (07-16a): Phase 1K-F exit execution-quality receipts.
+export const WORKER_VERSION = "stream-2026-07-17b"; // Weekend Gate 1 batches held-contract receipts off-path with retry-stable identity. Paper-only; manual Railway review/deploy required. Prior (07-17a): Phase 1K-G held-contract OPRA evidence capture.
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

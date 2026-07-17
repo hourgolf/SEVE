@@ -133,6 +133,13 @@ export interface HeldContractCapturePartition {
   rejectedOversize: number;
 }
 
+export interface HeldContractCaptureBatch {
+  token: string;
+  partition: HeldContractCapturePartition;
+}
+
+export type HeldContractCaptureFlushReason = "timer" | "high-water" | "shutdown";
+
 export interface HeldContractSegmentDescriptor {
   id: string;
   schemaVersion: typeof HELD_CONTRACT_CAPTURE_SCHEMA_VERSION;
@@ -431,6 +438,97 @@ export function partitionHeldContractCapture(drain: HeldContractCaptureDrain): H
       rejectedOversize: dropped.rejectedOversize,
     };
   });
+}
+
+function partitionIdentity(partition: Pick<HeldContractCapturePartition,
+  "dateEt" | "hourEt" | "positionId" | "occSymbol" | "sourceBootId" | "sourceVersion">): string {
+  return [partition.dateEt, partition.hourEt, partition.positionId, partition.occSymbol,
+    partition.sourceBootId, partition.sourceVersion].join("|");
+}
+
+function batchToken(partition: HeldContractCapturePartition): string {
+  return createHash("sha256").update(stable({
+    partition: partitionIdentity(partition),
+    sampleIds: partition.samples.map((sample) => sample.id),
+    droppedSamples: partition.droppedSamples,
+    rejectedOversize: partition.rejectedOversize,
+  })).digest("hex");
+}
+
+/** Coalesces the existing position/OCC/hour partitions across short queue
+ * drains. Ready batches are sealed before I/O, so an R2 or receipt retry keeps
+ * byte-identical content while later samples enter a new open batch. */
+export class HeldContractCaptureBatcher {
+  private open = new Map<string, HeldContractCapturePartition>();
+  private sealed = new Map<string, HeldContractCaptureBatch>();
+
+  constructor(readonly targetSamples: number, readonly maxAgeMs: number) {
+    if (!Number.isInteger(targetSamples) || targetSamples < 1) throw new Error("targetSamples must be a positive integer");
+    if (!Number.isInteger(maxAgeMs) || maxAgeMs < 1) throw new Error("maxAgeMs must be a positive integer");
+  }
+
+  accept(drain: HeldContractCaptureDrain): void {
+    const partitions = partitionHeldContractCapture(drain);
+    const partitionKeys = new Set(partitions.map(partitionIdentity));
+    for (const incoming of partitions) {
+      const key = partitionIdentity(incoming);
+      const current = this.open.get(key);
+      if (!current) {
+        this.open.set(key, incoming);
+        continue;
+      }
+      const samples = [...new Map([...current.samples, ...incoming.samples]
+        .map((sample) => [sample.id, sample])).values()]
+        .sort((a, b) => a.fetchCompletedAtMs - b.fetchCompletedAtMs || a.id.localeCompare(b.id));
+      this.open.set(key, {
+        ...current,
+        samples,
+        droppedSamples: current.droppedSamples + incoming.droppedSamples,
+        rejectedOversize: current.rejectedOversize + incoming.rejectedOversize,
+      });
+    }
+    for (const [key, dropped] of Object.entries(drain.droppedByPartition)) {
+      if (partitionKeys.has(key)) continue;
+      const current = this.open.get(key);
+      if (!current) continue;
+      this.open.set(key, {
+        ...current,
+        droppedSamples: current.droppedSamples + dropped.dropped,
+        rejectedOversize: current.rejectedOversize + dropped.rejectedOversize,
+      });
+    }
+  }
+
+  sealReady(reason: HeldContractCaptureFlushReason, nowMs: number): HeldContractCaptureBatch[] {
+    if (!finite(nowMs)) throw new Error("nowMs must be finite");
+    const currentPartition = etPartition(nowMs);
+    for (const [key, partition] of this.open) {
+      const firstAt = partition.samples[0]?.fetchCompletedAtMs ?? nowMs;
+      const crossedBoundary = partition.dateEt !== currentPartition.dateEt || partition.hourEt !== currentPartition.hourEt;
+      const ready = reason !== "timer" || crossedBoundary
+        || partition.samples.length >= this.targetSamples || nowMs - firstAt >= this.maxAgeMs;
+      if (!ready) continue;
+      const token = batchToken(partition);
+      this.sealed.set(token, { token, partition });
+      this.open.delete(key);
+    }
+    return this.pending();
+  }
+
+  pending(): HeldContractCaptureBatch[] {
+    return [...this.sealed.values()].sort((a, b) => a.token.localeCompare(b.token));
+  }
+
+  acknowledge(token: string): boolean {
+    return this.sealed.delete(token);
+  }
+
+  openPartitionCount(): number { return this.open.size; }
+  sealedBatchCount(): number { return this.sealed.size; }
+  sampleCount(): number {
+    return [...this.open.values(), ...Array.from(this.sealed.values(), (batch) => batch.partition)]
+      .reduce((sum, partition) => sum + partition.samples.length, 0);
+  }
 }
 
 export function buildHeldContractSegmentDescriptor(

@@ -12,10 +12,11 @@ import { BOOT_ID } from "./runId.js";
 import * as captureStore from "./heldContractCaptureStore.js";
 import {
   BoundedHeldContractCaptureQueue,
+  HeldContractCaptureBatcher,
   buildHeldContractSegmentDescriptor,
   normalizeHeldContractCaptureSample,
-  partitionHeldContractCapture,
   type HeldContractCaptureInput,
+  type HeldContractCaptureFlushReason,
   type HeldContractSegmentDescriptor,
 } from "./heldContractCaptureModel.js";
 
@@ -31,6 +32,10 @@ export class HeldContractCaptureRuntime {
   private readonly queue = new BoundedHeldContractCaptureQueue(
     config.heldContractCaptureMaxSamples,
     config.heldContractCaptureMaxBytes,
+  );
+  private readonly batcher = new HeldContractCaptureBatcher(
+    config.heldContractCaptureBatchTargetSamples,
+    config.heldContractCaptureBatchMaxAgeMs,
   );
   private readonly s3 = new S3Client({
     region: "auto",
@@ -56,7 +61,10 @@ export class HeldContractCaptureRuntime {
     }
     if (!Number.isInteger(config.heldContractCaptureMaxSamples) || config.heldContractCaptureMaxSamples < 1
         || !Number.isInteger(config.heldContractCaptureMaxBytes) || config.heldContractCaptureMaxBytes < 1
-        || !Number.isFinite(config.heldContractCaptureFlushMs) || config.heldContractCaptureFlushMs < 5_000) {
+        || !Number.isFinite(config.heldContractCaptureFlushMs) || config.heldContractCaptureFlushMs < 5_000
+        || !Number.isInteger(config.heldContractCaptureBatchTargetSamples) || config.heldContractCaptureBatchTargetSamples < 1
+        || !Number.isInteger(config.heldContractCaptureBatchMaxAgeMs)
+        || config.heldContractCaptureBatchMaxAgeMs < config.heldContractCaptureFlushMs) {
       warn("held-contract-capture: disabled — invalid queue/flush bounds");
       return null;
     }
@@ -100,7 +108,7 @@ export class HeldContractCaptureRuntime {
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => { void this.flush("timer"); }, config.heldContractCaptureFlushMs);
-    info(`held-contract-capture: DARK enabled · targeted OPRA snapshots · queue=${config.heldContractCaptureMaxSamples} samples/${Math.round(config.heldContractCaptureMaxBytes / 1_048_576)}MiB · flush=${config.heldContractCaptureFlushMs}ms`);
+    info(`held-contract-capture: DARK enabled · targeted OPRA snapshots · queue=${config.heldContractCaptureMaxSamples} samples/${Math.round(config.heldContractCaptureMaxBytes / 1_048_576)}MiB · drain=${config.heldContractCaptureFlushMs}ms · batch=${config.heldContractCaptureBatchTargetSamples} samples/${config.heldContractCaptureBatchMaxAgeMs}ms`);
   }
 
   async stop(): Promise<void> {
@@ -176,10 +184,12 @@ export class HeldContractCaptureRuntime {
     return receipted;
   }
 
-  private async flush(reason: "timer" | "high-water" | "shutdown"): Promise<void> {
-    if (this.flushing || !this.queue.hasPending()) return;
+  private async flush(reason: HeldContractCaptureFlushReason): Promise<void> {
+    if (this.flushing || (!this.queue.hasPending() && this.batcher.sampleCount() === 0)) return;
     this.flushing = true;
-    const drain = this.queue.drain();
+    const drain = this.queue.hasPending()
+      ? this.queue.drain()
+      : { samples: [], estimatedBytes: 0, droppedByPartition: {} };
     try {
       const dropFacts = Object.entries(drain.droppedByPartition);
       const totalDropped = dropFacts.reduce((sum, [, value]) => sum + value.dropped, 0);
@@ -191,14 +201,20 @@ export class HeldContractCaptureRuntime {
           facts: { reason, partitions: dropFacts.length, rejectedOversize: dropFacts.reduce((sum, [, value]) => sum + value.rejectedOversize, 0) },
         });
       }
-      const partitions = partitionHeldContractCapture(drain);
+      this.batcher.accept(drain);
+      const batches = this.batcher.sealReady(reason, Date.now());
       let completed = 0;
-      for (const partition of partitions) {
-        const descriptor = buildHeldContractSegmentDescriptor(partition, config.heldContractCaptureR2Prefix);
-        if (!descriptor) continue;
+      for (const batch of batches) {
+        const descriptor = buildHeldContractSegmentDescriptor(batch.partition, config.heldContractCaptureR2Prefix);
+        if (!descriptor) { this.batcher.acknowledge(batch.token); continue; }
         try {
-          await this.writePartition(descriptor);
-          completed++;
+          const receipted = await this.writePartition(descriptor);
+          if (receipted) {
+            this.batcher.acknowledge(batch.token);
+            completed++;
+          } else {
+            warn(`held-contract-capture: receipt retry retained · ${descriptor.sampleCount} samples · ${descriptor.objectKey}`);
+          }
         } catch (error) {
           await captureStore.insertHeldContractCaptureHealth({
             id: randomUUID(), source_boot_id: BOOT_ID, observed_at: new Date().toISOString(),
@@ -209,10 +225,10 @@ export class HeldContractCaptureRuntime {
               message: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
             },
           });
-          warn(`held-contract-capture: segment failed; ${descriptor.sampleCount} research samples lost, execution unaffected — ${error instanceof Error ? error.message : String(error)}`);
+          warn(`held-contract-capture: segment retry retained; ${descriptor.sampleCount} research samples remain sealed, execution unaffected — ${error instanceof Error ? error.message : String(error)}`);
         }
       }
-      info(`held-contract-capture: ${reason} flush · ${drain.samples.length} samples · ${completed}/${partitions.length} immutable segment(s)${totalDropped ? ` · dropped=${totalDropped}` : ""}`);
+      info(`held-contract-capture: ${reason} flush · ${drain.samples.length} drained · ${completed}/${batches.length} immutable segment(s) · open=${this.batcher.openPartitionCount()} · retry=${this.batcher.sealedBatchCount()}${totalDropped ? ` · dropped=${totalDropped}` : ""}`);
     } catch (error) {
       warn(`held-contract-capture: flush bookkeeping failed; execution unaffected — ${error instanceof Error ? error.message : String(error)}`);
     } finally {
