@@ -41,6 +41,17 @@ import { captureFamilyAdmissionObservations } from "./familyAdmission.js";
 import type { FamilyAdmissionInput } from "./familyAdmissionModel.js";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
+import {
+  applyDay1ReleaseAdmission,
+  applyDay1ReleaseFleetOverlay,
+  buildDay1AdmissionState,
+  DAY1_RELEASE_CONFIGURATION_SHA256,
+  DAY1_RELEASE_ID,
+  DAY1_ROOTS,
+  day1ActiveSettingsReceipt,
+  day1Root,
+  day1ReleaseEodDue,
+} from "./day1ReleasePolicy.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 
@@ -79,6 +90,9 @@ function clearSweepPriceState(rowId: string): void {
 }
 
 function exitQualityPolicyFor(ch: store.ChannelConfig): ExitQualityPolicy {
+  if (config.day1ReleaseEnabled && day1Root(ch.slug)) {
+    return { premiumStopPct: 30, specPremiumStopPct: null, underlyingStopPct: null, takeProfitPct: null };
+  }
   const premiumGate = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
   const specExit = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
   const takeProfitCandidates = [ch.take_profit_pct, specExit?.profitPct]
@@ -225,7 +239,8 @@ async function reloadConfig(): Promise<void> {
     // table; routing.ts fail-closes any account_id that still can't resolve.
     const accounts = !c.accountsFresh && cfg.accounts.length ? cfg.accounts : c.accounts;
     if (accounts !== c.accounts) warn("config: accounts read stale — keeping the prior routing table");
-    cfg = { fund: c.fund, channels: c.channels, accounts };
+    const channels = config.day1ReleaseEnabled ? applyDay1ReleaseFleetOverlay(c.channels) : c.channels;
+    cfg = { fund: c.fund, channels, accounts };
   }
   else warn("config: reload returned no fund_state — keeping previous");
   const nowHalted = cfg.fund?.is_halted ?? false;
@@ -327,6 +342,16 @@ async function cycle(trigger: string): Promise<void> {
     const live = liveMode();
     const byId = new Map(cfg.channels.map((c) => [c.id, c]));
     const openRowsArr = await store.getOpenPositions(); // spans accounts; scoped per group below
+    const sessionPositions = config.day1ReleaseEnabled
+      ? await store.loadDay1SessionPositions(`${todayET}T00:00:00Z`)
+      : [];
+    const releaseState = config.day1ReleaseEnabled
+      ? buildDay1AdmissionState({
+          openPositions: openRowsArr,
+          sessionPositions: sessionPositions ?? [],
+          channelById: byId,
+        })
+      : null;
     // C1 STACK CAP input: desk-wide open ROW count by "UNDERLYING:direction" (OCC root = the
     // chars before the 15-char date+type+strike tail). Rebuilt each cycle from DB truth;
     // incremented below on each executed entry so two same-cycle entries can't both slip
@@ -418,13 +443,26 @@ async function cycle(trigger: string): Promise<void> {
           allOrders, // empty unless canManage — the PYRAMID executor reconstructs the lot stack from it
           deskStack, // C1 stack-cap input (desk-wide, cycle-scoped)
         };
-        const symDecisions: ShadowDecision[] = [];
+        const evaluatedDecisions: ShadowDecision[] = [];
         for (const ch of symChannels) {
-          try { symDecisions.push(await decideChannel(ch, ctx)); }
+          try { evaluatedDecisions.push(await decideChannel(ch, ctx)); }
           catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
         }
-        decisions.push(...symDecisions);
         const familyObservedAtMs = Date.now();
+        const symDecisions = config.day1ReleaseEnabled && releaseState
+          ? applyDay1ReleaseAdmission({
+              channels: symChannels,
+              decisions: evaluatedDecisions,
+              state: releaseState,
+              accountId: g.account.id,
+              sourceBarAtMs: lastSession.ts,
+              observedAtMs: familyObservedAtMs,
+              currentEtMinute: alpaca.etParts(Date.now()).min,
+              sessionCloseEtMinute: rthClose,
+              sessionLedgerReady: sessionPositions != null,
+            })
+          : evaluatedDecisions;
+        decisions.push(...symDecisions);
         for (const decision of symDecisions) {
           const channel = symChannels.find((candidate) => candidate.slug === decision.slug);
           if (channel) familyAdmissionInputs.push({
@@ -509,7 +547,7 @@ async function cycle(trigger: string): Promise<void> {
               else if ((d.action === "add" || d.action === "enter") && !canEnter) {
                 if (barFresh) info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
               }
-              else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
+              else if (d.action === "add" && row && !d.blocked && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
               else if (d.action === "enter" && barFresh) {
                 await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
                 // C1 within-cycle increment: count this entry toward the desk-wide stack so a
@@ -732,6 +770,20 @@ async function fastExitSweep(): Promise<void> {
         clearSweepPriceState(r.id);
         continue;
       }
+      // Ratified Day 1 wall-clock close: stop admissions and flatten release
+      // roots 35 minutes before the actual session close (15:25 on a normal
+      // session). This is bars-independent and remains mandatory if the orders
+      // snapshot is degraded.
+      if (config.day1ReleaseEnabled && day1ReleaseEodDue(ch.slug, nowMin, rthClose)) {
+        info(`day1-eod-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — release close, wall-clock mtc ${Math.max(0, rthClose - nowMin)}`);
+        if (exitGuard.claim(r.id)) {
+          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "day1_eod_flatten" }, r, exec, undefined, exitQualityPolicyFor(ch)); }
+          catch (e) { warn(`day1-eod-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+          finally { exitGuard.release(r.id); }
+        }
+        clearSweepPriceState(r.id);
+        continue;
+      }
       // ---- EOD HARD-FLATTEN backstop (wall-clock; 2026-06-19 Juneteenth strand fix) ----
       // The strategy's same-day flatten is BAR-relative, so a gapped near-bell bar (06-18: no
       // 15:59 print) means it never fires and the position strands — over a 3-day weekend if a
@@ -854,11 +906,13 @@ async function fastExitSweep(): Promise<void> {
             `${r.occ_symbol} peaked +${Math.round(peakPct)}%, now ${retPct >= 0 ? "+" : ""}${Math.round(retPct)}% — ${Math.round(((peak - bid) / (peak - entryPx)) * 100)}% of the move gone`);
       }
       const pe = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
+      const day1RootPolicy = config.day1ReleaseEnabled && day1Root(ch.slug) != null;
       // 1b #6: `mark` = the fresh EXECUTABLE BID, `peak` = the bid-based MFE ratchet above.
       // premiumExitReason stays PURE (unchanged comparisons) — only the input price changed.
       const reason = premiumExitReason({
-        row: r, slug: ch.slug, premiumExit: pe, takeProfitPct: ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
-        givebackTrail: policy.GIVEBACK_TRAIL[ch.slug] ?? null,
+        row: r, slug: ch.slug, premiumExit: day1RootPolicy ? undefined : pe,
+        takeProfitPct: day1RootPolicy ? 0 : ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
+        givebackTrail: day1RootPolicy ? null : policy.GIVEBACK_TRAIL[ch.slug] ?? null,
         isManual: /-manual$/i.test(ch.slug),
         minutesToClose: Math.max(0, rthClose - nowMin),
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)
@@ -912,6 +966,10 @@ async function main(): Promise<void> {
     ? (config.shadowWriteEvents ? "events" : "none (service role, events off)")
     : "none (anon, read-only)";
   info(`feeds: stock=${config.stockFeed} opt=${config.optFeed} · dryRun=${config.dryRun} · liveTrading=${config.liveTrading} · writes=${writeMode}`);
+  if (config.day1ReleaseEnabled && config.day1ReleaseExpectedSha256 !== DAY1_RELEASE_CONFIGURATION_SHA256) {
+    error(`Day 1 release checksum mismatch: expected env ${config.day1ReleaseExpectedSha256 || "<missing>"}, code ${DAY1_RELEASE_CONFIGURATION_SHA256}. Refusing to start.`);
+    process.exit(1);
+  }
   // Boot flags → the DB journal (2026-07-06): env-gated safety switches were previously
   // invisible outside Railway logs — an operator flipping ORPHAN_FLATTEN had no in-band
   // confirmation the restarted worker picked it up. One line per boot, queryable in events.
@@ -941,7 +999,18 @@ async function main(): Promise<void> {
   // via the websocket stream. So we log and carry on rather than exit.
   try { await reloadConfig(); }
   catch (e) { warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`); }
+  if (config.day1ReleaseEnabled && (!cfg.fund || DAY1_ROOTS.some((root) => !cfg.channels.some((channel) => channel.slug === root.slug)))) {
+    error("Day 1 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
+    process.exit(1);
+  }
   info(`config: ${cfg.fund ? `fund cap $${cfg.fund.total_capital_usd} mode=${cfg.fund.mode} halted=${cfg.fund.is_halted}` : "fund MISSING"}, ${cfg.channels.length} channels [${cfg.channels.map((c) => `${c.slug}:${c.status}`).join(", ")}]`);
+  if (config.day1ReleaseEnabled) {
+    const receipt = day1ActiveSettingsReceipt(cfg.channels);
+    info(`day1-release: ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256} roots=6 dark=62 paper-only`);
+    void store.journal("EXEC", `day1-release ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`, receipt);
+  } else {
+    info(`day1-release: OFF · candidate=${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`);
+  }
   // Cockpit P3 routing summary: each bucket's posture — LIVE (armed + creds), shadow (decided,
   // no orders), or no-creds (cred_ref set but env keys absent). The shadow-first verification view.
   const acctSummary = groupByAccount(cfg.channels, cfg.accounts)

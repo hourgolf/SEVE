@@ -95,6 +95,11 @@ export const config = {
   // check).
   dryRun: flag("DRY_RUN", true),
   liveTrading: flag("LIVE_TRADING", false),
+  // Checked-in Monday release layer. Default-off until the separately approved
+  // Railway deployment supplies both the enable flag and exact configuration
+  // checksum; a missing/mismatched checksum makes startup fail closed.
+  day1ReleaseEnabled: flag("DAY1_RELEASE_ENABLED", false),
+  day1ReleaseExpectedSha256: opt("DAY1_RELEASE_EXPECTED_SHA256", ""),
   // Fast EXIT poll cadence (seconds) while live with open stream-owned positions:
   // premium stop/target/giveback checked on the live chain between bar closes.
   fastExitSec: Number(opt("FAST_EXIT_SEC", "10")),

@@ -680,6 +680,21 @@ export async function loadManagerShadowRecoveryPositions(sinceIso: string): Prom
   return mapOpenPositions({ data: data as unknown[] | null, error: null });
 }
 
+/** Complete Day 1 session admission ledger. Pagination and total ordering are
+ * mandatory because a truncated read could incorrectly authorize re-entry. */
+export async function loadDay1SessionPositions(sinceIso: string): Promise<PositionRow[] | null> {
+  try {
+    const data = await pageAll<unknown>((from) => sb.from("positions").select("*")
+      .gte("opened_at", sinceIso)
+      .order("opened_at", { ascending: true })
+      .order("id", { ascending: true }));
+    return mapOpenPositions({ data, error: null });
+  } catch (error) {
+    warn(`store: Day 1 session-position read failed — ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
 let positionOutcomeTableAvailable: boolean | null = null;
 
 /** Phase 1E append-only lineage/booking evidence. Never awaited by execution. */

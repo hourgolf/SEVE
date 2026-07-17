@@ -55,7 +55,7 @@ export function makeExitGuard(): ExitGuard {
 // (stops/targets/ratchets/stall) read the snapshot for late-fill recovery and
 // working-order idempotency — without it they stay suppressed.
 export const MANDATORY_FLATTEN_REASONS: ReadonlySet<string> = new Set([
-  "halt_flatten", "eod_hard_flatten", "event_flatten",
+  "halt_flatten", "eod_hard_flatten", "day1_eod_flatten", "event_flatten",
 ]);
 
 /** May this sweep exit place a sell given the orders-snapshot freshness? */

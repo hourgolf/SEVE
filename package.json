@@ -78,6 +78,7 @@
     "vb-candidate-exact-dry-run": "tsx scripts/vb-candidate-exact-dry-run.ts",
     "vb-candidate-real-object-dry-run": "tsx scripts/vb-candidate-real-object-dry-run.ts",
     "day1-preregistration-selftest": "tsx lib/research/day1Preregistration.selftest.ts",
+    "day1-release-policy-selftest": "tsx worker/src/day1ReleasePolicy.selftest.ts",
     "backfill:trade-option-paths": "tsx --env-file=.env.local scripts/backfill-trade-option-paths.ts",
     "preregistered-path-tests-selftest": "tsx lib/research/preregisteredPathTests.selftest.ts",
     "family-preregistration-selftest": "tsx lib/research/familyPreregistration.selftest.ts",
