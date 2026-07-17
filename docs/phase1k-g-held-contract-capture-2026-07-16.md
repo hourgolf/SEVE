@@ -2,10 +2,13 @@
 
 ## Status
 
-Approved rollout in progress. The pure model and default-off runtime adapter were merged to
-`main@53a9c10`. The private migration was applied after a flat paper/broker reconciliation gate and its
-RLS, grants, policies, constraints, and indexes were verified. Both receipt tables began empty. The
-activation commit stamps `stream-2026-07-17a`; Railway dark-capture verification remains the final gate.
+Dark capture is deployed and verified. The pure model and runtime landed on `main@53a9c10`; the
+activation record and worker stamp landed at `main@7062af3`. The private migration was applied after a
+flat paper/broker reconciliation gate and its RLS, grants, policies, constraints, and indexes were
+verified. Railway deployment `a3f8aa3f` is active on `stream-2026-07-17a` with the held-contract observer
+explicitly DARK enabled. The post-deploy worker heartbeat is clean, all three paper broker books match
+the flat desk, production web returns HTTP 200, and both new receipt tables remain empty with zero
+health rows as expected before a position is held.
 
 This phase is observation-only. It cannot place, alter, cancel, resize, or close an order. It does not
 change the strict 15-second provider-event rule used by `manager-shadow-book-v1/v2`.
@@ -94,7 +97,8 @@ retry cannot rewrite evidence identity with a new wall-clock timestamp.
 - root and worker TypeScript clean, full runner/manager/capture suites green; **complete**;
 - flat paper desk before applying the private migration; **complete** — all three paper broker books and
   the desk showed zero open OCCs with exact reconciliation;
-- separately approved worker-version bump and manual Railway deploy; **approved/in progress**;
+- separately approved worker-version bump and manual Railway deploy; **complete** —
+  `stream-2026-07-17a`, Railway deployment `a3f8aa3f`;
 - first session has one successful sample per healthy fast-exit tick, no unexplained gap above 15 seconds,
   no silent drops, exact broker/desk reconciliation, and no heartbeat degradation;
 - at least three clean paper sessions before snapshot-fresh evidence may inform a new manager-policy version;

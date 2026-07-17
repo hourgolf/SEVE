@@ -76,7 +76,7 @@ Production baseline before this research-only review branch: `main@241525d`.
 | Phase 1K-D | Complete; review only | July 15 exact holdout scored unchanged against `phase1k-c-preregister-v1`; receipt and results are preserved in the research review branch. |
 | Phase 1K-E | Frozen; accumulating | PB, ORB, Grind, QQQ, and IWM tests were frozen before the July 16+ prospective window; evidence floors require at least five independent sessions. |
 | Phase 1K-F | Merged + deployed; first-session validation pending | Execution-quality receipts are observation-only and live. Reconcile the next session's eligible exits before activating any alert thresholds. |
-| Phase 1K-G | Default-off runtime in review | Held-contract OPRA capture reuses manager-book requests, buffers position-scoped evidence off-path, and writes verified R2 segments plus private receipts. The 52-check suite is green; migration is unapplied and production flag remains absent/off. |
+| Phase 1K-G | Deployed dark; first-session validation pending | Held-contract OPRA capture reuses manager-book requests, buffers position-scoped evidence off-path, and writes verified R2 segments plus private receipts. The 52-check suite, migration/RLS audit, flatness gate, Railway deploy, fresh worker heartbeat, and zero-error startup are green. Validate gaps, drops, receipt/object integrity, and broker/desk reconciliation on the first session with held positions. |
 
 The seam remains load-bearing:
 
@@ -177,7 +177,7 @@ development/prospective status. `pk` and win rate can be useful, but neither is 
 2. **Complete; human review required:** Phase 1K-D scored the July 15 holdout unchanged. No policy or production change is authorized.
 3. **Frozen and accumulating:** Phase 1K-E evaluates PB, ORB, Grind, QQQ, and IWM beginning July 16; do not score a final verdict before its minimum five-session evidence floors are met.
 4. **Next evidence gate:** reconcile Phase 1K-F receipts against the next paper session's eligible exits; missing cron-failover and late-recovery evidence stays explicit.
-5. **Next evidence build:** complete Phase 1K-G held-contract OPRA capture from the reviewed pure foundation. Wire it observation-only, off the order path, behind a default-off flag; preserve strict manager-v1 quote semantics.
+5. **Next evidence gate:** reconcile Phase 1K-G after its first session with held positions: verify one successful sample per healthy fast-exit tick, no unexplained gap above 15 seconds, no silent drops, R2/manifest hashes, and exact broker/desk reconciliation. Preserve strict manager-v1 quote semantics.
 6. **Next dashboard slice:** build Sentinel with provenance and freshness; no LLM claim in health logic.
 7. **Then:** build Event Tape / Review with live versus after-action separation.
 8. **Then:** consolidate Ops/auth/preflight/safety and complete authenticated operator drills.
