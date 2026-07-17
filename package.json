@@ -74,6 +74,8 @@
     "trade-path-audit-selftest": "tsx lib/research/tradePathAnalysis.selftest.ts",
     "trade-path-audit": "tsx --env-file=.env.local scripts/trade-path-audit.ts",
     "databento-exact-path-selftest": "tsx lib/research/databentoExactPath.selftest.ts",
+    "vb-candidate-evidence-selftest": "tsx lib/research/vbCandidateEvidence.selftest.ts",
+    "day1-preregistration-selftest": "tsx lib/research/day1Preregistration.selftest.ts",
     "backfill:trade-option-paths": "tsx --env-file=.env.local scripts/backfill-trade-option-paths.ts",
     "preregistered-path-tests-selftest": "tsx lib/research/preregisteredPathTests.selftest.ts",
     "family-preregistration-selftest": "tsx lib/research/familyPreregistration.selftest.ts",

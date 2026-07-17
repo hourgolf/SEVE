@@ -28,6 +28,7 @@ import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, fre
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 import { captureObservedPositionPlan } from "./planShadow.js";
+import { observedPolicyIdentity } from "./planShadowModel.js";
 import { captureBrokerObservation, captureDecisionObservation } from "./executionObservation.js";
 import { captureExecutionQualityReceipt } from "./executionQuality.js";
 import { capturePositionOutcome } from "./positionOutcome.js";
@@ -662,12 +663,29 @@ export async function executeEntry(
   }
 
   const qty = d.qty ?? 0;
+  const policyIdentity = observedPolicyIdentity({
+    channel: ch,
+    accountId: ctx.accountId,
+    workerVersion: WORKER_VERSION,
+  });
   const opportunityId = !blocked && qty > 0
     ? captureObservedPositionPlan({ channel: ch, decision: d, accountId: ctx.accountId, decisionAtMs: ctx.decisionAtMs })
     : null;
   await store.insertSignal({
     strategist_id: ch.id, signal_type: d.reason, underlying_price: spotClose, direction: dir,
-    acted_on: !blocked, blocked_reason: blocked, rationale: { occ, qty, executor: "stream", opportunity_id: opportunityId, ...(d.detail ?? {}) },
+    acted_on: !blocked, blocked_reason: blocked, rationale: {
+      occ, qty, executor: "stream", opportunity_id: opportunityId,
+      ...(d.detail ?? {}),
+      decision_source_bar_at: new Date(ctx.decisionAtMs).toISOString(),
+      candidate_underlying: ch.underlying,
+      candidate_side: dir,
+      account_id: ctx.accountId,
+      channel_version: policyIdentity?.channelVersion ?? null,
+      manager_version: policyIdentity?.managerVersion ?? null,
+      configuration_epoch_id: policyIdentity?.configurationEpochId ?? null,
+      policy_epoch_id: policyIdentity?.policyEpochId ?? null,
+      worker_version: WORKER_VERSION,
+    },
   });
   if (blocked || qty <= 0) { if (blocked !== d.blocked) info(`entry ${d.slug} blocked: ${blocked}`); return; }
 
