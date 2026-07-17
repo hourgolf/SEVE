@@ -13,12 +13,14 @@ SHA-256 `967f342378922b4e8c12e1d9bef01739bde40ae014cb54dd65c56cc021c7f819`.
 - root `tsc --noEmit`: pass;
 - worker `tsc --noEmit`: pass;
 - Next.js production build: pass, including type validation and all static/dynamic route generation;
-- held-contract capture: 79/79 pass;
-- VB candidate exact evidence: 32/32 pass;
+- held-contract capture: 86/86 pass;
+- VB candidate exact evidence: 35/35 pass;
 - deterministic Gate 2 exact dry-run: pass, `externalWrites=false`;
-- new prospective versioned scorer: 12/12 pass;
+- checksum-verified July 15 Databento object dry-run: 555,969 parsed rows, 8/8 manager arms,
+  `externalWrites=false`;
+- new prospective versioned and duplicate-safe scorer: 25/25 pass;
 - legacy family scorer: 19/19 pass, unchanged;
-- Databento exact path: 17/17 pass;
+- Databento exact path and persisted-object parser: 19/19 pass;
 - Day 1 canonical receipt model: 5/5 pass; no receipt rendered or sealed;
 - runner: 148/148 pass;
 - manager shadow: 17/17 pass;
@@ -32,9 +34,10 @@ SHA-256 `967f342378922b4e8c12e1d9bef01739bde40ae014cb54dd65c56cc021c7f819`.
 - `git diff --check`: clean after the documentation correction; the earlier inaccurate claim is superseded.
 
 The adversarial matrix covers sustained R2 and Supabase-receipt outages, combined open/sealed sample and
-byte bounds, retry backoff and exhaustion, multi-segment shutdown, left/right path boundaries, internal
-gaps, invalid and wrong-contract Databento quotes, stale/unproven live asks, approximate contracts, exact
-SQL/payload field alignment, prospective version separation, and the zero-delta denominator.
+byte bounds, retry backoff and exhaustion, never-resolving R2 and Supabase adapters, multi-segment shutdown,
+left/right path boundaries, internal gaps, invalid and wrong-contract Databento quotes, stale/unproven live
+asks, approximate contracts, exact SQL/payload field alignment, prospective version separation, exact and
+conflicting duplicate ingestion, siblings sharing one clock, invalid dates, and the zero-delta denominator.
 
 ## Deliberately not performed
 

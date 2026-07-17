@@ -46,22 +46,48 @@ replaced with snapshots, mids, `option_quotes`, approximate OCCs, or synthetic V
 candidate ledger → exact contract request → Databento response validation → canonical content-addressed
 object and manifest → proposed Supabase payload → eight-arm manager scorecard.
 
-The deterministic proof produced:
+The deterministic fixture test produced:
 
 | Fact | Dry-run result |
 |---|---|
 | External writes | `false` |
 | Exact OCC / raw symbol | `QQQ260720C00600000` / `QQQ   260720C00600000` |
-| Candidate decision / exact entry quote | `13:35:00.000Z` / `13:35:00.500Z` |
+| Candidate decision / exact entry quote | `13:35:00.200Z` / `13:35:00.500Z` |
 | Live observed ask / exact Databento entry ask | `9.99` non-exact / `1.05` exact |
-| Boundary lags / maximum internal gap | `500 ms` / `500 ms` / `1,000 ms` |
-| Canonical content SHA-256 | `eb04d3307e4b0894cb3d65c20042181516549361194790e28fc52912d18e00b5` |
-| Compressed SHA-256 | `e75188295a47f9398740ce734c120345ad02f2fc49b4267b27c89feaa6252946` |
+| Boundary lags / maximum internal gap | `300 ms` / `500 ms` / `1,000 ms` |
+| Canonical content SHA-256 | `edfb1526719008a8519f85dbfe691171bb90f8cb99f5b8a6a3d8f06b992ffe9b` |
+| Compressed SHA-256 | `57fc1dd23d5a8405cff90d258625f9001b9bf4d7e7a921ab2068ea5fc4454869` |
 | Manager arms | 8/8 exact ask-to-executable-bid arms |
 | Censors / eligible | none / true |
 | Order path authorized | false |
 
-The proof is deterministic fixture evidence, not a historical result and not an external publication.
+This is only a synthetic deterministic fixture. It proves adapter behavior; it is not described as an
+actual Databento response or historical result.
+
+## Real-object zero-write integration receipt
+
+A second proof read the already-downloaded July 15 gzip object, verified its frozen compressed checksum,
+decompressed its saved provider-derived CBBO rows, passed all 555,969 rows through the strict persisted
+Databento object parser, selected an exact OCC/window that met every boundary rule, and invoked the same
+candidate/object/manifest/SQL/manager adapter. It imported no Supabase or R2 client and wrote nothing.
+
+| Fact | Real-object result |
+|---|---|
+| Frozen input object | `2026-07-15-cffdfe787793a084.json.gz` |
+| Input compressed SHA-256 | `cffdfe787793a0849227f92b25440dec607d93f6fa0648d5d95941623e0ba9b4` |
+| Manifest SHA-256 | `39dccfe72068ea6ded6ae879e1a9dd91f9399cc8c4077b3cba0745d19f747400` |
+| Dataset / schema / parsed rows | `OPRA.PILLAR` / `cbbo-1s` / 555,969 |
+| Exact OCC | `SPY260715P00751000` |
+| Decision window | `2026-07-15T16:16:03.006Z` → `16:20:53.546Z` |
+| Boundary lags / maximum gap | 994 ms / 454 ms / 1,000 ms |
+| Exact entry ask / manager arms | $0.92 / 8 of 8 |
+| Canonical output SHA-256 | `cd936a4bf32c7d0498e6c78b1789b4d3f4f1524a5ecb14eb48721e998f3a8e28` |
+| Canonical gzip SHA-256 | `4c619f3592848f1503592bf7b2bda91eb10571efe0b09bf02074af882344b028` |
+| External writes / order authorization | false / false |
+
+The saved historical object contains normalized rows written by the real downloader after the raw
+Databento JSON-line parser accepted them; the integration proof reparses the actual checksum-verified saved
+bytes rather than inventing quotes. No alternative contract or synthetic path was substituted.
 
 ## SQL payload alignment
 
@@ -72,16 +98,20 @@ exact:
 - candidate SQL columns = `VB_CANDIDATE_SQL_FIELDS` = generated candidate keys;
 - exact-path SQL columns = `VB_EXACT_PATH_SQL_FIELDS` = generated exact-path keys.
 
-The exact-path payload includes entry quote time/ask, both boundary lags, maximum internal gap, source
-version, content and compressed checksums, content-addressed keys, and verification flags. The migration
+Candidate `source_version` remains the worker/channel observation source. Exact-path
+`path_builder_version=vb-exact-path-builder-v1` is separately embedded in canonical content, manifest, and
+SQL receipt; dataset and schema remain `OPRA.PILLAR` / `cbbo-1s`. The exact-path payload also includes entry
+quote time/ask, both boundary lags, maximum internal gap, content and compressed checksums, content-addressed
+keys, and verification flags. The migration
 remains only a local proposal and has not been applied.
 
 ## Verification
 
-- VB candidate adversarial evidence self-test: 32/32 pass;
+- VB candidate adversarial evidence self-test: 35/35 pass;
 - left/right boundary, internal-gap, invalid quote, response-contract mismatch, stale/unproven live ask,
   and approximate-contract cases fail closed;
 - deterministic end-to-end dry-run: eligible, 8/8 manager arms, zero external writes;
+- checksum-verified real-object integration: eligible, 8/8 manager arms, zero external writes;
 - candidate and exact-path SQL/payload field alignment: pass;
 - legacy live adapter stays read-only and historical pre-stamp rows stay censored.
 

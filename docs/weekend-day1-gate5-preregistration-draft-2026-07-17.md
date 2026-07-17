@@ -18,6 +18,29 @@ count as positive outcomes. Thus one positive, one zero, and one negative row yi
 1/3. The prior scorer and every prior result remain byte-for-byte and semantically unchanged. The new scorer
 has no policy, production, or promotion authority.
 
+### Duplicate-safe identity and counts
+
+A prospective comparison is canonically identified by test ID, comparison ID, completed source clock,
+ET session date, control policy identity, and challenger policy identity. Each policy identity contains
+channel slug/version, manager version, and configuration epoch. The receipt fingerprint separately covers
+provenance ID, both P&Ls, and eligibility.
+
+- Byte-equivalent reingestion with the same identity and fingerprint is ignored and counted in
+  `exactDuplicatesIgnored`; it does not inflate complete groups or become a censor.
+- The same identity with any different fingerprint is a conflict. The entire comparison identity is
+  excluded from scoring, every conflicting input row is counted as censored, and the group increments
+  `conflictingDuplicateGroups`.
+- Distinct sibling comparison IDs at one source clock remain distinct completed groups, while
+  `independentOpportunities` counts that session/clock once. `independentSessions` counts the ET session
+  once per policy comparison.
+- Invalid calendar dates, malformed identities, non-finite outcomes, and explicitly ineligible rows are
+  censored. Valid pre-cohort dates are rejected rather than silently pooled into the new cohort.
+
+The focused self-test covers the zero-delta denominator, channel/manager/configuration separation, exact
+duplicates, conflicting duplicates, repeated ingestion, siblings on the same clock, invalid calendar and
+format dates, complete/censored group counts, independent session/opportunity counts, and the pre-cohort
+guard: 25/25 pass.
+
 ## Proposed immutable content
 
 The final receipt must include only canonical decision content:
@@ -47,8 +70,9 @@ timing, and other machine-dependent metadata. Those belong in an envelope outsid
    not run.
 6. Gate 1 is memory-bounded but not durable. The operator must choose 24/120 with a 600-second maximum
    retained exposure, the recommended 12/60 with 540 seconds, or require durable staging/recovery.
-7. The new scorer resolves version identity and zero deltas prospectively, but its exact test roster,
-   evidence floors, and final configuration identities cannot be frozen before Gate 4 ratification.
+7. The new scorer resolves version identity, duplicate behavior, opportunity counts, and zero deltas
+   prospectively, but its exact test roster, evidence floors, and final configuration identities cannot be
+   frozen before Gate 4 ratification.
 
 ## Seal procedure after authorization
 

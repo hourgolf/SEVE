@@ -1,9 +1,9 @@
 # SEVE Weekend Day 1 — Frozen Gate 0 Audit
 
-Session: 2026-07-17 ET  
-Frozen: 2026-07-17T20:48:06Z  
-Branch point: `aa6f4797a9189ffb20c02e7b54b0ef85e209ea4b`  
-Machine receipt: `docs/weekend-day1-gate0-receipt-2026-07-17.json`  
+Session: 2026-07-17 ET
+Frozen: 2026-07-17T20:48:06Z
+Branch point: `aa6f4797a9189ffb20c02e7b54b0ef85e209ea4b`
+Machine receipt: `docs/weekend-day1-gate0-receipt-2026-07-17.json`
 Machine-receipt SHA-256: `967f342378922b4e8c12e1d9bef01739bde40ae014cb54dd65c56cc021c7f819`
 
 ## Gate 0 result

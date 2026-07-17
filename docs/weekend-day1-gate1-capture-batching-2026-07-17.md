@@ -27,7 +27,9 @@ the immutable segment schema:
 
 1. `capture()` remains synchronous and only enqueues normalized observations.
 2. The 30-second timer drains the bounded queue into position/OCC/boot/version/date/hour partitions.
-3. A partition seals at 24 samples, 120 seconds, an ET hour/session boundary, high water, or shutdown.
+3. The recommended Monday deployment proposal is 12 samples / 60 seconds; a partition also seals at an ET
+   hour/session boundary, high water, or shutdown. The source fallback and every running environment remain
+   at 24/120 because applying or changing configuration is outside this pass.
 4. Sealing occurs before any R2 or Supabase I/O. Later samples enter a new open batch and cannot change a
    sealed batch's bytes, checksum, object key, manifest key, or receipt identity.
 5. R2 or receipt failure retains the sealed batch for retry. A receipt acknowledgement removes only the
@@ -56,15 +58,21 @@ are unchanged. The receipt schema and RLS/grant contract are unchanged; no datab
 - A failed batch is attempted at most five times. Normal flushes use exponential retry times of 0, 30, 90,
   210, and 450 seconds after sealing; a failed batch is then explicitly censored and released. It is not
   retried on every 30-second flush forever.
-- Shutdown bypasses delay but not the finite retry budget. It serially awaits all pending partitions through
-  at most five forced passes. The former 1.5-second race is removed; shutdown either completes all receipts
-  or logs the exact remaining censored sample/byte count after budget exhaustion.
+- Every R2 object write, object HEAD, manifest write, manifest HEAD, Supabase receipt insert, health insert,
+  and schema probe has an abortable five-second request deadline. The Promise boundary also returns when a
+  faulty adapter ignores its abort signal.
+- A normal flush has a 15-second wall-clock budget. Timed-out and unvisited sealed partitions stay bounded
+  and eligible for later backoff rather than pinning the flush chain.
+- Shutdown bypasses backoff but retains the five-attempt maximum and reserves time for a final health fact.
+  Its total wall-clock ceiling is 30 seconds, including an already-running bounded flush. Remaining queue,
+  open, or sealed samples are released with a `shutdown_abandoned` censor rather than silently disappearing.
+- `adapter_timeout`, `retry_exhausted`, and `shutdown_abandoned` remain distinct schema-compatible values in
+  `held_contract_capture_health.facts.censorCode`; existing top-level health codes are not changed.
 
-Abrupt process death can still lose an in-memory open or sealed batch. The sample and byte caps prevent
-unbounded memory, but they are not durable staging. The measured windows below include the open timer phase
-and the full normal retry schedule. Adapter call duration itself has no local upper bound, so a deploy also
-needs platform shutdown grace long enough for the awaited calls or a later durable staging design. It must
-not claim crash-proof capture.
+Abrupt process death can still lose an in-memory open or sealed batch. The sample/byte caps and adapter/
+shutdown deadlines bound memory and wall-clock waits, but they are not durable staging. The measured windows
+below include the open timer phase and full normal retry schedule. A deploy must grant at least the documented
+30-second shutdown ceiling or use later durable staging; it must not claim crash-proof capture.
 
 ## July 17 sequence replay and storage projection
 
@@ -83,28 +91,29 @@ the immutable partition keys and sealed at the proposed 24-sample/120-second bou
 
 The replay gives no gzip-compression credit and scales receipt bytes linearly. It is a planning projection,
 not a post-deploy measurement. Short-lived positions, state pressure, retries, and real shutdown timing can
-produce different segment counts. The **recommendation is 12 samples / 60 seconds**: it still removes 55.67%
-of July 17 receipts while reducing the normal open window by 60 seconds and total bounded retained exposure
-by 60 seconds versus 24/120. This is a review recommendation only; defaults remain 24/120 and nothing was
-deployed.
+produce different segment counts. The **recommended deployment default is 12 samples / 60 seconds**: it still
+removes 55.67% of July 17 receipts while reducing the normal open window by 60 seconds and total bounded
+retained exposure by 60 seconds versus 24/120. It remains an unapplied operator configuration proposal; the
+checked-in fallback and production are unchanged at 24/120.
 
 ## Verification completed
 
 - root TypeScript: pass;
 - worker TypeScript: pass;
-- held-contract capture: 79/79 pass;
+- held-contract capture: 86/86 pass;
 - runner: 146/146 pass;
 - manager shadow: 17/17 pass;
 - manager shadow book: 149/149 pass.
 
 The focused tests additionally prove combined open/sealed sample and byte bounds, sustained R2 outage,
 sustained Supabase-receipt outage, finite backoff/eviction, research-only shedding, truthful attribution,
-multi-partition shutdown, and forced shutdown retry without the former timeout race.
+multi-partition shutdown, never-resolving R2/Supabase adapters, abort signaling, distinct censor codes,
+bounded normal-flush recovery, and 30-second shutdown abandonment without the former timeout race.
 
 ## Review gates before deployment
 
-1. Decide whether the recommended 12/60 option and its 540-second maximum retained exposure are acceptable,
-   whether to retain 24/120 and 600 seconds, or require durable staging/recovery.
+1. Ratify or revise the prepared 12/60 option and its 540-second maximum retained exposure, or require
+   durable staging/recovery.
 2. Review the 10,000-sample/8-MiB state bounds and five-attempt retry budget.
 3. Verify the prepared `stream-2026-07-17b` identity against the final reviewed diff.
 4. Re-run the complete Gate 6 suite and flat broker/desk gate.

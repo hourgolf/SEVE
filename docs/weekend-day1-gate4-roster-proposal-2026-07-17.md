@@ -25,24 +25,44 @@ The proposal separates five kinds of settings:
 
 ## Complementary proposed roots
 
+### Observed fresh entry asks, July 15–17
+
+SELECT-only execution receipts were reduced to one non-runner root position per entry and required a
+positive decision ask no more than 15 seconds old. All 60 proposed-root positions had valid asks; no missing,
+stale, nonpositive, or unmapped rows were converted to zero.
+
+| Root | Valid / censored | Median | p75 | p90 | p95 | Maximum |
+|---|---:|---:|---:|---:|---:|---:|
+| `pb-ride` | 16 / 0 | $2.13 | $2.44 | $2.96 | $3.37 | $3.37 |
+| `orb-ustop-ctl` | 8 / 0 | $1.25 | $1.46 | $1.87 | $1.87 | $1.87 |
+| `grind-v3` | 11 / 0 | $1.08 | $1.25 | $1.31 | $1.65 | $1.65 |
+| `momo-shape` | 18 / 0 | $1.225 | $1.48 | $1.69 | $2.04 | $2.04 |
+| `orb-qqq-trail` | 4 / 0 | $2.195 | $2.33 | $2.71 | $2.71 | $2.71 |
+| `breakout-alt-v3-iwm` | 3 / 0 | $0.79 | $1.04 | $1.04 | $1.04 | $1.04 |
+
+These are small, correlated paper samples. The proposed per-contract ceilings round each observed maximum
+up to the next conservative $0.25 increment. The aggregate debit ceiling is exactly two contracts times
+that premium ceiling times the $100 option multiplier. Quantity therefore does not silently change the
+entry hypothesis through the old universal $500 admission limit.
+
 | Family | Executed root proposal | Entry / contract hypothesis | Contracts and whole-lot allocation | Prospective safety baseline |
 |---|---|---|---:|---|
-| SPY PB | `pb-ride` | pullback continuation; 1DTE ATM | 1; hold 1, bank 0, runner 0 | aggregate entry debit <= $500; premium stop -30%; no structural stop or profit target; EOD 15:25 ET |
-| SPY ORB | `orb-ustop-ctl` | opening-range continuation; 0DTE ATM | 1; hold 1, bank 0, runner 0 | aggregate entry debit <= $500; explicit premium stop -30%; no inherited default, structural stop, or target; EOD 15:25 ET |
-| SPY Grind | `grind-v3` | grind continuation; 0DTE ATM | 1; hold 1, bank 0, runner 0 | aggregate entry debit <= $500; premium stop -30%; no structural stop or target; EOD 15:25 ET |
-| SPY MOMO | `momo-shape` | shaped momentum; 0DTE ATM | 2; executed hold 2, bank 0, runner 0 | aggregate entry debit <= $1,000; premium stop -30%; no structural stop or target; EOD 15:25 ET |
-| QQQ ORB | `orb-qqq-trail` | QQQ opening-range continuation; 0DTE ATM | 1; hold 1, bank 0, runner 0 | aggregate entry debit <= $500; premium stop -30%; no target; EOD 15:25 ET |
-| IWM breakout | `breakout-alt-v3-iwm` | IWM expansion; 0DTE ATM | 1; hold 1, bank 0, runner 0 | aggregate entry debit <= $500; premium stop -30%; no target, pyramid, or re-entry; EOD 15:25 ET |
+| SPY PB | `pb-ride` | pullback continuation; 1DTE ATM | 2; all-out arms 2/0, split arms bank 1/run 1 | per-contract premium <= $3.50; aggregate debit <= $700; premium stop -30%; EOD 15:25 ET |
+| SPY ORB | `orb-ustop-ctl` | opening-range continuation; 0DTE ATM | 2; all-out arms 2/0, split arms bank 1/run 1 | per-contract premium <= $2.00; aggregate debit <= $400; explicit premium stop -30%; EOD 15:25 ET |
+| SPY Grind | `grind-v3` | grind continuation; 0DTE ATM | 2; all-out arms 2/0, split arms bank 1/run 1 | per-contract premium <= $1.75; aggregate debit <= $350; premium stop -30%; EOD 15:25 ET |
+| SPY MOMO | `momo-shape` | shaped momentum; 0DTE ATM | 2; all-out arms 2/0, split arms bank 1/run 1 | per-contract premium <= $2.25; aggregate debit <= $450; premium stop -30%; EOD 15:25 ET |
+| QQQ ORB | `orb-qqq-trail` | QQQ opening-range continuation; 0DTE ATM | 2; all-out arms 2/0, split arms bank 1/run 1 | per-contract premium <= $3.00; aggregate debit <= $600; premium stop -30%; EOD 15:25 ET |
+| IWM breakout | `breakout-alt-v3-iwm` | IWM expansion; 0DTE ATM | 2; all-out arms 2/0, split arms bank 1/run 1 | per-contract premium <= $1.25; aggregate debit <= $250; premium stop -30%; no adds/re-entry; EOD 15:25 ET |
 
-The debit guard means skip the candidate if the exact executable entry ask would exceed the stated
-aggregate limit. It is not permission to substitute a mid, snapshot, approximate contract, or stale ask.
+Both premium and aggregate guards must pass on the same exact executable entry ask. They are not permission
+to substitute a mid, snapshot, approximate contract, or stale ask.
 The -30% premium stop is a common prospective catastrophe boundary used by existing shadow research; it is
 chosen for loss containment, not because the small sample proved it optimal. A missing fresh executable bid
 must be reported truthfully and handled by the separately ratified paper safety procedure.
 
-MOMO alone proposes two contracts because a previously preregistered 1/1 bank-runner manager contrast is a
-real whole-lot research question. The executed safety manager still holds both lots. The other roots use one
-contract and therefore do not pretend a fractional scale-out is executable.
+Every ordinary root proposes two contracts so the existing split manager arms are whole-lot executable in
+research: one bank lot and one runner lot. The root remains the only paper fill; exit alternatives continue
+to observe that same exact path and do not create sibling orders.
 
 ## Dark siblings and legitimate contrasts
 
@@ -64,7 +84,7 @@ snapshots, mids, `option_quotes`, and approximate contracts cannot satisfy that 
 ## Concurrency, collision, and EOD proposal
 
 - Maximum open positions: one per named family; two total across SPY; one QQQ; one IWM; four account-wide.
-- Maximum simultaneous contract count under these caps: five, because the MOMO root has two lots.
+- Maximum simultaneous contract count under these caps: eight, because every admitted root has two lots.
 - Same family and source clock: root candidate only; every sibling is shadow/dark.
 - Cross-family SPY same completed source-bar clock and direction: admit at most one new root in deterministic
   safety order `PB > Grind > MOMO > ORB`. The order follows the development downside ranking only as a loss-
@@ -86,10 +106,9 @@ channel version, manager version, and configuration epoch:
 `LOCK20/30`, `LOCK30/30`, `LOCK50/30`, `WIDE20/50`, `BANK20/RUN50`,
 `ARM20/HALF-GIVEBACK`, `BELL/-30`, and `BELL/no-stop`.
 
-The observer never authorizes execution. On one-contract roots, the two split arms are exact-path research
-models but are marked `whole_lot_not_executable`; they cannot be presented as an executable one-lot result.
-MOMO's two lots permit a 1-bank/1-runner allocation for those shadow arms. `BELL/no-stop` is observation-
-only and can never override the executed -30% catastrophe stop.
+The observer never authorizes execution. `BANK20/RUN50` and `ARM20/HALF-GIVEBACK` use one bank lot and one
+runner lot on every two-contract root; all-out arms use both lots. `BELL/no-stop` is observation-only and can
+never override the executed -30% catastrophe stop.
 
 ## Complete current-paper → proposed diff
 
@@ -99,12 +118,12 @@ forward. `Debit` is a new admission ceiling and must be implemented and reviewed
 
 | Channel | Current state and numeric configuration | Proposed state and configuration |
 |---|---|---|
-| `pb-ride` | paper; $1200/cap10; 1DTE ATM; 30/0.35·10·0 | proposed root; debit $500/cap1; 1DTE ATM; 30/—·0·0; hold1; EOD 15:25 |
-| `orb-ustop-ctl` | paper; $500/cap6; 0DTE ATM; inherited 50/—·0·0 | proposed root; debit $500/cap1; 0DTE ATM; explicit 30/—·0·0; hold1; EOD 15:25 |
-| `grind-v3` | paper; $600/cap12; 0DTE ATM; 35/0.5·6·0 | proposed root; debit $500/cap1; 0DTE ATM; 30/—·0·0; hold1; EOD 15:25 |
-| `momo-shape` | paper; $1200/cap12; 0DTE ATM; 40/0.5·0·0 | proposed root; debit $1000/cap2; 0DTE ATM; 30/—·0·0; hold2; EOD 15:25 |
-| `orb-qqq-trail` | paper; $750/cap12; 0DTE ATM; 40/—·0·0 | proposed root; debit $500/cap1; 0DTE ATM; 30/—·0·0; hold1; EOD 15:25 |
-| `breakout-alt-v3-iwm` | paper; $750/cap10; 0DTE ATM; 30/—·22·0 | proposed root; debit $500/cap1; 0DTE ATM; 30/—·0·0; hold1; no adds/re-entry; EOD 15:25 |
+| `pb-ride` | paper; $1200/cap10; 1DTE ATM; 30/0.35·10·0 | proposed root; premium $3.50/debit $700/cap2; 1DTE ATM; 30/—·0·0; split 1/1; EOD 15:25 |
+| `orb-ustop-ctl` | paper; $500/cap6; 0DTE ATM; inherited 50/—·0·0 | proposed root; premium $2.00/debit $400/cap2; 0DTE ATM; explicit 30/—·0·0; split 1/1; EOD 15:25 |
+| `grind-v3` | paper; $600/cap12; 0DTE ATM; 35/0.5·6·0 | proposed root; premium $1.75/debit $350/cap2; 0DTE ATM; 30/—·0·0; split 1/1; EOD 15:25 |
+| `momo-shape` | paper; $1200/cap12; 0DTE ATM; 40/0.5·0·0 | proposed root; premium $2.25/debit $450/cap2; 0DTE ATM; 30/—·0·0; split 1/1; EOD 15:25 |
+| `orb-qqq-trail` | paper; $750/cap12; 0DTE ATM; 40/—·0·0 | proposed root; premium $3.00/debit $600/cap2; 0DTE ATM; 30/—·0·0; split 1/1; EOD 15:25 |
+| `breakout-alt-v3-iwm` | paper; $750/cap10; 0DTE ATM; 30/—·22·0 | proposed root; premium $1.25/debit $250/cap2; 0DTE ATM; 30/—·0·0; split 1/1; no adds/re-entry; EOD 15:25 |
 | `breakout` | paper; $600/cap12; 40/—·22·0 | dark/draft; current values quarantined and not a Monday configuration |
 | `breakout-alt-v3` | paper; $750/cap18; 40/—·22·3 | dark/draft; current values quarantined; incomplete pyramid disabled |
 | `breakout-alt-v3-qqq` | paper; $250/cap6; 30/—·14·0 | dark/draft; current values quarantined |
@@ -144,8 +163,8 @@ does not apply them.
 
 ## Remaining operator decisions
 
-The operator must decide whether to ratify the six roots; the $500/$1,000 debit ceilings; one-versus-two lot
-quantities; -30% premium stop; 15:25 ET EOD; max-open rules; SPY collision priority; duplicate-OCC rule;
+The operator must decide whether to ratify the six roots; each observed-distribution premium/debit ceiling;
+the two-lot 1/1 scaling design; -30% premium stop; 15:25 ET EOD; max-open rules; SPY collision priority; duplicate-OCC rule;
 manager-arm set and whole-lot censoring; and the lifecycle representation for dark channels. Ratification
 must happen after the debit guard and version stamps are shown to be implementable. Until then this is not
 the Monday roster.
