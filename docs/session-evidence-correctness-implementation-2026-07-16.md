@@ -2,7 +2,9 @@
 
 ## Status
 
-Review branch only. Production, Supabase, Railway, and Vercel production have not been changed.
+Merged and deployed from `main@9c13672`. The required Supabase migrations are applied, the Railway worker
+deployment is active, Vercel production is ready, and the post-deploy paper/readiness smoke checks passed.
+No strategy, sizing, order, or execution policy changed.
 
 ## What this tranche fixes
 
@@ -38,7 +40,7 @@ Apply in timestamp order:
 2. `20260716205122_add_latest_option_quote_index.sql`
 3. `20260716205844_manager_shadow_book_v2_admission_provenance.sql`
 
-The migrations are required before deploying the worker changes. They have not been applied to production from this branch.
+The migrations were applied in timestamp order before the worker and web deployments.
 
 ## Safe rollout order
 

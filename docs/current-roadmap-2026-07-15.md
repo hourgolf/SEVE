@@ -54,7 +54,7 @@ without changing the frozen selectors or thresholds.
 
 ## 3. Current implementation state
 
-Production baseline before the current review branch: `main@3895b43`.
+Production baseline before this research-only review branch: `main@9c13672`.
 
 | Area | State | Receipt / remaining gate |
 |---|---|---|
@@ -71,8 +71,10 @@ Production baseline before the current review branch: `main@3895b43`.
 | Sentinel workspace | Not started | Full evidence, provenance, freshness, deterministic vs interpretive split. |
 | Event Tape / Review | Not started | Live execution versus after-action evidence. |
 | Ops workspace | Not started | Auth/settings/preflight/health/safety consolidation. |
-| Strategy cartridge/passport | **In review** | Pure V1 + read-only 68-channel inventory complete; systemic policy stamps identified; no runtime wiring. |
-| Phase 1K-D | Frozen for T+1 | July 15 ledger receipt frozen at `e4546fd`; acquire exact paths and score unchanged when historical CBBO is available July 16 ET. |
+| Strategy cartridge/passport | Contract merged | Pure V1 + read-only 68-channel inventory complete; systemic policy stamps identified; no runtime wiring. |
+| Session evidence correctness | Merged + deployed | V2 immediate manager admission, closed-row truth, and resilient market reads are live; strategy and execution policy remain unchanged. |
+| Phase 1K-D | Complete; review only | July 15 exact holdout scored unchanged against `phase1k-c-preregister-v1`; receipt and results are preserved in the research review branch. |
+| Phase 1K-E | Frozen; accumulating | PB, ORB, Grind, QQQ, and IWM tests were frozen before the July 16+ prospective window; evidence floors require at least five independent sessions. |
 
 The seam remains load-bearing:
 
@@ -87,7 +89,19 @@ Legacy Rooms remains available until each required operator job has a useful, te
 
 ## 4. Phase 1K-D — untouched July 15 holdout
 
-When Databento exposes the completed July 15 historical CBBO-1s:
+The completed July 15 historical CBBO-1s gate produced:
+
+- 94 held positions, 89 strategy-native outcomes, and five operator-managed outcomes kept separate;
+- 86 exact eligible positions from 555,969 CBBO-1s rows;
+- two native positions censored for missing in-window quotes, never scored as zero;
+- a maximum same-OCC overlap of six positions / 66 contracts, confirming that fleet rows are not independent evidence;
+- a one-session MOMO result where the +15% half-bank arms reduced loss and drawdown versus native management;
+- a one-session VB result where both frozen +15% scale arms underperformed native management.
+
+These are holdout observations, not edge validation or production authority. The frozen rules and full
+decision boundary are recorded in `docs/phase1k-d-holdout-results-2026-07-16.md`.
+
+The gate executed the following unchanged protocol:
 
 1. read the final ledger and acquire only exact OCC contracts traded July 15;
 2. store a new content-addressed local object and checksum manifest;
@@ -158,15 +172,16 @@ development/prospective status. `pk` and win rate can be useful, but neither is 
 ## 7. Ordered work from here
 
 1. **Complete:** worker-ledger long-run correction is merged, deployed, and production-smoked green.
-2. **T+1 gate:** run Phase 1K-D unchanged when July 15 historical CBBO becomes available July 16 ET.
-3. **In review:** ratify cartridge/passport V1 and the read-only fleet inventory; next step is an explicit mapping decision for seven systemic fields, not guessed per-slug defaults.
-4. **Next dashboard slice:** build Sentinel with provenance and freshness; no LLM claim in health logic.
-5. **Then:** build Event Tape / Review with live versus after-action separation.
-6. **Then:** consolidate Ops/auth/preflight/safety and complete authenticated operator drills.
-7. **Then:** reshape Channels around cartridge controls and evidence passports; test PB, ORB, Grind,
+2. **Complete; human review required:** Phase 1K-D scored the July 15 holdout unchanged. No policy or production change is authorized.
+3. **Frozen and accumulating:** Phase 1K-E evaluates PB, ORB, Grind, QQQ, and IWM beginning July 16; do not score a final verdict before its minimum five-session evidence floors are met.
+4. **Next evidence build:** execution-quality receipts (YF-D) and held-contract option capture (YF-B), both observation-only.
+5. **Next dashboard slice:** build Sentinel with provenance and freshness; no LLM claim in health logic.
+6. **Then:** build Event Tape / Review with live versus after-action separation.
+7. **Then:** consolidate Ops/auth/preflight/safety and complete authenticated operator drills.
+8. **Then:** reshape Channels around cartridge controls and evidence passports; test PB, ORB, Grind,
    MOMO, QQQ/IWM, and VB as separate hypotheses and policy eras.
-8. **Only after parity:** retire Legacy Rooms.
-9. **Finally:** finish exact 909 aesthetic tuning, responsive sizing, contrast, density, and blackout skin.
+9. **Only after parity:** retire Legacy Rooms.
+10. **Finally:** finish exact 909 aesthetic tuning, responsive sizing, contrast, density, and blackout skin.
 
 ## 8. Release gates
 
