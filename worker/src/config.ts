@@ -113,6 +113,11 @@ export const config = {
   heldContractCaptureBatchMaxAgeMs: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_MAX_AGE_MS", "120000")),
   heldContractCaptureMaxSamples: Number(opt("HELD_CONTRACT_CAPTURE_MAX_SAMPLES", "10000")),
   heldContractCaptureMaxBytes: Number(opt("HELD_CONTRACT_CAPTURE_MAX_BYTES", String(8 * 1024 * 1024))),
+  heldContractCaptureStateMaxSamples: Number(opt("HELD_CONTRACT_CAPTURE_STATE_MAX_SAMPLES", "10000")),
+  heldContractCaptureStateMaxBytes: Number(opt("HELD_CONTRACT_CAPTURE_STATE_MAX_BYTES", String(8 * 1024 * 1024))),
+  heldContractCaptureRetryMaxAttempts: Number(opt("HELD_CONTRACT_CAPTURE_RETRY_MAX_ATTEMPTS", "5")),
+  heldContractCaptureRetryBaseDelayMs: Number(opt("HELD_CONTRACT_CAPTURE_RETRY_BASE_DELAY_MS", "30000")),
+  heldContractCaptureRetryMaxDelayMs: Number(opt("HELD_CONTRACT_CAPTURE_RETRY_MAX_DELAY_MS", "300000")),
   heldContractCaptureR2Prefix: opt("HELD_CONTRACT_CAPTURE_R2_PREFIX", "held-contracts"),
   // Phase 1H-B raw SIP trade/quote capture. DARK by default and observation-only.
   // Enabling requires paper mode, the SIP feed, the private receipt migration,

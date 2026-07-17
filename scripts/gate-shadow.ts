@@ -65,28 +65,39 @@ function exactCandidateDecision(s: any, base: ShadowRow): VbCandidateDecision | 
   const sourceBarAtMs = Date.parse(String(rationale.decision_source_bar_at ?? ""));
   const virtualExitAtMs = Date.parse(String(base.exitAt ?? ""));
   const side = rationale.candidate_side;
-  const entryAsk = Number(rationale.ask ?? 0);
+  const observedAtMs = Date.parse(String(rationale.decision_observed_at ?? ""));
+  const liveAsk = Number(rationale.ask ?? 0);
   if (!Number.isFinite(sourceBarAtMs)) return { signalId: String(s.id), code: "missing_exact_source_bar_clock" };
   if (typeof rationale.channel_version !== "string" || !rationale.channel_version)
     return { signalId: String(s.id), code: "missing_channel_version" };
   if (typeof rationale.configuration_epoch_id !== "string" || !/^sha256:[0-9a-f]{64}$/.test(rationale.configuration_epoch_id))
     return { signalId: String(s.id), code: "missing_configuration_epoch" };
+  if (typeof rationale.worker_version !== "string" || !rationale.worker_version)
+    return { signalId: String(s.id), code: "missing_source_version" };
   if (side !== "call" && side !== "put") return { signalId: String(s.id), code: "missing_option_side" };
-  if (!(entryAsk > 0)) return { signalId: String(s.id), code: "missing_candidate_time_executable_ask" };
   if (!Number.isFinite(virtualExitAtMs)) return { signalId: String(s.id), code: "missing_virtual_exit_clock" };
   return {
     signalId: String(s.id),
+    strategistId: String(s.strategist_id),
+    accountId: typeof rationale.account_id === "string" ? rationale.account_id : null,
     channelSlug: base.slug,
     channelVersion: rationale.channel_version,
     configurationEpochId: rationale.configuration_epoch_id,
+    sourceVersion: rationale.worker_version,
     sourceBarAtMs,
     underlying: String(rationale.candidate_underlying ?? ""),
     side,
     occSymbol: base.occ,
-    entryAsk,
+    liveObservedAsk: liveAsk > 0 ? {
+      price: liveAsk,
+      feed: "alpaca_snapshot",
+      providerAtMs: null,
+      observedAtMs: Number.isFinite(observedAtMs) ? observedAtMs : null,
+      freshnessMs: Number.isFinite(Number(rationale.live_ask_snapshot_age_ms)) ? Number(rationale.live_ask_snapshot_age_ms) : null,
+      exactExecutable: false,
+    } : null,
     blockedReason: String(s.blocked_reason) as VbCandidateDecision["blockedReason"],
     virtualExitAtMs,
-    accountId: typeof rationale.account_id === "string" ? rationale.account_id : null,
   };
 }
 

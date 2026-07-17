@@ -36,6 +36,11 @@ export class HeldContractCaptureRuntime {
   private readonly batcher = new HeldContractCaptureBatcher(
     config.heldContractCaptureBatchTargetSamples,
     config.heldContractCaptureBatchMaxAgeMs,
+    config.heldContractCaptureStateMaxSamples,
+    config.heldContractCaptureStateMaxBytes,
+    config.heldContractCaptureRetryMaxAttempts,
+    config.heldContractCaptureRetryBaseDelayMs,
+    config.heldContractCaptureRetryMaxDelayMs,
   );
   private readonly s3 = new S3Client({
     region: "auto",
@@ -43,7 +48,7 @@ export class HeldContractCaptureRuntime {
     credentials: { accessKeyId: config.r2AccessKeyId, secretAccessKey: config.r2SecretAccessKey },
   });
   private timer: ReturnType<typeof setInterval> | null = null;
-  private flushing = false;
+  private flushChain: Promise<void> = Promise.resolve();
   private highWaterScheduled = false;
   private lastDropLogMs = 0;
 
@@ -64,7 +69,13 @@ export class HeldContractCaptureRuntime {
         || !Number.isFinite(config.heldContractCaptureFlushMs) || config.heldContractCaptureFlushMs < 5_000
         || !Number.isInteger(config.heldContractCaptureBatchTargetSamples) || config.heldContractCaptureBatchTargetSamples < 1
         || !Number.isInteger(config.heldContractCaptureBatchMaxAgeMs)
-        || config.heldContractCaptureBatchMaxAgeMs < config.heldContractCaptureFlushMs) {
+        || config.heldContractCaptureBatchMaxAgeMs < config.heldContractCaptureFlushMs
+        || !Number.isInteger(config.heldContractCaptureStateMaxSamples) || config.heldContractCaptureStateMaxSamples < 1
+        || !Number.isInteger(config.heldContractCaptureStateMaxBytes) || config.heldContractCaptureStateMaxBytes < 1
+        || !Number.isInteger(config.heldContractCaptureRetryMaxAttempts) || config.heldContractCaptureRetryMaxAttempts < 1
+        || !Number.isInteger(config.heldContractCaptureRetryBaseDelayMs) || config.heldContractCaptureRetryBaseDelayMs < 1
+        || !Number.isInteger(config.heldContractCaptureRetryMaxDelayMs)
+        || config.heldContractCaptureRetryMaxDelayMs < config.heldContractCaptureRetryBaseDelayMs) {
       warn("held-contract-capture: disabled — invalid queue/flush bounds");
       return null;
     }
@@ -108,13 +119,22 @@ export class HeldContractCaptureRuntime {
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => { void this.flush("timer"); }, config.heldContractCaptureFlushMs);
-    info(`held-contract-capture: DARK enabled · targeted OPRA snapshots · queue=${config.heldContractCaptureMaxSamples} samples/${Math.round(config.heldContractCaptureMaxBytes / 1_048_576)}MiB · drain=${config.heldContractCaptureFlushMs}ms · batch=${config.heldContractCaptureBatchTargetSamples} samples/${config.heldContractCaptureBatchMaxAgeMs}ms`);
+    info(`held-contract-capture: DARK enabled · targeted OPRA snapshots · queue=${config.heldContractCaptureMaxSamples} samples/${Math.round(config.heldContractCaptureMaxBytes / 1_048_576)}MiB · retained=${config.heldContractCaptureStateMaxSamples} samples/${Math.round(config.heldContractCaptureStateMaxBytes / 1_048_576)}MiB · drain=${config.heldContractCaptureFlushMs}ms · batch=${config.heldContractCaptureBatchTargetSamples} samples/${config.heldContractCaptureBatchMaxAgeMs}ms · retry=${config.heldContractCaptureRetryMaxAttempts}`);
   }
 
   async stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    await Promise.race([this.flush("shutdown"), new Promise<void>((resolve) => setTimeout(resolve, 1_500))]);
+    // A normal deploy drains every open and sealed segment. Shutdown bypasses
+    // retry backoff but not the finite retry budget; exhausted segments are
+    // explicitly censored before process exit instead of losing a timeout race.
+    for (let attempt = 0; attempt < config.heldContractCaptureRetryMaxAttempts
+      && (this.queue.hasPending() || this.batcher.sampleCount() > 0); attempt++) {
+      await this.flush("shutdown");
+    }
+    const remaining = this.batcher.sampleCount() + this.queue.size();
+    if (remaining) warn(`held-contract-capture: shutdown incomplete · ${remaining} research samples remain explicitly unpersisted; execution shutdown continues`);
+    else info(`held-contract-capture: shutdown drained · shed=${this.batcher.shedTotals().samples} research samples`);
   }
 
   private async writePartition(descriptor: HeldContractSegmentDescriptor): Promise<boolean> {
@@ -184,9 +204,14 @@ export class HeldContractCaptureRuntime {
     return receipted;
   }
 
-  private async flush(reason: HeldContractCaptureFlushReason): Promise<void> {
-    if (this.flushing || (!this.queue.hasPending() && this.batcher.sampleCount() === 0)) return;
-    this.flushing = true;
+  private flush(reason: HeldContractCaptureFlushReason): Promise<void> {
+    const scheduled = this.flushChain.then(() => this.flushOnce(reason));
+    this.flushChain = scheduled.catch(() => undefined);
+    return scheduled;
+  }
+
+  private async flushOnce(reason: HeldContractCaptureFlushReason): Promise<void> {
+    if (!this.queue.hasPending() && this.batcher.sampleCount() === 0) return;
     const drain = this.queue.hasPending()
       ? this.queue.drain()
       : { samples: [], estimatedBytes: 0, droppedByPartition: {} };
@@ -201,8 +226,19 @@ export class HeldContractCaptureRuntime {
           facts: { reason, partitions: dropFacts.length, rejectedOversize: dropFacts.reduce((sum, [, value]) => sum + value.rejectedOversize, 0) },
         });
       }
-      this.batcher.accept(drain);
-      const batches = this.batcher.sealReady(reason, Date.now());
+      const accepted = this.batcher.accept(drain);
+      if (accepted.shed.length) {
+        const shedSamples = accepted.shed.reduce((sum, row) => sum + row.samples, 0);
+        const shedBytes = accepted.shed.reduce((sum, row) => sum + row.estimatedBytes, 0);
+        await captureStore.insertHeldContractCaptureHealth({
+          id: randomUUID(), source_boot_id: BOOT_ID, observed_at: new Date().toISOString(),
+          severity: "high", code: "queue_drop", position_id: null, occ_symbol: null,
+          affected_samples: shedSamples,
+          facts: { reason: "retained_state_capacity", estimatedBytes: shedBytes, stateSamples: this.batcher.sampleCount(), stateBytes: this.batcher.estimatedBytes() },
+        });
+      }
+      const nowMs = Date.now();
+      const batches = this.batcher.sealReady(reason, nowMs);
       let completed = 0;
       for (const batch of batches) {
         const descriptor = buildHeldContractSegmentDescriptor(batch.partition, config.heldContractCaptureR2Prefix);
@@ -213,26 +249,27 @@ export class HeldContractCaptureRuntime {
             this.batcher.acknowledge(batch.token);
             completed++;
           } else {
-            warn(`held-contract-capture: receipt retry retained · ${descriptor.sampleCount} samples · ${descriptor.objectKey}`);
+            const evicted = this.batcher.recordFailure(batch.token, Date.now());
+            warn(`held-contract-capture: receipt ${evicted ? "retry budget exhausted; evidence censored" : "retry retained with backoff"} · ${descriptor.sampleCount} samples · ${descriptor.objectKey}`);
           }
         } catch (error) {
+          const evicted = this.batcher.recordFailure(batch.token, Date.now());
           await captureStore.insertHeldContractCaptureHealth({
             id: randomUUID(), source_boot_id: BOOT_ID, observed_at: new Date().toISOString(),
             severity: "high", code: "r2_flush_failed", position_id: descriptor.positionId,
             occ_symbol: descriptor.occSymbol, affected_samples: descriptor.sampleCount + descriptor.droppedSamples,
             facts: {
-              reason, objectKey: descriptor.objectKey,
+              reason, objectKey: descriptor.objectKey, retryBudgetExhausted: Boolean(evicted),
               message: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
             },
           });
-          warn(`held-contract-capture: segment retry retained; ${descriptor.sampleCount} research samples remain sealed, execution unaffected — ${error instanceof Error ? error.message : String(error)}`);
+          warn(`held-contract-capture: segment ${evicted ? "retry budget exhausted; evidence censored" : "retry retained with backoff"}; execution unaffected — ${error instanceof Error ? error.message : String(error)}`);
         }
       }
-      info(`held-contract-capture: ${reason} flush · ${drain.samples.length} drained · ${completed}/${batches.length} immutable segment(s) · open=${this.batcher.openPartitionCount()} · retry=${this.batcher.sealedBatchCount()}${totalDropped ? ` · dropped=${totalDropped}` : ""}`);
+      info(`held-contract-capture: ${reason} flush · ${drain.samples.length} drained · ${completed}/${batches.length} immutable segment(s) · open=${this.batcher.openPartitionCount()} · retry=${this.batcher.sealedBatchCount()} · state=${this.batcher.sampleCount()} samples/${this.batcher.estimatedBytes()} bytes${totalDropped || accepted.shed.length ? ` · dropped=${totalDropped + accepted.shed.reduce((sum, row) => sum + row.samples, 0)}` : ""}`);
     } catch (error) {
       warn(`held-contract-capture: flush bookkeeping failed; execution unaffected — ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      this.flushing = false;
       if (this.queue.utilization() >= FLUSH_HIGH_WATER) void this.flush("high-water");
     }
   }

@@ -663,6 +663,7 @@ export async function executeEntry(
   }
 
   const qty = d.qty ?? 0;
+  const decisionObservedAt = Date.now();
   const policyIdentity = observedPolicyIdentity({
     channel: ch,
     accountId: ctx.accountId,
@@ -677,8 +678,13 @@ export async function executeEntry(
       occ, qty, executor: "stream", opportunity_id: opportunityId,
       ...(d.detail ?? {}),
       decision_source_bar_at: new Date(ctx.decisionAtMs).toISOString(),
+      decision_observed_at: new Date(decisionObservedAt).toISOString(),
       candidate_underlying: ch.underlying,
       candidate_side: dir,
+      live_ask_feed: "alpaca_snapshot",
+      live_ask_snapshot_age_ms: ctx.chain.ageMs,
+      live_ask_provider_at: null,
+      live_ask_exact: false,
       account_id: ctx.accountId,
       channel_version: policyIdentity?.channelVersion ?? null,
       manager_version: policyIdentity?.managerVersion ?? null,
