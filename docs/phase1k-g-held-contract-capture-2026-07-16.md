@@ -2,9 +2,10 @@
 
 ## Status
 
-Review branch only. The pure model, private schema, and default-off runtime adapter are built. The
-migration is not applied, Railway has no enabled flag, no worker-version bump was made, and no Supabase
-or R2 write is active. Production remains at `main@241525d`.
+Approved rollout in progress. The pure model and default-off runtime adapter were merged to
+`main@53a9c10`. The private migration was applied after a flat paper/broker reconciliation gate and its
+RLS, grants, policies, constraints, and indexes were verified. Both receipt tables began empty. The
+activation commit stamps `stream-2026-07-17a`; Railway dark-capture verification remains the final gate.
 
 This phase is observation-only. It cannot place, alter, cancel, resize, or close an order. It does not
 change the strict 15-second provider-event rule used by `manager-shadow-book-v1/v2`.
@@ -49,8 +50,8 @@ manifests, and the absence of provider, broker, position, or order imports in th
 
 ## Draft storage contract
 
-Migration `20260717052246_phase_1k_g_held_contract_capture_receipts.sql` is intentionally unapplied.
-It proposes two append-only private tables:
+Migration `20260717052246_phase_1k_g_held_contract_capture_receipts.sql` was applied to the SEVE Supabase
+project after the flatness gate. It creates two append-only private tables:
 
 1. `held_contract_capture_receipts` — one compact receipt per immutable R2 segment, including checksums,
    identity, time bounds, sample/quality counts, gaps, provider-age distribution, and drops.
@@ -85,13 +86,15 @@ flush cadence, sample cap, and byte cap are separate from the Phase 1H SIP captu
 manifests are content-addressed; manifest completion uses the last included fetch clock so an idempotent
 retry cannot rewrite evidence identity with a new wall-clock timestamp.
 
-## Acceptance gates before activation
+## Acceptance gates and rollout state
 
-- migration review plus Supabase security/performance advisors;
+- migration review plus Supabase security/performance advisors; **complete** — no new security finding,
+  and only expected unused-index notices on the new empty tables;
 - runtime isolation tests proving capture fan-out/enqueue failures cannot suppress manager advancement and storage work starts outside the manager callback;
-- root and worker TypeScript clean, full runner/manager/capture suites green;
-- flat paper desk before applying the private migration;
-- separately approved worker-version bump and manual Railway deploy;
+- root and worker TypeScript clean, full runner/manager/capture suites green; **complete**;
+- flat paper desk before applying the private migration; **complete** — all three paper broker books and
+  the desk showed zero open OCCs with exact reconciliation;
+- separately approved worker-version bump and manual Railway deploy; **approved/in progress**;
 - first session has one successful sample per healthy fast-exit tick, no unexplained gap above 15 seconds,
   no silent drops, exact broker/desk reconciliation, and no heartbeat degradation;
 - at least three clean paper sessions before snapshot-fresh evidence may inform a new manager-policy version;

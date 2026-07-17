@@ -192,7 +192,7 @@ export const config = {
 } as const;
 
 // Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-16a"; // Phase 1K-F adds append-only, non-blocking exit execution-quality receipts. Prior (07-14a): Phase 1H capture v2 retained SIP exchange/tape/sale conditions. Deferred: cron-failover/late-recovery receipt coverage and authoritative per-contract provider quote time.
+export const WORKER_VERSION = "stream-2026-07-17a"; // Phase 1K-G adds default-off, position-scoped held-contract OPRA evidence capture. Enable only in the paper Railway worker after the private receipt migration is verified. Prior (07-16a): Phase 1K-F exit execution-quality receipts.
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
