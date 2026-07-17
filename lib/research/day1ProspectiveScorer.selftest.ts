@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import {
   buildDay1ProspectiveScorecard,
+  DAY1_EVIDENCE_FLOOR,
+  DAY1_OPPORTUNITY_CLUSTER_RULE,
+  DAY1_PORTFOLIO_RULE,
   DAY1_PROSPECTIVE_SCORER_VERSION,
   DAY1_ZERO_DELTA_RULE,
   type ProspectiveMatchedPairInput,
@@ -80,6 +83,44 @@ const siblingClock = buildDay1ProspectiveScorecard([
 equal(siblingClock.scores[0].completedGroups, 2, "distinct sibling comparisons remain distinct groups");
 equal(siblingClock.scores[0].independentOpportunities, 1, "siblings on one clock count as one independent opportunity");
 equal(siblingClock.scores[0].independentSessions, 1, "shared-clock siblings count as one independent session");
+equal(siblingClock.scores[0].opportunityClusterRule, DAY1_OPPORTUNITY_CLUSTER_RULE, "opportunity clustering rule is explicit");
+equal(siblingClock.scores[0].opportunityClusters[0].comparisonGroups, 2, "cluster metric exposes two comparisons on one opportunity");
+equal(siblingClock.scores[0].opportunityClusterInvariantSatisfied, true, "every completed group belongs to exactly one opportunity cluster");
+equal(siblingClock.scores[0].portfolioRule, DAY1_PORTFOLIO_RULE, "portfolio prohibition is explicit");
+equal(siblingClock.scores[0].portfolioWeightingRule, null, "no portfolio weighting rule is silently invented");
+equal(siblingClock.scores[0].portfolioClaimAuthorized, false, "sibling P&L cannot authorize a portfolio claim");
+
+const tenRowsAcrossFourSessions = Array.from({ length: 10 }, (_, index) => {
+  const sessionDay = 20 + (index % 4);
+  return row(index + 1, {
+    comparisonId: `floor-four-session-${index}`,
+    sessionDateEt: `2026-07-${sessionDay}`,
+    clockId: `clock-${index}`,
+    provenanceId: `floor-four-session-receipt-${index}`,
+  });
+});
+const insufficientSessions = buildDay1ProspectiveScorecard(tenRowsAcrossFourSessions).scores[0];
+equal(insufficientSessions.completedGroups, 10, "completed groups may reach ten without satisfying the floor");
+equal(insufficientSessions.independentOpportunities, 10, "ten distinct clocks are ten opportunities");
+equal(insufficientSessions.independentSessions, 4, "session independence is counted separately");
+equal(insufficientSessions.evidenceFloorMet, false, "completedGroups never substitutes for the independent session floor");
+ok(insufficientSessions.evidenceFloorBlockers.some((value) => value.startsWith("independent_sessions_4_below_5")), "session-floor blocker is explicit");
+
+const tenRowsAcrossFiveSessions = Array.from({ length: 10 }, (_, index) => {
+  const sessionDay = 20 + Math.floor(index / 2);
+  return row(index + 1, {
+    comparisonId: `floor-five-session-${index}`,
+    sessionDateEt: `2026-07-${sessionDay}`,
+    clockId: `clock-${index}`,
+    provenanceId: `floor-five-session-receipt-${index}`,
+  });
+});
+const floorMet = buildDay1ProspectiveScorecard(tenRowsAcrossFiveSessions).scores[0];
+equal(floorMet.evidenceFloor, DAY1_EVIDENCE_FLOOR, "ratified evidence floor is carried in every score");
+equal(floorMet.independentOpportunities, 10, "floor requires ten independent opportunity clocks");
+equal(floorMet.independentSessions, 5, "floor requires five independent sessions");
+equal(floorMet.evidenceFloorMet, true, "both independent requirements satisfy the first-review floor");
+equal(floorMet.evidenceFloorBlockers.length, 0, "a satisfied floor has no blockers");
 
 const invalidDates = buildDay1ProspectiveScorecard([
   row(1),

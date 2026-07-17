@@ -1,7 +1,8 @@
 # Weekend Day 1 — corrected Gate 4 Monday proposal
 
-Status: **proposal only; not finalized or applied**. Paper-only is invariant. This document does not
-authorize a roster, configuration, migration, seal, merge, push, or deployment.
+Status: **operator-ratified and implemented as a checked-in, default-off local release candidate; not
+applied**. Paper-only is invariant. Ratification authorizes preparation and sealing, not configuration
+application, migration, merge, push, deployment, or orders.
 
 ## Evidence boundary and parameter classes
 
@@ -157,14 +158,16 @@ The other 43 inventory rows are already draft or disabled and remain unchanged a
 `vb-vwap-revert-iwm`, and `vb-vwap-revert-qqq`. No numeric value on those rows is proposed for Monday use.
 
 This diff covers all 68 inventory rows: 25 current paper rows are enumerated above and 43 existing
-draft/disabled rows are unchanged. Because the deployed lifecycle cannot express a durable dark/bench state,
-the paper-to-dark transitions require operator review and an explicit configuration mechanism; this document
-does not apply them.
+draft/disabled rows are unchanged. The local release overlay now expresses root/dark lifecycle durably in
+checked-in code without creating sibling fills. It is guarded by a default-off environment switch and exact
+configuration SHA; this document does not apply it.
 
-## Remaining operator decisions
+## Ratified local release-candidate identity
 
-The operator must decide whether to ratify the six roots; each observed-distribution premium/debit ceiling;
-the two-lot 1/1 scaling design; -30% premium stop; 15:25 ET EOD; max-open rules; SPY collision priority; duplicate-OCC rule;
-manager-arm set and whole-lot censoring; and the lifecycle representation for dark channels. Ratification
-must happen after the debit guard and version stamps are shown to be implementable. Until then this is not
-the Monday roster.
+The operator ratified every proposed value above. The checked-in canonical payload is
+`weekend-day1-2026-07-20-rc1`, schema 1, SHA-256
+`ba0fed21340f34a7f816a7edb7589a44758e15b6696b4a6db41d432e090a37c1`. It represents six roots and all
+62 non-roots as dark, with unknown channels failing dark. The runtime gate remains default-off and refuses
+startup when enabled without this exact expected SHA-256. No current Supabase configuration row was changed;
+the “current” side of the table remains the SELECT-only inventory and the “proposed” side is the complete
+local overlay.

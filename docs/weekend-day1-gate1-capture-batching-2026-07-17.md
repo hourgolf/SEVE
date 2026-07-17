@@ -2,7 +2,7 @@
 
 Status: safe local implementation prepared and verified. **Not deployed.** No migration, production
 configuration, Supabase/R2 write, order action, merge, or Railway action is authorized by this record.
-The prepared worker identity is `stream-2026-07-17b`; production remains `stream-2026-07-17a`.
+The prepared worker identity is `stream-2026-07-17c`; production remains untouched.
 
 Gate 0 is frozen at `746407a` before these changes.
 
@@ -27,9 +27,9 @@ the immutable segment schema:
 
 1. `capture()` remains synchronous and only enqueues normalized observations.
 2. The 30-second timer drains the bounded queue into position/OCC/boot/version/date/hour partitions.
-3. The recommended Monday deployment proposal is 12 samples / 60 seconds; a partition also seals at an ET
-   hour/session boundary, high water, or shutdown. The source fallback and every running environment remain
-   at 24/120 because applying or changing configuration is outside this pass.
+3. The operator-ratified checked-in Monday proposal is 12 samples / 60 seconds; a partition also seals at an
+   ET hour/session boundary, high water, or shutdown. Every running environment remains untouched because
+   applying or changing configuration is outside this pass.
 4. Sealing occurs before any R2 or Supabase I/O. Later samples enter a new open batch and cannot change a
    sealed batch's bytes, checksum, object key, manifest key, or receipt identity.
 5. R2 or receipt failure retains the sealed batch for retry. A receipt acknowledgement removes only the
@@ -91,32 +91,30 @@ the immutable partition keys and sealed at the proposed 24-sample/120-second bou
 
 The replay gives no gzip-compression credit and scales receipt bytes linearly. It is a planning projection,
 not a post-deploy measurement. Short-lived positions, state pressure, retries, and real shutdown timing can
-produce different segment counts. The **recommended deployment default is 12 samples / 60 seconds**: it still
+produce different segment counts. The **operator-ratified deployment proposal is 12 samples / 60 seconds**: it still
 removes 55.67% of July 17 receipts while reducing the normal open window by 60 seconds and total bounded
 retained exposure by 60 seconds versus 24/120. It remains an unapplied operator configuration proposal; the
-checked-in fallback and production are unchanged at 24/120.
+checked-in fallback is now 12/60 while production is unchanged.
 
 ## Verification completed
 
 - root TypeScript: pass;
 - worker TypeScript: pass;
-- held-contract capture: 86/86 pass;
-- runner: 146/146 pass;
+- held-contract capture: 92/92 pass;
+- runner: 148/148 pass;
 - manager shadow: 17/17 pass;
 - manager shadow book: 149/149 pass.
 
 The focused tests additionally prove combined open/sealed sample and byte bounds, sustained R2 outage,
 sustained Supabase-receipt outage, finite backoff/eviction, research-only shedding, truthful attribution,
 multi-partition shutdown, never-resolving R2/Supabase adapters, abort signaling, distinct censor codes,
-bounded normal-flush recovery, and 30-second shutdown abandonment without the former timeout race.
+bounded normal-flush recovery, prompt high-water follow-up after an in-flight flush, and 30-second shutdown
+abandonment without the former timeout race.
 
 ## Review gates before deployment
 
-1. Ratify or revise the prepared 12/60 option and its 540-second maximum retained exposure, or require
-   durable staging/recovery.
-2. Review the 10,000-sample/8-MiB state bounds and five-attempt retry budget.
-3. Verify the prepared `stream-2026-07-17b` identity against the final reviewed diff.
-4. Re-run the complete Gate 6 suite and flat broker/desk gate.
-5. Manually deploy Railway only after explicit operator approval.
-6. Verify heartbeat/version and one dark receipt whose sample density is materially larger without any
+1. Verify the prepared `stream-2026-07-17c` identity and exact active-settings receipt against the seal.
+2. Re-run the complete Gate 6 suite and flat broker/desk gate.
+3. Manually deploy Railway only after explicit operator approval.
+4. Verify heartbeat/version and one dark receipt whose sample density is materially larger without any
    changed quality or clock semantics.

@@ -10,6 +10,7 @@
 // ============================================================================
 
 import dotenv from "dotenv";
+export { WORKER_VERSION } from "./version.js";
 
 // Load env without overriding anything already set (Railway's real env wins).
 // Local dev convenience: also read the repo-root .env.local (ALPACA_KEY/SECRET +
@@ -202,9 +203,6 @@ export const config = {
   // 2.5 calendar days incl. extended hours = full prior session always present.
   barHistory: Number(opt("BAR_HISTORY", "2400")),
 } as const;
-
-// Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-17c"; // Weekend Day 1 release candidate: ratified 12/60 evidence batching plus bounded adapter/shutdown behavior. Paper-only; manual Railway review/deploy required. Prior (07-17b): Gate 1 correction pass.
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

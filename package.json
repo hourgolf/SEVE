@@ -84,6 +84,7 @@
     "family-preregistration-selftest": "tsx lib/research/familyPreregistration.selftest.ts",
     "family-preregistered-scorer-selftest": "tsx lib/research/familyPreregisteredScorer.selftest.ts",
     "day1-prospective-scorer-selftest": "tsx lib/research/day1ProspectiveScorer.selftest.ts",
+    "day1-release-receipt": "tsx scripts/day1-release-receipt.ts",
     "family-preregistered-receipt-adapter-selftest": "tsx lib/research/familyPreregisteredReceiptAdapter.selftest.ts",
     "family-preregistered-scorecard": "tsx scripts/family-preregistered-scorecard.ts",
     "preregistered-path-tests": "tsx scripts/preregistered-path-tests.ts",

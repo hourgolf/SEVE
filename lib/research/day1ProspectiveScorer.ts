@@ -1,9 +1,22 @@
 // Prospective-only scorer for Weekend Day 1. This contract intentionally does
 // not alter or reinterpret phase1k-e-family-preregister-v1 results.
 
-export const DAY1_PROSPECTIVE_SCORER_VERSION = "weekend-day1-prospective-scorer-v1" as const;
+export const DAY1_PROSPECTIVE_SCORER_VERSION = "weekend-day1-prospective-scorer-v2" as const;
 export const DAY1_PROSPECTIVE_COHORT_START_ET = "2026-07-20" as const;
 export const DAY1_ZERO_DELTA_RULE = "all_complete_groups_including_zero_delta" as const;
+export const DAY1_OPPORTUNITY_CLUSTER_RULE = "session_date_et_plus_clock_id" as const;
+export const DAY1_PORTFOLIO_RULE = "separate_policy_comparisons_no_portfolio_weighting_preregistered" as const;
+export const DAY1_EVIDENCE_FLOOR = Object.freeze({
+  independentOpportunities: 10,
+  independentSessions: 5,
+});
+
+export interface ProspectiveOpportunityClusterMetric {
+  opportunityKey: string;
+  sessionDateEt: string;
+  clockId: string;
+  comparisonGroups: number;
+}
 
 export interface ProspectivePolicyIdentity {
   channelSlug: string;
@@ -37,6 +50,12 @@ export interface ProspectiveMatchedPairScore {
   censoredGroups: number;
   independentSessions: number;
   independentOpportunities: number;
+  opportunityClusterRule: typeof DAY1_OPPORTUNITY_CLUSTER_RULE;
+  opportunityClusters: ProspectiveOpportunityClusterMetric[];
+  opportunityClusterInvariantSatisfied: boolean;
+  evidenceFloor: typeof DAY1_EVIDENCE_FLOOR;
+  evidenceFloorMet: boolean;
+  evidenceFloorBlockers: string[];
   exactDuplicatesIgnored: number;
   conflictingDuplicateGroups: number;
   totalDelta: number;
@@ -45,6 +64,9 @@ export interface ProspectiveMatchedPairScore {
   negativeDelta: number;
   zeroDelta: number;
   positiveDeltaShare: number | null;
+  portfolioRule: typeof DAY1_PORTFOLIO_RULE;
+  portfolioWeightingRule: null;
+  portfolioClaimAuthorized: false;
   policyChangeAuthorized: false;
   productionChangeAuthorized: false;
 }
@@ -53,6 +75,11 @@ export interface ProspectiveScorecard {
   scorerVersion: typeof DAY1_PROSPECTIVE_SCORER_VERSION;
   cohortStartEt: typeof DAY1_PROSPECTIVE_COHORT_START_ET;
   positiveDeltaShareDenominator: typeof DAY1_ZERO_DELTA_RULE;
+  opportunityClusterRule: typeof DAY1_OPPORTUNITY_CLUSTER_RULE;
+  evidenceFloor: typeof DAY1_EVIDENCE_FLOOR;
+  portfolioRule: typeof DAY1_PORTFOLIO_RULE;
+  portfolioWeightingRule: null;
+  portfolioClaimAuthorized: false;
   scores: ProspectiveMatchedPairScore[];
   censoredRows: number;
   exactDuplicatesIgnored: number;
@@ -180,6 +207,30 @@ export function buildDay1ProspectiveScorecard(rows: readonly ProspectiveMatchedP
   const scores = [...groups.entries()].map(([policyKey, group]): ProspectiveMatchedPairScore => {
     const deltas = group.complete.map((row) => round(row.challengerPnl - row.controlPnl, 2));
     const positiveDelta = deltas.filter((delta) => delta > 0).length;
+    const opportunityMap = new Map<string, ProspectiveOpportunityClusterMetric>();
+    for (const row of group.complete) {
+      const opportunityKey = `${row.sessionDateEt}|${row.clockId}`;
+      const cluster = opportunityMap.get(opportunityKey) ?? {
+        opportunityKey,
+        sessionDateEt: row.sessionDateEt,
+        clockId: row.clockId,
+        comparisonGroups: 0,
+      };
+      cluster.comparisonGroups++;
+      opportunityMap.set(opportunityKey, cluster);
+    }
+    const opportunityClusters = [...opportunityMap.values()]
+      .sort((left, right) => left.opportunityKey.localeCompare(right.opportunityKey));
+    const independentSessions = new Set(group.complete.map((row) => row.sessionDateEt)).size;
+    const independentOpportunities = opportunityClusters.length;
+    const evidenceFloorBlockers = [
+      ...(independentOpportunities < DAY1_EVIDENCE_FLOOR.independentOpportunities
+        ? [`independent_opportunities_${independentOpportunities}_below_${DAY1_EVIDENCE_FLOOR.independentOpportunities}`]
+        : []),
+      ...(independentSessions < DAY1_EVIDENCE_FLOOR.independentSessions
+        ? [`independent_sessions_${independentSessions}_below_${DAY1_EVIDENCE_FLOOR.independentSessions}`]
+        : []),
+    ];
     return {
       scorerVersion: DAY1_PROSPECTIVE_SCORER_VERSION,
       cohortStartEt: DAY1_PROSPECTIVE_COHORT_START_ET,
@@ -190,8 +241,15 @@ export function buildDay1ProspectiveScorecard(rows: readonly ProspectiveMatchedP
       policyKey,
       completedGroups: group.complete.length,
       censoredGroups: group.censoredGroups,
-      independentSessions: new Set(group.complete.map((row) => row.sessionDateEt)).size,
-      independentOpportunities: new Set(group.complete.map((row) => `${row.sessionDateEt}|${row.clockId}`)).size,
+      independentSessions,
+      independentOpportunities,
+      opportunityClusterRule: DAY1_OPPORTUNITY_CLUSTER_RULE,
+      opportunityClusters,
+      opportunityClusterInvariantSatisfied:
+        opportunityClusters.reduce((sum, cluster) => sum + cluster.comparisonGroups, 0) === group.complete.length,
+      evidenceFloor: DAY1_EVIDENCE_FLOOR,
+      evidenceFloorMet: evidenceFloorBlockers.length === 0,
+      evidenceFloorBlockers,
       exactDuplicatesIgnored: group.exactDuplicates,
       conflictingDuplicateGroups: group.conflictingGroups,
       totalDelta: round(deltas.reduce((sum, delta) => sum + delta, 0), 2),
@@ -200,6 +258,9 @@ export function buildDay1ProspectiveScorecard(rows: readonly ProspectiveMatchedP
       negativeDelta: deltas.filter((delta) => delta < 0).length,
       zeroDelta: deltas.filter((delta) => delta === 0).length,
       positiveDeltaShare: deltas.length ? round(positiveDelta / deltas.length) : null,
+      portfolioRule: DAY1_PORTFOLIO_RULE,
+      portfolioWeightingRule: null,
+      portfolioClaimAuthorized: false,
       policyChangeAuthorized: false,
       productionChangeAuthorized: false,
     };
@@ -209,6 +270,11 @@ export function buildDay1ProspectiveScorecard(rows: readonly ProspectiveMatchedP
     scorerVersion: DAY1_PROSPECTIVE_SCORER_VERSION,
     cohortStartEt: DAY1_PROSPECTIVE_COHORT_START_ET,
     positiveDeltaShareDenominator: DAY1_ZERO_DELTA_RULE,
+    opportunityClusterRule: DAY1_OPPORTUNITY_CLUSTER_RULE,
+    evidenceFloor: DAY1_EVIDENCE_FLOOR,
+    portfolioRule: DAY1_PORTFOLIO_RULE,
+    portfolioWeightingRule: null,
+    portfolioClaimAuthorized: false,
     scores,
     censoredRows: invalidRows + [...groups.values()].reduce((sum, group) => sum + group.censoredRows, 0),
     exactDuplicatesIgnored: scores.reduce((sum, score) => sum + score.exactDuplicatesIgnored, 0),

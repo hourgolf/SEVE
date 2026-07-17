@@ -59,6 +59,8 @@ for (const trade of audit.audit?.trades ?? []) {
     configurationEpochId: `sha256:${"e".repeat(64)}`,
     sourceVersion: "historical-candidate-integration-fixture-v1",
     sourceBarAtMs: trade.sourceBarAtMs,
+    // Historical audits do not retain the original candidate decision clock.
+    // openedAtMs is deliberately a proxy for fixture integrity testing only.
     decisionObservedAtMs: trade.openedAtMs,
     underlying: trade.underlying,
     side: sideMarker === "C" ? "call" : "put",
@@ -101,6 +103,8 @@ console.log(JSON.stringify({
     invalidRows: parsed.invalidRows,
   },
   selectedWindow: {
+    historicalClockBasis: "openedAtMs_proxy_not_original_decision_timestamp",
+    historicalClockProofScope: "parser_adapter_and_content_integrity_only",
     sourcePositionId: selected.positionId,
     sourceChannel: selected.channel,
     occSymbol: selected.occSymbol,

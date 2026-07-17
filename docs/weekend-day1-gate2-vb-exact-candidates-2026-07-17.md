@@ -71,6 +71,12 @@ decompressed its saved provider-derived CBBO rows, passed all 555,969 rows throu
 Databento object parser, selected an exact OCC/window that met every boundary rule, and invoked the same
 candidate/object/manifest/SQL/manager adapter. It imported no Supabase or R2 client and wrote nothing.
 
+The historical audit does not retain the original candidate decision timestamp. This fixture therefore
+uses the position `openedAtMs` as an explicit historical clock proxy. It proves checksum/parser, adapter,
+boundary-validation, canonical-content, SQL-payload, and manager-scorecard integrity; it does **not** prove
+recovery of the original decision timestamp or make `openedAtMs` equivalent to that timestamp. The dry-run
+receipt labels both the proxy basis and this limited proof scope.
+
 | Fact | Real-object result |
 |---|---|
 | Frozen input object | `2026-07-15-cffdfe787793a084.json.gz` |

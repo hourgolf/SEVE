@@ -1,13 +1,13 @@
 # Weekend Day 1 — Gate 5 preregistration draft
 
-Status: **not sealed; prospective cohort cannot start until operator review and blockers are cleared**.
+Status: **operator-ratified local release candidate; not yet sealed in this commit**.
 
 Prospective start, if authorized: Monday, `2026-07-20` ET. Paper only. No automatic promotion authority.
 Existing Phase 1K-C and Phase 1K-E contracts remain unchanged.
 
 ## New prospective scorer contract
 
-`weekend-day1-prospective-scorer-v1` applies only to sessions on or after `2026-07-20` ET. Every result key
+`weekend-day1-prospective-scorer-v2` applies only to sessions on or after `2026-07-20` ET. Every result key
 contains the control and challenger channel slug/version, manager version, and configuration epoch. Rows
 with different identity tuples produce separate scores and can never be pooled. Pre-cohort rows are rejected,
 so the new scorer cannot reinterpret Phase 1K-C/1K-E evidence.
@@ -33,13 +33,22 @@ provenance ID, both P&Ls, and eligibility.
 - Distinct sibling comparison IDs at one source clock remain distinct completed groups, while
   `independentOpportunities` counts that session/clock once. `independentSessions` counts the ET session
   once per policy comparison.
+- Every score emits an `opportunityClusters` metric keyed by ET session plus completed source clock. The
+  invariant requires cluster comparison-group counts to sum exactly to `completedGroups`; this makes
+  correlated sibling observations visible without pretending they are independent opportunities.
+- The first-review evidence floor is met only when the same policy test has at least 10
+  `independentOpportunities` across at least five `independentSessions`. `completedGroups` never substitutes
+  for either requirement. Meeting the floor authorizes review only, never promotion or a policy change.
+- Scores remain separate policy comparisons. `portfolioWeightingRule=null` and
+  `portfolioClaimAuthorized=false`; sibling P&L must not be aggregated into a portfolio claim unless a
+  separate prospective weighting rule is preregistered first.
 - Invalid calendar dates, malformed identities, non-finite outcomes, and explicitly ineligible rows are
   censored. Valid pre-cohort dates are rejected rather than silently pooled into the new cohort.
 
 The focused self-test covers the zero-delta denominator, channel/manager/configuration separation, exact
-duplicates, conflicting duplicates, repeated ingestion, siblings on the same clock, invalid calendar and
-format dates, complete/censored group counts, independent session/opportunity counts, and the pre-cohort
-guard: 25/25 pass.
+duplicates, conflicting duplicates, repeated ingestion, opportunity clusters and their invariant, siblings
+on the same clock, invalid calendar and format dates, complete/censored group counts, the two-part evidence
+floor, prohibition on unweighted portfolio claims, and the pre-cohort guard.
 
 ## Proposed immutable content
 
@@ -58,27 +67,19 @@ The final receipt must include only canonical decision content:
 The canonical hash must exclude generated timestamps, local paths, usernames, environment values, query
 timing, and other machine-dependent metadata. Those belong in an envelope outside the sealed content.
 
-## Blocking items
+## Remaining release boundary
 
-1. The Gate 4 roster is not operator-ratified.
-2. The corrected Gate 4 values, debit admission guard, collision/concurrency, market-input, open-limit,
-   whole-lot, and EOD stamps are proposed but not implemented or ratified.
-3. `orb-ustop-ctl` currently relies on an unstamped 50% default; the proposal replaces it with explicit
-   -30%, but no configuration change is authorized.
-4. The proposed cross-family SPY order `PB > Grind > MOMO > ORB` requires operator ratification.
-5. Gate 2 receipt migration is review-only and unapplied; Supabase advisors and insert/RLS verification have
-   not run.
-6. Gate 1 is memory-bounded but not durable. The operator must choose 24/120 with a 600-second maximum
-   retained exposure, the recommended 12/60 with 540 seconds, or require durable staging/recovery.
-7. The new scorer resolves version identity, duplicate behavior, opportunity counts, and zero deltas
-   prospectively, but its exact test roster, evidence floors, and final configuration identities cannot be
-   frozen before Gate 4 ratification.
+Gate 1, the six-root roster, exact two-lot/debit limits, -30% catastrophe stop, 15:25 ET behavior,
+concurrency/collision guards, scorer floor, and local durable lifecycle are ratified. Gate 2 schema remains
+design-approved but unapplied before T+1. The only remaining local prerequisite is full verification followed
+by rendering and hashing the immutable receipt from the final code/configuration identities. Application,
+migration, merge, push, and deployment remain separate operator-review boundaries.
 
 ## Seal procedure after authorization
 
-Render the canonical JSON, validate every root against the live SELECT-only inventory, validate paper mode
-and flat books, compute SHA-256, and commit the receipt before applying configuration. Then apply only the
-operator-ratified diff, re-read the fleet, and require the applied identities to match the seal exactly.
-Any mismatch invalidates the prospective start; it is not patched intraday.
+Render the canonical JSON, validate every root against the live SELECT-only inventory, validate paper mode,
+compute SHA-256, and commit the receipt before applying configuration. A later separately authorized release
+must re-read the fleet and require the applied identities to match the seal exactly. Any mismatch invalidates
+the prospective start; it is not patched intraday.
 
-No Day 1 receipt was rendered or sealed in this correction pass.
+The receipt is rendered only in the subsequent isolated seal commit after verification succeeds.

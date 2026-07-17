@@ -5,13 +5,13 @@ Status: dependency map only. No migration, configuration, seal, merge, push, or 
 | Item | Required before Monday capture | Safely deferrable to T+1 | Research-only | Requires migration | Requires Railway deployment | Requires operator configuration ratification |
 |---|---:|---:|---:|---:|---:|---:|
 | Future candidate provenance stamps in `signals.rationale` | yes | no | no | no | **yes** | no |
-| Gate 1 held-capture deadlines and proposed 12/60 batching | yes, if held capture is enabled Monday | no | no | no | **yes** | **yes; source and production remain 24/120** |
-| Root roster, quantities, premium/debit bounds, stops, EOD, collision caps | yes for proposed root execution | no | no | no | only if runtime fields change | **yes** |
-| Day 1 canonical receipt | yes before any configuration application | no | governance | no | no | **yes, then separate seal approval** |
+| Gate 1 held-capture deadlines and ratified 12/60 batching | yes, if held capture is enabled Monday | no | no | no | **yes** | ratified; production untouched |
+| Root roster, quantities, premium/debit bounds, stops, EOD, collision caps | yes for proposed root execution | no | no | no | **yes** | ratified; application still stopped |
+| Day 1 canonical receipt | yes before any configuration application | no | governance | no | no | seal prepared only after final verification |
 | Gate 2 candidate/exact-path receipt tables | no | **yes** | research evidence | **yes** | no | no |
 | Databento exact-path download, parser, canonical object, manifest, scorecard | no | **yes** | **yes** | no for local zero-write work | no | no |
 | R2 exact-path publisher and Supabase compact receipt insert | no | **yes** | research evidence | **yes, first** | publisher deploy later | separate publication approval |
-| Prospective duplicate-safe scorer | no | **yes** | **yes** | no | no | evidence-floor ratification only |
+| Prospective opportunity-clustered scorer | no | **yes** | **yes** | no | no | 10 clocks / five sessions ratified |
 
 ## Direct answer on the Gate 2 dependency
 
