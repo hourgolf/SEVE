@@ -53,7 +53,7 @@ manifests, and the absence of provider, broker, position, or order imports in th
 
 ## Draft storage contract
 
-Migration `20260717052246_phase_1k_g_held_contract_capture_receipts.sql` was applied to the SEVE Supabase
+Migration `20260717061821_phase_1k_g_held_contract_capture_receipts.sql` was applied to the SEVE Supabase
 project after the flatness gate. It creates two append-only private tables:
 
 1. `held_contract_capture_receipts` — one compact receipt per immutable R2 segment, including checksums,

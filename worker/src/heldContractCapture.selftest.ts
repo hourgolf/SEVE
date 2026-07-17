@@ -165,7 +165,7 @@ const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8
 check("held capture is default off", /heldContractCaptureEnabled:\s*flag\("HELD_CONTRACT_CAPTURE_ENABLED", false\)/.test(configSource), true);
 const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
 check("default worker loads held R2 runtime dynamically", /await import\("\.\/heldContractCapture\.js"\)/.test(indexSource), true);
-const migration = readFileSync(new URL("../../supabase/migrations/20260717052246_phase_1k_g_held_contract_capture_receipts.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../../supabase/migrations/20260717061821_phase_1k_g_held_contract_capture_receipts.sql", import.meta.url), "utf8");
 check("capture receipt table is RLS protected", /alter table public\.held_contract_capture_receipts enable row level security/i.test(migration), true);
 check("anonymous capture access is revoked", /revoke all on public\.held_contract_capture_receipts from public, anon, authenticated, service_role/i.test(migration), true);
 check("capture receipts are append-only for the worker", /grant select, insert on public\.held_contract_capture_receipts to service_role/i.test(migration), true);
