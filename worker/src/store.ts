@@ -116,6 +116,7 @@ export interface FundState {
 export interface AccountRow {
   id: string;
   name: string;
+  mode: string;
   cred_ref: string | null;
   is_armed: boolean;
   is_halted: boolean;
@@ -160,7 +161,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
   // phantom-reconcile-closed. accountsFresh=false → reloadConfig keeps the prior table.
   const { data: acctRows, error: acctErr } = await sb
     .from("accounts")
-    .select("id,name,cred_ref,is_armed,is_halted,master_daily_stop_usd");
+    .select("id,name,mode,cred_ref,is_armed,is_halted,master_daily_stop_usd");
   const acctMissingTable = !!acctErr && (acctErr.code === "42P01" || /does not exist|could not find the table|schema cache/i.test(acctErr.message ?? ""));
   if (acctErr) warn(`store: accounts read failed — ${acctErr.message}${acctMissingTable ? "; single-account fallback" : "; STALE (transient) — caller keeps prior routing"}`);
 
@@ -213,6 +214,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
   const accounts: AccountRow[] = ((acctRows ?? []) as any[]).map((a) => ({
     id: String(a.id),
     name: String(a.name ?? a.id),
+    mode: String(a.mode ?? ""),
     cred_ref: a.cred_ref ?? null,
     is_armed: !!a.is_armed,
     is_halted: !!a.is_halted,

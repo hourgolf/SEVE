@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { ShadowDecision } from "./decide.js";
-import type { ChannelConfig, PositionRow } from "./store.js";
+import type { AccountRow, ChannelConfig, PositionRow } from "./store.js";
+import { WORKER_VERSION } from "./version.js";
 import { sweepExitAllowed } from "./exitGuard.js";
 import {
   applyDay1ReleaseAdmission,
@@ -10,10 +11,13 @@ import {
   buildDay1AdmissionState,
   DAY1_DARK_CHANNELS,
   DAY1_RELEASE_CONFIGURATION_SHA256,
+  DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
-  day1ActiveSettingsReceipt,
   day1Lifecycle,
   day1ReleaseEodDue,
+  finalizeDay1ReleaseAdmissions,
+  prepareDay1ReleaseAdmission,
+  validateDay1ReleaseStartup,
 } from "./day1ReleasePolicy.js";
 
 let checks = 0;
@@ -100,6 +104,57 @@ check("same-clock SPY priority is PB then Grind then MOMO then ORB", collision.m
 ]);
 check("suppressed collision records its winner", collision[0].detail?.day1CollisionWinner, "pb-ride");
 
+const FIRST_TEAM = "cd817549-e025-4d38-805e-d32e607052f7";
+const MORGUE = "995aa327-b0da-4050-bede-97ab462b06cd";
+const boundChannel = (slug: string): ChannelConfig => {
+  const binding = DAY1_ROOT_BINDINGS.find((row) => row.slug === slug)!;
+  const root = DAY1_ROOTS.find((row) => row.slug === slug)!;
+  return { ...channel(slug, root.underlying), id: binding.strategistId, account_id: binding.accountId };
+};
+const globallyArbitrate = (slugs: string[], state = emptyState()) => {
+  const sourceBarAtMs = Date.parse("2026-07-20T14:00:00Z");
+  const prepared = slugs.flatMap((slug) => {
+    const ch = boundChannel(slug);
+    const accountId = ch.account_id!;
+    const [candidate] = prepareDay1ReleaseAdmission({
+      channels: [ch], decisions: [decision(slug, 1)], state, accountId, sourceBarAtMs,
+      observedAtMs: sourceBarAtMs + 1_000, currentEtMinute: 600, sessionCloseEtMinute: 960,
+      sessionLedgerReady: true,
+    });
+    return [{ accountId, sourceBarAtMs, decision: candidate }];
+  });
+  return finalizeDay1ReleaseAdmissions({ prepared, state });
+};
+const winnerOf = (slugs: string[]): string | null => globallyArbitrate(slugs)
+  .find((row) => row.decision.action === "enter" && !row.decision.blocked)?.decision.slug ?? null;
+check("cross-account PB FIRST beats Grind MORGUE", winnerOf(["grind-v3", "pb-ride"]), "pb-ride");
+check("cross-account Grind MORGUE beats MOMO FIRST when PB is absent", winnerOf(["momo-shape", "grind-v3"]), "grind-v3");
+check("MOMO FIRST survives when it is the only SPY candidate", winnerOf(["momo-shape"]), "momo-shape");
+check("MOMO FIRST beats ORB MORGUE when Grind is absent", winnerOf(["orb-ustop-ctl", "momo-shape"]), "momo-shape");
+const crossAccountSuppressed = globallyArbitrate(["grind-v3", "pb-ride"])[0].decision;
+const suppressedProvenance = crossAccountSuppressed.detail?.day1Candidate as Record<string, unknown>;
+check("cross-account suppression retains complete candidate and collision provenance", [
+  crossAccountSuppressed.blocked,
+  suppressedProvenance.releaseId,
+  suppressedProvenance.configurationSha256,
+  suppressedProvenance.accountId,
+  suppressedProvenance.strategistId,
+  suppressedProvenance.sourceBarAt,
+  suppressedProvenance.observedAt,
+  suppressedProvenance.occSymbol,
+  suppressedProvenance.executableAsk,
+  crossAccountSuppressed.detail?.day1CollisionWinner,
+  crossAccountSuppressed.detail?.day1CollisionScope,
+], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-20-rc2", DAY1_RELEASE_CONFIGURATION_SHA256,
+  MORGUE, DAY1_ROOT_BINDINGS.find((row) => row.slug === "grind-v3")!.strategistId,
+  "2026-07-20T14:00:00.000Z", "2026-07-20T14:00:01.000Z", "SPY260720C00600000", 1,
+  "pb-ride", "global-cross-account-exact-source-clock"]);
+const crossUnderlying = globallyArbitrate(["orb-qqq-trail", "breakout-alt-v3-iwm"]);
+check("QQQ and IWM arbitrate independently when global capacity remains", crossUnderlying.map((row) => row.decision.blocked), [null, null]);
+const fullCrossState = emptyState(); fullCrossState.openTotal = 4;
+check("QQQ and IWM still obey the desk-wide global limit", globallyArbitrate(["orb-qqq-trail", "breakout-alt-v3-iwm"], fullCrossState)
+  .map((row) => row.decision.blocked), ["day1_global_concurrency", "day1_global_concurrency"]);
+
 const familyOpen = emptyState(); familyOpen.openFamilies.add("SPY-PB");
 check("one open position per family", apply([decision("pb-ride", 1)], familyOpen)[0].blocked, "day1_family_open");
 const priorEntry = emptyState(); priorEntry.enteredFamilies.add("SPY-PB");
@@ -129,16 +184,103 @@ check("restart state reconstructs open and prior-session family guards", [
   restored.openByUnderlying.get("SPY"), restored.openTotal,
 ], [true, true, 1, 1]);
 
-const startup = day1ActiveSettingsReceipt(applyDay1ReleaseFleetOverlay(channels));
-check("startup receipt pins paper posture and all six strategist identities", [
-  startup.configurationSha256, startup.mode, (startup.roots as unknown[]).length,
-  startup.liveMoneyAuthorized,
-], [DAY1_RELEASE_CONFIGURATION_SHA256, "paper-only", 6, false]);
+const rc1Receipt = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-preregistration-receipt-2026-07-17.json", import.meta.url), "utf8")) as {
+  content: { roots: { slug: string; policyIdentity: { policyJson: { alpha: { spec: unknown } } } }[] };
+};
+const specBySlug = new Map(rc1Receipt.content.roots.map((root) => [root.slug, root.policyIdentity.policyJson.alpha.spec]));
+const fullFleet = applyDay1ReleaseFleetOverlay([
+  ...DAY1_ROOT_BINDINGS.map((binding) => ({
+    ...boundChannel(binding.slug),
+    spec_json: specBySlug.get(binding.slug) ?? null,
+  })),
+  ...DAY1_DARK_CHANNELS.map((slug, index) => ({ ...channel(slug), id: `dark-${index}` })),
+]);
+const startupAccounts: AccountRow[] = [
+  { id: FIRST_TEAM, name: "FIRST-TEAM", mode: "paper", cred_ref: null, is_armed: true, is_halted: false, master_daily_stop_usd: 0 },
+  { id: MORGUE, name: "MORGUE", mode: "paper", cred_ref: "MORGUE", is_armed: true, is_halted: false, master_daily_stop_usd: 0 },
+];
+const validPosture = {
+  alpacaPaperHost: "https://paper-api.alpaca.markets",
+  stockFeed: "sip", optionFeed: "opra", dryRun: true, liveTrading: false,
+  heldCaptureEnabled: true, heldCaptureFlushMs: 30_000,
+  heldCaptureTargetSamples: 12, heldCaptureMaxAgeMs: 60_000,
+  heldCaptureIngressMaxSamples: 10_000, heldCaptureIngressMaxBytes: 8_388_608,
+  heldCaptureStateMaxSamples: 10_000, heldCaptureStateMaxBytes: 8_388_608,
+  heldCaptureRetryMaxAttempts: 5, heldCaptureRetryBaseDelayMs: 30_000,
+  heldCaptureRetryMaxDelayMs: 300_000, heldCaptureAdapterDeadlineMs: 5_000,
+  heldCaptureNormalFlushDeadlineMs: 15_000, heldCaptureShutdownDeadlineMs: 30_000,
+  managerShadowEnabled: true,
+  managerShadowQuoteMaxAgeMs: 15_000,
+};
+const startupInput = () => ({
+  channels: fullFleet, accounts: startupAccounts, fundMode: "paper", workerVersion: WORKER_VERSION,
+  expectedConfigurationSha256: DAY1_RELEASE_CONFIGURATION_SHA256, posture: validPosture,
+});
+const validStartup = validateDay1ReleaseStartup(startupInput());
+check("RC2 startup reproduces all committed bindings", [validStartup.ok, validStartup.errors], [true, []]);
+const mutateRoot = (slug: string, change: Partial<ChannelConfig>) => fullFleet.map((row) => row.slug === slug ? { ...row, ...change } : row);
+const refuses = (label: string, input: Parameters<typeof validateDay1ReleaseStartup>[0]): void =>
+  check(label, validateDay1ReleaseStartup(input).ok, false);
+refuses("spec_json mutation refuses startup", { ...startupInput(), channels: mutateRoot("pb-ride", { spec_json: { mutated: true } }) });
+refuses("strategist ID mutation refuses startup", { ...startupInput(), channels: mutateRoot("pb-ride", { id: "11111111-1111-4111-8111-111111111111" }) });
+refuses("account route mutation refuses startup", { ...startupInput(), channels: mutateRoot("grind-v3", { account_id: FIRST_TEAM }) });
+refuses("DTE mutation refuses startup", { ...startupInput(), channels: mutateRoot("pb-ride", { entry_dte: 0 }) });
+refuses("strike mutation refuses startup", { ...startupInput(), channels: mutateRoot("pb-ride", { strike_offset: -1 }) });
+refuses("channel-manager mutation refuses startup", { ...startupInput(), channels: mutateRoot("pb-ride", { premium_stop_pct: 31 }) });
+refuses("worker version mutation refuses startup", { ...startupInput(), workerVersion: "stream-mutated" });
+refuses("configuration hash mutation refuses startup", { ...startupInput(), expectedConfigurationSha256: "0".repeat(64) });
+refuses("missing fleet slug refuses startup", { ...startupInput(), channels: fullFleet.slice(1) });
+refuses("duplicate fleet slug refuses startup", { ...startupInput(), channels: [...fullFleet, fullFleet[0]] });
+refuses("unexpected fleet slug refuses startup", { ...startupInput(), channels: [...fullFleet.slice(1), channel("unexpected")] });
+refuses("non-paper fund refuses startup", { ...startupInput(), fundMode: "live" });
+refuses("non-paper root account refuses startup", { ...startupInput(), accounts: startupAccounts.map((row) => row.id === FIRST_TEAM ? { ...row, mode: "live" } : row) });
+refuses("live Alpaca origin refuses startup", { ...startupInput(), posture: { ...validPosture, alpacaPaperHost: "https://api.alpaca.markets" } });
+refuses("credential-bearing Alpaca URL refuses startup", { ...startupInput(), posture: { ...validPosture, alpacaPaperHost: "https://user:secret@paper-api.alpaca.markets" } });
+refuses("IEX feed refuses startup", { ...startupInput(), posture: { ...validPosture, stockFeed: "iex" } });
+refuses("indicative option feed refuses startup", { ...startupInput(), posture: { ...validPosture, optionFeed: "indicative" } });
+for (const [field, value] of [
+  ["heldCaptureFlushMs", 30_001],
+  ["heldCaptureTargetSamples", 13], ["heldCaptureMaxAgeMs", 60_001],
+  ["heldCaptureIngressMaxSamples", 10_001], ["heldCaptureIngressMaxBytes", 8_388_609],
+  ["heldCaptureStateMaxSamples", 10_001], ["heldCaptureStateMaxBytes", 8_388_609],
+  ["heldCaptureRetryMaxAttempts", 6], ["heldCaptureRetryBaseDelayMs", 30_001],
+  ["heldCaptureRetryMaxDelayMs", 300_001],
+  ["heldCaptureAdapterDeadlineMs", 5_001], ["heldCaptureNormalFlushDeadlineMs", 15_001],
+  ["heldCaptureShutdownDeadlineMs", 30_001],
+] as const) refuses(`wrong capture ${field} refuses startup`, {
+  ...startupInput(), posture: { ...validPosture, [field]: value },
+});
+refuses("wrong manager shadow quote age refuses startup", { ...startupInput(), posture: { ...validPosture, managerShadowQuoteMaxAgeMs: 15_001 } });
+const startupReceipt = validStartup.activeSettingsReceipt!;
+check("active-settings receipt includes actual fleet, lifecycle, route, feed and evidence posture", [
+  startupReceipt.workerVersion, startupReceipt.releaseId, startupReceipt.releaseConfigurationSha256,
+  startupReceipt.fleetCount, startupReceipt.rootCount, startupReceipt.darkChannelCount,
+  startupReceipt.alpacaPaperOrigin, startupReceipt.stockFeed, startupReceipt.optionFeed,
+  (startupReceipt.roots as unknown[]).length,
+  (startupReceipt.heldCapture as Record<string, unknown>).targetSamples,
+  (startupReceipt.managerShadow as Record<string, unknown>).quoteMaxAgeMs,
+], [WORKER_VERSION, "weekend-day1-2026-07-20-rc2", DAY1_RELEASE_CONFIGURATION_SHA256,
+  68, 6, 62, "https://paper-api.alpaca.markets", "sip", "opra", 6, 12, 15_000]);
+check("active-settings receipt never contains credential fields or secrets", /alpacaKey|alpacaSecret|serviceRole|credential|secret/i.test(JSON.stringify(startupReceipt)), false);
+const executorStartup = validateDay1ReleaseStartup({
+  ...startupInput(), posture: { ...validPosture, dryRun: false, liveTrading: true },
+});
+check("paper executor posture validates and remains explicitly non-live-money", [
+  executorStartup.ok,
+  executorStartup.activeSettingsReceipt?.dryRun,
+  executorStartup.activeSettingsReceipt?.liveTrading,
+  executorStartup.activeSettingsReceipt?.liveMoneyAuthorized,
+], [true, false, true, false]);
 
 const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
 const executeSource = readFileSync(new URL("./execute.ts", import.meta.url), "utf8");
 const storeSource = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
-check("runtime applies release admission before final decision evidence", /applyDay1ReleaseAdmission\([\s\S]*?captureDecisionObservation\(/.test(indexSource), true);
+check("runtime release path stages every account batch and continues before any executor", /releaseBatches\.push\(executionBatch\);\s*continue;/.test(indexSource), true);
+check("runtime globally finalizes all prepared rows before the first release executor call", [
+  indexSource.indexOf("const finalized = finalizeDay1ReleaseAdmissions"),
+  indexSource.indexOf("for (const batch of releaseBatches) await executeDecisionBatch"),
+].every((value) => value >= 0) && indexSource.indexOf("const finalized = finalizeDay1ReleaseAdmissions")
+  < indexSource.indexOf("for (const batch of releaseBatches) await executeDecisionBatch"), true);
 check("blocked Day 1 adds cannot reach the add executor", /d\.action === "add" && row && !d\.blocked && barFresh/.test(indexSource), true);
 check("Day 1 EOD is a mandatory wall-clock root flatten", [
   indexSource.includes("day1ReleaseEodDue(ch.slug, nowMin, rthClose)"),

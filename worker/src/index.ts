@@ -21,6 +21,11 @@ import { BarStore, ChainStore } from "./state.js";
 import { StockBarStream } from "./stream.js";
 import type { IntraminuteCaptureRuntime } from "./intraminuteCapture.js";
 import type { HeldContractCaptureRuntime } from "./heldContractCapture.js";
+import {
+  HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+  HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
+  HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
+} from "./researchAdapterDeadline.js";
 import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type ShadowDecision } from "./decide.js";
 import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
@@ -42,18 +47,20 @@ import type { FamilyAdmissionInput } from "./familyAdmissionModel.js";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
 import {
-  applyDay1ReleaseAdmission,
   applyDay1ReleaseFleetOverlay,
   buildDay1AdmissionState,
   DAY1_RELEASE_CONFIGURATION_SHA256,
   DAY1_RELEASE_ID,
   DAY1_ROOTS,
-  day1ActiveSettingsReceipt,
+  finalizeDay1ReleaseAdmissions,
+  prepareDay1ReleaseAdmission,
+  validateDay1ReleaseStartup,
   day1Root,
   day1ReleaseEodDue,
 } from "./day1ReleasePolicy.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
+let day1StartupReceipt: Record<string, unknown> | null = null;
 
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
@@ -206,6 +213,108 @@ function groupByAccount(channels: store.ChannelConfig[], accounts: store.Account
 /** The account id a position row belongs to (via its channel) — for per-account row scoping. */
 const rowAccountId = rowAccountIdOf;
 
+interface DecisionExecutionBatch {
+  group: AccountGroup;
+  symbol: string;
+  channels: store.ChannelConfig[];
+  decisions: ShadowDecision[];
+  lastSession: Bar;
+  chain: ChainStore;
+  todayET: string;
+  barMin: number;
+  canManage: boolean;
+  canEnter: boolean;
+  allOrders: alpaca.AlpacaOrder[];
+  ordersFresh: boolean;
+  openRows: Map<string, store.PositionRow>;
+  alpacaByOcc: Map<string, alpaca.AlpacaPosition>;
+  remainingByOcc: Map<string, number>;
+  openRowQty: Map<string, number>;
+  sourceBarAtMs: number;
+  observedAtMs: number;
+}
+
+/** Phase D only. RC2 never invokes this until every account batch has been
+ * prepared and the global release arbiter has returned final decisions. */
+async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Map<string, number>): Promise<void> {
+  const { group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
+    lastSession, chain, todayET, barMin, canManage, canEnter, allOrders, ordersFresh,
+    openRows, alpacaByOcc, remainingByOcc, openRowQty } = batch;
+  if (!canManage) return;
+  const barFresh = Date.now() - lastSession.ts < 180_000;
+  if (!barFresh) info(`live pass[${g.account.name}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
+  const exec: ExecCtx = { api: g.api!, accountId: g.account.id, paperMode: cfg.fund?.mode?.toLowerCase() === "paper", decisionAtMs: lastSession.ts, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+  const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
+  for (const d of symDecisions) {
+    const ch = bySlug.get(d.slug);
+    if (!ch || !ownedBy(ch)) continue;
+    if (barFresh) {
+      if (d.action === "exit" && d.reason === "event_flatten")
+        alertOnce(todayET, "event", "standdown", "⚑ event stand-down", `${d.slug} flattening ${d.occ ?? ""} — entries blocked through the window`);
+      if (canEnter) {
+        if (d.action === "enter" && d.blocked === "daily_stop")
+          alertOnce(todayET, "latch", d.slug, `⛔ ${d.slug} daily stop latched`, `realized ≤ −$${Math.round(ch.daily_stop_usd)} — its entries are done for the day`);
+        if (d.action === "enter" && d.blocked === "daily_target")
+          alertOnce(todayET, "latch", d.slug, `✅ ${d.slug} banked its day`, `realized ≥ +$${Math.round(ch.daily_target_usd)} — win-and-done, no more entries today`);
+        if (d.action === "enter" && d.blocked === "insufficient_capital")
+          alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
+      }
+    }
+    const row = openRows.get(ch.id);
+    let evidenceBlocked = d.blocked ?? null;
+    if (!evidenceBlocked && (d.action === "enter" || d.action === "add" || d.action === "exit") && !barFresh)
+      evidenceBlocked = "stale_decision_bar";
+    else if (!evidenceBlocked && !ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit")
+      evidenceBlocked = "orders_snapshot_unavailable";
+    else if (!evidenceBlocked && (d.action === "enter" || d.action === "add") && !canEnter)
+      evidenceBlocked = "account_manage_only";
+    else if (!evidenceBlocked && (d.action === "exit" || d.action === "add" || d.action === "reconcile") && !row)
+      evidenceBlocked = "position_row_missing";
+    captureDecisionObservation({
+      channel: ch,
+      decision: evidenceBlocked === (d.blocked ?? null) ? d : { ...d, blocked: evidenceBlocked },
+      accountId: g.account.id,
+      decisionAtMs: lastSession.ts,
+      observedAtMs: Date.now(),
+      chainAgeMs: chain.ageMs,
+    });
+    if (!ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit") {
+      info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
+      continue;
+    }
+    try {
+      if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
+      else if (d.action === "exit" && row && !d.blocked && barFresh) {
+        if (!exitGuard.claim(row.id)) {
+          info(`live pass[${g.account.name}/${sym}]: ${d.slug} exit skipped — an exit for this row is already in flight (sweep)`);
+        } else {
+          try { await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }, exitQualityPolicyFor(ch)); }
+          finally { exitGuard.release(row.id); }
+        }
+      }
+      else if ((d.action === "add" || d.action === "enter") && !canEnter) {
+        if (barFresh) info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
+      }
+      else if (d.action === "add" && row && !d.blocked && barFresh) await executeAdd(d, ch, row, exec);
+      else if (d.action === "enter" && barFresh) {
+        await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+        if (d.occ && !d.blocked) {
+          const k = `${ch.underlying.toUpperCase()}:${d.occ.slice(-9, -8) === "C" ? "call" : "put"}`;
+          deskStack.set(k, (deskStack.get(k) ?? 0) + 1);
+        }
+      }
+      else if (d.action === "hold" && row) {
+        const alp = alpacaByOcc.get(row.occ_symbol);
+        if (alp) {
+          noteRowHeld(row.id);
+          const unreal = Math.round((alp.current_price - row.avg_entry_price) * row.qty * 10000) / 100;
+          await store.markPositionRow(row.id, alp.current_price, unreal);
+        }
+      }
+    } catch (e) { warn(`execute ${d.slug} failed — ${(e as Error).message}`); }
+  }
+}
+
 // Retry a transient async op with exponential backoff. Used for boot-time REST
 // calls so a flaky Alpaca/network moment doesn't crash-loop the container.
 async function retry<T>(label: string, fn: () => Promise<T>, attempts = 5, baseMs = 2000): Promise<T> {
@@ -240,6 +349,40 @@ async function reloadConfig(): Promise<void> {
     const accounts = !c.accountsFresh && cfg.accounts.length ? cfg.accounts : c.accounts;
     if (accounts !== c.accounts) warn("config: accounts read stale — keeping the prior routing table");
     const channels = config.day1ReleaseEnabled ? applyDay1ReleaseFleetOverlay(c.channels) : c.channels;
+    if (config.day1ReleaseEnabled) {
+      const validation = validateDay1ReleaseStartup({
+        channels,
+        accounts,
+        fundMode: c.fund.mode,
+        workerVersion: WORKER_VERSION,
+        expectedConfigurationSha256: config.day1ReleaseExpectedSha256,
+        posture: {
+          alpacaPaperHost: config.alpacaPaperHost,
+          stockFeed: config.stockFeed,
+          optionFeed: config.optFeed,
+          dryRun: config.dryRun,
+          liveTrading: config.liveTrading,
+          heldCaptureEnabled: config.heldContractCaptureEnabled,
+          heldCaptureFlushMs: config.heldContractCaptureFlushMs,
+          heldCaptureTargetSamples: config.heldContractCaptureBatchTargetSamples,
+          heldCaptureMaxAgeMs: config.heldContractCaptureBatchMaxAgeMs,
+          heldCaptureIngressMaxSamples: config.heldContractCaptureMaxSamples,
+          heldCaptureIngressMaxBytes: config.heldContractCaptureMaxBytes,
+          heldCaptureStateMaxSamples: config.heldContractCaptureStateMaxSamples,
+          heldCaptureStateMaxBytes: config.heldContractCaptureStateMaxBytes,
+          heldCaptureRetryMaxAttempts: config.heldContractCaptureRetryMaxAttempts,
+          heldCaptureRetryBaseDelayMs: config.heldContractCaptureRetryBaseDelayMs,
+          heldCaptureRetryMaxDelayMs: config.heldContractCaptureRetryMaxDelayMs,
+          heldCaptureAdapterDeadlineMs: HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+          heldCaptureNormalFlushDeadlineMs: HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
+          heldCaptureShutdownDeadlineMs: HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
+          managerShadowEnabled: config.managerShadowBookEnabled,
+          managerShadowQuoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs,
+        },
+      });
+      if (!validation.ok) throw new Error(`Day 1 RC2 startup validation failed: ${validation.errors.join(";")}`);
+      day1StartupReceipt = validation.activeSettingsReceipt;
+    }
     cfg = { fund: c.fund, channels, accounts };
   }
   else warn("config: reload returned no fund_state — keeping previous");
@@ -368,6 +511,7 @@ async function cycle(trigger: string): Promise<void> {
 
     const decisions: ShadowDecision[] = [];
     const familyAdmissionInputs: FamilyAdmissionInput[] = [];
+    const releaseBatches: DecisionExecutionBatch[] = [];
     let totEquity = 0, totCash = 0, totUnreal = 0, snappedAny = false;
     // Per-account orphan-sweep inputs, captured on each bucket's PRE-cycle snapshot and swept
     // AFTER the decision pass (so same-cycle entries/exits don't false-positive).
@@ -450,7 +594,7 @@ async function cycle(trigger: string): Promise<void> {
         }
         const familyObservedAtMs = Date.now();
         const symDecisions = config.day1ReleaseEnabled && releaseState
-          ? applyDay1ReleaseAdmission({
+          ? prepareDay1ReleaseAdmission({
               channels: symChannels,
               decisions: evaluatedDecisions,
               state: releaseState,
@@ -462,6 +606,16 @@ async function cycle(trigger: string): Promise<void> {
               sessionLedgerReady: sessionPositions != null,
             })
           : evaluatedDecisions;
+        const executionBatch: DecisionExecutionBatch = {
+          group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
+          lastSession, chain, todayET, barMin, canManage, canEnter, allOrders, ordersFresh,
+          openRows, alpacaByOcc, remainingByOcc, openRowQty,
+          sourceBarAtMs: lastSession.ts, observedAtMs: familyObservedAtMs,
+        };
+        if (config.day1ReleaseEnabled) {
+          releaseBatches.push(executionBatch);
+          continue;
+        }
         decisions.push(...symDecisions);
         for (const decision of symDecisions) {
           const channel = symChannels.find((candidate) => candidate.slug === decision.slug);
@@ -579,6 +733,37 @@ async function cycle(trigger: string): Promise<void> {
         try { await store.insertEquitySnapshot(account.equity, account.cash, unreal, g.account.id); }
         catch (e) { warn(`equity snapshot[${g.account.name}] failed — ${(e as Error).message}`); }
       }
+    }
+
+    // ---- RC2 PHASES B/C/D: one global arbiter, then original-account execution ----
+    // No release entry can reach executeDecisionBatch above: release batches take
+    // the `continue` path until every account/symbol has been evaluated and stamped.
+    if (config.day1ReleaseEnabled) {
+      if (!releaseState) throw new Error("Day 1 RC2 release state unavailable before global arbitration");
+      const prepared = releaseBatches.flatMap((batch) => batch.decisions.map((decision) => ({
+        accountId: batch.group.account.id,
+        sourceBarAtMs: batch.sourceBarAtMs,
+        decision,
+      })));
+      const finalized = finalizeDay1ReleaseAdmissions({ prepared, state: releaseState });
+      let cursor = 0;
+      for (const batch of releaseBatches) {
+        batch.decisions = finalized.slice(cursor, cursor + batch.decisions.length).map((row) => row.decision);
+        cursor += batch.decisions.length;
+        decisions.push(...batch.decisions);
+        for (const decision of batch.decisions) {
+          const channel = batch.channels.find((candidate) => candidate.slug === decision.slug);
+          if (channel) familyAdmissionInputs.push({
+            channel,
+            accountId: batch.group.account.id,
+            decision,
+            sourceBarAtMs: batch.sourceBarAtMs,
+            observedAtMs: batch.observedAtMs,
+          });
+        }
+      }
+      if (cursor !== finalized.length) throw new Error("Day 1 RC2 arbitration mapping mismatch");
+      for (const batch of releaseBatches) await executeDecisionBatch(batch, deskStack);
     }
 
     // ---- SHARED diagnostics, once per symbol (account-independent) ----
@@ -998,14 +1183,24 @@ async function main(): Promise<void> {
   // container. Config self-heals via the realtime sub + 30s poll; bars self-heal
   // via the websocket stream. So we log and carry on rather than exit.
   try { await reloadConfig(); }
-  catch (e) { warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`); }
+  catch (e) {
+    if (config.day1ReleaseEnabled) {
+      error(`config: RC2 initial validation failed — ${(e as Error).message}; refusing to start`);
+      process.exit(1);
+    }
+    warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`);
+  }
   if (config.day1ReleaseEnabled && (!cfg.fund || DAY1_ROOTS.some((root) => !cfg.channels.some((channel) => channel.slug === root.slug)))) {
     error("Day 1 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
     process.exit(1);
   }
   info(`config: ${cfg.fund ? `fund cap $${cfg.fund.total_capital_usd} mode=${cfg.fund.mode} halted=${cfg.fund.is_halted}` : "fund MISSING"}, ${cfg.channels.length} channels [${cfg.channels.map((c) => `${c.slug}:${c.status}`).join(", ")}]`);
   if (config.day1ReleaseEnabled) {
-    const receipt = day1ActiveSettingsReceipt(cfg.channels);
+    const receipt = day1StartupReceipt;
+    if (!receipt) {
+      error("Day 1 RC2 active-settings receipt is unavailable after validation. Refusing to start.");
+      process.exit(1);
+    }
     info(`day1-release: ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256} roots=6 dark=62 paper-only`);
     void store.journal("EXEC", `day1-release ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`, receipt);
   } else {

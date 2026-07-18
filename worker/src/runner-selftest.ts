@@ -196,7 +196,7 @@ check("momo absent from map (no trail) = plain ride", premiumExitReason(base({ t
 // default account — an empty/stale accounts table used to route acct-2/3 channels through
 // the default keys and phantom-reconcile their real rows closed.
 const acct = (over: Partial<AccountRow> = {}): AccountRow => ({
-  id: "acct-2", name: "FIRST-TEAM", cred_ref: "2", is_armed: true, is_halted: false, master_daily_stop_usd: 0, ...over,
+  id: "acct-2", name: "FIRST-TEAM", mode: "paper", cred_ref: "2", is_armed: true, is_halted: false, master_daily_stop_usd: 0, ...over,
 });
 const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
   id: "ch1", slug: "test", name: "test", status: "armed", spec_json: null, underlying: "SPY",

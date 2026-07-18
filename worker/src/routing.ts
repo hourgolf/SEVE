@@ -17,7 +17,7 @@
 
 import type { AccountRow, ChannelConfig } from "./store.js";
 
-export const SYNTH_DEFAULT: AccountRow = { id: "__default__", name: "default", cred_ref: null, is_armed: true, is_halted: false, master_daily_stop_usd: 0 };
+export const SYNTH_DEFAULT: AccountRow = { id: "__default__", name: "default", mode: "unknown", cred_ref: null, is_armed: true, is_halted: false, master_daily_stop_usd: 0 };
 
 /** The sentinel cred_ref of a fail-closed unresolved account — can never match
  *  env creds, and acctCanManage refuses it explicitly (belt-and-suspenders). */
@@ -26,7 +26,7 @@ export const UNRESOLVED_CRED_REF = "__unresolved__";
 /** Fail-closed placeholder for an account_id that doesn't resolve: never armed,
  *  halted, and a cred_ref that can never match env creds (api resolves null). */
 export function unresolvedAccount(accountId: string): AccountRow {
-  return { id: accountId, name: `unresolved:${accountId.slice(0, 8)}`, cred_ref: UNRESOLVED_CRED_REF, is_armed: false, is_halted: true, master_daily_stop_usd: 0 };
+  return { id: accountId, name: `unresolved:${accountId.slice(0, 8)}`, mode: "unknown", cred_ref: UNRESOLVED_CRED_REF, is_armed: false, is_halted: true, master_daily_stop_usd: 0 };
 }
 
 // ---- is_armed split (audit 2026-07-11, 1b #1) --------------------------------
