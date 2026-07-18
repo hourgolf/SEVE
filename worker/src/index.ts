@@ -21,6 +21,11 @@ import { BarStore, ChainStore } from "./state.js";
 import { StockBarStream } from "./stream.js";
 import type { IntraminuteCaptureRuntime } from "./intraminuteCapture.js";
 import type { HeldContractCaptureRuntime } from "./heldContractCapture.js";
+import {
+  HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+  HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
+  HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
+} from "./researchAdapterDeadline.js";
 import { decideChannel, buildSessionBars, computeLevels, type DecisionCtx, type ShadowDecision } from "./decide.js";
 import { alertOnce, alertClear } from "./alerts.js";
 import { updateShadowManagement } from "./shadowManage.js";
@@ -41,8 +46,27 @@ import { captureFamilyAdmissionObservations } from "./familyAdmission.js";
 import type { FamilyAdmissionInput } from "./familyAdmissionModel.js";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
+import {
+  applyDay1ReleaseFleetOverlay,
+  buildDay1AdmissionState,
+  DAY1_RELEASE_CONFIGURATION_SHA256,
+  DAY1_RELEASE_ID,
+  DAY1_ROOT_BINDINGS,
+  DAY1_ROOTS,
+  finalizeDay1ReleaseAdmissions,
+  prepareDay1ReleaseAdmission,
+  validateDay1ReleaseSourceExecutorBoundary,
+  validateDay1ReleaseStartup,
+  day1Root,
+  day1ReleaseEodDue,
+  type Day1BrokerHolding,
+  type Day1PendingOrderOccupancy,
+  type Day1SnapshotFailure,
+} from "./day1ReleasePolicy.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
+let day1StartupReceipt: Record<string, unknown> | null = null;
+let day1SourceExecutorBoundaryReady = !config.day1ReleaseEnabled;
 
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
@@ -79,6 +103,9 @@ function clearSweepPriceState(rowId: string): void {
 }
 
 function exitQualityPolicyFor(ch: store.ChannelConfig): ExitQualityPolicy {
+  if (config.day1ReleaseEnabled && day1Root(ch.slug)) {
+    return { premiumStopPct: 30, specPremiumStopPct: null, underlyingStopPct: null, takeProfitPct: null };
+  }
   const premiumGate = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
   const specExit = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
   const takeProfitCandidates = [ch.take_profit_pct, specExit?.profitPct]
@@ -192,6 +219,110 @@ function groupByAccount(channels: store.ChannelConfig[], accounts: store.Account
 /** The account id a position row belongs to (via its channel) — for per-account row scoping. */
 const rowAccountId = rowAccountIdOf;
 
+interface DecisionExecutionBatch {
+  group: AccountGroup;
+  symbol: string;
+  channels: store.ChannelConfig[];
+  decisions: ShadowDecision[];
+  lastSession: Bar;
+  chain: ChainStore;
+  todayET: string;
+  barMin: number;
+  canManage: boolean;
+  canEnter: boolean;
+  allOrders: alpaca.AlpacaOrder[];
+  ordersFresh: boolean;
+  openRows: Map<string, store.PositionRow>;
+  alpacaByOcc: Map<string, alpaca.AlpacaPosition>;
+  remainingByOcc: Map<string, number>;
+  openRowQty: Map<string, number>;
+  sourceBarAtMs: number;
+  observedAtMs: number;
+  executionEligible: boolean;
+  executionIneligibleReason: string | null;
+}
+
+/** Phase D only. RC5 never invokes this until every account batch has been
+ * prepared and the global release arbiter has returned final decisions. */
+async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Map<string, number>): Promise<void> {
+  const { group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
+    lastSession, chain, todayET, barMin, canManage, canEnter, allOrders, ordersFresh,
+    openRows, alpacaByOcc, remainingByOcc, openRowQty } = batch;
+  if (!canManage) return;
+  const barFresh = Date.now() - lastSession.ts < 180_000;
+  if (!barFresh) info(`live pass[${g.account.name}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
+  const exec: ExecCtx = { api: g.api!, accountId: g.account.id, paperMode: cfg.fund?.mode?.toLowerCase() === "paper", decisionAtMs: lastSession.ts, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+  const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
+  for (const d of symDecisions) {
+    const ch = bySlug.get(d.slug);
+    if (!ch || !ownedBy(ch)) continue;
+    if (barFresh) {
+      if (d.action === "exit" && d.reason === "event_flatten")
+        alertOnce(todayET, "event", "standdown", "⚑ event stand-down", `${d.slug} flattening ${d.occ ?? ""} — entries blocked through the window`);
+      if (canEnter) {
+        if (d.action === "enter" && d.blocked === "daily_stop")
+          alertOnce(todayET, "latch", d.slug, `⛔ ${d.slug} daily stop latched`, `realized ≤ −$${Math.round(ch.daily_stop_usd)} — its entries are done for the day`);
+        if (d.action === "enter" && d.blocked === "daily_target")
+          alertOnce(todayET, "latch", d.slug, `✅ ${d.slug} banked its day`, `realized ≥ +$${Math.round(ch.daily_target_usd)} — win-and-done, no more entries today`);
+        if (d.action === "enter" && d.blocked === "insufficient_capital")
+          alertOnce(todayET, "size0", d.slug, `⚠ ${d.slug} sized to ZERO`, `RISK $${Math.round(ch.capital_pct)} can't clear 1 contract (ask too rich) — nudge the knob if the trade was wanted`);
+      }
+    }
+    const row = openRows.get(ch.id);
+    let evidenceBlocked = d.blocked ?? null;
+    if (!evidenceBlocked && (d.action === "enter" || d.action === "add" || d.action === "exit") && !barFresh)
+      evidenceBlocked = "stale_decision_bar";
+    else if (!evidenceBlocked && !ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit")
+      evidenceBlocked = "orders_snapshot_unavailable";
+    else if (!evidenceBlocked && (d.action === "enter" || d.action === "add") && !canEnter)
+      evidenceBlocked = "account_manage_only";
+    else if (!evidenceBlocked && (d.action === "exit" || d.action === "add" || d.action === "reconcile") && !row)
+      evidenceBlocked = "position_row_missing";
+    captureDecisionObservation({
+      channel: ch,
+      decision: evidenceBlocked === (d.blocked ?? null) ? d : { ...d, blocked: evidenceBlocked },
+      accountId: g.account.id,
+      decisionAtMs: lastSession.ts,
+      observedAtMs: Date.now(),
+      chainAgeMs: chain.ageMs,
+    });
+    if (!ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit") {
+      info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
+      continue;
+    }
+    try {
+      if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
+      else if (d.action === "exit" && row && !d.blocked && barFresh) {
+        if (!exitGuard.claim(row.id)) {
+          info(`live pass[${g.account.name}/${sym}]: ${d.slug} exit skipped — an exit for this row is already in flight (sweep)`);
+        } else {
+          try { await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }, exitQualityPolicyFor(ch)); }
+          finally { exitGuard.release(row.id); }
+        }
+      }
+      else if ((d.action === "add" || d.action === "enter") && !canEnter) {
+        if (barFresh) info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
+      }
+      else if (d.action === "add" && row && !d.blocked && barFresh) await executeAdd(d, ch, row, exec);
+      else if (d.action === "enter" && barFresh) {
+        await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+        if (d.occ && !d.blocked) {
+          const k = `${ch.underlying.toUpperCase()}:${d.occ.slice(-9, -8) === "C" ? "call" : "put"}`;
+          deskStack.set(k, (deskStack.get(k) ?? 0) + 1);
+        }
+      }
+      else if (d.action === "hold" && row) {
+        const alp = alpacaByOcc.get(row.occ_symbol);
+        if (alp) {
+          noteRowHeld(row.id);
+          const unreal = Math.round((alp.current_price - row.avg_entry_price) * row.qty * 10000) / 100;
+          await store.markPositionRow(row.id, alp.current_price, unreal);
+        }
+      }
+    } catch (e) { warn(`execute ${d.slug} failed — ${(e as Error).message}`); }
+  }
+}
+
 // Retry a transient async op with exponential backoff. Used for boot-time REST
 // calls so a flaky Alpaca/network moment doesn't crash-loop the container.
 async function retry<T>(label: string, fn: () => Promise<T>, attempts = 5, baseMs = 2000): Promise<T> {
@@ -218,6 +349,7 @@ async function reloadConfig(): Promise<void> {
   const hadFund = !!cfg.fund;
   const prevHalted = cfg.fund?.is_halted ?? false;
   const c = await store.loadConfig();
+  if (config.day1ReleaseEnabled) day1SourceExecutorBoundaryReady = false;
   if (c.fund) {
     // Audit 2026-07-10 (critical): a TRANSIENT accounts-read failure must not replace a
     // good routing table with [] — every channel would regroup onto the default account
@@ -225,7 +357,55 @@ async function reloadConfig(): Promise<void> {
     // table; routing.ts fail-closes any account_id that still can't resolve.
     const accounts = !c.accountsFresh && cfg.accounts.length ? cfg.accounts : c.accounts;
     if (accounts !== c.accounts) warn("config: accounts read stale — keeping the prior routing table");
-    cfg = { fund: c.fund, channels: c.channels, accounts };
+    if (config.day1ReleaseEnabled) {
+      const boundaryErrors = validateDay1ReleaseSourceExecutorBoundary(c.channels);
+      if (boundaryErrors.length) {
+        throw new Error(`Day 1 source executor boundary failed before overlay: ${boundaryErrors.join(";")}`);
+      }
+    }
+    const channels = config.day1ReleaseEnabled ? applyDay1ReleaseFleetOverlay(c.channels) : c.channels;
+    if (config.day1ReleaseEnabled) {
+      const validation = validateDay1ReleaseStartup({
+        channels,
+        accounts,
+        fundMode: c.fund.mode,
+        workerVersion: WORKER_VERSION,
+        expectedConfigurationSha256: config.day1ReleaseExpectedSha256,
+        resolvedCredentialAccountIds: groupByAccount(channels, accounts)
+          .filter((group) => group.account.cred_ref
+            ? group.api != null
+            : !!config.alpacaKey && !!config.alpacaSecret)
+          .map((group) => group.account.id),
+        credentialRouteEvidenceBasis: "runtime-env-presence",
+        posture: {
+          alpacaPaperHost: config.alpacaPaperHost,
+          stockFeed: config.stockFeed,
+          optionFeed: config.optFeed,
+          dryRun: config.dryRun,
+          liveTrading: config.liveTrading,
+          heldCaptureEnabled: config.heldContractCaptureEnabled,
+          heldCaptureFlushMs: config.heldContractCaptureFlushMs,
+          heldCaptureTargetSamples: config.heldContractCaptureBatchTargetSamples,
+          heldCaptureMaxAgeMs: config.heldContractCaptureBatchMaxAgeMs,
+          heldCaptureIngressMaxSamples: config.heldContractCaptureMaxSamples,
+          heldCaptureIngressMaxBytes: config.heldContractCaptureMaxBytes,
+          heldCaptureStateMaxSamples: config.heldContractCaptureStateMaxSamples,
+          heldCaptureStateMaxBytes: config.heldContractCaptureStateMaxBytes,
+          heldCaptureRetryMaxAttempts: config.heldContractCaptureRetryMaxAttempts,
+          heldCaptureRetryBaseDelayMs: config.heldContractCaptureRetryBaseDelayMs,
+          heldCaptureRetryMaxDelayMs: config.heldContractCaptureRetryMaxDelayMs,
+          heldCaptureAdapterDeadlineMs: HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+          heldCaptureNormalFlushDeadlineMs: HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
+          heldCaptureShutdownDeadlineMs: HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
+          managerShadowEnabled: config.managerShadowBookEnabled,
+          managerShadowQuoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs,
+        },
+      });
+      if (!validation.ok) throw new Error(`Day 1 RC5 startup validation failed: ${validation.errors.join(";")}`);
+      day1StartupReceipt = validation.activeSettingsReceipt;
+      day1SourceExecutorBoundaryReady = true;
+    }
+    cfg = { fund: c.fund, channels, accounts };
   }
   else warn("config: reload returned no fund_state — keeping previous");
   const nowHalted = cfg.fund?.is_halted ?? false;
@@ -327,6 +507,9 @@ async function cycle(trigger: string): Promise<void> {
     const live = liveMode();
     const byId = new Map(cfg.channels.map((c) => [c.id, c]));
     const openRowsArr = await store.getOpenPositions(); // spans accounts; scoped per group below
+    const sessionPositions = config.day1ReleaseEnabled
+      ? await store.loadDay1SessionPositions(`${todayET}T00:00:00Z`)
+      : [];
     // C1 STACK CAP input: desk-wide open ROW count by "UNDERLYING:direction" (OCC root = the
     // chars before the 15-char date+type+strike tail). Rebuilt each cycle from DB truth;
     // incremented below on each executed entry so two same-cycle entries can't both slip
@@ -343,6 +526,16 @@ async function cycle(trigger: string): Promise<void> {
 
     const decisions: ShadowDecision[] = [];
     const familyAdmissionInputs: FamilyAdmissionInput[] = [];
+    const releaseBatches: DecisionExecutionBatch[] = [];
+    const releaseBoundAccountIds = new Set(DAY1_ROOT_BINDINGS.map((binding) => binding.accountId));
+    const releaseObservedAccountIds = new Set<string>();
+    const releaseBrokerPositions: Day1BrokerHolding[] = [];
+    const releasePendingOrders: Day1PendingOrderOccupancy[] = [];
+    const releaseAccountIdByStrategist = new Map<string, string>();
+    let releasePositionSnapshotComplete = true;
+    let releaseOrderSnapshotComplete = true;
+    const releaseSnapshotFailures: Day1SnapshotFailure[] = [];
+    const releaseOrderFailureAccountIds = new Set<string>();
     let totEquity = 0, totCash = 0, totUnreal = 0, snappedAny = false;
     // Per-account orphan-sweep inputs, captured on each bucket's PRE-cycle snapshot and swept
     // AFTER the decision pass (so same-cycle entries/exits don't false-positive).
@@ -355,16 +548,38 @@ async function cycle(trigger: string): Promise<void> {
     // shadow-logged but places NO orders — the shadow-first gate. A NON-ARMED bucket with
     // creds is MANAGE-ONLY (1b #1): exits/reconcile/marks run, entries/adds don't.
     for (const g of groupByAccount(cfg.channels, cfg.accounts)) {
+      for (const channel of g.channels) releaseAccountIdByStrategist.set(channel.id, g.account.id);
       const api = g.api;
       let account: alpaca.AlpacaAccount = { equity: 0, cash: 0 };
       let positions: alpaca.AlpacaPosition[] = [];
+      let accountFresh = true;
+      let positionsFresh = true;
+      const isReleaseBoundAccount = releaseBoundAccountIds.has(g.account.id);
+      if (isReleaseBoundAccount) releaseObservedAccountIds.add(g.account.id);
       if (api) {
-        try { [account, positions] = await Promise.all([alpaca.getAccount(api), alpaca.getPositions(api)]); }
-        catch (e) { warn(`cycle(${trigger}): account ${g.account.name} read failed — ${(e as Error).message}; skip bucket`); continue; }
+        try { account = await alpaca.getAccount(api); }
+        catch (e) {
+          accountFresh = false;
+          if (isReleaseBoundAccount) {
+            releasePositionSnapshotComplete = false;
+            releaseSnapshotFailures.push({ accountId: g.account.id, kind: "account" });
+          }
+          warn(`cycle(${trigger}): account ${g.account.name} account read failed — ${(e as Error).message}; new Day 1 admissions fail closed, risk-reducing management continues where safe`);
+        }
+        try { positions = await alpaca.getPositions(api); }
+        catch (e) {
+          positionsFresh = false;
+          warn(`cycle(${trigger}): account ${g.account.name} initial position read failed — ${(e as Error).message}; Day 1 will require a confirming read before admission`);
+        }
       } else {
+        accountFresh = false;
+        positionsFresh = false;
+        if (isReleaseBoundAccount) {
+          releasePositionSnapshotComplete = false;
+          releaseSnapshotFailures.push({ accountId: g.account.id, kind: "account" }, { accountId: g.account.id, kind: "positions" });
+        }
         warn(`cycle(${trigger}): account ${g.account.name} (cred_ref ${g.account.cred_ref}) has no creds in env — shadow only`);
       }
-      const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
       const groupRows = openRowsArr.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
       const openRows = new Map(groupRows.map((r) => [r.strategist_id, r]));
       // audit 2026-07-11 (1b #1): is_armed = ENTRIES ONLY (operator decision — see routing.ts).
@@ -374,7 +589,6 @@ async function cycle(trigger: string): Promise<void> {
       // protection. canEnter (adds is_armed + !is_halted) gates only enter/add decisions.
       const canManage = acctCanManage(g.account, live, api != null);
       const canEnter = acctCanEnter(g.account, live, api != null);
-      sweepInputs.push({ g, alpacaByOcc, groupRows, canManage }); // orphan net (swept post-decision)
       let allOrders: alpaca.AlpacaOrder[] = [];
       let ordersFresh = true; // audit 2026-07-10: the idempotency / lost-insert guards are BLIND without the order snapshot
       let remainingByOcc = new Map<string, number>();
@@ -385,13 +599,66 @@ async function cycle(trigger: string): Promise<void> {
         // still lands in the !ordersFresh path below + the noteOrdersRead escalation.
         try {
           allOrders = await retry(`cycle orders ${g.account.name}`, () => alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()), 3, 500);
+          if (config.day1ReleaseEnabled && isReleaseBoundAccount) {
+            for (const order of allOrders) {
+              const match = /^([A-Z]+)\d{6}[CP]\d{8}$/i.exec(order.symbol);
+              if (!match || order.side.toLowerCase() !== "buy" || alpaca.TERMINAL_ORDER_STATUS.has(order.status)) continue;
+              releasePendingOrders.push({ accountId: g.account.id, occSymbol: order.symbol.toUpperCase(), underlying: match[1].toUpperCase() });
+            }
+          }
           noteOrdersRead(g.account.id, g.account.name, true, todayET);
         }
         catch (e) {
           ordersFresh = false;
+          if (config.day1ReleaseEnabled && isReleaseBoundAccount) {
+            releaseOrderSnapshotComplete = false;
+            releaseOrderFailureAccountIds.add(g.account.id);
+          }
           noteOrdersRead(g.account.id, g.account.name, false, todayET);
           warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; entries/adds/reconcile suppressed this cycle (exits still run)`);
         }
+      }
+
+      // RC5 admission snapshot: positions -> orders -> confirming positions.
+      // A buy can fill between the first two reads and disappear from the working-order
+      // set. The confirming position read is therefore the authoritative admission
+      // snapshot. On failure we retain the initial positions only for risk-reducing
+      // management and globally block every new Day 1 entry.
+      if (config.day1ReleaseEnabled && live && isReleaseBoundAccount && api) {
+        try {
+          positions = await retry(`cycle confirming positions ${g.account.name}`, () => alpaca.getPositions(api), 3, 500);
+          positionsFresh = true;
+        } catch (e) {
+          positionsFresh = false;
+          releasePositionSnapshotComplete = false;
+          releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
+          warn(`cycle(${trigger}): account ${g.account.name} confirming position read failed — ${(e as Error).message}; all new Day 1 admissions fail closed`);
+        }
+      } else if (isReleaseBoundAccount && !positionsFresh) {
+        releasePositionSnapshotComplete = false;
+        releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
+      }
+
+      // Outside the sealed Day 1 path, preserve the original fail-closed cycle
+      // behavior. Empty/stale position input must never drive a duplicate entry or a
+      // false desk reconciliation. The independent fast-exit sweep remains available.
+      if (!config.day1ReleaseEnabled && api && (!accountFresh || !positionsFresh)) continue;
+
+      if (isReleaseBoundAccount && positionsFresh) {
+        for (const position of positions) {
+          const match = /^([A-Z]+)\d{6}[CP]\d{8}$/i.exec(position.symbol);
+          if (!match || !(Math.abs(position.qty) > 0)) continue;
+          releaseBrokerPositions.push({
+            accountId: g.account.id,
+            occSymbol: position.symbol.toUpperCase(),
+            underlying: match[1].toUpperCase(),
+            quantity: Math.abs(position.qty),
+          });
+        }
+      }
+      const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
+      sweepInputs.push({ g, alpacaByOcc, groupRows, canManage }); // orphan net (swept post-decision)
+      if (canManage) {
         remainingByOcc = seedRemaining(positions);
         for (const r of groupRows) openRowQty.set(r.occ_symbol, (openRowQty.get(r.occ_symbol) ?? 0) + Math.abs(Math.round(r.qty)));
       }
@@ -418,13 +685,46 @@ async function cycle(trigger: string): Promise<void> {
           allOrders, // empty unless canManage — the PYRAMID executor reconstructs the lot stack from it
           deskStack, // C1 stack-cap input (desk-wide, cycle-scoped)
         };
-        const symDecisions: ShadowDecision[] = [];
+        const evaluatedDecisions: ShadowDecision[] = [];
         for (const ch of symChannels) {
-          try { symDecisions.push(await decideChannel(ch, ctx)); }
+          try { evaluatedDecisions.push(await decideChannel(ch, ctx)); }
           catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
         }
-        decisions.push(...symDecisions);
         const familyObservedAtMs = Date.now();
+        const symDecisions = config.day1ReleaseEnabled
+          ? prepareDay1ReleaseAdmission({
+              channels: symChannels,
+              decisions: evaluatedDecisions,
+              accountId: g.account.id,
+              sourceBarAtMs: lastSession.ts,
+              observedAtMs: familyObservedAtMs,
+              currentEtMinute: alpaca.etParts(Date.now()).min,
+              sessionCloseEtMinute: rthClose,
+              sessionLedgerReady: sessionPositions != null,
+            })
+          : evaluatedDecisions;
+        const barFresh = Date.now() - lastSession.ts < 180_000;
+        const executionEligible = live && day1SourceExecutorBoundaryReady
+          && accountFresh && positionsFresh && ordersFresh && canEnter && barFresh;
+        const executionIneligibleReason = executionEligible ? null
+          : !live ? "day1_shadow_rehearsal"
+          : !day1SourceExecutorBoundaryReady ? "day1_source_executor_boundary"
+          : !accountFresh || !positionsFresh ? "day1_global_snapshot_incomplete"
+          : !ordersFresh ? "day1_global_orders_incomplete"
+          : !canEnter ? "day1_account_manage_only"
+          : "day1_stale_decision_bar";
+        const executionBatch: DecisionExecutionBatch = {
+          group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
+          lastSession, chain, todayET, barMin, canManage, canEnter, allOrders, ordersFresh,
+          openRows, alpacaByOcc, remainingByOcc, openRowQty,
+          sourceBarAtMs: lastSession.ts, observedAtMs: familyObservedAtMs,
+          executionEligible, executionIneligibleReason,
+        };
+        if (config.day1ReleaseEnabled) {
+          releaseBatches.push(executionBatch);
+          continue;
+        }
+        decisions.push(...symDecisions);
         for (const decision of symDecisions) {
           const channel = symChannels.find((candidate) => candidate.slug === decision.slug);
           if (channel) familyAdmissionInputs.push({
@@ -509,7 +809,7 @@ async function cycle(trigger: string): Promise<void> {
               else if ((d.action === "add" || d.action === "enter") && !canEnter) {
                 if (barFresh) info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
               }
-              else if (d.action === "add" && row && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
+              else if (d.action === "add" && row && !d.blocked && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
               else if (d.action === "enter" && barFresh) {
                 await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
                 // C1 within-cycle increment: count this entry toward the desk-wide stack so a
@@ -541,6 +841,60 @@ async function cycle(trigger: string): Promise<void> {
         try { await store.insertEquitySnapshot(account.equity, account.cash, unreal, g.account.id); }
         catch (e) { warn(`equity snapshot[${g.account.name}] failed — ${(e as Error).message}`); }
       }
+    }
+
+    // ---- RC5 PHASES B/C/D: broker-truth state, one global arbiter, then execution ----
+    // No release entry can reach executeDecisionBatch above: release batches take
+    // the `continue` path until every account/symbol has been evaluated and stamped.
+    if (config.day1ReleaseEnabled) {
+      for (const accountId of releaseBoundAccountIds) {
+        if (!releaseObservedAccountIds.has(accountId)) {
+          releasePositionSnapshotComplete = false;
+          releaseSnapshotFailures.push({ accountId, kind: "account-group-missing" });
+        }
+      }
+      const releaseState = buildDay1AdmissionState({
+        openPositions: openRowsArr,
+        sessionPositions: sessionPositions ?? [],
+        channelById: byId,
+        accountIdByStrategist: releaseAccountIdByStrategist,
+        brokerPositions: releaseBrokerPositions,
+        pendingOrders: releasePendingOrders,
+      });
+      const prepared = releaseBatches.flatMap((batch) => batch.decisions.map((decision) => ({
+        accountId: batch.group.account.id,
+        sourceBarAtMs: batch.sourceBarAtMs,
+        decision,
+        executionEligible: batch.executionEligible,
+        executionIneligibleReason: batch.executionIneligibleReason,
+      })));
+      const finalized = finalizeDay1ReleaseAdmissions({
+        prepared,
+        state: releaseState,
+        posture: live ? "paper-executor" : "shadow-counterfactual",
+        globalPositionSnapshotComplete: releasePositionSnapshotComplete,
+        globalOrderSnapshotComplete: !live || releaseOrderSnapshotComplete,
+        globalSnapshotFailures: releaseSnapshotFailures,
+        globalOrderFailureAccountIds: [...releaseOrderFailureAccountIds].sort(),
+      });
+      let cursor = 0;
+      for (const batch of releaseBatches) {
+        batch.decisions = finalized.slice(cursor, cursor + batch.decisions.length).map((row) => row.decision);
+        cursor += batch.decisions.length;
+        decisions.push(...batch.decisions);
+        for (const decision of batch.decisions) {
+          const channel = batch.channels.find((candidate) => candidate.slug === decision.slug);
+          if (channel) familyAdmissionInputs.push({
+            channel,
+            accountId: batch.group.account.id,
+            decision,
+            sourceBarAtMs: batch.sourceBarAtMs,
+            observedAtMs: batch.observedAtMs,
+          });
+        }
+      }
+      if (cursor !== finalized.length) throw new Error("Day 1 RC5 arbitration mapping mismatch");
+      for (const batch of releaseBatches) await executeDecisionBatch(batch, deskStack);
     }
 
     // ---- SHARED diagnostics, once per symbol (account-independent) ----
@@ -732,6 +1086,20 @@ async function fastExitSweep(): Promise<void> {
         clearSweepPriceState(r.id);
         continue;
       }
+      // Ratified Day 1 wall-clock close: stop admissions and flatten release
+      // roots 35 minutes before the actual session close (15:25 on a normal
+      // session). This is bars-independent and remains mandatory if the orders
+      // snapshot is degraded.
+      if (config.day1ReleaseEnabled && day1ReleaseEodDue(ch.slug, nowMin, rthClose)) {
+        info(`day1-eod-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — release close, wall-clock mtc ${Math.max(0, rthClose - nowMin)}`);
+        if (exitGuard.claim(r.id)) {
+          try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "day1_eod_flatten" }, r, exec, undefined, exitQualityPolicyFor(ch)); }
+          catch (e) { warn(`day1-eod-flatten ${ch.slug} failed — ${(e as Error).message}`); }
+          finally { exitGuard.release(r.id); }
+        }
+        clearSweepPriceState(r.id);
+        continue;
+      }
       // ---- EOD HARD-FLATTEN backstop (wall-clock; 2026-06-19 Juneteenth strand fix) ----
       // The strategy's same-day flatten is BAR-relative, so a gapped near-bell bar (06-18: no
       // 15:59 print) means it never fires and the position strands — over a 3-day weekend if a
@@ -854,11 +1222,13 @@ async function fastExitSweep(): Promise<void> {
             `${r.occ_symbol} peaked +${Math.round(peakPct)}%, now ${retPct >= 0 ? "+" : ""}${Math.round(retPct)}% — ${Math.round(((peak - bid) / (peak - entryPx)) * 100)}% of the move gone`);
       }
       const pe = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
+      const day1RootPolicy = config.day1ReleaseEnabled && day1Root(ch.slug) != null;
       // 1b #6: `mark` = the fresh EXECUTABLE BID, `peak` = the bid-based MFE ratchet above.
       // premiumExitReason stays PURE (unchanged comparisons) — only the input price changed.
       const reason = premiumExitReason({
-        row: r, slug: ch.slug, premiumExit: pe, takeProfitPct: ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
-        givebackTrail: policy.GIVEBACK_TRAIL[ch.slug] ?? null,
+        row: r, slug: ch.slug, premiumExit: day1RootPolicy ? undefined : pe,
+        takeProfitPct: day1RootPolicy ? 0 : ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
+        givebackTrail: day1RootPolicy ? null : policy.GIVEBACK_TRAIL[ch.slug] ?? null,
         isManual: /-manual$/i.test(ch.slug),
         minutesToClose: Math.max(0, rthClose - nowMin),
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)
@@ -912,6 +1282,10 @@ async function main(): Promise<void> {
     ? (config.shadowWriteEvents ? "events" : "none (service role, events off)")
     : "none (anon, read-only)";
   info(`feeds: stock=${config.stockFeed} opt=${config.optFeed} · dryRun=${config.dryRun} · liveTrading=${config.liveTrading} · writes=${writeMode}`);
+  if (config.day1ReleaseEnabled && config.day1ReleaseExpectedSha256 !== DAY1_RELEASE_CONFIGURATION_SHA256) {
+    error(`Day 1 release checksum mismatch: expected env ${config.day1ReleaseExpectedSha256 || "<missing>"}, code ${DAY1_RELEASE_CONFIGURATION_SHA256}. Refusing to start.`);
+    process.exit(1);
+  }
   // Boot flags → the DB journal (2026-07-06): env-gated safety switches were previously
   // invisible outside Railway logs — an operator flipping ORPHAN_FLATTEN had no in-band
   // confirmation the restarted worker picked it up. One line per boot, queryable in events.
@@ -940,8 +1314,53 @@ async function main(): Promise<void> {
   // container. Config self-heals via the realtime sub + 30s poll; bars self-heal
   // via the websocket stream. So we log and carry on rather than exit.
   try { await reloadConfig(); }
-  catch (e) { warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`); }
+  catch (e) {
+    if (config.day1ReleaseEnabled) {
+      error(`config: RC5 initial validation failed — ${(e as Error).message}; refusing to start`);
+      process.exit(1);
+    }
+    warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`);
+  }
+  if (config.day1ReleaseEnabled && (!cfg.fund || DAY1_ROOTS.some((root) => !cfg.channels.some((channel) => channel.slug === root.slug)))) {
+    error("Day 1 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
+    process.exit(1);
+  }
+
+  // Required Day 1 research capture must be constructible before the first boot
+  // decision can run. create() verifies paper/OPRA posture, private receipt schema,
+  // bounded settings and R2/Supabase credentials. A null runtime is a startup
+  // refusal for the sealed release, never a warning followed by trading.
+  let heldContractCapture: HeldContractCaptureRuntime | null = null;
+  if (config.heldContractCaptureEnabled) {
+    const { HeldContractCaptureRuntime: CaptureRuntime } = await import("./heldContractCapture.js");
+    heldContractCapture = await CaptureRuntime.create({
+      paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+    });
+  }
+  if (config.day1ReleaseEnabled && !heldContractCapture) {
+    error("Day 1 required held-contract capture is not runtime-ready before the boot decision. Refusing to start.");
+    process.exit(1);
+  }
+  heldContractCapture?.start();
+
   info(`config: ${cfg.fund ? `fund cap $${cfg.fund.total_capital_usd} mode=${cfg.fund.mode} halted=${cfg.fund.is_halted}` : "fund MISSING"}, ${cfg.channels.length} channels [${cfg.channels.map((c) => `${c.slug}:${c.status}`).join(", ")}]`);
+  if (config.day1ReleaseEnabled) {
+    if (!day1StartupReceipt) {
+      error("Day 1 active-settings receipt is unavailable after validation. Refusing to start.");
+      process.exit(1);
+    }
+    const receipt = {
+      ...day1StartupReceipt,
+      runtimeReadiness: {
+        heldCaptureReady: true,
+        heldCaptureStartedBeforeBootDecision: true,
+      },
+    };
+    info(`day1-release: ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256} roots=6 dark=62 paper-only`);
+    void store.journal("EXEC", `day1-release ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`, receipt);
+  } else {
+    info(`day1-release: OFF · candidate=${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`);
+  }
   // Cockpit P3 routing summary: each bucket's posture — LIVE (armed + creds), shadow (decided,
   // no orders), or no-creds (cred_ref set but env keys absent). The shadow-first verification view.
   const acctSummary = groupByAccount(cfg.channels, cfg.accounts)
@@ -973,16 +1392,6 @@ async function main(): Promise<void> {
   }
   const stream = new StockBarStream(SYMBOLS, onBar, onReconnect, intraminuteCapture?.observer());
   intraminuteCapture?.start();
-  // Phase 1K-G reuses manager-book targeted OPRA requests. Dynamic loading
-  // keeps the default-off R2 adapter out of the normal worker path.
-  let heldContractCapture: HeldContractCaptureRuntime | null = null;
-  if (config.heldContractCaptureEnabled) {
-    const { HeldContractCaptureRuntime: CaptureRuntime } = await import("./heldContractCapture.js");
-    heldContractCapture = await CaptureRuntime.create({
-      paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
-    });
-    heldContractCapture?.start();
-  }
   stream.start();
 
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).

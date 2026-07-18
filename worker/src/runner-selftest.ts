@@ -25,7 +25,7 @@ const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./ex
 const { shadowLifecycleAction } = await import("./shadowManageModel.js");
 const { classifyPriorOpenRun } = await import("./runReconcile.js");
 const { decodeDurableShadow, encodeDurableShadow } = await import("./shadowPersistence.js");
-const { buildShadowPlanEvidence } = await import("./planShadowModel.js");
+const { buildShadowPlanEvidence, observedPolicyIdentity } = await import("./planShadowModel.js");
 const { buildDecisionObservation, buildBrokerObservation } = await import("./executionObservationModel.js");
 const { buildPositionOutcome } = await import("./positionOutcomeModel.js");
 type FastExitCheck = import("./exitRules.js").FastExitCheck;
@@ -196,7 +196,7 @@ check("momo absent from map (no trail) = plain ride", premiumExitReason(base({ t
 // default account — an empty/stale accounts table used to route acct-2/3 channels through
 // the default keys and phantom-reconcile their real rows closed.
 const acct = (over: Partial<AccountRow> = {}): AccountRow => ({
-  id: "acct-2", name: "FIRST-TEAM", cred_ref: "2", is_armed: true, is_halted: false, master_daily_stop_usd: 0, ...over,
+  id: "acct-2", name: "FIRST-TEAM", mode: "paper", cred_ref: "2", is_armed: true, is_halted: false, master_daily_stop_usd: 0, ...over,
 });
 const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
   id: "ch1", slug: "test", name: "test", status: "armed", spec_json: null, underlying: "SPY",
@@ -231,6 +231,14 @@ const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
   check("phase1c: take-profit policy maps to truthful all-out harvest", [a.epoch.manager_id, a.plan.plan_json.harvest], ["premium-all-out", "all_out"]);
   check("phase1c: dynamic adds are captured without fabricated R stages", [a.plan.plan_json.adds.length, (a.epoch.policy_json.dynamicAdds as { capturedInEpochOnly: boolean }).capturedInEpochOnly], [0, true]);
   check("phase1c: observed plan is deeply frozen", [Object.isFrozen(a.plan.plan_json), Object.isFrozen(a.plan.plan_json.identity)], [true, true]);
+  const policyA = observedPolicyIdentity({ channel: input.channel, accountId, workerVersion: input.workerVersion })!;
+  const policyOtherAccount = observedPolicyIdentity({
+    channel: input.channel,
+    accountId: "33333333-3333-4333-8333-333333333333",
+    workerVersion: input.workerVersion,
+  })!;
+  check("phase1c: configuration epoch excludes routing account", policyOtherAccount.configurationEpochId, policyA.configurationEpochId);
+  check("phase1c: durable policy epoch retains routing account provenance", policyOtherAccount.policyEpochId === policyA.policyEpochId, false);
   const changedManager = buildShadowPlanEvidence({ ...input, channel: { ...input.channel, take_profit_pct: 30 } })!;
   check("phase1c: manager change creates a new epoch", changedManager.epoch.id === a.epoch.id, false);
   check("phase1c: manager change does not rewrite alpha version", changedManager.epoch.channel_version, a.epoch.channel_version);

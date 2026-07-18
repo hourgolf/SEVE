@@ -5,6 +5,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { config } from "./config.js";
 import { warn } from "./log.js";
+import {
+  HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+  isResearchAdapterTimeout,
+  withResearchAdapterDeadline,
+} from "./researchAdapterDeadline.js";
 
 export interface HeldContractCaptureReceiptRow {
   id: string;
@@ -66,37 +71,55 @@ const sb = createClient(config.supabaseUrl, config.supabaseServiceKey, {
 
 const duplicate = (error: { code?: string } | null): boolean => error?.code === "23505";
 
-export async function heldContractCaptureSchemaReady(): Promise<boolean> {
+export async function heldContractCaptureSchemaReady(overallDeadlineAtMs?: number): Promise<boolean> {
   if (!config.hasServiceRole) return false;
   try {
-    const { error } = await sb.from("held_contract_capture_receipts").select("id").limit(1);
+    const { error } = await withResearchAdapterDeadline({
+      stage: "supabase_schema_probe",
+      requestTimeoutMs: HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+      overallDeadlineAtMs,
+      operation: (signal) => sb.from("held_contract_capture_receipts").select("id").limit(1).abortSignal(signal),
+    });
     if (error) { warn(`held-contract-capture: schema probe failed — ${error.message}`); return false; }
     return true;
   } catch (error) {
+    if (isResearchAdapterTimeout(error)) throw error;
     warn(`held-contract-capture: schema probe rejected — ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 }
 
-export async function insertHeldContractCaptureReceipt(row: HeldContractCaptureReceiptRow): Promise<boolean> {
+export async function insertHeldContractCaptureReceipt(row: HeldContractCaptureReceiptRow, overallDeadlineAtMs?: number): Promise<boolean> {
   if (!config.hasServiceRole) return false;
   try {
-    const { error } = await sb.from("held_contract_capture_receipts").insert(row);
+    const { error } = await withResearchAdapterDeadline({
+      stage: "supabase_receipt_write",
+      requestTimeoutMs: HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+      overallDeadlineAtMs,
+      operation: (signal) => sb.from("held_contract_capture_receipts").insert(row).abortSignal(signal),
+    });
     if (!error || duplicate(error)) return true;
     warn(`held-contract-capture: receipt insert failed — ${error.message}`);
   } catch (error) {
+    if (isResearchAdapterTimeout(error)) throw error;
     warn(`held-contract-capture: receipt insert rejected — ${error instanceof Error ? error.message : String(error)}`);
   }
   return false;
 }
 
-export async function insertHeldContractCaptureHealth(row: HeldContractCaptureHealthRow): Promise<boolean> {
+export async function insertHeldContractCaptureHealth(row: HeldContractCaptureHealthRow, overallDeadlineAtMs?: number): Promise<boolean> {
   if (!config.hasServiceRole) return false;
   try {
-    const { error } = await sb.from("held_contract_capture_health").insert(row);
+    const { error } = await withResearchAdapterDeadline({
+      stage: "supabase_health_write",
+      requestTimeoutMs: HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+      overallDeadlineAtMs,
+      operation: (signal) => sb.from("held_contract_capture_health").insert(row).abortSignal(signal),
+    });
     if (!error || duplicate(error)) return true;
     warn(`held-contract-capture: health insert failed — ${error.message}`);
   } catch (error) {
+    if (isResearchAdapterTimeout(error)) throw error;
     warn(`held-contract-capture: health insert rejected — ${error instanceof Error ? error.message : String(error)}`);
   }
   return false;

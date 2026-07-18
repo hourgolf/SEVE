@@ -10,6 +10,7 @@
 // ============================================================================
 
 import dotenv from "dotenv";
+export { WORKER_VERSION } from "./version.js";
 
 // Load env without overriding anything already set (Railway's real env wins).
 // Local dev convenience: also read the repo-root .env.local (ALPACA_KEY/SECRET +
@@ -95,6 +96,11 @@ export const config = {
   // check).
   dryRun: flag("DRY_RUN", true),
   liveTrading: flag("LIVE_TRADING", false),
+  // Checked-in Monday release layer. Default-off until the separately approved
+  // Railway deployment supplies both the enable flag and exact configuration
+  // checksum; a missing/mismatched checksum makes startup fail closed.
+  day1ReleaseEnabled: flag("DAY1_RELEASE_ENABLED", false),
+  day1ReleaseExpectedSha256: opt("DAY1_RELEASE_EXPECTED_SHA256", ""),
   // Fast EXIT poll cadence (seconds) while live with open stream-owned positions:
   // premium stop/target/giveback checked on the live chain between bar closes.
   fastExitSec: Number(opt("FAST_EXIT_SEC", "10")),
@@ -109,8 +115,15 @@ export const config = {
   // provider request or enters the execution call graph.
   heldContractCaptureEnabled: flag("HELD_CONTRACT_CAPTURE_ENABLED", false),
   heldContractCaptureFlushMs: Number(opt("HELD_CONTRACT_CAPTURE_FLUSH_MS", "30000")),
+  heldContractCaptureBatchTargetSamples: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_TARGET_SAMPLES", "12")),
+  heldContractCaptureBatchMaxAgeMs: Number(opt("HELD_CONTRACT_CAPTURE_BATCH_MAX_AGE_MS", "60000")),
   heldContractCaptureMaxSamples: Number(opt("HELD_CONTRACT_CAPTURE_MAX_SAMPLES", "10000")),
   heldContractCaptureMaxBytes: Number(opt("HELD_CONTRACT_CAPTURE_MAX_BYTES", String(8 * 1024 * 1024))),
+  heldContractCaptureStateMaxSamples: Number(opt("HELD_CONTRACT_CAPTURE_STATE_MAX_SAMPLES", "10000")),
+  heldContractCaptureStateMaxBytes: Number(opt("HELD_CONTRACT_CAPTURE_STATE_MAX_BYTES", String(8 * 1024 * 1024))),
+  heldContractCaptureRetryMaxAttempts: Number(opt("HELD_CONTRACT_CAPTURE_RETRY_MAX_ATTEMPTS", "5")),
+  heldContractCaptureRetryBaseDelayMs: Number(opt("HELD_CONTRACT_CAPTURE_RETRY_BASE_DELAY_MS", "30000")),
+  heldContractCaptureRetryMaxDelayMs: Number(opt("HELD_CONTRACT_CAPTURE_RETRY_MAX_DELAY_MS", "300000")),
   heldContractCaptureR2Prefix: opt("HELD_CONTRACT_CAPTURE_R2_PREFIX", "held-contracts"),
   // Phase 1H-B raw SIP trade/quote capture. DARK by default and observation-only.
   // Enabling requires paper mode, the SIP feed, the private receipt migration,
@@ -190,9 +203,6 @@ export const config = {
   // 2.5 calendar days incl. extended hours = full prior session always present.
   barHistory: Number(opt("BAR_HISTORY", "2400")),
 } as const;
-
-// Version tag — heartbeat note + logs (mirror the cron's banner convention).
-export const WORKER_VERSION = "stream-2026-07-17a"; // Phase 1K-G adds default-off, position-scoped held-contract OPRA evidence capture. Enable only in the paper Railway worker after the private receipt migration is verified. Prior (07-16a): Phase 1K-F exit execution-quality receipts.
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {

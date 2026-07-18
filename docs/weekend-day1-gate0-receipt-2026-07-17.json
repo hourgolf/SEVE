@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 1,
+  "kind": "seve-weekend-day1-gate0-receipt",
+  "sessionDateEt": "2026-07-17",
+  "frozenAt": "2026-07-17T20:48:06Z",
+  "verdict": "pass_with_recorded_yellow",
+  "yellow": [
+    {
+      "code": "sentinel_session_field_named_date",
+      "classification": "schema_nonconformance_without_session_identity_ambiguity",
+      "facts": {
+        "eventCreatedAt": "2026-07-17T20:19:29.997145Z",
+        "message": "sentinel: 2026-07-17",
+        "metaSession": null,
+        "metaDate": "2026-07-17",
+        "briefAsOf": "2026-07-17",
+        "forDate": "2026-07-20"
+      },
+      "disposition": "preserve the July 17 receipt unchanged; require an explicit session field in the next versioned publisher contract"
+    }
+  ],
+  "sources": {
+    "implementationBranch": "weekend-day1-implementation",
+    "branchCommit": "aa6f4797a9189ffb20c02e7b54b0ef85e209ea4b",
+    "deployedWorkerVersion": "stream-2026-07-17a",
+    "deployedWorkerGitSha": "7062af3b1f007457d2dcb53953fc86b0ee996ecc",
+    "workerDeploymentId": "a3f8aa3f-0fc3-4a36-b975-f80e8abf8e57",
+    "captureVersion": "held-contract-opra-snapshot-v1",
+    "managerShadowBookVersion": "manager-shadow-book-v2",
+    "managerPolicyVersion": "manager-lab-preregister-v1",
+    "latestDatabaseMigration": "20260717061821_phase_1k_g_held_contract_capture_receipts",
+    "postgresVersion": "17.6",
+    "registryBundleSha256": "9bd18ffc5a9c35510fc3879d3575070aa400b489d3eb036a7c28bdefced7d0d5"
+  },
+  "queryWindows": {
+    "brokerDeskReconciliation": {
+      "startedAt": "2026-07-17T20:40:36Z",
+      "finishedAt": "2026-07-17T20:40:39Z"
+    },
+    "paperFlatnessGate": {
+      "startedAt": "2026-07-17T20:40:54Z",
+      "finishedAt": "2026-07-17T20:40:56Z"
+    },
+    "supabaseConsolidatedSelect": "2026-07-17T20:43:26.329614Z",
+    "channelFleetSelect": "2026-07-17T20:42:29.796Z",
+    "channelEvidenceSelect": "2026-07-17T20:43:02.270Z",
+    "policyEpochSelect": "2026-07-17T20:43:19.518Z",
+    "r2Inventory": "2026-07-17T20:45:14.826Z",
+    "r2ExhaustiveVerificationCompleted": "2026-07-17T20:47:51Z",
+    "r2TimestampNormalizationCheck": "2026-07-17T20:48:06Z"
+  },
+  "flatReconciliation": {
+    "fundMode": "paper",
+    "deskOpenPositions": 0,
+    "paperBrokerAccountsReached": 3,
+    "paperBrokerOpenOccs": 0,
+    "paperBrokerAccountNames": ["FIRST-TEAM", "LAB", "MORGUE"],
+    "brokerRealizedUsd": -43747,
+    "deskBookedRealizedUsd": -43747,
+    "signedBookingErrorUsd": 0,
+    "sumAbsolutePerOccDriftUsd": 2,
+    "driftGateUsd": 200
+  },
+  "positions": {
+    "count": 66,
+    "closed": 66,
+    "open": 0,
+    "multiContract": 66,
+    "withPeak": 66,
+    "withTrough": 66,
+    "firstOpenedAt": "2026-07-17T13:49:02.178103Z",
+    "lastClosedAt": "2026-07-17T19:16:02.729Z",
+    "realizedPnlUsd": -6488
+  },
+  "managerShadow": {
+    "runCount": 534,
+    "positionCount": 66,
+    "terminal": 528,
+    "censored": 6,
+    "active": 0,
+    "quoteMaxAgeMs": 15000,
+    "cutoffMinutesBeforeClose": 5,
+    "censorClassification": "truthful_illiquid_0dte_provider_inactivity_at_cutoff_not_observer_scheduling",
+    "classificationBasis": "targeted fetches continued through 2026-07-17T19:55:38.829Z while the last provider quote events for these contracts ended between 19:02:08.598Z and 19:53:27.869Z",
+    "censors": [
+      {
+        "positionId": "766d3566-5f4f-4def-9a37-bd425109b7e0",
+        "channel": "breakout-alt-v3-iwm",
+        "occ": "IWM260717C00296000",
+        "manager": "BELL/no-stop",
+        "code": "no_fresh_cutoff_bid",
+        "entryAt": "2026-07-17T14:09:02.748Z",
+        "actualCloseAt": "2026-07-17T14:10:49.539Z",
+        "actualCloseReason": "target_premium",
+        "lastQuoteAt": "2026-07-17T19:02:08.598Z",
+        "lastObservedAt": "2026-07-17T19:02:09.043Z",
+        "censoredAt": "2026-07-17T19:55:38.474Z",
+        "consecutiveQuoteMisses": 320
+      },
+      {
+        "positionId": "ce19c8a8-34f7-45ee-bdf8-e93137b8f5b3",
+        "channel": "breakout-alt-v3-iwm",
+        "occ": "IWM260717C00295000",
+        "manager": "BELL/no-stop",
+        "code": "no_fresh_cutoff_bid",
+        "entryAt": "2026-07-17T14:05:06.227Z",
+        "actualCloseAt": "2026-07-17T14:08:31.555Z",
+        "actualCloseReason": "target_premium",
+        "lastQuoteAt": "2026-07-17T19:53:27.869Z",
+        "lastObservedAt": "2026-07-17T19:53:28.898Z",
+        "censoredAt": "2026-07-17T19:55:38.474Z",
+        "consecutiveQuoteMisses": 12
+      },
+      {
+        "positionId": "d821083a-820f-4800-a4cc-ff0ecd09820f",
+        "channel": "breakout-smart-entries-iwm",
+        "occ": "IWM260717C00295000",
+        "manager": "BELL/no-stop",
+        "code": "no_fresh_cutoff_bid",
+        "entryAt": "2026-07-17T14:05:11.302Z",
+        "actualCloseAt": "2026-07-17T14:09:39.610Z",
+        "actualCloseReason": "target_premium",
+        "lastQuoteAt": "2026-07-17T19:53:27.869Z",
+        "lastObservedAt": "2026-07-17T19:53:28.898Z",
+        "censoredAt": "2026-07-17T19:55:38.474Z",
+        "consecutiveQuoteMisses": 12
+      },
+      {
+        "positionId": "3a650c87-a9ab-4d31-a2ec-13111dfd078b",
+        "channel": "breakout-smart-entries-iwm",
+        "occ": "IWM260717C00296000",
+        "manager": "BELL/no-stop",
+        "code": "no_fresh_cutoff_bid",
+        "entryAt": "2026-07-17T14:10:03.754Z",
+        "actualCloseAt": "2026-07-17T14:12:21.124Z",
+        "actualCloseReason": "manual:reversal",
+        "lastQuoteAt": "2026-07-17T19:02:08.598Z",
+        "lastObservedAt": "2026-07-17T19:02:09.043Z",
+        "censoredAt": "2026-07-17T19:55:38.474Z",
+        "consecutiveQuoteMisses": 320
+      },
+      {
+        "positionId": "54f25f03-61b6-41f6-bbfc-962361f88805",
+        "channel": "vb-squeeze-break-qqq",
+        "occ": "QQQ260717C00702000",
+        "manager": "BELL/no-stop",
+        "code": "no_fresh_cutoff_bid",
+        "entryAt": "2026-07-17T16:52:07.281Z",
+        "actualCloseAt": "2026-07-17T16:56:12.911Z",
+        "actualCloseReason": "premium_stop",
+        "lastQuoteAt": "2026-07-17T19:32:28.666Z",
+        "lastObservedAt": "2026-07-17T19:32:28.810Z",
+        "censoredAt": "2026-07-17T19:55:38.474Z",
+        "consecutiveQuoteMisses": 138
+      },
+      {
+        "positionId": "51a2c960-12f9-4c14-91a4-4d11050e434f",
+        "channel": "vb-squeeze-break-qqq",
+        "occ": "QQQ260717C00701000",
+        "manager": "BELL/no-stop",
+        "code": "no_fresh_cutoff_bid",
+        "entryAt": "2026-07-17T16:48:08.402Z",
+        "actualCloseAt": "2026-07-17T16:51:32.079Z",
+        "actualCloseReason": "target_premium",
+        "lastQuoteAt": "2026-07-17T19:39:38.671Z",
+        "lastObservedAt": "2026-07-17T19:39:38.828Z",
+        "censoredAt": "2026-07-17T19:55:38.474Z",
+        "consecutiveQuoteMisses": 95
+      }
+    ]
+  },
+  "heldCapture": {
+    "receiptRows": 20794,
+    "positionsCovered": 66,
+    "positionsMissingReceipts": 0,
+    "uniqueOccs": 20,
+    "sampleCount": 102545,
+    "successfulQuoteCount": 101554,
+    "eligibleCount": 101554,
+    "missingQuoteCount": 991,
+    "requestFailureCount": 0,
+    "invalidQuoteCount": 0,
+    "staleSnapshotCount": 0,
+    "staleQuoteEventCount": 0,
+    "gapCount": 0,
+    "droppedSamples": 0,
+    "rejectedOversize": 0,
+    "healthRows": 0,
+    "maxObservationGapMs": 11378,
+    "firstFetchAt": "2026-07-17T13:49:08.174Z",
+    "lastFetchAt": "2026-07-17T19:55:38.829Z",
+    "averageSamplesPerReceipt": 4.9315,
+    "r2": {
+      "gzipObjects": 20794,
+      "manifestObjects": 20794,
+      "listedKeys": 41588,
+      "gzipBytes": 16139289,
+      "manifestBytes": 33965189,
+      "sessionBytes": 50104478,
+      "missingKeys": 0,
+      "unexpectedKeys": 0,
+      "verifiedChains": 20794,
+      "substantiveMismatches": 0,
+      "receiptIdentitySha256": "2258d1649085c92e597145b05ce239e4c7fe0334417b3771f1b977034b7ce9d7",
+      "sqlReceiptChainSha256": "2677b91a24e882a3fc1e7fec45d88ff3b2e59c7f46d26c9c92bd29dc4625c7ac",
+      "keySizeSha256": "069eedce4c5e0b6736299ad664aef0f98089e97958708bedb9eaa32b3d631892"
+    }
+  },
+  "postClose": {
+    "publisherSummaryAt": "2026-07-17T20:31:01Z",
+    "publisherLastExitCode": 0,
+    "publisherState": "not_running",
+    "publisherAllRequiredStepsGreen": true,
+    "dayReport": {
+      "reportDate": "2026-07-17",
+      "mode": "paper",
+      "updatedAt": "2026-07-17T20:05:34.419Z",
+      "receiptSha256": "f7971644e329be9febb9dab53318435891daeafdf46b827946c7da6218df2374"
+    },
+    "forensicsReport": {
+      "generatedAt": "2026-07-17T20:27:55.178Z",
+      "payloadSha256": "f33fe40e4f59373fc120556543433923ada2c4da7ac31f11ca295c553bc47841"
+    },
+    "vb": {
+      "blockedDecisions": 1179,
+      "reconstructedTrades": 139,
+      "reconstructedNotArmed": 136,
+      "reconstructedNoQuotes": 0,
+      "lastInsertedAt": "2026-07-17T20:08:57.625013Z"
+    },
+    "familyAdmissionObservations": 7
+  },
+  "storage": {
+    "supabaseDatabaseBytes": 409693331,
+    "heldReceiptTableBytes": 18972672,
+    "heldReceiptIndexBytes": 18710528,
+    "heldReceiptTotalBytes": 37724160,
+    "heldHealthTotalBytes": 32768,
+    "r2BucketKeys": 88029,
+    "r2BucketBytes": 6285806304,
+    "projectionAtCurrentDailyRate": {
+      "supabaseBytesPerSession": 37724160,
+      "supabaseBytesFiveSessions": 188620800,
+      "supabaseBytesTwentySessions": 754483200,
+      "r2HeldBytesPerSession": 50104478,
+      "r2HeldBytesTwentySessions": 1002089560
+    }
+  },
+  "localArtifacts": {
+    "sentinelMarkdownSha256": "b1b631f5397bc90cd548f8ee415d3d431dab02a014a4cd6169b6d5297157b3b0",
+    "sentinelBriefSha256": "642ed8ce7bafc400040e7dec6970dffcfb0a9939e1970206430de805f6305e54",
+    "weeklyReadoutSha256": "ca9a8e6f9df400ae2de0acc54c7da5b59e72b12b8e5667e609fcaab259f30af6",
+    "quotesArchiveSha256": "2d63e86a8fcb0b759e04843d130bfae759a3528dc9298fbbf3346ea1a23d82c0",
+    "spyBarsSha256": "a5709db6c89100df09d4a160f6051272c5339270565e58e0bc999008ccb53202",
+    "qqqBarsSha256": "30837e0a934344b73d776d76dd146113ef4161f17673e99217f02f20b58844c5",
+    "iwmBarsSha256": "231ce2ba87b072f7c17b400971f7d37d6bb204958f29c0fee8dc830f3573e056",
+    "captureLogSha256AtFreeze": "566d27bc6bce9a41f29a9a70b92a55fbc92f3b28e926cb988a3a447860cb65fd"
+  },
+  "boundaries": {
+    "paperOnly": true,
+    "liveMoneyAuthorized": false,
+    "productionWritesPerformedByAudit": false,
+    "july17ReceiptsRewritten": false,
+    "automaticPromotionAuthorized": false,
+    "configurationChangeAuthorized": false,
+    "migrationAuthorized": false,
+    "mergeAuthorized": false,
+    "deploymentAuthorized": false
+  }
+}

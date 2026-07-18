@@ -133,6 +133,30 @@ export interface HeldContractCapturePartition {
   rejectedOversize: number;
 }
 
+export interface HeldContractCaptureBatch {
+  token: string;
+  partition: HeldContractCapturePartition;
+  estimatedBytes: number;
+  attempts: number;
+  nextAttemptAtMs: number;
+}
+
+export interface HeldContractBatcherShed {
+  reason: "state_samples" | "state_bytes" | "retry_budget" | "shutdown_abandoned";
+  samples: number;
+  estimatedBytes: number;
+  positionId: string | null;
+  occSymbol: string | null;
+  token: string | null;
+}
+
+export interface HeldContractBatcherAcceptResult {
+  acceptedSamples: number;
+  shed: readonly HeldContractBatcherShed[];
+}
+
+export type HeldContractCaptureFlushReason = "timer" | "high-water" | "shutdown";
+
 export interface HeldContractSegmentDescriptor {
   id: string;
   schemaVersion: typeof HELD_CONTRACT_CAPTURE_SCHEMA_VERSION;
@@ -431,6 +455,217 @@ export function partitionHeldContractCapture(drain: HeldContractCaptureDrain): H
       rejectedOversize: dropped.rejectedOversize,
     };
   });
+}
+
+function partitionIdentity(partition: Pick<HeldContractCapturePartition,
+  "dateEt" | "hourEt" | "positionId" | "occSymbol" | "sourceBootId" | "sourceVersion">): string {
+  return [partition.dateEt, partition.hourEt, partition.positionId, partition.occSymbol,
+    partition.sourceBootId, partition.sourceVersion].join("|");
+}
+
+function batchToken(partition: HeldContractCapturePartition): string {
+  return createHash("sha256").update(stable({
+    partition: partitionIdentity(partition),
+    sampleIds: partition.samples.map((sample) => sample.id),
+    droppedSamples: partition.droppedSamples,
+    rejectedOversize: partition.rejectedOversize,
+  })).digest("hex");
+}
+
+function estimatedSampleBytes(sample: HeldContractCaptureSample): number {
+  return Buffer.byteLength(stable(sample), "utf8") + 1;
+}
+
+function estimatedPartitionBytes(partition: HeldContractCapturePartition): number {
+  return partition.samples.reduce((sum, sample) => sum + estimatedSampleBytes(sample), 0);
+}
+
+/** Coalesces the existing position/OCC/hour partitions across short queue
+ * drains. Ready batches are sealed before I/O, so an R2 or receipt retry keeps
+ * byte-identical content while later samples enter a new open batch. */
+export class HeldContractCaptureBatcher {
+  private open = new Map<string, HeldContractCapturePartition>();
+  private sealed = new Map<string, HeldContractCaptureBatch>();
+  private retainedSamples = 0;
+  private retainedBytes = 0;
+  private totalShedSamples = 0;
+  private totalShedBytes = 0;
+
+  constructor(
+    readonly targetSamples: number,
+    readonly maxAgeMs: number,
+    readonly maxStateSamples = 10_000,
+    readonly maxStateBytes = 8 * 1024 * 1024,
+    readonly retryMaxAttempts = 5,
+    readonly retryBaseDelayMs = 30_000,
+    readonly retryMaxDelayMs = 300_000,
+  ) {
+    if (!Number.isInteger(targetSamples) || targetSamples < 1) throw new Error("targetSamples must be a positive integer");
+    if (!Number.isInteger(maxAgeMs) || maxAgeMs < 1) throw new Error("maxAgeMs must be a positive integer");
+    if (!Number.isInteger(maxStateSamples) || maxStateSamples < 1) throw new Error("maxStateSamples must be a positive integer");
+    if (!Number.isInteger(maxStateBytes) || maxStateBytes < 1) throw new Error("maxStateBytes must be a positive integer");
+    if (!Number.isInteger(retryMaxAttempts) || retryMaxAttempts < 1) throw new Error("retryMaxAttempts must be a positive integer");
+    if (!Number.isInteger(retryBaseDelayMs) || retryBaseDelayMs < 1) throw new Error("retryBaseDelayMs must be a positive integer");
+    if (!Number.isInteger(retryMaxDelayMs) || retryMaxDelayMs < retryBaseDelayMs) throw new Error("retryMaxDelayMs must be at least retryBaseDelayMs");
+  }
+
+  accept(drain: HeldContractCaptureDrain): HeldContractBatcherAcceptResult {
+    const partitions = partitionHeldContractCapture(drain);
+    const partitionKeys = new Set(partitions.map(partitionIdentity));
+    const shed: HeldContractBatcherShed[] = [];
+    let acceptedSamples = 0;
+    for (const incoming of partitions) {
+      const key = partitionIdentity(incoming);
+      const current = this.open.get(key);
+      const known = new Set(current?.samples.map((sample) => sample.id) ?? []);
+      const accepted: HeldContractCaptureSample[] = [];
+      let stateShed = 0;
+      for (const sample of incoming.samples) {
+        if (known.has(sample.id)) continue;
+        const bytes = estimatedSampleBytes(sample);
+        const reason = this.retainedSamples >= this.maxStateSamples
+          ? "state_samples"
+          : this.retainedBytes + bytes > this.maxStateBytes ? "state_bytes" : null;
+        if (reason) {
+          this.totalShedSamples++;
+          this.totalShedBytes += bytes;
+          stateShed++;
+          shed.push({ reason, samples: 1, estimatedBytes: bytes, positionId: incoming.positionId, occSymbol: incoming.occSymbol, token: null });
+          continue;
+        }
+        known.add(sample.id);
+        accepted.push(sample);
+        this.retainedSamples++;
+        this.retainedBytes += bytes;
+        acceptedSamples++;
+      }
+      if (!current && !accepted.length) continue;
+      const samples = [...(current?.samples ?? []), ...accepted]
+        .sort((a, b) => a.fetchCompletedAtMs - b.fetchCompletedAtMs || a.id.localeCompare(b.id));
+      this.open.set(key, {
+        ...incoming,
+        ...current,
+        samples,
+        droppedSamples: (current?.droppedSamples ?? 0) + incoming.droppedSamples + stateShed,
+        rejectedOversize: (current?.rejectedOversize ?? 0) + incoming.rejectedOversize,
+      });
+    }
+    for (const [key, dropped] of Object.entries(drain.droppedByPartition)) {
+      if (partitionKeys.has(key)) continue;
+      const current = this.open.get(key);
+      if (!current) continue;
+      this.open.set(key, {
+        ...current,
+        droppedSamples: current.droppedSamples + dropped.dropped,
+        rejectedOversize: current.rejectedOversize + dropped.rejectedOversize,
+      });
+    }
+    return { acceptedSamples, shed };
+  }
+
+  sealReady(reason: HeldContractCaptureFlushReason, nowMs: number): HeldContractCaptureBatch[] {
+    if (!finite(nowMs)) throw new Error("nowMs must be finite");
+    const currentPartition = etPartition(nowMs);
+    for (const [key, partition] of this.open) {
+      const firstAt = partition.samples[0]?.fetchCompletedAtMs ?? nowMs;
+      const crossedBoundary = partition.dateEt !== currentPartition.dateEt || partition.hourEt !== currentPartition.hourEt;
+      const ready = reason !== "timer" || crossedBoundary
+        || partition.samples.length >= this.targetSamples || nowMs - firstAt >= this.maxAgeMs;
+      if (!ready) continue;
+      const token = batchToken(partition);
+      this.sealed.set(token, {
+        token,
+        partition,
+        estimatedBytes: estimatedPartitionBytes(partition),
+        attempts: 0,
+        nextAttemptAtMs: 0,
+      });
+      this.open.delete(key);
+    }
+    return this.pending(nowMs, reason === "shutdown");
+  }
+
+  pending(nowMs = Number.POSITIVE_INFINITY, force = false): HeldContractCaptureBatch[] {
+    return [...this.sealed.values()]
+      .filter((batch) => force || batch.nextAttemptAtMs <= nowMs)
+      .sort((a, b) => a.token.localeCompare(b.token));
+  }
+
+  acknowledge(token: string): boolean {
+    const batch = this.sealed.get(token);
+    if (!batch) return false;
+    this.retainedSamples -= batch.partition.samples.length;
+    this.retainedBytes -= batch.estimatedBytes;
+    return this.sealed.delete(token);
+  }
+
+  recordFailure(token: string, nowMs: number): HeldContractBatcherShed | null {
+    const batch = this.sealed.get(token);
+    if (!batch || !finite(nowMs)) return null;
+    batch.attempts++;
+    if (batch.attempts >= this.retryMaxAttempts) {
+      this.sealed.delete(token);
+      this.retainedSamples -= batch.partition.samples.length;
+      this.retainedBytes -= batch.estimatedBytes;
+      this.totalShedSamples += batch.partition.samples.length;
+      this.totalShedBytes += batch.estimatedBytes;
+      return {
+        reason: "retry_budget",
+        samples: batch.partition.samples.length,
+        estimatedBytes: batch.estimatedBytes,
+        positionId: batch.partition.positionId,
+        occSymbol: batch.partition.occSymbol,
+        token,
+      };
+    }
+    const delay = Math.min(this.retryMaxDelayMs, this.retryBaseDelayMs * 2 ** (batch.attempts - 1));
+    batch.nextAttemptAtMs = nowMs + delay;
+    return null;
+  }
+
+  abandonAll(): HeldContractBatcherShed[] {
+    const shed: HeldContractBatcherShed[] = [];
+    for (const partition of this.open.values()) {
+      shed.push({
+        reason: "shutdown_abandoned",
+        samples: partition.samples.length,
+        estimatedBytes: estimatedPartitionBytes(partition),
+        positionId: partition.positionId,
+        occSymbol: partition.occSymbol,
+        token: null,
+      });
+    }
+    for (const batch of this.sealed.values()) {
+      shed.push({
+        reason: "shutdown_abandoned",
+        samples: batch.partition.samples.length,
+        estimatedBytes: batch.estimatedBytes,
+        positionId: batch.partition.positionId,
+        occSymbol: batch.partition.occSymbol,
+        token: batch.token,
+      });
+    }
+    const samples = shed.reduce((sum, row) => sum + row.samples, 0);
+    const bytes = shed.reduce((sum, row) => sum + row.estimatedBytes, 0);
+    this.totalShedSamples += samples;
+    this.totalShedBytes += bytes;
+    this.retainedSamples = 0;
+    this.retainedBytes = 0;
+    this.open.clear();
+    this.sealed.clear();
+    return shed;
+  }
+
+  openPartitionCount(): number { return this.open.size; }
+  sealedBatchCount(): number { return this.sealed.size; }
+  sampleCount(): number {
+    return this.retainedSamples;
+  }
+  estimatedBytes(): number { return this.retainedBytes; }
+  utilization(): number { return Math.max(this.retainedSamples / this.maxStateSamples, this.retainedBytes / this.maxStateBytes); }
+  shedTotals(): { samples: number; estimatedBytes: number } {
+    return { samples: this.totalShedSamples, estimatedBytes: this.totalShedBytes };
+  }
 }
 
 export function buildHeldContractSegmentDescriptor(

@@ -29,15 +29,25 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import {
+  coalesceVbCandidateDecisions,
+  type VbCandidateDecision,
+  type VbCandidateReceipt,
+} from "../lib/research/vbCandidateEvidence.js";
 
 const URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+const READ_ONLY = process.argv.includes("--read-only");
+// A read-only audit may authenticate with the backend credential when no anon
+// key is available, but every external write branch remains disabled.
+const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY && !READ_ONLY;
 const sb = createClient(URL, KEY, { auth: { persistSession: false } });
 
 const daysArg = process.argv.indexOf("--days");
 const DAYS = daysArg > 0 ? Math.max(1, Number(process.argv[daysArg + 1]) || 6) : 6;
 const LEDGER = "data/gate-shadow.json";
+const CANDIDATE_LEDGER = "data/vb-candidates.json";
+const CANDIDATE_CENSORS = "data/vb-candidate-censors.json";
 const POLICY_STOP = 50; // worker policy.PREMIUM_STOP_PCT — the shadow's fallback stop
 const MAX_PER_DAY = 6;  // bench churn cap per (channel, day) — daily-stop latch isn't modeled
 
@@ -48,11 +58,72 @@ interface ShadowRow {
   mfePct: number | null; giveback: number | null; basis: "mid-upper-bound";
 }
 
+interface CandidateCensor { signalId: string; code: string }
+
+function exactCandidateDecision(s: any, base: ShadowRow): VbCandidateDecision | CandidateCensor {
+  const rationale = s.rationale && typeof s.rationale === "object" ? s.rationale as Record<string, unknown> : {};
+  const sourceBarAtMs = Date.parse(String(rationale.decision_source_bar_at ?? ""));
+  const virtualExitAtMs = Date.parse(String(base.exitAt ?? ""));
+  const side = rationale.candidate_side;
+  const observedAtMs = Date.parse(String(rationale.decision_observed_at ?? ""));
+  const liveAsk = Number(rationale.ask ?? 0);
+  if (!Number.isFinite(sourceBarAtMs)) return { signalId: String(s.id), code: "missing_exact_source_bar_clock" };
+  if (!Number.isFinite(observedAtMs)) return { signalId: String(s.id), code: "missing_decision_observation_clock" };
+  if (typeof rationale.channel_version !== "string" || !rationale.channel_version)
+    return { signalId: String(s.id), code: "missing_channel_version" };
+  if (typeof rationale.configuration_epoch_id !== "string" || !/^sha256:[0-9a-f]{64}$/.test(rationale.configuration_epoch_id))
+    return { signalId: String(s.id), code: "missing_configuration_epoch" };
+  if (typeof rationale.worker_version !== "string" || !rationale.worker_version)
+    return { signalId: String(s.id), code: "missing_source_version" };
+  if (side !== "call" && side !== "put") return { signalId: String(s.id), code: "missing_option_side" };
+  if (!Number.isFinite(virtualExitAtMs)) return { signalId: String(s.id), code: "missing_virtual_exit_clock" };
+  return {
+    signalId: String(s.id),
+    strategistId: String(s.strategist_id),
+    accountId: typeof rationale.account_id === "string" ? rationale.account_id : null,
+    channelSlug: base.slug,
+    channelVersion: rationale.channel_version,
+    configurationEpochId: rationale.configuration_epoch_id,
+    sourceVersion: rationale.worker_version,
+    sourceBarAtMs,
+    decisionObservedAtMs: observedAtMs,
+    underlying: String(rationale.candidate_underlying ?? ""),
+    side,
+    occSymbol: base.occ,
+    liveObservedAsk: liveAsk > 0 ? {
+      price: liveAsk,
+      feed: "alpaca_snapshot",
+      providerAtMs: null,
+      observedAtMs: Number.isFinite(observedAtMs) ? observedAtMs : null,
+      freshnessMs: Number.isFinite(Number(rationale.live_ask_snapshot_age_ms)) ? Number(rationale.live_ask_snapshot_age_ms) : null,
+      exactExecutable: false,
+    } : null,
+    blockedReason: String(s.blocked_reason) as VbCandidateDecision["blockedReason"],
+    virtualExitAtMs,
+  };
+}
+
 function loadLedger(): Map<string, ShadowRow> {
   if (!existsSync(LEDGER)) return new Map();
   try {
     const rows = JSON.parse(readFileSync(LEDGER, "utf8")) as ShadowRow[];
     return new Map(rows.map((r) => [r.signalId, r]));
+  } catch { return new Map(); }
+}
+
+function loadCandidateLedger(): Map<string, VbCandidateReceipt> {
+  if (!existsSync(CANDIDATE_LEDGER)) return new Map();
+  try {
+    const rows = JSON.parse(readFileSync(CANDIDATE_LEDGER, "utf8")) as VbCandidateReceipt[];
+    return new Map(rows.map((row) => [row.opportunityId, row]));
+  } catch { return new Map(); }
+}
+
+function loadCandidateCensors(): Map<string, CandidateCensor> {
+  if (!existsSync(CANDIDATE_CENSORS)) return new Map();
+  try {
+    const rows = JSON.parse(readFileSync(CANDIDATE_CENSORS, "utf8")) as CandidateCensor[];
+    return new Map(rows.map((row) => [`${row.signalId}\u0000${row.code}`, row]));
   } catch { return new Map(); }
 }
 
@@ -119,7 +190,7 @@ async function main() {
   // returned the OLDEST 1000 — new days' signals never entered the walk, so the LAB panel
   // froze mid-06 while gate-shadow reported "0 new". Same silent-truncation class as the
   // quote-fetch flicker; same cure — page to completion, then fail LOUD on any shortfall.
-  const BLOCKED = ["cost_gate", "stale_chain", "not_armed", "halted"];
+  const BLOCKED = ["cost_gate", "stale_chain", "not_armed", "halted", "day1_dark_lifecycle"];
   const { count: expected, error: cErr } = await sb
     .from("signals").select("id", { count: "exact", head: true })
     .in("blocked_reason", BLOCKED).gte("created_at", since);
@@ -160,7 +231,7 @@ async function main() {
   // `halted` joins the bench walk (data-hole fix 2026-07-02): a KILL window's blocked
   // entries re-signal every bar while flat, exactly like drafts — same one-at-a-time
   // sequential semantics, and without this they vanish at the 7d quote prune.
-  const WALK = new Set(["not_armed", "halted"]);
+  const WALK = new Set(["not_armed", "halted", "day1_dark_lifecycle"]);
   const benchByDay = new Map<string, any[]>();
   const gateSigs: any[] = [];
   for (const s of (sigs ?? []) as any[]) {
@@ -172,6 +243,13 @@ async function main() {
   }
 
   const ledger = loadLedger();
+  const candidateDecisions: VbCandidateDecision[] = [];
+  const candidateCensors: CandidateCensor[] = [];
+  const collectCandidate = (s: any, row: ShadowRow): void => {
+    const candidate = exactCandidateDecision(s, row);
+    if ("code" in candidate) candidateCensors.push(candidate);
+    else candidateDecisions.push(candidate);
+  };
   let fresh = 0;
   const bank = async (s: any, base: ShadowRow) => {
     if (HAS_SERVICE) {
@@ -191,7 +269,7 @@ async function main() {
       }, { onConflict: "signal_id" });
       if (error) { console.error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`); process.exit(1); }
       // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
-      if (base.blocked !== "not_armed" && base.pnlPerContract != null) {
+      if (!WALK.has(base.blocked) && base.pnlPerContract != null) {
         try {
           await sb.from("events").insert({
             level: "INFO",
@@ -227,11 +305,13 @@ async function main() {
         // already banked on an earlier run — advance the cursor off its recorded exit
         taken++;
         cursorMs = prior.exitAt ? Date.parse(prior.exitAt) : tMs + 60_000;
+        collectCandidate(s, prior);
         continue;
       }
       const slug = String(s.strategists?.slug ?? "?");
       const base = await reconstruct(s, slug, cfgById.get(s.strategist_id) ?? { stop: POLICY_STOP, tp: 0 });
       await bank(s, base);
+      collectCandidate(s, base);
       taken++;
       cursorMs = base.exitAt ? Date.parse(base.exitAt) : tMs + 60_000; // unscored → try the next minute's signal
     }
@@ -261,11 +341,20 @@ async function main() {
   mkdirSync("data", { recursive: true });
   const rows = [...ledger.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   writeFileSync(LEDGER, JSON.stringify(rows, null, 1));
+  const candidateLedger = loadCandidateLedger();
+  for (const receipt of coalesceVbCandidateDecisions(candidateDecisions)) candidateLedger.set(receipt.opportunityId, receipt);
+  const candidateReceipts = [...candidateLedger.values()].sort((a, b) => a.sourceBarAtMs - b.sourceBarAtMs || a.opportunityId.localeCompare(b.opportunityId));
+  const censorLedger = loadCandidateCensors();
+  for (const censor of candidateCensors) censorLedger.set(`${censor.signalId}\u0000${censor.code}`, censor);
+  const retainedCensors = [...censorLedger.values()].sort((a, b) => a.signalId.localeCompare(b.signalId) || a.code.localeCompare(b.code));
+  writeFileSync(CANDIDATE_LEDGER, JSON.stringify(candidateReceipts, null, 1));
+  writeFileSync(CANDIDATE_CENSORS, JSON.stringify(retainedCensors, null, 1));
 
   const scored = rows.filter((r) => r.pnlPerContract != null);
   const sum = scored.reduce((a, r) => a + (r.pnlPerContract ?? 0), 0);
   console.log(`\n  GATE-SHADOW v2 (re-entry-aware, cap ${MAX_PER_DAY}/day) · ${fresh} new / ${rows.length} total banked → ${LEDGER} + virtual_trades`);
   console.log(`  scored ${scored.length} (mid-basis UPPER BOUND) · Σ would-have $${Math.round(sum)} · avg $${scored.length ? Math.round(sum / scored.length) : 0}/ct`);
+  console.log(`  exact-candidate lane: ${candidateReceipts.length} retained receipts → ${CANDIDATE_LEDGER} · ${retainedCensors.length} retained fail-closed censors → ${CANDIDATE_CENSORS}`);
   for (const grp of ["not_armed", "cost_gate", "stale_chain"] as const) {
     const g = scored.filter((r) => r.blocked === grp);
     if (!g.length) continue;

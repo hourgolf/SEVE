@@ -34,6 +34,15 @@ export interface PositionPlanDraft {
 
 export interface ShadowPlanEvidence { epoch: PolicyEpochDraft; plan: PositionPlanDraft }
 
+export interface ObservedPolicyIdentity {
+  channelVersion: string;
+  managerId: string;
+  managerVersion: string;
+  configurationEpochId: string;
+  policyEpochId: string;
+  policyJson: Record<string, unknown>;
+}
+
 export interface ShadowPlanInput {
   channel: ChannelConfig;
   decision: ShadowDecision;
@@ -102,18 +111,19 @@ function invalidation(ch: ChannelConfig, defaultStopPct: number): string {
   return "strategy exit or mandatory session flatten";
 }
 
-export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvidence | null {
-  const { channel: ch, decision: d } = input;
-  const qty = d.qty ?? 0;
-  const ask = Number(d.detail?.ask ?? 0);
-  const createdAt = new Date(input.decisionAtMs);
-  if (!UUID.test(input.accountId) || !UUID.test(ch.id) || d.action !== "enter" || d.blocked || !d.occ || !d.direction
-      || !Number.isInteger(qty) || qty <= 0 || !(ask > 0) || Number.isNaN(createdAt.getTime())) return null;
-
+/**
+ * Immutable policy/configuration identity shared by accepted position plans and
+ * blocked VB candidates. The configuration epoch deliberately excludes the
+ * routing account; account is provenance, not market-opportunity identity.
+ */
+export function observedPolicyIdentity(input: {
+  channel: ChannelConfig;
+  accountId: string;
+  workerVersion: string;
+}): ObservedPolicyIdentity | null {
+  const ch = input.channel;
+  if (!UUID.test(input.accountId) || !UUID.test(ch.id)) return null;
   const manager = managerPolicy(ch);
-  // Built-in channels have no independent semantic version. The worker release
-  // is therefore part of their alpha identity; over-segmenting is safer than
-  // pooling evidence across a code change that cannot otherwise be named.
   const alpha = { slug: ch.slug, underlying: ch.underlying, spec: ch.spec_json, implementationVersion: input.workerVersion };
   const channelVersion = `sha256:${digest(alpha)}`;
   const managerVersion = `sha256:${digest(manager.body)}`;
@@ -140,10 +150,36 @@ export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvide
       riskBasis: "maximum long-option debit; stop-budget estimate is diagnostic only",
     },
   };
-  const epochId = deterministicEvidenceUuid("seve-policy-epoch-v1", {
+  const configurationEpochId = `sha256:${digest({
+    strategistId: ch.id, channelVersion, managerVersion, workerVersion: input.workerVersion, policyJson,
+  })}`;
+  const policyEpochId = deterministicEvidenceUuid("seve-policy-epoch-v1", {
     strategistId: ch.id, accountId: input.accountId, channelVersion, managerVersion,
     workerVersion: input.workerVersion, policyJson,
   });
+  return {
+    channelVersion,
+    managerId: manager.id,
+    managerVersion,
+    configurationEpochId,
+    policyEpochId,
+    policyJson,
+  };
+}
+
+export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvidence | null {
+  const { channel: ch, decision: d } = input;
+  const qty = d.qty ?? 0;
+  const ask = Number(d.detail?.ask ?? 0);
+  const createdAt = new Date(input.decisionAtMs);
+  if (!UUID.test(input.accountId) || !UUID.test(ch.id) || d.action !== "enter" || d.blocked || !d.occ || !d.direction
+      || !Number.isInteger(qty) || qty <= 0 || !(ask > 0) || Number.isNaN(createdAt.getTime())) return null;
+
+  const identity = observedPolicyIdentity({ channel: ch, accountId: input.accountId, workerVersion: input.workerVersion });
+  if (!identity) return null;
+  const manager = managerPolicy(ch);
+  const { channelVersion, managerVersion, policyJson } = identity;
+  const epochId = identity.policyEpochId;
   const opportunityId = observedOpportunityId({
     strategistId: ch.id, accountId: input.accountId, occ: d.occ, direction: d.direction,
     reason: d.reason, decisionAtMs: input.decisionAtMs,
