@@ -11,6 +11,7 @@ import { signedUsd, timeOfDay, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveRecentExits } from "@/lib/perform/derivePositionsWorkspace";
+import { SentinelReceiptStrip } from "@/components/perform/SentinelWorkspace";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -111,6 +112,7 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
   const judge = sentinel.judge;
 
   return <>
+    <SentinelReceiptStrip sentinel={sentinel} compact />
     <div className="m2-desk-hero">
       <span><small>DAY P&amp;L</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{signedUsd(liveFund.dayPnl)}</b></span>
       <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span>
@@ -145,6 +147,11 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
           <div><small>NEXT OPEN</small>{brief.carry.watch.map((item, index) => <p key={index}>{item}</p>)}</div>
           {brief.events.length > 0 && <div><small>EVENTS</small>{brief.events.map((item, index) => <p key={index}>{item}</p>)}</div>}
         </>}
+      </div>}
+    </Section>
+    <Section title="DETERMINISTIC SCAN" meta="descriptive · not an arm gate">
+      {!sentinel.scan ? <div className="m2-desk-empty">scan evidence unavailable</div> : <div className="m2-review-scan">
+        {[...sentinel.scan.promote.map((row) => ({ ...row, kind: "PROMOTE" })), ...sentinel.scan.fixable.map((row) => ({ ...row, kind: "FIX" })), ...sentinel.scan.leaks.map((row) => ({ ...row, kind: "LEAK" }))].slice(0, 12).map((row) => <div key={`${row.kind}-${row.slug}`}><b>{row.kind}</b><span>{row.slug}</span><small>pk {Math.round(row.peak)}% · win {Math.round(row.win)}% · give {row.give == null ? "—" : `${Math.round(row.give)}%`} · {row.n}t</small></div>)}
       </div>}
     </Section>
   </>;

@@ -43,7 +43,9 @@ export type DigestState = "loading" | "ok" | "empty" | "error";
 
 export function useSentinelDigest(): {
   brief: Brief | null; scan: Scan | null; judge: Judge | null; lens: Lens | null;
-  digest: string | null; date: string; forDate: string; state: DigestState; err: string;
+  digest: string | null; date: string; forDate: string; session: string;
+  createdAt: string; publishedAt: string; message: string; schemaVersion: number | null;
+  publisherVersion: string; state: DigestState; err: string;
 } {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [scan, setScan] = useState<Scan | null>(null);
@@ -52,6 +54,12 @@ export function useSentinelDigest(): {
   const [digest, setDigest] = useState<string | null>(null);
   const [date, setDate] = useState("");
   const [forDate, setForDate] = useState("");
+  const [session, setSession] = useState("");
+  const [createdAt, setCreatedAt] = useState("");
+  const [publishedAt, setPublishedAt] = useState("");
+  const [message, setMessage] = useState("");
+  const [schemaVersion, setSchemaVersion] = useState<number | null>(null);
+  const [publisherVersion, setPublisherVersion] = useState("");
   const [state, setState] = useState<DigestState>("loading");
   const [err, setErr] = useState("");
 
@@ -64,7 +72,7 @@ export function useSentinelDigest(): {
           .like("message", "sentinel:%").order("created_at", { ascending: false }).limit(1);
         if (!alive) return;
         if (error) { setState("error"); setErr(error.message); return; }
-        const row = (data ?? [])[0] as { created_at?: string; meta?: Record<string, unknown> } | undefined;
+        const row = (data ?? [])[0] as { message?: string; created_at?: string; meta?: Record<string, unknown> } | undefined;
         const meta = row?.meta;
         if (!meta) { setState("empty"); return; }
         setBrief((meta.brief as Brief) ?? null);
@@ -74,13 +82,19 @@ export function useSentinelDigest(): {
         setDigest((meta.digest as string) ?? null);
         setDate((meta.date as string) ?? row?.created_at?.slice(0, 10) ?? "");
         setForDate((meta.forDate as string) ?? "");
+        setSession((meta.session as string) ?? "");
+        setCreatedAt(row?.created_at ?? "");
+        setPublishedAt((meta.publishedAt as string) ?? row?.created_at ?? "");
+        setMessage(row?.message ?? "");
+        setSchemaVersion(typeof meta.schemaVersion === "number" ? meta.schemaVersion : null);
+        setPublisherVersion((meta.publisherVersion as string) ?? "");
         setState("ok");
       } catch (e) { if (alive) { setState("error"); setErr((e as Error).message); } }
     })();
     return () => { alive = false; };
   }, []);
 
-  return { brief, scan, judge, lens, digest, date, forDate, state, err };
+  return { brief, scan, judge, lens, digest, date, forDate, session, createdAt, publishedAt, message, schemaVersion, publisherVersion, state, err };
 }
 
 // Legacy fallback: split a combined markdown digest into its forward (terrain) + backward

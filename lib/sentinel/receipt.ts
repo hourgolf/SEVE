@@ -1,0 +1,82 @@
+export const SENTINEL_RECEIPT_SCHEMA_VERSION = 2;
+export const SENTINEL_PUBLISHER_VERSION = "sentinel-publisher-v2";
+
+export interface SentinelReceiptInput {
+  state: "loading" | "ok" | "empty" | "error";
+  err?: string;
+  date?: string;
+  forDate?: string;
+  session?: string;
+  createdAt?: string;
+  publishedAt?: string;
+  message?: string;
+  schemaVersion?: number | null;
+  publisherVersion?: string;
+  briefAsOf?: string;
+}
+
+export interface SentinelReceiptStatus {
+  tone: "green" | "yellow" | "red" | "neutral";
+  code: "current" | "identity-inferred" | "stale" | "loading" | "missing" | "error";
+  label: string;
+  detail: string;
+  session: string;
+  forDate: string;
+  publishedAt: string;
+  source: string;
+  identityExplicit: boolean;
+}
+
+const etDate = (nowMs: number): string => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(nowMs));
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+};
+
+const short = (value: string): string => value ? value.slice(5) : "—";
+
+export function deriveSentinelReceiptStatus(input: SentinelReceiptInput, nowMs = Date.now()): SentinelReceiptStatus {
+  const session = input.session || input.briefAsOf || input.date || "";
+  const forDate = input.forDate || "";
+  const publishedAt = input.publishedAt || input.createdAt || "";
+  const source = input.publisherVersion || (input.schemaVersion ? `sentinel schema v${input.schemaVersion}` : "legacy sentinel event");
+  const identityExplicit = Boolean(input.session);
+
+  if (input.state === "loading") return { tone: "neutral", code: "loading", label: "CHECKING RECEIPT", detail: "reading the latest Sentinel evidence", session, forDate, publishedAt, source, identityExplicit };
+  if (input.state === "error") return { tone: "red", code: "error", label: "RECEIPT ERROR", detail: input.err || "Sentinel evidence could not be read", session, forDate, publishedAt, source, identityExplicit };
+  if (input.state === "empty") return { tone: "yellow", code: "missing", label: "NO RECEIPT", detail: "no Sentinel evidence has been published", session, forDate, publishedAt, source, identityExplicit };
+
+  const today = etDate(nowMs);
+  if (!session || !forDate) return { tone: "yellow", code: "identity-inferred", label: "IDENTITY INCOMPLETE", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  if (today > forDate) return { tone: "red", code: "stale", label: "STALE FOR NEXT OPEN", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  if (!identityExplicit) return { tone: "yellow", code: "identity-inferred", label: "CURRENT · SESSION INFERRED", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  return { tone: "green", code: "current", label: "CURRENT FOR NEXT OPEN", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+}
+
+export function buildSentinelReceiptMeta(input: {
+  session: string;
+  forDate: string | null;
+  digest: string;
+  brief: unknown;
+  scan: unknown;
+  judge: unknown;
+  lens: unknown;
+  publishedAt?: string;
+}): Record<string, unknown> {
+  return {
+    kind: "sentinel",
+    schemaVersion: SENTINEL_RECEIPT_SCHEMA_VERSION,
+    publisherVersion: SENTINEL_PUBLISHER_VERSION,
+    session: input.session,
+    date: input.session,
+    forDate: input.forDate,
+    publishedAt: input.publishedAt ?? new Date().toISOString(),
+    digest: input.digest,
+    brief: input.brief,
+    scan: input.scan,
+    judge: input.judge,
+    lens: input.lens,
+  };
+}

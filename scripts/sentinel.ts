@@ -27,6 +27,7 @@ import {
   SENTINEL_VIRTUAL_TRADE_SELECT,
   type SentinelVirtualTradeRow,
 } from "../lib/sentinel/virtualTradeQuery";
+import { buildSentinelReceiptMeta } from "../lib/sentinel/receipt";
 
 // Service role (when present, e.g. the nightly capture / .env.local) lets the digest publish to the
 // events table for the §03 panel; anon still reads virtual_trades fine, just skips the publish.
@@ -396,7 +397,19 @@ async function main() {
     try {
       await sb.from("events").delete().like("message", `sentinel: ${et}%`);
       // `lens` = the per-channel avg-peak/win map (era-4, real fills) — the P&L panel's harvest columns.
-      await sb.from("events").insert({ level: "INFO", message: `sentinel: ${et}`, meta: { kind: "sentinel", date: et, forDate: (briefStruct as { forDate?: string } | null)?.forDate ?? null, digest: full, brief: briefStruct, scan, judge: judged, lens: cur.ch } });
+      await sb.from("events").insert({
+        level: "INFO",
+        message: `sentinel: ${et}`,
+        meta: buildSentinelReceiptMeta({
+          session: et,
+          forDate: (briefStruct as { forDate?: string } | null)?.forDate ?? null,
+          digest: full,
+          brief: briefStruct,
+          scan,
+          judge: judged,
+          lens: cur.ch,
+        }),
+      });
     } catch (e) { console.error(`sentinel: event publish failed — ${(e as Error).message}`); }
   }
 
