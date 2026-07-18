@@ -19,17 +19,17 @@ import {
   DAY1_RELEASE_CONFIGURATION,
   DAY1_RELEASE_CONFIGURATION_SHA256,
   DAY1_RELEASE_ID,
+  DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
+  validateDay1ReleaseStartup,
 } from "../worker/src/day1ReleasePolicy.js";
 import { observedPolicyIdentity } from "../worker/src/planShadowModel.js";
-import type { ChannelConfig } from "../worker/src/store.js";
+import type { AccountRow, ChannelConfig } from "../worker/src/store.js";
 
 const arg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : null;
 };
-
-interface AccountRow { id: string; name: string; mode: string; cred_ref: string | null; }
 
 function mapChannel(row: any): ChannelConfig {
   const cfg = Array.isArray(row.strategist_config) ? row.strategist_config[0] : row.strategist_config;
@@ -62,14 +62,16 @@ async function main(): Promise<void> {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (!url || !key) throw new Error("Supabase backend credentials missing");
   const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const [strategistRead, accountRead] = await Promise.all([
+  const [strategistRead, accountRead, fundRead] = await Promise.all([
     sb.from("strategists")
       .select("id,slug,name,status,spec_json,underlying,executor,account_id,is_active,strategist_config(*)")
       .order("slug").order("id"),
-    sb.from("accounts").select("id,name,mode,cred_ref").order("id"),
+    sb.from("accounts").select("id,name,mode,cred_ref,is_armed,is_halted,master_daily_stop_usd").order("id"),
+    sb.from("fund_state").select("mode").eq("id", 1).maybeSingle(),
   ]);
   if (strategistRead.error) throw new Error(`strategists SELECT failed: ${strategistRead.error.message}`);
   if (accountRead.error) throw new Error(`accounts SELECT failed: ${accountRead.error.message}`);
+  if (fundRead.error) throw new Error(`fund_state SELECT failed: ${fundRead.error.message}`);
   const channels = (strategistRead.data ?? []).map(mapChannel);
   const accounts = (accountRead.data ?? []) as AccountRow[];
   if (channels.length !== DAY1_ROOTS.length + DAY1_DARK_CHANNELS.length) {
@@ -87,6 +89,27 @@ async function main(): Promise<void> {
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const defaultAccounts = accounts.filter((account) => !account.cred_ref);
   if (defaultAccounts.length !== 1) throw new Error(`expected one default paper account, found ${defaultAccounts.length}`);
+  const startup = validateDay1ReleaseStartup({
+    channels: overlaid,
+    accounts,
+    fundMode: String((fundRead.data as { mode?: unknown } | null)?.mode ?? ""),
+    workerVersion: WORKER_VERSION,
+    expectedConfigurationSha256: DAY1_RELEASE_CONFIGURATION_SHA256,
+    posture: {
+      alpacaPaperHost: "https://paper-api.alpaca.markets",
+      stockFeed: "sip", optionFeed: "opra", dryRun: true, liveTrading: false,
+      heldCaptureEnabled: true, heldCaptureFlushMs: 30_000,
+      heldCaptureTargetSamples: 12, heldCaptureMaxAgeMs: 60_000,
+      heldCaptureIngressMaxSamples: 10_000, heldCaptureIngressMaxBytes: 8_388_608,
+      heldCaptureStateMaxSamples: 10_000, heldCaptureStateMaxBytes: 8_388_608,
+      heldCaptureRetryMaxAttempts: 5, heldCaptureRetryBaseDelayMs: 30_000,
+      heldCaptureRetryMaxDelayMs: 300_000, heldCaptureAdapterDeadlineMs: 5_000,
+      heldCaptureNormalFlushDeadlineMs: 15_000, heldCaptureShutdownDeadlineMs: 30_000,
+      managerShadowEnabled: true,
+      managerShadowQuoteMaxAgeMs: 15_000,
+    },
+  });
+  if (!startup.ok) throw new Error(`live fleet does not reproduce RC2 bindings: ${startup.errors.join(";")}`);
 
   const roots = DAY1_ROOTS.map((root) => {
     const channel = channelBySlug.get(root.slug);
@@ -120,9 +143,18 @@ async function main(): Promise<void> {
       workerVersion: WORKER_VERSION,
       releaseConfigurationSha256: DAY1_RELEASE_CONFIGURATION_SHA256,
       releaseConfiguration: DAY1_RELEASE_CONFIGURATION,
+      committedRootBindings: DAY1_ROOT_BINDINGS,
+      supersededRc1: {
+        status: "rejected-superseded-not-deployable",
+        fileSha256: "120cd5ec768c9743e024539cdca8a6e8145bcd32bb00e932367d6732df9cb99a",
+        contentSha256: "02de877337c4cb1df736bbfd5dfbba0cf8c144c8f0204189d058db28cb09f2f8",
+        configurationSha256: "ba0fed21340f34a7f816a7edb7589a44758e15b6696b4a6db41d432e090a37c1",
+      },
       capture: {
-        samples: 12, maxAgeSeconds: 60, combinedStateMaxSamples: 10_000,
-        combinedStateMaxBytes: 8_388_608, retrySeconds: [0, 30, 90, 210, 450],
+        samples: 12, maxAgeMs: 60_000, ingressMaxSamples: 10_000, ingressMaxBytes: 8_388_608,
+        combinedStateMaxSamples: 10_000, combinedStateMaxBytes: 8_388_608,
+        retryAttempts: 5, retryBaseDelayMs: 30_000, retryMaxDelayMs: 300_000,
+        retrySeconds: [0, 30, 90, 210, 450],
         adapterDeadlineSeconds: 5, normalFlushDeadlineSeconds: 15, shutdownDeadlineSeconds: 30,
       },
       scorer: {
@@ -157,19 +189,26 @@ async function main(): Promise<void> {
   const output = JSON.stringify({ contentSha256: sealed.sha256, content: JSON.parse(sealed.canonicalJson) });
   const out = arg("out");
   if (out) writeFileSync(out, output);
+  const activeSettingsOut = arg("active-settings-out");
+  if (activeSettingsOut) writeFileSync(activeSettingsOut, JSON.stringify(startup.activeSettingsReceipt));
   console.log(JSON.stringify({
     externalWrites: false,
-    supabaseOperations: ["SELECT strategists", "SELECT accounts"],
+    supabaseOperations: ["SELECT strategists", "SELECT accounts", "SELECT fund_state"],
     localOutput: out,
+    localActiveSettingsOutput: activeSettingsOut,
     fleetChannels: channels.length,
     roots: roots.map((root) => ({
       slug: root.slug,
+      strategistId: root.strategistId,
+      account: root.account,
       channelVersion: root.policyIdentity.channelVersion,
       managerVersion: root.policyIdentity.managerVersion,
       configurationEpoch: root.policyIdentity.configurationEpochId,
+      policyEpoch: root.policyIdentity.policyEpochId,
     })),
     releaseConfigurationSha256: DAY1_RELEASE_CONFIGURATION_SHA256,
     contentSha256: sealed.sha256,
+    activeSettingsReceiptExample: startup.activeSettingsReceipt,
   }, null, 2));
 }
 

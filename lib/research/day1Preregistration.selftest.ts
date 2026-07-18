@@ -25,8 +25,8 @@ check("authorization invariants remain inside canonical content", a.canonicalJso
 assert.throws(() => sealDay1Preregistration({ ...base, evidence: { ...base.evidence, generatedAt: "2026-07-17T21:00:00Z" } }), /volatile/); checks++;
 assert.throws(() => sealDay1Preregistration({ ...base, roots: [] }), /invalid/); checks++;
 const renderer = readFileSync(new URL("../../scripts/day1-release-receipt.ts", import.meta.url), "utf8");
-check("release renderer contains only the two declared Supabase SELECT reads",
-  (renderer.match(/\.from\("/g) ?? []).length, 2);
+check("release renderer contains only the three declared Supabase SELECT reads",
+  (renderer.match(/\.from\("/g) ?? []).length, 3);
 check("release renderer contains no external mutation method",
   /\.(?:insert|upsert|update|delete)\s*\(/.test(renderer), false);
 console.log(`day1-preregistration-selftest: ${checks}/${checks} PASS`);
