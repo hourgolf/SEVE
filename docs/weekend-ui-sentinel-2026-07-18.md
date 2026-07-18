@@ -1,6 +1,6 @@
 # Weekend UI functional slice — Sentinel and Review
 
-Date: 2026-07-18  
+Date: 2026-07-18
 Branch: `weekend-ui-functional`
 
 ## Outcome
