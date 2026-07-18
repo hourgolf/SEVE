@@ -10,6 +10,8 @@ import { timeOfDay } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
+import { deriveTapeRows } from "@/lib/perform/eventTape";
 
 // =============================================================================
 // MOBILE · PERFORM (S5) — the watch surface as ONE vertical scroll (the gallery
@@ -89,23 +91,26 @@ function TapeMsg({ message, strategists }: { message: string; strategists: Strat
   );
 }
 
-function TapeSection({ events, strategists }: { events: MarketEvent[]; strategists: StrategistState[] }) {
+function TapeSection({ events, strategists, health }: { events: MarketEvent[]; strategists: StrategistState[]; health: SurfaceProps["data"]["readHealth"]["events"] }) {
+  const rows = deriveTapeRows(events);
   return (
     <section className="m2-screen m2-glass">
       <div className="m2-phead">
         <span className="t">TAPE</span>
         <span className="grow" />
-        <span className="x"><span className="m2-livedot" />LIVE</span>
+        <span className="x">NEWEST {events.length}/14</span>
       </div>
+      <TapeReadStrip health={health} events={events} compact />
       <div>
-        {events.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="m2-ghost">no events yet</div>
-        ) : events.slice(0, 40).map((e) => (
+        ) : rows.map((e) => (
           <Fragment key={e.id}>
             <div className="m2-trow">
               <span className="m2-t-time num">{timeOfDay(e.created_at)}</span>
               <span className={`m2-t-kind ${KIND[e.level] ?? "info"}`}>{e.level === "RISK" ? "RISK" : e.level === "OK" ? "OK" : e.level}</span>
               <TapeMsg message={e.message} strategists={strategists} />
+              {e.count > 1 && <strong className="m2-t-count">×{e.count}</strong>}
             </div>
           </Fragment>
         ))}
@@ -150,7 +155,7 @@ export function MobilePerform({
 
         <MobilePositions props={props} strategists={view.desk.strategists} />
         <SentinelSection symbol={symbol} sent={sent} />
-        <TapeSection events={data.events} strategists={view.desk.strategists} />
+        <TapeSection events={data.events} strategists={view.desk.strategists} health={data.readHealth.events} />
       </div>
 
       <MobileDock channels={channels} livePnl={livePnl} lens={sent.lens} write={props.write} />

@@ -25,11 +25,21 @@ This slice does not change the Day 1 roster, order behavior, Railway configurati
 - mobile Review at 390x844: passed; zero horizontal overflow
 - desktop and mobile console warnings/errors: zero
 
+## Event Tape follow-on
+
+The same branch now also replaces the expanded compact desktop Tape with a full operational ledger workspace. It exposes query health, the 14-row retention boundary, latest-row time, adjacent-repeat collapsing, and execution/risk/data/Sentinel/system filters. Mobile Play uses the same status model and no longer labels a weekend ledger `LIVE` merely because rows exist.
+
+Additional verification:
+
+- `event-tape-selftest`: 13/13 passed
+- desktop filters exercised against real retained rows
+- mobile Tape at 390x844: 14 rows, zero horizontal overflow
+- final production build: passed
+
 ## Remaining dashboard order
 
-1. Event Tape / Review provenance and useful operator filters.
-2. Ops workspace and capture/observer receipts.
-3. Channels workspace and evidence passports.
-4. Shared interaction, contrast, sizing, and cream/blackout polish after functional parity.
+1. Ops workspace and capture/observer receipts.
+2. Channels workspace and evidence passports.
+3. Shared interaction, contrast, sizing, and cream/blackout polish after functional parity.
 
 Legacy Rooms remain available until each dependency has an equivalent or better destination.
