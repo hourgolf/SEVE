@@ -1,3 +1,5 @@
+import { isTradingDay } from "@/engine/market-calendar";
+
 export const SENTINEL_RECEIPT_SCHEMA_VERSION = 2;
 export const SENTINEL_PUBLISHER_VERSION = "sentinel-publisher-v2";
 
@@ -17,7 +19,7 @@ export interface SentinelReceiptInput {
 
 export interface SentinelReceiptStatus {
   tone: "green" | "yellow" | "red" | "neutral";
-  code: "current" | "identity-inferred" | "stale" | "loading" | "missing" | "error";
+  code: "current" | "identity-inferred" | "identity-conflict" | "target-invalid" | "stale" | "loading" | "missing" | "error";
   label: string;
   detail: string;
   session: string;
@@ -51,6 +53,14 @@ export function deriveSentinelReceiptStatus(input: SentinelReceiptInput, nowMs =
   const today = etDate(nowMs);
   if (!session || !forDate) return { tone: "yellow", code: "identity-inferred", label: "IDENTITY INCOMPLETE", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
   if (today > forDate) return { tone: "red", code: "stale", label: "STALE FOR NEXT OPEN", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  if (!isTradingDay(forDate)) return { tone: "red", code: "target-invalid", label: "TARGET IS NOT A SESSION", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  const sessionConflicts = Boolean(input.session) && (
+    !isTradingDay(input.session as string)
+    || Boolean(input.briefAsOf && input.briefAsOf !== input.session)
+    || Boolean(input.date && input.date !== input.session)
+    || session >= forDate
+  );
+  if (sessionConflicts) return { tone: "yellow", code: "identity-conflict", label: "SESSION IDENTITY CONFLICT", detail: `session ${short(session)} · evidence ${short(input.briefAsOf || input.date || "")} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
   if (!identityExplicit) return { tone: "yellow", code: "identity-inferred", label: "CURRENT · SESSION INFERRED", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
   return { tone: "green", code: "current", label: "CURRENT FOR NEXT OPEN", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
 }

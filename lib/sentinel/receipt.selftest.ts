@@ -28,6 +28,24 @@ const stale = deriveSentinelReceiptStatus({
 assert.equal(stale.code, "stale");
 assert.equal(stale.tone, "red");
 
+const weekendSession = deriveSentinelReceiptStatus({
+  state: "ok", session: "2026-07-18", date: "2026-07-18", briefAsOf: "2026-07-17", forDate: "2026-07-20",
+}, now);
+assert.equal(weekendSession.code, "identity-conflict");
+assert.equal(weekendSession.tone, "yellow");
+
+const conflictingSession = deriveSentinelReceiptStatus({
+  state: "ok", session: "2026-07-17", date: "2026-07-17", briefAsOf: "2026-07-16", forDate: "2026-07-20",
+}, now);
+assert.equal(conflictingSession.code, "identity-conflict");
+assert.equal(conflictingSession.tone, "yellow");
+
+const invalidTarget = deriveSentinelReceiptStatus({
+  state: "ok", session: "2026-07-17", forDate: "2026-07-19",
+}, now);
+assert.equal(invalidTarget.code, "target-invalid");
+assert.equal(invalidTarget.tone, "red");
+
 assert.equal(deriveSentinelReceiptStatus({ state: "error", err: "timeout" }, now).code, "error");
 assert.equal(deriveSentinelReceiptStatus({ state: "empty" }, now).code, "missing");
 assert.equal(deriveSentinelReceiptStatus({ state: "loading" }, now).code, "loading");
@@ -42,4 +60,4 @@ assert.equal(meta.session, "2026-07-17");
 assert.equal(meta.date, "2026-07-17");
 assert.equal(meta.forDate, "2026-07-20");
 
-console.log("sentinel-receipt-selftest: 11/11 passed");
+console.log("sentinel-receipt-selftest: 17/17 passed");

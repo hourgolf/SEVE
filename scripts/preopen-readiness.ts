@@ -9,9 +9,11 @@
 // ============================================================================
 
 import { createClient } from "@supabase/supabase-js";
-import { DAY1_CONFIG_HASH, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION } from "@/lib/channels/day1Release";
+import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION } from "@/lib/channels/day1Release";
 import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
+import { deriveSentinelReceiptStatus } from "@/lib/sentinel/receipt";
 import type { MarketEvent } from "@/lib/types";
+import { DAY1_SEALED_RUNTIME_POSTURE } from "@/worker/src/day1ReleasePolicy";
 
 const REQUIRED_PAPER_HOST = "https://paper-api.alpaca.markets";
 const WORKER_FRESH_SEC = 150;
@@ -135,13 +137,14 @@ async function main(): Promise<void> {
   if (configuredHost !== REQUIRED_PAPER_HOST) failures.push(`ALPACA_PAPER_HOST is ${configuredHost}; expected ${REQUIRED_PAPER_HOST}`);
 
   const sb = createClient(sbUrl, sbKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const [fundRead, accountsRead, channelsRead, positionsRead, workerRead, releaseRead] = await Promise.all([
+  const [fundRead, accountsRead, channelsRead, positionsRead, workerRead, releaseRead, sentinelRead] = await Promise.all([
     sb.from("fund_state").select("mode,is_halted,halted_reason").eq("id", 1).maybeSingle(),
     sb.from("accounts").select("id,name,cred_ref,is_armed,is_halted,master_daily_stop_usd").order("name"),
     sb.from("strategists").select("id,slug,status,underlying,executor,account_id,is_active,strategist_config(max_contracts,capital_pct,daily_stop_usd,daily_target_usd,premium_stop_pct,take_profit_pct,underlying_stop_pct,entry_dte,strike_offset,muted,boosted,event_policy)").order("slug"),
     sb.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open"),
     sb.from("worker_runs").select("version,git_sha,last_heartbeat_at,last_phase,ended_at,last_error").is("ended_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("events").select("id,level,message,created_at,strategist_id,meta").ilike("message", "%day1-release ACTIVE%").order("created_at", { ascending: false }).limit(1),
+    sb.from("events").select("id,level,message,created_at,strategist_id,meta").ilike("message", "sentinel:%").order("created_at", { ascending: false }).limit(1),
   ]);
 
   for (const [label, error] of [
@@ -173,6 +176,24 @@ async function main(): Promise<void> {
     if (release.configHash !== DAY1_CONFIG_HASH) failures.push(`release hash is ${release.configHash}; expected ${DAY1_CONFIG_HASH}`);
   }
 
+  const sentinelEvent = ((sentinelRead.data ?? []) as MarketEvent[])[0];
+  const sentinelMeta = (sentinelEvent?.meta ?? {}) as Record<string, unknown>;
+  const sentinelBrief = (sentinelMeta.brief ?? {}) as Record<string, unknown>;
+  const sentinelReceipt = deriveSentinelReceiptStatus({
+    state: sentinelRead.error ? "error" : sentinelEvent ? "ok" : "empty",
+    err: sentinelRead.error?.message,
+    date: typeof sentinelMeta.date === "string" ? sentinelMeta.date : undefined,
+    forDate: typeof sentinelMeta.forDate === "string" ? sentinelMeta.forDate : typeof sentinelBrief.forDate === "string" ? sentinelBrief.forDate : undefined,
+    session: typeof sentinelMeta.session === "string" ? sentinelMeta.session : undefined,
+    createdAt: sentinelEvent?.created_at,
+    publishedAt: typeof sentinelMeta.publishedAt === "string" ? sentinelMeta.publishedAt : undefined,
+    message: sentinelEvent?.message,
+    schemaVersion: typeof sentinelMeta.schemaVersion === "number" ? sentinelMeta.schemaVersion : null,
+    publisherVersion: typeof sentinelMeta.publisherVersion === "string" ? sentinelMeta.publisherVersion : undefined,
+    briefAsOf: typeof sentinelBrief.asOf === "string" ? sentinelBrief.asOf : undefined,
+  });
+  if (sentinelReceipt.tone !== "green") warnings.push(`Sentinel ${sentinelReceipt.label}: ${sentinelReceipt.detail}`);
+
   const accounts = (accountsRead.data ?? []) as AccountRow[];
   const allChannels = (channelsRead.data ?? []) as ChannelRow[];
   const channels = allChannels.filter((channel) => channel.status === "armed" && channel.is_active === true);
@@ -187,6 +208,7 @@ async function main(): Promise<void> {
   console.log(`Fund        : ${fund?.mode ?? "missing"} · halted=${fund?.is_halted ? "TRUE" : "false"}`);
   console.log(`Worker      : ${worker?.version ?? "missing"} · ${Math.round(workerAgeSec)}s · ${worker?.last_phase ?? "?"} · ${worker?.last_error ? "ERROR" : "clean"}`);
   console.log(`Release     : ${release?.releaseId ?? "missing"} · ${release?.configHash.slice(0, 12) ?? "—"}${release ? "…" : ""}`);
+  console.log(`Sentinel    : ${sentinelReceipt.label} · ${sentinelReceipt.detail}`);
   console.log(`Desk rows   : ${positions.length} open\n`);
 
   console.log("Paper broker accounts:");
@@ -259,6 +281,8 @@ async function main(): Promise<void> {
 
   const darkDatabaseRows = channels.filter((channel) => !DAY1_ROOTS[channel.slug]).length;
   console.log(`\nRuntime     : ${readyRoots}/${rootPolicies.length} sealed roots ready · ${darkDatabaseRows} other armed/active DB rows suppressed to dark evidence by RC5`);
+  console.log(`Capture     : REQUIRED · ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.targetSamples} samples / ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.maxAgeMs / 1_000}s · ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.retryMaxAttempts} attempts · bounded ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.stateMaxSamples.toLocaleString()} samples / ${Math.round(DAY1_SEALED_RUNTIME_POSTURE.heldCapture.stateMaxBytes / 1_048_576)} MiB`);
+  console.log(`Observer    : REQUIRED · ${DAY1_MANAGER_ARMS.length} shadow manager arms · quote age ≤${DAY1_SEALED_RUNTIME_POSTURE.managerShadow.quoteMaxAgeMs / 1_000}s`);
   console.log("DB settings : context only where RC5 overlays policy; the startup receipt + worker version identify the active runtime contract");
   console.log("Account stop: legacy display only; sealed per-channel risk governs the Day 1 roots above");
   if (warnings.length) console.log(`\nWarnings (${warnings.length}):\n  - ${warnings.join("\n  - ")}`);
