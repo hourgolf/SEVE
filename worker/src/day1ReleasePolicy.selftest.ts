@@ -10,6 +10,7 @@ import {
   applyDay1ReleaseFleetOverlay,
   buildDay1AdmissionState,
   DAY1_DARK_CHANNELS,
+  DAY1_RELEASE_CONFIGURATION,
   DAY1_RELEASE_CONFIGURATION_SHA256,
   DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
@@ -49,6 +50,13 @@ check("non-root overlay remains non-executing input for the admission layer", ap
 check("durable lifecycle enumerates six roots and sixty-two dark channels", [DAY1_ROOTS.length, DAY1_DARK_CHANNELS.length], [6, 62]);
 check("unknown channels fail dark", day1Lifecycle("new-unreviewed-channel"), "dark");
 check("release configuration hash is a canonical SHA-256", /^[a-f0-9]{64}$/.test(DAY1_RELEASE_CONFIGURATION_SHA256), true);
+check("release identity seals broker truth and posture-specific arbitration", [
+  DAY1_RELEASE_CONFIGURATION.admissionTruth.brokerPositionsRequired,
+  DAY1_RELEASE_CONFIGURATION.admissionTruth.workingBuyOrdersRequired,
+  DAY1_RELEASE_CONFIGURATION.admissionTruth.incompletePositionCensor,
+  DAY1_RELEASE_CONFIGURATION.admissionTruth.incompleteOrderCensor,
+  DAY1_RELEASE_CONFIGURATION.arbitration.manageOnlyMaySuppressExecutableCandidate,
+], [true, true, "day1_global_snapshot_incomplete", "day1_global_orders_incomplete", false]);
 check("fleet overlay refuses a missing ratified root", (() => {
   try { applyDay1ReleaseFleetOverlay(channels.filter((row) => row.slug !== "grind-v3")); return false; }
   catch { return true; }
