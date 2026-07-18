@@ -26,6 +26,7 @@ const NAV = [
   { key: "studio", label: "Channels", icon: "◉", mode: "studio" as const },
   { key: "sentinel", label: "Sentinel", icon: "◇", mode: "perform" as const, section: "sentinel" as const },
   { key: "tape", label: "Event Tape", icon: "≋", mode: "perform" as const, section: "tape" as const },
+  { key: "ops", label: "Ops", icon: "⌘", mode: "perform" as const, section: "ops" as const },
 ];
 
 const compactUsd = (value: number): string => {

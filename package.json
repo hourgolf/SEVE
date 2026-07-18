@@ -87,6 +87,7 @@
     "day1-release-receipt": "tsx scripts/day1-release-receipt.ts",
     "sentinel-receipt-selftest": "tsx lib/sentinel/receipt.selftest.ts",
     "event-tape-selftest": "tsx lib/perform/eventTape.selftest.ts",
+    "release-receipt-selftest": "tsx lib/ops/releaseReceipt.selftest.ts",
     "family-preregistered-receipt-adapter-selftest": "tsx lib/research/familyPreregisteredReceiptAdapter.selftest.ts",
     "family-preregistered-scorecard": "tsx scripts/family-preregistered-scorecard.ts",
     "preregistered-path-tests": "tsx scripts/preregistered-path-tests.ts",

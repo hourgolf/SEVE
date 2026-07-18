@@ -3,7 +3,7 @@ import type { MarketEvent } from "@/lib/types";
 import type { Severity } from "@/lib/incident/deriveIncident";
 
 export type PerformFocus = "market" | "positions" | "incident";
-export type PerformSection = "overview" | "market" | "positions" | "sentinel" | "tape";
+export type PerformSection = "overview" | "market" | "positions" | "sentinel" | "tape" | "ops";
 
 export interface CollapsedEvent extends MarketEvent {
   count: number;

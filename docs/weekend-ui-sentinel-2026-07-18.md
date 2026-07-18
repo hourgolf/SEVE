@@ -36,10 +36,16 @@ Additional verification:
 - mobile Tape at 390x844: 14 rows, zero horizontal overflow
 - final production build: passed
 
+## Ops follow-on
+
+Desktop now has a real read-only Ops destination. It separates the 24/7 process ledger from the RTH stream beat and cron snapshot, reports each app market read independently, exposes the most recent Day 1 startup receipt without treating it as liveness, and labels database assignments separately from the runtime release overlay. The mobile Ops room carries the same release receipt and now labels its roster counts as database state.
+
+The release parser is deterministic and rejects malformed/incomplete hashes. No Railway configuration or runtime behavior is changed by this UI.
+
 ## Remaining dashboard order
 
-1. Ops workspace and capture/observer receipts.
-2. Channels workspace and evidence passports.
+1. Channels workspace and evidence passports.
+2. Deeper capture/observer receipts once their evidence is available at the shared seam.
 3. Shared interaction, contrast, sizing, and cream/blackout polish after functional parity.
 
 Legacy Rooms remain available until each dependency has an equivalent or better destination.

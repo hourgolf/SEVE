@@ -12,6 +12,7 @@ import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveRecentExits } from "@/lib/perform/derivePositionsWorkspace";
 import { SentinelReceiptStrip } from "@/components/perform/SentinelWorkspace";
+import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -163,6 +164,7 @@ function OpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; cha
   const risk = active.reduce((sum, channel) => sum + (channel.config.capital_pct || 0), 0);
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug]?.dayPnl ?? 0 })).filter((row) => row.pnl !== 0).sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
   const ingestAge = data.lastIngestTs ? Math.max(0, Math.round((Date.now() - Date.parse(data.lastIngestTs)) / 1000)) : null;
+  const release = findDay1ReleaseReceipt(data.events);
 
   return <>
     <section className={`m2-incident-card ${incident.severity}`}><header><i /><b>{incident.title}</b><span>{incident.severity.toUpperCase()}</span></header>
@@ -170,17 +172,20 @@ function OpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; cha
     <Section title="PREFLIGHT" meta={incident.session.replaceAll("_", " ")}>
       <div className="m2-preflight">
         <span><b>PROCESS</b><em>{workerRuns.query.state === "ok" ? "OBSERVED" : workerRuns.query.state.toUpperCase()}</em><small>{workerRuns.rowsIn16h} runs / 16h</small></span>
-        <span><b>STREAM</b><em>{ops.heartbeat.state.toUpperCase()}</em><small>{age(ops.hbAgeSec)} · {ops.streamArmed} armed</small></span>
-        <span><b>CRON</b><em>{ops.cron.state.toUpperCase()}</em><small>{age(ops.cronAgeSec)} · {ops.cronArmed} armed</small></span>
+        <span><b>STREAM</b><em>{ops.heartbeat.state.toUpperCase()}</em><small>{age(ops.hbAgeSec)} · {ops.streamArmed} DB armed</small></span>
+        <span><b>CRON</b><em>{ops.cron.state.toUpperCase()}</em><small>{age(ops.cronAgeSec)} · {ops.cronArmed} DB armed</small></span>
         <span><b>TAPE</b><em>{data.lastIngestTs ? "OBSERVED" : "MISSING"}</em><small>{age(ingestAge)} · {data.snapshot.length} contracts</small></span>
       </div>
     </Section>
     <div className="m2-desk-hero">
       <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span><span><small>DAY</small><b>{signedUsd(liveFund.dayPnl)}</b></span>
-      <span><small>ACTIVE</small><b>{active.length}</b></span><span><small>RISK ALLOC</small><b>{moneyK(risk)}</b></span>
+      <span><small>DB ACTIVE</small><b>{active.length}</b></span><span><small>DB RISK</small><b>{moneyK(risk)}</b></span>
     </div>
     <Section title="DAY BOOKS" meta={`${feed.recentTrades.length} closed · ${feed.positions.length} open`}>
       {rows.length === 0 ? <div className="m2-desk-empty">no attributed P&amp;L today</div> : <div className="m2-daybooks">{rows.map(({ channel, pnl }) => <span key={channel.slug}><i style={{ background: pmVar(channel.color) }} /><b>{channel.slug}</b><em className={pnl < 0 ? "neg" : "pos"}>{signedUsd(pnl)}</em></span>)}</div>}
+    </Section>
+    <Section title="MONDAY RELEASE" meta="startup receipt · not liveness">
+      {release ? <div className="m2-release-receipt"><b>{release.releaseId}</b><small>{release.configHash}</small></div> : <div className="m2-desk-empty">release receipt outside retained event window</div>}
     </Section>
     <button type="button" className="m2-open-settings" onClick={onOpenSettings}>OPEN SETTINGS · AUTH · PUSH · LOG</button>
   </>;
