@@ -57,6 +57,9 @@ export interface MarketData {
   bars: UnderlyingBar[];
   /** Latest ~14 system events, newest first. */
   events: MarketEvent[];
+  /** Latest Day 1 startup receipt event, queried independently so a busy tape
+   *  cannot evict release identity from operator surfaces. */
+  releaseEvents: MarketEvent[];
   /** Distinct expirations present in the latest pull. */
   expirations: number;
   /** Wall-clock time of the last completed poll. */
@@ -119,6 +122,7 @@ const INITIAL: MarketData = {
   snapshot: [],
   bars: [],
   events: [],
+  releaseEvents: [],
   expirations: 0,
   updatedAt: null,
   error: null,
@@ -179,10 +183,11 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       // independently keeps an optional event/bar timeout from poisoning a
       // healthy options chain. The old exact COUNT scanned the whole symbol
       // partition every minute and was removed from the live path entirely.
-      const [quotesSettled, barsSettled, eventsSettled] = await Promise.allSettled([
+      const [quotesSettled, barsSettled, eventsSettled, releaseSettled] = await Promise.allSettled([
         sb.from("option_quotes").select("*").eq("underlying", symbol).order("captured_at", { ascending: false }).limit(200),
         sb.from("underlying_bars").select("ts,open,high,low,close,volume,vwap").eq("symbol", symbol).order("ts", { ascending: false }).limit(RECENT_BARS),
         sb.from("events").select("*").order("created_at", { ascending: false }).limit(14),
+        sb.from("events").select("*").ilike("message", "%day1-release ACTIVE%").order("created_at", { ascending: false }).limit(1),
       ]);
 
       const quotesRes = quotesSettled.status === "fulfilled" ? quotesSettled.value : null;
@@ -211,11 +216,15 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
 
       const barsRes = barsSettled.status === "fulfilled" ? barsSettled.value : null;
       const eventsRes = eventsSettled.status === "fulfilled" ? eventsSettled.value : null;
+      const releaseRes = releaseSettled.status === "fulfilled" ? releaseSettled.value : null;
       const barsError = barsSettled.status === "rejected" ? barsSettled.reason : barsRes?.error;
       const eventsError = eventsSettled.status === "rejected" ? eventsSettled.reason : eventsRes?.error;
+      const releaseError = releaseSettled.status === "rejected" ? releaseSettled.reason : releaseRes?.error;
+      const eventHealthError = eventsError ?? releaseError;
       const warnings = [
         barsError ? `CHART ${readErrorMessage(barsError)}` : null,
         eventsError ? `EVENT TAPE ${readErrorMessage(eventsError)}` : null,
+        releaseError ? `RELEASE RECEIPT ${readErrorMessage(releaseError)}` : null,
       ].filter((value): value is string => value != null);
 
       const quotes = (quotesRes?.data ?? []) as OptionQuote[];
@@ -223,6 +232,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       const recent = [...recentDesc].reverse(); // oldest → newest
       const bars = recent.length ? mergeBars(historyBars.current, recent) : null;
       const events = eventsError ? null : ((eventsRes?.data ?? []) as MarketEvent[]);
+      const releaseEvents = releaseError ? null : ((releaseRes?.data ?? []) as MarketEvent[]);
 
       let status: FeedStatus = "stale";
       let spot: number | null = null;
@@ -296,6 +306,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         snapshot,
         bars: bars ?? prev.bars,
         events: events ?? prev.events,
+        releaseEvents: releaseEvents ?? prev.releaseEvents,
         expirations,
         updatedAt: completedAt,
         error: null,
@@ -307,8 +318,8 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
           bars: barsError
             ? markReadFailure(prev.readHealth.bars, completedAt, readErrorMessage(barsError))
             : markReadSuccess(prev.readHealth.bars, completedAt),
-          events: eventsError
-            ? markReadFailure(prev.readHealth.events, completedAt, readErrorMessage(eventsError))
+          events: eventHealthError
+            ? markReadFailure(prev.readHealth.events, completedAt, readErrorMessage(eventHealthError))
             : markReadSuccess(prev.readHealth.events, completedAt),
         },
       }));

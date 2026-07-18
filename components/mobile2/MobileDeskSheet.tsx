@@ -164,7 +164,7 @@ function OpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; cha
   const risk = active.reduce((sum, channel) => sum + (channel.config.capital_pct || 0), 0);
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug]?.dayPnl ?? 0 })).filter((row) => row.pnl !== 0).sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
   const ingestAge = data.lastIngestTs ? Math.max(0, Math.round((Date.now() - Date.parse(data.lastIngestTs)) / 1000)) : null;
-  const release = findDay1ReleaseReceipt(data.events);
+  const release = findDay1ReleaseReceipt(data.releaseEvents);
 
   return <>
     <section className={`m2-incident-card ${incident.severity}`}><header><i /><b>{incident.title}</b><span>{incident.severity.toUpperCase()}</span></header>
@@ -185,7 +185,7 @@ function OpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; cha
       {rows.length === 0 ? <div className="m2-desk-empty">no attributed P&amp;L today</div> : <div className="m2-daybooks">{rows.map(({ channel, pnl }) => <span key={channel.slug}><i style={{ background: pmVar(channel.color) }} /><b>{channel.slug}</b><em className={pnl < 0 ? "neg" : "pos"}>{signedUsd(pnl)}</em></span>)}</div>}
     </Section>
     <Section title="MONDAY RELEASE" meta="startup receipt · not liveness">
-      {release ? <div className="m2-release-receipt"><b>{release.releaseId}</b><small>{release.configHash}</small></div> : <div className="m2-desk-empty">release receipt outside retained event window</div>}
+      {release ? <div className="m2-release-receipt"><b>{release.releaseId}</b><small>{release.configHash}</small></div> : <div className="m2-desk-empty">dedicated release receipt unavailable</div>}
     </Section>
     <button type="button" className="m2-open-settings" onClick={onOpenSettings}>OPEN SETTINGS · AUTH · PUSH · LOG</button>
   </>;

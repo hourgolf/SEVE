@@ -4,6 +4,8 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { StudioChannelRow, StudioFleetSummary, StudioSort } from "@/lib/studio/deriveStudioView";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
+import type { ChannelPassport } from "@/lib/channels/channelPassport";
+import type { Day1ReleaseObservation } from "@/lib/channels/day1Release";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -12,18 +14,24 @@ const SORTS: { value: StudioSort; label: string }[] = [
   { value: "name", label: "Name" },
 ];
 
-export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShowAll, onSort, onSelect }: {
+export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, passports, onShowAll, onSort, onSelect }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
   selectedSlug?: string;
   showAll: boolean;
   sort: StudioSort;
+  passports: { release: Day1ReleaseObservation; bySlug: Record<string, ChannelPassport>; roots: number; dark: number };
   onShowAll: (show: boolean) => void;
   onSort: (sort: StudioSort) => void;
   onSelect: (slug: string) => void;
 }) {
   return (
     <section className="fleet" aria-label="Strategy channel fleet">
+      <div className={`fleet-release ${passports.release.state}`} role="status">
+        <span><i /><b>{passports.release.state === "verified" ? "SEALED RC5 RUNTIME" : passports.release.state === "mismatch" ? "RELEASE MISMATCH" : "RUNTIME UNVERIFIED"}</b><small>{passports.release.fact}</small></span>
+        <em>{passports.release.state === "verified" ? `${passports.roots} ACCOUNT ROOT · ${passports.dark} ACCOUNT DARK` : "DATABASE VIEW ONLY"}</em>
+        <code>{passports.release.receipt?.configHash.slice(0, 12) ?? passports.release.expectedHash.slice(0, 12)}…</code>
+      </div>
       <header className="fleet-summary">
         <div className="fleet-title">
           <span className="fleet-kicker">STUDIO · FLEET</span>
@@ -31,10 +39,10 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShow
           <span>{summary.total} channels · desk-ledger P&amp;L</span>
         </div>
         <div className="fleet-metrics" aria-label="Fleet summary">
-          <span><small>ARMED</small><b>{summary.armed}</b></span>
+          <span><small>DB ARMED</small><b>{summary.armed}</b></span>
           <span className={summary.openPositions ? "hot" : ""}><small>OPEN</small><b>{summary.openPositions}</b></span>
-          <span><small>MUTED</small><b>{summary.muted}</b></span>
-          <span><small>BOOST</small><b>{summary.boosted}</b></span>
+          <span><small>DB MUTED</small><b>{summary.muted}</b></span>
+          <span><small>DB BOOST</small><b>{summary.boosted}</b></span>
           <span className={summary.dayPnl < 0 ? "neg" : summary.dayPnl > 0 ? "pos" : ""}><small>DAY</small><b>{signedUsd(summary.dayPnl)}</b></span>
         </div>
       </header>
@@ -54,7 +62,7 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShow
       <div className="fleet-table" role="table" aria-label={showAll ? "All strategy channels" : "Channels needing attention"}>
         <div className="fleet-grid fleet-head" role="row">
           <span role="columnheader">CHANNEL</span>
-          <span role="columnheader">STATE</span>
+          <span role="columnheader">RUNTIME / DB</span>
           <span role="columnheader">POSITION</span>
           <span className="fc-risk" role="columnheader">RISK / TRADE</span>
           <span className="fc-signal" role="columnheader">DECISION</span>
@@ -62,6 +70,7 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShow
         </div>
         <div className="fleet-rows" role="rowgroup">
           {rows.map((row) => {
+            const passport = passports.bySlug[row.channel.slug];
             const pnlClass = row.pnl.dayPnl < 0 ? "neg" : row.pnl.dayPnl > 0 ? "pos" : "";
             const decision = channelDecisionState(row.lastSignal);
             return (
@@ -74,7 +83,10 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShow
                 onClick={() => onSelect(row.channel.slug)}
               >
                 <span className="fleet-channel" role="cell"><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></span>
-                <span role="cell"><em className={`fleet-state ${row.stateLabel.toLowerCase()}`}>{row.stateLabel}</em></span>
+                <span className="fleet-runtime" role="cell">
+                  <em className={`fleet-state ${passport?.lifecycle ?? row.stateLabel.toLowerCase()}`}>{passport?.lifecycleLabel ?? row.stateLabel}</em>
+                  <small className={passport?.database.differsFromRuntime ? "diff" : ""}>DB {passport?.database.state ?? row.stateLabel} · {passport?.database.executor ?? row.channel.executor ?? "cron"}</small>
+                </span>
                 <span className="fleet-position" role="cell">
                   <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : "—"}</b>
                   <small className={pnlClass}>{row.pnl.dayPnl ? signedUsd(row.pnl.dayPnl) : "$0"} day</small>
@@ -86,6 +98,8 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, onShow
                 <span className="fc-tune fleet-tags" role="cell">
                   {row.attentionReasons.length
                     ? row.attentionReasons.slice(0, 3).map((reason) => <i key={reason}>{reason}</i>)
+                    : passport?.database.differsFromRuntime
+                      ? <i className="runtime">runtime overlay differs</i>
                     : row.configDiffs.length
                       ? row.configDiffs.slice(0, 2).map((diff) => <i className="context" key={diff}>{diff}</i>)
                       : <span>nominal</span>}

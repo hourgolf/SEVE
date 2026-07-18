@@ -14,7 +14,7 @@ function StateLamp({ state, label, detail }: { state: string; label: string; det
 
 export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
   const { data, ops, workerRuns, incident, feed, write, accounts, acctId } = surface;
-  const release = findDay1ReleaseReceipt(data.events);
+  const release = findDay1ReleaseReceipt(data.releaseEvents);
   const account = accounts.find((row) => row.id === acctId);
   const processAge = workerRuns.currentHeartbeatAtMs == null ? null : Math.max(0, Math.round((Date.now() - workerRuns.currentHeartbeatAtMs) / 1000));
 
@@ -35,7 +35,7 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
       </div></section>
 
       <section className="opsw-card"><header><span>03</span><b>MONDAY RELEASE</b><em>startup receipt ≠ current liveness</em></header>
-        {release ? <div className="opsw-release"><i /><span><small>LAST OBSERVED STARTUP RECEIPT</small><b>{release.releaseId}</b><em>{release.configHash}</em><small>{localTime(release.createdAt)}</small></span></div> : <div className="opsw-empty">no Day 1 startup receipt in the retained 14-event window</div>}
+        {release ? <div className="opsw-release"><i /><span><small>LAST OBSERVED STARTUP RECEIPT</small><b>{release.releaseId}</b><em>{release.configHash}</em><small>{localTime(release.createdAt)}</small></span></div> : <div className="opsw-empty">no Day 1 startup receipt returned by the dedicated receipt read</div>}
         <p className="opsw-note">The process heartbeat above establishes current observation. This receipt only identifies the release/config seen at startup.</p>
       </section>
 

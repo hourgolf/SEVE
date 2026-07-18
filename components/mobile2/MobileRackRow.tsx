@@ -7,6 +7,7 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState, StrategistConfig } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import type { ChannelPassport } from "@/lib/channels/channelPassport";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -24,7 +25,7 @@ const A13_SLUGS = new Set(["momo-shape"]);
 const RISK_MIN = 0, RISK_MAX = 5000, RISK_STEP = 25;
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle, write,
+  strategist, pnl, active, open, onToggle, write, passport,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
@@ -32,9 +33,11 @@ export function MobileRackRow({
   open: boolean;
   onToggle: () => void;
   write: SurfaceProps["write"];
+  passport?: ChannelPassport;
 }) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, canWrite } = write;
+  const { persistConfig } = write;
+  const canWrite = write.canWrite && passport?.release.state !== "verified";
   const faderRef = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -49,6 +52,7 @@ export function MobileRackRow({
   const pm = pmVar(color);
 
   const persistPatch = (patch: Partial<StrategistConfig>) => {
+    if (!canWrite) return;
     setWriteError(null);
     void persistConfig(id, patch).then((result) => {
       if (!result.ok) setWriteError(result.error ?? "config write failed");
@@ -96,12 +100,20 @@ export function MobileRackRow({
     if (v !== tp) setCfg({ take_profit_pct: v });
   };
 
-  const tag = config.muted ? { txt: "MUTED", cls: "muted" }
+  const databaseTag = config.muted ? { txt: "DB MUTED", cls: "muted" }
     : status === "draft" ? { txt: "BENCH", cls: "darkch" }
     : status === "disabled" ? { txt: "OFF", cls: "darkch" }
     : null;
-  const dot = active && status === "armed" && !config.muted;
-  const firesSummary = ride ? `−${premStop}% · ride · EOD` : `−${premStop}/+${tp} · EOD`;
+  const runtimeMayFill = passport?.lifecycle === "paper-root" || !passport || passport.lifecycle === "unverified";
+  const dot = runtimeMayFill && active && status === "armed" && !config.muted;
+  const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "PAPER ROOT", cls: "root" }
+    : passport?.lifecycle === "dark-evidence" ? { txt: "DARK", cls: "dark" }
+    : { txt: "UNVERIFIED", cls: "unverified" };
+  const firesSummary = passport?.rootPolicy
+    ? `−${passport.rootPolicy.premiumStopPct}% · ride · ${passport.rootPolicy.eodEt}`
+    : passport?.lifecycle === "dark-evidence"
+      ? "NO FILL · T+1 PATH"
+      : ride ? `−${premStop}% · ride · EOD` : `−${premStop}/+${tp} · EOD`;
 
   return (
     <section className={`m2-rack${config.muted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>
@@ -110,7 +122,8 @@ export function MobileRackRow({
           <span className={`m2-rr-dot${dot ? " on" : ""}${A13_SLUGS.has(slug) ? " hot" : ""}`} />
           <span className="m2-rr-slug">{slug}</span>
           {A13_SLUGS.has(slug) && <span className="m2-rr-a13">⚡A13</span>}
-          {tag && <span className={`m2-rr-tag ${tag.cls}`}>{tag.txt}</span>}
+          <span className={`m2-rr-tag ${runtimeTag.cls}`}>{runtimeTag.txt}</span>
+          {databaseTag && <span className={`m2-rr-tag ${databaseTag.cls}`}>{databaseTag.txt}</span>}
         </span>
         <span className="m2-rr-right">
           <span className="m2-rr-fires num">{firesSummary}</span>
@@ -121,7 +134,19 @@ export function MobileRackRow({
 
       {open && (
         <div className="m2-insp">
-          <div className="m2-fireslbl"><span className="fl">FIRES — binding exits · use − / + or tap value</span><span className="ln" /></div>
+          <div className={`m2-passport lane-${passport?.lifecycle ?? "unverified"}`}>
+            <header><span>RUNTIME PASSPORT</span><b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b></header>
+            <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
+            <div>
+              <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
+              <span><small>FAMILY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
+              <span><small>DECISIONS</small><b>{passport?.evidence.recentSignals ?? 0} · {passport?.evidence.censoredSignals ?? 0} censored</b></span>
+              <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
+              {passport?.rootPolicy && <><span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span><span><small>IDENTITY</small><code>{passport.rootPolicy.configurationEpochId.slice(0, 10)}…</code></span></>}
+            </div>
+            {passport?.release.state === "verified" && <footer>SEALED READ-ONLY · DATABASE KNOBS BELOW ARE NOT ACTIVE RC5</footer>}
+          </div>
+          <div className="m2-fireslbl"><span className="fl">{passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE − / + OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
               <div className="m2-exit-stepper">

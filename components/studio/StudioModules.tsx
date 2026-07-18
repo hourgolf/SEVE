@@ -7,6 +7,7 @@ import type { StudioChannelEvidence } from "@/lib/studio/deriveStudioEvidence";
 import type { StudioEvidence } from "@/hooks/useStudioEvidence";
 import type { Incident } from "@/lib/incident/deriveIncident";
 import type { Position } from "@/lib/desk/types";
+import type { ChannelPassport } from "@/lib/channels/channelPassport";
 
 function Panel({ index, title, meta, children }: { index: string; title: string; meta: string; children: React.ReactNode }) {
   return (
@@ -19,13 +20,14 @@ function Panel({ index, title, meta, children }: { index: string; title: string;
 
 const ratio = (value: number | null) => value == null ? "∞" : value.toFixed(1);
 
-export function StudioModules({ selected, evidence, evidenceState, positions, recentTrades, incident }: {
+export function StudioModules({ selected, evidence, evidenceState, positions, recentTrades, incident, passport }: {
   selected?: StudioChannelRow;
   evidence?: StudioChannelEvidence;
   evidenceState: StudioEvidence;
   positions: Position[];
   recentTrades: Position[];
   incident: Incident;
+  passport?: ChannelPassport;
 }) {
   const channel = selected?.channel;
   const decision = channelDecisionState(selected?.lastSignal ?? null);
@@ -49,7 +51,7 @@ export function StudioModules({ selected, evidence, evidenceState, positions, re
         </> : <div className="module-empty">select a fleet row</div>}
       </Panel>
 
-      <Panel index="04" title="LIVE EVIDENCE" meta={evidenceState.basis}>
+      <Panel index="04" title="HISTORICAL DESK EVIDENCE" meta="pre-RC5 · mixed epochs">
         {evidenceState.loading ? <div className="module-empty">reading recent desk ledger…</div>
           : evidenceState.error ? <div className="module-empty warn">evidence read unavailable · no performance claim</div>
             : evidence ? <>
@@ -64,24 +66,27 @@ export function StudioModules({ selected, evidence, evidenceState, positions, re
                 <span><small>MAX DRAWDOWN</small><b>{usd0(evidence.maxDrawdown)}</b></span>
                 <span><small>WIN % · SECONDARY</small><b>{evidence.winPct.toFixed(0)}%</b></span>
               </div>
-              <footer>latest {evidenceState.sessionDates.length} account sessions · gross attribution · fees and broker-net unavailable</footer>
+              <footer>latest {evidenceState.sessionDates.length} account sessions · mixed pre-RC5 configurations · context only, not a Day 1 score · fees and broker-net unavailable</footer>
             </> : <div className="module-empty">no closed rows in the recent account window</div>}
       </Panel>
 
-      <Panel index="05" title="POSITION / EXIT" meta={incident.severity.toUpperCase()}>
+      <Panel index="05" title="EVIDENCE PASSPORT" meta={passport?.lifecycleLabel ?? incident.severity.toUpperCase()}>
         {channel ? <>
           <div className="ops-truth">
             <span><small>OPEN</small><b>{open.length}</b></span>
-            <span><small>EXPOSURE</small><b>{usd0(selected?.pnl.exposure ?? 0)}</b></span>
-            <span><small>DESK HEALTH</small><b className={incident.severity}>{incident.title}</b></span>
+            <span><small>DECISIONS</small><b>{passport?.evidence.recentSignals ?? 0}</b></span>
+            <span><small>RUNTIME / DB</small><b className={passport?.database.differsFromRuntime ? "warning" : ""}>{passport?.lifecycleLabel ?? "UNVERIFIED"} / {passport?.database.state ?? "—"}</b></span>
           </div>
-          <div className="exit-shape">
-            <span><small>PREMIUM STOP</small><b>−{channel.config.premium_stop_pct ?? 50}%</b></span>
-            <span><small>TAKE</small><b>{channel.config.take_profit_pct ? `+${channel.config.take_profit_pct}%` : "RIDE"}</b></span>
-            <span><small>STALL</small><b>{channel.config.stall_minutes ? `${channel.config.stall_minutes}m / +${channel.config.stall_max_favor_pct ?? 0}%` : "OFF"}</b></span>
+          <div className="passport-grid">
+            <span><small>ACTED / CENSORED</small><b>{passport?.evidence.actedSignals ?? 0} / {passport?.evidence.censoredSignals ?? 0}</b></span>
+            <span><small>RECENT FILLS</small><b>{passport?.evidence.recentClosed ?? 0} closed · {open.length} open</b></span>
+            <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms · {passport?.observer.state ?? "unverified"}</b></span>
             <span><small>LAST EXIT</small><b>{lastClosed?.close_reason?.replaceAll("_", " ") ?? "—"}</b></span>
+            <span><small>CHANNEL VERSION</small><code>{passport?.rootPolicy?.channelVersion.slice(0, 12) ?? "not sealed"}</code></span>
+            <span><small>CONFIG EPOCH</small><code>{passport?.rootPolicy?.configurationEpochId.slice(0, 12) ?? "not sealed"}</code></span>
           </div>
-          <footer>desk positions ≠ broker reconciliation · policy epoch not stamped · peak data is era-dependent</footer>
+          <p className="passport-fact">{passport?.observer.fact ?? "Observer evidence unavailable."}</p>
+          <footer>prospective floor: 10 independent clocks / 5 sessions · gross desk attribution · no automatic promotion</footer>
         </> : <div className="module-empty">select a fleet row</div>}
       </Panel>
     </div>

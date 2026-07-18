@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MobileRackRow } from "@/components/mobile2/MobileRackRow";
 import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { signedUsd } from "@/lib/format";
+import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
@@ -32,6 +33,14 @@ export function MobileStudio({
   const dispatch = useDeskDispatch();
   const { canWrite, persistFund } = props.write;
   const [busy, setBusy] = useState(false);
+  const passports = useMemo(() => deriveChannelPassports({
+    channels,
+    events: props.data.releaseEvents,
+    signals: feed.signals,
+    positions: feed.positions,
+    recentTrades: feed.recentTrades,
+    evidenceBySlug: props.studioEvidence.bySlug,
+  }), [channels, props.data.releaseEvents, feed.signals, feed.positions, feed.recentTrades, props.studioEvidence.bySlug]);
 
   const running = desk.fund.running && !desk.fund.is_halted;
   const setRun = (run: boolean) => {
@@ -63,6 +72,13 @@ export function MobileStudio({
         </div>
       </section>
 
+      <section className={`m2-release-card ${passports.release.state}`} aria-label="Runtime release identity">
+        <span><i /><b>{passports.release.state === "verified" ? "SEALED RC5 RUNTIME" : passports.release.state === "mismatch" ? "RELEASE MISMATCH" : "RUNTIME UNVERIFIED"}</b></span>
+        <strong>{passports.release.state === "verified" ? `${passports.roots} ACCT ROOT · ${passports.dark} ACCT DARK` : "DATABASE VIEW ONLY"}</strong>
+        <small>{passports.release.fact}</small>
+        <code>{passports.release.receipt?.configHash.slice(0, 12) ?? passports.release.expectedHash.slice(0, 12)}…</code>
+      </section>
+
       <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" onClick={canWrite ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD CHANNEL" : "SIGN IN TO TUNE"}</button></div>
       <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · EDIT STOP / TAKE / RISK" : "READ ONLY · SIGN IN TO CHANGE CONTROLS"}</span><span className="ln" /></div>
       {channels.length === 0 ? (
@@ -74,6 +90,7 @@ export function MobileStudio({
           pnl={livePnl[s.slug]}
           active={isActive(s.slug) && !(anySolo && !s.config.soloed && !s.config.muted)}
           write={props.write}
+          passport={passports.bySlug[s.slug]}
           open={openSlug === s.slug}
           onToggle={() => setOpenSlug(openSlug === s.slug ? null : s.slug)}
         />

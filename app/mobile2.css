@@ -294,6 +294,21 @@
 .m2-transport-day b { font-family: var(--mono); font-size: 17px; font-weight: 800; }
 .m2-dial-lbl { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--dk-dim); }
 
+.m2-release-card {
+  margin: 8px 4px 4px; padding: 9px 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 9px;
+  border: 1px solid var(--line-2); border-radius: 7px; background: linear-gradient(180deg, var(--lcd), var(--lcd-2));
+  color: var(--lcd-ink); font-family: var(--mono); box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 2px 5px rgba(0,0,0,.25);
+}
+.m2-release-card > span { min-width: 0; display: flex; align-items: center; gap: 7px; }
+.m2-release-card i { width: 8px; height: 8px; border-radius: 50%; background: var(--m2-amber); box-shadow: 0 0 6px var(--m2-amber); }
+.m2-release-card b,
+.m2-release-card strong { font-size: 9.5px; letter-spacing: .07em; }
+.m2-release-card small { min-width: 0; color: var(--dk-mut); font-size: 8.5px; line-height: 1.3; }
+.m2-release-card code { justify-self: end; color: var(--dk-dim); font-size: 8px; }
+.m2-release-card.verified i { background: var(--m2-green-soft); box-shadow: 0 0 6px var(--m2-green-soft); }
+.m2-release-card.mismatch { border-color: rgba(224,122,88,.55); }
+.m2-release-card.mismatch i { background: var(--m2-red-soft); box-shadow: 0 0 6px var(--m2-red-soft); }
+
 .m2-seam { display: flex; align-items: center; gap: 9px; padding: 3px 5px 0; }
 .m2-seam .ln { flex: 1; height: 1px; background: var(--sep); }
 
@@ -313,11 +328,26 @@
 .m2-rr-tag { flex: 0 0 auto; font-family: var(--mono); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
 .m2-rr-tag.muted { color: var(--mute-pad); }
 .m2-rr-tag.darkch { color: #5c646a; }
+.m2-rr-tag.root { color: var(--m2-green-soft); }
+.m2-rr-tag.dark { color: var(--dk-mut); }
+.m2-rr-tag.unverified { color: var(--m2-amber); }
 .m2-rr-fires { font-size: 11.5px; color: var(--dk-mut); white-space: nowrap; letter-spacing: -.2px; }
 .m2-rr-pnl { font-family: var(--mono); font-size: 14px; font-weight: 800; white-space: nowrap; }
 .m2-rr-chev { font-size: 12px; color: var(--dk-dim); }
 
 .m2-insp { display: flex; flex-direction: column; gap: 11px; padding: 4px 11px 13px; border-top: 1px solid var(--line); }
+.m2-passport { padding: 9px; border: 1px solid var(--line-2); border-radius: 7px; background: rgba(0,0,0,.16); font-family: var(--mono); }
+.m2-passport.lane-paper-root { border-color: rgba(108,192,109,.5); }
+.m2-passport.lane-unverified { border-color: rgba(224,162,63,.5); }
+.m2-passport header { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--dk-mut); font-size: 9px; letter-spacing: .09em; }
+.m2-passport header b { color: var(--lcd-ink); }
+.m2-passport p { margin: 7px 0; color: var(--dk-mut); font-size: 9px; line-height: 1.35; }
+.m2-passport > div { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1px; background: var(--line); }
+.m2-passport > div > span { min-width: 0; display: grid; gap: 3px; padding: 6px; background: color-mix(in srgb, var(--lcd) 92%, #000); }
+.m2-passport small { color: var(--dk-dim); font-size: 8px; letter-spacing: .08em; }
+.m2-passport b,
+.m2-passport code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lcd-ink); font-size: 9px; }
+.m2-passport footer { margin-top: 7px; color: var(--m2-amber); font-size: 8px; line-height: 1.35; letter-spacing: .05em; }
 .m2-fireslbl { display: flex; align-items: center; gap: 8px; }
 .m2-fireslbl .fl { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--dk-dim); }
 .m2-fireslbl .ln { flex: 1; height: 1px; background: var(--line); }
@@ -414,6 +444,9 @@
 .m2-app[data-skin="cream"][data-mode="studio"] .m2-fp { background:rgba(255,255,255,.24); }
 .m2-app[data-skin="cream"][data-mode="studio"] .m2-lrbtn { background:rgba(255,255,255,.22); }
 .m2-app[data-skin="cream"][data-mode="studio"] .m2-seam .ln { background:rgba(60,52,30,.24); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-release-card { border-color:#8d877a; box-shadow:inset 0 1px 0 #fff,0 2px 5px rgba(0,0,0,.18); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-passport { background:rgba(255,255,255,.18); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-passport > div > span { background:rgba(255,255,255,.18); }
 
 .m2-app[data-skin="cream"][data-mode="perform"] .m2-main,
 .m2-app[data-skin="cream"][data-mode="perform"] .m2-scroll { background:#c5bfae; }
