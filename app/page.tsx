@@ -33,6 +33,7 @@ import { useRefreshTick } from "@/hooks/useRefreshTick";
 import { useStudioEvidence } from "@/hooks/useStudioEvidence";
 import { useContractHistory } from "@/hooks/useContractHistory";
 import type { Room } from "@/components/surfaceTypes";
+import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
 // tab-shell. The data-seam pattern means neither layout re-subscribes.
@@ -89,6 +90,26 @@ function Surface({
   const workerRuns = useWorkerRuns();
   const positionPeaks = usePositionPeaks(feed.positions, liveMarks);
   const studioEvidence = useStudioEvidence(acctId, mode === "studio");
+  // Channel runtime identity is a page-owned, skin-neutral view model. Desktop,
+  // mobile, and any future visual shell receive the exact same release state,
+  // lifecycle classification, evidence counts, and policy identity.
+  const accountChannels = useMemo(
+    () => (acctId ? view.desk.strategists.filter((channel) => channel.account_id === acctId) : view.desk.strategists),
+    [view.desk.strategists, acctId],
+  );
+  const channelWorkspace = useMemo(() => deriveChannelPassports({
+    channels: accountChannels,
+    events: data.releaseEvents,
+    signals: feed.signals,
+    positions: feed.positions,
+    recentTrades: feed.recentTrades,
+    evidenceBySlug: studioEvidence.bySlug,
+    releaseReadState: data.releaseReceiptHealth.lastError
+      ? "error"
+      : data.releaseReceiptHealth.lastSuccessAt
+        ? "ok"
+        : "checking",
+  }), [accountChannels, data.releaseEvents, data.releaseReceiptHealth.lastError, data.releaseReceiptHealth.lastSuccessAt, feed.signals, feed.positions, feed.recentTrades, studioEvidence.bySlug]);
   // P5 slice 3 — deterministic incident, derived ONCE at the seam from ops/workerRuns/positions/fund/
   // session. A 15s tick (+ the hook polls) keeps nowMs fresh so time-based escalation re-renders.
   useRefreshTick(15_000);
@@ -125,7 +146,7 @@ function Surface({
   useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

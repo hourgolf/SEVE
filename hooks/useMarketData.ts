@@ -60,6 +60,10 @@ export interface MarketData {
   /** Latest Day 1 startup receipt event, queried independently so a busy tape
    *  cannot evict release identity from operator surfaces. */
   releaseEvents: MarketEvent[];
+  /** Health of the dedicated release-receipt query. Kept separate from the
+   *  busy event-tape read so operator surfaces can distinguish CHECKING,
+   *  EMPTY, and READ ERROR without making a false runtime claim. */
+  releaseReceiptHealth: MarketReadHealth;
   /** Distinct expirations present in the latest pull. */
   expirations: number;
   /** Wall-clock time of the last completed poll. */
@@ -123,6 +127,7 @@ const INITIAL: MarketData = {
   bars: [],
   events: [],
   releaseEvents: [],
+  releaseReceiptHealth: { ...EMPTY_READ_HEALTH },
   expirations: 0,
   updatedAt: null,
   error: null,
@@ -191,7 +196,15 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       ]);
 
       const quotesRes = quotesSettled.status === "fulfilled" ? quotesSettled.value : null;
+      const barsRes = barsSettled.status === "fulfilled" ? barsSettled.value : null;
+      const eventsRes = eventsSettled.status === "fulfilled" ? eventsSettled.value : null;
+      const releaseRes = releaseSettled.status === "fulfilled" ? releaseSettled.value : null;
       const quoteError = quotesSettled.status === "rejected" ? quotesSettled.reason : quotesRes?.error;
+      const barsError = barsSettled.status === "rejected" ? barsSettled.reason : barsRes?.error;
+      const eventsError = eventsSettled.status === "rejected" ? eventsSettled.reason : eventsRes?.error;
+      const releaseError = releaseSettled.status === "rejected" ? releaseSettled.reason : releaseRes?.error;
+      const completedAt = new Date().toISOString();
+      const releaseEvents = releaseError ? null : ((releaseRes?.data ?? []) as MarketEvent[]);
       if (quoteError) {
         const message = readErrorMessage(quoteError);
         const isAccessError = ACCESS_ERROR_RE.test(message);
@@ -208,18 +221,16 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
             error: lastGoodFresh ? null : message,
             warning: lastGoodFresh ? `OPTIONS CHAIN READ DEGRADED · ${message}` : null,
             isAccessError,
+            releaseEvents: releaseEvents ?? prev.releaseEvents,
+            releaseReceiptHealth: releaseError
+              ? markReadFailure(prev.releaseReceiptHealth, failedAt, readErrorMessage(releaseError))
+              : markReadSuccess(prev.releaseReceiptHealth, failedAt),
             readHealth: { ...prev.readHealth, option_chain: markReadFailure(prev.readHealth.option_chain, failedAt, message) },
           };
         });
         return;
       }
 
-      const barsRes = barsSettled.status === "fulfilled" ? barsSettled.value : null;
-      const eventsRes = eventsSettled.status === "fulfilled" ? eventsSettled.value : null;
-      const releaseRes = releaseSettled.status === "fulfilled" ? releaseSettled.value : null;
-      const barsError = barsSettled.status === "rejected" ? barsSettled.reason : barsRes?.error;
-      const eventsError = eventsSettled.status === "rejected" ? eventsSettled.reason : eventsRes?.error;
-      const releaseError = releaseSettled.status === "rejected" ? releaseSettled.reason : releaseRes?.error;
       const eventHealthError = eventsError ?? releaseError;
       const warnings = [
         barsError ? `CHART ${readErrorMessage(barsError)}` : null,
@@ -232,7 +243,6 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       const recent = [...recentDesc].reverse(); // oldest → newest
       const bars = recent.length ? mergeBars(historyBars.current, recent) : null;
       const events = eventsError ? null : ((eventsRes?.data ?? []) as MarketEvent[]);
-      const releaseEvents = releaseError ? null : ((releaseRes?.data ?? []) as MarketEvent[]);
 
       let status: FeedStatus = "stale";
       let spot: number | null = null;
@@ -293,8 +303,6 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       }
 
       const expirations = new Set(quotes.map((r) => r.expiration)).size;
-      const completedAt = new Date().toISOString();
-
       if (!live()) return;
       setData((prev) => ({
         ...prev,
@@ -307,6 +315,9 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         bars: bars ?? prev.bars,
         events: events ?? prev.events,
         releaseEvents: releaseEvents ?? prev.releaseEvents,
+        releaseReceiptHealth: releaseError
+          ? markReadFailure(prev.releaseReceiptHealth, completedAt, readErrorMessage(releaseError))
+          : markReadSuccess(prev.releaseReceiptHealth, completedAt),
         expirations,
         updatedAt: completedAt,
         error: null,
@@ -336,7 +347,12 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
             error: lastGoodFresh ? null : message,
             warning: lastGoodFresh ? `OPTIONS CHAIN READ DEGRADED · ${message}` : null,
             isAccessError: ACCESS_ERROR_RE.test(message),
-            readHealth: { ...prev.readHealth, option_chain: markReadFailure(prev.readHealth.option_chain, failedAt, message) },
+            releaseReceiptHealth: markReadFailure(prev.releaseReceiptHealth, failedAt, message),
+            readHealth: {
+              option_chain: markReadFailure(prev.readHealth.option_chain, failedAt, message),
+              bars: markReadFailure(prev.readHealth.bars, failedAt, message),
+              events: markReadFailure(prev.readHealth.events, failedAt, message),
+            },
           };
         });
       }

@@ -4,8 +4,7 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { StudioChannelRow, StudioFleetSummary, StudioSort } from "@/lib/studio/deriveStudioView";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
-import type { ChannelPassport } from "@/lib/channels/channelPassport";
-import type { Day1ReleaseObservation } from "@/lib/channels/day1Release";
+import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -20,7 +19,7 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, passpo
   selectedSlug?: string;
   showAll: boolean;
   sort: StudioSort;
-  passports: { release: Day1ReleaseObservation; bySlug: Record<string, ChannelPassport>; roots: number; dark: number };
+  passports: ChannelWorkspaceModel;
   onShowAll: (show: boolean) => void;
   onSort: (sort: StudioSort) => void;
   onSelect: (slug: string) => void;
@@ -28,9 +27,9 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, passpo
   return (
     <section className="fleet" aria-label="Strategy channel fleet">
       <div className={`fleet-release ${passports.release.state}`} role="status">
-        <span><i /><b>{passports.release.state === "verified" ? "SEALED RC5 RUNTIME" : passports.release.state === "mismatch" ? "RELEASE MISMATCH" : "RUNTIME UNVERIFIED"}</b><small>{passports.release.fact}</small></span>
-        <em>{passports.release.state === "verified" ? `${passports.roots} ACCOUNT ROOT · ${passports.dark} ACCOUNT DARK` : "DATABASE VIEW ONLY"}</em>
-        <code>{passports.release.receipt?.configHash.slice(0, 12) ?? passports.release.expectedHash.slice(0, 12)}…</code>
+        <span><i /><b>{passports.releaseView.label}</b><small>{passports.release.fact}</small></span>
+        <em>{passports.releaseView.accountLifecycleLabel}</em>
+        <code>{passports.releaseView.shortHash}</code>
       </div>
       <header className="fleet-summary">
         <div className="fleet-title">

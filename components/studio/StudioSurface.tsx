@@ -8,7 +8,6 @@ import { StudioBand } from "@/components/studio/StudioBand";
 import { StudioModules } from "@/components/studio/StudioModules";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort } from "@/lib/studio/deriveStudioView";
-import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 
 // =============================================================================
 // STUDIO surface (P5 slice 4) — exception-first fleet tuning. The primary pane
@@ -22,7 +21,7 @@ import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ data, view, feed, write, livePnl, liveFund, acctId, symbol, incident, studioEvidence }: SurfaceProps) {
+export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, incident, studioEvidence, channelWorkspace }: SurfaceProps) {
   void symbol;
   const { desk } = view;
 
@@ -40,14 +39,6 @@ export function StudioSurface({ data, view, feed, write, livePnl, liveFund, acct
     [channels, livePnl, feed.signals, feed.updatedAt],
   );
   const summary = useMemo(() => summarizeStudioFleet(rows), [rows]);
-  const passports = useMemo(() => deriveChannelPassports({
-    channels,
-    events: data.releaseEvents,
-    signals: feed.signals,
-    positions: feed.positions,
-    recentTrades: feed.recentTrades,
-    evidenceBySlug: studioEvidence.bySlug,
-  }), [channels, data.releaseEvents, feed.signals, feed.positions, feed.recentTrades, studioEvidence.bySlug]);
   const visibleRows = useMemo(
     () => sortStudioRows(showAll ? rows : rows.filter((row) => row.attentionReasons.length > 0), sort),
     [rows, showAll, sort],
@@ -62,13 +53,13 @@ export function StudioSurface({ data, view, feed, write, livePnl, liveFund, acct
         selectedSlug={selectedRow?.channel.slug}
         showAll={showAll}
         sort={sort}
-        passports={passports}
+        passports={channelWorkspace}
         onShowAll={setShowAll}
         onSort={setSort}
         onSelect={setSelSlug}
       />
 
-      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? passports.bySlug[selectedRow.channel.slug] : undefined} write={write} />
+      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} />
 
       <StudioModules
         selected={selectedRow}
@@ -77,7 +68,7 @@ export function StudioSurface({ data, view, feed, write, livePnl, liveFund, acct
         positions={feed.positions}
         recentTrades={feed.recentTrades}
         incident={incident}
-        passport={selectedRow ? passports.bySlug[selectedRow.channel.slug] : undefined}
+        passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined}
       />
 
       <StudioBand

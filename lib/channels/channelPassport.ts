@@ -6,6 +6,7 @@ import {
   DAY1_ROOTS,
   observeDay1Release,
   type Day1ReleaseObservation,
+  type Day1ReleaseReadState,
   type Day1RootPolicy,
 } from "@/lib/channels/day1Release";
 
@@ -38,6 +39,48 @@ export interface ChannelPassport {
     configuredArms: number;
     state: "configured" | "not-applicable" | "unverified";
     fact: string;
+  };
+}
+
+/** Semantic, skin-neutral release presentation. Desktop, mobile, and any
+ * future shell consume the same operator wording and lifecycle counts instead
+ * of independently translating safety state in visual components. */
+export interface ChannelReleasePresentation {
+  label: "CHECKING RELEASE" | "SEALED RC5 RUNTIME" | "RELEASE MISMATCH" | "RELEASE READ ERROR" | "RUNTIME UNVERIFIED";
+  accountLifecycleLabel: string;
+  compactAccountLifecycleLabel: string;
+  shortHash: string;
+  databaseOnly: boolean;
+}
+
+export interface ChannelWorkspaceModel {
+  release: Day1ReleaseObservation;
+  releaseView: ChannelReleasePresentation;
+  bySlug: Record<string, ChannelPassport>;
+  roots: number;
+  dark: number;
+}
+
+function presentRelease(release: Day1ReleaseObservation, roots: number, dark: number): ChannelReleasePresentation {
+  const label = release.state === "verified"
+    ? "SEALED RC5 RUNTIME"
+    : release.state === "checking"
+      ? "CHECKING RELEASE"
+      : release.state === "mismatch"
+        ? "RELEASE MISMATCH"
+        : release.state === "read-error"
+          ? "RELEASE READ ERROR"
+          : "RUNTIME UNVERIFIED";
+  return {
+    label,
+    accountLifecycleLabel: release.state === "verified"
+      ? `${roots} ACCOUNT ROOT · ${dark} ACCOUNT DARK`
+      : "DATABASE VIEW ONLY",
+    compactAccountLifecycleLabel: release.state === "verified"
+      ? `${roots} ACCT ROOT · ${dark} ACCT DARK`
+      : "DATABASE VIEW ONLY",
+    shortHash: `${(release.receipt?.configHash ?? release.expectedHash).slice(0, 12)}…`,
+    databaseOnly: release.state !== "verified",
   };
 }
 const latestFirst = (a: Signal, b: Signal) => Date.parse(b.created_at) - Date.parse(a.created_at);
@@ -126,8 +169,9 @@ export function deriveChannelPassports(input: {
   positions: Position[];
   recentTrades: Position[];
   evidenceBySlug: Record<string, StudioChannelEvidence>;
-}): { release: Day1ReleaseObservation; bySlug: Record<string, ChannelPassport>; roots: number; dark: number } {
-  const release = observeDay1Release(input.events);
+  releaseReadState?: Day1ReleaseReadState;
+}): ChannelWorkspaceModel {
+  const release = observeDay1Release(input.events, input.releaseReadState);
   const passports = input.channels.map((channel) => deriveChannelPassport({
     channel,
     release,
@@ -136,10 +180,13 @@ export function deriveChannelPassports(input: {
     recentTrades: input.recentTrades,
     ledger: input.evidenceBySlug[channel.slug],
   }));
+  const roots = passports.filter((passport) => passport.lifecycle === "paper-root").length;
+  const dark = passports.filter((passport) => passport.lifecycle === "dark-evidence").length;
   return {
     release,
+    releaseView: presentRelease(release, roots, dark),
     bySlug: Object.fromEntries(passports.map((passport) => [passport.slug, passport])),
-    roots: passports.filter((passport) => passport.lifecycle === "paper-root").length,
-    dark: passports.filter((passport) => passport.lifecycle === "dark-evidence").length,
+    roots,
+    dark,
   };
 }

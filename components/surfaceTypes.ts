@@ -12,6 +12,7 @@ import type { Incident } from "@/lib/incident/deriveIncident";
 import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import type { StudioEvidence } from "@/hooks/useStudioEvidence";
 import type { ContractHistory } from "@/hooks/useContractHistory";
+import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
@@ -65,4 +66,7 @@ export interface SurfaceProps {
   incident: Incident;
   /** Recent channel evidence — page-owned, STUDIO-enabled only; no leaf subscription. */
   studioEvidence: StudioEvidence;
+  /** Skin-neutral channel runtime/evidence contract derived once at the page
+   *  seam. Every shell renders the same lifecycle and release truth. */
+  channelWorkspace: ChannelWorkspaceModel;
 }

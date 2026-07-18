@@ -306,8 +306,10 @@
 .m2-release-card small { min-width: 0; color: var(--dk-mut); font-size: 8.5px; line-height: 1.3; }
 .m2-release-card code { justify-self: end; color: var(--dk-dim); font-size: 8px; }
 .m2-release-card.verified i { background: var(--m2-green-soft); box-shadow: 0 0 6px var(--m2-green-soft); }
-.m2-release-card.mismatch { border-color: rgba(224,122,88,.55); }
-.m2-release-card.mismatch i { background: var(--m2-red-soft); box-shadow: 0 0 6px var(--m2-red-soft); }
+.m2-release-card.mismatch,
+.m2-release-card.read-error { border-color: rgba(224,122,88,.55); }
+.m2-release-card.mismatch i,
+.m2-release-card.read-error i { background: var(--m2-red-soft); box-shadow: 0 0 6px var(--m2-red-soft); }
 
 .m2-seam { display: flex; align-items: center; gap: 9px; padding: 3px 5px 0; }
 .m2-seam .ln { flex: 1; height: 1px; background: var(--sep); }

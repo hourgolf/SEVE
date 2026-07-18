@@ -28,6 +28,10 @@ const result = deriveChannelPassports({
 });
 
 assert.equal(result.release.state, "verified");
+assert.equal(result.releaseView.label, "SEALED RC5 RUNTIME");
+assert.equal(result.releaseView.accountLifecycleLabel, "1 ACCOUNT ROOT · 1 ACCOUNT DARK");
+assert.equal(result.releaseView.compactAccountLifecycleLabel, "1 ACCT ROOT · 1 ACCT DARK");
+assert.equal(result.releaseView.databaseOnly, false);
 assert.equal(result.roots, 1);
 assert.equal(result.dark, 1);
 assert.equal(result.bySlug["pb-ride"].lifecycle, "paper-root");
@@ -41,6 +45,22 @@ assert.equal(result.bySlug["pb-ride-2"].database.differsFromRuntime, true);
 const missing = deriveChannelPassports({ channels: [channel("pb-ride")], events: [], signals: [], positions: [], recentTrades: [], evidenceBySlug: {} });
 assert.equal(missing.release.state, "missing");
 assert.equal(missing.bySlug["pb-ride"].lifecycle, "unverified");
+
+const checking = deriveChannelPassports({ channels: [channel("pb-ride")], events: [], signals: [], positions: [], recentTrades: [], evidenceBySlug: {}, releaseReadState: "checking" });
+assert.equal(checking.release.state, "checking");
+assert.equal(checking.releaseView.label, "CHECKING RELEASE");
+assert.equal(checking.releaseView.databaseOnly, true);
+assert.equal(checking.bySlug["pb-ride"].lifecycle, "unverified");
+assert.match(checking.release.fact, /no runtime lifecycle claim/i);
+
+const readError = deriveChannelPassports({ channels: [channel("pb-ride")], events: [], signals: [], positions: [], recentTrades: [], evidenceBySlug: {}, releaseReadState: "error" });
+assert.equal(readError.release.state, "read-error");
+assert.equal(readError.bySlug["pb-ride"].lifecycle, "unverified");
+assert.match(readError.release.fact, /read failed/i);
+
+const cachedThroughError = deriveChannelPassports({ channels: [channel("pb-ride")], events: verified, signals: [], positions: [], recentTrades: [], evidenceBySlug: {}, releaseReadState: "error" });
+assert.equal(cachedThroughError.release.state, "verified");
+assert.equal(cachedThroughError.bySlug["pb-ride"].lifecycle, "paper-root");
 
 const mismatch = deriveChannelPassports({
   channels: [channel("pb-ride")],
@@ -82,4 +102,4 @@ for (const sealedRoot of prereg.content.roots) {
   assert.equal(clientRoot.policyEpochId, binding.policyEpoch);
 }
 
-console.log("channel-passport-selftest: 110/110 passed");
+console.log("channel-passport-selftest: 125/125 passed");

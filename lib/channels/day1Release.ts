@@ -102,7 +102,8 @@ export const DAY1_ROOTS: Readonly<Record<string, Day1RootPolicy>> = Object.fromE
   }]),
 );
 
-export type Day1ReleaseState = "verified" | "missing" | "mismatch";
+export type Day1ReleaseReadState = "checking" | "ok" | "error";
+export type Day1ReleaseState = "checking" | "verified" | "missing" | "mismatch" | "read-error";
 
 export interface Day1ReleaseObservation {
   state: Day1ReleaseState;
@@ -112,8 +113,23 @@ export interface Day1ReleaseObservation {
   fact: string;
 }
 
-export function observeDay1Release(events: MarketEvent[]): Day1ReleaseObservation {
+export function observeDay1Release(events: MarketEvent[], readState: Day1ReleaseReadState = "ok"): Day1ReleaseObservation {
   const receipt = findDay1ReleaseReceipt(events);
+  // A previously observed exact receipt remains valid startup identity through
+  // a transient read failure. Read degradation is surfaced separately; it must
+  // not erase evidence already observed in this mounted seam.
+  if (!receipt && readState === "checking") {
+    return {
+      state: "checking", receipt: null, releaseId: DAY1_RELEASE_ID, expectedHash: DAY1_CONFIG_HASH,
+      fact: "Checking the dedicated Day 1 startup-receipt read; no runtime lifecycle claim yet.",
+    };
+  }
+  if (!receipt && readState === "error") {
+    return {
+      state: "read-error", receipt: null, releaseId: DAY1_RELEASE_ID, expectedHash: DAY1_CONFIG_HASH,
+      fact: "Release-receipt read failed; database rows cannot establish the active runtime lifecycle.",
+    };
+  }
   if (!receipt) {
     return {
       state: "missing", receipt: null, releaseId: DAY1_RELEASE_ID, expectedHash: DAY1_CONFIG_HASH,
