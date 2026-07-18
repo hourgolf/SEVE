@@ -39,6 +39,17 @@ const etDate = (nowMs: number): string => {
 
 const short = (value: string): string => value ? value.slice(5) : "—";
 
+export function resolveSentinelEvidenceSession(input: {
+  briefAsOf?: string | null;
+  through?: string | null;
+  publishedEtDate: string;
+}): string {
+  for (const candidate of [input.briefAsOf, input.through]) {
+    if (candidate && isTradingDay(candidate)) return candidate;
+  }
+  return input.briefAsOf || input.through || input.publishedEtDate;
+}
+
 export function deriveSentinelReceiptStatus(input: SentinelReceiptInput, nowMs = Date.now()): SentinelReceiptStatus {
   const session = input.session || input.briefAsOf || input.date || "";
   const forDate = input.forDate || "";

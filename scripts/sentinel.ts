@@ -27,7 +27,7 @@ import {
   SENTINEL_VIRTUAL_TRADE_SELECT,
   type SentinelVirtualTradeRow,
 } from "../lib/sentinel/virtualTradeQuery";
-import { buildSentinelReceiptMeta } from "../lib/sentinel/receipt";
+import { buildSentinelReceiptMeta, resolveSentinelEvidenceSession } from "../lib/sentinel/receipt";
 
 // Service role (when present, e.g. the nightly capture / .env.local) lets the digest publish to the
 // events table for the §03 panel; anon still reads virtual_trades fine, just skips the publish.
@@ -384,6 +384,11 @@ async function main() {
     patterns, // trigger-pattern flags (descriptive; registry-probe candidates only)
   };
   const et = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+  const evidenceSession = resolveSentinelEvidenceSession({
+    briefAsOf: (briefStruct as { asOf?: string } | null)?.asOf,
+    through,
+    publishedEtDate: et,
+  });
   // shadow-first: bank the digest as a dated, reviewable artifact (the durable local copy)
   try {
     mkdirSync(path.join("data", "sentinel"), { recursive: true });
@@ -395,13 +400,13 @@ async function main() {
   // the visual panels; `digest` is kept as the durable markdown + legacy fallback. Upsert-by-day.
   if (HAS_SERVICE) {
     try {
-      await sb.from("events").delete().like("message", `sentinel: ${et}%`);
+      await sb.from("events").delete().like("message", `sentinel: ${evidenceSession}%`);
       // `lens` = the per-channel avg-peak/win map (era-4, real fills) — the P&L panel's harvest columns.
       await sb.from("events").insert({
         level: "INFO",
-        message: `sentinel: ${et}`,
+        message: `sentinel: ${evidenceSession}`,
         meta: buildSentinelReceiptMeta({
-          session: et,
+          session: evidenceSession,
           forDate: (briefStruct as { forDate?: string } | null)?.forDate ?? null,
           digest: full,
           brief: briefStruct,

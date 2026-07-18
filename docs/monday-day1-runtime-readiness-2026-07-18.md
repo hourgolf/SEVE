@@ -23,7 +23,7 @@ cannot truthfully be green before the session begins.
 | Held-path capture posture | Green, configured | Startup refuses unless capture is enabled at 12 samples / 60 seconds, bounded to 10,000 samples / 8 MiB, five attempts, five-second adapter deadline, 15-second flush deadline, and 30-second shutdown deadline. |
 | Shadow manager posture | Green, configured | Startup refuses unless the observer is enabled with a 15-second quote-age ceiling; all eight preregistered arms are sealed. |
 | Candidate provenance | Green, code path | The executed signal rationale carries the pre-admission candidate detail. The release-policy suite pins this requirement. |
-| Sentinel next-open evidence | Yellow, classified | The frozen Friday receipt is semantically current for July 20 but lacked literal v2 `session`. A later v2 publish labeled Saturday 07-18 as `session` while its brief evidence remains Friday and its target is Monday. Explicit schema identity cannot turn a non-trading or conflicting session into green; the shared classifier and preopen gate now report `SESSION IDENTITY CONFLICT`. |
+| Sentinel next-open evidence | Yellow, classified and fixed on review branch | The frozen Friday receipt is semantically current for July 20 but lacked literal v2 `session`. A later v2 publish labeled Saturday 07-18 as `session` while its brief evidence remains Friday and its target is Monday. Explicit schema identity cannot turn a non-trading or conflicting session into green; the shared classifier and preopen gate now report `SESSION IDENTITY CONFLICT`. The publisher fix stamps `brief.asOf` (or the verified scan-through session) instead of its weekend run date on the next publish. |
 | Local close publisher | Green at last close | Gate 0 recorded 21 runs, last exit code 0, and a fully green final Tier 1/2 summary at 2026-07-17 20:31:01Z. |
 | First RC5 session evidence | Yellow, expected | No July 20 candidate, held path, manager scorecard, collision censor, or close receipt can exist before the cohort starts. This is an evidence wait, not a configuration gap. |
 
@@ -50,7 +50,7 @@ Database `armed` is therefore not the effective Monday roster.
 - shadow manager: 17/17 pass;
 - durable shadow book: 149/149 pass;
 - prospective scorer and duplicate/censor rules: 41/41 pass;
-- Sentinel receipt identity and freshness: 17/17 pass;
+- Sentinel receipt identity, freshness, and evidence-session selection: 19/19 pass;
 - TypeScript and production build passed on the review branch.
 
 ## First-session proof sequence

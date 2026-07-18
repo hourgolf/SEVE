@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import {
   buildSentinelReceiptMeta,
   deriveSentinelReceiptStatus,
+  resolveSentinelEvidenceSession,
   SENTINEL_PUBLISHER_VERSION,
   SENTINEL_RECEIPT_SCHEMA_VERSION,
 } from "./receipt";
@@ -46,6 +47,13 @@ const invalidTarget = deriveSentinelReceiptStatus({
 assert.equal(invalidTarget.code, "target-invalid");
 assert.equal(invalidTarget.tone, "red");
 
+assert.equal(resolveSentinelEvidenceSession({
+  briefAsOf: "2026-07-17", through: "2026-07-17", publishedEtDate: "2026-07-18",
+}), "2026-07-17");
+assert.equal(resolveSentinelEvidenceSession({
+  through: "2026-07-17", publishedEtDate: "2026-07-18",
+}), "2026-07-17");
+
 assert.equal(deriveSentinelReceiptStatus({ state: "error", err: "timeout" }, now).code, "error");
 assert.equal(deriveSentinelReceiptStatus({ state: "empty" }, now).code, "missing");
 assert.equal(deriveSentinelReceiptStatus({ state: "loading" }, now).code, "loading");
@@ -60,4 +68,4 @@ assert.equal(meta.session, "2026-07-17");
 assert.equal(meta.date, "2026-07-17");
 assert.equal(meta.forDate, "2026-07-20");
 
-console.log("sentinel-receipt-selftest: 17/17 passed");
+console.log("sentinel-receipt-selftest: 19/19 passed");
