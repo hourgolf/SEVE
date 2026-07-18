@@ -21,6 +21,7 @@ import {
   DAY1_RELEASE_ID,
   DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
+  validateDay1ReleaseSourceExecutorBoundary,
   validateDay1ReleaseStartup,
 } from "../worker/src/day1ReleasePolicy.js";
 import { observedPolicyIdentity } from "../worker/src/planShadowModel.js";
@@ -88,6 +89,10 @@ async function main(): Promise<void> {
   if (missing.length || unexpected.length || actualSlugs.size !== channels.length) {
     throw new Error(`fleet identity mismatch: missing=${missing.join(",")} unexpected=${unexpected.join(",")}`);
   }
+  const sourceBoundaryErrors = validateDay1ReleaseSourceExecutorBoundary(channels);
+  if (sourceBoundaryErrors.length) {
+    throw new Error(`source executor boundary mismatch: ${sourceBoundaryErrors.join(";")}`);
+  }
   const overlaid = applyDay1ReleaseFleetOverlay(channels);
   const channelBySlug = new Map(overlaid.map((channel) => [channel.slug, channel]));
   const accountById = new Map(accounts.map((account) => [account.id, account]));
@@ -115,7 +120,7 @@ async function main(): Promise<void> {
       managerShadowQuoteMaxAgeMs: 15_000,
     },
   });
-  if (!startup.ok && !deriveBindings) throw new Error(`live fleet does not reproduce RC4 bindings: ${startup.errors.join(";")}`);
+  if (!startup.ok && !deriveBindings) throw new Error(`live fleet does not reproduce RC5 bindings: ${startup.errors.join(";")}`);
 
   const roots = DAY1_ROOTS.map((root) => {
     const channel = channelBySlug.get(root.slug);
@@ -197,7 +202,7 @@ async function main(): Promise<void> {
       "day1_premium_debit_cap", "day1_admission_closed", "day1_spy_same_clock_collision", "day1_family_open",
       "day1_reentry_disabled", "day1_same_occ_open", "day1_underlying_concurrency", "day1_global_concurrency",
       "day1_global_snapshot_incomplete", "day1_global_orders_incomplete", "day1_account_manage_only",
-      "day1_stale_decision_bar",
+      "day1_stale_decision_bar", "day1_source_executor_boundary",
       "left_boundary_censored", "right_boundary_censored", "internal_gap_censored", "path_identity_mismatch",
       "invalid_exact_quote", "invalid_exact_entry_ask", "adapter_timeout", "retry_exhausted", "shutdown_abandoned",
       "no_fresh_cutoff_bid",

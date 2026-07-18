@@ -6,8 +6,8 @@ import type { ShadowDecision } from "./decide.js";
 import type { AccountRow, ChannelConfig, PositionRow } from "./store.js";
 import { observedPolicyIdentity, type ObservedPolicyIdentity } from "./planShadowModel.js";
 
-export const DAY1_RELEASE_SCHEMA_VERSION = 4 as const;
-export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc4" as const;
+export const DAY1_RELEASE_SCHEMA_VERSION = 5 as const;
+export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc5" as const;
 export const DAY1_MANAGER_VERSION = "day1-catastrophe-eod-v1" as const;
 export const DAY1_SHADOW_MANAGER_VERSION = "manager-lab-preregister-v1" as const;
 
@@ -57,56 +57,56 @@ export interface Day1RootBinding {
   policyEpoch: string;
 }
 
-/** SELECT-only-derived RC4 bindings. They are runtime admission authority, not
+/** SELECT-only-derived RC5 bindings. They are runtime admission authority, not
  * a claim that the live fleet has already been changed to the local overlay. */
 export const DAY1_ROOT_BINDINGS: readonly Day1RootBinding[] = [
   {
     slug: "pb-ride", strategistId: "4528343d-7151-46ae-8f0d-10c0ef9572b4",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:1f0f29644f8a4c393a8f3e52f98cc769ece9944e1d124ba5bc39290c7ca39082",
+    channelVersion: "sha256:0890122702487404a599d3b78e0774d4b9a9bc90b57806ee32c72a38ddf4fa34",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:2b597c9ae7cfa626841761de3bb8014cd62b82eed1c2a5c90463fafb5f3b4c72",
-    policyEpoch: "505be44f-484d-55ed-81f0-c6c755044264",
+    configurationEpoch: "sha256:7b908a25ed1838f19ac32167dab3c74238ded00b3f39ec375cb213905784838f",
+    policyEpoch: "2c2787b7-4e0b-5628-8ff6-183da8014239",
   },
   {
     slug: "orb-ustop-ctl", strategistId: "51ab6380-e0db-4e41-ad59-625b151cb9cf",
     accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountMode: "paper",
-    channelVersion: "sha256:88b412e225738cb4b887aacd2fcc0399253118860997b3c9364cb5da843db1d0",
+    channelVersion: "sha256:b9ce9e1a01886637a7a04d1a0e80008a7fba8d6f001adc4d201601ce87ab5591",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:d7a17fc08e6fdc063e04ea2f1aa273b5881b1fe517ae1d49eb7d83a6fc972d63",
-    policyEpoch: "633c8551-7e42-5e12-9a20-5aa8be775664",
+    configurationEpoch: "sha256:20b29fd8b19e56a6cfeed868753caa68b9a14ccef3490531ed3e59dc8cdbfeb0",
+    policyEpoch: "150ee8f4-cd5f-58e4-bf72-920ca906fc2f",
   },
   {
     slug: "grind-v3", strategistId: "1dc15beb-79a5-4f49-9b9b-9b5693c93561",
     accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountMode: "paper",
-    channelVersion: "sha256:cbd86bd2416dc4878d8812615fe23d185644eff9ce7d07a88ae64b39c546c72f",
+    channelVersion: "sha256:cd2f40c4394d3a55e12ab9a42d66182550887552f1401d043ef93c0f9bf1ce21",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:43d66895f7fefa8c426da504939d4f7dd1e668a1a35abad0deda3b9815ef6fac",
-    policyEpoch: "3c74d688-c4d7-5275-b55b-41f53a535122",
+    configurationEpoch: "sha256:77f8a7c81f390dbc7c4977b06af6db199734f136f2fe5fb62d8095a9c3b2c658",
+    policyEpoch: "4efe3eb8-0683-5f9e-ba7b-d1965a45727b",
   },
   {
     slug: "momo-shape", strategistId: "c2efcffa-b0bb-4cde-a3de-25209879ebe1",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:2dfa4a072350a9b2dc36c968f190042a8867abe05e42ccffe383ec1703a1dead",
+    channelVersion: "sha256:4f0f694ba52357e237a5b40162014a47089d049c5cc5cbc98c131670f71c65d8",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:b97b5969ba034bd673c4e82728ab68c4a61239297563563ae442f8f29e35e91c",
-    policyEpoch: "671888c4-2400-5ce3-b69c-029c04870081",
+    configurationEpoch: "sha256:85ef6b8789050b4b2a4843840b8011b9c2da9a50f84e64c6cf886e0820277c56",
+    policyEpoch: "3b9c36e4-320f-5f91-904a-96ae2d1d83bc",
   },
   {
     slug: "orb-qqq-trail", strategistId: "62b108c8-535e-4232-8c68-af8fb5b8f932",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:c1c9aa226ef6e849be9a497672f189766a2f0ddc94446c627b21843208d9fbdb",
+    channelVersion: "sha256:b08df73baec4896dee3f81017ffca16da52f01eb22a44632793b3397eddf1879",
     managerVersion: "sha256:c3af49e3ce9e6653d7307ad458330293cd65a1433412057ba2715150dedea3c8",
-    configurationEpoch: "sha256:9ff8fdb9f9635510edec86d239e01579f04dd16f7214bee2951dc62caf43c35d",
-    policyEpoch: "a18f02d6-c7c3-5469-942c-5eb59a05fc4e",
+    configurationEpoch: "sha256:915b876a53ae745f18b5e6178c46f3d77fc2e2c6eb4b5f1188923e710486fa1b",
+    policyEpoch: "6d17038a-1761-571a-ab12-247d40c6c4cd",
   },
   {
     slug: "breakout-alt-v3-iwm", strategistId: "24889b0e-3ba7-4e47-9430-f73aa2c764a4",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:bae3d4340445147afe9b4ae536b0ae2b2c8d4926d0ec484062f551f8f727b4a4",
+    channelVersion: "sha256:c09ce06f0886641344258bff0a2d2c1b5920fa90aabca9391581424cffa82c7d",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:630307eb8ccf79a29f15e9be050342e703fd3588f41b071f7a0db30360ee43b6",
-    policyEpoch: "082d21a6-210a-5655-b250-55bbcb3e6682",
+    configurationEpoch: "sha256:f355002d33f366775329ba8deb8c00d2c26754e91aa6ab3ff6e238cad6fe9b4c",
+    policyEpoch: "a7c37735-8de2-51ab-8a02-e50aad93303f",
   },
 ] as const;
 
@@ -205,6 +205,8 @@ export const DAY1_RELEASE_CONFIGURATION = {
     incompleteOrderCensor: "day1_global_orders_incomplete",
     riskReducingManagementOnAdmissionFailure: true,
     requiredCaptureRuntimeReadyBeforeBootDecision: true,
+    sourceExecutorBoundaryRequiredBeforeOverlay: true,
+    sourceExecutorBoundaryCensor: "day1_source_executor_boundary",
   },
   arbitration: {
     paperExecutor: "strategy_and_execution_eligible_only",
@@ -280,6 +282,27 @@ export function applyDay1ReleaseFleetOverlay(channels: readonly ChannelConfig[])
   const missing = DAY1_ROOTS.filter((root) => !present.has(root.slug)).map((root) => root.slug);
   if (missing.length) throw new Error(`Day 1 release missing root channels: ${missing.join(",")}`);
   return channels.map(applyDay1ReleaseChannelOverlay);
+}
+
+/** Validate the source-of-truth executor boundary before the release overlay
+ * can rewrite any row. A root that drifts to `cron` could otherwise be traded
+ * by cron while the overlaid worker also treats it as stream-owned. Dark cron
+ * rows remain allowed only while their entry gate is visibly closed; cron may
+ * still own risk-reducing management for legacy positions on those rows. */
+export function validateDay1ReleaseSourceExecutorBoundary(
+  channels: readonly Pick<ChannelConfig, "slug" | "executor" | "status" | "muted">[],
+): string[] {
+  const errors: string[] = [];
+  for (const channel of channels) {
+    if (day1Root(channel.slug)) {
+      if (channel.executor !== "stream") errors.push(`${channel.slug}:source_executor_not_stream`);
+      continue;
+    }
+    if (channel.executor === "cron" && channel.status === "armed" && !channel.muted) {
+      errors.push(`${channel.slug}:dark_cron_entry_gate_open`);
+    }
+  }
+  return errors.sort();
 }
 
 export interface Day1AdmissionState {
@@ -554,7 +577,7 @@ export function finalizeDay1ReleaseAdmissions(input: {
   return output;
 }
 
-/** Compatibility helper for one account/symbol batch. Runtime RC4 uses the
+/** Compatibility helper for one account/symbol batch. Runtime RC5 uses the
  * explicit prepare → global finalize path across every account. */
 export function applyDay1ReleaseAdmission(input: Day1AdmissionInput): ShadowDecision[] {
   const prepared = prepareDay1ReleaseAdmission(input).map((decision) => ({
@@ -626,7 +649,8 @@ function sameIdentity(actual: ObservedPolicyIdentity, binding: Day1RootBinding):
   return errors;
 }
 
-/** Pure startup gate. Call only after applying the RC4 channel overlay. */
+/** Pure startup gate. Call only after separately validating the raw source
+ * fleet and then applying the release channel overlay. */
 export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1ReleaseStartupResult {
   const errors: string[] = [];
   const expectedSlugs = [...DAY1_ROOTS.map((root) => root.slug), ...DAY1_DARK_CHANNELS];

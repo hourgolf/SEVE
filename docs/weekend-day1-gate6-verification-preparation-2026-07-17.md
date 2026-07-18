@@ -13,8 +13,8 @@ SHA-256 `967f342378922b4e8c12e1d9bef01739bde40ae014cb54dd65c56cc021c7f819`.
 - root `tsc --noEmit`: pass;
 - worker `tsc --noEmit`: pass;
 - Next.js production build: pass, including type validation and all static/dynamic route generation;
-- held-contract capture: 92/92 pass, including the in-flight high-water follow-up race;
-- VB candidate exact evidence: 35/35 pass;
+- held-contract capture: 93/93 pass, including the in-flight high-water follow-up race and manifest checksum verification;
+- VB candidate exact evidence: 37/37 pass, including the Day 1 dark-lifecycle reconstruction path;
 - deterministic Gate 2 exact dry-run: pass, `externalWrites=false`;
 - checksum-verified July 15 Databento object dry-run: 555,969 parsed rows, 8/8 manager arms,
   `externalWrites=false`;
@@ -22,7 +22,7 @@ SHA-256 `967f342378922b4e8c12e1d9bef01739bde40ae014cb54dd65c56cc021c7f819`.
 - legacy family scorer: 19/19 pass, unchanged;
 - Databento exact path and persisted-object parser: 19/19 pass;
 - Day 1 canonical receipt model and zero-mutation renderer guard: 7/7 pass;
-- Day 1 release policy/admission/lifecycle: 33/33 pass;
+- Day 1 release policy/admission/lifecycle/executor boundary: 101/101 pass;
 - SELECT-only 68-channel release receipt validation: pass; two SELECTs, zero external writes, no local
   receipt output during the preflight;
 - runner: 148/148 pass;

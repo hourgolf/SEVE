@@ -55,6 +55,7 @@ import {
   DAY1_ROOTS,
   finalizeDay1ReleaseAdmissions,
   prepareDay1ReleaseAdmission,
+  validateDay1ReleaseSourceExecutorBoundary,
   validateDay1ReleaseStartup,
   day1Root,
   day1ReleaseEodDue,
@@ -65,6 +66,7 @@ import {
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 let day1StartupReceipt: Record<string, unknown> | null = null;
+let day1SourceExecutorBoundaryReady = !config.day1ReleaseEnabled;
 
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
@@ -240,7 +242,7 @@ interface DecisionExecutionBatch {
   executionIneligibleReason: string | null;
 }
 
-/** Phase D only. RC4 never invokes this until every account batch has been
+/** Phase D only. RC5 never invokes this until every account batch has been
  * prepared and the global release arbiter has returned final decisions. */
 async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Map<string, number>): Promise<void> {
   const { group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
@@ -347,6 +349,7 @@ async function reloadConfig(): Promise<void> {
   const hadFund = !!cfg.fund;
   const prevHalted = cfg.fund?.is_halted ?? false;
   const c = await store.loadConfig();
+  if (config.day1ReleaseEnabled) day1SourceExecutorBoundaryReady = false;
   if (c.fund) {
     // Audit 2026-07-10 (critical): a TRANSIENT accounts-read failure must not replace a
     // good routing table with [] — every channel would regroup onto the default account
@@ -354,6 +357,12 @@ async function reloadConfig(): Promise<void> {
     // table; routing.ts fail-closes any account_id that still can't resolve.
     const accounts = !c.accountsFresh && cfg.accounts.length ? cfg.accounts : c.accounts;
     if (accounts !== c.accounts) warn("config: accounts read stale — keeping the prior routing table");
+    if (config.day1ReleaseEnabled) {
+      const boundaryErrors = validateDay1ReleaseSourceExecutorBoundary(c.channels);
+      if (boundaryErrors.length) {
+        throw new Error(`Day 1 source executor boundary failed before overlay: ${boundaryErrors.join(";")}`);
+      }
+    }
     const channels = config.day1ReleaseEnabled ? applyDay1ReleaseFleetOverlay(c.channels) : c.channels;
     if (config.day1ReleaseEnabled) {
       const validation = validateDay1ReleaseStartup({
@@ -392,8 +401,9 @@ async function reloadConfig(): Promise<void> {
           managerShadowQuoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs,
         },
       });
-      if (!validation.ok) throw new Error(`Day 1 RC4 startup validation failed: ${validation.errors.join(";")}`);
+      if (!validation.ok) throw new Error(`Day 1 RC5 startup validation failed: ${validation.errors.join(";")}`);
       day1StartupReceipt = validation.activeSettingsReceipt;
+      day1SourceExecutorBoundaryReady = true;
     }
     cfg = { fund: c.fund, channels, accounts };
   }
@@ -609,7 +619,7 @@ async function cycle(trigger: string): Promise<void> {
         }
       }
 
-      // RC4 admission snapshot: positions -> orders -> confirming positions.
+      // RC5 admission snapshot: positions -> orders -> confirming positions.
       // A buy can fill between the first two reads and disappear from the working-order
       // set. The confirming position read is therefore the authoritative admission
       // snapshot. On failure we retain the initial positions only for risk-reducing
@@ -694,9 +704,11 @@ async function cycle(trigger: string): Promise<void> {
             })
           : evaluatedDecisions;
         const barFresh = Date.now() - lastSession.ts < 180_000;
-        const executionEligible = live && accountFresh && positionsFresh && ordersFresh && canEnter && barFresh;
+        const executionEligible = live && day1SourceExecutorBoundaryReady
+          && accountFresh && positionsFresh && ordersFresh && canEnter && barFresh;
         const executionIneligibleReason = executionEligible ? null
           : !live ? "day1_shadow_rehearsal"
+          : !day1SourceExecutorBoundaryReady ? "day1_source_executor_boundary"
           : !accountFresh || !positionsFresh ? "day1_global_snapshot_incomplete"
           : !ordersFresh ? "day1_global_orders_incomplete"
           : !canEnter ? "day1_account_manage_only"
@@ -831,7 +843,7 @@ async function cycle(trigger: string): Promise<void> {
       }
     }
 
-    // ---- RC4 PHASES B/C/D: broker-truth state, one global arbiter, then execution ----
+    // ---- RC5 PHASES B/C/D: broker-truth state, one global arbiter, then execution ----
     // No release entry can reach executeDecisionBatch above: release batches take
     // the `continue` path until every account/symbol has been evaluated and stamped.
     if (config.day1ReleaseEnabled) {
@@ -881,7 +893,7 @@ async function cycle(trigger: string): Promise<void> {
           });
         }
       }
-      if (cursor !== finalized.length) throw new Error("Day 1 RC4 arbitration mapping mismatch");
+      if (cursor !== finalized.length) throw new Error("Day 1 RC5 arbitration mapping mismatch");
       for (const batch of releaseBatches) await executeDecisionBatch(batch, deskStack);
     }
 
@@ -1304,7 +1316,7 @@ async function main(): Promise<void> {
   try { await reloadConfig(); }
   catch (e) {
     if (config.day1ReleaseEnabled) {
-      error(`config: RC4 initial validation failed — ${(e as Error).message}; refusing to start`);
+      error(`config: RC5 initial validation failed — ${(e as Error).message}; refusing to start`);
       process.exit(1);
     }
     warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`);

@@ -5,6 +5,7 @@ Status: dependency map only. No migration, configuration, seal, merge, push, or 
 | Item | Required before Monday capture | Safely deferrable to T+1 | Research-only | Requires migration | Requires Railway deployment | Requires operator configuration ratification |
 |---|---:|---:|---:|---:|---:|---:|
 | Future candidate provenance stamps in `signals.rationale` | yes | no | no | no | **yes** | no |
+| Raw executor boundary before release overlay | yes | no | execution safety | no | **yes** | no |
 | Gate 1 held-capture deadlines and ratified 12/60 batching | yes, if held capture is enabled Monday | no | no | no | **yes** | ratified; production untouched |
 | Root roster, quantities, premium/debit bounds, stops, EOD, collision caps | yes for proposed root execution | no | no | no | **yes** | ratified; application still stopped |
 | Day 1 canonical receipt | yes before any configuration application | no | governance | no | no | seal prepared only after final verification |
@@ -21,6 +22,11 @@ source-bar clock, decision-observation clock, exact OCC, underlying/side, strate
 configuration identities, manager version, worker `source_version`, and the explicitly non-exact live ask.
 That requires the corrected worker stamping code to be deployed before capture; it does not require a new
 table.
+
+The worker now stamps dark candidates with `day1_dark_lifecycle`, and the existing local `gate-shadow`
+publisher recognizes that reason as a sequential no-fill walk. If the local close-pass does not run,
+stamped `signals` rows remain the durable reconstruction input and may be processed T+1; the local Mac is
+not the only copy of the candidate clock/OCC/version evidence.
 
 T+1 can then read those immutable signal facts, request the exact OCC/window, build the versioned exact-path
 object, and score it locally. What cannot happen before the migration is durable publication of the compact

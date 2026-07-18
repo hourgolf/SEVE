@@ -190,7 +190,7 @@ async function main() {
   // returned the OLDEST 1000 — new days' signals never entered the walk, so the LAB panel
   // froze mid-06 while gate-shadow reported "0 new". Same silent-truncation class as the
   // quote-fetch flicker; same cure — page to completion, then fail LOUD on any shortfall.
-  const BLOCKED = ["cost_gate", "stale_chain", "not_armed", "halted"];
+  const BLOCKED = ["cost_gate", "stale_chain", "not_armed", "halted", "day1_dark_lifecycle"];
   const { count: expected, error: cErr } = await sb
     .from("signals").select("id", { count: "exact", head: true })
     .in("blocked_reason", BLOCKED).gte("created_at", since);
@@ -231,7 +231,7 @@ async function main() {
   // `halted` joins the bench walk (data-hole fix 2026-07-02): a KILL window's blocked
   // entries re-signal every bar while flat, exactly like drafts — same one-at-a-time
   // sequential semantics, and without this they vanish at the 7d quote prune.
-  const WALK = new Set(["not_armed", "halted"]);
+  const WALK = new Set(["not_armed", "halted", "day1_dark_lifecycle"]);
   const benchByDay = new Map<string, any[]>();
   const gateSigs: any[] = [];
   for (const s of (sigs ?? []) as any[]) {
@@ -269,7 +269,7 @@ async function main() {
       }, { onConflict: "signal_id" });
       if (error) { console.error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`); process.exit(1); }
       // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
-      if (base.blocked !== "not_armed" && base.pnlPerContract != null) {
+      if (!WALK.has(base.blocked) && base.pnlPerContract != null) {
         try {
           await sb.from("events").insert({
             level: "INFO",

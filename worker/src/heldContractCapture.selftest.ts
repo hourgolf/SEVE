@@ -321,6 +321,10 @@ check("capture enqueue is synchronous", /capture\(input: HeldContractCaptureInpu
 check("held-contract compression is asynchronous", [runtimeSource.includes("gzipSync"), runtimeSource.includes("await gzipAsync")], [false, true]);
 check("high-water persistence is deferred past the manager callback", /setImmediate\(\(\)\s*=>\s*{[\s\S]*?this\.flush\("high-water"\)/.test(runtimeSource), true);
 check("manifest completion is retry-stable", /const completedAt = descriptor\.lastFetchAt/.test(runtimeSource), true);
+check("manifest HEAD verifies a content checksum as well as byte length", [
+  runtimeSource.includes("manifest_sha256"),
+  runtimeSource.includes("manifestHead.Metadata?.manifest_sha256 !== manifestSha256"),
+], [true, true]);
 check("runtime acknowledges a batch only after a durable receipt", /if \(receipted\)\s*{[\s\S]*?batcher\.acknowledge\(batch\.token\)/.test(runtimeSource), true);
 check("R2 and receipt failures retain a retry batch with backoff", /retry retained with backoff/.test(runtimeSource), true);
 check("R2 and receipt failures use bounded backoff budgets", /batcher\.recordFailure/.test(runtimeSource) && /RetryMaxAttempts/.test(runtimeSource), true);

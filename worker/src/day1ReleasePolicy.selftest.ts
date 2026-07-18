@@ -18,6 +18,7 @@ import {
   day1ReleaseEodDue,
   finalizeDay1ReleaseAdmissions,
   prepareDay1ReleaseAdmission,
+  validateDay1ReleaseSourceExecutorBoundary,
   validateDay1ReleaseStartup,
 } from "./day1ReleasePolicy.js";
 
@@ -56,11 +57,27 @@ check("release identity seals broker truth and posture-specific arbitration", [
   DAY1_RELEASE_CONFIGURATION.admissionTruth.incompletePositionCensor,
   DAY1_RELEASE_CONFIGURATION.admissionTruth.incompleteOrderCensor,
   DAY1_RELEASE_CONFIGURATION.arbitration.manageOnlyMaySuppressExecutableCandidate,
-], [true, true, "day1_global_snapshot_incomplete", "day1_global_orders_incomplete", false]);
+  DAY1_RELEASE_CONFIGURATION.admissionTruth.sourceExecutorBoundaryRequiredBeforeOverlay,
+  DAY1_RELEASE_CONFIGURATION.admissionTruth.sourceExecutorBoundaryCensor,
+], [true, true, "day1_global_snapshot_incomplete", "day1_global_orders_incomplete", false,
+  true, "day1_source_executor_boundary"]);
 check("fleet overlay refuses a missing ratified root", (() => {
   try { applyDay1ReleaseFleetOverlay(channels.filter((row) => row.slug !== "grind-v3")); return false; }
   catch { return true; }
 })(), true);
+const sourceBoundarySafe = channels.map((row) => day1Lifecycle(row.slug) === "paper"
+  ? { ...row, executor: "stream" as const }
+  : row);
+check("raw executor boundary accepts stream roots and a closed dark cron gate",
+  validateDay1ReleaseSourceExecutorBoundary(sourceBoundarySafe), []);
+check("raw executor boundary catches root cron ownership before overlay",
+  validateDay1ReleaseSourceExecutorBoundary(sourceBoundarySafe.map((row) => row.slug === "pb-ride"
+    ? { ...row, executor: "cron" as const }
+    : row)), ["pb-ride:source_executor_not_stream"]);
+check("raw executor boundary catches a dark cron entry gate left open",
+  validateDay1ReleaseSourceExecutorBoundary(sourceBoundarySafe.map((row) => row.slug === "pb-ride-2"
+    ? { ...row, executor: "cron" as const, status: "armed" as const, muted: false }
+    : row)), ["pb-ride-2:dark_cron_entry_gate_open"]);
 
 function decision(slug: string, ask: number, overrides: Partial<ShadowDecision> = {}): ShadowDecision {
   return {
@@ -174,7 +191,7 @@ check("cross-account suppression retains complete candidate and collision proven
   suppressedProvenance.executableAsk,
   crossAccountSuppressed.detail?.day1CollisionWinner,
   crossAccountSuppressed.detail?.day1CollisionScope,
-], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-20-rc4", DAY1_RELEASE_CONFIGURATION_SHA256,
+], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-20-rc5", DAY1_RELEASE_CONFIGURATION_SHA256,
   MORGUE, DAY1_ROOT_BINDINGS.find((row) => row.slug === "grind-v3")!.strategistId,
   "2026-07-20T14:00:00.000Z", "2026-07-20T14:00:01.000Z", "SPY260720C00600000", 1,
   "pb-ride", "global-cross-account-exact-source-clock"]);
@@ -338,7 +355,7 @@ const startupInput = () => ({
   credentialRouteEvidenceBasis: "runtime-env-presence" as const,
 });
 const validStartup = validateDay1ReleaseStartup(startupInput());
-check("RC4 startup reproduces all committed bindings", [validStartup.ok, validStartup.errors], [true, []]);
+check("RC5 startup reproduces all committed bindings", [validStartup.ok, validStartup.errors], [true, []]);
 const mutateRoot = (slug: string, change: Partial<ChannelConfig>) => fullFleet.map((row) => row.slug === slug ? { ...row, ...change } : row);
 const refuses = (label: string, input: Parameters<typeof validateDay1ReleaseStartup>[0]): void =>
   check(label, validateDay1ReleaseStartup(input).ok, false);
@@ -385,7 +402,7 @@ check("active-settings receipt includes actual fleet, lifecycle, route, feed and
   (startupReceipt.roots as unknown[]).length,
   (startupReceipt.heldCapture as Record<string, unknown>).targetSamples,
   (startupReceipt.managerShadow as Record<string, unknown>).quoteMaxAgeMs,
-], [WORKER_VERSION, "weekend-day1-2026-07-20-rc4", DAY1_RELEASE_CONFIGURATION_SHA256,
+], [WORKER_VERSION, "weekend-day1-2026-07-20-rc5", DAY1_RELEASE_CONFIGURATION_SHA256,
   68, 6, 62, "https://paper-api.alpaca.markets", "sip", "opra", "runtime-env-presence", 6, 12, 15_000]);
 check("active-settings receipt never contains credential values or secrets", /alpacaKey|alpacaSecret|serviceRole|secret/i.test(JSON.stringify(startupReceipt)), false);
 const executorStartup = validateDay1ReleaseStartup({
@@ -402,6 +419,13 @@ const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8")
 const executeSource = readFileSync(new URL("./execute.ts", import.meta.url), "utf8");
 const storeSource = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
 check("runtime release path stages every account batch and continues before any executor", /releaseBatches\.push\(executionBatch\);\s*continue;/.test(indexSource), true);
+check("runtime validates the raw executor boundary before applying the overlay", (() => {
+  const validate = indexSource.indexOf("validateDay1ReleaseSourceExecutorBoundary(c.channels)");
+  const overlay = indexSource.indexOf("applyDay1ReleaseFleetOverlay(c.channels)");
+  return validate >= 0 && overlay >= 0 && validate < overlay;
+})(), true);
+check("runtime preserves executor-boundary failure as an explicit admission censor",
+  indexSource.includes('!day1SourceExecutorBoundaryReady ? "day1_source_executor_boundary"'), true);
 check("runtime globally finalizes all prepared rows before the first release executor call", [
   indexSource.indexOf("const finalized = finalizeDay1ReleaseAdmissions"),
   indexSource.indexOf("for (const batch of releaseBatches) await executeDecisionBatch"),

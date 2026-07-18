@@ -13,6 +13,10 @@ account identities, channel/configuration/manager/worker versions, underlying, s
 canonical TypeScript candidate payload and proposed SQL table now match exactly, including
 `strategist_id` and `source_version`.
 
+The Day 1 release-specific `day1_dark_lifecycle` reason is part of the same sequential-walk population as
+the older `not_armed` and `halted` bench reasons. This preserves all no-fill sibling and VB candidates after
+the release overlay instead of silently excluding them from reconstruction.
+
 The live Alpaca snapshot ask is retained only as provenance:
 
 - feed: `alpaca_snapshot`;
@@ -113,12 +117,13 @@ remains only a local proposal and has not been applied.
 
 ## Verification
 
-- VB candidate adversarial evidence self-test: 35/35 pass;
+- VB candidate adversarial evidence self-test: 37/37 pass;
 - left/right boundary, internal-gap, invalid quote, response-contract mismatch, stale/unproven live ask,
   and approximate-contract cases fail closed;
 - deterministic end-to-end dry-run: eligible, 8/8 manager arms, zero external writes;
 - checksum-verified real-object integration: eligible, 8/8 manager arms, zero external writes;
 - candidate and exact-path SQL/payload field alignment: pass;
+- Day 1 dark-lifecycle query, sequential coalescing, payload, and proposed SQL constraint: pass;
 - legacy live adapter stays read-only and historical pre-stamp rows stay censored.
 
 ## Operator-review boundary

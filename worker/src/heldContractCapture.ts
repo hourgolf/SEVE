@@ -195,6 +195,7 @@ export class HeldContractCaptureRuntime {
     const completedAt = descriptor.lastFetchAt;
     const manifest = manifestFor(descriptor, compressedSha256, compressed.byteLength, completedAt);
     const manifestBody = Buffer.from(JSON.stringify(manifest), "utf8");
+    const manifestSha256 = createHash("sha256").update(manifestBody).digest("hex");
 
     await this.r2("r2_object_write", deadlineAtMs, (abortSignal) => this.s3.send(new PutObjectCommand({
       Bucket: config.r2Bucket, Key: descriptor.objectKey, Body: compressed,
@@ -217,11 +218,13 @@ export class HeldContractCaptureRuntime {
 
     await this.r2("r2_manifest_write", deadlineAtMs, (abortSignal) => this.s3.send(new PutObjectCommand({
       Bucket: config.r2Bucket, Key: descriptor.manifestKey, Body: manifestBody, ContentType: "application/json",
+      Metadata: { manifest_sha256: manifestSha256 },
     }), { abortSignal }));
     const manifestHead = await this.r2("r2_manifest_head", deadlineAtMs, (abortSignal) => this.s3.send(
       new HeadObjectCommand({ Bucket: config.r2Bucket, Key: descriptor.manifestKey }), { abortSignal },
     ));
-    if (manifestHead.ContentLength !== manifestBody.byteLength) {
+    if (manifestHead.ContentLength !== manifestBody.byteLength
+        || manifestHead.Metadata?.manifest_sha256 !== manifestSha256) {
       throw new Error(`R2 manifest verification mismatch for ${descriptor.manifestKey}`);
     }
 

@@ -63,6 +63,9 @@ const coalesced = coalesceVbCandidateDecisions([
 check("per-minute repeats coalesce until prior exit", coalesced.map((row) => row.signalId), [base.signalId, "66666666-6666-4666-8666-666666666666"]);
 check("legitimate re-entry gets a new ordinal", coalesced.map((row) => row.reentryOrdinal), [1, 2]);
 check("order path remains unauthorized", coalesced.every((row) => !row.orderPathAuthorized), true);
+check("Day 1 dark lifecycle remains valid research evidence",
+  candidateDbPayload({ ...coalesced[0], blockedReason: "day1_dark_lifecycle" })?.blocked_reason,
+  "day1_dark_lifecycle");
 
 const candidate = coalesced[0];
 const candidatePayload = candidateDbPayload(candidate)!;
@@ -127,6 +130,12 @@ function sqlColumns(sql: string, table: string): string[] {
       && !["created_at", "check", "unique", "foreign"].includes(value));
 }
 const migration = readFileSync(new URL("../../supabase/migrations/20260717210403_gate2_vb_exact_candidate_receipts.sql", import.meta.url), "utf8");
+const gateShadow = readFileSync(new URL("../../scripts/gate-shadow.ts", import.meta.url), "utf8");
+check("nightly reconstruction includes the Day 1 dark lifecycle sequential walk", [
+  /const BLOCKED = \[[^\]]*"day1_dark_lifecycle"/.test(gateShadow),
+  /const WALK = new Set\(\[[^\]]*"day1_dark_lifecycle"/.test(gateShadow),
+  /blocked_reason in \([^\)]*'day1_dark_lifecycle'/.test(migration),
+], [true, true, true]);
 check("candidate SQL and generated payload align field-for-field", sqlColumns(migration, "vb_candidate_receipts"), [...VB_CANDIDATE_SQL_FIELDS]);
 check("exact-path SQL and generated payload align field-for-field", sqlColumns(migration, "vb_exact_path_receipts"), [...VB_EXACT_PATH_SQL_FIELDS]);
 check("candidate generated keys exactly equal the SQL contract", Object.keys(dry.candidatePayload ?? {}), [...VB_CANDIDATE_SQL_FIELDS]);

@@ -62,7 +62,7 @@ export interface VbCandidateDecision {
   side: "call" | "put";
   occSymbol: string;
   liveObservedAsk: VbLiveObservedAsk | null;
-  blockedReason: "not_armed" | "halted" | "cost_gate" | "stale_chain";
+  blockedReason: "not_armed" | "halted" | "cost_gate" | "stale_chain" | "day1_dark_lifecycle";
   virtualExitAtMs: number;
 }
 
