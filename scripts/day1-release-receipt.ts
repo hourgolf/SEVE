@@ -58,6 +58,10 @@ function mapChannel(row: any): ChannelConfig {
 }
 
 async function main(): Promise<void> {
+  const deriveBindings = process.argv.includes("--derive-bindings");
+  if (deriveBindings && (arg("out") || arg("active-settings-out"))) {
+    throw new Error("--derive-bindings is SELECT-only stdout and cannot write receipt files");
+  }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (!url || !key) throw new Error("Supabase backend credentials missing");
@@ -95,6 +99,7 @@ async function main(): Promise<void> {
     fundMode: String((fundRead.data as { mode?: unknown } | null)?.mode ?? ""),
     workerVersion: WORKER_VERSION,
     expectedConfigurationSha256: DAY1_RELEASE_CONFIGURATION_SHA256,
+    resolvedCredentialAccountIds: [...new Set(DAY1_ROOT_BINDINGS.map((binding) => binding.accountId))],
     posture: {
       alpacaPaperHost: "https://paper-api.alpaca.markets",
       stockFeed: "sip", optionFeed: "opra", dryRun: true, liveTrading: false,
@@ -109,7 +114,7 @@ async function main(): Promise<void> {
       managerShadowQuoteMaxAgeMs: 15_000,
     },
   });
-  if (!startup.ok) throw new Error(`live fleet does not reproduce RC2 bindings: ${startup.errors.join(";")}`);
+  if (!startup.ok && !deriveBindings) throw new Error(`live fleet does not reproduce RC3 bindings: ${startup.errors.join(";")}`);
 
   const roots = DAY1_ROOTS.map((root) => {
     const channel = channelBySlug.get(root.slug);
@@ -150,6 +155,12 @@ async function main(): Promise<void> {
         contentSha256: "02de877337c4cb1df736bbfd5dfbba0cf8c144c8f0204189d058db28cb09f2f8",
         configurationSha256: "ba0fed21340f34a7f816a7edb7589a44758e15b6696b4a6db41d432e090a37c1",
       },
+      supersededRc2: {
+        status: "accepted-major-correction-superseded-not-deployable",
+        fileSha256: "4b0b4e6b3dbd5f7832cc696693bed674446dce8833e23c55bbfdab7d697c4c12",
+        activeSettingsSha256: "e081acb65e9ab48904acfc8c363050bd1819e80b0dcf76b302776d1a2c36d6b6",
+        releaseConfigurationSha256: "67abd8b0ad3435268156836a646d935da79ffd985b72cbef001e926b283fe746",
+      },
       capture: {
         samples: 12, maxAgeMs: 60_000, ingressMaxSamples: 10_000, ingressMaxBytes: 8_388_608,
         combinedStateMaxSamples: 10_000, combinedStateMaxBytes: 8_388_608,
@@ -178,6 +189,7 @@ async function main(): Promise<void> {
       "day1_dark_lifecycle", "day1_adds_disabled", "day1_exit_shadow_only", "day1_session_ledger_unavailable",
       "day1_premium_debit_cap", "day1_admission_closed", "day1_spy_same_clock_collision", "day1_family_open",
       "day1_reentry_disabled", "day1_same_occ_open", "day1_underlying_concurrency", "day1_global_concurrency",
+      "day1_global_snapshot_incomplete", "day1_global_orders_incomplete", "day1_account_manage_only",
       "left_boundary_censored", "right_boundary_censored", "internal_gap_censored", "path_identity_mismatch",
       "invalid_exact_quote", "invalid_exact_entry_ask", "adapter_timeout", "retry_exhausted", "shutdown_abandoned",
       "no_fresh_cutoff_bid",

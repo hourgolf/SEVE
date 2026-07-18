@@ -51,12 +51,16 @@ import {
   buildDay1AdmissionState,
   DAY1_RELEASE_CONFIGURATION_SHA256,
   DAY1_RELEASE_ID,
+  DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
   finalizeDay1ReleaseAdmissions,
   prepareDay1ReleaseAdmission,
   validateDay1ReleaseStartup,
   day1Root,
   day1ReleaseEodDue,
+  type Day1BrokerHolding,
+  type Day1PendingOrderOccupancy,
+  type Day1SnapshotFailure,
 } from "./day1ReleasePolicy.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
@@ -232,9 +236,11 @@ interface DecisionExecutionBatch {
   openRowQty: Map<string, number>;
   sourceBarAtMs: number;
   observedAtMs: number;
+  executionEligible: boolean;
+  executionIneligibleReason: string | null;
 }
 
-/** Phase D only. RC2 never invokes this until every account batch has been
+/** Phase D only. RC3 never invokes this until every account batch has been
  * prepared and the global release arbiter has returned final decisions. */
 async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Map<string, number>): Promise<void> {
   const { group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
@@ -356,6 +362,11 @@ async function reloadConfig(): Promise<void> {
         fundMode: c.fund.mode,
         workerVersion: WORKER_VERSION,
         expectedConfigurationSha256: config.day1ReleaseExpectedSha256,
+        resolvedCredentialAccountIds: groupByAccount(channels, accounts)
+          .filter((group) => group.account.cred_ref
+            ? group.api != null
+            : !!config.alpacaKey && !!config.alpacaSecret)
+          .map((group) => group.account.id),
         posture: {
           alpacaPaperHost: config.alpacaPaperHost,
           stockFeed: config.stockFeed,
@@ -380,7 +391,7 @@ async function reloadConfig(): Promise<void> {
           managerShadowQuoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs,
         },
       });
-      if (!validation.ok) throw new Error(`Day 1 RC2 startup validation failed: ${validation.errors.join(";")}`);
+      if (!validation.ok) throw new Error(`Day 1 RC3 startup validation failed: ${validation.errors.join(";")}`);
       day1StartupReceipt = validation.activeSettingsReceipt;
     }
     cfg = { fund: c.fund, channels, accounts };
@@ -488,13 +499,6 @@ async function cycle(trigger: string): Promise<void> {
     const sessionPositions = config.day1ReleaseEnabled
       ? await store.loadDay1SessionPositions(`${todayET}T00:00:00Z`)
       : [];
-    const releaseState = config.day1ReleaseEnabled
-      ? buildDay1AdmissionState({
-          openPositions: openRowsArr,
-          sessionPositions: sessionPositions ?? [],
-          channelById: byId,
-        })
-      : null;
     // C1 STACK CAP input: desk-wide open ROW count by "UNDERLYING:direction" (OCC root = the
     // chars before the 15-char date+type+strike tail). Rebuilt each cycle from DB truth;
     // incremented below on each executed entry so two same-cycle entries can't both slip
@@ -512,6 +516,15 @@ async function cycle(trigger: string): Promise<void> {
     const decisions: ShadowDecision[] = [];
     const familyAdmissionInputs: FamilyAdmissionInput[] = [];
     const releaseBatches: DecisionExecutionBatch[] = [];
+    const releaseBoundAccountIds = new Set(DAY1_ROOT_BINDINGS.map((binding) => binding.accountId));
+    const releaseObservedAccountIds = new Set<string>();
+    const releaseBrokerPositions: Day1BrokerHolding[] = [];
+    const releasePendingOrders: Day1PendingOrderOccupancy[] = [];
+    const releaseAccountIdByStrategist = new Map<string, string>();
+    let releasePositionSnapshotComplete = true;
+    let releaseOrderSnapshotComplete = true;
+    const releaseSnapshotFailures: Day1SnapshotFailure[] = [];
+    const releaseOrderFailureAccountIds = new Set<string>();
     let totEquity = 0, totCash = 0, totUnreal = 0, snappedAny = false;
     // Per-account orphan-sweep inputs, captured on each bucket's PRE-cycle snapshot and swept
     // AFTER the decision pass (so same-cycle entries/exits don't false-positive).
@@ -524,14 +537,53 @@ async function cycle(trigger: string): Promise<void> {
     // shadow-logged but places NO orders — the shadow-first gate. A NON-ARMED bucket with
     // creds is MANAGE-ONLY (1b #1): exits/reconcile/marks run, entries/adds don't.
     for (const g of groupByAccount(cfg.channels, cfg.accounts)) {
+      for (const channel of g.channels) releaseAccountIdByStrategist.set(channel.id, g.account.id);
       const api = g.api;
       let account: alpaca.AlpacaAccount = { equity: 0, cash: 0 };
       let positions: alpaca.AlpacaPosition[] = [];
+      let accountFresh = true;
+      let positionsFresh = true;
+      const isReleaseBoundAccount = releaseBoundAccountIds.has(g.account.id);
+      if (isReleaseBoundAccount) releaseObservedAccountIds.add(g.account.id);
       if (api) {
-        try { [account, positions] = await Promise.all([alpaca.getAccount(api), alpaca.getPositions(api)]); }
-        catch (e) { warn(`cycle(${trigger}): account ${g.account.name} read failed — ${(e as Error).message}; skip bucket`); continue; }
+        try { account = await alpaca.getAccount(api); }
+        catch (e) {
+          accountFresh = false;
+          if (isReleaseBoundAccount) {
+            releasePositionSnapshotComplete = false;
+            releaseSnapshotFailures.push({ accountId: g.account.id, kind: "account" });
+          }
+          warn(`cycle(${trigger}): account ${g.account.name} account read failed — ${(e as Error).message}; new RC3 admissions fail closed, risk-reducing management continues where safe`);
+        }
+        try { positions = await alpaca.getPositions(api); }
+        catch (e) {
+          positionsFresh = false;
+          if (isReleaseBoundAccount) {
+            releasePositionSnapshotComplete = false;
+            releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
+          }
+          warn(`cycle(${trigger}): account ${g.account.name} position read failed — ${(e as Error).message}; new RC3 admissions fail closed, risk-reducing management continues where safe`);
+        }
       } else {
+        accountFresh = false;
+        positionsFresh = false;
+        if (isReleaseBoundAccount) {
+          releasePositionSnapshotComplete = false;
+          releaseSnapshotFailures.push({ accountId: g.account.id, kind: "account" }, { accountId: g.account.id, kind: "positions" });
+        }
         warn(`cycle(${trigger}): account ${g.account.name} (cred_ref ${g.account.cred_ref}) has no creds in env — shadow only`);
+      }
+      if (isReleaseBoundAccount && positionsFresh) {
+        for (const position of positions) {
+          const match = /^([A-Z]+)\d{6}[CP]\d{8}$/i.exec(position.symbol);
+          if (!match || !(Math.abs(position.qty) > 0)) continue;
+          releaseBrokerPositions.push({
+            accountId: g.account.id,
+            occSymbol: position.symbol.toUpperCase(),
+            underlying: match[1].toUpperCase(),
+            quantity: Math.abs(position.qty),
+          });
+        }
       }
       const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
       const groupRows = openRowsArr.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
@@ -554,10 +606,21 @@ async function cycle(trigger: string): Promise<void> {
         // still lands in the !ordersFresh path below + the noteOrdersRead escalation.
         try {
           allOrders = await retry(`cycle orders ${g.account.name}`, () => alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()), 3, 500);
+          if (config.day1ReleaseEnabled && isReleaseBoundAccount) {
+            for (const order of allOrders) {
+              const match = /^([A-Z]+)\d{6}[CP]\d{8}$/i.exec(order.symbol);
+              if (!match || order.side.toLowerCase() !== "buy" || alpaca.TERMINAL_ORDER_STATUS.has(order.status)) continue;
+              releasePendingOrders.push({ accountId: g.account.id, occSymbol: order.symbol.toUpperCase(), underlying: match[1].toUpperCase() });
+            }
+          }
           noteOrdersRead(g.account.id, g.account.name, true, todayET);
         }
         catch (e) {
           ordersFresh = false;
+          if (config.day1ReleaseEnabled && isReleaseBoundAccount) {
+            releaseOrderSnapshotComplete = false;
+            releaseOrderFailureAccountIds.add(g.account.id);
+          }
           noteOrdersRead(g.account.id, g.account.name, false, todayET);
           warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; entries/adds/reconcile suppressed this cycle (exits still run)`);
         }
@@ -593,11 +656,10 @@ async function cycle(trigger: string): Promise<void> {
           catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
         }
         const familyObservedAtMs = Date.now();
-        const symDecisions = config.day1ReleaseEnabled && releaseState
+        const symDecisions = config.day1ReleaseEnabled
           ? prepareDay1ReleaseAdmission({
               channels: symChannels,
               decisions: evaluatedDecisions,
-              state: releaseState,
               accountId: g.account.id,
               sourceBarAtMs: lastSession.ts,
               observedAtMs: familyObservedAtMs,
@@ -606,11 +668,20 @@ async function cycle(trigger: string): Promise<void> {
               sessionLedgerReady: sessionPositions != null,
             })
           : evaluatedDecisions;
+        const barFresh = Date.now() - lastSession.ts < 180_000;
+        const executionEligible = live && accountFresh && positionsFresh && ordersFresh && canEnter && barFresh;
+        const executionIneligibleReason = executionEligible ? null
+          : !live ? "day1_shadow_rehearsal"
+          : !accountFresh || !positionsFresh ? "day1_global_snapshot_incomplete"
+          : !ordersFresh ? "day1_global_orders_incomplete"
+          : !canEnter ? "day1_account_manage_only"
+          : "day1_stale_decision_bar";
         const executionBatch: DecisionExecutionBatch = {
           group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
           lastSession, chain, todayET, barMin, canManage, canEnter, allOrders, ordersFresh,
           openRows, alpacaByOcc, remainingByOcc, openRowQty,
           sourceBarAtMs: lastSession.ts, observedAtMs: familyObservedAtMs,
+          executionEligible, executionIneligibleReason,
         };
         if (config.day1ReleaseEnabled) {
           releaseBatches.push(executionBatch);
@@ -735,17 +806,40 @@ async function cycle(trigger: string): Promise<void> {
       }
     }
 
-    // ---- RC2 PHASES B/C/D: one global arbiter, then original-account execution ----
+    // ---- RC3 PHASES B/C/D: broker-truth state, one global arbiter, then execution ----
     // No release entry can reach executeDecisionBatch above: release batches take
     // the `continue` path until every account/symbol has been evaluated and stamped.
     if (config.day1ReleaseEnabled) {
-      if (!releaseState) throw new Error("Day 1 RC2 release state unavailable before global arbitration");
+      for (const accountId of releaseBoundAccountIds) {
+        if (!releaseObservedAccountIds.has(accountId)) {
+          releasePositionSnapshotComplete = false;
+          releaseSnapshotFailures.push({ accountId, kind: "account-group-missing" });
+        }
+      }
+      const releaseState = buildDay1AdmissionState({
+        openPositions: openRowsArr,
+        sessionPositions: sessionPositions ?? [],
+        channelById: byId,
+        accountIdByStrategist: releaseAccountIdByStrategist,
+        brokerPositions: releaseBrokerPositions,
+        pendingOrders: releasePendingOrders,
+      });
       const prepared = releaseBatches.flatMap((batch) => batch.decisions.map((decision) => ({
         accountId: batch.group.account.id,
         sourceBarAtMs: batch.sourceBarAtMs,
         decision,
+        executionEligible: batch.executionEligible,
+        executionIneligibleReason: batch.executionIneligibleReason,
       })));
-      const finalized = finalizeDay1ReleaseAdmissions({ prepared, state: releaseState });
+      const finalized = finalizeDay1ReleaseAdmissions({
+        prepared,
+        state: releaseState,
+        posture: live ? "paper-executor" : "shadow-counterfactual",
+        globalPositionSnapshotComplete: releasePositionSnapshotComplete,
+        globalOrderSnapshotComplete: !live || releaseOrderSnapshotComplete,
+        globalSnapshotFailures: releaseSnapshotFailures,
+        globalOrderFailureAccountIds: [...releaseOrderFailureAccountIds].sort(),
+      });
       let cursor = 0;
       for (const batch of releaseBatches) {
         batch.decisions = finalized.slice(cursor, cursor + batch.decisions.length).map((row) => row.decision);
@@ -762,7 +856,7 @@ async function cycle(trigger: string): Promise<void> {
           });
         }
       }
-      if (cursor !== finalized.length) throw new Error("Day 1 RC2 arbitration mapping mismatch");
+      if (cursor !== finalized.length) throw new Error("Day 1 RC3 arbitration mapping mismatch");
       for (const batch of releaseBatches) await executeDecisionBatch(batch, deskStack);
     }
 
@@ -1185,7 +1279,7 @@ async function main(): Promise<void> {
   try { await reloadConfig(); }
   catch (e) {
     if (config.day1ReleaseEnabled) {
-      error(`config: RC2 initial validation failed — ${(e as Error).message}; refusing to start`);
+      error(`config: RC3 initial validation failed — ${(e as Error).message}; refusing to start`);
       process.exit(1);
     }
     warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`);
@@ -1198,7 +1292,7 @@ async function main(): Promise<void> {
   if (config.day1ReleaseEnabled) {
     const receipt = day1StartupReceipt;
     if (!receipt) {
-      error("Day 1 RC2 active-settings receipt is unavailable after validation. Refusing to start.");
+      error("Day 1 RC3 active-settings receipt is unavailable after validation. Refusing to start.");
       process.exit(1);
     }
     info(`day1-release: ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256} roots=6 dark=62 paper-only`);

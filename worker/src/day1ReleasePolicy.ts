@@ -6,8 +6,8 @@ import type { ShadowDecision } from "./decide.js";
 import type { AccountRow, ChannelConfig, PositionRow } from "./store.js";
 import { observedPolicyIdentity, type ObservedPolicyIdentity } from "./planShadowModel.js";
 
-export const DAY1_RELEASE_SCHEMA_VERSION = 2 as const;
-export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc2" as const;
+export const DAY1_RELEASE_SCHEMA_VERSION = 3 as const;
+export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc3" as const;
 export const DAY1_MANAGER_VERSION = "day1-catastrophe-eod-v1" as const;
 export const DAY1_SHADOW_MANAGER_VERSION = "manager-lab-preregister-v1" as const;
 
@@ -57,56 +57,56 @@ export interface Day1RootBinding {
   policyEpoch: string;
 }
 
-/** SELECT-only-derived RC2 bindings. They are runtime admission authority, not
+/** SELECT-only-derived RC3 bindings. They are runtime admission authority, not
  * a claim that the live fleet has already been changed to the local overlay. */
 export const DAY1_ROOT_BINDINGS: readonly Day1RootBinding[] = [
   {
     slug: "pb-ride", strategistId: "4528343d-7151-46ae-8f0d-10c0ef9572b4",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:7a2a3c3c86712f359fe97d0ab8dc6cf5d9bdf085ff1ec3c5e8a70a658a6e88dc",
+    channelVersion: "sha256:ae14a58e6618a18b1c9c153e58b114c0942f36668bf6f65b31d691da340329cc",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:b85ba463b4f9604e30f9a8045963a1d7716e03e2a75531f363a54830b6126c37",
-    policyEpoch: "76833e13-d373-543a-a502-82ed7f41bbc9",
+    configurationEpoch: "sha256:7e1bbf702e76de6107715910c76b573799499333b71c7edac667a241c1701160",
+    policyEpoch: "41845df4-ed1a-5d9e-9440-69ff775d5506",
   },
   {
     slug: "orb-ustop-ctl", strategistId: "51ab6380-e0db-4e41-ad59-625b151cb9cf",
     accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountMode: "paper",
-    channelVersion: "sha256:dd32feaed1d13a9c025df68575bf89585a55975501aa998b23d5955ebe197634",
+    channelVersion: "sha256:838781d0b10542e6d471a38fb4bbc8bdb00c740084a5f26bffbaf139c16ab726",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:d740c241e8bbc269b88258aad8b7ecb57d3e89a4eb1a30502afff29c011b2907",
-    policyEpoch: "403ed1db-2176-5861-8a38-3fde3ebadc44",
+    configurationEpoch: "sha256:b3dbeb3f08b02c8907d81fb0a1d325f464570a4482685b8febf49fb8dffdb8c1",
+    policyEpoch: "0fab5888-cd9a-5b34-b106-286f920edc3b",
   },
   {
     slug: "grind-v3", strategistId: "1dc15beb-79a5-4f49-9b9b-9b5693c93561",
     accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountMode: "paper",
-    channelVersion: "sha256:7786a2169a4c87c1d4d2ad23ba7b9f7d3a352b40878d3cfbaa7eff52619d119c",
+    channelVersion: "sha256:b226aaca28804163d40f04fdd9b361f3ee85292e1a0371f8f74ee5c573a55bb9",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:cf92700a2de9cb5d3f055f4fcad9b631e219156a7c2db6c5c2c230a0e7e1ce98",
-    policyEpoch: "b0db5414-1c4b-5350-8011-627ff9036153",
+    configurationEpoch: "sha256:bb7b58718c4e943612c66bbfbf4ad9558324ca95ff9d21e02c3f2654ad5395e1",
+    policyEpoch: "337d566e-bfad-5f9c-9f96-f7e7ce068649",
   },
   {
     slug: "momo-shape", strategistId: "c2efcffa-b0bb-4cde-a3de-25209879ebe1",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:f7754225ad5d24a3b48425f277abe3626163df2cdadc9075833b15783c37f17e",
+    channelVersion: "sha256:948fa8176397b29c9cce7f9d3d048f4d0e8f2cbac46af8f175b9d4310b13f038",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:f27c0c8eaac379a038ae0c314dc79baa84997270384f6ef591b1cddbf3f7d448",
-    policyEpoch: "9fe303c1-8a10-5d39-8976-50d5ab713638",
+    configurationEpoch: "sha256:74b521fa9da5fba29b68d7bfae165329ed730f7710dee9899c03b9766e33dd5b",
+    policyEpoch: "889ec408-187f-5c7b-9780-9b95a13917b0",
   },
   {
     slug: "orb-qqq-trail", strategistId: "62b108c8-535e-4232-8c68-af8fb5b8f932",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:0fec0e3469a3dfd79577e94a838af6c27c0c351fa18b056a198c5a574252caf9",
+    channelVersion: "sha256:e847a344ab2f9f70b3bb03e610fff3425d0612777f0d1422eb1c85782937989c",
     managerVersion: "sha256:c3af49e3ce9e6653d7307ad458330293cd65a1433412057ba2715150dedea3c8",
-    configurationEpoch: "sha256:c141d89f9645015b4a75d77b408797edb857a9b50b832649ee2c01583357358a",
-    policyEpoch: "24fe527a-ff0c-590d-830b-b2c1130793d2",
+    configurationEpoch: "sha256:d1c3ab2abe36f01ee4b7f45841a8e126d1ceacecb1f7697ab1440c0bfd1cf594",
+    policyEpoch: "9e848ce6-f446-58eb-ba12-0a081c1d49d3",
   },
   {
     slug: "breakout-alt-v3-iwm", strategistId: "24889b0e-3ba7-4e47-9430-f73aa2c764a4",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:1a974b076853bf1c0b106e473d483c4d478ff6456a67528e490eefb60c95f3f9",
+    channelVersion: "sha256:41bd7e48e0e82a28c59cb97644fc6ace550a439c465d829dc18e3b2a76e18616",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:b279ec3eef07391aff36e7b77d5e3f9c9fb587c70d9fc1fc4a40ebeff646a93b",
-    policyEpoch: "180f8c4b-5426-55e3-aff2-a836da6bba07",
+    configurationEpoch: "sha256:995bbc1d0d3f0785aa0b0180681dcc8b8f54b196f1b8b0413f6f859bdfc00119",
+    policyEpoch: "765fcacc-aa87-5442-becf-a5ec8419c6f2",
   },
 ] as const;
 
@@ -135,6 +135,7 @@ export const DAY1_SEALED_RUNTIME_POSTURE = {
   stockFeed: "sip",
   optionFeed: "opra",
   heldCapture: {
+    requiredEnabled: true,
     flushMs: 30_000,
     targetSamples: 12,
     maxAgeMs: 60_000,
@@ -149,7 +150,10 @@ export const DAY1_SEALED_RUNTIME_POSTURE = {
     normalFlushDeadlineMs: 15_000,
     shutdownDeadlineMs: 30_000,
   },
-  managerShadowQuoteMaxAgeMs: 15_000,
+  managerShadow: {
+    requiredEnabled: true,
+    quoteMaxAgeMs: 15_000,
+  },
 } as const;
 
 export const DAY1_RELEASE_CONFIGURATION = {
@@ -263,29 +267,82 @@ export interface Day1AdmissionState {
   openByUnderlying: Map<string, number>;
   openTotal: number;
   openOcc: Set<string>;
+  brokerOnlyOccupancies: number;
+  brokerQuantityUncoveredOccupancies: number;
+  pendingOrderOccupancies: number;
+}
+
+export interface Day1BrokerHolding {
+  accountId: string;
+  occSymbol: string;
+  underlying: string;
+  quantity: number;
+}
+
+export interface Day1PendingOrderOccupancy {
+  accountId: string;
+  occSymbol: string;
+  underlying: string;
 }
 
 export function buildDay1AdmissionState(input: {
   openPositions: readonly PositionRow[];
   sessionPositions: readonly PositionRow[];
   channelById: ReadonlyMap<string, Pick<ChannelConfig, "slug" | "underlying">>;
+  accountIdByStrategist?: ReadonlyMap<string, string>;
+  brokerPositions?: readonly Day1BrokerHolding[];
+  pendingOrders?: readonly Day1PendingOrderOccupancy[];
 }): Day1AdmissionState {
   const state: Day1AdmissionState = {
     openFamilies: new Set(), enteredFamilies: new Set(), openByUnderlying: new Map(),
     openTotal: input.openPositions.length,
     openOcc: new Set(input.openPositions.map((row) => row.occ_symbol.toUpperCase())),
+    brokerOnlyOccupancies: 0,
+    brokerQuantityUncoveredOccupancies: 0,
+    pendingOrderOccupancies: 0,
   };
+  const deskQuantityByAccountOcc = new Map<string, number>();
+  const occupiedByAccountOcc = new Set<string>();
   for (const row of input.openPositions) {
     const channel = input.channelById.get(row.strategist_id);
     const underlying = (row.underlying || channel?.underlying || "").toUpperCase();
     if (underlying) state.openByUnderlying.set(underlying, (state.openByUnderlying.get(underlying) ?? 0) + 1);
     const root = channel ? day1Root(channel.slug) : null;
     if (root) state.openFamilies.add(root.familyId);
+    const accountId = input.accountIdByStrategist?.get(row.strategist_id) ?? "";
+    const key = `${accountId}|${row.occ_symbol.toUpperCase()}`;
+    deskQuantityByAccountOcc.set(key, (deskQuantityByAccountOcc.get(key) ?? 0) + Math.abs(row.qty));
+    occupiedByAccountOcc.add(key);
   }
   for (const row of input.sessionPositions) {
     const channel = input.channelById.get(row.strategist_id);
     const root = channel ? day1Root(channel.slug) : null;
     if (root) state.enteredFamilies.add(root.familyId);
+  }
+  for (const broker of input.brokerPositions ?? []) {
+    const occ = broker.occSymbol.toUpperCase();
+    const underlying = broker.underlying.toUpperCase();
+    const held = Math.abs(broker.quantity);
+    if (!(held > 0) || !occ) continue;
+    const covered = deskQuantityByAccountOcc.get(`${broker.accountId}|${occ}`) ?? 0;
+    if (covered >= held) continue;
+    occupiedByAccountOcc.add(`${broker.accountId}|${occ}`);
+    state.openTotal++;
+    state.openOcc.add(occ);
+    if (underlying) state.openByUnderlying.set(underlying, (state.openByUnderlying.get(underlying) ?? 0) + 1);
+    if (covered > 0) state.brokerQuantityUncoveredOccupancies++;
+    else state.brokerOnlyOccupancies++;
+  }
+  for (const order of input.pendingOrders ?? []) {
+    const occ = order.occSymbol.toUpperCase();
+    const underlying = order.underlying.toUpperCase();
+    const key = `${order.accountId}|${occ}`;
+    if (!occ || occupiedByAccountOcc.has(key)) continue;
+    occupiedByAccountOcc.add(key);
+    state.openTotal++;
+    state.openOcc.add(occ);
+    if (underlying) state.openByUnderlying.set(underlying, (state.openByUnderlying.get(underlying) ?? 0) + 1);
+    state.pendingOrderOccupancies++;
   }
   return state;
 }
@@ -302,13 +359,15 @@ export interface Day1AdmissionInput {
   sessionLedgerReady: boolean;
 }
 
+export type Day1PreparationInput = Omit<Day1AdmissionInput, "state">;
+
 function block(decision: ShadowDecision, reason: string, extra: Record<string, unknown> = {}): ShadowDecision {
   return { ...decision, blocked: reason, detail: { ...(decision.detail ?? {}), ...extra } };
 }
 
 /** Phase A: stamp provenance and apply per-candidate guards only. No global
  * collision/concurrency decision is made here and this function cannot execute. */
-export function prepareDay1ReleaseAdmission(input: Day1AdmissionInput): ShadowDecision[] {
+export function prepareDay1ReleaseAdmission(input: Day1PreparationInput): ShadowDecision[] {
   const channelBySlug = new Map(input.channels.map((channel) => [channel.slug, channel]));
   const decorated = input.decisions.map((decision) => {
     const channel = channelBySlug.get(decision.slug);
@@ -364,6 +423,14 @@ export interface Day1PreparedDecision {
   accountId: string;
   sourceBarAtMs: number;
   decision: ShadowDecision;
+  executionEligible?: boolean;
+  executionIneligibleReason?: string | null;
+}
+
+export type Day1ArbitrationPosture = "shadow-counterfactual" | "paper-executor";
+export interface Day1SnapshotFailure {
+  accountId: string;
+  kind: "account" | "positions" | "account-group-missing";
 }
 
 /** Phases B/C: globally arbitrate every prepared account batch by exact source
@@ -372,8 +439,49 @@ export interface Day1PreparedDecision {
 export function finalizeDay1ReleaseAdmissions(input: {
   prepared: readonly Day1PreparedDecision[];
   state: Day1AdmissionState;
+  posture?: Day1ArbitrationPosture;
+  globalPositionSnapshotComplete?: boolean;
+  globalOrderSnapshotComplete?: boolean;
+  globalSnapshotFailures?: readonly Day1SnapshotFailure[];
+  globalOrderFailureAccountIds?: readonly string[];
 }): Day1PreparedDecision[] {
-  const output = input.prepared.map((row) => ({ ...row, decision: { ...row.decision } }));
+  const posture = input.posture ?? "paper-executor";
+  const positionSnapshotComplete = input.globalPositionSnapshotComplete ?? true;
+  const orderSnapshotComplete = input.globalOrderSnapshotComplete ?? true;
+  const output: Day1PreparedDecision[] = input.prepared.map((row) => {
+    const executionEligible = row.executionEligible ?? true;
+    const arbitration = {
+      posture,
+      strategyEligible: row.decision.action === "enter" && !row.decision.blocked,
+      executionEligible,
+      executionIneligibleReason: row.executionIneligibleReason ?? null,
+      brokerExecutable: posture === "paper-executor" && executionEligible
+        && positionSnapshotComplete && orderSnapshotComplete,
+      counterfactualOnly: posture === "shadow-counterfactual",
+      globalPositionSnapshotComplete: positionSnapshotComplete,
+      globalOrderSnapshotComplete: orderSnapshotComplete,
+      globalSnapshotFailures: input.globalSnapshotFailures ?? [],
+      globalOrderFailureAccountIds: input.globalOrderFailureAccountIds ?? [],
+    };
+    return {
+      ...row,
+      executionEligible,
+      executionIneligibleReason: row.executionIneligibleReason ?? null,
+      decision: { ...row.decision, detail: { ...(row.decision.detail ?? {}), day1Arbitration: arbitration } },
+    };
+  });
+  if (posture === "paper-executor") {
+    for (const row of output) {
+      if (row.decision.action !== "enter" || row.decision.blocked) continue;
+      if (!positionSnapshotComplete) row.decision = block(row.decision, "day1_global_snapshot_incomplete", {
+        day1GlobalSnapshotFailures: input.globalSnapshotFailures ?? [],
+      });
+      else if (!orderSnapshotComplete) row.decision = block(row.decision, "day1_global_orders_incomplete", {
+        day1GlobalOrderFailureAccountIds: input.globalOrderFailureAccountIds ?? [],
+      });
+      else if (!row.executionEligible) row.decision = block(row.decision, row.executionIneligibleReason ?? "day1_execution_ineligible");
+    }
+  }
   const spyByClock = new Map<number, { index: number; root: NonNullable<ReturnType<typeof day1Root>> }[]>();
   for (let index = 0; index < output.length; index++) {
     const row = output[index];
@@ -425,7 +533,7 @@ export function finalizeDay1ReleaseAdmissions(input: {
   return output;
 }
 
-/** Compatibility helper for one account/symbol batch. Runtime RC2 uses the
+/** Compatibility helper for one account/symbol batch. Runtime RC3 uses the
  * explicit prepare → global finalize path across every account. */
 export function applyDay1ReleaseAdmission(input: Day1AdmissionInput): ShadowDecision[] {
   const prepared = prepareDay1ReleaseAdmission(input).map((decision) => ({
@@ -471,6 +579,7 @@ export interface Day1ReleaseStartupInput {
   workerVersion: string;
   expectedConfigurationSha256: string;
   posture: Day1RuntimePostureInput;
+  resolvedCredentialAccountIds: readonly string[];
 }
 
 export interface Day1ReleaseStartupResult {
@@ -495,7 +604,7 @@ function sameIdentity(actual: ObservedPolicyIdentity, binding: Day1RootBinding):
   return errors;
 }
 
-/** Pure startup gate. Call only after applying the RC2 channel overlay. */
+/** Pure startup gate. Call only after applying the RC3 channel overlay. */
 export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1ReleaseStartupResult {
   const errors: string[] = [];
   const expectedSlugs = [...DAY1_ROOTS.map((root) => root.slug), ...DAY1_DARK_CHANNELS];
@@ -520,6 +629,7 @@ export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1
   if (input.posture.optionFeed !== DAY1_SEALED_RUNTIME_POSTURE.optionFeed) errors.push("option_feed");
 
   const sealedCapture = DAY1_SEALED_RUNTIME_POSTURE.heldCapture;
+  if (input.posture.heldCaptureEnabled !== sealedCapture.requiredEnabled) errors.push("held_capture:enabled");
   if (input.posture.heldCaptureEnabled) {
     const captureFields: [string, number, number][] = [
       ["flush_ms", input.posture.heldCaptureFlushMs, sealedCapture.flushMs],
@@ -538,8 +648,10 @@ export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1
     ];
     for (const [field, actual, expected] of captureFields) if (actual !== expected) errors.push(`held_capture:${field}`);
   }
+  const sealedManager = DAY1_SEALED_RUNTIME_POSTURE.managerShadow;
+  if (input.posture.managerShadowEnabled !== sealedManager.requiredEnabled) errors.push("manager_shadow:enabled");
   if (input.posture.managerShadowEnabled
-      && input.posture.managerShadowQuoteMaxAgeMs !== DAY1_SEALED_RUNTIME_POSTURE.managerShadowQuoteMaxAgeMs) {
+      && input.posture.managerShadowQuoteMaxAgeMs !== sealedManager.quoteMaxAgeMs) {
     errors.push("manager_shadow:quote_max_age_ms");
   }
 
@@ -547,6 +659,11 @@ export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1
   const accountById = new Map(input.accounts.map((account) => [account.id, account]));
   const defaults = input.accounts.filter((account) => !account.cred_ref);
   if (defaults.length !== 1) errors.push(`default_account_count:${defaults.length}`);
+  const credentialAccounts = new Set(input.resolvedCredentialAccountIds);
+  const requiredCredentialAccounts = [...new Set(DAY1_ROOT_BINDINGS.map((binding) => binding.accountId))].sort();
+  for (const accountId of requiredCredentialAccounts) {
+    if (!credentialAccounts.has(accountId)) errors.push(`${accountId}:credential_route_unresolved`);
+  }
   const actualRoots: Record<string, unknown>[] = [];
   for (const binding of DAY1_ROOT_BINDINGS) {
     const channel = channelBySlug.get(binding.slug);
@@ -581,6 +698,13 @@ export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1
     expectedConfigurationSha256: input.expectedConfigurationSha256,
     fundMode: input.fundMode,
     roots: actualRoots,
+    accountRoutes: requiredCredentialAccounts.map((accountId) => ({
+      accountId,
+      accountName: accountById.get(accountId)?.name ?? null,
+      accountMode: accountById.get(accountId)?.mode?.toLowerCase() ?? null,
+      resolved: credentialAccounts.has(accountId),
+      rootSlugs: DAY1_ROOT_BINDINGS.filter((binding) => binding.accountId === accountId).map((binding) => binding.slug),
+    })),
     alpacaPaperOrigin: host.origin,
     stockFeed: input.posture.stockFeed,
     optionFeed: input.posture.optionFeed,
