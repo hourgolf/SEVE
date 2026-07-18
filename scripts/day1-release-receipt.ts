@@ -100,6 +100,7 @@ async function main(): Promise<void> {
     workerVersion: WORKER_VERSION,
     expectedConfigurationSha256: DAY1_RELEASE_CONFIGURATION_SHA256,
     resolvedCredentialAccountIds: [...new Set(DAY1_ROOT_BINDINGS.map((binding) => binding.accountId))],
+    credentialRouteEvidenceBasis: "offline-example-assumption",
     posture: {
       alpacaPaperHost: "https://paper-api.alpaca.markets",
       stockFeed: "sip", optionFeed: "opra", dryRun: true, liveTrading: false,
@@ -114,7 +115,7 @@ async function main(): Promise<void> {
       managerShadowQuoteMaxAgeMs: 15_000,
     },
   });
-  if (!startup.ok && !deriveBindings) throw new Error(`live fleet does not reproduce RC3 bindings: ${startup.errors.join(";")}`);
+  if (!startup.ok && !deriveBindings) throw new Error(`live fleet does not reproduce RC4 bindings: ${startup.errors.join(";")}`);
 
   const roots = DAY1_ROOTS.map((root) => {
     const channel = channelBySlug.get(root.slug);
@@ -160,6 +161,12 @@ async function main(): Promise<void> {
         fileSha256: "4b0b4e6b3dbd5f7832cc696693bed674446dce8833e23c55bbfdab7d697c4c12",
         activeSettingsSha256: "e081acb65e9ab48904acfc8c363050bd1819e80b0dcf76b302776d1a2c36d6b6",
         releaseConfigurationSha256: "67abd8b0ad3435268156836a646d935da79ffd985b72cbef001e926b283fe746",
+      },
+      supersededRc3: {
+        status: "accepted-shadow-candidate-superseded-before-executor",
+        fileSha256: "705a997854395052ce1fed9870f440c07ac1e57dd4b00f810dfd7a128c5ad2df",
+        activeSettingsSha256: "21e6e28fd25153cd33c79dc9289d91561e40be996d9b07305b40c12dfaa2df4d",
+        releaseConfigurationSha256: "32a7d27813411274d0dc31dd4bcb9a86902d0bb990e5e2bc044317e109a1f3a6",
       },
       capture: {
         samples: 12, maxAgeMs: 60_000, ingressMaxSamples: 10_000, ingressMaxBytes: 8_388_608,

@@ -174,7 +174,7 @@ check("cross-account suppression retains complete candidate and collision proven
   suppressedProvenance.executableAsk,
   crossAccountSuppressed.detail?.day1CollisionWinner,
   crossAccountSuppressed.detail?.day1CollisionScope,
-], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-20-rc3", DAY1_RELEASE_CONFIGURATION_SHA256,
+], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-20-rc4", DAY1_RELEASE_CONFIGURATION_SHA256,
   MORGUE, DAY1_ROOT_BINDINGS.find((row) => row.slug === "grind-v3")!.strategistId,
   "2026-07-20T14:00:00.000Z", "2026-07-20T14:00:01.000Z", "SPY260720C00600000", 1,
   "pb-ride", "global-cross-account-exact-source-clock"]);
@@ -335,9 +335,10 @@ const startupInput = () => ({
   channels: fullFleet, accounts: startupAccounts, fundMode: "paper", workerVersion: WORKER_VERSION,
   expectedConfigurationSha256: DAY1_RELEASE_CONFIGURATION_SHA256, posture: validPosture,
   resolvedCredentialAccountIds: [FIRST_TEAM, MORGUE],
+  credentialRouteEvidenceBasis: "runtime-env-presence" as const,
 });
 const validStartup = validateDay1ReleaseStartup(startupInput());
-check("RC3 startup reproduces all committed bindings", [validStartup.ok, validStartup.errors], [true, []]);
+check("RC4 startup reproduces all committed bindings", [validStartup.ok, validStartup.errors], [true, []]);
 const mutateRoot = (slug: string, change: Partial<ChannelConfig>) => fullFleet.map((row) => row.slug === slug ? { ...row, ...change } : row);
 const refuses = (label: string, input: Parameters<typeof validateDay1ReleaseStartup>[0]): void =>
   check(label, validateDay1ReleaseStartup(input).ok, false);
@@ -380,12 +381,13 @@ check("active-settings receipt includes actual fleet, lifecycle, route, feed and
   startupReceipt.workerVersion, startupReceipt.releaseId, startupReceipt.releaseConfigurationSha256,
   startupReceipt.fleetCount, startupReceipt.rootCount, startupReceipt.darkChannelCount,
   startupReceipt.alpacaPaperOrigin, startupReceipt.stockFeed, startupReceipt.optionFeed,
+  startupReceipt.credentialRouteEvidenceBasis,
   (startupReceipt.roots as unknown[]).length,
   (startupReceipt.heldCapture as Record<string, unknown>).targetSamples,
   (startupReceipt.managerShadow as Record<string, unknown>).quoteMaxAgeMs,
-], [WORKER_VERSION, "weekend-day1-2026-07-20-rc3", DAY1_RELEASE_CONFIGURATION_SHA256,
-  68, 6, 62, "https://paper-api.alpaca.markets", "sip", "opra", 6, 12, 15_000]);
-check("active-settings receipt never contains credential fields or secrets", /alpacaKey|alpacaSecret|serviceRole|credential|secret/i.test(JSON.stringify(startupReceipt)), false);
+], [WORKER_VERSION, "weekend-day1-2026-07-20-rc4", DAY1_RELEASE_CONFIGURATION_SHA256,
+  68, 6, 62, "https://paper-api.alpaca.markets", "sip", "opra", "runtime-env-presence", 6, 12, 15_000]);
+check("active-settings receipt never contains credential values or secrets", /alpacaKey|alpacaSecret|serviceRole|secret/i.test(JSON.stringify(startupReceipt)), false);
 const executorStartup = validateDay1ReleaseStartup({
   ...startupInput(), posture: { ...validPosture, dryRun: false, liveTrading: true },
 });
@@ -413,6 +415,30 @@ check("runtime builds broker and pending-order occupancy only after every accoun
   < indexSource.indexOf("const releaseState = buildDay1AdmissionState")
   && indexSource.indexOf("const releaseState = buildDay1AdmissionState")
   < indexSource.indexOf("const finalized = finalizeDay1ReleaseAdmissions"), true);
+check("executor admission uses positions-orders-confirming-positions ordering", (() => {
+  const initial = indexSource.indexOf("try { positions = await alpaca.getPositions(api); }");
+  const orders = indexSource.indexOf("allOrders = await retry(`cycle orders");
+  const confirming = indexSource.indexOf("positions = await retry(`cycle confirming positions");
+  const brokerTruth = indexSource.indexOf("releaseBrokerPositions.push({");
+  return [initial, orders, confirming, brokerTruth].every((value) => value >= 0)
+    && initial < orders && orders < confirming && confirming < brokerTruth;
+})(), true);
+check("failed confirming positions globally censor admission but retain risk-management path", [
+  indexSource.includes("releasePositionSnapshotComplete = false;"),
+  indexSource.includes('releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" })'),
+  indexSource.includes("all new Day 1 admissions fail closed"),
+], [true, true, true]);
+check("ordinary non-release cycles fail closed on stale account or position truth", indexSource.includes(
+  "if (!config.day1ReleaseEnabled && api && (!accountFresh || !positionsFresh)) continue;",
+), true);
+check("required capture is runtime-ready and started before the boot decision", (() => {
+  const create = indexSource.indexOf("heldContractCapture = await CaptureRuntime.create");
+  const refusal = indexSource.indexOf("Day 1 required held-contract capture is not runtime-ready before the boot decision");
+  const start = indexSource.indexOf("heldContractCapture?.start();");
+  const boot = indexSource.indexOf('await cycle("boot")');
+  return [create, refusal, start, boot].every((value) => value >= 0)
+    && create < refusal && refusal < start && start < boot;
+})(), true);
 check("runtime passes broker positions, pending orders and precise snapshot failures to the arbiter", [
   "brokerPositions: releaseBrokerPositions",
   "pendingOrders: releasePendingOrders",

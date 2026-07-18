@@ -6,8 +6,8 @@ import type { ShadowDecision } from "./decide.js";
 import type { AccountRow, ChannelConfig, PositionRow } from "./store.js";
 import { observedPolicyIdentity, type ObservedPolicyIdentity } from "./planShadowModel.js";
 
-export const DAY1_RELEASE_SCHEMA_VERSION = 3 as const;
-export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc3" as const;
+export const DAY1_RELEASE_SCHEMA_VERSION = 4 as const;
+export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc4" as const;
 export const DAY1_MANAGER_VERSION = "day1-catastrophe-eod-v1" as const;
 export const DAY1_SHADOW_MANAGER_VERSION = "manager-lab-preregister-v1" as const;
 
@@ -57,56 +57,56 @@ export interface Day1RootBinding {
   policyEpoch: string;
 }
 
-/** SELECT-only-derived RC3 bindings. They are runtime admission authority, not
+/** SELECT-only-derived RC4 bindings. They are runtime admission authority, not
  * a claim that the live fleet has already been changed to the local overlay. */
 export const DAY1_ROOT_BINDINGS: readonly Day1RootBinding[] = [
   {
     slug: "pb-ride", strategistId: "4528343d-7151-46ae-8f0d-10c0ef9572b4",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:ae14a58e6618a18b1c9c153e58b114c0942f36668bf6f65b31d691da340329cc",
+    channelVersion: "sha256:1f0f29644f8a4c393a8f3e52f98cc769ece9944e1d124ba5bc39290c7ca39082",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:7e1bbf702e76de6107715910c76b573799499333b71c7edac667a241c1701160",
-    policyEpoch: "41845df4-ed1a-5d9e-9440-69ff775d5506",
+    configurationEpoch: "sha256:2b597c9ae7cfa626841761de3bb8014cd62b82eed1c2a5c90463fafb5f3b4c72",
+    policyEpoch: "505be44f-484d-55ed-81f0-c6c755044264",
   },
   {
     slug: "orb-ustop-ctl", strategistId: "51ab6380-e0db-4e41-ad59-625b151cb9cf",
     accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountMode: "paper",
-    channelVersion: "sha256:838781d0b10542e6d471a38fb4bbc8bdb00c740084a5f26bffbaf139c16ab726",
+    channelVersion: "sha256:88b412e225738cb4b887aacd2fcc0399253118860997b3c9364cb5da843db1d0",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:b3dbeb3f08b02c8907d81fb0a1d325f464570a4482685b8febf49fb8dffdb8c1",
-    policyEpoch: "0fab5888-cd9a-5b34-b106-286f920edc3b",
+    configurationEpoch: "sha256:d7a17fc08e6fdc063e04ea2f1aa273b5881b1fe517ae1d49eb7d83a6fc972d63",
+    policyEpoch: "633c8551-7e42-5e12-9a20-5aa8be775664",
   },
   {
     slug: "grind-v3", strategistId: "1dc15beb-79a5-4f49-9b9b-9b5693c93561",
     accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountMode: "paper",
-    channelVersion: "sha256:b226aaca28804163d40f04fdd9b361f3ee85292e1a0371f8f74ee5c573a55bb9",
+    channelVersion: "sha256:cbd86bd2416dc4878d8812615fe23d185644eff9ce7d07a88ae64b39c546c72f",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:bb7b58718c4e943612c66bbfbf4ad9558324ca95ff9d21e02c3f2654ad5395e1",
-    policyEpoch: "337d566e-bfad-5f9c-9f96-f7e7ce068649",
+    configurationEpoch: "sha256:43d66895f7fefa8c426da504939d4f7dd1e668a1a35abad0deda3b9815ef6fac",
+    policyEpoch: "3c74d688-c4d7-5275-b55b-41f53a535122",
   },
   {
     slug: "momo-shape", strategistId: "c2efcffa-b0bb-4cde-a3de-25209879ebe1",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:948fa8176397b29c9cce7f9d3d048f4d0e8f2cbac46af8f175b9d4310b13f038",
+    channelVersion: "sha256:2dfa4a072350a9b2dc36c968f190042a8867abe05e42ccffe383ec1703a1dead",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:74b521fa9da5fba29b68d7bfae165329ed730f7710dee9899c03b9766e33dd5b",
-    policyEpoch: "889ec408-187f-5c7b-9780-9b95a13917b0",
+    configurationEpoch: "sha256:b97b5969ba034bd673c4e82728ab68c4a61239297563563ae442f8f29e35e91c",
+    policyEpoch: "671888c4-2400-5ce3-b69c-029c04870081",
   },
   {
     slug: "orb-qqq-trail", strategistId: "62b108c8-535e-4232-8c68-af8fb5b8f932",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:e847a344ab2f9f70b3bb03e610fff3425d0612777f0d1422eb1c85782937989c",
+    channelVersion: "sha256:c1c9aa226ef6e849be9a497672f189766a2f0ddc94446c627b21843208d9fbdb",
     managerVersion: "sha256:c3af49e3ce9e6653d7307ad458330293cd65a1433412057ba2715150dedea3c8",
-    configurationEpoch: "sha256:d1c3ab2abe36f01ee4b7f45841a8e126d1ceacecb1f7697ab1440c0bfd1cf594",
-    policyEpoch: "9e848ce6-f446-58eb-ba12-0a081c1d49d3",
+    configurationEpoch: "sha256:9ff8fdb9f9635510edec86d239e01579f04dd16f7214bee2951dc62caf43c35d",
+    policyEpoch: "a18f02d6-c7c3-5469-942c-5eb59a05fc4e",
   },
   {
     slug: "breakout-alt-v3-iwm", strategistId: "24889b0e-3ba7-4e47-9430-f73aa2c764a4",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:41bd7e48e0e82a28c59cb97644fc6ace550a439c465d829dc18e3b2a76e18616",
+    channelVersion: "sha256:bae3d4340445147afe9b4ae536b0ae2b2c8d4926d0ec484062f551f8f727b4a4",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:995bbc1d0d3f0785aa0b0180681dcc8b8f54b196f1b8b0413f6f859bdfc00119",
-    policyEpoch: "765fcacc-aa87-5442-becf-a5ec8419c6f2",
+    configurationEpoch: "sha256:630307eb8ccf79a29f15e9be050342e703fd3588f41b071f7a0db30360ee43b6",
+    policyEpoch: "082d21a6-210a-5655-b250-55bbcb3e6682",
   },
 ] as const;
 
@@ -195,6 +195,8 @@ export const DAY1_RELEASE_CONFIGURATION = {
     boundAccountSnapshotsRequired: true,
     brokerPositionsRequired: true,
     workingBuyOrdersRequired: true,
+    brokerSnapshotOrdering: "positions_orders_confirming_positions",
+    confirmingPositionReadRequiredInExecutor: true,
     brokerDeskNetting: "account_occ_quantity_coverage",
     brokerOnlyOccupancy: "counts_same_occ_underlying_global",
     quantityUncoveredOccupancy: "one_conservative_slot_per_account_occ",
@@ -202,6 +204,7 @@ export const DAY1_RELEASE_CONFIGURATION = {
     incompletePositionCensor: "day1_global_snapshot_incomplete",
     incompleteOrderCensor: "day1_global_orders_incomplete",
     riskReducingManagementOnAdmissionFailure: true,
+    requiredCaptureRuntimeReadyBeforeBootDecision: true,
   },
   arbitration: {
     paperExecutor: "strategy_and_execution_eligible_only",
@@ -551,7 +554,7 @@ export function finalizeDay1ReleaseAdmissions(input: {
   return output;
 }
 
-/** Compatibility helper for one account/symbol batch. Runtime RC3 uses the
+/** Compatibility helper for one account/symbol batch. Runtime RC4 uses the
  * explicit prepare → global finalize path across every account. */
 export function applyDay1ReleaseAdmission(input: Day1AdmissionInput): ShadowDecision[] {
   const prepared = prepareDay1ReleaseAdmission(input).map((decision) => ({
@@ -598,6 +601,7 @@ export interface Day1ReleaseStartupInput {
   expectedConfigurationSha256: string;
   posture: Day1RuntimePostureInput;
   resolvedCredentialAccountIds: readonly string[];
+  credentialRouteEvidenceBasis: "runtime-env-presence" | "offline-example-assumption";
 }
 
 export interface Day1ReleaseStartupResult {
@@ -622,7 +626,7 @@ function sameIdentity(actual: ObservedPolicyIdentity, binding: Day1RootBinding):
   return errors;
 }
 
-/** Pure startup gate. Call only after applying the RC3 channel overlay. */
+/** Pure startup gate. Call only after applying the RC4 channel overlay. */
 export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1ReleaseStartupResult {
   const errors: string[] = [];
   const expectedSlugs = [...DAY1_ROOTS.map((root) => root.slug), ...DAY1_DARK_CHANNELS];
@@ -716,6 +720,7 @@ export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1
     expectedConfigurationSha256: input.expectedConfigurationSha256,
     fundMode: input.fundMode,
     roots: actualRoots,
+    credentialRouteEvidenceBasis: input.credentialRouteEvidenceBasis,
     accountRoutes: requiredCredentialAccounts.map((accountId) => ({
       accountId,
       accountName: accountById.get(accountId)?.name ?? null,

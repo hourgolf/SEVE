@@ -240,7 +240,7 @@ interface DecisionExecutionBatch {
   executionIneligibleReason: string | null;
 }
 
-/** Phase D only. RC3 never invokes this until every account batch has been
+/** Phase D only. RC4 never invokes this until every account batch has been
  * prepared and the global release arbiter has returned final decisions. */
 async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Map<string, number>): Promise<void> {
   const { group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
@@ -367,6 +367,7 @@ async function reloadConfig(): Promise<void> {
             ? group.api != null
             : !!config.alpacaKey && !!config.alpacaSecret)
           .map((group) => group.account.id),
+        credentialRouteEvidenceBasis: "runtime-env-presence",
         posture: {
           alpacaPaperHost: config.alpacaPaperHost,
           stockFeed: config.stockFeed,
@@ -391,7 +392,7 @@ async function reloadConfig(): Promise<void> {
           managerShadowQuoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs,
         },
       });
-      if (!validation.ok) throw new Error(`Day 1 RC3 startup validation failed: ${validation.errors.join(";")}`);
+      if (!validation.ok) throw new Error(`Day 1 RC4 startup validation failed: ${validation.errors.join(";")}`);
       day1StartupReceipt = validation.activeSettingsReceipt;
     }
     cfg = { fund: c.fund, channels, accounts };
@@ -553,16 +554,12 @@ async function cycle(trigger: string): Promise<void> {
             releasePositionSnapshotComplete = false;
             releaseSnapshotFailures.push({ accountId: g.account.id, kind: "account" });
           }
-          warn(`cycle(${trigger}): account ${g.account.name} account read failed — ${(e as Error).message}; new RC3 admissions fail closed, risk-reducing management continues where safe`);
+          warn(`cycle(${trigger}): account ${g.account.name} account read failed — ${(e as Error).message}; new Day 1 admissions fail closed, risk-reducing management continues where safe`);
         }
         try { positions = await alpaca.getPositions(api); }
         catch (e) {
           positionsFresh = false;
-          if (isReleaseBoundAccount) {
-            releasePositionSnapshotComplete = false;
-            releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
-          }
-          warn(`cycle(${trigger}): account ${g.account.name} position read failed — ${(e as Error).message}; new RC3 admissions fail closed, risk-reducing management continues where safe`);
+          warn(`cycle(${trigger}): account ${g.account.name} initial position read failed — ${(e as Error).message}; Day 1 will require a confirming read before admission`);
         }
       } else {
         accountFresh = false;
@@ -573,19 +570,6 @@ async function cycle(trigger: string): Promise<void> {
         }
         warn(`cycle(${trigger}): account ${g.account.name} (cred_ref ${g.account.cred_ref}) has no creds in env — shadow only`);
       }
-      if (isReleaseBoundAccount && positionsFresh) {
-        for (const position of positions) {
-          const match = /^([A-Z]+)\d{6}[CP]\d{8}$/i.exec(position.symbol);
-          if (!match || !(Math.abs(position.qty) > 0)) continue;
-          releaseBrokerPositions.push({
-            accountId: g.account.id,
-            occSymbol: position.symbol.toUpperCase(),
-            underlying: match[1].toUpperCase(),
-            quantity: Math.abs(position.qty),
-          });
-        }
-      }
-      const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
       const groupRows = openRowsArr.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
       const openRows = new Map(groupRows.map((r) => [r.strategist_id, r]));
       // audit 2026-07-11 (1b #1): is_armed = ENTRIES ONLY (operator decision — see routing.ts).
@@ -595,7 +579,6 @@ async function cycle(trigger: string): Promise<void> {
       // protection. canEnter (adds is_armed + !is_halted) gates only enter/add decisions.
       const canManage = acctCanManage(g.account, live, api != null);
       const canEnter = acctCanEnter(g.account, live, api != null);
-      sweepInputs.push({ g, alpacaByOcc, groupRows, canManage }); // orphan net (swept post-decision)
       let allOrders: alpaca.AlpacaOrder[] = [];
       let ordersFresh = true; // audit 2026-07-10: the idempotency / lost-insert guards are BLIND without the order snapshot
       let remainingByOcc = new Map<string, number>();
@@ -624,6 +607,48 @@ async function cycle(trigger: string): Promise<void> {
           noteOrdersRead(g.account.id, g.account.name, false, todayET);
           warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; entries/adds/reconcile suppressed this cycle (exits still run)`);
         }
+      }
+
+      // RC4 admission snapshot: positions -> orders -> confirming positions.
+      // A buy can fill between the first two reads and disappear from the working-order
+      // set. The confirming position read is therefore the authoritative admission
+      // snapshot. On failure we retain the initial positions only for risk-reducing
+      // management and globally block every new Day 1 entry.
+      if (config.day1ReleaseEnabled && live && isReleaseBoundAccount && api) {
+        try {
+          positions = await retry(`cycle confirming positions ${g.account.name}`, () => alpaca.getPositions(api), 3, 500);
+          positionsFresh = true;
+        } catch (e) {
+          positionsFresh = false;
+          releasePositionSnapshotComplete = false;
+          releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
+          warn(`cycle(${trigger}): account ${g.account.name} confirming position read failed — ${(e as Error).message}; all new Day 1 admissions fail closed`);
+        }
+      } else if (isReleaseBoundAccount && !positionsFresh) {
+        releasePositionSnapshotComplete = false;
+        releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
+      }
+
+      // Outside the sealed Day 1 path, preserve the original fail-closed cycle
+      // behavior. Empty/stale position input must never drive a duplicate entry or a
+      // false desk reconciliation. The independent fast-exit sweep remains available.
+      if (!config.day1ReleaseEnabled && api && (!accountFresh || !positionsFresh)) continue;
+
+      if (isReleaseBoundAccount && positionsFresh) {
+        for (const position of positions) {
+          const match = /^([A-Z]+)\d{6}[CP]\d{8}$/i.exec(position.symbol);
+          if (!match || !(Math.abs(position.qty) > 0)) continue;
+          releaseBrokerPositions.push({
+            accountId: g.account.id,
+            occSymbol: position.symbol.toUpperCase(),
+            underlying: match[1].toUpperCase(),
+            quantity: Math.abs(position.qty),
+          });
+        }
+      }
+      const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
+      sweepInputs.push({ g, alpacaByOcc, groupRows, canManage }); // orphan net (swept post-decision)
+      if (canManage) {
         remainingByOcc = seedRemaining(positions);
         for (const r of groupRows) openRowQty.set(r.occ_symbol, (openRowQty.get(r.occ_symbol) ?? 0) + Math.abs(Math.round(r.qty)));
       }
@@ -806,7 +831,7 @@ async function cycle(trigger: string): Promise<void> {
       }
     }
 
-    // ---- RC3 PHASES B/C/D: broker-truth state, one global arbiter, then execution ----
+    // ---- RC4 PHASES B/C/D: broker-truth state, one global arbiter, then execution ----
     // No release entry can reach executeDecisionBatch above: release batches take
     // the `continue` path until every account/symbol has been evaluated and stamped.
     if (config.day1ReleaseEnabled) {
@@ -856,7 +881,7 @@ async function cycle(trigger: string): Promise<void> {
           });
         }
       }
-      if (cursor !== finalized.length) throw new Error("Day 1 RC3 arbitration mapping mismatch");
+      if (cursor !== finalized.length) throw new Error("Day 1 RC4 arbitration mapping mismatch");
       for (const batch of releaseBatches) await executeDecisionBatch(batch, deskStack);
     }
 
@@ -1279,7 +1304,7 @@ async function main(): Promise<void> {
   try { await reloadConfig(); }
   catch (e) {
     if (config.day1ReleaseEnabled) {
-      error(`config: RC3 initial validation failed — ${(e as Error).message}; refusing to start`);
+      error(`config: RC4 initial validation failed — ${(e as Error).message}; refusing to start`);
       process.exit(1);
     }
     warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`);
@@ -1288,13 +1313,37 @@ async function main(): Promise<void> {
     error("Day 1 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
     process.exit(1);
   }
+
+  // Required Day 1 research capture must be constructible before the first boot
+  // decision can run. create() verifies paper/OPRA posture, private receipt schema,
+  // bounded settings and R2/Supabase credentials. A null runtime is a startup
+  // refusal for the sealed release, never a warning followed by trading.
+  let heldContractCapture: HeldContractCaptureRuntime | null = null;
+  if (config.heldContractCaptureEnabled) {
+    const { HeldContractCaptureRuntime: CaptureRuntime } = await import("./heldContractCapture.js");
+    heldContractCapture = await CaptureRuntime.create({
+      paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+    });
+  }
+  if (config.day1ReleaseEnabled && !heldContractCapture) {
+    error("Day 1 required held-contract capture is not runtime-ready before the boot decision. Refusing to start.");
+    process.exit(1);
+  }
+  heldContractCapture?.start();
+
   info(`config: ${cfg.fund ? `fund cap $${cfg.fund.total_capital_usd} mode=${cfg.fund.mode} halted=${cfg.fund.is_halted}` : "fund MISSING"}, ${cfg.channels.length} channels [${cfg.channels.map((c) => `${c.slug}:${c.status}`).join(", ")}]`);
   if (config.day1ReleaseEnabled) {
-    const receipt = day1StartupReceipt;
-    if (!receipt) {
-      error("Day 1 RC3 active-settings receipt is unavailable after validation. Refusing to start.");
+    if (!day1StartupReceipt) {
+      error("Day 1 active-settings receipt is unavailable after validation. Refusing to start.");
       process.exit(1);
     }
+    const receipt = {
+      ...day1StartupReceipt,
+      runtimeReadiness: {
+        heldCaptureReady: true,
+        heldCaptureStartedBeforeBootDecision: true,
+      },
+    };
     info(`day1-release: ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256} roots=6 dark=62 paper-only`);
     void store.journal("EXEC", `day1-release ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`, receipt);
   } else {
@@ -1331,16 +1380,6 @@ async function main(): Promise<void> {
   }
   const stream = new StockBarStream(SYMBOLS, onBar, onReconnect, intraminuteCapture?.observer());
   intraminuteCapture?.start();
-  // Phase 1K-G reuses manager-book targeted OPRA requests. Dynamic loading
-  // keeps the default-off R2 adapter out of the normal worker path.
-  let heldContractCapture: HeldContractCaptureRuntime | null = null;
-  if (config.heldContractCaptureEnabled) {
-    const { HeldContractCaptureRuntime: CaptureRuntime } = await import("./heldContractCapture.js");
-    heldContractCapture = await CaptureRuntime.create({
-      paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
-    });
-    heldContractCapture?.start();
-  }
   stream.start();
 
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
