@@ -295,6 +295,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
 }
 .shell-root[data-mode="perform"] .pf-ok { color: var(--pf-green-soft); }
+.shell-root[data-mode="perform"] .pf-receipt-green{color:var(--pf-green-soft)}.shell-root[data-mode="perform"] .pf-receipt-yellow{color:var(--pf-amber)}.shell-root[data-mode="perform"] .pf-receipt-red{color:#e0644c}.shell-root[data-mode="perform"] .pf-receipt-neutral{color:var(--dk-mut)}
 .shell-root[data-mode="perform"] .pf-livedot {
   display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--pf-green);
   box-shadow: 0 0 6px var(--pf-green); margin-right: 6px; vertical-align: 1px; animation: pf-pulse 2s infinite;

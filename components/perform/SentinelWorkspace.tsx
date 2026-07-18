@@ -5,6 +5,22 @@ import { deriveSentinelReceiptStatus } from "@/lib/sentinel/receipt";
 
 type SentinelDigest = ReturnType<typeof useSentinelDigest>;
 
+export function deriveSentinelDigestReceipt(sentinel: SentinelDigest) {
+  return deriveSentinelReceiptStatus({
+    state: sentinel.state,
+    err: sentinel.err,
+    date: sentinel.date,
+    forDate: sentinel.forDate || sentinel.brief?.forDate,
+    session: sentinel.session,
+    createdAt: sentinel.createdAt,
+    publishedAt: sentinel.publishedAt,
+    message: sentinel.message,
+    schemaVersion: sentinel.schemaVersion,
+    publisherVersion: sentinel.publisherVersion,
+    briefAsOf: sentinel.brief?.asOf,
+  });
+}
+
 const pct = (value: number | null | undefined): string => value == null ? "—" : `${Math.round(value)}%`;
 const dateTime = (value: string): string => value ? new Date(value).toLocaleString("en-US", {
   timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
@@ -18,19 +34,7 @@ function EvidenceRows({ rows, empty }: { rows: ScanRow[]; empty: string }) {
 }
 
 export function SentinelReceiptStrip({ sentinel, compact = false }: { sentinel: SentinelDigest; compact?: boolean }) {
-  const receipt = deriveSentinelReceiptStatus({
-    state: sentinel.state,
-    err: sentinel.err,
-    date: sentinel.date,
-    forDate: sentinel.forDate || sentinel.brief?.forDate,
-    session: sentinel.session,
-    createdAt: sentinel.createdAt,
-    publishedAt: sentinel.publishedAt,
-    message: sentinel.message,
-    schemaVersion: sentinel.schemaVersion,
-    publisherVersion: sentinel.publisherVersion,
-    briefAsOf: sentinel.brief?.asOf,
-  });
+  const receipt = deriveSentinelDigestReceipt(sentinel);
   return <div className={`sentinel-receipt ${receipt.tone}${compact ? " compact" : ""}`} role="status">
     <i /><span><b>{receipt.label}</b><small>{receipt.detail}</small></span>
     {!compact && <><span><small>SOURCE</small><b>{receipt.source}</b></span><span><small>PUBLISHED</small><b>{dateTime(receipt.publishedAt)}</b></span></>}

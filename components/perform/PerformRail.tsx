@@ -12,6 +12,7 @@ import { collapseEvents, type PerformSection } from "@/lib/perform/derivePerform
 import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
 import { usePositionCloseFlow } from "@/hooks/usePositionCloseFlow";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorkspace";
 
 // PERFORM right rail (slice S2): POSITIONS (row-per-leg with pk glow ring +
 // ratchet/LOCK-RIDE/giveback badges) · SENTINEL (verdict chip + one-line digest
@@ -126,6 +127,8 @@ type Digest = ReturnType<typeof useSentinelDigest>;
 
 function SentinelSection({ symbol, sent, targeted }: { symbol: string; sent: Digest; targeted: boolean }) {
   const { judge, scan, brief, date, state } = sent;
+  const receipt = deriveSentinelDigestReceipt(sent);
+  const receiptText = receipt.tone === "green" && date ? `scan ${date.slice(5)}` : receipt.label.toLowerCase();
 
   // SENT level legend — the same terrain the §01 SENT chip draws (per-index
   // sentLevels; carry fallback). γ-wall amber · PD/swing grey · gap-arm green.
@@ -150,8 +153,7 @@ function SentinelSection({ symbol, sent, targeted }: { symbol: string; sent: Dig
         <span className="t">SENTINEL</span>
         <span className="grow" />
         <span className="pf-basis">interpretive</span>
-        <span className="x">{state === "ok" && date ? `scan ${date.slice(5)} ` : "no scan "}
-          {state === "ok" ? <span className="pf-ok">✓</span> : ""}</span>
+        <span className={`x pf-receipt-${receipt.tone}`}>{receiptText} {receipt.tone === "green" ? "✓" : "!"}</span>
       </div>
       <div className="pfs-body">
         {state !== "ok" || !judge ? (

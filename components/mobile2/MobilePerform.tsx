@@ -11,6 +11,7 @@ import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
+import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorkspace";
 import { deriveTapeRows } from "@/lib/perform/eventTape";
 
 // =============================================================================
@@ -26,6 +27,8 @@ type Digest = ReturnType<typeof useSentinelDigest>;
 
 function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
   const { judge, scan, brief, date, state } = sent;
+  const receipt = deriveSentinelDigestReceipt(sent);
+  const receiptText = receipt.tone === "green" && date ? `scan ${date.slice(5)}` : receipt.label.toLowerCase();
   const terrain = brief?.sentLevels?.[symbol];
   const above = terrain?.above ?? brief?.carry.above ?? [];
   const below = terrain?.below ?? brief?.carry.below ?? [];
@@ -44,8 +47,7 @@ function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
       <div className="m2-phead">
         <span className="t">SENTINEL</span>
         <span className="grow" />
-        <span className="x">{state === "ok" && date ? `scan ${date.slice(5)} ` : "no scan "}
-          {state === "ok" ? <span className="m2-ok">✓</span> : ""}</span>
+        <span className={`x m2-receipt-${receipt.tone}`}>{receiptText} {receipt.tone === "green" ? "✓" : "!"}</span>
       </div>
       <div className="m2-sent-body">
         {state !== "ok" || !judge ? (
