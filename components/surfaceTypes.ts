@@ -13,6 +13,7 @@ import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import type { StudioEvidence } from "@/hooks/useStudioEvidence";
 import type { ContractHistory } from "@/hooks/useContractHistory";
 import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
+import type { OpsReadinessModel } from "@/lib/ops/readiness";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
@@ -69,4 +70,7 @@ export interface SurfaceProps {
   /** Skin-neutral channel runtime/evidence contract derived once at the page
    *  seam. Every shell renders the same lifecycle and release truth. */
   channelWorkspace: ChannelWorkspaceModel;
+  /** Day 1 capture/observer/publisher evidence, derived once at the page seam.
+   * Configured startup claims remain separate from observed session receipts. */
+  opsReadiness: OpsReadinessModel;
 }

@@ -11,6 +11,7 @@ import { useDeskFeed } from "@/hooks/useDeskFeed";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useOpsStatus } from "@/hooks/useOpsStatus";
+import { useOpsEvidence } from "@/hooks/useOpsEvidence";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
 import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import { useSentinelDigest } from "@/hooks/useSentinelDigest";
@@ -34,6 +35,7 @@ import { useStudioEvidence } from "@/hooks/useStudioEvidence";
 import { useContractHistory } from "@/hooks/useContractHistory";
 import type { Room } from "@/components/surfaceTypes";
 import { deriveChannelPassports } from "@/lib/channels/channelPassport";
+import { deriveOpsReadiness } from "@/lib/ops/readiness";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
 // tab-shell. The data-seam pattern means neither layout re-subscribes.
@@ -78,6 +80,7 @@ function Surface({
   // Lifted to the seam — called ONCE here so the persistent shell AND both layouts
   // share one accounts/ops poll + one live-marked P&L derivation (no re-subscribe).
   const ops = useOpsStatus();
+  const opsEvidence = useOpsEvidence();
   useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
@@ -132,6 +135,31 @@ function Surface({
   const incident = process.env.NODE_ENV !== "production" && devSev
     ? devIncidentFixture(devSev, positionsBE, derivedIncident.session)
     : derivedIncident;
+  const opsReadiness = deriveOpsReadiness({
+    nowMs: Date.now(),
+    releaseEvents: data.releaseEvents,
+    releaseReadState: data.releaseReceiptHealth.lastError
+      ? "error"
+      : data.releaseReceiptHealth.lastSuccessAt
+        ? "ok"
+        : "checking",
+    evidence: opsEvidence,
+    sentinel: {
+      state: sentinel.state,
+      err: sentinel.err,
+      date: sentinel.date,
+      forDate: sentinel.forDate,
+      session: sentinel.session,
+      createdAt: sentinel.createdAt,
+      publishedAt: sentinel.publishedAt,
+      message: sentinel.message,
+      schemaVersion: sentinel.schemaVersion,
+      publisherVersion: sentinel.publisherVersion,
+      briefAsOf: sentinel.brief?.asOf,
+    },
+    openPositions: feed.positions.length,
+    closedPositions: feed.recentTrades.length,
+  });
   // 909 KIT — audible fills (opt-in via the KIT pad; inert while off). At the
   // seam so desktop + mobile share one diff of the same feed.
   useKitSounds(feed.positions, feed.recentTrades);
@@ -146,7 +174,7 @@ function Surface({
   useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, opsReadiness };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

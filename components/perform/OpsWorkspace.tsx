@@ -3,6 +3,7 @@
 import { SystemHealthStrip } from "@/components/perform/SystemHealthStrip";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
+import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
 
 const age = (seconds: number | null): string => seconds == null ? "—" : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h`;
 const localTime = (value: string | null | undefined): string => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " PT" : "—";
@@ -22,6 +23,7 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
     <header className="opsw-head"><span><b>OPERATIONS</b><small>read-only control-plane evidence · paper desk</small></span><em>HEALTH CLAIMS REQUIRE THEIR OWN RECEIPT</em></header>
     <SystemHealthStrip incident={incident} />
     <div className="opsw-grid">
+      <section className="opsw-card opsw-readiness"><header><span>00</span><b>CAPTURE + OBSERVER READINESS</b><em>configured ≠ observed</em></header><OpsReadinessPanel model={surface.opsReadiness} /></section>
       <section className="opsw-card"><header><span>01</span><b>PROCESS + EXECUTORS</b><em>liveness clocks remain distinct</em></header><div className="opsw-lamps">
         <StateLamp label="24/7 PROCESS" state={workerRuns.query.state === "ok" ? (workerRuns.hasOpenRun ? "observed" : "missing") : workerRuns.query.state} detail={`${age(processAge)} · ${workerRuns.rowsIn16h} runs / 16h · ${workerRuns.abrupt16h} abrupt`} />
         <StateLamp label="STREAM BEAT" state={ops.heartbeat.state} detail={`${age(ops.hbAgeSec)} · RTH clock`} />

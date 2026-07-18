@@ -13,6 +13,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveRecentExits } from "@/lib/perform/derivePositionsWorkspace";
 import { SentinelReceiptStrip } from "@/components/perform/SentinelWorkspace";
 import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
+import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -176,6 +177,9 @@ function OpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; cha
         <span><b>CRON</b><em>{ops.cron.state.toUpperCase()}</em><small>{age(ops.cronAgeSec)} · {ops.cronArmed} DB armed</small></span>
         <span><b>TAPE</b><em>{data.lastIngestTs ? "OBSERVED" : "MISSING"}</em><small>{age(ingestAge)} · {data.snapshot.length} contracts</small></span>
       </div>
+    </Section>
+    <Section title="DAY 1 EVIDENCE" meta="configured ≠ observed">
+      <OpsReadinessPanel model={props.opsReadiness} compact />
     </Section>
     <div className="m2-desk-hero">
       <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span><span><small>DAY</small><b>{signedUsd(liveFund.dayPnl)}</b></span>
