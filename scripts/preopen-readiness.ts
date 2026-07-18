@@ -9,11 +9,12 @@
 // ============================================================================
 
 import { createClient } from "@supabase/supabase-js";
+import { DAY1_CONFIG_HASH, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION } from "@/lib/channels/day1Release";
+import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
+import type { MarketEvent } from "@/lib/types";
 
 const REQUIRED_PAPER_HOST = "https://paper-api.alpaca.markets";
 const WORKER_FRESH_SEC = 150;
-const DEFAULT_PREMIUM_STOP_PCT = 50;
-const MIN_SCALABLE_QTY = 2;
 
 type AccountRow = {
   id: string;
@@ -134,17 +135,18 @@ async function main(): Promise<void> {
   if (configuredHost !== REQUIRED_PAPER_HOST) failures.push(`ALPACA_PAPER_HOST is ${configuredHost}; expected ${REQUIRED_PAPER_HOST}`);
 
   const sb = createClient(sbUrl, sbKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const [fundRead, accountsRead, channelsRead, positionsRead, workerRead] = await Promise.all([
+  const [fundRead, accountsRead, channelsRead, positionsRead, workerRead, releaseRead] = await Promise.all([
     sb.from("fund_state").select("mode,is_halted,halted_reason").eq("id", 1).maybeSingle(),
     sb.from("accounts").select("id,name,cred_ref,is_armed,is_halted,master_daily_stop_usd").order("name"),
-    sb.from("strategists").select("id,slug,status,underlying,executor,account_id,is_active,strategist_config(max_contracts,capital_pct,daily_stop_usd,daily_target_usd,premium_stop_pct,take_profit_pct,underlying_stop_pct,entry_dte,strike_offset,muted,boosted,event_policy)").eq("status", "armed").eq("is_active", true).order("slug"),
+    sb.from("strategists").select("id,slug,status,underlying,executor,account_id,is_active,strategist_config(max_contracts,capital_pct,daily_stop_usd,daily_target_usd,premium_stop_pct,take_profit_pct,underlying_stop_pct,entry_dte,strike_offset,muted,boosted,event_policy)").order("slug"),
     sb.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open"),
     sb.from("worker_runs").select("version,git_sha,last_heartbeat_at,last_phase,ended_at,last_error").is("ended_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("events").select("id,level,message,created_at,strategist_id,meta").ilike("message", "%day1-release ACTIVE%").order("created_at", { ascending: false }).limit(1),
   ]);
 
   for (const [label, error] of [
     ["fund_state", fundRead.error], ["accounts", accountsRead.error], ["strategists", channelsRead.error],
-    ["positions", positionsRead.error], ["worker_runs", workerRead.error],
+    ["positions", positionsRead.error], ["worker_runs", workerRead.error], ["release receipt", releaseRead.error],
   ] as const) if (error) failures.push(`${label} read failed: ${error.message}`);
 
   const fund = fundRead.data as { mode?: string; is_halted?: boolean; halted_reason?: string | null } | null;
@@ -161,12 +163,22 @@ async function main(): Promise<void> {
     workerAgeSec = Math.max(0, (Date.now() - Date.parse(worker.last_heartbeat_at)) / 1000);
     if (workerAgeSec > WORKER_FRESH_SEC) failures.push(`worker heartbeat is ${Math.round(workerAgeSec)}s old`);
     if (worker.last_error) failures.push(`worker reports an error: ${worker.last_error}`);
+    if (worker.version !== DAY1_WORKER_VERSION) failures.push(`worker version is ${worker.version ?? "missing"}; expected ${DAY1_WORKER_VERSION}`);
+  }
+
+  const release = findDay1ReleaseReceipt((releaseRead.data ?? []) as MarketEvent[]);
+  if (!release) failures.push("no Day 1 startup receipt observed");
+  else {
+    if (release.releaseId !== DAY1_RELEASE_ID) failures.push(`release id is ${release.releaseId}; expected ${DAY1_RELEASE_ID}`);
+    if (release.configHash !== DAY1_CONFIG_HASH) failures.push(`release hash is ${release.configHash}; expected ${DAY1_CONFIG_HASH}`);
   }
 
   const accounts = (accountsRead.data ?? []) as AccountRow[];
-  const channels = (channelsRead.data ?? []) as ChannelRow[];
+  const allChannels = (channelsRead.data ?? []) as ChannelRow[];
+  const channels = allChannels.filter((channel) => channel.status === "armed" && channel.is_active === true);
   const positions = (positionsRead.data ?? []) as PositionRow[];
-  const channelsById = new Map(channels.map((channel) => [channel.id, channel]));
+  const channelsById = new Map(allChannels.map((channel) => [channel.id, channel]));
+  const channelsBySlug = new Map(allChannels.map((channel) => [channel.slug, channel]));
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const identities = new Set<string>();
 
@@ -174,6 +186,7 @@ async function main(): Promise<void> {
   console.log(`Broker host : ${configuredHost} ${configuredHost === REQUIRED_PAPER_HOST ? "✓ PAPER" : "✗"}`);
   console.log(`Fund        : ${fund?.mode ?? "missing"} · halted=${fund?.is_halted ? "TRUE" : "false"}`);
   console.log(`Worker      : ${worker?.version ?? "missing"} · ${Math.round(workerAgeSec)}s · ${worker?.last_phase ?? "?"} · ${worker?.last_error ? "ERROR" : "clean"}`);
+  console.log(`Release     : ${release?.releaseId ?? "missing"} · ${release?.configHash.slice(0, 12) ?? "—"}${release ? "…" : ""}`);
   console.log(`Desk rows   : ${positions.length} open\n`);
 
   console.log("Paper broker accounts:");
@@ -210,45 +223,51 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log("\nEffective armed-channel manifest:");
-  console.log(`  ${pad("CHANNEL", 28)} ${pad("ACCOUNT", 12)} ${pad("SYM", 4)} ${padL("RISK", 7)} ${padL("CAP", 4)} ${padL("2-LOT ASK≤", 11)} ${padL("STOP", 7)} ${padL("TAKE", 7)} ${pad("STATE", 8)}`);
+  console.log("\nSealed RC5 runtime roots:");
+  console.log(`  ${pad("CHANNEL", 28)} ${pad("ACCOUNT", 12)} ${pad("SYM", 4)} ${padL("QTY", 4)} ${padL("RISK", 7)} ${padL("PREM≤", 7)} ${padL("DEBIT≤", 8)} ${padL("STOP", 7)} ${padL("TAKE", 7)} ${pad("EOD", 6)} ${pad("DB", 7)}`);
 
-  let effective = 0;
-  let muted = 0;
-  for (const channel of channels.sort((a, b) => {
-    const aa = accountById.get(a.account_id ?? "")?.name ?? "unresolved";
-    const ba = accountById.get(b.account_id ?? "")?.name ?? "unresolved";
-    return aa.localeCompare(ba) || a.slug.localeCompare(b.slug);
-  })) {
-    const cfg = configOf(channel);
-    const account = accountById.get(channel.account_id ?? "");
-    const maxContracts = num(cfg?.max_contracts);
-    const risk = num(cfg?.capital_pct) * (cfg?.boosted ? 2 : 1);
-    const rawStop = cfg?.premium_stop_pct == null ? DEFAULT_PREMIUM_STOP_PCT : num(cfg.premium_stop_pct);
-    const stopPct = rawStop > 0 ? rawStop : DEFAULT_PREMIUM_STOP_PCT;
-    const scalableAsk = risk / ((stopPct / 100) * 100 * MIN_SCALABLE_QTY);
-    const state = cfg?.muted ? "MUTED" : account?.is_armed && !account?.is_halted ? "READY" : "OFF";
-    if (cfg?.muted) muted++; else effective++;
+  let readyRoots = 0;
+  const rootPolicies = Object.values(DAY1_ROOTS).sort((a, b) => a.accountName.localeCompare(b.accountName) || a.priority - b.priority || a.slug.localeCompare(b.slug));
+  for (const root of rootPolicies) {
+    const channel = channelsBySlug.get(root.slug);
+    const account = accountById.get(root.accountId);
+    const cfg = channel ? configOf(channel) : null;
+    const dbState = !channel
+      ? "MISSING"
+      : channel.status !== "armed" || channel.is_active !== true
+        ? "OFF"
+        : cfg?.muted
+          ? "MUTED"
+          : account?.is_armed && !account?.is_halted
+            ? "READY"
+            : "OFF";
 
-    if (!account) failures.push(`${channel.slug}: account_id does not resolve`);
-    if (channel.executor !== "stream") failures.push(`${channel.slug}: executor is ${channel.executor ?? "missing"}, expected stream`);
-    if (maxContracts < MIN_SCALABLE_QTY) failures.push(`${channel.slug}: max_contracts ${maxContracts} cannot support a multi-contract scale-out`);
-    if (scalableAsk < 1) warnings.push(`${channel.slug}: two-lot scaling requires ask <= $${scalableAsk.toFixed(2)}`);
+    if (!channel) failures.push(`${root.slug}: sealed root is missing from armed/active database rows`);
+    else {
+      if (channel.status !== "armed" || channel.is_active !== true) failures.push(`${root.slug}: sealed root is not armed and active in the database`);
+      if (channel.account_id !== root.accountId) failures.push(`${root.slug}: database account does not match the sealed root binding`);
+      if (channel.executor !== "stream") failures.push(`${root.slug}: executor is ${channel.executor ?? "missing"}, expected stream`);
+      if (channel.underlying !== root.underlying) failures.push(`${root.slug}: underlying is ${channel.underlying ?? "missing"}, expected ${root.underlying}`);
+      if (cfg?.muted) failures.push(`${root.slug}: sealed root is database-muted`);
+      if (num(cfg?.max_contracts) < root.quantity) failures.push(`${root.slug}: database max_contracts ${num(cfg?.max_contracts)} is below sealed quantity ${root.quantity}`);
+    }
+    if (!account) failures.push(`${root.slug}: sealed account binding does not resolve`);
+    if (dbState === "READY") readyRoots++;
 
-    const stop = rawStop > 0 ? `-${rawStop}%` : "U-STOP";
-    const take = num(cfg?.take_profit_pct) > 0 ? `+${num(cfg?.take_profit_pct)}%` : "RIDE";
-    console.log(`  ${pad(channel.slug, 28)} ${pad(account?.name ?? "UNRESOLVED", 12)} ${pad(String(channel.underlying ?? "?"), 4)} ${padL(usd(risk), 7)} ${padL(String(maxContracts), 4)} ${padL(`$${scalableAsk.toFixed(2)}`, 11)} ${padL(stop, 7)} ${padL(take, 7)} ${pad(state, 8)}`);
+    console.log(`  ${pad(root.slug, 28)} ${pad(root.accountName, 12)} ${pad(root.underlying, 4)} ${padL(String(root.quantity), 4)} ${padL(usd(root.riskBudgetUsd), 7)} ${padL(`$${root.premiumCap.toFixed(2)}`, 7)} ${padL(usd(root.aggregateDebitCap), 8)} ${padL(`-${root.premiumStopPct}%`, 7)} ${padL(root.takeProfitPct ? `+${root.takeProfitPct}%` : "RIDE", 7)} ${pad(root.eodEt, 6)} ${pad(dbState, 7)}`);
   }
 
-  console.log(`\nChannels    : ${channels.length} armed/active configs · ${effective} entry-enabled · ${muted} muted`);
-  console.log("Account stop: legacy display only; live entry risk is governed per channel by the manifest above");
+  const darkDatabaseRows = channels.filter((channel) => !DAY1_ROOTS[channel.slug]).length;
+  console.log(`\nRuntime     : ${readyRoots}/${rootPolicies.length} sealed roots ready · ${darkDatabaseRows} other armed/active DB rows suppressed to dark evidence by RC5`);
+  console.log("DB settings : context only where RC5 overlays policy; the startup receipt + worker version identify the active runtime contract");
+  console.log("Account stop: legacy display only; sealed per-channel risk governs the Day 1 roots above");
   if (warnings.length) console.log(`\nWarnings (${warnings.length}):\n  - ${warnings.join("\n  - ")}`);
   if (failures.length) {
     console.error(`\n✗ PRE-OPEN BLOCKED (${failures.length}):\n  - ${failures.join("\n  - ")}\n`);
     process.exitCode = 1;
     return;
   }
-  console.log("\n✓ PRE-OPEN HARD GATES PASS — paper boundary, broker/desk books, worker, routing, and multi-contract caps\n");
+  console.log("\n✓ PRE-OPEN HARD GATES PASS — paper boundary, broker/desk books, worker liveness, sealed RC5 identity, and six-root routing\n");
 }
 
 main().catch((error) => {
