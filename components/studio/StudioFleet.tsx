@@ -13,14 +13,16 @@ const SORTS: { value: StudioSort; label: string }[] = [
   { value: "name", label: "Name" },
 ];
 
-export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, passports, onShowAll, onSort, onSelect }: {
+export type StudioScope = "attention" | "roots" | "dark" | "all";
+
+export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, onScope, onSort, onSelect }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
   selectedSlug?: string;
-  showAll: boolean;
+  scope: StudioScope;
   sort: StudioSort;
   passports: ChannelWorkspaceModel;
-  onShowAll: (show: boolean) => void;
+  onScope: (scope: StudioScope) => void;
   onSort: (sort: StudioSort) => void;
   onSelect: (slug: string) => void;
 }) {
@@ -48,8 +50,10 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, passpo
 
       <div className="fleet-tools">
         <div className="fleet-scope" role="group" aria-label="Channel scope">
-          <button type="button" className={!showAll ? "on" : ""} onClick={() => onShowAll(false)}>ATTENTION <b>{summary.attention}</b></button>
-          <button type="button" className={showAll ? "on" : ""} onClick={() => onShowAll(true)}>ALL <b>{summary.total}</b></button>
+          <button type="button" className={scope === "attention" ? "on" : ""} onClick={() => onScope("attention")}>ATTENTION <b>{summary.attention}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>ROOTS <b>{passports.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>DARK <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => onScope("all")}>ALL <b>{summary.total}</b></button>
         </div>
         <label className="fleet-sort">SORT
           <select value={sort} onChange={(event) => onSort(event.target.value as StudioSort)}>
@@ -58,7 +62,7 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, passpo
         </label>
       </div>
 
-      <div className="fleet-table" role="table" aria-label={showAll ? "All strategy channels" : "Channels needing attention"}>
+      <div className="fleet-table" role="table" aria-label={`${scope} strategy channels`}>
         <div className="fleet-grid fleet-head" role="row">
           <span role="columnheader">CHANNEL</span>
           <span role="columnheader">RUNTIME / DB</span>
@@ -108,9 +112,9 @@ export function StudioFleet({ rows, summary, selectedSlug, showAll, sort, passpo
           })}
           {rows.length === 0 && (
             <div className="fleet-empty">
-              <strong>NO CHANNEL EXCEPTIONS</strong>
-              <span>No exposure, risk event, or active boost requires intervention.</span>
-              <button type="button" onClick={() => onShowAll(true)}>SHOW ALL CHANNELS</button>
+              <strong>NO {scope.toUpperCase()} CHANNELS</strong>
+              <span>This account has no channels in the selected runtime scope.</span>
+              <button type="button" onClick={() => onScope("all")}>SHOW ALL CHANNELS</button>
             </div>
           )}
         </div>

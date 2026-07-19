@@ -34,6 +34,10 @@ export interface ChannelPassport {
     recentClosed: number;
     ledger: StudioChannelEvidence | null;
     lastSignal: Signal | null;
+    /** Newest channel decisions visible in the page-owned account feed. This
+     * is deliberately a bounded live window, not a historical-performance
+     * claim or a replacement for the T+1 evidence ledger. */
+    recentDecisions: Signal[];
   };
   observer: {
     configuredArms: number;
@@ -149,6 +153,7 @@ export function deriveChannelPassport(input: {
       recentClosed,
       ledger: input.ledger ?? null,
       lastSignal: signals[0] ?? null,
+      recentDecisions: signals.slice(0, 3),
     },
     observer: {
       configuredArms: lifecycle === "paper-root" ? DAY1_MANAGER_ARMS.length : 0,

@@ -38,9 +38,20 @@ assert.equal(result.bySlug["pb-ride"].lifecycle, "paper-root");
 assert.equal(result.bySlug["pb-ride"].rootPolicy?.quantity, 2);
 assert.equal(result.bySlug["pb-ride"].observer.configuredArms, 8);
 assert.equal(result.bySlug["pb-ride"].evidence.actedSignals, 1);
+assert.deepEqual(result.bySlug["pb-ride"].evidence.recentDecisions.map((row) => row.id), ["s1"]);
 assert.equal(result.bySlug["pb-ride-2"].lifecycle, "dark-evidence");
 assert.equal(result.bySlug["pb-ride-2"].evidence.darkLifecycleCensors, 1);
 assert.equal(result.bySlug["pb-ride-2"].database.differsFromRuntime, true);
+
+const decisionWindow = deriveChannelPassports({
+  channels: [channel("pb-ride")], events: verified,
+  signals: [1, 2, 3, 4].map((minute) => ({
+    id: `decision-${minute}`, strategist_slug: "pb-ride", level: "INFO" as const,
+    signal_type: "entry", message: `candidate ${minute}`, created_at: `2026-07-18T14:0${minute}:00Z`,
+  })),
+  positions: [], recentTrades: [], evidenceBySlug: {},
+});
+assert.deepEqual(decisionWindow.bySlug["pb-ride"].evidence.recentDecisions.map((row) => row.id), ["decision-4", "decision-3", "decision-2"]);
 
 const missing = deriveChannelPassports({ channels: [channel("pb-ride")], events: [], signals: [], positions: [], recentTrades: [], evidenceBySlug: {} });
 assert.equal(missing.release.state, "missing");
@@ -102,4 +113,4 @@ for (const sealedRoot of prereg.content.roots) {
   assert.equal(clientRoot.policyEpochId, binding.policyEpoch);
 }
 
-console.log("channel-passport-selftest: 125/125 passed");
+console.log("channel-passport-selftest: 127/127 passed");

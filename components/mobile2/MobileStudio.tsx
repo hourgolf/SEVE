@@ -3,6 +3,7 @@
 import { MobileRackRow } from "@/components/mobile2/MobileRackRow";
 import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { signedUsd } from "@/lib/format";
+import { useMemo, useState } from "react";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
@@ -29,6 +30,13 @@ export function MobileStudio({
   const { desk, anySolo, isActive } = view;
   const { canWrite } = props.write;
   const passports = props.channelWorkspace;
+  const [scope, setScope] = useState<"roots" | "dark" | "all">("roots");
+  const visibleChannels = useMemo(() => channels.filter((channel) => {
+    const lifecycle = passports.bySlug[channel.slug]?.lifecycle;
+    if (scope === "roots") return lifecycle === "paper-root";
+    if (scope === "dark") return lifecycle === "dark-evidence";
+    return true;
+  }), [channels, passports, scope]);
 
   const dayCls = liveFund.dayPnl > 0 ? "pos" : liveFund.dayPnl < 0 ? "neg" : "flat";
 
@@ -60,10 +68,15 @@ export function MobileStudio({
       </section>
 
       <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" onClick={canWrite ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD CHANNEL" : "SIGN IN TO TUNE"}</button></div>
+      <div className="m2-channel-scope" role="group" aria-label="Channel runtime scope">
+        <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>ROOTS <b>{passports.roots}</b></button>
+        <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>DARK <b>{passports.dark}</b></button>
+        <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL <b>{channels.length}</b></button>
+      </div>
       <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · REVIEW CONTROLS · FORK DRAFT TO EDIT SEALED ROOTS" : "READ ONLY · SIGN IN TO CHANGE CONTROLS"}</span><span className="ln" /></div>
-      {channels.length === 0 ? (
-        <div className="m2-ghost">no channels in this account</div>
-      ) : channels.map((s) => (
+      {visibleChannels.length === 0 ? (
+        <div className="m2-ghost">no channels in this runtime scope</div>
+      ) : visibleChannels.map((s) => (
         <MobileRackRow
           key={s.slug}
           strategist={s}

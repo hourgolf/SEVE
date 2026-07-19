@@ -8,6 +8,7 @@ import { StudioBand } from "@/components/studio/StudioBand";
 import { StudioModules } from "@/components/studio/StudioModules";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort } from "@/lib/studio/deriveStudioView";
+import type { StudioScope } from "@/components/studio/StudioFleet";
 
 // =============================================================================
 // STUDIO surface (P5 slice 4) — exception-first fleet tuning. The primary pane
@@ -32,18 +33,21 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
   );
 
   const [selSlug, setSelSlug] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(true);
+  const [scope, setScope] = useState<StudioScope>("roots");
   const [sort, setSort] = useState<StudioSort>("attention");
   const rows = useMemo(
     () => deriveStudioRows(channels, livePnl, feed.signals, feed.updatedAt ? Date.parse(feed.updatedAt) : 0),
     [channels, livePnl, feed.signals, feed.updatedAt],
   );
   const summary = useMemo(() => summarizeStudioFleet(rows), [rows]);
-  const visibleRows = useMemo(
-    () => sortStudioRows(showAll ? rows : rows.filter((row) => row.attentionReasons.length > 0), sort),
-    [rows, showAll, sort],
-  );
-  const selectedRow = rows.find((row) => row.channel.slug === selSlug) ?? visibleRows[0] ?? rows[0];
+  const visibleRows = useMemo(() => sortStudioRows(rows.filter((row) => {
+    const lifecycle = channelWorkspace.bySlug[row.channel.slug]?.lifecycle;
+    if (scope === "attention") return row.attentionReasons.length > 0;
+    if (scope === "roots") return lifecycle === "paper-root";
+    if (scope === "dark") return lifecycle === "dark-evidence";
+    return true;
+  }), sort), [rows, scope, sort, channelWorkspace]);
+  const selectedRow = visibleRows.find((row) => row.channel.slug === selSlug) ?? visibleRows[0];
 
   return (
     <div className="studio studio-v4 studio-v4b">
@@ -51,10 +55,10 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
         rows={visibleRows}
         summary={summary}
         selectedSlug={selectedRow?.channel.slug}
-        showAll={showAll}
+        scope={scope}
         sort={sort}
         passports={channelWorkspace}
-        onShowAll={setShowAll}
+        onScope={setScope}
         onSort={setSort}
         onSelect={setSelSlug}
       />

@@ -19,6 +19,9 @@ function Panel({ index, title, meta, children }: { index: string; title: string;
 }
 
 const ratio = (value: number | null) => value == null ? "∞" : value.toFixed(1);
+const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+}).format(new Date(iso));
 
 export function StudioModules({ selected, evidence, evidenceState, positions, recentTrades, incident, passport }: {
   selected?: StudioChannelRow;
@@ -43,11 +46,20 @@ export function StudioModules({ selected, evidence, evidenceState, positions, re
       <Panel index="03" title="DECISION ENGINE" meta={channel?.regime ?? "select channel"}>
         {channel ? <>
           <div className={`decision-state ${decision.tone}`}><b>{decision.label}</b><span>{decision.fact}</span></div>
+          <div className="decision-ledger" aria-label="Recent channel decision receipts">
+            {(passport?.evidence.recentDecisions ?? []).map((signal) => {
+              const state = channelDecisionState(signal);
+              return <span key={signal.id} className={state.tone}>
+                <time>{etTime(signal.created_at)} ET</time><b>{state.label}</b><em>{signal.signal_type}</em><small>{state.fact}</small>
+              </span>;
+            })}
+            {!passport?.evidence.recentDecisions.length && <i>no channel decision receipt in the bounded account feed</i>}
+          </div>
           <p className="module-mandate">{channel.mandate}</p>
           <div className="condition-bank">
             {conditions.length ? conditions.map((condition) => <span key={condition}>{condition}</span>) : <i>built-in policy detail not exported</i>}
           </div>
-          <footer>effective context · current config + compiled thesis</footer>
+          <footer>latest bounded account feed · decision/censor receipts, not a historical score</footer>
         </> : <div className="module-empty">select a fleet row</div>}
       </Panel>
 

@@ -10,6 +10,7 @@ import { signedUsd, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState, StrategistConfig } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
+import { channelDecisionState } from "@/lib/studio/channelDecision";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -25,6 +26,9 @@ import type { ChannelPassport } from "@/lib/channels/channelPassport";
 
 const A13_SLUGS = new Set(["momo-shape"]);
 const RISK_MIN = 0, RISK_MAX = 5000, RISK_STEP = 25;
+const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+}).format(new Date(iso));
 
 export function MobileRackRow({
   strategist, pnl, active, open, onToggle, write, passport,
@@ -154,6 +158,13 @@ export function MobileRackRow({
               <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
               {passport?.rootPolicy && <><span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span><span><small>IDENTITY</small><code>{passport.rootPolicy.configurationEpochId.slice(0, 10)}…</code></span></>}
             </div>
+            <section className="m2-decision-ledger" aria-label="Recent channel decision receipts">
+              {(passport?.evidence.recentDecisions ?? []).map((signal) => {
+                const state = channelDecisionState(signal);
+                return <span key={signal.id} className={state.tone}><time>{etTime(signal.created_at)} ET</time><b>{state.label}</b><small>{state.fact}</small></span>;
+              })}
+              {!passport?.evidence.recentDecisions.length && <i>no recent decision receipt in account feed</i>}
+            </section>
             {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
           </div>
           <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} compact />
