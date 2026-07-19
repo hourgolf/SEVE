@@ -128,7 +128,7 @@ export function MobileShell(props: SurfaceProps) {
       </main>
 
       <nav className="m2-padbar" aria-label="rooms">
-        {ROOMS.map((item) => <button type="button" key={item.id} className={`m2-modepad m2-roompad${room === item.id ? " on" : ""}`} onClick={() => setRoom(item.id)} aria-pressed={room === item.id}>
+        {ROOMS.map((item) => <button type="button" key={item.id} className={`m2-modepad m2-roompad${room === item.id ? " on" : ""}`} onClick={() => setRoom(item.id)} aria-pressed={room === item.id} aria-current={room === item.id ? "page" : undefined}>
           {item.label}<small>{item.sub}</small>
         </button>)}
       </nav>

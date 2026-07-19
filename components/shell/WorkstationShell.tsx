@@ -20,13 +20,13 @@ interface WorkstationShellProps {
 }
 
 const NAV = [
-  { key: "overview", label: "Dashboard", icon: "▣", mode: "perform" as const, section: "overview" as const },
-  { key: "market", label: "Markets", icon: "▤", mode: "perform" as const, section: "market" as const },
-  { key: "positions", label: "Positions", icon: "⌁", mode: "perform" as const, section: "positions" as const },
-  { key: "studio", label: "Channels", icon: "◉", mode: "studio" as const },
-  { key: "sentinel", label: "Sentinel", icon: "◇", mode: "perform" as const, section: "sentinel" as const },
-  { key: "tape", label: "Event Tape", icon: "≋", mode: "perform" as const, section: "tape" as const },
-  { key: "ops", label: "Ops", icon: "⌘", mode: "perform" as const, section: "ops" as const },
+  { key: "overview", label: "Dashboard", hint: "Watch", icon: "▣", group: "trade", mode: "perform" as const, section: "overview" as const },
+  { key: "market", label: "Markets", hint: "Chain", icon: "▤", group: "trade", mode: "perform" as const, section: "market" as const },
+  { key: "positions", label: "Positions", hint: "Book", icon: "⌁", group: "trade", mode: "perform" as const, section: "positions" as const },
+  { key: "studio", label: "Channels", hint: "Tune", icon: "◉", group: "trade", mode: "studio" as const },
+  { key: "sentinel", label: "Sentinel", hint: "Next open", icon: "◇", group: "evidence", mode: "perform" as const, section: "sentinel" as const },
+  { key: "tape", label: "Event Tape", hint: "Review", icon: "≋", group: "evidence", mode: "perform" as const, section: "tape" as const },
+  { key: "ops", label: "Ops", hint: "System", icon: "⌘", group: "system", mode: "perform" as const, section: "ops" as const },
 ];
 
 const compactUsd = (value: number): string => {
@@ -70,6 +70,7 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   const incidentOn = incident.severity !== "normal";
   const step = now ? sessionStep(now) : 0;
   const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
+  const activeNav = NAV.find((item) => mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section))) ?? NAV[0];
   const navigate = (item: (typeof NAV)[number]) => {
     setMode(item.mode);
     if (item.mode !== "perform" || !("section" in item)) return;
@@ -79,7 +80,7 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   };
 
   return (
-    <div className="shell-root ws909" data-mode={mode} data-skin={skin} data-density={density} data-incident={incident.severity}>
+    <div className="shell-root ws909" data-mode={mode} data-section={activeNav.key} data-skin={skin} data-density={density} data-incident={incident.severity}>
       <span className="ws-screw ws-screw--tl" /><span className="ws-screw ws-screw--tr" />
       <span className="ws-screw ws-screw--bl" /><span className="ws-screw ws-screw--br" />
 
@@ -89,10 +90,10 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
           <button type="button" className={mode === "perform" ? "on" : ""} onClick={() => setMode("perform")}>PERFORM</button>
           <button type="button" className={mode === "studio" ? "on" : ""} onClick={() => setMode("studio")}>STUDIO</button>
         </div>
-        <button type="button" className={`ws-alert ws-alert--${incident.severity}`} onClick={() => { setMode("perform"); setPerformSection("overview"); }}>
+        <button type="button" className={`ws-alert ws-alert--${incident.severity}`} aria-label={`${incidentOn ? incident.title : "System nominal"}. Current workspace: ${activeNav.label}.`} onClick={() => { setMode("perform"); setPerformSection("overview"); }}>
           <span>{incidentOn ? "▲" : "●"}</span><b>{incidentOn ? incident.title : "SYSTEM NOMINAL"}</b>
           <small>{incidentOn ? incident.facts[0] : `${roster.length} channels · process ${processObserved ? "observed" : "checking"}`}</small>
-          <em>{incidentOn ? "VIEW INCIDENT" : "LIVE"}</em>
+          <em>{incidentOn ? "VIEW INCIDENT" : activeNav.label.toUpperCase()}</em>
         </button>
         <div className="ws-utility">
           <button type="button" title="frame skin" onClick={toggleSkin}>{skin === "cream" ? "☼" : "◐"}</button>
@@ -127,14 +128,18 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
       <main className="ws-main">
         <nav className="ws-left" aria-label="Workstation sections">
           <div className="ws-left-label"><i />SECTIONS<span /></div>
-          {NAV.map((item) => (
-            <button key={item.key} type="button" className={mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section)) ? "on" : ""} onClick={() => navigate(item)}>
-              <span>{item.icon}</span><b>{item.label}</b>
-            </button>
-          ))}
-          <button type="button" onClick={onLegacy}><span>⌗</span><b>Legacy Rooms</b></button>
+          {NAV.map((item, index) => {
+            const active = item.key === activeNav.key;
+            const newGroup = index > 0 && NAV[index - 1].group !== item.group;
+            return (
+              <button key={item.key} type="button" className={`${active ? "on" : ""}${newGroup ? " group-start" : ""}`} aria-current={active ? "page" : undefined} onClick={() => navigate(item)}>
+                <span aria-hidden="true">{item.icon}</span><span className="ws-left-copy"><b>{item.label}</b><small>{item.hint}</small></span>
+              </button>
+            );
+          })}
+          <button type="button" className="group-start" onClick={onLegacy}><span aria-hidden="true">⌗</span><span className="ws-left-copy"><b>Legacy Rooms</b><small>Archive</small></span></button>
           <button type="button" className="ws-auth-launch" onClick={() => setAuthOpen(true)}>
-            <span>OP</span><b>{write.canWrite ? "Operator" : "Sign In"}</b>
+            <span aria-hidden="true">OP</span><span className="ws-left-copy"><b>{write.canWrite ? "Operator" : "Sign In"}</b><small>{write.canWrite ? "Ready" : "Read only"}</small></span>
           </button>
           <div className="ws-system">
             <small>SYSTEM</small>
@@ -143,15 +148,15 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
           </div>
         </nav>
 
-        <section className="ws-display" aria-label={`${mode} workstation display`}>
+        <section className="ws-display" aria-label={`${activeNav.label} workspace`}>
           {mode === "perform" ? <PerformSurface {...surface} section={performSection} /> : <StudioSurface {...surface} />}
         </section>
       </main>
 
       <footer className="ws-deck">
         <section className="ws-deck-mode"><small>MODE</small><div>
-          <button type="button" className={mode === "perform" ? "on" : ""} onClick={() => { setMode("perform"); setPerformSection("overview"); }}><i />PERFORM</button>
-          <button type="button" className={mode === "studio" ? "on" : ""} onClick={() => setMode("studio")}><i />STUDIO</button>
+          <button type="button" className={mode === "perform" ? "on" : ""} aria-current={mode === "perform" ? "page" : undefined} onClick={() => { setMode("perform"); setPerformSection("overview"); }}><i />PERFORM</button>
+          <button type="button" className={mode === "studio" ? "on" : ""} aria-current={mode === "studio" ? "page" : undefined} onClick={() => setMode("studio")}><i />STUDIO</button>
           <button type="button" onClick={onLegacy}><i />ROOMS</button>
         </div></section>
         <section className="ws-transport"><small>SESSION</small><div>
