@@ -109,9 +109,38 @@ roster while changing only their hierarchy and presentation.
   still uses the existing desk dispatch/write controller. No skin-owned fetch,
   subscription, or mutation path was introduced.
 
-Markets, Book, Channels, Sentinel, Review, and Ops continue to use the mature
-shared leaves. The next native slices should be Book and Channels because they
-contain the highest-value operator actions and evidence context.
+Markets, Sentinel, Review, and Ops continue to use the mature shared leaves.
+
+## Native Folio Book and Channels slices
+
+Book and Channels were then recomposed without introducing either a data read
+or mutation path. The shared leaves remain the owners of guarded behavior.
+
+- Book makes the broker/desk receipt and open-position ledger primary, followed
+  by correlated exposure and recent exits. Manual close and the required exit-
+  rationale prompt still use the single `usePositionCloseFlow` controller.
+- The phone Book retains open positions, exposure, recent exits, signals, option
+  chain, contract detail, and a direct return to the chart. Its primary chart
+  control is 44px high and the workspace has no horizontal overflow.
+- Channels is grouped first by the sealed runtime lifecycle: account paper roots
+  versus dark evidence lanes. Day P&L is contextual; it is not presented as an
+  automatic promotion score.
+- Desktop Channels retains deterministic sorting, channel selection, the sealed
+  runtime/database/policy inspector, forked configuration drafts, evidence
+  modules, and all existing write guards. Root and dark filters resolved to four
+  and eight account-scoped channels respectively in the authenticated receipt.
+- Phone Channels retains the 12-row account rack, explicit PAPER ROOT/DARK
+  labels, runtime receipt, expandable controls, and session tape. The tested
+  steppers measured 44px, MUTE/BOOST 50px, and bottom navigation 56px.
+- Authenticated checks at desktop and 390×844 found zero page/workspace
+  horizontal overflow and zero browser warnings/errors. The weekend flat book
+  contained no natural close target, so action integrity is additionally pinned
+  by manual-close 8/8 and position-close-flow 16/16 self-tests.
+- Perform 22/22, channel passport 125/125, Studio 12/12, presentation 8/8,
+  and Ops readiness 43/43 passed; TypeScript and the production build are clean.
+
+The remaining native Folio slices are Review/Sentinel/Ops and the full Markets
+workspace. They may continue independently of the sealed Monday runtime.
 
 ## Skin Lab acceptance
 
