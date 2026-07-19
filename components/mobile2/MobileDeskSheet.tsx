@@ -14,6 +14,12 @@ import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { BrokerReconciliationStrip, OpsReadinessPanel, PositionEvidenceChains } from "@/components/ops/OpsReadinessPanel";
 import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
 import { deriveTapeRows } from "@/lib/perform/eventTape";
+import {
+  DEFAULT_MOBILE_REVIEW_MODE,
+  MOBILE_REVIEW_MODES,
+  mobileReviewHas,
+  type MobileReviewMode,
+} from "@/lib/mobile/reviewWorkspace";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -91,6 +97,7 @@ function BookView({ props, onViewMarket }: { props: SurfaceProps; onViewMarket?:
 }
 
 function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channels: StrategistState[]; livePnl: Record<string, ChannelPnl> }) {
+  const [mode, setMode] = useState<MobileReviewMode>(DEFAULT_MOBILE_REVIEW_MODE);
   const { feed, liveFund, sentinel } = props;
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug] })).sort((a, b) => Math.abs(b.pnl?.dayPnl ?? 0) - Math.abs(a.pnl?.dayPnl ?? 0));
   const equity = feed.equityCurve.map((point) => point.equity);
@@ -99,20 +106,24 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
   const tape = useMemo(() => deriveTapeRows(props.data.events).slice(0, 12), [props.data.events]);
 
   return <>
-    <SentinelReceiptStrip sentinel={sentinel} compact />
-    <div className="m2-desk-hero">
+    <nav className="m2-review-modes" aria-label="Review workspace">
+      {MOBILE_REVIEW_MODES.map((item) => <button type="button" key={item.id} className={mode === item.id ? "on" : ""} onClick={() => setMode(item.id)} aria-pressed={mode === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
+    </nav>
+
+    {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
+    {mobileReviewHas(mode, "session-summary") && <div className="m2-desk-hero">
       <span><small>DAY P&amp;L</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{signedUsd(liveFund.dayPnl)}</b></span>
       <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span>
       <span><small>CLOSED</small><b>{feed.recentTrades.length}</b></span>
       <span><small>OPEN</small><b>{feed.positions.length}</b></span>
-    </div>
+    </div>}
 
-    <Section title="EQUITY" meta="desk feed · today">
+    {mobileReviewHas(mode, "equity") && <Section title="EQUITY" meta="desk feed · today">
       {equity.length >= 2 ? <LineChart values={equity} height={92} id="m2-desk-equity" baseline={equity[0]} format={usd0} formatDelta={signedUsd} labels={feed.equityCurve.map((point) => timeOfDay(point.ts))} />
         : <div className="m2-desk-empty">awaiting equity history</div>}
-    </Section>
+    </Section>}
 
-    <Section title="CHANNEL ATTRIBUTION" meta="gross desk marks">
+    {mobileReviewHas(mode, "attribution") && <Section title="CHANNEL ATTRIBUTION" meta="gross desk marks">
       <div className="m2-review-rows">
         {rows.map(({ channel, pnl }) => {
           const trades = pnl?.trades ?? 0;
@@ -123,22 +134,22 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
             <small>{trades}t · pk {peak ?? "—"}% · win {win ?? "—"}%</small></div>;
         })}
       </div>
-    </Section>
+    </Section>}
 
-    <Section title="EVENT TAPE" meta="retained operational view">
+    {mobileReviewHas(mode, "event-tape") && <Section title="EVENT TAPE" meta="retained operational view · newest 14">
       <TapeReadStrip health={props.data.readHealth.events} events={props.data.events} compact />
       <div className="m2-review-tape">
         {tape.length === 0 ? <div className="m2-desk-empty">no retained events</div> : tape.map((event) => <div key={event.id} data-kind={event.category}>
           <time>{timeOfDay(event.created_at)}</time><b>{event.level}</b><span>{event.message}</span>{event.count > 1 && <em>×{event.count}</em>}
         </div>)}
       </div>
-    </Section>
+    </Section>}
 
-    <Section title="TRADE EVIDENCE" meta="candidate → close">
+    {mobileReviewHas(mode, "trade-evidence") && <Section title="TRADE EVIDENCE" meta="candidate → close">
       <PositionEvidenceChains model={props.opsReadiness} compact />
-    </Section>
+    </Section>}
 
-    <Section title="NIGHTLY READ" meta={sentinel.date ? `scan ${sentinel.date.slice(5)}` : sentinel.state}>
+    {mobileReviewHas(mode, "nightly-read") && <Section title="NIGHTLY READ" meta={sentinel.date ? `scan ${sentinel.date.slice(5)}` : sentinel.state}>
       {sentinel.state !== "ok" ? <div className="m2-desk-empty">nightly review {sentinel.state}</div> : <div className="m2-nightly">
         {judge && <><div className="verdict"><b>{judge.verdict}</b><span>{judge.soWhat}</span></div>
           {judge.opportunities.length > 0 && <div><small>OPPORTUNITIES</small>{judge.opportunities.map((item, index) => <p key={index}>{item}</p>)}</div>}
@@ -148,12 +159,12 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
           {brief.events.length > 0 && <div><small>EVENTS</small>{brief.events.map((item, index) => <p key={index}>{item}</p>)}</div>}
         </>}
       </div>}
-    </Section>
-    <Section title="DETERMINISTIC SCAN" meta="descriptive · not an arm gate">
+    </Section>}
+    {mobileReviewHas(mode, "deterministic-scan") && <Section title="DETERMINISTIC SCAN" meta="descriptive · not an arm gate">
       {!sentinel.scan ? <div className="m2-desk-empty">scan evidence unavailable</div> : <div className="m2-review-scan">
         {[...sentinel.scan.promote.map((row) => ({ ...row, kind: "PROMOTE" })), ...sentinel.scan.fixable.map((row) => ({ ...row, kind: "FIX" })), ...sentinel.scan.leaks.map((row) => ({ ...row, kind: "LEAK" }))].slice(0, 12).map((row) => <div key={`${row.kind}-${row.slug}`}><b>{row.kind}</b><span>{row.slug}</span><small>pk {Math.round(row.peak)}% · win {Math.round(row.win)}% · give {row.give == null ? "—" : `${Math.round(row.give)}%`} · {row.n}t</small></div>)}
       </div>}
-    </Section>
+    </Section>}
   </>;
 }
 

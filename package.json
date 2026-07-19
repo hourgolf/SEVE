@@ -87,6 +87,7 @@
     "day1-release-receipt": "tsx scripts/day1-release-receipt.ts",
     "sentinel-receipt-selftest": "tsx lib/sentinel/receipt.selftest.ts",
     "event-tape-selftest": "tsx lib/perform/eventTape.selftest.ts",
+    "mobile-review-selftest": "tsx lib/mobile/reviewWorkspace.selftest.ts",
     "release-receipt-selftest": "tsx lib/ops/releaseReceipt.selftest.ts",
     "ops-readiness-selftest": "tsx lib/ops/readiness.selftest.ts",
     "broker-reconciliation-selftest": "tsx lib/ops/brokerReconciliation.selftest.ts",
