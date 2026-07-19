@@ -62,6 +62,7 @@ type PositionRow = {
 type WorkerRow = {
   version: string | null;
   git_sha: string | null;
+  started_at: string | null;
   last_heartbeat_at: string | null;
   last_phase: string | null;
   ended_at: string | null;
@@ -142,7 +143,7 @@ async function main(): Promise<void> {
     sb.from("accounts").select("id,name,cred_ref,is_armed,is_halted,master_daily_stop_usd").order("name"),
     sb.from("strategists").select("id,slug,status,underlying,executor,account_id,is_active,strategist_config(max_contracts,capital_pct,daily_stop_usd,daily_target_usd,premium_stop_pct,take_profit_pct,underlying_stop_pct,entry_dte,strike_offset,muted,boosted,event_policy)").order("slug"),
     sb.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open"),
-    sb.from("worker_runs").select("version,git_sha,last_heartbeat_at,last_phase,ended_at,last_error").is("ended_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("worker_runs").select("version,git_sha,started_at,last_heartbeat_at,last_phase,ended_at,last_error").is("ended_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("events").select("id,level,message,created_at,strategist_id,meta").ilike("message", "%day1-release ACTIVE%").order("created_at", { ascending: false }).limit(1),
     sb.from("events").select("id,level,message,created_at,strategist_id,meta").ilike("message", "sentinel:%").order("created_at", { ascending: false }).limit(1),
   ]);
@@ -174,6 +175,15 @@ async function main(): Promise<void> {
   else {
     if (release.releaseId !== DAY1_RELEASE_ID) failures.push(`release id is ${release.releaseId}; expected ${DAY1_RELEASE_ID}`);
     if (release.configHash !== DAY1_CONFIG_HASH) failures.push(`release hash is ${release.configHash}; expected ${DAY1_CONFIG_HASH}`);
+    if (worker?.started_at && Date.parse(release.createdAt) < Date.parse(worker.started_at)) {
+      failures.push("latest Day 1 receipt predates the current worker run");
+    }
+    if (release.alpacaPaperOrigin !== REQUIRED_PAPER_HOST) {
+      failures.push(`release paper origin is ${release.alpacaPaperOrigin ?? "unverified"}; expected ${REQUIRED_PAPER_HOST}`);
+    }
+    if (release.dryRun !== false || release.liveTrading !== true) {
+      failures.push(`paper executor is not enabled (dryRun=${String(release.dryRun)}, liveTrading=${String(release.liveTrading)})`);
+    }
   }
 
   const sentinelEvent = ((sentinelRead.data ?? []) as MarketEvent[])[0];
@@ -208,6 +218,7 @@ async function main(): Promise<void> {
   console.log(`Fund        : ${fund?.mode ?? "missing"} · halted=${fund?.is_halted ? "TRUE" : "false"}`);
   console.log(`Worker      : ${worker?.version ?? "missing"} · ${Math.round(workerAgeSec)}s · ${worker?.last_phase ?? "?"} · ${worker?.last_error ? "ERROR" : "clean"}`);
   console.log(`Release     : ${release?.releaseId ?? "missing"} · ${release?.configHash.slice(0, 12) ?? "—"}${release ? "…" : ""}`);
+  console.log(`Execution   : ${release?.dryRun === false && release?.liveTrading === true ? "PAPER EXECUTOR" : "SHADOW / UNVERIFIED"} · dryRun=${String(release?.dryRun ?? null)} · liveTrading=${String(release?.liveTrading ?? null)}`);
   console.log(`Sentinel    : ${sentinelReceipt.label} · ${sentinelReceipt.detail}`);
   console.log(`Desk rows   : ${positions.length} open\n`);
 
@@ -291,7 +302,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  console.log("\n✓ PRE-OPEN HARD GATES PASS — paper boundary, broker/desk books, worker liveness, sealed RC5 identity, and six-root routing\n");
+  console.log("\n✓ PRE-OPEN HARD GATES PASS — paper executor, broker/desk books, worker liveness, sealed RC5 identity, and six-root routing\n");
 }
 
 main().catch((error) => {

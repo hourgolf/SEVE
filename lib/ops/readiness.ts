@@ -195,12 +195,24 @@ const releaseConfigItems = (events: MarketEvent[], readState: Day1ReleaseReadSta
     && held?.enabled === true && Number(held?.targetSamples) === 12 && Number(held?.maxAgeMs) === 60_000
     && runtime?.heldCaptureReady === true && runtime?.heldCaptureStartedBeforeBootDecision === true;
   const managerOk = observed.state === "verified" && manager?.enabled === true && Number(manager?.quoteMaxAgeMs) === 15_000;
-  const paperOk = observed.state === "verified" && meta?.dryRun === true && meta?.liveTrading === false;
+  const paperOriginOk = meta?.alpacaPaperOrigin === "https://paper-api.alpaca.markets";
+  const paperExecutor = observed.state === "verified" && paperOriginOk && meta?.dryRun === false && meta?.liveTrading === true;
+  const paperShadow = observed.state === "verified" && paperOriginOk && meta?.dryRun === true && meta?.liveTrading === false;
   return [
     { id: "release", label: "SEALED RELEASE", state: observed.state.replaceAll("-", " ").toUpperCase(), tone: releaseTone, detail: observed.fact, observedAt: observed.receipt?.createdAt },
     { id: "capture-config", label: "HELD CAPTURE", state: captureOk ? "CONFIGURED" : observed.state === "checking" ? "CHECKING" : "UNVERIFIED", tone: captureOk ? "green" : observed.state === "checking" ? "neutral" : "red", detail: captureOk ? "12 samples / 60s · runtime ready before boot decision" : "sealed capture settings or runtime-readiness receipt not observed" },
     { id: "manager-config", label: "MANAGER OBSERVER", state: managerOk ? "CONFIGURED" : observed.state === "checking" ? "CHECKING" : "UNVERIFIED", tone: managerOk ? "green" : observed.state === "checking" ? "neutral" : "red", detail: managerOk ? `${DAY1_MANAGER_ARMS.length} paper-only arms · quote max 15s` : "sealed manager-shadow settings not observed" },
-    { id: "paper-boundary", label: "ORDER BOUNDARY", state: paperOk ? "PAPER / DRY RUN" : "UNVERIFIED", tone: paperOk ? "green" : "red", detail: paperOk ? "liveTrading=false · research writes only" : "paper-only startup boundary not established by the release receipt" },
+    {
+      id: "paper-boundary",
+      label: "ORDER BOUNDARY",
+      state: paperExecutor ? "PAPER EXECUTOR" : paperShadow ? "PAPER / SHADOW" : "UNVERIFIED",
+      tone: paperExecutor ? "green" : paperShadow ? "yellow" : "red",
+      detail: paperExecutor
+        ? "paper broker execution enabled · two-key turn verified"
+        : paperShadow
+          ? "research writes only · paper orders disabled"
+          : "paper-only startup boundary not established by the release receipt",
+    },
   ];
 };
 

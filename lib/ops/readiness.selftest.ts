@@ -14,7 +14,7 @@ const release = [{
   message: `day1-release ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_CONFIG_HASH}`,
   created_at: "2026-07-18T14:57:11.000Z",
   meta: {
-    dryRun: true, liveTrading: false,
+    dryRun: false, liveTrading: true, alpacaPaperOrigin: "https://paper-api.alpaca.markets",
     heldCapture: { enabled: true, targetSamples: 12, maxAgeMs: 60_000 },
     runtimeReadiness: { heldCaptureReady: true, heldCaptureStartedBeforeBootDecision: true },
     managerShadow: { enabled: true, quoteMaxAgeMs: 15_000 },
@@ -46,6 +46,8 @@ const before = deriveOpsReadiness(base({ nowMs: SATURDAY }));
 assert.equal(before.phase, "before-cohort");
 assert.equal(find(before, "capture-config").tone, "green");
 assert.equal(find(before, "manager-config").tone, "green");
+assert.equal(find(before, "paper-boundary").state, "PAPER EXECUTOR");
+assert.equal(find(before, "paper-boundary").tone, "green");
 assert.equal(find(before, "candidates").state, "NOT DUE");
 
 const empty = deriveOpsReadiness(base());
@@ -109,6 +111,12 @@ const badRelease = deriveOpsReadiness(base({ releaseEvents: [], releaseReadState
 assert.equal(find(badRelease, "release").tone, "red");
 assert.equal(find(badRelease, "paper-boundary").tone, "red");
 
+const shadowRelease = deriveOpsReadiness(base({ releaseEvents: [{
+  ...release[0], meta: { ...release[0].meta, dryRun: true, liveTrading: false },
+}], releaseReadState: "ok" }));
+assert.equal(find(shadowRelease, "paper-boundary").state, "PAPER / SHADOW");
+assert.equal(find(shadowRelease, "paper-boundary").tone, "yellow");
+
 const postClose = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T21:00:00Z"), evidence: evidence({ execution: ok([decision]) }) }));
 assert.equal(find(postClose, "publisher").state, "DUE");
 
@@ -140,4 +148,4 @@ const brokerPartial = deriveOpsReadiness(base({ evidence: evidence({ broker: ok(
 }]) }) }));
 assert.equal(find(brokerPartial, "reconciliation").tone, "yellow");
 
-console.log("ops-readiness-selftest: 43/43 passed");
+console.log("ops-readiness-selftest: 47/47 passed");
