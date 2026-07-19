@@ -89,6 +89,7 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
         write={surface.write}
         targeted
         reconciliation={reconciliation}
+        evidenceChains={surface.opsReadiness.chains}
       />
       <aside className="pf-positions-context"><AggregateExposure surface={surface} /><RecentExits surface={surface} /></aside>
     </div>

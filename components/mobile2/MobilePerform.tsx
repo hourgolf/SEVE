@@ -13,6 +13,9 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
 import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorkspace";
 import { deriveTapeRows } from "@/lib/perform/eventTape";
+import { OptionChain } from "@/components/OptionChain";
+import { ContractDetailView } from "@/components/ContractDetail";
+import { MarketOpenRisk, MarketReadStrip } from "@/components/perform/PerformMarketsWorkspace";
 
 // =============================================================================
 // MOBILE · PERFORM (S5) — the watch surface as ONE vertical scroll (the gallery
@@ -24,6 +27,7 @@ import { deriveTapeRows } from "@/lib/perform/eventTape";
 // =============================================================================
 
 type Digest = ReturnType<typeof useSentinelDigest>;
+export type MobileMarketView = "chart" | "chain";
 
 function SentinelSection({ symbol, sent }: { symbol: string; sent: Digest }) {
   const { judge, scan, brief, date, state } = sent;
@@ -122,19 +126,32 @@ function TapeSection({ events, strategists, health }: { events: MarketEvent[]; s
 }
 
 export function MobilePerform({
-  props, channels, sent, livePnl,
+  props, channels, sent, livePnl, marketView, onMarketViewChange,
 }: {
   props: SurfaceProps;
   channels: StrategistState[];
   sent: Digest;
   livePnl: Record<string, ChannelPnl>;
+  marketView: MobileMarketView;
+  onMarketViewChange: (view: MobileMarketView) => void;
 }) {
-  const { data, view, feed, spotUp, symbol, setSymbol } = props;
+  const { data, view, feed, spotUp, symbol, setSymbol, selected, setSelected, contractHistory } = props;
+  const changeSymbol = (next: string) => {
+    setSelected(null);
+    setSymbol(next);
+  };
 
   return (
     <>
       <div className="m2-scroll">
-        <section className="m2-screen">
+        <nav className="m2-market-switch" aria-label="Markets workspace">
+          <button type="button" className={marketView === "chart" ? "on" : ""} onClick={() => onMarketViewChange("chart")} aria-pressed={marketView === "chart"}>CHART</button>
+          <button type="button" className={marketView === "chain" ? "on" : ""} onClick={() => onMarketViewChange("chain")} aria-pressed={marketView === "chain"}>CHAIN</button>
+          <span />
+          {["SPY", "QQQ", "IWM"].map((ticker) => <button type="button" key={ticker} className={`symbol${symbol === ticker ? " on" : ""}`} onClick={() => changeSymbol(ticker)} aria-pressed={symbol === ticker}>{ticker}</button>)}
+        </nav>
+        {marketView === "chart" ? <>
+          <section className="m2-screen">
           <div className="m2-phead">
             <span className="idx">01</span>
             <span className="t">{symbol} · LIVE</span>
@@ -158,6 +175,15 @@ export function MobilePerform({
         <MobilePositions props={props} strategists={view.desk.strategists} />
         <SentinelSection symbol={symbol} sent={sent} />
         <TapeSection events={data.events} strategists={view.desk.strategists} health={data.readHealth.events} />
+        </> : <>
+          <MarketReadStrip surface={props} compact />
+          <MarketOpenRisk surface={props} compact />
+          <section className="m2-markets-chain">
+            <OptionChain snapshot={data.snapshot} spot={data.spot} deltasModeled={data.deltasModeled} selected={selected}
+              onSelect={(occ) => setSelected((current) => current === occ ? null : occ)} compact symbol={symbol} />
+          </section>
+          {selected && <section className="m2-markets-contract"><ContractDetailView occSymbol={selected} onClose={() => setSelected(null)} history={contractHistory} /></section>}
+        </>}
       </div>
 
       <MobileDock channels={channels} livePnl={livePnl} lens={sent.lens} write={props.write} />

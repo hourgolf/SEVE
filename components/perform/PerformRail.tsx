@@ -13,7 +13,8 @@ import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
 import { usePositionCloseFlow } from "@/hooks/usePositionCloseFlow";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorkspace";
-import type { ReadinessItem } from "@/lib/ops/readiness";
+import type { OpsEvidenceChain, ReadinessItem } from "@/lib/ops/readiness";
+import { deriveOpenPositionRows } from "@/lib/perform/derivePositionsWorkspace";
 
 // PERFORM right rail (slice S2): POSITIONS (row-per-leg with pk glow ring +
 // ratchet/LOCK-RIDE/giveback badges) · SENTINEL (verdict chip + one-line digest
@@ -46,7 +47,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 }
 
 export function PositionsSection({
-  positions, strategists, liveMarks, peaks, write, targeted, reconciliation,
+  positions, strategists, liveMarks, peaks, write, targeted, reconciliation, evidenceChains,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -55,15 +56,12 @@ export function PositionsSection({
   write: SurfaceProps["write"];
   targeted: boolean;
   reconciliation?: ReadinessItem;
+  evidenceChains?: OpsEvidenceChain[];
 }) {
   const closeFlow = usePositionCloseFlow(write);
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
-  const markOf = (p: Position) => {
-    const m = liveMarks?.[p.occ_symbol];
-    if (m != null && Number.isFinite(m) && m > 0) return { mark: m, unreal: (m - p.avg_entry_price) * p.qty * 100 };
-    return { mark: p.current_mark, unreal: p.unrealized_pnl };
-  };
-  const total = positions.reduce((a, p) => a + markOf(p).unreal, 0);
+  const rows = deriveOpenPositionRows(positions, liveMarks ?? {}, peaks);
+  const total = rows.reduce((sum, row) => sum + row.unrealized, 0);
 
   return (
     <section className="pf-screen pf-hardware" id="perform-positions" data-nav-target={targeted || undefined} tabIndex={-1}>
@@ -78,14 +76,13 @@ export function PositionsSection({
       <div className="pfp-body">
         {positions.length === 0 ? (
           <div className="pf-ghost">flat — no open positions</div>
-        ) : positions.map((p) => {
+        ) : rows.map((row) => {
+          const p = row.position;
           const s = stratOf(p.strategist_slug);
           const pm = pmVar(s?.color ?? "green");
-          const { mark, unreal } = markOf(p);
+          const { mark, unrealized: unreal, returnPct, peakPct, givebackPct, capturePct, markedNotional } = row;
           const entry = p.avg_entry_price;
-          const peak = peaks[p.occ_symbol] ?? 0;
-          const peakPct = entry > 0 && peak > entry ? ((peak - entry) / entry) * 100 : null;
-          const gavePct = peakPct != null && mark < peak ? Math.min(999, ((peak - mark) / (peak - entry)) * 100) : null;
+          const evidence = evidenceChains?.find((chain) => chain.positionId === p.id);
           const lock = (s?.config.take_profit_pct ?? 0) > 0;
           const dte = dteOf(p.expiration);
           return (
@@ -96,11 +93,18 @@ export function PositionsSection({
               <div className="pfp-ctr">
                 {occRoot(p.occ_symbol, s?.underlying ?? "SPY")} {p.strike.toFixed(0)}{p.opt_type === "call" ? "C" : "P"} ×{p.qty}{dte != null ? ` · ${dte}DTE` : ""}
               </div>
-              <div className="pfp-meta">in @{entry.toFixed(2)}{p.opened_at ? ` · ${timeOfDay(p.opened_at)}` : ""}</div>
+              <div className="pfp-meta">{p.opened_at ? timeOfDay(p.opened_at) : "—"} · marked ${Math.round(markedNotional)}</div>
+              <div className="pfp-decision">
+                <span>IN <b>{entry.toFixed(2)}</b></span><i>→</i><span>MARK <b>{mark.toFixed(2)}</b></span>
+                <span className={(returnPct ?? 0) < 0 ? "neg" : "pos"}>RET <b>{returnPct == null ? "—" : `${returnPct >= 0 ? "+" : ""}${Math.round(returnPct)}%`}</b></span>
+                <span>PK <b>{peakPct == null ? "—" : `+${Math.round(peakPct)}%`}</b></span>
+                <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAPTURE" : "GIVE"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
+              </div>
               <div className="pfp-tags">
                 {A13_SLUGS.has(p.strategist_slug) && <span className="pfp-tag amber">⚡ A13 ratchet</span>}
                 <span className="pfp-tag">{lock ? "LOCK" : "RIDE"}</span>
-                {gavePct != null && gavePct >= 40 && <span className="pfp-tag warn">giveback {Math.round(gavePct)}% of pk</span>}
+                {evidence && <span className={`pfp-tag evidence-${evidence.tone}`}>EVIDENCE {evidence.tone}</span>}
+                {givebackPct != null && givebackPct >= 40 && <span className="pfp-tag warn">giveback {Math.round(givebackPct)}% of pk</span>}
               </div>
               <div className="pfp-pk">
                 {peakPct != null ? <Ring pct={peakPct} color={pm} /> : <span className="pfp-nopk">—</span>}

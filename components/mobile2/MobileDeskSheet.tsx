@@ -2,8 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
-import { OptionChain } from "@/components/OptionChain";
-import { ContractDetailView } from "@/components/ContractDetail";
 import { MobilePositions } from "@/components/mobile2/MobilePositions";
 import { computeNetExposure } from "@/lib/desk/netExposure";
 import { pmVar } from "@/lib/desk/colors";
@@ -33,15 +31,14 @@ function Section({ title, meta, children }: { title: string; meta?: string; chil
   return <section className="m2-desk-section"><header><b>{title}</b>{meta && <span>{meta}</span>}</header><div className="m2-desk-body">{children}</div></section>;
 }
 
-function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: () => void }) {
-  const { data, feed, liveMarks, selected, setSelected, contractHistory, symbol } = props;
+function BookView({ props, onViewMarket }: { props: SurfaceProps; onViewMarket?: (view: "chart" | "chain") => void }) {
+  const { feed, liveMarks } = props;
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
   const recentExits = useMemo(() => deriveRecentExits(feed.recentTrades), [feed.recentTrades]);
-  const selectedQuote = selected ? data.snapshot.find((quote) => quote.occ_symbol === selected) : undefined;
   const signals = feed.signals.slice(0, 18);
 
   return <>
-    <div className="m2-book-nav"><span><b>LIVE BOOK</b><small>positions first · exposure second</small></span>{onViewChart && <button type="button" onClick={onViewChart}>VIEW CHART</button>}</div>
+    <div className="m2-book-nav"><span><b>LIVE BOOK</b><small>positions first · exposure second</small></span>{onViewMarket && <div><button type="button" onClick={() => onViewMarket("chart")}>CHART</button><button type="button" onClick={() => onViewMarket("chain")}>CHAIN</button></div>}</div>
     <BrokerReconciliationStrip model={props.opsReadiness} compact />
     <MobilePositions props={props} strategists={props.view.desk.strategists} compact />
     <div className="m2-desk-hero">
@@ -90,22 +87,6 @@ function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: (
       </div>
     </Section>
 
-    <Section title={`${symbol} OPTION CHAIN`} meta="front expiry · tap a leg">
-      <div className="m2-desk-chain">
-        <OptionChain snapshot={data.snapshot} spot={data.spot} deltasModeled={data.deltasModeled} selected={selected}
-          onSelect={(occ) => setSelected((current) => current === occ ? null : occ)} compact symbol={symbol} />
-        {selectedQuote && <div className="m2-quote-detail">
-          <b>{selectedQuote.occ_symbol}</b><button type="button" onClick={() => setSelected(null)}>CLEAR</button>
-          <span><small>BID</small>{selectedQuote.bid?.toFixed(2) ?? "—"}</span>
-          <span><small>ASK</small>{selectedQuote.ask?.toFixed(2) ?? "—"}</span>
-          <span><small>MID</small>{selectedQuote.mid?.toFixed(2) ?? "—"}</span>
-          <span><small>DELTA</small>{selectedQuote.delta?.toFixed(2) ?? "—"}</span>
-          <span><small>IV</small>{selectedQuote.iv != null ? `${(selectedQuote.iv * 100).toFixed(1)}%` : "—"}</span>
-          <span><small>SPOT</small>{selectedQuote.underlying_price?.toFixed(2) ?? "—"}</span>
-        </div>}
-        {selected && <ContractDetailView occSymbol={selected} onClose={() => setSelected(null)} history={contractHistory} />}
-      </div>
-    </Section>
   </>;
 }
 
@@ -250,16 +231,16 @@ export function MobileDeskSheet({ open, onClose, props, channels, livePnl, onOpe
   </div>;
 }
 
-export function MobileDeskRoom({ room, props, channels, livePnl, onViewChart, onOpenSettings }: {
+export function MobileDeskRoom({ room, props, channels, livePnl, onViewMarket, onOpenSettings }: {
   room: "book" | "review" | "ops";
   props: SurfaceProps;
   channels: StrategistState[];
   livePnl: Record<string, ChannelPnl>;
-  onViewChart: () => void;
+  onViewMarket: (view: "chart" | "chain") => void;
   onOpenSettings: () => void;
 }) {
   return <div className="m2-scroll m2-room-scroll"><div className="m2-desk-scroll">
-    {room === "book" && <BookView props={props} onViewChart={onViewChart} />}
+    {room === "book" && <BookView props={props} onViewMarket={onViewMarket} />}
     {room === "review" && <ReviewView props={props} channels={channels} livePnl={livePnl} />}
     {room === "ops" && <OpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
   </div></div>;

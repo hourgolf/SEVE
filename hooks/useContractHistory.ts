@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import type { OptionQuote } from "@/lib/types";
+import { normalizeContractHistoryRows } from "@/lib/perform/contractHistory";
 
 export interface ContractHistory {
   rows: OptionQuote[]; // oldest → newest
@@ -33,11 +34,11 @@ export function useContractHistory(occSymbol: string | null): ContractHistory {
           .from("option_quotes")
           .select("*")
           .eq("occ_symbol", occSymbol)
-          .order("captured_at", { ascending: true })
+          .order("captured_at", { ascending: false })
           .limit(400);
         if (error) throw error;
         if (cancelled) return;
-        setState({ rows: (data ?? []) as OptionQuote[], loading: false, error: null });
+        setState({ rows: normalizeContractHistoryRows((data ?? []) as OptionQuote[]), loading: false, error: null });
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : "load failed";

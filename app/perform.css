@@ -192,7 +192,8 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909[data-mode="perform"] .pf-market-risk-body { max-height:150px; overflow-y:auto; background:var(--pf-scr); }
 .shell-root.ws909[data-mode="perform"] .pf-market-risk-row {
   position:relative; display:grid; grid-template-columns:8px minmax(0,1fr) auto; gap:3px 8px;
-  padding:7px 9px; border-bottom:1px solid var(--pf-line); font-family:var(--sh-mono);
+  width:100%; padding:7px 9px; border:0; border-bottom:1px solid var(--pf-line); background:transparent;
+  color:inherit; text-align:left; font-family:var(--sh-mono); cursor:pointer;
 }
 .shell-root.ws909[data-mode="perform"] .pf-market-risk-row:last-child { border-bottom:0; }
 .shell-root.ws909[data-mode="perform"] .pf-market-risk-row.selected { background:rgba(59,133,223,.11); box-shadow:inset 3px 0 0 var(--blue); }
@@ -206,9 +207,10 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 
 .shell-root.ws909[data-mode="perform"] .pf-markets-chain,
 .shell-root.ws909[data-mode="perform"] .pf-markets-contract { min-height:0; overflow:hidden; }
+.shell-root.ws909[data-mode="perform"] .pf-markets-chain { display:flex; flex-direction:column; gap:5px; }
 .shell-root.ws909[data-mode="perform"] .pf-markets-chain>.panel,
 .shell-root.ws909[data-mode="perform"] .pf-markets-contract>.panel {
-  height:100%; margin:0; display:flex; flex-direction:column; border-radius:6px;
+  min-height:0; margin:0; display:flex; flex:1; flex-direction:column; border-radius:6px;
   background:linear-gradient(180deg,#111719,#0b1011); color:var(--lcd-ink);
 }
 .shell-root.ws909[data-mode="perform"] .pf-markets-chain .phead,
@@ -231,6 +233,16 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909[data-mode="perform"] .pf-markets-chain tr.atm td { background:rgba(47,213,115,.08); }
 .shell-root.ws909[data-mode="perform"] .pf-markets-contract .pbody { flex:1; min-height:0; overflow:auto; padding:9px 11px; }
 .shell-root.ws909[data-mode="perform"] .pf-markets-contract .cd-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.shell-root.ws909[data-mode="perform"] .market-read-strip {
+  flex:0 0 auto; display:grid; grid-template-columns:8px auto minmax(0,1fr) auto; gap:6px 9px; align-items:center;
+  padding:6px 9px; border:1px solid var(--pf-line-2); border-radius:5px; background:#101516;
+  color:var(--dk-mut); font:700 var(--fs-chip)/1.2 var(--sh-mono); letter-spacing:.04em;
+}
+.shell-root.ws909[data-mode="perform"] .market-read-strip>i { width:7px; height:7px; border-radius:50%; background:var(--dk-dim); }
+.shell-root.ws909[data-mode="perform"] .market-read-strip>b { color:var(--lcd-ink); letter-spacing:.08em; }
+.shell-root.ws909[data-mode="perform"] .market-read-strip>em { color:var(--dk-dim); font-style:normal; }
+.shell-root.ws909[data-mode="perform"] .market-read-strip.green>i { background:var(--pf-green); box-shadow:0 0 6px var(--pf-green); }
+.shell-root.ws909[data-mode="perform"] .market-read-strip.yellow>i { background:var(--pf-amber); box-shadow:0 0 6px var(--pf-amber); }
 
 /* the reused IntradayChart panel, made to FILL the hero cell (fill prop) */
 .shell-root[data-mode="perform"] .chart-fill {
@@ -333,6 +345,14 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root[data-mode="perform"] .pfp-pnl { font-family: var(--sh-mono); font-size: var(--fs-num-lg); font-weight: 800; text-align: right; white-space: nowrap; }
 .shell-root[data-mode="perform"] .pfp-ctr { grid-column: 2; font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); white-space: nowrap; }
 .shell-root[data-mode="perform"] .pfp-meta { grid-column: 3; font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-dim); text-align: right; white-space: nowrap; }
+.shell-root[data-mode="perform"] .pfp-decision {
+  grid-column:2 / 4; display:flex; gap:5px; align-items:center; flex-wrap:wrap; font:700 var(--fs-chip)/1.2 var(--sh-mono); color:var(--dk-mut);
+}
+.shell-root[data-mode="perform"] .pfp-decision span { padding:3px 5px; border:1px solid var(--pf-line); border-radius:3px; }
+.shell-root[data-mode="perform"] .pfp-decision i { color:var(--dk-dim); font-style:normal; }
+.shell-root[data-mode="perform"] .pfp-decision span.pos b { color:var(--pf-green-soft); }
+.shell-root[data-mode="perform"] .pfp-decision span.neg b { color:var(--pf-red-soft); }
+.shell-root[data-mode="perform"] .pfp-decision span.warn { color:var(--pf-amber); border-color:rgba(224,162,63,.35); }
 .shell-root[data-mode="perform"] .pfp-tags { grid-column: 2; display: flex; gap: 7px; flex-wrap: wrap; align-self: center; }
 .shell-root[data-mode="perform"] .pfp-tag {
   font-family: var(--sh-mono); font-size: var(--fs-chip); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
@@ -341,6 +361,9 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root[data-mode="perform"] .pfp-tag.amber { color: #ffb224; border-color: rgba(255, 178, 36, 0.5); background: rgba(255, 178, 36, 0.08); }
 .shell-root[data-mode="perform"] .pfp-tag.warn { color: var(--pf-red-soft); border-color: rgba(224, 122, 88, 0.45); background: rgba(224, 122, 88, 0.08); }
 .shell-root[data-mode="perform"] .pfp-tag.ok { color: var(--pf-green-soft); border-color: rgba(108, 192, 109, 0.45); background: rgba(108, 192, 109, 0.08); }
+.shell-root[data-mode="perform"] .pfp-tag.evidence-green { color:var(--pf-green-soft); border-color:rgba(108,192,109,.35); }
+.shell-root[data-mode="perform"] .pfp-tag.evidence-yellow { color:var(--pf-amber); border-color:rgba(224,162,63,.35); }
+.shell-root[data-mode="perform"] .pfp-tag.evidence-red { color:var(--pf-red-soft); border-color:rgba(224,122,88,.4); }
 .shell-root[data-mode="perform"] .pfp-pk { grid-column: 3; display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
 .shell-root[data-mode="perform"] .pfp-pklbl { font-family: var(--sh-mono); font-size: var(--fs-num); color: var(--dk-mut); white-space: nowrap; }
 .shell-root[data-mode="perform"] .pfp-pklbl b { color: var(--pm); font-weight: 800; }

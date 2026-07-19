@@ -2,10 +2,11 @@
 
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
-import type { Position, StrategistState } from "@/lib/desk/types";
+import type { StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
 import { usePositionCloseFlow } from "@/hooks/usePositionCloseFlow";
+import { deriveOpenPositionRows } from "@/lib/perform/derivePositionsWorkspace";
 
 const A13_SLUGS = new Set(["momo-shape"]);
 const ONE_DAY = 86_400_000;
@@ -39,12 +40,8 @@ export function MobilePositions({ props, strategists, compact = false }: {
   const closeFlow = usePositionCloseFlow(write);
 
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
-  const markOf = (p: Position) => {
-    const m = liveMarks?.[p.occ_symbol];
-    if (m != null && Number.isFinite(m) && m > 0) return { mark: m, unreal: (m - p.avg_entry_price) * p.qty * 100 };
-    return { mark: p.current_mark, unreal: p.unrealized_pnl };
-  };
-  const total = positions.reduce((sum, position) => sum + markOf(position).unreal, 0);
+  const rows = deriveOpenPositionRows(positions, liveMarks ?? {}, positionPeaks);
+  const total = rows.reduce((sum, row) => sum + row.unrealized, 0);
 
   return <section className={`m2-screen m2-hardware m2-position-book${compact ? " compact" : ""}`}>
     <div className="m2-phead">
@@ -52,14 +49,13 @@ export function MobilePositions({ props, strategists, compact = false }: {
       {positions.length > 0 && <span className={`x num ${total < 0 ? "neg" : "up"}`}>Σ {signedUsd(total)}</span>}
     </div>
     <div>
-      {positions.length === 0 ? <div className="m2-ghost">flat — no open positions</div> : positions.map((position) => {
+      {positions.length === 0 ? <div className="m2-ghost">flat — no open positions</div> : rows.map((row) => {
+        const position = row.position;
         const strategist = stratOf(position.strategist_slug);
         const pm = pmVar(strategist?.color ?? "green");
-        const { mark, unreal } = markOf(position);
+        const { mark, unrealized: unreal, returnPct, peakPct, givebackPct, capturePct, markedNotional } = row;
         const entry = position.avg_entry_price;
-        const peak = positionPeaks[position.occ_symbol] ?? 0;
-        const peakPct = entry > 0 && peak > entry ? ((peak - entry) / entry) * 100 : null;
-        const gavePct = peakPct != null && mark < peak ? Math.min(999, ((peak - mark) / (peak - entry)) * 100) : null;
+        const evidence = props.opsReadiness.chains.find((chain) => chain.positionId === position.id);
         const lock = (strategist?.config.take_profit_pct ?? 0) > 0;
         const dte = dteOf(position.expiration);
         return <div className="m2-pos-row" key={position.id} style={{ ["--pm" as string]: pm }}>
@@ -67,11 +63,18 @@ export function MobilePositions({ props, strategists, compact = false }: {
           <div className="m2-p-slug">{position.strategist_slug}</div>
           <div className={`m2-p-pnl num ${unreal < 0 ? "neg" : "pos"}`}>{signedUsd(unreal)}</div>
           <div className="m2-p-ctr">{occRoot(position.occ_symbol, strategist?.underlying ?? "SPY")} {position.strike.toFixed(0)}{position.opt_type === "call" ? "C" : "P"} ×{position.qty}{dte != null ? ` · ${dte}DTE` : ""}</div>
-          <div className="m2-p-meta">in @{entry.toFixed(2)}{position.opened_at ? ` · ${timeOfDay(position.opened_at)}` : ""}</div>
+          <div className="m2-p-meta">{position.opened_at ? timeOfDay(position.opened_at) : "—"} · ${Math.round(markedNotional)}</div>
+          <div className="m2-p-decision">
+            <span>IN <b>{entry.toFixed(2)}</b></span><i>→</i><span>MARK <b>{mark.toFixed(2)}</b></span>
+            <span className={(returnPct ?? 0) < 0 ? "neg" : "pos"}>RET <b>{returnPct == null ? "—" : `${returnPct >= 0 ? "+" : ""}${Math.round(returnPct)}%`}</b></span>
+            <span>PK <b>{peakPct == null ? "—" : `+${Math.round(peakPct)}%`}</b></span>
+            <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAP" : "GIVE"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
+          </div>
           <div className="m2-p-tags">
             {A13_SLUGS.has(position.strategist_slug) && <span className="m2-tag amber">⚡ A13 ratchet</span>}
             <span className="m2-tag">{lock ? "LOCK" : "RIDE"}</span>
-            {gavePct != null && gavePct >= 40 && <span className="m2-tag warn">giveback {Math.round(gavePct)}% of pk</span>}
+            {evidence && <span className={`m2-tag evidence-${evidence.tone}`}>EVIDENCE {evidence.tone}</span>}
+            {givebackPct != null && givebackPct >= 40 && <span className="m2-tag warn">giveback {Math.round(givebackPct)}% of pk</span>}
           </div>
           <div className="m2-p-pk">{peakPct != null ? <Ring pct={peakPct} color={pm} /> : null}<span className="lbl">pk <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span></div>
           {write.canWrite && <div className="m2-pos-actions">

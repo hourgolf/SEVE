@@ -3,7 +3,7 @@
 import "@/app/mobile2.css";
 import { useEffect, useMemo, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
-import { MobilePerform } from "@/components/mobile2/MobilePerform";
+import { MobilePerform, type MobileMarketView } from "@/components/mobile2/MobilePerform";
 import { MobileStudio } from "@/components/mobile2/MobileStudio";
 import { MobileDeskRoom } from "@/components/mobile2/MobileDeskSheet";
 import { MobileKillControl } from "@/components/mobile2/MobileKillControl";
@@ -45,6 +45,7 @@ export function MobileShell(props: SurfaceProps) {
   const sent = props.sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
 
   const [room, setRoom] = useState<MobileRoom>("play");
+  const [marketView, setMarketView] = useState<MobileMarketView>("chart");
   const [setOpen, setSetOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>(null); // studio accordion — one at a time
@@ -74,6 +75,10 @@ export function MobileShell(props: SurfaceProps) {
   const spotColor = spotUp == null ? "var(--led-red)" : spotUp ? "var(--pm-green)" : "var(--led-red)";
   const navK = (liveFund.nav / 1000).toFixed(1);
   const statusOn = props.incident.severity !== "normal";
+  const openMarket = (next: MobileMarketView) => {
+    setMarketView(next);
+    setRoom("play");
+  };
   const clock = now?.toLocaleTimeString("en-US", {
     hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles",
   }) ?? "--:--";
@@ -116,10 +121,10 @@ export function MobileShell(props: SurfaceProps) {
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
         {data.warning && (room === "play" || room === "ops") && <div className="market-read-warning" role="status">{data.warning}</div>}
         {room === "play" ? (
-          <MobilePerform props={props} channels={channels} sent={sent} livePnl={livePnl} />
+          <MobilePerform props={props} channels={channels} sent={sent} livePnl={livePnl} marketView={marketView} onMarketViewChange={setMarketView} />
         ) : room === "studio" ? (
           <MobileStudio props={props} channels={channels} livePnl={livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={() => setAddOpen(true)} onOpenSettings={() => setSetOpen(true)} />
-        ) : <MobileDeskRoom room={room} props={props} channels={channels} livePnl={livePnl} onViewChart={() => setRoom("play")} onOpenSettings={() => setSetOpen(true)} />}
+        ) : <MobileDeskRoom room={room} props={props} channels={channels} livePnl={livePnl} onViewMarket={openMarket} onOpenSettings={() => setSetOpen(true)} />}
       </main>
 
       <nav className="m2-padbar" aria-label="rooms">

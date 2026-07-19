@@ -41,6 +41,7 @@ export function ContractDetailView({
 }) {
   const { rows, loading, error } = history;
   const last: OptionQuote | undefined = rows[rows.length - 1];
+  const spread = last?.bid != null && last.ask != null ? Math.max(0, last.ask - last.bid) : null;
   const mids = rows
     .map((r) => r.mid)
     .filter((v): v is number => v != null)
@@ -63,7 +64,7 @@ export function ContractDetailView({
         {!error && !loading && (
           <>
             <div className="cd-charthead">
-              <span>MID</span>
+              <span>OBSERVED MID · NOT EXECUTABLE</span>
               {last && (
                 <span className="num">
                   {last.mid != null ? num2(last.mid) : "·"} ·{" "}
@@ -77,6 +78,7 @@ export function ContractDetailView({
                 <Stat k="Bid" v={num2(last.bid)} />
                 <Stat k="Ask" v={num2(last.ask)} />
                 <Stat k="Mid" v={num2(last.mid)} />
+                <Stat k="Spread" v={num2(spread)} />
                 <Stat k="Last" v={num2(last.last)} />
                 <Stat
                   k="IV"

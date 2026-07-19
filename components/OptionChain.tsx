@@ -34,6 +34,11 @@ export function OptionChain({
   /** Instrument label for the header (SPY/QQQ). */
   symbol?: string;
 }) {
+  const keySelect = (action?: () => void) => (event: React.KeyboardEvent<HTMLTableCellElement>) => {
+    if (!action || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    action();
+  };
   const [folded, toggleFold] = useFold("chain");
   let rows: React.ReactNode;
   let meta = "—";
@@ -103,9 +108,9 @@ export function OptionChain({
         return (
           <tr key={k} className={k === atm ? "atm" : undefined}>
             <td className={cCls} style={{ textAlign: "left" }} onClick={onC}>{num2(c?.delta)}</td>
-            <td className={cCls} onClick={onC}>{num2(c?.mid)}</td>
+            <td className={cCls} onClick={onC} onKeyDown={keySelect(onC)} role={c ? "button" : undefined} tabIndex={c ? 0 : undefined} aria-label={c ? `Inspect ${c.occ_symbol}` : undefined}>{num2(c?.mid)}</td>
             <td className="strike-col">{k.toFixed(0)}</td>
-            <td className={pCls} onClick={onP}>{num2(p?.mid)}</td>
+            <td className={pCls} onClick={onP} onKeyDown={keySelect(onP)} role={p ? "button" : undefined} tabIndex={p ? 0 : undefined} aria-label={p ? `Inspect ${p.occ_symbol}` : undefined}>{num2(p?.mid)}</td>
             <td className={pCls} style={{ textAlign: "right" }} onClick={onP}>{num2(p?.delta)}</td>
           </tr>
         );
@@ -116,9 +121,9 @@ export function OptionChain({
           <td className={cCls} onClick={onC}>{num2(c?.delta)}</td>
           <td className={cCls} onClick={onC}>{num2(c?.bid)}</td>
           <td className={cCls} onClick={onC}>{num2(c?.ask)}</td>
-          <td className={cCls} onClick={onC}>{num2(c?.mid)}</td>
+          <td className={cCls} onClick={onC} onKeyDown={keySelect(onC)} role={c ? "button" : undefined} tabIndex={c ? 0 : undefined} aria-label={c ? `Inspect ${c.occ_symbol}` : undefined}>{num2(c?.mid)}</td>
           <td className="strike-col">{k.toFixed(0)}</td>
-          <td className={pCls} onClick={onP}>{num2(p?.mid)}</td>
+          <td className={pCls} onClick={onP} onKeyDown={keySelect(onP)} role={p ? "button" : undefined} tabIndex={p ? 0 : undefined} aria-label={p ? `Inspect ${p.occ_symbol}` : undefined}>{num2(p?.mid)}</td>
           <td className={pCls} onClick={onP}>{num2(p?.bid)}</td>
           <td className={pCls} onClick={onP}>{num2(p?.ask)}</td>
           <td className={pCls} onClick={onP}>{num2(p?.delta)}</td>
@@ -137,15 +142,15 @@ export function OptionChain({
   return (
     <div className="panel">
       <div className="phead">
-        <span className="t">Live {symbol} Chain</span>
+        <span className="t">Observed {symbol} Chain</span>
         <span className="x">
           {meta}
           {livePricing && (
             <span
-              title="Marks track the live spot between 1-min snapshots (delta-adjusted; spread preserved)."
+              title="Observed quotes are first-order adjusted to the current spot between snapshots; they are not executable prices."
               style={{ color: "var(--green, #2fd573)" }}
             >
-              {" · live"}
+              {" · spot model"}
             </span>
           )}
           {deltasModeled && snapshot.length > 0 && (
