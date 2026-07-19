@@ -10,6 +10,7 @@
 // (NEXT_PUBLIC_* env, present server-side on Vercel).
 
 import { NextResponse } from "next/server";
+import { requireDeskOperator } from "@/lib/auth/serverOperator";
 import { simulateSession, metrics } from "@/engine/backtest";
 import { priceChain } from "@/engine/market";
 import { loadRealSessions } from "@/engine/realsource";
@@ -52,6 +53,9 @@ function monthKey(ms: number): string {
 }
 
 export async function POST(req: Request) {
+  const operator = await requireDeskOperator(req);
+  if (!operator.ok) return operator.response;
+
   let spec: StrategySpec;
   let underlying = "SPY";
   try {

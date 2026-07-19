@@ -8,6 +8,7 @@
 // symbol is allowlisted (no arbitrary upstream fetch) and the cache is per-symbol.
 
 import { NextResponse } from "next/server";
+import { requireDeskOperator } from "@/lib/auth/serverOperator";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ const cache = new Map<string, { price: number; ts: string | null; at: number }>(
 const TTL_MS = 2000;
 
 export async function GET(req: Request) {
+  const operator = await requireDeskOperator(req);
+  if (!operator.ok) return operator.response;
+
   const raw = new URL(req.url).searchParams.get("symbol") ?? "SPY";
   const symbol = raw.toUpperCase();
   if (!ALLOWED.has(symbol)) {

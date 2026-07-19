@@ -5,7 +5,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 export const metadata: Metadata = {
   title: "$EVE — Live Market Monitor",
   description:
-    "Read-only live window over the SEVE paper-trading desk: SPY 0DTE/1DTE option tape.",
+    "Private operator workstation for the SEVE paper-trading desk.",
   manifest: "/manifest.webmanifest",
   // standalone PWA — required for iOS web-push (the manual-exit alerts).
   appleWebApp: { capable: true, title: "SEVE", statusBarStyle: "black-translucent" },

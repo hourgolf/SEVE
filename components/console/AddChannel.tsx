@@ -10,6 +10,7 @@ import {
   type StrategySpec,
 } from "@/lib/desk/strategySpec";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
+import { useAuth } from "@/hooks/useAuth";
 import type { PmColor, StrategistConfig } from "@/lib/desk/types";
 import { PM_COLORS, pmVar } from "@/lib/desk/colors";
 
@@ -52,6 +53,7 @@ export function AddChannel({
   existingSlugs?: string[];
 }) {
   const { canWrite, createChannel } = useDeskWrite();
+  const { session } = useAuth();
   const [md, setMd] = useState("");
   const [compiling, setCompiling] = useState(false);
   const [spec, setSpec] = useState<StrategySpec | null>(null);
@@ -96,7 +98,10 @@ export function AddChannel({
     try {
       const r = await fetch("/api/compile-strategy", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(session?.access_token ? { authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ md }),
       });
       const j = await r.json();
@@ -116,7 +121,10 @@ export function AddChannel({
     try {
       const r = await fetch("/api/backtest-strategy", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(session?.access_token ? { authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ spec, underlying }),
       });
       const j = await r.json();

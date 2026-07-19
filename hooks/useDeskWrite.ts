@@ -69,7 +69,7 @@ export function useDeskWrite() {
   // row so a half-created channel never lingers. Returns the new id on success.
   const createChannel = useCallback(
     async (input: NewChannelInput): Promise<{ ok: boolean; id?: string; error?: string }> => {
-      if (!session) return { ok: false, error: "sign in to add a channel" };
+      if (!session || !operator) return { ok: false, error: "operator authorization required" };
       try {
         const sb = getSupabase();
         const { data, error } = await sb
@@ -110,7 +110,7 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "create failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // DUPLICATE a channel — clone the strategists row + its config under a fresh numeric slug
@@ -121,7 +121,7 @@ export function useDeskWrite() {
   // copied spec_json. The realtime sub re-hydrates the desk → the copy appears on the bench.
   const duplicateChannel = useCallback(
     async (sourceId: string): Promise<{ ok: boolean; slug?: string; name?: string; error?: string }> => {
-      if (!session || !sourceId) return { ok: false, error: "sign in to duplicate" };
+      if (!session || !operator || !sourceId) return { ok: false, error: "operator authorization required" };
       try {
         const sb = getSupabase();
         const { data: src, error: e1 } = await sb
@@ -171,12 +171,12 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "duplicate failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   const renameChannel = useCallback(
     async (id: string, name: string): Promise<{ ok: boolean; error?: string }> => {
-      if (!session || !id || !name.trim()) return { ok: false, error: "sign in / empty name" };
+      if (!session || !operator || !id || !name.trim()) return { ok: false, error: "operator authorization required" };
       try {
         const { error } = await getSupabase()
           .from("strategists")
@@ -187,14 +187,14 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "rename failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // Recolor a channel (accent token). Free-text column, so any of the 12 palette
   // tokens is valid; the desk reducer updates the UI optimistically.
   const setChannelAccent = useCallback(
     async (id: string, accent: PmColor): Promise<{ ok: boolean; error?: string }> => {
-      if (!session || !id) return { ok: false, error: "sign in to recolor" };
+      if (!session || !operator || !id) return { ok: false, error: "operator authorization required" };
       try {
         const { error } = await getSupabase().from("strategists").update({ accent }).eq("id", id);
         return error ? { ok: false, error: error.message } : { ok: true };
@@ -202,7 +202,7 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "recolor failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // Bench ⇄ re-arm a channel (the 86'd shelf). status='draft' = no entries; the
@@ -210,7 +210,7 @@ export function useDeskWrite() {
   // This is the UI form of the cull/rollback SQL — one tap, reversible.
   const setChannelStatus = useCallback(
     async (id: string, status: ChannelStatus): Promise<{ ok: boolean; error?: string }> => {
-      if (!session || !id) return { ok: false, error: "sign in to change status" };
+      if (!session || !operator || !id) return { ok: false, error: "operator authorization required" };
       try {
         const { error } = await getSupabase().from("strategists").update({ status }).eq("id", id);
         return error ? { ok: false, error: error.message } : { ok: true };
@@ -218,7 +218,7 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "status change failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // Flip a channel's EXECUTOR (cron ⇄ stream). The minute cron and the Railway stream
@@ -226,7 +226,7 @@ export function useDeskWrite() {
   // flip. This is the live migration control, now one auth-gated tap from the strip.
   const setChannelExecutor = useCallback(
     async (id: string, executor: "cron" | "stream"): Promise<{ ok: boolean; error?: string }> => {
-      if (!session || !id) return { ok: false, error: "sign in to change executor" };
+      if (!session || !operator || !id) return { ok: false, error: "operator authorization required" };
       try {
         const { error } = await getSupabase().from("strategists").update({ executor }).eq("id", id);
         return error ? { ok: false, error: error.message } : { ok: true };
@@ -234,7 +234,7 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "executor change failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // Delete a channel. A channel with trade history (signals/positions FK) can't
@@ -243,7 +243,7 @@ export function useDeskWrite() {
   // leaves the desk. Returns how it was removed.
   const deleteChannel = useCallback(
     async (id: string): Promise<{ ok: boolean; mode?: "deleted" | "disabled"; error?: string }> => {
-      if (!session || !id) return { ok: false, error: "sign in to remove a channel" };
+      if (!session || !operator || !id) return { ok: false, error: "operator authorization required" };
       try {
         const sb = getSupabase();
         const { error } = await sb.from("strategists").delete().eq("id", id);
@@ -261,7 +261,7 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "delete failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // Manual close: market-sell an open position via the server route (which holds
@@ -269,7 +269,7 @@ export function useDeskWrite() {
   // verify the operator is signed in. Returns the booked realized P&L on success.
   const closePosition = useCallback(
     async (id: string): Promise<{ ok: boolean; error?: string; realized?: number }> => {
-      if (!session) return { ok: false, error: "sign in to close" };
+      if (!session || !operator) return { ok: false, error: "operator authorization required" };
       try {
         const r = await fetch("/api/close-position", {
           method: "POST",
@@ -282,7 +282,7 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "close failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // Post-close tag (close-reason chips, 31_close_reason.sql): refine an operator
@@ -290,7 +290,7 @@ export function useDeskWrite() {
   // so failures are soft (the row just stays 'manual').
   const tagClose = useCallback(
     async (id: string, tag: string): Promise<{ ok: boolean; error?: string }> => {
-      if (!session) return { ok: false, error: "sign in to tag" };
+      if (!session || !operator) return { ok: false, error: "operator authorization required" };
       try {
         const r = await fetch("/api/close-position", {
           method: "POST",
@@ -303,14 +303,14 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "tag failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   // Persist a new channel display order: write sort_order = position for each id.
   // The desk reducer already reordered optimistically; this makes it durable.
   const reorderChannels = useCallback(
     async (orderedIds: string[]): Promise<{ ok: boolean; error?: string }> => {
-      if (!session) return { ok: false, error: "sign in to reorder" };
+      if (!session || !operator) return { ok: false, error: "operator authorization required" };
       try {
         const sb = getSupabase();
         const results = await Promise.all(
@@ -322,7 +322,7 @@ export function useDeskWrite() {
         return { ok: false, error: e instanceof Error ? e.message : "reorder failed" };
       }
     },
-    [session]
+    [session, operator]
   );
 
   return { canWrite, persistConfig, persistFund, createChannel, duplicateChannel, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, deleteChannel, closePosition, tagClose, reorderChannels };

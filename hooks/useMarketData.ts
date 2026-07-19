@@ -15,6 +15,7 @@ import type {
   UnderlyingBar,
 } from "@/lib/types";
 import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
+import { useAuth } from "@/hooks/useAuth";
 
 // CHAIN (option_quotes) safety-net poll. The chain is the heavy read (200 full
 // rows) and was the egress that blew the quota, so it runs slow; the bars poll +
@@ -152,6 +153,7 @@ const INITIAL: MarketData = {
  * mix on the chart.
  */
 export function useMarketData(symbol: string = "SPY"): MarketData {
+  const { session } = useAuth();
   const [data, setData] = useState<MarketData>(INITIAL);
   // Avoid setState after unmount when a slow poll resolves late.
   const mounted = useRef(true);
@@ -434,7 +436,10 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     // route returns null — e.g. Alpaca keys not set in the deploy env.
     async function pollSpot() {
       try {
-        const res = await fetch(`/api/spot?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" });
+        const res = await fetch(`/api/spot?symbol=${encodeURIComponent(symbol)}`, {
+          cache: "no-store",
+          headers: session?.access_token ? { authorization: `Bearer ${session.access_token}` } : {},
+        });
         if (!res.ok) return;
         const j = (await res.json()) as { price?: number | null };
         if (typeof j.price === "number" && live()) {
@@ -498,7 +503,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         }
       }
     };
-  }, [symbol]);
+  }, [symbol, session?.access_token]);
 
   return data;
 }

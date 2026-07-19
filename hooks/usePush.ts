@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 // Web-push enable flow for the manual-exit alerts. Registers /sw.js, requests
 // permission (must be a user gesture — and on iOS the app must be an installed PWA),
@@ -19,6 +20,7 @@ function urlB64ToUint8(base64: string): BufferSource {
 export type PushState = "loading" | "unsupported" | "noconfig" | "off" | "denied" | "working" | "on" | "error";
 
 export function usePush() {
+  const { session, operator } = useAuth();
   const [state, setState] = useState<PushState>("loading");
   const supported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
@@ -45,10 +47,15 @@ export function usePush() {
       if (perm !== "granted") { setState(perm === "denied" ? "denied" : "off"); return; }
       let sub = await reg.pushManager.getSubscription();
       if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(VAPID) });
-      const r = await fetch("/api/push-subscribe", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(sub) });
+      if (!session?.access_token || !operator) { setState("error"); return; }
+      const r = await fetch("/api/push-subscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify(sub),
+      });
       setState(r.ok ? "on" : "error");
     } catch { setState("error"); }
-  }, [supported]);
+  }, [supported, session, operator]);
 
   return { state, enable };
 }

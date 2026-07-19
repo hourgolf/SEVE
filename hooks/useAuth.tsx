@@ -10,17 +10,21 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabaseClient";
-import { isDeskOperator } from "@/lib/auth/operator";
+import { isDeskOperator, SEVE_OPERATOR_EMAIL } from "@/lib/auth/operator";
 
 interface AuthValue {
   session: Session | null;
   email: string | null;
   operator: boolean;
   ready: boolean;
-  /** Sends a magic link + 6-digit code to `email`. Returns an error or null. */
-  signIn: (email: string) => Promise<string | null>;
-  /** Verifies the emailed 6-digit code (no redirect — robust on mobile). */
-  verifyCode: (email: string, token: string) => Promise<string | null>;
+  /** Password sign-in for the single provisioned operator account. */
+  signInWithPassword: (password: string) => Promise<string | null>;
+  /** Sends a recovery magic link + 6-digit code to the provisioned operator. */
+  requestRecoveryCode: () => Promise<string | null>;
+  /** Verifies the operator recovery code (no redirect — robust on mobile). */
+  verifyRecoveryCode: (token: string) => Promise<string | null>;
+  /** Sets or rotates the password on the currently authenticated operator. */
+  updatePassword: (password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
 
@@ -54,11 +58,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: session?.user?.email ?? null,
       operator: isDeskOperator(session?.user),
       ready,
-      async signIn(email: string) {
+      async signInWithPassword(password: string) {
+        if (!password) return "password required";
+        try {
+          const sb = getSupabase();
+          const { error } = await sb.auth.signInWithPassword({
+            email: SEVE_OPERATOR_EMAIL,
+            password,
+          });
+          return error ? error.message : null;
+        } catch (e) {
+          return e instanceof Error ? e.message : "Sign-in failed";
+        }
+      },
+      async requestRecoveryCode() {
         try {
           const sb = getSupabase();
           const { error } = await sb.auth.signInWithOtp({
-            email,
+            email: SEVE_OPERATOR_EMAIL,
             // single-route app now — "/console" was merged into "/" (the old
             // route 404'd the magic link and bounced sign-in in a loop).
             // This is an operator console, not a public sign-up surface. Only
@@ -70,20 +87,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return e instanceof Error ? e.message : "Sign-in failed";
         }
       },
-      async verifyCode(email: string, token: string) {
+      async verifyRecoveryCode(token: string) {
         // No redirect / no PKCE verifier — Supabase validates the emailed code
         // server-side and returns a session right here. This is why it works on
         // mobile where the magic link opens in a different browser context.
         try {
           const sb = getSupabase();
           const { error } = await sb.auth.verifyOtp({
-            email: email.trim(),
+            email: SEVE_OPERATOR_EMAIL,
             token: token.trim(),
             type: "email",
           });
           return error ? error.message : null;
         } catch (e) {
           return e instanceof Error ? e.message : "Verification failed";
+        }
+      },
+      async updatePassword(password: string) {
+        if (!isDeskOperator(session?.user)) return "operator authorization required";
+        if (password.length < 12) return "use at least 12 characters";
+        try {
+          const { error } = await getSupabase().auth.updateUser({ password });
+          return error ? error.message : null;
+        } catch (e) {
+          return e instanceof Error ? e.message : "Password update failed";
         }
       },
       async signOut() {

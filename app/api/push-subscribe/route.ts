@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
+import { requireDeskOperator } from "@/lib/auth/serverOperator";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT ?? "mailto:desk@seve.local";
 
 export async function POST(req: Request) {
+  const operator = await requireDeskOperator(req);
+  if (!operator.ok) return operator.response;
   if (!SB_URL || !SB_SERVICE) return NextResponse.json({ ok: false, error: "supabase env missing" }, { status: 503 });
 
   let sub: { endpoint?: string } | undefined;

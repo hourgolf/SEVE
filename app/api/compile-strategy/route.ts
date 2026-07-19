@@ -4,6 +4,7 @@
 // the client falls back to a frontmatter-only preview.
 
 import { NextResponse } from "next/server";
+import { requireDeskOperator } from "@/lib/auth/serverOperator";
 import { normalizeSpec, type StrategySpec } from "@/lib/desk/strategySpec";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +88,9 @@ Rules:
 - Be faithful to the thesis; do not add rules it doesn't state. Always call emit_spec exactly once.`;
 
 export async function POST(req: Request) {
+  const operator = await requireDeskOperator(req);
+  if (!operator.ok) return operator.response;
+
   const key = process.env.ANTHROPIC_API_KEY;
   let md = "";
   try { md = (await req.json())?.md ?? ""; } catch { /* */ }

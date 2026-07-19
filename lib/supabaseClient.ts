@@ -1,8 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// Read-only browser client. Both values are public by design:
+// Browser client. Both values are public identifiers by design:
 //   - URL is just the project endpoint.
-//   - anon (publishable) key is safe to ship; RLS read policies gate access.
+//   - anon (publishable) key is safe to ship; private operator RLS gates data.
 // The service-role key must NEVER be referenced in this app.
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -29,7 +29,7 @@ export function getSupabase(): SupabaseClient {
       // survive the redirect + page reload — persistSession:false lost the
       // verifier, so the code exchange failed and sign-in bounced back logged
       // out every time. Persist + detect-in-URL fixes the loop. Anon reads are
-      // unaffected (no session = anon, RLS still gates everything).
+      // rejected until a verified operator session is present.
       auth: {
         persistSession: true,
         autoRefreshToken: true,

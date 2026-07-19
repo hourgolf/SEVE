@@ -73,6 +73,7 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 .ws-auth-panel>header button { width:28px; height:28px; border:1px solid #777166; border-radius:4px; background:#d7d1c3; color:#44423c; font:800 18px/1 var(--sh-mono); cursor:pointer; }
 .ws-auth-panel>.auth { margin-top:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .ws-auth-panel .auth-form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; width:100%; }
+.ws-auth-panel .auth-operator-label { align-self:center; color:#5d5a52; font:800 8px/1.2 var(--sh-mono); letter-spacing:.09em; }
 .ws-auth-panel .auth-form input { min-width:0; height:38px; border:2px solid #44443e; border-radius:5px; background:#0e1414; color:#eef4ed; font:700 13px/1 var(--sh-mono); }
 .ws-auth-panel .auth-btn { min-height:38px; padding:0 14px; border:1px solid #4c6f52; border-radius:5px; color:#84e18f; background:linear-gradient(180deg,#203528,#112018); font:800 10px/1 var(--sh-mono); letter-spacing:.07em; cursor:pointer; }
 .ws-auth-panel .auth-link { grid-column:1/3; justify-self:start; }.ws-auth-panel .auth-msg { width:100%; color:#3e693f; font:700 10px/1.35 var(--sh-mono); }.ws-auth-panel .auth-email { color:#2f322c; }

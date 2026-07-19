@@ -36,6 +36,8 @@ import { useContractHistory } from "@/hooks/useContractHistory";
 import type { Room } from "@/components/surfaceTypes";
 import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 import { deriveOpsReadiness } from "@/lib/ops/readiness";
+import { useAuth } from "@/hooks/useAuth";
+import { AuthControl } from "@/components/AuthControl";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
 // tab-shell. The data-seam pattern means neither layout re-subscribes.
@@ -243,6 +245,26 @@ function PageInner() {
 }
 
 export default function Page() {
+  const { ready, operator } = useAuth();
+
+  // The desk is private, not a public dashboard with privileged buttons. Do not
+  // mount any data hook/subscription until Supabase has verified the immutable
+  // operator claim on the restored or newly-created session.
+  if (!ready) {
+    return <main className="operator-gate"><div className="operator-gate__status">VERIFYING OPERATOR SESSION…</div></main>;
+  }
+  if (!operator) {
+    return (
+      <main className="operator-gate">
+        <section className="operator-gate__panel" aria-label="private operator access">
+          <div className="operator-gate__brand"><b>SEVE DESK</b><span>PRIVATE PAPER-TRADING WORKSTATION</span></div>
+          <p>Operator authentication is required before market, position, strategy, or system data is loaded.</p>
+          <AuthControl defaultOpen />
+        </section>
+      </main>
+    );
+  }
+
   return (
     <ShellProvider>
       <PageInner />
