@@ -97,6 +97,7 @@
     "phase1k-holdout-report-selftest": "tsx lib/research/phase1kHoldoutReport.selftest.ts",
     "phase1k-d-report": "tsx scripts/phase1k-d-report.ts",
     "held-ledger-integrity-selftest": "tsx lib/research/heldLedgerIntegrity.selftest.ts",
+    "page-all-selftest": "tsx engine/pageAll.selftest.ts",
     "audit:held-ledger": "tsx scripts/audit-held-ledger.ts",
     "held-trade-path-rebuild-selftest": "tsx lib/research/heldTradePathRebuild.selftest.ts",
     "rebuild:held-trade-path-audit": "tsx scripts/rebuild-held-trade-path-audit.ts",
