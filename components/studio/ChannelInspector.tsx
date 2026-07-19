@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { Knob } from "@/components/console/hw/Knob";
+import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftPanel";
 import { useDeskDispatch } from "@/hooks/useDeskState";
+import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import { strikeLabel } from "@/lib/studio/channelDecision";
@@ -22,7 +24,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
 }) {
   const dispatch = useDeskDispatch();
   const { persistConfig, setChannelStatus, duplicateChannel, deleteChannel } = write;
-  const canWrite = write.canWrite && passport?.release.state !== "verified";
+  const draft = useChannelConfigDraft(strategist, passport);
   const [confirmDel, setConfirmDel] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -30,7 +32,11 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
 
   if (!strategist) return <aside className="inspector mixer-inspector"><div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">select a fleet row</span></div><div className="insp-empty">no channel selected</div></aside>;
 
-  const { id, slug, underlying, color, status, config } = strategist;
+  const { id, slug, underlying, color, status, config: databaseConfig } = strategist;
+  const config = draft.proposed ?? databaseConfig;
+  const sealed = passport?.release.state === "verified";
+  const canPersist = write.canWrite && !sealed;
+  const canTune = draft.active || canPersist;
   const dte = config.entry_dte ?? 0;
   const eventPolicy = config.event_policy ?? "standdown";
   const ustop = config.underlying_stop_pct ?? 0;
@@ -40,8 +46,8 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
   const giveback = GIVEBACK_NOTE[slug];
 
-  const stageCfg = (patch: Partial<StrategistConfig>) => dispatch({ type: "SET_CONFIG", slug, patch });
-  const commitCfg = (patch: Partial<StrategistConfig>) => persistConfig(id, patch);
+  const stageCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : dispatch({ type: "SET_CONFIG", slug, patch });
+  const commitCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : persistConfig(id, patch);
   const setCfg = (patch: Partial<StrategistConfig>) => { stageCfg(patch); commitCfg(patch); };
   const toggleBench = () => {
     const next = status === "armed" ? "draft" : "armed";
@@ -58,10 +64,10 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
     if (r.ok) { setConfirmDel(false); dispatch({ type: "REMOVE", slug }); }
     else { setConfirmDel(false); setErr(r.error ?? "remove failed"); }
   };
-  const seg = <T extends string | number>(cur: T, opts: { v: T; label: string }[], onPick: (v: T) => void) => <span className="iseg">{opts.map((o) => <button key={String(o.v)} type="button" className={o.v === cur ? "on" : ""} disabled={!canWrite} onClick={() => canWrite && onPick(o.v)}>{o.label}</button>)}</span>;
-  const step = (label: string, value: string, dec: () => void, inc: () => void) => <span className="istep"><button type="button" disabled={!canWrite} onClick={dec} aria-label={`decrease ${label}`}>−</button><b>{value}</b><button type="button" disabled={!canWrite} onClick={inc} aria-label={`increase ${label}`}>+</button></span>;
+  const seg = <T extends string | number>(cur: T, opts: { v: T; label: string }[], onPick: (v: T) => void) => <span className="iseg">{opts.map((o) => <button key={String(o.v)} type="button" className={o.v === cur ? "on" : ""} disabled={!canTune} onClick={() => canTune && onPick(o.v)}>{o.label}</button>)}</span>;
+  const step = (label: string, value: string, dec: () => void, inc: () => void) => <span className="istep"><button type="button" disabled={!canTune} onClick={dec} aria-label={`decrease ${label}`}>−</button><b>{value}</b><button type="button" disabled={!canTune} onClick={inc} aria-label={`increase ${label}`}>+</button></span>;
   const knob = (value: number, min: number, max: number, stepBy: number, label: string, format: (v: number) => string, key: keyof StrategistConfig, cap?: string, writable = true) => (
-    <Knob value={value} min={min} max={max} step={stepBy} size="sm" label={label} format={format} disabled={!canWrite || !writable}
+    <Knob value={value} min={min} max={max} step={stepBy} size="sm" label={label} format={format} disabled={!canTune || (!writable && !draft.active)}
       color="var(--pm)" cap={cap} onChange={(next) => stageCfg({ [key]: next })} onCommit={(next) => commitCfg({ [key]: next })} />
   );
 
@@ -93,20 +99,20 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
           </> : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
         </div></section>
 
-        <section className="mix-bank mix-bank--entry"><header>DATABASE ENTRY CONFIG · FUTURE EPOCH</header><div className="mix-bank-body">
+        <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
           <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
           <div className="ctl"><span className="cl">strike offset</span><span className="ival" title="effective configured strike offset">{strikeLabel(config.strike_offset ?? 0)}</span></div>
           <div className="ctl"><span className="cl">event policy</span>{seg(eventPolicy, [{ v: "standdown", label: "STAND-DOWN" }, { v: "ignore", label: "TRADE-THRU" }], (v) => setCfg({ event_policy: v }))}</div>
         </div></section>
 
-        <section className="mix-bank mix-bank--gain"><header>DATABASE KNOBS · NOT ACTIVE RC5</header><div className="knob-bank">
+        <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : "DATABASE KNOBS · NOT ACTIVE RC5"}</header><div className="knob-bank">
           {knob(config.capital_pct, 100, 2500, 50, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
           {knob(config.daily_stop_usd, 100, 5000, 50, "ENTRY LATCH", (v) => `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
           {knob(premStop, 10, 90, 5, "PREM STOP · POLICY", (v) => `−${v}%`, "premium_stop_pct", "#25272a", false)}
           {knob(config.max_contracts, 1, 60, 1, "HARD CAP", (v) => `${v} ct`, "max_contracts")}
         </div></section>
 
-        <section className="mix-bank"><header>EXIT SHAPE</header><div className="mix-bank-body two-col">
+        <section className="mix-bank"><header>{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : "EXIT SHAPE"}</header><div className="mix-bank-body two-col">
           <div className="ctl"><span className="cl">u-stop %{ustopOff && <span className="uoff">uS·off</span>}</span>{step("u-stop", ustop === 0 ? "off" : `${ustop.toFixed(2)}%`, () => setCfg({ underlying_stop_pct: Math.max(0, +(ustop - 0.05).toFixed(2)) }), () => setCfg({ underlying_stop_pct: Math.min(2, +(ustop + 0.05).toFixed(2)) }))}</div>
           <div className="ctl"><span className="cl">take profit</span>{step("take profit", config.take_profit_pct ? `+${config.take_profit_pct}%` : "ride", () => setCfg({ take_profit_pct: Math.max(0, (config.take_profit_pct ?? 0) - 5) }), () => setCfg({ take_profit_pct: Math.min(300, (config.take_profit_pct ?? 0) + 5) }))}</div>
           {pyrEligible ? <div className="ctl"><span className="cl">pyramid</span>{seg(pyr > 0 ? "on" : "off", [{ v: "off", label: "OFF" }, { v: "on", label: "+3 · CAP12" }], (v) => setCfg(v === "on" ? { pyramid_adds: 3, max_contracts: Math.max(config.max_contracts, 12) } : { pyramid_adds: 0 }))}</div> : <div className="ctl"><span className="cl">pyramid</span><span className="ival muted">n/a</span></div>}
@@ -114,17 +120,18 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
         </div></section>
 
         <section className="mix-bank mix-bank--posture"><header>CHANNEL POSTURE</header><div className="posture-pads">
-          <button type="button" className={config.muted ? "on mute" : ""} disabled={!canWrite} onClick={() => setCfg({ muted: !config.muted })}><i />MUTE<small>{config.muted ? "held" : "ready"}</small></button>
-          <button type="button" className={config.boosted ? "on boost" : ""} disabled={!canWrite} onClick={() => setCfg({ boosted: !config.boosted })}><i />BOOST<small>{config.boosted ? "2× today" : "normal"}</small></button>
+          <button type="button" className={databaseConfig.muted ? "on mute" : ""} disabled={!canPersist} onClick={() => setCfg({ muted: !databaseConfig.muted })}><i />MUTE<small>{databaseConfig.muted ? "held" : "ready"}</small></button>
+          <button type="button" className={databaseConfig.boosted ? "on boost" : ""} disabled={!canPersist} onClick={() => setCfg({ boosted: !databaseConfig.boosted })}><i />BOOST<small>{databaseConfig.boosted ? "2× today" : "normal"}</small></button>
         </div></section>
+        <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} />
       </div>
 
       <div className="insp-foot">
-        <button type="button" className="life" disabled={!canWrite} onClick={toggleBench}>{status === "armed" ? "BENCH" : "RE-ARM"}</button>
-        <button type="button" className="life" disabled={!canWrite || busy} onClick={doDuplicate}>{busy ? "…" : "DUPLICATE"}</button>
-        {!confirmDel ? <button type="button" className="life del" disabled={!canWrite} onClick={() => setConfirmDel(true)}>DELETE</button> : <><button type="button" className="life del" onClick={doDelete}>CONFIRM</button><button type="button" className="life" onClick={() => setConfirmDel(false)}>CANCEL</button></>}
+        <button type="button" className="life" disabled={!canPersist} onClick={toggleBench}>{status === "armed" ? "BENCH" : "RE-ARM"}</button>
+        <button type="button" className="life" disabled={!canPersist || busy} onClick={doDuplicate}>{busy ? "…" : "DUPLICATE"}</button>
+        {!confirmDel ? <button type="button" className="life del" disabled={!canPersist} onClick={() => setConfirmDel(true)}>DELETE</button> : <><button type="button" className="life del" onClick={doDelete}>CONFIRM</button><button type="button" className="life" onClick={() => setConfirmDel(false)}>CANCEL</button></>}
       </div>
-      {passport?.release.state === "verified" && <div className="insp-note sealed">SEALED RELEASE · CONTROLS ARE READ-ONLY · FORK A NEW CONFIGURATION EPOCH TO TUNE</div>}
+      {sealed && <div className="insp-note sealed">SEALED RELEASE · ACTIVE CONTROLS ARE READ-ONLY · LOCAL DRAFTS REQUIRE REVIEW + A NEW SEALED RELEASE</div>}
       {(msg || err) && <div className={`insp-note${err ? " err" : ""}`}>{err ?? msg}</div>}
     </aside>
   );

@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 import { FiresPill, TradeShapeBar } from "@/components/console/ChannelStrip";
+import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftPanel";
 import { useDeskDispatch } from "@/hooks/useDeskState";
+import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState, StrategistConfig } from "@/lib/desk/types";
@@ -37,11 +39,15 @@ export function MobileRackRow({
 }) {
   const dispatch = useDeskDispatch();
   const { persistConfig } = write;
-  const canWrite = write.canWrite && passport?.release.state !== "verified";
   const faderRef = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
   const [writeError, setWriteError] = useState<string | null>(null);
-  const { id, slug, color, status, config } = strategist;
+  const draft = useChannelConfigDraft(strategist, passport);
+  const { id, slug, color, status, config: databaseConfig } = strategist;
+  const config = draft.proposed ?? databaseConfig;
+  const sealed = passport?.release.state === "verified";
+  const canPersist = write.canWrite && !sealed;
+  const canTune = draft.active || canPersist;
 
   const tp = config.take_profit_pct ?? 0;
   const premStop = config.premium_stop_pct ?? 50;
@@ -52,14 +58,18 @@ export function MobileRackRow({
   const pm = pmVar(color);
 
   const persistPatch = (patch: Partial<StrategistConfig>) => {
-    if (!canWrite) return;
+    if (draft.active) { draft.update(patch); return; }
+    if (!canPersist) return;
     setWriteError(null);
     void persistConfig(id, patch).then((result) => {
       if (!result.ok) setWriteError(result.error ?? "config write failed");
     });
   };
+  const stagePatch = (patch: Partial<StrategistConfig>) => draft.active
+    ? draft.update(patch)
+    : dispatch({ type: "SET_CONFIG", slug, patch });
   const setCfg = (patch: Partial<StrategistConfig>) => {
-    dispatch({ type: "SET_CONFIG", slug, patch });
+    stagePatch(patch);
     persistPatch(patch);
   };
   // LOCK/RIDE writes the matched pair (giveback doctrine) — verbatim from ChannelRackRow.
@@ -83,7 +93,7 @@ export function MobileRackRow({
   const faderMove = (clientX: number, commit: boolean) => {
     const v = valueFromX(clientX);
     if (v === config.capital_pct && !commit) return;
-    dispatch({ type: "SET_CONFIG", slug, patch: { capital_pct: v } });
+    stagePatch({ capital_pct: v });
     if (commit) persistPatch({ capital_pct: v });
   };
 
@@ -100,7 +110,7 @@ export function MobileRackRow({
     if (v !== tp) setCfg({ take_profit_pct: v });
   };
 
-  const databaseTag = config.muted ? { txt: "DB MUTED", cls: "muted" }
+  const databaseTag = databaseConfig.muted ? { txt: "DB MUTED", cls: "muted" }
     : status === "draft" ? { txt: "BENCH", cls: "darkch" }
     : status === "disabled" ? { txt: "OFF", cls: "darkch" }
     : null;
@@ -144,33 +154,34 @@ export function MobileRackRow({
               <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
               {passport?.rootPolicy && <><span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span><span><small>IDENTITY</small><code>{passport.rootPolicy.configurationEpochId.slice(0, 10)}…</code></span></>}
             </div>
-            {passport?.release.state === "verified" && <footer>SEALED READ-ONLY · DATABASE KNOBS BELOW ARE NOT ACTIVE RC5</footer>}
+            {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
           </div>
-          <div className="m2-fireslbl"><span className="fl">{passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE − / + OR TAP VALUE"}</span><span className="ln" /></div>
+          <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} compact />
+          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE − / + OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
               <div className="m2-exit-stepper">
-                <button type="button" disabled={!canWrite || premStop <= 10} onClick={() => stepPremiumStop(-5)} aria-label="decrease premium stop by 5 percent">−</button>
+                <button type="button" disabled={!canTune || premStop <= 10} onClick={() => stepPremiumStop(-5)} aria-label="decrease premium stop by 5 percent">−</button>
                 <FiresPill
                   value={premStop} display={`−${premStop}%`}
                   onCommit={(v) => setCfg({ premium_stop_pct: v })}
                   min={10} max={90} className="m2-fp-val"
-                  canWrite={canWrite} label="premium stop percent" title="premium stop % — the binding downside"
+                  canWrite={canTune} label="premium stop percent" title="premium stop % — the binding downside"
                 />
-                <button type="button" disabled={!canWrite || premStop >= 90} onClick={() => stepPremiumStop(5)} aria-label="increase premium stop by 5 percent">+</button>
+                <button type="button" disabled={!canTune || premStop >= 90} onClick={() => stepPremiumStop(5)} aria-label="increase premium stop by 5 percent">+</button>
               </div>
               <span className="m2-fp-cap">prem stop</span>
             </div>
             <div className={`m2-fp ${tp > 0 ? "take" : "ride"}`}>
               <div className="m2-exit-stepper">
-                <button type="button" disabled={!canWrite || tp <= 0} onClick={() => stepTakeProfit(-5)} aria-label="decrease take profit by 5 percent">−</button>
+                <button type="button" disabled={!canTune || tp <= 0} onClick={() => stepTakeProfit(-5)} aria-label="decrease take profit by 5 percent">−</button>
                 <FiresPill
                   value={tp} display={tp > 0 ? `+${tp}%` : "ride"}
                   onCommit={(v) => setCfg({ take_profit_pct: v })}
                   min={0} max={300} className="m2-fp-val"
-                  canWrite={canWrite} label="take profit percent" title="take-profit % (0 = ride)"
+                  canWrite={canTune} label="take profit percent" title="take-profit % (0 = ride)"
                 />
-                <button type="button" disabled={!canWrite || tp >= 300} onClick={() => stepTakeProfit(5)} aria-label="increase take profit by 5 percent">+</button>
+                <button type="button" disabled={!canTune || tp >= 300} onClick={() => stepTakeProfit(5)} aria-label="increase take profit by 5 percent">+</button>
               </div>
               <span className="m2-fp-cap">{tp > 0 ? "take" : "no take"}</span>
             </div>
@@ -178,7 +189,7 @@ export function MobileRackRow({
           </div>
 
           <div className="m2-lr" role="group" aria-label="exit mode">
-            {canWrite ? (
+            {canTune ? (
               <>
                 <button type="button" className={`m2-lrbtn lock${ride ? "" : " on"}`} onClick={applyLock}
                   title="LOCK — take profit + a tight −30% stop">LOCK</button>
@@ -192,8 +203,8 @@ export function MobileRackRow({
 
           <div className="m2-shape">
             <TradeShapeBar
-              tp={tp} premStop={premStop} canWrite={canWrite}
-              onChange={(patch) => dispatch({ type: "SET_CONFIG", slug, patch })}
+              tp={tp} premStop={premStop} canWrite={canTune}
+              onChange={stagePatch}
               onCommit={persistPatch}
             />
           </div>
@@ -202,16 +213,16 @@ export function MobileRackRow({
             <div className="m2-stopday">
               <span className="m2-dial-lbl">stop/day</span>
               <div className="m2-stepper">
-                <button type="button" disabled={!canWrite} onClick={() => stepStop(-250)} aria-label="decrease stop per day">−</button>
+                <button type="button" disabled={!canTune} onClick={() => stepStop(-250)} aria-label="decrease stop per day">−</button>
                 <b className="num">{usd0(config.daily_stop_usd)}</b>
-                <button type="button" disabled={!canWrite} onClick={() => stepStop(250)} aria-label="increase stop per day">+</button>
+                <button type="button" disabled={!canTune} onClick={() => stepStop(250)} aria-label="increase stop per day">+</button>
               </div>
             </div>
             <div className="m2-riskwrap">
               <div
                 ref={faderRef}
                 className="m2-hfader"
-                onPointerDown={(e) => { if (!canWrite) return; e.preventDefault(); (e.currentTarget as Element).setPointerCapture(e.pointerId); dragging.current = true; faderMove(e.clientX, false); }}
+                onPointerDown={(e) => { if (!canTune) return; e.preventDefault(); (e.currentTarget as Element).setPointerCapture(e.pointerId); dragging.current = true; faderMove(e.clientX, false); }}
                 onPointerMove={(e) => { if (dragging.current) faderMove(e.clientX, false); }}
                 onPointerUp={(e) => { if (dragging.current) { dragging.current = false; faderMove(e.clientX, true); try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch { /* */ } } }}
               >
@@ -224,11 +235,11 @@ export function MobileRackRow({
           </div>
 
           <div className="m2-padrow">
-            <button type="button" className={`m2-bigpad${config.muted ? " lit-m" : ""}`} disabled={!canWrite}
-              onClick={() => { dispatch({ type: "TOGGLE_MUTE", slug }); persistPatch({ muted: !config.muted }); }}>
-              {config.muted ? "MUTED" : "MUTE"}
+            <button type="button" className={`m2-bigpad${databaseConfig.muted ? " lit-m" : ""}`} disabled={!canPersist}
+              onClick={() => { dispatch({ type: "TOGGLE_MUTE", slug }); persistPatch({ muted: !databaseConfig.muted }); }}>
+              {databaseConfig.muted ? "MUTED" : "MUTE"}
             </button>
-            <button type="button" className={`m2-bigpad${boosted ? " lit-b" : ""}`} disabled={!canWrite}
+            <button type="button" className={`m2-bigpad${boosted ? " lit-b" : ""}`} disabled={!canPersist}
               onClick={() => { const next = !boosted; dispatch({ type: "SET_CONFIG", slug, patch: { boosted: next } }); persistPatch({ boosted: next }); }}>
               {boosted ? "BOOST 2×" : "BOOST"}
             </button>
