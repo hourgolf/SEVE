@@ -12,6 +12,32 @@ function Item({ item }: { item: ReadinessItem }) {
   </div>;
 }
 
+/** A compact, shared broker-vs-desk claim. It is derived at the page seam and
+ * deliberately does not infer broker truth from the local position list. */
+export function BrokerReconciliationStrip({ model, compact = false }: { model: OpsReadinessModel; compact?: boolean }) {
+  const item = model.evidence.find((row) => row.id === "reconciliation") ?? {
+    id: "reconciliation", label: "BROKER RECONCILIATION", state: "CHECKING", tone: "neutral" as const,
+    detail: "current broker evidence has not been derived",
+  };
+  return <div className={`opsr-broker-strip ${item.tone}${compact ? " compact" : ""}`} role="status" data-readiness={item.id}>
+    <i aria-hidden="true" />
+    <span><small>{item.label}</small><b>{item.state}</b><em>{item.detail}</em></span>
+    {item.observedAt && <time>{ptTime(item.observedAt)}</time>}
+  </div>;
+}
+
+/** Candidate → fill → exact capture → manager arms → close chains, shared by
+ * Ops and Review. Empty is a truthful waiting state, not proof of a failure. */
+export function PositionEvidenceChains({ model, compact = false }: { model: OpsReadinessModel; compact?: boolean }) {
+  return <section className={`opsr-drill${compact ? " compact" : ""}`} aria-label="Position evidence chains">
+    <header><b>POSITION EVIDENCE CHAINS</b><em>candidate → fill → capture → arms → close</em></header>
+    {model.chains.length === 0 ? <div className="opsr-chain-empty">no RC5 filled position yet · evidence chain is not due</div> : model.chains.map((chain) => <details key={chain.positionId} className={chain.tone}>
+      <summary><i aria-hidden="true" /><span><b>{chain.channelSlug}</b><small>{chain.occSymbol}</small></span><em>{chain.opportunityId}</em></summary>
+      <div>{chain.steps.map((step) => <Item key={step.id} item={step} />)}</div>
+    </details>)}
+  </section>;
+}
+
 /** Skin-neutral readiness content. Desktop and mobile receive the same model
  * from the page seam; this component performs no reads or health derivation. */
 export function OpsReadinessPanel({ model, compact = false }: { model: OpsReadinessModel; compact?: boolean }) {
@@ -23,13 +49,7 @@ export function OpsReadinessPanel({ model, compact = false }: { model: OpsReadin
       <section><header><b>CONFIGURED AT BOOT</b><em>receipt claims</em></header><div className="opsr-items">{model.configuration.map((item) => <Item key={item.id} item={item} />)}</div></section>
       <section><header><b>SESSION EVIDENCE</b><em>observed receipts</em></header><div className="opsr-items">{model.evidence.map((item) => <Item key={item.id} item={item} />)}</div></section>
     </div>
-    {model.chains.length > 0 && <section className="opsr-drill" aria-label="Position evidence chains">
-      <header><b>POSITION EVIDENCE CHAINS</b><em>candidate → fill → capture → arms → close</em></header>
-      {model.chains.map((chain) => <details key={chain.positionId} className={chain.tone}>
-        <summary><i aria-hidden="true" /><span><b>{chain.channelSlug}</b><small>{chain.occSymbol}</small></span><em>{chain.opportunityId}</em></summary>
-        <div>{chain.steps.map((step) => <Item key={step.id} item={step} />)}</div>
-      </details>)}
-    </section>}
+    {model.chains.length > 0 && <PositionEvidenceChains model={model} compact={compact} />}
     {model.brokerReceipt && <details className={`opsr-broker ${model.brokerReceipt.state}`}>
       <summary><b>BROKER BOOK DETAIL</b><em>{model.brokerReceipt.accounts.length} accounts · {model.brokerReceipt.mismatches.length} mismatches</em></summary>
       <div className="opsr-broker-accounts">{model.brokerReceipt.accounts.map((account) => <span key={account.accountId} className={account.reachable ? account.mismatchCount ? "drift" : "ok" : "partial"}>

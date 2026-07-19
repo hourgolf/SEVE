@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
-import { deriveEventTapeStatus, deriveTapeRows, eventCategory, filterTapeRows } from "./eventTape";
+import { deriveAfterActionStatus, deriveEventTapeStatus, deriveTapeRows, eventCategory, filterTapeRows } from "./eventTape";
 import type { MarketEvent } from "../types";
+import type { OpsEvidenceChain, OpsReadinessModel, ReadinessTone } from "../ops/readiness";
 
 const event = (id: string, level: MarketEvent["level"], message: string): MarketEvent => ({
   id, level, message, strategist_id: null, meta: null, created_at: `2026-07-17T20:00:0${id}Z`,
@@ -27,4 +28,21 @@ assert.equal(deriveEventTapeStatus({ ...emptyHealth, lastSuccessAt: "2026-07-17T
 assert.equal(deriveEventTapeStatus({ ...emptyHealth, lastError: "timeout" }, [event("1", "INFO", "x")]).tone, "red");
 assert.equal(deriveEventTapeStatus({ ...emptyHealth, lastSuccessAt: "2026-07-17T20:00:00Z" }, [event("1", "INFO", "x")]).tone, "green");
 
-console.log("event-tape-selftest: 13/13 passed");
+const chain = (tone: ReadinessTone, closeState: string): OpsEvidenceChain => ({
+  positionId: `position-${tone}`, channelSlug: "pb-ride", occSymbol: "SPY260720C00755000", opportunityId: `opp-${tone}`, tone,
+  steps: [{ id: "close", label: "CLOSE", state: closeState, detail: "fixture", tone }],
+});
+const model = (chains: OpsEvidenceChain[]): OpsReadinessModel => ({
+  sessionDateEt: "2026-07-20", phase: "session",
+  summary: { id: "summary", label: "DAY 1 EVIDENCE", state: "READY", detail: "fixture", tone: "green" },
+  configuration: [], evidence: [], chains, brokerReceipt: null,
+  counts: { candidates: chains.length, suppressed: 0, fills: chains.length, capturedPositions: 0, managerArms: 0, expectedManagerArms: chains.length * 8 },
+});
+
+assert.equal(deriveAfterActionStatus(model([])).label, "WAITING FOR FIRST FILL");
+assert.equal(deriveAfterActionStatus(model([chain("red", "OPEN")])).tone, "red");
+assert.equal(deriveAfterActionStatus(model([chain("yellow", "OPEN")])).tone, "yellow");
+assert.equal(deriveAfterActionStatus(model([chain("green", "BOOKED")])).label, "CHAINS COMPLETE");
+assert.equal(deriveAfterActionStatus(model([chain("neutral", "OPEN")])).label, "EVIDENCE IN PROGRESS");
+
+console.log("event-tape-selftest: 18/18 passed");

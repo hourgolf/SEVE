@@ -1,5 +1,6 @@
 import type { MarketEvent, EventLevel } from "@/lib/types";
 import type { MarketReadHealth } from "@/hooks/useMarketData";
+import type { OpsReadinessModel } from "@/lib/ops/readiness";
 
 export type EventTapeCategory = "execution" | "risk" | "data" | "sentinel" | "system";
 export type EventTapeFilter = "all" | EventTapeCategory;
@@ -14,6 +15,12 @@ export interface EventTapeStatus {
   label: string;
   detail: string;
   latestAt: string;
+}
+
+export interface AfterActionStatus {
+  tone: "green" | "yellow" | "red" | "neutral";
+  label: string;
+  detail: string;
 }
 
 const DATA_RE = /market-ingest|archive:|option[_ -]?quotes|underlying[_ -]?bars|quotes?\b|cbbo|databento/i;
@@ -68,4 +75,23 @@ export function deriveEventTapeStatus(
     detail: `${events.length} newest row${events.length === 1 ? "" : "s"} retained by this view`,
     latestAt,
   };
+}
+
+/** Status of linked position evidence only. This must not be used as a worker
+ * liveness claim; it says whether evidence currently due for filled positions
+ * is complete. */
+export function deriveAfterActionStatus(model: OpsReadinessModel): AfterActionStatus {
+  if (model.chains.length === 0) return {
+    tone: "neutral", label: "WAITING FOR FIRST FILL",
+    detail: "no RC5 filled position yet · an evidence chain is not due",
+  };
+  const red = model.chains.filter((chain) => chain.tone === "red").length;
+  const yellow = model.chains.filter((chain) => chain.tone === "yellow").length;
+  const open = model.chains.filter((chain) => chain.steps.some((step) => step.id === "close" && step.state === "OPEN")).length;
+  if (red) return { tone: "red", label: "EVIDENCE BLOCKED", detail: `${red}/${model.chains.length} chains contain a red evidence state · ${open} still open` };
+  if (yellow) return { tone: "yellow", label: "EVIDENCE ATTENTION", detail: `${yellow}/${model.chains.length} chains need review · ${open} still open` };
+  if (model.chains.every((chain) => chain.tone === "green")) return {
+    tone: "green", label: "CHAINS COMPLETE", detail: `${model.chains.length}/${model.chains.length} filled-position chains complete`,
+  };
+  return { tone: "neutral", label: "EVIDENCE IN PROGRESS", detail: `${model.chains.length} linked chain${model.chains.length === 1 ? "" : "s"} · ${open} still open` };
 }

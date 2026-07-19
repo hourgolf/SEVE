@@ -13,7 +13,9 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveRecentExits } from "@/lib/perform/derivePositionsWorkspace";
 import { SentinelReceiptStrip } from "@/components/perform/SentinelWorkspace";
 import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
-import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
+import { BrokerReconciliationStrip, OpsReadinessPanel, PositionEvidenceChains } from "@/components/ops/OpsReadinessPanel";
+import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
+import { deriveTapeRows } from "@/lib/perform/eventTape";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -40,6 +42,7 @@ function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: (
 
   return <>
     <div className="m2-book-nav"><span><b>LIVE BOOK</b><small>positions first · exposure second</small></span>{onViewChart && <button type="button" onClick={onViewChart}>VIEW CHART</button>}</div>
+    <BrokerReconciliationStrip model={props.opsReadiness} compact />
     <MobilePositions props={props} strategists={props.view.desk.strategists} compact />
     <div className="m2-desk-hero">
       <span><small>OPEN</small><b>{feed.positions.length}</b></span>
@@ -112,6 +115,7 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
   const equity = feed.equityCurve.map((point) => point.equity);
   const brief = sentinel.brief;
   const judge = sentinel.judge;
+  const tape = useMemo(() => deriveTapeRows(props.data.events).slice(0, 12), [props.data.events]);
 
   return <>
     <SentinelReceiptStrip sentinel={sentinel} compact />
@@ -138,6 +142,19 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
             <small>{trades}t · pk {peak ?? "—"}% · win {win ?? "—"}%</small></div>;
         })}
       </div>
+    </Section>
+
+    <Section title="EVENT TAPE" meta="retained operational view">
+      <TapeReadStrip health={props.data.readHealth.events} events={props.data.events} compact />
+      <div className="m2-review-tape">
+        {tape.length === 0 ? <div className="m2-desk-empty">no retained events</div> : tape.map((event) => <div key={event.id} data-kind={event.category}>
+          <time>{timeOfDay(event.created_at)}</time><b>{event.level}</b><span>{event.message}</span>{event.count > 1 && <em>×{event.count}</em>}
+        </div>)}
+      </div>
+    </Section>
+
+    <Section title="TRADE EVIDENCE" meta="candidate → close">
+      <PositionEvidenceChains model={props.opsReadiness} compact />
     </Section>
 
     <Section title="NIGHTLY READ" meta={sentinel.date ? `scan ${sentinel.date.slice(5)}` : sentinel.state}>
@@ -206,7 +223,7 @@ function BuildView({ props, channels, onAddChannel }: { props: SurfaceProps; cha
       {bench.length === 0 ? <div className="m2-desk-empty">bench empty</div> : <div className="m2-bench-list">{bench.map((channel) => <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><span><b>{channel.slug}</b><small>{channel.regime} · {channel.underlying}</small></span><em>{channel.status.toUpperCase()}</em></div>)}</div>}
     </Section>
     <Section title="MOBILE PARITY" meta="deliberate scope">
-      <div className="m2-parity-note">Live book, today review, nightly read, preflight, day books, settings, and channel creation are available here. Deep historical autopsy and shadow-book forensics remain desktop review tools until their data is lifted to the shared seam.</div>
+      <div className="m2-parity-note">Live book, broker reconciliation, retained event tape, linked trade evidence, nightly read, preflight, day books, settings, and channel creation are available here. Deep historical autopsy and shadow-book forensics remain desktop review tools until their data is lifted to the shared seam.</div>
     </Section>
   </>;
 }

@@ -13,6 +13,7 @@ import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
 import { usePositionCloseFlow } from "@/hooks/usePositionCloseFlow";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorkspace";
+import type { ReadinessItem } from "@/lib/ops/readiness";
 
 // PERFORM right rail (slice S2): POSITIONS (row-per-leg with pk glow ring +
 // ratchet/LOCK-RIDE/giveback badges) · SENTINEL (verdict chip + one-line digest
@@ -45,7 +46,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 }
 
 export function PositionsSection({
-  positions, strategists, liveMarks, peaks, write, targeted,
+  positions, strategists, liveMarks, peaks, write, targeted, reconciliation,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -53,6 +54,7 @@ export function PositionsSection({
   peaks: Record<string, number>; // P5 slice 1 — from the page seam (usePositionPeaks lifted)
   write: SurfaceProps["write"];
   targeted: boolean;
+  reconciliation?: ReadinessItem;
 }) {
   const closeFlow = usePositionCloseFlow(write);
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
@@ -68,7 +70,9 @@ export function PositionsSection({
       <div className="pf-head">
         <span className="t">POSITIONS · {positions.length} OPEN</span>
         <span className="grow" />
-        <span className="pf-basis" title="Desk marks are operational estimates; broker-flat reconciliation is not available here.">desk marks · unreconciled</span>
+        <span className={`pf-basis${reconciliation ? ` reconciliation-${reconciliation.tone}` : ""}`} title={reconciliation?.detail ?? "Desk marks are operational estimates; broker reconciliation is shown in the full Book workspace."}>
+          {reconciliation ? reconciliation.state.toLowerCase() : "desk marks · broker check in book"}
+        </span>
         {positions.length > 0 && <span className={`x num ${total < 0 ? "neg" : "up"}`}>Σ {signedUsd(total)}</span>}
       </div>
       <div className="pfp-body">

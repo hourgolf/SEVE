@@ -5,6 +5,7 @@ import { PositionsSection } from "@/components/perform/PerformRail";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import { derivePositionsWorkspace } from "@/lib/perform/derivePositionsWorkspace";
+import { BrokerReconciliationStrip } from "@/components/ops/OpsReadinessPanel";
 
 const money = (value: number) => Math.abs(value) >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
 const rootOf = (occ: string) => occ.match(/^([A-Z]+)\d/)?.[1] ?? "?";
@@ -69,22 +70,27 @@ function RecentExits({ surface }: { surface: SurfaceProps }) {
         </article>;
       })}
     </div>
-    <footer>per-channel fill-net attribution · broker reconciliation unavailable · peak fields are era-dependent</footer>
+    <footer>per-channel fill-net attribution · broker state shown in the shared receipt · peak fields are era-dependent</footer>
   </section>;
 }
 
 /** Full-stage position book. The guarded close workflow stays in the existing
  * shared open-book leaf; aggregate and exit context are read-only seam data. */
 export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }) {
-  return <section className="pf-positions-workspace" data-flat={surface.feed.positions.length === 0 || undefined} data-nav-target="true" tabIndex={-1}>
-    <PositionsSection
-      positions={surface.feed.positions}
-      strategists={surface.view.desk.strategists}
-      liveMarks={surface.liveMarks}
-      peaks={surface.positionPeaks}
-      write={surface.write}
-      targeted
-    />
-    <aside className="pf-positions-context"><AggregateExposure surface={surface} /><RecentExits surface={surface} /></aside>
+  const reconciliation = surface.opsReadiness.evidence.find((item) => item.id === "reconciliation");
+  return <section className="pf-positions-shell" data-nav-target="true" tabIndex={-1}>
+    <BrokerReconciliationStrip model={surface.opsReadiness} />
+    <div className="pf-positions-workspace" data-flat={surface.feed.positions.length === 0 || undefined}>
+      <PositionsSection
+        positions={surface.feed.positions}
+        strategists={surface.view.desk.strategists}
+        liveMarks={surface.liveMarks}
+        peaks={surface.positionPeaks}
+        write={surface.write}
+        targeted
+        reconciliation={reconciliation}
+      />
+      <aside className="pf-positions-context"><AggregateExposure surface={surface} /><RecentExits surface={surface} /></aside>
+    </div>
   </section>;
 }

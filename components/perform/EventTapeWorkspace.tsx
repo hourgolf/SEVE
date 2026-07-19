@@ -7,9 +7,11 @@ import { pmVar } from "@/lib/desk/colors";
 import { timeOfDay } from "@/lib/format";
 import type { MarketEvent } from "@/lib/types";
 import {
-  deriveEventTapeStatus, deriveTapeRows, filterTapeRows,
+  deriveAfterActionStatus, deriveEventTapeStatus, deriveTapeRows, filterTapeRows,
   type EventTapeFilter, type TapeRow,
 } from "@/lib/perform/eventTape";
+import type { OpsReadinessModel } from "@/lib/ops/readiness";
+import { PositionEvidenceChains } from "@/components/ops/OpsReadinessPanel";
 
 const FILTERS: { id: EventTapeFilter; label: string }[] = [
   { id: "all", label: "ALL" }, { id: "execution", label: "EXECUTION" },
@@ -38,27 +40,29 @@ export function TapeReadStrip({ health, events, compact = false }: {
   </div>;
 }
 
-export function EventTapeWorkspace({ events, health, strategists }: {
-  events: MarketEvent[]; health: MarketReadHealth; strategists: StrategistState[];
+export function EventTapeWorkspace({ events, health, strategists, readiness }: {
+  events: MarketEvent[]; health: MarketReadHealth; strategists: StrategistState[]; readiness: OpsReadinessModel;
 }) {
+  const [view, setView] = useState<"live" | "evidence">("live");
   const [filter, setFilter] = useState<EventTapeFilter>("all");
   const rows = useMemo(() => deriveTapeRows(events), [events]);
   const visible = useMemo(() => filterTapeRows(rows, filter), [rows, filter]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map(({ id }) => [id, filterTapeRows(rows, id).length])), [rows]);
+  const evidenceStatus = deriveAfterActionStatus(readiness);
 
   return <section className="etw" id="perform-tape" tabIndex={-1} aria-label="Event Tape evidence workspace">
-    <header className="etw-head"><span><b>EVENT TAPE</b><small>newest-first operational ledger · retained view, not a complete session archive</small></span><em>ADJACENT REPEATS COLLAPSED</em></header>
-    <TapeReadStrip health={health} events={events} />
+    <header className="etw-head"><span><b>REVIEW</b><small>live operational tape + linked after-action evidence</small></span><nav aria-label="review view"><button type="button" className={view === "live" ? "on" : ""} onClick={() => setView("live")}>LIVE TAPE</button><button type="button" className={view === "evidence" ? "on" : ""} onClick={() => setView("evidence")}>TRADE EVIDENCE</button></nav></header>
+    {view === "live" ? <TapeReadStrip health={health} events={events} /> : <div className={`tape-read-strip evidence ${evidenceStatus.tone}`} role="status"><i /><span><b>{evidenceStatus.label}</b><small>{evidenceStatus.detail}</small></span></div>}
     <div className="etw-tools">
-      <nav aria-label="event tape filter">{FILTERS.map((item) => <button type="button" key={item.id} className={filter === item.id ? "on" : ""} onClick={() => setFilter(item.id)}>{item.label}<span>{counts[item.id] ?? 0}</span></button>)}</nav>
-      <p>Supabase <code>events</code> · newest {events.length}/14 rows queried · filters apply only to this retained window</p>
+      {view === "live" ? <><nav aria-label="event tape filter">{FILTERS.map((item) => <button type="button" key={item.id} className={filter === item.id ? "on" : ""} onClick={() => setFilter(item.id)}>{item.label}<span>{counts[item.id] ?? 0}</span></button>)}</nav><p>Supabase <code>events</code> · newest {events.length}/14 rows queried · filters apply only to this retained window</p></>
+        : <p>linked by RC5 opportunity and position identity · configured evidence claims remain in Ops</p>}
     </div>
-    <div className="etw-list">
+    {view === "live" ? <div className="etw-list">
       {visible.length === 0 ? <div className="etw-empty">no {filter === "all" ? "" : `${filter} `}events in the retained window</div> : visible.map((event) => <article key={event.id} data-kind={event.category}>
         <time>{timeOfDay(event.created_at)}</time><span className="etw-level">{event.level}</span><span className="etw-category">{event.category}</span>
         <EventMessage event={event} strategists={strategists} />
         {event.count > 1 && <strong title={`${event.count} adjacent identical events`}>×{event.count}</strong>}
       </article>)}
-    </div>
+    </div> : <div className="etw-evidence"><PositionEvidenceChains model={readiness} /></div>}
   </section>;
 }

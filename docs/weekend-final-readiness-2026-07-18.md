@@ -5,10 +5,10 @@ authorize a strategy/configuration change, database migration, order, worker dep
 
 ## Current verdict
 
-The sealed Monday RC5 trading/evidence runtime is ready. The remaining pre-session work is operational:
-finish the authenticated desktop/mobile production drill, merge the local evidence-read hardening, and run
-one final read-only rehearsal. Monday's first candidate/fill evidence is expected to remain yellow until the
-cohort actually begins.
+The sealed Monday RC5 trading/evidence runtime is ready. The authenticated desktop/mobile production drill,
+evidence-read hardening merge, and final read-only rehearsal are complete on `main@243f06f`. Monday's first
+candidate/fill evidence is expected to remain yellow until the cohort actually begins; absence of a candidate
+or fill is not itself a fault.
 
 | Gate | State | Current evidence |
 | --- | --- | --- |
@@ -19,8 +19,9 @@ cohort actually begins.
 | Sentinel | Green | Latest receipt identifies session 2026-07-17 and target/`forDate` 2026-07-20. |
 | Local automation | Green | `com.seve.morning` and `com.seve.capture` are loaded, use the canonical repo, and last exited zero. Required Supabase/R2 credentials are present. |
 | Friday evidence | Green | 66/66 closed trades reconstructed; all three account coverage checks clean; raw archives, held-ledger integrity, reconciliation, Sentinel, and final day report complete. |
-| Close-pass resilience | Green on review branch | The first Saturday best-effort close pass hit a transient fetch rejection, then the same capture run completed the report. The review branch adds opt-in bounded timeouts and fresh-builder retries for transient forensic reads only. Worker reads retain existing behavior. |
-| Authenticated UI drill | Pending | The production desk is correctly private and exposes no data before operator authentication. Signed-in desktop/mobile navigation, evidence, and console checks remain the final browser gate. |
+| Close-pass resilience | Green on main | The first Saturday best-effort close pass hit a transient fetch rejection, then the same capture run completed the report. Merged hardening adds opt-in bounded timeouts and fresh-builder retries for transient forensic reads only. Worker reads retain existing behavior. |
+| Authenticated UI drill | Green | Signed-in production desktop/mobile navigation, private evidence, responsive scrolling, Legacy Rooms isolation, and console checks passed. The books were flat, so the natural-position close drill remains due during the paper cohort. |
+| Final read-only rehearsal | Green | On July 19 the canonical preopen tool observed paper host, fund not halted, worker `stream-2026-07-17g` fresh at 16s, exact RC5 release/hash, Sentinel 07-17→07-20, three distinct flat broker/desk accounts, 6/6 roots, 12/60 capture, and eight manager arms. |
 | First RC5 evidence | Expected yellow | No July 20 candidate, fill, capture, manager, collision, or close receipt can exist before the session. |
 | Local storage | Yellow, non-blocking | Approximately 111 GiB free at the last audit. Adequate for Monday, but the host volume is 94% used and should be cleaned or expanded after the session. |
 
@@ -44,17 +45,17 @@ operator/manual-close/position-flow 63 checks, Perform/Studio 34, Ops/Sentinel/T
 
 ## Before Monday open
 
-1. Finish the authenticated production drill on desktop and 390×844 mobile:
+1. **Complete:** authenticated production drill on desktop and 390×844 mobile:
    - switch through Dashboard/Markets/Positions/Channels/Sentinel/Event Tape/Ops;
    - verify all private reads succeed and no console errors appear;
    - verify account switching, chart access, recent exits, channel passports, Sentinel provenance,
      broker reconciliation, and Day 1 evidence are present;
    - verify mobile PLAY/STUDIO/BOOK/REVIEW/OPS are independently scrollable with no horizontal overflow;
    - do not change a sealed channel setting or fabricate an open position for the drill.
-2. Review and merge the evidence-read hardening. This is a web/local-tooling change only; it does not require
-   a Railway deployment or worker version bump.
-3. Run the final read-only preopen rehearsal from latest `origin/main` and require the exact RC5 release/hash,
-   six roots, flat books, fresh process/run ledger, correct Sentinel target, 12/60 capture, and eight managers.
+2. **Complete:** evidence-read hardening merged in PR #7. It was a web/local-tooling change only and did not
+   require a Railway deployment or worker version bump.
+3. **Complete:** final read-only preopen rehearsal from latest `origin/main`; exact RC5 release/hash, six roots,
+   flat books, fresh process/run ledger, correct Sentinel target, 12/60 capture, and eight managers all passed.
 4. Confirm Railway remains on the already-verified `stream-2026-07-17g`. Do not redeploy merely to rehearse.
 5. Leave all strategy configuration frozen through Monday's session.
 
@@ -126,6 +127,20 @@ Verify, without tuning:
    controls/passports, linked live/after-action evidence, and useful Ops/Sentinel surfaces on both form factors.
 5. Preserve Legacy Rooms until every required operator job has a tested native home; then resume 909 density,
    cream/blackout balance, typography, and alternate-skin work over the shared functional seam.
+
+## Post-merge dashboard truth slice
+
+Prepared after the readiness merge without changing the worker, subscriptions, strategy configuration,
+Supabase, R2, or production:
+
+- desktop and mobile Book/Positions consume the same seam-derived broker reconciliation receipt used by Ops;
+  the position book no longer asserts that reconciliation is unavailable when a receipt exists;
+- desktop Review switches between the retained operational event tape and linked
+  candidate → fill → capture → manager → close chains;
+- mobile Review now contains the same retained tape health and linked trade-evidence chains instead of only
+  aggregate attribution and the nightly interpretation;
+- empty evidence chains remain neutral and explicitly not due until an RC5 fill; yellow/red states describe
+  evidence completeness and never claim worker death.
 
 ## Deferred, not forgotten
 
