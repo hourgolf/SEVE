@@ -154,6 +154,60 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 .ws909[data-skin="cream"][data-mode="perform"] .pfc-basis { color:#777269; }
 .ws909[data-skin="cream"][data-mode="perform"] .pfc-pnl.flat { color:#5f5d55; }
 
+/* BLACKOUT is a complete material change, not a cream chassis surrounding dark
+   content. Dark glass remains glass; the workstation body, navigation and deck
+   become graphite hardware while preserving the same geometry and controls. */
+.ws909[data-skin="blackout"] {
+  --metal:#1a1d1e; --metal-2:#101213; --metal-hi:#35393a; --metal-edge:#050606;
+  color:#dddcd5;
+  background:
+    radial-gradient(900px 420px at 50% -12%,rgba(255,255,255,.055),transparent 62%),
+    repeating-linear-gradient(90deg,rgba(255,255,255,.014) 0 1px,rgba(0,0,0,.04) 1px 3px),
+    linear-gradient(180deg,#202326,#0d0f10);
+  border-color:#050606;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -7px 12px rgba(0,0,0,.6),0 7px 20px rgba(0,0,0,.65);
+}
+.ws909[data-skin="blackout"] .ws-brand { border-color:rgba(255,255,255,.11); }
+.ws909[data-skin="blackout"] .ws-brand strong { color:#e5e3da; }
+.ws909[data-skin="blackout"] .ws-brand span,
+.ws909[data-skin="blackout"] .ws-left-label,
+.ws909[data-skin="blackout"] .ws-system,
+.ws909[data-skin="blackout"] .ws-deck>section>small,
+.ws909[data-skin="blackout"] .ws-dial,
+.ws909[data-skin="blackout"] .ws-dial em { color:#929791; }
+.ws909[data-skin="blackout"] .ws-utility { border-color:rgba(255,255,255,.11); }
+.ws909[data-skin="blackout"] .ws-utility button:not(.op) {
+  border-color:#080909; background:linear-gradient(180deg,#363a3a,#171919); color:#c6c8c2;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 2px 0 #050606;
+}
+.ws909[data-skin="blackout"] .ws-left {
+  border-color:#343738; background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(0,0,0,.18));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 5px rgba(0,0,0,.45);
+}
+.ws909[data-skin="blackout"] .ws-left-label span,
+.ws909[data-skin="blackout"] .ws-system { border-color:#343738; }
+.ws909[data-skin="blackout"] .ws-left button { color:#b8bcb6; }
+.ws909[data-skin="blackout"] .ws-left button>b { color:#aeb2ad; }
+.ws909[data-skin="blackout"] .ws-left button.on>b { color:#7ee88b; }
+.ws909[data-skin="blackout"] .ws-left .ws-auth-launch>b { color:#e0a23f; }
+.ws909[data-skin="blackout"] .ws-system small { color:#d4d5cf; }
+.ws909[data-skin="blackout"] .ws-deck {
+  border-color:#343738; background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(0,0,0,.2));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+}
+.ws909[data-skin="blackout"] .ws-deck>section { border-color:#3b3e3e; }
+.ws909[data-skin="blackout"] .ws-sequencer i {
+  border-color:#070808; background:linear-gradient(180deg,#3c403e,#191b1b);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 3px 1px #050606;
+}
+.ws909[data-skin="blackout"] .ws-sequencer i span { color:#9ea39d; }
+.ws909[data-skin="blackout"] .ws-density { border-color:#080909; background:#252828; color:#c7c9c3; }
+.ws909[data-skin="blackout"] .ws-screw { box-shadow:0 1px 0 rgba(255,255,255,.2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ws909,.m2-app,.ws-mode-tabs button,.m2-modepad { transition:none !important; }
+}
+
 @media (max-width: 1180px) {
   .ws909 { grid-template-rows:44px 56px minmax(0,1fr) 94px; padding:7px; gap:4px; }
   .ws-top { grid-template-columns:120px 190px minmax(220px,1fr) 110px; padding:0 12px; gap:6px; }.ws-brand strong{font-size:14px}.ws-alert small{display:none}.ws-utility{gap:5px}.ws-telemetry{grid-template-columns:160px repeat(5,minmax(70px,1fr)) 110px}.ws-telemetry>.ws-metric:nth-of-type(6),.ws-telemetry>.ws-metric:nth-of-type(7){display:none}.ws-main{grid-template-columns:105px minmax(0,1fr)}.ws-left button{grid-template-columns:29px 1fr;gap:3px}.ws-left button>b{font-size:7px}.ws-system{display:none}.ws-deck{grid-template-columns:145px 145px minmax(240px,1fr) 210px 105px;padding:6px 14px 3px;gap:5px}.ws-deck>section{padding-inline:4px}.ws-sequencer>div{gap:2px}.ws-controls .ws-dial:nth-child(3){display:none}.shell-root.ws909[data-mode="perform"] .perform{grid-template-rows:auto minmax(0,1fr) 104px}.shell-root.ws909[data-mode="studio"] .studio{grid-template-rows:minmax(220px,.9fr) minmax(150px,.62fr) 42px}

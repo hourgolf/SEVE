@@ -38,7 +38,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: max(3px, env(safe-area-inset-top)) 5px 0;
+  padding: max(2px, env(safe-area-inset-top)) 5px 0;
   background: radial-gradient(1200px 600px at 50% -12%, rgba(255, 255, 255, .035), transparent 60%), #0a0b0c;
   color: #c9c7be;
   font-family: var(--sans);
@@ -71,8 +71,8 @@
 /* ================= vitals header (chrome — flips) ======================== */
 .m2-head {
   flex: 0 0 auto;
-  display: flex; flex-direction: column; gap: 7px;
-  padding: 8px 10px 7px;
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 7px 9px 6px;
   background: var(--chrome-grad);
   border: 1px solid var(--chrome-edge); border-radius: 7px 7px 3px 3px;
   box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 2px 4px rgba(0,0,0,.18);
@@ -90,7 +90,7 @@
 .m2-status em { font-size:6.7px; color:#8da290; }
 .m2-status--checking { color:#e0a23f; border-color:#6f5c2c; }.m2-status--checking>i { background:#e0a23f; box-shadow:0 0 6px #e0a23f; }
 .m2-status--warning,.m2-status--high,.m2-status--critical { color:#ff6a40; border-color:#84331f; background:linear-gradient(180deg,#35170f,#1e0c08); }.m2-status--warning>i,.m2-status--high>i,.m2-status--critical>i{background:#ff5936;box-shadow:0 0 6px #ff5936}
-.m2-head-meta { min-height:24px; display:flex; align-items:center; gap:6px; }
+.m2-head-meta { min-height:22px; display:flex; align-items:center; gap:6px; }
 .m2-pill {
   font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: .1em;
   padding: 4px 7px; border-radius: 6px; border: 1px solid var(--sep); color: var(--chrome-soft); white-space: nowrap;
@@ -114,8 +114,8 @@
 /* shrink the reused LedDisplay 7-seg down to a phone-header size (the desktop 26×47
    digit is far too wide for three windows at 375px) */
 .m2-head-r2 .led { gap: 3px; }
-.m2-head-r2 .led-window { gap: 2px; padding: 5px 7px; border-radius: 6px; }
-.m2-head-r2 .seven-seg { width: 13px; height: 24px; }
+.m2-head-r2 .led-window { gap: 2px; padding: 4px 6px; border-radius: 6px; }
+.m2-head-r2 .seven-seg { width: 12px; height: 22px; }
 .m2-head-r2 .led-unit { font-size: 13px; margin-left: 2px; }
 .m2-head-r2 .led-caption { font-size: 8px; letter-spacing: .8px; color: var(--chrome-soft); }
 
@@ -442,7 +442,7 @@
 }
 .m2-app[data-skin="cream"][data-mode="studio"] .m2-rr-slug { color:color-mix(in srgb,var(--pm) 62%,#292925); }
 .m2-app[data-skin="cream"][data-mode="studio"] .m2-rack { background:linear-gradient(180deg,#ddd8ca,#c9c3b4); }
-.m2-app[data-skin="cream"][data-mode="studio"] .m2-rrow { border-bottom:1px solid rgba(60,52,30,.14); }
+.m2-app[data-skin="cream"][data-mode="studio"] .m2-rrow { border-bottom:1px solid rgba(60,52,30,.2); }
 .m2-app[data-skin="cream"][data-mode="studio"] .m2-insp { border-color:rgba(60,52,30,.16); background:rgba(255,255,255,.12); }
 .m2-app[data-skin="cream"][data-mode="studio"] .m2-fp { background:rgba(255,255,255,.24); }
 .m2-app[data-skin="cream"][data-mode="studio"] .m2-lrbtn { background:rgba(255,255,255,.22); }
@@ -474,6 +474,19 @@
 .m2-app[data-skin="cream"][data-mode="perform"] .m2-chick-slug { color:#2e2e2a; }
 .m2-app[data-skin="cream"][data-mode="perform"] .m2-chick-pw { color:#6d6960; }
 .m2-app[data-skin="cream"][data-mode="perform"] .m2-chick-pw b { color:color-mix(in srgb,var(--pm) 70%,#282824); }
+
+/* Short phones need the operator surface, not an oversized instrument header.
+   Keep every vital, but compress the decorative LED chrome and let the chart +
+   first book row claim the recovered height. */
+@media (max-height: 740px) {
+  .m2-head { gap:4px; padding-block:5px; }
+  .m2-brand small,.m2-head-r2 .led-caption { display:none; }
+  .m2-head-r2 .seven-seg { width:10px; height:19px; }
+  .m2-head-r2 .led-window { padding:3px 5px; }
+  .m2-status { height:31px; }
+  .m2-cog { width:31px; height:31px; }
+  .m2-modepad { min-height:45px; }
+}
 
 /* ================= tab bar (chrome — flips) ============================= */
 .m2-padbar {

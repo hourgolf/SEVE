@@ -60,7 +60,7 @@ export function MobileStudio({
       </section>
 
       <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" onClick={canWrite ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD CHANNEL" : "SIGN IN TO TUNE"}</button></div>
-      <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · EDIT STOP / TAKE / RISK" : "READ ONLY · SIGN IN TO CHANGE CONTROLS"}</span><span className="ln" /></div>
+      <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · REVIEW CONTROLS · FORK DRAFT TO EDIT SEALED ROOTS" : "READ ONLY · SIGN IN TO CHANGE CONTROLS"}</span><span className="ln" /></div>
       {channels.length === 0 ? (
         <div className="m2-ghost">no channels in this account</div>
       ) : channels.map((s) => (

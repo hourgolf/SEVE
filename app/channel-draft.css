@@ -34,3 +34,15 @@
 .channel-draft-panel.compact > footer span { width: 100%; margin: 0; }
 .channel-draft-launch.compact { align-items: stretch; flex-direction: column; }
 .channel-draft-launch.compact button { width: 100%; min-height: 44px; }
+
+/* On the phone this is the permission boundary for the controls immediately
+   below it. Give the fork action the visual weight of a primary hardware pad;
+   otherwise the enabled steppers look broken while the sealed release is doing
+   exactly what it should. */
+.m2-app .channel-draft-launch.compact { border-width: 2px; }
+.m2-app .channel-draft-launch.compact button:not(:disabled) {
+  border-color: color-mix(in srgb, var(--amber, #d79b31) 62%, #111);
+  background: linear-gradient(180deg, #f0b652, #bd7f20);
+  color: #1b1003;
+  box-shadow: 0 2px 0 #735019, 0 0 10px color-mix(in srgb, var(--amber, #d79b31) 28%, transparent);
+}

@@ -747,7 +747,17 @@ export function IntradayChart({
       <div className="pbody">
         <div className="chart-wrap chart-wrap--lw" style={{ position: "relative" }}>
           {/* the exit-timing instrument — sized up (operator: the chart was undersized for how much it's read) */}
-          <div ref={elRef} style={{ height: fill ? "100%" : (mobile ? (showMacd ? 420 : 380) : (showMacd ? 500 : 420)), width: "100%" }} />
+          <div
+            ref={elRef}
+            style={{
+              height: fill
+                ? "100%"
+                : mobile
+                  ? (showMacd ? "clamp(320px, 46dvh, 410px)" : "clamp(260px, 38dvh, 340px)")
+                  : (showMacd ? 500 : 420),
+              width: "100%",
+            }}
+          />
           {ledSpot != null && (
             <div className="chart-led">
               <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption={`${symbol.toLowerCase()} $`} color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"} />
