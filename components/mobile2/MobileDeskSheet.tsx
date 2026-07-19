@@ -37,7 +37,7 @@ function Section({ title, meta, children }: { title: string; meta?: string; chil
   return <section className="m2-desk-section"><header><b>{title}</b>{meta && <span>{meta}</span>}</header><div className="m2-desk-body">{children}</div></section>;
 }
 
-function BookView({ props, onViewMarket }: { props: SurfaceProps; onViewMarket?: (view: "chart" | "chain") => void }) {
+export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; onViewMarket?: (view: "chart" | "chain") => void }) {
   const { feed, liveMarks } = props;
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
   const recentExits = useMemo(() => deriveRecentExits(feed.recentTrades), [feed.recentTrades]);
@@ -96,7 +96,7 @@ function BookView({ props, onViewMarket }: { props: SurfaceProps; onViewMarket?:
   </>;
 }
 
-function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channels: StrategistState[]; livePnl: Record<string, ChannelPnl> }) {
+export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceProps; channels: StrategistState[]; livePnl: Record<string, ChannelPnl> }) {
   const [mode, setMode] = useState<MobileReviewMode>(DEFAULT_MOBILE_REVIEW_MODE);
   const { feed, liveFund, sentinel } = props;
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug] })).sort((a, b) => Math.abs(b.pnl?.dayPnl ?? 0) - Math.abs(a.pnl?.dayPnl ?? 0));
@@ -168,7 +168,7 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
   </>;
 }
 
-function OpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; channels: StrategistState[]; onOpenSettings: () => void }) {
+export function MobileOpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; channels: StrategistState[]; onOpenSettings: () => void }) {
   const { data, ops, workerRuns, incident, liveFund, feed, livePnl } = props;
   const active = channels.filter((channel) => channel.status === "armed" && !channel.config.muted);
   const risk = active.reduce((sum, channel) => sum + (channel.config.capital_pct || 0), 0);
@@ -233,9 +233,9 @@ export function MobileDeskSheet({ open, onClose, props, channels, livePnl, onOpe
         {TABS.map((item) => <button type="button" key={item.id} className={tab === item.id ? "on" : ""} onClick={() => setTab(item.id)} aria-pressed={tab === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
       </nav>
       <div className="m2-desk-scroll">
-        {tab === "book" && <BookView props={props} />}
-        {tab === "review" && <ReviewView props={props} channels={channels} livePnl={livePnl} />}
-        {tab === "ops" && <OpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
+        {tab === "book" && <MobileBookView props={props} />}
+        {tab === "review" && <MobileReviewView props={props} channels={channels} livePnl={livePnl} />}
+        {tab === "ops" && <MobileOpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
         {tab === "build" && <BuildView props={props} channels={channels} onAddChannel={onAddChannel} />}
       </div>
     </section>
@@ -251,8 +251,8 @@ export function MobileDeskRoom({ room, props, channels, livePnl, onViewMarket, o
   onOpenSettings: () => void;
 }) {
   return <div className="m2-scroll m2-room-scroll"><div className="m2-desk-scroll">
-    {room === "book" && <BookView props={props} onViewMarket={onViewMarket} />}
-    {room === "review" && <ReviewView props={props} channels={channels} livePnl={livePnl} />}
-    {room === "ops" && <OpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
+    {room === "book" && <MobileBookView props={props} onViewMarket={onViewMarket} />}
+    {room === "review" && <MobileReviewView props={props} channels={channels} livePnl={livePnl} />}
+    {room === "ops" && <MobileOpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
   </div></div>;
 }

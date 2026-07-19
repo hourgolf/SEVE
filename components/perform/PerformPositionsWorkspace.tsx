@@ -17,7 +17,7 @@ const reason = (value?: string | null) => {
   return value.replaceAll("_", " ");
 };
 
-function AggregateExposure({ surface }: { surface: SurfaceProps }) {
+export function AggregateExposure({ surface }: { surface: SurfaceProps }) {
   const model = derivePositionsWorkspace(surface.feed.positions, surface.feed.recentTrades, surface.liveMarks);
   const { open, exposure } = model;
   return <section className="pf-screen pf-hardware pf-position-exposure" aria-label="Aggregate open exposure">
@@ -46,7 +46,7 @@ function AggregateExposure({ surface }: { surface: SurfaceProps }) {
   </section>;
 }
 
-function RecentExits({ surface }: { surface: SurfaceProps }) {
+export function RecentExits({ surface }: { surface: SurfaceProps }) {
   const exits = derivePositionsWorkspace(surface.feed.positions, surface.feed.recentTrades, surface.liveMarks).exits;
   const colorOf = (slug: string) => pmVar(surface.view.desk.strategists.find((channel) => channel.slug === slug)?.color ?? "green");
   return <section className="pf-screen pf-hardware pf-recent-exits" aria-label="Recent closed positions">
