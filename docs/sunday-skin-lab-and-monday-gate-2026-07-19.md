@@ -139,8 +139,39 @@ or mutation path. The shared leaves remain the owners of guarded behavior.
 - Perform 22/22, channel passport 125/125, Studio 12/12, presentation 8/8,
   and Ops readiness 43/43 passed; TypeScript and the production build are clean.
 
-The remaining native Folio slices are Review/Sentinel/Ops and the full Markets
-workspace. They may continue independently of the sealed Monday runtime.
+## Completed Folio functional shell
+
+The remaining functional rooms were then completed as native Folio
+compositions. This closes the presentation study at the full-workspace level;
+future Folio work can be targeted visual refinement rather than missing-room
+implementation.
+
+- Markets retains seven chart canvases, every instrument/range/interval/
+  indicator control, open risk, the live option chain, selection, and exact
+  contract-history drill-down. It is intentionally the one dark analytical
+  room inside the lighter Folio shell.
+- Sentinel places receipt identity ahead of terrain, interpretation, and the
+  deterministic scan. It retains all three evidence cards and never combines
+  deterministic health with the LLM read.
+- Review retains LIVE TAPE/TRADE EVIDENCE switching, all six event filters, the
+  retained row-window disclosure, and linked position evidence chains.
+- Ops retains the independent incident, process, executor, market-read,
+  release, operator, and broker claims. Configured and observed evidence remain
+  visibly separate.
+- Phone Review and Ops use Folio card stacks around the existing shared models.
+  The authenticated 390×844 receipt retained six Review sections, four Ops
+  sections, a 48px settings action, and 56px bottom navigation.
+- At 1440×900, Markets, Sentinel, Review, and Ops each had zero page/display
+  horizontal overflow. At 390×844, Review and Ops had zero page/workspace
+  horizontal overflow. Browser warnings/errors were zero.
+- Sentinel receipt 19/19, event tape 18/18, Ops readiness 43/43, Perform 22/22,
+  presentation 8/8, and workstation telemetry 11/11 passed. TypeScript and the
+  production build remain clean.
+
+Folio now covers Home, Markets, Book, Channels, Sentinel, Review, and Ops on
+desktop plus Home, Channels, Book, Review, and Ops on phone. The next design
+phase should return to 909 functional/visual polish while Folio stays isolated
+on the review branch.
 
 ## Skin Lab acceptance
 
