@@ -40,9 +40,18 @@ July 19. The in-app mobile viewport was 529×998 and the desktop override was
 - The preview root `/` rendered the 909 workstation, not Atlas.
 - Browser console warnings/errors: zero across the complete navigation pass.
 
-This receipt proves responsive composition at the observed in-app width and
-the desktop target. A narrower 390×844 phone pass remains a separate visual
-polish check; it is not a blocker to keeping Atlas preview-only.
+The follow-up 390×844 phone pass also completed without horizontal overflow or
+browser warnings/errors. Live retained seven chart canvases and an internally
+scrollable workspace; Channels, Book, Review, and Ops each retained their own
+bounded vertical scroll container. The authenticated settings/log dialog opened
+and closed normally.
+
+Atlas is nevertheless closed as a design direction. At 390px, several header
+controls measured only 18–28px high and the bottom navigation measured 42px
+high. The shared functional seam is proven, but this presentation does not meet
+the next skin's mobile ergonomics bar. Future candidates require at least 44px
+primary touch targets, a clearer phone information hierarchy, and a deliberate
+mobile composition rather than a compressed desktop aesthetic.
 
 ## Skin Lab acceptance
 
