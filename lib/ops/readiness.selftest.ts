@@ -24,6 +24,13 @@ const release = [{
 const evidence = (overrides: Partial<OpsEvidence> = {}): OpsEvidence => ({
   execution: ok(), managers: ok(), captures: ok(), captureHealth: ok(),
   publisher: ok([{ id: "pub", message: "shadow-publish: day-report done", created_at: "2026-07-17T20:40:57Z" }]),
+  outcomes: ok(),
+  broker: ok([{
+    state: "matched", observedAt: "2026-07-20T14:59:00Z", allAccountsReachable: true,
+    booksMatch: true, flatConfirmed: true, brokerContracts: 0, deskContracts: 0,
+    accounts: [{ accountId: "first", accountName: "FIRST-TEAM", reachable: true, error: "", brokerContracts: 0, deskContracts: 0, mismatchCount: 0 }],
+    mismatches: [],
+  }]),
   ...overrides,
 });
 
@@ -46,6 +53,7 @@ assert.equal(find(empty, "candidates").state, "WAITING");
 assert.equal(find(empty, "capture").tone, "neutral");
 assert.equal(find(empty, "managers").tone, "neutral");
 assert.match(find(empty, "candidates").detail, /trade absence is not a failure/);
+assert.equal(find(empty, "reconciliation").state, "BROKER + DESK FLAT");
 
 const candidatePayload = { decisionDetail: { day1Candidate: { releaseId: DAY1_RELEASE_ID, configurationSha256: DAY1_CONFIG_HASH } } };
 const decision = {
@@ -67,6 +75,8 @@ assert.equal(readFailure.counts.candidates, 0);
 const justFilled = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T14:46:30Z"), evidence: evidence({ execution: ok([fill, decision]) }) }));
 assert.equal(find(justFilled, "capture").state, "FLUSHING");
 assert.equal(find(justFilled, "managers").state, "STARTING");
+assert.equal(justFilled.chains.length, 1);
+assert.equal(justFilled.chains[0].steps.find((step) => step.id === "fill")?.state, "2 FILLED");
 
 const overdue = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]) }) }));
 assert.equal(find(overdue, "capture").state, "MISSING RECEIPT");
@@ -82,6 +92,8 @@ const complete = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([f
 assert.equal(find(complete, "capture").state, "OBSERVED");
 assert.equal(find(complete, "managers").state, "COMPLETE");
 assert.equal(complete.counts.managerArms, 8);
+assert.equal(complete.chains[0].steps.find((step) => step.id === "capture")?.state, "OBSERVED");
+assert.equal(complete.chains[0].steps.find((step) => step.id === "managers")?.state, "8/8");
 
 const partial = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]), captures: ok([capture]), managers: ok(managers.slice(0, 7)) }) }));
 assert.equal(find(partial, "managers").state, "INCOMPLETE");
@@ -106,5 +118,26 @@ assert.equal(find(sameDayPublisher, "publisher").tone, "green");
 const sentinelConflict = deriveOpsReadiness(base({ sentinel: { state: "ok", session: "2026-07-18", date: "2026-07-18", briefAsOf: "2026-07-17", forDate: "2026-07-20" } }));
 assert.equal(find(sentinelConflict, "sentinel").tone, "yellow");
 
-assert.equal(find(empty, "reconciliation").state, "UNAVAILABLE");
-console.log("ops-readiness-selftest: 31/31 passed");
+const booked = deriveOpsReadiness(base({ evidence: evidence({
+  execution: ok([fill, decision]), captures: ok([capture]), managers: ok(managers),
+  outcomes: ok([{ id: "outcome", event_kind: "position_booked", event_at: "2026-07-20T15:30:00Z", position_id: "position-1", opportunity_id: "opp-1", quantity: 2, exit_price: 1.4, realized_pnl: 70, close_reason: "manual:risk" }]),
+}) }));
+assert.equal(booked.chains[0].steps.find((step) => step.id === "close")?.state, "BOOKED");
+
+const brokerDrift = deriveOpsReadiness(base({ evidence: evidence({ broker: ok([{
+  state: "drift", observedAt: "2026-07-20T15:00:00Z", allAccountsReachable: true,
+  booksMatch: false, flatConfirmed: false, brokerContracts: 2, deskContracts: 1,
+  accounts: [{ accountId: "first", accountName: "FIRST-TEAM", reachable: true, error: "", brokerContracts: 2, deskContracts: 1, mismatchCount: 1 }],
+  mismatches: [{ accountId: "first", accountName: "FIRST-TEAM", symbol: "SPY260720C00600000", brokerQty: 2, deskQty: 1, delta: -1 }],
+}]) }) }));
+assert.equal(find(brokerDrift, "reconciliation").state, "DRIFT");
+assert.equal(find(brokerDrift, "reconciliation").tone, "red");
+
+const brokerPartial = deriveOpsReadiness(base({ evidence: evidence({ broker: ok([{
+  state: "partial", observedAt: "2026-07-20T15:00:00Z", allAccountsReachable: false,
+  booksMatch: false, flatConfirmed: false, brokerContracts: 0, deskContracts: 0,
+  accounts: [{ accountId: "first", accountName: "FIRST-TEAM", reachable: false, error: "timeout", brokerContracts: 0, deskContracts: 0, mismatchCount: 0 }], mismatches: [],
+}]) }) }));
+assert.equal(find(brokerPartial, "reconciliation").tone, "yellow");
+
+console.log("ops-readiness-selftest: 43/43 passed");

@@ -89,6 +89,7 @@
     "event-tape-selftest": "tsx lib/perform/eventTape.selftest.ts",
     "release-receipt-selftest": "tsx lib/ops/releaseReceipt.selftest.ts",
     "ops-readiness-selftest": "tsx lib/ops/readiness.selftest.ts",
+    "broker-reconciliation-selftest": "tsx lib/ops/brokerReconciliation.selftest.ts",
     "channel-passport-selftest": "tsx lib/channels/channelPassport.selftest.ts",
     "family-preregistered-receipt-adapter-selftest": "tsx lib/research/familyPreregisteredReceiptAdapter.selftest.ts",
     "family-preregistered-scorecard": "tsx scripts/family-preregistered-scorecard.ts",

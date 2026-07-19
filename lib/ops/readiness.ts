@@ -7,6 +7,7 @@ import {
   type Day1ReleaseReadState,
 } from "@/lib/channels/day1Release";
 import { deriveSentinelReceiptStatus, type SentinelReceiptInput } from "@/lib/sentinel/receipt";
+import type { BrokerReconciliationReceipt } from "@/lib/ops/brokerReconciliation";
 
 export type OpsEvidenceState = "loading" | "ok" | "error";
 export type ReadinessTone = "green" | "yellow" | "red" | "neutral";
@@ -76,12 +77,26 @@ export interface PublisherEvidenceRow {
   created_at: string;
 }
 
+export interface PositionOutcomeEvidenceRow {
+  id: string;
+  event_kind: "position_opened" | "position_remainder_opened" | "position_booked" | "reconciliation_unresolved" | "reconciliation_estimated" | "manual_reason_tagged";
+  event_at: string;
+  position_id: string;
+  opportunity_id: string | null;
+  quantity: number | null;
+  exit_price: number | null;
+  realized_pnl: number | null;
+  close_reason: string | null;
+}
+
 export interface OpsEvidence {
   execution: OpsEvidenceRead<ExecutionEvidenceRow>;
   managers: OpsEvidenceRead<ManagerEvidenceRow>;
   captures: OpsEvidenceRead<CaptureReceiptRow>;
   captureHealth: OpsEvidenceRead<CaptureHealthRow>;
   publisher: OpsEvidenceRead<PublisherEvidenceRow>;
+  outcomes: OpsEvidenceRead<PositionOutcomeEvidenceRow>;
+  broker: OpsEvidenceRead<BrokerReconciliationReceipt>;
 }
 
 export interface ReadinessItem {
@@ -107,6 +122,17 @@ export interface OpsReadinessModel {
     managerArms: number;
     expectedManagerArms: number;
   };
+  chains: OpsEvidenceChain[];
+  brokerReceipt: BrokerReconciliationReceipt | null;
+}
+
+export interface OpsEvidenceChain {
+  positionId: string;
+  channelSlug: string;
+  occSymbol: string;
+  opportunityId: string;
+  tone: ReadinessTone;
+  steps: ReadinessItem[];
 }
 
 export interface DeriveOpsReadinessInput {
@@ -253,7 +279,43 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   else evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: publisherDone ? "LAST RUN OK" : "NOT DUE", tone: publisherDone ? "green" : "neutral", detail: publisherDone ? latestPublisher?.message ?? "publisher complete" : "publication is evaluated after the close", observedAt: latestPublisher?.created_at });
 
   evidence.push({ id: "sentinel", label: "SENTINEL RECEIPT", state: sentinel.label, tone: sentinel.tone, detail: sentinel.detail, observedAt: sentinel.publishedAt });
-  evidence.push({ id: "reconciliation", label: "BROKER RECONCILIATION", state: "UNAVAILABLE", tone: "neutral", detail: `desk ${input.openPositions} open / ${input.closedPositions} closed · no broker-flat assertion` });
+  const broker = input.evidence.broker;
+  const brokerReceipt = broker.state === "ok" ? broker.rows[0] : null;
+  if (broker.state === "loading") evidence.push({ id: "reconciliation", label: "BROKER RECONCILIATION", state: "CHECKING", tone: "neutral", detail: "reading current positions from every configured paper account" });
+  else if (broker.state === "error" || !brokerReceipt) evidence.push(readError("reconciliation", "BROKER RECONCILIATION", broker));
+  else if (brokerReceipt.state === "partial") evidence.push({ id: "reconciliation", label: "BROKER RECONCILIATION", state: "PARTIAL", tone: "yellow", detail: `${brokerReceipt.accounts.filter((account) => account.reachable).length}/${brokerReceipt.accounts.length} accounts reached · no broker-flat assertion`, observedAt: brokerReceipt.observedAt });
+  else if (brokerReceipt.state === "drift") evidence.push({ id: "reconciliation", label: "BROKER RECONCILIATION", state: "DRIFT", tone: "red", detail: `${brokerReceipt.mismatches.length} OCC mismatch${brokerReceipt.mismatches.length === 1 ? "" : "es"} · broker ${brokerReceipt.brokerContracts} / desk ${brokerReceipt.deskContracts} contracts`, observedAt: brokerReceipt.observedAt });
+  else evidence.push({ id: "reconciliation", label: "BROKER RECONCILIATION", state: brokerReceipt.flatConfirmed ? "BROKER + DESK FLAT" : "BOOKS MATCH", tone: "green", detail: `${brokerReceipt.accounts.length} paper accounts reached · broker ${brokerReceipt.brokerContracts} / desk ${brokerReceipt.deskContracts} contracts`, observedAt: brokerReceipt.observedAt });
+
+  const outcomes = input.evidence.outcomes.state === "ok" ? input.evidence.outcomes.rows : [];
+  const chains: OpsEvidenceChain[] = [...fillsByPosition.values()].map((fill) => {
+    const positionId = fill.position_id as string;
+    const receipt = sessionReceipts.find((row) => row.position_id === positionId);
+    const positionManagers = managerRows.filter((row) => row.position_id === positionId);
+    const positionOutcomes = outcomes.filter((row) => row.position_id === positionId);
+    const outcome = latest(positionOutcomes.filter((row) => ["position_booked", "reconciliation_estimated", "reconciliation_unresolved"].includes(row.event_kind)), (row) => row.event_at);
+    const closeTag = latest(positionOutcomes.filter((row) => row.event_kind === "manual_reason_tagged"), (row) => row.event_at);
+    const decision = decisions.find((row) => row.opportunity_id && row.opportunity_id === fill.opportunity_id);
+    const captureState: ReadinessItem = receipt
+      ? { id: "capture", label: "CAPTURE", state: "OBSERVED", tone: "green", detail: `${receipt.sample_count} samples · ${receipt.dropped_samples} dropped`, observedAt: receipt.completed_at }
+      : { id: "capture", label: "CAPTURE", state: captureDue ? "MISSING" : "FLUSHING", tone: captureDue ? "yellow" : "neutral", detail: "waiting for the exact-contract held-path receipt" };
+    const managerState: ReadinessItem = positionManagers.length === expectedManagerArms
+      ? { id: "managers", label: "MANAGER ARMS", state: "8/8", tone: "green", detail: "all preregistered arms share this filled position" }
+      : { id: "managers", label: "MANAGER ARMS", state: `${positionManagers.length}/${expectedManagerArms}`, tone: managerDue ? "yellow" : "neutral", detail: "shadow arms observed for this position" };
+    const closed = outcome && ["position_booked", "reconciliation_estimated"].includes(outcome.event_kind);
+    const closeState: ReadinessItem = closed
+      ? { id: "close", label: "CLOSE", state: "BOOKED", tone: "green", detail: `${closeTag?.close_reason ?? outcome.close_reason ?? "unclassified"} · ${outcome.realized_pnl == null ? "P&L unavailable" : `$${Math.round(outcome.realized_pnl)}`}`, observedAt: closeTag?.event_at ?? outcome.event_at }
+      : outcome?.event_kind === "reconciliation_unresolved"
+        ? { id: "close", label: "CLOSE", state: "UNRESOLVED", tone: "red", detail: outcome.close_reason ?? "reconciliation has no executable price", observedAt: outcome.event_at }
+        : { id: "close", label: "CLOSE", state: "OPEN", tone: "neutral", detail: "no terminal booking receipt observed" };
+    const steps: ReadinessItem[] = [
+      { id: "candidate", label: "CANDIDATE", state: decision ? "STAMPED" : "INFERRED", tone: decision ? "green" : "yellow", detail: fill.opportunity_id ?? "opportunity id unavailable", observedAt: decision?.event_at },
+      { id: "fill", label: "FILL", state: `${fill.filled_qty ?? 0} FILLED`, tone: "green", detail: fill.broker_status ?? "broker result observed", observedAt: fill.event_at },
+      captureState, managerState, closeState,
+    ];
+    const tone: ReadinessTone = steps.some((step) => step.tone === "red") ? "red" : steps.some((step) => step.tone === "yellow") ? "yellow" : steps.every((step) => step.tone === "green") ? "green" : "neutral";
+    return { positionId, channelSlug: fill.channel_slug, occSymbol: fill.occ_symbol ?? "—", opportunityId: fill.opportunity_id ?? "—", tone, steps };
+  });
 
   const all = [...configuration, ...evidence];
   const red = all.filter((item) => item.tone === "red").length;
@@ -267,5 +329,7 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   return {
     sessionDateEt: clock.date, phase, summary, configuration, evidence,
     counts: { candidates, suppressed, fills: fillsByPosition.size, capturedPositions, managerArms: observedArms.size, expectedManagerArms: expectedArms },
+    chains,
+    brokerReceipt,
   };
 }

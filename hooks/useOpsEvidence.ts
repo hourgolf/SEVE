@@ -10,8 +10,10 @@ import type {
   ManagerEvidenceRow,
   OpsEvidence,
   OpsEvidenceRead,
+  PositionOutcomeEvidenceRow,
   PublisherEvidenceRow,
 } from "@/lib/ops/readiness";
+import type { BrokerReconciliationReceipt } from "@/lib/ops/brokerReconciliation";
 
 const initial = <T,>(): OpsEvidenceRead<T> => ({
   state: "loading", rows: [], error: "", fetchedAtMs: null, lastOkAtMs: null,
@@ -23,6 +25,8 @@ const INITIAL: OpsEvidence = {
   captures: initial<CaptureReceiptRow>(),
   captureHealth: initial<CaptureHealthRow>(),
   publisher: initial<PublisherEvidenceRow>(),
+  outcomes: initial<PositionOutcomeEvidenceRow>(),
+  broker: initial<BrokerReconciliationReceipt>(),
 };
 
 const message = (error: unknown): string => {
@@ -34,6 +38,23 @@ const message = (error: unknown): string => {
 
 interface QueryResult { data: unknown; error: unknown }
 
+async function readBrokerReceipt(): Promise<QueryResult> {
+  const sb = getSupabase();
+  const { data: { session }, error } = await sb.auth.getSession();
+  if (error || !session?.access_token) return { data: null, error: error ?? new Error("operator sign-in required") };
+  try {
+    const response = await fetch("/api/broker-reconciliation", {
+      headers: { authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+    const body = await response.json().catch(() => ({})) as { ok?: boolean; receipt?: BrokerReconciliationReceipt; error?: string };
+    if (!response.ok || !body.ok || !body.receipt) return { data: null, error: new Error(body.error ?? `broker read failed (${response.status})`) };
+    return { data: [body.receipt], error: null };
+  } catch (readError) {
+    return { data: null, error: readError };
+  }
+}
+
 function applyRead<T>(previous: OpsEvidenceRead<T>, settled: PromiseSettledResult<QueryResult>, nowMs: number): OpsEvidenceRead<T> {
   if (settled.status === "rejected") return { ...previous, state: "error", error: message(settled.reason), fetchedAtMs: nowMs };
   if (settled.value.error) return { ...previous, state: "error", error: message(settled.value.error), fetchedAtMs: nowMs };
@@ -41,8 +62,9 @@ function applyRead<T>(previous: OpsEvidenceRead<T>, settled: PromiseSettledResul
 }
 
 /**
- * One compact, operator-scoped evidence poll for the Ops workspace. The four
- * research tables remain RLS protected; unauthenticated reads surface as
+ * One compact, operator-scoped evidence poll for the Ops workspace. The
+ * research tables remain RLS protected and the broker comparison is served by
+ * an operator-authenticated, read-only route; unauthenticated reads surface as
  * independent errors and never become fabricated empty ledgers. Leaves receive
  * this result through SurfaceProps and do not subscribe on their own.
  */
@@ -70,6 +92,10 @@ export function useOpsEvidence(pollMs = 30_000): OpsEvidence {
         sb.from("events").select("id,message,created_at")
           .ilike("message", "%shadow-publish:%").gte("created_at", since)
           .order("created_at", { ascending: false }).limit(12),
+        sb.from("position_outcome_events")
+          .select("id,event_kind,event_at,position_id,opportunity_id,quantity,exit_price,realized_pnl,close_reason")
+          .gte("event_at", since).order("event_at", { ascending: false }).limit(500),
+        readBrokerReceipt(),
       ]);
       if (!alive) return;
       const nowMs = Date.now();
@@ -79,6 +105,8 @@ export function useOpsEvidence(pollMs = 30_000): OpsEvidence {
         captures: applyRead(previous.captures, results[2] as PromiseSettledResult<QueryResult>, nowMs),
         captureHealth: applyRead(previous.captureHealth, results[3] as PromiseSettledResult<QueryResult>, nowMs),
         publisher: applyRead(previous.publisher, results[4] as PromiseSettledResult<QueryResult>, nowMs),
+        outcomes: applyRead(previous.outcomes, results[5] as PromiseSettledResult<QueryResult>, nowMs),
+        broker: applyRead(previous.broker, results[6] as PromiseSettledResult<QueryResult>, nowMs),
       }));
     };
     void poll();

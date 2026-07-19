@@ -17,6 +17,7 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
   const { data, ops, workerRuns, incident, feed, write, accounts, acctId } = surface;
   const release = findDay1ReleaseReceipt(data.releaseEvents);
   const account = accounts.find((row) => row.id === acctId);
+  const reconciliation = surface.opsReadiness.evidence.find((item) => item.id === "reconciliation");
   const processAge = workerRuns.currentHeartbeatAtMs == null ? null : Math.max(0, Math.round((Date.now() - workerRuns.currentHeartbeatAtMs) / 1000));
 
   return <section className="opsw" id="perform-ops" tabIndex={-1} aria-label="Operations evidence workspace">
@@ -45,7 +46,7 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
         <StateLamp label="ACCOUNT MODE" state={account?.mode ?? "checking"} detail={account?.name ?? "selected account unavailable"} />
         <StateLamp label="OPERATOR" state={write.canWrite ? "authenticated" : "read only"} detail={write.canWrite ? "manual-close and protected controls available" : "sign in for protected actions"} />
         <StateLamp label="DESK POSITIONS" state={feed.positions.length === 0 ? "observed" : "warning"} detail={`desk shows ${feed.positions.length} open · ${incident.positions.streamConfigured}s/${incident.positions.cronConfigured}c/${incident.positions.unknown}?`} />
-        <StateLamp label="BROKER RECONCILIATION" state="unavailable" detail="desk evidence is not a broker-flat assertion" />
+        <StateLamp label="BROKER RECONCILIATION" state={reconciliation?.tone === "green" ? "observed" : reconciliation?.tone === "red" ? "error" : reconciliation?.tone === "yellow" ? "warning" : "checking"} detail={reconciliation ? `${reconciliation.state} · ${reconciliation.detail}` : "checking current paper accounts"} />
       </div></section>
     </div>
   </section>;
