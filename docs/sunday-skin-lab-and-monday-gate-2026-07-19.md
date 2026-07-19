@@ -20,6 +20,30 @@ navigation, hierarchy, density, responsive composition, and visual direction
 without forking functional logic. A future skin may replace more presentation
 leaves only after equivalent contracts and tests exist.
 
+## Authenticated preview receipt
+
+An authenticated read-only smoke was completed against the Vercel preview on
+July 19. The in-app mobile viewport was 529×998 and the desktop override was
+1440×900.
+
+- Mobile Live, Channels, Book, Review, and Ops each rendered the shared live
+  model with no horizontal overflow. Book retained broker reconciliation, open
+  positions, aggregate exposure, recent exits, signals, and the option chain.
+- Desktop Overview, Markets, Positions, Channels, Sentinel, Review, and Ops
+  each rendered with no horizontal overflow. Markets retained seven chart
+  canvases; Channels showed the 12-channel RC5-aware fleet; Ops showed the
+  configured-versus-observed Day 1 evidence contract.
+- Account controls, authenticated operator access, and exactly one protected
+  KILL control remained present. No destructive or mutating control was used.
+- Legacy Rooms mounted as the sole workspace, retained its five-room console
+  and one KILL control, then returned to Atlas at `/skin-lab` without overflow.
+- The preview root `/` rendered the 909 workstation, not Atlas.
+- Browser console warnings/errors: zero across the complete navigation pass.
+
+This receipt proves responsive composition at the observed in-app width and
+the desktop target. A narrower 390×844 phone pass remains a separate visual
+polish check; it is not a blocker to keeping Atlas preview-only.
+
 ## Skin Lab acceptance
 
 - one set of page-owned hooks regardless of shell;
@@ -69,4 +93,3 @@ Atlas is not eligible for a production selector until its desktop and mobile
 operator drills pass against the same functional checklist as 909. Monday
 runtime evidence takes priority over aesthetic promotion. Skin work may continue
 on review branches because it cannot alter the sealed release.
-
