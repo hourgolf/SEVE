@@ -23,8 +23,9 @@ desktop and mobile without creating another subscription or order path.
 
 1. verifies the supplied Supabase access token with `auth.getUser(token)`;
 2. requires the desk-operator role;
-3. reads account routing and open desk positions with the server-only service
-   role;
+3. reads open desk positions and their immutable execution-account observations
+   with the server-only service role (the deployed `positions` table itself has
+   no `account_id` column);
 4. reads each relevant Alpaca **paper** account's current positions; and
 5. returns only a normalized reconciliation receipt.
 
@@ -45,7 +46,7 @@ unchanged.
 
 ## Verification
 
-- `npm run broker-reconciliation-selftest` — 21/21.
+- `npm run broker-reconciliation-selftest` — 23/23.
 - `npm run ops-readiness-selftest` — 43/43.
 - `npm run position-close-flow-selftest` — 16/16.
 - `npm run operator-selftest` — 5/5.

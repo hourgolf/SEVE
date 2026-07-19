@@ -15,8 +15,8 @@ const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SB_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 interface AccountRow { id: string; name: string; cred_ref: string | null; mode: string }
-interface StrategistRow { id: string; account_id: string | null }
-interface PositionRow { strategist_id: string; account_id: string | null; occ_symbol: string; qty: number }
+interface PositionRow { id: string; strategist_id: string; occ_symbol: string; qty: number }
+interface ExecutionRouteRow { position_id: string | null; account_id: string; event_at: string }
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, {
   status,
@@ -50,24 +50,32 @@ export async function GET(req: Request) {
   if (!isDeskOperator(userData.user)) return json({ ok: false, error: "operator authorization required" }, 403);
 
   const sb = createClient(SB_URL, SB_SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
-  const [accountsRead, strategistsRead, positionsRead] = await Promise.all([
+  const [accountsRead, positionsRead] = await Promise.all([
     sb.from("accounts").select("id,name,cred_ref,mode").order("sort_order", { ascending: true }),
-    sb.from("strategists").select("id,account_id"),
-    sb.from("positions").select("strategist_id,account_id,occ_symbol,qty").eq("status", "open"),
+    sb.from("positions").select("id,strategist_id,occ_symbol,qty").eq("status", "open"),
   ]);
-  const dbError = accountsRead.error || strategistsRead.error || positionsRead.error;
+  const dbError = accountsRead.error || positionsRead.error;
   if (dbError) return json({ ok: false, error: `desk read failed: ${dbError.message}` }, 502);
 
   const accounts = (accountsRead.data ?? []) as AccountRow[];
-  const strategists = (strategistsRead.data ?? []) as StrategistRow[];
   const positions = (positionsRead.data ?? []) as PositionRow[];
-  const defaultAccount = accounts.find((account) => !account.cred_ref) ?? null;
-  const strategistAccount = new Map(strategists.map((row) => [row.id, row.account_id || defaultAccount?.id || ""]));
+  const positionIds = positions.map((position) => position.id);
+  const routesRead = positionIds.length
+    ? await sb.from("execution_observations")
+      .select("position_id,account_id,event_at")
+      .in("position_id", positionIds)
+      .order("event_at", { ascending: false })
+    : { data: [] as ExecutionRouteRow[], error: null };
+  const executionRoutes = new Map<string, string>();
+  if (!routesRead.error) for (const row of (routesRead.data ?? []) as ExecutionRouteRow[]) {
+    if (row.position_id && !executionRoutes.has(row.position_id)) executionRoutes.set(row.position_id, row.account_id);
+  }
   const deskByAccount = new Map<string, PositionRow[]>();
   for (const position of positions) {
-    // Position.account_id is the immutable execution route. Fall back only for
-    // legacy rows that predate denormalized account stamping.
-    const accountId = position.account_id || strategistAccount.get(position.strategist_id) || "";
+    // The deployed positions schema has no account_id. Attribute through the
+    // immutable broker-result observation stamped at execution; never guess
+    // from a channel's mutable current account assignment.
+    const accountId = executionRoutes.get(position.id) ?? "";
     const rows = deskByAccount.get(accountId) ?? [];
     rows.push(position);
     deskByAccount.set(accountId, rows);
@@ -101,7 +109,10 @@ export async function GET(req: Request) {
   const unattributed = deskByAccount.get("") ?? [];
   if (unattributed.length) inputs.push({
     accountId: "unattributed", accountName: "UNATTRIBUTED DESK ROWS", reachable: false,
-    error: "open desk rows could not be attributed to a broker account", brokerPositions: [],
+    error: routesRead.error
+      ? `execution-route evidence unavailable: ${routesRead.error.message}`
+      : "open desk rows lack an immutable execution-account observation",
+    brokerPositions: [],
     deskPositions: unattributed.map((row) => ({ symbol: row.occ_symbol, qty: Number(row.qty) })),
   });
 

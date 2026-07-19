@@ -47,5 +47,7 @@ assert.match(routeSource, /auth\.auth\.getUser\(token\)/);
 assert.match(routeSource, /isDeskOperator\(userData\.user\)/);
 assert.match(routeSource, /paper-api\.alpaca\.markets/);
 assert.doesNotMatch(routeSource, /\.insert\(|\.update\(|\.delete\(/);
+assert.match(routeSource, /from\("execution_observations"\)/);
+assert.match(routeSource, /select\("id,strategist_id,occ_symbol,qty"\)/);
 
-console.log("broker-reconciliation-selftest: 21/21 passed");
+console.log("broker-reconciliation-selftest: 23/23 passed");
