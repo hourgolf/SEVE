@@ -86,6 +86,33 @@ The replacement was then exercised against the authenticated Vercel preview at
 This receipt establishes functional and responsive eligibility for design
 review. It does not constitute visual approval or authorize production use.
 
+## Native Folio Home/Live slice
+
+After the shell direction was accepted for continued exploration, Home/Live was
+recomposed as the first native Folio functional workspace. It no longer mounts
+the old PERFORM overview as one dark inherited panel. The new composition keeps
+the exact shared chart, authenticated position-close controller, channel-mute
+controller, incident policy, Sentinel digest, event tape, and account-scoped
+roster while changing only their hierarchy and presentation.
+
+- Desktop uses one focused dark market card, light health/position/Sentinel/
+  activity cards, and a subordinate channel drawer.
+- Phone retains the chart as a primary tool but reveals the Open Positions card
+  below it, making the vertical workflow discoverable. Sentinel and Activity
+  remain reachable in the same bounded scroll container.
+- The collapsed phone channel drawer is 59px high; expanded content is capped at
+  42% of viewport height and does not overflow horizontally.
+- At 1440×900 and 390×844, the page and native workspace had no horizontal
+  overflow. All chart instrument, range, interval, and indicator controls
+  remained available. Browser warnings/errors were zero.
+- Manual close and post-close rationale still use `usePositionCloseFlow`; mute
+  still uses the existing desk dispatch/write controller. No skin-owned fetch,
+  subscription, or mutation path was introduced.
+
+Markets, Book, Channels, Sentinel, Review, and Ops continue to use the mature
+shared leaves. The next native slices should be Book and Channels because they
+contain the highest-value operator actions and evidence context.
+
 ## Skin Lab acceptance
 
 - one set of page-owned hooks regardless of shell;
