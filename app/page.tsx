@@ -23,6 +23,8 @@ import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileShell } from "@/components/mobile2/MobileShell";
 import { WorkstationShell } from "@/components/shell/WorkstationShell";
+import { AtlasShell } from "@/components/skins/AtlasShell";
+import { usePresentation } from "@/components/skins/PresentationProvider";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { ShellProvider, useShell } from "@/hooks/useShellState";
 import { marketSummary } from "@/lib/marketSummary";
@@ -38,15 +40,18 @@ import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 import { deriveOpsReadiness } from "@/lib/ops/readiness";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthControl } from "@/components/AuthControl";
+import type { WorkstationPresentation } from "@/lib/shell/presentation";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
 // tab-shell. The data-seam pattern means neither layout re-subscribes.
 function Surface({
   theme,
   setTheme,
+  presentation,
 }: {
   theme: "cream" | "blackout";
   setTheme: Dispatch<SetStateAction<"cream" | "blackout">>;
+  presentation: WorkstationPresentation;
 }) {
   // §01 market instrument (SPY default, QQQ live). One state drives the single
   // market hook + the chart/chain/spot toggle — the desk (§02/§03) is per-channel.
@@ -190,7 +195,11 @@ function Surface({
   // Mobile (S5 rework) — the PERFORM/STUDIO phone shell. Shares the same seam
   // props + the persisted mode/skin (useShell) as desktop; MobileApp is retained
   // on disk (reviewer decides deletion at S6) but no longer mounted.
-  if (isMobile) return <MobileShell {...props} />;
+  if (isMobile) {
+    return presentation === "atlas"
+      ? <AtlasShell surface={props} dayChangePct={marketSummary(data.bars, data.spot).dayChangePct} mobile onLegacy={() => setLegacyOpen(true)} />
+      : <MobileShell {...props} />;
+  }
 
   // DESKTOP — one fixed workstation chassis spans both modes. Its inset display
   // composes the subscription-free Studio/Perform surfaces; the hardware frame,
@@ -214,7 +223,9 @@ function Surface({
 
   return (
     <>
-      <WorkstationShell surface={props} dayChangePct={mkt.dayChangePct} onLegacy={() => setLegacyOpen(true)} />
+      {presentation === "atlas"
+        ? <AtlasShell surface={props} dayChangePct={mkt.dayChangePct} mobile={false} onLegacy={() => setLegacyOpen(true)} />
+        : <WorkstationShell surface={props} dayChangePct={mkt.dayChangePct} onLegacy={() => setLegacyOpen(true)} />}
       {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats over EITHER
           room. Opens on the shared `seve:command-palette` event; roster scoped to the account. */}
       <CommandPalette
@@ -229,7 +240,7 @@ function Surface({
 // flip it; the page stamps it as data-theme on .console-root (the legacy
 // [data-theme="blackout"] override still re-skins the whole chassis) and the
 // shell mirrors it as data-skin. ShellProvider owns the persisted state.
-function PageInner() {
+function PageInner({ presentation }: { presentation: WorkstationPresentation }) {
   const { skin, setSkin } = useShell();
   // Dispatch-shaped adapter so the shared SurfaceProps type is unchanged — the
   // OPS/mobile toggles call it value-form, but honour functional updaters too.
@@ -238,13 +249,13 @@ function PageInner() {
   return (
     <div className="console-root" data-theme={skin}>
       <DeskProvider>
-        <Surface theme={skin} setTheme={setTheme} />
+        <Surface theme={skin} setTheme={setTheme} presentation={presentation} />
       </DeskProvider>
     </div>
   );
 }
 
-export default function Page() {
+function OperatorWorkstation({ presentation }: { presentation: WorkstationPresentation }) {
   const { ready, operator } = useAuth();
 
   // The desk is private, not a public dashboard with privileged buttons. Do not
@@ -267,7 +278,12 @@ export default function Page() {
 
   return (
     <ShellProvider>
-      <PageInner />
+      <PageInner presentation={presentation} />
     </ShellProvider>
   );
+}
+
+export default function Page() {
+  const presentation = usePresentation();
+  return <OperatorWorkstation presentation={presentation} />;
 }

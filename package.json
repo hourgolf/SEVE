@@ -208,6 +208,7 @@
     "execution-quality-selftest": "tsx lib/execution/executionQualityModel.selftest.ts",
     "incident-selftest": "tsx lib/incident/incident.selftest.ts",
     "workstation-telemetry-selftest": "tsx lib/shell/workstationTelemetry.selftest.ts",
+    "presentation-selftest": "tsx lib/shell/presentation.selftest.ts",
     "operator-selftest": "tsx lib/auth/operator.selftest.ts",
     "manual-close-selftest": "tsx lib/positions/manualClose.selftest.ts",
     "closed-position-invariant-selftest": "tsx worker/src/closedPositionInvariant.selftest.ts",
