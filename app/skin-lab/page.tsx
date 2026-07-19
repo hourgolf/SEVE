@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * presentation and this alternate route remains undiscoverable. */
 export default function SkinLabPage() {
   const target = deploymentTarget(process.env.VERCEL_ENV);
-  const presentation = resolvePresentation("atlas", target);
-  if (presentation !== "atlas") notFound();
+  const presentation = resolvePresentation("folio", target);
+  if (presentation !== "folio") notFound();
   return <PresentationProvider presentation={presentation}><Page /></PresentationProvider>;
 }

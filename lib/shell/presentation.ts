@@ -1,4 +1,4 @@
-export type WorkstationPresentation = "909" | "atlas";
+export type WorkstationPresentation = "909" | "folio";
 export type DeploymentTarget = "production" | "preview" | "development";
 
 /**
@@ -18,4 +18,3 @@ export function deploymentTarget(vercelEnv?: string): DeploymentTarget {
   if (vercelEnv === "preview") return "preview";
   return "development";
 }
-

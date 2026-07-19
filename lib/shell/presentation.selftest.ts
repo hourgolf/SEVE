@@ -6,8 +6,8 @@ assert.equal(deploymentTarget("preview"), "preview");
 assert.equal(deploymentTarget("development"), "development");
 assert.equal(deploymentTarget(undefined), "development");
 assert.equal(resolvePresentation("909", "production"), "909");
-assert.equal(resolvePresentation("atlas", "production"), "909");
-assert.equal(resolvePresentation("atlas", "preview"), "atlas");
-assert.equal(resolvePresentation("atlas", "development"), "atlas");
+assert.equal(resolvePresentation("folio", "production"), "909");
+assert.equal(resolvePresentation("folio", "preview"), "folio");
+assert.equal(resolvePresentation("folio", "development"), "folio");
 
 console.log("presentation-selftest: 8/8 passed");

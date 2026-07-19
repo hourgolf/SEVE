@@ -23,7 +23,7 @@ import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileShell } from "@/components/mobile2/MobileShell";
 import { WorkstationShell } from "@/components/shell/WorkstationShell";
-import { AtlasShell } from "@/components/skins/AtlasShell";
+import { FolioShell } from "@/components/skins/FolioShell";
 import { usePresentation } from "@/components/skins/PresentationProvider";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { ShellProvider, useShell } from "@/hooks/useShellState";
@@ -196,8 +196,8 @@ function Surface({
   // props + the persisted mode/skin (useShell) as desktop; MobileApp is retained
   // on disk (reviewer decides deletion at S6) but no longer mounted.
   if (isMobile) {
-    return presentation === "atlas"
-      ? <AtlasShell surface={props} dayChangePct={marketSummary(data.bars, data.spot).dayChangePct} mobile onLegacy={() => setLegacyOpen(true)} />
+    return presentation === "folio"
+      ? <FolioShell surface={props} dayChangePct={marketSummary(data.bars, data.spot).dayChangePct} mobile onLegacy={() => setLegacyOpen(true)} />
       : <MobileShell {...props} />;
   }
 
@@ -223,8 +223,8 @@ function Surface({
 
   return (
     <>
-      {presentation === "atlas"
-        ? <AtlasShell surface={props} dayChangePct={mkt.dayChangePct} mobile={false} onLegacy={() => setLegacyOpen(true)} />
+      {presentation === "folio"
+        ? <FolioShell surface={props} dayChangePct={mkt.dayChangePct} mobile={false} onLegacy={() => setLegacyOpen(true)} />
         : <WorkstationShell surface={props} dayChangePct={mkt.dayChangePct} onLegacy={() => setLegacyOpen(true)} />}
       {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats over EITHER
           room. Opens on the shared `seve:command-palette` event; roster scoped to the account. */}

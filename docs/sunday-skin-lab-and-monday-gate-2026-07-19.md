@@ -5,26 +5,36 @@ configuration, order, or production mutation is authorized by this document.
 
 ## Outcome
 
-The first alternate presentation is now a sibling shell over the existing
+The alternate presentation remains a sibling shell over the existing
 page-owned seam. `app/page.tsx` still owns every remote hook and cross-source
-derivation. The 909 workstation and Atlas receive the same `SurfaceProps`,
-authenticated actions, incident policy, channel release identity, position
-close flow, Sentinel classification, tape model, and Ops readiness model.
+derivation. The 909 workstation and the current Folio study receive the same
+`SurfaceProps`, authenticated actions, incident policy, channel release
+identity, position-close flow, Sentinel classification, tape model, and Ops
+readiness model.
 
-Atlas is available only at `/skin-lab` in local development and Vercel preview
+Folio is available only at `/skin-lab` in local development and Vercel preview
 deployments. `VERCEL_ENV=production` fails closed with a 404. The production
-root cannot select or persist Atlas, and 909 remains the only production shell.
+root cannot select or persist Folio, and 909 remains the only production shell.
 
-The first proof intentionally reuses the mature workspace leaves. It evaluates
-navigation, hierarchy, density, responsive composition, and visual direction
-without forking functional logic. A future skin may replace more presentation
-leaves only after equivalent contracts and tests exist.
+Atlas proved that a second shell could preserve the seam and full operator
+surface, but it was retired after the authenticated phone pass. Folio replaces
+it rather than remaining as a second dead implementation. Folio deliberately
+explores a different product character: warm paper, espresso navigation, bold
+mustard/coral/indigo/teal blocks, modern rounded cards, and a calmer summary
+hierarchy. It is inspired by the supplied financial-app reference without
+copying that app's layout or reducing SEVE to a banking use case.
 
-## Authenticated preview receipt
+The study still reuses mature workspace leaves. It evaluates whether the frame,
+navigation, summary hierarchy, density, responsive composition, and visual
+language can change without forking functional logic. A later skin may replace
+more presentation leaves only after equivalent contracts and tests exist.
 
-An authenticated read-only smoke was completed against the Vercel preview on
-July 19. The in-app mobile viewport was 529×998 and the desktop override was
-1440×900.
+## Historical Atlas seam receipt
+
+An authenticated read-only smoke of the now-retired Atlas shell was completed
+against the Vercel preview on July 19. It remains useful evidence that the
+presentation seam preserves functionality; it is not a Folio visual approval.
+The in-app mobile viewport was 529×998 and the desktop override was 1440×900.
 
 - Mobile Live, Channels, Book, Review, and Ops each rendered the shared live
   model with no horizontal overflow. Book retained broker reconciliation, open
@@ -36,8 +46,8 @@ July 19. The in-app mobile viewport was 529×998 and the desktop override was
 - Account controls, authenticated operator access, and exactly one protected
   KILL control remained present. No destructive or mutating control was used.
 - Legacy Rooms mounted as the sole workspace, retained its five-room console
-  and one KILL control, then returned to Atlas at `/skin-lab` without overflow.
-- The preview root `/` rendered the 909 workstation, not Atlas.
+  and one KILL control, then returned to the lab at `/skin-lab` without overflow.
+- The preview root `/` rendered the 909 workstation, not the lab presentation.
 - Browser console warnings/errors: zero across the complete navigation pass.
 
 The follow-up 390×844 phone pass also completed without horizontal overflow or
@@ -46,7 +56,7 @@ scrollable workspace; Channels, Book, Review, and Ops each retained their own
 bounded vertical scroll container. The authenticated settings/log dialog opened
 and closed normally.
 
-Atlas is nevertheless closed as a design direction. At 390px, several header
+Atlas was closed as a design direction. At 390px, several header
 controls measured only 18–28px high and the bottom navigation measured 42px
 high. The shared functional seam is proven, but this presentation does not meet
 the next skin's mobile ergonomics bar. Future candidates require at least 44px
@@ -58,11 +68,17 @@ mobile composition rather than a compressed desktop aesthetic.
 - one set of page-owned hooks regardless of shell;
 - no skin-owned fetch or subscription;
 - no new mutation path;
-- 909 remains `/` and Atlas remains preview/local `/skin-lab`;
+- 909 remains `/` and Folio remains preview/local `/skin-lab`;
 - desktop exposes Overview, Markets, Positions, Channels, Sentinel, Review,
   Ops, Legacy Rooms, operator access, and KILL;
 - mobile exposes Live, Channels, Book, Review, Ops, account selection,
   settings/auth, and KILL;
+- mobile primary actions are at least 44px and bottom navigation controls are
+  at least 56px high;
+- desktop and mobile use deliberate, independently composed card hierarchies
+  rather than compressing the 909 workstation;
+- all workspaces remain usable without horizontal page overflow and the browser
+  console remains free of warnings and errors;
 - loading, empty, error, stale, unreconciled, and incident states remain the
   shared model's states rather than presentation guesses;
 - production build includes a fail-closed route guard.
@@ -98,7 +114,8 @@ before the cohort begins. Do not tune configuration during the check.
 
 ## Promotion boundary
 
-Atlas is not eligible for a production selector until its desktop and mobile
-operator drills pass against the same functional checklist as 909. Monday
-runtime evidence takes priority over aesthetic promotion. Skin work may continue
-on review branches because it cannot alter the sealed release.
+Folio is not eligible for a production selector until its authenticated desktop
+and phone drills pass against the same functional checklist as 909 and the
+visual direction is explicitly accepted. Monday runtime evidence takes priority
+over aesthetic promotion. Skin work may continue on review branches because it
+cannot alter the sealed release.
