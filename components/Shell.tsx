@@ -46,15 +46,13 @@ export interface ShellProps {
 }
 
 // THE TRANSPORT (909-redesign slice 3): the persistent shell now owns the
-// master controls — START/STOP + guarded PAPER/LIVE (lifted from MasterStrip,
-// identical handlers) + NAV/DAY/BOOKS/STEP readouts + room tabs + the ONE
+// master controls — automatic-session truth + guarded PAPER/LIVE +
+// NAV/DAY/BOOKS/STEP readouts + room tabs + the ONE
 // always-visible KILL. Health + operator collapse to dots (titles carry the
 // words) — the fixed 1180 chassis has zero slack, and flex-wrap is the net.
 export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAcctId, activeRoom, setActiveRoom }: ShellProps) {
   const dispatch = useDeskDispatch();
   const { canWrite, persistFund } = useDeskWrite();
-
-  const running = fund.running && !fund.is_halted;
 
   // STEP readout — the session sequencer's clock on the transport (effect + 30s
   // tick so SSR/hydration can't disagree on the time).
@@ -92,10 +90,10 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
         <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
         <span
           className={`shell-xport${canWrite ? "" : " shell-xport--locked"}`}
-          title={canWrite ? undefined : "desk transport (START/STOP · PAPER/LIVE) — sign in via OPS to control the desk"}
+          title={canWrite ? "session admission is automatic; PAUSE is not connected" : "session status · PAPER/LIVE requires operator sign-in"}
         >
-          <TransportButton label="START" variant="start" active={running} onPress={() => dispatch({ type: "START" })} disabled={fund.is_halted} />
-          <TransportButton label="STOP" variant="stop" active={!fund.running} onPress={() => dispatch({ type: "STOP" })} />
+          <TransportButton label="AUTO" variant="start" active={!fund.is_halted} onPress={() => undefined} disabled />
+          <TransportButton label="PAUSE" variant="stop" onPress={() => undefined} disabled />
           <GuardedToggle
             mode={fund.mode}
             onChange={(m) => {

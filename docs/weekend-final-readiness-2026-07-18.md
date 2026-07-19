@@ -64,9 +64,26 @@ operator/manual-close/position-flow 63 checks, Perform/Studio 34, Ops/Sentinel/T
 - The current `START` / `STOP` transport is a local workstation presentation flag. `fund_state` has no
   `running` column and the worker does not consume it. It must not be represented as a remote worker or
   entry-admission control.
+- The final readiness branch removes that false affordance from the new desktop/mobile shell and the retained
+  Legacy Rooms chassis: the session is shown as `AUTO`, while `PAUSE` is disabled and explicitly described as
+  not connected. `KILL` remains separate and durable.
 - A durable pause-new-entries control should be built separately on the existing account `is_armed` boundary,
   whose worker contract already keeps exit management running while disarmed. Do not improvise that schema/write
   path immediately before Monday's sealed session.
+
+## Authenticated production acceptance
+
+Completed against `https://seve-henna.vercel.app/` with the authorized operator session before publishing this
+branch:
+
+- desktop Dashboard, Markets, Positions, Channels, Sentinel, Event Tape, and Ops all loaded current production
+  evidence with no console warnings or errors;
+- mobile PLAY, STUDIO, BOOK, REVIEW, and OPS were independently reachable at 390×844; PLAY restored all seven
+  chart canvases, the document stayed 390 px wide, and the mobile console remained clean;
+- Legacy Rooms mounted as the only product shell, exposed Play/Mix/Write/Tape/Ops with exactly one KILL control,
+  and returned to the workstation cleanly;
+- the books were flat, so the authenticated close-position control could not be exercised without fabricating a
+  trade. Its reducer/API self-tests and the earlier preview drill remain the acceptance evidence for that path.
 
 ## Monday operating sequence
 

@@ -76,17 +76,17 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
         )}
         <div className="master-transport">
           <TransportButton
-            label="START"
+            label="AUTO"
             variant="start"
-            active={fund.running && !fund.is_halted}
-            onPress={() => dispatch({ type: "START" })}
-            disabled={fund.is_halted}
+            active={!fund.is_halted}
+            onPress={() => undefined}
+            disabled
           />
           <TransportButton
-            label="STOP"
+            label="PAUSE"
             variant="stop"
-            active={!fund.running}
-            onPress={() => dispatch({ type: "STOP" })}
+            onPress={() => undefined}
+            disabled
           />
         </div>
 
