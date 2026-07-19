@@ -10,6 +10,7 @@ import { StudioSurface } from "@/components/studio/StudioSurface";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useShell } from "@/hooks/useShellState";
 import { signedUsd, usd0 } from "@/lib/format";
+import { deriveBrokerTelemetry, deriveProcessTelemetry } from "@/lib/shell/workstationTelemetry";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { PerformSection } from "@/lib/perform/derivePerformView";
 
@@ -65,7 +66,9 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   const roster = acctId ? view.desk.strategists.filter((s) => s.account_id === acctId) : view.desk.strategists;
   const exposure = useMemo(() => Object.values(livePnl).reduce((sum, pnl) => sum + pnl.exposure, 0), [livePnl]);
   const riskUsed = liveFund.nav > 0 ? (exposure / liveFund.nav) * 100 : 0;
-  const processObserved = workerRuns.query.state === "ok" && workerRuns.currentHeartbeatAtMs != null;
+  const processTelemetry = deriveProcessTelemetry(workerRuns, now?.getTime() ?? 0);
+  const brokerTelemetry = deriveBrokerTelemetry(surface.opsReadiness.evidence.find((item) => item.id === "reconciliation"));
+  const processObserved = processTelemetry.tone === "green";
   const incidentOn = incident.severity !== "normal";
   const step = now ? sessionStep(now) : 0;
   const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
@@ -118,8 +121,8 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
         <div className="ws-metric"><small>DESK CAPACITY</small><strong>{compactUsd(Math.max(0, liveFund.nav - exposure))}</strong></div>
         <div className="ws-metric"><small>OPEN POSITIONS</small><strong>{feed.positions.length}</strong></div>
         <div className="ws-metric"><small>RISK USED</small><strong>{riskUsed.toFixed(1)}%</strong></div>
-        <div className="ws-metric ws-state"><small>DATA</small><strong>{processObserved ? "LIVE" : "CHECK"}<i /></strong></div>
-        <div className="ws-metric ws-state"><small>BROKER</small><strong>UNRECONCILED<i className="amber" /></strong></div>
+        <div className={`ws-metric ws-state ${processTelemetry.tone}`} title={processTelemetry.detail}><small>DATA</small><strong>{processTelemetry.label}<i /></strong></div>
+        <div className={`ws-metric ws-state ${brokerTelemetry.tone}`} title={brokerTelemetry.detail}><small>BROKER</small><strong>{brokerTelemetry.label}<i /></strong></div>
         <div className="ws-clock"><strong>{clock} PT</strong><span>{incident.session.replaceAll("_", " ")}</span></div>
       </section>
 

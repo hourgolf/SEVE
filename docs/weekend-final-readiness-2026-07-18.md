@@ -58,6 +58,16 @@ operator/manual-close/position-flow 63 checks, Perform/Studio 34, Ops/Sentinel/T
 4. Confirm Railway remains on the already-verified `stream-2026-07-17g`. Do not redeploy merely to rehearse.
 5. Leave all strategy configuration frozen through Monday's session.
 
+## Operator-control truth
+
+- `KILL` is the durable safety control: it persists the fund halt and invokes the existing flatten path.
+- The current `START` / `STOP` transport is a local workstation presentation flag. `fund_state` has no
+  `running` column and the worker does not consume it. It must not be represented as a remote worker or
+  entry-admission control.
+- A durable pause-new-entries control should be built separately on the existing account `is_armed` boundary,
+  whose worker contract already keeps exit management running while disarmed. Do not improvise that schema/write
+  path immediately before Monday's sealed session.
+
 ## Monday operating sequence
 
 ### Before open
