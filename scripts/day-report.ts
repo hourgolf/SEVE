@@ -34,6 +34,16 @@ import { createServerSupabaseClient } from "./serverSupabase";
 
 const sb = createServerSupabaseClient("day-report");
 
+// Bulk forensic reads are non-trading, idempotent GETs. Bound each page so a
+// dead socket cannot stall the nightly chain indefinitely, and retry transient
+// network/statement failures with a fresh PostgREST builder. This is opt-in:
+// worker reads using pageAll retain their existing single-attempt behavior.
+const REPORT_PAGE_OPTS = {
+  attempts: 4,
+  retryDelaysMs: [500, 1_500, 4_500],
+  timeoutMs: 30_000,
+} as const;
+
 const di = process.argv.indexOf("--date");
 const READ_ONLY = process.argv.includes("--read-only");
 const ET_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" });
@@ -149,7 +159,7 @@ async function main() {
   const barsRaw = await pageAll<{ symbol: string; ts: string; close: number | null }>((from) => sb
     .from("underlying_bars").select("symbol,ts,close")
     .gte("ts", `${DATE}T13:25:00Z`).lte("ts", `${DATE}T20:05:00Z`)
-    .order("ts", { ascending: true }).order("id", { ascending: true }));
+    .order("ts", { ascending: true }).order("id", { ascending: true }), REPORT_PAGE_OPTS);
   const bySym = new Map<string, Array<{ ts: number; c: number }>>();
   for (const b of barsRaw) {
     if (b.close == null) continue;
@@ -327,9 +337,9 @@ async function main() {
   };
   type CovRow = { strategist_id: string; occ_symbol: string; qty: number };
   const openedRaw = await pageAll<CovRow>(() => sb.from("positions").select("strategist_id,occ_symbol,qty")
-    .gte("opened_at", `${DATE}T13:00:00Z`).lte("opened_at", `${DATE}T22:00:00Z`).order("opened_at").order("id"));
+    .gte("opened_at", `${DATE}T13:00:00Z`).lte("opened_at", `${DATE}T22:00:00Z`).order("opened_at").order("id"), REPORT_PAGE_OPTS);
   const openRowsRaw = await pageAll<CovRow>(() => sb.from("positions").select("strategist_id,occ_symbol,qty")
-    .eq("status", "open").order("opened_at").order("id"));
+    .eq("status", "open").order("opened_at").order("id"), REPORT_PAGE_OPTS);
   const boughtByAcct = grpByAcct(openedRaw);
   const openByAcct = grpByAcct(openRowsRaw);
 

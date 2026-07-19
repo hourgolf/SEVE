@@ -7,9 +7,9 @@ import { AuthControl } from "@/components/AuthControl";
 import { KillControl } from "@/components/console/hw/KillControl";
 import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
-import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useShell } from "@/hooks/useShellState";
 import { signedUsd, usd0 } from "@/lib/format";
+import { deriveBrokerTelemetry, deriveProcessTelemetry } from "@/lib/shell/workstationTelemetry";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { PerformSection } from "@/lib/perform/derivePerformView";
 
@@ -47,7 +47,6 @@ const sessionStep = (now: Date): number => {
 
 export function WorkstationShell({ surface, dayChangePct, onLegacy }: WorkstationShellProps) {
   const { mode, setMode, skin, toggleSkin, density, toggleDensity } = useShell();
-  const dispatch = useDeskDispatch();
   const [now, setNow] = useState<Date | null>(null);
   const [performSection, setPerformSection] = useState<PerformSection>("overview");
   const [authOpen, setAuthOpen] = useState(false);
@@ -65,7 +64,9 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   const roster = acctId ? view.desk.strategists.filter((s) => s.account_id === acctId) : view.desk.strategists;
   const exposure = useMemo(() => Object.values(livePnl).reduce((sum, pnl) => sum + pnl.exposure, 0), [livePnl]);
   const riskUsed = liveFund.nav > 0 ? (exposure / liveFund.nav) * 100 : 0;
-  const processObserved = workerRuns.query.state === "ok" && workerRuns.currentHeartbeatAtMs != null;
+  const processTelemetry = deriveProcessTelemetry(workerRuns, now?.getTime() ?? 0);
+  const brokerTelemetry = deriveBrokerTelemetry(surface.opsReadiness.evidence.find((item) => item.id === "reconciliation"));
+  const processObserved = processTelemetry.tone === "green";
   const incidentOn = incident.severity !== "normal";
   const step = now ? sessionStep(now) : 0;
   const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
@@ -118,8 +119,8 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
         <div className="ws-metric"><small>DESK CAPACITY</small><strong>{compactUsd(Math.max(0, liveFund.nav - exposure))}</strong></div>
         <div className="ws-metric"><small>OPEN POSITIONS</small><strong>{feed.positions.length}</strong></div>
         <div className="ws-metric"><small>RISK USED</small><strong>{riskUsed.toFixed(1)}%</strong></div>
-        <div className="ws-metric ws-state"><small>DATA</small><strong>{processObserved ? "LIVE" : "CHECK"}<i /></strong></div>
-        <div className="ws-metric ws-state"><small>BROKER</small><strong>UNRECONCILED<i className="amber" /></strong></div>
+        <div className={`ws-metric ws-state ${processTelemetry.tone}`} title={processTelemetry.detail}><small>DATA</small><strong>{processTelemetry.label}<i /></strong></div>
+        <div className={`ws-metric ws-state ${brokerTelemetry.tone}`} title={brokerTelemetry.detail}><small>BROKER</small><strong>{brokerTelemetry.label}<i /></strong></div>
         <div className="ws-clock"><strong>{clock} PT</strong><span>{incident.session.replaceAll("_", " ")}</span></div>
       </section>
 
@@ -153,9 +154,9 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
           <button type="button" className={mode === "studio" ? "on" : ""} onClick={() => setMode("studio")}><i />STUDIO</button>
           <button type="button" onClick={onLegacy}><i />ROOMS</button>
         </div></section>
-        <section className="ws-transport"><small>TRANSPORT</small><div>
-          <button type="button" disabled={!write.canWrite} className={!fund.running ? "on" : ""} onClick={() => dispatch({ type: "STOP" })}>■<span>STOP</span></button>
-          <button type="button" disabled={!write.canWrite || fund.is_halted} className={fund.running && !fund.is_halted ? "play on" : "play"} onClick={() => dispatch({ type: "START" })}>▶<span>PLAY</span></button>
+        <section className="ws-transport"><small>SESSION</small><div>
+          <button type="button" disabled className="play on" title="The paper session is automatic; this is status, not a worker control.">●<span>AUTO</span></button>
+          <button type="button" disabled title="Pause-new-entries is not connected yet. KILL remains the emergency flatten-and-halt control.">‖<span>PAUSE</span></button>
           <button type="button" className="rec" disabled><i /><span>{fund.mode.toUpperCase()}</span></button>
         </div></section>
         <section className="ws-sequencer"><small>SESSION SEQUENCER</small><div>{Array.from({ length: 16 }, (_, i) => <i key={i} className={i === step ? "on" : i < step ? "past" : ""}><span>{i + 1}</span></i>)}</div></section>
@@ -176,7 +177,7 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
               <button type="button" aria-label="close operator access" onClick={() => setAuthOpen(false)}>×</button>
             </header>
             <AuthControl defaultOpen />
-            <p>Closing positions, changing channel controls, transport, and KILL remain unavailable until an authorized operator session is verified.</p>
+            <p>Closing positions, changing channel controls, and KILL remain unavailable until an authorized operator session is verified. Session admission is automatic; PAUSE is not connected yet.</p>
           </section>
         </div>
       )}
