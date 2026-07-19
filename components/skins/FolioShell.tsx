@@ -9,11 +9,11 @@ import { AuthControl } from "@/components/AuthControl";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { MobileDeskRoom } from "@/components/mobile2/MobileDeskSheet";
 import { MobileKillControl } from "@/components/mobile2/MobileKillControl";
-import { MobilePerform } from "@/components/mobile2/MobilePerform";
 import { MobileSettingsSheet } from "@/components/mobile2/MobileSettingsSheet";
 import { MobileStudio } from "@/components/mobile2/MobileStudio";
 import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
+import { FolioHomeDesktop, FolioHomeMobile } from "@/components/skins/folio/FolioHome";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { useShell } from "@/hooks/useShellState";
 import { signedUsd, usd0 } from "@/lib/format";
@@ -132,7 +132,7 @@ function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps,
       </nav>
 
       <main className="folio-display" aria-label={`${mode} Folio workspace`}>
-        {mode === "perform" ? <PerformSurface {...surface} section={section} /> : <StudioSurface {...surface} />}
+        {mode === "perform" ? section === "overview" ? <FolioHomeDesktop surface={surface} /> : <PerformSurface {...surface} section={section} /> : <StudioSurface {...surface} />}
       </main>
 
       <footer className="folio-foot"><span>FOLIO IS A PREVIEW-ONLY PRESENTATION STUDY</span><span>SAME DATA · SAME ACTIONS · NO RC5 CHANGES</span></footer>
@@ -182,7 +182,7 @@ function FolioMobile({ surface }: { surface: SurfaceProps }) {
       <main className="folio-mobile-main">
         {surface.data.error && <ErrorBanner message={surface.data.error} isAccessError={surface.data.isAccessError} />}
         {surface.data.warning && (room === "play" || room === "ops") && <div className="market-read-warning" role="status">{surface.data.warning}</div>}
-        {room === "play" ? <MobilePerform props={surface} channels={channels} sent={surface.sentinel} livePnl={surface.livePnl} />
+        {room === "play" ? <FolioHomeMobile surface={surface} />
           : room === "studio" ? <MobileStudio props={surface} channels={channels} livePnl={surface.livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={() => setAddOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
             : <MobileDeskRoom room={room} props={surface} channels={channels} livePnl={surface.livePnl} onViewChart={() => setRoom("play")} onOpenSettings={() => setSettingsOpen(true)} />}
       </main>
