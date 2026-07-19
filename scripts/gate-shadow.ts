@@ -27,21 +27,19 @@
 //    npm run gate-shadow -- --days 3
 // ============================================================================
 
-import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import {
   coalesceVbCandidateDecisions,
   type VbCandidateDecision,
   type VbCandidateReceipt,
 } from "../lib/research/vbCandidateEvidence.js";
+import { createServerSupabaseClient } from "./serverSupabase";
 
-const URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const READ_ONLY = process.argv.includes("--read-only");
 // A read-only audit may authenticate with the backend credential when no anon
 // key is available, but every external write branch remains disabled.
 const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY && !READ_ONLY;
-const sb = createClient(URL, KEY, { auth: { persistSession: false } });
+const sb = createServerSupabaseClient("gate-shadow");
 
 const daysArg = process.argv.indexOf("--days");
 const DAYS = daysArg > 0 ? Math.max(1, Number(process.argv[daysArg + 1]) || 6) : 6;

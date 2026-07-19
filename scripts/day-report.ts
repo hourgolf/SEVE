@@ -14,13 +14,12 @@
 //    npm run day-report -- --date 2026-06-10
 //    npm run day-report -- --date 2026-06-10 --read-only
 //
-//  Reads use the anon client. Default mode may persist eligible override/foulout
+//  Reads use the server-only script client. Default mode may persist eligible override/foulout
 //  ledgers and publish the dashboard payload when private env is present;
 //  --read-only suppresses every report write. Peaks come from option_quotes
 //  (7-day retention — run it same-week). Exit reasons parse the `events` journal.
 // ============================================================================
 
-import { createClient } from "@supabase/supabase-js";
 import { upcomingEvents, tableHorizonDays } from "../engine/market-events";
 import {
   upsertLedger, loadLedger, scorecardLines, scorecardData, type LedgerEntry,
@@ -31,8 +30,9 @@ import { runOneAccountShadow, type ShadowResult } from "./one-account-shadow";
 import { ratchetShadowSummary, slotAwareA4, slotAwareMomo, type RatchetSummary, type SlotAwareBank } from "./ratchet-shadow";
 import { pageAll } from "../engine/pageAll";
 import { getPositionResearchAnnotation, type PositionResearchAnnotation } from "../lib/research/positionAnnotations";
+import { createServerSupabaseClient } from "./serverSupabase";
 
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+const sb = createServerSupabaseClient("day-report");
 
 const di = process.argv.indexOf("--date");
 const READ_ONLY = process.argv.includes("--read-only");
@@ -109,7 +109,7 @@ async function reconstructRide(occ: string, entry: number, qty: number, openedAt
 }
 
 // Publish the computed forensics to the §03 dashboard panel (best-effort, env-gated). The CLI
-// is anon/read-only, so it POSTs to the service-role route. Needs APP_URL + PUSH_SECRET in
+// keeps report publication behind the existing signed route. Needs APP_URL + PUSH_SECRET in
 // .env.local (the same vars the worker uses); absent → skipped, the terminal report is unaffected.
 async function publishForensics(date: string, payload: unknown): Promise<string> {
   const url = process.env.APP_URL, secret = process.env.PUSH_SECRET;

@@ -11,17 +11,15 @@
 //
 // An account whose ALPACA_KEY_<ref> isn't in .env.local is SKIPPED (its OCCs flagged, not corrected).
 
-import { createClient } from "@supabase/supabase-js";
 import { writeFileSync, readFileSync, existsSync } from "fs";
 import { pageAll } from "../engine/pageAll";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 const PAPER = "https://paper-api.alpaca.markets";
 const FIX = process.argv.includes("--fix");
 const WRITE = process.argv.includes("--write");
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
-const sbW = WRITE && process.env.SUPABASE_SERVICE_ROLE_KEY
-  ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
-  : null;
+const sb = createServerSupabaseClient("reconcile-alpaca");
+const sbW = WRITE ? sb : null;
 const usd = (v: number) => (v >= 0 ? "+$" : "-$") + Math.abs(Math.round(v)).toLocaleString();
 const r2 = (v: number) => Math.round(v * 100) / 100;
 

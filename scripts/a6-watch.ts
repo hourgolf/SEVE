@@ -17,14 +17,14 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
 import { pageAll } from "../engine/pageAll";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 const ERA4_START = "2026-06-30";
 const TRIGGER_SESSIONS = 15;
 const STATE_PATH = "data/a6-watch.json";
 const FORCE = process.argv.includes("--force");
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+const sb = createServerSupabaseClient("a6-watch");
 
 interface WatchState { t1Pushed?: boolean; firedMemo?: string }
 const loadState = (): WatchState => (existsSync(STATE_PATH) ? JSON.parse(readFileSync(STATE_PATH, "utf8")) : {});

@@ -8,12 +8,12 @@
 //  prints no API keys, account numbers, UUIDs, or broker account identifiers.
 // ============================================================================
 
-import { createClient } from "@supabase/supabase-js";
 import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION } from "@/lib/channels/day1Release";
 import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { deriveSentinelReceiptStatus } from "@/lib/sentinel/receipt";
 import type { MarketEvent } from "@/lib/types";
 import { DAY1_SEALED_RUNTIME_POSTURE } from "@/worker/src/day1ReleasePolicy";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 const REQUIRED_PAPER_HOST = "https://paper-api.alpaca.markets";
 const WORKER_FRESH_SEC = 150;
@@ -127,16 +127,16 @@ function sameBook(a: Map<string, number>, b: Map<string, number>): boolean {
 }
 
 async function main(): Promise<void> {
-  const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!sbUrl || !sbKey) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
-
   const configuredHost = process.env.ALPACA_PAPER_HOST ?? REQUIRED_PAPER_HOST;
   const failures: string[] = [];
   const warnings: string[] = [];
   if (configuredHost !== REQUIRED_PAPER_HOST) failures.push(`ALPACA_PAPER_HOST is ${configuredHost}; expected ${REQUIRED_PAPER_HOST}`);
 
-  const sb = createClient(sbUrl, sbKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  // The production desk is private: anon reads are intentionally denied by
+  // RLS. This local operator gate therefore uses the server-only service role
+  // for SELECTs. Keep this script structurally read-only; never pass this key to
+  // browser code or add a mutation to the preopen path.
+  const sb = createServerSupabaseClient("preopen-readiness");
   const [fundRead, accountsRead, channelsRead, positionsRead, workerRead, releaseRead, sentinelRead] = await Promise.all([
     sb.from("fund_state").select("mode,is_halted,halted_reason").eq("id", 1).maybeSingle(),
     sb.from("accounts").select("id,name,cred_ref,is_armed,is_halted,master_daily_stop_usd").order("name"),

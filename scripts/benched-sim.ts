@@ -26,8 +26,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { isPositionExcludedFromStrategyResearch } from "../lib/research/positionAnnotations";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return; // day-report runs with --env-file already
@@ -109,7 +110,7 @@ function simChannel(s: { slug: string; name: string; underlying: string; spec_js
 
 export async function benchedVsLive(date: string): Promise<BenchedVsLive> {
   loadEnv();
-  const sb: SupabaseClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const sb: SupabaseClient = createServerSupabaseClient("benched-sim");
   const todayET = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
   const ageDays = Math.round((Date.parse(todayET) - Date.parse(date)) / 86_400_000);
   const sameWeek = ageDays >= 0 && ageDays <= 6; // option_quotes 7d retention

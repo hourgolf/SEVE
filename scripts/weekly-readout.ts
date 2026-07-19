@@ -20,13 +20,11 @@
 //  are capital-blind would-haves. Diagnostics, never edge claims (registry A8).
 // ============================================================================
 
-import { createClient } from "@supabase/supabase-js";
 import { writeFileSync, mkdirSync } from "node:fs";
+import { createServerSupabaseClient } from "./serverSupabase";
 
-const URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
-const sb = createClient(URL, KEY, { auth: { persistSession: false } });
+const sb = createServerSupabaseClient("weekly-readout");
 
 const DAYS = 7;
 const ERA4_START = "2026-06-30"; // LOCK/RIDE era (A6)

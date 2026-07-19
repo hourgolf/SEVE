@@ -27,7 +27,6 @@
 //  npm run backfill:databento [-- --underlying QQQ] for a tighter match).
 // ============================================================================
 
-import { createClient } from "@supabase/supabase-js";
 import { simulateSession } from "../engine/backtest";
 import { specToStrategyDef, specPremiumExit } from "../engine/specEvaluate";
 import { specTrail, type StrategySpec } from "../lib/desk/strategySpec";
@@ -37,6 +36,7 @@ import { makeDatabentoChain, loadDatabentoByDay } from "../engine/databentosourc
 import { DEFAULT_COST_MODEL, type CostModel } from "../engine/cost";
 import type { ChainProvider } from "../engine/optionsource";
 import type { Evaluate, FundState, OptType, StrategistConfig, Trade } from "../engine/types";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 // ---- CLI -------------------------------------------------------------------
 const arg = (n: string, d: string): string => { const i = process.argv.indexOf(`--${n}`); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : d; };
@@ -46,7 +46,7 @@ const MODEL_SESSIONS = Number(arg("model-sessions", "60")); // model window leng
 const ONLY = arg("channel", "");                       // optional slug filter
 const JSON_OUT = process.argv.includes("--json");
 
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+const sb = createServerSupabaseClient("mfe-drift");
 
 // ---- live-faithful constants (worker 2026-06-10a) ---------------------------
 const FUND: FundState = { total_capital_usd: 100000, master_daily_stop_usd: 1e9, is_halted: false };

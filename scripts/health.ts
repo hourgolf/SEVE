@@ -2,7 +2,7 @@
 //  scripts/health.ts   ·   run: npm run health
 //
 //  Day-2 (and beyond) live-desk health check — one command, no SQL. Reads the
-//  desk tables via the anon key (.env.local) and prints a skimmable snapshot:
+//  private desk tables via the server-only local credential and prints a skimmable snapshot:
 //  worker liveness, fund/equity/P&L, dispatcher aborts, per-channel isolation
 //  failures (the 2026-06-01g guard), and a per-channel tally of signals /
 //  blocked-reasons / fills / open positions / realized P&L today. Surfaces the
@@ -13,7 +13,7 @@
 // ============================================================================
 
 import { readFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 const ETF = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York", weekday: "short",
@@ -33,9 +33,7 @@ const padL = (s: string, n: number) => (" ".repeat(n) + s).slice(-n);
 
 async function main() {
   for (const line of readFileSync(".env.local", "utf8").split("\n")) { const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim(); }
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) { console.error("Missing NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY in .env.local"); process.exit(1); }
-  const sb = createClient(url, key, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("health");
 
   const nowMs = Date.now();
   const now = etParts(nowMs); const today = now.date;

@@ -23,7 +23,7 @@
 // Era boundaries (calibration-change log): grind-v3-2's TP changed 12→5 on 2026-07-02 —
 // its era-4 sample starts there; do not pool across the boundary.
 
-import { createClient } from "@supabase/supabase-js";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 const ERA4_START = "2026-06-30";
 const SESSIONS_TRIGGER = 15;
@@ -33,7 +33,7 @@ const ERA_OVERRIDES: Record<string, string> = {
   "grind-v3-2": "2026-07-02", // TP 12→5 calibration (log entry B) — new era
 };
 
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+const sb = createServerSupabaseClient("a6-read");
 const usd = (v: number) => (v >= 0 ? "+$" : "-$") + Math.abs(Math.round(v)).toLocaleString();
 const pct = (v: number) => (v * 100).toFixed(0) + "%";
 

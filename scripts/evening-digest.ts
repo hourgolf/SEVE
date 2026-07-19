@@ -11,12 +11,12 @@
 //   npm run evening-digest            # trading days only
 //   npm run evening-digest -- --force # test on a non-session day
 
-import { createClient } from "@supabase/supabase-js";
 import { existsSync, readdirSync } from "fs";
 import { isTradingDay } from "../engine/market-calendar";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 const FORCE = process.argv.includes("--force");
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+const sb = createServerSupabaseClient("evening-digest");
 const usd = (v: number) => (v >= 0 ? "+$" : "-$") + Math.abs(Math.round(v)).toLocaleString();
 const ERA4_START = "2026-06-30";
 const A6_SESSIONS = 15;

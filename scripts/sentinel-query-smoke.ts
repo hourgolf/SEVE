@@ -1,19 +1,15 @@
 // Read-only live-schema check for the exact virtual_trades query Sentinel uses.
-// This intentionally uses the anonymous key even when a service key is present.
-import { createClient } from "@supabase/supabase-js";
+// The private desk denies anonymous reads, so this trusted local smoke uses the
+// server-only credential while remaining structurally SELECT-only.
 import {
   SENTINEL_VIRTUAL_TRADE_ORDER,
   SENTINEL_VIRTUAL_TRADE_SELECT,
 } from "../lib/sentinel/virtualTradeQuery";
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!url || !anonKey) throw new Error("NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required");
+import { createServerSupabaseClient } from "./serverSupabase";
 
 async function main() {
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-  const sb = createClient(url, anonKey);
+  const sb = createServerSupabaseClient("sentinel-query-smoke");
   const { data, error } = await sb
     .from("virtual_trades")
     .select(SENTINEL_VIRTUAL_TRADE_SELECT)

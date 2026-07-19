@@ -1,6 +1,7 @@
 // ============================================================================
 //  Real-bars data source for the backtest.
-//  Reads the backfilled underlying_bars from Supabase (anon key, read-only),
+//  Reads the backfilled underlying_bars from Supabase (server-only service role,
+//  read-only queries),
 //  groups them into US regular-hours sessions (09:30–16:00 ET), and returns one
 //  RealSession per trading day — real SPY price paths with real opening ranges.
 //  Option chains are still priced synthetically (Black-Scholes) on top, since we
@@ -8,8 +9,8 @@
 // ============================================================================
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
 import type { Bar } from "./types";
+import { createServerSupabaseClient } from "../scripts/serverSupabase";
 
 // Minimal .env.local loader (the Node backtest doesn't get Next's env).
 function loadEnv() {
@@ -86,10 +87,7 @@ function etParts(ms: number): { date: string; min: number } {
 
 async function fetchAllBars(sinceMs?: number, symbol = "SPY"): Promise<RawBar[]> {
   loadEnv();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY (.env.local)");
-  const sb = createClient(url, key, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("engine real-bars source");
 
   const out: RawBar[] = [];
   const cutoffMs = sinceMs ?? null;

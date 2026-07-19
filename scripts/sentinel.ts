@@ -15,7 +15,6 @@
 //
 //    tsx --env-file=.env.local scripts/sentinel.ts [--days N]
 // ---------------------------------------------------------------------------
-import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -28,13 +27,12 @@ import {
   type SentinelVirtualTradeRow,
 } from "../lib/sentinel/virtualTradeQuery";
 import { buildSentinelReceiptMeta, resolveSentinelEvidenceSession } from "../lib/sentinel/receipt";
+import { createServerSupabaseClient } from "./serverSupabase";
 
-// Service role (when present, e.g. the nightly capture / .env.local) lets the digest publish to the
-// events table for the §03 panel; anon still reads virtual_trades fine, just skips the publish.
-const SB_URL = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL) as string;
-const SB_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string;
+// The private desk requires the server-only service role for both the evidence
+// reads and the optional event publication.
 const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
-const sb = createClient(SB_URL, SB_KEY);
+const sb = createServerSupabaseClient("sentinel");
 
 const ERA4 = "2026-06-30";
 // Measured NTM exit half-spread ($/ct) — the mid-basis → real-fill haircut on bench

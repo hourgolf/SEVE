@@ -7,8 +7,8 @@
 // ============================================================================
 
 import { readFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
 import type { OptType, Quote } from "./types";
+import { createServerSupabaseClient } from "../scripts/serverSupabase";
 
 function loadEnv() {
   try {
@@ -88,10 +88,7 @@ interface RawOB {
 // 1M+ row table times out, but a single day (~11k rows, small offsets) is fast.
 export async function loadOptionBarsByDay(dates: string[], underlying = "SPY"): Promise<Map<string, Series[]>> {
   loadEnv();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY");
-  const sb = createClient(url, key, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("engine option-bars source");
 
   const PAGE = 1000;
   const out = new Map<string, Series[]>();
@@ -187,10 +184,7 @@ interface RawOQ { occ_symbol: string; captured_at: string; strike: number; opt_t
 // unlike option_bars). Same per-day keyset paging as loadOptionBarsByDay.
 export async function loadOptionQuotesByDay(dates: string[], underlying = "SPY"): Promise<Map<string, QSeries[]>> {
   loadEnv();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY");
-  const sb = createClient(url, key, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("engine option-quotes source");
 
   const PAGE = 1000;
   const out = new Map<string, QSeries[]>();

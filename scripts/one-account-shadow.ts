@@ -34,9 +34,10 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { pageAll } from "../engine/pageAll";
 import { isPositionExcludedFromStrategyResearch } from "../lib/research/positionAnnotations";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -102,7 +103,7 @@ export interface ShadowResult {
 
 export async function runOneAccountShadow(opts: ShadowOpts = {}): Promise<ShadowResult> {
   loadEnv();
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("one-account-shadow");
   const equity = opts.equity ?? 50_000;
   const from = opts.from ?? ERA4_EPOCH;
   const to = opts.to ?? ET_DAY.format(new Date());
@@ -349,7 +350,7 @@ function programmedExit(entry: number, path: { m: number; t: string }[], tpPct: 
 
 async function handsOff(to: string): Promise<void> {
   loadEnv();
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("one-account-shadow");
   const { data: strat } = await sb.from("strategists").select("id,slug,underlying,accounts(cred_ref),strategist_config(take_profit_pct,premium_stop_pct,underlying_stop_pct,entry_dte)").eq("status", "armed");
   const ft = new Map<string, { slug: string; underlying: string; tp: number; stop: number; ustop: number; dte: number }>();
   for (const s of (strat ?? []) as any[]) {
@@ -434,7 +435,7 @@ async function handsOff(to: string): Promise<void> {
 // No trade-path change. Cost = modeled half-spread (3% of mid) crossed unnecessarily.
 async function crossAudit(to: string): Promise<void> {
   loadEnv();
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("one-account-shadow");
   const { data: strat } = await sb.from("strategists").select("id,slug,accounts(cred_ref)").eq("status", "armed");
   const ft = new Map<string, string>();
   for (const s of (strat ?? []) as any[]) if (((Array.isArray(s.accounts) ? s.accounts[0] : s.accounts)?.cred_ref) === "2") ft.set(s.id, s.slug);

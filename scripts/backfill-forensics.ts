@@ -17,31 +17,30 @@
 //      option_quotes (DB, ~7d) ∪ the quotes-archive (gz, banked) — NEVER overwrites
 //      a live-ratcheted peak.
 //
-//  Read-only against the DB (anon). No service-role key locally → emits the UPDATEs
-//  to data/backfill-forensics.sql for apply-via-MCP. Idempotent (all COALESCE/merge).
+//  Server-only DB access. Without --write it emits UPDATEs to
+//  data/backfill-forensics.sql; with --write it applies them directly. Idempotent
+//  (all COALESCE/merge).
 //
 //    npm run backfill-forensics            (all trades)
 //    npm run backfill-forensics -- --from 2026-06-05   (limit the start ET date)
 // ============================================================================
 
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { loadRealSessions, type RealSession } from "../engine/realsource";
 import { computeFeatures } from "../engine/engine";
 import { macdAt } from "../engine/macd";
 import type { Bar } from "../engine/types";
+import { createServerSupabaseClient } from "./serverSupabase";
 
-const sb: SupabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: false } });
+const sb: SupabaseClient = createServerSupabaseClient("backfill-forensics");
 
 // Direct apply needs write access. With SUPABASE_SERVICE_ROLE_KEY in .env.local + --write,
 // the script UPDATEs the rows itself (the live-wins merge done in JS); otherwise it emits the
 // SQL file for apply-via-MCP. Read path is always anon.
 const WRITE = process.argv.includes("--write");
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const sbWrite = SERVICE ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, SERVICE, { auth: { persistSession: false } }) : null;
+const sbWrite = WRITE ? sb : null;
 
 const fi = process.argv.indexOf("--from");
 const FROM = fi >= 0 ? process.argv[fi + 1] : "2026-01-01";

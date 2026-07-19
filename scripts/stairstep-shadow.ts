@@ -37,8 +37,8 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { pageAll } from "../engine/pageAll";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -116,7 +116,7 @@ function walkRunner(entry: number, spawnLevel: number, quotes: { m: number }[]):
 
 async function main() {
   loadEnv();
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("stairstep-shadow");
 
   const { data: strat, error: se } = await sb.from("strategists").select("id,slug").in("slug", CANDIDATES);
   if (se) throw new Error(`strategists read: ${se.message}`);

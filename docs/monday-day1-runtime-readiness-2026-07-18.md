@@ -27,6 +27,39 @@ cannot truthfully be green before the session begins.
 | Local close publisher | Green at last close | Gate 0 recorded 21 runs, last exit code 0, and a fully green final Tier 1/2 summary at 2026-07-17 20:31:01Z. |
 | First RC5 session evidence | Yellow, expected | No July 20 candidate, held path, manager scorecard, collision censor, or close receipt can exist before the cohort starts. This is an evidence wait, not a configuration gap. |
 
+## Private data-plane cutover verification
+
+The operator-facing database tables became private before this audit. The browser correctly reads them
+through an authenticated user session and the worker correctly uses the service role, but the first
+post-cutover preopen run exposed a separate local-tooling dependency: trusted Node scripts still created
+anonymous clients. Those reads were denied by RLS and initially presented as false readiness blockers.
+
+The Monday-critical trusted tooling now uses one fail-closed server-only client that requires
+`SUPABASE_SERVICE_ROLE_KEY`. The helper is statically barred from the browser entry points. The corrected
+boundary covers preopen, health, Sentinel query/publisher, day report and its child simulations, broker
+reconciliation, held/benched/ratchet/stairstep research reads, raw quote/bar export, forensics, training
+store, weekly/MFE/A6 diagnostics, and the evening digest. No service credential is copied into a public
+anonymous-key variable by these paths.
+
+Read-only post-cutover evidence:
+
+- authoritative preopen gate: **all hard gates pass**; exact RC5 release/hash, six roots ready, 19
+  historical DB-armed rows correctly dark under the release overlay, 12/60 capture and eight manager
+  arms confirmed;
+- production health: paper, not halted, no active flags;
+- Sentinel query smoke: pass against the private data plane;
+- broker/desk reconciliation: 3/3 Alpaca paper accounts reached, 466 broker OCCs, broker and desk
+  realized totals both `-$43,747`, aggregate per-OCC drift `$2` versus the `$200` gate;
+- full 2026-07-17 read-only day report: 66/66 closed positions rebuilt; all three account coverage
+  checks clean; override, foul-out, managed-exit, benched, one-account, ratchet, and give-back sections
+  completed without an RLS or child-process permission failure;
+- server credential boundary self-test: 49/49 pass; TypeScript, production build, incident policy,
+  market calendar, runner, and durable manager-book suites pass.
+
+The remaining scripts that still mention the anonymous key are non-runtime historical/probe utilities.
+They are not in the Monday capture or readiness chain and remain follow-up cleanup; they must not be used
+as a reason to weaken RLS.
+
 ## Sealed root book
 
 | Root | Account | Underlying | Qty | Risk budget | Premium cap | Debit cap | Manager |

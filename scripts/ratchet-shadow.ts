@@ -43,9 +43,10 @@ import { gunzipSync } from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { pageAll } from "../engine/pageAll";
 import { isPositionExcludedFromStrategyResearch } from "../lib/research/positionAnnotations";
+import { createServerSupabaseClient } from "./serverSupabase";
 
 function loadEnv() {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) return;
@@ -330,7 +331,7 @@ export const slotAwareMomo = (sb: SupabaseClient, to: string) => slotAwareRead(s
 async function cli() {
   if (process.argv.includes("--slot")) {
     loadEnv();
-    const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+    const sb = createServerSupabaseClient("ratchet-shadow");
     const to = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
     // same 7d-retention clamp as slotAwareRead — a from-date older than the quote window fail-fasts
     const slotClamp = new Date(Date.parse(`${to}T00:00:00Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
@@ -352,7 +353,7 @@ async function cli() {
     return;
   }
   loadEnv();
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const sb = createServerSupabaseClient("ratchet-shadow");
   const { rows, fresh } = await buildRows(sb, { allowArchive: true, prior: loadLedger() });
   mkdirSync("data", { recursive: true });
   writeFileSync(LEDGER, JSON.stringify(rows, null, 1));

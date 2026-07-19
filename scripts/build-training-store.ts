@@ -21,10 +21,10 @@
 //    npm run build-training-store -- --from 2026-06-01 --to 2026-06-15
 // ============================================================================
 
-import { createClient } from "@supabase/supabase-js";
 import { writeFileSync, mkdirSync } from "fs";
+import { createServerSupabaseClient } from "./serverSupabase";
 
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+const sb = createServerSupabaseClient("build-training-store");
 const arg = (n: string, d = "") => { const i = process.argv.indexOf(`--${n}`); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : d; };
 const FROM = arg("from", "2024-01-01"), TO = arg("to", "2030-01-01");
 const etDate = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(iso));
