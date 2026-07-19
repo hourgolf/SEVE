@@ -109,7 +109,7 @@ export function MobileBookView({ props, onViewChart }: { props: SurfaceProps; on
   </>;
 }
 
-function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channels: StrategistState[]; livePnl: Record<string, ChannelPnl> }) {
+export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceProps; channels: StrategistState[]; livePnl: Record<string, ChannelPnl> }) {
   const { feed, liveFund, sentinel } = props;
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug] })).sort((a, b) => Math.abs(b.pnl?.dayPnl ?? 0) - Math.abs(a.pnl?.dayPnl ?? 0));
   const equity = feed.equityCurve.map((point) => point.equity);
@@ -176,7 +176,7 @@ function ReviewView({ props, channels, livePnl }: { props: SurfaceProps; channel
   </>;
 }
 
-function OpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; channels: StrategistState[]; onOpenSettings: () => void }) {
+export function MobileOpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; channels: StrategistState[]; onOpenSettings: () => void }) {
   const { data, ops, workerRuns, incident, liveFund, feed, livePnl } = props;
   const active = channels.filter((channel) => channel.status === "armed" && !channel.config.muted);
   const risk = active.reduce((sum, channel) => sum + (channel.config.capital_pct || 0), 0);
@@ -242,8 +242,8 @@ export function MobileDeskSheet({ open, onClose, props, channels, livePnl, onOpe
       </nav>
       <div className="m2-desk-scroll">
         {tab === "book" && <MobileBookView props={props} />}
-        {tab === "review" && <ReviewView props={props} channels={channels} livePnl={livePnl} />}
-        {tab === "ops" && <OpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
+        {tab === "review" && <MobileReviewView props={props} channels={channels} livePnl={livePnl} />}
+        {tab === "ops" && <MobileOpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
         {tab === "build" && <BuildView props={props} channels={channels} onAddChannel={onAddChannel} />}
       </div>
     </section>
@@ -260,7 +260,7 @@ export function MobileDeskRoom({ room, props, channels, livePnl, onViewChart, on
 }) {
   return <div className="m2-scroll m2-room-scroll"><div className="m2-desk-scroll">
     {room === "book" && <MobileBookView props={props} onViewChart={onViewChart} />}
-    {room === "review" && <ReviewView props={props} channels={channels} livePnl={livePnl} />}
-    {room === "ops" && <OpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
+    {room === "review" && <MobileReviewView props={props} channels={channels} livePnl={livePnl} />}
+    {room === "ops" && <MobileOpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
   </div></div>;
 }

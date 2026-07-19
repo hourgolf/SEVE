@@ -14,6 +14,7 @@ import { PerformSurface } from "@/components/perform/PerformSurface";
 import { FolioHomeDesktop, FolioHomeMobile } from "@/components/skins/folio/FolioHome";
 import { FolioBookDesktop, FolioBookMobile } from "@/components/skins/folio/FolioBook";
 import { FolioChannelsDesktop, FolioChannelsMobile } from "@/components/skins/folio/FolioChannels";
+import { FolioMarketsDesktop, FolioOpsDesktop, FolioOpsMobile, FolioReviewDesktop, FolioReviewMobile, FolioSentinelDesktop } from "@/components/skins/folio/FolioWorkspaces";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { useShell } from "@/hooks/useShellState";
 import { signedUsd, usd0 } from "@/lib/format";
@@ -137,7 +138,15 @@ function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps,
             ? <FolioHomeDesktop surface={surface} />
             : section === "positions"
               ? <FolioBookDesktop surface={surface} />
-              : <PerformSurface {...surface} section={section} />
+              : section === "market"
+                ? <FolioMarketsDesktop surface={surface} />
+                : section === "sentinel"
+                  ? <FolioSentinelDesktop surface={surface} />
+                  : section === "tape"
+                    ? <FolioReviewDesktop surface={surface} />
+                    : section === "ops"
+                      ? <FolioOpsDesktop surface={surface} />
+                      : <PerformSurface {...surface} section={section} />
           : <FolioChannelsDesktop surface={surface} />}
       </main>
 
@@ -191,7 +200,9 @@ function FolioMobile({ surface }: { surface: SurfaceProps }) {
         {room === "play" ? <FolioHomeMobile surface={surface} />
           : room === "studio" ? <FolioChannelsMobile surface={surface} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={() => setAddOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
             : room === "book" ? <FolioBookMobile surface={surface} onViewChart={() => setRoom("play")} />
-              : <MobileDeskRoom room={room} props={surface} channels={channels} livePnl={surface.livePnl} onViewChart={() => setRoom("play")} onOpenSettings={() => setSettingsOpen(true)} />}
+              : room === "review" ? <FolioReviewMobile surface={surface} channels={channels} />
+                : room === "ops" ? <FolioOpsMobile surface={surface} channels={channels} onOpenSettings={() => setSettingsOpen(true)} />
+                  : <MobileDeskRoom room={room} props={surface} channels={channels} livePnl={surface.livePnl} onViewChart={() => setRoom("play")} onOpenSettings={() => setSettingsOpen(true)} />}
       </main>
 
       <nav className="folio-mobile-nav" aria-label="Folio mobile workspaces">
