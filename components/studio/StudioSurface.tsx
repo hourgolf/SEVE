@@ -21,7 +21,7 @@ import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, incident, studioEvidence, channelWorkspace }: SurfaceProps) {
+export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, incident, studioEvidence, channelWorkspace, opsReadiness }: SurfaceProps) {
   void symbol;
   const { desk } = view;
 
@@ -77,6 +77,7 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
         positions={feed.positions}
         recentTrades={feed.recentTrades}
         strategists={desk.strategists}
+        reconciliation={opsReadiness.evidence.find((item) => item.id === "reconciliation")}
       />
     </div>
   );

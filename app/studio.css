@@ -496,6 +496,9 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 .shell-root[data-mode="studio"] .studio-v4 .sband b { font-size: var(--fs-chip); white-space: nowrap; }
 .shell-root[data-mode="studio"] .studio-v4 .sband span { color: var(--hw-soft); font-size: var(--fs-label); white-space: nowrap; }
 .shell-root[data-mode="studio"] .sband-truth { justify-content: flex-end; overflow: hidden; }
+.shell-root[data-mode="studio"] .sband-truth span.broker-green { color: var(--green-soft); }
+.shell-root[data-mode="studio"] .sband-truth span.broker-yellow { color: var(--amber); }
+.shell-root[data-mode="studio"] .sband-truth span.broker-red { color: var(--red-soft); }
 .shell-root[data-mode="studio"] .sband-pop {
   position: absolute; z-index: 20; left: 0; right: 0; bottom: calc(100% + 7px); max-height: min(430px, 60vh); overflow: auto;
   padding: 7px; border: 1px solid var(--lcd-edge); border-radius: 9px; color: var(--lcd-ink); background: linear-gradient(180deg, var(--lcd), var(--lcd-2));
