@@ -63,6 +63,29 @@ the next skin's mobile ergonomics bar. Future candidates require at least 44px
 primary touch targets, a clearer phone information hierarchy, and a deliberate
 mobile composition rather than a compressed desktop aesthetic.
 
+## Authenticated Folio preview receipt
+
+The replacement was then exercised against the authenticated Vercel preview at
+1440×900 and 390×844.
+
+- Desktop Home, Markets, Book, Channels, Sentinel, Review, and Ops each selected
+  the correct shared workspace with no page or display-level horizontal
+  overflow. The settled live summary showed the real $985k paper NAV, -$3,884
+  day result, zero positions, live process, and flat broker state.
+- The desktop frame retained account selection, operator status, one protected
+  KILL assembly, Legacy Rooms, the full chart, incident/session truth, Sentinel,
+  Tape, and the 12-channel dock.
+- Phone Home, Channels, Book, Review, and Ops each selected the correct room.
+  Neither the page nor the bounded workspace overflowed horizontally.
+- Phone account buttons and both header controls measured 44px high. Each of the
+  five bottom-navigation controls measured 56px high.
+- Browser warnings/errors: zero across both viewport passes.
+- The production-target guard returned HTTP 200 for `/` and HTTP 404 for
+  `/skin-lab` from the built artifact.
+
+This receipt establishes functional and responsive eligibility for design
+review. It does not constitute visual approval or authorize production use.
+
 ## Skin Lab acceptance
 
 - one set of page-owned hooks regardless of shell;
