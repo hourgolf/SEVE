@@ -33,7 +33,7 @@ function Section({ title, meta, children }: { title: string; meta?: string; chil
   return <section className="m2-desk-section"><header><b>{title}</b>{meta && <span>{meta}</span>}</header><div className="m2-desk-body">{children}</div></section>;
 }
 
-function BookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: () => void }) {
+export function MobileBookView({ props, onViewChart }: { props: SurfaceProps; onViewChart?: () => void }) {
   const { data, feed, liveMarks, selected, setSelected, contractHistory, symbol } = props;
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
   const recentExits = useMemo(() => deriveRecentExits(feed.recentTrades), [feed.recentTrades]);
@@ -241,7 +241,7 @@ export function MobileDeskSheet({ open, onClose, props, channels, livePnl, onOpe
         {TABS.map((item) => <button type="button" key={item.id} className={tab === item.id ? "on" : ""} onClick={() => setTab(item.id)} aria-pressed={tab === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
       </nav>
       <div className="m2-desk-scroll">
-        {tab === "book" && <BookView props={props} />}
+        {tab === "book" && <MobileBookView props={props} />}
         {tab === "review" && <ReviewView props={props} channels={channels} livePnl={livePnl} />}
         {tab === "ops" && <OpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
         {tab === "build" && <BuildView props={props} channels={channels} onAddChannel={onAddChannel} />}
@@ -259,7 +259,7 @@ export function MobileDeskRoom({ room, props, channels, livePnl, onViewChart, on
   onOpenSettings: () => void;
 }) {
   return <div className="m2-scroll m2-room-scroll"><div className="m2-desk-scroll">
-    {room === "book" && <BookView props={props} onViewChart={onViewChart} />}
+    {room === "book" && <MobileBookView props={props} onViewChart={onViewChart} />}
     {room === "review" && <ReviewView props={props} channels={channels} livePnl={livePnl} />}
     {room === "ops" && <OpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
   </div></div>;
