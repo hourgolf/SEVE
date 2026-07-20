@@ -48,14 +48,23 @@ const rowsOrError = (results: Array<{ data: unknown; error: unknown }>): QueryRe
   return { data: results.flatMap((result) => Array.isArray(result.data) ? result.data : []), error: null };
 };
 
-async function readExecutions(accountIds: string[], since: string): Promise<QueryResult> {
+async function readAccessToken(): Promise<string> {
+  const read = getSupabase().auth.getSession().then(({ data: { session }, error }) => {
+    if (error) throw error;
+    if (!session?.access_token) throw new Error("operator sign-in required");
+    return session.access_token;
+  });
+  return Promise.race([
+    read,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("operator session read timed out")), 3_000)),
+  ]);
+}
+
+async function readExecutions(accountIds: string[], token: string): Promise<QueryResult> {
   if (!accountIds.length) return { data: [], error: null, summary: { candidates: 0, suppressed: 0 } };
-  const sb = getSupabase();
-  const { data: { session }, error } = await sb.auth.getSession();
-  if (error || !session?.access_token) return { data: null, error: error ?? new Error("operator sign-in required") };
   try {
     const response = await fetch("/api/ops-execution-evidence", {
-      headers: { authorization: `Bearer ${session.access_token}` }, cache: "no-store",
+      headers: { authorization: `Bearer ${token}` }, cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
     const body = await response.json().catch(() => ({})) as {
@@ -96,14 +105,12 @@ async function readOutcomes(since: string): Promise<QueryResult> {
   return rowsOrError(reads);
 }
 
-async function readBrokerReceipt(): Promise<QueryResult> {
-  const sb = getSupabase();
-  const { data: { session }, error } = await sb.auth.getSession();
-  if (error || !session?.access_token) return { data: null, error: error ?? new Error("operator sign-in required") };
+async function readBrokerReceipt(token: string): Promise<QueryResult> {
   try {
     const response = await fetch("/api/broker-reconciliation", {
-      headers: { authorization: `Bearer ${session.access_token}` },
+      headers: { authorization: `Bearer ${token}` },
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
     });
     const body = await response.json().catch(() => ({})) as { ok?: boolean; receipt?: BrokerReconciliationReceipt; error?: string };
     if (!response.ok || !body.ok || !body.receipt) return { data: null, error: new Error(body.error ?? `broker read failed (${response.status})`) };
@@ -150,6 +157,7 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
       const since = new Date(Date.now() - 36 * 3600_000).toISOString();
       const scopedAccounts = accountScope ? accountScope.split(",") : [];
       const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+      const accessToken = readAccessToken();
       const settle = (key: keyof OpsEvidence, read: PromiseLike<QueryResult>) => {
         void Promise.allSettled([read]).then(([result]) => {
           if (!alive) return;
@@ -163,7 +171,7 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
       // Each ledger owns its own state transition. A slow or failed deep read
       // must not leave broker reconciliation and every unrelated evidence gate
       // stuck in a shared CHECKING state.
-      settle("execution", readExecutions(scopedAccounts, since));
+      settle("execution", accessToken.then((token) => readExecutions(scopedAccounts, token)));
       settle("managers", readManagers(scopedAccounts, since));
       settle("captures", sb.from("held_contract_capture_receipts")
         .select("id,position_id,channel_slug,occ_symbol,session_date_et,sample_count,successful_quote_count,dropped_samples,completed_at")
@@ -175,7 +183,7 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
         .ilike("message", "%shadow-publish:%").gte("created_at", since)
         .order("created_at", { ascending: false }).limit(12));
       settle("outcomes", readOutcomes(since));
-      settle("broker", readBrokerReceipt());
+      settle("broker", accessToken.then((token) => readBrokerReceipt(token)));
     };
     void poll();
     const stop = startVisibilityPoll(() => void poll(), pollMs);
