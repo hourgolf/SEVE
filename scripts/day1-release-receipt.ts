@@ -21,6 +21,7 @@ import {
   DAY1_RELEASE_ID,
   DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
+  day1ExecutableGivebackTrail,
   validateDay1ReleaseSourceExecutorBoundary,
   validateDay1ReleaseStartup,
 } from "../worker/src/day1ReleasePolicy.js";
@@ -127,7 +128,12 @@ async function main(): Promise<void> {
     if (!channel) throw new Error(`root missing after overlay: ${root.slug}`);
     const account = accountById.get(channel.account_id ?? defaultAccounts[0].id);
     if (!account || account.mode.toLowerCase() !== "paper") throw new Error(`${root.slug} does not resolve to a paper account`);
-    const identity = observedPolicyIdentity({ channel, accountId: account.id, workerVersion: WORKER_VERSION });
+    const identity = observedPolicyIdentity({
+      channel,
+      accountId: account.id,
+      workerVersion: WORKER_VERSION,
+      executableGivebackTrail: day1ExecutableGivebackTrail(root.slug),
+    });
     if (!identity) throw new Error(`could not build policy identity for ${root.slug}`);
     return {
       ...root,

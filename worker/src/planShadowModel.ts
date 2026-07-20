@@ -43,6 +43,12 @@ export interface ObservedPolicyIdentity {
   policyJson: Record<string, unknown>;
 }
 
+export interface ExecutableGivebackTrailIdentity {
+  engageMult: number;
+  givebackPct: number;
+  priceBasis: "executable-option-bid";
+}
+
 export interface ShadowPlanInput {
   channel: ChannelConfig;
   decision: ShadowDecision;
@@ -50,6 +56,7 @@ export interface ShadowPlanInput {
   decisionAtMs: number;
   workerVersion: string;
   defaultPremiumStopPct: number;
+  executableGivebackTrail?: ExecutableGivebackTrailIdentity | null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -81,7 +88,10 @@ export function observedPlanId(opportunityId: string): string {
   return deterministicEvidenceUuid("seve-position-plan-v1", opportunityId);
 }
 
-function managerPolicy(ch: ChannelConfig): { id: string; harvest: HarvestPolicy; body: Record<string, unknown> } {
+function managerPolicy(
+  ch: ChannelConfig,
+  executableGivebackTrail: ExecutableGivebackTrailIdentity | null = null,
+): { id: string; harvest: HarvestPolicy; body: Record<string, unknown> } {
   const specManagement = ch.spec_json && typeof ch.spec_json === "object"
     ? ((ch.spec_json as Record<string, unknown>).management ?? null)
     : null;
@@ -98,7 +108,9 @@ function managerPolicy(ch: ChannelConfig): { id: string; harvest: HarvestPolicy;
     eventPolicy: ch.event_policy,
     manualExit: /-manual$/i.test(ch.slug),
     specManagement,
+    ...(executableGivebackTrail ? { executableGivebackTrail } : {}),
   };
+  if (executableGivebackTrail) return { id: "premium-giveback-all-out", harvest: "all_out", body };
   if (/-manual$/i.test(ch.slug)) return { id: "manual-operator", harvest: "structure_time", body };
   if (ch.runner_frac > 0) return { id: "bank-runner", harvest: "bank_runner", body };
   if (ch.take_profit_pct > 0) return { id: "premium-all-out", harvest: "all_out", body };
@@ -120,10 +132,11 @@ export function observedPolicyIdentity(input: {
   channel: ChannelConfig;
   accountId: string;
   workerVersion: string;
+  executableGivebackTrail?: ExecutableGivebackTrailIdentity | null;
 }): ObservedPolicyIdentity | null {
   const ch = input.channel;
   if (!UUID.test(input.accountId) || !UUID.test(ch.id)) return null;
-  const manager = managerPolicy(ch);
+  const manager = managerPolicy(ch, input.executableGivebackTrail ?? null);
   const alpha = { slug: ch.slug, underlying: ch.underlying, spec: ch.spec_json, implementationVersion: input.workerVersion };
   const channelVersion = `sha256:${digest(alpha)}`;
   const managerVersion = `sha256:${digest(manager.body)}`;
@@ -175,9 +188,14 @@ export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvide
   if (!UUID.test(input.accountId) || !UUID.test(ch.id) || d.action !== "enter" || d.blocked || !d.occ || !d.direction
       || !Number.isInteger(qty) || qty <= 0 || !(ask > 0) || Number.isNaN(createdAt.getTime())) return null;
 
-  const identity = observedPolicyIdentity({ channel: ch, accountId: input.accountId, workerVersion: input.workerVersion });
+  const identity = observedPolicyIdentity({
+    channel: ch,
+    accountId: input.accountId,
+    workerVersion: input.workerVersion,
+    executableGivebackTrail: input.executableGivebackTrail,
+  });
   if (!identity) return null;
-  const manager = managerPolicy(ch);
+  const manager = managerPolicy(ch, input.executableGivebackTrail ?? null);
   const { channelVersion, managerVersion, policyJson } = identity;
   const epochId = identity.policyEpochId;
   const opportunityId = observedOpportunityId({

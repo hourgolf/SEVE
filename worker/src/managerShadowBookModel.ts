@@ -14,7 +14,11 @@ import { managerShadowTraceIdFor, SHADOW_MANAGER_COHORT_FROM } from "./managerSh
 import type { ExecutionObservationDraft } from "./executionObservationModel.js";
 
 export const MANAGER_SHADOW_SCHEMA_VERSION = 2 as const;
-export const MIN_MODELED_SOURCE_QTY = 4;
+// RC5.1 roots are intentionally two-lot. All-out arms model both contracts and
+// BANK20/RUN50 models an executable 1/1 split, so two is the honest whole-lot
+// floor. The former four-lot gate silently prevented every Day-1 root from
+// enrolling in its required observer cohort.
+export const MIN_MODELED_SOURCE_QTY = 2;
 export const MIN_STAGED_SOURCE_QTY = 2;
 export const MANAGER_SHADOW_BOOK_VERSION = "manager-shadow-book-v2" as const;
 export const SHADOW_CUTOFF_MINUTES_BEFORE_CLOSE = 5;

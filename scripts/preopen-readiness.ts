@@ -287,7 +287,8 @@ async function main(): Promise<void> {
     if (!account) failures.push(`${root.slug}: sealed account binding does not resolve`);
     if (dbState === "READY") readyRoots++;
 
-    console.log(`  ${pad(root.slug, 28)} ${pad(root.accountName, 12)} ${pad(root.underlying, 4)} ${padL(String(root.quantity), 4)} ${padL(usd(root.riskBudgetUsd), 7)} ${padL(`$${root.premiumCap.toFixed(2)}`, 7)} ${padL(usd(root.aggregateDebitCap), 8)} ${padL(`-${root.premiumStopPct}%`, 7)} ${padL(root.takeProfitPct ? `+${root.takeProfitPct}%` : "RIDE", 7)} ${pad(root.eodEt, 6)} ${pad(dbState, 7)}`);
+    const exit = root.givebackTrail ? "A13" : root.takeProfitPct ? `+${root.takeProfitPct}%` : "RIDE";
+    console.log(`  ${pad(root.slug, 28)} ${pad(root.accountName, 12)} ${pad(root.underlying, 4)} ${padL(String(root.quantity), 4)} ${padL(usd(root.riskBudgetUsd), 7)} ${padL(`$${root.premiumCap.toFixed(2)}`, 7)} ${padL(usd(root.aggregateDebitCap), 8)} ${padL(`-${root.premiumStopPct}%`, 7)} ${padL(exit, 7)} ${pad(root.eodEt, 6)} ${pad(dbState, 7)}`);
   }
 
   const darkDatabaseRows = channels.filter((channel) => !DAY1_ROOTS[channel.slug]).length;

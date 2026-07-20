@@ -28,7 +28,7 @@ const result = deriveChannelPassports({
 });
 
 assert.equal(result.release.state, "verified");
-assert.equal(result.releaseView.label, "SEALED RC5 RUNTIME");
+assert.equal(result.releaseView.label, "SEALED RC5.1 RUNTIME");
 assert.equal(result.releaseView.accountLifecycleLabel, "1 ACCOUNT ROOT · 1 ACCOUNT DARK");
 assert.equal(result.releaseView.compactAccountLifecycleLabel, "1 ACCT ROOT · 1 ACCT DARK");
 assert.equal(result.releaseView.databaseOnly, false);
@@ -85,12 +85,15 @@ assert.equal(mismatch.bySlug["pb-ride"].rootPolicy, null);
 // release field to the sealed machine receipts so a future RC cannot silently
 // make the dashboard lie.
 const prereg = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-preregistration-receipt-2026-07-17.json", import.meta.url), "utf8"));
-const active = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-active-settings-example-2026-07-17.json", import.meta.url), "utf8"));
+const hotfix = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-1-hotfix-2026-07-20.json", import.meta.url), "utf8"));
 const sealed = prereg.content.evidence.releaseConfiguration;
-assert.equal(DAY1_RELEASE_ID, sealed.releaseId);
-assert.equal(DAY1_CONFIG_HASH, active.releaseConfigurationSha256);
-assert.equal(DAY1_WORKER_VERSION, active.workerVersion);
+assert.equal(hotfix.supersedes, sealed.releaseId);
+assert.equal(DAY1_RELEASE_ID, hotfix.releaseId);
+assert.equal(DAY1_CONFIG_HASH, hotfix.releaseConfigurationSha256);
+assert.equal(DAY1_WORKER_VERSION, hotfix.workerVersion);
 assert.deepEqual(DAY1_MANAGER_ARMS, sealed.management.shadowManagerArms);
+assert.deepEqual(DAY1_ROOTS["momo-shape"].givebackTrail, hotfix.executableMomoRatchet);
+assert.equal(DAY1_ROOTS["pb-ride"].givebackTrail, null);
 assert.equal(Object.keys(DAY1_ROOTS).length, prereg.content.roots.length);
 for (const sealedRoot of prereg.content.roots) {
   const clientRoot = DAY1_ROOTS[sealedRoot.slug];
@@ -103,7 +106,7 @@ for (const sealedRoot of prereg.content.roots) {
   assert.equal(clientRoot.premiumCap, sealedRoot.premiumCap);
   assert.equal(clientRoot.aggregateDebitCap, sealedRoot.aggregateDebitCap);
   assert.equal(clientRoot.riskBudgetUsd, sealedRoot.policyIdentity.policyJson.channel.riskBudgetUsd);
-  const binding = sealed.rootBindings.find((row: { slug: string }) => row.slug === sealedRoot.slug);
+  const binding = hotfix.rootBindings.find((row: { slug: string }) => row.slug === sealedRoot.slug);
   assert.ok(binding);
   assert.equal(clientRoot.accountId, binding.accountId);
   assert.equal(clientRoot.accountName, sealedRoot.account.name);
