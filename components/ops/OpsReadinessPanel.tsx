@@ -41,7 +41,7 @@ export function PositionEvidenceChains({ model, compact = false }: { model: OpsR
 /** Skin-neutral readiness content. Desktop and mobile receive the same model
  * from the page seam; this component performs no reads or health derivation. */
 export function OpsReadinessPanel({ model, compact = false }: { model: OpsReadinessModel; compact?: boolean }) {
-  return <section className={`opsr ${compact ? "compact" : ""}`} aria-label="Day 1 capture and observer readiness">
+  return <section className={`opsr ${compact ? "compact" : ""}`} aria-label="Day 1 capture and observer readiness" data-ops-read-model="bounded-independent-v2">
     <header className={`opsr-summary ${model.summary.tone}`}>
       <i aria-hidden="true" /><span><small>{model.summary.label} · SESSION {model.sessionDateEt}</small><b>{model.summary.state}</b><em>{model.summary.detail}</em></span>
     </header>
