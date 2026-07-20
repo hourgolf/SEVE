@@ -96,7 +96,7 @@ function Surface({
   // Lifted to the seam — called ONCE here so the persistent shell AND both layouts
   // share one accounts/ops poll + one live-marked P&L derivation (no re-subscribe).
   const ops = useOpsStatus();
-  const opsEvidence = useOpsEvidence(120_000, activeRoom === "ops");
+  const opsEvidence = useOpsEvidence(120_000, activeRoom === "ops", accounts.map((account) => account.id));
   useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
