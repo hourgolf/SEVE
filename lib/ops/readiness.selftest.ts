@@ -113,11 +113,19 @@ assert.match(find(degraded, "capture").detail, /r2_flush_failed/);
 
 const recovered = deriveOpsReadiness(base({ evidence: evidence({
   execution: ok([fillWithoutDecisionMeta, decision]),
-  captures: ok([{ ...capture, object_key: "held/object.gz", created_at: "2026-07-20T14:52:00Z" }]),
+  captures: ok([{ ...capture, object_key: "held/object.gz", created_at: "2026-07-20T14:49:57Z" }]),
   captureHealth: ok([{ id: "health-recovered", observed_at: "2026-07-20T14:50:00Z", severity: "high", code: "receipt_write_failed", position_id: "position-1", affected_samples: 12, facts: { objectKey: "held/object.gz" } }]),
 }) }));
 assert.equal(find(recovered, "capture").state, "RETRY RECOVERED");
 assert.equal(find(recovered, "capture").tone, "yellow");
+
+const wrongObjectRemainsGap = deriveOpsReadiness(base({ evidence: evidence({
+  execution: ok([fillWithoutDecisionMeta, decision]),
+  captures: ok([{ ...capture, object_key: "held/different-object.gz", created_at: "2026-07-20T14:52:00Z" }]),
+  captureHealth: ok([{ id: "health-unrecovered", observed_at: "2026-07-20T14:50:00Z", severity: "high", code: "receipt_write_failed", position_id: "position-1", affected_samples: 12, facts: { objectKey: "held/object.gz" } }]),
+}) }));
+assert.equal(find(wrongObjectRemainsGap, "capture").state, "EVIDENCE GAP");
+assert.equal(find(wrongObjectRemainsGap, "capture").tone, "red");
 
 const authLoading = deriveOpsReadiness(base({ evidence: evidence({ managers: loading() }) }));
 assert.equal(find(authLoading, "managers").tone, "neutral");

@@ -277,8 +277,10 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   const recoveredHealth = healthRows.filter((health) => {
     const objectKey = typeof health.facts?.objectKey === "string" ? health.facts.objectKey : null;
     if (!objectKey) return false;
-    return sessionReceipts.some((receipt) => receipt.object_key === objectKey
-      && receipt.created_at && Date.parse(receipt.created_at) >= Date.parse(health.observed_at));
+    // The receipt insert may commit even when the client-side request times out.
+    // The health row is then emitted a few seconds after that committed receipt,
+    // so exact content-addressed identity is the recovery proof—not row ordering.
+    return sessionReceipts.some((receipt) => receipt.object_key === objectKey);
   });
   const unrecoveredHealth = healthRows.filter((row) => !recoveredHealth.includes(row));
   const highHealth = unrecoveredHealth.find((row) => row.severity === "high");
