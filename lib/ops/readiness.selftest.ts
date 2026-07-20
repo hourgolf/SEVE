@@ -64,6 +64,7 @@ const decision = {
   occ_symbol: "SPY260720C00600000", filled_qty: null, broker_status: null, payload: candidatePayload,
 };
 const fill = { ...decision, id: "fill", event_kind: "broker_result" as const, event_at: "2026-07-20T14:46:00Z", position_id: "position-1", filled_qty: 2, broker_status: "filled" };
+const fillWithoutDecisionMeta = { ...fill, payload: {} };
 
 const withCandidate = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([decision]) }) }));
 assert.equal(withCandidate.counts.candidates, 1);
@@ -79,6 +80,10 @@ assert.equal(find(justFilled, "capture").state, "FLUSHING");
 assert.equal(find(justFilled, "managers").state, "STARTING");
 assert.equal(justFilled.chains.length, 1);
 assert.equal(justFilled.chains[0].steps.find((step) => step.id === "fill")?.state, "2 FILLED");
+
+const linkedFill = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T14:46:30Z"), evidence: evidence({ execution: ok([fillWithoutDecisionMeta, decision]) }) }));
+assert.equal(linkedFill.counts.fills, 1);
+assert.equal(linkedFill.chains.length, 1);
 
 const overdue = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]) }) }));
 assert.equal(find(overdue, "capture").state, "MISSING RECEIPT");
@@ -103,6 +108,14 @@ assert.equal(find(partial, "managers").state, "INCOMPLETE");
 const degraded = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]), captureHealth: ok([{ id: "health", observed_at: "2026-07-20T14:50:00Z", severity: "high", code: "r2_flush_failed", position_id: "position-1", affected_samples: 12 }]) }) }));
 assert.equal(find(degraded, "capture").tone, "red");
 assert.match(find(degraded, "capture").detail, /r2_flush_failed/);
+
+const recovered = deriveOpsReadiness(base({ evidence: evidence({
+  execution: ok([fillWithoutDecisionMeta, decision]),
+  captures: ok([{ ...capture, object_key: "held/object.gz", created_at: "2026-07-20T14:52:00Z" }]),
+  captureHealth: ok([{ id: "health-recovered", observed_at: "2026-07-20T14:50:00Z", severity: "high", code: "receipt_write_failed", position_id: "position-1", affected_samples: 12, facts: { objectKey: "held/object.gz" } }]),
+}) }));
+assert.equal(find(recovered, "capture").state, "RETRY RECOVERED");
+assert.equal(find(recovered, "capture").tone, "yellow");
 
 const authLoading = deriveOpsReadiness(base({ evidence: evidence({ managers: loading() }) }));
 assert.equal(find(authLoading, "managers").tone, "neutral");

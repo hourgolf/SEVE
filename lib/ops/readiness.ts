@@ -53,6 +53,7 @@ export interface ManagerEvidenceRow {
 
 export interface CaptureReceiptRow {
   id: string;
+  object_key?: string;
   position_id: string;
   channel_slug: string;
   occ_symbol: string;
@@ -61,6 +62,7 @@ export interface CaptureReceiptRow {
   successful_quote_count: number;
   dropped_samples: number;
   completed_at: string;
+  created_at?: string;
 }
 
 export interface CaptureHealthRow {
@@ -70,6 +72,7 @@ export interface CaptureHealthRow {
   code: string;
   position_id: string | null;
   affected_samples: number;
+  facts?: Record<string, unknown>;
 }
 
 export interface PublisherEvidenceRow {
@@ -226,12 +229,15 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
 
   const execution = input.evidence.execution;
   const sessionExecutions = execution.state === "ok"
-    ? execution.rows.filter((row) => row.event_at.slice(0, 10) === clock.date && candidateMeta(row))
+    ? execution.rows.filter((row) => row.event_at.slice(0, 10) === clock.date)
     : [];
-  const decisions = sessionExecutions.filter((row) => row.event_kind === "decision");
+  const decisions = sessionExecutions.filter((row) => row.event_kind === "decision" && candidateMeta(row));
+  const admittedOpportunityIds = new Set(decisions.flatMap((row) => row.opportunity_id ? [row.opportunity_id] : []));
   const candidates = execution.summary?.candidates ?? new Set(decisions.map((row) => row.opportunity_id ?? row.id)).size;
   const suppressed = execution.summary?.suppressed ?? decisions.filter((row) => Boolean(row.blocked_reason)).length;
-  const fillRows = sessionExecutions.filter((row) => row.event_kind === "broker_result" && Number(row.filled_qty) > 0 && row.position_id);
+  const fillRows = sessionExecutions.filter((row) => row.event_kind === "broker_result"
+    && Number(row.filled_qty) > 0 && row.position_id && row.opportunity_id
+    && admittedOpportunityIds.has(row.opportunity_id));
   const fillsByPosition = new Map(fillRows.map((row) => [row.position_id as string, row]));
   const positionIds = new Set(fillsByPosition.keys());
   const oldestFillMs = Math.min(...[...fillsByPosition.values()].map((row) => Date.parse(row.event_at)), Number.POSITIVE_INFINITY);
@@ -246,7 +252,7 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   } else if (candidates === 0) {
     evidence.push({ id: "candidates", label: "CANDIDATE LEDGER", state: "WAITING", tone: "neutral", detail: "no RC5 candidate yet; trade absence is not a failure" });
   } else {
-    evidence.push({ id: "candidates", label: "CANDIDATE LEDGER", state: "OBSERVED", tone: "green", detail: `${candidates} independent candidate${candidates === 1 ? "" : "s"} · ${suppressed} suppressed/censored` });
+    evidence.push({ id: "candidates", label: "CANDIDATE LEDGER", state: "OBSERVED", tone: "green", detail: `${candidates} candidate decision receipt${candidates === 1 ? "" : "s"} · ${suppressed} suppressed/censored` });
   }
 
   evidence.push({
@@ -261,12 +267,20 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   const sessionReceipts = captures.state === "ok" ? captures.rows.filter((row) => row.session_date_et === clock.date && positionIds.has(row.position_id)) : [];
   const capturedPositions = new Set(sessionReceipts.map((row) => row.position_id)).size;
   const healthRows = captureHealth.state === "ok" ? captureHealth.rows.filter((row) => row.observed_at.slice(0, 10) === clock.date) : [];
-  const highHealth = healthRows.find((row) => row.severity === "high");
+  const recoveredHealth = healthRows.filter((health) => {
+    const objectKey = typeof health.facts?.objectKey === "string" ? health.facts.objectKey : null;
+    if (!objectKey) return false;
+    return sessionReceipts.some((receipt) => receipt.object_key === objectKey
+      && receipt.created_at && Date.parse(receipt.created_at) >= Date.parse(health.observed_at));
+  });
+  const unrecoveredHealth = healthRows.filter((row) => !recoveredHealth.includes(row));
+  const highHealth = unrecoveredHealth.find((row) => row.severity === "high");
   if (captures.state === "error") evidence.push(readError("capture", "HELD CAPTURE", captures));
   else if (captureHealth.state === "error") evidence.push(readError("capture", "HELD CAPTURE HEALTH", captureHealth));
   else if (highHealth) evidence.push({ id: "capture", label: "HELD CAPTURE", state: "EVIDENCE GAP", tone: "red", detail: `${highHealth.code} · ${highHealth.affected_samples} affected samples`, observedAt: highHealth.observed_at });
-  else if (healthRows.length) evidence.push({ id: "capture", label: "HELD CAPTURE", state: "DEGRADED", tone: "yellow", detail: `${healthRows[0].code} · ${healthRows[0].affected_samples} affected samples`, observedAt: healthRows[0].observed_at });
+  else if (unrecoveredHealth.length) evidence.push({ id: "capture", label: "HELD CAPTURE", state: "DEGRADED", tone: "yellow", detail: `${unrecoveredHealth[0].code} · ${unrecoveredHealth[0].affected_samples} affected samples`, observedAt: unrecoveredHealth[0].observed_at });
   else if (!positionIds.size) evidence.push({ id: "capture", label: "HELD CAPTURE", state: "WAITING", tone: "neutral", detail: "capture proof becomes due only after an RC5 fill" });
+  else if (capturedPositions === positionIds.size && recoveredHealth.length) evidence.push({ id: "capture", label: "HELD CAPTURE", state: "RETRY RECOVERED", tone: "yellow", detail: `${capturedPositions}/${positionIds.size} positions receipted · prior ${recoveredHealth[0].code} recovered by the exact object receipt`, observedAt: recoveredHealth[0].observed_at });
   else if (capturedPositions === positionIds.size) {
     const samples = sessionReceipts.reduce((sum, row) => sum + Number(row.sample_count), 0);
     evidence.push({ id: "capture", label: "HELD CAPTURE", state: "OBSERVED", tone: "green", detail: `${capturedPositions}/${positionIds.size} positions · ${samples} samples receipted`, observedAt: latest(sessionReceipts, (row) => row.completed_at)?.completed_at });

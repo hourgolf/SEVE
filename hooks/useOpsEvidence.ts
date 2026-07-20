@@ -189,10 +189,10 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
       settle("execution", accessToken.then((token) => readExecutions(scopedAccounts, token)));
       settle("managers", readManagers(scopedAccounts, since));
       settle("captures", sb.from("held_contract_capture_receipts")
-        .select("id,position_id,channel_slug,occ_symbol,session_date_et,sample_count,successful_quote_count,dropped_samples,completed_at")
+        .select("id,object_key,position_id,channel_slug,occ_symbol,session_date_et,sample_count,successful_quote_count,dropped_samples,completed_at,created_at")
         .eq("session_date_et", todayEt).order("completed_at", { ascending: false }).limit(1_000));
       settle("captureHealth", sb.from("held_contract_capture_health")
-        .select("id,observed_at,severity,code,position_id,affected_samples")
+        .select("id,observed_at,severity,code,position_id,affected_samples,facts")
         .gte("observed_at", since).order("observed_at", { ascending: false }).limit(50));
       settle("publisher", sb.from("events").select("id,message,created_at")
         .ilike("message", "%shadow-publish:%").gte("created_at", since)
