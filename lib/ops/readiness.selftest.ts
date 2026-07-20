@@ -119,6 +119,17 @@ const recovered = deriveOpsReadiness(base({ evidence: evidence({
 assert.equal(find(recovered, "capture").state, "RETRY RECOVERED");
 assert.equal(find(recovered, "capture").tone, "yellow");
 
+const recoveredOutsideCohort = deriveOpsReadiness(base({ evidence: evidence({
+  execution: ok([fillWithoutDecisionMeta, decision]),
+  captures: ok([
+    capture,
+    { ...capture, id: "capture-outside", position_id: "outside-position", object_key: "held/outside-object.gz" },
+  ]),
+  captureHealth: ok([{ id: "health-outside", observed_at: "2026-07-20T14:50:00Z", severity: "high", code: "receipt_write_failed", position_id: "outside-position", affected_samples: 8, facts: { objectKey: "held/outside-object.gz" } }]),
+}) }));
+assert.equal(find(recoveredOutsideCohort, "capture").state, "RETRY RECOVERED");
+assert.equal(recoveredOutsideCohort.counts.capturedPositions, 1);
+
 const wrongObjectRemainsGap = deriveOpsReadiness(base({ evidence: evidence({
   execution: ok([fillWithoutDecisionMeta, decision]),
   captures: ok([{ ...capture, object_key: "held/different-object.gz", created_at: "2026-07-20T14:52:00Z" }]),

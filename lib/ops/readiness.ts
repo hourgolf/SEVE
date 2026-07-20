@@ -271,7 +271,8 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
 
   const captures = input.evidence.captures;
   const captureHealth = input.evidence.captureHealth;
-  const sessionReceipts = captures.state === "ok" ? captures.rows.filter((row) => row.session_date_et === clock.date && positionIds.has(row.position_id)) : [];
+  const allSessionReceipts = captures.state === "ok" ? captures.rows.filter((row) => row.session_date_et === clock.date) : [];
+  const sessionReceipts = allSessionReceipts.filter((row) => positionIds.has(row.position_id));
   const capturedPositions = new Set(sessionReceipts.map((row) => row.position_id)).size;
   const healthRows = captureHealth.state === "ok" ? captureHealth.rows.filter((row) => row.observed_at.slice(0, 10) === clock.date) : [];
   const recoveredHealth = healthRows.filter((health) => {
@@ -280,7 +281,7 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
     // The receipt insert may commit even when the client-side request times out.
     // The health row is then emitted a few seconds after that committed receipt,
     // so exact content-addressed identity is the recovery proof—not row ordering.
-    return sessionReceipts.some((receipt) => receipt.object_key === objectKey);
+    return allSessionReceipts.some((receipt) => receipt.object_key === objectKey);
   });
   const unrecoveredHealth = healthRows.filter((row) => !recoveredHealth.includes(row));
   const highHealth = unrecoveredHealth.find((row) => row.severity === "high");
