@@ -98,6 +98,8 @@ const managers = DAY1_MANAGER_ARMS.map((manager_id, index) => ({
   manager_policy_version: "manager", shadow_book_version: "shadow", censor_code: null,
 }));
 const complete = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]), captures: ok([capture]), managers: ok(managers) }) }));
+assert.match(find(complete, "release").detail, /weekend-day1-2026-07-21-rc5\.2/);
+assert.doesNotMatch(find(complete, "release").detail, /RC5\.1/);
 assert.equal(find(complete, "capture").state, "OBSERVED");
 assert.equal(find(complete, "managers").state, "COMPLETE");
 assert.equal(complete.counts.managerArms, 8);

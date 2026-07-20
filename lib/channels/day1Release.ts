@@ -166,11 +166,11 @@ export function observeDay1Release(events: MarketEvent[], readState: Day1Release
   if (receipt.releaseId !== DAY1_RELEASE_ID || receipt.configHash !== DAY1_CONFIG_HASH) {
     return {
       state: "mismatch", receipt, releaseId: DAY1_RELEASE_ID, expectedHash: DAY1_CONFIG_HASH,
-      fact: `Observed ${receipt.releaseId} ${receipt.configHash.slice(0, 10)}…; expected sealed RC5.1.`,
+      fact: `Observed ${receipt.releaseId} ${receipt.configHash.slice(0, 10)}…; expected sealed ${DAY1_RELEASE_ID}.`,
     };
   }
   return {
     state: "verified", receipt, releaseId: DAY1_RELEASE_ID, expectedHash: DAY1_CONFIG_HASH,
-    fact: "Exact RC5.1 startup receipt observed. Receipt identity is not a liveness claim.",
+    fact: `Exact ${DAY1_RELEASE_ID} startup receipt observed. Receipt identity is not a liveness claim.`,
   };
 }
