@@ -8,6 +8,8 @@ assert.match(hook, /pollMs = 120_000, enabled = true/, "OPS evidence should defa
 assert.match(hook, /if \(!enabled\) return;/, "disabled workspaces must perform no OPS reads");
 assert.match(hook, /\.eq\("account_id", accountId\).*\.gte\("event_at", since\)/s, "execution reads must use the account/time index");
 assert.match(hook, /count: "exact", head: true/, "candidate totals should be counted server-side without transferring the ledger");
+assert.match(hook, /const settle = \(key: keyof OpsEvidence/, "independent ledgers should settle without sharing one loading barrier");
+assert.doesNotMatch(hook, /const results = await Promise\.allSettled/, "one slow ledger must not hold every evidence state in CHECKING");
 assert.match(hook, /\.eq\("event_kind", "broker_result"\)\.gt\("filled_qty", 0\)/, "only positive-fill broker rows should be transferred");
 assert.match(hook, /\.eq\("account_id", accountId\).*\.gte\("created_at", since\)/s, "manager reads must use the account/status/time index prefix");
 assert.match(hook, /\.eq\("session_date_et", todayEt\)/, "capture receipts should use the indexed session key");

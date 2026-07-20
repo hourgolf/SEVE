@@ -173,32 +173,32 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
       const since = new Date(Date.now() - 36 * 3600_000).toISOString();
       const scopedAccounts = accountScope ? accountScope.split(",") : [];
       const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
-      const results = await Promise.allSettled([
-        readExecutions(scopedAccounts, since),
-        readManagers(scopedAccounts, since),
-        sb.from("held_contract_capture_receipts")
-          .select("id,position_id,channel_slug,occ_symbol,session_date_et,sample_count,successful_quote_count,dropped_samples,completed_at")
-          .eq("session_date_et", todayEt).order("completed_at", { ascending: false }).limit(1_000),
-        sb.from("held_contract_capture_health")
-          .select("id,observed_at,severity,code,position_id,affected_samples")
-          .gte("observed_at", since).order("observed_at", { ascending: false }).limit(50),
-        sb.from("events").select("id,message,created_at")
-          .ilike("message", "%shadow-publish:%").gte("created_at", since)
-          .order("created_at", { ascending: false }).limit(12),
-        readOutcomes(since),
-        readBrokerReceipt(),
-      ]);
-      if (!alive) return;
-      const nowMs = Date.now();
-      setState((previous) => ({
-        execution: applyRead(previous.execution, results[0] as PromiseSettledResult<QueryResult>, nowMs),
-        managers: applyRead(previous.managers, results[1] as PromiseSettledResult<QueryResult>, nowMs),
-        captures: applyRead(previous.captures, results[2] as PromiseSettledResult<QueryResult>, nowMs),
-        captureHealth: applyRead(previous.captureHealth, results[3] as PromiseSettledResult<QueryResult>, nowMs),
-        publisher: applyRead(previous.publisher, results[4] as PromiseSettledResult<QueryResult>, nowMs),
-        outcomes: applyRead(previous.outcomes, results[5] as PromiseSettledResult<QueryResult>, nowMs),
-        broker: applyRead(previous.broker, results[6] as PromiseSettledResult<QueryResult>, nowMs),
-      }));
+      const settle = (key: keyof OpsEvidence, read: PromiseLike<QueryResult>) => {
+        void Promise.allSettled([read]).then(([result]) => {
+          if (!alive) return;
+          setState((previous) => ({
+            ...previous,
+            [key]: applyRead(previous[key] as OpsEvidenceRead<unknown>, result, Date.now()),
+          }) as OpsEvidence);
+        });
+      };
+
+      // Each ledger owns its own state transition. A slow or failed deep read
+      // must not leave broker reconciliation and every unrelated evidence gate
+      // stuck in a shared CHECKING state.
+      settle("execution", readExecutions(scopedAccounts, since));
+      settle("managers", readManagers(scopedAccounts, since));
+      settle("captures", sb.from("held_contract_capture_receipts")
+        .select("id,position_id,channel_slug,occ_symbol,session_date_et,sample_count,successful_quote_count,dropped_samples,completed_at")
+        .eq("session_date_et", todayEt).order("completed_at", { ascending: false }).limit(1_000));
+      settle("captureHealth", sb.from("held_contract_capture_health")
+        .select("id,observed_at,severity,code,position_id,affected_samples")
+        .gte("observed_at", since).order("observed_at", { ascending: false }).limit(50));
+      settle("publisher", sb.from("events").select("id,message,created_at")
+        .ilike("message", "%shadow-publish:%").gte("created_at", since)
+        .order("created_at", { ascending: false }).limit(12));
+      settle("outcomes", readOutcomes(since));
+      settle("broker", readBrokerReceipt());
     };
     void poll();
     const stop = startVisibilityPoll(() => void poll(), pollMs);
