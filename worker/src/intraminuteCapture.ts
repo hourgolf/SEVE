@@ -12,6 +12,7 @@ import * as captureStore from "./intraminuteCaptureStore.js";
 import {
   BoundedIntraminuteCaptureQueue,
   INTRAMINUTE_CAPTURE_SCHEMA_VERSION,
+  intraminuteCaptureWindow,
   partitionIntraminuteCapture,
   type IntraminuteCaptureEvent,
 } from "./intraminuteCaptureModel.js";
@@ -76,6 +77,7 @@ export class IntraminuteCaptureRuntime {
     return {
       onEvent: (raw, receivedAtMs) => this.captureRaw(raw, receivedAtMs),
       onGap: (startedAtMs, endedAtMs) => {
+        if (!intraminuteCaptureWindow(endedAtMs)) return;
         for (const symbol of this.symbols) {
           const gap = intraminuteCaptureGap({ symbol, reason: "socket_reconnect", startedAtMs, endedAtMs });
           if (!gap) continue;
@@ -105,11 +107,13 @@ export class IntraminuteCaptureRuntime {
     try {
       const trade = normalizeSipTrade(raw, receivedAtMs);
       if (trade && this.symbols.includes(trade.symbol)) {
+        if (!intraminuteCaptureWindow(trade.providerAtMs)) return;
         this.enqueue({ schemaVersion: INTRAMINUTE_CAPTURE_SCHEMA_VERSION, kind: "trade", symbol: trade.symbol, providerAtMs: trade.providerAtMs, receivedAtMs, payload: trade });
         return;
       }
       const quote = normalizeSipQuote(raw, receivedAtMs);
       if (quote && this.symbols.includes(quote.symbol)) {
+        if (!intraminuteCaptureWindow(quote.providerAtMs)) return;
         this.enqueue({ schemaVersion: INTRAMINUTE_CAPTURE_SCHEMA_VERSION, kind: "quote", symbol: quote.symbol, providerAtMs: quote.providerAtMs, receivedAtMs, payload: quote });
       }
     } catch {

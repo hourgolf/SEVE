@@ -60,6 +60,17 @@ That protects against Mac sleep, but it retains the archive inside the same
 vendor boundary and lacks a compact database receipt containing row count and
 content hashes.
 
+The raw intraminute SIP observer is a second, independent pressure source. It
+currently flushes R2 objects and inserts compact Supabase receipts after hours
+even though no Day 1 strategy can enter then. At 17:56 ET the ledger contained
+539 receipts after 16:15 ET and 70 in the preceding 15 minutes. A local
+observation-only correction bounds capture to trading days from 08:55 ET
+through the true session close plus 15 minutes (16:15 normally, 13:15 on a
+half-day). That retains pre-open context and every entry/manager window while
+eliminating overnight object and receipt churn. It changes research capture,
+not orders or strategy policy, and therefore still requires a newly sealed
+worker identity before deployment.
+
 ## Target architecture
 
 ### A. Bound the reads first

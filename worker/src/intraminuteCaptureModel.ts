@@ -2,6 +2,7 @@
 // position, order, or execution dependency is permitted in this module.
 
 import type { IntraminuteCaptureGap, SipQuoteEvent, SipTradeEvent } from "./intraminuteObserverModel.js";
+import { isTradingDay, PREOPEN_START_MIN, sessionCloseMin } from "../../engine/market-calendar.js";
 
 export const INTRAMINUTE_CAPTURE_SCHEMA_VERSION = 2 as const;
 
@@ -25,18 +26,32 @@ export interface CapturePartition {
 
 const ET_PARTS = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
-  hour: "2-digit", hour12: false,
+  hour: "2-digit", minute: "2-digit", hour12: false,
 });
 
-function etPartition(ms: number): { dateEt: string; hourEt: number } {
-  let year = "", month = "", day = "", hour = 0;
+function etPartition(ms: number): { dateEt: string; hourEt: number; minuteEt: number } {
+  let year = "", month = "", day = "", hour = 0, minute = 0;
   for (const part of ET_PARTS.formatToParts(new Date(ms))) {
     if (part.type === "year") year = part.value;
     else if (part.type === "month") month = part.value;
     else if (part.type === "day") day = part.value;
     else if (part.type === "hour") hour = Number(part.value) % 24;
+    else if (part.type === "minute") minute = Number(part.value);
   }
-  return { dateEt: `${year}-${month}-${day}`, hourEt: hour };
+  return { dateEt: `${year}-${month}-${day}`, hourEt: hour, minuteEt: hour * 60 + minute };
+}
+
+/**
+ * The raw SIP research tape only needs the decision-bearing session. Keeping
+ * it open overnight created an R2 object plus a Supabase receipt per symbol on
+ * every flush even though no strategy can enter then. Retain the pre-open
+ * context and a 15-minute settlement tail, including the true half-day close.
+ */
+export function intraminuteCaptureWindow(providerAtMs: number): boolean {
+  const { dateEt, minuteEt } = etPartition(providerAtMs);
+  return isTradingDay(dateEt)
+    && minuteEt >= PREOPEN_START_MIN
+    && minuteEt <= sessionCloseMin(dateEt) + 15;
 }
 
 /** Synchronous bounded queue: observer pressure sheds evidence, never execution. */
