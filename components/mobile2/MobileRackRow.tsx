@@ -10,6 +10,7 @@ import { signedUsd, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState, StrategistConfig } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
+import { day1RootExitLabel } from "@/lib/channels/day1Release";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
 
 // =============================================================================
@@ -124,7 +125,7 @@ export function MobileRackRow({
     : passport?.lifecycle === "dark-evidence" ? { txt: "DARK", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
   const firesSummary = passport?.rootPolicy
-    ? `−${passport.rootPolicy.premiumStopPct}% · ride · ${passport.rootPolicy.eodEt}`
+    ? day1RootExitLabel(passport.rootPolicy, true)
     : passport?.lifecycle === "dark-evidence"
       ? "NO FILL · T+1 PATH"
       : ride ? `−${premStop}% · ride · EOD` : `−${premStop}/+${tp} · EOD`;
@@ -156,7 +157,11 @@ export function MobileRackRow({
               <span><small>FAMILY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
               <span><small>DECISIONS</small><b>{passport?.evidence.recentSignals ?? 0} · {passport?.evidence.censoredSignals ?? 0} censored</b></span>
               <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
-              {passport?.rootPolicy && <><span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span><span><small>IDENTITY</small><code>{passport.rootPolicy.configurationEpochId.slice(0, 10)}…</code></span></>}
+              {passport?.rootPolicy && <>
+                <span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} ct · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
+                <span><small>EFFECTIVE EXIT</small><b>{day1RootExitLabel(passport.rootPolicy, true)}</b></span>
+                <span><small>IDENTITY</small><code>{passport.rootPolicy.configurationEpochId.slice(0, 10)}…</code></span>
+              </>}
             </div>
             <section className="m2-decision-ledger" aria-label="Recent channel decision receipts">
               {(passport?.evidence.recentDecisions ?? []).map((signal) => {

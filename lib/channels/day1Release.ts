@@ -116,6 +116,19 @@ export const DAY1_ROOTS: Readonly<Record<string, Day1RootPolicy>> = Object.fromE
   }]),
 );
 
+/** Operator-facing wording for the controls that actually govern the sealed
+ * runtime. Keep this beside the pinned policy data so desktop and mobile do
+ * not reinterpret database preview knobs as executable settings. */
+export function day1RootExitLabel(policy: Day1RootPolicy, compact = false): string {
+  const stop = `−${policy.premiumStopPct}%${compact ? "" : " catastrophe"}`;
+  const manager = policy.givebackTrail
+    ? compact
+      ? `A13 +${policy.givebackTrail.engageReturnPct}%/⅔`
+      : `A13 arm +${policy.givebackTrail.engageReturnPct}% / retain ⅔`
+    : "RIDE";
+  return `${stop} · ${manager} · ${policy.eodEt}${compact ? "" : " ET"}`;
+}
+
 export type Day1ReleaseReadState = "checking" | "ok" | "error";
 export type Day1ReleaseState = "checking" | "verified" | "missing" | "mismatch" | "read-error";
 

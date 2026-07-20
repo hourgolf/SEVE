@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { deriveChannelPassports } from "./channelPassport";
-import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION } from "./day1Release";
+import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION, day1RootExitLabel } from "./day1Release";
 import type { StrategistState } from "@/lib/desk/types";
 
 const channel = (slug: string, status: StrategistState["status"] = "armed", executor: StrategistState["executor"] = "stream"): StrategistState => ({
@@ -37,6 +37,9 @@ assert.equal(result.dark, 1);
 assert.equal(result.bySlug["pb-ride"].lifecycle, "paper-root");
 assert.equal(result.bySlug["pb-ride"].rootPolicy?.quantity, 2);
 assert.equal(result.bySlug["pb-ride"].observer.configuredArms, 8);
+assert.equal(day1RootExitLabel(DAY1_ROOTS["pb-ride"]), "−30% catastrophe · RIDE · 15:25 ET");
+assert.equal(day1RootExitLabel(DAY1_ROOTS["momo-shape"]), "−30% catastrophe · A13 arm +50% / retain ⅔ · 15:25 ET");
+assert.equal(day1RootExitLabel(DAY1_ROOTS["momo-shape"], true), "−30% · A13 +50%/⅔ · 15:25");
 assert.equal(result.bySlug["pb-ride"].evidence.actedSignals, 1);
 assert.deepEqual(result.bySlug["pb-ride"].evidence.recentDecisions.map((row) => row.id), ["s1"]);
 assert.equal(result.bySlug["pb-ride-2"].lifecycle, "dark-evidence");

@@ -11,6 +11,7 @@ import { strikeLabel } from "@/lib/studio/channelDecision";
 import type { StrategistState, StrategistConfig } from "@/lib/desk/types";
 import type { StudioChannelRow } from "@/lib/studio/deriveStudioView";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
+import { day1RootExitLabel } from "@/lib/channels/day1Release";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
@@ -95,7 +96,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
             <span><small>SIZE</small><b>{passport.rootPolicy.quantity} contracts</b></span>
             <span><small>RISK</small><b>{usd0(passport.rootPolicy.riskBudgetUsd)}</b></span>
             <span><small>PREMIUM / DEBIT</small><b>${passport.rootPolicy.premiumCap.toFixed(2)} / {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
-            <span><small>EXIT</small><b>−{passport.rootPolicy.premiumStopPct}% · {giveback ? `A13 ${giveback}` : "RIDE"} · {passport.rootPolicy.eodEt} ET</b></span>
+            <span><small>EXIT</small><b>{day1RootExitLabel(passport.rootPolicy)}</b></span>
             <span><small>ADMISSION</small><b>priority {passport.rootPolicy.priority} · one/family</b></span>
           </> : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
         </div></section>
