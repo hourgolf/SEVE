@@ -39,6 +39,12 @@ for (const caller of ["components/console/AddChannel.tsx", "hooks/usePush.ts", "
   checks += 1;
 }
 
+const positionMarks = source("hooks/usePositionMarks.ts");
+assert.match(positionMarks, /const \{ session \} = useAuth\(\)/, "live position marks must read the operator session");
+assert.match(positionMarks, /authorization:\s*`Bearer \$\{accessToken\}`/, "live position marks must authorize the fast spot request");
+assert.match(positionMarks, /\[occKey, metaKey, accessToken\]/, "live position marks must refresh when the operator token changes");
+checks += 3;
+
 const page = source("app/page.tsx");
 assert.match(page, /if \(!operator\)/, "the data-bearing desk must be behind the operator gate");
 checks += 1;

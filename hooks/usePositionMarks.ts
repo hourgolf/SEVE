@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
+import { useAuth } from "@/hooks/useAuth";
 import type { Position } from "@/lib/desk/types";
 
 // occ_symbol → a "live" mark for EVERY open position, BOTH tickers, independent of
@@ -20,9 +21,13 @@ import type { Position } from "@/lib/desk/types";
 
 const SPOT_SYMS = ["SPY", "QQQ"] as const;
 
-async function fetchSpot(sym: string): Promise<number | null> {
+async function fetchSpot(sym: string, accessToken: string): Promise<number | null> {
   try {
-    const r = await fetch(`/api/spot?symbol=${encodeURIComponent(sym)}`, { cache: "no-store" });
+    const r = await fetch(`/api/spot?symbol=${encodeURIComponent(sym)}`, {
+      cache: "no-store",
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    if (!r.ok) return null;
     const j = await r.json();
     return typeof j.price === "number" ? j.price : null;
   } catch {
@@ -34,6 +39,8 @@ interface QuoteRow { occ_symbol: string; mid: number | null; delta: number | nul
 
 export function usePositionMarks(positions: Position[]): Record<string, number> {
   const [marks, setMarks] = useState<Record<string, number>>({});
+  const { session } = useAuth();
+  const accessToken = session?.access_token ?? null;
   // stable dependency: the set of held OCCs (re-poll only when it changes)
   const open = positions.filter((p) => p.status === "open");
   const occKey = open.map((p) => p.occ_symbol).sort().join(",");
@@ -56,7 +63,9 @@ export function usePositionMarks(positions: Position[]): Record<string, number> 
             .in("occ_symbol", occs)
             .order("captured_at", { ascending: false })
             .limit(occs.length * 4),
-          Promise.all(SPOT_SYMS.map(fetchSpot)),
+          accessToken
+            ? Promise.all(SPOT_SYMS.map((sym) => fetchSpot(sym, accessToken)))
+            : Promise.resolve(SPOT_SYMS.map(() => null)),
         ]);
         const spot: Record<string, number | null> = {};
         SPOT_SYMS.forEach((s, i) => { spot[s] = spotArr[i]; });
@@ -100,7 +109,7 @@ export function usePositionMarks(positions: Position[]): Record<string, number> 
     // a background tab — so it's not an egress risk. Marks track the live spot.
     const stop = startVisibilityPoll(poll, 4000);
     return () => { alive = false; stop(); };
-  }, [occKey, metaKey]);
+  }, [occKey, metaKey, accessToken]);
 
   return marks;
 }
