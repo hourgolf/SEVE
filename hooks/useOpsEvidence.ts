@@ -68,10 +68,16 @@ function applyRead<T>(previous: OpsEvidenceRead<T>, settled: PromiseSettledResul
  * independent errors and never become fabricated empty ledgers. Leaves receive
  * this result through SurfaceProps and do not subscribe on their own.
  */
-export function useOpsEvidence(pollMs = 30_000): OpsEvidence {
+export function useOpsEvidence(pollMs = 120_000, enabled = true): OpsEvidence {
   const [state, setState] = useState<OpsEvidence>(INITIAL);
 
   useEffect(() => {
+    // These are deliberately deeper operational ledgers, not shell telemetry.
+    // Loading them from every PLAY/STUDIO/BOOK/REVIEW surface multiplied a
+    // multi-table read across every open dashboard even though only OPS renders
+    // the result. Keep the hook at the page-owned seam, but activate its remote
+    // reads only while the operator is actually in OPS.
+    if (!enabled) return;
     let alive = true;
     const poll = async () => {
       const sb = getSupabase();
@@ -79,22 +85,22 @@ export function useOpsEvidence(pollMs = 30_000): OpsEvidence {
       const results = await Promise.allSettled([
         sb.from("execution_observations")
           .select("id,event_kind,event_at,source_bar_at,channel_slug,opportunity_id,position_id,action,blocked_reason,occ_symbol,filled_qty,broker_status,payload")
-          .gte("event_at", since).order("event_at", { ascending: false }).limit(500),
+          .gte("event_at", since).order("event_at", { ascending: false }).limit(150),
         sb.from("manager_shadow_runs")
           .select("id,position_id,channel_slug,manager_id,status,evidence_state,entry_at,last_observed_at,manager_policy_version,shadow_book_version,censor_code")
-          .gte("entry_at", since).order("entry_at", { ascending: false }).limit(500),
+          .gte("entry_at", since).order("entry_at", { ascending: false }).limit(150),
         sb.from("held_contract_capture_receipts")
           .select("id,position_id,channel_slug,occ_symbol,session_date_et,sample_count,successful_quote_count,dropped_samples,completed_at")
-          .gte("completed_at", since).order("completed_at", { ascending: false }).limit(300),
+          .gte("completed_at", since).order("completed_at", { ascending: false }).limit(100),
         sb.from("held_contract_capture_health")
           .select("id,observed_at,severity,code,position_id,affected_samples")
-          .gte("observed_at", since).order("observed_at", { ascending: false }).limit(100),
+          .gte("observed_at", since).order("observed_at", { ascending: false }).limit(50),
         sb.from("events").select("id,message,created_at")
           .ilike("message", "%shadow-publish:%").gte("created_at", since)
           .order("created_at", { ascending: false }).limit(12),
         sb.from("position_outcome_events")
           .select("id,event_kind,event_at,position_id,opportunity_id,quantity,exit_price,realized_pnl,close_reason")
-          .gte("event_at", since).order("event_at", { ascending: false }).limit(500),
+          .gte("event_at", since).order("event_at", { ascending: false }).limit(150),
         readBrokerReceipt(),
       ]);
       if (!alive) return;
@@ -112,7 +118,7 @@ export function useOpsEvidence(pollMs = 30_000): OpsEvidence {
     void poll();
     const stop = startVisibilityPoll(() => void poll(), pollMs);
     return () => { alive = false; stop(); };
-  }, [pollMs]);
+  }, [enabled, pollMs]);
 
   return state;
 }

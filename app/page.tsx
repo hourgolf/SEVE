@@ -67,6 +67,15 @@ function Surface({
   const write = useDeskWrite();
   const isMobile = useIsMobile();
   const { mode } = useShell();
+  // Active room (shell tabs) is known before the evidence hooks so deep OPS
+  // ledgers can stay dormant outside the OPS workspace. This preserves the
+  // single page-owned subscription seam without polling hidden workspaces.
+  const [activeRoom, setActiveRoom] = useState<Room>("play");
+  useEffect(() => {
+    const s = localStorage.getItem("seve-room");
+    if (s === "play" || s === "mix" || s === "write" || s === "tape" || s === "ops") setActiveRoom(s);
+  }, []);
+  useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [selected, setSelected] = useState<string | null>(null);
   const contractHistory = useContractHistory(selected);
 
@@ -87,7 +96,7 @@ function Surface({
   // Lifted to the seam — called ONCE here so the persistent shell AND both layouts
   // share one accounts/ops poll + one live-marked P&L derivation (no re-subscribe).
   const ops = useOpsStatus();
-  const opsEvidence = useOpsEvidence();
+  const opsEvidence = useOpsEvidence(120_000, activeRoom === "ops");
   useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
@@ -173,12 +182,6 @@ function Surface({
 
   // Active room (shell tabs) + the DESK market-band collapse — persisted so the
   // operator returns to the same room/layout. Lifted to the seam (passed down).
-  const [activeRoom, setActiveRoom] = useState<Room>("play");
-  useEffect(() => {
-    const s = localStorage.getItem("seve-room");
-    if (s === "play" || s === "mix" || s === "write" || s === "tape" || s === "ops") setActiveRoom(s);
-  }, []);
-  useEffect(() => { localStorage.setItem("seve-room", activeRoom); }, [activeRoom]);
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
   const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, opsReadiness };
