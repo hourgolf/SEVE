@@ -36,7 +36,11 @@ const message = (error: unknown): string => {
   return String(error ?? "read rejected");
 };
 
-interface QueryResult { data: unknown; error: unknown }
+interface QueryResult {
+  data: unknown;
+  error: unknown;
+  summary?: { candidates: number; suppressed: number };
+}
 
 const rowsOrError = (results: Array<{ data: unknown; error: unknown }>): QueryResult => {
   const failed = results.find((result) => result.error);
@@ -45,13 +49,46 @@ const rowsOrError = (results: Array<{ data: unknown; error: unknown }>): QueryRe
 };
 
 async function readExecutions(accountIds: string[], since: string): Promise<QueryResult> {
-  if (!accountIds.length) return { data: [], error: null };
+  if (!accountIds.length) return { data: [], error: null, summary: { candidates: 0, suppressed: 0 } };
   const sb = getSupabase();
-  const reads = await Promise.all(accountIds.map((accountId) => sb.from("execution_observations")
-    .select("id,event_kind,event_at,source_bar_at,channel_slug,opportunity_id,position_id,action,blocked_reason,occ_symbol,filled_qty,broker_status,payload")
-    .eq("account_id", accountId).gte("event_at", since)
-    .order("event_at", { ascending: false }).limit(2_000)));
-  return rowsOrError(reads);
+  const reads = await Promise.all(accountIds.map(async (accountId) => {
+    const [admitted, fills, candidates, suppressed] = await Promise.all([
+      sb.from("execution_observations")
+        .select("id,event_kind,event_at,source_bar_at,channel_slug,opportunity_id,position_id,action,blocked_reason,occ_symbol,filled_qty,broker_status,payload")
+        .eq("account_id", accountId).gte("event_at", since)
+        .eq("event_kind", "decision").is("blocked_reason", null)
+        .order("event_at", { ascending: false }).limit(100),
+      sb.from("execution_observations")
+        .select("id,event_kind,event_at,source_bar_at,channel_slug,opportunity_id,position_id,action,blocked_reason,occ_symbol,filled_qty,broker_status,payload")
+        .eq("account_id", accountId).gte("event_at", since)
+        .eq("event_kind", "broker_result").gt("filled_qty", 0)
+        .order("event_at", { ascending: false }).limit(100),
+      sb.from("execution_observations")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", accountId).gte("event_at", since).eq("event_kind", "decision"),
+      sb.from("execution_observations")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", accountId).gte("event_at", since)
+        .eq("event_kind", "decision").not("blocked_reason", "is", null),
+    ]);
+    const failed = [admitted, fills, candidates, suppressed].find((result) => result.error);
+    return {
+      data: failed ? null : [...(admitted.data ?? []), ...(fills.data ?? [])],
+      error: failed?.error ?? null,
+      candidates: candidates.count ?? 0,
+      suppressed: suppressed.count ?? 0,
+    };
+  }));
+  const failed = reads.find((result) => result.error);
+  if (failed) return { data: null, error: failed.error };
+  return {
+    data: reads.flatMap((result) => result.data ?? []),
+    error: null,
+    summary: {
+      candidates: reads.reduce((sum, result) => sum + result.candidates, 0),
+      suppressed: reads.reduce((sum, result) => sum + result.suppressed, 0),
+    },
+  };
 }
 
 async function readManagers(accountIds: string[], since: string): Promise<QueryResult> {
@@ -102,7 +139,14 @@ async function readBrokerReceipt(): Promise<QueryResult> {
 function applyRead<T>(previous: OpsEvidenceRead<T>, settled: PromiseSettledResult<QueryResult>, nowMs: number): OpsEvidenceRead<T> {
   if (settled.status === "rejected") return { ...previous, state: "error", error: message(settled.reason), fetchedAtMs: nowMs };
   if (settled.value.error) return { ...previous, state: "error", error: message(settled.value.error), fetchedAtMs: nowMs };
-  return { state: "ok", rows: (settled.value.data ?? []) as T[], error: "", fetchedAtMs: nowMs, lastOkAtMs: nowMs };
+  return {
+    state: "ok",
+    rows: (settled.value.data ?? []) as T[],
+    error: "",
+    fetchedAtMs: nowMs,
+    lastOkAtMs: nowMs,
+    summary: settled.value.summary,
+  };
 }
 
 /**

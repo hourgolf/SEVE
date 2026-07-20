@@ -18,6 +18,7 @@ export interface OpsEvidenceRead<T> {
   error: string;
   fetchedAtMs: number | null;
   lastOkAtMs: number | null;
+  summary?: { candidates: number; suppressed: number };
 }
 
 export interface ExecutionEvidenceRow {
@@ -228,8 +229,8 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
     ? execution.rows.filter((row) => row.event_at.slice(0, 10) === clock.date && candidateMeta(row))
     : [];
   const decisions = sessionExecutions.filter((row) => row.event_kind === "decision");
-  const candidates = new Set(decisions.map((row) => row.opportunity_id ?? row.id)).size;
-  const suppressed = decisions.filter((row) => Boolean(row.blocked_reason)).length;
+  const candidates = execution.summary?.candidates ?? new Set(decisions.map((row) => row.opportunity_id ?? row.id)).size;
+  const suppressed = execution.summary?.suppressed ?? decisions.filter((row) => Boolean(row.blocked_reason)).length;
   const fillRows = sessionExecutions.filter((row) => row.event_kind === "broker_result" && Number(row.filled_qty) > 0 && row.position_id);
   const fillsByPosition = new Map(fillRows.map((row) => [row.position_id as string, row]));
   const positionIds = new Set(fillsByPosition.keys());
