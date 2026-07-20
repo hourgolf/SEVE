@@ -58,6 +58,13 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
     return () => window.clearInterval(id);
   }, []);
 
+  // The 909 shell owns visual workspace navigation, while remote subscriptions
+  // remain page-owned. Keep the existing seam room signal aligned with what is
+  // actually visible so deep OPS ledgers run only in OPS (and do run there).
+  useEffect(() => {
+    surface.setActiveRoom(mode === "perform" && performSection === "ops" ? "ops" : mode === "studio" ? "mix" : "play");
+  }, [mode, performSection, surface.setActiveRoom]);
+
   const { view, feed, liveFund, livePnl, accounts, acctId, setAcctId, incident, workerRuns, write } = surface;
   const fund = view.desk.fund;
   const selectedAccount = accounts.find((account) => account.id === acctId);

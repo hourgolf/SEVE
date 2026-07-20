@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const hook = readFileSync(new URL("./useOpsEvidence.ts", import.meta.url), "utf8");
 const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 const executionRoute = readFileSync(new URL("../app/api/ops-execution-evidence/route.ts", import.meta.url), "utf8");
+const workstation = readFileSync(new URL("../components/shell/WorkstationShell.tsx", import.meta.url), "utf8");
 
 assert.match(hook, /pollMs = 120_000, enabled = true/, "OPS evidence should default to a slow cadence");
 assert.match(hook, /if \(!enabled\) return;/, "disabled workspaces must perform no OPS reads");
@@ -19,5 +20,6 @@ assert.match(hook, /\.eq\("session_date_et", todayEt\)/, "capture receipts shoul
 assert.match(hook, /\.eq\("event_kind", eventKind\).*\.gte\("event_at", since\)/s, "outcomes should use the event-kind/time index");
 assert.match(hook, /\[accountScope, enabled, pollMs\]/, "workspace or account activation must restart the effect");
 assert.match(page, /useOpsEvidence\(120_000, activeRoom === "ops", accounts\.map\(\(account\) => account\.id\)\)/, "only OPS should activate account-scoped evidence reads");
+assert.match(workstation, /surface\.setActiveRoom\(mode === "perform" && performSection === "ops" \? "ops"/, "the 909 OPS workspace must activate the page-owned evidence seam");
 
-console.log("ops-evidence-read-selftest: 14/14 passed");
+console.log("ops-evidence-read-selftest: 15/15 passed");
