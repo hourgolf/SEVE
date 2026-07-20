@@ -73,6 +73,34 @@ Not supported now:
   losses;
 - treating one session or one trade as an evidence floor.
 
+## Suppressed and dark candidate readiness
+
+The existing Phase 1D decision ledger already captured the raw material needed
+for a fail-closed T+1 candidate-path build. A post-close SELECT-only audit found
+1,241 entry decisions: 4 admitted and 1,237 blocked. **All 1,237 blocked rows
+have a deterministic opportunity id, OCC symbol, source-bar clock, and observed
+Alpaca ask/request provenance.** The blocked population was:
+
+| Reason | Decision receipts | Channels |
+| --- | ---: | ---: |
+| `day1_dark_lifecycle` | 1,195 | 49 |
+| `day1_reentry_disabled` | 27 | 3 |
+| `halted` | 10 | 5 |
+| `day1_spy_same_clock_collision` | 5 | 2 |
+
+These are candidate receipts, not 1,237 independent trades. Sequential repeated
+signals must be coalesced by configuration identity, channel, direction,
+contract, and opportunity clock before scoring. The observed Alpaca ask is
+request provenance only; it is not an exact historical entry quote. Exact
+manager comparison still requires the already-designed T+1 Databento CBBO path
+and must censor a missing contract, boundary, internal gap, or invalid quote.
+
+Therefore no additional high-volume runtime table is needed before July 21.
+The next implementation is a read-only extractor/coalescer over
+`execution_observations`, followed after the provider gate by content-addressed
+R2 paths and compact receipts. The prepared Gate 2 migration remains unapplied
+and needs separate review before any publication write.
+
 ## Supabase pressure observed after close
 
 The application database was approximately **428.5 MB**, close to the 500 MB
