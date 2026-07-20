@@ -133,6 +133,21 @@ function applyRead<T>(previous: OpsEvidenceRead<T>, settled: PromiseSettledResul
   };
 }
 
+function expireInitialLoads(previous: OpsEvidence, nowMs: number): OpsEvidence {
+  const expire = <T,>(read: OpsEvidenceRead<T>): OpsEvidenceRead<T> => read.state === "loading"
+    ? { ...read, state: "error", error: "OPS evidence read timed out", fetchedAtMs: nowMs }
+    : read;
+  return {
+    execution: expire(previous.execution),
+    managers: expire(previous.managers),
+    captures: expire(previous.captures),
+    captureHealth: expire(previous.captureHealth),
+    publisher: expire(previous.publisher),
+    outcomes: expire(previous.outcomes),
+    broker: expire(previous.broker),
+  };
+}
+
 /**
  * One compact, operator-scoped evidence poll for the Ops workspace. The
  * research tables remain RLS protected and the broker comparison is served by
@@ -152,6 +167,7 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
     // reads only while the operator is actually in OPS.
     if (!enabled) return;
     let alive = true;
+    const watchdogs = new Set<ReturnType<typeof setTimeout>>();
     const poll = async () => {
       const sb = getSupabase();
       const since = new Date(Date.now() - 36 * 3600_000).toISOString();
@@ -184,10 +200,26 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
         .order("created_at", { ascending: false }).limit(12));
       settle("outcomes", readOutcomes(since));
       settle("broker", accessToken.then((token) => readBrokerReceipt(token)));
+
+      // Browser auth/session libraries can occasionally fail to resolve even
+      // when their underlying network request has its own timeout. Keep the
+      // operator surface fail-closed: after one bounded initial window, any
+      // ledger that never settled becomes an explicit read error rather than
+      // remaining neutral CHECKING forever.
+      const watchdog = setTimeout(() => {
+        watchdogs.delete(watchdog);
+        if (alive) setState((previous) => expireInitialLoads(previous, Date.now()));
+      }, 15_000);
+      watchdogs.add(watchdog);
     };
     void poll();
     const stop = startVisibilityPoll(() => void poll(), pollMs);
-    return () => { alive = false; stop(); };
+    return () => {
+      alive = false;
+      stop();
+      watchdogs.forEach((watchdog) => clearTimeout(watchdog));
+      watchdogs.clear();
+    };
   }, [accountScope, enabled, pollMs]);
 
   return state;
