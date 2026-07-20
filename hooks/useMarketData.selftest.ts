@@ -16,5 +16,9 @@ assert.match(releasePoll, /RELEASE_LOOKBACK_MS/, "release lookup must use the de
 assert.match(source, /if \(pollInFlight \|\| !live\(\)\) return;/, "market poll must reject overlap");
 assert.match(source, /if \(releaseInFlight \|\| !live\(\)\) return;/, "release poll must reject overlap");
 assert.match(source, /startVisibilityPoll\(pollRelease, RELEASE_POLL_MS\)/, "release polling must use its slow cadence");
+assert.match(source, /const HISTORY_LIMIT = 2340;/, "intraday startup history should cover 1W without loading 15 sessions");
+assert.match(source, /select\(OPTION_QUOTE_FIELDS\)/, "live chain should transfer only displayed/modeling fields");
+assert.match(source, /const BARS_POLL_MS = 60000;/, "closed-bar safety polling should match the minute write cadence");
+assert.match(source, /const RECENT_BARS = 60;/, "recurring chart reads should transfer only the merge tail");
 
-console.log("market-data-read-selftest: 7/7 passed");
+console.log("market-data-read-selftest: 11/11 passed");

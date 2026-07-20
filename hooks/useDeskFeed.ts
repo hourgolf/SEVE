@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useDeskState } from "@/hooks/useDeskState";
@@ -16,6 +16,8 @@ import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
 const POLL_MS = 45000;
 const MAX_CURVE = 600; // ~1.25 RTH sessions of 1-min fund snapshots — enough to find the current session's open
 const SESSION_GAP_MS = 2 * 3600_000; // a gap this large between snapshots = a new trading session
+const POSITION_FIELDS = "id,occ_symbol,expiration,strike,opt_type,qty,avg_entry_price,current_mark,unrealized_pnl,realized_pnl,opened_at,closed_at,close_reason,peak_mark,peak_at";
+const SIGNAL_FIELDS = "id,signal_type,direction,acted_on,blocked_reason,created_at";
 
 export type FeedStatus = "live" | "empty" | "error";
 
@@ -66,11 +68,54 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
   const [sessionOpenNav, setSessionOpenNav] = useState<number | null>(null);
   const [status, setStatus] = useState<FeedStatus>("empty");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const curveRef = useRef<{ ts: string; equity: number }[]>([]);
 
   useEffect(() => {
     const mounted = { current: true };
+    let pollInFlight = false;
+
+    const equityQuery = () => {
+      const sb = getSupabase();
+      return (acctId
+        ? sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).eq("account_id", acctId)
+        : sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).is("account_id", null)
+      ).order("captured_at", { ascending: false });
+    };
+
+    const sessionSlice = (rows: { ts: string; equity: number }[]) => {
+      let start = 0;
+      for (let i = rows.length - 1; i > 0; i--) {
+        if (Date.parse(rows[i].ts) - Date.parse(rows[i - 1].ts) > SESSION_GAP_MS) { start = i; break; }
+      }
+      return rows.slice(start);
+    };
+
+    const commitCurve = (rows: { ts: string; equity: number }[]) => {
+      const current = sessionSlice(rows).slice(-MAX_CURVE);
+      curveRef.current = current;
+      setCurve(current);
+      setLatestNav(current.length ? current[current.length - 1].equity : null);
+      setSessionOpenNav(current.length ? current[0].equity : null);
+    };
+
+    // The session curve is a chart/history payload. Load it once per account,
+    // then let the recurring poll merge only the newest two snapshots. The old
+    // path transferred all 600 rows on every poll and every signal insert.
+    async function loadCurve() {
+      try {
+        const res = await equityQuery().limit(MAX_CURVE);
+        if (res.error || !mounted.current) return;
+        const rows = ((res.data ?? []) as { net_liquidation: number; captured_at: string }[])
+          .slice().reverse().map((r) => ({ ts: r.captured_at, equity: Number(r.net_liquidation) }));
+        commitCurve(rows);
+      } catch {
+        /* the compact feed remains usable without curve history */
+      }
+    }
 
     async function poll() {
+      if (pollInFlight || !mounted.current) return;
+      pollInFlight = true;
       try {
         const sb = getSupabase();
         // Coarse lower bound for closed trades — wide enough to always include the
@@ -81,19 +126,21 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
         // channels' positions/signals (inner-join strategists.account_id) + ITS per-account
         // equity snapshot; with no acctId it falls back to the desk total (account_id NULL).
         /* eslint-disable @typescript-eslint/no-explicit-any */
-        const sel = acctId ? "*, strategists!inner(slug,account_id)" : "*, strategists(slug)";
+        const posSel = acctId
+          ? `${POSITION_FIELDS},strategists!inner(slug,account_id)`
+          : `${POSITION_FIELDS},strategists(slug)`;
+        const sigSel = acctId
+          ? `${SIGNAL_FIELDS},strategists!inner(slug,account_id)`
+          : `${SIGNAL_FIELDS},strategists(slug)`;
         const byAcct = (q: any) => (acctId ? q.eq("strategists.account_id", acctId) : q);
         const [posRes, sigRes, eqRes, closedRes] = await Promise.all([
-          byAcct(sb.from("positions").select(sel).eq("status", "open")).limit(100),
-          byAcct(sb.from("signals").select(sel)).order("created_at", { ascending: false }).limit(16),
-          (acctId
-            ? sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).eq("account_id", acctId)
-            : sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).is("account_id", null)
-          ).order("captured_at", { ascending: false }).limit(MAX_CURVE),
+          byAcct(sb.from("positions").select(posSel).eq("status", "open")).limit(24),
+          byAcct(sb.from("signals").select(sigSel)).order("created_at", { ascending: false }).limit(16),
+          equityQuery().limit(2),
           // recent CLOSED trades (narrowed to the current session in JS) — for the
           // realized day P&L + the recent-trades view, so fast scalps don't vanish.
-          byAcct(sb.from("positions").select(sel).eq("status", "closed").gte("closed_at", closedSince))
-            .order("closed_at", { ascending: false }).limit(400),
+          byAcct(sb.from("positions").select(posSel).eq("status", "closed").gte("closed_at", closedSince))
+            .order("closed_at", { ascending: false }).limit(100),
         ]);
         if (posRes.error || sigRes.error || eqRes.error) throw new Error("read denied");
         if (!mounted.current) return;
@@ -138,15 +185,16 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
         // so the curve (and the crosshair's P&L baseline) anchors at the session OPEN.
         // Gap-based (not a calendar filter) so it's robust to the ET session spanning
         // midnight UTC: "today" P&L = now − open (e.g. +$492), not NAV − inception.
-        const eqAsc = ((eqRes.data ?? []) as any[])
+        const latestEq = ((eqRes.data ?? []) as any[])
           .slice()
           .reverse()
           .map((r) => ({ ts: r.captured_at as string, equity: Number(r.net_liquidation) }));
-        let sStart = 0;
-        for (let i = eqAsc.length - 1; i > 0; i--) {
-          if (Date.parse(eqAsc[i].ts) - Date.parse(eqAsc[i - 1].ts) > SESSION_GAP_MS) { sStart = i; break; }
-        }
-        const eq = eqAsc.slice(sStart);
+        const merged = new Map(curveRef.current.map((row) => [row.ts, row]));
+        for (const row of latestEq) merged.set(row.ts, row);
+        const eq = sessionSlice(
+          [...merged.values()].sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts)),
+        ).slice(-MAX_CURVE);
+        commitCurve(eq);
 
         // Narrow closed trades to the CURRENT session (same gap anchor as the curve)
         // so the per-channel rows + Day P&L reflect today's session, not a UTC day
@@ -159,18 +207,17 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
         setPositions(pos);
         setClosedToday(sessionClosed);
         setSignals(sigs);
-        setCurve(eq);
-        setLatestNav(eq.length ? eq[eq.length - 1].equity : null);
-        setSessionOpenNav(eq.length ? eq[0].equity : null);
         setStatus(pos.length || sessionClosed.length || sigs.length ? "live" : "empty");
         setUpdatedAt(new Date().toISOString());
       } catch {
         if (!mounted.current) return;
         setStatus("error");
+      } finally {
+        pollInFlight = false;
       }
     }
 
-    poll();
+    void loadCurve().finally(() => void poll());
     const stopPoll = startVisibilityPoll(poll, POLL_MS);
 
     // Realtime refetch trigger (debounced); the poll is the fallback. Skipped
@@ -189,8 +236,6 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
       channel = sb
         .channel("desk-feed")
         .on("postgres_changes", { event: "*", schema: "public", table: "positions" }, trigger)
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "signals" }, trigger)
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "equity_snapshots" }, trigger)
         .subscribe();
     } catch {
       /* env missing — poll-only */

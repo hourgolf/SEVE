@@ -27,18 +27,19 @@ export const POLL_INTERVAL_MS = 60000;
 // message predicate off the full append-only events history.
 export const RELEASE_POLL_MS = 300000;
 export const RELEASE_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
-// BARS (the chart) poll. Cheap (~200 small OHLC rows) and exit-critical, so it
-// stays fast and realtime-independent: closed candles refresh within ~10s even
-// if the realtime tick drops. The live forming candle tracks the 3s spot below.
-const BARS_POLL_MS = 10000;
+const OPTION_QUOTE_FIELDS = "id,occ_symbol,underlying,expiration,strike,opt_type,underlying_price,bid,ask,mid,iv,delta,gamma,captured_at";
+// Closed bars change once per minute and Realtime already triggers the market
+// refresh on insert. A 60s safety poll is sufficient; the live forming candle
+// still tracks the 3s Alpaca spot below without Supabase egress.
+const BARS_POLL_MS = 60000;
 // The live chart EDGE for exit timing: /api/spot (Alpaca last trade) folds into
 // the forming candle every 3s — kept fast (only pauses when the tab is hidden).
 const SPOT_POLL_MS = 3000;
-// History (1-min bars) loaded ONCE on mount — ~15 trading days, so higher
-// timeframes have months of candles to pan through. The repeating poll only
-// pulls the recent tail and merges it in, keeping live updates cheap.
-const HISTORY_LIMIT = 5850;
-const RECENT_BARS = 200;
+// History (1-min bars) loaded ONCE on mount. Six RTH sessions cover the 1W
+// preset plus its prior-close anchor; longer presets use the daily rollup.
+// The former 5,850-row startup transfer was unnecessary browser egress.
+const HISTORY_LIMIT = 2340;
+const RECENT_BARS = 60;
 // Snapshot older than this is "stale" (market closed / cron paused).
 const STALE_AFTER_MIN = 3;
 
@@ -203,7 +204,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       // healthy options chain. The old exact COUNT scanned the whole symbol
       // partition every minute and was removed from the live path entirely.
       const [quotesSettled, barsSettled, eventsSettled] = await Promise.allSettled([
-        sb.from("option_quotes").select("*").eq("underlying", symbol).order("captured_at", { ascending: false }).limit(200),
+        sb.from("option_quotes").select(OPTION_QUOTE_FIELDS).eq("underlying", symbol).order("captured_at", { ascending: false }).limit(200),
         sb.from("underlying_bars").select("ts,open,high,low,close,volume,vwap").eq("symbol", symbol).order("ts", { ascending: false }).limit(RECENT_BARS),
         sb.from("events").select("id,level,strategist_id,message,meta,created_at").order("created_at", { ascending: false }).limit(14),
       ]);
