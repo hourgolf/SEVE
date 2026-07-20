@@ -21,6 +21,12 @@ import { useAuth } from "@/hooks/useAuth";
 // rows) and was the egress that blew the quota, so it runs slow; the bars poll +
 // spot below keep the CHART live independently. Pauses while the tab is hidden.
 export const POLL_INTERVAL_MS = 60000;
+// Release identity changes only when the worker boots. Keep that verification
+// independent from the market loop so a slow journal lookup can never delay
+// chart/chain/tape updates. The bounded window keeps the leading-wildcard
+// message predicate off the full append-only events history.
+export const RELEASE_POLL_MS = 300000;
+export const RELEASE_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 // BARS (the chart) poll. Cheap (~200 small OHLC rows) and exit-critical, so it
 // stays fast and realtime-independent: closed candles refresh within ~10s even
 // if the realtime tick drops. The live forming candle tracks the 3s spot below.
@@ -178,35 +184,37 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     // cleanup sets ITS cancelled=true, so its late responses are dropped.
     let cancelled = false;
     const live = () => mounted.current && !cancelled;
+    let pollInFlight = false;
+    let releaseInFlight = false;
+    let barsInFlight = false;
+    let spotInFlight = false;
     // Switching instruments: drop the previous ticker's history + visible bars so
     // a stale SPY candle never bleeds into a QQQ poll (mergeBars keys off ts only).
     historyBars.current = [];
     setData((d) => ({ ...d, bars: [], dailyBars: [], snapshot: [], spot: null, lastIngestTs: null }));
 
     async function poll() {
+      if (pollInFlight || !live()) return;
+      pollInFlight = true;
       try {
       const sb = getSupabase();
       // These reads have different operational importance. Settling them
       // independently keeps an optional event/bar timeout from poisoning a
       // healthy options chain. The old exact COUNT scanned the whole symbol
       // partition every minute and was removed from the live path entirely.
-      const [quotesSettled, barsSettled, eventsSettled, releaseSettled] = await Promise.allSettled([
+      const [quotesSettled, barsSettled, eventsSettled] = await Promise.allSettled([
         sb.from("option_quotes").select("*").eq("underlying", symbol).order("captured_at", { ascending: false }).limit(200),
         sb.from("underlying_bars").select("ts,open,high,low,close,volume,vwap").eq("symbol", symbol).order("ts", { ascending: false }).limit(RECENT_BARS),
-        sb.from("events").select("*").order("created_at", { ascending: false }).limit(14),
-        sb.from("events").select("*").ilike("message", "%day1-release ACTIVE%").order("created_at", { ascending: false }).limit(1),
+        sb.from("events").select("id,level,strategist_id,message,meta,created_at").order("created_at", { ascending: false }).limit(14),
       ]);
 
       const quotesRes = quotesSettled.status === "fulfilled" ? quotesSettled.value : null;
       const barsRes = barsSettled.status === "fulfilled" ? barsSettled.value : null;
       const eventsRes = eventsSettled.status === "fulfilled" ? eventsSettled.value : null;
-      const releaseRes = releaseSettled.status === "fulfilled" ? releaseSettled.value : null;
       const quoteError = quotesSettled.status === "rejected" ? quotesSettled.reason : quotesRes?.error;
       const barsError = barsSettled.status === "rejected" ? barsSettled.reason : barsRes?.error;
       const eventsError = eventsSettled.status === "rejected" ? eventsSettled.reason : eventsRes?.error;
-      const releaseError = releaseSettled.status === "rejected" ? releaseSettled.reason : releaseRes?.error;
       const completedAt = new Date().toISOString();
-      const releaseEvents = releaseError ? null : ((releaseRes?.data ?? []) as MarketEvent[]);
       if (quoteError) {
         const message = readErrorMessage(quoteError);
         const isAccessError = ACCESS_ERROR_RE.test(message);
@@ -223,21 +231,15 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
             error: lastGoodFresh ? null : message,
             warning: lastGoodFresh ? `OPTIONS CHAIN READ DEGRADED · ${message}` : null,
             isAccessError,
-            releaseEvents: releaseEvents ?? prev.releaseEvents,
-            releaseReceiptHealth: releaseError
-              ? markReadFailure(prev.releaseReceiptHealth, failedAt, readErrorMessage(releaseError))
-              : markReadSuccess(prev.releaseReceiptHealth, failedAt),
             readHealth: { ...prev.readHealth, option_chain: markReadFailure(prev.readHealth.option_chain, failedAt, message) },
           };
         });
         return;
       }
 
-      const eventHealthError = eventsError ?? releaseError;
       const warnings = [
         barsError ? `CHART ${readErrorMessage(barsError)}` : null,
         eventsError ? `EVENT TAPE ${readErrorMessage(eventsError)}` : null,
-        releaseError ? `RELEASE RECEIPT ${readErrorMessage(releaseError)}` : null,
       ].filter((value): value is string => value != null);
 
       const quotes = (quotesRes?.data ?? []) as OptionQuote[];
@@ -316,10 +318,6 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         snapshot,
         bars: bars ?? prev.bars,
         events: events ?? prev.events,
-        releaseEvents: releaseEvents ?? prev.releaseEvents,
-        releaseReceiptHealth: releaseError
-          ? markReadFailure(prev.releaseReceiptHealth, completedAt, readErrorMessage(releaseError))
-          : markReadSuccess(prev.releaseReceiptHealth, completedAt),
         expirations,
         updatedAt: completedAt,
         error: null,
@@ -331,8 +329,8 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
           bars: barsError
             ? markReadFailure(prev.readHealth.bars, completedAt, readErrorMessage(barsError))
             : markReadSuccess(prev.readHealth.bars, completedAt),
-          events: eventHealthError
-            ? markReadFailure(prev.readHealth.events, completedAt, readErrorMessage(eventHealthError))
+          events: eventsError
+            ? markReadFailure(prev.readHealth.events, completedAt, readErrorMessage(eventsError))
             : markReadSuccess(prev.readHealth.events, completedAt),
         },
       }));
@@ -349,7 +347,6 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
             error: lastGoodFresh ? null : message,
             warning: lastGoodFresh ? `OPTIONS CHAIN READ DEGRADED · ${message}` : null,
             isAccessError: ACCESS_ERROR_RE.test(message),
-            releaseReceiptHealth: markReadFailure(prev.releaseReceiptHealth, failedAt, message),
             readHealth: {
               option_chain: markReadFailure(prev.readHealth.option_chain, failedAt, message),
               bars: markReadFailure(prev.readHealth.bars, failedAt, message),
@@ -357,6 +354,51 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
             },
           };
         });
+      } finally {
+        pollInFlight = false;
+      }
+    }
+
+    // Startup release identity is operational evidence, not live market data.
+    // Read it on its own slow cadence and retain the last verified receipt
+    // through transient failures. This prevents a journal timeout from holding
+    // the option chain, chart and tape behind the same promise barrier.
+    async function pollRelease() {
+      if (releaseInFlight || !live()) return;
+      releaseInFlight = true;
+      const completedAt = new Date().toISOString();
+      try {
+        const cutoff = new Date(Date.now() - RELEASE_LOOKBACK_MS).toISOString();
+        const result = await getSupabase()
+          .from("events")
+          .select("id,level,strategist_id,message,meta,created_at")
+          .gte("created_at", cutoff)
+          .ilike("message", "%day1-release ACTIVE%")
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (!live()) return;
+        if (result.error) {
+          const message = readErrorMessage(result.error);
+          setData((prev) => ({
+            ...prev,
+            releaseReceiptHealth: markReadFailure(prev.releaseReceiptHealth, completedAt, message),
+          }));
+          return;
+        }
+        setData((prev) => ({
+          ...prev,
+          releaseEvents: (result.data ?? []) as MarketEvent[],
+          releaseReceiptHealth: markReadSuccess(prev.releaseReceiptHealth, completedAt),
+        }));
+      } catch (err) {
+        if (!live()) return;
+        const message = readErrorMessage(err);
+        setData((prev) => ({
+          ...prev,
+          releaseReceiptHealth: markReadFailure(prev.releaseReceiptHealth, completedAt, message),
+        }));
+      } finally {
+        releaseInFlight = false;
       }
     }
 
@@ -365,6 +407,8 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     // realtime tick drops; the live forming candle tracks the 3s spot. mergeBars
     // keys on ts → idempotent with the chain poll's bars (whichever lands last).
     async function pollBars() {
+      if (barsInFlight || !live()) return;
+      barsInFlight = true;
       try {
         const sb = getSupabase();
         const barsRes = await sb
@@ -379,6 +423,8 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         setData((prev) => ({ ...prev, bars }));
       } catch {
         /* keep the last bars on a failed poll */
+      } finally {
+        barsInFlight = false;
       }
     }
 
@@ -435,6 +481,8 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     // so the LED moves like a real ticker. No-ops (keeps the 1/min spot) if the
     // route returns null — e.g. Alpaca keys not set in the deploy env.
     async function pollSpot() {
+      if (spotInFlight || !live()) return;
+      spotInFlight = true;
       try {
         const res = await fetch(`/api/spot?symbol=${encodeURIComponent(symbol)}`, {
           cache: "no-store",
@@ -448,10 +496,13 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         }
       } catch {
         /* offline / route missing — fall back to the minute spot */
+      } finally {
+        spotInFlight = false;
       }
     }
 
     poll();
+    pollRelease();
     pollBars();
     loadHistory();
     loadDaily();
@@ -461,6 +512,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     // Supabase egress) and resumes with an immediate refresh. The bars + spot
     // loops stay fast (the live chart for exits); only the heavy chain is slow.
     const stopPoll = startVisibilityPoll(poll, POLL_INTERVAL_MS);
+    const stopRelease = startVisibilityPoll(pollRelease, RELEASE_POLL_MS);
     const stopBars = startVisibilityPoll(pollBars, BARS_POLL_MS);
     const stopSpot = startVisibilityPoll(pollSpot, SPOT_POLL_MS);
 
@@ -492,6 +544,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       mounted.current = false;
       cancelled = true; // drop any in-flight responses from THIS (old-symbol) effect
       stopPoll();
+      stopRelease();
       stopBars();
       stopSpot();
       if (debounce) clearTimeout(debounce);
