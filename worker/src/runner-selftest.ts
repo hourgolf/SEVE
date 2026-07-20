@@ -242,6 +242,23 @@ const chan = (over: Partial<ChannelConfig> = {}): ChannelConfig => ({
   const changedManager = buildShadowPlanEvidence({ ...input, channel: { ...input.channel, take_profit_pct: 30 } })!;
   check("phase1c: manager change creates a new epoch", changedManager.epoch.id === a.epoch.id, false);
   check("phase1c: manager change does not rewrite alpha version", changedManager.epoch.channel_version, a.epoch.channel_version);
+  const ratcheted = buildShadowPlanEvidence({
+    ...input,
+    executableGivebackTrail: {
+      engageMult: 1.5,
+      givebackPct: 33,
+      priceBasis: "executable-option-bid",
+    },
+  })!;
+  check("phase1c: executable ratchet gets a distinct manager identity", [
+    ratcheted.epoch.manager_id,
+    ratcheted.epoch.manager_version === a.epoch.manager_version,
+    ratcheted.epoch.id === a.epoch.id,
+    ratcheted.plan.plan_json.harvest,
+  ], ["premium-giveback-all-out", false, false, "all_out"]);
+  check("phase1c: executable ratchet is stamped into policy evidence",
+    (ratcheted.epoch.policy_json.manager as { executableGivebackTrail: unknown }).executableGivebackTrail,
+    { engageMult: 1.5, givebackPct: 33, priceBasis: "executable-option-bid" });
   const changedWorker = buildShadowPlanEvidence({ ...input, workerVersion: "stream-test-2" })!;
   check("phase1c: worker release changes builtin channel version", changedWorker.epoch.channel_version === a.epoch.channel_version, false);
   check("phase1c: blocked decisions never become plans", buildShadowPlanEvidence({ ...input, decision: { ...decision, blocked: "daily_stop" } }), null);

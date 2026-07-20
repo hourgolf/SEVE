@@ -51,6 +51,7 @@ import {
   buildDay1AdmissionState,
   DAY1_RELEASE_CONFIGURATION_SHA256,
   DAY1_RELEASE_ID,
+  day1ExecutableGivebackTrail,
   DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
   finalizeDay1ReleaseAdmissions,
@@ -1228,7 +1229,9 @@ async function fastExitSweep(): Promise<void> {
       const reason = premiumExitReason({
         row: r, slug: ch.slug, premiumExit: day1RootPolicy ? undefined : pe,
         takeProfitPct: day1RootPolicy ? 0 : ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
-        givebackTrail: day1RootPolicy ? null : policy.GIVEBACK_TRAIL[ch.slug] ?? null,
+        givebackTrail: day1RootPolicy
+          ? day1ExecutableGivebackTrail(ch.slug)
+          : policy.GIVEBACK_TRAIL[ch.slug] ?? null,
         isManual: /-manual$/i.test(ch.slug),
         minutesToClose: Math.max(0, rthClose - nowMin),
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)

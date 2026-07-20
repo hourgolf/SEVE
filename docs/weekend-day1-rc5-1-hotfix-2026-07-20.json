@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "weekend-day1-2026-07-20-rc5.1",
+  "releaseConfigurationSha256": "09a6090b237221b386f464830d90c4f54804d3c5717df2a384c2ea47a77f5508",
+  "workerVersion": "stream-2026-07-20a",
+  "supersedes": "weekend-day1-2026-07-20-rc5",
+  "paperOnly": true,
+  "changeBoundary": "after the operator manually closed the original MOMO position and halted a broker-flat desk",
+  "executableMomoRatchet": {
+    "engageReturnPct": 50,
+    "givebackPct": 33,
+    "retainGainPct": 67,
+    "priceBasis": "executable-option-bid"
+  },
+  "managerShadow": {
+    "minimumModeledSourceQty": 2,
+    "armsPerRoot": 8,
+    "twoLotBankRunnerAllocation": "1 bank / 1 runner",
+    "executionAuthority": false
+  },
+  "rootBindings": [
+    {
+      "slug": "pb-ride",
+      "strategistId": "4528343d-7151-46ae-8f0d-10c0ef9572b4",
+      "accountId": "cd817549-e025-4d38-805e-d32e607052f7",
+      "channelVersion": "sha256:519c946e29bad1b149c80582a58e00367d3d0f340ea02e7a5136fa5e5be20f6e",
+      "managerVersion": "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+      "configurationEpoch": "sha256:1dd00d58df978bf2b082462de91e435aaa2a22ec2b0ac23c56fa381c64aed9ed",
+      "policyEpoch": "e174f66c-da9e-52d0-bd85-15b6618b396a"
+    },
+    {
+      "slug": "orb-ustop-ctl",
+      "strategistId": "51ab6380-e0db-4e41-ad59-625b151cb9cf",
+      "accountId": "995aa327-b0da-4050-bede-97ab462b06cd",
+      "channelVersion": "sha256:be44b3ea314ae1cb27a44bb1a9364650def566d4bb18ec139a9f7a1adddda70e",
+      "managerVersion": "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+      "configurationEpoch": "sha256:0a4b78b8f7cc249f9b5cc0159cc020041fe18d5c043b486d1fbb35bd4076854c",
+      "policyEpoch": "7cb5fac0-5ea9-5f94-af27-c41f80c8d2f5"
+    },
+    {
+      "slug": "grind-v3",
+      "strategistId": "1dc15beb-79a5-4f49-9b9b-9b5693c93561",
+      "accountId": "995aa327-b0da-4050-bede-97ab462b06cd",
+      "channelVersion": "sha256:53e5a0da54a86923543195cfc597b993b20de7a4340f0c66eecae9cd289908bc",
+      "managerVersion": "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+      "configurationEpoch": "sha256:b6072769532f39d54ad6f9e4ce12f1aa6075dc9a6f1686bcf7965fedce9762ea",
+      "policyEpoch": "ed3d62d9-2eb0-55ff-b4a1-94d52d321bef"
+    },
+    {
+      "slug": "momo-shape",
+      "strategistId": "c2efcffa-b0bb-4cde-a3de-25209879ebe1",
+      "accountId": "cd817549-e025-4d38-805e-d32e607052f7",
+      "channelVersion": "sha256:cd0e795b642a1786bb82e95aacfaab85c6664d1bad46d681195e2204acf9b48f",
+      "managerVersion": "sha256:bda3e8a72526f9d1d44a8656733523e06735e21e726a254c935ccfddfb69ccb0",
+      "configurationEpoch": "sha256:6a26f012ad594a2ee9f18185be26082cb53d4896e2bedcb861de3e1068a01f5b",
+      "policyEpoch": "c61a1810-3dc4-5c04-9078-d3f5b2729d76"
+    },
+    {
+      "slug": "orb-qqq-trail",
+      "strategistId": "62b108c8-535e-4232-8c68-af8fb5b8f932",
+      "accountId": "cd817549-e025-4d38-805e-d32e607052f7",
+      "channelVersion": "sha256:a82a2ea08ab6ca2472453c9276813f2928824e9b32691f124f9e7fe6bf38c276",
+      "managerVersion": "sha256:c3af49e3ce9e6653d7307ad458330293cd65a1433412057ba2715150dedea3c8",
+      "configurationEpoch": "sha256:f0769761fb3a866a286eae76b691a0fc7617cd303075bd2f6fa93a6cfa0bb885",
+      "policyEpoch": "7bf86200-7dcd-59c3-b757-fb9896ceefa6"
+    },
+    {
+      "slug": "breakout-alt-v3-iwm",
+      "strategistId": "24889b0e-3ba7-4e47-9430-f73aa2c764a4",
+      "accountId": "cd817549-e025-4d38-805e-d32e607052f7",
+      "channelVersion": "sha256:2e3367a92e1ba41395e6ed9a2eb932c5d22af79da0c6016f555917b12bf9c4a8",
+      "managerVersion": "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+      "configurationEpoch": "sha256:07edeca18e06fd87b84297b2e0b6a6638e6d96d9a85aef5af7eca7a2a9f08b0b",
+      "policyEpoch": "1c062acc-7a6e-5f6c-96c3-035649529845"
+    }
+  ],
+  "unchanged": [
+    "six root entry policies and account bindings",
+    "two-contract root quantity",
+    "minus-30-percent premium catastrophe stop",
+    "15:25 ET liquidation",
+    "dark-channel no-fill lifecycle",
+    "paper-only authority"
+  ]
+}

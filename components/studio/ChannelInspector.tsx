@@ -13,7 +13,6 @@ import type { StudioChannelRow } from "@/lib/studio/deriveStudioView";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
-const GIVEBACK_NOTE: Record<string, string> = { "momo-shape": "arm +50% · keep ⅔" };
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
 export function ChannelInspector({ strategist, summary, passport, write }: {
@@ -44,7 +43,9 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
   const ustopOff = ustop > 0 && ustop * 180 >= premStop;
   const pyr = config.pyramid_adds ?? 0;
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
-  const giveback = GIVEBACK_NOTE[slug];
+  const giveback = passport?.rootPolicy?.givebackTrail
+    ? `arm +${passport.rootPolicy.givebackTrail.engageReturnPct}% · keep ⅔`
+    : undefined;
 
   const stageCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : dispatch({ type: "SET_CONFIG", slug, patch });
   const commitCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : persistConfig(id, patch);
@@ -94,7 +95,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
             <span><small>SIZE</small><b>{passport.rootPolicy.quantity} contracts</b></span>
             <span><small>RISK</small><b>{usd0(passport.rootPolicy.riskBudgetUsd)}</b></span>
             <span><small>PREMIUM / DEBIT</small><b>${passport.rootPolicy.premiumCap.toFixed(2)} / {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
-            <span><small>EXIT</small><b>−{passport.rootPolicy.premiumStopPct}% · RIDE · {passport.rootPolicy.eodEt} ET</b></span>
+            <span><small>EXIT</small><b>−{passport.rootPolicy.premiumStopPct}% · {giveback ? `A13 ${giveback}` : "RIDE"} · {passport.rootPolicy.eodEt} ET</b></span>
             <span><small>ADMISSION</small><b>priority {passport.rootPolicy.priority} · one/family</b></span>
           </> : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
         </div></section>
@@ -105,7 +106,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
           <div className="ctl"><span className="cl">event policy</span>{seg(eventPolicy, [{ v: "standdown", label: "STAND-DOWN" }, { v: "ignore", label: "TRADE-THRU" }], (v) => setCfg({ event_policy: v }))}</div>
         </div></section>
 
-        <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : "DATABASE KNOBS · NOT ACTIVE RC5"}</header><div className="knob-bank">
+        <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : "DATABASE KNOBS · NOT ACTIVE RC5.1"}</header><div className="knob-bank">
           {knob(config.capital_pct, 100, 2500, 50, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
           {knob(config.daily_stop_usd, 100, 5000, 50, "ENTRY LATCH", (v) => `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
           {knob(premStop, 10, 90, 5, "PREM STOP · POLICY", (v) => `−${v}%`, "premium_stop_pct", "#25272a", false)}

@@ -7,6 +7,7 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { prioritizeChannels } from "@/lib/perform/derivePerformView";
+import { DAY1_ROOTS } from "@/lib/channels/day1Release";
 
 // PERFORM bottom dock (slice S2) — one chicklet per roster channel, the same
 // source (useDeskState) that drives STUDIO's rack. Exposure/exceptions sort first;
@@ -16,7 +17,7 @@ import { prioritizeChannels } from "@/lib/perform/derivePerformView";
 
 // A13 = the momo giveback ratchet, live A/B (docs/pre-registered-tests-2026-07 · registry A13).
 // The one sentinel-sourced ratchet armed today; a small documented constant, not a config column.
-const A13_SLUGS = new Set(["momo-shape"]);
+const hasExecutableA13 = (slug: string) => !!DAY1_ROOTS[slug]?.givebackTrail;
 
 function Chicklet({
   ch, pnl, canWrite, onMute,
@@ -40,7 +41,7 @@ function Chicklet({
       <div className="pfc-r1">
         <span className={`pfc-dot${armed ? " on" : muted ? " stby" : ""}`} />
         <span className="pfc-slug">{ch.slug}</span>
-        {A13_SLUGS.has(ch.slug) && <span className="pfc-a13">⚡A13</span>}
+        {hasExecutableA13(ch.slug) && <span className="pfc-a13">⚡A13</span>}
       </div>
       <div className="pfc-mid">
         <div className={`pfc-pnl num ${dayCls}`} title="Desk-derived today P&L; not broker-reconciled.">{day != null ? signedUsd(day) : "—"}</div>

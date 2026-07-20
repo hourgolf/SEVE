@@ -15,6 +15,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorkspace";
 import type { OpsEvidenceChain, ReadinessItem } from "@/lib/ops/readiness";
 import { deriveOpenPositionRows } from "@/lib/perform/derivePositionsWorkspace";
+import { DAY1_ROOTS } from "@/lib/channels/day1Release";
 
 // PERFORM right rail (slice S2): POSITIONS (row-per-leg with pk glow ring +
 // ratchet/LOCK-RIDE/giveback badges) · SENTINEL (verdict chip + one-line digest
@@ -22,7 +23,7 @@ import { deriveOpenPositionRows } from "@/lib/perform/derivePositionsWorkspace";
 // All data REUSED: feed.positions + usePositionPeaks (same peak source as the
 // §03 book), useSentinelDigest (same §04 Brief/Sentinel fetch), data.events.
 
-const A13_SLUGS = new Set(["momo-shape"]); // registry A13 — momo giveback ratchet (live A/B)
+const hasExecutableA13 = (slug: string) => !!DAY1_ROOTS[slug]?.givebackTrail;
 const ONE_DAY = 86_400_000;
 function dteOf(exp?: string | null): number | null {
   if (!exp) return null;
@@ -84,6 +85,7 @@ export function PositionsSection({
           const entry = p.avg_entry_price;
           const evidence = evidenceChains?.find((chain) => chain.positionId === p.id);
           const lock = (s?.config.take_profit_pct ?? 0) > 0;
+          const a13 = hasExecutableA13(p.strategist_slug);
           const dte = dteOf(p.expiration);
           return (
             <div className="pfp-row" key={p.id} style={{ ["--pm" as string]: pm }}>
@@ -101,8 +103,8 @@ export function PositionsSection({
                 <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAPTURE" : "GIVE"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
               </div>
               <div className="pfp-tags">
-                {A13_SLUGS.has(p.strategist_slug) && <span className="pfp-tag amber">⚡ A13 ratchet</span>}
-                <span className="pfp-tag">{lock ? "LOCK" : "RIDE"}</span>
+                {a13 && <span className="pfp-tag amber">⚡ A13 armed +50% · keep ⅔</span>}
+                <span className="pfp-tag">{a13 ? "RATCHET" : lock ? "LOCK" : "RIDE"}</span>
                 {evidence && <span className={`pfp-tag evidence-${evidence.tone}`}>EVIDENCE {evidence.tone}</span>}
                 {givebackPct != null && givebackPct >= 40 && <span className="pfp-tag warn">giveback {Math.round(givebackPct)}% of pk</span>}
               </div>

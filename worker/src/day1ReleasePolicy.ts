@@ -6,10 +6,17 @@ import type { ShadowDecision } from "./decide.js";
 import type { AccountRow, ChannelConfig, PositionRow } from "./store.js";
 import { observedPolicyIdentity, type ObservedPolicyIdentity } from "./planShadowModel.js";
 
-export const DAY1_RELEASE_SCHEMA_VERSION = 5 as const;
-export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc5" as const;
-export const DAY1_MANAGER_VERSION = "day1-catastrophe-eod-v1" as const;
+export const DAY1_RELEASE_SCHEMA_VERSION = 6 as const;
+export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc5.1" as const;
+export const DAY1_MANAGER_VERSION = "day1-catastrophe-eod-momo-a13-v2" as const;
 export const DAY1_SHADOW_MANAGER_VERSION = "manager-lab-preregister-v1" as const;
+
+export const DAY1_EXECUTABLE_GIVEBACK_TRAILS = {
+  // A13: arm after a +50% executable-bid peak, then retain 67% of the
+  // peak gain (33% giveback). This is the only RC5.1 root with an executable
+  // profit ratchet; every other root remains the sealed ride-to-15:25 baseline.
+  "momo-shape": { engageMult: 1.5, givebackPct: 33, priceBasis: "executable-option-bid" },
+} as const;
 
 export const DAY1_MANAGER_ARMS = [
   "LOCK20/30", "LOCK30/30", "LOCK50/30", "WIDE20/50",
@@ -63,50 +70,50 @@ export const DAY1_ROOT_BINDINGS: readonly Day1RootBinding[] = [
   {
     slug: "pb-ride", strategistId: "4528343d-7151-46ae-8f0d-10c0ef9572b4",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:0890122702487404a599d3b78e0774d4b9a9bc90b57806ee32c72a38ddf4fa34",
+    channelVersion: "sha256:519c946e29bad1b149c80582a58e00367d3d0f340ea02e7a5136fa5e5be20f6e",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:7b908a25ed1838f19ac32167dab3c74238ded00b3f39ec375cb213905784838f",
-    policyEpoch: "2c2787b7-4e0b-5628-8ff6-183da8014239",
+    configurationEpoch: "sha256:1dd00d58df978bf2b082462de91e435aaa2a22ec2b0ac23c56fa381c64aed9ed",
+    policyEpoch: "e174f66c-da9e-52d0-bd85-15b6618b396a",
   },
   {
     slug: "orb-ustop-ctl", strategistId: "51ab6380-e0db-4e41-ad59-625b151cb9cf",
     accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountMode: "paper",
-    channelVersion: "sha256:b9ce9e1a01886637a7a04d1a0e80008a7fba8d6f001adc4d201601ce87ab5591",
+    channelVersion: "sha256:be44b3ea314ae1cb27a44bb1a9364650def566d4bb18ec139a9f7a1adddda70e",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:20b29fd8b19e56a6cfeed868753caa68b9a14ccef3490531ed3e59dc8cdbfeb0",
-    policyEpoch: "150ee8f4-cd5f-58e4-bf72-920ca906fc2f",
+    configurationEpoch: "sha256:0a4b78b8f7cc249f9b5cc0159cc020041fe18d5c043b486d1fbb35bd4076854c",
+    policyEpoch: "7cb5fac0-5ea9-5f94-af27-c41f80c8d2f5",
   },
   {
     slug: "grind-v3", strategistId: "1dc15beb-79a5-4f49-9b9b-9b5693c93561",
     accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountMode: "paper",
-    channelVersion: "sha256:cd2f40c4394d3a55e12ab9a42d66182550887552f1401d043ef93c0f9bf1ce21",
+    channelVersion: "sha256:53e5a0da54a86923543195cfc597b993b20de7a4340f0c66eecae9cd289908bc",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:77f8a7c81f390dbc7c4977b06af6db199734f136f2fe5fb62d8095a9c3b2c658",
-    policyEpoch: "4efe3eb8-0683-5f9e-ba7b-d1965a45727b",
+    configurationEpoch: "sha256:b6072769532f39d54ad6f9e4ce12f1aa6075dc9a6f1686bcf7965fedce9762ea",
+    policyEpoch: "ed3d62d9-2eb0-55ff-b4a1-94d52d321bef",
   },
   {
     slug: "momo-shape", strategistId: "c2efcffa-b0bb-4cde-a3de-25209879ebe1",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:4f0f694ba52357e237a5b40162014a47089d049c5cc5cbc98c131670f71c65d8",
-    managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:85ef6b8789050b4b2a4843840b8011b9c2da9a50f84e64c6cf886e0820277c56",
-    policyEpoch: "3b9c36e4-320f-5f91-904a-96ae2d1d83bc",
+    channelVersion: "sha256:cd0e795b642a1786bb82e95aacfaab85c6664d1bad46d681195e2204acf9b48f",
+    managerVersion: "sha256:bda3e8a72526f9d1d44a8656733523e06735e21e726a254c935ccfddfb69ccb0",
+    configurationEpoch: "sha256:6a26f012ad594a2ee9f18185be26082cb53d4896e2bedcb861de3e1068a01f5b",
+    policyEpoch: "c61a1810-3dc4-5c04-9078-d3f5b2729d76",
   },
   {
     slug: "orb-qqq-trail", strategistId: "62b108c8-535e-4232-8c68-af8fb5b8f932",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:b08df73baec4896dee3f81017ffca16da52f01eb22a44632793b3397eddf1879",
+    channelVersion: "sha256:a82a2ea08ab6ca2472453c9276813f2928824e9b32691f124f9e7fe6bf38c276",
     managerVersion: "sha256:c3af49e3ce9e6653d7307ad458330293cd65a1433412057ba2715150dedea3c8",
-    configurationEpoch: "sha256:915b876a53ae745f18b5e6178c46f3d77fc2e2c6eb4b5f1188923e710486fa1b",
-    policyEpoch: "6d17038a-1761-571a-ab12-247d40c6c4cd",
+    configurationEpoch: "sha256:f0769761fb3a866a286eae76b691a0fc7617cd303075bd2f6fa93a6cfa0bb885",
+    policyEpoch: "7bf86200-7dcd-59c3-b757-fb9896ceefa6",
   },
   {
     slug: "breakout-alt-v3-iwm", strategistId: "24889b0e-3ba7-4e47-9430-f73aa2c764a4",
     accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountMode: "paper",
-    channelVersion: "sha256:c09ce06f0886641344258bff0a2d2c1b5920fa90aabca9391581424cffa82c7d",
+    channelVersion: "sha256:2e3367a92e1ba41395e6ed9a2eb932c5d22af79da0c6016f555917b12bf9c4a8",
     managerVersion: "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    configurationEpoch: "sha256:f355002d33f366775329ba8deb8c00d2c26754e91aa6ab3ff6e238cad6fe9b4c",
-    policyEpoch: "a7c37735-8de2-51ab-8a02-e50aad93303f",
+    configurationEpoch: "sha256:07edeca18e06fd87b84297b2e0b6a6638e6d96d9a85aef5af7eca7a2a9f08b0b",
+    policyEpoch: "1c062acc-7a6e-5f6c-96c3-035649529845",
   },
 ] as const;
 
@@ -153,6 +160,7 @@ export const DAY1_SEALED_RUNTIME_POSTURE = {
   managerShadow: {
     requiredEnabled: true,
     quoteMaxAgeMs: 15_000,
+    minimumModeledSourceQty: 2,
   },
 } as const;
 
@@ -175,6 +183,7 @@ export const DAY1_RELEASE_CONFIGURATION = {
     shadowManagerArms: DAY1_MANAGER_ARMS,
     premiumCatastropheStopPct: 30,
     takeProfitPct: 0,
+    executableGivebackTrails: DAY1_EXECUTABLE_GIVEBACK_TRAILS,
     adds: 0,
     pyramidAdds: 0,
     reentry: "disabled",
@@ -238,6 +247,17 @@ const rootBySlug = new Map<string, typeof DAY1_ROOTS[number]>(DAY1_ROOTS.map((ro
 
 export function day1Root(slug: string): typeof DAY1_ROOTS[number] | null {
   return rootBySlug.get(slug.toLowerCase()) ?? null;
+}
+
+export function day1ExecutableGivebackTrail(slug: string): {
+  engageMult: number;
+  givebackPct: number;
+  priceBasis: "executable-option-bid";
+} | null {
+  const trail = DAY1_EXECUTABLE_GIVEBACK_TRAILS[
+    slug.toLowerCase() as keyof typeof DAY1_EXECUTABLE_GIVEBACK_TRAILS
+  ];
+  return trail ? { ...trail } : null;
 }
 
 export function day1Lifecycle(slug: string): "paper" | "dark" {
@@ -720,7 +740,12 @@ export function validateDay1ReleaseStartup(input: Day1ReleaseStartupInput): Day1
     const account = accountById.get(accountId);
     const accountMode = account?.mode?.toLowerCase() ?? "";
     if (accountMode !== binding.accountMode) errors.push(`${binding.slug}:account_mode`);
-    const identity = observedPolicyIdentity({ channel, accountId, workerVersion: input.workerVersion });
+    const identity = observedPolicyIdentity({
+      channel,
+      accountId,
+      workerVersion: input.workerVersion,
+      executableGivebackTrail: day1ExecutableGivebackTrail(binding.slug),
+    });
     if (!identity) errors.push(`${binding.slug}:identity_unavailable`);
     else errors.push(...sameIdentity(identity, binding));
     actualRoots.push({

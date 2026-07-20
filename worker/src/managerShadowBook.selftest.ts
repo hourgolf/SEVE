@@ -59,17 +59,17 @@ const base = {
 
 const runs = buildManagerShadowEnrollments(base);
 check("one paper position enrolls eight managers", runs.length, 8);
-check("minimum operating size is stamped", runs[0]?.minimumModeledQty, 4);
+check("minimum operating size is stamped", runs[0]?.minimumModeledQty, 2);
 check("underlying is normalized", runs[0]?.underlying, "SPY");
 check("admission is durable before any quote", [runs[0]?.admissionSource, runs[0]?.admissionDelayMs, runs[0]?.evidenceState, runs[0]?.lastBid], ["fill_hook", 250, "pending_quote", null]);
 truth("all confirmed-size managers are integer executable", runs.every((r) => r.economicMode === "whole_lot_executable"));
 check("non-paper enrolls nothing", buildManagerShadowEnrollments({ ...base, paperMode: false }).length, 0);
-check("three contracts fail the confirmed cohort gate", buildManagerShadowEnrollments({ ...base, originalQty: 3 }).length, 0);
+check("two-contract Day-1 root enrolls all eight managers", buildManagerShadowEnrollments({ ...base, originalQty: 2 }).length, 8);
 const pb2Two = buildManagerShadowEnrollments({ ...base, channelSlug: "pb-ride-2", originalQty: 2 });
-check("two-contract pb2 enrolls only its staged candidate", pb2Two.map((r) => r.managerId), ["PB2-BANK15/HALF-GIVEBACK"]);
+check("two-contract pb2 enrolls base arms plus its staged candidate", pb2Two.length, 9);
 check("pb2 staged candidate stamps a two-contract minimum", pb2Two[0]?.minimumModeledQty, 2);
 check("one contract cannot model an integer staged exit", buildManagerShadowEnrollments({ ...base, channelSlug: "pb-ride-2", originalQty: 1 }).length, 0);
-check("runtime enrollment gate avoids extra quotes for ineligible small lots", [managerEnrollmentEligible("pb-ride-2", 2), managerEnrollmentEligible("pb-ride", 2)], [true, false]);
+check("runtime enrollment gate accepts the sealed two-lot roots", [managerEnrollmentEligible("pb-ride-2", 2), managerEnrollmentEligible("pb-ride", 2)], [true, true]);
 check("fractional quantities fail enrollment", buildManagerShadowEnrollments({ ...base, originalQty: 4.5 }).length, 0);
 check("invalid position identity fails enrollment", buildManagerShadowEnrollments({ ...base, positionId: "bad" }).length, 0);
 check("invalid entry price fails enrollment", buildManagerShadowEnrollments({ ...base, entryPrice: 0 }).length, 0);
@@ -77,12 +77,13 @@ check("invalid entry time fails enrollment", buildManagerShadowEnrollments({ ...
 
 const bank4 = managerAllocation(4, "BANK20/RUN50");
 check("four contracts split 2 bank / 2 runner", bank4, { kind: "bank_runner", totalQty: 4, exitQty: 0, bankQty: 2, runnerQty: 2 });
+check("two contracts split 1 bank / 1 runner", managerAllocation(2, "BANK20/RUN50"), { kind: "bank_runner", totalQty: 2, exitQty: 0, bankQty: 1, runnerQty: 1 });
 const bank5 = managerAllocation(5, "BANK20/RUN50");
 check("five contracts split 2 bank / 3 runner", bank5, { kind: "bank_runner", totalQty: 5, exitQty: 0, bankQty: 2, runnerQty: 3 });
 check("all-out manager exits all five", managerAllocation(5, "LOCK20/30"), { kind: "all_out", totalQty: 5, exitQty: 5, bankQty: 0, runnerQty: 0 });
 check("one-lot bank is explicitly fractional", managerEconomicMode(managerAllocation(1, "BANK20/RUN50")!), "normalized_fractional");
 check("pb2 five-contract split is quantity-aware", managerAllocation(5, "PB2-BANK15/HALF-GIVEBACK"), { kind: "bank_runner", totalQty: 5, exitQty: 0, bankQty: 2, runnerQty: 3 });
-check("manager-specific minimums retain the old cohort", [minimumModeledQty("LOCK20/30"), minimumModeledQty("PB2-BANK15/HALF-GIVEBACK"), MIN_MODELED_SOURCE_QTY, MIN_STAGED_SOURCE_QTY], [4, 2, 4, 2]);
+check("manager-specific minimums accept whole-lot two-contract economics", [minimumModeledQty("LOCK20/30"), minimumModeledQty("PB2-BANK15/HALF-GIVEBACK"), MIN_MODELED_SOURCE_QTY, MIN_STAGED_SOURCE_QTY], [2, 2, 2, 2]);
 check("bad quantity has no allocation", managerAllocation(0, "BANK20/RUN50"), null);
 
 const ids = runs.map((r) => r.id);
@@ -287,5 +288,5 @@ truth("fill path queues observer without awaiting it", readFileSync(new URL("./e
 truth("recovery includes closed rows", readFileSync(new URL("./store.ts", import.meta.url), "utf8").includes("loadManagerShadowRecoveryPositions"));
 truth("terminal managers can receive later actual outcomes", readFileSync(new URL("./store.ts", import.meta.url), "utf8").includes("saveManagerShadowActualClose"));
 
-check("declared operating minimum remains four", MIN_MODELED_SOURCE_QTY, 4);
+check("declared operating minimum matches the sealed two-lot roots", MIN_MODELED_SOURCE_QTY, 2);
 console.log(`manager-shadow-book-selftest: ${passed}/${passed} PASS`);

@@ -50,7 +50,7 @@ export interface ChannelPassport {
  * future shell consume the same operator wording and lifecycle counts instead
  * of independently translating safety state in visual components. */
 export interface ChannelReleasePresentation {
-  label: "CHECKING RELEASE" | "SEALED RC5 RUNTIME" | "RELEASE MISMATCH" | "RELEASE READ ERROR" | "RUNTIME UNVERIFIED";
+  label: "CHECKING RELEASE" | "SEALED RC5.1 RUNTIME" | "RELEASE MISMATCH" | "RELEASE READ ERROR" | "RUNTIME UNVERIFIED";
   accountLifecycleLabel: string;
   compactAccountLifecycleLabel: string;
   shortHash: string;
@@ -67,7 +67,7 @@ export interface ChannelWorkspaceModel {
 
 function presentRelease(release: Day1ReleaseObservation, roots: number, dark: number): ChannelReleasePresentation {
   const label = release.state === "verified"
-    ? "SEALED RC5 RUNTIME"
+    ? "SEALED RC5.1 RUNTIME"
     : release.state === "checking"
       ? "CHECKING RELEASE"
       : release.state === "mismatch"
@@ -111,9 +111,9 @@ export function deriveChannelPassport(input: {
       : "dark-evidence";
   const lifecycleLabel = lifecycle === "paper-root" ? "PAPER ROOT" : lifecycle === "dark-evidence" ? "DARK EVIDENCE" : "UNVERIFIED";
   const lifecycleFact = lifecycle === "paper-root"
-    ? `${rootPolicy?.familyId} may submit paper entries under sealed RC5 admission.`
+    ? `${rootPolicy?.familyId} may submit paper entries under sealed RC5.1 admission.`
     : lifecycle === "dark-evidence"
-      ? "Candidate decisions are retained, but RC5 authorizes no fills for this channel."
+      ? "Candidate decisions are retained, but RC5.1 authorizes no fills for this channel."
       : "A matching startup receipt is required before the UI can assert runtime lifecycle.";
 
   const signals = input.signals.filter((signal) => signal.strategist_slug === channel.slug).sort(latestFirst);
@@ -159,7 +159,7 @@ export function deriveChannelPassport(input: {
       configuredArms: lifecycle === "paper-root" ? DAY1_MANAGER_ARMS.length : 0,
       state: observerState,
       fact: lifecycle === "paper-root"
-        ? `${DAY1_MANAGER_ARMS.length} manager arms observe the exact root path; they do not govern exits or auto-promote.`
+        ? `${DAY1_MANAGER_ARMS.length} manager arms observe the exact two-lot root path; only explicitly sealed root exits govern orders.`
         : lifecycle === "dark-evidence"
           ? "Dark candidates feed T+1 exact-path research; no redundant fill or manager claim is made."
           : "Observer status is withheld until the release receipt verifies.",

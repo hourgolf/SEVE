@@ -2,11 +2,12 @@
 // awaited by the trading path. A persistence failure can only lose observability;
 // it cannot block or alter an order.
 
-import { policy, WORKER_VERSION } from "./config.js";
+import { config, policy, WORKER_VERSION } from "./config.js";
 import { warn } from "./log.js";
 import { insertObservedPolicyEpoch, insertObservedPositionPlan, type ChannelConfig } from "./store.js";
 import type { ShadowDecision } from "./decide.js";
 import { buildShadowPlanEvidence, type ShadowPlanEvidence } from "./planShadowModel.js";
+import { day1ExecutableGivebackTrail } from "./day1ReleasePolicy.js";
 
 const seen = new Set<string>();
 const pending = new Set<string>();
@@ -25,6 +26,9 @@ export function captureObservedPositionPlan(args: {
       ...args,
       workerVersion: WORKER_VERSION,
       defaultPremiumStopPct: policy.PREMIUM_STOP_PCT,
+      executableGivebackTrail: config.day1ReleaseEnabled
+        ? day1ExecutableGivebackTrail(args.channel.slug)
+        : null,
     });
   } catch (e) {
     warn(`plan-shadow: draft rejected — ${(e as Error).message}`);

@@ -10,10 +10,12 @@ import {
   applyDay1ReleaseFleetOverlay,
   buildDay1AdmissionState,
   DAY1_DARK_CHANNELS,
+  DAY1_EXECUTABLE_GIVEBACK_TRAILS,
   DAY1_RELEASE_CONFIGURATION,
   DAY1_RELEASE_CONFIGURATION_SHA256,
   DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
+  day1ExecutableGivebackTrail,
   day1Lifecycle,
   day1ReleaseEodDue,
   finalizeDay1ReleaseAdmissions,
@@ -51,6 +53,15 @@ check("non-root overlay remains non-executing input for the admission layer", ap
 check("durable lifecycle enumerates six roots and sixty-two dark channels", [DAY1_ROOTS.length, DAY1_DARK_CHANNELS.length], [6, 62]);
 check("unknown channels fail dark", day1Lifecycle("new-unreviewed-channel"), "dark");
 check("release configuration hash is a canonical SHA-256", /^[a-f0-9]{64}$/.test(DAY1_RELEASE_CONFIGURATION_SHA256), true);
+check("RC5.1 activates only the MOMO A13 executable ratchet", [
+  DAY1_EXECUTABLE_GIVEBACK_TRAILS,
+  day1ExecutableGivebackTrail("momo-shape"),
+  day1ExecutableGivebackTrail("pb-ride"),
+], [
+  { "momo-shape": { engageMult: 1.5, givebackPct: 33, priceBasis: "executable-option-bid" } },
+  { engageMult: 1.5, givebackPct: 33, priceBasis: "executable-option-bid" },
+  null,
+]);
 check("release identity seals broker truth and posture-specific arbitration", [
   DAY1_RELEASE_CONFIGURATION.admissionTruth.brokerPositionsRequired,
   DAY1_RELEASE_CONFIGURATION.admissionTruth.workingBuyOrdersRequired,
@@ -191,7 +202,7 @@ check("cross-account suppression retains complete candidate and collision proven
   suppressedProvenance.executableAsk,
   crossAccountSuppressed.detail?.day1CollisionWinner,
   crossAccountSuppressed.detail?.day1CollisionScope,
-], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-20-rc5", DAY1_RELEASE_CONFIGURATION_SHA256,
+], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-20-rc5.1", DAY1_RELEASE_CONFIGURATION_SHA256,
   MORGUE, DAY1_ROOT_BINDINGS.find((row) => row.slug === "grind-v3")!.strategistId,
   "2026-07-20T14:00:00.000Z", "2026-07-20T14:00:01.000Z", "SPY260720C00600000", 1,
   "pb-ride", "global-cross-account-exact-source-clock"]);
@@ -402,7 +413,7 @@ check("active-settings receipt includes actual fleet, lifecycle, route, feed and
   (startupReceipt.roots as unknown[]).length,
   (startupReceipt.heldCapture as Record<string, unknown>).targetSamples,
   (startupReceipt.managerShadow as Record<string, unknown>).quoteMaxAgeMs,
-], [WORKER_VERSION, "weekend-day1-2026-07-20-rc5", DAY1_RELEASE_CONFIGURATION_SHA256,
+], [WORKER_VERSION, "weekend-day1-2026-07-20-rc5.1", DAY1_RELEASE_CONFIGURATION_SHA256,
   68, 6, 62, "https://paper-api.alpaca.markets", "sip", "opra", "runtime-env-presence", 6, 12, 15_000]);
 check("active-settings receipt never contains credential values or secrets", /alpacaKey|alpacaSecret|serviceRole|secret/i.test(JSON.stringify(startupReceipt)), false);
 const executorStartup = validateDay1ReleaseStartup({
@@ -418,6 +429,15 @@ check("paper executor posture validates and remains explicitly non-live-money", 
 const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
 const executeSource = readFileSync(new URL("./execute.ts", import.meta.url), "utf8");
 const storeSource = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+const clientReleaseSource = readFileSync(new URL("../../lib/channels/day1Release.ts", import.meta.url), "utf8");
+const hotfixReceipt = JSON.parse(readFileSync(
+  new URL("../../docs/weekend-day1-rc5-1-hotfix-2026-07-20.json", import.meta.url),
+  "utf8",
+)) as { releaseConfigurationSha256: string };
+check("worker, client, and immutable RC5.1 receipt pin the same configuration hash", [
+  clientReleaseSource.includes(`DAY1_CONFIG_HASH = "${DAY1_RELEASE_CONFIGURATION_SHA256}"`),
+  hotfixReceipt.releaseConfigurationSha256,
+], [true, DAY1_RELEASE_CONFIGURATION_SHA256]);
 check("runtime release path stages every account batch and continues before any executor", /releaseBatches\.push\(executionBatch\);\s*continue;/.test(indexSource), true);
 check("runtime validates the raw executor boundary before applying the overlay", (() => {
   const validate = indexSource.indexOf("validateDay1ReleaseSourceExecutorBoundary(c.channels)");
@@ -474,10 +494,10 @@ check("Day 1 EOD is a mandatory wall-clock root flatten", [
   indexSource.includes("day1ReleaseEodDue(ch.slug, nowMin, rthClose)"),
   indexSource.includes('reason: "day1_eod_flatten"'),
 ], [true, true]);
-check("fast release roots disable legacy targets and giveback exits", [
+check("fast release roots disable legacy targets but use only the sealed per-root giveback map", [
   indexSource.includes("const day1RootPolicy = config.day1ReleaseEnabled && day1Root(ch.slug) != null"),
   indexSource.includes("premiumExit: day1RootPolicy ? undefined : pe"),
-  indexSource.includes("givebackTrail: day1RootPolicy ? null"),
+  indexSource.includes("? day1ExecutableGivebackTrail(ch.slug)"),
 ], [true, true, true]);
 check("signal rationale carries the pre-admission candidate provenance", /rationale:\s*{[\s\S]*?\.\.\.\(d\.detail \?\? {}\)/.test(executeSource), true);
 check("re-entry ledger is complete, ordered, and paginated", [
