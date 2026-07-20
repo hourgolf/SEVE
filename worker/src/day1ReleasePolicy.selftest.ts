@@ -53,7 +53,7 @@ check("non-root overlay remains non-executing input for the admission layer", ap
 check("durable lifecycle enumerates six roots and sixty-two dark channels", [DAY1_ROOTS.length, DAY1_DARK_CHANNELS.length], [6, 62]);
 check("unknown channels fail dark", day1Lifecycle("new-unreviewed-channel"), "dark");
 check("release configuration hash is a canonical SHA-256", /^[a-f0-9]{64}$/.test(DAY1_RELEASE_CONFIGURATION_SHA256), true);
-check("RC5.1 activates only the MOMO A13 executable ratchet", [
+check("RC5.2 activates only the MOMO A13 executable ratchet", [
   DAY1_EXECUTABLE_GIVEBACK_TRAILS,
   day1ExecutableGivebackTrail("momo-shape"),
   day1ExecutableGivebackTrail("pb-ride"),
@@ -202,7 +202,7 @@ check("cross-account suppression retains complete candidate and collision proven
   suppressedProvenance.executableAsk,
   crossAccountSuppressed.detail?.day1CollisionWinner,
   crossAccountSuppressed.detail?.day1CollisionScope,
-], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-20-rc5.1", DAY1_RELEASE_CONFIGURATION_SHA256,
+], ["day1_spy_same_clock_collision", "weekend-day1-2026-07-21-rc5.2", DAY1_RELEASE_CONFIGURATION_SHA256,
   MORGUE, DAY1_ROOT_BINDINGS.find((row) => row.slug === "grind-v3")!.strategistId,
   "2026-07-20T14:00:00.000Z", "2026-07-20T14:00:01.000Z", "SPY260720C00600000", 1,
   "pb-ride", "global-cross-account-exact-source-clock"]);
@@ -413,7 +413,7 @@ check("active-settings receipt includes actual fleet, lifecycle, route, feed and
   (startupReceipt.roots as unknown[]).length,
   (startupReceipt.heldCapture as Record<string, unknown>).targetSamples,
   (startupReceipt.managerShadow as Record<string, unknown>).quoteMaxAgeMs,
-], [WORKER_VERSION, "weekend-day1-2026-07-20-rc5.1", DAY1_RELEASE_CONFIGURATION_SHA256,
+], [WORKER_VERSION, "weekend-day1-2026-07-21-rc5.2", DAY1_RELEASE_CONFIGURATION_SHA256,
   68, 6, 62, "https://paper-api.alpaca.markets", "sip", "opra", "runtime-env-presence", 6, 12, 15_000]);
 check("active-settings receipt never contains credential values or secrets", /alpacaKey|alpacaSecret|serviceRole|secret/i.test(JSON.stringify(startupReceipt)), false);
 const executorStartup = validateDay1ReleaseStartup({
@@ -431,13 +431,30 @@ const executeSource = readFileSync(new URL("./execute.ts", import.meta.url), "ut
 const storeSource = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
 const clientReleaseSource = readFileSync(new URL("../../lib/channels/day1Release.ts", import.meta.url), "utf8");
 const hotfixReceipt = JSON.parse(readFileSync(
-  new URL("../../docs/weekend-day1-rc5-1-hotfix-2026-07-20.json", import.meta.url),
+  new URL("../../docs/weekend-day1-rc5-2-operational-hotfix-2026-07-20.json", import.meta.url),
   "utf8",
-)) as { releaseConfigurationSha256: string };
-check("worker, client, and immutable RC5.1 receipt pin the same configuration hash", [
+)) as {
+  releaseConfigurationSha256: string;
+  workerVersion: string;
+  strategyConfigurationChanged: boolean;
+  rootBindings: Array<{ slug: string; strategistId: string; accountId: string; accountMode: string; channelVersion: string; managerVersion: string; configurationEpoch: string; policyEpoch: string }>;
+};
+check("worker, client, and immutable operational receipt pin the same identities", [
   clientReleaseSource.includes(`DAY1_CONFIG_HASH = "${DAY1_RELEASE_CONFIGURATION_SHA256}"`),
   hotfixReceipt.releaseConfigurationSha256,
-], [true, DAY1_RELEASE_CONFIGURATION_SHA256]);
+  hotfixReceipt.workerVersion,
+  hotfixReceipt.strategyConfigurationChanged,
+], [true, DAY1_RELEASE_CONFIGURATION_SHA256, WORKER_VERSION, false]);
+check("operational receipt seals every regenerated root identity", hotfixReceipt.rootBindings, DAY1_ROOT_BINDINGS.map((binding) => ({
+  slug: binding.slug,
+  strategistId: binding.strategistId,
+  accountId: binding.accountId,
+  accountMode: binding.accountMode,
+  channelVersion: binding.channelVersion,
+  managerVersion: binding.managerVersion,
+  configurationEpoch: binding.configurationEpoch,
+  policyEpoch: binding.policyEpoch,
+})));
 check("runtime release path stages every account batch and continues before any executor", /releaseBatches\.push\(executionBatch\);\s*continue;/.test(indexSource), true);
 check("runtime validates the raw executor boundary before applying the overlay", (() => {
   const validate = indexSource.indexOf("validateDay1ReleaseSourceExecutorBoundary(c.channels)");

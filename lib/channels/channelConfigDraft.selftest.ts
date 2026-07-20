@@ -22,7 +22,7 @@ const model = (patch: Parameters<typeof deriveChannelConfigDraft>[0]["patch"], r
   baseConfig: base,
   patch,
   releaseState,
-  releaseId: "weekend-day1-2026-07-20-rc5.1",
+  releaseId: "weekend-day1-2026-07-21-rc5.2",
   releaseHash: "a".repeat(64),
   configurationEpochId: "b".repeat(64),
 });

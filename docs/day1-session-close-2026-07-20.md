@@ -151,8 +151,8 @@ entries:
 
 1. production web and authenticated operator surface available;
 2. all accounts explicitly `paper`; no live-money origin or authorization;
-3. worker process/run ledger fresh and exact `stream-2026-07-20a` RC5.1
-   release/configuration receipt observed;
+3. worker process/run ledger fresh and exact `stream-2026-07-21a` operational
+   hotfix identity plus unchanged RC5.1 release/configuration receipt observed;
 4. stream and cron healthy for the current market session;
 5. broker and desk books flat/reconciled before open, with confirming position
    and working-order reads complete;

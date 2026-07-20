@@ -1,9 +1,9 @@
 import type { MarketEvent } from "@/lib/types";
 import { findDay1ReleaseReceipt, type Day1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
 
-export const DAY1_RELEASE_ID = "weekend-day1-2026-07-20-rc5.1";
-export const DAY1_CONFIG_HASH = "09a6090b237221b386f464830d90c4f54804d3c5717df2a384c2ea47a77f5508";
-export const DAY1_WORKER_VERSION = "stream-2026-07-20a";
+export const DAY1_RELEASE_ID = "weekend-day1-2026-07-21-rc5.2";
+export const DAY1_CONFIG_HASH = "a51d16679de8fcd4e39b25e29cca7d4e2c60a243f25912bd668a0eee2c13d888";
+export const DAY1_WORKER_VERSION = "stream-2026-07-21a";
 
 export const DAY1_MANAGER_ARMS = [
   "LOCK20/30",
@@ -47,55 +47,55 @@ const roots = [
     slug: "pb-ride", accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountName: "FIRST-TEAM",
     familyId: "SPY-PB", underlying: "SPY", priority: 1, quantity: 2, entryDte: 1,
     riskBudgetUsd: 210, premiumCap: 3.5, aggregateDebitCap: 700,
-    channelVersion: "519c946e29bad1b149c80582a58e00367d3d0f340ea02e7a5136fa5e5be20f6e",
-    configurationEpochId: "1dd00d58df978bf2b082462de91e435aaa2a22ec2b0ac23c56fa381c64aed9ed",
+    channelVersion: "62509928e3806740f5d156360e2565148f75523b6f2a5c6c0403153cd5f15f9c",
+    configurationEpochId: "d2a79e86bfede3e39519dbdbda41134f94c2492a4b6f09ea2717e385b780ac40",
     managerVersion: "e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    policyEpochId: "e174f66c-da9e-52d0-bd85-15b6618b396a",
+    policyEpochId: "89388e12-b16f-5f58-aabb-08fcecda67ef",
   },
   {
     slug: "orb-ustop-ctl", accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountName: "MORGUE",
     familyId: "SPY-ORB", underlying: "SPY", priority: 4, quantity: 2, entryDte: 0,
     riskBudgetUsd: 120, premiumCap: 2, aggregateDebitCap: 400,
-    channelVersion: "be44b3ea314ae1cb27a44bb1a9364650def566d4bb18ec139a9f7a1adddda70e",
-    configurationEpochId: "0a4b78b8f7cc249f9b5cc0159cc020041fe18d5c043b486d1fbb35bd4076854c",
+    channelVersion: "6437b8c55c3b17cc05c08287c878bf9ca9208c5f10b009ff090c74cc8a70b110",
+    configurationEpochId: "4c56e9195d3461767bdfefe73b9d7d31d602e90db872fe3d8b3b7bb3e34764c7",
     managerVersion: "e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    policyEpochId: "7cb5fac0-5ea9-5f94-af27-c41f80c8d2f5",
+    policyEpochId: "37c035a9-b4e9-5a8c-9568-195651331685",
   },
   {
     slug: "grind-v3", accountId: "995aa327-b0da-4050-bede-97ab462b06cd", accountName: "MORGUE",
     familyId: "SPY-GRIND", underlying: "SPY", priority: 2, quantity: 2, entryDte: 0,
     riskBudgetUsd: 105, premiumCap: 1.75, aggregateDebitCap: 350,
-    channelVersion: "53e5a0da54a86923543195cfc597b993b20de7a4340f0c66eecae9cd289908bc",
-    configurationEpochId: "b6072769532f39d54ad6f9e4ce12f1aa6075dc9a6f1686bcf7965fedce9762ea",
+    channelVersion: "d378582a69a89956e83fabc9811b16bfc9c8a85ef4aa3db4671b8a188dcf92a1",
+    configurationEpochId: "c5a444b1f0d5f7fa6f8f848ed8e6dbcccb82643eab3c15c032a4a4072ef6311f",
     managerVersion: "e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    policyEpochId: "ed3d62d9-2eb0-55ff-b4a1-94d52d321bef",
+    policyEpochId: "07bf321f-454c-5933-9bec-5932243e54cc",
   },
   {
     slug: "momo-shape", accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountName: "FIRST-TEAM",
     familyId: "SPY-MOMO", underlying: "SPY", priority: 3, quantity: 2, entryDte: 0,
     riskBudgetUsd: 135, premiumCap: 2.25, aggregateDebitCap: 450,
-    channelVersion: "cd0e795b642a1786bb82e95aacfaab85c6664d1bad46d681195e2204acf9b48f",
-    configurationEpochId: "6a26f012ad594a2ee9f18185be26082cb53d4896e2bedcb861de3e1068a01f5b",
+    channelVersion: "692d70560ad44cd0126c42fc3d96b61ea288f17b48706ecabb52d3f8f1349862",
+    configurationEpochId: "bb3999b1c8462d55bb7d6ac62962b036284290a1a1e4ba4f9199811568d73b85",
     managerVersion: "bda3e8a72526f9d1d44a8656733523e06735e21e726a254c935ccfddfb69ccb0",
-    policyEpochId: "c61a1810-3dc4-5c04-9078-d3f5b2729d76",
+    policyEpochId: "e3cb7aab-4df6-5bc1-a888-f13fd7e34d8a",
   },
   {
     slug: "orb-qqq-trail", accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountName: "FIRST-TEAM",
     familyId: "QQQ-ORB", underlying: "QQQ", priority: 1, quantity: 2, entryDte: 0,
     riskBudgetUsd: 180, premiumCap: 3, aggregateDebitCap: 600,
-    channelVersion: "a82a2ea08ab6ca2472453c9276813f2928824e9b32691f124f9e7fe6bf38c276",
-    configurationEpochId: "f0769761fb3a866a286eae76b691a0fc7617cd303075bd2f6fa93a6cfa0bb885",
+    channelVersion: "bd2e4d7df3aa6add56d287d03668fa85ad098d1f08b94139160166c42472ac9e",
+    configurationEpochId: "d50b95cb3c94ea0b7c6050906e73cae9c2f9bdc8db4795bc0fee0590db8e7286",
     managerVersion: "c3af49e3ce9e6653d7307ad458330293cd65a1433412057ba2715150dedea3c8",
-    policyEpochId: "7bf86200-7dcd-59c3-b757-fb9896ceefa6",
+    policyEpochId: "02aff8c7-003f-59f6-a255-695b440578c3",
   },
   {
     slug: "breakout-alt-v3-iwm", accountId: "cd817549-e025-4d38-805e-d32e607052f7", accountName: "FIRST-TEAM",
     familyId: "IWM-BREAKOUT", underlying: "IWM", priority: 1, quantity: 2, entryDte: 0,
     riskBudgetUsd: 75, premiumCap: 1.25, aggregateDebitCap: 250,
-    channelVersion: "2e3367a92e1ba41395e6ed9a2eb932c5d22af79da0c6016f555917b12bf9c4a8",
-    configurationEpochId: "07edeca18e06fd87b84297b2e0b6a6638e6d96d9a85aef5af7eca7a2a9f08b0b",
+    channelVersion: "7c38d181f6d1a470a52794ea01472092ffe5c459fa624b3ddd6bf9dff01055ad",
+    configurationEpochId: "9df46a84a8ba8c109623ce419810c83dc8fe5dc316f5437d74dd3e8be0e06c97",
     managerVersion: "e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
-    policyEpochId: "1c062acc-7a6e-5f6c-96c3-035649529845",
+    policyEpochId: "8464d393-5aa2-56a7-a4fc-c205c983a4f2",
   },
 ] as const;
 

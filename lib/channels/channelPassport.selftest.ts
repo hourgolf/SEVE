@@ -88,12 +88,12 @@ assert.equal(mismatch.bySlug["pb-ride"].rootPolicy, null);
 // release field to the sealed machine receipts so a future RC cannot silently
 // make the dashboard lie.
 const prereg = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-preregistration-receipt-2026-07-17.json", import.meta.url), "utf8"));
-const hotfix = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-1-hotfix-2026-07-20.json", import.meta.url), "utf8"));
+const hotfix = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-2-operational-hotfix-2026-07-20.json", import.meta.url), "utf8"));
 const sealed = prereg.content.evidence.releaseConfiguration;
-assert.equal(hotfix.supersedes, sealed.releaseId);
 assert.equal(DAY1_RELEASE_ID, hotfix.releaseId);
 assert.equal(DAY1_CONFIG_HASH, hotfix.releaseConfigurationSha256);
 assert.equal(DAY1_WORKER_VERSION, hotfix.workerVersion);
+assert.equal(hotfix.strategyConfigurationChanged, false);
 assert.deepEqual(DAY1_MANAGER_ARMS, sealed.management.shadowManagerArms);
 assert.deepEqual(DAY1_ROOTS["momo-shape"].givebackTrail, hotfix.executableMomoRatchet);
 assert.equal(DAY1_ROOTS["pb-ride"].givebackTrail, null);
