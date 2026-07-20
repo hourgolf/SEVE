@@ -65,6 +65,8 @@ const decision = {
 };
 const fill = { ...decision, id: "fill", event_kind: "broker_result" as const, event_at: "2026-07-20T14:46:00Z", position_id: "position-1", filled_qty: 2, broker_status: "filled" };
 const fillWithoutDecisionMeta = { ...fill, payload: {} };
+const entryBrokerWithoutPosition = { ...fillWithoutDecisionMeta, position_id: null };
+const openedOutcome = { id: "opened", event_kind: "position_opened" as const, event_at: "2026-07-20T14:46:05Z", position_id: "position-1", opportunity_id: "opp-1", quantity: 2, exit_price: null, realized_pnl: null, close_reason: null };
 
 const withCandidate = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([decision]) }) }));
 assert.equal(withCandidate.counts.candidates, 1);
@@ -81,7 +83,7 @@ assert.equal(find(justFilled, "managers").state, "STARTING");
 assert.equal(justFilled.chains.length, 1);
 assert.equal(justFilled.chains[0].steps.find((step) => step.id === "fill")?.state, "2 FILLED");
 
-const linkedFill = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T14:46:30Z"), evidence: evidence({ execution: ok([fillWithoutDecisionMeta, decision]) }) }));
+const linkedFill = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T14:46:30Z"), evidence: evidence({ execution: ok([entryBrokerWithoutPosition, decision]), outcomes: ok([openedOutcome]) }) }));
 assert.equal(linkedFill.counts.fills, 1);
 assert.equal(linkedFill.chains.length, 1);
 

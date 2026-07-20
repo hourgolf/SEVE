@@ -233,11 +233,18 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
     : [];
   const decisions = sessionExecutions.filter((row) => row.event_kind === "decision" && candidateMeta(row));
   const admittedOpportunityIds = new Set(decisions.flatMap((row) => row.opportunity_id ? [row.opportunity_id] : []));
+  const outcomes = input.evidence.outcomes.state === "ok" ? input.evidence.outcomes.rows : [];
+  const openedPositionByOpportunity = new Map(outcomes.flatMap((row) =>
+    row.opportunity_id && ["position_opened", "position_remainder_opened"].includes(row.event_kind)
+      ? [[row.opportunity_id, row.position_id] as const]
+      : []));
   const candidates = execution.summary?.candidates ?? new Set(decisions.map((row) => row.opportunity_id ?? row.id)).size;
   const suppressed = execution.summary?.suppressed ?? decisions.filter((row) => Boolean(row.blocked_reason)).length;
   const fillRows = sessionExecutions.filter((row) => row.event_kind === "broker_result"
-    && Number(row.filled_qty) > 0 && row.position_id && row.opportunity_id
-    && admittedOpportunityIds.has(row.opportunity_id));
+    && Number(row.filled_qty) > 0 && row.opportunity_id
+    && admittedOpportunityIds.has(row.opportunity_id))
+    .map((row) => ({ ...row, position_id: row.position_id ?? openedPositionByOpportunity.get(row.opportunity_id as string) ?? null }))
+    .filter((row) => Boolean(row.position_id));
   const fillsByPosition = new Map(fillRows.map((row) => [row.position_id as string, row]));
   const positionIds = new Set(fillsByPosition.keys());
   const oldestFillMs = Math.min(...[...fillsByPosition.values()].map((row) => Date.parse(row.event_at)), Number.POSITIVE_INFINITY);
@@ -314,7 +321,6 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   else if (brokerReceipt.state === "drift") evidence.push({ id: "reconciliation", label: "BROKER RECONCILIATION", state: "DRIFT", tone: "red", detail: `${brokerReceipt.mismatches.length} OCC mismatch${brokerReceipt.mismatches.length === 1 ? "" : "es"} · broker ${brokerReceipt.brokerContracts} / desk ${brokerReceipt.deskContracts} contracts`, observedAt: brokerReceipt.observedAt });
   else evidence.push({ id: "reconciliation", label: "BROKER RECONCILIATION", state: brokerReceipt.flatConfirmed ? "BROKER + DESK FLAT" : "BOOKS MATCH", tone: "green", detail: `${brokerReceipt.accounts.length} paper accounts reached · broker ${brokerReceipt.brokerContracts} / desk ${brokerReceipt.deskContracts} contracts`, observedAt: brokerReceipt.observedAt });
 
-  const outcomes = input.evidence.outcomes.state === "ok" ? input.evidence.outcomes.rows : [];
   const chains: OpsEvidenceChain[] = [...fillsByPosition.values()].map((fill) => {
     const positionId = fill.position_id as string;
     const receipt = sessionReceipts.find((row) => row.position_id === positionId);
