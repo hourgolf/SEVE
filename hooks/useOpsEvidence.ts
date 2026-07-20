@@ -51,44 +51,21 @@ const rowsOrError = (results: Array<{ data: unknown; error: unknown }>): QueryRe
 async function readExecutions(accountIds: string[], since: string): Promise<QueryResult> {
   if (!accountIds.length) return { data: [], error: null, summary: { candidates: 0, suppressed: 0 } };
   const sb = getSupabase();
-  const reads = await Promise.all(accountIds.map(async (accountId) => {
-    const [admitted, fills, candidates, suppressed] = await Promise.all([
-      sb.from("execution_observations")
-        .select("id,event_kind,event_at,source_bar_at,channel_slug,opportunity_id,position_id,action,blocked_reason,occ_symbol,filled_qty,broker_status,payload")
-        .eq("account_id", accountId).gte("event_at", since)
-        .eq("event_kind", "decision").is("blocked_reason", null)
-        .order("event_at", { ascending: false }).limit(100),
-      sb.from("execution_observations")
-        .select("id,event_kind,event_at,source_bar_at,channel_slug,opportunity_id,position_id,action,blocked_reason,occ_symbol,filled_qty,broker_status,payload")
-        .eq("account_id", accountId).gte("event_at", since)
-        .eq("event_kind", "broker_result").gt("filled_qty", 0)
-        .order("event_at", { ascending: false }).limit(100),
-      sb.from("execution_observations")
-        .select("id", { count: "exact", head: true })
-        .eq("account_id", accountId).gte("event_at", since).eq("event_kind", "decision"),
-      sb.from("execution_observations")
-        .select("id", { count: "exact", head: true })
-        .eq("account_id", accountId).gte("event_at", since)
-        .eq("event_kind", "decision").not("blocked_reason", "is", null),
-    ]);
-    const failed = [admitted, fills, candidates, suppressed].find((result) => result.error);
-    return {
-      data: failed ? null : [...(admitted.data ?? []), ...(fills.data ?? [])],
-      error: failed?.error ?? null,
-      candidates: candidates.count ?? 0,
-      suppressed: suppressed.count ?? 0,
+  const { data: { session }, error } = await sb.auth.getSession();
+  if (error || !session?.access_token) return { data: null, error: error ?? new Error("operator sign-in required") };
+  try {
+    const response = await fetch("/api/ops-execution-evidence", {
+      headers: { authorization: `Bearer ${session.access_token}` }, cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = await response.json().catch(() => ({})) as {
+      ok?: boolean; rows?: ExecutionEvidenceRow[]; summary?: { candidates: number; suppressed: number }; error?: string;
     };
-  }));
-  const failed = reads.find((result) => result.error);
-  if (failed) return { data: null, error: failed.error };
-  return {
-    data: reads.flatMap((result) => result.data ?? []),
-    error: null,
-    summary: {
-      candidates: reads.reduce((sum, result) => sum + result.candidates, 0),
-      suppressed: reads.reduce((sum, result) => sum + result.suppressed, 0),
-    },
-  };
+    if (!response.ok || !body.ok) return { data: null, error: new Error(body.error ?? `OPS evidence failed (${response.status})`) };
+    return { data: body.rows ?? [], error: null, summary: body.summary ?? { candidates: 0, suppressed: 0 } };
+  } catch (readError) {
+    return { data: null, error: readError };
+  }
 }
 
 async function readManagers(accountIds: string[], since: string): Promise<QueryResult> {
