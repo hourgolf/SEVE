@@ -121,6 +121,29 @@ fallbacks, less repeated broad fetching, and suspension of hidden OPS evidence
 reads. It must pass an authenticated preview smoke and receive separate merge
 authorization before production changes.
 
+## Quote-archive durability yellow
+
+The 16:15 ET Railway archive did **not** publish July 20 to the configured
+`forward-data` bucket. The cause is deterministic in the worker: a pre-close
+boot with no prior-day work sets the in-memory date guard, causing every
+post-close tick to return early. An upload failure also sets the same guard,
+preventing an automatic retry until a restart.
+
+The operator Mac preserved a valid local gzip at 16:56 ET with SHA-256
+`ed32ca74c92f4ee147e99ab03842b9ef145462c63272e1d69f2e62d23468410f`.
+It decompresses cleanly and contains 80,573 day-clean rows. The settled database
+contains 81,270 rows, so the local copy is 99.1% complete but **must not be
+represented as the final immutable archive**. The database still holds all
+81,270 rows inside the seven-day hot window.
+
+A local fix now keeps the guard open before 16:15 ET and after any failed day,
+so the 20-minute timer can retry. Deployment requires a new sealed worker
+identity rather than silently changing the binary under the RC5.1 version. The
+existing exporter also cannot be used as a casual repair: it scans the entire
+hot table, and a first attempt at date-only pagination timed out because the
+current indexes do not support that query/order shape. Exact repair must use an
+indexed per-underlying/captured-time traversal or the reviewed R2 writer.
+
 ## July 21 pre-open gates
 
 All of the following must be checked read-only before admitting new paper
@@ -153,14 +176,15 @@ green.
 
 1. authenticated preview smoke and operator review of the dashboard read/egress
    containment branch;
-2. make the sealed effective controls equally explicit on desktop and mobile;
-3. verify July 21 pre-open readiness against this checklist;
-4. add durable exact-path candidate capture for suppressed/dark candidates,
+2. review and seal the quote-archive retry fix under a new worker identity;
+3. make the sealed effective controls equally explicit on desktop and mobile;
+4. verify July 21 pre-open readiness against this checklist;
+5. add durable exact-path candidate capture for suppressed/dark candidates,
    fail-closed and without redundant fills;
-5. define bounded hot retention for high-volume Supabase evidence and archive
+6. define bounded hot retention for high-volume Supabase evidence and archive
    immutable research payloads to R2 before deletion;
-6. move the morning publisher to an always-on remote runtime so it does not
+7. move the morning publisher to an always-on remote runtime so it does not
    depend on the operator's Mac.
 
-Items 4–6 are implementation work, not permission to apply a migration, delete
+Items 2–7 are implementation work, not permission to apply a migration, delete
 data, alter the roster, deploy a worker, or change production.

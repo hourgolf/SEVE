@@ -34,9 +34,19 @@ Indexed per-day counts and Supabase Storage metadata at the close showed:
 | 2026-07-17 | 80,746 | 5,624,780 bytes |
 | 2026-07-20 | 81,270 | **not yet present at the audit clock** |
 
-The missing July 20 object is not yet a failure: the always-on worker waits
-until 16:15 ET and checks on a 20-minute timer. It is an absolute deletion
-blocker until the completed object and a trustworthy manifest are verified.
+The missing July 20 object is now a confirmed durability failure. The always-on
+worker did reach the archive code, but its pre-close boot path prematurely
+sealed the in-memory date guard; the 16:15 ET and later ticks therefore skipped
+the current date. The same code also sealed the guard after an upload failure,
+which prevented same-day retry. A local fix and four-case regression test are
+prepared, but production remains unchanged pending a newly sealed worker
+identity.
+
+The local Mac copy is valid and day-clean but contains 80,573 of the settled
+81,270 rows (99.1%), so it is a recovery aid rather than an authoritative final
+object. An attempted one-day PostgREST repair stopped on statement timeout and
+did not replace the local file. The database remains the complete source during
+the current seven-day hot window.
 
 The current `seve-retention` job runs at 06:17 UTC and performs:
 
@@ -68,7 +78,9 @@ hour or on cache-hit rate alone.
 The next quote-archive version should reuse the existing R2 credentials and
 content-addressed evidence conventions:
 
-1. select one complete ET day using keyset pagination;
+1. select one complete ET day using an index-backed per-underlying,
+   captured-time keyset traversal; do not combine a date filter with global
+   UUID ordering or scan the entire hot table for a single-day repair;
 2. canonicalize the verbatim quote rows and gzip them;
 3. compute uncompressed and compressed SHA-256 hashes;
 4. upload an immutable R2 object whose key contains the compressed hash;
@@ -163,7 +175,8 @@ jeopardizing heartbeat or exits.
 ## Safe implementation order
 
 1. merge and measure dashboard read containment;
-2. verify the July 20 existing archive after its post-close gate;
+2. seal and deploy the archive retry correction under a new worker identity,
+   then repair and verify the exact July 20 archive while its rows remain hot;
 3. implement R2 quote object + manifest + compact receipt locally with
    adversarial tests;
 4. review the migration and worker diff separately;

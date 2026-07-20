@@ -96,6 +96,7 @@
     "broker-reconciliation-selftest": "tsx lib/ops/brokerReconciliation.selftest.ts",
     "channel-passport-selftest": "tsx lib/channels/channelPassport.selftest.ts",
     "channel-config-draft-selftest": "tsx lib/channels/channelConfigDraft.selftest.ts",
+    "archive-selftest": "tsx worker/src/archive.selftest.ts",
     "family-preregistered-receipt-adapter-selftest": "tsx lib/research/familyPreregisteredReceiptAdapter.selftest.ts",
     "family-preregistered-scorecard": "tsx scripts/family-preregistered-scorecard.ts",
     "preregistered-path-tests": "tsx scripts/preregistered-path-tests.ts",
