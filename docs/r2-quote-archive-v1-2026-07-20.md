@@ -41,14 +41,16 @@ mismatch, missing underlying, receipt conflict, or receipt-write failure remains
 **unarchived** for retention purposes.
 
 This branch does not include any DELETE, retention change, object removal, or
-automatic fallback to approximate data. The proposed `(underlying,
-captured_at,id)` index and private receipt table are migration review only.
+automatic fallback to approximate data. Independent review removed a proposed
+three-column index: production already has `idx_oq_underlying_captured_at`, and
+building another index would spend IO without being required for the first
+proof. The private receipt table is the only schema change.
 
 ## Proposed proof sequence
 
 1. Review the code and migration independently.
-2. Apply only the private receipt/index migration with explicit authorization,
-   outside market hours, and observe index-build IO.
+2. Apply only the private receipt-table migration with explicit authorization
+   outside market hours.
 3. Deploy with `QUOTE_ARCHIVE_R2_ENABLED=1` and the existing R2 credentials,
    keeping the seven-day Supabase hot window unchanged.
 4. Verify two consecutive complete sessions: object, manifest, receipt, counts,

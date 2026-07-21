@@ -30,8 +30,3 @@ grant select, insert on public.quote_archive_receipts to service_role;
 
 comment on table public.quote_archive_receipts is
   'Private compact verification receipts for immutable R2 option quote archives; never an execution instruction.';
-
--- Supports bounded complete-day traversal by configured underlying. This
--- migration remains review-only because index construction consumes IO.
-create index if not exists idx_option_quotes_archive_keyset
-  on public.option_quotes (underlying, captured_at, id);

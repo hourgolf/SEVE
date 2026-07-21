@@ -45,6 +45,6 @@ assert.match(archiveSource, /if \(config\.quoteArchiveR2Enabled\)/);
 const migrationSource = readFileSync(new URL("../../supabase/migrations/20260721040000_quote_archive_receipts.sql", import.meta.url), "utf8");
 assert.match(migrationSource, /enable row level security/);
 assert.match(migrationSource, /revoke all .* from anon, authenticated/);
-assert.match(migrationSource, /\(underlying, captured_at, id\)/);
+assert.doesNotMatch(migrationSource, /create\s+index/i);
 
 console.log("quote-archive-selftest: 20/20 passed");
