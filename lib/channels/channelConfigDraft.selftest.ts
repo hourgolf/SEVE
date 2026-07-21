@@ -22,7 +22,7 @@ const model = (patch: Parameters<typeof deriveChannelConfigDraft>[0]["patch"], r
   baseConfig: base,
   patch,
   releaseState,
-  releaseId: "weekend-day1-2026-07-21-rc5.2",
+  releaseId: "weekend-day1-2026-07-21-rc5.3",
   releaseHash: "a".repeat(64),
   configurationEpochId: "b".repeat(64),
 });
@@ -36,7 +36,7 @@ check("valid patch is reviewable", () => assert.equal(model({ take_profit_pct: 2
 check("diff wording distinguishes ride", () => assert.deepEqual(model({ take_profit_pct: 20 }).diffs[0], { key: "take_profit_pct", label: "take profit", before: "ride", after: "+20%" }));
 check("draft is explicitly inert", () => assert.equal(model({ entry_dte: 1 }).activationAuthorized, false));
 check("canonical content is stable across key order", () => assert.equal(model({ entry_dte: 1, max_contracts: 4 }).canonicalJson, model({ max_contracts: 4, entry_dte: 1 }).canonicalJson));
-check("canonical content contains release identity", () => assert.match(model({ entry_dte: 1 }).canonicalJson, /weekend-day1-2026-07-20-rc5\.1/));
+check("canonical content contains release identity", () => assert.match(model({ entry_dte: 1 }).canonicalJson, /weekend-day1-2026-07-21-rc5\.3/));
 check("canonical content pins activation false", () => assert.match(model({ entry_dte: 1 }).canonicalJson, /"activationAuthorized":false/));
 check("unverified release blocks review", () => assert.equal(model({ entry_dte: 1 }, "mismatch").state, "blocked"));
 check("malformed release hash blocks review", () => assert.equal(deriveChannelConfigDraft({ slug: "pb-ride", baseConfig: base, patch: { entry_dte: 1 }, releaseState: "verified", releaseId: "rc5", releaseHash: "bad", configurationEpochId: "b".repeat(64) }).state, "blocked"));
