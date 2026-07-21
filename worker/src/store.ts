@@ -854,22 +854,38 @@ export async function listArchivedQuoteDays(): Promise<Set<string>> {
 }
 
 /** Verbatim option_quotes rows for one UTC/ET calendar day (RTH option quotes ⇒ UTC date ==
- *  ET date), keyset-paginated on the pkey (OFFSET dies on this table). One day ≈ ~85k rows. */
-export async function fetchQuotesForDay(etDate: string): Promise<unknown[]> {
+ *  ET date), traversed per underlying on (underlying,captured_at,id). The final
+ *  all-day count prevents an omitted symbol from producing a receiptable archive. */
+export async function fetchQuotesForDay(etDate: string, underlyings: readonly string[] = config.symbols): Promise<Record<string, unknown>[]> {
   const startISO = `${etDate}T00:00:00Z`;
   const end = new Date(Date.parse(startISO) + 86_400_000).toISOString();
-  const rows: Array<{ id: string | number }> = [];
-  let lastId: string | number | null = null;
-  for (;;) {
-    let q = sb.from("option_quotes").select("*").gte("captured_at", startISO).lt("captured_at", end).order("id", { ascending: true }).limit(1000);
-    if (lastId != null) q = q.gt("id", lastId);
-    const { data, error } = await q;
-    if (error) throw new Error(`option_quotes[${etDate}]: ${error.message}`);
-    const batch = (data ?? []) as Array<{ id: string | number }>;
-    rows.push(...batch);
-    if (batch.length < 1000) break;
-    lastId = batch[batch.length - 1].id;
+  const rows: Record<string, unknown>[] = [];
+  for (const underlying of [...new Set(underlyings.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))].sort()) {
+    let lastCapturedAt: string | null = null;
+    let lastId: string | null = null;
+    for (;;) {
+      let query = sb.from("option_quotes").select("*")
+        .eq("underlying", underlying)
+        .gte("captured_at", startISO).lt("captured_at", end)
+        .order("captured_at", { ascending: true }).order("id", { ascending: true }).limit(1000);
+      if (lastCapturedAt && lastId) {
+        query = query.or(`captured_at.gt.${lastCapturedAt},and(captured_at.eq.${lastCapturedAt},id.gt.${lastId})`);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(`option_quotes[${etDate}/${underlying}]: ${error.message}`);
+      const batch = (data ?? []) as Array<Record<string, unknown> & { id?: unknown; captured_at?: unknown }>;
+      rows.push(...batch);
+      if (batch.length < 1000) break;
+      const tail = batch[batch.length - 1];
+      lastCapturedAt = typeof tail.captured_at === "string" ? tail.captured_at : null;
+      lastId = typeof tail.id === "string" ? tail.id : String(tail.id ?? "");
+      if (!lastCapturedAt || !lastId) throw new Error(`option_quotes[${etDate}/${underlying}]: missing keyset identity`);
+    }
   }
+  const { count, error } = await sb.from("option_quotes").select("id", { count: "exact", head: true })
+    .gte("captured_at", startISO).lt("captured_at", end);
+  if (error) throw new Error(`option_quotes[${etDate}] count: ${error.message}`);
+  if (count !== rows.length) throw new Error(`option_quotes[${etDate}] coverage mismatch: fetched ${rows.length}, database ${count ?? "unknown"}`);
   return rows;
 }
 

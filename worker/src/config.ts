@@ -138,6 +138,13 @@ export const config = {
   r2SecretAccessKey: opt("R2_SECRET_ACCESS_KEY", ""),
   r2Bucket: opt("R2_BUCKET", ""),
   r2Prefix: opt("R2_PREFIX", "intraminute"),
+  // Immutable, complete-session option-quote archive. Default-off until the
+  // private receipt migration is reviewed/applied and the R2 path is proven.
+  quoteArchiveR2Enabled: flag("QUOTE_ARCHIVE_R2_ENABLED", false),
+  quoteArchiveR2Prefix: opt("QUOTE_ARCHIVE_R2_PREFIX", "quote-archive"),
+  // Required when enabled. This prevents the bounded proof from silently
+  // turning the whole hot-retention window into an unreviewed backfill.
+  quoteArchiveR2StartDate: opt("QUOTE_ARCHIVE_R2_START_DATE", ""),
   // Fund-level equity snapshots stay with the cron until full cutover (else two
   // writers double-snapshot). Flip at Phase B4 when the cron is unscheduled.
   writeEquitySnapshots: flag("WRITE_EQUITY_SNAPSHOTS", false),
