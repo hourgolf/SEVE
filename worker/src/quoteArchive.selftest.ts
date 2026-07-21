@@ -38,13 +38,16 @@ assert.throws(() => buildQuoteArchiveArtifact({ sessionDateEt: "bad", rows, pref
 
 const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
 assert.match(configSource, /quoteArchiveR2Enabled:\s*flag\("QUOTE_ARCHIVE_R2_ENABLED", false\)/);
+assert.match(configSource, /quoteArchiveR2StartDate:\s*opt\("QUOTE_ARCHIVE_R2_START_DATE", ""\)/);
 const runtimeSource = readFileSync(new URL("./r2QuoteArchive.ts", import.meta.url), "utf8");
 assert.doesNotMatch(runtimeSource, /^import .*?(?:alpaca|execute|order|position|strategy)/im);
 const archiveSource = readFileSync(new URL("./archive.ts", import.meta.url), "utf8");
 assert.match(archiveSource, /if \(config\.quoteArchiveR2Enabled\)/);
+assert.match(archiveSource, /QUOTE_ARCHIVE_R2_START_DATE is required/);
+assert.match(archiveSource, /date >= config\.quoteArchiveR2StartDate/);
 const migrationSource = readFileSync(new URL("../../supabase/migrations/20260721040000_quote_archive_receipts.sql", import.meta.url), "utf8");
 assert.match(migrationSource, /enable row level security/);
 assert.match(migrationSource, /revoke all .* from anon, authenticated/);
 assert.doesNotMatch(migrationSource, /create\s+index/i);
 
-console.log("quote-archive-selftest: 20/20 passed");
+console.log("quote-archive-selftest: 23/23 passed");

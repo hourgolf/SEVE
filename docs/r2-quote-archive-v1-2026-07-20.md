@@ -19,7 +19,9 @@ tape. It does **not** shorten retention. It adds:
 - one private, compact, idempotent Supabase receipt only after both R2 objects
   verify;
 - retry-open behavior whenever schema, R2, verification, or receipt work fails;
-- a default-off `QUOTE_ARCHIVE_R2_ENABLED` flag.
+- a default-off `QUOTE_ARCHIVE_R2_ENABLED` flag;
+- a required `QUOTE_ARCHIVE_R2_START_DATE` lower bound so enabling the proof
+  cannot silently backfill the existing hot-retention window.
 
 The existing Supabase Storage archive remains in place during the proof period.
 When R2 is enabled, a day is independently considered complete only from its
@@ -51,8 +53,11 @@ proof. The private receipt table is the only schema change.
 1. Review the code and migration independently.
 2. Apply only the private receipt-table migration with explicit authorization
    outside market hours.
-3. Deploy with `QUOTE_ARCHIVE_R2_ENABLED=1` and the existing R2 credentials,
-   keeping the seven-day Supabase hot window unchanged.
+3. Deploy with the feature disabled, confirm normal worker startup, then set
+   `QUOTE_ARCHIVE_R2_ENABLED=1` and `QUOTE_ARCHIVE_R2_START_DATE=2026-07-20`
+   with the existing R2 credentials. The explicit lower bound limits tonight's
+   run to the first proof session; older hot data is not an implicit backfill.
+   Keep the seven-day Supabase hot window unchanged.
 4. Verify two consecutive complete sessions: object, manifest, receipt, counts,
    boundaries, hashes, and a cold read/replay.
 5. Only then draft a separate receipt-gated bounded-retention migration.
@@ -62,7 +67,7 @@ data, merge, or change trading policy.
 
 ## Local verification
 
-- quote archive: 20/20
+- quote archive: 23/23
 - existing archive retry policy: 4/4
 - runner: 150/150
 - market calendar: pass

@@ -43,14 +43,21 @@ export async function archiveQuotesToStorage(reason: string): Promise<void> {
     let r2Ready = false;
     let r2ReceiptError: string | null = null;
     if (config.quoteArchiveR2Enabled) {
-      const receiptStore = await import("./quoteArchiveReceiptStore.js");
-      const receiptState = await receiptStore.listVerifiedQuoteArchiveDays();
-      r2Existing = receiptState.days;
-      r2ReceiptError = receiptState.error;
-      r2Ready = !receiptState.error;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(config.quoteArchiveR2StartDate)) {
+        r2ReceiptError = "QUOTE_ARCHIVE_R2_START_DATE is required when R2 archiving is enabled";
+      } else {
+        const receiptStore = await import("./quoteArchiveReceiptStore.js");
+        const receiptState = await receiptStore.listVerifiedQuoteArchiveDays();
+        r2Existing = receiptState.days;
+        r2ReceiptError = receiptState.error;
+        r2Ready = !receiptState.error;
+      }
       if (r2ReceiptError) await store.journal("WARN", `archive: R2 receipt schema/read unavailable — ${r2ReceiptError}`);
     }
-    const todo = candidates.filter((d) => !existing.has(d) || (r2Ready && !r2Existing.has(d)));
+    const needsR2 = (date: string): boolean => r2Ready
+      && date >= config.quoteArchiveR2StartDate
+      && !r2Existing.has(date);
+    const todo = candidates.filter((d) => !existing.has(d) || needsR2(d));
     if (!todo.length) {
       const failedDays = config.quoteArchiveR2Enabled && !r2Ready ? 1 : 0;
       if (archiveCycleMaySeal({ nowEtMinute: nowMin, failedDays })) lastArchiveDay = todayET;
@@ -72,7 +79,7 @@ export async function archiveQuotesToStorage(reason: string): Promise<void> {
           }
           else await store.journal("EXEC", `archive: quotes ${d} → Storage (${rows.length} rows, ${(gz.length / 1024).toFixed(0)} KB)`);
         }
-        if (r2Ready && !r2Existing.has(d)) {
+        if (needsR2(d)) {
           try {
             const { writeQuoteArchiveToR2 } = await import("./r2QuoteArchive.js");
             const receipt = await writeQuoteArchiveToR2({ sessionDateEt: d, rows });
