@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "hotfixId": "weekend-day1-2026-07-21-ops2",
+  "releaseId": "weekend-day1-2026-07-21-rc5.3",
+  "releaseConfigurationSha256": "b68348407a5f4c5c351213c6cf512afe1571a20646aeb9f213c644dd15f50bf1",
+  "supersedesReleaseId": "weekend-day1-2026-07-21-rc5.2",
+  "workerVersion": "stream-2026-07-21b",
+  "supersedesWorkerVersion": "stream-2026-07-21a",
+  "paperOnly": true,
+  "strategyConfigurationChanged": false,
+  "entryPolicyChanged": false,
+  "exitPolicyChanged": false,
+  "rosterChanged": false,
+  "executableMomoRatchet": {
+    "engageReturnPct": 50,
+    "givebackPct": 33,
+    "retainGainPct": 67,
+    "priceBasis": "executable-option-bid"
+  },
+  "rootBindings": [
+    {
+      "slug": "pb-ride",
+      "strategistId": "4528343d-7151-46ae-8f0d-10c0ef9572b4",
+      "accountId": "cd817549-e025-4d38-805e-d32e607052f7",
+      "accountMode": "paper",
+      "channelVersion": "sha256:e5e038af744d45ca8136b56ca3d625e0c5cda35c58d603fb8072785e9342c2b1",
+      "managerVersion": "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+      "configurationEpoch": "sha256:d52ec95d656c2637fb38e43d624f1e3ff29444d5e82bf0f180944d6e8d734488",
+      "policyEpoch": "a9338a26-668d-5e71-b48c-7610a26f8c1e"
+    },
+    {
+      "slug": "orb-ustop-ctl",
+      "strategistId": "51ab6380-e0db-4e41-ad59-625b151cb9cf",
+      "accountId": "995aa327-b0da-4050-bede-97ab462b06cd",
+      "accountMode": "paper",
+      "channelVersion": "sha256:71a7cc171a002573505cd147d42de109c4bbafb54e52d0fb6b31b2dee76c651e",
+      "managerVersion": "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+      "configurationEpoch": "sha256:cb5979e26b8003127de3de9d06c7d808c53c5aea36b67994e46f308250c1851e",
+      "policyEpoch": "4e0d03f8-d575-58ec-b3bd-ea74d0a60a4b"
+    },
+    {
+      "slug": "grind-v3",
+      "strategistId": "1dc15beb-79a5-4f49-9b9b-9b5693c93561",
+      "accountId": "995aa327-b0da-4050-bede-97ab462b06cd",
+      "accountMode": "paper",
+      "channelVersion": "sha256:43b84c0c2065d36e9e20ef473254b86c18d4fe39069865646124553d6fcad077",
+      "managerVersion": "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+      "configurationEpoch": "sha256:fee5b2a305410aeee528a3dd1c52420dd7b15d98c929b06079db9f7af333d035",
+      "policyEpoch": "74130bee-c41d-5dfd-8c7c-b729347568a8"
+    },
+    {
+      "slug": "momo-shape",
+      "strategistId": "c2efcffa-b0bb-4cde-a3de-25209879ebe1",
+      "accountId": "cd817549-e025-4d38-805e-d32e607052f7",
+      "accountMode": "paper",
+      "channelVersion": "sha256:b9259b5a5cd32448c14dc33353d3b1fcdefd57be92193fe446bd7e0b323a0f47",
+      "managerVersion": "sha256:bda3e8a72526f9d1d44a8656733523e06735e21e726a254c935ccfddfb69ccb0",
+      "configurationEpoch": "sha256:f69df8b415b82e0738387627768fce551d8f7e65ebcd964fe7712b186d399a6a",
+      "policyEpoch": "ff6eb502-d3a1-5fd0-ab37-25b564fd9629"
+    },
+    {
+      "slug": "orb-qqq-trail",
+      "strategistId": "62b108c8-535e-4232-8c68-af8fb5b8f932",
+      "accountId": "cd817549-e025-4d38-805e-d32e607052f7",
+      "accountMode": "paper",
+      "channelVersion": "sha256:ff1312b0c312b18a4a227ecd1eb6badad5f8d28b70d00e9d0017d3b1eb13fc2a",
+      "managerVersion": "sha256:c3af49e3ce9e6653d7307ad458330293cd65a1433412057ba2715150dedea3c8",
+      "configurationEpoch": "sha256:a67d149a2b474a565638a57eec72edc66f803f6dcc77c534f19ddd12e8410c9b",
+      "policyEpoch": "4ded4844-aa5e-54a3-b90e-56c8eac78126"
+    },
+    {
+      "slug": "breakout-alt-v3-iwm",
+      "strategistId": "24889b0e-3ba7-4e47-9430-f73aa2c764a4",
+      "accountId": "cd817549-e025-4d38-805e-d32e607052f7",
+      "accountMode": "paper",
+      "channelVersion": "sha256:75801f4cdd928d4a472b0cd205e6809aee68165eef41bba84314bbd8a7277eec",
+      "managerVersion": "sha256:e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+      "configurationEpoch": "sha256:c2d43fe72fc4f35a4f4692580e590f6f3671de7a3806fc5b06d3a14ed408cd9e",
+      "policyEpoch": "0d59b764-e7e1-538a-9bbb-6871eb60ba8b"
+    }
+  ],
+  "operationalChanges": [
+    "worker code can write immutable complete-session option quotes to R2 only when QUOTE_ARCHIVE_R2_ENABLED is explicitly enabled",
+    "QUOTE_ARCHIVE_R2_START_DATE is mandatory when enabled so the bounded proof cannot become a historical catch-up",
+    "the private quote_archive_receipts table records verified upload identity without granting browser access"
+  ],
+  "unchanged": [
+    "six RC5.2 root entry policies and account bindings",
+    "two-contract root quantity",
+    "minus-30-percent premium catastrophe stop",
+    "MOMO executable A13 giveback ratchet",
+    "15:25 ET liquidation",
+    "dark-channel no-fill lifecycle",
+    "paper-only authority"
+  ],
+  "deploymentBoundary": "prepared only; merge, Railway deployment, and environment changes require separate operator authorization"
+}

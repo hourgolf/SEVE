@@ -88,7 +88,7 @@ assert.equal(mismatch.bySlug["pb-ride"].rootPolicy, null);
 // release field to the sealed machine receipts so a future RC cannot silently
 // make the dashboard lie.
 const prereg = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-preregistration-receipt-2026-07-17.json", import.meta.url), "utf8"));
-const hotfix = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-2-operational-hotfix-2026-07-20.json", import.meta.url), "utf8"));
+const hotfix = JSON.parse(readFileSync(new URL("../../docs/weekend-day1-rc5-3-operational-hotfix-2026-07-20.json", import.meta.url), "utf8"));
 const sealed = prereg.content.evidence.releaseConfiguration;
 assert.equal(DAY1_RELEASE_ID, hotfix.releaseId);
 assert.equal(DAY1_CONFIG_HASH, hotfix.releaseConfigurationSha256);
