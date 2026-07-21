@@ -102,6 +102,13 @@ export function nextTradingDay(dateET: string): string {
   return d;
 }
 
+/** The previous ET session date strictly before `dateET` (skips weekends + holidays). */
+export function previousTradingDay(dateET: string): string {
+  let d = addDays(dateET, -1);
+  for (let i = 0; i < 10 && !isTradingDay(d); i++) d = addDays(d, -1);
+  return d;
+}
+
 /** Is `dateET` the last session before a HOLIDAY-extended closure — i.e. is there a
  *  weekday MARKET HOLIDAY strictly between `dateET` and the next trading day? TRUE for
  *  a Thursday before a Friday holiday (06-18 → Juneteenth); FALSE for a normal Friday

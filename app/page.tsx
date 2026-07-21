@@ -171,6 +171,8 @@ function Surface({
       message: sentinel.message,
       schemaVersion: sentinel.schemaVersion,
       publisherVersion: sentinel.publisherVersion,
+      publisherEvidenceState: sentinel.publisherEvidenceState || undefined,
+      publisherEvidenceDetail: sentinel.publisherEvidenceDetail,
       briefAsOf: sentinel.brief?.asOf,
     },
     openPositions: feed.positions.length,

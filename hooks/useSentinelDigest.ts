@@ -46,6 +46,8 @@ export function useSentinelDigest(): {
   digest: string | null; date: string; forDate: string; session: string;
   createdAt: string; publishedAt: string; message: string; schemaVersion: number | null;
   publisherVersion: string; state: DigestState; err: string;
+  publisherEvidenceState: "complete" | "partial" | "error" | "";
+  publisherEvidenceDetail: string;
 } {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [scan, setScan] = useState<Scan | null>(null);
@@ -60,6 +62,8 @@ export function useSentinelDigest(): {
   const [message, setMessage] = useState("");
   const [schemaVersion, setSchemaVersion] = useState<number | null>(null);
   const [publisherVersion, setPublisherVersion] = useState("");
+  const [publisherEvidenceState, setPublisherEvidenceState] = useState<"complete" | "partial" | "error" | "">("");
+  const [publisherEvidenceDetail, setPublisherEvidenceDetail] = useState("");
   const [state, setState] = useState<DigestState>("loading");
   const [err, setErr] = useState("");
 
@@ -88,13 +92,16 @@ export function useSentinelDigest(): {
         setMessage(row?.message ?? "");
         setSchemaVersion(typeof meta.schemaVersion === "number" ? meta.schemaVersion : null);
         setPublisherVersion((meta.publisherVersion as string) ?? "");
+        const evidenceState = meta.publisherEvidenceState;
+        setPublisherEvidenceState(evidenceState === "complete" || evidenceState === "partial" || evidenceState === "error" ? evidenceState : "");
+        setPublisherEvidenceDetail((meta.publisherEvidenceDetail as string) ?? "");
         setState("ok");
       } catch (e) { if (alive) { setState("error"); setErr((e as Error).message); } }
     })();
     return () => { alive = false; };
   }, []);
 
-  return { brief, scan, judge, lens, digest, date, forDate, session, createdAt, publishedAt, message, schemaVersion, publisherVersion, state, err };
+  return { brief, scan, judge, lens, digest, date, forDate, session, createdAt, publishedAt, message, schemaVersion, publisherVersion, publisherEvidenceState, publisherEvidenceDetail, state, err };
 }
 
 // Legacy fallback: split a combined markdown digest into its forward (terrain) + backward

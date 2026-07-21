@@ -16,6 +16,14 @@ const explicit = deriveSentinelReceiptStatus({
 assert.equal(explicit.code, "current");
 assert.equal(explicit.tone, "green");
 
+const partial = deriveSentinelReceiptStatus({
+  state: "ok", session: "2026-07-17", forDate: "2026-07-20", publisherEvidenceState: "partial",
+  publisherEvidenceDetail: "terrain unavailable",
+}, now);
+assert.equal(partial.code, "partial");
+assert.equal(partial.tone, "yellow");
+assert.equal(partial.detail, "terrain unavailable");
+
 const inferred = deriveSentinelReceiptStatus({
   state: "ok", date: "2026-07-17", briefAsOf: "2026-07-17", forDate: "2026-07-20",
 }, now);
@@ -68,4 +76,4 @@ assert.equal(meta.session, "2026-07-17");
 assert.equal(meta.date, "2026-07-17");
 assert.equal(meta.forDate, "2026-07-20");
 
-console.log("sentinel-receipt-selftest: 19/19 passed");
+console.log("sentinel-receipt-selftest: 22/22 passed");
