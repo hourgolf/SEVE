@@ -6,6 +6,8 @@
 //  NOT cover the Mac being OFF past the 7d DB prune (nothing gets captured). This closes that
 //  gap from the ALWAYS-ON Railway worker: post-close, it uploads each COMPLETE day's quotes
 //  (gz, format-identical to the local archive) to Supabase Storage — Mac-independent.
+//  A separately gated v1 also writes a content-addressed object+manifest to R2
+//  and seals that path only after its compact private receipt agrees.
 //
 //  Only COMPLETE days are uploaded (prior days always; today only post-close) → no partial-day
 //  risk, so skip-if-already-uploaded is safe (no re-do needed). Idempotent + restart-safe (it
@@ -37,25 +39,49 @@ export async function archiveQuotesToStorage(reason: string): Promise<void> {
     if (nowMin >= POST_CLOSE_ARCHIVE_MIN) candidates.push(todayET);
 
     const existing = await store.listArchivedQuoteDays();
-    const todo = candidates.filter((d) => !existing.has(d));
+    let r2Existing = new Set<string>();
+    let r2Ready = false;
+    let r2ReceiptError: string | null = null;
+    if (config.quoteArchiveR2Enabled) {
+      const receiptStore = await import("./quoteArchiveReceiptStore.js");
+      const receiptState = await receiptStore.listVerifiedQuoteArchiveDays();
+      r2Existing = receiptState.days;
+      r2ReceiptError = receiptState.error;
+      r2Ready = !receiptState.error;
+      if (r2ReceiptError) await store.journal("WARN", `archive: R2 receipt schema/read unavailable — ${r2ReceiptError}`);
+    }
+    const todo = candidates.filter((d) => !existing.has(d) || (r2Ready && !r2Existing.has(d)));
     if (!todo.length) {
-      if (archiveCycleMaySeal({ nowEtMinute: nowMin, failedDays: 0 })) lastArchiveDay = todayET;
+      const failedDays = config.quoteArchiveR2Enabled && !r2Ready ? 1 : 0;
+      if (archiveCycleMaySeal({ nowEtMinute: nowMin, failedDays })) lastArchiveDay = todayET;
       return;
     }
 
     info(`archive(${reason}): ${todo.length} day(s) to upload → ${todo.join(", ")}`);
-    let failedDays = 0;
+    let failedDays = config.quoteArchiveR2Enabled && !r2Ready ? 1 : 0;
     for (const d of todo) {
       try {
         const rows = await store.fetchQuotesForDay(d);
         if (!rows.length) continue; // weekend / holiday — nothing to archive
         const gz = gzipSync(Buffer.from(JSON.stringify(rows)));
-        const err = await store.uploadQuotesArchive(d, gz);
-        if (err) {
-          failedDays++;
-          await store.journal("WARN", `archive: upload ${d} FAILED — ${err}`);
+        if (!existing.has(d)) {
+          const err = await store.uploadQuotesArchive(d, gz);
+          if (err) {
+            failedDays++;
+            await store.journal("WARN", `archive: upload ${d} FAILED — ${err}`);
+          }
+          else await store.journal("EXEC", `archive: quotes ${d} → Storage (${rows.length} rows, ${(gz.length / 1024).toFixed(0)} KB)`);
         }
-        else await store.journal("EXEC", `archive: quotes ${d} → Storage (${rows.length} rows, ${(gz.length / 1024).toFixed(0)} KB)`);
+        if (r2Ready && !r2Existing.has(d)) {
+          try {
+            const { writeQuoteArchiveToR2 } = await import("./r2QuoteArchive.js");
+            const receipt = await writeQuoteArchiveToR2({ sessionDateEt: d, rows });
+            await store.journal("EXEC", `archive: quotes ${d} → R2 verified (${receipt.rowCount} rows · ${receipt.compressedSha256.slice(0, 12)})`);
+          } catch (error) {
+            failedDays++;
+            await store.journal("WARN", `archive: R2 ${d} FAILED — ${(error as Error).message}`);
+          }
+        }
       } catch (e) {
         failedDays++;
         await store.journal("WARN", `archive: ${d} failed — ${(e as Error).message}`);
