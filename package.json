@@ -125,6 +125,7 @@
     "forensics-mine": "tsx scripts/forensics-mine.ts",
     "reconcile-alpaca": "tsx --env-file=.env.local scripts/reconcile-alpaca.ts",
     "gate-shadow": "tsx --env-file=.env.local scripts/gate-shadow.ts",
+    "gate-shadow-policy-selftest": "tsx lib/research/gateShadowPolicy.selftest.ts",
     "a6-read": "tsx --env-file=.env.local scripts/a6-read.ts",
     "backup-archives": "tsx scripts/backup-archives.ts",
     "iv-bank": "tsx --env-file=.env.local scripts/iv-bank.ts",

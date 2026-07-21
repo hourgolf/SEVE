@@ -62,7 +62,19 @@ export interface VbCandidateDecision {
   side: "call" | "put";
   occSymbol: string;
   liveObservedAsk: VbLiveObservedAsk | null;
-  blockedReason: "not_armed" | "halted" | "cost_gate" | "stale_chain" | "day1_dark_lifecycle";
+  blockedReason:
+    | "not_armed"
+    | "halted"
+    | "cost_gate"
+    | "stale_chain"
+    | "day1_dark_lifecycle"
+    | "day1_premium_debit_cap"
+    | "day1_spy_same_clock_collision"
+    | "day1_family_open"
+    | "day1_reentry_disabled"
+    | "day1_same_occ_open"
+    | "day1_underlying_concurrency"
+    | "day1_global_concurrency";
   virtualExitAtMs: number;
 }
 

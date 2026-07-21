@@ -33,6 +33,10 @@ import {
   type VbCandidateDecision,
   type VbCandidateReceipt,
 } from "../lib/research/vbCandidateEvidence.js";
+import {
+  GATE_SHADOW_ALL_BLOCKS,
+  GATE_SHADOW_SEQUENTIAL_BLOCKS,
+} from "../lib/research/gateShadowPolicy.js";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const READ_ONLY = process.argv.includes("--read-only");
@@ -43,6 +47,11 @@ const sb = createServerSupabaseClient("gate-shadow");
 
 const daysArg = process.argv.indexOf("--days");
 const DAYS = daysArg > 0 ? Math.max(1, Number(process.argv[daysArg + 1]) || 6) : 6;
+const sessionArg = process.argv.indexOf("--session");
+const SESSION = sessionArg > 0 ? String(process.argv[sessionArg + 1] ?? "") : null;
+if (SESSION != null && !/^\d{4}-\d{2}-\d{2}$/.test(SESSION)) {
+  throw new Error("gate-shadow: --session must be YYYY-MM-DD");
+}
 const LEDGER = "data/gate-shadow.json";
 const CANDIDATE_LEDGER = "data/vb-candidates.json";
 const CANDIDATE_CENSORS = "data/vb-candidate-censors.json";
@@ -182,28 +191,31 @@ async function reconstruct(s: any, slug: string, cfg: Cfg): Promise<ShadowRow> {
 }
 
 async function main() {
-  const since = new Date(Date.now() - DAYS * 86_400_000).toISOString();
+  const since = SESSION ? `${SESSION}T00:00:00.000Z` : new Date(Date.now() - DAYS * 86_400_000).toISOString();
+  const until = SESSION ? new Date(Date.parse(since) + 86_400_000).toISOString() : null;
   // PAGINATED + count-verified (2026-07-07): the vb fleet's cross-index expansion pushed the
   // 6-day blocked-signal window past PostgREST's 1000-row page. The old single fetch silently
   // returned the OLDEST 1000 — new days' signals never entered the walk, so the LAB panel
   // froze mid-06 while gate-shadow reported "0 new". Same silent-truncation class as the
   // quote-fetch flicker; same cure — page to completion, then fail LOUD on any shortfall.
-  const BLOCKED = ["cost_gate", "stale_chain", "not_armed", "halted", "day1_dark_lifecycle"];
-  const { count: expected, error: cErr } = await sb
+  const countQuery = sb
     .from("signals").select("id", { count: "exact", head: true })
-    .in("blocked_reason", BLOCKED).gte("created_at", since);
+    .in("blocked_reason", [...GATE_SHADOW_ALL_BLOCKS]).gte("created_at", since);
+  if (until) countQuery.lt("created_at", until);
+  const { count: expected, error: cErr } = await countQuery;
   if (cErr) { console.error(`gate-shadow: signals count failed — ${cErr.message}`); process.exit(1); }
   const sigs: any[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await sb
+    const pageQuery = sb
       .from("signals")
       .select("id,strategist_id,created_at,blocked_reason,rationale,strategists(slug),direction")
-      .in("blocked_reason", BLOCKED)
+      .in("blocked_reason", [...GATE_SHADOW_ALL_BLOCKS])
       .gte("created_at", since)
       // id tiebreak: created_at alone is not a total order — same-second signals could
       // shuffle across page boundaries and silently drop/duplicate rows
-      .order("created_at", { ascending: true }).order("id", { ascending: true })
-      .range(from, from + 999);
+      .order("created_at", { ascending: true }).order("id", { ascending: true });
+    if (until) pageQuery.lt("created_at", until);
+    const { data, error } = await pageQuery.range(from, from + 999);
     if (error) { console.error(`gate-shadow: signals read failed — ${error.message}`); process.exit(1); }
     sigs.push(...((data ?? []) as any[]));
     if ((data ?? []).length < 1000) break;
@@ -229,7 +241,7 @@ async function main() {
   // `halted` joins the bench walk (data-hole fix 2026-07-02): a KILL window's blocked
   // entries re-signal every bar while flat, exactly like drafts — same one-at-a-time
   // sequential semantics, and without this they vanish at the 7d quote prune.
-  const WALK = new Set(["not_armed", "halted", "day1_dark_lifecycle"]);
+  const WALK: ReadonlySet<string> = GATE_SHADOW_SEQUENTIAL_BLOCKS;
   const benchByDay = new Map<string, any[]>();
   const gateSigs: any[] = [];
   for (const s of (sigs ?? []) as any[]) {
@@ -248,8 +260,8 @@ async function main() {
     if ("code" in candidate) candidateCensors.push(candidate);
     else candidateDecisions.push(candidate);
   };
-  let fresh = 0;
-  const bank = async (s: any, base: ShadowRow) => {
+  let fresh = 0, published = 0;
+  const bank = async (s: any, base: ShadowRow, isFresh: boolean) => {
     if (HAS_SERVICE) {
       // Upsert the virtual_trades row FIRST and LEDGER (= the later-runs dedup) only if it lands.
       // supabase-js returns API errors via `.error` — it does NOT throw — so the old try/catch
@@ -266,8 +278,9 @@ async function main() {
         mfe_pct: base.mfePct, giveback_pct: base.giveback, // avg-peak lens on the bench (cols added 2026-07-09)
       }, { onConflict: "signal_id" });
       if (error) { console.error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`); process.exit(1); }
+      published++;
       // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
-      if (!WALK.has(base.blocked) && base.pnlPerContract != null) {
+      if (isFresh && !WALK.has(base.blocked) && base.pnlPerContract != null) {
         try {
           await sb.from("events").insert({
             level: "INFO",
@@ -280,14 +293,18 @@ async function main() {
     // Ledger + fresh count AFTER the DB row lands (or immediately in the anon ledger-only mode with
     // no service role) — a failed night exits above WITHOUT ledgering, so the signal re-tries next run.
     ledger.set(base.signalId, base);
-    fresh++;
+    if (isFresh) fresh++;
   };
 
   // ── armed-channel gate blocks: every one is a forgone entry ──
   for (const s of gateSigs) {
-    if (ledger.has(String(s.id))) continue;
+    const prior = ledger.get(String(s.id));
+    if (prior) {
+      if (HAS_SERVICE) await bank(s, prior, false);
+      continue;
+    }
     const slug = String(s.strategists?.slug ?? "?");
-    await bank(s, await reconstruct(s, slug, cfgById.get(s.strategist_id) ?? { stop: POLICY_STOP, tp: 0 }));
+    await bank(s, await reconstruct(s, slug, cfgById.get(s.strategist_id) ?? { stop: POLICY_STOP, tp: 0 }), true);
   }
 
   // ── bench fleet: sequential re-entry walk per (channel, day) ──
@@ -301,6 +318,7 @@ async function main() {
       const prior = ledger.get(String(s.id));
       if (prior) {
         // already banked on an earlier run — advance the cursor off its recorded exit
+        if (HAS_SERVICE) await bank(s, prior, false);
         taken++;
         cursorMs = prior.exitAt ? Date.parse(prior.exitAt) : tMs + 60_000;
         collectCandidate(s, prior);
@@ -308,7 +326,7 @@ async function main() {
       }
       const slug = String(s.strategists?.slug ?? "?");
       const base = await reconstruct(s, slug, cfgById.get(s.strategist_id) ?? { stop: POLICY_STOP, tp: 0 });
-      await bank(s, base);
+      await bank(s, base, true);
       collectCandidate(s, base);
       taken++;
       cursorMs = base.exitAt ? Date.parse(base.exitAt) : tMs + 60_000; // unscored → try the next minute's signal
@@ -348,12 +366,15 @@ async function main() {
   writeFileSync(CANDIDATE_LEDGER, JSON.stringify(candidateReceipts, null, 1));
   writeFileSync(CANDIDATE_CENSORS, JSON.stringify(retainedCensors, null, 1));
 
-  const scored = rows.filter((r) => r.pnlPerContract != null);
+  const reportRows = SESSION ? rows.filter((r) => r.createdAt.startsWith(SESSION)) : rows;
+  const scored = reportRows.filter((r) => r.pnlPerContract != null);
   const sum = scored.reduce((a, r) => a + (r.pnlPerContract ?? 0), 0);
-  console.log(`\n  GATE-SHADOW v2 (re-entry-aware, cap ${MAX_PER_DAY}/day) · ${fresh} new / ${rows.length} total banked → ${LEDGER} + virtual_trades`);
+  console.log(`\n  GATE-SHADOW v2 (re-entry-aware, cap ${MAX_PER_DAY}/day)${SESSION ? ` · session ${SESSION}` : ""}${READ_ONLY ? " · REMOTE READ-ONLY" : ""}`);
+  console.log(`  ${fresh} new / ${rows.length} total banked · ${reportRows.length} in report window → ${LEDGER} + virtual_trades`);
+  if (HAS_SERVICE) console.log(`  ${published} remote virtual_trades upserts confirmed (idempotent by signal_id)`);
   console.log(`  scored ${scored.length} (mid-basis UPPER BOUND) · Σ would-have $${Math.round(sum)} · avg $${scored.length ? Math.round(sum / scored.length) : 0}/ct`);
   console.log(`  exact-candidate lane: ${candidateReceipts.length} retained receipts → ${CANDIDATE_LEDGER} · ${retainedCensors.length} retained fail-closed censors → ${CANDIDATE_CENSORS}`);
-  for (const grp of ["not_armed", "cost_gate", "stale_chain"] as const) {
+  for (const grp of GATE_SHADOW_ALL_BLOCKS) {
     const g = scored.filter((r) => r.blocked === grp);
     if (!g.length) continue;
     console.log(`  ── ${grp === "not_armed" ? "VIRTUAL BENCH (not_armed, re-entry walk)" : grp} · ${g.length} scored`);

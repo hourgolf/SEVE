@@ -131,9 +131,10 @@ function sqlColumns(sql: string, table: string): string[] {
 }
 const migration = readFileSync(new URL("../../supabase/migrations/20260717210403_gate2_vb_exact_candidate_receipts.sql", import.meta.url), "utf8");
 const gateShadow = readFileSync(new URL("../../scripts/gate-shadow.ts", import.meta.url), "utf8");
+const gateShadowPolicy = readFileSync(new URL("./gateShadowPolicy.ts", import.meta.url), "utf8");
 check("nightly reconstruction includes the Day 1 dark lifecycle sequential walk", [
-  /const BLOCKED = \[[^\]]*"day1_dark_lifecycle"/.test(gateShadow),
-  /const WALK = new Set\(\[[^\]]*"day1_dark_lifecycle"/.test(gateShadow),
+  /GATE_SHADOW_ALL_BLOCKS/.test(gateShadow) && /"day1_dark_lifecycle"/.test(gateShadowPolicy),
+  /GATE_SHADOW_SEQUENTIAL_BLOCKS/.test(gateShadow) && /"day1_dark_lifecycle"/.test(gateShadowPolicy),
   /blocked_reason in \([^\)]*'day1_dark_lifecycle'/.test(migration),
 ], [true, true, true]);
 check("candidate SQL and generated payload align field-for-field", sqlColumns(migration, "vb_candidate_receipts"), [...VB_CANDIDATE_SQL_FIELDS]);
