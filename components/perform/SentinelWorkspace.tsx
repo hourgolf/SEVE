@@ -17,6 +17,8 @@ export function deriveSentinelDigestReceipt(sentinel: SentinelDigest) {
     message: sentinel.message,
     schemaVersion: sentinel.schemaVersion,
     publisherVersion: sentinel.publisherVersion,
+    publisherEvidenceState: sentinel.publisherEvidenceState || undefined,
+    publisherEvidenceDetail: sentinel.publisherEvidenceDetail,
     briefAsOf: sentinel.brief?.asOf,
   });
 }

@@ -14,12 +14,14 @@ export interface SentinelReceiptInput {
   message?: string;
   schemaVersion?: number | null;
   publisherVersion?: string;
+  publisherEvidenceState?: "complete" | "partial" | "error";
+  publisherEvidenceDetail?: string;
   briefAsOf?: string;
 }
 
 export interface SentinelReceiptStatus {
   tone: "green" | "yellow" | "red" | "neutral";
-  code: "current" | "identity-inferred" | "identity-conflict" | "target-invalid" | "stale" | "loading" | "missing" | "error";
+  code: "current" | "partial" | "identity-inferred" | "identity-conflict" | "target-invalid" | "stale" | "loading" | "missing" | "error";
   label: string;
   detail: string;
   session: string;
@@ -73,6 +75,8 @@ export function deriveSentinelReceiptStatus(input: SentinelReceiptInput, nowMs =
   );
   if (sessionConflicts) return { tone: "yellow", code: "identity-conflict", label: "SESSION IDENTITY CONFLICT", detail: `session ${short(session)} · evidence ${short(input.briefAsOf || input.date || "")} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
   if (!identityExplicit) return { tone: "yellow", code: "identity-inferred", label: "CURRENT · SESSION INFERRED", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  if (input.publisherEvidenceState === "partial") return { tone: "yellow", code: "partial", label: "CURRENT · PARTIAL EVIDENCE", detail: input.publisherEvidenceDetail || `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  if (input.publisherEvidenceState === "error") return { tone: "red", code: "error", label: "PUBLISHER EVIDENCE ERROR", detail: input.publisherEvidenceDetail || `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
   return { tone: "green", code: "current", label: "CURRENT FOR NEXT OPEN", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
 }
 
