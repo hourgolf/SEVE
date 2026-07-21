@@ -44,11 +44,15 @@ jobs:
           npm run vb-candidate-evidence-selftest
       - name: Build and publish session research
         shell: bash
+        env:
+          SESSION_INPUT: ${{ inputs.session }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          session="${{ inputs.session }}"
+          session="$SESSION_INPUT"
           if [[ -z "$session" ]]; then session="today-et"; fi
           args=(--session "$session")
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN_INPUT" == "true" ]]; then
             args+=(--read-only)
           fi
           npm run gate-shadow:hosted -- "${args[@]}"
