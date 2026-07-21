@@ -63,6 +63,16 @@ The 1,413 raw dark signals collapsed to 148 native virtual trades and 134 versio
 receipts. With the four suppressed-root receipts, the exact-candidate ledger contains 138 retained
 receipts and zero fail-closed censors.
 
+Local freeze hashes:
+
+- Candidate receipts: `f438c3d0874bbfd6a0fdc19ce480504dccf5fbd083e0ebb413226e4553887811`.
+- Candidate censors: `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+- Native virtual-trade ledger: `24ed240146f7bed6e6388e60177ba34536a9fceead2143bf5e0b4c8eb3f20b80`.
+
+The full versioned candidate payload remains local pending the already-designed Gate 2 tables or R2
+publication. Because raw signals are short-retention evidence, the T+1 exact-path pass must preserve
+these receipts before that source window expires.
+
 The dark aggregate is **not a portfolio result**: it is capital-blind, mid-price, heavily correlated
 across siblings and underlying clocks, and uses the channel's current native exit configuration.
 It is only a triage surface for choosing which exact paths deserve T+1 validation.
