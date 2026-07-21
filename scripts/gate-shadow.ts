@@ -37,6 +37,7 @@ import {
   GATE_SHADOW_ALL_BLOCKS,
   GATE_SHADOW_SEQUENTIAL_BLOCKS,
 } from "../lib/research/gateShadowPolicy.js";
+import { etDayRangeUtc, resolveAfterCloseSession } from "../lib/research/afterCloseResearch.js";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const READ_ONLY = process.argv.includes("--read-only");
@@ -48,10 +49,7 @@ const sb = createServerSupabaseClient("gate-shadow");
 const daysArg = process.argv.indexOf("--days");
 const DAYS = daysArg > 0 ? Math.max(1, Number(process.argv[daysArg + 1]) || 6) : 6;
 const sessionArg = process.argv.indexOf("--session");
-const SESSION = sessionArg > 0 ? String(process.argv[sessionArg + 1] ?? "") : null;
-if (SESSION != null && !/^\d{4}-\d{2}-\d{2}$/.test(SESSION)) {
-  throw new Error("gate-shadow: --session must be YYYY-MM-DD");
-}
+const SESSION = resolveAfterCloseSession(sessionArg > 0 ? String(process.argv[sessionArg + 1] ?? "") : null, Date.now());
 const LEDGER = "data/gate-shadow.json";
 const CANDIDATE_LEDGER = "data/vb-candidates.json";
 const CANDIDATE_CENSORS = "data/vb-candidate-censors.json";
@@ -191,8 +189,9 @@ async function reconstruct(s: any, slug: string, cfg: Cfg): Promise<ShadowRow> {
 }
 
 async function main() {
-  const since = SESSION ? `${SESSION}T00:00:00.000Z` : new Date(Date.now() - DAYS * 86_400_000).toISOString();
-  const until = SESSION ? new Date(Date.parse(since) + 86_400_000).toISOString() : null;
+  const sessionRange = SESSION ? etDayRangeUtc(SESSION) : null;
+  const since = sessionRange?.start ?? new Date(Date.now() - DAYS * 86_400_000).toISOString();
+  const until = sessionRange?.end ?? null;
   // PAGINATED + count-verified (2026-07-07): the vb fleet's cross-index expansion pushed the
   // 6-day blocked-signal window past PostgREST's 1000-row page. The old single fetch silently
   // returned the OLDEST 1000 — new days' signals never entered the walk, so the LAB panel

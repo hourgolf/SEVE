@@ -1,0 +1,75 @@
+name: after-close research
+
+on:
+  schedule:
+    # 17:30 ET in summer / 16:30 ET in winter: after the quote archive settles.
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      session:
+        description: "ET session date (YYYY-MM-DD); blank uses today's ET date"
+        required: false
+        type: string
+      dry_run:
+        description: "Build ledgers without publishing research rows"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: after-close-research
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify research policy
+        run: |
+          npm run after-close-research-selftest
+          npm run gate-shadow-policy-selftest
+          npm run vb-candidate-evidence-selftest
+      - name: Build and publish session research
+        shell: bash
+        run: |
+          session="${{ inputs.session }}"
+          if [[ -z "$session" ]]; then session="today-et"; fi
+          args=(--session "$session")
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+            args+=(--read-only)
+          fi
+          npm run gate-shadow:hosted -- "${args[@]}"
+      - name: Freeze artifact checksums
+        shell: bash
+        run: |
+          sha256sum data/gate-shadow.json data/vb-candidates.json data/vb-candidate-censors.json | tee after-close-sha256.txt
+          {
+            echo "## After-close research receipt"
+            echo '```text'
+            cat after-close-sha256.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload frozen research ledgers
+        uses: actions/upload-artifact@v4
+        with:
+          name: after-close-research-${{ github.run_id }}
+          path: |
+            data/gate-shadow.json
+            data/vb-candidates.json
+            data/vb-candidate-censors.json
+            after-close-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
