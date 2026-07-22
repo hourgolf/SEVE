@@ -6,7 +6,7 @@ import type { ChannelConfig } from "./store.js";
 import { deterministicEvidenceUuid, observedOpportunityId } from "./planShadowModel.js";
 
 export const FAMILY_ADMISSION_SCHEMA_VERSION = 1 as const;
-export const FAMILY_ADMISSION_POLICY_VERSION = "family-admission-observer-v1" as const;
+export const FAMILY_ADMISSION_POLICY_VERSION = "family-admission-observer-v2" as const;
 export type FamilyAdmissionId = "PB" | "ORB-SPY";
 
 const FAMILY_SLUGS: Readonly<Record<FamilyAdmissionId, readonly string[]>> = {
@@ -31,6 +31,11 @@ export interface FamilyAdmissionCandidate {
   requestedQty: number;
   executableAsk: number;
   reason: string;
+  posture: "native-accepted" | "day1-paper-root" | "day1-dark-candidate";
+  releaseId: string | null;
+  configurationSha256: string | null;
+  releaseBlockedReason: string | null;
+  originalRequestedQty: number | null;
 }
 
 export interface FamilyAdmissionArm {
@@ -54,8 +59,11 @@ export interface FamilyAdmissionObservationDraft {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256 = /^[0-9a-f]{64}$/i;
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
 const rounded = (n: number): number => Math.round(n * 10_000) / 10_000;
+const record = (value: unknown): Record<string, unknown> | null => value != null
+  && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
 export function familyForChannel(slug: string): FamilyAdmissionId | null {
   const normalized = slug.toLowerCase();
@@ -65,11 +73,62 @@ export function familyForChannel(slug: string): FamilyAdmissionId | null {
   return null;
 }
 
+function day1Posture(input: FamilyAdmissionInput): Pick<FamilyAdmissionCandidate,
+  "posture" | "releaseId" | "configurationSha256" | "releaseBlockedReason" | "originalRequestedQty"
+> | null {
+  const { channel, decision } = input;
+  const sourceClock = new Date(input.sourceBarAtMs);
+  const observedClock = new Date(input.observedAtMs);
+  if (!finite(input.sourceBarAtMs) || !finite(input.observedAtMs)
+      || Number.isNaN(sourceClock.getTime()) || Number.isNaN(observedClock.getTime())
+      || input.observedAtMs < input.sourceBarAtMs) return null;
+  const stamp = record(decision.detail?.day1Candidate);
+  if (!stamp) {
+    return decision.blocked ? null : {
+      posture: "native-accepted",
+      releaseId: null,
+      configurationSha256: null,
+      releaseBlockedReason: null,
+      originalRequestedQty: decision.qty ?? null,
+    };
+  }
+
+  const releaseId = stamp.releaseId;
+  const configurationSha256 = stamp.configurationSha256;
+  const sourceBarAt = stamp.sourceBarAt;
+  const observedAt = stamp.observedAt;
+  const originalRequestedQty = stamp.originalRequestedQty;
+  const lifecycle = stamp.lifecycle;
+  const releaseBlockedReason = decision.blocked ?? null;
+  const paperRoot = lifecycle === "paper" && releaseBlockedReason == null;
+  const darkCandidate = lifecycle === "dark" && releaseBlockedReason === "day1_dark_lifecycle";
+  if (stamp.candidateStampedBeforeAdmission !== true
+      || typeof releaseId !== "string" || !releaseId
+      || typeof configurationSha256 !== "string" || !SHA256.test(configurationSha256)
+      || stamp.originalBlockedReason != null
+      || stamp.strategistId !== channel.id || stamp.accountId !== input.accountId
+      || stamp.channelSlug !== decision.slug
+      || sourceBarAt !== sourceClock.toISOString()
+      || observedAt !== observedClock.toISOString()
+      || stamp.occSymbol !== decision.occ
+      || stamp.executableAsk !== decision.detail?.ask
+      || !Number.isInteger(originalRequestedQty) || Number(originalRequestedQty) < 1
+      || (!paperRoot && !darkCandidate)) return null;
+  return {
+    posture: darkCandidate ? "day1-dark-candidate" : "day1-paper-root",
+    releaseId,
+    configurationSha256: configurationSha256.toLowerCase(),
+    releaseBlockedReason,
+    originalRequestedQty: Number(originalRequestedQty),
+  };
+}
+
 function candidate(input: FamilyAdmissionInput): { family: FamilyAdmissionId; group: string; row: FamilyAdmissionCandidate } | null {
   const { channel, decision } = input;
   const family = familyForChannel(channel.slug);
   const source = new Date(input.sourceBarAtMs);
-  if (!family || decision.action !== "enter" || decision.blocked || !decision.occ || !decision.direction
+  const posture = day1Posture(input);
+  if (!family || !posture || decision.action !== "enter" || !decision.occ || !decision.direction
       || !UUID.test(channel.id) || !UUID.test(input.accountId)
       || Number.isNaN(source.getTime()) || !finite(input.observedAtMs)
       || !Number.isInteger(decision.qty) || (decision.qty ?? 0) < 1
@@ -85,7 +144,8 @@ function candidate(input: FamilyAdmissionInput): { family: FamilyAdmissionId; gr
   });
   return {
     family,
-    group: `${family}|${source.toISOString()}|${underlying}|${decision.direction}`,
+    group: `${family}|${source.toISOString()}|${underlying}|${decision.direction}`
+      + `|${posture.releaseId ?? "native"}|${posture.configurationSha256 ?? "native"}`,
     row: {
       opportunityId,
       strategistId: channel.id,
@@ -95,6 +155,7 @@ function candidate(input: FamilyAdmissionInput): { family: FamilyAdmissionId; gr
       requestedQty: decision.qty as number,
       executableAsk: rounded(Number(decision.detail?.ask)),
       reason: decision.reason,
+      ...posture,
     },
   };
 }
@@ -132,7 +193,7 @@ export function buildFamilyAdmissionObservations(inputs: readonly FamilyAdmissio
       policyVersion: FAMILY_ADMISSION_POLICY_VERSION,
     };
     observations.push({
-      id: deterministicEvidenceUuid("seve-family-admission-v1", identity),
+      id: deterministicEvidenceUuid("seve-family-admission-v2", identity),
       schema_version: FAMILY_ADMISSION_SCHEMA_VERSION,
       policy_version: FAMILY_ADMISSION_POLICY_VERSION,
       family_id: group.family,

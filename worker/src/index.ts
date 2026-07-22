@@ -722,6 +722,17 @@ async function cycle(trigger: string): Promise<void> {
           executionEligible, executionIneligibleReason,
         };
         if (config.day1ReleaseEnabled) {
+          // Research tap: capture the per-candidate Day 1 decisions before the
+          // global arbiter reduces a family to its executable survivor. The pure
+          // observer admits only clean root decisions and clean dark-lifecycle
+          // siblings; execution never reads these receipts.
+          for (const decision of symDecisions) {
+            const channel = symChannels.find((candidate) => candidate.slug === decision.slug);
+            if (channel) familyAdmissionInputs.push({
+              channel, accountId: g.account.id, decision,
+              sourceBarAtMs: lastSession.ts, observedAtMs: familyObservedAtMs,
+            });
+          }
           releaseBatches.push(executionBatch);
           continue;
         }
@@ -883,16 +894,6 @@ async function cycle(trigger: string): Promise<void> {
         batch.decisions = finalized.slice(cursor, cursor + batch.decisions.length).map((row) => row.decision);
         cursor += batch.decisions.length;
         decisions.push(...batch.decisions);
-        for (const decision of batch.decisions) {
-          const channel = batch.channels.find((candidate) => candidate.slug === decision.slug);
-          if (channel) familyAdmissionInputs.push({
-            channel,
-            accountId: batch.group.account.id,
-            decision,
-            sourceBarAtMs: batch.sourceBarAtMs,
-            observedAtMs: batch.observedAtMs,
-          });
-        }
       }
       if (cursor !== finalized.length) throw new Error("Day 1 RC5 arbitration mapping mismatch");
       for (const batch of releaseBatches) await executeDecisionBatch(batch, deskStack);
