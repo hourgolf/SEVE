@@ -19,6 +19,7 @@ import { classifyPriorOpenRun } from "./runReconcile.js";
 import type { DurableShadowRow } from "./shadowPersistence.js";
 import type { PolicyEpochDraft, PositionPlanDraft } from "./planShadowModel.js";
 import type { ExecutionObservationDraft } from "./executionObservationModel.js";
+import { EXECUTION_OBSERVATION_WRITE_OPTIONS } from "./executionObservationPersistence.js";
 import type { ExecutionQualityReceiptDraft } from "../../lib/execution/executionQualityModel.js";
 import type { PositionOutcomeDraft } from "./positionOutcomeModel.js";
 import type { FamilyAdmissionObservationDraft } from "./familyAdmissionModel.js";
@@ -528,7 +529,14 @@ let executionObservationTableAvailable: boolean | null = null;
 export async function insertExecutionObservation(row: ExecutionObservationDraft): Promise<boolean> {
   if (!config.hasServiceRole || executionObservationTableAvailable === false) return false;
   try {
-    const { error } = await sb.from("execution_observations").insert({ ...row, source_boot_id: BOOT_ID });
+    // Observation IDs are deterministic. A restart can replay an already-landed
+    // receipt before the process-local `seen` set is warm; plain INSERT made
+    // that benign retry surface as a PostgreSQL duplicate-key ERROR. Keep the
+    // table append-only and make the retry idempotent at the database boundary.
+    const { error } = await sb.from("execution_observations").upsert(
+      { ...row, source_boot_id: BOOT_ID },
+      EXECUTION_OBSERVATION_WRITE_OPTIONS,
+    );
     if (!error || duplicate(error)) { executionObservationTableAvailable = true; return true; }
     if (missingRelation(error)) executionObservationTableAvailable = false;
     else warn(`store: execution observation insert failed — ${error.message}`);
