@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import {
   buildSentinelReceiptMeta,
   deriveSentinelReceiptStatus,
+  expectedSentinelForDate,
   resolveSentinelEvidenceSession,
   SENTINEL_PUBLISHER_VERSION,
   SENTINEL_RECEIPT_SCHEMA_VERSION,
@@ -36,6 +37,25 @@ const stale = deriveSentinelReceiptStatus({
 }, now);
 assert.equal(stale.code, "stale");
 assert.equal(stale.tone, "red");
+
+const afterClose = Date.parse("2026-07-22T00:30:00Z"); // Tue 20:30 ET
+assert.equal(expectedSentinelForDate(afterClose), "2026-07-22");
+assert.equal(deriveSentinelReceiptStatus({
+  state: "ok", session: "2026-07-20", forDate: "2026-07-21",
+}, afterClose).code, "stale");
+assert.equal(deriveSentinelReceiptStatus({
+  state: "ok", session: "2026-07-21", forDate: "2026-07-22",
+}, afterClose).code, "current");
+assert.equal(expectedSentinelForDate(Date.parse("2026-07-21T19:59:00Z")), "2026-07-21");
+assert.equal(expectedSentinelForDate(Date.parse("2026-11-27T18:01:00Z")), "2026-11-30");
+assert.equal(expectedSentinelForDate(Date.parse("2026-07-18T16:00:00Z")), "2026-07-20");
+assert.equal(expectedSentinelForDate(Date.parse("2026-07-03T16:00:00Z")), "2026-07-06");
+
+const futureTarget = deriveSentinelReceiptStatus({
+  state: "ok", session: "2026-07-21", forDate: "2026-07-23",
+}, afterClose);
+assert.equal(futureTarget.code, "target-mismatch");
+assert.equal(futureTarget.tone, "yellow");
 
 const weekendSession = deriveSentinelReceiptStatus({
   state: "ok", session: "2026-07-18", date: "2026-07-18", briefAsOf: "2026-07-17", forDate: "2026-07-20",
@@ -76,4 +96,4 @@ assert.equal(meta.session, "2026-07-17");
 assert.equal(meta.date, "2026-07-17");
 assert.equal(meta.forDate, "2026-07-20");
 
-console.log("sentinel-receipt-selftest: 22/22 passed");
+console.log("sentinel-receipt-selftest: 31/31 passed");

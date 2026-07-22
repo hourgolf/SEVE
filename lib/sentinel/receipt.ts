@@ -1,4 +1,4 @@
-import { isTradingDay } from "@/engine/market-calendar";
+import { isTradingDay, nextTradingDay, sessionCloseMin } from "@/engine/market-calendar";
 
 export const SENTINEL_RECEIPT_SCHEMA_VERSION = 2;
 export const SENTINEL_PUBLISHER_VERSION = "sentinel-publisher-v2";
@@ -21,7 +21,7 @@ export interface SentinelReceiptInput {
 
 export interface SentinelReceiptStatus {
   tone: "green" | "yellow" | "red" | "neutral";
-  code: "current" | "partial" | "identity-inferred" | "identity-conflict" | "target-invalid" | "stale" | "loading" | "missing" | "error";
+  code: "current" | "partial" | "identity-inferred" | "identity-conflict" | "target-invalid" | "target-mismatch" | "stale" | "loading" | "missing" | "error";
   label: string;
   detail: string;
   session: string;
@@ -38,6 +38,24 @@ const etDate = (nowMs: number): string => {
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   return `${value("year")}-${value("month")}-${value("day")}`;
 };
+
+function etMinute(nowMs: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(nowMs));
+  let hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  if (hour === 24) hour = 0;
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+  return hour * 60 + minute;
+}
+
+/** The session the desk is preparing to trade at this instant. After the real
+ * close (including half-days), that is the next trading day rather than today. */
+export function expectedSentinelForDate(nowMs: number): string {
+  const today = etDate(nowMs);
+  if (!isTradingDay(today) || etMinute(nowMs) >= sessionCloseMin(today)) return nextTradingDay(today);
+  return today;
+}
 
 const short = (value: string): string => value ? value.slice(5) : "—";
 
@@ -63,10 +81,11 @@ export function deriveSentinelReceiptStatus(input: SentinelReceiptInput, nowMs =
   if (input.state === "error") return { tone: "red", code: "error", label: "RECEIPT ERROR", detail: input.err || "Sentinel evidence could not be read", session, forDate, publishedAt, source, identityExplicit };
   if (input.state === "empty") return { tone: "yellow", code: "missing", label: "NO RECEIPT", detail: "no Sentinel evidence has been published", session, forDate, publishedAt, source, identityExplicit };
 
-  const today = etDate(nowMs);
+  const expectedForDate = expectedSentinelForDate(nowMs);
   if (!session || !forDate) return { tone: "yellow", code: "identity-inferred", label: "IDENTITY INCOMPLETE", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
-  if (today > forDate) return { tone: "red", code: "stale", label: "STALE FOR NEXT OPEN", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
   if (!isTradingDay(forDate)) return { tone: "red", code: "target-invalid", label: "TARGET IS NOT A SESSION", detail: `session ${short(session)} · target ${short(forDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  if (forDate < expectedForDate) return { tone: "red", code: "stale", label: "STALE FOR NEXT OPEN", detail: `session ${short(session)} · target ${short(forDate)} · expected ${short(expectedForDate)}`, session, forDate, publishedAt, source, identityExplicit };
+  if (forDate > expectedForDate) return { tone: "yellow", code: "target-mismatch", label: "TARGET DOES NOT MATCH NEXT OPEN", detail: `session ${short(session)} · target ${short(forDate)} · expected ${short(expectedForDate)}`, session, forDate, publishedAt, source, identityExplicit };
   const sessionConflicts = Boolean(input.session) && (
     !isTradingDay(input.session as string)
     || Boolean(input.briefAsOf && input.briefAsOf !== input.session)
