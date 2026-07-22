@@ -132,6 +132,8 @@
     "gate-shadow:hosted": "tsx scripts/gate-shadow.ts",
     "gate-shadow-policy-selftest": "tsx lib/research/gateShadowPolicy.selftest.ts",
     "after-close-research-selftest": "tsx lib/research/afterCloseResearch.selftest.ts",
+    "fixture-lane-selftest": "tsx lib/ui/fixtureLane.selftest.ts",
+    "execution-observation-persistence-selftest": "tsx worker/src/executionObservationPersistence.selftest.ts",
     "a6-read": "tsx --env-file=.env.local scripts/a6-read.ts",
     "backup-archives": "tsx scripts/backup-archives.ts",
     "iv-bank": "tsx --env-file=.env.local scripts/iv-bank.ts",
