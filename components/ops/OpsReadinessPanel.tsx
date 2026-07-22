@@ -57,6 +57,6 @@ export function OpsReadinessPanel({ model, compact = false }: { model: OpsReadin
       </span>)}</div>
       {model.brokerReceipt.mismatches.length > 0 && <div className="opsr-mismatches">{model.brokerReceipt.mismatches.slice(0, 12).map((row) => <span key={`${row.accountId}:${row.symbol}`}><b>{row.accountName} · {row.symbol}</b><em>broker {row.brokerQty} / desk {row.deskQty} · Δ {row.delta > 0 ? "+" : ""}{row.delta}</em></span>)}</div>}
     </details>}
-    <footer><span>CAND {model.counts.candidates}</span><span>FILLS {model.counts.fills}</span><span>CAPTURE {model.counts.capturedPositions}/{model.counts.fills}</span><span>ARMS {model.counts.managerArms}/{model.counts.expectedManagerArms}</span></footer>
+    <footer><span>CAND {model.counts.candidates}</span><span>FILLS {model.counts.fills}</span><span>CAPTURE {model.counts.capturedPositions}/{model.counts.fills}</span><span>ADMIT {model.counts.admittedManagerArms}/{model.counts.expectedManagerArms}</span><span>OBS {model.counts.managerArms}/{model.counts.expectedManagerArms}</span></footer>
   </section>;
 }

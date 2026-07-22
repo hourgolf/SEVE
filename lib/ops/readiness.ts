@@ -123,6 +123,7 @@ export interface OpsReadinessModel {
     suppressed: number;
     fills: number;
     capturedPositions: number;
+    admittedManagerArms: number;
     managerArms: number;
     expectedManagerArms: number;
   };
@@ -298,12 +299,16 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
 
   const managers = input.evidence.managers;
   const managerRows = managers.state === "ok" ? managers.rows.filter((row) => positionIds.has(row.position_id)) : [];
-  const observedArms = new Set(managerRows.map((row) => `${row.position_id}:${row.manager_id}`));
+  const admittedArms = new Set(managerRows.map((row) => `${row.position_id}:${row.manager_id}`));
+  const observingArms = new Set(managerRows
+    .filter((row) => row.evidence_state === "observing")
+    .map((row) => `${row.position_id}:${row.manager_id}`));
   const expectedArms = positionIds.size * expectedManagerArms;
   if (managers.state === "error") evidence.push(readError("managers", "MANAGER ARMS", managers));
   else if (!positionIds.size) evidence.push({ id: "managers", label: "MANAGER ARMS", state: "WAITING", tone: "neutral", detail: `${expectedManagerArms} shadow arms become due after each RC5 fill` });
-  else if (observedArms.size === expectedArms) evidence.push({ id: "managers", label: "MANAGER ARMS", state: "COMPLETE", tone: "green", detail: `${observedArms.size}/${expectedArms} position-arm receipts observed`, observedAt: latest(managerRows, (row) => row.last_observed_at ?? row.entry_at)?.last_observed_at ?? undefined });
-  else evidence.push({ id: "managers", label: "MANAGER ARMS", state: managerDue ? "INCOMPLETE" : "STARTING", tone: managerDue ? "yellow" : "neutral", detail: `${observedArms.size}/${expectedArms} position-arm receipts observed` });
+  else if (observingArms.size === expectedArms) evidence.push({ id: "managers", label: "MANAGER ARMS", state: "COMPLETE", tone: "green", detail: `${observingArms.size}/${expectedArms} observing · ${admittedArms.size}/${expectedArms} admitted`, observedAt: latest(managerRows.filter((row) => row.evidence_state === "observing"), (row) => row.last_observed_at ?? row.entry_at)?.last_observed_at ?? undefined });
+  else if (admittedArms.size === expectedArms) evidence.push({ id: "managers", label: "MANAGER ARMS", state: "AWAITING QUOTES", tone: managerDue ? "yellow" : "neutral", detail: `${observingArms.size}/${expectedArms} observing · ${admittedArms.size}/${expectedArms} admitted` });
+  else evidence.push({ id: "managers", label: "MANAGER ARMS", state: managerDue ? "INCOMPLETE" : "STARTING", tone: managerDue ? "yellow" : "neutral", detail: `${observingArms.size}/${expectedArms} observing · ${admittedArms.size}/${expectedArms} admitted` });
 
   const publisher = input.evidence.publisher;
   const latestPublisher = publisher.state === "ok" ? latest(publisher.rows, (row) => row.created_at) : null;
@@ -328,6 +333,8 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
     const positionId = fill.position_id as string;
     const receipt = sessionReceipts.find((row) => row.position_id === positionId);
     const positionManagers = managerRows.filter((row) => row.position_id === positionId);
+    const positionAdmittedManagers = new Set(positionManagers.map((row) => row.manager_id));
+    const positionObservingManagers = new Set(positionManagers.filter((row) => row.evidence_state === "observing").map((row) => row.manager_id));
     const positionOutcomes = outcomes.filter((row) => row.position_id === positionId);
     const outcome = latest(positionOutcomes.filter((row) => ["position_booked", "reconciliation_estimated", "reconciliation_unresolved"].includes(row.event_kind)), (row) => row.event_at);
     const closeTag = latest(positionOutcomes.filter((row) => row.event_kind === "manual_reason_tagged"), (row) => row.event_at);
@@ -335,9 +342,11 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
     const captureState: ReadinessItem = receipt
       ? { id: "capture", label: "CAPTURE", state: "OBSERVED", tone: "green", detail: `${receipt.sample_count} samples · ${receipt.dropped_samples} dropped`, observedAt: receipt.completed_at }
       : { id: "capture", label: "CAPTURE", state: captureDue ? "MISSING" : "FLUSHING", tone: captureDue ? "yellow" : "neutral", detail: "waiting for the exact-contract held-path receipt" };
-    const managerState: ReadinessItem = positionManagers.length === expectedManagerArms
-      ? { id: "managers", label: "MANAGER ARMS", state: "8/8", tone: "green", detail: "all preregistered arms share this filled position" }
-      : { id: "managers", label: "MANAGER ARMS", state: `${positionManagers.length}/${expectedManagerArms}`, tone: managerDue ? "yellow" : "neutral", detail: "shadow arms observed for this position" };
+    const managerState: ReadinessItem = positionObservingManagers.size === expectedManagerArms
+      ? { id: "managers", label: "MANAGER ARMS", state: `${positionObservingManagers.size}/${expectedManagerArms} OBSERVING`, tone: "green", detail: "all preregistered arms have durable quote evidence for this filled position" }
+      : positionAdmittedManagers.size === expectedManagerArms
+        ? { id: "managers", label: "MANAGER ARMS", state: `${positionObservingManagers.size}/${expectedManagerArms} OBSERVING`, tone: managerDue ? "yellow" : "neutral", detail: `${positionAdmittedManagers.size}/${expectedManagerArms} arms admitted · durable quote evidence pending` }
+        : { id: "managers", label: "MANAGER ARMS", state: `${positionObservingManagers.size}/${expectedManagerArms} OBSERVING`, tone: managerDue ? "yellow" : "neutral", detail: `${positionAdmittedManagers.size}/${expectedManagerArms} arms admitted` };
     const closed = outcome && ["position_booked", "reconciliation_estimated"].includes(outcome.event_kind);
     const closeState: ReadinessItem = closed
       ? { id: "close", label: "CLOSE", state: "BOOKED", tone: "green", detail: `${closeTag?.close_reason ?? outcome.close_reason ?? "unclassified"} · ${outcome.realized_pnl == null ? "P&L unavailable" : `$${Math.round(outcome.realized_pnl)}`}`, observedAt: closeTag?.event_at ?? outcome.event_at }
@@ -364,7 +373,7 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
 
   return {
     sessionDateEt: clock.date, phase, summary, configuration, evidence,
-    counts: { candidates, suppressed, fills: fillsByPosition.size, capturedPositions, managerArms: observedArms.size, expectedManagerArms: expectedArms },
+    counts: { candidates, suppressed, fills: fillsByPosition.size, capturedPositions, admittedManagerArms: admittedArms.size, managerArms: observingArms.size, expectedManagerArms: expectedArms },
     chains,
     brokerReceipt,
   };

@@ -98,13 +98,28 @@ const managers = DAY1_MANAGER_ARMS.map((manager_id, index) => ({
   manager_policy_version: "manager", shadow_book_version: "shadow", censor_code: null,
 }));
 const complete = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]), captures: ok([capture]), managers: ok(managers) }) }));
-assert.match(find(complete, "release").detail, /weekend-day1-2026-07-21-rc5\.2/);
+assert.ok(find(complete, "release").detail.includes(DAY1_RELEASE_ID));
 assert.doesNotMatch(find(complete, "release").detail, /RC5\.1/);
 assert.equal(find(complete, "capture").state, "OBSERVED");
 assert.equal(find(complete, "managers").state, "COMPLETE");
+assert.equal(complete.counts.admittedManagerArms, 8);
 assert.equal(complete.counts.managerArms, 8);
 assert.equal(complete.chains[0].steps.find((step) => step.id === "capture")?.state, "OBSERVED");
-assert.equal(complete.chains[0].steps.find((step) => step.id === "managers")?.state, "8/8");
+assert.equal(complete.chains[0].steps.find((step) => step.id === "managers")?.state, "8/8 OBSERVING");
+
+const pendingManagers = managers.map((row) => ({ ...row, evidence_state: "pending_quote", last_observed_at: null }));
+const awaitingQuotes = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]), captures: ok([capture]), managers: ok(pendingManagers) }) }));
+assert.equal(find(awaitingQuotes, "managers").state, "AWAITING QUOTES");
+assert.equal(find(awaitingQuotes, "managers").tone, "yellow");
+assert.equal(awaitingQuotes.counts.admittedManagerArms, 8);
+assert.equal(awaitingQuotes.counts.managerArms, 0);
+assert.equal(awaitingQuotes.chains[0].steps.find((step) => step.id === "managers")?.state, "0/8 OBSERVING");
+assert.equal(awaitingQuotes.chains[0].steps.find((step) => step.id === "managers")?.tone, "yellow");
+
+const mixedManagers = managers.map((row, index) => index === 7 ? { ...row, evidence_state: "pending_quote", last_observed_at: null } : row);
+const partiallyObserving = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]), managers: ok(mixedManagers) }) }));
+assert.equal(find(partiallyObserving, "managers").state, "AWAITING QUOTES");
+assert.match(find(partiallyObserving, "managers").detail, /7\/8 observing · 8\/8 admitted/);
 
 const partial = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]), captures: ok([capture]), managers: ok(managers.slice(0, 7)) }) }));
 assert.equal(find(partial, "managers").state, "INCOMPLETE");
@@ -184,4 +199,4 @@ const brokerPartial = deriveOpsReadiness(base({ evidence: evidence({ broker: ok(
 }]) }) }));
 assert.equal(find(brokerPartial, "reconciliation").tone, "yellow");
 
-console.log("ops-readiness-selftest: 47/47 passed");
+console.log("ops-readiness-selftest: 58/58 passed");
