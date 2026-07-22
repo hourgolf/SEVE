@@ -65,4 +65,4 @@ jobs:
               exit 1
             fi
           fi
-          npm run remote-morning-publisher -- "${args[@]}"
+          npm run remote-morning-publisher:hosted -- "${args[@]}"

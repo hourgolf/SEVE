@@ -147,6 +147,7 @@
     "sentinel-query-smoke": "tsx --env-file=.env.local scripts/sentinel-query-smoke.ts",
     "morning-brief": "caffeinate -i tsx --env-file=.env.local scripts/morning-brief.ts",
     "remote-morning-publisher": "tsx --env-file=.env.local scripts/remote-morning-publisher.ts",
+    "remote-morning-publisher:hosted": "tsx scripts/remote-morning-publisher.ts",
     "remote-morning-publisher-selftest": "tsx lib/sentinel/remoteMorningPublisher.selftest.ts",
     "stairstep-shadow": "tsx --env-file=.env.local scripts/stairstep-shadow.ts",
     "override-scorecard": "tsx --env-file=.env.local scripts/override-scorecard.ts",
