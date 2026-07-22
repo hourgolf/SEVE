@@ -28,6 +28,7 @@
 // ============================================================================
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import {
   coalesceVbCandidateDecisions,
   type VbCandidateDecision,
@@ -37,7 +38,7 @@ import {
   GATE_SHADOW_ALL_BLOCKS,
   GATE_SHADOW_SEQUENTIAL_BLOCKS,
 } from "../lib/research/gateShadowPolicy.js";
-import { etDayRangeUtc, resolveAfterCloseSession } from "../lib/research/afterCloseResearch.js";
+import { etDayRangeUtc, etSessionCloseUtc, resolveAfterCloseSession } from "../lib/research/afterCloseResearch.js";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const READ_ONLY = process.argv.includes("--read-only");
@@ -50,9 +51,12 @@ const daysArg = process.argv.indexOf("--days");
 const DAYS = daysArg > 0 ? Math.max(1, Number(process.argv[daysArg + 1]) || 6) : 6;
 const sessionArg = process.argv.indexOf("--session");
 const SESSION = resolveAfterCloseSession(sessionArg > 0 ? String(process.argv[sessionArg + 1] ?? "") : null, Date.now());
-const LEDGER = "data/gate-shadow.json";
-const CANDIDATE_LEDGER = "data/vb-candidates.json";
-const CANDIDATE_CENSORS = "data/vb-candidate-censors.json";
+const outputDirArg = process.argv.indexOf("--output-dir");
+const OUTPUT_DIR = outputDirArg > 0 ? String(process.argv[outputDirArg + 1] ?? "").trim() : "data";
+if (!OUTPUT_DIR) throw new Error("--output-dir requires a path");
+const LEDGER = join(OUTPUT_DIR, "gate-shadow.json");
+const CANDIDATE_LEDGER = join(OUTPUT_DIR, "vb-candidates.json");
+const CANDIDATE_CENSORS = join(OUTPUT_DIR, "vb-candidate-censors.json");
 const POLICY_STOP = 50; // worker policy.PREMIUM_STOP_PCT — the shadow's fallback stop
 const MAX_PER_DAY = 6;  // bench churn cap per (channel, day) — daily-stop latch isn't modeled
 
@@ -157,10 +161,17 @@ async function reconstruct(s: any, slug: string, cfg: Cfg): Promise<ShadowRow> {
     base.entryAsk = ask;
   }
   if (!(ask > 0)) return base;
-  const dayEnd = `${String(s.created_at).slice(0, 10)}T23:59:59Z`;
+  // `created_at.slice(0, 10)T23:59:59Z` is a UTC-day boundary, not an ET
+  // session boundary. In summer it admitted quotes through 19:59 ET and let
+  // virtual trades exit an hour after the regular close. Cap the path at the
+  // maintained market-calendar close (exclusive), including half days.
+  const sessionDateEt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(s.created_at));
+  const sessionClose = etSessionCloseUtc(sessionDateEt);
   const { data: quotes } = await sb
     .from("option_quotes").select("mid,captured_at")
-    .eq("occ_symbol", occ).gte("captured_at", s.created_at).lte("captured_at", dayEnd)
+    .eq("occ_symbol", occ).gte("captured_at", s.created_at).lt("captured_at", sessionClose)
     .order("captured_at", { ascending: true }).limit(5000);
   const qs = ((quotes ?? []) as any[])
     .map((q) => ({ m: Number(q.mid), t: String(q.captured_at) }))
@@ -340,7 +351,7 @@ async function main() {
       .from("events").select("created_at,message,meta")
       .like("message", "stream-shadow: gamma-open%")
       .order("created_at", { ascending: true }).limit(2000);
-    const GLED = "data/gamma-open.json";
+    const GLED = join(OUTPUT_DIR, "gamma-open.json");
     const prev: Record<string, unknown> = existsSync(GLED) ? JSON.parse(readFileSync(GLED, "utf8")) : {};
     let gNew = 0;
     for (const e of (gam ?? []) as any[]) {
@@ -348,12 +359,12 @@ async function main() {
       const key = `${sym}|${String(e.created_at).slice(0, 10)}`;
       if (!(key in prev)) { prev[key] = { at: e.created_at, ...(e.meta ?? {}) }; gNew++; }
     }
-    mkdirSync("data", { recursive: true });
+    mkdirSync(OUTPUT_DIR, { recursive: true });
     writeFileSync(GLED, JSON.stringify(prev, null, 1));
     console.log(`  gamma-open ledger: +${gNew} new / ${Object.keys(prev).length} total sym-days banked → ${GLED} (events prune 30d — this is the durable copy)`);
   } catch (e) { console.error(`  gamma-open ledger failed — ${(e as Error).message}`); }
 
-  mkdirSync("data", { recursive: true });
+  mkdirSync(OUTPUT_DIR, { recursive: true });
   const rows = [...ledger.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   writeFileSync(LEDGER, JSON.stringify(rows, null, 1));
   const candidateLedger = loadCandidateLedger();

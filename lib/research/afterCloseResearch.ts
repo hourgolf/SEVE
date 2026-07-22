@@ -1,3 +1,5 @@
+import { sessionCloseMin } from "../../engine/market-calendar.js";
+
 const ET_DATE = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/New_York",
   year: "numeric",
@@ -37,6 +39,21 @@ function etMidnightUtcMs(dateET: string): number {
   const [year, month, day] = dateET.split("-").map(Number);
   const naiveUtc = Date.UTC(year, month - 1, day);
   return naiveUtc - offsetMsAt(naiveUtc);
+}
+
+/** Convert an ET wall-clock minute on a maintained session date to UTC.
+ * The offset is derived with Intl, so summer/winter and early-close sessions
+ * do not inherit a fixed-offset or UTC-day boundary. */
+export function etWallMinuteUtc(dateET: string, minuteET: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateET)) throw new Error("session must be YYYY-MM-DD");
+  if (!Number.isInteger(minuteET) || minuteET < 0 || minuteET > 1_440)
+    throw new Error("ET wall minute must be an integer from 0 through 1440");
+  return new Date(etMidnightUtcMs(dateET) + minuteET * 60_000).toISOString();
+}
+
+/** Exclusive regular-session quote boundary for one ET session. */
+export function etSessionCloseUtc(dateET: string): string {
+  return etWallMinuteUtc(dateET, sessionCloseMin(dateET));
 }
 
 /** Exact [start, end) UTC bounds for one New York calendar date, including 23/25-hour DST days. */

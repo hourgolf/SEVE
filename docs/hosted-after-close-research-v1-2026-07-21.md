@@ -36,12 +36,15 @@ Remote publication is idempotent by `signal_id`. A failed workflow is visible in
 does not authorize a configuration change, channel promotion, order, position action or release.
 Exact Databento validation remains a separate T+1 gate.
 
-For the July 21 freeze, the 138 retained candidates collapse to 34 exact contracts. The newest
-requested quote is 2026-07-21T20:59:03.098Z, so the strict 24-hour rolling-history gate opens at
-2026-07-22T20:59:03.098Z (13:59:03 Pacific). The prepared validator must not download before that
+For the corrected July 21 freeze, the 138 retained candidates collapse to 34 exact contracts. The
+newest requested quote is 2026-07-21T19:59:02.755Z, so the strict 24-hour rolling-history gate opens at
+2026-07-22T19:59:02.755Z (12:59:02.755 Pacific). The prepared validator must not download before that
 instant and must stop on provider refusal, a missing exact contract, boundary failure, or quote gap.
 The validator makes one bounded request per exact contract so provider responses and memory use cannot
 expand into an unbounded all-session, all-contract payload.
+
+The original later clock came from a UTC-day rather than ET-session boundary and remains documented
+in `docs/july-21-research-boundary-correction-2026-07-21.md`.
 
 ## Enablement gate
 

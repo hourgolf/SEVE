@@ -1,5 +1,9 @@
 # July 21 Day 1 after-close research receipt
 
+> Historical receipt note: the original virtual session-close boundary admitted one hour of
+> after-hours quotes for eight rows. The preserved receipt below is superseded for those paths by
+> `docs/july-21-research-boundary-correction-2026-07-21.md`; live paper-trade evidence is unchanged.
+
 Status: research-only evidence published; paper roster and production behavior unchanged.
 
 ## Executive result

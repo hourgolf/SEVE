@@ -45,7 +45,7 @@ These are not Wednesday entry blockers:
    fallback. Replacing the old Claude interpretation with a versioned Codex-owned analysis contract
    is a separate after-close build.
 2. **First exact family replay.** July 21's 138 retained candidates collapse to 34 exact contracts.
-   The strict rolling-history gate opens at `2026-07-22T20:59:03.098Z` (13:59:03 Pacific). The runner
+   The corrected strict rolling-history gate opens at `2026-07-22T19:59:02.755Z` (12:59:02.755 Pacific). The runner
    must stop on provider refusal, missing contracts, checksum failure, boundary gaps, or failed
    identity joins.
 3. **Exit-policy evidence floor.** One session is insufficient. Manager selection requires at least
@@ -71,4 +71,3 @@ does not by itself assert that the executor is down.
 4. At the exact provider gate, run the family replay locally and preserve every censor.
 5. Add the session to the prospective evidence ledger without pooling siblings or policy eras.
 6. Continue Supabase query/egress profiling and the Codex-owned Sentinel design as separate slices.
-
