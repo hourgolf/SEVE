@@ -7,9 +7,13 @@ import { getSupabase } from "@/lib/supabaseClient";
 // scripts/sentinel.ts to the `events` table). The Brief panel renders `brief` (forward
 // terrain: levels/events/dealer/priors); the Sentinel panel renders `judge` + `scan`
 // (backward opportunity/drift + the LLM verdict). `digest` is the durable markdown kept
-// for the legacy-fallback path. Latest-only, self-fetched, read-only — the durable copy
-// lives in data/sentinel/<date>.md. Both panels call this; the extra light query mirrors
-// the existing self-fetching panels (Lab, Forensics).
+// for the legacy-fallback path. Latest-only and read-only — the durable copy lives in
+// data/sentinel/<date>.md. The page-owned hook is passed through SurfaceProps to the active
+// shells; isolated legacy panels retain their transitional reads until that surface retires.
+
+const SENTINEL_LOOKBACK_DAYS = 14;
+const SENTINEL_REFRESH_MS = 5 * 60_000;
+const SENTINEL_RETRY_MS = 15_000;
 
 export interface BriefStat { n: number; perT: number; win: number }
 export interface BriefLevel { px: number; label: string }
@@ -69,16 +73,57 @@ export function useSentinelDigest(): {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+    let inFlight = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearReceipt = () => {
+      setBrief(null);
+      setScan(null);
+      setJudge(null);
+      setLens(null);
+      setDigest(null);
+      setDate("");
+      setForDate("");
+      setSession("");
+      setCreatedAt("");
+      setPublishedAt("");
+      setMessage("");
+      setSchemaVersion(null);
+      setPublisherVersion("");
+      setPublisherEvidenceState("");
+      setPublisherEvidenceDetail("");
+    };
+
+    const schedule = (delayMs: number) => {
+      if (!alive) return;
+      timer = setTimeout(() => { void poll(); }, delayMs);
+    };
+
+    async function poll() {
+      if (!alive || inFlight) return;
+      inFlight = true;
+      let nextDelay = SENTINEL_REFRESH_MS;
       try {
+        const cutoff = new Date(Date.now() - SENTINEL_LOOKBACK_DAYS * 24 * 60 * 60_000).toISOString();
         const { data, error } = await getSupabase()
           .from("events").select("message,created_at,meta")
+          .gte("created_at", cutoff)
           .like("message", "sentinel:%").order("created_at", { ascending: false }).limit(1);
         if (!alive) return;
-        if (error) { setState("error"); setErr(error.message); return; }
+        if (error) {
+          setState("error");
+          setErr(error.message);
+          nextDelay = SENTINEL_RETRY_MS;
+          return;
+        }
         const row = (data ?? [])[0] as { message?: string; created_at?: string; meta?: Record<string, unknown> } | undefined;
         const meta = row?.meta;
-        if (!meta) { setState("empty"); return; }
+        if (!meta) {
+          clearReceipt();
+          setErr("");
+          setState("empty");
+          return;
+        }
         setBrief((meta.brief as Brief) ?? null);
         setScan((meta.scan as Scan) ?? null);
         setJudge((meta.judge as Judge) ?? null);
@@ -95,10 +140,25 @@ export function useSentinelDigest(): {
         const evidenceState = meta.publisherEvidenceState;
         setPublisherEvidenceState(evidenceState === "complete" || evidenceState === "partial" || evidenceState === "error" ? evidenceState : "");
         setPublisherEvidenceDetail((meta.publisherEvidenceDetail as string) ?? "");
+        setErr("");
         setState("ok");
-      } catch (e) { if (alive) { setState("error"); setErr((e as Error).message); } }
-    })();
-    return () => { alive = false; };
+      } catch (e) {
+        if (alive) {
+          setState("error");
+          setErr((e as Error).message);
+          nextDelay = SENTINEL_RETRY_MS;
+        }
+      } finally {
+        inFlight = false;
+        schedule(nextDelay);
+      }
+    }
+
+    void poll();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   return { brief, scan, judge, lens, digest, date, forDate, session, createdAt, publishedAt, message, schemaVersion, publisherVersion, publisherEvidenceState, publisherEvidenceDetail, state, err };
