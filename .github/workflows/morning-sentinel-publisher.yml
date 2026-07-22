@@ -2,9 +2,12 @@ name: morning sentinel publisher
 
 on:
   schedule:
-    # 08:55 ET in summer / winter. The publisher's calendar and ET window
-    # make the seasonally wrong invocation a no-op.
+    # 08:55, 09:00, 09:05, and 09:10 ET in summer / winter. GitHub schedules
+    # can start late, so the extra invocations are idempotent retries; the
+    # publisher's finish receipt makes every run after the first a no-op.
+    # The calendar and ET window also make the seasonally wrong hour a no-op.
     - cron: "55 12,13 * * 1-5"
+    - cron: "0,5,10 13,14 * * 1-5"
   workflow_dispatch:
     inputs:
       dry_run:

@@ -16,7 +16,9 @@ start the trading worker.
 
 ## Schedule and safety
 
-- Cron: `55 12,13 * * 1-5` UTC, covering 08:55 ET in both daylight and standard time.
+- Cron: `55 12,13 * * 1-5` plus `0,5,10 13,14 * * 1-5` UTC, covering 08:55, 09:00,
+  09:05, and 09:10 ET in both daylight and standard time. These redundant starts protect against
+  ordinary hosted-runner delay; the first finish receipt makes later starts no-op.
 - The maintained market calendar and the publisher's 08:55–09:10 ET window make the seasonally
   wrong invocation a no-op.
 - Concurrency is one, with no cancellation of a running publisher.
