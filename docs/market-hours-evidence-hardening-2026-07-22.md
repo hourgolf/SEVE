@@ -42,6 +42,14 @@ coverage, blockers, and per-channel coverage. It cannot write externally,
 authorize an order, or authorize a policy change. A fixture-only panel exposes
 the states for 909/Folio product work without subscribing to live data.
 
+The hosted after-close workflow is also prepared to run the existing
+`dark-candidate-freezer-v1` against the same resolved ET session as the gate
+shadow publisher. It retains the freeze, exact-contract request manifest,
+human report, receipt, and their checksums in the 30-day Actions artifact. The
+hosted freezer is Supabase SELECT-only and writes only to the ephemeral Actions
+workspace; it has no Databento, Alpaca, R2, or order credentials. This wiring is
+local review work and is not active until a later post-close merge.
+
 ## July 21 exact replay gate
 
 The frozen local ledger is unchanged:

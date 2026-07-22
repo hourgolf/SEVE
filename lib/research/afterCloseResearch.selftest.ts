@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { etDateAt, etDayRangeUtc, etSessionCloseUtc, etWallMinuteUtc, resolveAfterCloseSession } from "./afterCloseResearch";
 
 let passed = 0;
@@ -20,8 +21,14 @@ check("winter session close", etSessionCloseUtc("2026-01-12"), "2026-01-12T21:00
 check("early session close", etSessionCloseUtc("2026-11-27"), "2026-11-27T18:00:00.000Z");
 check("summer 15:25 wall minute", etWallMinuteUtc("2026-07-21", 15 * 60 + 25), "2026-07-21T19:25:00.000Z");
 
+const workflow = readFileSync(new URL("../../.github/workflows/after-close-research.yml", import.meta.url), "utf8");
+check("hosted workflow freezes dark candidates", workflow.includes("npm run dark-candidate-freeze:hosted"), true);
+check("hosted workflow uses one resolved ET session", workflow.includes("SESSION_DATE_ET") && !workflow.includes('session="today-et"'), true);
+check("hosted workflow retains exact-contract manifest", workflow.includes("data/dark-candidate-freezes/**"), true);
+check("hosted workflow remains credential-minimal", /DATABENTO|ALPACA|R2_/.test(workflow), false);
+
 let invalid = false;
 try { resolveAfterCloseSession("07/21/2026", 0); } catch { invalid = true; }
 check("invalid session fails closed", invalid, true);
 
-console.log(`after-close-research-selftest: ${passed}/14 passed`);
+console.log(`after-close-research-selftest: ${passed}/${passed} passed`);

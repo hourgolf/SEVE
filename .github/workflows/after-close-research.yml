@@ -37,29 +37,53 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Resolve ET session date
+        shell: bash
+        env:
+          SESSION_INPUT: ${{ inputs.session }}
+        run: |
+          session="$SESSION_INPUT"
+          if [[ -z "$session" ]]; then session="$(TZ=America/New_York date +%F)"; fi
+          if [[ ! "$session" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Invalid ET session date: $session" >&2
+            exit 1
+          fi
+          echo "SESSION_DATE_ET=$session" >> "$GITHUB_ENV"
       - name: Verify research policy
         run: |
           npm run after-close-research-selftest
           npm run gate-shadow-policy-selftest
           npm run vb-candidate-evidence-selftest
+          npm run dark-candidate-freeze-selftest
       - name: Build and publish session research
         shell: bash
         env:
-          SESSION_INPUT: ${{ inputs.session }}
           DRY_RUN_INPUT: ${{ inputs.dry_run }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          session="$SESSION_INPUT"
-          if [[ -z "$session" ]]; then session="today-et"; fi
-          args=(--session "$session")
+          args=(--session "$SESSION_DATE_ET")
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN_INPUT" == "true" ]]; then
             args+=(--read-only)
           fi
           npm run gate-shadow:hosted -- "${args[@]}"
+      - name: Freeze dark candidate exact-contract requests
+        shell: bash
+        run: |
+          npm run dark-candidate-freeze:hosted -- \
+            --date "$SESSION_DATE_ET" \
+            --out "data/dark-candidate-freezes/$SESSION_DATE_ET"
       - name: Freeze artifact checksums
         shell: bash
         run: |
-          sha256sum data/gate-shadow.json data/vb-candidates.json data/vb-candidate-censors.json | tee after-close-sha256.txt
+          sha256sum \
+            data/gate-shadow.json \
+            data/vb-candidates.json \
+            data/vb-candidate-censors.json \
+            "data/dark-candidate-freezes/$SESSION_DATE_ET/freeze.json" \
+            "data/dark-candidate-freezes/$SESSION_DATE_ET/contract-manifest.json" \
+            "data/dark-candidate-freezes/$SESSION_DATE_ET/report.md" \
+            "data/dark-candidate-freezes/$SESSION_DATE_ET/receipt.json" \
+            | tee after-close-sha256.txt
           {
             echo "## After-close research receipt"
             echo '```text'
@@ -74,6 +98,7 @@ jobs:
             data/gate-shadow.json
             data/vb-candidates.json
             data/vb-candidate-censors.json
+            data/dark-candidate-freezes/**
             after-close-sha256.txt
           if-no-files-found: error
           retention-days: 30
