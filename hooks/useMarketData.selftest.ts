@@ -20,5 +20,11 @@ assert.match(source, /const HISTORY_LIMIT = 2340;/, "intraday startup history sh
 assert.match(source, /select\(OPTION_QUOTE_FIELDS\)/, "live chain should transfer only displayed/modeling fields");
 assert.match(source, /const BARS_POLL_MS = 60000;/, "closed-bar safety polling should match the minute write cadence");
 assert.match(source, /const RECENT_BARS = 60;/, "recurring chart reads should transfer only the merge tail");
+assert.match(source, /POLL_INTERVAL_MS = 300000/, "heavy chain fallback should not duplicate the normal minute realtime refresh");
+assert.match(source, /MARKET_POLL_DEDUPE_MS = 30_000/, "near-simultaneous realtime and safety triggers must coalesce");
+assert.match(source, /filter: `symbol=eq\.\$\{symbol\}`/, "realtime bar trigger must be scoped to the selected symbol");
+assert.doesNotMatch(marketPoll, /from\("underlying_bars"\)/, "chain/event poll must not duplicate the dedicated bar poll");
+assert.match(source.slice(barsStart), /bars: markReadSuccess/, "dedicated bar poll must own its success health");
+assert.match(source.slice(barsStart), /bars: markReadFailure/, "dedicated bar poll must own its failure health");
 
-console.log("market-data-read-selftest: 11/11 passed");
+console.log("market-data-read-selftest: 17/17 passed");

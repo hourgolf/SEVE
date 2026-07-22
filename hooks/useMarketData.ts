@@ -17,10 +17,12 @@ import type {
 import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
 import { useAuth } from "@/hooks/useAuth";
 
-// CHAIN (option_quotes) safety-net poll. The chain is the heavy read (200 full
-// rows) and was the egress that blew the quota, so it runs slow; the bars poll +
-// spot below keep the CHART live independently. Pauses while the tab is hidden.
-export const POLL_INTERVAL_MS = 60000;
+// CHAIN (option_quotes) safety-net poll. Realtime selected-symbol bar inserts
+// drive the normal minute refresh; this slower loop is only the fallback. The
+// chain is the heavy read, so independently polling it every minute as well as
+// reacting to Realtime doubled the transfer for no operator benefit.
+export const POLL_INTERVAL_MS = 300000;
+const MARKET_POLL_DEDUPE_MS = 30_000;
 // Release identity changes only when the worker boots. Keep that verification
 // independent from the market loop so a slow journal lookup can never delay
 // chart/chain/tape updates. The bounded window keeps the leading-wildcard
@@ -186,6 +188,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     let cancelled = false;
     const live = () => mounted.current && !cancelled;
     let pollInFlight = false;
+    let lastMarketPollAt = 0;
     let releaseInFlight = false;
     let barsInFlight = false;
     let spotInFlight = false;
@@ -196,24 +199,23 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
 
     async function poll() {
       if (pollInFlight || !live()) return;
+      if (Date.now() - lastMarketPollAt < MARKET_POLL_DEDUPE_MS) return;
       pollInFlight = true;
+      lastMarketPollAt = Date.now();
       try {
       const sb = getSupabase();
       // These reads have different operational importance. Settling them
       // independently keeps an optional event/bar timeout from poisoning a
       // healthy options chain. The old exact COUNT scanned the whole symbol
       // partition every minute and was removed from the live path entirely.
-      const [quotesSettled, barsSettled, eventsSettled] = await Promise.allSettled([
+      const [quotesSettled, eventsSettled] = await Promise.allSettled([
         sb.from("option_quotes").select(OPTION_QUOTE_FIELDS).eq("underlying", symbol).order("captured_at", { ascending: false }).limit(200),
-        sb.from("underlying_bars").select("ts,open,high,low,close,volume,vwap").eq("symbol", symbol).order("ts", { ascending: false }).limit(RECENT_BARS),
         sb.from("events").select("id,level,strategist_id,message,meta,created_at").order("created_at", { ascending: false }).limit(14),
       ]);
 
       const quotesRes = quotesSettled.status === "fulfilled" ? quotesSettled.value : null;
-      const barsRes = barsSettled.status === "fulfilled" ? barsSettled.value : null;
       const eventsRes = eventsSettled.status === "fulfilled" ? eventsSettled.value : null;
       const quoteError = quotesSettled.status === "rejected" ? quotesSettled.reason : quotesRes?.error;
-      const barsError = barsSettled.status === "rejected" ? barsSettled.reason : barsRes?.error;
       const eventsError = eventsSettled.status === "rejected" ? eventsSettled.reason : eventsRes?.error;
       const completedAt = new Date().toISOString();
       if (quoteError) {
@@ -239,14 +241,10 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       }
 
       const warnings = [
-        barsError ? `CHART ${readErrorMessage(barsError)}` : null,
         eventsError ? `EVENT TAPE ${readErrorMessage(eventsError)}` : null,
       ].filter((value): value is string => value != null);
 
       const quotes = (quotesRes?.data ?? []) as OptionQuote[];
-      const recentDesc = barsError ? [] : ((barsRes?.data ?? []) as UnderlyingBar[]);
-      const recent = [...recentDesc].reverse(); // oldest → newest
-      const bars = recent.length ? mergeBars(historyBars.current, recent) : null;
       const events = eventsError ? null : ((eventsRes?.data ?? []) as MarketEvent[]);
 
       let status: FeedStatus = "stale";
@@ -261,7 +259,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
           const head = snapshot[0];
           spot =
             head?.underlying_price ??
-            (bars?.length ? bars[bars.length - 1].close : null);
+            (historyBars.current.length ? historyBars.current[historyBars.current.length - 1].close : null);
           const ageMin =
             (Date.now() - new Date(lastIngestTs).getTime()) / 60000;
           status = ageMin > STALE_AFTER_MIN ? "stale" : "live";
@@ -317,7 +315,6 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         spot: Date.now() - fastSpotAt.current < 15_000 && prev.spot != null ? prev.spot : spot,
         lastIngestTs,
         snapshot,
-        bars: bars ?? prev.bars,
         events: events ?? prev.events,
         expirations,
         updatedAt: completedAt,
@@ -327,9 +324,9 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         deltasModeled,
         readHealth: {
           option_chain: markReadSuccess(prev.readHealth.option_chain, completedAt),
-          bars: barsError
-            ? markReadFailure(prev.readHealth.bars, completedAt, readErrorMessage(barsError))
-            : markReadSuccess(prev.readHealth.bars, completedAt),
+          // Bar health is owned by the dedicated compact bar poll below. Do
+          // not overwrite it from the chain/event request.
+          bars: prev.readHealth.bars,
           events: eventsError
             ? markReadFailure(prev.readHealth.events, completedAt, readErrorMessage(eventsError))
             : markReadSuccess(prev.readHealth.events, completedAt),
@@ -350,7 +347,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
             isAccessError: ACCESS_ERROR_RE.test(message),
             readHealth: {
               option_chain: markReadFailure(prev.readHealth.option_chain, failedAt, message),
-              bars: markReadFailure(prev.readHealth.bars, failedAt, message),
+              bars: prev.readHealth.bars,
               events: markReadFailure(prev.readHealth.events, failedAt, message),
             },
           };
@@ -410,6 +407,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     async function pollBars() {
       if (barsInFlight || !live()) return;
       barsInFlight = true;
+      const completedAt = new Date().toISOString();
       try {
         const sb = getSupabase();
         const barsRes = await sb
@@ -418,12 +416,29 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
           .eq("symbol", symbol)
           .order("ts", { ascending: false })
           .limit(RECENT_BARS);
-        if (barsRes.error || !live()) return;
+        if (!live()) return;
+        if (barsRes.error) {
+          const message = readErrorMessage(barsRes.error);
+          setData((prev) => ({
+            ...prev,
+            readHealth: { ...prev.readHealth, bars: markReadFailure(prev.readHealth.bars, completedAt, message) },
+          }));
+          return;
+        }
         const recent = [...((barsRes.data ?? []) as UnderlyingBar[])].reverse();
         const bars = mergeBars(historyBars.current, recent);
-        setData((prev) => ({ ...prev, bars }));
-      } catch {
-        /* keep the last bars on a failed poll */
+        setData((prev) => ({
+          ...prev,
+          bars,
+          readHealth: { ...prev.readHealth, bars: markReadSuccess(prev.readHealth.bars, completedAt) },
+        }));
+      } catch (error) {
+        if (!live()) return;
+        const message = readErrorMessage(error);
+        setData((prev) => ({
+          ...prev,
+          readHealth: { ...prev.readHealth, bars: markReadFailure(prev.readHealth.bars, completedAt, message) },
+        }));
       } finally {
         barsInFlight = false;
       }
@@ -517,7 +532,9 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
     const stopBars = startVisibilityPoll(pollBars, BARS_POLL_MS);
     const stopSpot = startVisibilityPoll(pollSpot, SPOT_POLL_MS);
 
-    // Realtime: a CHEAP minute-tick trigger. Subscribe ONLY to underlying_bars
+    // Realtime: a CHEAP minute-tick trigger. Subscribe ONLY to this chart's
+    // selected symbol in underlying_bars. The prior unfiltered subscription
+    // could refetch the active chain once for each SPY/QQQ/IWM minute insert.
     // (~1 row/min/symbol) — NOT option_quotes, whose hundreds-of-rows/min fan-out
     // was the egress that blew the quota. A new bar = a new minute of tape, so
     // refetch the chain then; the poll above is the safety net. Skipped while
@@ -535,7 +552,10 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
       const sb = getSupabase();
       channel = sb
         .channel("monitor-feed")
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "underlying_bars" }, trigger)
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "underlying_bars",
+          filter: `symbol=eq.${symbol}`,
+        }, trigger)
         .subscribe();
     } catch {
       /* env missing — poll-only */

@@ -95,6 +95,7 @@
     "mobile-review-selftest": "tsx lib/mobile/reviewWorkspace.selftest.ts",
     "release-receipt-selftest": "tsx lib/ops/releaseReceipt.selftest.ts",
     "market-data-read-selftest": "tsx hooks/useMarketData.selftest.ts",
+    "position-peaks-read-selftest": "tsx hooks/usePositionPeaks.selftest.ts",
     "ops-evidence-read-selftest": "tsx hooks/useOpsEvidence.selftest.ts",
     "desk-feed-egress-selftest": "tsx hooks/useDeskFeed.selftest.ts",
     "ops-readiness-selftest": "tsx lib/ops/readiness.selftest.ts",
