@@ -1,0 +1,65 @@
+name: morning sentinel publisher
+
+on:
+  schedule:
+    # 08:55 ET in summer / winter. The publisher's calendar and ET window
+    # make the seasonally wrong invocation a no-op.
+    - cron: "55 12,13 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Evaluate the publisher without writing receipts"
+        required: true
+        default: true
+        type: boolean
+      at_utc:
+        description: "Optional ISO clock for a dry-run only"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: morning-sentinel-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MORNING_PUBLISHER_TIMEOUT_MS: "60000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify publisher policy
+        run: |
+          npm run remote-morning-publisher-selftest
+          npm run sentinel-receipt-selftest
+          npm run market-calendar-selftest
+          npm run server-supabase-selftest
+      - name: Publish current bounded receipt
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          AT_INPUT: ${{ inputs.at_utc }}
+        run: |
+          args=()
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$DRY_RUN_INPUT" == "true" ]]; then
+              args+=(--dry-run)
+              if [[ -n "$AT_INPUT" ]]; then args+=(--at "$AT_INPUT"); fi
+            elif [[ -n "$AT_INPUT" ]]; then
+              echo "::error::at_utc is test-only and requires dry_run=true"
+              exit 1
+            fi
+          fi
+          npm run remote-morning-publisher -- "${args[@]}"
