@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { readSentinelOperatorPacket, type SentinelOperatorPacket } from "@/lib/sentinel/operatorPacket";
 
 // One read for the whole §04 sentinel pair — the nightly digest event (published by
 // scripts/sentinel.ts to the `events` table). The Brief panel renders `brief` (forward
@@ -50,6 +51,7 @@ export function useSentinelDigest(): {
   digest: string | null; date: string; forDate: string; session: string;
   createdAt: string; publishedAt: string; message: string; schemaVersion: number | null;
   publisherVersion: string; state: DigestState; err: string;
+  interpretiveProvider: string; operatorPacket: SentinelOperatorPacket | null;
   publisherEvidenceState: "complete" | "partial" | "error" | "";
   publisherEvidenceDetail: string;
 } {
@@ -66,6 +68,8 @@ export function useSentinelDigest(): {
   const [message, setMessage] = useState("");
   const [schemaVersion, setSchemaVersion] = useState<number | null>(null);
   const [publisherVersion, setPublisherVersion] = useState("");
+  const [interpretiveProvider, setInterpretiveProvider] = useState("");
+  const [operatorPacket, setOperatorPacket] = useState<SentinelOperatorPacket | null>(null);
   const [publisherEvidenceState, setPublisherEvidenceState] = useState<"complete" | "partial" | "error" | "">("");
   const [publisherEvidenceDetail, setPublisherEvidenceDetail] = useState("");
   const [state, setState] = useState<DigestState>("loading");
@@ -90,6 +94,8 @@ export function useSentinelDigest(): {
       setMessage("");
       setSchemaVersion(null);
       setPublisherVersion("");
+      setInterpretiveProvider("");
+      setOperatorPacket(null);
       setPublisherEvidenceState("");
       setPublisherEvidenceDetail("");
     };
@@ -137,6 +143,8 @@ export function useSentinelDigest(): {
         setMessage(row?.message ?? "");
         setSchemaVersion(typeof meta.schemaVersion === "number" ? meta.schemaVersion : null);
         setPublisherVersion((meta.publisherVersion as string) ?? "");
+        setInterpretiveProvider((meta.interpretiveProvider as string) ?? "");
+        setOperatorPacket(readSentinelOperatorPacket(meta.operatorPacket));
         const evidenceState = meta.publisherEvidenceState;
         setPublisherEvidenceState(evidenceState === "complete" || evidenceState === "partial" || evidenceState === "error" ? evidenceState : "");
         setPublisherEvidenceDetail((meta.publisherEvidenceDetail as string) ?? "");
@@ -161,7 +169,7 @@ export function useSentinelDigest(): {
     };
   }, []);
 
-  return { brief, scan, judge, lens, digest, date, forDate, session, createdAt, publishedAt, message, schemaVersion, publisherVersion, publisherEvidenceState, publisherEvidenceDetail, state, err };
+  return { brief, scan, judge, lens, digest, date, forDate, session, createdAt, publishedAt, message, schemaVersion, publisherVersion, interpretiveProvider, operatorPacket, publisherEvidenceState, publisherEvidenceDetail, state, err };
 }
 
 // Legacy fallback: split a combined markdown digest into its forward (terrain) + backward

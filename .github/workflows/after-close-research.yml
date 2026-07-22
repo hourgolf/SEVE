@@ -72,6 +72,21 @@ jobs:
           npm run dark-candidate-freeze:hosted -- \
             --date "$SESSION_DATE_ET" \
             --out "data/dark-candidate-freezes/$SESSION_DATE_ET"
+      - name: Build deterministic Sentinel operator packet
+        shell: bash
+        env:
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          args=(
+            --session "$SESSION_DATE_ET"
+            --freeze "data/dark-candidate-freezes/$SESSION_DATE_ET/freeze.json"
+            --out "data/sentinel-packets/$SESSION_DATE_ET.json"
+          )
+          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$DRY_RUN_INPUT" != "true" ]]; then
+            args+=(--publish)
+          fi
+          npm run deterministic-sentinel:hosted -- "${args[@]}"
       - name: Freeze artifact checksums
         shell: bash
         run: |
@@ -83,6 +98,8 @@ jobs:
             "data/dark-candidate-freezes/$SESSION_DATE_ET/contract-manifest.json" \
             "data/dark-candidate-freezes/$SESSION_DATE_ET/report.md" \
             "data/dark-candidate-freezes/$SESSION_DATE_ET/receipt.json" \
+            "data/sentinel-packets/$SESSION_DATE_ET.json" \
+            "data/sentinel-packets/$SESSION_DATE_ET.receipt.json" \
             | tee after-close-sha256.txt
           {
             echo "## After-close research receipt"
@@ -99,6 +116,7 @@ jobs:
             data/vb-candidates.json
             data/vb-candidate-censors.json
             data/dark-candidate-freezes/**
+            data/sentinel-packets/**
             after-close-sha256.txt
           if-no-files-found: error
           retention-days: 30

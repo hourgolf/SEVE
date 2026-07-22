@@ -44,7 +44,8 @@ export function SentinelReceiptStrip({ sentinel, compact = false }: { sentinel: 
 }
 
 export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDigest; symbol: string }) {
-  const { brief, scan, judge, state, err } = sentinel;
+  const { brief, scan, judge, operatorPacket, state, err } = sentinel;
+  const deterministic = sentinel.interpretiveProvider === "none" || operatorPacket != null;
   const terrain = brief?.sentLevels?.[symbol];
   const above = terrain?.above ?? brief?.carry.above ?? [];
   const below = terrain?.below ?? brief?.carry.below ?? [];
@@ -56,7 +57,16 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
     {state !== "ok" ? <div className="sntw-state"><b>{state.toUpperCase()}</b><span>{err || "Sentinel evidence is not available yet."}</span></div> : <div className="sntw-grid">
       <section className="sntw-card sntw-next">
         <header><span>01</span><b>NEXT OPEN</b><em>structured brief · deterministic inputs</em></header>
-        {!brief ? <div className="sntw-empty">structured next-open brief unavailable</div> : <>
+        {!brief && operatorPacket ? <>
+          <div className="sntw-day"><b>{operatorPacket.forDate}</b><span>evidence {operatorPacket.overallState.replaceAll("_", " ")}</span></div>
+          <div className="sntw-sub">SESSION RECEIPT</div>
+          <ul>
+            <li>release {operatorPacket.release.releaseId ?? "missing"} · {operatorPacket.release.state}</li>
+            <li>live {operatorPacket.liveBook.closed}/{operatorPacket.liveBook.opened} closed · {operatorPacket.liveBook.open} open</li>
+            <li>manager {operatorPacket.managerBook.terminal}/{operatorPacket.managerBook.observed} terminal · {operatorPacket.managerBook.censored} censored</li>
+            <li>dark {operatorPacket.darkBook.rawDecisions} frozen · {operatorPacket.darkBook.exactContracts} exact contracts · {operatorPacket.darkBook.state.replaceAll("_", " ")}</li>
+          </ul>
+        </> : !brief ? <div className="sntw-empty">structured next-open brief unavailable</div> : <>
           <div className="sntw-day"><b>{brief.forDate || sentinel.forDate || "—"}</b><span>{brief.gap.cleared ? `GAP CLEARED ${brief.gap.spy >= 0 ? "+" : ""}${brief.gap.spy}%` : `GAP BOOK DARK ${brief.gap.spy >= 0 ? "+" : ""}${brief.gap.spy}%`}</span></div>
           <div className="sntw-sub">WATCH</div><ul>{brief.carry.watch.map((item, index) => <li key={index}>{item}</li>)}</ul>
           <div className="sntw-sub">LEVELS · {symbol}</div><div className="sntw-levels">
@@ -69,8 +79,8 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
       </section>
 
       <section className="sntw-card sntw-read">
-        <header><span>02</span><b>INTERPRETIVE READ</b><em>LLM synthesis · never a health claim</em></header>
-        {!judge ? <div className="sntw-empty">interpretive judgment unavailable</div> : <>
+        <header><span>02</span><b>{deterministic ? "OPERATOR QUEUE" : "INTERPRETIVE READ"}</b><em>{deterministic ? "deterministic packet · no model authority" : "LLM synthesis · never a health claim"}</em></header>
+        {!judge ? <div className="sntw-empty">{deterministic ? "operator queue unavailable" : "interpretive judgment unavailable"}</div> : <>
           <div className="sntw-verdict"><b>{judge.verdict}</b><span>{judge.soWhat}</span></div>
           <div className="sntw-sub">OPPORTUNITIES</div>{judge.opportunities.length ? <ul>{judge.opportunities.map((item, index) => <li key={index}>{item}</li>)}</ul> : <div className="sntw-empty inline">nothing queued</div>}
           <div className="sntw-sub">DRIFT</div>{judge.drift.length ? <ul>{judge.drift.map((item, index) => <li key={index}>{item}</li>)}</ul> : <div className="sntw-empty inline">no doctrine drift reported</div>}
@@ -79,7 +89,11 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
 
       <section className="sntw-card sntw-scan">
         <header><span>03</span><b>DETERMINISTIC SCAN</b><em>descriptive evidence · not an arm gate</em></header>
-        {!scan ? <div className="sntw-empty">deterministic scan unavailable</div> : <div className="sntw-scan-grid">
+        {operatorPacket ? <div className="sntw-scan-grid">
+          <div><div className="sntw-sub">REVIEW QUEUE</div><div className="sntw-evidence-rows">{operatorPacket.findings.slice(0, 8).map((finding) => <div key={finding.code}>
+            <b>{finding.title}</b><span>{finding.action.replaceAll("_", " ")}</span><em>{finding.tone}</em>
+          </div>)}</div></div>
+        </div> : !scan ? <div className="sntw-empty">deterministic scan unavailable</div> : <div className="sntw-scan-grid">
           <div><div className="sntw-sub">PROMOTE CANDIDATES</div><EvidenceRows rows={scan.promote} empty="no promote candidates" /></div>
           <div><div className="sntw-sub">HARVEST FIXES</div><EvidenceRows rows={scan.fixable} empty="no harvest-fix candidates" /></div>
           <div><div className="sntw-sub">LIVE LEAKS</div><EvidenceRows rows={scan.leaks} empty="no live leaks" /></div>

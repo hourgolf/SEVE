@@ -5,6 +5,7 @@ import {
   previousTradingDay,
   sessionCloseMin,
 } from "@/engine/market-calendar";
+import { readSentinelOperatorPacket } from "./operatorPacket.js";
 
 export const REMOTE_MORNING_PUBLISHER_VERSION = "remote-morning-publisher-v1";
 export const REMOTE_MORNING_WINDOW_END_MIN = 550; // 09:10 ET
@@ -149,7 +150,11 @@ export function deriveRemoteMorningPlan(input: {
 
 const dollars = (value: number): string => `${value >= 0 ? "+" : "-"}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
 
-export function buildRemoteSentinelMeta(plan: Extract<RemoteMorningPlan, { action: "publish" }>, publishedAt: string): Record<string, unknown> {
+export function buildRemoteSentinelMeta(
+  plan: Extract<RemoteMorningPlan, { action: "publish" }>,
+  publishedAt: string,
+  priorSentinel?: PriorSentinelReceipt | null,
+): Record<string, unknown> {
   const report = plan.report.payload;
   const giveback = report.giveback;
   const shadow = report.oneAccountShadow?.today;
@@ -162,8 +167,17 @@ export function buildRemoteSentinelMeta(plan: Extract<RemoteMorningPlan, { actio
   if (shadow) facts.push(`shared-book shadow admitted ${Number(shadow.admitted ?? 0)}, rejected ${Number(shadow.rejected ?? 0)}`);
   if (!facts.length) facts.push("durable post-close report is current; no detailed remote scan facts were available");
 
-  const scan = { benchDays: 0, promote: [], fixable: [], leaks: [], drift: facts, scalps: [], craters: [], patterns: [] };
-  const judge = {
+  const priorMeta = priorSentinel?.meta ?? null;
+  const parsedPacket = priorMeta?.session === plan.evidenceSession
+    ? readSentinelOperatorPacket(priorMeta?.operatorPacket)
+    : null;
+  const priorPacket = parsedPacket?.session === plan.evidenceSession && parsedPacket.forDate === plan.targetSession
+    ? parsedPacket
+    : null;
+  const scan = priorPacket && priorMeta?.scan && typeof priorMeta.scan === "object"
+    ? priorMeta.scan
+    : { benchDays: 0, promote: [], fixable: [], leaks: [], drift: facts, scalps: [], craters: [], patterns: [] };
+  const judge = priorPacket && priorMeta?.judge && typeof priorMeta.judge === "object" ? priorMeta.judge : {
     verdict: "WATCH",
     opportunities: [],
     drift: facts,
@@ -195,6 +209,8 @@ export function buildRemoteSentinelMeta(plan: Extract<RemoteMorningPlan, { actio
     scan,
     judge,
     lens: null,
+    operatorPacket: priorPacket,
+    interpretiveProvider: "none",
     remoteSummary: { liveTotal, nClosed, facts },
     inputs: {
       forensicsReportDate: plan.report.report_date,

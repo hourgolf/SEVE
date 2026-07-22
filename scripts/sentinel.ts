@@ -31,7 +31,10 @@ import { createServerSupabaseClient } from "./serverSupabase";
 
 // The private desk requires the server-only service role for both the evidence
 // reads and the optional event publication.
-const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+// The legacy local scanner may still render local research files, but it no
+// longer publishes operational Sentinel receipts unless explicitly opted in.
+// Hosted deterministic-sentinel owns the canonical event boundary.
+const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SENTINEL_LEGACY_PUBLISH === "1";
 const sb = createServerSupabaseClient("sentinel");
 
 const ERA4 = "2026-06-30";
@@ -166,6 +169,7 @@ const JUDGE_TOOL = {
   },
 } as const;
 async function judge(terrain: string, facts: string): Promise<SentinelJudge | null> {
+  if (process.env.SENTINEL_INTERPRETIVE_PROVIDER !== "anthropic") return null;
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
@@ -369,7 +373,7 @@ async function main() {
   const combined = (terrain ? terrain + "\n\n" + "═".repeat(64) + "\n\n" : "") + facts;
   const full = combined + (judged
     ? "\n\n" + "─".repeat(64) + "\n" + judgeToMarkdown(judged)
-    : "\n\n(judgment layer inactive — set ANTHROPIC_API_KEY in .env.local to enable the judged digest)");
+    : "\n\n(judgment layer inactive — deterministic operator packet is authoritative; legacy interpretation is opt-in only)");
   console.log(full);
   // structured scan (the §04 Sentinel panel renders these as colored rows, not markdown)
   const scan = {

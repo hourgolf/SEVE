@@ -25,6 +25,8 @@ const workflow = readFileSync(new URL("../../.github/workflows/after-close-resea
 check("hosted workflow freezes dark candidates", workflow.includes("npm run dark-candidate-freeze:hosted"), true);
 check("hosted workflow uses one resolved ET session", workflow.includes("SESSION_DATE_ET") && !workflow.includes('session="today-et"'), true);
 check("hosted workflow retains exact-contract manifest", workflow.includes("data/dark-candidate-freezes/**"), true);
+check("hosted workflow builds deterministic Sentinel packet", workflow.includes("npm run deterministic-sentinel:hosted"), true);
+check("hosted workflow retains deterministic packet", workflow.includes("data/sentinel-packets/**"), true);
 check("hosted workflow remains credential-minimal", /DATABENTO|ALPACA|R2_/.test(workflow), false);
 
 let invalid = false;

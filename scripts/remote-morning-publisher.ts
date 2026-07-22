@@ -73,7 +73,12 @@ async function main(): Promise<void> {
   }
 
   const publishedAt = new Date().toISOString();
-  const meta = buildRemoteSentinelMeta(plan, publishedAt);
+  const matchingPacket = ((sentinelRead.data ?? []) as PriorSentinelReceipt[]).find((row) =>
+    row.meta?.session === plan.evidenceSession
+    && row.meta?.operatorPacket != null
+    && typeof row.meta.operatorPacket === "object",
+  ) ?? null;
+  const meta = buildRemoteSentinelMeta(plan, publishedAt, matchingPacket);
   const runId = remoteMorningRunId(plan.evidenceSession, plan.targetSession);
   if (DRY_RUN) {
     console.log(JSON.stringify({ wouldPublish: { message: `sentinel: ${plan.evidenceSession}`, meta } }));
