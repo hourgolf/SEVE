@@ -71,6 +71,19 @@ longer duplicated.
 - production build: clean;
 - `git diff --check`: clean.
 
+## Hotspot 3: incident metadata cadence
+
+The incident hook formerly coupled three different observations to one
+15-second poll: the RTH heartbeat, the latest desk equity snapshot, and the
+entire strategist assignment roster. The local change keeps the heartbeat at
+15 seconds, reads cron/assignment metadata every 45 seconds, and pauses all
+three plus the worker-run ledger while the tab is hidden.
+
+The 45-second interval is deliberate: incident policy treats an Ops read older
+than 60 seconds as stale, so a seemingly cheaper multi-minute cadence would
+manufacture observability warnings. This reduces the full-roster transfer by
+about two-thirds without changing that safety contract.
+
 ## Remaining daytime-safe work
 
 1. Observe candidate, fill, held-capture, and manager-arm completeness through

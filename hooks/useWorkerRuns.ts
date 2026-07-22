@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import type { WorkerRunsInput } from "@/lib/incident/deriveIncident";
 import { applyWorkerRuns, type Settled } from "@/lib/incident/readModel";
+import { startVisibilityPoll } from "@/lib/pollControl";
 
 const WINDOW_MS = 16 * 3600_000;
 const INITIAL: WorkerRunsInput = {
@@ -44,8 +45,8 @@ export function useWorkerRuns(pollMs = 60_000): WorkerRunsInput {
       setTick((n) => n + 1);
     }
     void poll();
-    const id = setInterval(() => void poll(), pollMs);
-    return () => { alive = false; clearInterval(id); };
+    const stop = startVisibilityPoll(() => void poll(), pollMs);
+    return () => { alive = false; stop(); };
   }, [pollMs]);
 
   return view.current;
