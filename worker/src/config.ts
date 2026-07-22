@@ -10,7 +10,7 @@
 // ============================================================================
 
 import dotenv from "dotenv";
-export { WORKER_VERSION } from "./version.js";
+export { WORKER_RUNTIME_VERSION, WORKER_VERSION } from "./version.js";
 
 // Load env without overriding anything already set (Railway's real env wins).
 // Local dev convenience: also read the repo-root .env.local (ALPACA_KEY/SECRET +

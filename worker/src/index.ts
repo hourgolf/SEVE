@@ -12,7 +12,7 @@
 //  orders. Railway: 1 replica, restart-on-crash, sole order-placer.
 // ============================================================================
 
-import { config, policy, WORKER_VERSION } from "./config.js";
+import { config, policy, WORKER_RUNTIME_VERSION, WORKER_VERSION } from "./config.js";
 import { BOOT_ID, INSTANCE_ID } from "./runId.js";
 import { info, warn, error, shadow } from "./log.js";
 import * as alpaca from "./alpaca.js";
@@ -520,7 +520,7 @@ async function cycle(trigger: string): Promise<void> {
       const k = `${r.occ_symbol.slice(0, r.occ_symbol.length - 15).toUpperCase()}:${r.opt_type}`;
       deskStack.set(k, (deskStack.get(k) ?? 0) + 1);
     }
-    if (live) await store.heartbeat(`${WORKER_VERSION} cycle`);
+    if (live) await store.heartbeat(`${WORKER_RUNTIME_VERSION} cycle`);
     // Refresh every chain ONCE up front (shared, account-independent) so the per-account
     // passes + the diagnostics pass all read the same fresh NTM snapshot.
     for (const sym of SYMBOLS) await refreshChain(sym);
@@ -1014,7 +1014,7 @@ async function fastExitSweep(): Promise<void> {
     if (nowMin < RTH_OPEN || nowMin >= rthClose) return;
     const owned = cfg.channels.filter(ownedBy);
     if (!owned.length || !cfg.fund) return;
-    await store.heartbeat(`${WORKER_VERSION} sweep`);
+    await store.heartbeat(`${WORKER_RUNTIME_VERSION} sweep`);
     if (cfg.fund.mode !== "paper") return; // a non-paper mode freezes everything (live-$ safety wall)
     // KILL = FLATTEN (operator's word, 2026-07-01): flipping the kill switch closes every open
     // stream-owned position at MARKET — within one ~10s sweep during RTH, or at the first sweep
@@ -1281,7 +1281,7 @@ async function onReconnect(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  info(`SEVE streaming worker ${WORKER_VERSION} — the third engine driver`);
+  info(`SEVE streaming worker ${WORKER_RUNTIME_VERSION} · sealed strategy ${WORKER_VERSION} — the third engine driver`);
   const writeMode = config.hasServiceRole
     ? (config.shadowWriteEvents ? "events" : "none (service role, events off)")
     : "none (anon, read-only)";
@@ -1293,10 +1293,10 @@ async function main(): Promise<void> {
   // Boot flags → the DB journal (2026-07-06): env-gated safety switches were previously
   // invisible outside Railway logs — an operator flipping ORPHAN_FLATTEN had no in-band
   // confirmation the restarted worker picked it up. One line per boot, queryable in events.
-  void store.journal("EXEC", `boot: ${WORKER_VERSION} · orphanFlatten=${config.orphanFlatten ? "ARMED" : "detect-only"} · symbols=${SYMBOLS.join(",")}`, { boot_id: BOOT_ID, instance_id: INSTANCE_ID });
+  void store.journal("EXEC", `boot: ${WORKER_RUNTIME_VERSION} · sealedStrategy=${WORKER_VERSION} · orphanFlatten=${config.orphanFlatten ? "ARMED" : "detect-only"} · symbols=${SYMBOLS.join(",")}`, { boot_id: BOOT_ID, instance_id: INSTANCE_ID });
   // Crash-attribution ledger (external-review P4): open this run + close any prior un-ended run
   // as abrupt. Fail-open, off the trade path. See store.openRun / worker_runs / 67_worker_runs.sql.
-  void store.openRun(WORKER_VERSION);
+  void store.openRun(WORKER_RUNTIME_VERSION);
 
   // Phase B posture — the TWO-KEY turn. Going live requires DRY_RUN=false AND
   // LIVE_TRADING=true AND the service role, together; a partial flip refuses to
@@ -1431,7 +1431,7 @@ async function main(): Promise<void> {
   setInterval(() => {
     if (!liveMode()) return;
     const m = alpaca.etParts(Date.now()).min;
-    if (m >= RTH_OPEN - 35 && m < RTH_OPEN + 5) void store.heartbeat(`${WORKER_VERSION} pre-open`);
+    if (m >= RTH_OPEN - 35 && m < RTH_OPEN + 5) void store.heartbeat(`${WORKER_RUNTIME_VERSION} pre-open`);
   }, 60_000);
 
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
