@@ -102,6 +102,8 @@
     "channel-config-draft-selftest": "tsx lib/channels/channelConfigDraft.selftest.ts",
     "archive-selftest": "tsx worker/src/archive.selftest.ts",
     "family-preregistered-receipt-adapter-selftest": "tsx lib/research/familyPreregisteredReceiptAdapter.selftest.ts",
+    "family-exact-replay-bridge-selftest": "tsx lib/research/familyExactReplayBridge.selftest.ts",
+    "family-exact-replay-bridge": "tsx scripts/family-exact-replay-bridge.ts",
     "family-preregistered-scorecard": "tsx scripts/family-preregistered-scorecard.ts",
     "preregistered-path-tests": "tsx scripts/preregistered-path-tests.ts",
     "phase1k-holdout-report-selftest": "tsx lib/research/phase1kHoldoutReport.selftest.ts",

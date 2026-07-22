@@ -8,6 +8,10 @@ export interface AdmissionCandidateReceipt {
   opportunityId: string;
   channelSlug: string;
   requestedQty: number;
+  posture?: "native-accepted" | "day1-paper-root" | "day1-dark-candidate";
+  releaseId?: string | null;
+  configurationSha256?: string | null;
+  occSymbol?: string;
 }
 
 export interface AdmissionArmReceipt {

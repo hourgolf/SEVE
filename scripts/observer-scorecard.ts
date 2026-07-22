@@ -98,8 +98,20 @@ function familyReceipt(row: FamilyDbRow): FamilyAdmissionReceipt | null {
     const opportunityId = item?.opportunityId;
     const channelSlug = item?.channelSlug;
     const requestedQty = Number(item?.requestedQty);
+    const posture = item?.posture;
+    const releaseId = item?.releaseId;
+    const configurationSha256 = item?.configurationSha256;
+    const occSymbol = item?.occSymbol;
     return typeof opportunityId === "string" && typeof channelSlug === "string" && Number.isInteger(requestedQty)
-      ? [{ opportunityId, channelSlug, requestedQty }]
+      ? [{
+        opportunityId,
+        channelSlug,
+        requestedQty,
+        ...(posture === "native-accepted" || posture === "day1-paper-root" || posture === "day1-dark-candidate" ? { posture } : {}),
+        ...(releaseId == null || typeof releaseId === "string" ? { releaseId: releaseId ?? null } : {}),
+        ...(configurationSha256 == null || typeof configurationSha256 === "string" ? { configurationSha256: configurationSha256 ?? null } : {}),
+        ...(typeof occSymbol === "string" ? { occSymbol } : {}),
+      }]
       : [];
   });
   const admissionArms = row.admission_arms.flatMap((value) => {
