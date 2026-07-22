@@ -277,6 +277,7 @@ export function buildVbExactCandidateDryRun(input: {
   candidate: VbCandidateReceipt;
   databentoQuotes: readonly DatabentoCbboQuote[];
   nativeSyntheticPnlPerContract?: number | null;
+  materializeCanonicalObject?: boolean;
 }): VbExactDryRun {
   const { candidate } = input;
   const censors = new Set<VbCandidateCensor>();
@@ -319,6 +320,43 @@ export function buildVbExactCandidateDryRun(input: {
   if (censors.size || !left || !right) {
     scorecard.censors = [...censors].sort();
     return { request, candidatePayload, exactPathPayload: null, canonicalObject: null, manifest: null, scorecard, censors: scorecard.censors, externalWrites: false };
+  }
+
+  scorecard.exactEntryAsk = left.ask;
+  scorecard.exactEntryQuoteAtMs = left.atMs;
+  for (const managerId of managerIdsForChannel(candidate.channelSlug)) {
+    let state = {};
+    for (let index = 0; index < throughRight.length; index++) {
+      const quote = throughRight[index];
+      const returnPct = ((quote.bid - left.ask) / left.ask) * 100;
+      const advanced = advanceManager(managerId, state, returnPct, index === throughRight.length - 1);
+      state = advanced.state;
+      if (!advanced.exit) continue;
+      scorecard.exactArms.push({
+        managerId,
+        managerVersion: MANAGER_POLICY_VERSION,
+        exitAtMs: quote.atMs,
+        exitBid: quote.bid,
+        exitReason: advanced.exit.reason,
+        returnPct: advanced.exit.returnPct,
+        pnlPerContract: Math.round((left.ask * advanced.exit.returnPct) * 100) / 100,
+        basis: "databento_entry_ask_to_executable_bid",
+      });
+      break;
+    }
+  }
+  scorecard.eligible = scorecard.exactArms.length === managerIdsForChannel(candidate.channelSlug).length;
+  if (input.materializeCanonicalObject === false) {
+    return {
+      request,
+      candidatePayload,
+      exactPathPayload: null,
+      canonicalObject: null,
+      manifest: null,
+      scorecard,
+      censors: [],
+      externalWrites: false,
+    };
   }
 
   const canonical = {
@@ -392,30 +430,6 @@ export function buildVbExactCandidateDryRun(input: {
     completed_at: completedAt,
   };
 
-  scorecard.exactEntryAsk = left.ask;
-  scorecard.exactEntryQuoteAtMs = left.atMs;
-  for (const managerId of managerIdsForChannel(candidate.channelSlug)) {
-    let state = {};
-    for (let index = 0; index < throughRight.length; index++) {
-      const quote = throughRight[index];
-      const returnPct = ((quote.bid - left.ask) / left.ask) * 100;
-      const advanced = advanceManager(managerId, state, returnPct, index === throughRight.length - 1);
-      state = advanced.state;
-      if (!advanced.exit) continue;
-      scorecard.exactArms.push({
-        managerId,
-        managerVersion: MANAGER_POLICY_VERSION,
-        exitAtMs: quote.atMs,
-        exitBid: quote.bid,
-        exitReason: advanced.exit.reason,
-        returnPct: advanced.exit.returnPct,
-        pnlPerContract: Math.round((left.ask * advanced.exit.returnPct) * 100) / 100,
-        basis: "databento_entry_ask_to_executable_bid",
-      });
-      break;
-    }
-  }
-  scorecard.eligible = scorecard.exactArms.length === managerIdsForChannel(candidate.channelSlug).length;
   return {
     request,
     candidatePayload,

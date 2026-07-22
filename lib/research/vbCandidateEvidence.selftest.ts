@@ -101,6 +101,18 @@ check("exact path uses a parser/canonicalizer version separate from candidate so
   dry.candidatePayload?.source_version,
 ], [VB_EXACT_PATH_BUILDER_VERSION, base.sourceVersion]);
 check("path builder version is inside canonical content", dry.canonicalObject?.bytes.includes(Buffer.from(VB_EXACT_PATH_BUILDER_VERSION)), true);
+const scoreOnly = buildVbExactCandidateDryRun({
+  candidate,
+  databentoQuotes: exactQuotes,
+  nativeSyntheticPnlPerContract: 33,
+  materializeCanonicalObject: false,
+});
+check("score-only mode preserves exact manager outcomes without duplicating the source object", [
+  scoreOnly.scorecard,
+  scoreOnly.canonicalObject,
+  scoreOnly.manifest,
+  scoreOnly.exactPathPayload,
+], [dry.scorecard, null, null, null]);
 
 const leftCensored = buildVbExactCandidateDryRun({ candidate, databentoQuotes: exactQuotes.map((row) => ({ ...row, atMs: row.atMs + 1_001 })) });
 check("left boundary above 1.1 seconds is censored", leftCensored.censors.includes("left_boundary_censored"), true);
