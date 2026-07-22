@@ -128,6 +128,8 @@ function sameBook(a: Map<string, number>, b: Map<string, number>): boolean {
 }
 
 async function main(): Promise<void> {
+  const requireFlat = process.argv.includes("--require-flat");
+  const gateLabel = requireFlat ? "SESSION-CLOSE READINESS" : "PRE-OPEN READINESS";
   const configuredHost = process.env.ALPACA_PAPER_HOST ?? REQUIRED_PAPER_HOST;
   const failures: string[] = [];
   const warnings: string[] = [];
@@ -213,7 +215,7 @@ async function main(): Promise<void> {
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const identities = new Set<string>();
 
-  console.log("\n══ SEVE PRE-OPEN READINESS · READ ONLY ══");
+  console.log(`\n══ SEVE ${gateLabel} · READ ONLY ══`);
   console.log(`Broker host : ${configuredHost} ${configuredHost === REQUIRED_PAPER_HOST ? "✓ PAPER" : "✗"}`);
   console.log(`Fund        : ${fund?.mode ?? "missing"} · halted=${fund?.is_halted ? "TRUE" : "false"}`);
   console.log(`Worker      : ${worker?.version ?? "missing"} · ${Math.round(workerAgeSec)}s · ${worker?.last_phase ?? "?"} · ${worker?.last_error ? "ERROR" : "clean"}`);
@@ -244,10 +246,12 @@ async function main(): Promise<void> {
       const deskBook = aggregateDeskPositions(positions, channelsById, account.id);
       const brokerBook = aggregateBrokerPositions(brokerPositions);
       const booksMatch = positionsResponse.ok && sameBook(deskBook, brokerBook);
+      const accountFlat = booksMatch && brokerBook.size === 0 && deskBook.size === 0;
       if (!active) failures.push(`${account.name}: paper broker account is not ACTIVE`);
       if (!unblocked) failures.push(`${account.name}: paper broker account is blocked`);
       if (!unique) failures.push(`${account.name}: broker identity missing or duplicates another account`);
       if (!booksMatch) failures.push(`${account.name}: desk open lots do not match paper broker positions`);
+      if (requireFlat && !accountFlat) failures.push(`${account.name}: session-close gate requires broker and desk flat`);
       if (!account.is_armed || account.is_halted) warnings.push(`${account.name}: entries are ${account.is_halted ? "HALTED" : "DISARMED"}`);
       console.log(`  ${active && unblocked && unique && booksMatch ? "✓" : "✗"} ${pad(account.name, 12)} ACTIVE · distinct · broker ${brokerBook.size} / desk ${deskBook.size} OCCs${account.is_armed && !account.is_halted ? "" : " · entries off"}`);
     } catch (error) {
@@ -299,11 +303,13 @@ async function main(): Promise<void> {
   console.log("Account stop: legacy display only; sealed per-channel risk governs the Day 1 roots above");
   if (warnings.length) console.log(`\nWarnings (${warnings.length}):\n  - ${warnings.join("\n  - ")}`);
   if (failures.length) {
-    console.error(`\n✗ PRE-OPEN BLOCKED (${failures.length}):\n  - ${failures.join("\n  - ")}\n`);
+    console.error(`\n✗ ${requireFlat ? "SESSION-CLOSE" : "PRE-OPEN"} BLOCKED (${failures.length}):\n  - ${failures.join("\n  - ")}\n`);
     process.exitCode = 1;
     return;
   }
-  console.log("\n✓ PRE-OPEN HARD GATES PASS — paper executor, broker/desk books, worker liveness, sealed RC5 identity, and six-root routing\n");
+  console.log(requireFlat
+    ? "\n✓ SESSION-CLOSE HARD GATES PASS — all bound paper broker and desk books are reconciled and flat; release, capture, and observer identity remain intact\n"
+    : "\n✓ PRE-OPEN HARD GATES PASS — paper executor, broker/desk books, worker liveness, sealed RC5 identity, and six-root routing\n");
 }
 
 main().catch((error) => {
