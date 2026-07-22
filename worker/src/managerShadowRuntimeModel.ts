@@ -27,6 +27,11 @@ export function managerShadowSessionPhase(clock: EtClock): "closed" | "observe" 
  *  outcome. A new passive last-bid alone is intentionally not a database write. */
 export function managerShadowMeaningfulChange(before: ManagerShadowRun, after: ManagerShadowRun): boolean {
   if (before.status !== after.status) return true;
+  // The first eligible quote is the boundary between an admitted arm and an
+  // evidence-producing arm. Persist it immediately so a restart cannot erase
+  // the first-quote clocks or leave the durable book falsely `pending_quote`.
+  if (before.evidenceState !== after.evidenceState) return true;
+  if (before.firstQuoteAt !== after.firstQuoteAt) return true;
   if (before.actualCloseAt !== after.actualCloseAt) return true;
   if (before.bankReturnPct !== after.bankReturnPct) return true;
   if ((before.managerState.armedPeakPct ?? null) !== (after.managerState.armedPeakPct ?? null)) return true;

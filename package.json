@@ -176,6 +176,8 @@
     "giveback-study": "tsx scripts/giveback-study.ts",
     "manage-ab": "tsx scripts/manage-ab.ts",
     "health": "tsx scripts/health.ts",
+    "live-position-evidence": "tsx --env-file=.env.local scripts/live-position-evidence.ts",
+    "live-position-evidence-selftest": "tsx scripts/live-position-evidence.selftest.ts",
     "server-supabase-selftest": "tsx scripts/serverSupabase.selftest.ts",
     "preopen": "tsx --env-file=.env.local scripts/preopen-readiness.ts",
     "research-annotations-selftest": "tsx lib/research/positionAnnotations.selftest.ts",

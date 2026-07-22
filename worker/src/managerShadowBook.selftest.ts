@@ -276,6 +276,16 @@ check("weekend never observes", managerShadowSessionPhase({ date: "2026-07-12", 
 check("pre-open is closed", managerShadowSessionPhase({ date: "2026-07-13", minute: 569, second: 59 }), "closed");
 check("dark cohort quote freshness is stamped at 15 seconds", MANAGER_SHADOW_QUOTE_MAX_AGE_MS, 15_000);
 check("passive bid alone is not a durable write", managerShadowMeaningfulChange(lock, { ...lock, lastBid: 1.01 }), false);
+check("first eligible quote is durable", managerShadowMeaningfulChange(lock, {
+  ...lock,
+  evidenceState: "observing",
+  firstQuoteAt: "2026-07-13T14:32:00.000Z",
+  firstQuoteEventAgeMs: 500,
+  firstSnapshotFetchAgeMs: 50,
+  lastBid: 1.01,
+  lastQuoteAt: "2026-07-13T14:32:00.000Z",
+  lastObservedAt: "2026-07-13T14:32:00.050Z",
+}), true);
 check("first quote miss is durable", managerShadowMeaningfulChange(lock, recordManagerQuoteMiss(lock)), true);
 check("second quote miss is coalesced", managerShadowMeaningfulChange({ ...lock, consecutiveQuoteMisses: 1 }, { ...lock, consecutiveQuoteMisses: 2 }), false);
 check("sixth quote miss is a durable checkpoint", managerShadowMeaningfulChange({ ...lock, consecutiveQuoteMisses: 5 }, { ...lock, consecutiveQuoteMisses: 6 }), true);
