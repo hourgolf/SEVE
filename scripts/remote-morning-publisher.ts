@@ -8,7 +8,8 @@
 // Local review (zero writes): npm run remote-morning-publisher -- --dry-run --force-window
 // Railway cron: 0 13,14 * * 1-5 (one run self-gates in EDT, the other in EST)
 
-import { buildRemoteSentinelMeta, deriveRemoteMorningPlan, REMOTE_MORNING_PUBLISHER_VERSION, type PriorSentinelReceipt, type RemoteForensicsReport } from "@/lib/sentinel/remoteMorningPublisher";
+import { buildRemoteSentinelMeta, deriveRemoteMorningPlan, remoteMorningClock, remoteMorningRunId, REMOTE_MORNING_PUBLISHER_VERSION, type PriorSentinelReceipt, type RemoteForensicsReport } from "@/lib/sentinel/remoteMorningPublisher";
+import { auditMorningPublisherReceipt, type MorningPublisherEvent } from "@/lib/sentinel/morningPublisherReceipt";
 import { createServerSupabaseClient } from "./serverSupabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -39,25 +40,31 @@ async function main(): Promise<void> {
   const sb = createServerSupabaseClient("remote-morning-publisher");
   errorClient = sb;
   const nowMs = AT_MS ?? Date.now();
-  const [reportRead, sentinelRead, finishRead] = await withDeadline(Promise.all([
+  const [reportRead, sentinelRead, lifecycleRead] = await withDeadline(Promise.all([
     sb.from("forensics_reports").select("report_date,generated_at,payload").order("report_date", { ascending: false }).limit(1).maybeSingle(),
-    sb.from("events").select("message,created_at,meta").like("message", "sentinel:%").order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    sb.from("events").select("message,created_at,meta").eq("message", "morning-publisher: finish").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("events").select("message,created_at,meta").like("message", "sentinel:%").order("created_at", { ascending: false }).limit(25),
+    sb.from("events").select("message,created_at,meta").in("message", ["morning-publisher: start", "morning-publisher: finish"]).order("created_at", { ascending: false }).limit(50),
   ]), "publisher inputs");
-  for (const [label, result] of [["forensics", reportRead], ["sentinel", sentinelRead], ["finish", finishRead]] as const) {
+  for (const [label, result] of [["forensics", reportRead], ["sentinel", sentinelRead], ["lifecycle", lifecycleRead]] as const) {
     if (result.error) throw new Error(`${label} read failed: ${result.error.message}`);
   }
 
-  const completedTarget = typeof finishRead.data?.meta?.targetSession === "string" ? finishRead.data.meta.targetSession : null;
+  const targetDate = remoteMorningClock(nowMs).date;
+  const completedTarget = (lifecycleRead.data ?? []).some((row) => row.message === "morning-publisher: finish" && row.meta?.targetSession === targetDate)
+    ? targetDate
+    : null;
   const plan = deriveRemoteMorningPlan({
     nowMs,
     report: (reportRead.data as RemoteForensicsReport | null) ?? null,
-    priorSentinel: (sentinelRead.data as PriorSentinelReceipt | null) ?? null,
+    priorSentinel: ((sentinelRead.data?.[0] as PriorSentinelReceipt | undefined) ?? null),
     completedTarget,
     forceWindow: FORCE_WINDOW,
   });
 
-  const summary = { version: REMOTE_MORNING_PUBLISHER_VERSION, dryRun: DRY_RUN, action: plan.action, code: plan.code, detail: plan.detail, targetSession: plan.targetSession ?? null, evidenceSession: plan.evidenceSession ?? null };
+  const publisherRunId = plan.targetSession && plan.evidenceSession
+    ? remoteMorningRunId(plan.evidenceSession, plan.targetSession)
+    : null;
+  const summary = { version: REMOTE_MORNING_PUBLISHER_VERSION, publisherRunId, dryRun: DRY_RUN, action: plan.action, code: plan.code, detail: plan.detail, targetSession: plan.targetSession ?? null, evidenceSession: plan.evidenceSession ?? null };
   errorContext = summary;
   console.log(JSON.stringify(summary));
   if (plan.action === "skip") return;
@@ -67,19 +74,36 @@ async function main(): Promise<void> {
 
   const publishedAt = new Date().toISOString();
   const meta = buildRemoteSentinelMeta(plan, publishedAt);
+  const runId = remoteMorningRunId(plan.evidenceSession, plan.targetSession);
   if (DRY_RUN) {
     console.log(JSON.stringify({ wouldPublish: { message: `sentinel: ${plan.evidenceSession}`, meta } }));
     return;
   }
 
-  const start = await withDeadline(sb.from("events").insert({ level: "INFO", message: "morning-publisher: start", meta: { ...summary, startedAt: publishedAt } }), "start receipt");
-  if (start.error) throw new Error(`start receipt failed: ${start.error.message}`);
+  const priorLifecycle = lifecycleRead.data ?? [];
+  const hasStart = priorLifecycle.some((row) => row.message === "morning-publisher: start" && row.meta?.publisherRunId === runId);
+  const hasSentinel = (sentinelRead.data ?? []).some((row) => row.meta?.publisherRunId === runId);
+  if (!hasStart) {
+    const start = await withDeadline(sb.from("events").insert({ level: "INFO", message: "morning-publisher: start", meta: { ...summary, startedAt: publishedAt } }), "start receipt");
+    if (start.error) throw new Error(`start receipt failed: ${start.error.message}`);
+  }
 
-  const publish = await withDeadline(sb.from("events").insert({ level: "INFO", message: `sentinel: ${plan.evidenceSession}`, meta }), "Sentinel publish");
-  if (publish.error) throw new Error(`Sentinel publish failed: ${publish.error.message}`);
+  if (!hasSentinel) {
+    const publish = await withDeadline(sb.from("events").insert({ level: "INFO", message: `sentinel: ${plan.evidenceSession}`, meta }), "Sentinel publish");
+    if (publish.error) throw new Error(`Sentinel publish failed: ${publish.error.message}`);
+  }
 
   const finish = await withDeadline(sb.from("events").insert({ level: "INFO", message: "morning-publisher: finish", meta: { ...summary, publisherEvidenceState: "partial", publishedAt } }), "finish receipt");
   if (finish.error) throw new Error(`finish receipt failed: ${finish.error.message}`);
+  const verifyRead = await withDeadline(sb.from("events").select("message,created_at,meta")
+    .contains("meta", { publisherRunId: runId }).order("created_at", { ascending: true }).limit(10), "receipt verification");
+  if (verifyRead.error) throw new Error(`receipt verification read failed: ${verifyRead.error.message}`);
+  const audit = auditMorningPublisherReceipt({
+    events: (verifyRead.data as MorningPublisherEvent[] | null) ?? [],
+    evidenceSession: plan.evidenceSession,
+    targetSession: plan.targetSession,
+  });
+  if (audit.state !== "complete" && audit.state !== "recovered") throw new Error(`hosted receipt chain ${audit.state}: ${audit.facts.join("; ") || "incomplete"}`);
   console.log(`remote morning publisher: published ${plan.evidenceSession} -> ${plan.targetSession} (partial evidence)`);
 }
 

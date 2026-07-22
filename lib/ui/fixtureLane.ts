@@ -33,6 +33,16 @@ export interface FixtureScenario {
   positions: FixturePosition[];
   channels: FixtureChannel[];
   events: Array<{ at: string; level: string; message: string; tone: FixtureTone }>;
+  researchEvidence: {
+    state: "exact_pending" | "complete" | "partial";
+    tone: FixtureTone;
+    session: string;
+    frozen: number;
+    contracts: number;
+    exact: number;
+    arms: string;
+    detail: string;
+  };
 }
 
 /** The fixture lane is deliberately impossible to expose in production. */
@@ -56,6 +66,7 @@ export const FIXTURE_SCENARIOS: Readonly<Record<FixtureScenarioId, FixtureScenar
       { at: "09:41:58", level: "DATA", message: "SPY / QQQ / IWM market reads current", tone: "green" },
       { at: "09:40:12", level: "POLICY", message: "six-root RC5.3 roster verified", tone: "neutral" },
     ],
+    researchEvidence: { state: "exact_pending", tone: "amber", session: "07-22", frozen: 0, contracts: 0, exact: 0, arms: "0/0", detail: "session open · candidates accrue before the T+1 exact gate" },
   },
   managed: {
     id: "managed", label: "Open / managed", clock: "11:18 PT",
@@ -71,6 +82,7 @@ export const FIXTURE_SCENARIOS: Readonly<Record<FixtureScenarioId, FixtureScenar
       { at: "11:15:02", level: "FILL", message: "orb-qqq-trail opened 2 contracts", tone: "green" },
       { at: "11:13:00", level: "CENSOR", message: "SPY sibling suppressed by family occupancy", tone: "neutral" },
     ],
+    researchEvidence: { state: "exact_pending", tone: "amber", session: "07-22", frozen: 34, contracts: 11, exact: 0, arms: "0/272", detail: "candidate identities frozen · exact CBBO pending T+1" },
   },
   incident: {
     id: "incident", label: "Degraded reads", clock: "12:07 PT",
@@ -83,5 +95,6 @@ export const FIXTURE_SCENARIOS: Readonly<Record<FixtureScenarioId, FixtureScenar
       { at: "12:06:45", level: "EXEC", message: "process heartbeat current", tone: "green" },
       { at: "12:06:31", level: "RISK", message: "new entries censored; exits remain available", tone: "red" },
     ],
+    researchEvidence: { state: "partial", tone: "red", session: "07-21", frozen: 138, contracts: 34, exact: 132, arms: "1056/1104", detail: "6 exact paths censored · no policy inference authorized" },
   },
 };

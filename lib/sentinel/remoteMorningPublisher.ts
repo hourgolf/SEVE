@@ -9,6 +9,10 @@ import {
 export const REMOTE_MORNING_PUBLISHER_VERSION = "remote-morning-publisher-v1";
 export const REMOTE_MORNING_WINDOW_END_MIN = 550; // 09:10 ET
 
+export function remoteMorningRunId(evidenceSession: string, targetSession: string): string {
+  return `${REMOTE_MORNING_PUBLISHER_VERSION}:${evidenceSession}:${targetSession}`;
+}
+
 export type PublisherEvidenceState = "complete" | "partial" | "error";
 
 export interface RemoteForensicsReport {
@@ -80,7 +84,6 @@ export function remoteMorningClock(nowMs: number): MorningClock {
   return parts(nowMs);
 }
 
-const str = (value: unknown): string => typeof value === "string" ? value : "";
 const etClockOfIso = (value: string): MorningClock | null => {
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? parts(ms) : null;
@@ -107,10 +110,10 @@ export function deriveRemoteMorningPlan(input: {
   if (input.completedTarget === clock.date) {
     return { action: "skip", code: "already-published", detail: `finish receipt already exists for ${clock.date}`, targetSession: clock.date, evidenceSession };
   }
-  const priorMeta = input.priorSentinel?.meta ?? {};
-  if (str(priorMeta.session) === evidenceSession && str(priorMeta.forDate) === clock.date) {
-    return { action: "skip", code: "already-published", detail: `Sentinel receipt already targets ${clock.date}`, targetSession: clock.date, evidenceSession };
-  }
+  // A Sentinel row alone is not a completed hosted publication. It may have
+  // been emitted by the local rich publisher, or it may be the middle row of
+  // an interrupted hosted attempt. Only the matching finish receipt is the
+  // idempotency boundary; otherwise the hosted runner must be able to retry.
   if (!input.report) {
     return { action: "block", code: "forensics-missing", detail: `no durable forensics report exists for ${evidenceSession}`, targetSession: clock.date, evidenceSession };
   }
@@ -180,6 +183,7 @@ export function buildRemoteSentinelMeta(plan: Extract<RemoteMorningPlan, { actio
     kind: "sentinel",
     schemaVersion: 3,
     publisherVersion: REMOTE_MORNING_PUBLISHER_VERSION,
+    publisherRunId: remoteMorningRunId(plan.evidenceSession, plan.targetSession),
     publisherEvidenceState: "partial" satisfies PublisherEvidenceState,
     publisherEvidenceDetail: plan.detail,
     session: plan.evidenceSession,

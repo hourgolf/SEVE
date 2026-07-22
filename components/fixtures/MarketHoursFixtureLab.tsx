@@ -51,6 +51,11 @@ export function MarketHoursFixtureLab() {
           </aside>
           <section className="fixture-channels"><header><span>CHANNELS</span><b>{scenario.channels.length} representative</b></header>{scenario.channels.map((channel) => <article key={channel.slug} data-tone={channel.tone}><i /><div><b>{channel.slug}</b><span>{channel.family}</span></div><em>{channel.state}</em><small>{channel.detail}</small></article>)}</section>
           <section className="fixture-events"><header><span>EVENT TAPE</span><b>FIXTURE</b></header>{scenario.events.map((event) => <article key={`${event.at}-${event.message}`} data-tone={event.tone}><time>{event.at}</time><b>{event.level}</b><span>{event.message}</span></article>)}</section>
+          <section className="fixture-research" data-tone={scenario.researchEvidence.tone}>
+            <header><span>DARK / VB EVIDENCE</span><b>{scenario.researchEvidence.session} · {scenario.researchEvidence.state.replace("_", " ")}</b></header>
+            <div><article><span>FROZEN</span><b>{scenario.researchEvidence.frozen}</b></article><article><span>CONTRACTS</span><b>{scenario.researchEvidence.contracts}</b></article><article><span>EXACT</span><b>{scenario.researchEvidence.exact}</b></article><article><span>MANAGER ARMS</span><b>{scenario.researchEvidence.arms}</b></article></div>
+            <p>{scenario.researchEvidence.detail}</p>
+          </section>
         </section>
       </main>
     </div>
