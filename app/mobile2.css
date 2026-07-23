@@ -661,9 +661,10 @@
 .m2-app .srw-head b{font-size:10px;letter-spacing:.12em}.m2-app .srw-head small,.m2-app .srw-native header small,.m2-app .srw-exact header small{font-size:7px;color:#788184}
 .m2-app .srw-head em{font-size:6px;color:#58db85;font-style:normal;text-align:right}
 .m2-app .srw-controls{display:grid;grid-template-columns:1fr auto;gap:5px;padding:5px;background:#15191a;border:1px solid #303536;border-radius:5px}
-.m2-app .srw-controls nav{display:flex;gap:3px;overflow-x:auto}.m2-app .srw-controls nav+nav{grid-row:2;grid-column:1/-1}
+.m2-app .srw-controls nav{display:flex;gap:3px;overflow-x:auto}.m2-app .srw-controls .srw-sessions{grid-column:1/-1}.m2-app .srw-controls .srw-window{grid-column:1}.m2-app .srw-controls .srw-lanes{grid-column:1/-1}
 .m2-app .srw-controls button{min-height:27px;padding:0 8px;border:1px solid #343a3c;border-radius:4px;background:#090c0d;color:#929a9c;font:700 8px var(--mono);white-space:nowrap}
-.m2-app .srw-controls button.on{background:#e7b13b;border-color:#f0c15a;color:#171918}.m2-app .srw-read{align-self:center;font-size:7px;color:#5adb85}
+.m2-app .srw-controls button.on{background:#e7b13b;border-color:#f0c15a;color:#171918}.m2-app .srw-read{grid-column:2;grid-row:2;align-self:center;font-size:7px;color:#5adb85}.m2-app .srw-read.partial{color:#e7b13b}
+.m2-app .srw-running{display:grid;gap:4px;padding:7px 8px;background:#111817;border:1px solid #31523f;border-radius:5px}.m2-app .srw-running>span{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.m2-app .srw-running small{font-size:6px;color:#788481}.m2-app .srw-running b{font-size:10px}.m2-app .srw-running em{font-size:7px;color:#87928f;font-style:normal}.m2-app .srw-running.partial{border-color:#695729}
 .m2-app .srw-native,.m2-app .srw-exact{display:grid;gap:7px;padding:8px;background:#111516;border:1px solid #303637;border-radius:6px}
 .m2-app .srw-native>header b,.m2-app .srw-exact>header b{font-size:9px}.m2-app .srw-native>header em,.m2-app .srw-exact>header em{font-size:7px;color:#e7b13b;font-style:normal}
 .m2-app .srw-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid #2c3233;border-radius:4px;overflow:hidden}
