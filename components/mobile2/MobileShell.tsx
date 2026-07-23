@@ -58,6 +58,14 @@ export function MobileShell(props: SurfaceProps) {
     return () => window.clearInterval(id);
   }, []);
 
+  // REVIEW enables the bounded page-owned research ledger. Hidden phone rooms
+  // remain quiet, while every leaf stays subscription-free.
+  useEffect(() => {
+    props.setActiveRoom(
+      room === "studio" ? "mix" : room === "review" ? "tape" : room === "ops" ? "ops" : "play",
+    );
+  }, [room, props.setActiveRoom]);
+
   const { desk } = view;
   const channels = useMemo(
     () => (acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists),

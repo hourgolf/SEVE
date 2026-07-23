@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useRefreshTick } from "./useRefreshTick";
+import { isVirtualBenchSlug } from "@/lib/research/shadowResearch";
 
 // LAB · VIRTUAL BENCH reads (60_virtual_trades) — the gate-shadow job's reconstructed
 // would-have outcomes for the bench fleet (`vb-*` drafts) and the armed channels' gate
@@ -63,14 +64,17 @@ export function useVirtualBench(): {
         const { data } = await sb
           .from("virtual_trades")
           .select("slug,blocked,exit_reason,pnl_per_contract,signal_at")
+          .gte("signal_at", new Date(Date.now() - 30 * 86_400_000).toISOString())
           .order("signal_at", { ascending: false })
-          .limit(5000);
+          .limit(2000);
         if (!alive) return;
         const rows = (data ?? []) as VirtualRow[];
-        const benchRows = rows.filter((r) => r.blocked === "not_armed");
+        // Day 1 uses lifecycle-aware block codes such as
+        // day1_dark_lifecycle. Fleet membership is the durable identity.
+        const benchRows = rows.filter((r) => isVirtualBenchSlug(r.slug));
         let gn = 0, gs = 0, gp = 0;
         for (const r of rows) {
-          if (r.blocked === "not_armed") continue;
+          if (isVirtualBenchSlug(r.slug)) continue;
           gn++;
           if (r.pnl_per_contract != null) { gs++; gp += Number(r.pnl_per_contract); }
         }

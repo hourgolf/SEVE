@@ -72,14 +72,14 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909[data-mode="perform"] .perform[data-section="market"] .pf-stage { grid-template-columns:minmax(0,1fr); }
 .shell-root.ws909[data-mode="perform"] .perform[data-section="market"] .pf-rail,
 .shell-root.ws909[data-mode="perform"] .perform[data-section="market"] .pf-dock { display:none; }
-.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"],[data-section="ops"]) {
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="research"],[data-section="sentinel"],[data-section="tape"],[data-section="ops"]) {
   grid-template-rows:auto minmax(0,1fr) 0;
 }
-.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"],[data-section="ops"]) .pf-stage {
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="research"],[data-section="sentinel"],[data-section="tape"],[data-section="ops"]) .pf-stage {
   grid-template-columns:minmax(0,1fr);
 }
-.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"],[data-section="ops"]) .pf-market-target,
-.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"],[data-section="ops"]) .pf-dock { display:none; }
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="research"],[data-section="sentinel"],[data-section="tape"],[data-section="ops"]) .pf-market-target,
+.shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="research"],[data-section="sentinel"],[data-section="tape"],[data-section="ops"]) .pf-dock { display:none; }
 .shell-root.ws909[data-mode="perform"] .perform:is([data-section="positions"],[data-section="sentinel"],[data-section="tape"]) .pf-rail {
   grid-column:1; display:flex; flex-direction:column;
 }
@@ -92,6 +92,105 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909[data-mode="perform"] .perform[data-section="positions"] #perform-positions,
 .shell-root.ws909[data-mode="perform"] .perform[data-section="sentinel"] #perform-sentinel,
 .shell-root.ws909[data-mode="perform"] .perform[data-section="tape"] #perform-tape { flex:1; }
+
+/* ---------- SHADOW RESEARCH workspace -----------------------------------
+   Same-day native virtual paths are separated from checksum-bound T+1 exact
+   manager evidence. This surface is descriptive and has no write controls. */
+.shell-root.ws909[data-mode="perform"] .srw {
+  min-width:0; min-height:0; height:100%; overflow:auto;
+  display:grid; align-content:start; gap:8px; padding:10px;
+  color:#d8dcdb; background:#0c1011; border:1px solid #34393a;
+  border-radius:9px; font-family:var(--mono);
+}
+.shell-root.ws909 .srw-head,
+.shell-root.ws909 .srw-native > header,
+.shell-root.ws909 .srw-exact > header {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+}
+.shell-root.ws909 .srw-head { padding:2px 2px 6px; border-bottom:1px solid #303536; }
+.shell-root.ws909 .srw-head span,
+.shell-root.ws909 .srw-native > header span,
+.shell-root.ws909 .srw-exact > header span { display:grid; gap:3px; }
+.shell-root.ws909 .srw-head b { font-size:13px; letter-spacing:.14em; }
+.shell-root.ws909 .srw-head small,
+.shell-root.ws909 .srw-native header small,
+.shell-root.ws909 .srw-exact header small { color:#778185; font-size:9px; letter-spacing:.05em; }
+.shell-root.ws909 .srw-head em {
+  color:#55d981; font-size:9px; font-style:normal; letter-spacing:.09em;
+}
+.shell-root.ws909 .srw-controls {
+  display:flex; align-items:center; gap:8px; padding:5px;
+  background:#15191a; border:1px solid #2e3435; border-radius:6px;
+}
+.shell-root.ws909 .srw-controls nav { display:flex; gap:3px; }
+.shell-root.ws909 .srw-controls nav + nav { margin-left:auto; }
+.shell-root.ws909 .srw-controls button {
+  min-height:26px; padding:0 9px; border:1px solid #343a3c; border-radius:4px;
+  color:#929a9c; background:#0b0e0f; font:700 9px/1 var(--mono); letter-spacing:.05em;
+}
+.shell-root.ws909 .srw-controls button.on {
+  color:#131716; background:#e7b33d; border-color:#f1c45b;
+}
+.shell-root.ws909 .srw-read {
+  min-width:48px; color:#69dd8e; font-size:9px; letter-spacing:.08em; text-align:right;
+}
+.shell-root.ws909 .srw-read.error { color:#ff6b55; }
+.shell-root.ws909 .srw-native,
+.shell-root.ws909 .srw-exact {
+  display:grid; gap:8px; padding:10px; background:#111516;
+  border:1px solid #303637; border-radius:7px;
+}
+.shell-root.ws909 .srw-native > header b,
+.shell-root.ws909 .srw-exact > header b { font-size:11px; letter-spacing:.1em; }
+.shell-root.ws909 .srw-native > header em,
+.shell-root.ws909 .srw-exact > header em {
+  color:#e6b13c; font-size:9px; font-style:normal; letter-spacing:.08em;
+}
+.shell-root.ws909 .srw-exact.complete > header em { color:#56d982; }
+.shell-root.ws909 .srw-exact.missing > header em { color:#ff735b; }
+.shell-root.ws909 .srw-kpis {
+  display:grid; grid-template-columns:repeat(6,minmax(0,1fr));
+  border:1px solid #2c3233; border-radius:5px; overflow:hidden;
+}
+.shell-root.ws909 .srw-kpis > span {
+  min-width:0; display:grid; gap:4px; padding:8px;
+  border-right:1px solid #2c3233;
+}
+.shell-root.ws909 .srw-kpis > span:last-child { border-right:0; }
+.shell-root.ws909 .srw-kpis small { color:#70797c; font-size:8px; letter-spacing:.08em; }
+.shell-root.ws909 .srw-kpis b { font-size:14px; color:#edf0ef; }
+.shell-root.ws909 .srw-table { min-width:760px; display:grid; }
+.shell-root.ws909 .srw-table-head,
+.shell-root.ws909 .srw-row {
+  display:grid; grid-template-columns:minmax(175px,1.6fr) .5fr .5fr .65fr .65fr .5fr 1.1fr;
+  align-items:center; gap:8px; min-height:32px; padding:0 8px;
+  border-bottom:1px solid #262b2c; font-size:10px;
+}
+.shell-root.ws909 .srw-table-head { color:#667074; font-size:8px; letter-spacing:.08em; }
+.shell-root.ws909 .srw-row b { overflow:hidden; text-overflow:ellipsis; color:#e6e9e8; }
+.shell-root.ws909 .srw-row span { color:#939b9d; }
+.shell-root.ws909 .srw .pos { color:#55d981; }
+.shell-root.ws909 .srw .neg { color:#ff735b; }
+.shell-root.ws909 .srw-manager-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 10px; }
+.shell-root.ws909 .srw-manager-list > div {
+  display:grid; grid-template-columns:minmax(120px,1.5fr) .7fr .7fr .8fr;
+  gap:8px; padding:6px 8px; border-bottom:1px solid #262b2c; font-size:9px;
+}
+.shell-root.ws909 .srw-manager-list span { color:#7d8789; }
+.shell-root.ws909 .srw-manager-list strong { text-align:right; }
+.shell-root.ws909 .srw-interactions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+.shell-root.ws909 .srw-interactions > b { grid-column:1/-1; color:#7e888a; font-size:8px; letter-spacing:.08em; }
+.shell-root.ws909 .srw-interactions > span {
+  min-width:0; display:grid; gap:3px; padding:7px; background:#0b0e0f;
+  border:1px solid #2a3031; border-radius:4px;
+}
+.shell-root.ws909 .srw-interactions strong { font-size:9px; }
+.shell-root.ws909 .srw-interactions em,
+.shell-root.ws909 .srw-interactions small { color:#838d90; font-size:8px; font-style:normal; }
+.shell-root.ws909 .srw footer,
+.shell-root.ws909 .srw-exact > p { color:#737d80; font-size:9px; line-height:1.45; }
+.shell-root.ws909 .srw-empty { padding:20px; color:#7e8789; text-align:center; }
+.shell-root.ws909 .srw-empty.error { color:#ff735b; }
 
 /* ---------- POSITIONS workspace ------------------------------------------
    The actionable per-channel book remains the primary surface. Correlated

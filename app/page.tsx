@@ -35,6 +35,7 @@ import { devIncidentFixture } from "@/lib/incident/devFixture";
 import { useRefreshTick } from "@/hooks/useRefreshTick";
 import { useStudioEvidence } from "@/hooks/useStudioEvidence";
 import { useContractHistory } from "@/hooks/useContractHistory";
+import { useShadowResearch } from "@/hooks/useShadowResearch";
 import type { Room } from "@/components/surfaceTypes";
 import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 import { deriveOpsReadiness } from "@/lib/ops/readiness";
@@ -178,6 +179,7 @@ function Surface({
     openPositions: feed.positions.length,
     closedPositions: feed.recentTrades.length,
   });
+  const shadowResearch = useShadowResearch(activeRoom === "tape");
   // 909 KIT — audible fills (opt-in via the KIT pad; inert while off). At the
   // seam so desktop + mobile share one diff of the same feed.
   useKitSounds(feed.positions, feed.recentTrades);
@@ -186,7 +188,7 @@ function Surface({
   // operator returns to the same room/layout. Lifted to the seam (passed down).
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, opsReadiness };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, opsReadiness, shadowResearch };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

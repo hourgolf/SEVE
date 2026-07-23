@@ -13,6 +13,7 @@ import { SentinelReceiptStrip } from "@/components/perform/SentinelWorkspace";
 import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { BrokerReconciliationStrip, OpsReadinessPanel, PositionEvidenceChains } from "@/components/ops/OpsReadinessPanel";
 import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
+import { ShadowResearchWorkspace } from "@/components/perform/ShadowResearchWorkspace";
 import { deriveTapeRows } from "@/lib/perform/eventTape";
 import {
   DEFAULT_MOBILE_REVIEW_MODE,
@@ -135,6 +136,8 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
         })}
       </div>
     </Section>}
+
+    {mobileReviewHas(mode, "shadow-research") && <ShadowResearchWorkspace surface={props} compact />}
 
     {mobileReviewHas(mode, "event-tape") && <Section title="EVENT TAPE" meta="retained operational view · newest 14">
       <TapeReadStrip health={props.data.readHealth.events} events={props.data.events} compact />

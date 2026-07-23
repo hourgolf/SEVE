@@ -14,6 +14,7 @@ import type { StudioEvidence } from "@/hooks/useStudioEvidence";
 import type { ContractHistory } from "@/hooks/useContractHistory";
 import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 import type { OpsReadinessModel } from "@/lib/ops/readiness";
+import type { ShadowResearch } from "@/hooks/useShadowResearch";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
@@ -73,4 +74,7 @@ export interface SurfaceProps {
   /** Day 1 capture/observer/publisher evidence, derived once at the page seam.
    * Configured startup claims remain separate from observed session receipts. */
   opsReadiness: OpsReadinessModel;
+  /** Bounded same-session virtual-path ledger, page-owned and enabled only for
+   * the Review/Research workspace. Leaves remain subscription-free. */
+  shadowResearch: ShadowResearch;
 }

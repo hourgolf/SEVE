@@ -24,6 +24,7 @@ const NAV = [
   { key: "market", label: "Markets", hint: "Chain", icon: "▤", group: "trade", mode: "perform" as const, section: "market" as const },
   { key: "positions", label: "Positions", hint: "Book", icon: "⌁", group: "trade", mode: "perform" as const, section: "positions" as const },
   { key: "studio", label: "Channels", hint: "Tune", icon: "◉", group: "trade", mode: "studio" as const },
+  { key: "research", label: "Research", hint: "Shadow", icon: "∿", group: "evidence", mode: "perform" as const, section: "research" as const },
   { key: "sentinel", label: "Sentinel", hint: "Next open", icon: "◇", group: "evidence", mode: "perform" as const, section: "sentinel" as const },
   { key: "tape", label: "Event Tape", hint: "Review", icon: "≋", group: "evidence", mode: "perform" as const, section: "tape" as const },
   { key: "ops", label: "Ops", hint: "System", icon: "⌘", group: "system", mode: "perform" as const, section: "ops" as const },
@@ -62,7 +63,15 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   // remain page-owned. Keep the existing seam room signal aligned with what is
   // actually visible so deep OPS ledgers run only in OPS (and do run there).
   useEffect(() => {
-    surface.setActiveRoom(mode === "perform" && performSection === "ops" ? "ops" : mode === "studio" ? "mix" : "play");
+    surface.setActiveRoom(
+      mode === "perform" && performSection === "ops"
+        ? "ops"
+        : mode === "perform" && performSection === "research"
+          ? "tape"
+          : mode === "studio"
+            ? "mix"
+            : "play",
+    );
   }, [mode, performSection, surface.setActiveRoom]);
 
   const { view, feed, liveFund, livePnl, accounts, acctId, setAcctId, incident, workerRuns, write } = surface;

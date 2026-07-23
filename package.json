@@ -84,6 +84,7 @@
     "dark-candidate-freeze:hosted": "tsx scripts/freeze-dark-candidates.ts",
     "dark-evidence-completeness-selftest": "tsx lib/research/darkEvidenceCompleteness.selftest.ts",
     "dark-evidence-completeness:render": "tsx scripts/render-dark-evidence-completeness.ts",
+    "shadow-research-selftest": "tsx lib/research/shadowResearch.selftest.ts",
     "dark-exact-replay-selftest": "tsx lib/research/darkExactReplay.selftest.ts",
     "dark-candidate-t1": "tsx --env-file=.env.local scripts/dark-candidate-t1.ts",
     "day1-preregistration-selftest": "tsx lib/research/day1Preregistration.selftest.ts",

@@ -15,12 +15,13 @@ const check = (name: string, run: () => void) => {
 };
 
 check("evidence is the default operator review", () => assert.equal(DEFAULT_MOBILE_REVIEW_MODE, "evidence"));
-check("three explicit review modes are exposed", () => assert.deepEqual(MOBILE_REVIEW_MODES.map((mode) => mode.id), ["session", "evidence", "sentinel"]));
+check("four explicit review modes are exposed", () => assert.deepEqual(MOBILE_REVIEW_MODES.map((mode) => mode.id), ["session", "shadow", "evidence", "sentinel"]));
 check("session owns results and attribution only", () => assert.deepEqual(mobileReviewSections("session"), ["session-summary", "equity", "attribution"]));
+check("shadow owns the research workspace", () => assert.deepEqual(mobileReviewSections("shadow"), ["shadow-research"]));
 check("evidence owns retained tape and linked chains", () => assert.deepEqual(mobileReviewSections("evidence"), ["event-tape", "trade-evidence"]));
 check("sentinel owns provenance, read, and deterministic scan", () => assert.deepEqual(mobileReviewSections("sentinel"), ["sentinel-receipt", "nightly-read", "deterministic-scan"]));
 check("partitions are disjoint", () => {
-  const modes: MobileReviewMode[] = ["session", "evidence", "sentinel"];
+  const modes: MobileReviewMode[] = ["session", "shadow", "evidence", "sentinel"];
   const sections = modes.flatMap((mode) => mobileReviewSections(mode));
   assert.equal(new Set(sections).size, sections.length);
 });

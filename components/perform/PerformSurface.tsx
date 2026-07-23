@@ -11,6 +11,7 @@ import { PerformPositionsWorkspace } from "@/components/perform/PerformPositions
 import { SentinelWorkspace } from "@/components/perform/SentinelWorkspace";
 import { EventTapeWorkspace } from "@/components/perform/EventTapeWorkspace";
 import { OpsWorkspace } from "@/components/perform/OpsWorkspace";
+import { ShadowResearchWorkspace } from "@/components/perform/ShadowResearchWorkspace";
 import { derivePerformFocus, type PerformSection } from "@/lib/perform/derivePerformView";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
@@ -47,7 +48,7 @@ export function PerformSurface({
       <IncidentBanner incident={incident} />
       <main className="pf-stage">
         {data.warning && <div className="market-read-warning" role="status">{data.warning}</div>}
-        {section === "market" ? <PerformMarketsWorkspace surface={surface} /> : section === "positions" ? <PerformPositionsWorkspace surface={surface} /> : section === "sentinel" ? <SentinelWorkspace sentinel={sentinel} symbol={symbol} /> : section === "tape" ? <EventTapeWorkspace events={data.events} health={data.readHealth.events} strategists={desk.strategists} readiness={surface.opsReadiness} /> : section === "ops" ? <OpsWorkspace surface={surface} /> : <>
+        {section === "market" ? <PerformMarketsWorkspace surface={surface} /> : section === "positions" ? <PerformPositionsWorkspace surface={surface} /> : section === "research" ? <ShadowResearchWorkspace surface={surface} /> : section === "sentinel" ? <SentinelWorkspace sentinel={sentinel} symbol={symbol} /> : section === "tape" ? <EventTapeWorkspace events={data.events} health={data.readHealth.events} strategists={desk.strategists} readiness={surface.opsReadiness} /> : section === "ops" ? <OpsWorkspace surface={surface} /> : <>
           <div className="pf-market-target" tabIndex={-1}>
             <IntradayChart
               bars={data.bars}

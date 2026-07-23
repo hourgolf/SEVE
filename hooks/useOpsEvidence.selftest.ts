@@ -20,6 +20,7 @@ assert.match(hook, /\.eq\("session_date_et", todayEt\)/, "capture receipts shoul
 assert.match(hook, /\.eq\("event_kind", eventKind\).*\.gte\("event_at", since\)/s, "outcomes should use the event-kind/time index");
 assert.match(hook, /\[accountScope, enabled, pollMs\]/, "workspace or account activation must restart the effect");
 assert.match(page, /useOpsEvidence\(120_000, activeRoom === "ops", accounts\.map\(\(account\) => account\.id\)\)/, "only OPS should activate account-scoped evidence reads");
-assert.match(workstation, /surface\.setActiveRoom\(mode === "perform" && performSection === "ops" \? "ops"/, "the 909 OPS workspace must activate the page-owned evidence seam");
+assert.match(workstation, /performSection === "ops"\s*\?\s*"ops"/s, "the 909 OPS workspace must activate the page-owned evidence seam");
+assert.match(workstation, /performSection === "research"\s*\?\s*"tape"/s, "the 909 Research workspace must activate the page-owned shadow seam");
 
-console.log("ops-evidence-read-selftest: 15/15 passed");
+console.log("ops-evidence-read-selftest: 16/16 passed");
