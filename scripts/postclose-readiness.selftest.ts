@@ -14,6 +14,9 @@ truth("non-flat account fails closed", source.includes("session-close gate requi
 truth("blocked result names the active gate", source.includes('requireFlat ? "SESSION-CLOSE" : "PRE-OPEN"'));
 truth("reads all bound broker positions", source.includes('brokerRead("/v2/positions", creds)'));
 truth("database position read is open-only", source.includes('.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open")'));
+truth("readiness compares operational runtime identity", source.includes("worker.version !== WORKER_RUNTIME_VERSION"));
+truth("readiness does not compare the run ledger with the sealed strategy version", !source.includes("worker.version !== DAY1_WORKER_VERSION"));
+truth("readiness displays both runtime and sealed strategy identities", source.includes('sealed strategy ${WORKER_VERSION}'));
 truth("contains no database mutations", !source.match(/\.(insert|update|upsert|delete)\s*\(/));
 truth("contains no broker-order route", !source.match(/\/v2\/orders|orderAndFill|placeFill|closePosition/));
 

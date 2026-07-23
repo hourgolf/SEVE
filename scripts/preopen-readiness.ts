@@ -8,11 +8,12 @@
 //  prints no API keys, account numbers, UUIDs, or broker account identifiers.
 // ============================================================================
 
-import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION } from "@/lib/channels/day1Release";
+import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS } from "@/lib/channels/day1Release";
 import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { deriveSentinelReceiptStatus } from "@/lib/sentinel/receipt";
 import type { MarketEvent } from "@/lib/types";
 import { DAY1_SEALED_RUNTIME_POSTURE } from "@/worker/src/day1ReleasePolicy";
+import { WORKER_RUNTIME_VERSION, WORKER_VERSION } from "@/worker/src/version";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const REQUIRED_PAPER_HOST = "https://paper-api.alpaca.markets";
@@ -169,7 +170,7 @@ async function main(): Promise<void> {
     workerAgeSec = Math.max(0, (Date.now() - Date.parse(worker.last_heartbeat_at)) / 1000);
     if (workerAgeSec > WORKER_FRESH_SEC) failures.push(`worker heartbeat is ${Math.round(workerAgeSec)}s old`);
     if (worker.last_error) failures.push(`worker reports an error: ${worker.last_error}`);
-    if (worker.version !== DAY1_WORKER_VERSION) failures.push(`worker version is ${worker.version ?? "missing"}; expected ${DAY1_WORKER_VERSION}`);
+    if (worker.version !== WORKER_RUNTIME_VERSION) failures.push(`worker runtime is ${worker.version ?? "missing"}; expected ${WORKER_RUNTIME_VERSION}`);
   }
 
   const release = findDay1ReleaseReceipt((releaseRead.data ?? []) as MarketEvent[]);
@@ -218,7 +219,7 @@ async function main(): Promise<void> {
   console.log(`\n══ SEVE ${gateLabel} · READ ONLY ══`);
   console.log(`Broker host : ${configuredHost} ${configuredHost === REQUIRED_PAPER_HOST ? "✓ PAPER" : "✗"}`);
   console.log(`Fund        : ${fund?.mode ?? "missing"} · halted=${fund?.is_halted ? "TRUE" : "false"}`);
-  console.log(`Worker      : ${worker?.version ?? "missing"} · ${Math.round(workerAgeSec)}s · ${worker?.last_phase ?? "?"} · ${worker?.last_error ? "ERROR" : "clean"}`);
+  console.log(`Worker      : runtime ${worker?.version ?? "missing"} · sealed strategy ${WORKER_VERSION} · ${Math.round(workerAgeSec)}s · ${worker?.last_phase ?? "?"} · ${worker?.last_error ? "ERROR" : "clean"}`);
   console.log(`Release     : ${release?.releaseId ?? "missing"} · ${release?.configHash.slice(0, 12) ?? "—"}${release ? "…" : ""}`);
   console.log(`Execution   : ${release?.dryRun === false && release?.liveTrading === true ? "PAPER EXECUTOR" : "SHADOW / UNVERIFIED"} · dryRun=${String(release?.dryRun ?? null)} · liveTrading=${String(release?.liveTrading ?? null)}`);
   console.log(`Sentinel    : ${sentinelReceipt.label} · ${sentinelReceipt.detail}`);
