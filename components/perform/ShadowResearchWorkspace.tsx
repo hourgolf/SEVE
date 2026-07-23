@@ -13,6 +13,7 @@ const percent = (wins: number, scored: number): string =>
   scored ? `${Math.round((1000 * wins) / scored) / 10}%` : "—";
 const money = (value: number | null): string => value == null ? "—" : signedUsd(value);
 const shortSession = (session: string): string => session.slice(5).replace("-", "/");
+type ResearchLane = "vb" | "all";
 const laneTotals = (rows: ShadowChannelSummary[]) => {
   const scored = rows.reduce((sum, row) => sum + row.scored, 0);
   const pnl = rows.reduce((sum, row) => sum + row.pnlPerContract, 0);
@@ -73,11 +74,25 @@ function ExactStatus({ surface, session }: { surface: SurfaceProps; session: str
   return <section className="srw-exact missing"><header><span><b>EXACT MANAGER REPLAY</b><small>no session-matched receipt</small></span><em>MISSING</em></header>
     <p>The native ledger is visible, but no exact manager receipt is attached to this session.</p></section>;
 }
-function NativeTable({ rows }: { rows: ShadowChannelSummary[] }) {
+function NativeTable({
+  rows,
+  selectable = false,
+  excluded = [],
+  onToggle,
+  onToggleAll,
+}: {
+  rows: ShadowChannelSummary[];
+  selectable?: boolean;
+  excluded?: string[];
+  onToggle?: (slug: string) => void;
+  onToggleAll?: () => void;
+}) {
+  const selectedCount = rows.filter((row) => !excluded.includes(row.slug)).length;
+  const allSelected = rows.length > 0 && selectedCount === rows.length;
   return <div className="srw-table">
-    <div className="srw-table-head"><span>CHANNEL</span><span>PATHS</span><span>WIN</span><span>AVG/CT</span><span>Σ/CT</span><span>MFE</span><span>EXIT MIX</span></div>
+    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}CHANNEL</span><span>PATHS</span><span>WIN</span><span>AVG/CT</span><span>Σ/CT</span><span>MFE</span><span>EXIT MIX</span></div>
     {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : rows.map((row) => <div className="srw-row" key={row.slug}>
-      <b>{row.slug}</b><span>{row.scored}/{row.paths}</span><span>{percent(row.winners, row.scored)}</span>
+      <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span>{row.slug}</span></b><span>{row.scored}/{row.paths}</span><span>{percent(row.winners, row.scored)}</span>
       <strong className={(row.averagePerPath ?? 0) >= 0 ? "pos" : "neg"}>{money(row.averagePerPath)}</strong>
       <span>{money(row.pnlPerContract)}</span><span>{row.averageMfePct == null ? "—" : `${row.averageMfePct}%`}</span>
       <span>{row.targets}T · {row.stops}S · {row.flattens}B</span>
@@ -88,8 +103,9 @@ function NativeTable({ rows }: { rows: ShadowChannelSummary[] }) {
 export function ShadowResearchWorkspace({ surface, compact = false }: { surface: SurfaceProps; compact?: boolean }) {
   const { shadowResearch } = surface;
   const [session, setSession] = useState("");
-  const [lane, setLane] = useState<"vb" | "all">("vb");
+  const [lane, setLane] = useState<ResearchLane>("vb");
   const [windowMode, setWindowMode] = useState<"day" | "cumulative">("day");
+  const [excluded, setExcluded] = useState<Record<ResearchLane, string[]>>({ vb: [], all: [] });
   useEffect(() => {
     if (!session && shadowResearch.sessions.length) setSession(shadowResearch.sessions[0].session);
   }, [session, shadowResearch.sessions]);
@@ -99,14 +115,30 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   );
   const native = windowMode === "cumulative" ? shadowResearch.cumulative : selected;
   const rows = native ? (lane === "vb" ? native.vb : native.dark) : [];
-  const totals = laneTotals(rows);
+  const filteredRows = windowMode === "cumulative"
+    ? rows.filter((row) => !excluded[lane].includes(row.slug))
+    : rows;
+  const totals = laneTotals(filteredRows);
   const runningRows = shadowResearch.cumulative
     ? (lane === "vb" ? shadowResearch.cumulative.vb : shadowResearch.cumulative.dark)
     : [];
-  const running = laneTotals(runningRows);
+  const filteredRunningRows = windowMode === "cumulative"
+    ? runningRows.filter((row) => !excluded[lane].includes(row.slug))
+    : runningRows;
+  const running = laneTotals(filteredRunningRows);
   const nativeTitle = windowMode === "cumulative" && shadowResearch.cumulative
     ? `CUMULATIVE NATIVE PATHS · ${shadowResearch.cumulative.fromSession} → ${shadowResearch.cumulative.throughSession}`
     : `SAME-DAY NATIVE PATHS · ${selected?.session ?? "—"}`;
+  const toggleStrategy = (slug: string) => setExcluded((previous) => ({
+    ...previous,
+    [lane]: previous[lane].includes(slug)
+      ? previous[lane].filter((item) => item !== slug)
+      : [...previous[lane], slug],
+  }));
+  const toggleAllStrategies = () => setExcluded((previous) => ({
+    ...previous,
+    [lane]: rows.length > 0 && filteredRows.length === rows.length ? rows.map((row) => row.slug) : [],
+  }));
 
   return <section className={`srw${compact ? " compact" : ""}`} id="perform-research" tabIndex={-1} aria-label="Shadow research workspace">
     <header className="srw-head"><span><b>SHADOW RESEARCH</b><small>native paths now · exact manager truth at T+1</small></span>
@@ -120,7 +152,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>
       <span><small>RUNNING {lane === "vb" ? "VB SWARM" : "ALL DARK"} · SINCE {shadowResearch.cohortStart}</small>
         <b className={running.pnl >= 0 ? "pos" : "neg"}>{money(running.pnl)} Σ/CT</b></span>
-      <em>{running.scored} scored · {shadowResearch.cumulative.sessionCount} sessions · {percent(running.winners, running.scored)} win</em>
+      <em>{windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} strategies · ` : ""}{running.scored} scored · {shadowResearch.cumulative.sessionCount} sessions · {percent(running.winners, running.scored)} win</em>
     </div> : null}
     {shadowResearch.state === "loading" || shadowResearch.state === "idle" ? <div className="srw-empty">loading bounded research ledger…</div>
       : shadowResearch.state === "error" ? <div className="srw-empty error">research read failed · {shadowResearch.error}</div>
@@ -135,8 +167,8 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
             <span><small>TARGET / STOP</small><b>{totals.targets} / {totals.stops}</b></span>
             <span><small>AVG / PATH</small><b>{money(totals.average)}</b></span>
           </div>
-          <NativeTable rows={rows} />
-          <footer>Native figures are correlated would-haves, not portfolio P&amp;L. Rankings are descriptive and cannot change the desk.{shadowResearch.truncated ? ` Cumulative evidence is PARTIAL at the ${(10_000).toLocaleString()}-row safety cap.` : ""}</footer>
+          <NativeTable rows={rows} selectable={windowMode === "cumulative"} excluded={excluded[lane]} onToggle={toggleStrategy} onToggleAll={toggleAllStrategies} />
+          <footer>{windowMode === "cumulative" ? "Checked strategies contribute to the cumulative summary above. " : ""}Native figures are correlated would-haves, not portfolio P&amp;L. Rankings are descriptive and cannot change the desk.{shadowResearch.truncated ? ` Cumulative evidence is PARTIAL at the ${(10_000).toLocaleString()}-row safety cap.` : ""}</footer>
         </section>
         <ExactStatus surface={surface} session={selected.session} />
       </>}
