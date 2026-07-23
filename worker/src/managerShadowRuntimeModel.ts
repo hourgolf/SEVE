@@ -18,6 +18,10 @@ export function managerShadowSessionPhase(clock: EtClock): "closed" | "observe" 
   const cutoff = close - 5;
   const seconds = clock.minute * 60 + clock.second;
   if (seconds < 570 * 60) return "closed";
+  // Settlement owns only the bounded five-minute window before the session
+  // close. Without this upper bound an always-on worker treats every
+  // after-hours tick as settlement and can keep polling/capturing old OCCs.
+  if (seconds >= close * 60) return "closed";
   if (seconds < cutoff * 60) return "observe";
   if (seconds < cutoff * 60 + MANAGER_SHADOW_CUTOFF_GRACE_MS / 1_000) return "cutoff";
   return "settle";

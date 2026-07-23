@@ -248,6 +248,10 @@ truth("migration requires source-boot provenance", migration.includes("source_bo
 truth("model contains no execution imports", !readFileSync(new URL("./managerShadowBookModel.ts", import.meta.url), "utf8").match(/executeExit|orderAndFill|broker order/i));
 truth("v2 migration preserves versioned provenance", v2Migration.includes("manager-shadow-book-v2") && v2Migration.includes("admission_source"));
 truth("v2 migration permits the staged two-lot candidate", v2Migration.includes("minimum_modeled_qty in (2, 4)"));
+const storeSource = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+const runtimeSource = readFileSync(new URL("./managerShadowBook.ts", import.meta.url), "utf8");
+truth("duplicate-safe admission returns only persisted rows", /ignoreDuplicates: true \}\)\s*\.select\("\*"\)/.test(storeSource));
+truth("partial duplicate admission fails closed", runtimeSource.includes("persistedRows.length !== candidates.length"));
 
 check("targeted quotes deduplicate and sort", targetedOptionBatches(["Z", "A", "z"], 2, 10), [["A", "Z"]]);
 check("targeted quotes batch at provider limit", targetedOptionBatches(Array.from({ length: 101 }, (_, i) => `O${i}`), 100, 500)?.map((b) => b.length), [100, 1]);
@@ -270,7 +274,10 @@ check("missing snapshot body is empty", normalizeTargetedOptionSnapshots({}, "op
 check("regular session observes before 15:55", managerShadowSessionPhase({ date: "2026-07-13", minute: 954, second: 59 }), "observe");
 check("regular session enters cutoff at 15:55", managerShadowSessionPhase({ date: "2026-07-13", minute: 955, second: 0 }), "cutoff");
 check("cutoff grace settles after 30 seconds", managerShadowSessionPhase({ date: "2026-07-13", minute: 955, second: 30 }), "settle");
+check("regular session remains in bounded settlement before the bell", managerShadowSessionPhase({ date: "2026-07-13", minute: 959, second: 59 }), "settle");
+check("regular session is closed at the bell", managerShadowSessionPhase({ date: "2026-07-13", minute: 960, second: 0 }), "closed");
 check("half-day cutoff is 12:55", managerShadowSessionPhase({ date: "2026-11-27", minute: 775, second: 0 }), "cutoff");
+check("half-day is closed at 13:00", managerShadowSessionPhase({ date: "2026-11-27", minute: 780, second: 0 }), "closed");
 check("holiday never observes", managerShadowSessionPhase({ date: "2026-12-25", minute: 600, second: 0 }), "closed");
 check("weekend never observes", managerShadowSessionPhase({ date: "2026-07-12", minute: 600, second: 0 }), "closed");
 check("pre-open is closed", managerShadowSessionPhase({ date: "2026-07-13", minute: 569, second: 59 }), "closed");

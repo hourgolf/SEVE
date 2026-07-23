@@ -9,4 +9,4 @@ export const WORKER_VERSION = "stream-2026-07-21b" as const;
 // intentionally separate so an evidence-plumbing/runtime-only deploy can be
 // verified in the heartbeat and run ledger without mutating sealed strategy
 // provenance.
-export const WORKER_RUNTIME_VERSION = "stream-runtime-2026-07-22a" as const;
+export const WORKER_RUNTIME_VERSION = "stream-runtime-2026-07-22b" as const;

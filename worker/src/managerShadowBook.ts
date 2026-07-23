@@ -192,8 +192,22 @@ async function persistAdmission(input: ManagerEnrollmentInput): Promise<boolean>
   try {
     const candidates = buildManagerShadowEnrollments(input);
     if (!candidates.length) return false;
-    if (!await store.insertManagerShadowRuns(candidates)) return false;
-    for (const run of candidates) runs.set(run.id, { run, sourceBootId: BOOT_ID });
+    const persistedRows = await store.insertManagerShadowRuns(candidates);
+    // `ignoreDuplicates` is safe only when the runtime uses the rows Postgres
+    // actually inserted. If a prior/incompatible row owns any deterministic
+    // id, fail the whole admission closed instead of fabricating active arms
+    // in memory that can never win the status-guarded update.
+    if (!persistedRows || persistedRows.length !== candidates.length) return false;
+    const persisted = persistedRows.map((row) => ({
+      run: decodeManagerShadowRun(row),
+      sourceBootId: row.source_boot_id as string,
+    }));
+    if (persisted.some((item) => item.run == null)) return false;
+    const expectedIds = new Set(candidates.map((run) => run.id));
+    if (persisted.some((item) => !item.run || !expectedIds.has(item.run.id))) return false;
+    for (const item of persisted) {
+      if (item.run) runs.set(item.run.id, { run: item.run, sourceBootId: item.sourceBootId });
+    }
     enrolledPositions.add(input.positionId);
     admissionHealthWarned.delete(input.positionId);
     return true;

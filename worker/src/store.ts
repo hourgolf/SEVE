@@ -597,16 +597,24 @@ export async function loadManagerShadowRows(): Promise<ManagerShadowDbRow[] | nu
   return null;
 }
 
-export async function insertManagerShadowRuns(runs: readonly ManagerShadowRun[]): Promise<boolean> {
-  if (!config.hasServiceRole || managerShadowTableAvailable === false || !runs.length) return false;
+export async function insertManagerShadowRuns(runs: readonly ManagerShadowRun[]): Promise<ManagerShadowDbRow[] | null> {
+  if (!config.hasServiceRole || managerShadowTableAvailable === false) return null;
+  if (!runs.length) return [];
   const rows = runs.map((run) => encodeManagerShadowRun(run, { sourceBootId: BOOT_ID }));
-  if (rows.some((row) => row == null)) return false;
-  const { error } = await sb.from("manager_shadow_runs")
-    .upsert(rows as ManagerShadowDbRow[], { onConflict: "id", ignoreDuplicates: true });
-  if (!error) { managerShadowTableAvailable = true; return true; }
+  if (rows.some((row) => row == null)) return null;
+  // Returning the inserted representations is load-bearing. A duplicate is
+  // intentionally ignored by Postgres and therefore omitted from `data`; the
+  // runtime must not mistake that no-op for a newly admitted in-memory arm.
+  const { data, error } = await sb.from("manager_shadow_runs")
+    .upsert(rows as ManagerShadowDbRow[], { onConflict: "id", ignoreDuplicates: true })
+    .select("*");
+  if (!error) {
+    managerShadowTableAvailable = true;
+    return (data ?? []) as ManagerShadowDbRow[];
+  }
   if (missingRelation(error)) managerShadowTableAvailable = false;
   else warn(`store: manager shadow enrollment failed — ${error.message}`);
-  return false;
+  return null;
 }
 
 /** Optimistic active→active/terminal/censored update. The active predicate is
