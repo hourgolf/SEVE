@@ -26,6 +26,8 @@ Read-only aggregation of `virtual_trades`, grouped by New York session:
 
 These totals are correlated virtual would-haves and are not portfolio P&L.
 They are intentionally labeled **same-day native paths** in the interface.
+Within the VB lane alone, July 22 was 50/104 positive with a native average of
+-$7.52/path; July 21 was 55/120 positive with a native average of -$3.37/path.
 
 Selected July 22 native observations:
 
