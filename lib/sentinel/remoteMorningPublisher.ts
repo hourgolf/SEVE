@@ -2,8 +2,10 @@ import {
   calendarCoverageKnown,
   isTradingDay,
   previousTradingDay,
+  RTH_OPEN_MIN,
   sessionCloseMin,
 } from "@/engine/market-calendar";
+import { etWallMinuteUtc } from "@/lib/research/afterCloseResearch";
 import { readSentinelOperatorPacket } from "./operatorPacket.js";
 
 export const REMOTE_MORNING_PUBLISHER_VERSION = "remote-morning-publisher-v1";
@@ -90,11 +92,6 @@ export function remoteMorningClock(nowMs: number): MorningClock {
   return parts(nowMs);
 }
 
-const etClockOfIso = (value: string): MorningClock | null => {
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? parts(ms) : null;
-};
-
 export function deriveRemoteMorningPlan(input: {
   nowMs: number;
   report: RemoteForensicsReport | null;
@@ -129,16 +126,34 @@ export function deriveRemoteMorningPlan(input: {
   if (input.report.report_date > evidenceSession || (input.report.payload.giveback?.date && input.report.payload.giveback.date !== evidenceSession)) {
     return { action: "block", code: "forensics-conflict", detail: `forensics identity conflicts with ${evidenceSession}`, targetSession: clock.date, evidenceSession };
   }
-  const generatedEt = etClockOfIso(input.report.generated_at);
-  if (!generatedEt || generatedEt.date !== evidenceSession) {
-    return { action: "block", code: "forensics-conflict", detail: `forensics generated_at resolves to ${generatedEt?.date || "invalid"}; expected ${evidenceSession}`, targetSession: clock.date, evidenceSession };
+  const generatedAtMs = Date.parse(input.report.generated_at);
+  if (!Number.isFinite(generatedAtMs) || generatedAtMs > input.nowMs) {
+    return { action: "block", code: "forensics-conflict", detail: "forensics generated_at is invalid or in the future", targetSession: clock.date, evidenceSession };
   }
-  const earliestPostCloseMin = sessionCloseMin(evidenceSession) + 15;
-  if (generatedEt.minute < earliestPostCloseMin) {
+  // The durable row is deliberately idempotent and may be refreshed by a
+  // catch-up job after the evidence date. Accept that reconstruction only
+  // inside the exact settled-close -> target-open interval. This preserves the
+  // fail-closed boundary without requiring generated_at to remain on the same
+  // ET calendar date as a Friday/holiday-adjacent evidence session.
+  const earliestPostCloseMs = Date.parse(etWallMinuteUtc(
+    evidenceSession,
+    sessionCloseMin(evidenceSession) + 15,
+  ));
+  const targetOpenMs = Date.parse(etWallMinuteUtc(clock.date, RTH_OPEN_MIN));
+  if (generatedAtMs < earliestPostCloseMs) {
     return {
       action: "block",
       code: "forensics-stale",
-      detail: `forensics generated_at is ET minute ${generatedEt.minute}; post-close evidence requires >= ${earliestPostCloseMin}`,
+      detail: `forensics generated_at predates the settled close for ${evidenceSession}`,
+      targetSession: clock.date,
+      evidenceSession,
+    };
+  }
+  if (generatedAtMs >= targetOpenMs) {
+    return {
+      action: "block",
+      code: "forensics-conflict",
+      detail: `forensics generated_at is not pre-open for ${clock.date}`,
       targetSession: clock.date,
       evidenceSession,
     };
