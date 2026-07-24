@@ -11,6 +11,7 @@
 // boundary for every later invocation.
 
 import { appendFileSync } from "node:fs";
+import { previousTradingDay } from "@/engine/market-calendar";
 import { buildRemoteSentinelMeta, deriveRemoteMorningPlan, remoteMorningClock, remoteMorningRunId, REMOTE_MORNING_PUBLISHER_VERSION, type PriorSentinelReceipt, type RemoteForensicsReport } from "@/lib/sentinel/remoteMorningPublisher";
 import { auditMorningPublisherReceipt, type MorningPublisherEvent } from "@/lib/sentinel/morningPublisherReceipt";
 import { createServerSupabaseClient } from "./serverSupabase";
@@ -68,8 +69,14 @@ async function main(): Promise<void> {
   const sb = createServerSupabaseClient("remote-morning-publisher");
   errorClient = sb;
   const nowMs = AT_MS ?? Date.now();
+  const targetDate = remoteMorningClock(nowMs).date;
+  const evidenceDate = previousTradingDay(targetDate);
   const [reportRead, sentinelRead, lifecycleRead] = await withDeadline(Promise.all([
-    sb.from("forensics_reports").select("report_date,generated_at,payload").order("report_date", { ascending: false }).limit(1).maybeSingle(),
+    // A pre-open catch-up may already have created today's incomplete row.
+    // Bind the input to the exact prior trading session instead of treating
+    // the lexically latest report_date as evidence for this target.
+    sb.from("forensics_reports").select("report_date,generated_at,payload")
+      .eq("report_date", evidenceDate).maybeSingle(),
     sb.from("events").select("message,created_at,meta").like("message", "sentinel:%").order("created_at", { ascending: false }).limit(25),
     sb.from("events").select("message,created_at,meta").in("message", ["morning-publisher: start", "morning-publisher: finish"]).order("created_at", { ascending: false }).limit(50),
   ]), "publisher inputs");
@@ -77,7 +84,6 @@ async function main(): Promise<void> {
     if (result.error) throw new Error(`${label} read failed: ${result.error.message}`);
   }
 
-  const targetDate = remoteMorningClock(nowMs).date;
   const completedTarget = (lifecycleRead.data ?? []).some((row) => row.message === "morning-publisher: finish" && row.meta?.targetSession === targetDate)
     ? targetDate
     : null;

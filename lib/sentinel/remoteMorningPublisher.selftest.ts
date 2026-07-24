@@ -66,8 +66,18 @@ assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-19T13:00:00Z")
 assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: null, priorSentinel: null }).code, "forensics-missing");
 assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: report("2026-07-17"), priorSentinel: null }).code, "forensics-stale");
 assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: report("2026-07-21"), priorSentinel: null }).code, "forensics-conflict");
-assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: { ...report(), generated_at: "2026-07-19T20:30:00Z" }, priorSentinel: null }).code, "forensics-conflict");
+assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: { ...report(), generated_at: "2026-07-19T20:30:00Z" }, priorSentinel: null }).code, "forensics-stale");
 assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: { ...report(), generated_at: "2026-07-20T17:00:00Z" }, priorSentinel: null }).code, "forensics-stale");
+assert.equal(deriveRemoteMorningPlan({
+  nowMs: edt,
+  report: { ...report(), generated_at: "2026-07-21T09:30:00Z" },
+  priorSentinel: null,
+}).action, "publish");
+assert.equal(deriveRemoteMorningPlan({
+  nowMs: edt,
+  report: { ...report(), generated_at: "2026-07-21T13:30:00Z" },
+  priorSentinel: null,
+}).code, "forensics-conflict");
 assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: report(), priorSentinel: null, completedTarget: "2026-07-21" }).code, "already-published");
 assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: report(), priorSentinel: { meta: { session: "2026-07-20", forDate: "2026-07-21", publisherVersion: "sentinel-publisher-v2" } } }).action, "publish");
 assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: report(), priorSentinel: { meta: { session: "2026-07-20", forDate: "2026-07-21", publisherVersion: "remote-morning-publisher-v1" } } }).action, "publish");
@@ -78,4 +88,4 @@ assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2028-01-03T14:00:00Z")
 const publisherSource = readFileSync(new URL("../../scripts/remote-morning-publisher.ts", import.meta.url), "utf8");
 assert.doesNotMatch(publisherSource, /worker\/src\/(?:index|execute|alpaca)|close-position|ALPACA_|LIVE_TRADING/);
 
-console.log("remote-morning-publisher-selftest: 31/31 passed");
+console.log("remote-morning-publisher-selftest: 33/33 passed");
