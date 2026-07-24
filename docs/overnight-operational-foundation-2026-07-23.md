@@ -1,10 +1,34 @@
 # Overnight operational foundation — 2026-07-23
 
-Status: implementation branch `overnight/operational-foundation-2026-07-23`.
+Status: operator-approved after authenticated preview smoke on branch
+`overnight/operational-foundation-2026-07-23`. The implementation commit is
+`92a9823`; the handoff formatting follow-up is `93e0545`. Merge authorization
+was granted on 2026-07-23.
 This document is the canonical handoff for the next Codex task. It replaces
 conversation-derived status. Read it together with
 `docs/sentinel-purpose-review-2026-07-22.md` and
 `docs/week1-prospect-evidence-continuity-2026-07-23.md`.
+
+## Review and authenticated preview evidence
+
+The authenticated Vercel preview was smoke-tested on desktop and mobile before
+merge authorization:
+
+- SPY, QQQ, and IWM chart and observed-chain switching worked on both layouts;
+- IWM OCC rows and the shared underlying contract rendered correctly;
+- Shadow Research showed cumulative/native evidence and retained its
+  `RESEARCH ONLY · ZERO ORDER AUTHORITY` boundary;
+- Sentinel showed the deterministic current/partial packet and truthful T+1
+  exact-replay gate;
+- the sealed paper-only release identity remained visible;
+- no horizontal viewport overflow was observed; and
+- the browser console contained no warnings or errors.
+
+`BROKER CHECK` outside OPS is expected under the current load-shedding design:
+deep multi-account reconciliation is activated only in OPS. It must not be
+misread as a failed reconciliation. The flat preview could not exercise a live
+open-position mark update, and the corrected hosted schedule cannot be proven
+until its first post-merge run.
 
 ## Scope and invariants
 
