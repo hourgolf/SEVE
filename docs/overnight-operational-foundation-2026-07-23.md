@@ -195,4 +195,3 @@ For the next Codex task:
    invariants.
 5. Treat chat history as background; treat repository contracts and fresh
    receipts as authority.
-
