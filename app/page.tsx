@@ -54,7 +54,7 @@ function Surface({
   setTheme: Dispatch<SetStateAction<"cream" | "blackout">>;
   presentation: WorkstationPresentation;
 }) {
-  // §01 market instrument (SPY default, QQQ live). One state drives the single
+  // §01 market instrument (SPY default; SPY/QQQ/IWM live). One state drives the single
   // market hook + the chart/chain/spot toggle — the desk (§02/§03) is per-channel.
   const [symbol, setSymbol] = useState("SPY");
   const data = useMarketData(symbol);

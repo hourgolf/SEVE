@@ -16,6 +16,7 @@ import { deriveTapeRows } from "@/lib/perform/eventTape";
 import { OptionChain } from "@/components/OptionChain";
 import { ContractDetailView } from "@/components/ContractDetail";
 import { MarketOpenRisk, MarketReadStrip } from "@/components/perform/PerformMarketsWorkspace";
+import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 
 // =============================================================================
 // MOBILE · PERFORM (S5) — the watch surface as ONE vertical scroll (the gallery
@@ -148,7 +149,7 @@ export function MobilePerform({
           <button type="button" className={marketView === "chart" ? "on" : ""} onClick={() => onMarketViewChange("chart")} aria-pressed={marketView === "chart"}>CHART</button>
           <button type="button" className={marketView === "chain" ? "on" : ""} onClick={() => onMarketViewChange("chain")} aria-pressed={marketView === "chain"}>CHAIN</button>
           <span />
-          {["SPY", "QQQ", "IWM"].map((ticker) => <button type="button" key={ticker} className={`symbol${symbol === ticker ? " on" : ""}`} onClick={() => changeSymbol(ticker)} aria-pressed={symbol === ticker}>{ticker}</button>)}
+          {SUPPORTED_UNDERLYINGS.map((ticker) => <button type="button" key={ticker} className={`symbol${symbol === ticker ? " on" : ""}`} onClick={() => changeSymbol(ticker)} aria-pressed={symbol === ticker}>{ticker}</button>)}
         </nav>
         {marketView === "chart" ? <>
           <section className="m2-screen">

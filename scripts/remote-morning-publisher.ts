@@ -2,12 +2,15 @@
 //
 // This is intentionally a separate Railway cron/service, never imported by the
 // order executor. It reads one bounded forensics row plus compact event receipts,
-// self-gates to 08:55-09:10 ET, and publishes a truthfully PARTIAL Sentinel v3
+// self-gates to 07:00-09:25 ET, and publishes a truthfully PARTIAL Sentinel v3
 // artifact until terrain/IV/full-scan inputs have their own durable cloud source.
 //
 // Local review (zero writes): npm run remote-morning-publisher -- --dry-run --force-window
-// Railway cron: 0 13,14 * * 1-5 (one run self-gates in EDT, the other in EST)
+// Hosted cron: bounded retries begin early because GitHub schedules are
+// best-effort and may arrive late. The first finish receipt is the idempotency
+// boundary for every later invocation.
 
+import { appendFileSync } from "node:fs";
 import { buildRemoteSentinelMeta, deriveRemoteMorningPlan, remoteMorningClock, remoteMorningRunId, REMOTE_MORNING_PUBLISHER_VERSION, type PriorSentinelReceipt, type RemoteForensicsReport } from "@/lib/sentinel/remoteMorningPublisher";
 import { auditMorningPublisherReceipt, type MorningPublisherEvent } from "@/lib/sentinel/morningPublisherReceipt";
 import { createServerSupabaseClient } from "./serverSupabase";
@@ -23,6 +26,31 @@ const timeoutMs = Math.max(10_000, Math.min(120_000, Number(process.env.MORNING_
 
 let errorClient: SupabaseClient | null = null;
 let errorContext: Record<string, unknown> = { version: REMOTE_MORNING_PUBLISHER_VERSION };
+
+const writeHostedSummary = (summary: Record<string, unknown>): void => {
+  const action = String(summary.action ?? "unknown");
+  const code = String(summary.code ?? "unknown");
+  const detail = String(summary.detail ?? "");
+  const target = String(summary.targetSession ?? "—");
+  const evidence = String(summary.evidenceSession ?? "—");
+  if (process.env.GITHUB_ACTIONS === "true") {
+    const annotation = action === "block" ? "error" : action === "skip" && code === "outside-window" ? "warning" : "notice";
+    console.log(`::${annotation} title=Morning publisher ${action}/${code}::${detail}`);
+  }
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (summaryPath) {
+    appendFileSync(summaryPath, [
+      "### Morning publisher result",
+      "",
+      `- Action: **${action}**`,
+      `- Code: **${code}**`,
+      `- Evidence session: \`${evidence}\``,
+      `- Target session: \`${target}\``,
+      `- Detail: ${detail}`,
+      "",
+    ].join("\n"));
+  }
+};
 
 const withDeadline = async <T>(work: PromiseLike<T>, label: string): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -67,6 +95,7 @@ async function main(): Promise<void> {
   const summary = { version: REMOTE_MORNING_PUBLISHER_VERSION, publisherRunId, dryRun: DRY_RUN, action: plan.action, code: plan.code, detail: plan.detail, targetSession: plan.targetSession ?? null, evidenceSession: plan.evidenceSession ?? null };
   errorContext = summary;
   console.log(JSON.stringify(summary));
+  writeHostedSummary(summary);
   if (plan.action === "skip") return;
   if (plan.action === "block") {
     throw new Error(plan.detail);

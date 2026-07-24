@@ -5,6 +5,7 @@ import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
 import { useAuth } from "@/hooks/useAuth";
 import type { Position } from "@/lib/desk/types";
+import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 
 // occ_symbol → a "live" mark for EVERY open position, BOTH tickers, independent of
 // which chart/ticker is selected.
@@ -14,12 +15,10 @@ import type { Position } from "@/lib/desk/types";
 // versa) had no live mark and froze on the worker's ~1-min unrealized_pnl cadence.
 //
 // This hook is ticker-agnostic: it pulls the latest option_quotes for exactly the
-// HELD contracts (one `.in()` query, both tickers) + the fast /api/spot tick for
+// HELD contracts (one `.in()` query, every supported ticker) + the fast /api/spot tick for
 // each underlying, and marks each contract off its OWN ticker:
 //   mark = mid + delta·(liveSpot − quoteUnderlying)   (floored at 0)
 // — the same first-order delta estimate computeLiveMarks used, just not chart-bound.
-
-const SPOT_SYMS = ["SPY", "QQQ"] as const;
 
 async function fetchSpot(sym: string, accessToken: string): Promise<number | null> {
   try {
@@ -64,11 +63,11 @@ export function usePositionMarks(positions: Position[]): Record<string, number> 
             .order("captured_at", { ascending: false })
             .limit(occs.length * 4),
           accessToken
-            ? Promise.all(SPOT_SYMS.map((sym) => fetchSpot(sym, accessToken)))
-            : Promise.resolve(SPOT_SYMS.map(() => null)),
+            ? Promise.all(SUPPORTED_UNDERLYINGS.map((sym) => fetchSpot(sym, accessToken)))
+            : Promise.resolve(SUPPORTED_UNDERLYINGS.map(() => null)),
         ]);
         const spot: Record<string, number | null> = {};
-        SPOT_SYMS.forEach((s, i) => { spot[s] = spotArr[i]; });
+        SUPPORTED_UNDERLYINGS.forEach((s, i) => { spot[s] = spotArr[i]; });
 
         // newest quote per OCC (rows are captured_at-desc)
         const latest = new Map<string, QuoteRow>();

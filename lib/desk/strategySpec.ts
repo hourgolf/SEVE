@@ -410,7 +410,7 @@ export function structureSupported(structure: string): boolean {
 // UNDERLYINGS env (else a channel could arm for a ticker with no chain/bars). A
 // thesis declares its market with `underlying: QQQ` in the frontmatter; an
 // unsupported ticker is a capability gap (flagged like the data-feed gaps).
-export const SUPPORTED_UNDERLYINGS = ["SPY", "QQQ"];
+export const SUPPORTED_UNDERLYINGS = ["SPY", "QQQ", "IWM"];
 
 // Resolve a channel's underlying ticker: prefer the explicit `underlying:` key,
 // else scan the `instrument:` string / compiled meta for a supported ticker,

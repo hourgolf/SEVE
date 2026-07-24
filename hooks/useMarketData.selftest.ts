@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("./useMarketData.ts", import.meta.url), "utf8");
+const strategySource = readFileSync(new URL("../lib/desk/strategySpec.ts", import.meta.url), "utf8");
+const spotSource = readFileSync(new URL("../app/api/spot/route.ts", import.meta.url), "utf8");
+const marksSource = readFileSync(new URL("./usePositionMarks.ts", import.meta.url), "utf8");
 const marketStart = source.indexOf("async function poll()");
 const releaseStart = source.indexOf("async function pollRelease()");
 const barsStart = source.indexOf("async function pollBars()");
@@ -26,5 +29,8 @@ assert.match(source, /filter: `symbol=eq\.\$\{symbol\}`/, "realtime bar trigger 
 assert.doesNotMatch(marketPoll, /from\("underlying_bars"\)/, "chain/event poll must not duplicate the dedicated bar poll");
 assert.match(source.slice(barsStart), /bars: markReadSuccess/, "dedicated bar poll must own its success health");
 assert.match(source.slice(barsStart), /bars: markReadFailure/, "dedicated bar poll must own its failure health");
+assert.match(strategySource, /SUPPORTED_UNDERLYINGS = \["SPY", "QQQ", "IWM"\]/, "desktop and mobile must expose the full ingested ticker set");
+assert.match(spotSource, /new Set\(SUPPORTED_UNDERLYINGS\)/, "fast spot allowlist must share the UI capability contract");
+assert.match(marksSource, /SUPPORTED_UNDERLYINGS\.map\(\(sym\) => fetchSpot/, "open-position marks must refresh every supported underlying");
 
-console.log("market-data-read-selftest: 17/17 passed");
+console.log("market-data-read-selftest: 20/20 passed");

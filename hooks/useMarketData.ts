@@ -153,9 +153,9 @@ const INITIAL: MarketData = {
  * fetch lives here so a later phase can swap it for Supabase realtime
  * subscriptions without touching the panels.
  *
- * `symbol` (QQQ rollout, step 4) scopes EVERY read to one instrument —
+ * `symbol` scopes EVERY read to one supported instrument —
  * underlying_bars / option_quotes / the daily rollup / the /api/spot tick all
- * filter to it. Since market-ingest now writes SPY *and* QQQ into the same
+ * filter to it. Since market-ingest writes SPY, QQQ, and IWM into the same
  * tables, an unfiltered read would interleave both tickers; this keeps the §01
  * market context to the selected one. Changing `symbol` re-runs the effect
  * (fresh fetch + subscription) and clears the prior ticker's bars so they never

@@ -1,5 +1,4 @@
 import {
-  PREOPEN_START_MIN,
   calendarCoverageKnown,
   isTradingDay,
   previousTradingDay,
@@ -8,7 +7,13 @@ import {
 import { readSentinelOperatorPacket } from "./operatorPacket.js";
 
 export const REMOTE_MORNING_PUBLISHER_VERSION = "remote-morning-publisher-v1";
-export const REMOTE_MORNING_WINDOW_END_MIN = 550; // 09:10 ET
+// GitHub Actions cron is a best-effort scheduler and can arrive well after the
+// requested minute. The remote packet uses only the prior session's already
+// closed durable evidence, so it is safe to publish earlier than the legacy
+// 08:55 local-workstation window. A broad 07:00-09:25 ET hosted window gives
+// delayed retries room to land while still failing closed once RTH is underway.
+export const REMOTE_MORNING_WINDOW_START_MIN = 420; // 07:00 ET
+export const REMOTE_MORNING_WINDOW_END_MIN = 565; // 09:25 ET
 
 export function remoteMorningRunId(evidenceSession: string, targetSession: string): string {
   return `${REMOTE_MORNING_PUBLISHER_VERSION}:${evidenceSession}:${targetSession}`;
@@ -105,11 +110,11 @@ export function deriveRemoteMorningPlan(input: {
     return { action: "skip", code: "closed-session", detail: `${clock.date} is not a trading session` };
   }
   const evidenceSession = previousTradingDay(clock.date);
-  if (!input.forceWindow && (clock.minute < PREOPEN_START_MIN || clock.minute > REMOTE_MORNING_WINDOW_END_MIN)) {
-    return { action: "skip", code: "outside-window", detail: `ET minute ${clock.minute} is outside 08:55-09:10`, targetSession: clock.date, evidenceSession };
-  }
   if (input.completedTarget === clock.date) {
     return { action: "skip", code: "already-published", detail: `finish receipt already exists for ${clock.date}`, targetSession: clock.date, evidenceSession };
+  }
+  if (!input.forceWindow && (clock.minute < REMOTE_MORNING_WINDOW_START_MIN || clock.minute > REMOTE_MORNING_WINDOW_END_MIN)) {
+    return { action: "skip", code: "outside-window", detail: `ET minute ${clock.minute} is outside 07:00-09:25`, targetSession: clock.date, evidenceSession };
   }
   // A Sentinel row alone is not a completed hosted publication. It may have
   // been emitted by the local rich publisher, or it may be the middle row of

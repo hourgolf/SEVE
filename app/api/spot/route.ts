@@ -4,17 +4,18 @@
 // seconds); set a Vercel STOCK_FEED=iex var to revert. Degrades to { price: null }
 // on missing keys / a feed error, so the client falls back to the 1/min Supabase spot.
 //
-// Multi-instrument (QQQ rollout, step 4): ?symbol=SPY|QQQ picks the ticker. The
+// Multi-instrument: ?symbol=SPY|QQQ|IWM picks the ticker. The
 // symbol is allowlisted (no arbitrary upstream fetch) and the cache is per-symbol.
 
 import { NextResponse } from "next/server";
 import { requireDeskOperator } from "@/lib/auth/serverOperator";
+import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 
 export const dynamic = "force-dynamic";
 
 const FEED = process.env.STOCK_FEED ?? "sip";
 // Allowlist — only tickers the desk actually ingests. Guards the upstream URL.
-const ALLOWED = new Set(["SPY", "QQQ"]);
+const ALLOWED = new Set(SUPPORTED_UNDERLYINGS);
 const tradeUrl = (sym: string) =>
   `https://data.alpaca.markets/v2/stocks/${sym}/trades/latest?feed=${FEED}`;
 
