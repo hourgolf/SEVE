@@ -1,9 +1,10 @@
 # Overnight operational foundation — 2026-07-23
 
-Status: operator-approved after authenticated preview smoke on branch
-`overnight/operational-foundation-2026-07-23`. The implementation commit is
-`92a9823`; the handoff formatting follow-up is `93e0545`. Merge authorization
-was granted on 2026-07-23.
+Status: merged to `main` and deployed through Vercel after authenticated
+preview smoke. The reviewed merge state was `90beeeb`; the implementation
+commit is `92a9823`, followed by handoff commits `93e0545` and `90beeeb`.
+GitHub reported the Vercel check successful for that merge state on 2026-07-23.
+No Railway redeploy is required because this slice does not change the worker.
 This document is the canonical handoff for the next Codex task. It replaces
 conversation-derived status. Read it together with
 `docs/sentinel-purpose-review-2026-07-22.md` and
