@@ -7,7 +7,7 @@ import { MANAGER_POLICY_VERSION, managerIdsForChannel, type ManagerId } from "..
 import type { DarkCandidateFreeze, FrozenDarkCandidateDecision } from "./darkCandidateFreeze.js";
 import type { VbCandidateReceipt, VbCandidateScorecard, VbManagerArmResult } from "./vbCandidateEvidence.js";
 
-export const DARK_EXACT_REPLAY_VERSION = "dark-exact-replay-v1" as const;
+export const DARK_EXACT_REPLAY_VERSION = "dark-exact-replay-v2" as const;
 
 export type DarkExactReplayCensorCode =
   | "duplicate_candidate"
@@ -17,6 +17,7 @@ export type DarkExactReplayCensorCode =
   | "candidate_identity_mismatch"
   | "scorecard_ineligible"
   | "manager_arm_incomplete"
+  | "manager_arm_censored"
   | "manager_policy_mismatch"
   | "invalid_manager_exit"
   | "sequential_reentry_active";
@@ -32,6 +33,7 @@ export interface DarkExactReplayCensor {
 export interface DarkManagerPath {
   candidateId: string;
   opportunityId: string;
+  sessionDateEt: string;
   channelSlug: string;
   channelVersion: string;
   configurationEpochId: string;
@@ -193,19 +195,30 @@ export function deriveDarkExactReplay(input: {
       addCensor(censors, candidate, "candidate_identity_mismatch", `${scorecard.channelSlug}/${scorecard.opportunityId}`);
       continue;
     }
-    if (!scorecard.eligible || scorecard.censors.length > 0) {
+    if (scorecard.censors.length > 0) {
       exactCensoredCandidateClocks++;
       addCensor(censors, candidate, "scorecard_ineligible", scorecard.censors.join(",") || "ineligible");
       continue;
     }
     const arms = expectedManagers.map((managerId) => [managerId, armFor(scorecard, managerId)] as const);
-    if (arms.some(([, arm]) => arm == null)) {
+    const missingArms = arms.filter(([, arm]) => arm == null);
+    if (missingArms.length) {
       exactCensoredCandidateClocks++;
-      addCensor(censors, candidate, "manager_arm_incomplete", `${scorecard.exactArms.length}/${expectedManagers.length}`);
-      continue;
+      for (const [managerId] of missingArms) {
+        const armCensor = (scorecard.armCensors ?? []).find((row) => row.managerId === managerId);
+        addCensor(
+          censors,
+          candidate,
+          armCensor ? "manager_arm_censored" : "manager_arm_incomplete",
+          armCensor ? `${armCensor.code}:${armCensor.fact}` : `${scorecard.exactArms.length}/${expectedManagers.length}`,
+          managerId,
+        );
+      }
+    } else {
+      exactEligibleCandidateClocks++;
     }
-    exactEligibleCandidateClocks++;
     for (const [managerId, maybeArm] of arms) {
+      if (!maybeArm) continue;
       const arm = maybeArm as VbManagerArmResult;
       managerArmsEvaluated++;
       if (arm.managerVersion !== MANAGER_POLICY_VERSION) {
@@ -229,6 +242,7 @@ export function deriveDarkExactReplay(input: {
       paths.push({
         candidateId: candidate.candidateId,
         opportunityId: candidate.executionOpportunityId,
+        sessionDateEt: candidate.sessionDateEt,
         channelSlug: candidate.channelSlug,
         channelVersion: candidate.channelVersion,
         configurationEpochId: candidate.configurationEpochId,

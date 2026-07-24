@@ -125,6 +125,17 @@ const actualInternalGap = buildVbExactCandidateDryRun({ candidate: longCandidate
 check("actual internal gap above five seconds is censored", actualInternalGap.censors.includes("internal_gap_censored"), true);
 const staleUnproven = buildVbExactCandidateDryRun({ candidate: { ...candidate, liveObservedAsk: { ...candidate.liveObservedAsk!, freshnessMs: 999_999 } }, databentoQuotes: exactQuotes });
 check("stale unproven live ask is never substituted into scoring", [staleUnproven.scorecard.eligible, staleUnproven.scorecard.exactEntryAsk], [true, 1.05]);
+const noTerminalBid = buildVbExactCandidateDryRun({
+  candidate,
+  databentoQuotes: [...exactQuotes.slice(0, -1), quote(end + 500, 0, 0.01)],
+});
+check("no posted terminal bid preserves the exact path without inventing exits", [
+  noTerminalBid.censors,
+  noTerminalBid.exactPathPayload != null,
+  noTerminalBid.scorecard.eligible,
+  (noTerminalBid.scorecard.armCensors ?? []).every((row) => row.code === "no_executable_exit_bid"),
+  (noTerminalBid.scorecard.armCensors ?? []).length > 0,
+], [[], true, false, true, true]);
 const invalidExactAsk = buildVbExactCandidateDryRun({ candidate, databentoQuotes: [quote(t0 + 500, 1, 0.9), ...exactQuotes.slice(1)] });
 check("invalid exact entry ask is censored", invalidExactAsk.censors.includes("invalid_exact_quote"), true);
 const identityMismatch = buildVbExactCandidateDryRun({ candidate, databentoQuotes: [

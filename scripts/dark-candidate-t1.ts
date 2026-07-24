@@ -8,8 +8,8 @@
 
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { gzipSync } from "node:zlib";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { gzipSync, gunzipSync } from "node:zlib";
 import {
   parseDatabentoCbboJsonLine,
   dedupeCbboQuotes,
@@ -22,8 +22,19 @@ import {
   type DarkCandidateFreeze,
 } from "../lib/research/darkCandidateFreeze.js";
 import { deriveDarkEvidenceCompleteness } from "../lib/research/darkEvidenceCompleteness.js";
-import { deriveDarkExactReplay, exactReceiptForFrozenCandidate } from "../lib/research/darkExactReplay.js";
-import { buildVbExactCandidateDryRun, type VbCandidateScorecard } from "../lib/research/vbCandidateEvidence.js";
+import {
+  DARK_EXACT_REPLAY_VERSION,
+  deriveDarkExactReplay,
+  exactReceiptForFrozenCandidate,
+} from "../lib/research/darkExactReplay.js";
+import { darkExactManagerPathDbPayload } from "../lib/research/darkExactPersistence.js";
+import {
+  buildVbExactCandidateDryRun,
+  type VbCandidateDbPayload,
+  type VbCandidateScorecard,
+  type VbExactPathDbPayload,
+} from "../lib/research/vbCandidateEvidence.js";
+import { withBoundedRetry } from "../lib/research/boundedRetry.js";
 
 const arg = (name: string, fallback = ""): string => {
   const index = process.argv.indexOf(`--${name}`);
@@ -37,6 +48,8 @@ const OUT_DIR = arg("outdir", "data/dark-candidate-t1");
 const MINIMUM_AGE_HOURS = Number(arg("minimum-history-age-hours", "24"));
 const ESTIMATE = flag("estimate") || flag("download");
 const DOWNLOAD = flag("download");
+const PROVIDER_TIMEOUT_MS = 120_000;
+const PROVIDER_RETRY_DELAYS_MS = [1_000, 3_000, 7_000] as const;
 
 if (!FREEZE) throw new Error("--freeze is required");
 if (!/^[0-9a-f]{64}$/.test(EXPECTED_FILE_SHA256)) throw new Error("--expected-file-sha256 must be 64 lowercase hex characters");
@@ -84,12 +97,52 @@ async function databento(
   extra: Record<string, string> = {},
 ): Promise<string> {
   const query = new URLSearchParams({ ...requestParams(request), ...extra });
-  const response = await fetch(`https://hist.databento.com/v0/${method}?${query}`, {
-    headers: { Authorization: auth },
+  const label = `${method} ${request.occSymbol}`;
+  return withBoundedRetry({
+    attempts: PROVIDER_RETRY_DELAYS_MS.length + 1,
+    delaysMs: PROVIDER_RETRY_DELAYS_MS,
+    operation: async (attempt) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+      try {
+        const response = await fetch(`https://hist.databento.com/v0/${method}?${query}`, {
+          headers: { Authorization: auth },
+          signal: controller.signal,
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          const error = new Error(`Databento ${label} ${response.status}: ${text.slice(0, 300)}`);
+          Object.assign(error, { providerStatus: response.status });
+          throw error;
+        }
+        return text;
+      } catch (error) {
+        if (attempt === PROVIDER_RETRY_DELAYS_MS.length + 1) {
+          const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          throw new Error(`Databento ${label} transport exhausted after ${attempt} attempts: ${detail}`, {
+            cause: error,
+          });
+        }
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    isRetryable: (error) => {
+      const providerStatus = error && typeof error === "object" && "providerStatus" in error
+        ? Number((error as { providerStatus?: unknown }).providerStatus)
+        : null;
+      return error instanceof TypeError
+        || (error instanceof DOMException && error.name === "AbortError")
+        || providerStatus === 408
+        || providerStatus === 429
+        || (providerStatus != null && providerStatus >= 500);
+    },
+    onRetry: ({ attempt, delayMs, error }) => {
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      console.warn(`  ${label} transient attempt ${attempt} · retry in ${delayMs}ms · ${detail}`);
+    },
   });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`Databento ${method} ${response.status}: ${text.slice(0, 300)}`);
-  return text;
 }
 
 async function estimate(request: DarkCandidateContractRequest): Promise<number> {
@@ -121,6 +174,55 @@ async function fetchQuotes(request: DarkCandidateContractRequest): Promise<{
   }
   const quotes = dedupeCbboQuotes(parsed);
   if (!quotes.length) throw new Error(`exact provider response empty for ${request.occSymbol}`);
+  return { quotes };
+}
+
+function cachedQuotes(request: DarkCandidateContractRequest): { quotes: DatabentoCbboQuote[] } | null {
+  const sourceDir = join(OUT_DIR, "source");
+  if (!existsSync(sourceDir)) return null;
+  const prefix = `${request.sessionDateEt}-${request.occSymbol}-`;
+  const matches = readdirSync(sourceDir)
+    .filter((name) => name.startsWith(prefix) && name.endsWith(".json.gz"))
+    .sort();
+  if (!matches.length) return null;
+  if (matches.length !== 1) {
+    throw new Error(`ambiguous cached exact objects for ${request.occSymbol}: ${matches.length}`);
+  }
+  const name = matches[0]!;
+  const compressedSha256 = name.slice(prefix.length, -".json.gz".length);
+  if (!/^[0-9a-f]{64}$/.test(compressedSha256)) {
+    throw new Error(`invalid cached object identity for ${request.occSymbol}`);
+  }
+  const compressed = readFileSync(join(sourceDir, name));
+  if (sha256(compressed) !== compressedSha256) {
+    throw new Error(`cached object checksum mismatch for ${request.occSymbol}`);
+  }
+  const parsed = JSON.parse(gunzipSync(compressed).toString("utf8")) as unknown;
+  if (!Array.isArray(parsed) || !parsed.length) {
+    throw new Error(`cached exact object empty for ${request.occSymbol}`);
+  }
+  const startMs = Date.parse(request.startIso);
+  const endMs = Date.parse(request.endIso);
+  const quotes = parsed.map((row, index) => {
+    const quote = row as Partial<DatabentoCbboQuote>;
+    if (quote.occSymbol !== request.occSymbol
+        || !Number.isFinite(quote.atMs)
+        || Number(quote.atMs) < startMs
+        || Number(quote.atMs) > endMs
+        || !Number.isFinite(quote.bid)
+        || Number(quote.bid) < 0
+        || !Number.isFinite(quote.ask)
+        || Number(quote.ask) <= 0
+        || Number(quote.ask) < Number(quote.bid)) {
+      throw new Error(`cached exact object row ${index + 1} invalid for ${request.occSymbol}`);
+    }
+    return quote as DatabentoCbboQuote;
+  });
+  const deduped = dedupeCbboQuotes(quotes);
+  if (deduped.length !== quotes.length) {
+    throw new Error(`cached exact object contains duplicate rows for ${request.occSymbol}`);
+  }
+  console.log(`  ${request.occSymbol} · verified local resume ${quotes.length} rows`);
   return { quotes };
 }
 
@@ -159,6 +261,9 @@ async function main(): Promise<void> {
   }
   const sourceObjects: Array<Record<string, unknown>> = [];
   const scorecards: VbCandidateScorecard[] = [];
+  const candidatePayloads: VbCandidateDbPayload[] = [];
+  const exactPathPayloads: VbExactPathDbPayload[] = [];
+  const exactPathByCandidate = new Map<string, VbExactPathDbPayload>();
   for (const request of freeze.contractRequests) {
     const rows = candidatesByContract.get(request.occSymbol) ?? [];
     const expectedIds = [...new Set(rows.map((row) => row.candidateId))].sort();
@@ -166,7 +271,7 @@ async function main(): Promise<void> {
         || rows.length !== request.rawDecisionCount) {
       throw new Error(`frozen request identity mismatch for ${request.occSymbol}`);
     }
-    const result = await fetchQuotes(request);
+    const result = cachedQuotes(request) ?? await fetchQuotes(request);
     const payload = Buffer.from(`${JSON.stringify(result.quotes)}\n`, "utf8");
     const compressed = gzipSync(payload, { level: 9 });
     const contentSha256 = sha256(payload);
@@ -182,14 +287,30 @@ async function main(): Promise<void> {
       estimatedCostUsd: costByRequest.get(request.requestId),
       objectPath,
     });
-    const virtualExitAtMs = Date.parse(request.endIso) - DARK_CANDIDATE_REQUEST_PADDING_MS;
     for (const candidate of rows) {
+      // A frozen decision can arrive after its source-bar-derived request
+      // window (for example, a delayed post-bar observation near the close).
+      // Keep the receipt temporally valid so the exact-path builder can record
+      // the missing boundary/entry evidence as a censor. Never backdate an
+      // exit or invent quotes outside the authorized window.
+      const virtualExitAtMs = Math.max(
+        Date.parse(candidate.decisionObservedAt),
+        Date.parse(request.endIso) - DARK_CANDIDATE_REQUEST_PADDING_MS,
+      );
       const exact = buildVbExactCandidateDryRun({
         candidate: exactReceiptForFrozenCandidate(candidate, virtualExitAtMs),
         databentoQuotes: result.quotes,
-        materializeCanonicalObject: false,
       });
       scorecards.push(exact.scorecard);
+      if (exact.candidatePayload) candidatePayloads.push(exact.candidatePayload);
+      if (exact.exactPathPayload && exact.canonicalObject && exact.manifest) {
+        const exactObjectPath = join(OUT_DIR, exact.canonicalObject.objectKey);
+        const exactManifestPath = join(OUT_DIR, String(exact.exactPathPayload.manifest_key));
+        writeVerified(exactObjectPath, exact.canonicalObject.compressed);
+        writeVerified(exactManifestPath, Buffer.from(`${JSON.stringify(exact.manifest, null, 2)}\n`, "utf8"));
+        exactPathPayloads.push(exact.exactPathPayload);
+        exactPathByCandidate.set(candidate.candidateId, exact.exactPathPayload);
+      }
     }
   }
   if (scorecards.length !== freeze.candidates.length) {
@@ -197,6 +318,27 @@ async function main(): Promise<void> {
   }
 
   const replay = deriveDarkExactReplay({ freeze, scorecards });
+  const managerPathPayloads = replay.paths.map((path) => {
+    const exactPath = exactPathByCandidate.get(path.candidateId);
+    return exactPath ? darkExactManagerPathDbPayload({
+      path,
+      exactPath,
+      replayVersion: DARK_EXACT_REPLAY_VERSION,
+    }) : null;
+  });
+  if (managerPathPayloads.some((row) => row == null)) {
+    throw new Error("durable manager-path payload coverage mismatch");
+  }
+  const exactPathCandidateIds = new Set(exactPathPayloads.map((row) => row.candidate_id));
+  if (candidatePayloads.length !== freeze.candidates.length
+      || exactPathCandidateIds.size !== exactPathPayloads.length
+      || managerPathPayloads.length !== replay.paths.length) {
+    throw new Error(
+      `durable receipt coverage mismatch candidates=${candidatePayloads.length}/${freeze.candidates.length}`
+      + ` exact=${exactPathPayloads.length}/${scorecards.length}`
+      + ` manager=${managerPathPayloads.length}/${replay.paths.length}`,
+    );
+  }
   const completeness = deriveDarkEvidenceCompleteness({
     freeze,
     scorecards,
@@ -214,6 +356,9 @@ async function main(): Promise<void> {
     },
     estimatedCostUsd,
     sourceObjects,
+    candidatePayloads,
+    exactPathPayloads,
+    managerPathPayloads,
     scorecards,
     completeness,
     replay,
@@ -233,6 +378,7 @@ async function main(): Promise<void> {
     completenessState: completeness.state,
     rawDecisionClocks: replay.source.rawDecisionClocks,
     independentManagerPaths: replay.source.independentManagerPaths,
+    durableManagerPathReceipts: managerPathPayloads.length,
     censors: replay.censors.length,
     externalWrites: false,
     orderPathAuthorized: false,
@@ -241,8 +387,13 @@ async function main(): Promise<void> {
   console.log(`  exact raw-clock coverage ${completeness.counts.exactEligible}/${completeness.counts.frozenCandidates}`);
   console.log(`  independent manager paths ${replay.source.independentManagerPaths} · overlap censors ${replay.source.overlappingManagerClocksCensored}`);
   console.log(`  wrote ${OUT_DIR} · external writes NONE · order path false`);
-  if (completeness.state !== "complete" || replay.censors.some((row) => row.code !== "sequential_reentry_active")) {
-    throw new Error(`exact replay failed closed: completeness ${completeness.state}; non-overlap censors present`);
+  const structuralCensors = replay.censors.filter((row) =>
+    row.code !== "sequential_reentry_active" && row.code !== "manager_arm_censored");
+  if (structuralCensors.length || completeness.counts.exactMissing > 0) {
+    throw new Error(
+      `exact replay failed closed: completeness ${completeness.state};`
+      + ` structural censors ${structuralCensors.length}; missing ${completeness.counts.exactMissing}`,
+    );
   }
 }
 

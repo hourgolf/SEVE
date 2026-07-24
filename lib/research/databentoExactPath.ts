@@ -87,7 +87,7 @@ export function parsePersistedDatabentoCbboObject(input: Buffer | string): {
     const bid = numeric(row?.bid);
     const ask = numeric(row?.ask);
     if (!occSymbol || compactOccToDatabentoRaw(occSymbol, root) == null
-        || atMs == null || bid == null || ask == null || bid <= 0 || ask < bid
+        || atMs == null || bid == null || ask == null || bid < 0 || ask <= 0 || ask < bid
         || row?.source !== "databento_cbbo_1s") {
       invalidRows++;
       continue;
@@ -220,9 +220,13 @@ export function parseDatabentoCbboJsonLine(line: string): DatabentoCbboQuote | n
       : typeof (row.hd as Record<string, unknown> | undefined)?.ts_event === "string"
         ? Date.parse((row.hd as Record<string, unknown>).ts_event as string)
         : null;
-  const bid = numeric(level?.bid_px);
+  // Databento truthfully emits `null` when an option has no posted bid. Keep
+  // that market state as bid=0 in the immutable path; downstream managers
+  // must censor an unavailable executable exit rather than rejecting the
+  // entire provider object or inventing a bid.
+  const bid = level?.bid_px == null ? 0 : numeric(level.bid_px);
   const ask = numeric(level?.ask_px);
-  if (!symbol || ts == null || !finite(ts) || bid == null || ask == null || bid <= 0 || ask < bid) return null;
+  if (!symbol || ts == null || !finite(ts) || bid == null || ask == null || bid < 0 || ask <= 0 || ask < bid) return null;
   const publisherId = numeric((row.hd as Record<string, unknown> | undefined)?.publisher_id);
   return {
     occSymbol: symbol,

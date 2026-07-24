@@ -117,7 +117,10 @@ export function deriveDarkEvidenceCompleteness(input: {
       } else {
         exactCensored++;
         channel.exactCensored++;
-        const codes = scorecard.censors.length ? unique(scorecard.censors) : ["incomplete-manager-arms"];
+        const armCensors = (scorecard.armCensors ?? []).map((row) => `${row.managerId}:${row.code}`);
+        const codes = scorecard.censors.length
+          ? unique(scorecard.censors)
+          : armCensors.length ? unique(armCensors) : ["incomplete-manager-arms"];
         blockers.push(...codes.map((code) => `exact-censored:${candidate.candidateId}:${code}`));
       }
     }
