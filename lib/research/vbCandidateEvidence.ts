@@ -17,9 +17,9 @@ import {
 
 export const VB_CANDIDATE_SCHEMA_VERSION = 1 as const;
 export const VB_EXACT_PATH_RECEIPT_SCHEMA_VERSION = 1 as const;
-export const VB_EXACT_PATH_BUILDER_VERSION = "vb-exact-path-builder-v1" as const;
+export const VB_EXACT_PATH_BUILDER_VERSION = "vb-exact-path-builder-v3" as const;
 export const VB_BOUNDARY_MAX_LAG_MS = 1_100;
-export const VB_INTERNAL_MAX_GAP_MS = 5_000;
+export const VB_CBBO_ASOF_LOOKBACK_MS = 60_000;
 
 export const VB_CANDIDATE_SQL_FIELDS = [
   "id", "opportunity_id", "schema_version", "signal_id", "strategist_id", "account_id",
@@ -115,6 +115,13 @@ export interface VbManagerArmResult {
   basis: "databento_entry_ask_to_executable_bid";
 }
 
+export interface VbManagerArmCensor {
+  managerId: ManagerId;
+  code: "no_executable_exit_bid";
+  atMs: number;
+  fact: string;
+}
+
 export interface VbCandidateScorecard {
   candidateId: string;
   opportunityId: string;
@@ -124,6 +131,7 @@ export interface VbCandidateScorecard {
   liveObservedAsk: VbLiveObservedAsk | null;
   exactBasis: "databento_cbbo_1s";
   exactArms: VbManagerArmResult[];
+  armCensors?: VbManagerArmCensor[];
   nativeSynthetic: { basis: "native_mid_synthetic_development_only"; pnlPerContract: number | null } | null;
   censors: VbCandidateCensor[];
   eligible: boolean;
@@ -265,6 +273,7 @@ function emptyScorecard(candidate: VbCandidateReceipt, nativeSyntheticPnlPerCont
     liveObservedAsk: candidate.liveObservedAsk,
     exactBasis: "databento_cbbo_1s",
     exactArms: [],
+    armCensors: [],
     nativeSynthetic: nativeSyntheticPnlPerContract === undefined ? null : {
       basis: "native_mid_synthetic_development_only",
       pnlPerContract: finite(nativeSyntheticPnlPerContract) ? nativeSyntheticPnlPerContract : null,
@@ -289,31 +298,35 @@ export function buildVbExactCandidateDryRun(input: {
     sessionDateEt: candidate.sessionDateEt,
     occSymbol: candidate.occSymbol,
     rawSymbol,
-    startIso: new Date(candidate.decisionObservedAtMs).toISOString(),
+    startIso: new Date(Math.min(candidate.sourceBarAtMs, candidate.decisionObservedAtMs) - VB_CBBO_ASOF_LOOKBACK_MS).toISOString(),
     endIso: new Date(candidate.virtualExitAtMs + VB_BOUNDARY_MAX_LAG_MS + 1).toISOString(),
     positionIds: [candidate.opportunityId],
   } : null;
 
-  const responseWindow = input.databentoQuotes.filter((quote) => quote.atMs >= candidate.decisionObservedAtMs
-    && quote.atMs <= candidate.virtualExitAtMs + VB_BOUNDARY_MAX_LAG_MS);
+  const responseWindow = input.databentoQuotes.filter((quote) =>
+    quote.atMs <= candidate.virtualExitAtMs + VB_BOUNDARY_MAX_LAG_MS);
   if (responseWindow.some((quote) => quote.occSymbol !== candidate.occSymbol
       || quote.source !== "databento_cbbo_1s")) censors.add("path_identity_mismatch");
   if (responseWindow.some((quote) => !finite(quote.atMs) || !finite(quote.bid) || !finite(quote.ask)
-      || quote.bid <= 0 || quote.ask < quote.bid)) censors.add("invalid_exact_quote");
+      || quote.bid < 0 || quote.ask <= 0 || quote.ask < quote.bid)) censors.add("invalid_exact_quote");
   const quotes = dedupeCbboQuotes(responseWindow.filter((quote) => quote.occSymbol === candidate.occSymbol
     && quote.source === "databento_cbbo_1s" && finite(quote.atMs) && finite(quote.bid) && finite(quote.ask)
-    && quote.bid > 0 && quote.ask >= quote.bid));
+    && quote.bid >= 0 && quote.ask > 0 && quote.ask >= quote.bid));
   if (!quotes.length) censors.add("missing_exact_path");
-  const left = quotes[0];
-  const right = quotes.find((quote) => quote.atMs >= candidate.virtualExitAtMs);
-  const leftLag = left ? left.atMs - candidate.decisionObservedAtMs : Number.POSITIVE_INFINITY;
-  const rightLag = right ? right.atMs - candidate.virtualExitAtMs : Number.POSITIVE_INFINITY;
-  if (!left || leftLag < 0 || leftLag > VB_BOUNDARY_MAX_LAG_MS) censors.add("left_boundary_censored");
-  if (!right || rightLag < 0 || rightLag > VB_BOUNDARY_MAX_LAG_MS) censors.add("right_boundary_censored");
-  const throughRight = right ? quotes.filter((quote) => quote.atMs <= right.atMs) : quotes;
+  // Databento CBBO interval records are event-sparse: an unchanged BBO does
+  // not print a row. Use only the last state published at or before each
+  // boundary. This carries state forward without looking into the future.
+  const left = [...quotes].reverse().find((quote) => quote.atMs <= candidate.decisionObservedAtMs);
+  const right = [...quotes].reverse().find((quote) => quote.atMs <= candidate.virtualExitAtMs);
+  const leftLag = left ? candidate.decisionObservedAtMs - left.atMs : Number.POSITIVE_INFINITY;
+  const rightLag = right ? candidate.virtualExitAtMs - right.atMs : Number.POSITIVE_INFINITY;
+  if (!left || leftLag < 0) censors.add("left_boundary_censored");
+  if (!right || rightLag < 0) censors.add("right_boundary_censored");
+  const throughRight = left && right
+    ? quotes.filter((quote) => quote.atMs >= left.atMs && quote.atMs <= right.atMs)
+    : quotes;
   const gaps = throughRight.slice(1).map((quote, index) => quote.atMs - throughRight[index].atMs);
   const maxInternalGapMs = gaps.length ? Math.max(...gaps) : 0;
-  if (maxInternalGapMs > VB_INTERNAL_MAX_GAP_MS) censors.add("internal_gap_censored");
   if (!left || !(left.ask > 0) || left.ask < left.bid) censors.add("invalid_exact_entry_ask");
 
   const scorecard = emptyScorecard(candidate, input.nativeSyntheticPnlPerContract);
@@ -328,6 +341,7 @@ export function buildVbExactCandidateDryRun(input: {
     let state = {};
     for (let index = 0; index < throughRight.length; index++) {
       const quote = throughRight[index];
+      if (quote.bid <= 0) continue;
       const returnPct = ((quote.bid - left.ask) / left.ask) * 100;
       const advanced = advanceManager(managerId, state, returnPct, index === throughRight.length - 1);
       state = advanced.state;
@@ -343,6 +357,14 @@ export function buildVbExactCandidateDryRun(input: {
         basis: "databento_entry_ask_to_executable_bid",
       });
       break;
+    }
+    if (!scorecard.exactArms.some((row) => row.managerId === managerId)) {
+      scorecard.armCensors?.push({
+        managerId,
+        code: "no_executable_exit_bid",
+        atMs: right.atMs,
+        fact: `${candidate.occSymbol} had no posted bid at the required terminal clock`,
+      });
     }
   }
   scorecard.eligible = scorecard.exactArms.length === managerIdsForChannel(candidate.channelSlug).length;
@@ -366,6 +388,8 @@ export function buildVbExactCandidateDryRun(input: {
     dataset: EXACT_OPTION_PATH_DATASET,
     schema: EXACT_OPTION_PATH_SCHEMA,
     pathBuilderVersion: VB_EXACT_PATH_BUILDER_VERSION,
+    samplingConvention: "cbbo_event_or_trade_intervals_only",
+    asOfBoundaryRule: "last_published_state_at_or_before_clock_no_lookahead",
     occSymbol: candidate.occSymbol,
     sourceBarAt: new Date(candidate.sourceBarAtMs).toISOString(),
     decisionObservedAt: new Date(candidate.decisionObservedAtMs).toISOString(),
@@ -379,7 +403,7 @@ export function buildVbExactCandidateDryRun(input: {
   const base = `vb-exact-path/v1/${candidate.sessionDateEt}/${candidate.candidateId.slice(6)}/${compressedSha256}`;
   const objectKey = `${base}.json.gz`;
   const manifestKey = `${base}.manifest.json`;
-  const completedAt = new Date(right.atMs).toISOString();
+  const completedAt = new Date(candidate.virtualExitAtMs).toISOString();
   const manifest = {
     schemaVersion: VB_EXACT_PATH_RECEIPT_SCHEMA_VERSION,
     candidateId: candidate.candidateId,
@@ -387,6 +411,8 @@ export function buildVbExactCandidateDryRun(input: {
     dataset: EXACT_OPTION_PATH_DATASET,
     schema: EXACT_OPTION_PATH_SCHEMA,
     pathBuilderVersion: VB_EXACT_PATH_BUILDER_VERSION,
+    samplingConvention: "cbbo_event_or_trade_intervals_only",
+    asOfBoundaryRule: "last_published_state_at_or_before_clock_no_lookahead",
     objectKey,
     contentSha256,
     compressedSha256,

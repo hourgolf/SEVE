@@ -116,6 +116,20 @@ const duplicate = deriveDarkExactReplay({ freeze: freeze([first]), scorecards: [
 check("duplicate scorecards fail closed", [duplicate.source.exactCensoredCandidateClocks, duplicate.paths.length], [1, 0]);
 check("duplicate reason is explicit", duplicate.censors.some((row) => row.code === "duplicate_scorecard"), true);
 
+const partialScorecard = scorecard(first, baseAt + 2 * 60_000);
+const missingManager = managerIdsForChannel(first.channelSlug)[0];
+partialScorecard.exactArms = partialScorecard.exactArms.filter((row) => row.managerId !== missingManager);
+partialScorecard.armCensors = [{
+  managerId: missingManager,
+  code: "no_executable_exit_bid",
+  atMs: baseAt + 2 * 60_000,
+  fact: "no posted bid at terminal clock",
+}];
+partialScorecard.eligible = false;
+const partial = deriveDarkExactReplay({ freeze: freeze([first]), scorecards: [partialScorecard] });
+check("one no-bid manager censor does not discard other exact arms", partial.paths.length, managers - 1);
+check("no-bid manager censor remains explicit", partial.censors.map((row) => row.code), ["manager_arm_censored"]);
+
 const receipt = exactReceiptForFrozenCandidate(first, baseAt + 30 * 60_000);
 check("exact adapter preserves frozen identities", [receipt.candidateId, receipt.opportunityId, receipt.orderPathAuthorized], [first.candidateId, first.executionOpportunityId, false]);
 check("exact adapter does not upgrade the live snapshot basis", [receipt.liveObservedAsk?.feed, receipt.liveObservedAsk?.exactExecutable], ["alpaca_snapshot", false]);

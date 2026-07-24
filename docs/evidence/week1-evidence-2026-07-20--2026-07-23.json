@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "baselineVersion": "week1-evidence-baseline-v1",
+  "capturedAt": "2026-07-23T23:34:53.583013Z",
+  "source": "supabase_select_only",
+  "range": {
+    "from": "2026-07-20",
+    "through": "2026-07-23"
+  },
+  "release": {
+    "releaseId": "weekend-day1-2026-07-21-rc5.3",
+    "releaseConfigurationSha256": "b68348407a5f4c5c351213c6cf512afe1571a20646aeb9f213c644dd15f50bf1",
+    "rootProspectiveCohortStartEt": "2026-07-20",
+    "rootEraReset": false,
+    "rootConfigurationChangeAuthorized": false,
+    "roots": [
+      {
+        "slug": "breakout-alt-v3-iwm",
+        "channelVersion": "75801f4cdd928d4a472b0cd205e6809aee68165eef41bba84314bbd8a7277eec",
+        "configurationEpochId": "c2d43fe72fc4f35a4f4692580e590f6f3671de7a3806fc5b06d3a14ed408cd9e",
+        "managerVersion": "e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+        "policyEpochId": "0d59b764-e7e1-538a-9bbb-6871eb60ba8b"
+      },
+      {
+        "slug": "grind-v3",
+        "channelVersion": "43b84c0c2065d36e9e20ef473254b86c18d4fe39069865646124553d6fcad077",
+        "configurationEpochId": "fee5b2a305410aeee528a3dd1c52420dd7b15d98c929b06079db9f7af333d035",
+        "managerVersion": "e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+        "policyEpochId": "74130bee-c41d-5dfd-8c7c-b729347568a8"
+      },
+      {
+        "slug": "momo-shape",
+        "channelVersion": "b9259b5a5cd32448c14dc33353d3b1fcdefd57be92193fe446bd7e0b323a0f47",
+        "configurationEpochId": "f69df8b415b82e0738387627768fce551d8f7e65ebcd964fe7712b186d399a6a",
+        "managerVersion": "bda3e8a72526f9d1d44a8656733523e06735e21e726a254c935ccfddfb69ccb0",
+        "policyEpochId": "ff6eb502-d3a1-5fd0-ab37-25b564fd9629"
+      },
+      {
+        "slug": "orb-qqq-trail",
+        "channelVersion": "ff1312b0c312b18a4a227ecd1eb6badad5f8d28b70d00e9d0017d3b1eb13fc2a",
+        "configurationEpochId": "a67d149a2b474a565638a57eec72edc66f803f6dcc77c534f19ddd12e8410c9b",
+        "managerVersion": "c3af49e3ce9e6653d7307ad458330293cd65a1433412057ba2715150dedea3c8",
+        "policyEpochId": "4ded4844-aa5e-54a3-b90e-56c8eac78126"
+      },
+      {
+        "slug": "orb-ustop-ctl",
+        "channelVersion": "71a7cc171a002573505cd147d42de109c4bbafb54e52d0fb6b31b2dee76c651e",
+        "configurationEpochId": "cb5979e26b8003127de3de9d06c7d808c53c5aea36b67994e46f308250c1851e",
+        "managerVersion": "e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+        "policyEpochId": "4e0d03f8-d575-58ec-b3bd-ea74d0a60a4b"
+      },
+      {
+        "slug": "pb-ride",
+        "channelVersion": "e5e038af744d45ca8136b56ca3d625e0c5cda35c58d603fb8072785e9342c2b1",
+        "configurationEpochId": "d52ec95d656c2637fb38e43d624f1e3ff29444d5e82bf0f180944d6e8d734488",
+        "managerVersion": "e316c75156130bb18d68828ff1d03438f4d931909ce99b47d45a2a751a4e63d7",
+        "policyEpochId": "a9338a26-668d-5e71-b48c-7610a26f8c1e"
+      }
+    ]
+  },
+  "cohort": {
+    "allTrades": 17,
+    "allPnl": -230,
+    "cleanAutoTrades": 15,
+    "cleanAutoPnl": -480,
+    "interventionTrades": 2,
+    "interventionPnl": 250
+  },
+  "daily": [
+    { "sessionDate": "2026-07-20", "trades": 4, "realizedPnl": 482 },
+    { "sessionDate": "2026-07-21", "trades": 5, "realizedPnl": -72 },
+    { "sessionDate": "2026-07-22", "trades": 3, "realizedPnl": -312 },
+    { "sessionDate": "2026-07-23", "trades": 5, "realizedPnl": -328 }
+  ],
+  "managers": [
+    { "managerId": "ARM20/HALF-GIVEBACK", "paths": 17, "winners": 9, "terminalPnl": -106 },
+    { "managerId": "BANK20/RUN50", "paths": 17, "winners": 9, "terminalPnl": 58 },
+    { "managerId": "BELL/-30", "paths": 17, "winners": 5, "terminalPnl": 300 },
+    { "managerId": "BELL/no-stop", "paths": 17, "winners": 9, "terminalPnl": 1326 },
+    { "managerId": "LOCK20/30", "paths": 17, "winners": 9, "terminalPnl": 218 },
+    { "managerId": "LOCK30/30", "paths": 17, "winners": 7, "terminalPnl": 126 },
+    { "managerId": "LOCK50/30", "paths": 17, "winners": 6, "terminalPnl": -8 },
+    { "managerId": "WIDE20/50", "paths": 17, "winners": 13, "terminalPnl": 786 }
+  ],
+  "channelManagerHighlights": [
+    { "channelSlug": "breakout-alt-v3-iwm", "observedTrades": 1, "actualPnl": -50, "leadingObservedManager": "BELL/no-stop", "leadingModeledPnl": 138, "leadingWins": 1, "hypothesisOnly": true },
+    { "channelSlug": "grind-v3", "observedTrades": 3, "actualPnl": -264, "leadingObservedManager": "BELL/no-stop", "leadingModeledPnl": 70, "leadingWins": 1, "hypothesisOnly": true },
+    { "channelSlug": "momo-shape", "observedTrades": 3, "actualPnl": 514, "leadingObservedManager": "BELL/no-stop", "leadingModeledPnl": 1096, "leadingWins": 3, "hypothesisOnly": true },
+    { "channelSlug": "orb-qqq-trail", "observedTrades": 2, "actualPnl": -284, "leadingObservedManager": "WIDE20/50", "leadingModeledPnl": 194, "leadingWins": 2, "hypothesisOnly": true },
+    { "channelSlug": "orb-ustop-ctl", "observedTrades": 4, "actualPnl": -236, "leadingObservedManager": "LOCK50/30", "leadingModeledPnl": 110, "leadingWins": 2, "hypothesisOnly": true },
+    { "channelSlug": "pb-ride", "observedTrades": 4, "actualPnl": 90, "leadingObservedManager": "WIDE20/50", "leadingModeledPnl": 410, "leadingWins": 4, "hypothesisOnly": true }
+  ],
+  "managerState": {
+    "paths": 136,
+    "terminal": 136,
+    "censored": 0,
+    "positions": 17
+  },
+  "darkVirtualDaily": [
+    { "sessionDate": "2026-07-20", "trades": 189, "channels": 56, "winners": 87, "pnlPerContractSum": -1285.9 },
+    { "sessionDate": "2026-07-21", "trades": 152, "channels": 44, "winners": 73, "pnlPerContractSum": -355.11 },
+    { "sessionDate": "2026-07-22", "trades": 141, "channels": 43, "winners": 68, "pnlPerContractSum": -1627.68 },
+    { "sessionDate": "2026-07-23", "trades": 202, "channels": 56, "winners": 115, "pnlPerContractSum": -862.84 }
+  ],
+  "interpretations": {
+    "livePnlIsBrokerSessionEvidence": true,
+    "darkVirtualPnlIsPortfolioPnl": false,
+    "historicalPoolingAuthorized": false,
+    "policyChangeAuthorized": false
+  }
+}

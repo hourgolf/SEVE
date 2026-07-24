@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-24T01:21:35.282Z",
+  "sessionDateEt": "2026-07-22",
+  "replayVersion": "dark-exact-replay-v2",
+  "freezeFileSha256": "c3417a4da96c8b2c6a03bbaf726b34c68344045cbeb955db4d02364bbf3d98b2",
+  "freezeCanonicalSha256": "51271a246cb9b6f849d916ebb2f2802ba2506c087cc2e9ca027d36ffaa71b34d",
+  "reportSha256": "f8c2e5b826b0a7d98f12889c95a6e6d20f8b57c01de7c68ff4926b194b0f2048",
+  "provider": {
+    "dataset": "OPRA.PILLAR",
+    "schema": "cbbo-1s",
+    "exactContracts": 29,
+    "sourceRows": 528340,
+    "compressedBytes": 4446780,
+    "estimatedCostUsd": 0.08120760321499998
+  },
+  "completeness": {
+    "state": "partial",
+    "tone": "red",
+    "rawDecisionClocks": 1247,
+    "exactScorecards": 1247,
+    "exactEligibleClocks": 893,
+    "exactCensoredClocks": 354,
+    "exactMissingClocks": 0,
+    "completedManagerArms": 7165,
+    "expectedManagerArms": 9997,
+    "independentManagerPaths": 784,
+    "overlappingManagerClocksCensored": 6381,
+    "durableManagerPathPayloads": 784
+  },
+  "scorecardCensors": {
+    "internal_gap_censored": 350,
+    "left_boundary_censored": 7,
+    "invalid_exact_entry_ask": 4,
+    "missing_exact_path": 4,
+    "right_boundary_censored": 4
+  },
+  "structuralCensorsByChannel": {
+    "vb-vwap-revert-iwm": 229,
+    "vb-pm-trend-iwm": 57,
+    "vb-curl-reversal-iwm": 24,
+    "vb-macd-state-iwm": 16,
+    "vb-squeeze-break-iwm": 11,
+    "pb-ride-itm": 8,
+    "vb-ribbon-cross-iwm": 3,
+    "power-final30": 2,
+    "power": 2,
+    "vb-rsi-revert-iwm": 1,
+    "vb-or-fail-iwm": 1
+  },
+  "interpretation": {
+    "usableEvidence": "893 exact-eligible clocks and 784 sequenced independent manager paths are retained",
+    "notQualified": "the July 22 session is not complete enough to qualify any prospect or make an IWM manager claim",
+    "iWmFinding": "342 IWM clocks failed the preregistered internal-gap evidence guard; the guard was not weakened",
+    "lateDecisionFinding": "one power-final30 decision arrived after its authorized quote window and remained truthfully censored",
+    "portfolioPnlClaimAuthorized": false,
+    "strategyChangeAuthorized": false,
+    "prospectActivationAuthorized": false
+  },
+  "externalWrites": false,
+  "supabaseWrites": false,
+  "r2Writes": false,
+  "orderPathAuthorized": false,
+  "policyChangeAuthorized": false
+}

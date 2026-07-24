@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { deriveShadowSessions, isVirtualBenchSlug, type ShadowResearchRow } from "./shadowResearch";
+import {
+  deriveShadowCumulative,
+  deriveShadowSessions,
+  isVirtualBenchSlug,
+  type ShadowResearchRow,
+} from "./shadowResearch";
 
 const row = (overrides: Partial<ShadowResearchRow>): ShadowResearchRow => ({
   slug: "vb-alpha",
@@ -18,6 +23,13 @@ const sessions = deriveShadowSessions([
   row({ slug: "root-dark", blocked: "day1_reentry_disabled", exitReason: "would_flatten", pnlPerContract: 5 }),
   row({ slug: "vb-prior", signalAt: "2026-07-21T15:00:00.000Z", pnlPerContract: null }),
   row({ slug: "bad-date", signalAt: "not-a-date" }),
+]);
+const cumulative = deriveShadowCumulative([
+  row({}),
+  row({ slug: "vb-alpha", exitReason: "would_stop", pnlPerContract: -30, mfePct: 4, givebackPct: 80 }),
+  row({ slug: "root-dark", blocked: "day1_reentry_disabled", exitReason: "would_flatten", pnlPerContract: 5 }),
+  row({ slug: "vb-prior", signalAt: "2026-07-21T15:00:00.000Z", pnlPerContract: null }),
+  row({ slug: "bad-date", signalAt: "not-a-date", pnlPerContract: 999 }),
 ]);
 
 assert.equal(isVirtualBenchSlug("vb-gap-drift"), true);
@@ -39,5 +51,18 @@ assert.equal(sessions[0].vb[0].stops, 1);
 assert.equal(sessions[0].dark.length, 2);
 assert.equal(sessions[1].scored, 0);
 assert.equal(sessions[1].averagePerPath, null);
+assert.ok(cumulative);
+assert.equal(cumulative.fromSession, "2026-07-21");
+assert.equal(cumulative.throughSession, "2026-07-22");
+assert.equal(cumulative.sessionCount, 2);
+assert.equal(cumulative.paths, 4, "invalid timestamps are excluded from the cumulative ledger");
+assert.equal(cumulative.scored, 3);
+assert.equal(cumulative.winners, 2);
+assert.equal(cumulative.pnlPerContract, -15);
+assert.equal(cumulative.averagePerPath, -5);
+assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averagePerPath, -10);
+assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averageMfePct, 12);
+assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averageGivebackPct, 42.5);
+assert.equal(deriveShadowCumulative([row({ signalAt: "bad" })]), null);
 
 console.log("shadow-research-selftest: PASS");

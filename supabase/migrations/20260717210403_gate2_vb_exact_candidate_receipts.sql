@@ -31,7 +31,20 @@ create table public.vb_candidate_receipts (
   live_ask_observed_at     timestamptz,
   live_ask_freshness_ms    integer check (live_ask_freshness_ms is null or live_ask_freshness_ms >= 0),
   live_ask_exact           boolean not null default false check (not live_ask_exact),
-  blocked_reason           text not null check (blocked_reason in ('not_armed', 'halted', 'cost_gate', 'stale_chain', 'day1_dark_lifecycle')),
+  blocked_reason           text not null check (blocked_reason in (
+    'not_armed',
+    'halted',
+    'cost_gate',
+    'stale_chain',
+    'day1_dark_lifecycle',
+    'day1_premium_debit_cap',
+    'day1_spy_same_clock_collision',
+    'day1_family_open',
+    'day1_reentry_disabled',
+    'day1_same_occ_open',
+    'day1_underlying_concurrency',
+    'day1_global_concurrency'
+  )),
   virtual_exit_at          timestamptz not null,
   reentry_ordinal          integer not null check (reentry_ordinal > 0),
   exact_path_required      boolean not null default true check (exact_path_required),
@@ -82,9 +95,13 @@ create table public.vb_exact_path_receipts (
   last_quote_at            timestamptz not null,
   entry_quote_at           timestamptz not null,
   entry_ask                numeric not null check (entry_ask > 0),
-  left_boundary_lag_ms     integer not null check (left_boundary_lag_ms between 0 and 1100),
-  right_boundary_lag_ms    integer not null check (right_boundary_lag_ms between 0 and 1100),
-  max_internal_gap_ms      integer not null check (max_internal_gap_ms between 0 and 5000),
+  -- v2 records post-boundary lag; v3 records the age of the last CBBO state
+  -- published at or before the boundary. The builder version makes the
+  -- interpretation explicit. Event-sparse gaps are diagnostic, not proof of
+  -- missing provider evidence.
+  left_boundary_lag_ms     integer not null check (left_boundary_lag_ms between 0 and 86400000),
+  right_boundary_lag_ms    integer not null check (right_boundary_lag_ms between 0 and 86400000),
+  max_internal_gap_ms      integer not null check (max_internal_gap_ms between 0 and 86400000),
   checksum_verified        boolean not null check (checksum_verified),
   contract_valid           boolean not null check (contract_valid),
   source                   text not null check (source = 'databento_historical'),

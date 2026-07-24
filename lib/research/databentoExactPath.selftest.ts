@@ -59,6 +59,11 @@ const quote = parseDatabentoCbboJsonLine(line);
 check("CBBO line parses exact contract and timestamp", [quote?.occSymbol, quote?.atMs, quote?.bid, quote?.ask], ["SPY260715C00600000", Date.parse("2026-07-14T14:00:11.123Z"), 1.2, 1.25]);
 check("CBBO sizes and source retained", [quote?.bidSize, quote?.askSize, quote?.publisherId, quote?.source], [5, 7, 1, "databento_cbbo_1s"]);
 check("crossed CBBO line is rejected", parseDatabentoCbboJsonLine(JSON.stringify({ ...JSON.parse(line), levels: [{ bid_px: 1.3, ask_px: 1.2 }] })), null);
+const noBid = parseDatabentoCbboJsonLine(JSON.stringify({
+  ...JSON.parse(line),
+  levels: [{ bid_px: null, ask_px: "0.01", bid_sz: 0, ask_sz: 447 }],
+}));
+check("truthful no-posted-bid CBBO state is retained", [noBid?.bid, noBid?.ask, noBid?.bidSize], [0, 0.01, 0]);
 
 const deduped = dedupeCbboQuotes([quote!, quote!, { ...quote!, atMs: quote!.atMs + 1_000 }]);
 check("CBBO rows dedupe by contract and timestamp", deduped.length, 2);
@@ -66,9 +71,10 @@ check("CBBO rows dedupe by contract and timestamp", deduped.length, 2);
 const persisted = parsePersistedDatabentoCbboObject(Buffer.from(JSON.stringify([
   quote,
   quote,
+  { ...noBid, atMs: (noBid?.atMs ?? 0) + 2_000 },
   { ...quote, ask: 1.1 },
 ])));
-check("persisted CBBO bytes use the strict real-object parser", [persisted.quotes.length, persisted.invalidRows], [1, 1]);
+check("persisted CBBO bytes retain no-bid states and reject crossed rows", [persisted.quotes.length, persisted.invalidRows], [2, 1]);
 check("persisted CBBO parser rejects non-JSON bytes", (() => {
   try { parsePersistedDatabentoCbboObject(Buffer.from("not-json")); return false; }
   catch { return true; }

@@ -5,7 +5,7 @@
 // differ by manager and must be resolved later from the exact CBBO path.
 
 import { createHash } from "node:crypto";
-import { sessionCloseMin } from "../../engine/market-calendar.js";
+import { RTH_OPEN_MIN, sessionCloseMin } from "../../engine/market-calendar.js";
 import { compactOccToDatabentoRaw, EXACT_OPTION_PATH_DATASET, EXACT_OPTION_PATH_SCHEMA } from "./databentoExactPath.js";
 import { canonicalVbCandidateId } from "./vbCandidateEvidence.js";
 
@@ -333,12 +333,21 @@ function buildRequests(sessionDateEt: string, candidates: readonly FrozenDarkCan
     groups.set(key, group);
   }
   const closeMinute = sessionCloseMin(sessionDateEt) - DARK_CANDIDATE_PATH_END_MINUTES_BEFORE_CLOSE;
-  const endMs = etWallMinuteToUtcMs(sessionDateEt, closeMinute) + DARK_CANDIDATE_REQUEST_PADDING_MS;
+  const sessionOpenMs = etWallMinuteToUtcMs(sessionDateEt, RTH_OPEN_MIN);
+  const scheduledEndMs = etWallMinuteToUtcMs(sessionDateEt, closeMinute);
   return [...groups.values()].flatMap((rows) => {
     const first = rows[0];
     const rawSymbol = compactOccToDatabentoRaw(first.occSymbol, first.underlying);
     if (!rawSymbol) return [];
-    const startMs = Math.min(...rows.map((row) => Date.parse(row.decisionObservedAt))) - DARK_CANDIDATE_REQUEST_PADDING_MS;
+    // CBBO-1s prints only intervals containing a trade or CBBO update. Begin
+    // at the session boundary so the last published state can be carried
+    // forward without look-ahead at a later decision clock.
+    const startMs = sessionOpenMs - DARK_CANDIDATE_REQUEST_PADDING_MS;
+    // A delayed decision near the research cutoff must never fall outside its
+    // own frozen request. Preserve the normal cutoff while extending only as
+    // far as the latest observed decision requires.
+    const latestDecisionMs = Math.max(...rows.map((row) => Date.parse(row.decisionObservedAt)));
+    const endMs = Math.max(scheduledEndMs, latestDecisionMs) + DARK_CANDIDATE_REQUEST_PADDING_MS;
     const candidateIds = [...new Set(rows.map((row) => row.candidateId))].sort();
     const requestCore = { sessionDateEt, occSymbol: first.occSymbol, startIso: new Date(startMs).toISOString(), endIso: new Date(endMs).toISOString(), candidateIds };
     return [{

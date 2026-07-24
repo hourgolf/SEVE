@@ -59,7 +59,7 @@ const base = freezeDarkCandidates({
 check("retains repeated raw decisions without an independence claim", base.candidates.length, 2);
 check("every candidate defers manager-specific opportunity replay", base.candidates.map((row) => [row.independentOpportunityClaimed, row.managerSpecificReplayRequired]), [[false, true], [false, true]]);
 check("deduplicates only the exact contract request", [base.contractRequests.length, base.contractRequests[0].rawDecisionCount], [1, 2]);
-check("request starts two seconds before the earliest observation", base.contractRequests[0].startIso, new Date(Date.parse(t0) + 800 - DARK_CANDIDATE_REQUEST_PADDING_MS).toISOString());
+check("request starts two seconds before the regular-session open", base.contractRequests[0].startIso, "2026-07-20T13:29:58.000Z");
 check("normal-day request ends five minutes before close plus padding", base.contractRequests[0].endIso, "2026-07-20T19:55:02.000Z");
 check("request contract is exact CBBO", [base.contractRequests[0].dataset, base.contractRequests[0].schema, base.contractRequests[0].rawSymbol], ["OPRA.PILLAR", "cbbo-1s", "SPY   260720C00750000"]);
 check("live ask stays explicitly non-exact", base.candidates.map((row) => [row.liveAskFeed, row.liveAskExact]), [["alpaca_snapshot", false], ["alpaca_snapshot", false]]);
@@ -124,6 +124,18 @@ const halfDay = freezeDarkCandidates({
 });
 check("half-day request honors maintained market close", halfDay.contractRequests[0].endIso, "2026-11-27T17:55:02.000Z");
 check("path cutoff constant is explicit", DARK_CANDIDATE_PATH_END_MINUTES_BEFORE_CLOSE, 5);
+
+const lateDecisionBar = "2026-07-20T19:56:00.000Z";
+const lateDecision = freezeDarkCandidates({
+  sessionDateEt: "2026-07-20",
+  signals: [signal(30, lateDecisionBar)],
+  executionObservations: [observation(31, lateDecisionBar)],
+});
+check(
+  "late observed decisions extend their own future request instead of becoming out-of-window",
+  lateDecision.contractRequests[0].endIso,
+  new Date(Date.parse(lateDecisionBar) + 800 + DARK_CANDIDATE_REQUEST_PADDING_MS).toISOString(),
+);
 
 const script = readFileSync(new URL("../../scripts/freeze-dark-candidates.ts", import.meta.url), "utf8");
 check("adapter contains no Supabase mutation calls", /\.(?:insert|upsert|delete)\s*\(|sb\.from[^;]+\.update\s*\(/s.test(script), false);

@@ -123,7 +123,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   background:#15191a; border:1px solid #2e3435; border-radius:6px;
 }
 .shell-root.ws909 .srw-controls nav { display:flex; gap:3px; }
-.shell-root.ws909 .srw-controls nav + nav { margin-left:auto; }
+.shell-root.ws909 .srw-controls .srw-window { margin-left:auto; }
 .shell-root.ws909 .srw-controls button {
   min-height:26px; padding:0 9px; border:1px solid #343a3c; border-radius:4px;
   color:#929a9c; background:#0b0e0f; font:700 9px/1 var(--mono); letter-spacing:.05em;
@@ -135,6 +135,16 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   min-width:48px; color:#69dd8e; font-size:9px; letter-spacing:.08em; text-align:right;
 }
 .shell-root.ws909 .srw-read.error { color:#ff6b55; }
+.shell-root.ws909 .srw-read.partial { color:#e6b13c; }
+.shell-root.ws909 .srw-running {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:8px 10px; background:#111817; border:1px solid #31523f; border-radius:6px;
+}
+.shell-root.ws909 .srw-running > span { display:flex; align-items:baseline; gap:10px; }
+.shell-root.ws909 .srw-running small { color:#798582; font-size:8px; letter-spacing:.08em; }
+.shell-root.ws909 .srw-running b { font-size:14px; letter-spacing:.03em; }
+.shell-root.ws909 .srw-running em { color:#8d9996; font-size:9px; font-style:normal; }
+.shell-root.ws909 .srw-running.partial { border-color:#695729; }
 .shell-root.ws909 .srw-native,
 .shell-root.ws909 .srw-exact {
   display:grid; gap:8px; padding:10px; background:#111516;
@@ -152,6 +162,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   display:grid; grid-template-columns:repeat(6,minmax(0,1fr));
   border:1px solid #2c3233; border-radius:5px; overflow:hidden;
 }
+.shell-root.ws909 .srw-native .srw-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); }
 .shell-root.ws909 .srw-kpis > span {
   min-width:0; display:grid; gap:4px; padding:8px;
   border-right:1px solid #2c3233;
@@ -169,6 +180,25 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .srw-table-head { color:#667074; font-size:8px; letter-spacing:.08em; }
 .shell-root.ws909 .srw-row b { overflow:hidden; text-overflow:ellipsis; color:#e6e9e8; }
 .shell-root.ws909 .srw-row span { color:#939b9d; }
+.shell-root.ws909 .srw-channel-cell {
+  min-width:0; display:flex; align-items:center; gap:7px;
+}
+.shell-root.ws909 .srw-channel-cell > span {
+  min-width:0; overflow:hidden; text-overflow:ellipsis; color:inherit;
+}
+.shell-root.ws909 .srw-check {
+  width:14px; height:14px; min-height:0; flex:0 0 14px; display:grid; place-items:center;
+  padding:0; border:1px solid #4b5354; border-radius:3px; background:#090c0d; cursor:pointer;
+}
+.shell-root.ws909 .srw-check i {
+  width:6px; height:6px; border-radius:1px; background:transparent;
+}
+.shell-root.ws909 .srw-check[aria-pressed="true"] { border-color:#e7b33d; }
+.shell-root.ws909 .srw-check[aria-pressed="true"] i {
+  background:#e7b33d; box-shadow:0 0 7px rgba(231,179,61,.65);
+}
+.shell-root.ws909 .srw-check:focus-visible { outline:2px solid #f1c45b; outline-offset:2px; }
+.shell-root.ws909 .srw-channel-cell.excluded > span { opacity:.35; }
 .shell-root.ws909 .srw .pos { color:#55d981; }
 .shell-root.ws909 .srw .neg { color:#ff735b; }
 .shell-root.ws909 .srw-manager-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 10px; }

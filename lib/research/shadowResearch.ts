@@ -38,6 +38,23 @@ export interface ShadowSessionSummary {
   blocked: Record<string, number>;
 }
 
+export interface ShadowCumulativeSummary {
+  fromSession: string;
+  throughSession: string;
+  sessionCount: number;
+  paths: number;
+  scored: number;
+  winners: number;
+  targets: number;
+  stops: number;
+  flattens: number;
+  pnlPerContract: number;
+  averagePerPath: number | null;
+  vb: ShadowChannelSummary[];
+  dark: ShadowChannelSummary[];
+  blocked: Record<string, number>;
+}
+
 const ET_DATE = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/New_York",
   year: "numeric",
@@ -124,6 +141,26 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     || a.slug.localeCompare(b.slug));
 }
 
+function summarizeRows(rows: ShadowResearchRow[]): Omit<ShadowSessionSummary, "session"> {
+  const scored = rows.filter((row) => row.pnlPerContract != null);
+  const pnl = scored.reduce((sum, row) => sum + Number(row.pnlPerContract), 0);
+  const blocked: Record<string, number> = {};
+  for (const row of rows) blocked[row.blocked] = (blocked[row.blocked] ?? 0) + 1;
+  return {
+    paths: rows.length,
+    scored: scored.length,
+    winners: scored.filter((row) => Number(row.pnlPerContract) > 0).length,
+    targets: rows.filter((row) => row.exitReason === "would_target").length,
+    stops: rows.filter((row) => row.exitReason === "would_stop").length,
+    flattens: rows.filter((row) => row.exitReason === "would_flatten").length,
+    pnlPerContract: rounded(pnl),
+    averagePerPath: scored.length ? rounded(pnl / scored.length) : null,
+    vb: summarizeChannels(rows.filter((row) => isVirtualBenchSlug(row.slug))),
+    dark: summarizeChannels(rows),
+    blocked,
+  };
+}
+
 /**
  * Same-session native virtual paths are deliberately kept separate from exact
  * T+1 manager evidence. They are a cheap, capital-blind triage layer, not
@@ -138,24 +175,25 @@ export function deriveShadowSessions(rows: ShadowResearchRow[]): ShadowSessionSu
     existing.push(row);
     sessions.set(session, existing);
   }
-  return [...sessions.entries()].map(([session, sessionRows]) => {
-    const scored = sessionRows.filter((row) => row.pnlPerContract != null);
-    const pnl = scored.reduce((sum, row) => sum + Number(row.pnlPerContract), 0);
-    const blocked: Record<string, number> = {};
-    for (const row of sessionRows) blocked[row.blocked] = (blocked[row.blocked] ?? 0) + 1;
-    return {
-      session,
-      paths: sessionRows.length,
-      scored: scored.length,
-      winners: scored.filter((row) => Number(row.pnlPerContract) > 0).length,
-      targets: sessionRows.filter((row) => row.exitReason === "would_target").length,
-      stops: sessionRows.filter((row) => row.exitReason === "would_stop").length,
-      flattens: sessionRows.filter((row) => row.exitReason === "would_flatten").length,
-      pnlPerContract: rounded(pnl),
-      averagePerPath: scored.length ? rounded(pnl / scored.length) : null,
-      vb: summarizeChannels(sessionRows.filter((row) => isVirtualBenchSlug(row.slug))),
-      dark: summarizeChannels(sessionRows),
-      blocked,
-    };
-  }).sort((a, b) => b.session.localeCompare(a.session));
+  return [...sessions.entries()]
+    .map(([session, sessionRows]) => ({ session, ...summarizeRows(sessionRows) }))
+    .sort((a, b) => b.session.localeCompare(a.session));
+}
+
+/**
+ * Prospective cumulative native evidence. This intentionally aggregates raw
+ * paths rather than daily averages, so channel figures remain path-weighted.
+ */
+export function deriveShadowCumulative(rows: ShadowResearchRow[]): ShadowCumulativeSummary | null {
+  const valid = rows
+    .map((row) => ({ row, session: shadowSessionDate(row.signalAt) }))
+    .filter((item) => item.session);
+  if (!valid.length) return null;
+  const sessions = [...new Set(valid.map((item) => item.session))].sort();
+  return {
+    fromSession: sessions[0],
+    throughSession: sessions[sessions.length - 1],
+    sessionCount: sessions.length,
+    ...summarizeRows(valid.map((item) => item.row)),
+  };
 }

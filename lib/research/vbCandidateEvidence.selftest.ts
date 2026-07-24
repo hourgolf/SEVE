@@ -6,6 +6,7 @@ import {
   candidateDbPayload,
   coalesceVbCandidateDecisions,
   VB_BOUNDARY_MAX_LAG_MS,
+  VB_CBBO_ASOF_LOOKBACK_MS,
   VB_CANDIDATE_SQL_FIELDS,
   VB_EXACT_PATH_BUILDER_VERSION,
   VB_EXACT_PATH_SQL_FIELDS,
@@ -78,6 +79,7 @@ const quote = (atMs: number, bid: number, ask: number): DatabentoCbboQuote => ({
   publisherId: 1, source: "databento_cbbo_1s",
 });
 const exactQuotes = [
+  quote(t0, 0.95, 1.05),
   quote(t0 + 500, 0.95, 1.05),
   quote(t0 + 1_500, 1.2, 1.25),
   quote(t0 + 2_500, 1.1, 1.15),
@@ -87,7 +89,7 @@ const exactQuotes = [
 const dry = buildVbExactCandidateDryRun({ candidate, databentoQuotes: exactQuotes, nativeSyntheticPnlPerContract: 33 });
 check("dry run performs zero external writes", dry.externalWrites, false);
 check("request uses the exact OCC and deterministic boundary", [dry.request?.occSymbol, dry.request?.startIso, dry.request?.endIso], [
-  base.occSymbol, new Date(base.decisionObservedAtMs).toISOString(), new Date(end + VB_BOUNDARY_MAX_LAG_MS + 1).toISOString(),
+  base.occSymbol, new Date(base.sourceBarAtMs - VB_CBBO_ASOF_LOOKBACK_MS).toISOString(), new Date(end + VB_BOUNDARY_MAX_LAG_MS + 1).toISOString(),
 ]);
 check("Databento ask, not live observed ask, is the score entry", [dry.scorecard.exactEntryAsk, dry.scorecard.liveObservedAsk?.price], [1.05, 9.99]);
 check("clean exact path produces every preregistered manager arm", [dry.scorecard.eligible, dry.scorecard.exactArms.length, dry.censors], [true, 8, []]);
@@ -114,17 +116,34 @@ check("score-only mode preserves exact manager outcomes without duplicating the 
   scoreOnly.exactPathPayload,
 ], [dry.scorecard, null, null, null]);
 
-const leftCensored = buildVbExactCandidateDryRun({ candidate, databentoQuotes: exactQuotes.map((row) => ({ ...row, atMs: row.atMs + 1_001 })) });
-check("left boundary above 1.1 seconds is censored", leftCensored.censors.includes("left_boundary_censored"), true);
-const rightCensored = buildVbExactCandidateDryRun({ candidate, databentoQuotes: exactQuotes.filter((row) => row.atMs < end) });
-check("missing right boundary is censored", rightCensored.censors.includes("right_boundary_censored"), true);
+const leftCensored = buildVbExactCandidateDryRun({
+  candidate,
+  databentoQuotes: exactQuotes.filter((row) => row.atMs > candidate.decisionObservedAtMs),
+});
+check("a quote published only after the decision cannot be used with look-ahead", leftCensored.censors.includes("left_boundary_censored"), true);
+const carriedTerminal = buildVbExactCandidateDryRun({ candidate, databentoQuotes: exactQuotes.filter((row) => row.atMs < end) });
+check("an unchanged terminal CBBO carries the last published state forward", carriedTerminal.censors.includes("right_boundary_censored"), false);
 const internalGap = buildVbExactCandidateDryRun({ candidate, databentoQuotes: [quote(t0 + 100, 1, 1.05), quote(end + 500, 1.1, 1.15)] });
 check("internal gap above five seconds is censored", internalGap.censors.includes("internal_gap_censored"), false);
 const longCandidate = { ...candidate, virtualExitAtMs: t0 + 8_000 };
-const actualInternalGap = buildVbExactCandidateDryRun({ candidate: longCandidate, databentoQuotes: [quote(t0 + 300, 1, 1.05), quote(t0 + 5_400, 1.1, 1.15), quote(t0 + 8_500, 1.2, 1.25)] });
-check("actual internal gap above five seconds is censored", actualInternalGap.censors.includes("internal_gap_censored"), true);
+const actualInternalGap = buildVbExactCandidateDryRun({ candidate: longCandidate, databentoQuotes: [quote(t0, 1, 1.05), quote(t0 + 5_400, 1.1, 1.15), quote(t0 + 8_500, 1.2, 1.25)] });
+check("event-sparse CBBO gaps remain diagnostic instead of false missing-data censors", [
+  actualInternalGap.censors.includes("internal_gap_censored"),
+  Number(actualInternalGap.exactPathPayload?.max_internal_gap_ms ?? 0) > 5_000,
+], [false, true]);
 const staleUnproven = buildVbExactCandidateDryRun({ candidate: { ...candidate, liveObservedAsk: { ...candidate.liveObservedAsk!, freshnessMs: 999_999 } }, databentoQuotes: exactQuotes });
 check("stale unproven live ask is never substituted into scoring", [staleUnproven.scorecard.eligible, staleUnproven.scorecard.exactEntryAsk], [true, 1.05]);
+const noTerminalBid = buildVbExactCandidateDryRun({
+  candidate,
+  databentoQuotes: [...exactQuotes.filter((row) => row.atMs < end), quote(end, 0, 0.01)],
+});
+check("no posted terminal bid preserves the exact path without inventing exits", [
+  noTerminalBid.censors,
+  noTerminalBid.exactPathPayload != null,
+  noTerminalBid.scorecard.eligible,
+  (noTerminalBid.scorecard.armCensors ?? []).every((row) => row.code === "no_executable_exit_bid"),
+  (noTerminalBid.scorecard.armCensors ?? []).length > 0,
+], [[], true, false, true, true]);
 const invalidExactAsk = buildVbExactCandidateDryRun({ candidate, databentoQuotes: [quote(t0 + 500, 1, 0.9), ...exactQuotes.slice(1)] });
 check("invalid exact entry ask is censored", invalidExactAsk.censors.includes("invalid_exact_quote"), true);
 const identityMismatch = buildVbExactCandidateDryRun({ candidate, databentoQuotes: [
