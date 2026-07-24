@@ -95,9 +95,13 @@ create table public.vb_exact_path_receipts (
   last_quote_at            timestamptz not null,
   entry_quote_at           timestamptz not null,
   entry_ask                numeric not null check (entry_ask > 0),
-  left_boundary_lag_ms     integer not null check (left_boundary_lag_ms between 0 and 1100),
-  right_boundary_lag_ms    integer not null check (right_boundary_lag_ms between 0 and 1100),
-  max_internal_gap_ms      integer not null check (max_internal_gap_ms between 0 and 5000),
+  -- v2 records post-boundary lag; v3 records the age of the last CBBO state
+  -- published at or before the boundary. The builder version makes the
+  -- interpretation explicit. Event-sparse gaps are diagnostic, not proof of
+  -- missing provider evidence.
+  left_boundary_lag_ms     integer not null check (left_boundary_lag_ms between 0 and 86400000),
+  right_boundary_lag_ms    integer not null check (right_boundary_lag_ms between 0 and 86400000),
+  max_internal_gap_ms      integer not null check (max_internal_gap_ms between 0 and 86400000),
   checksum_verified        boolean not null check (checksum_verified),
   contract_valid           boolean not null check (contract_valid),
   source                   text not null check (source = 'databento_historical'),

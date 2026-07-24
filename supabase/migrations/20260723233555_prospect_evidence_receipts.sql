@@ -46,8 +46,8 @@ create index idx_vb_exact_manager_paths_session_channel
   on public.vb_exact_manager_path_receipts (session_date_et desc, channel_slug, manager_id);
 create index idx_vb_exact_manager_paths_epoch
   on public.vb_exact_manager_path_receipts (configuration_epoch_id, source_bar_at);
-create index idx_vb_exact_manager_paths_candidate
-  on public.vb_exact_manager_path_receipts (candidate_id);
+create index idx_vb_exact_manager_paths_exact_path
+  on public.vb_exact_manager_path_receipts (exact_path_receipt_id);
 
 comment on table public.vb_exact_manager_path_receipts is
   'Append-only exact executable-basis manager research for dark/VB decisions; never an order, promotion, or root-epoch instruction.';
