@@ -163,6 +163,40 @@ only from locally verified objects whose compressed checksum, contract,
 authorized window, quote shape, and uniqueness all match. This changes no
 market evidence or production path.
 
+### Forward correction: event-sparse CBBO semantics
+
+The July 22 partial receipt remains unchanged. A source-semantics review after
+that freeze established why its IWM concentration must not be carried into
+future evidence:
+
+- Databento documents `cbbo-1s` as an interval schema that prints no record
+  when neither a trade nor a CBBO update occurs in the interval.
+- A gap between printed rows therefore means "no published state change," not
+  by itself "missing provider evidence."
+- The former five-second internal-row-gap guard confused event sparsity with
+  evidence loss. It remains part of the historical July 22 v2 result only.
+
+`vb-exact-path-builder-v3` corrects future research receipts without changing
+the frozen v2 artifact:
+
+- exact contract requests begin at the regular-session boundary, establishing
+  prior quote state before any later decision;
+- entry and terminal values use only the last CBBO state published at or before
+  the required clock, never a later row;
+- unchanged CBBO state is carried forward between published events;
+- observed row gaps remain in the receipt as diagnostics but are not treated
+  as proof of a feed gap;
+- a late observed decision extends its own future request instead of falling
+  outside a source-bar-derived cutoff;
+- missing prior state, wrong contract, malformed quotes, and missing exact
+  objects still fail closed.
+
+Primary schema reference:
+`https://databento.com/docs/schemas-and-data-formats/cbbo`.
+
+This is research tooling only. It does not revise July 22, authorize a prospect,
+change a root, write an external receipt, or alter production behavior.
+
 ## Verification
 
 - prospect-lane self-test: 22/22
@@ -182,9 +216,8 @@ market evidence or production path.
 1. Review this branch and the two unapplied migrations.
 2. Keep the 784 valid July 22 paths, but do not qualify a prospect from this
    partial session.
-3. Decide whether future IWM capture should request a more suitable exact
-   schema/window or retain the current five-second liquidity censor. Do not
-   revise the July 22 result retroactively.
+3. Review the forward-only v3 CBBO as-of semantics. Do not revise the July 22
+   v2 result retroactively.
 4. Accumulate additional exact sessions and ratify evidence floors separately.
 5. Only after those gates, decide whether any dark family earns a bounded
    paper-prospect fill lane.
