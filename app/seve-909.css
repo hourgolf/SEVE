@@ -1153,3 +1153,108 @@
     display: none;
   }
 }
+
+/* Positions: complete the cream-mode surface and semantic-color contract. */
+.shell-root.ws909[data-skin="cream"] .sv909-metrics {
+  background: var(--909-border);
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin="cream"] .sv909-metrics > span {
+  background: var(--909-surface-panel-raised);
+}
+
+.shell-root.ws909[data-skin="cream"] .sv909-metrics small {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"] .sv909-metrics b {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"] .sv909-metrics .success b {
+  color: var(--909-positive-text);
+}
+
+.shell-root.ws909[data-skin="cream"] .sv909-metrics .attention b {
+  color: var(--909-warning-text);
+}
+
+.shell-root.ws909[data-skin="cream"] .sv909-metrics .danger b {
+  color: var(--909-negative-text);
+}
+
+.shell-root.ws909[data-skin="cream"] .sv909-metrics .info b {
+  color: #245e9b;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] [data-nav-target="true"] {
+  outline-color: color-mix(in srgb, var(--909-positive-text) 70%, var(--909-border-strong));
+  box-shadow: 0 0 0 1px rgba(14, 97, 50, .12);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-pos-metrics, .pf-exit-summary) {
+  background: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-pos-metrics, .pf-exit-summary) > span {
+  background: var(--909-surface-panel-raised);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-pos-metrics, .pf-exit-summary) small {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-pos-metrics, .pf-exit-summary) b {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(
+  .pf-pos-metrics b.pos,
+  .pf-exit-summary b.pos,
+  .pf-recent-exits .pf-head .x.up,
+  .pf-exit-list > article > strong.pos,
+  .pf-exit-stats span.pos,
+  .pfp-pnl.pos,
+  .pfp-decision span.pos b,
+  .pfp-tag.ok,
+  .pfp-tag.evidence-green,
+  .pfp-close-reasons header b
+) {
+  color: var(--909-positive-text);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(
+  .pf-pos-metrics b.neg,
+  .pf-exit-summary b.neg,
+  .pf-recent-exits .pf-head .x.neg,
+  .pf-exit-list > article > strong.neg,
+  .pf-exit-stats span.neg,
+  .pfp-pnl.neg,
+  .pfp-decision span.neg b
+) {
+  color: var(--909-negative-text);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pfp-pklbl b {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pfp-close-reasons {
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pfp-close-reasons > div button {
+  color: var(--909-text-primary);
+  background: #e4dfd2;
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(
+  .pfp-close-reasons header span,
+  .pfp-close-reasons > div button small,
+  .pfp-close-reasons .skip
+) {
+  color: var(--909-text-secondary);
+}
