@@ -52,6 +52,12 @@
   --909-border: rgba(60, 52, 30, .22);
   --909-border-strong: #8d877a;
   --909-focus: #2b6fb8;
+  --909-scroll-track: #b8b2a4;
+  --909-scroll-track-edge: #8d877a;
+  --909-scroll-track-well: #d3cdbf;
+  --909-scroll-thumb: #66645e;
+  --909-scroll-thumb-hi: #918d83;
+  --909-scroll-thumb-lo: #4f4e49;
 }
 
 :where(.ws909, .m2-app)[data-skin="blackout"] {
@@ -71,6 +77,72 @@
   --909-border: rgba(255, 255, 255, .11);
   --909-border-strong: #3a4448;
   --909-focus: #69a9ec;
+  --909-scroll-track: #090c0d;
+  --909-scroll-track-edge: #30383b;
+  --909-scroll-track-well: #151a1c;
+  --909-scroll-thumb: #596266;
+  --909-scroll-thumb-hi: #7e898d;
+  --909-scroll-thumb-lo: #343b3e;
+}
+
+/* 909 fader rails for every native workstation scrollbar. Scroll behavior,
+   gutters, and intentionally hidden mobile rails remain owned by each surface. */
+:where(.shell-root.ws909, .m2-app) * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--909-scroll-thumb) var(--909-scroll-track);
+}
+
+:where(.shell-root.ws909, .m2-app) *::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+:where(.shell-root.ws909, .m2-app) *::-webkit-scrollbar-track {
+  margin: 3px;
+  background:
+    linear-gradient(90deg, var(--909-scroll-track), var(--909-scroll-track-well) 48%, var(--909-scroll-track));
+  border: 1px solid var(--909-scroll-track-edge);
+  border-radius: 999px;
+  box-shadow:
+    inset 1px 0 2px rgba(0, 0, 0, .24),
+    inset -1px 0 1px rgba(255, 255, 255, .20);
+}
+
+:where(.shell-root.ws909, .m2-app) *::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0 calc(50% - 1px),
+      var(--accent) calc(50% - 1px) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ) padding-box,
+    linear-gradient(
+      90deg,
+      var(--909-scroll-thumb-lo),
+      var(--909-scroll-thumb) 34%,
+      var(--909-scroll-thumb-hi) 52%,
+      var(--909-scroll-thumb) 70%,
+      var(--909-scroll-thumb-lo)
+    ) padding-box;
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, .18),
+    inset -1px 0 0 rgba(0, 0, 0, .28);
+}
+
+:where(.shell-root.ws909, .m2-app) *::-webkit-scrollbar-thumb:hover {
+  --909-scroll-thumb: var(--909-scroll-thumb-hi);
+}
+
+:where(.shell-root.ws909, .m2-app) *::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+}
+
+:where(.shell-root.ws909, .m2-app) *::-webkit-scrollbar-corner {
+  background: var(--909-scroll-track);
 }
 
 .sv909-workspace-head {
