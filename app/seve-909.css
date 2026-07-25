@@ -1065,21 +1065,31 @@
 }
 
 .m2-app:not(.folio-mobile) .m2-review-modes {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
 }
 
 .m2-app:not(.folio-mobile) .m2-review-modes button {
-  min-height: 48px;
+  min-height: 44px;
+  gap: 3px;
+  padding: 4px 2px;
 }
 
 .m2-app:not(.folio-mobile) .m2-review-modes button b {
-  font-size: 11px;
+  overflow: hidden;
+  font-size: 9.5px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .m2-app:not(.folio-mobile) .m2-review-modes button small {
-  font-size: 10px;
+  overflow: hidden;
+  font-size: 7.5px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .m2-app:not(.folio-mobile) .m2-preflight {

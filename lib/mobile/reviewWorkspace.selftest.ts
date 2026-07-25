@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   DEFAULT_MOBILE_REVIEW_MODE,
   MOBILE_REVIEW_MODES,
@@ -16,6 +17,12 @@ const check = (name: string, run: () => void) => {
 
 check("evidence is the default operator review", () => assert.equal(DEFAULT_MOBILE_REVIEW_MODE, "evidence"));
 check("four explicit review modes are exposed", () => assert.deepEqual(MOBILE_REVIEW_MODES.map((mode) => mode.id), ["session", "shadow", "evidence", "sentinel"]));
+check("review modes render as one four-segment rail", () => {
+  const css = readFileSync("app/seve-909.css", "utf8");
+  const layout = css.match(/\.m2-app:not\(\.folio-mobile\) \.m2-review-modes \{([^}]*)\}/)?.[1] ?? "";
+  assert.match(layout, /grid-template-columns:\s*repeat\(4,/);
+  assert.doesNotMatch(layout, /repeat\(2,/);
+});
 check("session owns results and attribution only", () => assert.deepEqual(mobileReviewSections("session"), ["session-summary", "equity", "attribution"]));
 check("shadow owns the research workspace", () => assert.deepEqual(mobileReviewSections("shadow"), ["shadow-research"]));
 check("evidence owns retained tape and linked chains", () => assert.deepEqual(mobileReviewSections("evidence"), ["event-tape", "trade-evidence"]));
