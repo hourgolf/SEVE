@@ -1211,19 +1211,87 @@
   white-space: nowrap;
 }
 
+.m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-section > header,
 .m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-disclosure > summary {
   color: var(--909-text-primary);
   background: linear-gradient(180deg, #25282b, #191b1d);
   border-color: #343a3d;
 }
 
+.m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-section > header b,
 .m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-disclosure > summary b {
   color: var(--909-text-primary);
 }
 
+.m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-section > header span,
 .m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-disclosure > summary span,
 .m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-disclosure > summary i {
   color: var(--909-text-secondary);
+}
+
+/* Phone market controls are touch targets, not miniatures of the desktop
+   toolbar. Keep both switch rows legible without crowding the chart canvas. */
+.m2-app:not(.folio-mobile) .m2-market-switch {
+  gap: 6px;
+  padding: 6px;
+}
+
+.m2-app:not(.folio-mobile) .m2-market-switch button {
+  min-height: 46px;
+  padding-inline: 13px;
+  font-size: 12px;
+}
+
+.m2-app:not(.folio-mobile) .m2-market-switch button.symbol {
+  min-width: 50px;
+  padding-inline: 10px;
+  font-size: 11px;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-head--untitled {
+  padding: 8px 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-head--untitled .phead-right {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .sym-toggle {
+  grid-column: 1;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-cfg-chip {
+  grid-column: 2;
+  justify-self: end;
+  min-width: 46px;
+  min-height: 42px;
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-controls-right {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .seg--range {
+  width: 100%;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body :is(.chart-toggle, .seg) button {
+  min-height: 42px;
+  padding-inline: 10px;
+  font-size: 11px;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .sym-toggle button {
+  min-width: 56px;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .seg--range button {
+  flex: 1;
 }
 
 .m2-app:not(.folio-mobile) .m2-desk-body {

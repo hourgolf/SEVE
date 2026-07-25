@@ -36,8 +36,11 @@ assert.match(shadowResearch, /shadowResearch\.sessions\.slice\(RECENT_SESSION_LI
 assert.match(foundationCss, /\[data-skin="cream"\] \.m2-book-nav button/);
 assert.match(foundationCss, /\[data-skin="cream"\] \.m2-markets-chain > \.panel/);
 assert.match(workstationCss, /\.ws-deck-mode,\.ws-transport \{ display:none; \}/);
-assert.match(workstationCss, /\.ws-left-copy b\{[^}]*font-size:10px/);
+assert.match(workstationCss, /\.ws-left-copy b\{[^}]*font-size:12px/);
+assert.match(workstationCss, /\.ws-left-copy small\{[^}]*font-size:10px/);
 assert.match(workstationCss, /\.ws-telemetry \.acct-switch \{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+assert.match(workstationCss, /\.ws-telemetry \.acct-switch \{[^}]*height:32px/);
+assert.match(workstationCss, /\.ws-telemetry \.acct-opt \{[^}]*height:32px/);
 assert.match(workstationShell, /const startOfDayNav = liveFund\.nav - liveFund\.dayPnl/);
 assert.match(workstationShell, /const dayPnlPct = startOfDayNav > 0 \? \(liveFund\.dayPnl \/ startOfDayNav\) \* 100 : null/);
 assert.doesNotMatch(workstationShell, /dayChangePct/);
@@ -61,5 +64,8 @@ assert.match(mobileShell, /const openStudioChannel = \(slug: string\) => \{[\s\S
 assert.match(mobileCss, /\.m2-studio-sequencer \.m-sqbody \{[^}]*padding-top:6px/);
 assert.match(sessionSequencer, /if \(variant === "dock"\)[\s\S]*className="m-sqbody"[\s\S]*className="m-sqhead"/);
 assert.match(mobileCss, /\.m2-app\[data-room="studio"\] \.m2-padbar \{ margin-top:0/);
+assert.match(foundationCss, /\[data-skin="blackout"\] \.m2-desk-section > header,[\s\S]{0,180}\.m2-desk-disclosure > summary/);
+assert.match(foundationCss, /\.m2-market-switch button \{[\s\S]{0,120}min-height:\s*46px/);
+assert.match(foundationCss, /\.m2-chart-body :is\(\.chart-toggle, \.seg\) button \{[\s\S]{0,120}min-height:\s*42px/);
 
-console.log("presentation-selftest: 44/44 passed");
+console.log("presentation-selftest: 50/50 passed");
