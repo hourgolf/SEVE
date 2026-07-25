@@ -765,11 +765,27 @@
 }
 
 .m2-app:not(.folio-mobile) .m2-head-r2 .led {
-  gap: 2px;
+  width: 100%;
+  gap: 3px;
 }
 
 .m2-app:not(.folio-mobile) .m2-head-r2 .led-window {
-  padding: 3px 5px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 124px;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 5px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-r2 .seven-seg {
+  width: 16px;
+  height: 29px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-r2 .led-unit {
+  margin-left: 2px;
+  font-size: 16px;
 }
 
 .m2-app:not(.folio-mobile) .m2-head-r2 .led-caption {
