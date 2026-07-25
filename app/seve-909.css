@@ -690,7 +690,12 @@
 .m2-app:not(.folio-mobile) .m2-head-meta .acct-switch {
   width: 100%;
   height: 40px;
+  background: var(--909-surface-panel-inset);
+  border: 1px solid var(--909-border-strong);
   border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .56),
+    0 1px 1px rgba(43, 39, 30, .14);
 }
 
 .m2-app:not(.folio-mobile) .m2-head-meta .acct-opt {
@@ -702,6 +707,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta .acct-opt + .acct-opt {
+  border-left: 1px solid var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .m2-head-meta .acct-opt:not(.acct-live) {
+  color: var(--909-text-secondary);
+  background: rgba(255, 255, 255, .16);
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta .acct-opt:not(.acct-live).on {
+  color: #241704;
+  background: linear-gradient(180deg, #efbd53, #d99a1f);
+  box-shadow:
+    inset 0 -2px 0 var(--accent),
+    inset 0 1px 0 rgba(255, 255, 255, .42);
 }
 
 .m2-app:not(.folio-mobile) .m2-pill {
@@ -801,6 +823,22 @@
 .m2-app:not(.folio-mobile) .m2-channel-scope button {
   min-height: 44px;
   font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .m2-market-switch button {
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel-raised), #d8d2c3);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .68);
+}
+
+.m2-app:not(.folio-mobile) .m2-market-switch button.on {
+  color: #241704;
+  background: linear-gradient(180deg, #efbd53, #d99a1f);
+  border-color: #8b6211;
+  box-shadow:
+    inset 0 -3px 0 var(--accent),
+    inset 0 1px 0 rgba(255, 255, 255, .42);
 }
 
 .m2-app:not(.folio-mobile) .market-read-strip,
