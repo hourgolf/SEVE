@@ -472,11 +472,57 @@
   color: var(--909-text-secondary);
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="studio"] .condition-bank,
-.shell-root.ws909[data-skin="cream"][data-mode="studio"] .decision-ledger {
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .condition-bank {
   color: var(--909-text-primary);
   background: rgba(255, 255, 255, .30);
   border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .decision-ledger,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .passport-grid {
+  color: var(--909-text-primary);
+  background: var(--909-border);
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] :is(
+  .decision-ledger > span,
+  .decision-ledger > i,
+  .passport-grid > span
+) {
+  color: var(--909-text-primary);
+  background: rgba(255, 255, 255, .22);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] :is(
+  .decision-ledger time,
+  .decision-ledger small,
+  .decision-ledger > i,
+  .passport-grid small
+) {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] :is(
+  .decision-ledger b,
+  .decision-ledger em,
+  .passport-grid b,
+  .passport-grid code
+) {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .decision-ledger .held b,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .passport-grid b.warning {
+  color: var(--909-warning-text);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .decision-ledger .fired b {
+  color: var(--909-positive-text);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .decision-ledger .risk b {
+  color: var(--909-negative-text);
 }
 
 @media (max-width: 700px) {
@@ -1189,8 +1235,16 @@
 }
 
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] [data-nav-target="true"] {
-  outline-color: color-mix(in srgb, var(--909-positive-text) 70%, var(--909-border-strong));
-  box-shadow: 0 0 0 1px rgba(14, 97, 50, .12);
+  outline: none;
+  box-shadow: none;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(
+  #perform-positions,
+  #perform-sentinel,
+  #perform-tape
+)[data-nav-target="true"] {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 7px rgba(0, 0, 0, .20);
 }
 
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-pos-metrics, .pf-exit-summary) {
@@ -1298,7 +1352,7 @@
 }
 
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pft-body {
-  background: var(--909-surface-panel-raised);
+  background: transparent;
 }
 
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pft-row {
