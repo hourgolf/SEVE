@@ -8,10 +8,13 @@ const marksSource = readFileSync(new URL("./usePositionMarks.ts", import.meta.ur
 const marketStart = source.indexOf("async function poll()");
 const releaseStart = source.indexOf("async function pollRelease()");
 const barsStart = source.indexOf("async function pollBars()");
+const historyStart = source.indexOf("async function loadHistory()");
+const dailyStart = source.indexOf("async function loadDaily()");
 
-assert.ok(marketStart >= 0 && releaseStart > marketStart && barsStart > releaseStart);
+assert.ok(marketStart >= 0 && releaseStart > marketStart && barsStart > releaseStart && historyStart > barsStart && dailyStart > historyStart);
 const marketPoll = source.slice(marketStart, releaseStart);
 const releasePoll = source.slice(releaseStart, barsStart);
+const historyLoad = source.slice(historyStart, dailyStart);
 
 assert.doesNotMatch(marketPoll, /day1-release ACTIVE/, "market poll must not wait for release lookup");
 assert.match(releasePoll, /\.gte\("created_at", cutoff\)/, "release lookup must be time bounded");
@@ -29,8 +32,10 @@ assert.match(source, /filter: `symbol=eq\.\$\{symbol\}`/, "realtime bar trigger 
 assert.doesNotMatch(marketPoll, /from\("underlying_bars"\)/, "chain/event poll must not duplicate the dedicated bar poll");
 assert.match(source.slice(barsStart), /bars: markReadSuccess/, "dedicated bar poll must own its success health");
 assert.match(source.slice(barsStart), /bars: markReadFailure/, "dedicated bar poll must own its failure health");
+assert.match(historyLoad, /if \(live\(\)\) pollBars\(\);/, "deep history must merge through the dedicated bars poll");
+assert.doesNotMatch(historyLoad, /if \(live\(\)\) poll\(\);/, "deep history must not call the chain/event poll");
 assert.match(strategySource, /SUPPORTED_UNDERLYINGS = \["SPY", "QQQ", "IWM"\]/, "desktop and mobile must expose the full ingested ticker set");
 assert.match(spotSource, /new Set\(SUPPORTED_UNDERLYINGS\)/, "fast spot allowlist must share the UI capability contract");
 assert.match(marksSource, /SUPPORTED_UNDERLYINGS\.map\(\(sym\) => fetchSpot/, "open-position marks must refresh every supported underlying");
 
-console.log("market-data-read-selftest: 20/20 passed");
+console.log("market-data-read-selftest: 22/22 passed");

@@ -468,7 +468,10 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
         const desc = pages.flatMap((p) => (p.data ?? []) as UnderlyingBar[]);
         if (!desc.length) return;
         historyBars.current = desc.reverse(); // desc pages → oldest→newest
-        if (live()) poll();
+        // The dedicated bars poll owns the visible merge. Calling the general
+        // chain/event poll here leaves the chart on its 60-row startup tail;
+        // after hours, the RTH filter can reduce that tail to a single bar.
+        if (live()) pollBars();
       } catch {
         /* poll-only */
       }
