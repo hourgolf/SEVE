@@ -45,9 +45,15 @@ assert.match(workstationCss, /\.ws-sequencer \.m-sqbody \{[^}]*bottom:50px/);
 assert.match(workstationShell, /import \{ SessionSequencer \} from "@\/components\/console\/SessionSequencer"/);
 assert.match(workstationShell, /<SessionSequencer[\s\S]*variant="dock"[\s\S]*positions=\{feed\.positions\}[\s\S]*recentTrades=\{feed\.recentTrades\}/);
 assert.doesNotMatch(workstationShell, /Array\.from\(\{ length: 16 \}, \(_, i\) => <i/);
-assert.match(workstationCss, /\.ws-telemetry \.acct-switch \{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
-assert.match(workstationCss, /\.ws-telemetry \.acct-switch \{[^}]*height:32px/);
-assert.match(workstationCss, /\.ws-telemetry \.acct-opt \{[^}]*height:32px/);
+assert.doesNotMatch(workstationShell, /<AccountSwitcher/);
+assert.match(workstationShell, /accounts\.map\(\(account, index\) =>/);
+assert.match(workstationShell, /<LedDisplay value=\{String\(index \+ 1\)\} digits=\{1\} color=\{color\}/);
+assert.match(workstationShell, /aria-label=\{`Account \$\{index \+ 1\}: \$\{account\.name\}`\}/);
+assert.match(workstationCss, /--ws-nav-width:220px; --ws-main-gap:8px/);
+assert.match(workstationCss, /grid-template-columns: calc\(var\(--ws-nav-width\) \+ var\(--ws-main-gap\)\) repeat\(7/);
+assert.match(workstationCss, /\.ws-account-bank \{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+assert.match(workstationCss, /\.ws-account-key \.seven-seg \{ width:24px; height:44px; \}/);
+assert.match(workstationCss, /\.ws-account-key\.on::after \{ background:var\(--hw-green\)/);
 assert.match(workstationCss, /\.ws-metric\.pos>span\{color:var\(--hw-green,#55d766\)\}/);
 assert.match(workstationCss, /\.ws-metric\.neg>span\{color:var\(--hw-red-soft,#ff6044\)\}/);
 assert.match(workstationShell, /const startOfDayNav = liveFund\.nav - liveFund\.dayPnl/);
@@ -81,4 +87,4 @@ assert.match(foundationCss, /\.srw-row \{[\s\S]{0,80}min-height:\s*44px;[\s\S]{0
 assert.match(foundationCss, /:is\(\.pf-market-target, \.pf-markets-chart\) > \.panel/);
 assert.match(foundationCss, /:is\(\s*\.pf-market-target,\s*\.pf-markets-chart\s*\) :is\([\s\S]{0,100}\.chart-toggle,[\s\S]{0,60}\.seg[\s\S]{0,40}\) button\.on/);
 
-console.log("presentation-selftest: 63/63 passed");
+console.log("presentation-selftest: 69/69 passed");

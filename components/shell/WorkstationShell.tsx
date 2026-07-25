@@ -2,7 +2,6 @@
 
 import "@/app/workstation.css";
 import { useEffect, useMemo, useState } from "react";
-import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { AuthControl } from "@/components/AuthControl";
 import { KillControl } from "@/components/console/hw/KillControl";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
@@ -145,8 +144,29 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
 
       <section className="ws-telemetry" aria-label="Desk telemetry">
         <div className="ws-account">
-          <small>ACCOUNT</small>
-          <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
+          <div className="ws-account-bank" role="group" aria-label="account">
+            {accounts.map((account, index) => {
+              const active = acctId === account.id;
+              const color = account.mode === "live"
+                ? "var(--hw-red-soft)"
+                : active
+                  ? "var(--hw-green)"
+                  : "var(--ws-led-neutral)";
+              return (
+                <button
+                  key={account.id}
+                  type="button"
+                  className={`ws-account-key${active ? " on" : ""}${account.mode === "live" ? " live" : ""}`}
+                  aria-label={`Account ${index + 1}: ${account.name}`}
+                  aria-pressed={active}
+                  title={`${account.name} (${account.mode})`}
+                  onClick={() => setAcctId(account.id)}
+                >
+                  <LedDisplay value={String(index + 1)} digits={1} color={color} />
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="ws-metric ws-metric--led"><small>NAV</small><div className="ws-led-readout neutral" role="img" aria-label={`NAV ${compactUsd(liveFund.nav)}`}><span aria-hidden="true">$</span><LedDisplay value={navLed.value} digits={navLed.digits} color="var(--ws-led-neutral)" unit={navLed.unit} /></div></div>
         <div className={`ws-metric ws-metric--led ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}><small>DAY P&amp;L</small><div className="ws-led-readout" role="img" aria-label={`Day P and L ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div><span>{dayPnlPct != null ? `${dayPnlPct >= 0 ? "+" : ""}${dayPnlPct.toFixed(2)}%` : "—"}</span></div>
