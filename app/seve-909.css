@@ -28,9 +28,9 @@
   --909-type-title: 24px;
 
   --909-success: var(--909-positive-text, var(--hw-green, var(--m2-green, #2fd573)));
-  --909-attention: var(--hw-amber, var(--m2-amber, #e0a23f));
-  --909-danger: var(--hw-red-soft, var(--m2-red-soft, #e07a58));
-  --909-info: var(--m2-blue, #5aa0e6);
+  --909-attention: var(--909-warning-text, var(--hw-amber, var(--m2-amber, #e0a23f)));
+  --909-danger: var(--909-negative-text, var(--hw-red-soft, var(--m2-red-soft, #e07a58)));
+  --909-info: var(--909-info-text, var(--m2-blue, #5aa0e6));
   --909-on-dark: var(--lcd-ink, #e9eef0);
   --909-on-dark-muted: var(--dk-mut, #8a949a);
 
@@ -56,11 +56,13 @@
   --909-text-primary: #4c4943;
   --909-text-secondary: #737068;
   --909-text-tertiary: #777269;
+  --909-neutral-text: #5f5b53;
   --909-positive-text: #3b7c48;
   --909-positive-icon: #3b7c48;
   --909-positive-fill: rgba(59, 124, 72, .10);
   --909-negative-text: #933e35;
   --909-warning-text: #bc8b51;
+  --909-info-text: #385e77;
   --909-border: rgba(60, 52, 30, .14);
   --909-border-strong: rgba(60, 52, 30, .26);
   --909-focus: #285f7a;
@@ -93,11 +95,13 @@
   --909-text-primary: #e7eae5;
   --909-text-secondary: #aeb2aa;
   --909-text-tertiary: #6f797d;
+  --909-neutral-text: #a6afb2;
   --909-positive-text: #88b780;
   --909-positive-icon: #88b780;
   --909-positive-fill: rgba(136, 183, 128, .10);
   --909-negative-text: #d27f60;
   --909-warning-text: #dbae6e;
+  --909-info-text: #7faad6;
   --909-border: rgba(255, 255, 255, .07);
   --909-border-strong: rgba(255, 255, 255, .13);
   --909-focus: #5aa0e6;
@@ -2203,6 +2207,160 @@
 .shell-root.ws909[data-mode="perform"] .srw-interactions strong {
   font-size: clamp(13px, .72vw, 15px);
 }
+
+/* ==========================================================================
+   909 THEME SURFACE CONTRACT
+
+   Figma owns the chassis, panel, inset, line, text, and status values. This
+   final semantic layer retires the remaining mock-era beige/graphite literals
+   without flattening the dark chart and seven-segment instruments.
+   ========================================================================== */
+
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"],
+.m2-app:not(.folio-mobile)[data-skin="cream"] {
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, .34), transparent 22%, rgba(255, 255, 255, .12) 60%, transparent 82%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .024) 0 1px, rgba(45, 42, 34, .016) 1px 3px),
+    var(--909-surface-canvas);
+}
+
+.shell-root.ws909[data-skin="blackout"],
+.m2-app:not(.folio-mobile)[data-skin="blackout"] {
+  background:
+    radial-gradient(1000px 520px at 50% -12%, rgba(255, 255, 255, .04), transparent 62%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .012) 0 1px, rgba(0, 0, 0, .035) 1px 3px),
+    var(--909-surface-canvas);
+}
+
+.shell-root.ws909[data-skin] :is(.ws-display, .perform, .studio),
+.m2-app:not(.folio-mobile)[data-skin] :is(.m2-main, .m2-scroll, .m2-room-scroll) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-canvas);
+}
+
+.shell-root.ws909[data-skin] :is(.ws-left, .ws-auth-panel) {
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin] .ws-deck {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset);
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin] :is(
+  .pf-hardware,
+  .sntw,
+  .etw,
+  .opsw,
+  .srw,
+  .inspector,
+  .studio-module,
+  .mixer-inspector,
+  .mix-bank,
+  .pf-chick,
+  .pf-market-target > .panel,
+  .pf-markets-chart > .panel,
+  .pf-markets-chain > .panel,
+  .pf-markets-contract > .panel,
+  .pf-market-risk
+) {
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin] :is(
+  .pf-hardware .pf-head,
+  .pf-market-target .phead,
+  .pf-markets-chart .phead,
+  .pf-markets-chain .phead,
+  .pf-markets-contract .phead,
+  .pf-market-risk .pf-head,
+  .insp-head,
+  .studio-module > header,
+  .mix-bank > header,
+  .sntw-card > header
+) {
+  color: var(--909-text-primary);
+  background: linear-gradient(
+    180deg,
+    var(--909-surface-panel-inset),
+    color-mix(in srgb, var(--909-surface-panel-inset) 82%, var(--909-surface-canvas))
+  );
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(.m2-head, .m2-dock, .m2-padbar) {
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-market-switch,
+  .m2-book-nav,
+  .m2-studio-tools,
+  .m2-screen.m2-hardware,
+  .m2-desk-section,
+  .m2-desk-disclosure,
+  .m2-room-scroll .sentinel-receipt,
+  .srw.compact,
+  .m2-set-sheet
+) {
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-hardware .m2-phead,
+  .m2-desk-section > header,
+  .m2-desk-disclosure > summary
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset);
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-desk-hero > span,
+  .m2-preflight > span,
+  .m2-nightly .verdict,
+  .m2-review-modes,
+  .m2-desk-rows > div,
+  .m2-passport,
+  .m2-fp,
+  .srw-controls,
+  .srw-running,
+  .srw-native,
+  .srw-exact,
+  .srw-interactions > span
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset);
+  border-color: var(--909-border);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-market-switch,
+  .m2-book-nav,
+  .m2-studio-tools,
+  .m2-desk-section,
+  .m2-desk-disclosure,
+  .m2-room-scroll .sentinel-receipt,
+  .m2-review-modes
+) {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--909-text-primary) 10%, transparent);
+}
+
+/* 909 THEME SURFACE CONTRACT: END */
 
 /* ==========================================================================
    909 CONTROL CONTRACT: START

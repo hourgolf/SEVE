@@ -99,5 +99,27 @@ assert.match(foundationCss, /\.srw-head b \{[\s\S]{0,80}font-size:\s*clamp\(18px
 assert.match(foundationCss, /\.srw-row \{[\s\S]{0,80}min-height:\s*44px;[\s\S]{0,80}font-size:\s*clamp\(14px, \.78vw, 16px\)/);
 assert.match(foundationCss, /:is\(\.pf-market-target, \.pf-markets-chart\) > \.panel/);
 assert.match(foundationCss, /:is\(\s*\.pf-market-target,\s*\.pf-markets-chart\s*\) :is\([\s\S]{0,100}\.chart-toggle,[\s\S]{0,60}\.seg[\s\S]{0,40}\) button\.on/);
+const themeContract = foundationCss.match(/909 THEME SURFACE CONTRACT([\s\S]*?)909 THEME SURFACE CONTRACT: END/)?.[1] ?? "";
+assert.ok(themeContract, "final 909 theme surface contract is missing");
+for (const token of [
+  "--909-surface-canvas",
+  "--909-surface-panel",
+  "--909-surface-panel-inset",
+  "--909-text-primary",
+  "--909-border",
+  "--909-border-strong",
+]) {
+  assert.ok(themeContract.includes(token), `theme contract does not consume ${token}`);
+}
+for (const family of [
+  ".ws-left",
+  ".pf-hardware",
+  ".m2-market-switch",
+  ".m2-screen.m2-hardware",
+  ".m2-desk-section",
+  ".srw.compact",
+]) {
+  assert.ok(themeContract.includes(family), `theme contract does not cover ${family}`);
+}
 
-console.log("presentation-selftest: 82/82 passed");
+console.log("presentation-selftest: 95/95 passed");
