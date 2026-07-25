@@ -622,10 +622,10 @@
 }
 
 .m2-app:not(.folio-mobile) .m2-head-meta .acct-opt {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   height: 100%;
-  padding: 0 6px;
+  padding: 0 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
