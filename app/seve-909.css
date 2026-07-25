@@ -1258,3 +1258,152 @@
 ) {
   color: var(--909-text-secondary);
 }
+
+/* Event Tape console: cream mode is an analytical surface, not dark glass.
+   This covers the always-visible desktop rail and its mobile render path; the
+   dedicated Event Tape workspace already follows the cream token contract. */
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass {
+  --lcd-ink: var(--909-text-primary);
+  --dk-mut: var(--909-text-secondary);
+  --dk-dim: var(--909-text-tertiary);
+  --pf-line: rgba(60, 52, 30, .14);
+  --pf-line-2: rgba(60, 52, 30, .26);
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 6px rgba(0, 0, 0, .16);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pf-head {
+  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass :is(
+  .pf-head .t,
+  .pf-head .x,
+  .pf-basis
+) {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pf-head .t {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pf-livedot {
+  background: var(--909-positive-text);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--909-positive-text) 55%, transparent);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pft-body {
+  background: var(--909-surface-panel-raised);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pft-row {
+  border-color: rgba(60, 52, 30, .14);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass :is(
+  .pft-time,
+  .pft-kind.info
+) {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pft-kind.info {
+  background: rgba(255, 255, 255, .26);
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pft-kind.exec {
+  color: var(--909-positive-text);
+  background: rgba(14, 97, 50, .06);
+  border-color: rgba(14, 97, 50, .3);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pft-kind.warn {
+  color: var(--909-warning-text);
+  background: rgba(132, 87, 12, .07);
+  border-color: rgba(132, 87, 12, .3);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pft-msg {
+  color: var(--909-text-primary);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass {
+  --lcd-ink: var(--909-text-primary);
+  --dk-mut: var(--909-text-secondary);
+  --dk-dim: var(--909-text-tertiary);
+  --line: rgba(60, 52, 30, .14);
+  --line-2: rgba(60, 52, 30, .26);
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 6px rgba(0, 0, 0, .16);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-phead {
+  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-phead .t {
+  color: var(--909-text-primary);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-phead .x {
+  color: var(--909-text-secondary);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .tape-read-strip {
+  color: var(--909-text-secondary);
+  background: rgba(255, 255, 255, .26);
+  border-color: var(--909-border);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .tape-read-strip.green {
+  color: var(--909-positive-text);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .tape-read-strip.yellow {
+  color: var(--909-warning-text);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .tape-read-strip.red {
+  color: var(--909-negative-text);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .tape-read-strip small,
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-t-time {
+  color: var(--909-text-secondary);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-trow {
+  border-color: rgba(60, 52, 30, .14);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-t-kind.info {
+  color: var(--909-text-secondary);
+  background: rgba(255, 255, 255, .26);
+  border-color: var(--909-border);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-t-kind.exec {
+  color: var(--909-positive-text);
+  background: rgba(14, 97, 50, .06);
+  border-color: rgba(14, 97, 50, .3);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-t-kind.warn {
+  color: var(--909-warning-text);
+  background: rgba(132, 87, 12, .07);
+  border-color: rgba(132, 87, 12, .3);
+}
+
+.m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-t-msg {
+  color: var(--909-text-primary);
+}
