@@ -232,7 +232,7 @@ function Surface({
     <>
       {presentation === "folio"
         ? <FolioShell surface={props} dayChangePct={mkt.dayChangePct} mobile={false} onLegacy={() => setLegacyOpen(true)} />
-        : <WorkstationShell surface={props} dayChangePct={mkt.dayChangePct} onLegacy={() => setLegacyOpen(true)} />}
+        : <WorkstationShell surface={props} onLegacy={() => setLegacyOpen(true)} />}
       {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats over EITHER
           room. Opens on the shared `seve:command-palette` event; roster scoped to the account. */}
       <CommandPalette

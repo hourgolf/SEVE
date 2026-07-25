@@ -127,7 +127,7 @@ function TapeSection({ events, strategists, health }: { events: MarketEvent[]; s
 }
 
 export function MobilePerform({
-  props, channels, sent, livePnl, marketView, onMarketViewChange,
+  props, channels, sent, livePnl, marketView, onMarketViewChange, onOpenChannel,
 }: {
   props: SurfaceProps;
   channels: StrategistState[];
@@ -135,6 +135,7 @@ export function MobilePerform({
   livePnl: Record<string, ChannelPnl>;
   marketView: MobileMarketView;
   onMarketViewChange: (view: MobileMarketView) => void;
+  onOpenChannel?: (slug: string) => void;
 }) {
   const { data, view, feed, spotUp, symbol, setSymbol, selected, setSelected, contractHistory } = props;
   const changeSymbol = (next: string) => {
@@ -188,7 +189,7 @@ export function MobilePerform({
         </>}
       </div>
 
-      <MobileDock channels={channels} livePnl={livePnl} lens={sent.lens} write={props.write} />
+      <MobileDock channels={channels} livePnl={livePnl} lens={sent.lens} write={props.write} onOpenChannel={onOpenChannel} />
     </>
   );
 }

@@ -87,6 +87,10 @@ export function MobileShell(props: SurfaceProps) {
     setMarketView(next);
     setRoom("play");
   };
+  const openStudioChannel = (slug: string) => {
+    setOpenSlug(slug);
+    setRoom("studio");
+  };
   const clock = now?.toLocaleTimeString("en-US", {
     hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles",
   }) ?? "--:--";
@@ -129,7 +133,7 @@ export function MobileShell(props: SurfaceProps) {
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
         {data.warning && (room === "play" || room === "ops") && <div className="market-read-warning" role="status">{data.warning}</div>}
         {room === "play" ? (
-          <MobilePerform props={props} channels={channels} sent={sent} livePnl={livePnl} marketView={marketView} onMarketViewChange={setMarketView} />
+          <MobilePerform props={props} channels={channels} sent={sent} livePnl={livePnl} marketView={marketView} onMarketViewChange={setMarketView} onOpenChannel={openStudioChannel} />
         ) : room === "studio" ? (
           <MobileStudio props={props} channels={channels} livePnl={livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={() => setAddOpen(true)} onOpenSettings={() => setSetOpen(true)} />
         ) : <MobileDeskRoom room={room} props={props} channels={channels} livePnl={livePnl} onViewMarket={openMarket} onOpenSettings={() => setSetOpen(true)} />}

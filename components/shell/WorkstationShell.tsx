@@ -16,7 +16,6 @@ import type { PerformSection } from "@/lib/perform/derivePerformView";
 
 interface WorkstationShellProps {
   surface: SurfaceProps;
-  dayChangePct: number | null;
   onLegacy: () => void;
 }
 
@@ -66,7 +65,7 @@ const sessionStep = (now: Date): number => {
   return Math.max(0, Math.min(15, Math.floor(((hour * 60 + minute) - 570) / (390 / 16))));
 };
 
-export function WorkstationShell({ surface, dayChangePct, onLegacy }: WorkstationShellProps) {
+export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const { mode, setMode, skin, toggleSkin, density, toggleDensity } = useShell();
   const [now, setNow] = useState<Date | null>(null);
   const [performSection, setPerformSection] = useState<PerformSection>("overview");
@@ -96,10 +95,12 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
 
   const { view, feed, liveFund, livePnl, accounts, acctId, setAcctId, incident, workerRuns, write } = surface;
   const fund = view.desk.fund;
-  const selectedAccount = accounts.find((account) => account.id === acctId);
   const roster = acctId ? view.desk.strategists.filter((s) => s.account_id === acctId) : view.desk.strategists;
   const exposure = useMemo(() => Object.values(livePnl).reduce((sum, pnl) => sum + pnl.exposure, 0), [livePnl]);
+  const deskCapacity = Math.max(0, liveFund.nav - exposure);
   const riskUsed = liveFund.nav > 0 ? (exposure / liveFund.nav) * 100 : 0;
+  const startOfDayNav = liveFund.nav - liveFund.dayPnl;
+  const dayPnlPct = startOfDayNav > 0 ? (liveFund.dayPnl / startOfDayNav) * 100 : null;
   const processTelemetry = deriveProcessTelemetry(workerRuns, now?.getTime() ?? 0);
   const brokerTelemetry = deriveBrokerTelemetry(surface.opsReadiness.evidence.find((item) => item.id === "reconciliation"));
   const processObserved = processTelemetry.tone === "green";
@@ -108,6 +109,9 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
   const navLed = ledCompact(liveFund.nav);
   const dayLed = ledCompact(liveFund.dayPnl);
+  const capacityLed = ledCompact(deskCapacity);
+  const positionsLed = ledCompact(feed.positions.length);
+  const riskLedValue = riskUsed.toFixed(1);
   const dayLedColor = liveFund.dayPnl < 0 ? "var(--hw-red-soft)" : "var(--hw-green)";
   const activeNav = NAV.find((item) => mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section))) ?? NAV[0];
   const navigate = (item: (typeof NAV)[number]) => {
@@ -152,13 +156,12 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
         <div className="ws-account">
           <small>ACCOUNT</small>
           <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
-          <b>{selectedAccount?.mode.toUpperCase() ?? fund.mode.toUpperCase()}</b>
         </div>
         <div className="ws-metric ws-metric--led"><small>NAV</small><div className="ws-led-readout neutral" role="img" aria-label={`NAV ${compactUsd(liveFund.nav)}`}><span aria-hidden="true">$</span><LedDisplay value={navLed.value} digits={navLed.digits} color="var(--ws-led-neutral)" unit={navLed.unit} /></div></div>
-        <div className={`ws-metric ws-metric--led ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}><small>DAY P&amp;L</small><div className="ws-led-readout" role="img" aria-label={`Day P and L ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div><span>{dayChangePct != null ? `${dayChangePct >= 0 ? "+" : ""}${dayChangePct.toFixed(2)}%` : "—"}</span></div>
-        <div className="ws-metric"><small>DESK CAPACITY</small><strong>{compactUsd(Math.max(0, liveFund.nav - exposure))}</strong></div>
-        <div className="ws-metric"><small>OPEN POSITIONS</small><strong>{feed.positions.length}</strong></div>
-        <div className="ws-metric"><small>RISK USED</small><strong>{riskUsed.toFixed(1)}%</strong></div>
+        <div className={`ws-metric ws-metric--led ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}><small>DAY P&amp;L</small><div className="ws-led-readout" role="img" aria-label={`Day P and L ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div><span>{dayPnlPct != null ? `${dayPnlPct >= 0 ? "+" : ""}${dayPnlPct.toFixed(2)}%` : "—"}</span></div>
+        <div className="ws-metric ws-metric--led"><small>DESK CAPACITY</small><div className="ws-led-readout neutral" role="img" aria-label={`Desk capacity ${compactUsd(deskCapacity)}`}><span aria-hidden="true">$</span><LedDisplay value={capacityLed.value} digits={capacityLed.digits} color="var(--ws-led-neutral)" unit={capacityLed.unit} /></div></div>
+        <div className="ws-metric ws-metric--led"><small>OPEN POSITIONS</small><div className="ws-led-readout neutral" role="img" aria-label={`${feed.positions.length} open positions`}><LedDisplay value={positionsLed.value} digits={Math.max(2, positionsLed.digits)} color="var(--ws-led-neutral)" /></div></div>
+        <div className="ws-metric ws-metric--led"><small>RISK USED</small><div className="ws-led-readout neutral" role="img" aria-label={`Risk used ${riskLedValue} percent`}><LedDisplay value={riskLedValue} digits={riskLedValue.replace(".", "").length} color="var(--ws-led-neutral)" unit="%" /></div></div>
         <div className={`ws-metric ws-state ${processTelemetry.tone}`} title={processTelemetry.detail}><small>DATA</small><strong>{processTelemetry.label}<i /></strong></div>
         <div className={`ws-metric ws-state ${brokerTelemetry.tone}`} title={brokerTelemetry.detail}><small>BROKER</small><strong>{brokerTelemetry.label}<i /></strong></div>
         <div className="ws-clock"><strong>{clock} PT</strong><span>{incident.session.replaceAll("_", " ")}</span></div>

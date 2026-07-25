@@ -47,6 +47,7 @@ export function MobileRackRow({
   const faderRef = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
   const [writeError, setWriteError] = useState<string | null>(null);
+  const [passportOpen, setPassportOpen] = useState(false);
   const draft = useChannelConfigDraft(strategist, passport);
   const { id, slug, color, status, config: databaseConfig } = strategist;
   const config = draft.proposed ?? databaseConfig;
@@ -131,7 +132,7 @@ export function MobileRackRow({
       : ride ? `−${premStop}% · ride · EOD` : `−${premStop}/+${tp} · EOD`;
 
   return (
-    <section className={`m2-rack${config.muted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>
+    <section id={`m2-channel-${slug}`} className={`m2-rack${config.muted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>
       <button type="button" className="m2-rrow" onClick={onToggle} aria-expanded={open}>
         <span className="m2-rr-left">
           <span className={`m2-rr-dot${dot ? " on" : ""}${A13_SLUGS.has(slug) ? " hot" : ""}`} />
@@ -149,29 +150,6 @@ export function MobileRackRow({
 
       {open && (
         <div className="m2-insp">
-          <div className={`m2-passport lane-${passport?.lifecycle ?? "unverified"}`}>
-            <header><span>RUNTIME PASSPORT</span><b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b></header>
-            <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
-            <div>
-              <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
-              <span><small>FAMILY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
-              <span><small>DECISIONS</small><b>{passport?.evidence.recentSignals ?? 0} · {passport?.evidence.censoredSignals ?? 0} censored</b></span>
-              <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
-              {passport?.rootPolicy && <>
-                <span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} ct · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
-                <span><small>EFFECTIVE EXIT</small><b>{day1RootExitLabel(passport.rootPolicy, true)}</b></span>
-                <span><small>IDENTITY</small><code>{passport.rootPolicy.configurationEpochId.slice(0, 10)}…</code></span>
-              </>}
-            </div>
-            <section className="m2-decision-ledger" aria-label="Recent channel decision receipts">
-              {(passport?.evidence.recentDecisions ?? []).map((signal) => {
-                const state = channelDecisionState(signal);
-                return <span key={signal.id} className={state.tone}><time>{etTime(signal.created_at)} ET</time><b>{state.label}</b><small>{state.fact}</small></span>;
-              })}
-              {!passport?.evidence.recentDecisions.length && <i>no recent decision receipt in account feed</i>}
-            </section>
-            {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
-          </div>
           <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE − / + OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
@@ -260,6 +238,33 @@ export function MobileRackRow({
             </button>
           </div>
           {writeError && <div className="m2-write-error" role="alert" title={writeError}>WRITE FAILED · CHANGE NOT CONFIRMED</div>}
+          <div className={`m2-passport lane-${passport?.lifecycle ?? "unverified"}${passportOpen ? " open" : " collapsed"}`}>
+            <button type="button" className="m2-passport-toggle" onClick={() => setPassportOpen((value) => !value)} aria-expanded={passportOpen}>
+              <span>RUNTIME PASSPORT</span><b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b><i>{passportOpen ? "▾" : "▸"}</i>
+            </button>
+            {passportOpen && <>
+              <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
+              <div>
+                <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
+                <span><small>FAMILY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
+                <span><small>DECISIONS</small><b>{passport?.evidence.recentSignals ?? 0} · {passport?.evidence.censoredSignals ?? 0} censored</b></span>
+                <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
+                {passport?.rootPolicy && <>
+                  <span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} ct · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
+                  <span><small>EFFECTIVE EXIT</small><b>{day1RootExitLabel(passport.rootPolicy, true)}</b></span>
+                  <span><small>IDENTITY</small><code>{passport.rootPolicy.configurationEpochId.slice(0, 10)}…</code></span>
+                </>}
+              </div>
+              <section className="m2-decision-ledger" aria-label="Recent channel decision receipts">
+                {(passport?.evidence.recentDecisions ?? []).map((signal) => {
+                  const state = channelDecisionState(signal);
+                  return <span key={signal.id} className={state.tone}><time>{etTime(signal.created_at)} ET</time><b>{state.label}</b><small>{state.fact}</small></span>;
+                })}
+                {!passport?.evidence.recentDecisions.length && <i>no recent decision receipt in account feed</i>}
+              </section>
+              {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
+            </>}
+          </div>
           <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} compact />
         </div>
       )}

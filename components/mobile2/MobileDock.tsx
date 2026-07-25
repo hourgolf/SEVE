@@ -29,12 +29,13 @@ function pkWin(slug: string, lens: Lens | null, pnl?: ChannelPnl): { pk: number 
 }
 
 function Chicklet({
-  ch, pnl, lens, canWrite, onMute,
+  ch, pnl, lens, canWrite, onOpen, onMute,
 }: {
   ch: StrategistState;
   pnl?: ChannelPnl;
   lens: Lens | null;
   canWrite: boolean;
+  onOpen?: () => void;
   onMute: () => void;
 }) {
   const muted = ch.config.muted;
@@ -47,7 +48,7 @@ function Chicklet({
 
   return (
     <div className={`m2-chick${dim}`} style={{ ["--pm" as string]: pmVar(ch.color) }} title={`${ch.slug} — ${ch.mandate}`}>
-      <div className="m2-chick-main">
+      <button type="button" className="m2-chick-main" onClick={onOpen} disabled={!onOpen} aria-label={`Open ${ch.slug} in Studio`}>
         <div className="m2-chick-r1">
           <span className={`m2-chick-dot${armed ? " on" : muted ? " stby" : ""}`} />
           <span className="m2-chick-slug">{ch.slug}</span>
@@ -61,7 +62,7 @@ function Chicklet({
         ) : (
           <span className="m2-chick-pw">pk<b>{pk != null ? Math.round(pk) : "—"}</b>·win<b>{win != null ? Math.round(win) : "—"}</b></span>
         )}
-      </div>
+      </button>
       <button
         type="button"
         className={`m2-chick-mute${muted ? " lit" : ""}`}
@@ -77,12 +78,13 @@ function Chicklet({
 }
 
 export function MobileDock({
-  channels, livePnl, lens, write,
+  channels, livePnl, lens, write, onOpenChannel,
 }: {
   channels: StrategistState[];
   livePnl: Record<string, ChannelPnl>;
   lens: Lens | null;
   write: SurfaceProps["write"];
+  onOpenChannel?: (slug: string) => void;
 }) {
   const dispatch = useDeskDispatch();
   const { canWrite, persistConfig } = write;
@@ -116,6 +118,7 @@ export function MobileDock({
             pnl={livePnl[ch.slug]}
             lens={lens}
             canWrite={canWrite}
+            onOpen={onOpenChannel ? () => onOpenChannel(ch.slug) : undefined}
             onMute={() => mute(ch)}
           />
         ))}
