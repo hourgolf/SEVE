@@ -289,7 +289,7 @@
   --amber: var(--909-warning-text);
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart > .panel,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) > .panel,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain > .panel,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-contract > .panel,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk {
@@ -304,7 +304,7 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 7px rgba(0, 0, 0, .16);
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .phead,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) .phead,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .phead,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-contract .phead,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk .pf-head {
@@ -314,43 +314,43 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .phead .t,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) .phead .t,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .phead .t,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-contract .phead .t,
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk .pf-head .t {
   color: #34332e;
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .pbody {
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) .pbody {
   background: var(--909-surface-panel);
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .chart-wrap {
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) .chart-wrap {
   overflow: hidden;
   background: var(--909-surface-instrument);
   border: 1px solid #080a0b;
   border-radius: 0 0 5px 5px;
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .chart-controls--bottom {
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) .chart-controls--bottom {
   margin-top: 0;
   padding: 8px 0 1px;
   color: var(--909-text-secondary);
   background: var(--909-surface-panel);
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .seg,
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .ind-chips,
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .chart-toggle {
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) .seg,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) .ind-chips,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) .chart-toggle {
   border-color: var(--909-border-strong);
   background: #c6c0b2;
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart button {
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) button {
   color: var(--909-text-secondary);
 }
 
-.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart button.on {
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] :is(.pf-market-target, .pf-markets-chart) button.on {
   color: #fff;
   background: var(--909-positive-text);
   border-color: var(--909-positive-text);
@@ -2132,7 +2132,7 @@
 }
 
 .shell-root.ws909[data-mode="perform"] .srw-head b {
-  font-size: 16px;
+  font-size: clamp(18px, 1vw, 21px);
 }
 
 .shell-root.ws909[data-mode="perform"] :is(
@@ -2153,7 +2153,7 @@
   .srw footer,
   .srw-exact > p
 ) {
-  font-size: 11px;
+  font-size: clamp(12px, .66vw, 14px);
   line-height: 1.4;
 }
 
@@ -2162,46 +2162,46 @@
   .srw-history,
   .srw-history select
 ) {
-  min-height: 36px;
+  min-height: 40px;
 }
 
 .shell-root.ws909[data-mode="perform"] :is(
   .srw-native > header b,
   .srw-exact > header b
 ) {
-  font-size: 14px;
+  font-size: clamp(16px, .86vw, 18px);
 }
 
 .shell-root.ws909[data-mode="perform"] :is(
   .srw-running b,
   .srw-kpis b
 ) {
-  font-size: 16px;
+  font-size: clamp(18px, .96vw, 20px);
 }
 
 .shell-root.ws909[data-mode="perform"] .srw-kpis small {
-  font-size: 10px;
+  font-size: clamp(11.5px, .62vw, 13px);
   line-height: 1.3;
 }
 
 .shell-root.ws909[data-mode="perform"] .srw-table-head {
-  min-height: 36px;
-  font-size: 10.5px;
+  min-height: 40px;
+  font-size: clamp(11.5px, .62vw, 13px);
 }
 
 .shell-root.ws909[data-mode="perform"] .srw-row {
-  min-height: 40px;
-  font-size: 12.5px;
+  min-height: 44px;
+  font-size: clamp(14px, .78vw, 16px);
 }
 
 .shell-root.ws909[data-mode="perform"] .srw-manager-list > div {
-  min-height: 36px;
+  min-height: 40px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: clamp(13px, .72vw, 15px);
 }
 
 .shell-root.ws909[data-mode="perform"] .srw-interactions strong {
-  font-size: 11.5px;
+  font-size: clamp(13px, .72vw, 15px);
 }
 
 /* ==========================================================================

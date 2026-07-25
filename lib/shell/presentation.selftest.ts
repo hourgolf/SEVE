@@ -40,6 +40,11 @@ assert.match(workstationCss, /\.ws-left-copy b\{[^}]*font-size:12px/);
 assert.match(workstationCss, /\.ws-left-copy small\{[^}]*font-size:10px/);
 assert.match(workstationCss, /:is\(\.pf-market-target,\.pf-markets-chart\) \.phead \.t \{ font-size:13px/);
 assert.match(workstationCss, /:is\(\.pf-market-target,\.pf-markets-chart\) :is\(\.chart-toggle,\.seg\) button \{ min-height:28px/);
+assert.match(workstationCss, /\.ws-sequencer>\.m-sqdock \{[^}]*position:absolute/);
+assert.match(workstationCss, /\.ws-sequencer \.m-sqbody \{[^}]*bottom:50px/);
+assert.match(workstationShell, /import \{ SessionSequencer \} from "@\/components\/console\/SessionSequencer"/);
+assert.match(workstationShell, /<SessionSequencer[\s\S]*variant="dock"[\s\S]*positions=\{feed\.positions\}[\s\S]*recentTrades=\{feed\.recentTrades\}/);
+assert.doesNotMatch(workstationShell, /Array\.from\(\{ length: 16 \}, \(_, i\) => <i/);
 assert.match(workstationCss, /\.ws-telemetry \.acct-switch \{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
 assert.match(workstationCss, /\.ws-telemetry \.acct-switch \{[^}]*height:32px/);
 assert.match(workstationCss, /\.ws-telemetry \.acct-opt \{[^}]*height:32px/);
@@ -71,8 +76,9 @@ assert.match(mobileCss, /\.m2-app\[data-room="studio"\] \.m2-padbar \{ margin-to
 assert.match(foundationCss, /\[data-skin="blackout"\] \.m2-desk-section > header,[\s\S]{0,180}\.m2-desk-disclosure > summary/);
 assert.match(foundationCss, /\.m2-market-switch button \{[\s\S]{0,120}min-height:\s*46px/);
 assert.match(foundationCss, /\.m2-chart-body :is\(\.chart-toggle, \.seg\) button \{[\s\S]{0,120}min-height:\s*42px/);
-assert.match(foundationCss, /\.srw-head b \{[\s\S]{0,60}font-size:\s*16px/);
-assert.match(foundationCss, /\.srw-row \{[\s\S]{0,80}min-height:\s*40px;[\s\S]{0,60}font-size:\s*12\.5px/);
+assert.match(foundationCss, /\.srw-head b \{[\s\S]{0,80}font-size:\s*clamp\(18px, 1vw, 21px\)/);
+assert.match(foundationCss, /\.srw-row \{[\s\S]{0,80}min-height:\s*44px;[\s\S]{0,80}font-size:\s*clamp\(14px, \.78vw, 16px\)/);
+assert.match(foundationCss, /:is\(\.pf-market-target, \.pf-markets-chart\) > \.panel/);
 assert.match(foundationCss, /:is\(\s*\.pf-market-target,\s*\.pf-markets-chart\s*\) :is\([\s\S]{0,100}\.chart-toggle,[\s\S]{0,60}\.seg[\s\S]{0,40}\) button\.on/);
 
-console.log("presentation-selftest: 57/57 passed");
+console.log("presentation-selftest: 63/63 passed");

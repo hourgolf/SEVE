@@ -6,6 +6,7 @@ import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { AuthControl } from "@/components/AuthControl";
 import { KillControl } from "@/components/console/hw/KillControl";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
+import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
 import { useShell } from "@/hooks/useShellState";
@@ -56,15 +57,6 @@ const ledCompact = (value: number): { value: string; digits: number; unit?: stri
   return { value: display, digits: display.replace(".", "").length, unit };
 };
 
-const sessionStep = (now: Date): number => {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit",
-  }).formatToParts(now);
-  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
-  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
-  return Math.max(0, Math.min(15, Math.floor(((hour * 60 + minute) - 570) / (390 / 16))));
-};
-
 export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const { mode, setMode, skin, toggleSkin, density, toggleDensity } = useShell();
   const [now, setNow] = useState<Date | null>(null);
@@ -105,7 +97,6 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const brokerTelemetry = deriveBrokerTelemetry(surface.opsReadiness.evidence.find((item) => item.id === "reconciliation"));
   const processObserved = processTelemetry.tone === "green";
   const incidentOn = incident.severity !== "normal";
-  const step = now ? sessionStep(now) : 0;
   const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
   const navLed = ledCompact(liveFund.nav);
   const dayLed = ledCompact(liveFund.dayPnl);
@@ -206,7 +197,15 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
           <button type="button" disabled title="Pause-new-entries is not connected yet. KILL remains the emergency flatten-and-halt control.">‖<span>PAUSE</span></button>
           <button type="button" className="rec" disabled><i /><span>{fund.mode.toUpperCase()}</span></button>
         </div></section>
-        <section className="ws-sequencer"><small>SESSION SEQUENCER</small><div>{Array.from({ length: 16 }, (_, i) => <i key={i} className={i === step ? "on" : i < step ? "past" : ""}><span>{i + 1}</span></i>)}</div></section>
+        <section className="ws-sequencer">
+          <small>SESSION SEQUENCER</small>
+          <SessionSequencer
+            variant="dock"
+            positions={feed.positions}
+            recentTrades={feed.recentTrades}
+            strategists={view.desk.strategists}
+          />
+        </section>
         <section className="ws-controls"><small>CONTROL</small><div>
           <span className={`ws-dial ${incidentOn ? "hot" : "ok"}`}><i /><b>CHECK</b><em>{incident.severity}</em></span>
           <span className="ws-dial blue"><i style={{ transform: `rotate(${Math.min(130, -130 + riskUsed * 8)}deg)` }} /><b>RISK</b><em>{riskUsed.toFixed(1)}%</em></span>
