@@ -8,22 +8,23 @@ same interaction state.
 
 | Meaning | Treatment | Current families |
 | --- | --- | --- |
-| Primary workspace navigation | Orange | desktop mode/section navigation; mobile room pads |
-| Exclusive selection | Amber with dark type and orange strike | account, chart/chain, ticker, date/window/lane, chart range/interval/type, review mode, studio scope, settings frame |
+| Primary workspace navigation | Neutral face with orange locator | desktop mode/section navigation; mobile room pads |
+| Exclusive selection | Neutral pressed face with amber locator | account, chart/chain, ticker, date/window/lane, chart range/interval/type, review mode, studio scope, settings frame |
 | Enabled overlay/toggle | Green | chart overlays and configuration visibility |
 | Health or positive value | Green text/light only | process, broker, read receipts, positive P&L |
 | Warning | Amber text/light only | degraded or partial evidence |
 | Danger/destructive | Red | KILL, close confirmation, negative/risk states |
 
 Green must not be used to mean “selected tab.” Amber must not imply that a
-system is healthy. Orange must not be used for data meaning.
+system is healthy. Orange must not be used as a full navigation fill or for
+data meaning.
 
 ## Mounted control inventory
 
 ### Mobile
 
 - Account: `.acct-switch` / `.acct-opt`
-- Workspace navigation: `.m2-padbar`
+- Workspace navigation: `.m2-padbar` / `.m2-modepad`
 - Market view and ticker: `.m2-market-switch`
 - Chart exclusive selectors: `.chart-toggle`, `.seg`
 - Chart overlay toggles: `.ind-chip`, `.chart-cfg-chip`

@@ -27,7 +27,7 @@ for (const selector of exclusiveFamilies) {
   assert.ok(docs.includes(selector), `exclusive control family is missing from the inventory: ${selector}`);
 }
 
-for (const selector of [".ws-mode-tabs", ".ws-left"]) {
+for (const selector of [".ws-mode-tabs", ".ws-left", ".m2-modepad"]) {
   assert.ok(contract.includes(selector), `primary navigation family is outside the shared contract: ${selector}`);
   assert.ok(docs.includes(selector), `primary navigation family is missing from the inventory: ${selector}`);
 }
@@ -42,4 +42,4 @@ assert.ok(contract.includes("--909-control-primary-top"), "primary navigation do
 assert.ok(contract.includes("--909-control-toggle-fill"), "binary toggles do not use the green enabled token");
 assert.equal(contract.includes("var(--909-positive-text)"), false, "selection contract aliases a selected tab to positive data");
 
-console.log("ui-control-contract-selftest: 39/39 passed");
+console.log("ui-control-contract-selftest: 41/41 passed");

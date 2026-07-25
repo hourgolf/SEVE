@@ -34,14 +34,14 @@
   --909-on-dark: var(--lcd-ink, #e9eef0);
   --909-on-dark-muted: var(--dk-mut, #8a949a);
 
-  /* Control-state language: amber selects a value, orange navigates the
-     workstation, green enables an overlay or reports health, and red remains
-     reserved for destructive/risk states. */
-  --909-control-selected-top: #efbd53;
-  --909-control-selected-bottom: #d99a1f;
-  --909-control-selected-text: #241704;
-  --909-control-selected-border: #8b6211;
-  --909-control-selected-strike: var(--accent, #ef5a23);
+  /* Control-state language: an amber locator selects a value, an orange
+     locator navigates the workstation, green enables an overlay or reports
+     health, and red remains reserved for destructive/risk states. */
+  --909-control-selected-top: #e3dcc8;
+  --909-control-selected-bottom: #c8bfaa;
+  --909-control-selected-text: #292925;
+  --909-control-selected-border: #9a8966;
+  --909-control-selected-strike: #b88724;
   --909-control-primary-top: #ff7038;
   --909-control-primary-bottom: var(--accent, #ef5a23);
   --909-control-primary-text: #1a0801;
@@ -75,6 +75,11 @@
   --909-control-rest-text: #292925;
   --909-control-rest-border: #8d877a;
   --909-control-rest-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
+  --909-control-selected-top: #e3dcc8;
+  --909-control-selected-bottom: #c8bfaa;
+  --909-control-selected-text: #292925;
+  --909-control-selected-border: #9a8966;
+  --909-control-selected-strike: #b88724;
   --909-control-toggle-fill: #0e6132;
   --909-control-toggle-text: #fff;
 }
@@ -107,6 +112,11 @@
   --909-control-rest-text: #a5afb3;
   --909-control-rest-border: #41474a;
   --909-control-rest-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+  --909-control-selected-top: #2a2e2f;
+  --909-control-selected-bottom: #111516;
+  --909-control-selected-text: #e9eef0;
+  --909-control-selected-border: #78652e;
+  --909-control-selected-strike: #d2a13b;
   --909-control-toggle-fill: #237444;
   --909-control-toggle-text: #eaf8ee;
 }
@@ -1834,9 +1844,10 @@
    909 CONTROL CONTRACT: START
 
    This final layer intentionally outranks the historical component rules.
-   Exclusive choices share the amber selected state across every mounted
-   desktop/mobile workspace. Primary workspace navigation remains orange;
-   binary overlay toggles remain green. See docs/909-control-state-contract.md.
+   Exclusive choices share a neutral pressed face with an amber locator across
+   every mounted desktop/mobile workspace. Primary workspace navigation uses a
+   neutral face with an orange locator; binary overlay toggles remain green.
+   See docs/909-control-state-contract.md.
    ========================================================================== */
 
 /* Peer mobile selectors use one physical button treatment. This covers the
@@ -1926,6 +1937,23 @@
 }
 
 /* Workspace navigation uses the orange transport accent. */
+.m2-app:not(.folio-mobile)[data-skin] .m2-modepad.on {
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-control-rest-top), var(--909-control-rest-bottom));
+  border-color: color-mix(in srgb, var(--909-control-primary-bottom) 48%, var(--909-control-rest-border));
+  box-shadow:
+    inset 0 3px 0 var(--909-control-primary-bottom),
+    var(--909-control-rest-shadow);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-modepad.on::before {
+  display: none;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-modepad.on small {
+  color: var(--909-text-secondary);
+}
+
 .shell-root.ws909[data-skin] .ws-mode-tabs button.on {
   color: var(--909-control-primary-text);
   background: linear-gradient(180deg, var(--909-control-primary-top), var(--909-control-primary-bottom));
