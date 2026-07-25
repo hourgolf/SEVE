@@ -8,7 +8,7 @@
    ========================================================================== */
 
 :where(.shell-root, .m2-app) {
-  --909-font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --909-font-sans: "JetBrains Mono", ui-monospace, monospace;
   --909-font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --909-space-1: 4px;
@@ -25,7 +25,7 @@
   --909-type-label: 12px;
   --909-type-body: 14px;
   --909-type-metric: 16px;
-  --909-type-title: clamp(22px, 1.7vw, 30px);
+  --909-type-title: 24px;
 
   --909-success: var(--909-positive-text, var(--hw-green, var(--m2-green, #2fd573)));
   --909-attention: var(--hw-amber, var(--m2-amber, #e0a23f));
@@ -48,22 +48,22 @@
 }
 
 :where(.ws909, .m2-app)[data-skin="cream"] {
-  --909-surface-canvas: #c7c1b2;
-  --909-surface-panel: #ddd8ca;
-  --909-surface-panel-raised: #ebe6d8;
-  --909-surface-panel-inset: #c9c3b4;
+  --909-surface-canvas: #e8e3da;
+  --909-surface-panel: #f2f1ee;
+  --909-surface-panel-raised: #f2f1ee;
+  --909-surface-panel-inset: #e1dbd3;
   --909-surface-instrument: #0c1113;
-  --909-text-primary: #292925;
-  --909-text-secondary: #5f5d55;
-  --909-text-tertiary: #716d64;
-  --909-positive-text: #0e6132;
-  --909-positive-icon: #16743e;
-  --909-positive-fill: rgba(14, 97, 50, .10);
-  --909-negative-text: #9e2d1c;
-  --909-warning-text: #8b5a10;
-  --909-border: rgba(60, 52, 30, .22);
-  --909-border-strong: #8d877a;
-  --909-focus: #2b6fb8;
+  --909-text-primary: #4c4943;
+  --909-text-secondary: #737068;
+  --909-text-tertiary: #777269;
+  --909-positive-text: #3b7c48;
+  --909-positive-icon: #3b7c48;
+  --909-positive-fill: rgba(59, 124, 72, .10);
+  --909-negative-text: #933e35;
+  --909-warning-text: #bc8b51;
+  --909-border: rgba(60, 52, 30, .14);
+  --909-border-strong: rgba(60, 52, 30, .26);
+  --909-focus: #285f7a;
   --909-scroll-track: #b8b2a4;
   --909-scroll-track-edge: #8d877a;
   --909-scroll-track-well: #d3cdbf;
@@ -80,27 +80,27 @@
   --909-control-selected-text: #292925;
   --909-control-selected-border: #9a8966;
   --909-control-selected-strike: #b88724;
-  --909-control-toggle-fill: #0e6132;
+  --909-control-toggle-fill: #3b7c48;
   --909-control-toggle-text: #fff;
 }
 
 :where(.ws909, .m2-app)[data-skin="blackout"] {
-  --909-surface-canvas: #090b0c;
-  --909-surface-panel: #14191b;
-  --909-surface-panel-raised: #1e2426;
-  --909-surface-panel-inset: #0e1213;
+  --909-surface-canvas: #262728;
+  --909-surface-panel: #1d2223;
+  --909-surface-panel-raised: #232727;
+  --909-surface-panel-inset: #232727;
   --909-surface-instrument: #080b0c;
-  --909-text-primary: #e9eef0;
-  --909-text-secondary: #a5afb3;
-  --909-text-tertiary: #7f8a8f;
-  --909-positive-text: #55d981;
-  --909-positive-icon: #2fd573;
-  --909-positive-fill: rgba(47, 213, 115, .10);
-  --909-negative-text: #ff735b;
-  --909-warning-text: #e6b13c;
-  --909-border: rgba(255, 255, 255, .11);
-  --909-border-strong: #3a4448;
-  --909-focus: #69a9ec;
+  --909-text-primary: #e7eae5;
+  --909-text-secondary: #aeb2aa;
+  --909-text-tertiary: #6f797d;
+  --909-positive-text: #88b780;
+  --909-positive-icon: #88b780;
+  --909-positive-fill: rgba(136, 183, 128, .10);
+  --909-negative-text: #d27f60;
+  --909-warning-text: #dbae6e;
+  --909-border: rgba(255, 255, 255, .07);
+  --909-border-strong: rgba(255, 255, 255, .13);
+  --909-focus: #5aa0e6;
   --909-scroll-track: #090c0d;
   --909-scroll-track-edge: #30383b;
   --909-scroll-track-well: #151a1c;

@@ -9,19 +9,19 @@
      [data-theme="blackout"] (console.css) re-declares these same token NAMES to
      the graphite values — so this is the single source of truth for both themes.
      Recessed LCD "screen" tokens (--lcd*) are theme-INVARIANT (near-black both). === */
-  --bg: #d8d3c4;            /* page / chassis body */
-  --panel: #efe7d2;          /* cream card */
-  --panel-2: #cfc9b8;        /* inset cell */
-  --panel-3: #d3d1c7;        /* light row card (autopsy rows etc.) */
-  --border: rgba(60, 52, 30, 0.16); /* hairline */
-  --border-bright: #d7cca9;  /* card edge */
-  --text: #2c2a24;           /* ink (on cream) */
-  --muted: #8b8678;
-  --muted-2: #6e6c63;
-  --green: #0e6132;          /* P&L up — cream-legible deep green (≈4.4–5:1 on the chassis; was #1f9d57 ≈2.3:1) */
-  --red: #9e2d1c;            /* P&L down — cream-legible deep red (≈4.3–4.8:1; was #d23a28 ≈3.2:1) */
-  --amber: #b07d10;
-  --blue: #2b6fb8;
+  --bg: #e8e3da;            /* Figma Cream Draft: chassis */
+  --panel: #f2f1ee;         /* Figma Cream Draft: panel */
+  --panel-2: #e1dbd3;       /* Figma Cream Draft: inset */
+  --panel-3: #e9e5df;       /* derived light row between panel and inset */
+  --border: rgba(60, 52, 30, 0.14); /* Figma Cream Draft: subtle line */
+  --border-bright: rgba(60, 52, 30, 0.26); /* Figma Cream Draft: strong line */
+  --text: #4c4943;          /* Figma Cream Draft: primary text */
+  --muted: #737068;         /* Figma Cream Draft: muted text */
+  --muted-2: #777269;       /* Figma Cream Draft: disabled text */
+  --green: #3b7c48;
+  --red: #933e35;
+  --amber: #bc8b51;
+  --blue: #385e77;
   /* recessed LCD "screen" — theme-INVARIANT (near-black both themes). --lcd-ink is
      the LIGHT text on those screens; --lcd-up/down are the BRIGHT P&L colours for
      dark screens (vs the deep --green/--red used on cream cards). */
@@ -33,8 +33,8 @@
   --lcd-down: #e07a58;
   --plate-ink: #d7d5cb;
   /* cream-TE accent system — a single orange for live/active states + named tones */
-  --accent: #df5320;
-  --accent-cream: #cf5a26;
+  --accent: #d87750;
+  --accent-cream: #d87750;
   --nav-orange: #e0a23f;
   --pill: #33332f;
   --mute: #d98e6e;
@@ -43,7 +43,7 @@
   --knob-dark: #3a3a38;
   --knob-cream: #e9e5d6;
   --mono: "JetBrains Mono", ui-monospace, monospace;
-  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --sans: "JetBrains Mono", ui-monospace, monospace;
   --wordmark: "Inter", "IBM Plex Sans", system-ui, sans-serif;
 }
 

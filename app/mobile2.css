@@ -11,26 +11,26 @@
 
 .m2-app {
   --mono: "JetBrains Mono", ui-monospace, monospace;
-  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --sans: "JetBrains Mono", ui-monospace, monospace;
   --lcd: #14181b; --lcd-2: #0f1214; --lcd-edge: #0a0a0b; --lcd-ink: #e9eef0; --scr: #0b0d0f;
   --plate: #2b2b2e; --plate-2: #1d1d20; --plate-ink: #d7d5cb;
   --dk-mut: #8a949a; --dk-dim: #5f6a70;
   --line: rgba(255, 255, 255, .07); --line-2: rgba(255, 255, 255, .13);
-  --m2-green: #2fd573; --m2-green-soft: #6cc06d; --m2-red: #f0563f; --m2-red-soft: #e07a58;
-  --m2-amber: #e0a23f; --m2-mut: #8a949a; --m2-blue: #5aa0e6;
-  --accent: #ef5a23;
+  --m2-green: #88b780; --m2-green-soft: #88b780; --m2-red: #d27f60; --m2-red-soft: #d27f60;
+  --m2-amber: #dbae6e; --m2-mut: #aeb2aa; --m2-blue: #7faad6;
+  --accent: #d87750;
   --stripe-orange: #e0552f; --stripe-red: #c5362a; --stripe-cream: #d9d7cc;
   --mute-pad: #d98e6e;
   --led-red: #ff3b2f; --led-amber: #ffb224;
   /* chrome — BLACKOUT default (flipped for cream below) */
-  --chrome-grad: linear-gradient(180deg, #17191c, #121417);
-  --chrome-edge: #1e2125; --chrome-ink: #e7e4db; --chrome-soft: #8a8c8e;
+  --chrome-grad: linear-gradient(180deg, #1d2223, #232727);
+  --chrome-edge: rgba(255, 255, 255, .13); --chrome-ink: #e7eae5; --chrome-soft: #aeb2aa;
   --silk: rgba(226, 214, 184, .55);
   --btn-grad: linear-gradient(180deg, #303237, #26282c);
   --btn-edge: #000;
   --btn-shadow: 0 1px 0 rgba(255, 255, 255, .09) inset, 0 2px 4px rgba(0, 0, 0, .45);
-  --sep: rgba(255, 255, 255, .09);
-  --neg-chrome: #e07a58;
+  --sep: rgba(255, 255, 255, .07);
+  --neg-chrome: #d27f60;
   --run-ink: #2fd573; --run-edge: rgba(47, 213, 115, .55); --run-bg: rgba(47, 213, 115, .1);
 
   position: relative;
@@ -46,19 +46,19 @@
   -webkit-font-smoothing: antialiased;
 }
 .m2-app[data-skin="cream"] {
-  --chrome-grad: linear-gradient(180deg, #ded9ca, #d2cdbd);
-  --chrome-edge: #b9b3a2; --chrome-ink: #2a2a28; --chrome-soft: #55534c;
-  --silk: #55534c;
-  --btn-grad: linear-gradient(180deg, #ece8d9, #dcd7c6);
-  --btn-edge: #a9a396;
-  --btn-shadow: 0 2px 0 #a9a396, 0 1px 0 #fff inset;
-  --sep: rgba(60, 52, 30, .25);
-  --neg-chrome: #9e2d1c;
-  --run-ink: #0e6132; --run-edge: rgba(14, 97, 50, .55); --run-bg: rgba(14, 97, 50, .10);
+  --chrome-grad: linear-gradient(180deg, #f2f1ee, #e1dbd3);
+  --chrome-edge: rgba(60, 52, 30, .26); --chrome-ink: #4c4943; --chrome-soft: #737068;
+  --silk: #737068;
+  --btn-grad: linear-gradient(180deg, #f2f1ee, #e8e3da);
+  --btn-edge: rgba(60, 52, 30, .26);
+  --btn-shadow: 0 2px 0 rgba(60, 52, 30, .26), 0 1px 0 #fff inset;
+  --sep: rgba(60, 52, 30, .14);
+  --neg-chrome: #933e35;
+  --run-ink: #3b7c48; --run-edge: rgba(59, 124, 72, .55); --run-bg: rgba(59, 124, 72, .10);
   background:
     linear-gradient(115deg, rgba(255,255,255,.34), transparent 22%, rgba(255,255,255,.12) 60%, transparent 82%),
     repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 1px, rgba(45,42,34,.015) 1px 3px),
-    linear-gradient(180deg, #ded9cb, #c2bcad);
+    linear-gradient(180deg, #e8e3da, #e1dbd3);
 }
 .m2-app .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .m2-app .pos { color: var(--m2-green); }

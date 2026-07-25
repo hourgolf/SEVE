@@ -6,15 +6,15 @@
 
 .console-root {
   /* --- 909 chassis palette --- */
-  --chassis: #d8d3c4; /* cream-TE body */
-  --chassis-2: #ccc6b5;
-  --chassis-edge: #c5bfae;
-  --chassis-dark: #b3ad9c;
+  --chassis: #e8e3da;
+  --chassis-2: #e1dbd3;
+  --chassis-edge: rgba(60, 52, 30, 0.26);
+  --chassis-dark: #c8c1b7;
   --panel-plate: #2b2b2e; /* dark sub-panels behind knobs */
   --panel-plate-2: #1d1d20;
   --screw: #7a7870;
-  --ink: #2a2a28; /* dark text on cream */
-  --ink-soft: #55534c;
+  --ink: #4c4943;
+  --ink-soft: #737068;
 
   /* --- dark hardware surface (the master strip) — themeable so it can cool
      from this warm brown to graphite under [data-theme="blackout"]. Other
@@ -64,28 +64,28 @@
    .console-root div (OPS room control; persisted to localStorage). */
 .console-root[data-theme="blackout"] {
   /* semantic tokens (mirror globals.css :root) */
-  --bg: #1c1d1f;
-  --panel: #2a2b2d;
-  --panel-2: #232426;
-  --panel-3: #2f3033;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-bright: #3a3b3d;
-  --text: #e7e4db;
-  --muted: #8a8c8e;
-  --muted-2: #6c6e70;
-  --green: #6cc06d; /* brighter P&L green on graphite cards */
-  --red: #e07a58;
-  --amber: #e0a23f;
-  --blue: #5aa0e6;
-  --accent: #ef5a23; /* brighter orange on dark */
-  --accent-cream: #f0703a;
+  --bg: #262728;
+  --panel: #1d2223;
+  --panel-2: #232727;
+  --panel-3: #292d2d;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-bright: rgba(255, 255, 255, 0.13);
+  --text: #e7eae5;
+  --muted: #aeb2aa;
+  --muted-2: #6f797d;
+  --green: #88b780;
+  --red: #d27f60;
+  --amber: #dbae6e;
+  --blue: #7faad6;
+  --accent: #d87750;
+  --accent-cream: #d87750;
   /* chassis hardware tokens (mirror .console-root) */
-  --chassis: #26282a;
-  --chassis-2: #1f2123;
-  --chassis-edge: #3a3b3d;
-  --chassis-dark: #4a4b4d;
-  --ink: #e7e4db;
-  --ink-soft: #9a9c9e;
+  --chassis: #262728;
+  --chassis-2: #1d2223;
+  --chassis-edge: rgba(255, 255, 255, 0.13);
+  --chassis-dark: #383c3c;
+  --ink: #e7eae5;
+  --ink-soft: #aeb2aa;
   --plate-ink: #e2d6b8; /* warm parchment silkscreen (was the cool #d7d5cb that read as "silver") */
   --knob-cream: #b9bbbd; /* silver knobs in blackout */
   --master-bg-1: #202123; /* cool the warm master strip to graphite */
