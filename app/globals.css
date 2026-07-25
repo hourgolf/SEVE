@@ -9,19 +9,19 @@
      [data-theme="blackout"] (console.css) re-declares these same token NAMES to
      the graphite values — so this is the single source of truth for both themes.
      Recessed LCD "screen" tokens (--lcd*) are theme-INVARIANT (near-black both). === */
-  --bg: #e8e3da;            /* Figma Cream Draft: chassis */
-  --panel: #f2f1ee;         /* Figma Cream Draft: panel */
-  --panel-2: #e1dbd3;       /* Figma Cream Draft: inset */
-  --panel-3: #e9e5df;       /* derived light row between panel and inset */
+  --bg: #d8d3c4;            /* Figma Cream: chassis */
+  --panel: #efe7d2;         /* Figma Cream: panel */
+  --panel-2: #cfc9b8;       /* Figma Cream: inset */
+  --panel-3: #e4decd;       /* derived light row between panel and inset */
   --border: rgba(60, 52, 30, 0.14); /* Figma Cream Draft: subtle line */
   --border-bright: rgba(60, 52, 30, 0.26); /* Figma Cream Draft: strong line */
-  --text: #4c4943;          /* Figma Cream Draft: primary text */
-  --muted: #737068;         /* Figma Cream Draft: muted text */
+  --text: #2c2a24;          /* Figma Cream: primary text */
+  --muted: #5f5b53;         /* Figma Cream: muted text */
   --muted-2: #777269;       /* Figma Cream Draft: disabled text */
-  --green: #3b7c48;
-  --red: #933e35;
-  --amber: #bc8b51;
-  --blue: #385e77;
+  --green: #0e6132;
+  --red: #9e2d1c;
+  --amber: #8a5b00;
+  --blue: #285f7a;
   /* recessed LCD "screen" — theme-INVARIANT (near-black both themes). --lcd-ink is
      the LIGHT text on those screens; --lcd-up/down are the BRIGHT P&L colours for
      dark screens (vs the deep --green/--red used on cream cards). */

@@ -657,12 +657,32 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 .shell-root[data-mode="studio"] .mix-bank--runtime { border-color: #3a3e42; }
 .shell-root[data-mode="studio"] .mix-bank--runtime.lane-paper-root { border-color: color-mix(in srgb, var(--green-soft) 48%, #25282b); }
 .shell-root[data-mode="studio"] .mix-bank--runtime.lane-unverified { border-color: color-mix(in srgb, var(--amber) 48%, #25282b); }
+.shell-root[data-mode="studio"] .desktop-passport-toggle {
+  width:100%; min-height:36px; display:grid; grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center; gap:8px; padding:0 9px; border:0; border-radius:5px;
+  color:var(--dk-mut); background:rgba(255,255,255,.025);
+  font:800 var(--fs-label)/1 var(--sh-mono); letter-spacing:.1em; text-align:left; cursor:pointer;
+}
+.shell-root[data-mode="studio"] .desktop-passport-toggle span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.shell-root[data-mode="studio"] .desktop-passport-toggle b { color:var(--lcd-ink); font-size:var(--fs-chip); letter-spacing:.04em; }
+.shell-root[data-mode="studio"] .desktop-passport-toggle i { color:var(--amber); font-style:normal; }
+.shell-root[data-mode="studio"] .desktop-passport-toggle:focus-visible { outline:2px solid var(--909-focus); outline-offset:-3px; }
 .shell-root[data-mode="studio"] .runtime-bank { padding: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .shell-root[data-mode="studio"] .runtime-bank p { grid-column: 1 / -1; margin: 0; color: #aeb4b7; font: 600 var(--fs-chip)/1.35 var(--sh-mono); }
 .shell-root[data-mode="studio"] .runtime-bank > span { min-width: 0; display: grid; gap: 3px; padding: 6px 7px; background: #0d0f10; border: 1px solid var(--line); border-radius: 3px; }
 .shell-root[data-mode="studio"] .runtime-bank small { color: var(--dk-dim); font: 700 var(--fs-label)/1 var(--sh-mono); letter-spacing: .08em; }
 .shell-root[data-mode="studio"] .runtime-bank b { overflow-wrap: anywhere; color: var(--lcd-ink); font: 750 var(--fs-chip)/1.25 var(--sh-mono); }
 .shell-root[data-mode="studio"] .runtime-bank .runtime-wide { grid-column: 1 / -1; }
+.shell-root[data-skin="cream"][data-mode="studio"] .desktop-passport-toggle {
+  color:var(--909-text-secondary); background:rgba(255,255,255,.22);
+}
+.shell-root[data-skin="cream"][data-mode="studio"] .desktop-passport-toggle b { color:var(--909-text-primary); }
+.shell-root[data-skin="cream"][data-mode="studio"] .runtime-bank p { color:var(--909-text-secondary); }
+.shell-root[data-skin="cream"][data-mode="studio"] .runtime-bank > span {
+  color:var(--909-text-primary); background:rgba(255,255,255,.22); border-color:var(--909-border);
+}
+.shell-root[data-skin="cream"][data-mode="studio"] .runtime-bank small { color:var(--909-text-tertiary); }
+.shell-root[data-skin="cream"][data-mode="studio"] .runtime-bank b { color:var(--909-text-primary); }
 .shell-root[data-mode="studio"] .insp-note.sealed { color: var(--amber); background: rgba(224, 162, 63, .07); border-color: rgba(224, 162, 63, .25); }
 .shell-root[data-mode="studio"] .passport-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 7px; background: var(--line); }
 .shell-root[data-mode="studio"] .passport-grid > span { min-width: 0; display: grid; gap: 3px; padding: 7px; background: #111416; }

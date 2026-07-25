@@ -22,7 +22,7 @@
 /* the cream module — hard values, never re-skinned */
 .cmdk-panel {
   width: min(640px, 90vw); border-radius: 11px; padding: 7px 8px 8px;
-  background: linear-gradient(180deg, #d8d3c4, #ccc6b5); border: 1px solid #c5bfae;
+  background: linear-gradient(180deg, var(--909-overlay-canvas, #d8d3c4), var(--909-overlay-inset, #cfc9b8)); border: 1px solid var(--909-overlay-border-strong, rgba(60,52,30,.26));
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.75),
     0 2px 0 rgba(255, 255, 255, 0.14) inset, 0 -2px 6px rgba(0, 0, 0, 0.18) inset;
   transform: translateY(-8px); transition: transform 0.15s ease;

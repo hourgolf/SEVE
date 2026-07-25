@@ -21,10 +21,10 @@
   --909-radius-md: 7px;
   --909-radius-lg: 10px;
 
-  --909-type-silkscreen: 10px;
+  --909-type-silkscreen: 11px;
   --909-type-label: 12px;
   --909-type-body: 14px;
-  --909-type-metric: 16px;
+  --909-type-metric: 18px;
   --909-type-title: 24px;
 
   --909-success: var(--909-positive-text, var(--hw-green, var(--m2-green, #2fd573)));
@@ -48,21 +48,21 @@
 }
 
 :where(.ws909, .m2-app)[data-skin="cream"] {
-  --909-surface-canvas: #e8e3da;
-  --909-surface-panel: #f2f1ee;
-  --909-surface-panel-raised: #f2f1ee;
-  --909-surface-panel-inset: #e1dbd3;
+  --909-surface-canvas: #d8d3c4;
+  --909-surface-panel: #efe7d2;
+  --909-surface-panel-raised: #efe7d2;
+  --909-surface-panel-inset: #cfc9b8;
   --909-surface-instrument: #0c1113;
-  --909-text-primary: #4c4943;
-  --909-text-secondary: #737068;
+  --909-text-primary: #2c2a24;
+  --909-text-secondary: #5f5b53;
   --909-text-tertiary: #777269;
   --909-neutral-text: #5f5b53;
-  --909-positive-text: #3b7c48;
-  --909-positive-icon: #3b7c48;
-  --909-positive-fill: rgba(59, 124, 72, .10);
-  --909-negative-text: #933e35;
-  --909-warning-text: #bc8b51;
-  --909-info-text: #385e77;
+  --909-positive-text: #0e6132;
+  --909-positive-icon: #0e6132;
+  --909-positive-fill: rgba(14, 97, 50, .10);
+  --909-negative-text: #9e2d1c;
+  --909-warning-text: #8a5b00;
+  --909-info-text: #285f7a;
   --909-border: rgba(60, 52, 30, .14);
   --909-border-strong: rgba(60, 52, 30, .26);
   --909-focus: #285f7a;
@@ -82,26 +82,26 @@
   --909-control-selected-text: #292925;
   --909-control-selected-border: #9a8966;
   --909-control-selected-strike: #b88724;
-  --909-control-toggle-fill: #3b7c48;
+  --909-control-toggle-fill: #0e6132;
   --909-control-toggle-text: #fff;
 }
 
 :where(.ws909, .m2-app)[data-skin="blackout"] {
-  --909-surface-canvas: #262728;
-  --909-surface-panel: #1d2223;
-  --909-surface-panel-raised: #232727;
-  --909-surface-panel-inset: #232727;
+  --909-surface-canvas: #1c1d1f;
+  --909-surface-panel: #101516;
+  --909-surface-panel-raised: #101516;
+  --909-surface-panel-inset: #0b0f10;
   --909-surface-instrument: #080b0c;
-  --909-text-primary: #e7eae5;
-  --909-text-secondary: #aeb2aa;
+  --909-text-primary: #e9eef0;
+  --909-text-secondary: #a6afb2;
   --909-text-tertiary: #6f797d;
   --909-neutral-text: #a6afb2;
-  --909-positive-text: #88b780;
-  --909-positive-icon: #88b780;
-  --909-positive-fill: rgba(136, 183, 128, .10);
-  --909-negative-text: #d27f60;
-  --909-warning-text: #dbae6e;
-  --909-info-text: #7faad6;
+  --909-positive-text: #6cc06d;
+  --909-positive-icon: #6cc06d;
+  --909-positive-fill: rgba(108, 192, 109, .10);
+  --909-negative-text: #e07a58;
+  --909-warning-text: #e0a23f;
+  --909-info-text: #5aa0e6;
   --909-border: rgba(255, 255, 255, .07);
   --909-border-strong: rgba(255, 255, 255, .13);
   --909-focus: #5aa0e6;
@@ -386,7 +386,7 @@
 
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .chain-table thead th {
   color: var(--909-text-secondary);
-  background: #cbc5b7;
+  background: var(--909-surface-panel-inset);
   border-color: var(--909-border);
 }
 
@@ -465,14 +465,14 @@
 .shell-root.ws909[data-skin="cream"] .srw-controls button {
   min-height: 36px;
   color: var(--909-text-secondary);
-  background: #d1cbbd;
+  background: var(--909-surface-panel-inset);
   border-color: var(--909-border-strong);
 }
 
 .shell-root.ws909[data-skin="cream"] .srw-history select {
   min-height: 36px;
   color: var(--909-text-secondary);
-  background: #d1cbbd;
+  background: var(--909-surface-panel-inset);
   border-color: var(--909-border-strong);
 }
 
@@ -529,7 +529,7 @@
 }
 
 .shell-root.ws909[data-skin="cream"] .srw-check {
-  background: #f0ebdd;
+  background: var(--909-surface-panel);
   border-color: var(--909-border-strong);
 }
 
@@ -1068,7 +1068,7 @@
 
 .m2-app:not(.folio-mobile)[data-skin="cream"] .m2-markets-chain .chain-table thead th {
   color: var(--909-text-secondary);
-  background: #cbc5b7;
+  background: var(--909-surface-panel-inset);
   border-color: var(--909-border);
 }
 
@@ -1174,7 +1174,7 @@
   gap: 8px;
   padding: 0 12px;
   border-bottom: 1px solid #9e988b;
-  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  background: linear-gradient(180deg, var(--909-surface-panel-inset), color-mix(in srgb, var(--909-surface-panel-inset) 86%, var(--909-text-secondary)));
   list-style: none;
 }
 
@@ -1466,7 +1466,7 @@
 }
 
 .m2-app:not(.folio-mobile)[data-skin="cream"][data-room="studio"] .m2-screen:not(.m2-tape-screen) .m2-phead {
-  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  background: linear-gradient(180deg, var(--909-surface-panel-inset), color-mix(in srgb, var(--909-surface-panel-inset) 86%, var(--909-text-secondary)));
   border-color: var(--909-border-strong);
 }
 
@@ -1836,7 +1836,7 @@
 }
 
 .shell-root.ws909[data-skin="cream"][data-mode="perform"] #perform-tape.pf-screen.pf-glass .pf-head {
-  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  background: linear-gradient(180deg, var(--909-surface-panel-inset), color-mix(in srgb, var(--909-surface-panel-inset) 86%, var(--909-text-secondary)));
   border-color: var(--909-border-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
 }
@@ -1907,7 +1907,7 @@
 }
 
 .m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-phead {
-  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  background: linear-gradient(180deg, var(--909-surface-panel-inset), color-mix(in srgb, var(--909-surface-panel-inset) 86%, var(--909-text-secondary)));
   border-color: var(--909-border-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
 }
@@ -2073,7 +2073,7 @@
 }
 
 .m2-app[data-skin="cream"] .m2-set-sheet .panel .phead {
-  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  background: linear-gradient(180deg, var(--909-surface-panel-inset), color-mix(in srgb, var(--909-surface-panel-inset) 86%, var(--909-text-secondary)));
   border-color: var(--909-border-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
 }
@@ -2548,31 +2548,31 @@
    inherit the shell-local variables directly. Give that overlay the same
    Figma foundation contract at the page theme boundary. */
 .console-root[data-theme="cream"] {
-  --909-overlay-canvas: #e8e3da;
-  --909-overlay-panel: #f2f1ee;
-  --909-overlay-inset: #e1dbd3;
-  --909-overlay-text: #4c4943;
-  --909-overlay-muted: #737068;
+  --909-overlay-canvas: #d8d3c4;
+  --909-overlay-panel: #efe7d2;
+  --909-overlay-inset: #cfc9b8;
+  --909-overlay-text: #2c2a24;
+  --909-overlay-muted: #5f5b53;
   --909-overlay-disabled: #777269;
   --909-overlay-border: rgba(60, 52, 30, .14);
   --909-overlay-border-strong: rgba(60, 52, 30, .26);
-  --909-overlay-success: #3b7c48;
-  --909-overlay-attention: #bc8b51;
-  --909-overlay-danger: #933e35;
+  --909-overlay-success: #0e6132;
+  --909-overlay-attention: #8a5b00;
+  --909-overlay-danger: #9e2d1c;
 }
 
 .console-root[data-theme="blackout"] {
-  --909-overlay-canvas: #262728;
-  --909-overlay-panel: #1d2223;
-  --909-overlay-inset: #232727;
-  --909-overlay-text: #e7eae5;
-  --909-overlay-muted: #aeb2aa;
+  --909-overlay-canvas: #1c1d1f;
+  --909-overlay-panel: #101516;
+  --909-overlay-inset: #0b0f10;
+  --909-overlay-text: #e9eef0;
+  --909-overlay-muted: #a6afb2;
   --909-overlay-disabled: #6f797d;
   --909-overlay-border: rgba(255, 255, 255, .07);
   --909-overlay-border-strong: rgba(255, 255, 255, .13);
-  --909-overlay-success: #88b780;
-  --909-overlay-attention: #dbae6e;
-  --909-overlay-danger: #d27f60;
+  --909-overlay-success: #6cc06d;
+  --909-overlay-attention: #e0a23f;
+  --909-overlay-danger: #e07a58;
 }
 
 .console-root[data-theme] .cmdk-panel {
@@ -3178,6 +3178,44 @@
 
 .m2-app:not(.folio-mobile)[data-skin] .srw-head b {
   font-size: 15px;
+}
+
+/* Desktop research was the last surface still reading at microtype scale.
+   Preserve its dense table, but bring every hierarchy tier up to the same
+   legibility floor as Markets, Tape, Sentinel and Ops. */
+@media (min-width: 931px) {
+  .shell-root.ws909[data-mode="perform"] .srw { gap:9px; padding:11px; }
+  .shell-root.ws909 .srw-head b { font-size:16px; }
+  .shell-root.ws909 :is(
+    .srw-head small,
+    .srw-head em,
+    .srw-native header small,
+    .srw-exact header small,
+    .srw-native > header em,
+    .srw-exact > header em,
+    .srw-read,
+    .srw-running small,
+    .srw-running em,
+    .srw-kpis small,
+    .srw-table-head,
+    .srw-interactions > b,
+    .srw-interactions em,
+    .srw-interactions small,
+    .srw footer,
+    .srw-exact > p
+  ) {
+    font-size:11px;
+    line-height:1.35;
+  }
+  .shell-root.ws909 .srw-controls button,
+  .shell-root.ws909 .srw-history select { min-height:34px; font-size:11px; }
+  .shell-root.ws909 .srw-running b,
+  .shell-root.ws909 .srw-kpis b { font-size:16px; }
+  .shell-root.ws909 .srw-native > header b,
+  .shell-root.ws909 .srw-exact > header b { font-size:13px; }
+  .shell-root.ws909 .srw-row { min-height:39px; font-size:12px; }
+  .shell-root.ws909 .srw-manager-list > div { min-height:34px; font-size:11px; }
+  .shell-root.ws909 .srw-interactions strong { font-size:11px; }
 }
 
 /* 909 CONVERGENCE PASS: END */

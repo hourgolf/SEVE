@@ -29,6 +29,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [passportOpen, setPassportOpen] = useState(false);
 
   if (!strategist) return <aside className="inspector mixer-inspector"><div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">select a fleet row</span></div><div className="insp-empty">no channel selected</div></aside>;
 
@@ -89,18 +90,6 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
       </div>
 
       <div className="mixer-deck">
-        <section className={`mix-bank mix-bank--runtime lane-${passport?.lifecycle ?? "unverified"}`}><header>SEALED RUNTIME · BASELINE, NOT LEARNED</header><div className="runtime-bank">
-          <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
-          {passport?.rootPolicy ? <>
-            <span><small>FAMILY</small><b>{passport.rootPolicy.familyId}</b></span>
-            <span><small>SIZE</small><b>{passport.rootPolicy.quantity} contracts</b></span>
-            <span><small>RISK</small><b>{usd0(passport.rootPolicy.riskBudgetUsd)}</b></span>
-            <span><small>PREMIUM / DEBIT</small><b>${passport.rootPolicy.premiumCap.toFixed(2)} / {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
-            <span><small>EXIT</small><b>{day1RootExitLabel(passport.rootPolicy)}</b></span>
-            <span><small>ADMISSION</small><b>priority {passport.rootPolicy.priority} · one/family</b></span>
-          </> : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
-        </div></section>
-
         <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
           <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
           <div className="ctl"><span className="cl">strike offset</span><span className="ival" title="effective configured strike offset">{strikeLabel(config.strike_offset ?? 0)}</span></div>
@@ -125,6 +114,29 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
           <button type="button" className={databaseConfig.muted ? "on mute" : ""} disabled={!canPersist} onClick={() => setCfg({ muted: !databaseConfig.muted })}><i />MUTE<small>{databaseConfig.muted ? "held" : "ready"}</small></button>
           <button type="button" className={databaseConfig.boosted ? "on boost" : ""} disabled={!canPersist} onClick={() => setCfg({ boosted: !databaseConfig.boosted })}><i />BOOST<small>{databaseConfig.boosted ? "2× today" : "normal"}</small></button>
         </div></section>
+        <section className={`mix-bank mix-bank--runtime lane-${passport?.lifecycle ?? "unverified"}${passportOpen ? " open" : " collapsed"}`}>
+          <button
+            type="button"
+            className="desktop-passport-toggle"
+            aria-expanded={passportOpen}
+            onClick={() => setPassportOpen((open) => !open)}
+          >
+            <span>RUNTIME PASSPORT · BASELINE, NOT LEARNED</span>
+            <b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b>
+            <i aria-hidden="true">{passportOpen ? "▾" : "▸"}</i>
+          </button>
+          {passportOpen && <div className="runtime-bank">
+            <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
+            {passport?.rootPolicy ? <>
+              <span><small>FAMILY</small><b>{passport.rootPolicy.familyId}</b></span>
+              <span><small>SIZE</small><b>{passport.rootPolicy.quantity} contracts</b></span>
+              <span><small>RISK</small><b>{usd0(passport.rootPolicy.riskBudgetUsd)}</b></span>
+              <span><small>PREMIUM / DEBIT</small><b>${passport.rootPolicy.premiumCap.toFixed(2)} / {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
+              <span><small>EXIT</small><b>{day1RootExitLabel(passport.rootPolicy)}</b></span>
+              <span><small>ADMISSION</small><b>priority {passport.rootPolicy.priority} · one/family</b></span>
+            </> : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
+          </div>}
+        </section>
         <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} />
       </div>
 

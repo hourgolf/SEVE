@@ -6,15 +6,15 @@
 
 .console-root {
   /* --- 909 chassis palette --- */
-  --chassis: #e8e3da;
-  --chassis-2: #e1dbd3;
+  --chassis: #d8d3c4;
+  --chassis-2: #cfc9b8;
   --chassis-edge: rgba(60, 52, 30, 0.26);
   --chassis-dark: #c8c1b7;
   --panel-plate: #2b2b2e; /* dark sub-panels behind knobs */
   --panel-plate-2: #1d1d20;
   --screw: #7a7870;
-  --ink: #4c4943;
-  --ink-soft: #737068;
+  --ink: #2c2a24;
+  --ink-soft: #5f5b53;
 
   /* --- dark hardware surface (the master strip) — themeable so it can cool
      from this warm brown to graphite under [data-theme="blackout"]. Other
@@ -64,28 +64,28 @@
    .console-root div (OPS room control; persisted to localStorage). */
 .console-root[data-theme="blackout"] {
   /* semantic tokens (mirror globals.css :root) */
-  --bg: #262728;
-  --panel: #1d2223;
-  --panel-2: #232727;
-  --panel-3: #292d2d;
+  --bg: #1c1d1f;
+  --panel: #101516;
+  --panel-2: #0b0f10;
+  --panel-3: #151a1c;
   --border: rgba(255, 255, 255, 0.07);
   --border-bright: rgba(255, 255, 255, 0.13);
-  --text: #e7eae5;
-  --muted: #aeb2aa;
+  --text: #e9eef0;
+  --muted: #a6afb2;
   --muted-2: #6f797d;
-  --green: #88b780;
-  --red: #d27f60;
-  --amber: #dbae6e;
-  --blue: #7faad6;
+  --green: #6cc06d;
+  --red: #e07a58;
+  --amber: #e0a23f;
+  --blue: #5aa0e6;
   --accent: #d87750;
   --accent-cream: #d87750;
   /* chassis hardware tokens (mirror .console-root) */
-  --chassis: #262728;
-  --chassis-2: #1d2223;
+  --chassis: #1c1d1f;
+  --chassis-2: #101516;
   --chassis-edge: rgba(255, 255, 255, 0.13);
   --chassis-dark: #383c3c;
-  --ink: #e7eae5;
-  --ink-soft: #aeb2aa;
+  --ink: #e9eef0;
+  --ink-soft: #a6afb2;
   --plate-ink: #e2d6b8; /* warm parchment silkscreen (was the cool #d7d5cb that read as "silver") */
   --knob-cream: #b9bbbd; /* silver knobs in blackout */
   --master-bg-1: #202123; /* cool the warm master strip to graphite */
