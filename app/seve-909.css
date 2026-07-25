@@ -3039,4 +3039,145 @@
   height: 38px;
 }
 
+/* Mobile legibility closure. The phone shell still had a handful of inherited
+   5–9px labels after the first convergence pass. These are operational
+   controls and evidence labels, so keep them at an honest readable floor. */
+.m2-app:not(.folio-mobile)[data-skin] .m2-head-r1 {
+  align-items: stretch;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(.m2-status, .m2-cog) {
+  min-height: 44px;
+  height: 44px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-status b {
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-status :is(small, em) {
+  font-size: 8px;
+  line-height: 1.1;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-head-r2 {
+  gap: 12px;
+  padding: 3px 5px 0;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-led-mod {
+  flex: 1 1 0;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-head-r2 .led,
+.m2-app:not(.folio-mobile)[data-skin] .m2-head-r2 .led-window {
+  width: 100%;
+  justify-content: center;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-head-r2 .seven-seg {
+  width: 14px;
+  height: 27px;
+}
+
+/* The Book shortcuts are navigation controls, not permanently active dark
+   switches. Their material now follows the selected cream/blackout frame. */
+.m2-app:not(.folio-mobile)[data-skin] .m2-book-nav button {
+  min-height: 44px;
+  padding-inline: 13px;
+  color: var(--909-control-rest-text);
+  background: linear-gradient(180deg, var(--909-control-rest-top), var(--909-control-rest-bottom));
+  border-color: var(--909-control-rest-border);
+  box-shadow: var(--909-control-rest-shadow);
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-book-nav b {
+  font-size: 11px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-book-nav small {
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-desk-hero small {
+  font-size: 9px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-desk-hero b {
+  font-size: 14px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-desk-section > header {
+  min-height: 38px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-desk-section > header b {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-desk-section > header span {
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-desk-empty,
+  .m2-desk-directions > span,
+  .m2-desk-rows > div,
+  .m2-recent-exits b,
+  .m2-recent-exits small,
+  .m2-recent-exits p,
+  .m2-desk-signals time,
+  .m2-desk-signals > div > b,
+  .m2-desk-signals > div > span,
+  .m2-nightly > div > small,
+  .m2-nightly p,
+  .m2-bench-list b,
+  .m2-bench-list small,
+  .m2-bench-list em,
+  .m2-release-receipt b,
+  .m2-release-receipt small
+) {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-review-modes button {
+  min-height: 48px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .srw-controls button,
+.m2-app:not(.folio-mobile)[data-skin] .srw-history select {
+  min-height: 44px;
+  padding-inline: 11px;
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .srw-read,
+  .srw-running small,
+  .srw-running em,
+  .srw-kpis small,
+  .srw-native > header em,
+  .srw-exact > header em,
+  .srw-interactions strong,
+  .srw-empty
+) {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(.srw-running b, .srw-kpis b) {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .srw-head b {
+  font-size: 15px;
+}
+
 /* 909 CONVERGENCE PASS: END */
