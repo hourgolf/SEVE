@@ -13,6 +13,7 @@ const percent = (wins: number, scored: number): string =>
   scored ? `${Math.round((1000 * wins) / scored) / 10}%` : "—";
 const money = (value: number | null): string => value == null ? "—" : signedUsd(value);
 const shortSession = (session: string): string => session.slice(5).replace("-", "/");
+const RECENT_SESSION_LIMIT = 4;
 type ResearchLane = "vb" | "all";
 const laneTotals = (rows: ShadowChannelSummary[]) => {
   const scored = rows.reduce((sum, row) => sum + row.scored, 0);
@@ -113,6 +114,11 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     () => shadowResearch.sessions.find((item) => item.session === session) ?? shadowResearch.sessions[0] ?? null,
     [session, shadowResearch.sessions],
   );
+  const recentSessions = shadowResearch.sessions.slice(0, RECENT_SESSION_LIMIT);
+  const historicalSessions = shadowResearch.sessions.slice(RECENT_SESSION_LIMIT);
+  const historicalSession = historicalSessions.some((item) => item.session === selected?.session)
+    ? selected?.session ?? ""
+    : "";
   const native = windowMode === "cumulative" ? shadowResearch.cumulative : selected;
   const rows = native ? (lane === "vb" ? native.vb : native.dark) : [];
   const filteredRows = windowMode === "cumulative"
@@ -144,7 +150,19 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     <header className="srw-head"><span><b>SHADOW RESEARCH</b><small>native paths now · exact manager truth at T+1</small></span>
       <em>RESEARCH ONLY · ZERO ORDER AUTHORITY</em></header>
     <div className="srw-controls">
-      <nav className="srw-sessions" aria-label="research session">{shadowResearch.sessions.slice(0, 5).map((item) => <button type="button" key={item.session} className={windowMode === "day" && selected?.session === item.session ? "on" : ""} onClick={() => { setSession(item.session); setWindowMode("day"); }}>{shortSession(item.session)}</button>)}</nav>
+      <nav className="srw-sessions" aria-label="research session">
+        {recentSessions.map((item) => <button type="button" key={item.session} className={windowMode === "day" && selected?.session === item.session ? "on" : ""} onClick={() => { setSession(item.session); setWindowMode("day"); }}>{shortSession(item.session)}</button>)}
+        {historicalSessions.length ? <label className={`srw-history${windowMode === "day" && historicalSession ? " on" : ""}`}>
+          <select aria-label="Older research session" value={historicalSession} onChange={(event) => {
+            if (!event.target.value) return;
+            setSession(event.target.value);
+            setWindowMode("day");
+          }}>
+            <option value="">HISTORY · {historicalSessions.length}</option>
+            {historicalSessions.map((item) => <option key={item.session} value={item.session}>{shortSession(item.session)}</option>)}
+          </select>
+        </label> : null}
+      </nav>
       <nav className="srw-window" aria-label="research window"><button type="button" className={windowMode === "day" ? "on" : ""} onClick={() => setWindowMode("day")}>DAY</button><button type="button" className={windowMode === "cumulative" ? "on" : ""} onClick={() => setWindowMode("cumulative")}>CUMULATIVE</button></nav>
       <nav className="srw-lanes" aria-label="research lane"><button type="button" className={lane === "vb" ? "on" : ""} onClick={() => setLane("vb")}>VB SWARM</button><button type="button" className={lane === "all" ? "on" : ""} onClick={() => setLane("all")}>ALL DARK</button></nav>
       <span className={`srw-read ${shadowResearch.state}${shadowResearch.truncated ? " partial" : ""}`}>{shadowResearch.truncated ? "PARTIAL" : shadowResearch.state.toUpperCase()}</span>
