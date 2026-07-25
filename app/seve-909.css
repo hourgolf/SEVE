@@ -2119,6 +2119,91 @@
   background: var(--909-border-strong);
 }
 
+/* Research is an analytical workspace, but it still has to read at the same
+   workstation distance as Positions, Tape, and Markets. Keep the dense table
+   rhythm while retiring the original microtype scale in both skins. */
+.shell-root.ws909[data-mode="perform"] .srw {
+  gap: 10px;
+  padding: 12px;
+}
+
+.shell-root.ws909[data-mode="perform"] .srw-head {
+  padding: 3px 3px 9px;
+}
+
+.shell-root.ws909[data-mode="perform"] .srw-head b {
+  font-size: 16px;
+}
+
+.shell-root.ws909[data-mode="perform"] :is(
+  .srw-head small,
+  .srw-head em,
+  .srw-native header small,
+  .srw-exact header small,
+  .srw-controls button,
+  .srw-history select,
+  .srw-read,
+  .srw-running small,
+  .srw-running em,
+  .srw-table-head,
+  .srw-manager-list > div,
+  .srw-interactions > b,
+  .srw-interactions em,
+  .srw-interactions small,
+  .srw footer,
+  .srw-exact > p
+) {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.shell-root.ws909[data-mode="perform"] :is(
+  .srw-controls button,
+  .srw-history,
+  .srw-history select
+) {
+  min-height: 36px;
+}
+
+.shell-root.ws909[data-mode="perform"] :is(
+  .srw-native > header b,
+  .srw-exact > header b
+) {
+  font-size: 14px;
+}
+
+.shell-root.ws909[data-mode="perform"] :is(
+  .srw-running b,
+  .srw-kpis b
+) {
+  font-size: 16px;
+}
+
+.shell-root.ws909[data-mode="perform"] .srw-kpis small {
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.shell-root.ws909[data-mode="perform"] .srw-table-head {
+  min-height: 36px;
+  font-size: 10.5px;
+}
+
+.shell-root.ws909[data-mode="perform"] .srw-row {
+  min-height: 40px;
+  font-size: 12.5px;
+}
+
+.shell-root.ws909[data-mode="perform"] .srw-manager-list > div {
+  min-height: 36px;
+  align-items: center;
+  font-size: 11.5px;
+}
+
+.shell-root.ws909[data-mode="perform"] .srw-interactions strong {
+  font-size: 11.5px;
+}
+
 /* ==========================================================================
    909 CONTROL CONTRACT: START
 
@@ -2181,7 +2266,10 @@
 
 /* Desktop/mobile analytical selectors: symbol, window, interval, chart type,
    research lane/window, roster view, and channel configuration. */
-.shell-root.ws909[data-skin][data-mode="perform"] .pf-markets-chart :is(
+.shell-root.ws909[data-skin][data-mode="perform"] :is(
+  .pf-market-target,
+  .pf-markets-chart
+) :is(
   .chart-toggle,
   .seg
 ) button.on,
@@ -2205,9 +2293,15 @@
 }
 
 /* Overlay visibility is a binary enabled state, not an exclusive selection. */
-.shell-root.ws909[data-skin][data-mode="perform"] .pf-markets-chart .ind-chip.on,
+.shell-root.ws909[data-skin][data-mode="perform"] :is(
+  .pf-market-target,
+  .pf-markets-chart
+) .ind-chip.on,
 .m2-app:not(.folio-mobile)[data-skin] .m2-chart-body .ind-chip.on,
-.shell-root.ws909[data-skin][data-mode="perform"] .pf-markets-chart .chart-cfg-chip.on,
+.shell-root.ws909[data-skin][data-mode="perform"] :is(
+  .pf-market-target,
+  .pf-markets-chart
+) .chart-cfg-chip.on,
 .m2-app:not(.folio-mobile)[data-skin] .m2-chart-body .chart-cfg-chip.on {
   color: var(--909-control-toggle-text);
   background: var(--909-control-toggle-fill);

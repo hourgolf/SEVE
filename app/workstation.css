@@ -66,9 +66,9 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 .shell-root.ws909[data-mode="perform"] .perform { height:100%; min-height:0; grid-template-rows:auto minmax(0,1fr) 96px; background:#080b0c; }
 .shell-root.ws909[data-mode="perform"] .pf-stage { min-height:0; gap:8px; padding:8px; }
 .shell-root.ws909[data-mode="perform"] .pf-dock { min-height:0; }
-.shell-root.ws909[data-mode="perform"] .pf-markets-chart .phead .t { font-size:13px; }
-.shell-root.ws909[data-mode="perform"] .pf-markets-chart :is(.chart-toggle,.seg) button { min-height:28px; padding-inline:10px; font-size:11px; }
-.shell-root.ws909[data-mode="perform"] .pf-markets-chart .seg--interval button { font-size:10.5px; }
+.shell-root.ws909[data-mode="perform"] :is(.pf-market-target,.pf-markets-chart) .phead .t { font-size:13px; }
+.shell-root.ws909[data-mode="perform"] :is(.pf-market-target,.pf-markets-chart) :is(.chart-toggle,.seg) button { min-height:28px; padding-inline:10px; font-size:11px; }
+.shell-root.ws909[data-mode="perform"] :is(.pf-market-target,.pf-markets-chart) .seg--interval button { font-size:10.5px; }
 .shell-root.ws909[data-mode="studio"] .studio { height:100%; min-height:0; padding:5px; gap:5px; grid-template-rows:minmax(240px,.95fr) minmax(170px,.66fr) 44px; background:#080b0c; }
 .shell-root.ws909[data-mode="studio"] .studio-v4b .fleet { border-radius:4px; }
 .shell-root.ws909[data-mode="studio"] .studio-v4b .inspector,.shell-root.ws909[data-mode="studio"] .studio-module { border-radius:4px; }
