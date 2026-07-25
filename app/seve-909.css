@@ -33,6 +33,18 @@
   --909-info: var(--m2-blue, #5aa0e6);
   --909-on-dark: var(--lcd-ink, #e9eef0);
   --909-on-dark-muted: var(--dk-mut, #8a949a);
+
+  /* Control-state language: amber selects a value, orange navigates the
+     workstation, green enables an overlay or reports health, and red remains
+     reserved for destructive/risk states. */
+  --909-control-selected-top: #efbd53;
+  --909-control-selected-bottom: #d99a1f;
+  --909-control-selected-text: #241704;
+  --909-control-selected-border: #8b6211;
+  --909-control-selected-strike: var(--accent, #ef5a23);
+  --909-control-primary-top: #ff7038;
+  --909-control-primary-bottom: var(--accent, #ef5a23);
+  --909-control-primary-text: #1a0801;
 }
 
 :where(.ws909, .m2-app)[data-skin="cream"] {
@@ -58,6 +70,13 @@
   --909-scroll-thumb: #66645e;
   --909-scroll-thumb-hi: #918d83;
   --909-scroll-thumb-lo: #4f4e49;
+  --909-control-rest-top: #ebe6d8;
+  --909-control-rest-bottom: #d8d2c3;
+  --909-control-rest-text: #292925;
+  --909-control-rest-border: #8d877a;
+  --909-control-rest-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
+  --909-control-toggle-fill: #0e6132;
+  --909-control-toggle-text: #fff;
 }
 
 :where(.ws909, .m2-app)[data-skin="blackout"] {
@@ -83,6 +102,13 @@
   --909-scroll-thumb: #596266;
   --909-scroll-thumb-hi: #7e898d;
   --909-scroll-thumb-lo: #343b3e;
+  --909-control-rest-top: #34383a;
+  --909-control-rest-bottom: #17191a;
+  --909-control-rest-text: #a5afb3;
+  --909-control-rest-border: #41474a;
+  --909-control-rest-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+  --909-control-toggle-fill: #237444;
+  --909-control-toggle-text: #eaf8ee;
 }
 
 /* 909 fader rails for every native workstation scrollbar. Scroll behavior,
@@ -1795,3 +1821,150 @@
 .m2-app[data-skin="cream"] .m2-set-sheet .log::-webkit-scrollbar-thumb {
   background: var(--909-border-strong);
 }
+
+/* ==========================================================================
+   909 CONTROL CONTRACT: START
+
+   This final layer intentionally outranks the historical component rules.
+   Exclusive choices share the amber selected state across every mounted
+   desktop/mobile workspace. Primary workspace navigation remains orange;
+   binary overlay toggles remain green. See docs/909-control-state-contract.md.
+   ========================================================================== */
+
+/* Peer mobile selectors use one physical button treatment. This covers the
+   Markets, Review, Desk, Studio scope, Research, and Settings families. */
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-market-switch,
+  .m2-review-modes,
+  .m2-desk-tabs,
+  .m2-channel-scope,
+  .srw-controls,
+  .m2-set-seg
+) button {
+  color: var(--909-control-rest-text);
+  background: linear-gradient(180deg, var(--909-control-rest-top), var(--909-control-rest-bottom));
+  border-color: var(--909-control-rest-border);
+  box-shadow: var(--909-control-rest-shadow);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-market-switch,
+  .m2-review-modes,
+  .m2-desk-tabs,
+  .m2-channel-scope,
+  .srw-controls,
+  .m2-set-seg
+) button.on {
+  color: var(--909-control-selected-text);
+  background: linear-gradient(180deg, var(--909-control-selected-top), var(--909-control-selected-bottom));
+  border-color: var(--909-control-selected-border);
+  box-shadow:
+    inset 0 -3px 0 var(--909-control-selected-strike),
+    inset 0 1px 0 rgba(255, 255, 255, .42);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-review-modes,
+  .m2-desk-tabs
+) button.on :is(b, small) {
+  color: inherit;
+}
+
+/* Account scope is an exclusive choice, including the compact dark desktop
+   telemetry slot. Its unselected material remains owned by that slot. */
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] .acct-opt.on:not(.acct-live) {
+  color: var(--909-control-selected-text);
+  background: linear-gradient(180deg, var(--909-control-selected-top), var(--909-control-selected-bottom));
+  border-color: var(--909-control-selected-border);
+  box-shadow:
+    inset 0 -2px 0 var(--909-control-selected-strike),
+    inset 0 1px 0 rgba(255, 255, 255, .42);
+}
+
+/* Desktop/mobile analytical selectors: symbol, window, interval, chart type,
+   research lane/window, roster view, and channel configuration. */
+.shell-root.ws909[data-skin][data-mode="perform"] .pf-markets-chart :is(
+  .chart-toggle,
+  .seg
+) button.on,
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body :is(
+  .chart-toggle,
+  .seg
+) button.on,
+.shell-root.ws909[data-skin] :is(
+  .srw-controls,
+  .iseg,
+  .roster-toggle,
+  .theme-toggle,
+  .cfg-seg
+) button.on {
+  color: var(--909-control-selected-text);
+  background: linear-gradient(180deg, var(--909-control-selected-top), var(--909-control-selected-bottom));
+  border-color: var(--909-control-selected-border);
+  box-shadow:
+    inset 0 -2px 0 var(--909-control-selected-strike),
+    inset 0 1px 0 rgba(255, 255, 255, .32);
+}
+
+/* Overlay visibility is a binary enabled state, not an exclusive selection. */
+.shell-root.ws909[data-skin][data-mode="perform"] .pf-markets-chart .ind-chip.on,
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body .ind-chip.on,
+.shell-root.ws909[data-skin][data-mode="perform"] .pf-markets-chart .chart-cfg-chip.on,
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body .chart-cfg-chip.on {
+  color: var(--909-control-toggle-text);
+  background: var(--909-control-toggle-fill);
+  border-color: var(--909-control-toggle-fill);
+  box-shadow: none;
+}
+
+/* Workspace navigation uses the orange transport accent. */
+.shell-root.ws909[data-skin] .ws-mode-tabs button.on {
+  color: var(--909-control-primary-text);
+  background: linear-gradient(180deg, var(--909-control-primary-top), var(--909-control-primary-bottom));
+}
+
+.shell-root.ws909[data-skin] .ws-mode-tabs button.on::after {
+  background: #241006;
+  box-shadow: none;
+}
+
+.shell-root.ws909[data-skin] .ws-left button.on {
+  border-color: color-mix(in srgb, var(--909-control-primary-bottom) 52%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--909-control-primary-top) 19%, transparent),
+    color-mix(in srgb, var(--909-control-primary-bottom) 4%, transparent)
+  );
+  box-shadow: inset 3px 0 0 var(--909-control-primary-bottom);
+}
+
+.shell-root.ws909[data-skin] .ws-left button.on > span:first-child {
+  color: var(--909-control-primary-top);
+  border-color: color-mix(in srgb, var(--909-control-primary-bottom) 55%, #282b29);
+  box-shadow:
+    inset 0 0 8px color-mix(in srgb, var(--909-control-primary-bottom) 25%, transparent),
+    0 0 0 1px #0b0d0b;
+}
+
+.shell-root.ws909[data-skin="cream"] .ws-left button.on .ws-left-copy b {
+  color: #7b310e;
+}
+
+.shell-root.ws909[data-skin="cream"] .ws-left button.on .ws-left-copy small {
+  color: #865039;
+}
+
+.shell-root.ws909[data-skin="blackout"] .ws-left button.on .ws-left-copy b {
+  color: #ff9a63;
+}
+
+.shell-root.ws909[data-skin="blackout"] .ws-left button.on .ws-left-copy small {
+  color: #c97c55;
+}
+
+/* Keep state geometry stable and disabled controls legible. */
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] button:disabled {
+  filter: saturate(.55);
+}
+
+/* 909 CONTROL CONTRACT: END */

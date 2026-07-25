@@ -149,6 +149,7 @@
     "gate-shadow-policy-selftest": "tsx lib/research/gateShadowPolicy.selftest.ts",
     "after-close-research-selftest": "tsx lib/research/afterCloseResearch.selftest.ts",
     "fixture-lane-selftest": "tsx lib/ui/fixtureLane.selftest.ts",
+    "ui-control-contract-selftest": "tsx lib/ui/controlContract.selftest.ts",
     "execution-observation-persistence-selftest": "tsx worker/src/executionObservationPersistence.selftest.ts",
     "a6-read": "tsx --env-file=.env.local scripts/a6-read.ts",
     "backup-archives": "tsx scripts/backup-archives.ts",
