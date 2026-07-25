@@ -83,12 +83,6 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
         {giveback && <span className="ih-tag amber">⚡ A13 ratchet</span>}
         <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
-      <div className="mixer-meter">
-        <span><small>RUNTIME</small><b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b></span>
-        <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
-        <span><small>POLICY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
-      </div>
-
       <div className="mixer-deck">
         <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
           <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
@@ -114,6 +108,11 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
           <button type="button" className={databaseConfig.muted ? "on mute" : ""} disabled={!canPersist} onClick={() => setCfg({ muted: !databaseConfig.muted })}><i />MUTE<small>{databaseConfig.muted ? "held" : "ready"}</small></button>
           <button type="button" className={databaseConfig.boosted ? "on boost" : ""} disabled={!canPersist} onClick={() => setCfg({ boosted: !databaseConfig.boosted })}><i />BOOST<small>{databaseConfig.boosted ? "2× today" : "normal"}</small></button>
         </div></section>
+        <div className="mixer-meter">
+          <span><small>RUNTIME</small><b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b></span>
+          <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
+          <span><small>POLICY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
+        </div>
         <section className={`mix-bank mix-bank--runtime lane-${passport?.lifecycle ?? "unverified"}${passportOpen ? " open" : " collapsed"}`}>
           <button
             type="button"
