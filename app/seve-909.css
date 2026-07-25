@@ -27,12 +27,50 @@
   --909-type-metric: 16px;
   --909-type-title: clamp(22px, 1.7vw, 30px);
 
-  --909-success: var(--hw-green, var(--m2-green, #2fd573));
+  --909-success: var(--909-positive-text, var(--hw-green, var(--m2-green, #2fd573)));
   --909-attention: var(--hw-amber, var(--m2-amber, #e0a23f));
   --909-danger: var(--hw-red-soft, var(--m2-red-soft, #e07a58));
   --909-info: var(--m2-blue, #5aa0e6);
   --909-on-dark: var(--lcd-ink, #e9eef0);
   --909-on-dark-muted: var(--dk-mut, #8a949a);
+}
+
+:where(.ws909, .m2-app)[data-skin="cream"] {
+  --909-surface-canvas: #c7c1b2;
+  --909-surface-panel: #ddd8ca;
+  --909-surface-panel-raised: #ebe6d8;
+  --909-surface-panel-inset: #c9c3b4;
+  --909-surface-instrument: #0c1113;
+  --909-text-primary: #292925;
+  --909-text-secondary: #5f5d55;
+  --909-text-tertiary: #716d64;
+  --909-positive-text: #0e6132;
+  --909-positive-icon: #16743e;
+  --909-positive-fill: rgba(14, 97, 50, .10);
+  --909-negative-text: #9e2d1c;
+  --909-warning-text: #8b5a10;
+  --909-border: rgba(60, 52, 30, .22);
+  --909-border-strong: #8d877a;
+  --909-focus: #2b6fb8;
+}
+
+:where(.ws909, .m2-app)[data-skin="blackout"] {
+  --909-surface-canvas: #090b0c;
+  --909-surface-panel: #14191b;
+  --909-surface-panel-raised: #1e2426;
+  --909-surface-panel-inset: #0e1213;
+  --909-surface-instrument: #080b0c;
+  --909-text-primary: #e9eef0;
+  --909-text-secondary: #a5afb3;
+  --909-text-tertiary: #7f8a8f;
+  --909-positive-text: #55d981;
+  --909-positive-icon: #2fd573;
+  --909-positive-fill: rgba(47, 213, 115, .10);
+  --909-negative-text: #ff735b;
+  --909-warning-text: #e6b13c;
+  --909-border: rgba(255, 255, 255, .11);
+  --909-border-strong: #3a4448;
+  --909-focus: #69a9ec;
 }
 
 .sv909-workspace-head {
@@ -113,6 +151,334 @@
 .sv909-metrics .danger b { color: var(--909-danger); }
 .sv909-metrics .info b { color: var(--909-info); }
 
+/* ==========================================================================
+   Desktop cream parity
+
+   Cream is the ordinary analytical surface. Dark is reserved for the plot,
+   seven-segment telemetry, tape, and explicit evidence instruments.
+   ========================================================================== */
+
+.shell-root.ws909[data-skin="cream"] .ws-display {
+  background: var(--909-surface-canvas);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .perform,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .studio {
+  color: var(--909-text-primary);
+  background: var(--909-surface-canvas);
+}
+
+/* Markets: a dark plot in a cream analytical frame. */
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-console {
+  --panel: var(--909-surface-panel);
+  --panel-2: var(--909-surface-panel-inset);
+  --text: var(--909-text-primary);
+  --muted: var(--909-text-secondary);
+  --muted-2: var(--909-text-tertiary);
+  --border: var(--909-border);
+  --border-bright: var(--909-border-strong);
+  --green: var(--909-positive-text);
+  --amber: var(--909-warning-text);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart > .panel,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain > .panel,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-contract > .panel,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk {
+  --lcd-ink: var(--909-text-primary);
+  --dk-mut: var(--909-text-secondary);
+  --dk-dim: var(--909-text-tertiary);
+  --pf-line: var(--909-border);
+  --pf-line-2: rgba(60, 52, 30, .30);
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 7px rgba(0, 0, 0, .16);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .phead,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .phead,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-contract .phead,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk .pf-head {
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, #d0cabd, #bbb5a7);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .phead .t,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .phead .t,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-contract .phead .t,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk .pf-head .t {
+  color: #34332e;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .pbody {
+  background: var(--909-surface-panel);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .chart-wrap {
+  overflow: hidden;
+  background: var(--909-surface-instrument);
+  border: 1px solid #080a0b;
+  border-radius: 0 0 5px 5px;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .chart-controls--bottom {
+  margin-top: 0;
+  padding: 8px 0 1px;
+  color: var(--909-text-secondary);
+  background: var(--909-surface-panel);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .seg,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .ind-chips,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart .chart-toggle {
+  border-color: var(--909-border-strong);
+  background: #c6c0b2;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart button {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chart button.on {
+  color: #fff;
+  background: var(--909-positive-text);
+  border-color: var(--909-positive-text);
+  box-shadow: none;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk-body {
+  background: transparent;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .market-read-strip {
+  color: var(--909-text-secondary);
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .market-read-strip > b {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .market-read-strip > em {
+  color: var(--909-text-tertiary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .market-read-strip.green > i {
+  background: var(--909-positive-icon);
+  box-shadow: none;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .chain-table thead th {
+  color: var(--909-text-secondary);
+  background: #cbc5b7;
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .chain-table td {
+  color: var(--909-text-secondary);
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .strike-col {
+  color: var(--909-text-primary);
+  background: rgba(255, 255, 255, .28);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .calls,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk-row > strong.pos {
+  color: var(--909-positive-text);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain .puts,
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-market-risk-row > strong.neg {
+  color: var(--909-negative-text);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .pf-markets-chain tr.atm td {
+  background: var(--909-positive-fill);
+}
+
+/* Research: analytical workspace, not a full-screen dark instrument. */
+.shell-root.ws909[data-skin="cream"][data-mode="perform"] .srw {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .78), 0 2px 8px rgba(0, 0, 0, .18);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-head,
+.shell-root.ws909[data-skin="cream"] .srw-native > header,
+.shell-root.ws909[data-skin="cream"] .srw-exact > header {
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-head small,
+.shell-root.ws909[data-skin="cream"] .srw-native header small,
+.shell-root.ws909[data-skin="cream"] .srw-exact header small,
+.shell-root.ws909[data-skin="cream"] .srw-running small,
+.shell-root.ws909[data-skin="cream"] .srw-running em,
+.shell-root.ws909[data-skin="cream"] .srw-row span,
+.shell-root.ws909[data-skin="cream"] .srw-manager-list span,
+.shell-root.ws909[data-skin="cream"] .srw footer,
+.shell-root.ws909[data-skin="cream"] .srw-exact > p {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-head em,
+.shell-root.ws909[data-skin="cream"] .srw-read,
+.shell-root.ws909[data-skin="cream"] .srw .pos,
+.shell-root.ws909[data-skin="cream"] .srw-exact.complete > header em {
+  color: var(--909-positive-text);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw .neg,
+.shell-root.ws909[data-skin="cream"] .srw-exact.missing > header em {
+  color: var(--909-negative-text);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-controls,
+.shell-root.ws909[data-skin="cream"] .srw-native,
+.shell-root.ws909[data-skin="cream"] .srw-exact,
+.shell-root.ws909[data-skin="cream"] .srw-running,
+.shell-root.ws909[data-skin="cream"] .srw-interactions > span {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-controls button {
+  min-height: 36px;
+  color: var(--909-text-secondary);
+  background: #d1cbbd;
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-controls button.on {
+  color: #fff;
+  background: var(--909-positive-text);
+  border-color: var(--909-positive-text);
+  box-shadow: none;
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-running {
+  border-color: rgba(14, 97, 50, .42);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-kpis {
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-kpis > span {
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-kpis small,
+.shell-root.ws909[data-skin="cream"] .srw-table-head,
+.shell-root.ws909[data-skin="cream"] .srw-interactions > b,
+.shell-root.ws909[data-skin="cream"] .srw-interactions em,
+.shell-root.ws909[data-skin="cream"] .srw-interactions small {
+  color: var(--909-text-tertiary);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-kpis b,
+.shell-root.ws909[data-skin="cream"] .srw-row b {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-table-head,
+.shell-root.ws909[data-skin="cream"] .srw-row,
+.shell-root.ws909[data-skin="cream"] .srw-manager-list > div {
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-check {
+  background: #f0ebdd;
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-head small,
+.shell-root.ws909[data-skin="cream"] .srw-native header small,
+.shell-root.ws909[data-skin="cream"] .srw-exact header small,
+.shell-root.ws909[data-skin="cream"] .srw-head em,
+.shell-root.ws909[data-skin="cream"] .srw-controls button,
+.shell-root.ws909[data-skin="cream"] .srw-read,
+.shell-root.ws909[data-skin="cream"] .srw-running small,
+.shell-root.ws909[data-skin="cream"] .srw-running em,
+.shell-root.ws909[data-skin="cream"] .srw-table-head,
+.shell-root.ws909[data-skin="cream"] .srw-manager-list > div,
+.shell-root.ws909[data-skin="cream"] .srw-interactions > b,
+.shell-root.ws909[data-skin="cream"] .srw-interactions strong,
+.shell-root.ws909[data-skin="cream"] .srw-interactions em,
+.shell-root.ws909[data-skin="cream"] .srw-interactions small,
+.shell-root.ws909[data-skin="cream"] .srw footer,
+.shell-root.ws909[data-skin="cream"] .srw-exact > p {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-row {
+  min-height: 38px;
+  font-size: 11px;
+}
+
+/* Channels: ordinary inspector/runtime cards stay cream; only segmented
+   controls keep a bounded dark face with their own light-on-dark tokens. */
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .mixer-meter {
+  background: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .mixer-meter > span,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .runtime-bank > span {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .mixer-meter small,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .runtime-bank small,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .runtime-bank p {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .mixer-meter small,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .runtime-bank small {
+  font-size: 10px;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .mixer-meter b,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .runtime-bank b,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .runtime-bank p {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .mixer-meter b,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .runtime-bank b {
+  color: var(--909-text-primary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .fleet-state.paper-root,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .evidence-hero.pos strong,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .ih-stats .pos {
+  color: var(--909-positive-text);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .module-mandate,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .passport-fact {
+  color: var(--909-text-secondary);
+}
+
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .condition-bank,
+.shell-root.ws909[data-skin="cream"][data-mode="studio"] .decision-ledger {
+  color: var(--909-text-primary);
+  background: rgba(255, 255, 255, .30);
+  border-color: var(--909-border);
+}
+
 @media (max-width: 700px) {
   :where(.shell-root, .m2-app) {
     --909-type-silkscreen: 10px;
@@ -129,5 +495,661 @@
 
   .sv909-workspace-head em {
     text-align: left;
+  }
+}
+
+/* ==========================================================================
+   Mobile hierarchy and cream parity
+
+   The phone presentation keeps the same data seam, but uses readable type,
+   touch-sized controls, and summary-first disclosure.
+   ========================================================================== */
+
+.m2-app:not(.folio-mobile) {
+  --909-mobile-label: 10px;
+  --909-mobile-secondary: 12px;
+  --909-mobile-body: 13px;
+  --909-mobile-title: 18px;
+  --909-mobile-metric: 18px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head {
+  gap: 8px;
+  padding: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-r1 {
+  gap: 8px;
+}
+
+.m2-app:not(.folio-mobile) .m2-brand {
+  gap: 4px;
+}
+
+.m2-app:not(.folio-mobile) .m2-brand b {
+  font-size: 14px;
+}
+
+.m2-app:not(.folio-mobile) .m2-brand small {
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+.m2-app:not(.folio-mobile) .m2-status {
+  min-height: 44px;
+  height: auto;
+  padding: 7px 9px;
+}
+
+.m2-app:not(.folio-mobile) .m2-status b {
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-status small,
+.m2-app:not(.folio-mobile) .m2-status em {
+  font-size: 9px;
+}
+
+.m2-app:not(.folio-mobile) .m2-cog {
+  width: 44px;
+  height: 44px;
+}
+
+.m2-app:not(.folio-mobile) .m2-pill {
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-kill {
+  min-width: 52px;
+  min-height: 40px;
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-kill-wrap > small {
+  font-size: 9px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-r2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-r2 .led-caption {
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+
+.m2-app:not(.folio-mobile) .m2-nav-read {
+  min-width: 68px;
+  align-self: stretch;
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  color: var(--chrome-ink);
+  background: rgba(255, 255, 255, .18);
+  border: 1px solid var(--sep);
+  border-radius: 6px;
+  text-align: right;
+}
+
+.m2-app:not(.folio-mobile) .m2-nav-read small {
+  color: var(--chrome-soft);
+  font: 800 10px/1 var(--mono);
+  letter-spacing: .08em;
+}
+
+.m2-app:not(.folio-mobile) .m2-nav-read b {
+  font: 800 14px/1 var(--mono);
+}
+
+.m2-app:not(.folio-mobile) .m2-padbar {
+  min-height: 64px;
+  gap: 4px;
+  padding: 5px max(5px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left));
+}
+
+.m2-app:not(.folio-mobile) .m2-modepad {
+  min-height: 52px;
+  font-size: 11px;
+}
+
+.m2-app:not(.folio-mobile) .m2-modepad small {
+  font-size: 9px;
+  letter-spacing: .03em;
+}
+
+.m2-app:not(.folio-mobile) .m2-market-switch button,
+.m2-app:not(.folio-mobile) .m2-book-nav button,
+.m2-app:not(.folio-mobile) .m2-studio-tools button,
+.m2-app:not(.folio-mobile) .m2-channel-scope button {
+  min-height: 44px;
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .market-read-strip,
+.m2-app:not(.folio-mobile) .market-read-strip b,
+.m2-app:not(.folio-mobile) .market-read-strip em,
+.m2-app:not(.folio-mobile) .pf-market-risk .pf-head .t,
+.m2-app:not(.folio-mobile) .pf-market-risk .pf-head .pf-basis,
+.m2-app:not(.folio-mobile) .pf-market-risk .pf-head .x,
+.m2-app:not(.folio-mobile) .pf-market-risk-row > span,
+.m2-app:not(.folio-mobile) .pf-market-risk-row > small {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.m2-app:not(.folio-mobile) .pf-market-risk-row > b,
+.m2-app:not(.folio-mobile) .pf-market-risk-row > strong {
+  font-size: 12px;
+}
+
+.m2-app:not(.folio-mobile) .m2-pos-actions button,
+.m2-app:not(.folio-mobile) .m2-pos-closing,
+.m2-app:not(.folio-mobile) .m2-close-error,
+.m2-app:not(.folio-mobile) .m2-close-reasons header b,
+.m2-app:not(.folio-mobile) .m2-close-reasons header span,
+.m2-app:not(.folio-mobile) .m2-close-reasons button b,
+.m2-app:not(.folio-mobile) .m2-close-reasons button small,
+.m2-app:not(.folio-mobile) .m2-close-reasons .skip {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.m2-app:not(.folio-mobile) .m2-screen .tape-read-strip b,
+.m2-app:not(.folio-mobile) .m2-screen .tape-read-strip small,
+.m2-app:not(.folio-mobile) .m2-dock-cap small,
+.m2-app:not(.folio-mobile) .m2-silk,
+.m2-app:not(.folio-mobile) .m2-t-kind,
+.m2-app:not(.folio-mobile) .m2-chick-a13,
+.m2-app:not(.folio-mobile) .m2-dial-lbl {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.m2-app:not(.folio-mobile) .m2-book-nav {
+  min-height: 58px;
+  padding: 9px 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-book-nav b,
+.m2-app:not(.folio-mobile) .m2-studio-tools {
+  font-size: 11px;
+}
+
+.m2-app:not(.folio-mobile) .m2-book-nav small {
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-release-card strong,
+.m2-app:not(.folio-mobile) .m2-release-card small,
+.m2-app:not(.folio-mobile) .m2-release-card code,
+.m2-app:not(.folio-mobile) .m2-rr-a13,
+.m2-app:not(.folio-mobile) .m2-rr-tag,
+.m2-app:not(.folio-mobile) .m2-passport header,
+.m2-app:not(.folio-mobile) .m2-passport p,
+.m2-app:not(.folio-mobile) .m2-passport small,
+.m2-app:not(.folio-mobile) .m2-passport b,
+.m2-app:not(.folio-mobile) .m2-passport code,
+.m2-app:not(.folio-mobile) .m2-passport footer,
+.m2-app:not(.folio-mobile) .m2-fireslbl .fl,
+.m2-app:not(.folio-mobile) .m2-fp-cap,
+.m2-app:not(.folio-mobile) .m2-write-error,
+.m2-app:not(.folio-mobile) .m2-decision-ledger time,
+.m2-app:not(.folio-mobile) .m2-decision-ledger b,
+.m2-app:not(.folio-mobile) .m2-decision-ledger > i {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-hero > span {
+  min-height: 68px;
+  gap: 6px;
+  padding: 10px 8px;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-hero small {
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-hero b {
+  font-size: 15px;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-section > header,
+.m2-app:not(.folio-mobile) .m2-desk-disclosure > summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid #9e988b;
+  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  list-style: none;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-disclosure > summary {
+  cursor: pointer;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-disclosure > summary i {
+  color: var(--909-text-secondary);
+  font: 800 16px/1 var(--mono);
+  font-style: normal;
+  transition: transform .16s ease;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-disclosure[open] > summary i {
+  transform: rotate(180deg);
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-section > header b,
+.m2-app:not(.folio-mobile) .m2-desk-disclosure > summary b {
+  color: #34332e;
+  font: 800 11px/1 var(--mono);
+  letter-spacing: .10em;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-section > header span,
+.m2-app:not(.folio-mobile) .m2-desk-disclosure > summary span {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: #5f5b53;
+  font: 700 10px/1.25 var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-disclosure > summary {
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, #25282b, #191b1d);
+  border-color: #343a3d;
+}
+
+.m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-disclosure > summary b {
+  color: var(--909-text-primary);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-disclosure > summary span,
+.m2-app:not(.folio-mobile)[data-skin="blackout"] .m2-desk-disclosure > summary i {
+  color: var(--909-text-secondary);
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-body {
+  padding: 12px;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-empty,
+.m2-app:not(.folio-mobile) .m2-build-copy,
+.m2-app:not(.folio-mobile) .m2-parity-note {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.m2-app:not(.folio-mobile) .m2-review-modes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+}
+
+.m2-app:not(.folio-mobile) .m2-review-modes button {
+  min-height: 48px;
+}
+
+.m2-app:not(.folio-mobile) .m2-review-modes button b {
+  font-size: 11px;
+}
+
+.m2-app:not(.folio-mobile) .m2-review-modes button small {
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-preflight {
+  gap: 8px;
+}
+
+.m2-app:not(.folio-mobile) .m2-preflight > span {
+  min-height: 92px;
+  gap: 6px;
+  padding: 10px;
+}
+
+.m2-app:not(.folio-mobile) .m2-preflight b,
+.m2-app:not(.folio-mobile) .m2-preflight small {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.m2-app:not(.folio-mobile) .m2-preflight em {
+  font-size: 12px;
+}
+
+.m2-app:not(.folio-mobile) .m2-incident-card {
+  padding: 12px;
+}
+
+.m2-app:not(.folio-mobile) .m2-incident-card header b {
+  font-size: 13px;
+}
+
+.m2-app:not(.folio-mobile) .m2-incident-card header span,
+.m2-app:not(.folio-mobile) .m2-incident-card p {
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.m2-app:not(.folio-mobile) .m2-review-rows b,
+.m2-app:not(.folio-mobile) .m2-review-rows span,
+.m2-app:not(.folio-mobile) .m2-daybooks b,
+.m2-app:not(.folio-mobile) .m2-daybooks em,
+.m2-app:not(.folio-mobile) .m2-bench-list b,
+.m2-app:not(.folio-mobile) .m2-release-receipt b {
+  font-size: 12px;
+}
+
+.m2-app:not(.folio-mobile) .m2-recent-exits b,
+.m2-app:not(.folio-mobile) .m2-recent-exits em {
+  font-size: 12px;
+}
+
+.m2-app:not(.folio-mobile) .m2-recent-exits small,
+.m2-app:not(.folio-mobile) .m2-recent-exits p,
+.m2-app:not(.folio-mobile) .m2-desk-signals time,
+.m2-app:not(.folio-mobile) .m2-desk-signals > div > b {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.m2-app:not(.folio-mobile) .m2-desk-signals > div > span {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.m2-app:not(.folio-mobile) .m2-review-rows small,
+.m2-app:not(.folio-mobile) .m2-bench-list small,
+.m2-app:not(.folio-mobile) .m2-bench-list em,
+.m2-app:not(.folio-mobile) .m2-release-receipt small,
+.m2-app:not(.folio-mobile) .m2-review-tape time,
+.m2-app:not(.folio-mobile) .m2-review-tape b,
+.m2-app:not(.folio-mobile) .m2-review-tape em,
+.m2-app:not(.folio-mobile) .m2-review-tape span,
+.m2-app:not(.folio-mobile) .tape-read-strip b,
+.m2-app:not(.folio-mobile) .tape-read-strip small {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.m2-app:not(.folio-mobile) .m2-nightly .verdict > span,
+.m2-app:not(.folio-mobile) .m2-nightly > div > small,
+.m2-app:not(.folio-mobile) .m2-nightly p,
+.m2-app:not(.folio-mobile) .m2-room-scroll .sentinel-receipt b,
+.m2-app:not(.folio-mobile) .m2-room-scroll .sentinel-receipt small,
+.m2-app:not(.folio-mobile) .m2-review-scan b,
+.m2-app:not(.folio-mobile) .m2-review-scan span,
+.m2-app:not(.folio-mobile) .m2-review-scan small {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.m2-app:not(.folio-mobile) .m2-open-settings,
+.m2-app:not(.folio-mobile) .m2-build-add {
+  min-height: 48px;
+  font-size: 11px;
+}
+
+.m2-app:not(.folio-mobile) .m2-quote-detail > b,
+.m2-app:not(.folio-mobile) .m2-quote-detail > button,
+.m2-app:not(.folio-mobile) .m2-quote-detail small {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.m2-app:not(.folio-mobile) .m2-quote-detail > span {
+  font-size: 12px;
+}
+
+/* Cream phone rooms use cream analytical cards. Play keeps the plot and live
+   option instrument dark; Studio's terminal-like session tape may remain dark. */
+.m2-app:not(.folio-mobile)[data-skin="cream"]:not([data-room="play"]) .m2-main {
+  color: var(--909-text-primary);
+  background: var(--909-surface-canvas);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 7px rgba(0, 0, 0, .20);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"][data-room="studio"] .m2-screen:not(.m2-tape-screen) {
+  --lcd-ink: var(--909-text-primary);
+  --dk-mut: var(--909-text-secondary);
+  --dk-dim: var(--909-text-tertiary);
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 6px rgba(0, 0, 0, .14);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"][data-room="studio"] .m2-screen:not(.m2-tape-screen) .m2-phead {
+  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"][data-room="studio"] .m2-screen:not(.m2-tape-screen) .m2-phead .t,
+.m2-app:not(.folio-mobile)[data-skin="cream"][data-room="studio"] .m2-screen:not(.m2-tape-screen) .m2-phead .x {
+  color: var(--909-text-primary);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .pos,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .up,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .m2-ok,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .m2-receipt-green {
+  color: var(--909-positive-text);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .neg,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .m2-receipt-red {
+  color: var(--909-negative-text);
+}
+
+/* Mobile Research becomes a readable cream card system and the wide table
+   becomes a ranked, summary-first card list. */
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw.compact {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 6px rgba(0, 0, 0, .16);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-head small,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-native header small,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-exact header small,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-running small,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-running em,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw footer,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-exact > p {
+  color: var(--909-text-secondary);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-head em,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-read,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw .pos {
+  color: var(--909-positive-text);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw .neg {
+  color: var(--909-negative-text);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-controls,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-running,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-native,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-exact,
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-interactions > span {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border);
+}
+
+.m2-app:not(.folio-mobile) .srw-head b {
+  font-size: 15px;
+}
+
+.m2-app:not(.folio-mobile) .srw-head small,
+.m2-app:not(.folio-mobile) .srw-head em,
+.m2-app:not(.folio-mobile) .srw-native header small,
+.m2-app:not(.folio-mobile) .srw-exact header small,
+.m2-app:not(.folio-mobile) .srw-native > header em,
+.m2-app:not(.folio-mobile) .srw-exact > header em,
+.m2-app:not(.folio-mobile) .srw-read {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.m2-app:not(.folio-mobile) .srw-controls {
+  gap: 7px;
+  padding: 7px;
+}
+
+.m2-app:not(.folio-mobile) .srw-controls button {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-controls button {
+  color: var(--909-text-secondary);
+  background: #d1cbbd;
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .srw-controls button.on {
+  color: #fff;
+  background: var(--909-positive-text);
+  border-color: var(--909-positive-text);
+}
+
+.m2-app:not(.folio-mobile) .srw-running {
+  gap: 7px;
+  padding: 10px;
+}
+
+.m2-app:not(.folio-mobile) .srw-running > span {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.m2-app:not(.folio-mobile) .srw-running small,
+.m2-app:not(.folio-mobile) .srw-running em {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.m2-app:not(.folio-mobile) .srw-running b {
+  font-size: 16px;
+}
+
+.m2-app:not(.folio-mobile) .srw-native,
+.m2-app:not(.folio-mobile) .srw-exact {
+  gap: 10px;
+  padding: 10px;
+}
+
+.m2-app:not(.folio-mobile) .srw-native > header b,
+.m2-app:not(.folio-mobile) .srw-exact > header b {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.m2-app:not(.folio-mobile) .srw-kpis small {
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .srw-kpis b {
+  font-size: 16px;
+}
+
+.m2-app:not(.folio-mobile) .srw-table {
+  overflow: visible;
+}
+
+.m2-app:not(.folio-mobile) .srw-table-head {
+  display: none;
+}
+
+.m2-app:not(.folio-mobile) .srw-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 8px;
+  padding: 12px 2px;
+  font-size: 12px;
+}
+
+.m2-app:not(.folio-mobile) .srw-row > .srw-channel-cell {
+  grid-column: 1 / -1;
+  font-size: 13px;
+}
+
+.m2-app:not(.folio-mobile) .srw-row > :is(.srw-cell-paths, .srw-cell-win, .srw-cell-avg, .srw-cell-total, .srw-cell-mfe, .srw-cell-exits) {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--909-text-primary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.m2-app:not(.folio-mobile) .srw-row > :is(.srw-cell-paths, .srw-cell-win, .srw-cell-avg, .srw-cell-total, .srw-cell-mfe, .srw-cell-exits)::before {
+  color: var(--909-text-tertiary);
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .07em;
+}
+
+.m2-app:not(.folio-mobile) .srw-cell-paths::before { content: "PATHS"; }
+.m2-app:not(.folio-mobile) .srw-cell-win::before { content: "WIN"; }
+.m2-app:not(.folio-mobile) .srw-cell-avg::before { content: "AVG/CT"; }
+.m2-app:not(.folio-mobile) .srw-cell-total::before { content: "Σ/CT"; }
+.m2-app:not(.folio-mobile) .srw-cell-mfe::before { content: "MFE"; }
+.m2-app:not(.folio-mobile) .srw-cell-exits::before { content: "EXIT MIX"; }
+
+.m2-app:not(.folio-mobile) .srw-manager-list > div {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  padding: 10px 2px;
+  font-size: 10px;
+}
+
+.m2-app:not(.folio-mobile) .srw-interactions > b,
+.m2-app:not(.folio-mobile) .srw-interactions strong,
+.m2-app:not(.folio-mobile) .srw-interactions em,
+.m2-app:not(.folio-mobile) .srw-interactions small,
+.m2-app:not(.folio-mobile) .srw footer,
+.m2-app:not(.folio-mobile) .srw-exact > p {
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+@media (max-width: 380px) {
+  .m2-app:not(.folio-mobile) .m2-brand small {
+    display: none;
+  }
+
+  .m2-app:not(.folio-mobile) .m2-status small {
+    display: none;
+  }
+
+  .m2-app:not(.folio-mobile) .m2-head-r2 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .m2-app:not(.folio-mobile) .m2-nav-read {
+    display: none;
   }
 }

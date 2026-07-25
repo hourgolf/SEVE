@@ -34,7 +34,16 @@ const TABS: { id: DeskTab; label: string; sub: string }[] = [
 const age = (sec: number | null) => sec == null ? "—" : sec < 90 ? `${sec}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${Math.round(sec / 3600)}h`;
 const moneyK = (value: number) => Math.abs(value) >= 1000 ? `$${(value / 1000).toFixed(1)}k` : usd0(value);
 
-function Section({ title, meta, children }: { title: string; meta?: string; children: React.ReactNode }) {
+function Section({ title, meta, children, collapsible = false }: {
+  title: string;
+  meta?: string;
+  children: React.ReactNode;
+  collapsible?: boolean;
+}) {
+  if (collapsible) return <details className="m2-desk-section m2-desk-disclosure">
+    <summary><b>{title}</b>{meta && <span>{meta}</span>}<i aria-hidden="true">⌄</i></summary>
+    <div className="m2-desk-body">{children}</div>
+  </details>;
   return <section className="m2-desk-section"><header><b>{title}</b>{meta && <span>{meta}</span>}</header><div className="m2-desk-body">{children}</div></section>;
 }
 
@@ -85,7 +94,7 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
       </div>
     </Section>
 
-    <Section title="SIGNALS" meta="latest · repeats retained">
+    <Section title="SIGNALS" meta={`${signals.length} latest · tap to inspect`} collapsible>
       <div className="m2-desk-signals">
         {signals.length === 0 ? <div className="m2-desk-empty">listening for signals</div> : signals.map((signal) => <div key={signal.id}>
           <time>{timeOfDay(signal.created_at)}</time><b className={signal.level.toLowerCase()}>{signal.level}</b>
@@ -190,17 +199,17 @@ export function MobileOpsView({ props, channels, onOpenSettings }: { props: Surf
         <span><b>TAPE</b><em>{data.lastIngestTs ? "OBSERVED" : "MISSING"}</em><small>{age(ingestAge)} · {data.snapshot.length} contracts</small></span>
       </div>
     </Section>
-    <Section title="DAY 1 EVIDENCE" meta="configured ≠ observed">
+    <Section title="DAY 1 EVIDENCE" meta="configured ≠ observed · tap to inspect" collapsible>
       <OpsReadinessPanel model={props.opsReadiness} compact />
     </Section>
     <div className="m2-desk-hero">
       <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span><span><small>DAY</small><b>{signedUsd(liveFund.dayPnl)}</b></span>
       <span><small>DB ACTIVE</small><b>{active.length}</b></span><span><small>DB RISK</small><b>{moneyK(risk)}</b></span>
     </div>
-    <Section title="DAY BOOKS" meta={`${feed.recentTrades.length} closed · ${feed.positions.length} open`}>
+    <Section title="DAY BOOKS" meta={`${feed.recentTrades.length} closed · ${feed.positions.length} open`} collapsible>
       {rows.length === 0 ? <div className="m2-desk-empty">no attributed P&amp;L today</div> : <div className="m2-daybooks">{rows.map(({ channel, pnl }) => <span key={channel.slug}><i style={{ background: pmVar(channel.color) }} /><b>{channel.slug}</b><em className={pnl < 0 ? "neg" : "pos"}>{signedUsd(pnl)}</em></span>)}</div>}
     </Section>
-    <Section title="MONDAY RELEASE" meta="startup receipt · not liveness">
+    <Section title="MONDAY RELEASE" meta="startup receipt · not liveness" collapsible>
       {release ? <div className="m2-release-receipt"><b>{release.releaseId}</b><small>{release.configHash}</small></div> : <div className="m2-desk-empty">dedicated release receipt unavailable</div>}
     </Section>
     <button type="button" className="m2-open-settings" onClick={onOpenSettings}>OPEN SETTINGS · AUTH · PUSH · LOG</button>

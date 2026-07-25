@@ -92,10 +92,10 @@ function NativeTable({
   return <div className="srw-table">
     <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}CHANNEL</span><span>PATHS</span><span>WIN</span><span>AVG/CT</span><span>Σ/CT</span><span>MFE</span><span>EXIT MIX</span></div>
     {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : rows.map((row) => <div className="srw-row" key={row.slug}>
-      <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span>{row.slug}</span></b><span>{row.scored}/{row.paths}</span><span>{percent(row.winners, row.scored)}</span>
-      <strong className={(row.averagePerPath ?? 0) >= 0 ? "pos" : "neg"}>{money(row.averagePerPath)}</strong>
-      <span>{money(row.pnlPerContract)}</span><span>{row.averageMfePct == null ? "—" : `${row.averageMfePct}%`}</span>
-      <span>{row.targets}T · {row.stops}S · {row.flattens}B</span>
+      <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span>{row.slug}</span></b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
+      <strong className={`srw-cell-avg ${(row.averagePerPath ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.averagePerPath)}</strong>
+      <span className="srw-cell-total">{money(row.pnlPerContract)}</span><span className="srw-cell-mfe">{row.averageMfePct == null ? "—" : `${row.averageMfePct}%`}</span>
+      <span className="srw-cell-exits">{row.targets}T · {row.stops}S · {row.flattens}B</span>
     </div>)}
   </div>;
 }

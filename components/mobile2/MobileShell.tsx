@@ -108,8 +108,7 @@ export function MobileShell(props: SurfaceProps) {
         <div className="m2-head-meta">
           <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
           <span className="grow" />
-          <span className={`m2-pill m2-run ${runCls}`}>{runLabel}</span>
-          <span className={`m2-pill m2-md ${desk.fund.mode}`}>{desk.fund.mode === "live" ? "LIVE" : "PAPER"}</span>
+          <span className={`m2-pill m2-run ${runCls}`}>{runLabel} · {desk.fund.mode === "live" ? "LIVE" : "PAPER"}</span>
           <MobileKillControl halted={desk.fund.is_halted} write={props.write} />
         </div>
         <div className="m2-head-r2">
@@ -119,9 +118,7 @@ export function MobileShell(props: SurfaceProps) {
           <div className="m2-led-mod">
             <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
           </div>
-          <div className="m2-led-mod">
-            <LedDisplay value={navK} digits={5} unit="K" color="var(--led-amber)" caption="nav $" />
-          </div>
+          <span className="m2-nav-read"><small>NAV</small><b>${navK}K</b></span>
         </div>
       </header>
       <div className="m2-band"><i /><i /><i /><i /></div>
