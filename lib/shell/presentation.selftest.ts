@@ -52,10 +52,19 @@ assert.match(workstationShell, /aria-label=\{`Account \$\{index \+ 1\}: \$\{acco
 assert.match(workstationCss, /--ws-nav-width:220px; --ws-main-gap:8px; --ws-telemetry-edge:3px/);
 assert.match(workstationCss, /grid-template-columns: calc\(var\(--ws-nav-width\) \+ var\(--ws-main-gap\) - var\(--ws-telemetry-edge\)\) repeat\(7/);
 assert.match(workstationCss, /\.ws-account-bank \{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
-assert.match(workstationCss, /\.ws-account-key \.seven-seg \{ width:24px; height:44px; \}/);
+assert.match(workstationCss, /\.ws-account-key \.seven-seg \{ width:18px; height:34px; \}/);
 assert.match(workstationCss, /\.ws-account-key\.on::after \{ background:var\(--hw-green\)/);
-assert.match(workstationCss, /\.ws-metric\.pos>span\{color:var\(--hw-green,#55d766\)\}/);
-assert.match(workstationCss, /\.ws-metric\.neg>span\{color:var\(--hw-red-soft,#ff6044\)\}/);
+assert.ok(ledDisplay.includes('"+": "g"'));
+assert.ok(ledDisplay.includes('":": ""'));
+assert.match(workstationShell, /className="ws-day-readouts"/);
+assert.ok(workstationShell.includes('<LedDisplay value={dayPctLed} digits={dayPctLed.replace(".", "").length} color={dayLedColor} unit="%"'));
+assert.match(workstationCss, /\.ws-led-percent \.seven-seg \{ width:6px; height:12px; \}/);
+assert.match(workstationShell, /<LedDisplay value=\{clock\} digits=\{8\} color="var\(--ws-led-neutral\)"/);
+assert.match(workstationCss, /\.ws-clock-led \.seven-seg \{ width:7px; height:15px; \}/);
+assert.match(workstationShell, /className="ws-scope" aria-label="Decorative ambient signal scope"/);
+assert.match(workstationCss, /@keyframes ws-scope-sweep/);
+assert.doesNotMatch(workstationShell, /ws-density/);
+assert.doesNotMatch(workstationShell, /toggleDensity/);
 assert.match(workstationShell, /const startOfDayNav = liveFund\.nav - liveFund\.dayPnl/);
 assert.match(workstationShell, /const dayPnlPct = startOfDayNav > 0 \? \(liveFund\.dayPnl \/ startOfDayNav\) \* 100 : null/);
 assert.doesNotMatch(workstationShell, /dayChangePct/);
@@ -87,4 +96,4 @@ assert.match(foundationCss, /\.srw-row \{[\s\S]{0,80}min-height:\s*44px;[\s\S]{0
 assert.match(foundationCss, /:is\(\.pf-market-target, \.pf-markets-chart\) > \.panel/);
 assert.match(foundationCss, /:is\(\s*\.pf-market-target,\s*\.pf-markets-chart\s*\) :is\([\s\S]{0,100}\.chart-toggle,[\s\S]{0,60}\.seg[\s\S]{0,40}\) button\.on/);
 
-console.log("presentation-selftest: 69/69 passed");
+console.log("presentation-selftest: 78/78 passed");

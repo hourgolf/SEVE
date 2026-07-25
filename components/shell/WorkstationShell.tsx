@@ -57,7 +57,7 @@ const ledCompact = (value: number): { value: string; digits: number; unit?: stri
 };
 
 export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
-  const { mode, setMode, skin, toggleSkin, density, toggleDensity } = useShell();
+  const { mode, setMode, skin, toggleSkin, density } = useShell();
   const [now, setNow] = useState<Date | null>(null);
   const [performSection, setPerformSection] = useState<PerformSection>("overview");
   const [authOpen, setAuthOpen] = useState(false);
@@ -99,6 +99,9 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
   const navLed = ledCompact(liveFund.nav);
   const dayLed = ledCompact(liveFund.dayPnl);
+  const dayPctLed = dayPnlPct == null
+    ? null
+    : `${dayPnlPct >= 0 ? "+" : "-"}${Math.abs(dayPnlPct).toFixed(2)}`;
   const capacityLed = ledCompact(deskCapacity);
   const positionsLed = ledCompact(feed.positions.length);
   const riskLedValue = riskUsed.toFixed(1);
@@ -169,13 +172,24 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
           </div>
         </div>
         <div className="ws-metric ws-metric--led"><small>NAV</small><div className="ws-led-readout neutral" role="img" aria-label={`NAV ${compactUsd(liveFund.nav)}`}><span aria-hidden="true">$</span><LedDisplay value={navLed.value} digits={navLed.digits} color="var(--ws-led-neutral)" unit={navLed.unit} /></div></div>
-        <div className={`ws-metric ws-metric--led ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}><small>DAY P&amp;L</small><div className="ws-led-readout" role="img" aria-label={`Day P and L ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div><span>{dayPnlPct != null ? `${dayPnlPct >= 0 ? "+" : ""}${dayPnlPct.toFixed(2)}%` : "—"}</span></div>
+        <div className={`ws-metric ws-metric--led ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}>
+          <small>DAY P&amp;L</small>
+          <div className="ws-day-readouts">
+            <div className="ws-led-readout" role="img" aria-label={`Day P and L ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div>
+            <div className="ws-led-percent" role="img" aria-label={dayPnlPct == null ? "Day P and L percentage unavailable" : `Day P and L ${dayPnlPct.toFixed(2)} percent`}>
+              {dayPctLed ? <LedDisplay value={dayPctLed} digits={dayPctLed.replace(".", "").length} color={dayLedColor} unit="%" /> : <span>—</span>}
+            </div>
+          </div>
+        </div>
         <div className="ws-metric ws-metric--led"><small>DESK CAPACITY</small><div className="ws-led-readout neutral" role="img" aria-label={`Desk capacity ${compactUsd(deskCapacity)}`}><span aria-hidden="true">$</span><LedDisplay value={capacityLed.value} digits={capacityLed.digits} color="var(--ws-led-neutral)" unit={capacityLed.unit} /></div></div>
         <div className="ws-metric ws-metric--led"><small>OPEN POSITIONS</small><div className="ws-led-readout neutral" role="img" aria-label={`${feed.positions.length} open positions`}><LedDisplay value={positionsLed.value} digits={Math.max(2, positionsLed.digits)} color="var(--ws-led-neutral)" /></div></div>
         <div className="ws-metric ws-metric--led"><small>RISK USED</small><div className="ws-led-readout neutral" role="img" aria-label={`Risk used ${riskLedValue} percent`}><LedDisplay value={riskLedValue} digits={riskLedValue.replace(".", "").length} color="var(--ws-led-neutral)" unit="%" /></div></div>
         <div className={`ws-metric ws-state ${processTelemetry.tone}`} title={processTelemetry.detail}><small>DATA</small><strong>{processTelemetry.label}<i /></strong></div>
         <div className={`ws-metric ws-state ${brokerTelemetry.tone}`} title={brokerTelemetry.detail}><small>BROKER</small><strong>{brokerTelemetry.label}<i /></strong></div>
-        <div className="ws-clock"><strong>{clock} PT</strong><span>{incident.session.replaceAll("_", " ")}</span></div>
+        <div className="ws-clock">
+          <div className="ws-clock-led" role="img" aria-label={`${clock} Pacific time`}><LedDisplay value={clock} digits={8} color="var(--ws-led-neutral)" /><i aria-hidden="true">PT</i></div>
+          <span>{incident.session.replaceAll("_", " ")}</span>
+        </div>
       </section>
 
       <main className="ws-main">
@@ -226,11 +240,15 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
             strategists={view.desk.strategists}
           />
         </section>
-        <section className="ws-controls"><small>CONTROL</small><div>
-          <span className={`ws-dial ${incidentOn ? "hot" : "ok"}`}><i /><b>CHECK</b><em>{incident.severity}</em></span>
-          <span className="ws-dial blue"><i style={{ transform: `rotate(${Math.min(130, -130 + riskUsed * 8)}deg)` }} /><b>RISK</b><em>{riskUsed.toFixed(1)}%</em></span>
-          <span className="ws-dial amber"><i /><b>SIZE</b><em>{feed.positions.length} open</em></span>
-          <button type="button" className="ws-density" onClick={toggleDensity}><b>{density === "compact" ? "CMP" : "COM"}</b><span>DENSITY</span></button>
+        <section className="ws-scope" aria-label="Decorative ambient signal scope"><small>SIGNAL</small><div>
+          <div className="ws-scope-screen" aria-hidden="true">
+            <svg viewBox="0 0 260 48" preserveAspectRatio="none">
+              <path className="ws-scope-trace ws-scope-trace--a" d="M0 25 C18 9 30 40 49 23 S82 12 98 27 S126 38 145 20 S177 9 194 27 S225 39 260 22" />
+              <path className="ws-scope-trace ws-scope-trace--b" d="M0 28 C22 36 35 12 55 27 S88 36 107 21 S139 13 157 29 S194 34 211 20 S242 12 260 27" />
+              <line className="ws-scope-sweep" x1="0" y1="2" x2="0" y2="46" />
+            </svg>
+          </div>
+          <span>AMBIENT</span>
         </div></section>
         <section className="ws-master"><small>MASTER</small><div className="ws-master-knob"><i /></div><KillControl halted={fund.is_halted} /></section>
       </footer>

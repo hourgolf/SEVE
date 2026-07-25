@@ -27,6 +27,8 @@ const DIGIT: Record<string, string> = {
   "8": "abcdefg",
   "9": "abcfgd",
   "-": "g",
+  "+": "g",
+  ":": "",
   "$": "afgcd",
   "E": "afged",
   "V": "",
@@ -67,6 +69,24 @@ function SevenSeg({
         opacity={dot ? 1 : 0.06}
         style={dot ? { filter: `drop-shadow(0 0 2.5px ${color})` } : undefined}
       />
+      {glyph === "+" && (
+        <line
+          x1="20"
+          y1="25"
+          x2="20"
+          y2="47"
+          stroke={color}
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 2.5px ${color})` }}
+        />
+      )}
+      {glyph === ":" && (
+        <>
+          <circle cx="20" cy="25" r="3" fill={color} style={{ filter: `drop-shadow(0 0 2.5px ${color})` }} />
+          <circle cx="20" cy="47" r="3" fill={color} style={{ filter: `drop-shadow(0 0 2.5px ${color})` }} />
+        </>
+      )}
       {glyph === "$" && (
         <line
           x1="20"
