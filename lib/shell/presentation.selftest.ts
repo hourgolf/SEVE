@@ -15,6 +15,8 @@ const mobileShell = readFileSync("components/mobile2/MobileShell.tsx", "utf8");
 const ledDisplay = readFileSync("components/console/hw/LedDisplay.tsx", "utf8");
 const shadowResearch = readFileSync("components/perform/ShadowResearchWorkspace.tsx", "utf8");
 const foundationCss = readFileSync("app/seve-909.css", "utf8");
+const workstationCss = readFileSync("app/workstation.css", "utf8");
+const performCss = readFileSync("app/perform.css", "utf8");
 assert.match(mobileShell, /<LedWordmark value="\$EVE" color=\{dayColor\}/);
 assert.match(mobileShell, /const dayColor = down \? "var\(--led-red\)" : "var\(--pm-green\)"/);
 assert.match(ledDisplay, /"\$": "afgcd"[\s\S]*"E": "afged"[\s\S]*"V": ""/);
@@ -25,5 +27,8 @@ assert.match(shadowResearch, /aria-label="Older research session"/);
 assert.match(shadowResearch, /shadowResearch\.sessions\.slice\(RECENT_SESSION_LIMIT\)/);
 assert.match(foundationCss, /\[data-skin="cream"\] \.m2-book-nav button/);
 assert.match(foundationCss, /\[data-skin="cream"\] \.m2-markets-chain > \.panel/);
+assert.match(workstationCss, /\.ws-deck-mode,\.ws-transport \{ display:none; \}/);
+assert.match(workstationCss, /\.ws-left-copy b\{[^}]*font-size:10px/);
+assert.match(performCss, /grid-auto-flow: column; grid-auto-columns: minmax\(182px, 1fr\)/);
 
-console.log("presentation-selftest: 18/18 passed");
+console.log("presentation-selftest: 21/21 passed");
