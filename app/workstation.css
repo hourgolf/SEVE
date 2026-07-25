@@ -3,7 +3,7 @@
 body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 
 .ws909 {
-  --metal: #d8d3c4; --metal-2: #cfc9b8; --metal-hi: #efe7d2; --metal-edge: #777269;
+  --metal: #e8e3da; --metal-2: #e1dbd3; --metal-hi: #f2f1ee; --metal-edge: #777269;
   --screen: #0c1113; --screen-2: #111719; --screen-edge: #050707;
   --green: #55d766; --orange: #f05a28; --blue: #3b85df; --amber: #e19a2d; --red: #e24b2e;
   --ws-nav-width:220px; --ws-main-gap:8px; --ws-telemetry-edge:3px; --ws-led-neutral:#e5dfcc;
@@ -13,7 +13,7 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
   background:
     linear-gradient(115deg, rgba(255,255,255,.32), transparent 18%, rgba(255,255,255,.12) 55%, transparent 78%),
     repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 1px, rgba(45,42,34,.015) 1px 3px),
-    linear-gradient(180deg, var(--909-surface-canvas, #d8d3c4), var(--909-surface-panel-inset, #cfc9b8));
+    linear-gradient(180deg, var(--909-surface-canvas, #e8e3da), var(--909-surface-panel-inset, #e1dbd3));
   border: 1px solid #787267; border-radius: 0 0 13px 13px;
   box-shadow: inset 0 1px 0 #fff, inset 0 -7px 10px rgba(56,51,41,.27), 0 7px 20px rgba(0,0,0,.45);
 }
@@ -112,11 +112,11 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 .ws-sequencer .m-sqbar { height:100%; gap:8px; padding:12px 8px 4px; color:#4e4c46; }
 .ws-sequencer .m-sq-lbl { display:none; }
 .ws-sequencer .m-sq-mini { gap:4px; }
-.ws-sequencer .m-sq-mini i { height:31px; border:2px solid #4b4942; border-radius:3px; background:linear-gradient(180deg,var(--909-surface-panel,#efe7d2),color-mix(in srgb,var(--909-surface-panel-inset,#cfc9b8) 70%,#777269)); box-shadow:inset 0 1px 0 #fff,0 3px 1px #69645b; opacity:1 !important; }
+.ws-sequencer .m-sq-mini i { height:31px; border:2px solid #4b4942; border-radius:3px; background:linear-gradient(180deg,var(--909-surface-panel,#f2f1ee),color-mix(in srgb,var(--909-surface-panel-inset,#e1dbd3) 70%,#777269)); box-shadow:inset 0 1px 0 #fff,0 3px 1px #69645b; opacity:1 !important; }
 .ws-sequencer .m-sq-step,.ws-sequencer .m-sq-ch { padding-top:8px; color:#4e4c46; font-size:9px; }
 .ws-sequencer .m-sq-play { min-width:42px; min-height:32px; margin:8px 3px 0 0; color:#494740; background:linear-gradient(180deg,#e5e0d2,#b9b3a5); border-color:#777166; box-shadow:inset 0 1px 0 #fff,0 2px 0 #716c61; }
 .ws-sequencer .m-sq-play.busy { color:#fff; background:linear-gradient(180deg,#ff7b30,#e44f24); border-color:#8d321d; }
-.ws-sequencer .m-sqbody { position:absolute; left:-8px; right:-8px; bottom:50px; z-index:70; max-height:min(46vh,430px); padding:10px; overflow-y:auto; color:var(--ink,#2a2a24); background:linear-gradient(180deg,var(--909-surface-panel,#efe7d2),var(--909-surface-panel-inset,#cfc9b8)); border:2px solid #555149; border-radius:8px 8px 4px 4px; box-shadow:inset 0 1px 0 #fff,0 -8px 24px rgba(0,0,0,.38); }
+.ws-sequencer .m-sqbody { position:absolute; left:-8px; right:-8px; bottom:50px; z-index:70; max-height:min(46vh,430px); padding:10px; overflow-y:auto; color:var(--ink,#4c4943); background:linear-gradient(180deg,var(--909-surface-panel,#f2f1ee),var(--909-surface-panel-inset,#e1dbd3)); border:2px solid #555149; border-radius:8px 8px 4px 4px; box-shadow:inset 0 1px 0 #fff,0 -8px 24px rgba(0,0,0,.38); }
 .ws-sequencer .m-sqbody .sq-steps { grid-template-columns:repeat(16,minmax(0,1fr)); gap:5px; }
 .ws-sequencer .m-sqbody .sq-step { height:50px; }
 .ws-sequencer .m-sqbody .sq-time { display:block; font-size:7px; }
@@ -228,7 +228,7 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
    content. Dark glass remains glass; the workstation body, navigation and deck
    become graphite hardware while preserving the same geometry and controls. */
 .ws909[data-skin="blackout"] {
-  --metal:#1c1d1f; --metal-2:#101516; --metal-hi:#252b2d; --metal-edge:#050606;
+  --metal:#262728; --metal-2:#1d2223; --metal-hi:#232727; --metal-edge:#050606;
   color:var(--909-text-primary);
   background:
     radial-gradient(900px 420px at 50% -12%,rgba(255,255,255,.055),transparent 62%),
@@ -261,7 +261,7 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 .ws909[data-skin="blackout"] .ws-left button.on { border-color:rgba(85,215,102,.24); background:linear-gradient(90deg,rgba(85,215,102,.12),rgba(85,215,102,.02)); }
 .ws909[data-skin="blackout"] .ws-left button.on .ws-left-copy b { color:#7ee88b; }
 .ws909[data-skin="blackout"] .ws-left button.on .ws-left-copy small { color:#6cae74; }
-.ws909[data-skin="blackout"] .ws-left .ws-auth-launch .ws-left-copy b { color:#e0a23f; }
+.ws909[data-skin="blackout"] .ws-left .ws-auth-launch .ws-left-copy b { color:#dbae6e; }
 .ws909[data-skin="blackout"] .ws-system small { color:#d4d5cf; }
 .ws909[data-skin="blackout"] .ws-deck {
   border-color:#343738; background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(0,0,0,.2));

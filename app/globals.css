@@ -9,33 +9,33 @@
      [data-theme="blackout"] (console.css) re-declares these same token NAMES to
      the graphite values — so this is the single source of truth for both themes.
      Recessed LCD "screen" tokens (--lcd*) are theme-INVARIANT (near-black both). === */
-  --bg: #d8d3c4;            /* Figma Cream: chassis */
-  --panel: #efe7d2;         /* Figma Cream: panel */
-  --panel-2: #cfc9b8;       /* Figma Cream: inset */
-  --panel-3: #e4decd;       /* derived light row between panel and inset */
+  --bg: #e8e3da;            /* Figma Cream Draft: chassis */
+  --panel: #f2f1ee;         /* Figma Cream Draft: panel */
+  --panel-2: #e1dbd3;       /* Figma Cream Draft: inset */
+  --panel-3: #e9e5df;       /* derived light row between panel and inset */
   --border: rgba(60, 52, 30, 0.14); /* Figma Cream Draft: subtle line */
   --border-bright: rgba(60, 52, 30, 0.26); /* Figma Cream Draft: strong line */
-  --text: #2c2a24;          /* Figma Cream: primary text */
-  --muted: #5f5b53;         /* Figma Cream: muted text */
+  --text: #4c4943;          /* Figma Cream Draft: primary text */
+  --muted: #737068;         /* Figma Cream Draft: muted text */
   --muted-2: #777269;       /* Figma Cream Draft: disabled text */
-  --green: #0e6132;
-  --red: #9e2d1c;
-  --amber: #8a5b00;
-  --blue: #285f7a;
+  --green: #3b7c48;
+  --red: #933e35;
+  --amber: #bc8b51;
+  --blue: #385e77;
   /* recessed LCD "screen" — theme-INVARIANT (near-black both themes). --lcd-ink is
      the LIGHT text on those screens; --lcd-up/down are the BRIGHT P&L colours for
      dark screens (vs the deep --green/--red used on cream cards). */
   --lcd: #14181b;
   --lcd-2: #0f1214;
   --lcd-edge: #0a0a0b;
-  --lcd-ink: #e9eef0;
-  --lcd-up: #6cc06d;
-  --lcd-down: #e07a58;
+  --lcd-ink: #e7eae5;
+  --lcd-up: #88b780;
+  --lcd-down: #d27f60;
   --plate-ink: #d7d5cb;
   /* cream-TE accent system — a single orange for live/active states + named tones */
   --accent: #d87750;
   --accent-cream: #d87750;
-  --nav-orange: #e0a23f;
+  --nav-orange: #d87750;
   --pill: #33332f;
   --mute: #d98e6e;
   --start: #2f5d39;
@@ -1362,7 +1362,7 @@ tr:hover td.clk {
   font-size: 11px; line-height: 1; cursor: pointer;
   transition: color 0.12s, border-color 0.12s;
 }
-.pos-cancel:hover { color: var(--text, #e9eef0); border-color: var(--muted, #7d8a90); }
+.pos-cancel:hover { color: var(--text, #e7eae5); border-color: var(--muted, #7d8a90); }
 td.clk.sel {
   background: rgba(59, 158, 255, 0.16);
   box-shadow: inset 0 0 0 1px rgba(59, 158, 255, 0.4);

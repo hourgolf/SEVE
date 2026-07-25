@@ -26,10 +26,10 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
   --fs-slug: calc(var(--dz, 1) * clamp(14px, 1vw, 18px));
   --fs-dslug: calc(var(--dz, 1) * clamp(12px, 0.82vw, 15px));
   --line: rgba(255, 255, 255, 0.07); --line-2: rgba(255, 255, 255, 0.13);
-  --amber: #e0a23f; --red-soft: #e07a58; --green-soft: #6cc06d;
+  --amber: #dbae6e; --red-soft: #d27f60; --green-soft: #88b780;
   /* fires colours + P&L — BLACKOUT defaults (readable on dark); cream overrides below */
-  --fire-stop: #e07a58; --fire-take: #6cc06d;
-  --st-pos: #2fd573; --st-neg: #e07a58;
+  --fire-stop: #d27f60; --fire-take: #88b780;
+  --st-pos: #88b780; --st-neg: #d27f60;
   --pad-well: rgba(0, 0, 0, 0.4);
 
   height: calc(100vh - var(--h-top) - 2px);
@@ -44,8 +44,8 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 }
 .shell-root[data-skin="cream"][data-mode="studio"] .studio {
   --line: rgba(60, 52, 30, 0.16); --line-2: rgba(60, 52, 30, 0.28);
-  --fire-stop: #be3326; --fire-take: #1c7a44;
-  --st-pos: #0e6132; --st-neg: #9e2d1c;
+  --fire-stop: #933e35; --fire-take: #3b7c48;
+  --st-pos: #3b7c48; --st-neg: #933e35;
 }
 
 /* ---------- CHANNEL RACK — the hardware bezel ------------------------------- */

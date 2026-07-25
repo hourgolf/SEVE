@@ -28,97 +28,97 @@
   --909-type-title: 24px;
 
   --909-success: var(--909-positive-text, var(--hw-green, var(--m2-green, #2fd573)));
-  --909-attention: var(--909-warning-text, var(--hw-amber, var(--m2-amber, #e0a23f)));
-  --909-danger: var(--909-negative-text, var(--hw-red-soft, var(--m2-red-soft, #e07a58)));
-  --909-info: var(--909-info-text, var(--m2-blue, #5aa0e6));
-  --909-on-dark: var(--lcd-ink, #e9eef0);
+  --909-attention: var(--909-warning-text, var(--hw-amber, var(--m2-amber, #dbae6e)));
+  --909-danger: var(--909-negative-text, var(--hw-red-soft, var(--m2-red-soft, #d27f60)));
+  --909-info: var(--909-info-text, var(--m2-blue, #7faad6));
+  --909-on-dark: var(--lcd-ink, #e7eae5);
   --909-on-dark-muted: var(--dk-mut, #8a949a);
 
   /* Control-state language: an amber locator selects a value, an orange
      locator navigates the workstation, green enables an overlay or reports
      health, and red remains reserved for destructive/risk states. */
-  --909-control-selected-top: #e3dcc8;
-  --909-control-selected-bottom: #c8bfaa;
-  --909-control-selected-text: #292925;
+  --909-control-selected-top: #e8e3da;
+  --909-control-selected-bottom: #e1dbd3;
+  --909-control-selected-text: #4c4943;
   --909-control-selected-border: #9a8966;
   --909-control-selected-strike: #b88724;
   --909-control-primary-top: #ff7038;
-  --909-control-primary-bottom: var(--accent, #ef5a23);
+  --909-control-primary-bottom: var(--accent, #d87750);
   --909-control-primary-text: #1a0801;
 }
 
 :where(.ws909, .m2-app)[data-skin="cream"] {
-  --909-surface-canvas: #d8d3c4;
-  --909-surface-panel: #efe7d2;
-  --909-surface-panel-raised: #efe7d2;
-  --909-surface-panel-inset: #cfc9b8;
+  --909-surface-canvas: #e8e3da;
+  --909-surface-panel: #f2f1ee;
+  --909-surface-panel-raised: #f2f1ee;
+  --909-surface-panel-inset: #e1dbd3;
   --909-surface-instrument: #0c1113;
-  --909-text-primary: #2c2a24;
-  --909-text-secondary: #5f5b53;
+  --909-text-primary: #4c4943;
+  --909-text-secondary: #737068;
   --909-text-tertiary: #777269;
   --909-neutral-text: #5f5b53;
-  --909-positive-text: #0e6132;
-  --909-positive-icon: #0e6132;
-  --909-positive-fill: rgba(14, 97, 50, .10);
-  --909-negative-text: #9e2d1c;
-  --909-warning-text: #8a5b00;
-  --909-info-text: #285f7a;
+  --909-positive-text: #3b7c48;
+  --909-positive-icon: #3b7c48;
+  --909-positive-fill: rgba(59, 124, 72, .10);
+  --909-negative-text: #933e35;
+  --909-warning-text: #bc8b51;
+  --909-info-text: #385e77;
   --909-border: rgba(60, 52, 30, .14);
   --909-border-strong: rgba(60, 52, 30, .26);
   --909-focus: #285f7a;
-  --909-scroll-track: #b8b2a4;
-  --909-scroll-track-edge: #8d877a;
-  --909-scroll-track-well: #d3cdbf;
-  --909-scroll-thumb: #66645e;
-  --909-scroll-thumb-hi: #918d83;
-  --909-scroll-thumb-lo: #4f4e49;
-  --909-control-rest-top: #ebe6d8;
-  --909-control-rest-bottom: #d8d2c3;
-  --909-control-rest-text: #292925;
+  --909-scroll-track: #d8d2ca;
+  --909-scroll-track-edge: #a8a39b;
+  --909-scroll-track-well: #ece8e2;
+  --909-scroll-thumb: #737068;
+  --909-scroll-thumb-hi: #99958e;
+  --909-scroll-thumb-lo: #5f5b53;
+  --909-control-rest-top: #f2f1ee;
+  --909-control-rest-bottom: #e8e3da;
+  --909-control-rest-text: #4c4943;
   --909-control-rest-border: #8d877a;
   --909-control-rest-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
-  --909-control-selected-top: #e3dcc8;
-  --909-control-selected-bottom: #c8bfaa;
-  --909-control-selected-text: #292925;
+  --909-control-selected-top: #e8e3da;
+  --909-control-selected-bottom: #e1dbd3;
+  --909-control-selected-text: #4c4943;
   --909-control-selected-border: #9a8966;
   --909-control-selected-strike: #b88724;
-  --909-control-toggle-fill: #0e6132;
+  --909-control-toggle-fill: #3b7c48;
   --909-control-toggle-text: #fff;
 }
 
 :where(.ws909, .m2-app)[data-skin="blackout"] {
-  --909-surface-canvas: #1c1d1f;
-  --909-surface-panel: #101516;
-  --909-surface-panel-raised: #101516;
-  --909-surface-panel-inset: #0b0f10;
+  --909-surface-canvas: #262728;
+  --909-surface-panel: #1d2223;
+  --909-surface-panel-raised: #1d2223;
+  --909-surface-panel-inset: #232727;
   --909-surface-instrument: #080b0c;
-  --909-text-primary: #e9eef0;
-  --909-text-secondary: #a6afb2;
+  --909-text-primary: #e7eae5;
+  --909-text-secondary: #aeb2aa;
   --909-text-tertiary: #6f797d;
   --909-neutral-text: #a6afb2;
-  --909-positive-text: #6cc06d;
-  --909-positive-icon: #6cc06d;
-  --909-positive-fill: rgba(108, 192, 109, .10);
-  --909-negative-text: #e07a58;
-  --909-warning-text: #e0a23f;
-  --909-info-text: #5aa0e6;
+  --909-positive-text: #88b780;
+  --909-positive-icon: #88b780;
+  --909-positive-fill: rgba(136, 183, 128, .10);
+  --909-negative-text: #d27f60;
+  --909-warning-text: #dbae6e;
+  --909-info-text: #7faad6;
   --909-border: rgba(255, 255, 255, .07);
   --909-border-strong: rgba(255, 255, 255, .13);
   --909-focus: #5aa0e6;
-  --909-scroll-track: #090c0d;
-  --909-scroll-track-edge: #30383b;
-  --909-scroll-track-well: #151a1c;
-  --909-scroll-thumb: #596266;
-  --909-scroll-thumb-hi: #7e898d;
-  --909-scroll-thumb-lo: #343b3e;
-  --909-control-rest-top: #34383a;
-  --909-control-rest-bottom: #17191a;
-  --909-control-rest-text: #a5afb3;
+  --909-scroll-track: #161a1b;
+  --909-scroll-track-edge: #383d3e;
+  --909-scroll-track-well: #232727;
+  --909-scroll-thumb: #6f797d;
+  --909-scroll-thumb-hi: #929b9e;
+  --909-scroll-thumb-lo: #444b4d;
+  --909-control-rest-top: #262728;
+  --909-control-rest-bottom: #1d2223;
+  --909-control-rest-text: #aeb2aa;
   --909-control-rest-border: #41474a;
   --909-control-rest-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
-  --909-control-selected-top: #2a2e2f;
-  --909-control-selected-bottom: #111516;
-  --909-control-selected-text: #e9eef0;
+  --909-control-selected-top: #232727;
+  --909-control-selected-bottom: #1d2223;
+  --909-control-selected-text: #e7eae5;
   --909-control-selected-border: #78652e;
   --909-control-selected-strike: #d2a13b;
   --909-control-toggle-fill: #237444;
@@ -2349,6 +2349,69 @@
 }
 
 .m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-book-nav b,
+  .m2-desk-hero b,
+  .m2-desk-section > header b,
+  .m2-desk-disclosure > summary b,
+  .m2-recent-exits b,
+  .m2-desk-signals > div > span,
+  .m2-review-rows b,
+  .m2-review-rows span,
+  .m2-nightly,
+  .m2-nightly .verdict > span,
+  .m2-review-tape span
+) {
+  color: var(--909-text-primary);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-book-nav small,
+  .m2-desk-hero small,
+  .m2-desk-section > header span,
+  .m2-desk-disclosure > summary span,
+  .m2-recent-exits small,
+  .m2-recent-exits p,
+  .m2-desk-signals time,
+  .m2-review-rows small,
+  .m2-nightly > div > small,
+  .m2-review-tape time,
+  .m2-review-tape b,
+  .m2-preflight small,
+  .m2-bench-list small,
+  .m2-release-receipt small
+) {
+  color: var(--909-text-secondary);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-desk-hero b.pos,
+  .m2-room-scroll .sentinel-receipt.green,
+  .tape-read-strip.green,
+  .m2-preflight em
+) {
+  color: var(--909-positive-text);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-desk-hero b.neg,
+  .m2-room-scroll .sentinel-receipt.red,
+  .tape-read-strip.red,
+  .m2-bench-list em
+) {
+  color: var(--909-negative-text);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-desk-hero b.warn,
+  .m2-room-scroll .sentinel-receipt.yellow,
+  .tape-read-strip.yellow,
+  .m2-nightly .verdict > b,
+  .m2-review-tape em
+) {
+  color: var(--909-warning-text);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
   .m2-market-switch,
   .m2-book-nav,
   .m2-studio-tools,
@@ -2548,31 +2611,31 @@
    inherit the shell-local variables directly. Give that overlay the same
    Figma foundation contract at the page theme boundary. */
 .console-root[data-theme="cream"] {
-  --909-overlay-canvas: #d8d3c4;
-  --909-overlay-panel: #efe7d2;
-  --909-overlay-inset: #cfc9b8;
-  --909-overlay-text: #2c2a24;
-  --909-overlay-muted: #5f5b53;
+  --909-overlay-canvas: #e8e3da;
+  --909-overlay-panel: #f2f1ee;
+  --909-overlay-inset: #e1dbd3;
+  --909-overlay-text: #4c4943;
+  --909-overlay-muted: #737068;
   --909-overlay-disabled: #777269;
   --909-overlay-border: rgba(60, 52, 30, .14);
   --909-overlay-border-strong: rgba(60, 52, 30, .26);
-  --909-overlay-success: #0e6132;
-  --909-overlay-attention: #8a5b00;
-  --909-overlay-danger: #9e2d1c;
+  --909-overlay-success: #3b7c48;
+  --909-overlay-attention: #bc8b51;
+  --909-overlay-danger: #933e35;
 }
 
 .console-root[data-theme="blackout"] {
-  --909-overlay-canvas: #1c1d1f;
-  --909-overlay-panel: #101516;
-  --909-overlay-inset: #0b0f10;
-  --909-overlay-text: #e9eef0;
-  --909-overlay-muted: #a6afb2;
+  --909-overlay-canvas: #262728;
+  --909-overlay-panel: #1d2223;
+  --909-overlay-inset: #232727;
+  --909-overlay-text: #e7eae5;
+  --909-overlay-muted: #aeb2aa;
   --909-overlay-disabled: #6f797d;
   --909-overlay-border: rgba(255, 255, 255, .07);
   --909-overlay-border-strong: rgba(255, 255, 255, .13);
-  --909-overlay-success: #6cc06d;
-  --909-overlay-attention: #e0a23f;
-  --909-overlay-danger: #e07a58;
+  --909-overlay-success: #88b780;
+  --909-overlay-attention: #dbae6e;
+  --909-overlay-danger: #d27f60;
 }
 
 .console-root[data-theme] .cmdk-panel {
