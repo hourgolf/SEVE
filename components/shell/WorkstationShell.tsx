@@ -4,7 +4,7 @@ import "@/app/workstation.css";
 import { useEffect, useMemo, useState } from "react";
 import { AuthControl } from "@/components/AuthControl";
 import { KillControl } from "@/components/console/hw/KillControl";
-import { LedDisplay } from "@/components/console/hw/LedDisplay";
+import { LedDisplay, LedWordmark } from "@/components/console/hw/LedDisplay";
 import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
@@ -121,7 +121,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
       <span className="ws-screw ws-screw--bl" /><span className="ws-screw ws-screw--br" />
 
       <header className="ws-top">
-        <div className="ws-brand"><strong>SEVE DESK</strong><span>TRADING WORKSTATION</span></div>
+        <div className="ws-brand ws-brand--led"><LedWordmark value="$EVE" color={dayLedColor} label="$EVE" /></div>
         <div className="ws-mode-tabs" role="tablist" aria-label="workstation mode">
           <button type="button" className={mode === "perform" ? "on" : ""} onClick={() => setMode("perform")}>PERFORM</button>
           <button type="button" className={mode === "studio" ? "on" : ""} onClick={() => setMode("studio")}>STUDIO</button>

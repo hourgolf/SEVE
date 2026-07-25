@@ -24,7 +24,9 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 
 .ws-top { display: grid; grid-template-columns: 190px 260px minmax(420px, 1fr) 160px; gap: 12px; align-items: center; padding: 0 24px; min-width: 0; }
 .ws-brand { display: grid; line-height: 1; padding-left: 3px; border-right: 1px solid rgba(60,55,45,.28); }
-.ws-brand strong { font: 800 19px/1 var(--sh-sans); letter-spacing: .09em; }.ws-brand span { margin-top: 6px; font: 700 9px/1 var(--sh-mono); letter-spacing: .16em; color: #626057; }
+.ws-brand--led { display:flex; align-items:center; }
+.ws-brand--led .led-wordmark { gap:1px; margin:0; padding:3px 7px; border:2px solid #090b0a; border-radius:5px; background:linear-gradient(180deg,#151a18,#090c0a); box-shadow:inset 0 2px 8px #000,0 1px 0 rgba(255,255,255,.35); }
+.ws-brand--led .seven-seg { width:13px; height:24px; }
 .ws-mode-tabs { height: 42px; display: grid; grid-template-columns: 1fr 1fr; border: 2px solid #48463f; border-radius: 5px; overflow: hidden; background: #171a1a; box-shadow: inset 0 2px 6px #000, 0 1px 0 #fff; }
 .ws-mode-tabs button { border: 0; border-right: 1px solid #050606; color: #8d908b; background: linear-gradient(180deg,#252929,#111414); font: 800 11px/1 var(--sh-mono); letter-spacing: .08em; cursor: pointer; position: relative; }
 .ws-mode-tabs button.on { color: var(--green); }.ws-mode-tabs button.on::after { content:""; position:absolute; left:0; right:0; bottom:0; height:2px; background:var(--green); box-shadow:0 0 7px var(--green); }

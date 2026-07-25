@@ -43,6 +43,10 @@ assert.match(workstationCss, /:is\(\.pf-market-target,\.pf-markets-chart\) :is\(
 assert.match(workstationCss, /\.ws-sequencer>\.m-sqdock \{[^}]*position:absolute/);
 assert.match(workstationCss, /\.ws-sequencer \.m-sqbody \{[^}]*bottom:50px/);
 assert.match(workstationShell, /import \{ SessionSequencer \} from "@\/components\/console\/SessionSequencer"/);
+assert.match(workstationShell, /import \{ LedDisplay, LedWordmark \} from "@\/components\/console\/hw\/LedDisplay"/);
+assert.match(workstationShell, /<LedWordmark value="\$EVE" color=\{dayLedColor\} label="\$EVE" \/>/);
+assert.doesNotMatch(workstationShell, /SEVE DESK|TRADING WORKSTATION/);
+assert.match(workstationCss, /\.ws-brand--led \.seven-seg \{ width:13px; height:24px; \}/);
 assert.match(workstationShell, /<SessionSequencer[\s\S]*variant="dock"[\s\S]*positions=\{feed\.positions\}[\s\S]*recentTrades=\{feed\.recentTrades\}/);
 assert.doesNotMatch(workstationShell, /Array\.from\(\{ length: 16 \}, \(_, i\) => <i/);
 assert.doesNotMatch(workstationShell, /<AccountSwitcher/);
@@ -96,4 +100,4 @@ assert.match(foundationCss, /\.srw-row \{[\s\S]{0,80}min-height:\s*44px;[\s\S]{0
 assert.match(foundationCss, /:is\(\.pf-market-target, \.pf-markets-chart\) > \.panel/);
 assert.match(foundationCss, /:is\(\s*\.pf-market-target,\s*\.pf-markets-chart\s*\) :is\([\s\S]{0,100}\.chart-toggle,[\s\S]{0,60}\.seg[\s\S]{0,40}\) button\.on/);
 
-console.log("presentation-selftest: 78/78 passed");
+console.log("presentation-selftest: 82/82 passed");
