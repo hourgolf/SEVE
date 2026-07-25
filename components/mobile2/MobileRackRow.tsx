@@ -172,7 +172,6 @@ export function MobileRackRow({
             </section>
             {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
           </div>
-          <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} compact />
           <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE − / + OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
@@ -261,6 +260,7 @@ export function MobileRackRow({
             </button>
           </div>
           {writeError && <div className="m2-write-error" role="alert" title={writeError}>WRITE FAILED · CHANGE NOT CONFIRMED</div>}
+          <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} compact />
         </div>
       )}
     </section>

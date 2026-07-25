@@ -138,7 +138,7 @@ class SessionLayer implements ISeriesPrimitive<Time> {
 
 export function IntradayChart({
   bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
-  symbol = "SPY", onSymbolChange, fill = false,
+  symbol = "SPY", onSymbolChange, fill = false, hideTitle = false,
 }: {
   bars: UnderlyingBar[];
   dailyBars?: UnderlyingBar[];
@@ -148,6 +148,9 @@ export function IntradayChart({
   /** Fill the parent's height instead of the fixed canvas height (PERFORM hero,
    *  slice S2 — the full-viewport surface sizes the chart to its grid cell). */
   fill?: boolean;
+  /** The surrounding workspace already names the live instrument. Keep the
+   *  chart controls, but omit the repeated "SPY — Intraday" label. */
+  hideTitle?: boolean;
   /** §01 instrument label (SPY/QQQ) — titles the chart + the spot LED caption. */
   symbol?: string;
   /** When provided, renders the SPY/QQQ toggle in the chart header. */
@@ -704,8 +707,8 @@ export function IntradayChart({
 
   return (
     <div className={`panel${fill ? " chart-fill" : ""}`}>
-      <div className="phead">
-        <span className="t">{symbol} — {isDaily ? "Daily" : "Intraday"}</span>
+      <div className={`phead${hideTitle ? " chart-head--untitled" : ""}`}>
+        {!hideTitle && <span className="t">{symbol} — {isDaily ? "Daily" : "Intraday"}</span>}
         <span className="phead-right chart-controls chart-controls--top">
           {onSymbolChange && (
             <span className="chart-toggle sym-toggle" role="group" aria-label="instrument">

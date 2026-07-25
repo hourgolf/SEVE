@@ -17,6 +17,12 @@ const shadowResearch = readFileSync("components/perform/ShadowResearchWorkspace.
 const foundationCss = readFileSync("app/seve-909.css", "utf8");
 const workstationCss = readFileSync("app/workstation.css", "utf8");
 const performCss = readFileSync("app/perform.css", "utf8");
+const intradayChart = readFileSync("components/IntradayChart.tsx", "utf8");
+const mobilePerform = readFileSync("components/mobile2/MobilePerform.tsx", "utf8");
+const mobileRackRow = readFileSync("components/mobile2/MobileRackRow.tsx", "utf8");
+const mobileStudio = readFileSync("components/mobile2/MobileStudio.tsx", "utf8");
+const sessionSequencer = readFileSync("components/console/SessionSequencer.tsx", "utf8");
+const mobileCss = readFileSync("app/mobile2.css", "utf8");
 assert.match(mobileShell, /<LedWordmark value="\$EVE" color=\{dayColor\}/);
 assert.match(mobileShell, /const dayColor = down \? "var\(--led-red\)" : "var\(--pm-green\)"/);
 assert.match(ledDisplay, /"\$": "afgcd"[\s\S]*"E": "afged"[\s\S]*"V": ""/);
@@ -30,5 +36,13 @@ assert.match(foundationCss, /\[data-skin="cream"\] \.m2-markets-chain > \.panel/
 assert.match(workstationCss, /\.ws-deck-mode,\.ws-transport \{ display:none; \}/);
 assert.match(workstationCss, /\.ws-left-copy b\{[^}]*font-size:10px/);
 assert.match(performCss, /grid-auto-flow: column; grid-auto-columns: minmax\(182px, 1fr\)/);
+assert.match(intradayChart, /hideTitle = false/);
+assert.match(mobilePerform, /onSymbolChange=\{setSymbol\}[\s\S]*hideTitle/);
+assert.ok(mobileRackRow.indexOf('className="m2-passport') < mobileRackRow.indexOf('className="m2-fireslbl'));
+assert.ok(mobileRackRow.indexOf('className="m2-fireslbl') < mobileRackRow.lastIndexOf("<ChannelConfigDraftPanel"));
+assert.match(mobileStudio, /className="m2-studio-sequencer"/);
+assert.doesNotMatch(mobileStudio, /m2-tape-screen/);
+assert.match(sessionSequencer, /if \(variant === "dock"\)[\s\S]*className="m-sqbody"[\s\S]*className="m-sqhead"/);
+assert.match(mobileCss, /\.m2-app\[data-room="studio"\] \.m2-padbar \{ margin-top:0/);
 
-console.log("presentation-selftest: 21/21 passed");
+console.log("presentation-selftest: 29/29 passed");

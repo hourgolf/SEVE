@@ -434,6 +434,10 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   flex: 1;
   min-height: 0;
 }
+.shell-root[data-mode="perform"] .chart-head--untitled .phead-right {
+  flex: 1;
+  justify-content: space-between;
+}
 
 /* rail: positions (auto) · sentinel (auto) · tape (fills) */
 .shell-root[data-mode="perform"] .pf-rail {

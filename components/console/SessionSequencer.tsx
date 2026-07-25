@@ -336,6 +336,12 @@ export function SessionSequencer({
     );
     return (
       <div className={`m-sqdock${open ? " open" : ""}`}>
+        {open && (
+          <div className="m-sqbody">
+            {steps}
+            {slice}
+          </div>
+        )}
         <div className="m-sqhead">
           <button type="button" className="m-sqbar" onClick={toggle} aria-expanded={open} aria-label="session sequencer">
             <span className="m-sq-lbl">Seq</span>
@@ -347,12 +353,6 @@ export function SessionSequencer({
             {replaying ? "■" : "▶"}
           </button>
         </div>
-        {open && (
-          <div className="m-sqbody">
-            {steps}
-            {slice}
-          </div>
-        )}
       </div>
     );
   }

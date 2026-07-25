@@ -169,6 +169,7 @@ export function MobilePerform({
               openPositions={feed.positions}
               symbol={symbol}
               onSymbolChange={setSymbol}
+              hideTitle
             />
           </div>
         </section>
