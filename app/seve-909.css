@@ -1461,3 +1461,157 @@
 .m2-app[data-skin="cream"][data-mode="perform"] .m2-screen.m2-glass .m2-t-msg {
   color: var(--909-text-primary);
 }
+
+/* Mobile Settings/Log follows the selected frame. The event journal remains
+   visually inset, but cream mode no longer renders the entire sheet as dark
+   glass. Component-local legacy variables are remapped so the reused auth,
+   push, kit, and EventLog leaves inherit one coherent palette. */
+.m2-app[data-skin="cream"] .m2-set-ov {
+  background: rgba(43, 39, 30, .38);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet {
+  --bg: var(--909-surface-panel-inset);
+  --panel: var(--909-surface-panel-raised);
+  --text: var(--909-text-primary);
+  --muted: var(--909-text-secondary);
+  --muted-2: var(--909-text-tertiary);
+  --border: var(--909-border);
+  --border-bright: var(--909-border-strong);
+  --green: var(--909-positive-text);
+  --blue: #245e9b;
+  --amber: var(--909-warning-text);
+  --red: var(--909-negative-text);
+  --lcd: var(--909-surface-panel);
+  --lcd-2: var(--909-surface-panel-inset);
+  --lcd-edge: var(--909-border-strong);
+  --lcd-ink: var(--909-text-primary);
+  --plate-ink: var(--909-text-primary);
+  --line: rgba(60, 52, 30, .14);
+  --line-2: rgba(60, 52, 30, .26);
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+  box-shadow: 0 -18px 60px rgba(43, 39, 30, .34), inset 0 1px 0 rgba(255, 255, 255, .78);
+}
+
+.m2-app[data-skin="cream"] .m2-set-grab {
+  background: var(--909-border-strong);
+}
+
+.m2-app[data-skin="cream"] .m2-set-head {
+  border-color: var(--909-border);
+}
+
+.m2-app[data-skin="cream"] :is(
+  .m2-set-head .t,
+  .m2-set-lbl
+) {
+  color: var(--909-text-primary);
+}
+
+.m2-app[data-skin="cream"] :is(
+  .m2-set-x,
+  .m2-write-chip,
+  .m2-set-sheet .auth-link,
+  .m2-set-sheet .auth-msg
+) {
+  color: var(--909-text-secondary);
+}
+
+.m2-app[data-skin="cream"] .m2-write-chip.on,
+.m2-app[data-skin="cream"] .m2-set-sheet .auth-email {
+  color: var(--909-positive-text);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet :is(
+  .auth-btn,
+  .push-toggle,
+  .m2-set-seg button
+) {
+  color: var(--909-text-secondary);
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .auth-btn:hover {
+  color: var(--909-text-primary);
+  border-color: var(--909-text-tertiary);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .auth-form input {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border-strong);
+}
+
+.m2-app[data-skin="cream"] .m2-set-seg button.on {
+  color: #271306;
+  background: var(--accent);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .push-toggle.on {
+  color: var(--909-positive-text);
+  border-color: color-mix(in srgb, var(--909-positive-text) 50%, var(--909-border));
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .panel {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 6px rgba(43, 39, 30, .16);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .panel .phead {
+  background: linear-gradient(180deg, #cbc5b7, #b7b1a3);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .panel .phead .t {
+  color: var(--909-text-primary);
+  text-shadow: none;
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .panel :is(
+  .phead .x,
+  .pfold,
+  .log .ts
+) {
+  color: var(--909-text-secondary);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .panel .pbody {
+  background: rgba(255, 255, 255, .18);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .log .line {
+  border-color: rgba(60, 52, 30, .14);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .log .msg {
+  color: var(--909-text-primary);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .log .lv.OK {
+  color: var(--909-positive-text);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .log .lv.INFO {
+  color: #245e9b;
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .log .lv.WARN {
+  color: var(--909-warning-text);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .log .lv.RISK {
+  color: var(--909-negative-text);
+}
+
+.m2-app[data-skin="cream"] .m2-set-sheet .log::-webkit-scrollbar-thumb {
+  background: var(--909-border-strong);
+}

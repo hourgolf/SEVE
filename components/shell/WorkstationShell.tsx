@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { AuthControl } from "@/components/AuthControl";
 import { KillControl } from "@/components/console/hw/KillControl";
+import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
 import { useShell } from "@/hooks/useShellState";
@@ -35,6 +36,25 @@ const compactUsd = (value: number): string => {
   if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
   if (abs >= 100_000) return `$${Math.round(value / 1000)}k`;
   return usd0(value);
+};
+
+const ledCompact = (value: number): { value: string; digits: number; unit?: string } => {
+  const negative = value < 0;
+  const absolute = Math.abs(value);
+  const trim = (formatted: string) => formatted.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+  let shown: string;
+  let unit: string | undefined;
+  if (absolute >= 1_000_000) {
+    shown = trim((absolute / 1_000_000).toFixed(absolute >= 10_000_000 ? 1 : 2));
+    unit = "M";
+  } else if (absolute >= 1_000) {
+    shown = trim((absolute / 1_000).toFixed(absolute >= 100_000 ? 0 : 1));
+    unit = "K";
+  } else {
+    shown = String(Math.round(absolute));
+  }
+  const display = `${negative ? "-" : ""}${shown}`;
+  return { value: display, digits: display.replace(".", "").length, unit };
 };
 
 const sessionStep = (now: Date): number => {
@@ -86,6 +106,9 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
   const incidentOn = incident.severity !== "normal";
   const step = now ? sessionStep(now) : 0;
   const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
+  const navLed = ledCompact(liveFund.nav);
+  const dayLed = ledCompact(liveFund.dayPnl);
+  const dayLedColor = liveFund.dayPnl < 0 ? "var(--hw-red-soft)" : "var(--hw-green)";
   const activeNav = NAV.find((item) => mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section))) ?? NAV[0];
   const navigate = (item: (typeof NAV)[number]) => {
     setMode(item.mode);
@@ -131,8 +154,8 @@ export function WorkstationShell({ surface, dayChangePct, onLegacy }: Workstatio
           <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
           <b>{selectedAccount?.mode.toUpperCase() ?? fund.mode.toUpperCase()}</b>
         </div>
-        <div className="ws-metric"><small>NAV</small><strong>{compactUsd(liveFund.nav)}</strong></div>
-        <div className={`ws-metric ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}><small>DAY P&amp;L</small><strong>{signedUsd(liveFund.dayPnl)}</strong><span>{dayChangePct != null ? `${dayChangePct >= 0 ? "+" : ""}${dayChangePct.toFixed(2)}%` : "—"}</span></div>
+        <div className="ws-metric ws-metric--led"><small>NAV</small><div className="ws-led-readout neutral" role="img" aria-label={`NAV ${compactUsd(liveFund.nav)}`}><span aria-hidden="true">$</span><LedDisplay value={navLed.value} digits={navLed.digits} color="var(--ws-led-neutral)" unit={navLed.unit} /></div></div>
+        <div className={`ws-metric ws-metric--led ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}><small>DAY P&amp;L</small><div className="ws-led-readout" role="img" aria-label={`Day P and L ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div><span>{dayChangePct != null ? `${dayChangePct >= 0 ? "+" : ""}${dayChangePct.toFixed(2)}%` : "—"}</span></div>
         <div className="ws-metric"><small>DESK CAPACITY</small><strong>{compactUsd(Math.max(0, liveFund.nav - exposure))}</strong></div>
         <div className="ws-metric"><small>OPEN POSITIONS</small><strong>{feed.positions.length}</strong></div>
         <div className="ws-metric"><small>RISK USED</small><strong>{riskUsed.toFixed(1)}%</strong></div>

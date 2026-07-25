@@ -37,6 +37,15 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 .ws-account,.ws-metric,.ws-clock { min-width:0; border-right:1px solid #283032; padding:8px 10px; display:grid; align-content:center; gap:5px; }
 .ws-account { grid-template-columns:1fr auto; }.ws-account small { grid-column:1/3; }.ws-account .acct-switch { grid-column:1; }.ws-account > b { font:800 8px/1 var(--sh-mono); color:#8c968f; }
 .ws-account small,.ws-metric small { font:700 8px/1 var(--sh-mono); letter-spacing:.1em; color:#7a8380; }.ws-metric strong { font:750 15px/1 var(--sh-mono); color:#e5e9e3; white-space:nowrap; }.ws-metric span { font:700 8px/1 var(--sh-mono); color:#6ec77a; }.ws-metric.pos strong{color:var(--green)}.ws-metric.neg strong{color:#ff6044}.ws-state strong{font-size:10px;color:var(--green);display:flex;align-items:center;gap:6px}.ws-state i{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}.ws-state.amber strong{color:var(--amber)}.ws-state.amber i{background:var(--amber);box-shadow:0 0 6px var(--amber)}.ws-state.red strong{color:var(--red)}.ws-state.red i{background:var(--red);box-shadow:0 0 6px var(--red)}.ws-state.dim strong{color:#8a918d}.ws-state.dim i{background:#6f7773;box-shadow:none}
+.ws-metric--led { --ws-led-neutral:#e5dfcc; gap:3px; }
+.ws-led-readout { min-width:0; display:flex; align-items:center; gap:2px; color:var(--ws-led-neutral); overflow:hidden; }
+.ws-led-readout>span { flex:0 0 auto; color:currentColor; font:800 10px/1 var(--sh-mono); text-shadow:0 0 5px currentColor; }
+.ws-led-readout .led { min-width:0; gap:0; }
+.ws-led-readout .led-window { min-width:0; gap:1px; padding:0; border:0; border-radius:0; background:none; box-shadow:none; }
+.ws-led-readout .led-glass,.ws-led-readout .led-caption { display:none; }
+.ws-led-readout .seven-seg { width:10px; height:20px; }
+.ws-led-readout .led-unit { margin-left:2px; font:800 8px/1 var(--sh-mono); text-shadow:0 0 5px currentColor; }
+.ws-metric--led>span { margin-top:-1px; }
 .ws-clock { border:0; text-align:right; }.ws-clock strong { font:750 12px/1 var(--sh-mono); }.ws-clock span { font:700 8px/1 var(--sh-mono); color:#9ba09a; text-transform:uppercase; }
 .ws-telemetry .acct-switch { gap:2px; }.ws-telemetry .acct-opt { padding:3px 5px; font-size:8px; }
 
