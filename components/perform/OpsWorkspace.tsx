@@ -4,6 +4,7 @@ import { SystemHealthStrip } from "@/components/perform/SystemHealthStrip";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
+import { SeveWorkspaceHeader } from "@/components/ui/Seve909";
 
 const age = (seconds: number | null): string => seconds == null ? "—" : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h`;
 const localTime = (value: string | null | undefined): string => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " PT" : "—";
@@ -21,7 +22,11 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
   const processAge = workerRuns.currentHeartbeatAtMs == null ? null : Math.max(0, Math.round((Date.now() - workerRuns.currentHeartbeatAtMs) / 1000));
 
   return <section className="opsw" id="perform-ops" tabIndex={-1} aria-label="Operations evidence workspace">
-    <header className="opsw-head"><span><b>OPERATIONS</b><small>read-only control-plane evidence · paper desk</small></span><em>HEALTH CLAIMS REQUIRE THEIR OWN RECEIPT</em></header>
+    <SeveWorkspaceHeader
+      title="OPERATIONS"
+      subtitle="read-only control-plane evidence · paper desk"
+      boundary="HEALTH CLAIMS REQUIRE THEIR OWN RECEIPT"
+    />
     <SystemHealthStrip incident={incident} />
     <div className="opsw-grid">
       <section className="opsw-card opsw-readiness"><header><span>00</span><b>CAPTURE + OBSERVER READINESS</b><em>configured ≠ observed</em></header><OpsReadinessPanel model={surface.opsReadiness} /></section>

@@ -1,6 +1,7 @@
 "use client";
 
 import "@/app/mobile2.css";
+import "@/app/seve-909.css";
 import { useEffect, useMemo, useState } from "react";
 import { LedDisplay } from "@/components/console/hw/LedDisplay";
 import { MobilePerform, type MobileMarketView } from "@/components/mobile2/MobilePerform";

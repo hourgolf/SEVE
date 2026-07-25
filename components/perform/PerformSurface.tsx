@@ -2,6 +2,7 @@
 
 import "@/app/perform.css";
 import "@/app/incident.css";
+import "@/app/seve-909.css";
 import { IntradayChart } from "@/components/IntradayChart";
 import { IncidentBanner } from "@/components/perform/IncidentBanner";
 import { PerformRail } from "@/components/perform/PerformRail";

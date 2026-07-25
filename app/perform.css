@@ -227,7 +227,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
    aggregate exposure and today's completed exits stay visible beside it. */
 .shell-root.ws909[data-mode="perform"] .pf-positions-shell {
   min-width:0; min-height:0; height:100%; display:grid;
-  grid-template-rows:auto minmax(0,1fr); gap:7px;
+  grid-template-rows:auto auto auto minmax(0,1fr); gap:7px;
   outline:2px solid transparent; outline-offset:-2px; border-radius:9px;
 }
 .shell-root.ws909[data-mode="perform"] .pf-positions-workspace {
@@ -294,6 +294,30 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909[data-mode="perform"] .pf-exit-stats span { padding:3px 5px; border:1px solid var(--pf-line); border-radius:3px; color:var(--dk-mut); font-size:var(--fs-chip); }
 .shell-root.ws909[data-mode="perform"] .pf-exit-stats span.warn { color:var(--pf-amber); border-color:rgba(224,162,63,.35); }
 .shell-root.ws909[data-mode="perform"] .pf-recent-exits>footer { padding:6px 9px; border-top:1px solid var(--pf-line); color:var(--dk-dim); font:700 var(--fs-chip)/1.25 var(--sh-mono); }
+
+/* 909 refinement: keep the live book dominant while making session,
+   reconciliation, and operator-attribution hierarchy explicit. */
+.shell-root.ws909[data-mode="perform"] .pf-positions-shell>.opsr-broker-strip {
+  margin:0;
+}
+.shell-root.ws909[data-mode="perform"] .pf-positions-shell>.sv909-metrics {
+  min-height:58px;
+}
+.shell-root.ws909[data-mode="perform"] .pf-position-exposure .pf-head,
+.shell-root.ws909[data-mode="perform"] .pf-recent-exits .pf-head {
+  min-height:40px;
+}
+.shell-root.ws909[data-mode="perform"] .pf-exit-list>article {
+  min-height:76px;
+  gap:6px 10px;
+  padding:10px 12px;
+}
+.shell-root.ws909[data-mode="perform"] .pf-exit-list>article>small,
+.shell-root.ws909[data-mode="perform"] .pf-exit-stats span,
+.shell-root.ws909[data-mode="perform"] .pf-recent-exits>footer {
+  font-size:max(var(--fs-chip),10px);
+  line-height:1.35;
+}
 
 /* ---------- MARKETS workspace ---------------------------------------------
    Chart and chain are peers. Open risk remains pinned above the chain while a
@@ -574,6 +598,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 
 /* ---------- OPS workspace -------------------------------------------------- */
 .shell-root.ws909[data-mode="perform"] .opsw{min-width:0;min-height:0;height:100%;overflow:auto;padding:8px;border:1px solid var(--chrome-edge);border-radius:9px;background:linear-gradient(145deg,#ddd8ca,#c7c1b3);color:#30302c;box-shadow:inset 0 1px 0 rgba(255,255,255,.85),inset 0 0 0 3px rgba(62,57,47,.08)}.shell-root.ws909[data-skin="blackout"] .opsw{background:linear-gradient(145deg,#24272a,#151719);color:#d7d5cb;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.shell-root.ws909 .opsw>.sv909-workspace-head{margin-bottom:8px}
 .shell-root.ws909 .opsw-head{min-height:44px;display:flex;align-items:center;gap:12px;padding:0 10px}.shell-root.ws909 .opsw-head>span{display:grid;gap:3px}.shell-root.ws909 .opsw-head b,.shell-root.ws909 .opsw-head small,.shell-root.ws909 .opsw-head em{font-family:var(--sh-mono)}.shell-root.ws909 .opsw-head b{font-size:var(--fs-num-lg);letter-spacing:.12em}.shell-root.ws909 .opsw-head small{color:#68645b;font-size:var(--fs-chip);letter-spacing:.05em}.shell-root.ws909 .opsw-head em{margin-left:auto;color:#7a5312;font:800 var(--fs-chip)/1 var(--sh-mono);font-style:normal;letter-spacing:.08em}.shell-root.ws909[data-skin="blackout"] .opsw-head small{color:var(--dk-mut)}.shell-root.ws909[data-skin="blackout"] .opsw-head em{color:var(--pf-amber)}
 .shell-root.ws909 .opsw>.sys-health{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:7px 10px;margin-bottom:8px;border:1px solid #898478;border-radius:6px;background:rgba(255,255,255,.22);font:700 var(--fs-chip)/1 var(--sh-mono)}.shell-root.ws909 .opsw .sys-chip{padding:3px 7px;border:1px solid currentColor;border-radius:4px;letter-spacing:.05em}.shell-root.ws909 .opsw .sys-ok{color:#0d7136}.shell-root.ws909 .opsw .sys-warn{color:#9b6710}.shell-root.ws909 .opsw .sys-bad{color:#a02f20}.shell-root.ws909 .opsw .sys-dim{color:#666158}.shell-root.ws909 .opsw .sys-item{display:inline-flex;align-items:baseline;gap:6px;color:#69655d}.shell-root.ws909 .opsw .sys-k{font-size:var(--fs-chip);letter-spacing:.07em}.shell-root.ws909 .opsw .sys-v{color:#34332e;font-weight:800}.shell-root.ws909 .opsw .sys-attr{color:#666158}.shell-root.ws909 .opsw .sys-attr i{font-style:normal;opacity:.65}.shell-root.ws909[data-skin="blackout"] .opsw>.sys-health{border-color:var(--pf-line-2);background:#0d1213}.shell-root.ws909[data-skin="blackout"] .opsw .sys-item,.shell-root.ws909[data-skin="blackout"] .opsw .sys-attr{color:var(--dk-mut)}.shell-root.ws909[data-skin="blackout"] .opsw .sys-v{color:var(--lcd-ink)}
 .shell-root.ws909 .opsw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.shell-root.ws909 .opsw-card{min-width:0;overflow:hidden;border:1px solid #918b7e;border-radius:7px;background:linear-gradient(180deg,rgba(255,255,255,.35),rgba(255,255,255,.12));box-shadow:inset 0 1px 0 rgba(255,255,255,.78)}.shell-root.ws909[data-skin="blackout"] .opsw-card{border-color:var(--pf-line-2);background:linear-gradient(180deg,#15191b,#0d1011);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
@@ -582,6 +607,9 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .opsw-lamps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:rgba(70,65,55,.16)}.shell-root.ws909 .opsw-lamp{min-width:0;display:grid;grid-template-columns:8px minmax(0,1fr);gap:8px;align-items:center;padding:10px;background:rgba(255,255,255,.18);color:#8a650f}.shell-root.ws909[data-skin="blackout"] .opsw-lamps{background:var(--pf-line)}.shell-root.ws909[data-skin="blackout"] .opsw-lamp{background:#101415}.shell-root.ws909 .opsw-lamp.green{color:#0d7136}.shell-root.ws909 .opsw-lamp.red{color:#a02f20}.shell-root.ws909 .opsw-lamp>i{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}.shell-root.ws909 .opsw-lamp>span{min-width:0;display:grid;gap:4px}.shell-root.ws909 .opsw-lamp small,.shell-root.ws909 .opsw-lamp b,.shell-root.ws909 .opsw-lamp em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--sh-mono);font-style:normal}.shell-root.ws909 .opsw-lamp small{color:#69655d;font-size:var(--fs-chip);letter-spacing:.07em}.shell-root.ws909 .opsw-lamp b{font-size:var(--fs-num)}.shell-root.ws909 .opsw-lamp em{color:#59564f;font-size:var(--fs-chip)}.shell-root.ws909[data-skin="blackout"] .opsw-lamp small,.shell-root.ws909[data-skin="blackout"] .opsw-lamp em{color:var(--dk-mut)}
 .shell-root.ws909 .opsw-release{display:grid;grid-template-columns:9px minmax(0,1fr);gap:9px;align-items:center;margin:10px;padding:10px;border:1px solid rgba(29,122,64,.35);border-radius:5px;color:#0d7136}.shell-root.ws909 .opsw-release>i{width:9px;height:9px;border-radius:50%;background:currentColor;box-shadow:0 0 7px currentColor}.shell-root.ws909 .opsw-release>span{min-width:0;display:grid;gap:4px}.shell-root.ws909 .opsw-release small,.shell-root.ws909 .opsw-release b,.shell-root.ws909 .opsw-release em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--sh-mono);font-style:normal}.shell-root.ws909 .opsw-release small{color:#69655d;font-size:var(--fs-chip)}.shell-root.ws909 .opsw-release b{font-size:var(--fs-num-lg)}.shell-root.ws909 .opsw-release em{color:#5e5a52;font-size:var(--fs-chip)}.shell-root.ws909[data-skin="blackout"] .opsw-release small,.shell-root.ws909[data-skin="blackout"] .opsw-release em{color:var(--dk-mut)}.shell-root.ws909 .opsw-note{margin:8px 10px 10px;color:#666158;font:700 var(--fs-chip)/1.4 var(--sh-mono)}.shell-root.ws909[data-skin="blackout"] .opsw-note{color:var(--dk-mut)}.shell-root.ws909 .opsw-empty{padding:20px 10px;color:#8a650f;font:800 var(--fs-chip)/1.4 var(--sh-mono);text-transform:uppercase}
 @media(max-width:1050px){.shell-root.ws909 .opsw-grid{grid-template-columns:1fr}.shell-root.ws909 .opsw-lamps{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.shell-root.ws909 .opsw-lamp small{font-size:max(var(--fs-chip),10px)}
+.shell-root.ws909 .opsw-lamp b{font-size:max(var(--fs-num),13px)}
+.shell-root.ws909 .opsw-lamp em{font-size:max(var(--fs-chip),11px)}
 
 .shell-root[data-mode="perform"] .pfs-body { padding: 0.55em 12px 0.7em; display: flex; flex-direction: column; gap: 0.5em; }
 .shell-root[data-mode="perform"] .pfs-top { display: flex; align-items: center; gap: 11px; }

@@ -6,6 +6,7 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import { derivePositionsWorkspace } from "@/lib/perform/derivePositionsWorkspace";
 import { BrokerReconciliationStrip } from "@/components/ops/OpsReadinessPanel";
+import { SeveMetricStrip, SeveWorkspaceHeader, type SeveMetricTone } from "@/components/ui/Seve909";
 
 const money = (value: number) => Math.abs(value) >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
 const rootOf = (occ: string) => occ.match(/^([A-Z]+)\d/)?.[1] ?? "?";
@@ -78,8 +79,24 @@ export function RecentExits({ surface }: { surface: SurfaceProps }) {
  * shared open-book leaf; aggregate and exit context are read-only seam data. */
 export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }) {
   const reconciliation = surface.opsReadiness.evidence.find((item) => item.id === "reconciliation");
+  const model = derivePositionsWorkspace(surface.feed.positions, surface.feed.recentTrades, surface.liveMarks, surface.positionPeaks);
+  const manualExits = model.exits.rows.filter(({ position }) => position.close_reason?.startsWith("manual"));
+  const lastManualReason = manualExits.at(0)?.position.close_reason?.slice("manual:".length).replaceAll("_", " ");
+  const realizedTone: SeveMetricTone = model.exits.realized > 0 ? "success" : model.exits.realized < 0 ? "danger" : "neutral";
+
   return <section className="pf-positions-shell" data-nav-target="true" tabIndex={-1}>
+    <SeveWorkspaceHeader
+      title="POSITIONS"
+      subtitle="broker-truth position ledger · executable exits · operator attribution"
+      boundary="PAPER ONLY · MANUAL CLOSE REQUIRES CONFIRMATION"
+    />
     <BrokerReconciliationStrip model={surface.opsReadiness} />
+    <SeveMetricStrip metrics={[
+      { label: "REALIZED", value: signedUsd(model.exits.realized), tone: realizedTone },
+      { label: "WINNERS", value: model.exits.wins },
+      { label: "LOSSES", value: model.exits.losses, tone: model.exits.losses > 0 ? "danger" : "neutral" },
+      { label: "MANUAL", value: manualExits.length === 0 ? "0" : `${manualExits.length} ${lastManualReason ?? "TAGGED"}`, tone: manualExits.length > 0 ? "attention" : "neutral" },
+    ]} />
     <div className="pf-positions-workspace" data-flat={surface.feed.positions.length === 0 || undefined}>
       <PositionsSection
         positions={surface.feed.positions}
