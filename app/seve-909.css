@@ -240,7 +240,7 @@
   display: grid;
   gap: var(--909-space-2);
   padding: 10px var(--909-space-3);
-  background: #101516;
+  background: var(--909-surface-panel);
 }
 
 .sv909-metrics small {
