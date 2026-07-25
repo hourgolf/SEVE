@@ -664,12 +664,22 @@
 
 .m2-app:not(.folio-mobile) .m2-head-r1 {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   gap: 6px;
+  padding: 5px;
+  background: var(--909-surface-panel-inset);
+  border: 1px solid var(--909-border-strong);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .52),
+    0 1px 2px rgba(43, 39, 30, .14);
 }
 
 .m2-app:not(.folio-mobile) .m2-brand {
   gap: 4px;
+  padding-right: 10px;
+  border-right: 1px solid rgba(100, 205, 115, .24);
+  color: var(--lcd-ink);
 }
 
 .m2-app:not(.folio-mobile) .m2-brand b {
@@ -679,12 +689,16 @@
 .m2-app:not(.folio-mobile) .m2-brand small {
   font-size: 8px;
   letter-spacing: .08em;
+  color: #78917d;
 }
 
 .m2-app:not(.folio-mobile) .m2-status {
-  min-height: 40px;
-  height: 40px;
-  padding: 5px 8px;
+  min-height: 44px;
+  height: 44px;
+  grid-template-columns: auto 8px minmax(0, 1fr) auto;
+  gap: 9px;
+  padding: 5px 10px;
+  border-radius: 6px;
 }
 
 .m2-app:not(.folio-mobile) .m2-status b {
@@ -697,8 +711,8 @@
 }
 
 .m2-app:not(.folio-mobile) .m2-cog {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
 }
 
 .m2-app:not(.folio-mobile) .m2-head-meta {
@@ -781,13 +795,19 @@
 
 .m2-app:not(.folio-mobile) .m2-head-r2 {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 66px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
-  gap: 6px;
+  gap: 8px;
+  padding: 5px 7px 4px;
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid var(--909-border);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 2px rgba(43, 39, 30, .12);
 }
 
 .m2-app:not(.folio-mobile) .m2-head-r2 .m2-led-mod {
   justify-content: center;
+  padding: 1px 0;
 }
 
 .m2-app:not(.folio-mobile) .m2-head-r2 .led {
@@ -798,15 +818,15 @@
 .m2-app:not(.folio-mobile) .m2-head-r2 .led-window {
   box-sizing: border-box;
   width: 100%;
-  max-width: 124px;
+  max-width: 136px;
   justify-content: center;
   gap: 2px;
   padding: 4px 5px;
 }
 
 .m2-app:not(.folio-mobile) .m2-head-r2 .seven-seg {
-  width: 16px;
-  height: 29px;
+  width: 17px;
+  height: 31px;
 }
 
 .m2-app:not(.folio-mobile) .m2-head-r2 .led-unit {
@@ -817,30 +837,6 @@
 .m2-app:not(.folio-mobile) .m2-head-r2 .led-caption {
   font-size: 10px;
   letter-spacing: .06em;
-}
-
-.m2-app:not(.folio-mobile) .m2-nav-read {
-  min-width: 0;
-  align-self: stretch;
-  display: grid;
-  place-content: center;
-  gap: 3px;
-  padding: 3px 6px;
-  color: var(--chrome-ink);
-  background: rgba(255, 255, 255, .18);
-  border: 1px solid var(--sep);
-  border-radius: 6px;
-  text-align: right;
-}
-
-.m2-app:not(.folio-mobile) .m2-nav-read small {
-  color: var(--chrome-soft);
-  font: 800 10px/1 var(--mono);
-  letter-spacing: .08em;
-}
-
-.m2-app:not(.folio-mobile) .m2-nav-read b {
-  font: 800 14px/1 var(--mono);
 }
 
 .m2-app:not(.folio-mobile) .m2-padbar {
@@ -1393,15 +1389,16 @@
     display: none;
   }
 
-  .m2-app:not(.folio-mobile) .m2-status small {
-    display: none;
+  .m2-app:not(.folio-mobile) .m2-brand {
+    padding-right: 8px;
   }
 
-  .m2-app:not(.folio-mobile) .m2-head-r2 {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  .m2-app:not(.folio-mobile) .m2-status {
+    gap: 7px;
+    padding-inline: 8px;
   }
 
-  .m2-app:not(.folio-mobile) .m2-nav-read {
+  .m2-app:not(.folio-mobile) .m2-status em {
     display: none;
   }
 }

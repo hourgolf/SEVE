@@ -82,7 +82,6 @@ export function MobileShell(props: SurfaceProps) {
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
   const spotStr = data.spot != null ? data.spot.toFixed(2) : "----";
   const spotColor = spotUp == null ? "var(--led-red)" : spotUp ? "var(--pm-green)" : "var(--led-red)";
-  const navK = (liveFund.nav / 1000).toFixed(1);
   const statusOn = props.incident.severity !== "normal";
   const openMarket = (next: MobileMarketView) => {
     setMarketView(next);
@@ -98,9 +97,10 @@ export function MobileShell(props: SurfaceProps) {
       <span className="m2-screw m2-screw--bl" /><span className="m2-screw m2-screw--br" />
       <header className="m2-head">
         <div className="m2-head-r1">
-          <span className="m2-brand"><b>SEVE DESK</b><small>MOBILE WORKSTATION</small></span>
           <button type="button" className={`m2-status m2-status--${props.incident.severity}`} onClick={() => setRoom("play")}>
-            <i /><span><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {props.feed.positions.length} · {props.incident.session.replaceAll("_", " ")}</small></span>
+            <span className="m2-brand"><b>SEVE DESK</b><small>MOBILE WORKSTATION</small></span>
+            <i />
+            <span className="m2-status-copy"><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {props.feed.positions.length} · {props.incident.session.replaceAll("_", " ")}</small></span>
             <em>{clock} PT</em>
           </button>
           <button type="button" className="m2-cog" onClick={() => setSetOpen(true)} aria-label="settings and log"><IcCog /></button>
@@ -118,7 +118,6 @@ export function MobileShell(props: SurfaceProps) {
           <div className="m2-led-mod">
             <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
           </div>
-          <span className="m2-nav-read"><small>NAV</small><b>${navK}K</b></span>
         </div>
       </header>
       <div className="m2-band"><i /><i /><i /><i /></div>
