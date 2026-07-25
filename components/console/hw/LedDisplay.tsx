@@ -27,6 +27,9 @@ const DIGIT: Record<string, string> = {
   "8": "abcdefg",
   "9": "abcfgd",
   "-": "g",
+  "$": "afgcd",
+  "E": "afged",
+  "V": "cde",
   " ": "",
 };
 
@@ -39,7 +42,8 @@ function SevenSeg({
   color: string;
   dot?: boolean;
 }) {
-  const on = DIGIT[char] ?? "";
+  const glyph = char.toUpperCase();
+  const on = DIGIT[glyph] ?? "";
   return (
     <svg viewBox="0 0 40 72" className="seven-seg" aria-hidden>
       {Object.entries(SEG).map(([k, pts]) => {
@@ -63,6 +67,18 @@ function SevenSeg({
         opacity={dot ? 1 : 0.06}
         style={dot ? { filter: `drop-shadow(0 0 2.5px ${color})` } : undefined}
       />
+      {glyph === "$" && (
+        <line
+          x1="20"
+          y1="1"
+          x2="20"
+          y2="71"
+          stroke={color}
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 2.5px ${color})` }}
+        />
+      )}
     </svg>
   );
 }
@@ -72,7 +88,24 @@ export interface LedDisplayProps {
   digits: number; // fixed width (right-aligned)
   color?: string;
   caption?: string;
-  unit?: string; // small glowing suffix (e.g. "K") — the 7-seg can't show letters
+  unit?: string; // small glowing suffix (e.g. "K") for glyphs outside the limited display alphabet
+}
+
+export function LedWordmark({
+  value,
+  color,
+  label = value,
+}: {
+  value: string;
+  color: string;
+  label?: string;
+}) {
+  return (
+    <span className="led-wordmark" role="img" aria-label={label}>
+      {Array.from(value).map((char, index) => <SevenSeg key={`${char}-${index}`} char={char} color={color} />)}
+      <span className="led-glass" aria-hidden />
+    </span>
+  );
 }
 
 export function LedDisplay({

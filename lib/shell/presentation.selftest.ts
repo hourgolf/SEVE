@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { deploymentTarget, resolvePresentation } from "./presentation";
 
 assert.equal(deploymentTarget("production"), "production");
@@ -10,4 +11,10 @@ assert.equal(resolvePresentation("folio", "production"), "909");
 assert.equal(resolvePresentation("folio", "preview"), "folio");
 assert.equal(resolvePresentation("folio", "development"), "folio");
 
-console.log("presentation-selftest: 8/8 passed");
+const mobileShell = readFileSync("components/mobile2/MobileShell.tsx", "utf8");
+const ledDisplay = readFileSync("components/console/hw/LedDisplay.tsx", "utf8");
+assert.match(mobileShell, /<LedWordmark value="\$EVE" color=\{dayColor\}/);
+assert.match(mobileShell, /const dayColor = down \? "var\(--led-red\)" : "var\(--pm-green\)"/);
+assert.match(ledDisplay, /"\$": "afgcd"[\s\S]*"E": "afged"[\s\S]*"V": "cde"/);
+
+console.log("presentation-selftest: 11/11 passed");

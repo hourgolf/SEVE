@@ -693,6 +693,23 @@
   color: var(--lcd-ink);
 }
 
+.m2-app:not(.folio-mobile) .m2-brand--led {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.m2-app:not(.folio-mobile) .m2-brand--led .led-wordmark {
+  gap: 1px;
+  padding: 2px 5px;
+  border-color: rgba(0, 0, 0, .82);
+}
+
+.m2-app:not(.folio-mobile) .m2-brand--led .seven-seg {
+  width: 13px;
+  height: 24px;
+}
+
 .m2-app:not(.folio-mobile) .m2-brand b {
   font-size: 13px;
 }
@@ -1416,12 +1433,13 @@
 }
 
 @media (max-width: 380px) {
-  .m2-app:not(.folio-mobile) .m2-brand small {
-    display: none;
-  }
-
   .m2-app:not(.folio-mobile) .m2-brand {
     padding-right: 8px;
+  }
+
+  .m2-app:not(.folio-mobile) .m2-brand--led .seven-seg {
+    width: 12px;
+    height: 22px;
   }
 
   .m2-app:not(.folio-mobile) .m2-status {

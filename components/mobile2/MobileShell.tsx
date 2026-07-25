@@ -3,7 +3,7 @@
 import "@/app/mobile2.css";
 import "@/app/seve-909.css";
 import { useEffect, useMemo, useState } from "react";
-import { LedDisplay } from "@/components/console/hw/LedDisplay";
+import { LedDisplay, LedWordmark } from "@/components/console/hw/LedDisplay";
 import { MobilePerform, type MobileMarketView } from "@/components/mobile2/MobilePerform";
 import { MobileStudio } from "@/components/mobile2/MobileStudio";
 import { MobileDeskRoom } from "@/components/mobile2/MobileDeskSheet";
@@ -98,7 +98,9 @@ export function MobileShell(props: SurfaceProps) {
       <header className="m2-head">
         <div className="m2-head-r1">
           <button type="button" className={`m2-status m2-status--${props.incident.severity}`} onClick={() => setRoom("play")}>
-            <span className="m2-brand"><b>SEVE DESK</b><small>MOBILE WORKSTATION</small></span>
+            <span className="m2-brand m2-brand--led">
+              <LedWordmark value="$EVE" color={dayColor} label={`$EVE desk ${down ? "down" : "up"} for the day`} />
+            </span>
             <i />
             <span className="m2-status-copy"><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {props.feed.positions.length} · {props.incident.session.replaceAll("_", " ")}</small></span>
             <em>{clock} PT</em>
