@@ -101,8 +101,10 @@ export function MobileShell(props: SurfaceProps) {
             <span className="m2-brand m2-brand--led">
               <LedWordmark value="$EVE" color={dayColor} label={`$EVE desk ${down ? "down" : "up"} for the day`} />
             </span>
-            <i />
-            <span className="m2-status-copy"><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {props.feed.positions.length} · {props.incident.session.replaceAll("_", " ")}</small></span>
+            <span className="m2-status-center">
+              <i />
+              <span className="m2-status-copy"><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {props.feed.positions.length} · {props.incident.session.replaceAll("_", " ")}</small></span>
+            </span>
             <em>{clock} PT</em>
           </button>
           <button type="button" className="m2-cog" onClick={() => setSetOpen(true)} aria-label="settings and log"><IcCog /></button>
@@ -122,7 +124,6 @@ export function MobileShell(props: SurfaceProps) {
           </div>
         </div>
       </header>
-      <div className="m2-band"><i /><i /><i /><i /></div>
 
       <main className="m2-main">
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}

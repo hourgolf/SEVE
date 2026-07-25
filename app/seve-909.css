@@ -723,12 +723,22 @@
 .m2-app:not(.folio-mobile) .m2-status {
   min-height: 44px;
   height: 44px;
-  grid-template-columns: auto 8px minmax(0, 1fr) auto;
-  gap: 9px;
+  grid-template-columns: 77px minmax(0, 1fr) 77px;
+  gap: 0;
   padding: 5px 10px;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+.m2-app:not(.folio-mobile) .m2-status-center {
+  max-width: 100%;
+  gap: 9px;
+}
+
+.m2-app:not(.folio-mobile) .m2-status-copy {
+  justify-items: center;
+  text-align: center;
 }
 
 .m2-app:not(.folio-mobile) .m2-status b {
@@ -738,6 +748,10 @@
 .m2-app:not(.folio-mobile) .m2-status small,
 .m2-app:not(.folio-mobile) .m2-status em {
   font-size: 9px;
+}
+
+.m2-app:not(.folio-mobile) .m2-status em {
+  justify-self: end;
 }
 
 .m2-app:not(.folio-mobile) .m2-cog {
@@ -1213,13 +1227,18 @@
   font-size: 12px;
 }
 
-/* Cream phone rooms use cream analytical cards. Play keeps the plot and live
-   option instrument dark; Studio's terminal-like session tape may remain dark. */
-.m2-app:not(.folio-mobile)[data-skin="cream"]:not([data-room="play"]) .m2-main {
+/* Cream phone rooms use cream hardware around their analytical cards. The
+   plots and live instruments retain their own dark glass surfaces. */
+.m2-app:not(.folio-mobile)[data-skin="cream"] .m2-main {
   color: var(--909-text-primary);
   background: var(--909-surface-canvas);
+  border-width: 2px;
   border-color: var(--909-border-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 7px rgba(0, 0, 0, .20);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] .m2-scroll {
+  background: var(--909-surface-canvas);
 }
 
 .m2-app:not(.folio-mobile)[data-skin="cream"][data-room="studio"] .m2-screen:not(.m2-tape-screen) {
@@ -1443,8 +1462,8 @@
   }
 
   .m2-app:not(.folio-mobile) .m2-status {
-    gap: 7px;
     padding-inline: 8px;
+    grid-template-columns: 71px minmax(0, 1fr) 71px;
   }
 
   .m2-app:not(.folio-mobile) .m2-status em {
