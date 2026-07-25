@@ -26,7 +26,7 @@ const NAV = [
   { key: "studio", label: "Channels", hint: "Tune", icon: "◉", group: "trade", mode: "studio" as const },
   { key: "research", label: "Research", hint: "Shadow", icon: "∿", group: "evidence", mode: "perform" as const, section: "research" as const },
   { key: "sentinel", label: "Sentinel", hint: "Next open", icon: "◇", group: "evidence", mode: "perform" as const, section: "sentinel" as const },
-  { key: "tape", label: "Event Tape", hint: "Review", icon: "≋", group: "evidence", mode: "perform" as const, section: "tape" as const },
+  { key: "tape", label: "Review", hint: "Evidence", icon: "≋", group: "evidence", mode: "perform" as const, section: "tape" as const },
   { key: "ops", label: "Ops", hint: "System", icon: "⌘", group: "system", mode: "perform" as const, section: "ops" as const },
 ];
 

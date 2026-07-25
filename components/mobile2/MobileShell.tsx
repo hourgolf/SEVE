@@ -36,7 +36,7 @@ const ROOMS: { id: MobileRoom; label: string; sub: string }[] = [
   { id: "play", label: "PLAY", sub: "CHART" },
   { id: "studio", label: "STUDIO", sub: "CHANNELS" },
   { id: "book", label: "BOOK", sub: "POSITIONS" },
-  { id: "review", label: "REVIEW", sub: "READ" },
+  { id: "review", label: "REVIEW", sub: "EVIDENCE" },
   { id: "ops", label: "OPS", sub: "SYSTEM" },
 ];
 

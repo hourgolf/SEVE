@@ -88,6 +88,7 @@ export function PerformMarketsWorkspace({ surface }: { surface: SurfaceProps }) 
           symbol={symbol}
           onSymbolChange={changeSymbol}
           fill
+          hideTitle
         />
       </div>
       <aside className="pf-markets-console" data-selected-contract={selected || undefined}>

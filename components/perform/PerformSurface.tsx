@@ -61,6 +61,7 @@ export function PerformSurface({
               symbol={symbol}
               onSymbolChange={setSymbol}
               fill
+              hideTitle
             />
           </div>
           <PerformRail

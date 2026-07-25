@@ -138,7 +138,7 @@ class SessionLayer implements ISeriesPrimitive<Time> {
 
 export function IntradayChart({
   bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
-  symbol = "SPY", onSymbolChange, fill = false, hideTitle = false,
+  symbol = "SPY", onSymbolChange, fill = false, hideTitle = false, hideSymbolSelector = false,
 }: {
   bars: UnderlyingBar[];
   dailyBars?: UnderlyingBar[];
@@ -151,6 +151,9 @@ export function IntradayChart({
   /** The surrounding workspace already names the live instrument. Keep the
    *  chart controls, but omit the repeated "SPY — Intraday" label. */
   hideTitle?: boolean;
+  /** A parent workspace owns the instrument selector. Avoid rendering a
+   *  second SPY/QQQ/IWM bank inside the chart module. */
+  hideSymbolSelector?: boolean;
   /** §01 instrument label (SPY/QQQ) — titles the chart + the spot LED caption. */
   symbol?: string;
   /** When provided, renders the SPY/QQQ toggle in the chart header. */
@@ -710,7 +713,7 @@ export function IntradayChart({
       <div className={`phead${hideTitle ? " chart-head--untitled" : ""}`}>
         {!hideTitle && <span className="t">{symbol} — {isDaily ? "Daily" : "Intraday"}</span>}
         <span className="phead-right chart-controls chart-controls--top">
-          {onSymbolChange && (
+          {onSymbolChange && !hideSymbolSelector && (
             <span className="chart-toggle sym-toggle" role="group" aria-label="instrument">
               {SUPPORTED_UNDERLYINGS.map((sy) => (
                 <button key={sy} className={symbol === sy ? "on" : ""} onClick={() => onSymbolChange(sy)} aria-pressed={symbol === sy}>{sy}</button>

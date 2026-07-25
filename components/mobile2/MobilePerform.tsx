@@ -171,6 +171,7 @@ export function MobilePerform({
               symbol={symbol}
               onSymbolChange={setSymbol}
               hideTitle
+              hideSymbolSelector
             />
           </div>
         </section>

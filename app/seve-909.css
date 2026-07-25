@@ -2535,3 +2535,508 @@
 }
 
 /* 909 CONTROL CONTRACT: END */
+
+/* ==========================================================================
+   909 CONVERGENCE PASS
+
+   Final semantic bridge for leaves that still carried pre-foundation colors
+   or type sizes. This layer deliberately changes presentation only: no data,
+   execution, evidence, or control authority moves with it.
+   ========================================================================== */
+
+/* The command palette is mounted beside the workstation shell, so it cannot
+   inherit the shell-local variables directly. Give that overlay the same
+   Figma foundation contract at the page theme boundary. */
+.console-root[data-theme="cream"] {
+  --909-overlay-canvas: #e8e3da;
+  --909-overlay-panel: #f2f1ee;
+  --909-overlay-inset: #e1dbd3;
+  --909-overlay-text: #4c4943;
+  --909-overlay-muted: #737068;
+  --909-overlay-disabled: #777269;
+  --909-overlay-border: rgba(60, 52, 30, .14);
+  --909-overlay-border-strong: rgba(60, 52, 30, .26);
+  --909-overlay-success: #3b7c48;
+  --909-overlay-attention: #bc8b51;
+  --909-overlay-danger: #933e35;
+}
+
+.console-root[data-theme="blackout"] {
+  --909-overlay-canvas: #262728;
+  --909-overlay-panel: #1d2223;
+  --909-overlay-inset: #232727;
+  --909-overlay-text: #e7eae5;
+  --909-overlay-muted: #aeb2aa;
+  --909-overlay-disabled: #6f797d;
+  --909-overlay-border: rgba(255, 255, 255, .07);
+  --909-overlay-border-strong: rgba(255, 255, 255, .13);
+  --909-overlay-success: #88b780;
+  --909-overlay-attention: #dbae6e;
+  --909-overlay-danger: #d27f60;
+}
+
+.console-root[data-theme] .cmdk-panel {
+  color-scheme: light dark;
+  color: var(--909-overlay-text);
+  background: linear-gradient(180deg, var(--909-overlay-panel), var(--909-overlay-inset));
+  border-color: var(--909-overlay-border-strong);
+}
+
+.console-root[data-theme] :is(.cmdk-title, .cmdk-esc) {
+  color: var(--909-overlay-text);
+}
+
+.console-root[data-theme] .cmdk-esc {
+  border-color: var(--909-overlay-border-strong);
+  background: color-mix(in srgb, var(--909-overlay-panel) 78%, transparent);
+}
+
+.console-root[data-theme] .cmdk-lcd {
+  color: var(--909-overlay-text);
+  background: var(--909-overlay-panel);
+  border-color: var(--909-overlay-border-strong);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--909-overlay-text) 8%, transparent);
+}
+
+.console-root[data-theme] .cmdk-in {
+  border-color: var(--909-overlay-border);
+}
+
+.console-root[data-theme] .cmdk-in input,
+.console-root[data-theme] .cmdk-row,
+.console-root[data-theme] .cmdk-row .verb {
+  color: var(--909-overlay-text);
+}
+
+.console-root[data-theme] :is(
+  .cmdk-in input::placeholder,
+  .cmdk-count,
+  .cmdk-grp,
+  .cmdk-row .sub,
+  .cmdk-row .signin,
+  .cmdk-foot,
+  .cmdk-empty
+) {
+  color: var(--909-overlay-muted);
+}
+
+.console-root[data-theme] .cmdk-row:hover {
+  background: color-mix(in srgb, var(--909-overlay-text) 5%, transparent);
+}
+
+.console-root[data-theme] .cmdk-row.sel {
+  color: var(--909-overlay-text);
+  background: color-mix(in srgb, var(--909-overlay-attention) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--909-overlay-attention);
+}
+
+.console-root[data-theme] .cmdk-row .selmark {
+  color: var(--909-overlay-attention);
+}
+
+.console-root[data-theme] .cmdk-row kbd {
+  color: var(--909-overlay-muted);
+  border-color: var(--909-overlay-border-strong);
+  background: color-mix(in srgb, var(--909-overlay-text) 4%, transparent);
+}
+
+.console-root[data-theme] .cmdk-foot {
+  border-color: var(--909-overlay-border);
+}
+
+.console-root[data-theme] .cmdk-foot b {
+  color: var(--909-overlay-text);
+}
+
+.console-root[data-theme] .cmdk-row.kill,
+.console-root[data-theme] .cmdk-row.kill .verb,
+.console-root[data-theme] .cmdk-row .armtag {
+  color: var(--909-overlay-danger);
+}
+
+/* Mobile command/settings overlays are true peers of their selected frame. */
+.m2-app:not(.folio-mobile)[data-skin] .m2-cmd-sheet {
+  color-scheme: light dark;
+  color: var(--909-text-primary);
+  background: linear-gradient(180deg, var(--909-surface-panel), var(--909-surface-panel-inset));
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-cmd-title,
+  .m2-cmd-x,
+  .m2-cmd-row,
+  .m2-cmd-row .verb,
+  .m2-cmd-row .rest
+) {
+  color: var(--909-text-primary);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-cmd-x {
+  border-color: var(--909-border-strong);
+  background: color-mix(in srgb, var(--909-surface-panel) 78%, transparent);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-cmd-lcd {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--909-text-primary) 8%, transparent);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-cmd-row .sub,
+  .m2-cmd-row .signin,
+  .m2-cmd-row .gotag,
+  .m2-cmd-foot
+) {
+  color: var(--909-text-secondary);
+}
+
+/* Health/status colors come from the active foundation mode, not the retired
+   high-chroma desk green. The status LCD remains an intentional instrument. */
+.m2-app:not(.folio-mobile)[data-skin] .m2-status {
+  color: var(--909-positive-text);
+  border-color: color-mix(in srgb, var(--909-positive-text) 48%, #111);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-status-center > i {
+  background: var(--909-positive-icon);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--909-positive-icon) 75%, transparent);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-status small,
+.m2-app:not(.folio-mobile)[data-skin] .m2-status em {
+  color: color-mix(in srgb, var(--909-positive-text) 62%, var(--909-text-tertiary));
+}
+
+.shell-root.ws909[data-skin] :is(
+  .ws-state.green strong,
+  .ws-utility .op.on,
+  .opsw-lamp.green,
+  .opsw-release,
+  .opsr-summary.green,
+  .opsr-item.green,
+  .opsr-broker-strip.green
+),
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-release-receipt,
+  .tape-read-strip.green,
+  .sentinel-receipt.green,
+  .m2-preflight em
+) {
+  color: var(--909-positive-text);
+}
+
+.shell-root.ws909[data-skin] .ws-state.green i {
+  background: var(--909-positive-icon);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--909-positive-icon) 72%, transparent);
+}
+
+/* The mobile account bank now shares desktop's 1/2/3 LED language. Account
+   names stay available through each button's accessible label and tooltip. */
+.m2-app:not(.folio-mobile) .m2-head-meta :is(.acct-switch, .acct-badge) {
+  min-height: 44px;
+  height: 44px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta :is(.acct-opt, .acct-badge) {
+  min-height: 44px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta .acct-opt {
+  display: grid;
+  place-items: center;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta :is(.acct-opt, .acct-badge) .led {
+  gap: 0;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta :is(.acct-opt, .acct-badge) .led-window {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta :is(.acct-opt, .acct-badge) :is(.led-glass, .led-caption) {
+  display: none;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta :is(.acct-opt, .acct-badge) .seven-seg {
+  width: 15px;
+  height: 28px;
+}
+
+.m2-app:not(.folio-mobile) .m2-head-meta :is(.m2-pill, .m2-kill) {
+  min-height: 44px;
+  height: 44px;
+}
+
+/* Cream chain parity. The chain is a dense analytical table, but it is no
+   longer allowed to ignore the selected light frame. */
+.m2-app:not(.folio-mobile)[data-skin="cream"] :is(.m2-markets-chain, .m2-markets-contract, .m2-desk-chain) {
+  --panel: var(--909-surface-panel);
+  --panel-2: var(--909-surface-panel-inset);
+  --text: var(--909-text-primary);
+  --muted: var(--909-text-secondary);
+  --muted-2: var(--909-text-tertiary);
+  --border: var(--909-border);
+  --border-bright: var(--909-border-strong);
+  --green: var(--909-positive-text);
+  --amber: var(--909-warning-text);
+  color: var(--909-text-primary);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] :is(
+  .m2-markets-chain,
+  .m2-markets-contract,
+  .m2-desk-chain
+) > .panel {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel);
+  border-color: var(--909-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 3px 10px rgba(43, 39, 30, .16);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] :is(
+  .m2-markets-chain,
+  .m2-markets-contract,
+  .m2-desk-chain
+) :is(.phead, .chain-table thead th) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset);
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] :is(
+  .m2-markets-chain,
+  .m2-markets-contract,
+  .m2-desk-chain
+) :is(.phead .t, .phead .x, .chain-table th, .chain-table td) {
+  color: var(--909-text-primary);
+  text-shadow: none;
+  border-color: var(--909-border);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] :is(
+  .m2-markets-chain,
+  .m2-desk-chain
+) .chain-table tr.atm td {
+  background: var(--909-positive-fill);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] :is(
+  .m2-markets-chain,
+  .m2-desk-chain
+) .chain-table :is(.call, .call-delta, .pos) {
+  color: var(--909-positive-text);
+}
+
+.m2-app:not(.folio-mobile)[data-skin="cream"] :is(
+  .m2-markets-chain,
+  .m2-desk-chain
+) .chain-table :is(.put, .put-delta, .neg) {
+  color: var(--909-negative-text);
+}
+
+/* Native select controls must not introduce a browser-white island into the
+   blackout research workspace. */
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] .srw-history select {
+  appearance: none;
+  color-scheme: light dark;
+  color: var(--909-control-rest-text);
+  background: linear-gradient(180deg, var(--909-control-rest-top), var(--909-control-rest-bottom));
+  border-color: var(--909-control-rest-border);
+}
+
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] .srw-history.on select {
+  color: var(--909-control-selected-text);
+  background: linear-gradient(180deg, var(--909-control-selected-top), var(--909-control-selected-bottom));
+  border-color: var(--909-control-selected-border);
+  box-shadow: inset 0 -2px 0 var(--909-control-selected-strike);
+}
+
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] .srw-history::after {
+  color: currentColor;
+}
+
+/* Remove the last pre-foundation beige bands from room and analytical card
+   headers. Dark chart canvases and LED instruments remain intentionally dark. */
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] :is(
+  .m2-desk-section > header,
+  .m2-book-nav,
+  .m2-studio-tools,
+  .m2-room-scroll .sentinel-receipt,
+  .opsw-card > header,
+  .sntw-card > header,
+  .pf-hardware .pf-head
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset);
+  border-color: var(--909-border-strong);
+}
+
+/* A single type floor for operator-readable evidence. Detail stays compact,
+   but no active desktop/mobile workspace falls back to 6–9px microtype. */
+.shell-root.ws909[data-skin] :is(
+  .srw,
+  .sntw,
+  .etw,
+  .opsw,
+  .pf-positions-shell,
+  .studio
+) {
+  --fs-label: 11px;
+  --fs-chip: 11px;
+  --fs-num: 13px;
+  --fs-num-lg: 16px;
+  --fs-body: 13px;
+}
+
+.shell-root.ws909[data-skin] :is(
+  .sv909-workspace-head,
+  .srw-head,
+  .sntw-head,
+  .etw-head
+) {
+  min-height: 58px;
+  padding: 10px 12px;
+  color: var(--909-text-primary);
+  border-bottom: 1px solid var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin] :is(
+  .sv909-workspace-head,
+  .srw-head,
+  .sntw-head,
+  .etw-head
+) :is(b, > span > b) {
+  font-size: clamp(18px, 1vw, 22px);
+  line-height: 1.1;
+  letter-spacing: .1em;
+}
+
+.shell-root.ws909[data-skin] :is(
+  .sv909-workspace-head,
+  .srw-head,
+  .sntw-head,
+  .etw-head
+) :is(small, em) {
+  font-size: clamp(11px, .68vw, 13px);
+  line-height: 1.35;
+}
+
+.shell-root.ws909[data-skin] .opsw-card > header {
+  min-height: 42px;
+}
+
+.shell-root.ws909[data-skin] .opsw-card > header :is(b, em, span) {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.shell-root.ws909[data-skin] :is(
+  .opsr-summary small,
+  .opsr-summary em,
+  .opsr-item small,
+  .opsr-item em,
+  .opsr-item time,
+  .opsr-groups > section > header b,
+  .opsr-groups > section > header em,
+  .opsr > footer span,
+  .opsr-drill > header b,
+  .opsr-drill > header em,
+  .opsr-drill summary small,
+  .opsr-drill summary em,
+  .opsr-broker summary b,
+  .opsr-broker summary em,
+  .opsr-broker-accounts b,
+  .opsr-broker-accounts em,
+  .opsr-mismatches b,
+  .opsr-mismatches em
+) {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-review-modes button b,
+  .m2-review-modes button small,
+  .m2-review-tape time,
+  .m2-review-tape b,
+  .m2-review-tape em,
+  .m2-review-tape span,
+  .m2-review-scan b,
+  .m2-review-scan span,
+  .m2-review-scan small,
+  .m2-room-scroll .sentinel-receipt b,
+  .m2-room-scroll .sentinel-receipt small,
+  .m2-preflight b,
+  .m2-preflight small,
+  .m2-release-receipt b,
+  .m2-release-receipt small,
+  .srw-head small,
+  .srw-head em,
+  .srw-native header small,
+  .srw-exact header small,
+  .srw-table-head,
+  .srw-row,
+  .srw-manager-list > div,
+  .srw-interactions > b,
+  .srw-interactions em,
+  .srw-interactions small,
+  .srw footer,
+  .srw-exact > p
+) {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .srw-head b,
+  .srw-native > header b,
+  .srw-exact > header b
+) {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+/* Keep compact controls touchable and visually proportional in both market
+   views. The outer bank owns the mobile instrument selection. */
+.m2-app:not(.folio-mobile)[data-skin] .m2-market-switch button {
+  min-height: 44px;
+  padding-inline: 14px;
+  font-size: 11px;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-market-switch button.symbol {
+  min-width: 58px;
+  padding-inline: 10px;
+  font-size: 11px;
+}
+
+/* The chart module is now untitled when its workspace already owns context;
+   close the resulting blank header space without changing chart geometry. */
+.shell-root.ws909[data-mode="perform"] .chart-head--untitled,
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-head--untitled {
+  min-height: 52px;
+}
+
+.shell-root.ws909[data-mode="perform"] .chart-head--untitled .phead-right {
+  width: 100%;
+  flex: 1 1 100%;
+}
+
+/* The footer scope is a small ambient flourish, not a peer of evidence or
+   execution controls. */
+.shell-root.ws909 .ws-deck {
+  grid-template-columns: minmax(480px, 1fr) minmax(180px, 230px) 126px;
+}
+
+.shell-root.ws909 .ws-scope-screen {
+  height: 38px;
+}
+
+/* 909 CONVERGENCE PASS: END */
