@@ -15,6 +15,6 @@ const mobileShell = readFileSync("components/mobile2/MobileShell.tsx", "utf8");
 const ledDisplay = readFileSync("components/console/hw/LedDisplay.tsx", "utf8");
 assert.match(mobileShell, /<LedWordmark value="\$EVE" color=\{dayColor\}/);
 assert.match(mobileShell, /const dayColor = down \? "var\(--led-red\)" : "var\(--pm-green\)"/);
-assert.match(ledDisplay, /"\$": "afgcd"[\s\S]*"E": "afged"[\s\S]*"V": "cde"/);
+assert.match(ledDisplay, /"\$": "afgcd"[\s\S]*"E": "afged"[\s\S]*"V": ""/);
 
 console.log("presentation-selftest: 11/11 passed");

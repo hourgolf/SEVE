@@ -29,7 +29,7 @@ const DIGIT: Record<string, string> = {
   "-": "g",
   "$": "afgcd",
   "E": "afged",
-  "V": "cde",
+  "V": "",
   " ": "",
 };
 
@@ -76,6 +76,17 @@ function SevenSeg({
           stroke={color}
           strokeWidth="2.6"
           strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 2.5px ${color})` }}
+        />
+      )}
+      {glyph === "V" && (
+        <polyline
+          points="9,7 20,67 31,7"
+          fill="none"
+          stroke={color}
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
           style={{ filter: `drop-shadow(0 0 2.5px ${color})` }}
         />
       )}
