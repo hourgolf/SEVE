@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./seve-theme.generated.css";
 import { AuthProvider } from "@/hooks/useAuth";
 
 export const metadata: Metadata = {

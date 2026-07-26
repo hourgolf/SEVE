@@ -9,6 +9,7 @@ import { SessionSequencer } from "@/components/console/SessionSequencer";
 import { PerformSurface } from "@/components/perform/PerformSurface";
 import { StudioSurface } from "@/components/studio/StudioSurface";
 import { useShell } from "@/hooks/useShellState";
+import { openThemeLab } from "@/components/theme/ThemeBridge";
 import { signedUsd, usd0 } from "@/lib/format";
 import { deriveBrokerTelemetry, deriveProcessTelemetry } from "@/lib/shell/workstationTelemetry";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -133,6 +134,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
         </button>
         <div className="ws-utility">
           <button type="button" title="frame skin" onClick={toggleSkin}>{skin === "cream" ? "☼" : "◐"}</button>
+          <button type="button" title="Figma Theme Lab" aria-label="open Figma Theme Lab" onClick={openThemeLab}>TL</button>
           <button type="button" title="command palette" onClick={() => window.dispatchEvent(new CustomEvent("seve:command-palette"))}>⌘K</button>
           <button
             type="button"

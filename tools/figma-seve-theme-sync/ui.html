@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root{font-family:Inter,system-ui,sans-serif;color:#e7eae5;background:#101516}*{box-sizing:border-box}body{margin:0;padding:16px;display:grid;gap:12px}header{display:flex;justify-content:space-between;align-items:start}h1{margin:0;font-size:16px}header p{margin:4px 0 0;color:#9da6a7;font-size:11px}.lamp{color:#88b780}label{display:grid;gap:5px;color:#aeb2aa;font-size:10px;font-weight:700;letter-spacing:.08em}input,textarea{width:100%;border:1px solid #3d4547;border-radius:5px;background:#090d0e;color:#e7eae5;padding:9px;font:12px/1.45 "JetBrains Mono",monospace}textarea{height:430px;resize:none}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.actions button{min-height:38px;border:1px solid #566064;border-radius:5px;background:#202627;color:#e7eae5;font-weight:800;cursor:pointer}.actions button.primary{border-color:#d87750;background:#d87750;color:#1b0c07}.status{min-height:18px;color:#88b780;font-size:11px}.status.bad{color:#d27f60}
+  </style>
+</head>
+<body>
+  <header><div><h1>SEVE 909 · THEME SYNC</h1><p>Draft colors + font families · layout locked</p></div><span class="lamp">● READY</span></header>
+  <label>SEVE PREVIEW URL<input id="base" value="https://seve-git-feat-909-foundation-pos-f8d985-matts-projects-e40c49ec.vercel.app/" /></label>
+  <label>EXPORTED TOKEN PAYLOAD<textarea id="payload" spellcheck="false" readonly>Reading Figma variables…</textarea></label>
+  <div class="actions">
+    <button id="copy-json">COPY JSON</button>
+    <button id="download">DOWNLOAD JSON</button>
+    <button id="copy-link">COPY REVIEW LINK</button>
+    <button id="open" class="primary">PREVIEW IN SEVE</button>
+  </div>
+  <div id="status" class="status"></div>
+  <script>
+    let theme = null;
+    const payload = document.getElementById("payload");
+    const status = document.getElementById("status");
+    const setStatus = (message, bad = false) => { status.textContent = message; status.className = bad ? "status bad" : "status"; };
+    const encode = (value) => {
+      const bytes = new TextEncoder().encode(JSON.stringify(value));
+      let binary = ""; bytes.forEach((byte) => binary += String.fromCharCode(byte));
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    };
+    const previewUrl = () => {
+      const url = new URL(document.getElementById("base").value);
+      url.hash = new URLSearchParams({ "seve-theme": encode(theme) }).toString();
+      return url.toString();
+    };
+    onmessage = (event) => {
+      const message = event.data.pluginMessage;
+      if (message.type === "theme") {
+        theme = message.payload;
+        payload.value = JSON.stringify(theme, null, 2);
+        setStatus("Draft modes exported. No repository or production state was changed.");
+      } else if (message.type === "error") {
+        payload.value = "";
+        setStatus(message.message, true);
+      }
+    };
+    document.getElementById("copy-json").onclick = async () => {
+      if (!theme) return; await navigator.clipboard.writeText(JSON.stringify(theme, null, 2)); setStatus("Theme JSON copied.");
+    };
+    document.getElementById("download").onclick = () => {
+      if (!theme) return;
+      const href = URL.createObjectURL(new Blob([JSON.stringify(theme, null, 2) + "\n"], { type: "application/json" }));
+      const link = document.createElement("a"); link.href = href; link.download = "seve-909-theme.json"; link.click(); URL.revokeObjectURL(href);
+      setStatus("Theme JSON downloaded.");
+    };
+    document.getElementById("copy-link").onclick = async () => {
+      if (!theme) return; await navigator.clipboard.writeText(previewUrl()); setStatus("Review link copied.");
+    };
+    document.getElementById("open").onclick = () => {
+      if (!theme) return; parent.postMessage({ pluginMessage: { type: "open-preview", url: previewUrl() } }, "*"); setStatus("Opening SEVE with the Figma draft applied.");
+    };
+  </script>
+</body>
+</html>

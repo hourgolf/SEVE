@@ -5,6 +5,7 @@ import { PushToggle } from "@/components/console/PushToggle";
 import { KitToggle } from "@/components/console/KitToggle";
 import { EventLog } from "@/components/EventLog";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
+import { openThemeLab } from "@/components/theme/ThemeBridge";
 import type { MarketEvent } from "@/lib/types";
 
 // =============================================================================
@@ -46,6 +47,7 @@ export function MobileSettingsSheet({
               <button type="button" className={skin === "blackout" ? "on" : ""} onClick={() => setSkin("blackout")}>BLACKOUT</button>
             </span>
           </div>
+          <button type="button" className="m2-open-settings" onClick={openThemeLab}>OPEN FIGMA THEME LAB</button>
           <PushToggle />
           <KitToggle variant="sheet" />
           <EventLog events={events} />

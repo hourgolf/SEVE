@@ -41,6 +41,7 @@ import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 import { deriveOpsReadiness } from "@/lib/ops/readiness";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthControl } from "@/components/AuthControl";
+import { ThemeBridge } from "@/components/theme/ThemeBridge";
 import type { WorkstationPresentation } from "@/lib/shell/presentation";
 
 // One set of data hooks, two layouts: the wide desktop chassis or the phone
@@ -257,6 +258,7 @@ function PageInner({ presentation }: { presentation: WorkstationPresentation }) 
     <div className="console-root" data-theme={skin}>
       <DeskProvider>
         <Surface theme={skin} setTheme={setTheme} presentation={presentation} />
+        <ThemeBridge skin={skin} setSkin={setSkin} />
       </DeskProvider>
     </div>
   );

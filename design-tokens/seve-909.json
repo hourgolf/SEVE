@@ -1,0 +1,77 @@
+{
+  "schema": "seve-909-theme/v1",
+  "name": "SEVE 909 Figma Draft",
+  "source": {
+    "fileKey": "8SVX0qillk8k8ygJcH7GGE",
+    "collection": "SEVE 909 / Foundation",
+    "creamMode": "Cream Draft",
+    "blackoutMode": "Blackout Draft"
+  },
+  "modes": {
+    "cream": {
+      "surface/chassis": "#e8e3da",
+      "surface/panel": "#f2f1ee",
+      "surface/inset": "#e1dbd3",
+      "surface/well": "rgba(60, 52, 30, 0.08)",
+      "line/subtle": "rgba(60, 52, 30, 0.14)",
+      "line/strong": "rgba(60, 52, 30, 0.26)",
+      "text/primary": "#4c4943",
+      "text/muted": "#737068",
+      "text/disabled": "#777269",
+      "status/success": "#3b7c48",
+      "status/attention": "#bc8b51",
+      "status/danger": "#933e35",
+      "status/info": "#385e77",
+      "status/neutral": "#5f5b53",
+      "focus/ring": "#285f7a",
+      "hardware/accent": "#d87750"
+    },
+    "blackout": {
+      "surface/chassis": "#262728",
+      "surface/panel": "#1d2223",
+      "surface/inset": "#232727",
+      "surface/well": "rgba(255, 255, 255, 0.035)",
+      "line/subtle": "rgba(255, 255, 255, 0.07)",
+      "line/strong": "rgba(255, 255, 255, 0.13)",
+      "text/primary": "#e7eae5",
+      "text/muted": "#aeb2aa",
+      "text/disabled": "#6f797d",
+      "status/success": "#88b780",
+      "status/attention": "#dbae6e",
+      "status/danger": "#d27f60",
+      "status/info": "#7faad6",
+      "status/neutral": "#a6afb2",
+      "focus/ring": "#5aa0e6",
+      "hardware/accent": "#d87750"
+    }
+  },
+  "type": {
+    "family/body": "IBM Plex Sans",
+    "family/mono": "JetBrains Mono",
+    "family/display": "Inter",
+    "weight/body": 400,
+    "weight/medium": 500,
+    "weight/strong": 700,
+    "size/silkscreen": 8,
+    "size/label": 11,
+    "size/mobile-label": 12,
+    "size/chip": 12,
+    "size/body": 14,
+    "size/number": 16,
+    "size/number-lg": 20,
+    "size/hero": 24,
+    "size/title": 32
+  },
+  "space": {
+    "1": 4,
+    "2": 8,
+    "3": 12,
+    "4": 16,
+    "5": 24
+  },
+  "radius": {
+    "control": 4,
+    "panel": 6,
+    "workspace": 8
+  }
+}

@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "theme:generate": "tsx scripts/generate-seve-theme-css.ts",
+    "theme:selftest": "tsx lib/theme/seveTheme.selftest.ts",
     "lint": "next lint",
     "backtest": "tsx engine/backtest.ts",
     "montecarlo": "tsx engine/montecarlo.ts",
