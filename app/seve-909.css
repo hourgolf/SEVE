@@ -3544,6 +3544,18 @@
   border-color: var(--909-border-strong) !important;
 }
 
+.shell-root.ws909[data-skin] .sv909-workspace-head b {
+  color: var(--909-text-primary) !important;
+}
+
+.shell-root.ws909[data-skin] .sv909-workspace-head small {
+  color: var(--909-text-secondary) !important;
+}
+
+.shell-root.ws909[data-skin] .sv909-workspace-head em {
+  color: var(--909-warning-text) !important;
+}
+
 .shell-root.ws909[data-skin][data-mode="studio"] :is(
   .fleet,
   .mixer-deck
