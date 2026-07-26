@@ -3692,6 +3692,21 @@
 }
 
 .m2-app:not(.folio-mobile)[data-skin] .m2-chart-body :is(
+  .m2-screen,
+  .panel,
+  .m2-phead
+) {
+  color: var(--909-on-dark) !important;
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+  border-color: color-mix(in srgb, var(--909-on-dark) 16%, transparent) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body .m2-phead :is(.t, .x) {
+  color: var(--909-on-dark) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body :is(
   .chart-toggle,
   .seg,
   .ind-chips
@@ -3721,6 +3736,65 @@
   background-image: none !important;
   border-color: color-mix(in srgb, var(--909-on-dark) 16%, transparent) !important;
   box-shadow: inset 0 -2px 0 var(--909-warning-text) !important;
+}
+
+/* Studio and Ops controls are application chrome, not vintage gradients. */
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-rack,
+  .m2-studio-tools,
+  .m2-studio-sequencer .m-sqdock
+) {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-stepper button,
+  .m2-bigpad,
+  .m2-studio-tools button,
+  .m2-open-settings,
+  .m2-build-add
+) {
+  color: var(--909-text-secondary) !important;
+  background: var(--909-surface-panel-inset) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+  box-shadow: none !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-bigpad.lit-m {
+  color: var(--909-on-dark) !important;
+  background: var(--909-negative-text) !important;
+  border-color: var(--909-negative-text) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-bigpad.lit-b {
+  color: var(--909-surface-instrument) !important;
+  background: var(--909-warning-text) !important;
+  border-color: var(--909-warning-text) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-incident-card {
+  color: var(--909-positive-text) !important;
+  background: var(--909-positive-fill) !important;
+  background-image: none !important;
+  border-color: var(--909-positive-text) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-incident-card :is(p, span) {
+  color: var(--909-text-secondary) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-incident-card:is(
+  .warning,
+  .high,
+  .critical
+) {
+  color: var(--909-negative-text) !important;
+  background: var(--909-negative-fill) !important;
+  border-color: var(--909-negative-text) !important;
 }
 
 /* Chain data remains dense, but its table header is still a theme surface. */
