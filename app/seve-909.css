@@ -3282,3 +3282,151 @@
 }
 
 /* 909 CONVERGENCE PASS: END */
+
+/* ==========================================================================
+   FIGMA FOUNDATION SURFACE ENFORCEMENT
+
+   The earlier token sync updated the semantic variables, but several original
+   workstation rules still painted mock-era beige/graphite gradients over those
+   variables. Keep the 909 geometry and dark instruments; make every chassis,
+   panel, inset, header, and neutral control consume one exact Figma surface.
+   ========================================================================== */
+
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] {
+  background: var(--909-surface-canvas);
+}
+
+.shell-root.ws909[data-skin] :is(.ws-display, .perform, .studio) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-canvas);
+}
+
+.shell-root.ws909[data-skin] :is(
+  .ws-left,
+  .panel,
+  .pf-screen,
+  .pf-hardware,
+  .pf-glass,
+  .pf-chick,
+  .pf-dock,
+  .mix-bank,
+  .studio-module,
+  .inspector,
+  .mixer-inspector,
+  .sntw,
+  .sntw-card,
+  .etw,
+  .etw-list,
+  .opsw,
+  .opsw-card,
+  .srw,
+  .pf-market-target > .panel,
+  .pf-markets-chart > .panel,
+  .pf-markets-chain > .panel,
+  .pf-markets-contract > .panel,
+  .pf-market-risk
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel);
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin] :is(
+  .phead,
+  .pf-head,
+  .insp-head,
+  .studio-module > header,
+  .mix-bank > header,
+  .sntw-card > header,
+  .opsw-card > header,
+  .pf-market-target .phead,
+  .pf-markets-chart .phead,
+  .pf-markets-chain .phead,
+  .pf-markets-contract .phead,
+  .pf-market-risk .pf-head
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset);
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin] :is(
+  .chart-toggle,
+  .seg,
+  .ind-chips,
+  .ws-deck
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset);
+  border-color: var(--909-border-strong);
+}
+
+.shell-root.ws909[data-skin] :is(.chart-controls--bottom, .pf-dock) {
+  background: var(--909-surface-panel);
+}
+
+.shell-root.ws909[data-skin] .ws-utility button:not(.op),
+.shell-root.ws909[data-skin] .ws-sequencer :is(.m-sq-mini i, .m-sq-play) {
+  color: var(--909-control-rest-text);
+  background: var(--909-control-rest-top);
+  border-color: var(--909-control-rest-border);
+  box-shadow: var(--909-control-rest-shadow);
+}
+
+.shell-root.ws909[data-skin] .pfc-mute.lit {
+  color: var(--909-control-toggle-text);
+  background: var(--909-negative-text);
+  border-color: var(--909-negative-text);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--909-negative-text) 48%, transparent);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-main,
+  .m2-scroll,
+  .m2-room-scroll
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-canvas);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-head,
+  .m2-dock,
+  .m2-padbar,
+  .m2-market-switch,
+  .m2-book-nav,
+  .m2-studio-tools,
+  .m2-screen.m2-hardware,
+  .m2-desk-section,
+  .m2-desk-disclosure,
+  .m2-room-scroll .sentinel-receipt,
+  .srw.compact,
+  .m2-set-sheet
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel);
+  border-color: var(--909-border-strong);
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-hardware .m2-phead,
+  .m2-desk-section > header,
+  .m2-desk-disclosure > summary,
+  .m2-desk-hero > span,
+  .m2-preflight > span,
+  .m2-review-modes,
+  .m2-desk-rows > div,
+  .m2-passport,
+  .m2-fp,
+  .srw-controls,
+  .srw-running,
+  .srw-native,
+  .srw-exact,
+  .srw-interactions > span
+) {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset);
+  border-color: var(--909-border);
+}
+
+/* FIGMA FOUNDATION SURFACE ENFORCEMENT: END */
