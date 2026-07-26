@@ -106,7 +106,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const capacityLed = ledCompact(deskCapacity);
   const positionsLed = ledCompact(feed.positions.length);
   const riskLedValue = riskUsed.toFixed(1);
-  const dayLedColor = liveFund.dayPnl < 0 ? "var(--hw-red-soft)" : "var(--hw-green)";
+  const dayLedColor = liveFund.dayPnl < 0 ? "var(--led-red)" : "var(--pm-green)";
   const activeNav = NAV.find((item) => mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section))) ?? NAV[0];
   const navigate = (item: (typeof NAV)[number]) => {
     setMode(item.mode);

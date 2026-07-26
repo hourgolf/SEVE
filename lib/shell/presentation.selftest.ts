@@ -44,6 +44,7 @@ assert.match(workstationCss, /\.ws-sequencer>\.m-sqdock \{[^}]*position:absolute
 assert.match(workstationCss, /\.ws-sequencer \.m-sqbody \{[^}]*bottom:50px/);
 assert.match(workstationShell, /import \{ SessionSequencer \} from "@\/components\/console\/SessionSequencer"/);
 assert.match(workstationShell, /import \{ LedDisplay, LedWordmark \} from "@\/components\/console\/hw\/LedDisplay"/);
+assert.match(workstationShell, /const dayLedColor = liveFund\.dayPnl < 0 \? "var\(--led-red\)" : "var\(--pm-green\)"/);
 assert.match(workstationShell, /<LedWordmark value="\$EVE" color=\{dayLedColor\} label="\$EVE" \/>/);
 assert.doesNotMatch(workstationShell, /SEVE DESK|TRADING WORKSTATION/);
 assert.match(workstationCss, /\.ws-brand--led \.seven-seg \{ width:13px; height:24px; \}/);
