@@ -3293,12 +3293,12 @@
    ========================================================================== */
 
 :is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] {
-  background: var(--909-surface-canvas);
+  background: var(--909-surface-canvas) !important;
 }
 
 .shell-root.ws909[data-skin] :is(.ws-display, .perform, .studio) {
   color: var(--909-text-primary);
-  background: var(--909-surface-canvas);
+  background: var(--909-surface-canvas) !important;
 }
 
 .shell-root.ws909[data-skin] :is(
@@ -3327,7 +3327,7 @@
   .pf-market-risk
 ) {
   color: var(--909-text-primary);
-  background: var(--909-surface-panel);
+  background: var(--909-surface-panel) !important;
   border-color: var(--909-border-strong);
 }
 
@@ -3346,7 +3346,7 @@
   .pf-market-risk .pf-head
 ) {
   color: var(--909-text-primary);
-  background: var(--909-surface-panel-inset);
+  background: var(--909-surface-panel-inset) !important;
   border-color: var(--909-border-strong);
 }
 
@@ -3357,25 +3357,25 @@
   .ws-deck
 ) {
   color: var(--909-text-primary);
-  background: var(--909-surface-panel-inset);
+  background: var(--909-surface-panel-inset) !important;
   border-color: var(--909-border-strong);
 }
 
 .shell-root.ws909[data-skin] :is(.chart-controls--bottom, .pf-dock) {
-  background: var(--909-surface-panel);
+  background: var(--909-surface-panel) !important;
 }
 
 .shell-root.ws909[data-skin] .ws-utility button:not(.op),
 .shell-root.ws909[data-skin] .ws-sequencer :is(.m-sq-mini i, .m-sq-play) {
   color: var(--909-control-rest-text);
-  background: var(--909-control-rest-top);
+  background: var(--909-control-rest-top) !important;
   border-color: var(--909-control-rest-border);
   box-shadow: var(--909-control-rest-shadow);
 }
 
 .shell-root.ws909[data-skin] .pfc-mute.lit {
   color: var(--909-control-toggle-text);
-  background: var(--909-negative-text);
+  background: var(--909-negative-text) !important;
   border-color: var(--909-negative-text);
   box-shadow: 0 0 8px color-mix(in srgb, var(--909-negative-text) 48%, transparent);
 }
@@ -3386,7 +3386,7 @@
   .m2-room-scroll
 ) {
   color: var(--909-text-primary);
-  background: var(--909-surface-canvas);
+  background: var(--909-surface-canvas) !important;
 }
 
 .m2-app:not(.folio-mobile)[data-skin] :is(
@@ -3404,7 +3404,7 @@
   .m2-set-sheet
 ) {
   color: var(--909-text-primary);
-  background: var(--909-surface-panel);
+  background: var(--909-surface-panel) !important;
   border-color: var(--909-border-strong);
 }
 
@@ -3425,7 +3425,7 @@
   .srw-interactions > span
 ) {
   color: var(--909-text-primary);
-  background: var(--909-surface-panel-inset);
+  background: var(--909-surface-panel-inset) !important;
   border-color: var(--909-border);
 }
 
