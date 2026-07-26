@@ -3380,6 +3380,30 @@
   box-shadow: 0 0 8px color-mix(in srgb, var(--909-negative-text) 48%, transparent);
 }
 
+.shell-root.ws909[data-skin] .ws-sequencer .sq-step {
+  color: var(--909-text-primary);
+  background: var(--909-surface-panel-inset) !important;
+  border-color: var(--909-border-strong);
+  box-shadow: var(--909-control-rest-shadow);
+}
+
+.shell-root.ws909[data-skin] .ws-sequencer .sq-step.acc {
+  color: var(--909-control-toggle-text);
+  background: var(--909-negative-text) !important;
+  border-color: var(--909-negative-text);
+}
+
+.shell-root.ws909[data-skin] .ws-sequencer .sq-step.sel {
+  box-shadow:
+    0 0 0 2px var(--909-control-selected-border),
+    var(--909-control-rest-shadow);
+}
+
+.shell-root.ws909[data-skin] .ws-sequencer .sq-step :is(.sq-num, .sq-time) {
+  color: currentColor;
+  opacity: .72;
+}
+
 .m2-app:not(.folio-mobile)[data-skin] :is(
   .m2-main,
   .m2-scroll,
