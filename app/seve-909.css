@@ -3691,6 +3691,18 @@
   background-image: none !important;
 }
 
+.m2-app:not(.folio-mobile)[data-skin] .m2-screen:has(.m2-chart-body),
+.m2-app:not(.folio-mobile)[data-skin] .m2-screen:has(.m2-chart-body) > .m2-phead {
+  color: var(--909-on-dark) !important;
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+  border-color: color-mix(in srgb, var(--909-on-dark) 16%, transparent) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-screen:has(.m2-chart-body) > .m2-phead :is(.t, .x) {
+  color: var(--909-on-dark) !important;
+}
+
 .m2-app:not(.folio-mobile)[data-skin] .m2-chart-body :is(
   .m2-screen,
   .panel,
