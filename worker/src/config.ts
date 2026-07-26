@@ -101,6 +101,11 @@ export const config = {
   // checksum; a missing/mismatched checksum makes startup fail closed.
   day1ReleaseEnabled: flag("DAY1_RELEASE_ENABLED", false),
   day1ReleaseExpectedSha256: opt("DAY1_RELEASE_EXPECTED_SHA256", ""),
+  // Roster-neutral Week 2 LAB foundation. This switch is intentionally unusable
+  // until a later reviewed commit supplies a sealed roster/configuration draft;
+  // setting it early makes startup refuse rather than infer candidates.
+  labCanaryEnabled: flag("LAB_CANARY_ENABLED", false),
+  labCanaryExpectedSha256: opt("LAB_CANARY_EXPECTED_SHA256", ""),
   // Fast EXIT poll cadence (seconds) while live with open stream-owned positions:
   // premium stop/target/giveback checked on the live chain between bar closes.
   fastExitSec: Number(opt("FAST_EXIT_SEC", "10")),

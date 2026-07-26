@@ -51,6 +51,7 @@ import {
   buildDay1AdmissionState,
   DAY1_RELEASE_CONFIGURATION_SHA256,
   DAY1_RELEASE_ID,
+  DAY1_DARK_CHANNELS,
   day1ExecutableGivebackTrail,
   DAY1_ROOT_BINDINGS,
   DAY1_ROOTS,
@@ -64,6 +65,11 @@ import {
   type Day1PendingOrderOccupancy,
   type Day1SnapshotFailure,
 } from "./day1ReleasePolicy.js";
+import {
+  LAB_CANARY_FOUNDATION_ID,
+  LAB_CANARY_FOUNDATION_SHA256,
+  validateLabCanaryReleaseDraft,
+} from "./labCanaryPolicy.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 let day1StartupReceipt: Record<string, unknown> | null = null;
@@ -1290,6 +1296,15 @@ async function main(): Promise<void> {
     error(`Day 1 release checksum mismatch: expected env ${config.day1ReleaseExpectedSha256 || "<missing>"}, code ${DAY1_RELEASE_CONFIGURATION_SHA256}. Refusing to start.`);
     process.exit(1);
   }
+  if (config.labCanaryEnabled) {
+    const errors = validateLabCanaryReleaseDraft({
+      enabledForNewEntries: config.labCanaryEnabled,
+      expectedConfigurationSha256: config.labCanaryExpectedSha256,
+      release: null,
+    });
+    error(`LAB canary activation refused (${errors.join(", ")}). Foundation ${LAB_CANARY_FOUNDATION_ID} is prepared but tomorrow's roster/configuration is not sealed.`);
+    process.exit(1);
+  }
   // Boot flags → the DB journal (2026-07-06): env-gated safety switches were previously
   // invisible outside Railway logs — an operator flipping ORPHAN_FLATTEN had no in-band
   // confirmation the restarted worker picked it up. One line per boot, queryable in events.
@@ -1360,11 +1375,12 @@ async function main(): Promise<void> {
         heldCaptureStartedBeforeBootDecision: true,
       },
     };
-    info(`day1-release: ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256} roots=6 dark=62 paper-only`);
+    info(`day1-release: ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256} roots=${DAY1_ROOTS.length} dark=${DAY1_DARK_CHANNELS.length} paper-only`);
     void store.journal("EXEC", `day1-release ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`, receipt);
   } else {
     info(`day1-release: OFF · candidate=${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`);
   }
+  info(`lab-canary: OFF · foundation=${LAB_CANARY_FOUNDATION_ID} config=${LAB_CANARY_FOUNDATION_SHA256} roster=unsealed`);
   // Cockpit P3 routing summary: each bucket's posture — LIVE (armed + creds), shadow (decided,
   // no orders), or no-creds (cred_ref set but env keys absent). The shadow-first verification view.
   const acctSummary = groupByAccount(cfg.channels, cfg.accounts)

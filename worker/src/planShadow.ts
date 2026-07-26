@@ -8,6 +8,7 @@ import { insertObservedPolicyEpoch, insertObservedPositionPlan, type ChannelConf
 import type { ShadowDecision } from "./decide.js";
 import { buildShadowPlanEvidence, type ShadowPlanEvidence } from "./planShadowModel.js";
 import { day1ExecutableGivebackTrail } from "./day1ReleasePolicy.js";
+import type { ReleaseEvidenceContext } from "./releaseEvidenceContext.js";
 
 const seen = new Set<string>();
 const pending = new Set<string>();
@@ -19,6 +20,7 @@ export function captureObservedPositionPlan(args: {
   decision: ShadowDecision;
   accountId: string;
   decisionAtMs: number;
+  releaseEvidenceContext?: ReleaseEvidenceContext | null;
 }): string | null {
   let evidence: ShadowPlanEvidence | null;
   try {
@@ -29,6 +31,7 @@ export function captureObservedPositionPlan(args: {
       executableGivebackTrail: config.day1ReleaseEnabled
         ? day1ExecutableGivebackTrail(args.channel.slug)
         : null,
+      releaseEvidenceContext: args.releaseEvidenceContext,
     });
   } catch (e) {
     warn(`plan-shadow: draft rejected — ${(e as Error).message}`);

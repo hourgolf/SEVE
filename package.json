@@ -96,6 +96,8 @@
     "week1-evidence-baseline:verify": "tsx scripts/verify-week1-evidence-baseline.ts",
     "day1-preregistration-selftest": "tsx lib/research/day1Preregistration.selftest.ts",
     "day1-release-policy-selftest": "tsx worker/src/day1ReleasePolicy.selftest.ts",
+    "lab-canary-policy-selftest": "tsx worker/src/labCanaryPolicy.selftest.ts",
+    "lab-canary-foundation-receipt": "tsx scripts/lab-canary-foundation-receipt.ts",
     "backfill:trade-option-paths": "tsx --env-file=.env.local scripts/backfill-trade-option-paths.ts",
     "preregistered-path-tests-selftest": "tsx lib/research/preregisteredPathTests.selftest.ts",
     "family-preregistration-selftest": "tsx lib/research/familyPreregistration.selftest.ts",

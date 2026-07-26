@@ -34,6 +34,7 @@ import { captureExecutionQualityReceipt } from "./executionQuality.js";
 import { capturePositionOutcome } from "./positionOutcome.js";
 import { queueManagerShadowAdmission } from "./managerShadowBook.js";
 import { day1ExecutableGivebackTrail } from "./day1ReleasePolicy.js";
+import { releaseEvidenceStamp, type ReleaseEvidenceContext } from "./releaseEvidenceContext.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -86,6 +87,9 @@ export interface ExecCtx {
   alpacaByOcc: Map<string, alpaca.AlpacaPosition>;  // THIS account's positions
   remainingByOcc: Map<string, number>;    // live per-OCC held counter (09c fix 2) — THIS account
   openRowQty: Map<string, number>;        // Σ open-row qty per OCC (09d gate input) — THIS account's channels
+  // Present only for a separately sealed successor cohort. RC5.3 omits this,
+  // preserving its existing policy identities byte-for-byte.
+  releaseEvidenceContext?: ReleaseEvidenceContext | null;
 }
 
 /** Seed the per-OCC remaining counter from Alpaca's positions (cycle start). */
@@ -672,10 +676,18 @@ export async function executeEntry(
     executableGivebackTrail: config.day1ReleaseEnabled
       ? day1ExecutableGivebackTrail(ch.slug)
       : null,
+    releaseEvidenceContext: ctx.releaseEvidenceContext,
   });
   const opportunityId = !blocked && qty > 0
-    ? captureObservedPositionPlan({ channel: ch, decision: d, accountId: ctx.accountId, decisionAtMs: ctx.decisionAtMs })
+    ? captureObservedPositionPlan({
+      channel: ch,
+      decision: d,
+      accountId: ctx.accountId,
+      decisionAtMs: ctx.decisionAtMs,
+      releaseEvidenceContext: ctx.releaseEvidenceContext,
+    })
     : null;
+  const releaseEvidence = releaseEvidenceStamp(ctx.releaseEvidenceContext);
   await store.insertSignal({
     strategist_id: ch.id, signal_type: d.reason, underlying_price: spotClose, direction: dir,
     acted_on: !blocked, blocked_reason: blocked, rationale: {
@@ -695,6 +707,7 @@ export async function executeEntry(
       configuration_epoch_id: policyIdentity?.configurationEpochId ?? null,
       policy_epoch_id: policyIdentity?.policyEpochId ?? null,
       worker_version: WORKER_VERSION,
+      release_evidence: releaseEvidence,
     },
   });
   if (blocked || qty <= 0) { if (blocked !== d.blocked) info(`entry ${d.slug} blocked: ${blocked}`); return; }
@@ -722,7 +735,11 @@ export async function executeEntry(
       expiration: (d.detail?.expiry as string) ?? ctx.todayET, strike, opt_type: dir, qty: fillQty, avg_entry_price: entryPx,
       // durable per-trade forensics (44_trade_forensics): the entry side of the dataset.
       entry_reason: d.reason,
-      entry_features: { ...(d.detail ?? {}), opportunity_id: opportunityId },
+      entry_features: {
+        ...(d.detail ?? {}),
+        opportunity_id: opportunityId,
+        release_evidence: releaseEvidence,
+      },
       entry_delta: eq?.delta ?? null,
     });
     if (inserted.error) {
