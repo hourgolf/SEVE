@@ -3454,3 +3454,273 @@
 }
 
 /* FIGMA FOUNDATION SURFACE ENFORCEMENT: END */
+
+/* ==========================================================================
+   FIGMA FINAL RENDERED CONTROL CONTRACT
+
+   Token parity is not enough when an older component paints a gradient with
+   those tokens. UI chrome is therefore flat and semantic at the rendered
+   layer. Gradients remain reserved for actual instruments: LED glass, charts,
+   the signal scope, and the master knob.
+   ========================================================================== */
+
+/* Desktop transport, account bank, status display, and navigation. */
+.shell-root.ws909[data-skin] .ws-mode-tabs button {
+  color: var(--909-on-dark-muted) !important;
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+}
+
+.shell-root.ws909[data-skin] .ws-mode-tabs button.on {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel-inset) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+  box-shadow: inset 0 -3px 0 var(--909-warning-text) !important;
+}
+
+.shell-root.ws909[data-skin] .ws-mode-tabs button.on::after {
+  display: none !important;
+}
+
+.shell-root.ws909[data-skin] :is(
+  .ws-alert,
+  .ws-telemetry,
+  .ws-account-key,
+  .ws-utility .op
+) {
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+}
+
+.shell-root.ws909[data-skin] .ws-account-key.on {
+  color: var(--909-on-dark) !important;
+  border-color: color-mix(in srgb, var(--909-positive-text) 62%, var(--909-border-strong)) !important;
+  box-shadow:
+    inset 0 -2px 0 var(--909-positive-text),
+    inset 0 0 16px color-mix(in srgb, var(--909-positive-text) 13%, transparent) !important;
+}
+
+.shell-root.ws909[data-skin] .ws-left button {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.shell-root.ws909[data-skin] .ws-left button.on {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel-inset) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+  box-shadow: inset 3px 0 0 var(--909-warning-text) !important;
+}
+
+.shell-root.ws909[data-skin] .ws-left button > span:first-child {
+  color: var(--909-on-dark-muted) !important;
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+}
+
+.shell-root.ws909[data-skin] .ws-left button.on > span:first-child {
+  color: var(--909-warning-text) !important;
+  border-color: var(--909-border-strong) !important;
+  box-shadow: inset 0 -2px 0 var(--909-warning-text) !important;
+}
+
+.shell-root.ws909[data-skin] .ws-left button.on .ws-left-copy b {
+  color: var(--909-text-primary) !important;
+}
+
+.shell-root.ws909[data-skin] .ws-left button.on .ws-left-copy small {
+  color: var(--909-text-secondary) !important;
+}
+
+/* Workspace title bands and studio hardware use the same surfaces as every
+   other cream/blackout panel instead of retaining the old graphite/beige mix. */
+.shell-root.ws909[data-skin] .sv909-workspace-head {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel-inset) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+}
+
+.shell-root.ws909[data-skin][data-mode="studio"] :is(
+  .fleet,
+  .mixer-deck
+) {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+}
+
+.shell-root.ws909[data-skin][data-mode="studio"] :is(
+  .sband,
+  .fleet-release,
+  .fleet-head,
+  .fleet-metrics > span
+) {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel-inset) !important;
+  background-image: none !important;
+  border-color: var(--909-border) !important;
+}
+
+/* Neutral choice controls are flat Figma surfaces. Selection is conveyed by
+   a quiet inset change plus a two-pixel semantic locator, never a yellow fill. */
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] :is(
+  .chart-toggle,
+  .seg,
+  .iseg,
+  .roster-toggle,
+  .theme-toggle,
+  .cfg-seg,
+  .srw-controls,
+  .m2-market-switch,
+  .m2-review-modes,
+  .m2-desk-tabs,
+  .m2-channel-scope,
+  .m2-set-seg,
+  .m2-book-nav
+) :is(button, select),
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] .srw-history select {
+  color: var(--909-text-secondary) !important;
+  background: var(--909-surface-panel) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+  box-shadow: none !important;
+}
+
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] :is(
+  .chart-toggle,
+  .seg,
+  .iseg,
+  .roster-toggle,
+  .theme-toggle,
+  .cfg-seg,
+  .srw-controls,
+  .m2-market-switch,
+  .m2-review-modes,
+  .m2-desk-tabs,
+  .m2-channel-scope,
+  .m2-set-seg,
+  .m2-book-nav
+) :is(button.on, select.on),
+:is(.shell-root.ws909, .m2-app:not(.folio-mobile))[data-skin] .srw-history.on select {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel-inset) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+  box-shadow: inset 0 -2px 0 var(--909-warning-text) !important;
+}
+
+/* Mobile workstation chrome follows the same flat contract. */
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .m2-head-r1,
+  .m2-status
+) {
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .acct-opt:not(.acct-live),
+  .m2-modepad,
+  .m2-roompad
+) {
+  color: var(--909-text-secondary) !important;
+  background: var(--909-surface-panel) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+  box-shadow: none !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(
+  .acct-opt:not(.acct-live).on,
+  .m2-modepad.on,
+  .m2-roompad.on
+) {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel-inset) !important;
+  background-image: none !important;
+  box-shadow: inset 0 -2px 0 var(--909-warning-text) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] :is(.m2-modepad.on, .m2-roompad.on)::before {
+  display: none !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-kill {
+  color: var(--909-on-dark) !important;
+  background: var(--909-negative-text) !important;
+  background-image: none !important;
+  border-color: var(--909-negative-text) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-kill:disabled {
+  color: var(--909-text-disabled) !important;
+  background: var(--909-surface-panel-inset) !important;
+  border-color: var(--909-border) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-verdict.queue {
+  color: var(--909-surface-instrument) !important;
+  background: var(--909-positive-text) !important;
+  background-image: none !important;
+}
+
+/* Tape/review is an information surface, not an instrument. */
+.m2-app:not(.folio-mobile)[data-skin] .m2-screen.m2-glass {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel) !important;
+  background-image: none !important;
+  border-color: var(--909-border-strong) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-screen.m2-glass .m2-phead {
+  color: var(--909-text-primary) !important;
+  background: var(--909-surface-panel-inset) !important;
+  background-image: none !important;
+  border-color: var(--909-border) !important;
+}
+
+/* The market chart is intentionally an instrument. Its compact selectors stay
+   dark in both modes, but no longer carry selected cream/yellow gradients. */
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body {
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body :is(
+  .chart-toggle,
+  .seg,
+  .ind-chips
+) {
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+  border-color: color-mix(in srgb, var(--909-on-dark) 16%, transparent) !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body :is(
+  .chart-toggle,
+  .seg
+) button {
+  color: var(--909-on-dark-muted) !important;
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+  border-color: color-mix(in srgb, var(--909-on-dark) 16%, transparent) !important;
+  box-shadow: none !important;
+}
+
+.m2-app:not(.folio-mobile)[data-skin] .m2-chart-body :is(
+  .chart-toggle,
+  .seg
+) button.on {
+  color: var(--909-on-dark) !important;
+  background: var(--909-surface-instrument) !important;
+  background-image: none !important;
+  border-color: color-mix(in srgb, var(--909-on-dark) 16%, transparent) !important;
+  box-shadow: inset 0 -2px 0 var(--909-warning-text) !important;
+}
+
+/* FIGMA FINAL RENDERED CONTROL CONTRACT: END */
