@@ -5,26 +5,27 @@
     "fileKey": "8SVX0qillk8k8ygJcH7GGE",
     "collection": "SEVE 909 / Foundation",
     "creamMode": "Cream Draft",
-    "blackoutMode": "Blackout Draft"
+    "blackoutMode": "Blackout Draft",
+    "exportedAt": "2026-07-26T13:30:13.529Z"
   },
   "modes": {
     "cream": {
-      "surface/chassis": "#e8e3da",
+      "surface/chassis": "#e1dbd3",
       "surface/panel": "#f2f1ee",
-      "surface/inset": "#e1dbd3",
+      "surface/inset": "#e8e3da",
       "surface/well": "rgba(60, 52, 30, 0.08)",
       "line/subtle": "rgba(60, 52, 30, 0.14)",
       "line/strong": "rgba(60, 52, 30, 0.26)",
-      "text/primary": "#4c4943",
-      "text/muted": "#737068",
-      "text/disabled": "#777269",
-      "status/success": "#3b7c48",
-      "status/attention": "#bc8b51",
-      "status/danger": "#933e35",
-      "status/info": "#385e77",
+      "text/primary": "#43413d",
+      "text/muted": "#676561",
+      "text/disabled": "#98948c",
+      "status/success": "#499d5a",
+      "status/attention": "#c99e6b",
+      "status/danger": "#a04940",
+      "status/info": "#417597",
       "status/neutral": "#5f5b53",
-      "focus/ring": "#285f7a",
-      "hardware/accent": "#d87750"
+      "focus/ring": "#417597",
+      "hardware/accent": "#e68a65"
     },
     "blackout": {
       "surface/chassis": "#262728",
@@ -42,13 +43,13 @@
       "status/info": "#7faad6",
       "status/neutral": "#a6afb2",
       "focus/ring": "#5aa0e6",
-      "hardware/accent": "#d87750"
+      "hardware/accent": "#e68a65"
     }
   },
   "type": {
     "family/body": "IBM Plex Sans",
     "family/mono": "JetBrains Mono",
-    "family/display": "Inter",
+    "family/display": "IBM Plex Sans",
     "weight/body": 400,
     "weight/medium": 500,
     "weight/strong": 700,
