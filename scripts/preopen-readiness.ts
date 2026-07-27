@@ -130,7 +130,10 @@ function sameBook(a: Map<string, number>, b: Map<string, number>): boolean {
 
 async function main(): Promise<void> {
   const requireFlat = process.argv.includes("--require-flat");
-  const gateLabel = requireFlat ? "SESSION-CLOSE READINESS" : "PRE-OPEN READINESS";
+  const brokerRuntimeOnly = process.argv.includes("--broker-runtime-only");
+  const gateLabel = requireFlat
+    ? brokerRuntimeOnly ? "SESSION-CLOSE BROKER/RUNTIME READINESS" : "SESSION-CLOSE READINESS"
+    : "PRE-OPEN READINESS";
   const configuredHost = process.env.ALPACA_PAPER_HOST ?? REQUIRED_PAPER_HOST;
   const failures: string[] = [];
   const warnings: string[] = [];
@@ -174,18 +177,20 @@ async function main(): Promise<void> {
   }
 
   const release = findDay1ReleaseReceipt((releaseRead.data ?? []) as MarketEvent[]);
-  if (!release) failures.push("no Day 1 startup receipt observed");
-  else {
-    if (release.releaseId !== DAY1_RELEASE_ID) failures.push(`release id is ${release.releaseId}; expected ${DAY1_RELEASE_ID}`);
-    if (release.configHash !== DAY1_CONFIG_HASH) failures.push(`release hash is ${release.configHash}; expected ${DAY1_CONFIG_HASH}`);
-    if (worker?.started_at && Date.parse(release.createdAt) < Date.parse(worker.started_at)) {
-      failures.push("latest Day 1 receipt predates the current worker run");
-    }
-    if (release.alpacaPaperOrigin !== REQUIRED_PAPER_HOST) {
-      failures.push(`release paper origin is ${release.alpacaPaperOrigin ?? "unverified"}; expected ${REQUIRED_PAPER_HOST}`);
-    }
-    if (release.dryRun !== false || release.liveTrading !== true) {
-      failures.push(`paper executor is not enabled (dryRun=${String(release.dryRun)}, liveTrading=${String(release.liveTrading)})`);
+  if (!brokerRuntimeOnly) {
+    if (!release) failures.push("no Day 1 startup receipt observed");
+    else {
+      if (release.releaseId !== DAY1_RELEASE_ID) failures.push(`release id is ${release.releaseId}; expected ${DAY1_RELEASE_ID}`);
+      if (release.configHash !== DAY1_CONFIG_HASH) failures.push(`release hash is ${release.configHash}; expected ${DAY1_CONFIG_HASH}`);
+      if (worker?.started_at && Date.parse(release.createdAt) < Date.parse(worker.started_at)) {
+        failures.push("latest Day 1 receipt predates the current worker run");
+      }
+      if (release.alpacaPaperOrigin !== REQUIRED_PAPER_HOST) {
+        failures.push(`release paper origin is ${release.alpacaPaperOrigin ?? "unverified"}; expected ${REQUIRED_PAPER_HOST}`);
+      }
+      if (release.dryRun !== false || release.liveTrading !== true) {
+        failures.push(`paper executor is not enabled (dryRun=${String(release.dryRun)}, liveTrading=${String(release.liveTrading)})`);
+      }
     }
   }
 
@@ -220,8 +225,12 @@ async function main(): Promise<void> {
   console.log(`Broker host : ${configuredHost} ${configuredHost === REQUIRED_PAPER_HOST ? "✓ PAPER" : "✗"}`);
   console.log(`Fund        : ${fund?.mode ?? "missing"} · halted=${fund?.is_halted ? "TRUE" : "false"}`);
   console.log(`Worker      : runtime ${worker?.version ?? "missing"} · sealed strategy ${WORKER_VERSION} · ${Math.round(workerAgeSec)}s · ${worker?.last_phase ?? "?"} · ${worker?.last_error ? "ERROR" : "clean"}`);
-  console.log(`Release     : ${release?.releaseId ?? "missing"} · ${release?.configHash.slice(0, 12) ?? "—"}${release ? "…" : ""}`);
-  console.log(`Execution   : ${release?.dryRun === false && release?.liveTrading === true ? "PAPER EXECUTOR" : "SHADOW / UNVERIFIED"} · dryRun=${String(release?.dryRun ?? null)} · liveTrading=${String(release?.liveTrading ?? null)}`);
+  console.log(brokerRuntimeOnly
+    ? "Release     : delegated to the separate current-release binding and identity check"
+    : `Release     : ${release?.releaseId ?? "missing"} · ${release?.configHash.slice(0, 12) ?? "—"}${release ? "…" : ""}`);
+  console.log(brokerRuntimeOnly
+    ? "Execution   : release authority not evaluated in broker/runtime-only mode"
+    : `Execution   : ${release?.dryRun === false && release?.liveTrading === true ? "PAPER EXECUTOR" : "SHADOW / UNVERIFIED"} · dryRun=${String(release?.dryRun ?? null)} · liveTrading=${String(release?.liveTrading ?? null)}`);
   console.log(`Sentinel    : ${sentinelReceipt.label} · ${sentinelReceipt.detail}`);
   console.log(`Desk rows   : ${positions.length} open\n`);
 
@@ -261,12 +270,16 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log("\nSealed RC5 runtime roots:");
-  console.log(`  ${pad("CHANNEL", 28)} ${pad("ACCOUNT", 12)} ${pad("SYM", 4)} ${padL("QTY", 4)} ${padL("RISK", 7)} ${padL("PREM≤", 7)} ${padL("DEBIT≤", 8)} ${padL("STOP", 7)} ${padL("TAKE", 7)} ${pad("EOD", 6)} ${pad("DB", 7)}`);
+  console.log(brokerRuntimeOnly
+    ? "\nSealed release: not evaluated here; the caller must run a current-release binding and identity check"
+    : "\nSealed RC5 runtime roots:");
+  if (!brokerRuntimeOnly) {
+    console.log(`  ${pad("CHANNEL", 28)} ${pad("ACCOUNT", 12)} ${pad("SYM", 4)} ${padL("QTY", 4)} ${padL("RISK", 7)} ${padL("PREM≤", 7)} ${padL("DEBIT≤", 8)} ${padL("STOP", 7)} ${padL("TAKE", 7)} ${pad("EOD", 6)} ${pad("DB", 7)}`);
+  }
 
   let readyRoots = 0;
   const rootPolicies = Object.values(DAY1_ROOTS).sort((a, b) => a.accountName.localeCompare(b.accountName) || a.priority - b.priority || a.slug.localeCompare(b.slug));
-  for (const root of rootPolicies) {
+  for (const root of brokerRuntimeOnly ? [] : rootPolicies) {
     const channel = channelsBySlug.get(root.slug);
     const account = accountById.get(root.accountId);
     const cfg = channel ? configOf(channel) : null;
@@ -296,12 +309,14 @@ async function main(): Promise<void> {
     console.log(`  ${pad(root.slug, 28)} ${pad(root.accountName, 12)} ${pad(root.underlying, 4)} ${padL(String(root.quantity), 4)} ${padL(usd(root.riskBudgetUsd), 7)} ${padL(`$${root.premiumCap.toFixed(2)}`, 7)} ${padL(usd(root.aggregateDebitCap), 8)} ${padL(`-${root.premiumStopPct}%`, 7)} ${padL(exit, 7)} ${pad(root.eodEt, 6)} ${pad(dbState, 7)}`);
   }
 
-  const darkDatabaseRows = channels.filter((channel) => !DAY1_ROOTS[channel.slug]).length;
-  console.log(`\nRuntime     : ${readyRoots}/${rootPolicies.length} sealed roots ready · ${darkDatabaseRows} other armed/active DB rows suppressed to dark evidence by RC5`);
-  console.log(`Capture     : REQUIRED · ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.targetSamples} samples / ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.maxAgeMs / 1_000}s · ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.retryMaxAttempts} attempts · bounded ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.stateMaxSamples.toLocaleString()} samples / ${Math.round(DAY1_SEALED_RUNTIME_POSTURE.heldCapture.stateMaxBytes / 1_048_576)} MiB`);
-  console.log(`Observer    : REQUIRED · ${DAY1_MANAGER_ARMS.length} shadow manager arms · quote age ≤${DAY1_SEALED_RUNTIME_POSTURE.managerShadow.quoteMaxAgeMs / 1_000}s`);
-  console.log("DB settings : context only where RC5 overlays policy; the startup receipt + worker version identify the active runtime contract");
-  console.log("Account stop: legacy display only; sealed per-channel risk governs the Day 1 roots above");
+  if (!brokerRuntimeOnly) {
+    const darkDatabaseRows = channels.filter((channel) => !DAY1_ROOTS[channel.slug]).length;
+    console.log(`\nRuntime     : ${readyRoots}/${rootPolicies.length} sealed roots ready · ${darkDatabaseRows} other armed/active DB rows suppressed to dark evidence by RC5`);
+    console.log(`Capture     : REQUIRED · ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.targetSamples} samples / ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.maxAgeMs / 1_000}s · ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.retryMaxAttempts} attempts · bounded ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.stateMaxSamples.toLocaleString()} samples / ${Math.round(DAY1_SEALED_RUNTIME_POSTURE.heldCapture.stateMaxBytes / 1_048_576)} MiB`);
+    console.log(`Observer    : REQUIRED · ${DAY1_MANAGER_ARMS.length} shadow manager arms · quote age ≤${DAY1_SEALED_RUNTIME_POSTURE.managerShadow.quoteMaxAgeMs / 1_000}s`);
+    console.log("DB settings : context only where RC5 overlays policy; the startup receipt + worker version identify the active runtime contract");
+    console.log("Account stop: legacy display only; sealed per-channel risk governs the Day 1 roots above");
+  }
   if (warnings.length) console.log(`\nWarnings (${warnings.length}):\n  - ${warnings.join("\n  - ")}`);
   if (failures.length) {
     console.error(`\n✗ ${requireFlat ? "SESSION-CLOSE" : "PRE-OPEN"} BLOCKED (${failures.length}):\n  - ${failures.join("\n  - ")}\n`);
@@ -309,7 +324,9 @@ async function main(): Promise<void> {
     return;
   }
   console.log(requireFlat
-    ? "\n✓ SESSION-CLOSE HARD GATES PASS — all bound paper broker and desk books are reconciled and flat; release, capture, and observer identity remain intact\n"
+    ? brokerRuntimeOnly
+      ? "\n✓ SESSION-CLOSE BROKER/RUNTIME GATES PASS — all paper broker and desk books are reconciled and flat; paper host, fund boundary, and worker liveness are verified\n"
+      : "\n✓ SESSION-CLOSE HARD GATES PASS — all bound paper broker and desk books are reconciled and flat; release, capture, and observer identity remain intact\n"
     : "\n✓ PRE-OPEN HARD GATES PASS — paper executor, broker/desk books, worker liveness, sealed RC5 identity, and six-root routing\n");
 }
 
