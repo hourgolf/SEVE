@@ -51,17 +51,9 @@ export function MobileRackRow({
   const { id, slug, color, status, config: databaseConfig } = strategist;
   const sealed = passport?.release.state === "verified";
   const rootPolicy = passport?.rootPolicy;
-  const runtimeConfig: StrategistConfig = rootPolicy ? {
-    ...databaseConfig,
-    capital_pct: rootPolicy.riskBudgetUsd,
-    max_contracts: rootPolicy.quantity,
-    premium_stop_pct: rootPolicy.premiumStopPct,
-    take_profit_pct: rootPolicy.bankTargetPct ?? 0,
-    entry_dte: rootPolicy.entryDte,
-    strike_offset: rootPolicy.strikeOffset,
-    pyramid_adds: 0,
-  } : databaseConfig;
-  const config = draft.proposed ?? (sealed && rootPolicy ? runtimeConfig : databaseConfig);
+  const config = draft.active
+    ? draft.proposed ?? draft.baseConfig ?? databaseConfig
+    : draft.baseConfig ?? databaseConfig;
   const canPersist = write.canWrite && !sealed;
   const canTune = draft.active || canPersist;
 
@@ -130,8 +122,11 @@ export function MobileRackRow({
     : status === "draft" ? { txt: "BENCH", cls: "darkch" }
     : status === "disabled" ? { txt: "OFF", cls: "darkch" }
     : null;
-  const runtimeMayFill = passport?.lifecycle === "paper-root" || !passport || passport.lifecycle === "unverified";
-  const dot = runtimeMayFill && active && status === "armed" && !config.muted;
+  const dot = passport?.lifecycle === "paper-root"
+    ? true
+    : passport?.lifecycle === "dark-evidence"
+      ? false
+      : active && status === "armed" && !config.muted;
   const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "PAPER ROOT", cls: "root" }
     : passport?.lifecycle === "dark-evidence" ? { txt: "DARK", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
@@ -160,7 +155,7 @@ export function MobileRackRow({
 
       {open && (
         <div className="m2-insp">
-          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE − / + OR TAP VALUE"}</span><span className="ln" /></div>
+          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE − / + OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
               <div className="m2-exit-stepper">

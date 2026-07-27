@@ -6,6 +6,7 @@ import {
   RC54_CONFIG_HASH,
   RC54_RELEASE_ID,
   RC54_ROOTS,
+  activeRootRuntimeConfig,
   RC54_WORKER_VERSION,
   activeRootExitLabel,
 } from "./activeRelease";
@@ -181,5 +182,38 @@ for (const clientRoot of Object.values(RC54_ROOTS)) {
   assert.ok(rc54Dossier.includes(`\`${clientRoot.slug}\``));
   assert.equal(clientRoot.riskBudgetUsd, clientRoot.aggregateDebitCap * 0.30);
 }
+
+const databaseConfig = {
+  capital_pct: 1_200,
+  aggression: 1,
+  max_contracts: 10,
+  daily_stop_usd: 3_000,
+  daily_target_usd: 2_000,
+  muted: true,
+  soloed: true,
+  boosted: true,
+  executor: "cron" as const,
+  event_policy: "ignore" as const,
+  entry_dte: 0,
+  strike_offset: 1,
+  premium_stop_pct: 50,
+  take_profit_pct: 10,
+  underlying_stop_pct: 0.35,
+  pyramid_adds: 3,
+  stall_minutes: 15,
+  stall_max_favor_pct: 10,
+};
+const runtimeConfig = activeRootRuntimeConfig(databaseConfig, RC54_ROOTS["pb-ride"]);
+assert.equal(runtimeConfig.capital_pct, 210);
+assert.equal(runtimeConfig.max_contracts, 2);
+assert.equal(runtimeConfig.daily_stop_usd, 0);
+assert.equal(runtimeConfig.entry_dte, 1);
+assert.equal(runtimeConfig.premium_stop_pct, 30);
+assert.equal(runtimeConfig.take_profit_pct, 0);
+assert.equal(runtimeConfig.underlying_stop_pct, 0);
+assert.equal(runtimeConfig.event_policy, "standdown");
+assert.equal(runtimeConfig.muted, false);
+assert.equal(runtimeConfig.boosted, false);
+assert.equal(runtimeConfig.pyramid_adds, 0);
 
 console.log("channel-passport-selftest: RC5.3 + RC5.4 contracts passed");

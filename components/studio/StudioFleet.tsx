@@ -94,7 +94,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                   <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : "—"}</b>
                   <small className={pnlClass}>{row.pnl.dayPnl ? signedUsd(row.pnl.dayPnl) : "$0"} day</small>
                 </span>
-                <span className="fc-risk fleet-value" role="cell">{usd0(row.channel.config.capital_pct)}</span>
+                <span className="fc-risk fleet-value" role="cell">{usd0(passport?.rootPolicy?.riskBudgetUsd ?? row.channel.config.capital_pct)}</span>
                 <span className="fc-signal fleet-signal" role="cell" title={row.lastSignal?.message}>
                   <b className={decision.tone}>{decision.label}</b><small>{row.lastSignal?.signal_type ?? "no recent candidate"}</small>
                 </span>

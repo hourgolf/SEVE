@@ -36,17 +36,9 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
   const { id, slug, underlying, color, status, config: databaseConfig } = strategist;
   const sealed = passport?.release.state === "verified";
   const rootPolicy = passport?.rootPolicy;
-  const runtimeConfig: StrategistConfig = rootPolicy ? {
-    ...databaseConfig,
-    capital_pct: rootPolicy.riskBudgetUsd,
-    max_contracts: rootPolicy.quantity,
-    premium_stop_pct: rootPolicy.premiumStopPct,
-    take_profit_pct: rootPolicy.bankTargetPct ?? 0,
-    entry_dte: rootPolicy.entryDte,
-    strike_offset: rootPolicy.strikeOffset,
-    pyramid_adds: 0,
-  } : databaseConfig;
-  const config = draft.proposed ?? (sealed && rootPolicy ? runtimeConfig : databaseConfig);
+  const config = draft.active
+    ? draft.proposed ?? draft.baseConfig ?? databaseConfig
+    : draft.baseConfig ?? databaseConfig;
   const canPersist = write.canWrite && !sealed;
   const canTune = draft.active || canPersist;
   const dte = config.entry_dte ?? 0;
@@ -94,15 +86,15 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
         <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
       <div className="mixer-deck">
-        <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
+        <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : rootPolicy ? "SEALED RUNTIME · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
           <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
           <div className="ctl"><span className="cl">strike offset</span><span className="ival" title="effective configured strike offset">{strikeLabel(config.strike_offset ?? 0)}</span></div>
           <div className="ctl"><span className="cl">event policy</span>{seg(eventPolicy, [{ v: "standdown", label: "STAND-DOWN" }, { v: "ignore", label: "TRADE-THRU" }], (v) => setCfg({ event_policy: v }))}</div>
         </div></section>
 
         <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : rootPolicy ? "SEALED RUNTIME · RISK + SIZE" : "DATABASE KNOBS · FUTURE EPOCH"}</header><div className="knob-bank">
-          {knob(config.capital_pct, 100, 2500, 50, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
-          {knob(config.daily_stop_usd, 100, 5000, 50, "ENTRY LATCH", (v) => `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
+          {knob(config.capital_pct, 25, 5000, 25, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
+          {knob(config.daily_stop_usd, 0, 5000, 50, "ENTRY LATCH", (v) => v === 0 ? "OFF" : `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
           {knob(premStop, 10, 90, 5, "PREM STOP · POLICY", (v) => `−${v}%`, "premium_stop_pct", "#25272a", false)}
           {knob(config.max_contracts, 1, 60, 1, "HARD CAP", (v) => `${v} ct`, "max_contracts")}
         </div></section>

@@ -13,6 +13,7 @@ import {
   type SealedReleaseLane,
   type SealedReleaseReceipt,
 } from "@/lib/ops/releaseReceipt";
+import type { StrategistConfig } from "@/lib/desk/types";
 
 export const RC54_RELEASE_ID = "week2-2026-07-27-rc5.4";
 export const RC54_CONFIG_HASH = "a1dda169e9c578e83f725c09b01af0af675d4ebc6d26e4c75fd1d520e828b227";
@@ -54,6 +55,35 @@ export interface ActiveRootPolicy {
   configurationEpochId: string;
   managerVersion: string;
   policyEpochId: string;
+}
+
+/** Present the same effective strategist configuration the worker applies for
+ * a verified sealed root. This is read-only UI projection: it does not mutate
+ * the database row or grant activation authority. */
+export function activeRootRuntimeConfig(
+  databaseConfig: StrategistConfig,
+  rootPolicy: ActiveRootPolicy,
+): StrategistConfig {
+  return {
+    ...databaseConfig,
+    capital_pct: rootPolicy.riskBudgetUsd,
+    aggression: 0,
+    max_contracts: rootPolicy.quantity,
+    daily_stop_usd: 0,
+    daily_target_usd: 0,
+    underlying_stop_pct: 0,
+    muted: false,
+    soloed: false,
+    boosted: false,
+    event_policy: "standdown",
+    entry_dte: rootPolicy.entryDte,
+    strike_offset: rootPolicy.strikeOffset,
+    premium_stop_pct: rootPolicy.premiumStopPct,
+    take_profit_pct: rootPolicy.bankTargetPct ?? 0,
+    pyramid_adds: 0,
+    stall_minutes: 0,
+    stall_max_favor_pct: 0,
+  };
 }
 
 const a13 = {

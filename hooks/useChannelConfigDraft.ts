@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { deriveChannelConfigDraft, type ChannelConfigDraftPatch } from "@/lib/channels/channelConfigDraft";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
+import { activeRootRuntimeConfig } from "@/lib/channels/activeRelease";
 import type { StrategistState } from "@/lib/desk/types";
 
 /** Local-only proposal state. Drafts survive row changes within the mounted
@@ -12,16 +13,21 @@ export function useChannelConfigDraft(channel?: StrategistState, passport?: Chan
   const slug = channel?.slug ?? "";
   const active = !!slug && Object.prototype.hasOwnProperty.call(drafts, slug);
   const patch = active ? drafts[slug] : {};
-  const proposed = channel ? { ...channel.config, ...patch } : undefined;
+  const baseConfig = channel
+    ? passport?.release.state === "verified" && passport.rootPolicy
+      ? activeRootRuntimeConfig(channel.config, passport.rootPolicy)
+      : channel.config
+    : undefined;
+  const proposed = baseConfig ? { ...baseConfig, ...patch } : undefined;
   const model = useMemo(() => channel && passport ? deriveChannelConfigDraft({
     slug: channel.slug,
-    baseConfig: channel.config,
+    baseConfig: baseConfig ?? channel.config,
     patch,
     releaseState: passport.release.state,
     releaseId: passport.release.releaseId,
     releaseHash: passport.release.receipt?.configHash ?? passport.release.expectedHash,
     configurationEpochId: passport.rootPolicy?.configurationEpochId ?? null,
-  }) : null, [channel, passport, patch]);
+  }) : null, [channel, passport, patch, baseConfig]);
 
   const begin = () => {
     if (!slug) return;
@@ -40,5 +46,5 @@ export function useChannelConfigDraft(channel?: StrategistState, passport?: Chan
     });
   };
 
-  return { active, proposed, model, begin, update, discard };
+  return { active, proposed, baseConfig, model, begin, update, discard };
 }
