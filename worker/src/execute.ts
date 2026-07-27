@@ -19,7 +19,7 @@
 //  the cron-style reconstruction as the restart fallback.
 // ============================================================================
 
-import { config, policy, WORKER_VERSION } from "./config.js";
+import { ACTIVE_WORKER_VERSION, config, policy } from "./config.js";
 import { info } from "./log.js";
 import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
@@ -219,7 +219,7 @@ async function placeFill(
         // ChainStore does not expose an authoritative per-contract exchange
         // timestamp. YF-B held-contract capture will supply this second clock.
         providerQuoteEventAgeMs: null,
-        sourceVersion: WORKER_VERSION,
+        sourceVersion: ACTIVE_WORKER_VERSION,
         payload: {
           decisionSourceBarAt: new Date(ctx.decisionAtMs).toISOString(),
           fillTimeBasis: "local_terminal_observation",
@@ -706,7 +706,7 @@ export async function executeEntry(
   const policyIdentity = observedPolicyIdentity({
     channel: ch,
     accountId: ctx.accountId,
-    workerVersion: WORKER_VERSION,
+    workerVersion: ACTIVE_WORKER_VERSION,
     executableGivebackTrail: config.day1ReleaseEnabled
       ? day1ExecutableGivebackTrail(ch.slug)
       : null,
@@ -742,7 +742,7 @@ export async function executeEntry(
       manager_version: policyIdentity?.managerVersion ?? null,
       configuration_epoch_id: policyIdentity?.configurationEpochId ?? null,
       policy_epoch_id: policyIdentity?.policyEpochId ?? null,
-      worker_version: WORKER_VERSION,
+      worker_version: ACTIVE_WORKER_VERSION,
       release_evidence: releaseEvidence,
     },
   });

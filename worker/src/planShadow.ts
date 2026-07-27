@@ -2,7 +2,7 @@
 // awaited by the trading path. A persistence failure can only lose observability;
 // it cannot block or alter an order.
 
-import { config, policy, WORKER_VERSION } from "./config.js";
+import { ACTIVE_WORKER_VERSION, config, policy } from "./config.js";
 import { warn } from "./log.js";
 import { insertObservedPolicyEpoch, insertObservedPositionPlan, type ChannelConfig } from "./store.js";
 import type { ShadowDecision } from "./decide.js";
@@ -27,7 +27,7 @@ export function captureObservedPositionPlan(args: {
   try {
     evidence = buildShadowPlanEvidence({
       ...args,
-      workerVersion: WORKER_VERSION,
+      workerVersion: ACTIVE_WORKER_VERSION,
       defaultPremiumStopPct: policy.PREMIUM_STOP_PCT,
       executableGivebackTrail: config.day1ReleaseEnabled
         ? day1ExecutableGivebackTrail(args.channel.slug)

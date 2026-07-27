@@ -12,8 +12,9 @@ remain separate operator-approved actions.
 - Release: `week2-2026-07-27-rc5.4`
 - Cohort: `rc54-executable-2026-07-27`
 - Cohort start: `2026-07-27`
+- Sealed strategy worker: `stream-2026-07-27a`
 - Configuration SHA-256:
-  `9bf64ad94c4b8a3d59dc793221dfa27e8b903aaa1ed0fd92485889ab9e2c5efb`
+  `a1dda169e9c578e83f725c09b01af0af675d4ebc6d26e4c75fd1d520e828b227`
 - Mode: paper only
 - Entry quantity: two contracts per admitted root
 - Re-entry, adds, and pyramiding: disabled
@@ -91,7 +92,7 @@ The worker refuses RC5.4 startup unless all of the following are true:
 - `DAY1_RELEASE_ENABLED=false`
 - `LAB_CANARY_ENABLED=false`
 - `RC54_RELEASE_ENABLED=true`
-- `RC54_RELEASE_EXPECTED_SHA256=9bf64ad94c4b8a3d59dc793221dfa27e8b903aaa1ed0fd92485889ab9e2c5efb`
+- `RC54_RELEASE_EXPECTED_SHA256=a1dda169e9c578e83f725c09b01af0af675d4ebc6d26e4c75fd1d520e828b227`
 - Fund and all routed accounts are paper mode.
 - Alpaca uses the paper origin with separately resolved credentials for every
   required account.

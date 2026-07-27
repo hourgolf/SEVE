@@ -95,6 +95,9 @@ const prepared = (
 });
 
 check("release checksum is sealed", /^[a-f0-9]{64}$/.test(RC54_RELEASE_CONFIGURATION_SHA256), true);
+check("release checksum matches the reviewed worker-specific seal",
+  RC54_RELEASE_CONFIGURATION_SHA256,
+  "a1dda169e9c578e83f725c09b01af0af675d4ebc6d26e4c75fd1d520e828b227");
 check("nine roots are explicit", RC54_ROOTS.length, 9);
 check("control/lab split is 6/3", [
   RC54_ROOTS.filter((root) => root.cohort === "control").length,

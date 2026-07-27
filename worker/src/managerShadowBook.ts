@@ -1,7 +1,7 @@
 // Phase 1G-B dark durable manager runtime. Observation-only by construction:
 // no execution, broker account, broker position, or broker order imports.
 
-import { config, WORKER_VERSION } from "./config.js";
+import { ACTIVE_WORKER_VERSION, config } from "./config.js";
 import { BOOT_ID } from "./runId.js";
 import { info, warn } from "./log.js";
 import * as alpaca from "./alpaca.js";
@@ -122,7 +122,7 @@ async function targetedQuotes(
           requestedSymbols: result.batch, requestOutcome: result.requestOutcome, failureCode: result.failureCode,
           fetchStartedAtMs: result.fetchStartedAtMs, fetchCompletedAtMs: result.fetchCompletedAtMs,
           observedAtMs: result.fetchCompletedAtMs, quotes: result.quotes,
-          sourceBootId: BOOT_ID, sourceVersion: WORKER_VERSION,
+          sourceBootId: BOOT_ID, sourceVersion: ACTIVE_WORKER_VERSION,
         });
         for (const input of inputs) capture.capture(input);
       } catch (error) {
@@ -334,7 +334,7 @@ export async function shadowManagerBookTick(ctx: ManagerShadowBookContext): Prom
           requestedSymbols: omittedCaptureSymbols, requestOutcome: "not_requested",
           failureCode: "targeted_option_hard_cap_shed", fetchStartedAtMs: omittedAtMs,
           fetchCompletedAtMs: omittedAtMs, observedAtMs: omittedAtMs,
-          quotes: new Map(), sourceBootId: BOOT_ID, sourceVersion: WORKER_VERSION,
+          quotes: new Map(), sourceBootId: BOOT_ID, sourceVersion: ACTIVE_WORKER_VERSION,
         });
         for (const input of omissions) ctx.heldContractCapture.capture(input);
       } catch (error) {
