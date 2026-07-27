@@ -75,10 +75,11 @@ export function PerformSurface({
             incident={incident}
             write={write}
             section={section}
+            channelWorkspace={surface.channelWorkspace}
           />
         </>}
       </main>
-      <PerformDock channels={channels} livePnl={livePnl} />
+      <PerformDock channels={channels} livePnl={livePnl} channelWorkspace={surface.channelWorkspace} />
     </div>
   );
 }

@@ -2,13 +2,11 @@ import type { StudioChannelEvidence } from "@/lib/studio/deriveStudioEvidence";
 import type { Position, Signal, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
 import {
-  DAY1_MANAGER_ARMS,
-  DAY1_ROOTS,
-  observeDay1Release,
-  type Day1ReleaseObservation,
-  type Day1ReleaseReadState,
-  type Day1RootPolicy,
-} from "@/lib/channels/day1Release";
+  observeActiveRelease,
+  type ActiveReleaseObservation,
+  type ActiveRootPolicy,
+} from "@/lib/channels/activeRelease";
+import type { Day1ReleaseReadState } from "@/lib/channels/day1Release";
 
 export type RuntimeLifecycle = "paper-root" | "dark-evidence" | "unverified";
 
@@ -17,8 +15,8 @@ export interface ChannelPassport {
   lifecycle: RuntimeLifecycle;
   lifecycleLabel: "PAPER ROOT" | "DARK EVIDENCE" | "UNVERIFIED";
   lifecycleFact: string;
-  release: Day1ReleaseObservation;
-  rootPolicy: Day1RootPolicy | null;
+  release: ActiveReleaseObservation;
+  rootPolicy: ActiveRootPolicy | null;
   database: {
     state: string;
     executor: "cron" | "stream";
@@ -58,14 +56,14 @@ export interface ChannelReleasePresentation {
 }
 
 export interface ChannelWorkspaceModel {
-  release: Day1ReleaseObservation;
+  release: ActiveReleaseObservation;
   releaseView: ChannelReleasePresentation;
   bySlug: Record<string, ChannelPassport>;
   roots: number;
   dark: number;
 }
 
-function presentRelease(release: Day1ReleaseObservation, roots: number, dark: number): ChannelReleasePresentation {
+function presentRelease(release: ActiveReleaseObservation, roots: number, dark: number): ChannelReleasePresentation {
   const label = release.state === "verified"
     ? "SEALED RELEASE RUNTIME"
     : release.state === "checking"
@@ -96,14 +94,14 @@ function databaseState(channel: StrategistState): string {
 
 export function deriveChannelPassport(input: {
   channel: StrategistState;
-  release: Day1ReleaseObservation;
+  release: ActiveReleaseObservation;
   signals: Signal[];
   positions: Position[];
   recentTrades: Position[];
   ledger?: StudioChannelEvidence;
 }): ChannelPassport {
   const { channel, release } = input;
-  const rootPolicy = release.state === "verified" ? DAY1_ROOTS[channel.slug] ?? null : null;
+  const rootPolicy = release.state === "verified" ? release.roots[channel.slug] ?? null : null;
   const lifecycle: RuntimeLifecycle = release.state !== "verified"
     ? "unverified"
     : rootPolicy
@@ -121,7 +119,10 @@ export function deriveChannelPassport(input: {
   const recentClosed = input.recentTrades.filter((position) => position.strategist_slug === channel.slug).length;
   const actedSignals = signals.filter((signal) => signal.acted_on === true).length;
   const censoredSignals = signals.filter((signal) => !!signal.blocked_reason).length;
-  const darkLifecycleCensors = signals.filter((signal) => signal.blocked_reason === "day1_dark_lifecycle").length;
+  const darkLifecycleCensors = signals.filter((signal) =>
+    signal.blocked_reason === "day1_dark_lifecycle"
+    || signal.blocked_reason === "rc54_dark_lifecycle"
+  ).length;
   const dbState = databaseState(channel);
   const executor = channel.executor ?? "cron";
   const differsFromRuntime = lifecycle === "paper-root"
@@ -156,10 +157,10 @@ export function deriveChannelPassport(input: {
       recentDecisions: signals.slice(0, 3),
     },
     observer: {
-      configuredArms: lifecycle === "paper-root" ? DAY1_MANAGER_ARMS.length : 0,
+      configuredArms: lifecycle === "paper-root" ? release.configuredManagerArms : 0,
       state: observerState,
       fact: lifecycle === "paper-root"
-        ? `${DAY1_MANAGER_ARMS.length} manager arms observe the exact two-lot root path; only explicitly sealed root exits govern orders.`
+        ? `${release.configuredManagerArms} manager arms observe the exact two-lot root path; only explicitly sealed root exits govern orders.`
         : lifecycle === "dark-evidence"
           ? "Dark candidates feed T+1 exact-path research; no redundant fill or manager claim is made."
           : "Observer status is withheld until the release receipt verifies.",
@@ -176,7 +177,7 @@ export function deriveChannelPassports(input: {
   evidenceBySlug: Record<string, StudioChannelEvidence>;
   releaseReadState?: Day1ReleaseReadState;
 }): ChannelWorkspaceModel {
-  const release = observeDay1Release(input.events, input.releaseReadState);
+  const release = observeActiveRelease(input.events, input.releaseReadState);
   const passports = input.channels.map((channel) => deriveChannelPassport({
     channel,
     release,

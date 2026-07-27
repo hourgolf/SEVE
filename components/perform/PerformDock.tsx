@@ -7,7 +7,7 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { prioritizeChannels } from "@/lib/perform/derivePerformView";
-import { DAY1_ROOTS } from "@/lib/channels/day1Release";
+import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 
 // PERFORM bottom dock (slice S2) — one chicklet per roster channel, the same
 // source (useDeskState) that drives STUDIO's rack. Exposure/exceptions sort first;
@@ -15,17 +15,14 @@ import { DAY1_ROOTS } from "@/lib/channels/day1Release";
 // here on purpose: it is an exit diagnostic, not a promotion/status score. The
 // only write remains the existing auth-gated MUTE pad.
 
-// A13 = the momo giveback ratchet, live A/B (docs/pre-registered-tests-2026-07 · registry A13).
-// The one sentinel-sourced ratchet armed today; a small documented constant, not a config column.
-const hasExecutableA13 = (slug: string) => !!DAY1_ROOTS[slug]?.givebackTrail;
-
 function Chicklet({
-  ch, pnl, canWrite, onMute,
+  ch, pnl, canWrite, onMute, a13,
 }: {
   ch: StrategistState;
   pnl?: ChannelPnl;
   canWrite: boolean;
   onMute: () => void;
+  a13: boolean;
 }) {
   const muted = ch.config.muted;
   const armed = ch.status === "armed" && !muted;
@@ -41,7 +38,7 @@ function Chicklet({
       <div className="pfc-r1">
         <span className={`pfc-dot${armed ? " on" : muted ? " stby" : ""}`} />
         <span className="pfc-slug">{ch.slug}</span>
-        {hasExecutableA13(ch.slug) && <span className="pfc-a13">⚡A13</span>}
+        {a13 && <span className="pfc-a13">⚡A13</span>}
       </div>
       <div className="pfc-mid">
         <div className={`pfc-pnl num ${dayCls}`} title="Desk-derived today P&L; not broker-reconciled.">{day != null ? signedUsd(day) : "—"}</div>
@@ -65,10 +62,11 @@ function Chicklet({
 }
 
 export function PerformDock({
-  channels, livePnl,
+  channels, livePnl, channelWorkspace,
 }: {
   channels: StrategistState[];
   livePnl: Record<string, ChannelPnl>;
+  channelWorkspace: ChannelWorkspaceModel;
 }) {
   const dispatch = useDeskDispatch();
   const { canWrite, persistConfig } = useDeskWrite();
@@ -102,6 +100,7 @@ export function PerformDock({
               pnl={livePnl[ch.slug]}
               canWrite={canWrite}
               onMute={() => mute(ch)}
+              a13={channelWorkspace.bySlug[ch.slug]?.rootPolicy?.runner === "a13"}
             />
           ))}
         </div>

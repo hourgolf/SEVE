@@ -11,7 +11,7 @@ import { strikeLabel } from "@/lib/studio/channelDecision";
 import type { StrategistState, StrategistConfig } from "@/lib/desk/types";
 import type { StudioChannelRow } from "@/lib/studio/deriveStudioView";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
-import { day1RootExitLabel } from "@/lib/channels/day1Release";
+import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
@@ -34,8 +34,19 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
   if (!strategist) return <aside className="inspector mixer-inspector"><div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">select a fleet row</span></div><div className="insp-empty">no channel selected</div></aside>;
 
   const { id, slug, underlying, color, status, config: databaseConfig } = strategist;
-  const config = draft.proposed ?? databaseConfig;
   const sealed = passport?.release.state === "verified";
+  const rootPolicy = passport?.rootPolicy;
+  const runtimeConfig: StrategistConfig = rootPolicy ? {
+    ...databaseConfig,
+    capital_pct: rootPolicy.riskBudgetUsd,
+    max_contracts: rootPolicy.quantity,
+    premium_stop_pct: rootPolicy.premiumStopPct,
+    take_profit_pct: rootPolicy.bankTargetPct ?? 0,
+    entry_dte: rootPolicy.entryDte,
+    strike_offset: rootPolicy.strikeOffset,
+    pyramid_adds: 0,
+  } : databaseConfig;
+  const config = draft.proposed ?? (sealed && rootPolicy ? runtimeConfig : databaseConfig);
   const canPersist = write.canWrite && !sealed;
   const canTune = draft.active || canPersist;
   const dte = config.entry_dte ?? 0;
@@ -45,9 +56,8 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
   const ustopOff = ustop > 0 && ustop * 180 >= premStop;
   const pyr = config.pyramid_adds ?? 0;
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
-  const giveback = passport?.rootPolicy?.givebackTrail
-    ? `arm +${passport.rootPolicy.givebackTrail.engageReturnPct}% · keep ⅔`
-    : undefined;
+  const managerLabel = rootPolicy?.managerLabel;
+  const a13 = rootPolicy?.runner === "a13";
 
   const stageCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : dispatch({ type: "SET_CONFIG", slug, patch });
   const commitCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : persistConfig(id, patch);
@@ -80,7 +90,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
       <div className="insp-hero">
         <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
         {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{passport.lifecycleLabel}</span>}
-        {giveback && <span className="ih-tag amber">⚡ A13 ratchet</span>}
+        {a13 && <span className="ih-tag amber">⚡ A13</span>}
         <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
       <div className="mixer-deck">
@@ -90,7 +100,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
           <div className="ctl"><span className="cl">event policy</span>{seg(eventPolicy, [{ v: "standdown", label: "STAND-DOWN" }, { v: "ignore", label: "TRADE-THRU" }], (v) => setCfg({ event_policy: v }))}</div>
         </div></section>
 
-        <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : "DATABASE KNOBS · NOT ACTIVE RC5.1"}</header><div className="knob-bank">
+        <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : rootPolicy ? "SEALED RUNTIME · RISK + SIZE" : "DATABASE KNOBS · FUTURE EPOCH"}</header><div className="knob-bank">
           {knob(config.capital_pct, 100, 2500, 50, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
           {knob(config.daily_stop_usd, 100, 5000, 50, "ENTRY LATCH", (v) => `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
           {knob(premStop, 10, 90, 5, "PREM STOP · POLICY", (v) => `−${v}%`, "premium_stop_pct", "#25272a", false)}
@@ -101,7 +111,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
           <div className="ctl"><span className="cl">u-stop %{ustopOff && <span className="uoff">uS·off</span>}</span>{step("u-stop", ustop === 0 ? "off" : `${ustop.toFixed(2)}%`, () => setCfg({ underlying_stop_pct: Math.max(0, +(ustop - 0.05).toFixed(2)) }), () => setCfg({ underlying_stop_pct: Math.min(2, +(ustop + 0.05).toFixed(2)) }))}</div>
           <div className="ctl"><span className="cl">take profit</span>{step("take profit", config.take_profit_pct ? `+${config.take_profit_pct}%` : "ride", () => setCfg({ take_profit_pct: Math.max(0, (config.take_profit_pct ?? 0) - 5) }), () => setCfg({ take_profit_pct: Math.min(300, (config.take_profit_pct ?? 0) + 5) }))}</div>
           {pyrEligible ? <div className="ctl"><span className="cl">pyramid</span>{seg(pyr > 0 ? "on" : "off", [{ v: "off", label: "OFF" }, { v: "on", label: "+3 · CAP12" }], (v) => setCfg(v === "on" ? { pyramid_adds: 3, max_contracts: Math.max(config.max_contracts, 12) } : { pyramid_adds: 0 }))}</div> : <div className="ctl"><span className="cl">pyramid</span><span className="ival muted">n/a</span></div>}
-          <div className="ctl"><span className="cl">giveback trail{giveback ? " · A13" : ""}</span><span className="ival">{giveback ?? "—"}</span></div>
+          <div className="ctl"><span className="cl">manager profile</span><span className="ival">{managerLabel ?? "—"}</span></div>
         </div></section>
 
         <section className="mix-bank mix-bank--posture"><header>CHANNEL POSTURE</header><div className="posture-pads">
@@ -131,7 +141,8 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
               <span><small>SIZE</small><b>{passport.rootPolicy.quantity} contracts</b></span>
               <span><small>RISK</small><b>{usd0(passport.rootPolicy.riskBudgetUsd)}</b></span>
               <span><small>PREMIUM / DEBIT</small><b>${passport.rootPolicy.premiumCap.toFixed(2)} / {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
-              <span><small>EXIT</small><b>{day1RootExitLabel(passport.rootPolicy)}</b></span>
+              <span><small>MANAGER</small><b>{passport.rootPolicy.managerLabel}</b></span>
+              <span><small>EXIT</small><b>{activeRootExitLabel(passport.rootPolicy)}</b></span>
               <span><small>ADMISSION</small><b>priority {passport.rootPolicy.priority} · one/family</b></span>
             </> : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
           </div>}

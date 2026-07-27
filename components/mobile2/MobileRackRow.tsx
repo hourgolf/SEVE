@@ -10,7 +10,7 @@ import { signedUsd, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState, StrategistConfig } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
-import { day1RootExitLabel } from "@/lib/channels/day1Release";
+import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
 
 // =============================================================================
@@ -25,7 +25,6 @@ import { channelDecisionState } from "@/lib/studio/channelDecision";
 // + auth-gated persistConfig; anon = read-only.
 // =============================================================================
 
-const A13_SLUGS = new Set(["momo-shape"]);
 const RISK_MIN = 0, RISK_MAX = 5000, RISK_STEP = 25;
 const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
@@ -50,8 +49,19 @@ export function MobileRackRow({
   const [passportOpen, setPassportOpen] = useState(false);
   const draft = useChannelConfigDraft(strategist, passport);
   const { id, slug, color, status, config: databaseConfig } = strategist;
-  const config = draft.proposed ?? databaseConfig;
   const sealed = passport?.release.state === "verified";
+  const rootPolicy = passport?.rootPolicy;
+  const runtimeConfig: StrategistConfig = rootPolicy ? {
+    ...databaseConfig,
+    capital_pct: rootPolicy.riskBudgetUsd,
+    max_contracts: rootPolicy.quantity,
+    premium_stop_pct: rootPolicy.premiumStopPct,
+    take_profit_pct: rootPolicy.bankTargetPct ?? 0,
+    entry_dte: rootPolicy.entryDte,
+    strike_offset: rootPolicy.strikeOffset,
+    pyramid_adds: 0,
+  } : databaseConfig;
+  const config = draft.proposed ?? (sealed && rootPolicy ? runtimeConfig : databaseConfig);
   const canPersist = write.canWrite && !sealed;
   const canTune = draft.active || canPersist;
 
@@ -126,7 +136,7 @@ export function MobileRackRow({
     : passport?.lifecycle === "dark-evidence" ? { txt: "DARK", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
   const firesSummary = passport?.rootPolicy
-    ? day1RootExitLabel(passport.rootPolicy, true)
+    ? activeRootExitLabel(passport.rootPolicy, true)
     : passport?.lifecycle === "dark-evidence"
       ? "NO FILL · T+1 PATH"
       : ride ? `−${premStop}% · ride · EOD` : `−${premStop}/+${tp} · EOD`;
@@ -135,9 +145,9 @@ export function MobileRackRow({
     <section id={`m2-channel-${slug}`} className={`m2-rack${config.muted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>
       <button type="button" className="m2-rrow" onClick={onToggle} aria-expanded={open}>
         <span className="m2-rr-left">
-          <span className={`m2-rr-dot${dot ? " on" : ""}${A13_SLUGS.has(slug) ? " hot" : ""}`} />
+          <span className={`m2-rr-dot${dot ? " on" : ""}${rootPolicy?.runner === "a13" ? " hot" : ""}`} />
           <span className="m2-rr-slug">{slug}</span>
-          {A13_SLUGS.has(slug) && <span className="m2-rr-a13">⚡A13</span>}
+          {rootPolicy?.runner === "a13" && <span className="m2-rr-a13">⚡A13</span>}
           <span className={`m2-rr-tag ${runtimeTag.cls}`}>{runtimeTag.txt}</span>
           {databaseTag && <span className={`m2-rr-tag ${databaseTag.cls}`}>{databaseTag.txt}</span>}
         </span>
@@ -251,8 +261,9 @@ export function MobileRackRow({
                 <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
                 {passport?.rootPolicy && <>
                   <span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} ct · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
-                  <span><small>EFFECTIVE EXIT</small><b>{day1RootExitLabel(passport.rootPolicy, true)}</b></span>
-                  <span><small>IDENTITY</small><code>{passport.rootPolicy.configurationEpochId.slice(0, 10)}…</code></span>
+                  <span><small>MANAGER</small><b>{passport.rootPolicy.managerLabel}</b></span>
+                  <span><small>EFFECTIVE EXIT</small><b>{activeRootExitLabel(passport.rootPolicy, true)}</b></span>
+                  <span><small>RELEASE IDENTITY</small><code>{passport.release.expectedHash.slice(0, 10)}…</code></span>
                 </>}
               </div>
               <section className="m2-decision-ledger" aria-label="Recent channel decision receipts">

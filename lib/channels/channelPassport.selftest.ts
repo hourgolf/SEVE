@@ -2,6 +2,21 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { deriveChannelPassports } from "./channelPassport";
 import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION, day1RootExitLabel } from "./day1Release";
+import {
+  RC54_CONFIG_HASH,
+  RC54_RELEASE_ID,
+  RC54_ROOTS,
+  RC54_WORKER_VERSION,
+  activeRootExitLabel,
+} from "./activeRelease";
+import {
+  RC54_RELEASE_CONFIGURATION_SHA256,
+  RC54_RELEASE_ID as WORKER_RC54_RELEASE_ID,
+  RC54_ROOT_IDENTITY_SEAL,
+  RC54_ROOTS as WORKER_RC54_ROOTS,
+} from "../../worker/src/rc54ReleasePolicy";
+import { RC54_MANAGER_PROFILES } from "../../worker/src/rc54ManagerPolicy";
+import { RC54_WORKER_VERSION as CURRENT_RC54_WORKER_VERSION } from "../../worker/src/version";
 import type { StrategistState } from "@/lib/desk/types";
 
 const channel = (slug: string, status: StrategistState["status"] = "armed", executor: StrategistState["executor"] = "stream"): StrategistState => ({
@@ -84,6 +99,37 @@ const mismatch = deriveChannelPassports({
 assert.equal(mismatch.release.state, "mismatch");
 assert.equal(mismatch.bySlug["pb-ride"].rootPolicy, null);
 
+const rc54Verified = [event(`stream: rc54-release ACTIVE ${RC54_RELEASE_ID} config=${RC54_CONFIG_HASH}`)];
+const rc54 = deriveChannelPassports({
+  channels: [
+    channel("pb-ride"),
+    channel("vb-macd-state", "draft", "cron"),
+    channel("vb-squeeze-break", "draft", "cron"),
+    channel("vb-ribbon-cross-qqq", "draft", "cron"),
+    channel("vb-macd-state-qqq", "armed", "stream"),
+  ],
+  events: rc54Verified,
+  signals: [{
+    id: "rc54-dark", strategist_slug: "vb-macd-state-qqq", level: "INFO",
+    signal_type: "entry", message: "dark", created_at: "2026-07-27T14:01:00Z",
+    blocked_reason: "rc54_dark_lifecycle",
+  }],
+  positions: [], recentTrades: [], evidenceBySlug: {},
+});
+assert.equal(rc54.release.state, "verified");
+assert.equal(rc54.release.lane, "rc54");
+assert.equal(rc54.roots, 4);
+assert.equal(rc54.dark, 1);
+assert.equal(rc54.bySlug["vb-macd-state"].lifecycle, "paper-root");
+assert.equal(rc54.bySlug["vb-macd-state"].rootPolicy?.accountName, "LAB");
+assert.equal(rc54.bySlug["vb-macd-state"].rootPolicy?.managerProfileId, "LAB54-L30-L50");
+assert.equal(rc54.bySlug["vb-macd-state"].rootPolicy?.bankTargetPct, 30);
+assert.equal(rc54.bySlug["vb-macd-state"].rootPolicy?.runner, "fixed-50");
+assert.equal(rc54.bySlug["vb-macd-state"].database.differsFromRuntime, true);
+assert.equal(rc54.bySlug["vb-macd-state-qqq"].evidence.darkLifecycleCensors, 1);
+assert.equal(activeRootExitLabel(RC54_ROOTS["orb-ustop-ctl"]), "−30% catastrophe · bank 1 @ +30% / A13 runner · 15:25 ET");
+assert.equal(activeRootExitLabel(RC54_ROOTS["vb-macd-state"], true), "−30% · B30/R50 · 15:25");
+
 // Keep browser code free of worker/Node dependencies, but pin every displayed
 // release field to the sealed machine receipts so a future RC cannot silently
 // make the dashboard lie.
@@ -119,4 +165,38 @@ for (const sealedRoot of prereg.content.roots) {
   assert.equal(clientRoot.policyEpochId, binding.policyEpoch);
 }
 
-console.log("channel-passport-selftest: 127/127 passed");
+assert.equal(RC54_RELEASE_ID, WORKER_RC54_RELEASE_ID);
+assert.equal(RC54_CONFIG_HASH, RC54_RELEASE_CONFIGURATION_SHA256);
+assert.equal(RC54_WORKER_VERSION, CURRENT_RC54_WORKER_VERSION);
+assert.equal(Object.keys(RC54_ROOTS).length, WORKER_RC54_ROOTS.length);
+for (const workerRoot of WORKER_RC54_ROOTS) {
+  const clientRoot = RC54_ROOTS[workerRoot.slug];
+  const profile = RC54_MANAGER_PROFILES[workerRoot.managerProfileId];
+  assert.ok(clientRoot);
+  assert.equal(clientRoot.slug, workerRoot.slug);
+  assert.equal(clientRoot.cohort, workerRoot.cohort);
+  assert.equal(clientRoot.domainId, workerRoot.domainId);
+  assert.equal(clientRoot.familyId, workerRoot.familyId);
+  assert.equal(clientRoot.underlying, workerRoot.underlying);
+  assert.equal(clientRoot.priority, workerRoot.priority);
+  assert.equal(clientRoot.quantity, workerRoot.quantity);
+  assert.equal(clientRoot.entryDte, workerRoot.entryDte);
+  assert.equal(clientRoot.strikeOffset, workerRoot.strikeOffset);
+  assert.equal(clientRoot.premiumCap, workerRoot.premiumCap);
+  assert.equal(clientRoot.aggregateDebitCap, workerRoot.aggregateDebitCap);
+  assert.equal(clientRoot.accountId, workerRoot.accountId);
+  assert.equal(clientRoot.managerProfileId, workerRoot.managerProfileId);
+  assert.equal(clientRoot.premiumStopPct, profile.catastropheStopPct);
+  assert.equal(clientRoot.bankTargetPct, profile.bankTargetPct);
+  assert.equal(clientRoot.runner, profile.runner);
+  assert.equal(clientRoot.runnerFraction, profile.runnerFraction);
+  assert.equal(clientRoot.eodEt, profile.liquidationEt);
+  const identity = RC54_ROOT_IDENTITY_SEAL.find((row) => row.slug === workerRoot.slug);
+  assert.ok(identity);
+  assert.equal(clientRoot.channelVersion, identity.channelVersion.replace("sha256:", ""));
+  assert.equal(clientRoot.configurationEpochId, identity.configurationEpoch.replace("sha256:", ""));
+  assert.equal(clientRoot.managerVersion, identity.managerVersion.replace("sha256:", ""));
+  assert.equal(clientRoot.policyEpochId, identity.policyEpoch);
+}
+
+console.log("channel-passport-selftest: RC5.3 + RC5.4 contracts passed");

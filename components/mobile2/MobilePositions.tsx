@@ -7,9 +7,6 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
 import { usePositionCloseFlow } from "@/hooks/usePositionCloseFlow";
 import { deriveOpenPositionRows } from "@/lib/perform/derivePositionsWorkspace";
-import { DAY1_ROOTS } from "@/lib/channels/day1Release";
-
-const hasExecutableA13 = (slug: string) => !!DAY1_ROOTS[slug]?.givebackTrail;
 const ONE_DAY = 86_400_000;
 function dteOf(exp?: string | null): number | null {
   if (!exp) return null;
@@ -58,7 +55,8 @@ export function MobilePositions({ props, strategists, compact = false }: {
         const entry = position.avg_entry_price;
         const evidence = props.opsReadiness.chains.find((chain) => chain.positionId === position.id);
         const lock = (strategist?.config.take_profit_pct ?? 0) > 0;
-        const a13 = hasExecutableA13(position.strategist_slug);
+        const rootPolicy = props.channelWorkspace.bySlug[position.strategist_slug]?.rootPolicy;
+        const a13 = rootPolicy?.runner === "a13";
         const dte = dteOf(position.expiration);
         return <div className="m2-pos-row" key={position.id} style={{ ["--pm" as string]: pm }}>
           <span className="m2-p-dot" />
@@ -73,7 +71,7 @@ export function MobilePositions({ props, strategists, compact = false }: {
             <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAP" : "GIVE"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
           </div>
           <div className="m2-p-tags">
-            {a13 && <span className="m2-tag amber">⚡ A13 armed +50% · keep ⅔</span>}
+            {rootPolicy && <span className="m2-tag amber">{rootPolicy.managerLabel}</span>}
             <span className="m2-tag">{a13 ? "RATCHET" : lock ? "LOCK" : "RIDE"}</span>
             {evidence && <span className={`m2-tag evidence-${evidence.tone}`}>EVIDENCE {evidence.tone}</span>}
             {givebackPct != null && givebackPct >= 40 && <span className="m2-tag warn">giveback {Math.round(givebackPct)}% of pk</span>}

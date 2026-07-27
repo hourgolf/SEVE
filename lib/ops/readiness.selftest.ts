@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID } from "../channels/day1Release";
+import { RC54_CONFIG_HASH, RC54_RELEASE_ID } from "../channels/activeRelease";
 import { deriveOpsReadiness, type DeriveOpsReadinessInput, type OpsEvidence, type OpsEvidenceRead } from "./readiness";
 
 const MONDAY = Date.parse("2026-07-20T15:00:00Z"); // 11:00 ET
@@ -72,6 +73,30 @@ const withCandidate = deriveOpsReadiness(base({ evidence: evidence({ execution: 
 assert.equal(withCandidate.counts.candidates, 1);
 assert.equal(find(withCandidate, "candidates").tone, "green");
 assert.equal(find(withCandidate, "fills").tone, "neutral");
+
+const rc54Release = [{
+  ...release[0],
+  id: "rc54-release",
+  message: `rc54-release ACTIVE ${RC54_RELEASE_ID} config=${RC54_CONFIG_HASH}`,
+  created_at: "2026-07-27T12:30:00.000Z",
+}];
+const rc54Decision = {
+  ...decision,
+  id: "rc54-decision",
+  event_at: "2026-07-27T14:45:00Z",
+  source_bar_at: "2026-07-27T14:45:00Z",
+  payload: { decisionDetail: { rc54Candidate: { releaseId: RC54_RELEASE_ID, configurationSha256: RC54_CONFIG_HASH } } },
+};
+const rc54Ready = deriveOpsReadiness(base({
+  nowMs: Date.parse("2026-07-27T15:00:00Z"),
+  releaseEvents: rc54Release,
+  evidence: evidence({ execution: ok([rc54Decision]) }),
+}));
+assert.equal(find(rc54Ready, "release").state, "VERIFIED");
+assert.match(find(rc54Ready, "release").detail, /week2-2026-07-27-rc5\.4/);
+assert.equal(find(rc54Ready, "manager-config").detail, "8 paper-only arms · quote max 15s");
+assert.equal(rc54Ready.counts.candidates, 1);
+assert.equal(find(rc54Ready, "candidates").tone, "green");
 
 const readFailure = deriveOpsReadiness(base({ evidence: evidence({ execution: failed([decision]) }) }));
 assert.equal(find(readFailure, "candidates").state, "READ ERROR");
@@ -199,4 +224,4 @@ const brokerPartial = deriveOpsReadiness(base({ evidence: evidence({ broker: ok(
 }]) }) }));
 assert.equal(find(brokerPartial, "reconciliation").tone, "yellow");
 
-console.log("ops-readiness-selftest: 58/58 passed");
+console.log("ops-readiness-selftest: RC5.3 + RC5.4 evidence contracts passed");

@@ -1,11 +1,12 @@
 import type { MarketEvent } from "@/lib/types";
 import {
-  DAY1_CONFIG_HASH,
   DAY1_MANAGER_ARMS,
-  DAY1_RELEASE_ID,
-  observeDay1Release,
   type Day1ReleaseReadState,
 } from "@/lib/channels/day1Release";
+import {
+  observeActiveRelease,
+  type ActiveReleaseObservation,
+} from "@/lib/channels/activeRelease";
 import { deriveSentinelReceiptStatus, type SentinelReceiptInput } from "@/lib/sentinel/receipt";
 import type { BrokerReconciliationReceipt } from "@/lib/ops/brokerReconciliation";
 
@@ -150,7 +151,8 @@ export interface DeriveOpsReadinessInput {
   closedPositions: number;
 }
 
-const COHORT_FROM = "2026-07-20";
+const DAY1_COHORT_FROM = "2026-07-20";
+const RC54_COHORT_FROM = "2026-07-27";
 const CAPTURE_GRACE_MS = 150_000;
 const MANAGER_GRACE_MS = 60_000;
 
@@ -168,16 +170,29 @@ const etParts = (nowMs: number): { date: string; minute: number } => {
 const object = (value: unknown): Record<string, unknown> | null =>
   value != null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
-const candidateMeta = (row: ExecutionEvidenceRow): Record<string, unknown> | null => {
+const candidateMeta = (
+  row: ExecutionEvidenceRow,
+  release: ActiveReleaseObservation,
+): Record<string, unknown> | null => {
   const payload = object(row.payload);
   const detail = object(payload?.decisionDetail);
-  const candidate = object(detail?.day1Candidate);
-  return candidate?.releaseId === DAY1_RELEASE_ID && candidate.configurationSha256 === DAY1_CONFIG_HASH ? candidate : null;
+  const candidate = object(release.lane === "rc54" ? detail?.rc54Candidate : detail?.day1Candidate);
+  return candidate?.releaseId === release.releaseId
+    && candidate.configurationSha256 === release.expectedHash
+    ? candidate
+    : null;
 };
 
-const eventMeta = (events: MarketEvent[]): Record<string, unknown> | null => {
-  const release = events.find((event) => event.message.includes(`day1-release ACTIVE ${DAY1_RELEASE_ID}`));
-  return object(release?.meta);
+const eventMeta = (
+  events: MarketEvent[],
+  release: ActiveReleaseObservation,
+): Record<string, unknown> | null => {
+  const row = events.find((event) =>
+    release.lane != null
+    && event.message.includes(`${release.lane}-release ACTIVE ${release.releaseId}`)
+    && event.message.includes(`config=${release.expectedHash}`)
+  );
+  return object(row?.meta);
 };
 
 const readError = (id: string, label: string, read: OpsEvidenceRead<unknown>): ReadinessItem => ({
@@ -189,10 +204,10 @@ const latest = <T>(rows: T[], at: (row: T) => string): T | null =>
   rows.reduce<T | null>((best, row) => !best || Date.parse(at(row)) > Date.parse(at(best)) ? row : best, null);
 
 const releaseConfigItems = (events: MarketEvent[], readState: Day1ReleaseReadState): ReadinessItem[] => {
-  const observed = observeDay1Release(events, readState);
+  const observed = observeActiveRelease(events, readState);
   const releaseTone: ReadinessTone = observed.state === "verified" ? "green"
     : observed.state === "checking" ? "neutral" : observed.state === "read-error" ? "red" : "red";
-  const meta = eventMeta(events);
+  const meta = eventMeta(events, observed);
   const held = object(meta?.heldCapture);
   const runtime = object(meta?.runtimeReadiness);
   const manager = object(meta?.managerShadow);
@@ -206,7 +221,7 @@ const releaseConfigItems = (events: MarketEvent[], readState: Day1ReleaseReadSta
   return [
     { id: "release", label: "SEALED RELEASE", state: observed.state.replaceAll("-", " ").toUpperCase(), tone: releaseTone, detail: observed.fact, observedAt: observed.receipt?.createdAt },
     { id: "capture-config", label: "HELD CAPTURE", state: captureOk ? "CONFIGURED" : observed.state === "checking" ? "CHECKING" : "UNVERIFIED", tone: captureOk ? "green" : observed.state === "checking" ? "neutral" : "red", detail: captureOk ? "12 samples / 60s · runtime ready before boot decision" : "sealed capture settings or runtime-readiness receipt not observed" },
-    { id: "manager-config", label: "MANAGER OBSERVER", state: managerOk ? "CONFIGURED" : observed.state === "checking" ? "CHECKING" : "UNVERIFIED", tone: managerOk ? "green" : observed.state === "checking" ? "neutral" : "red", detail: managerOk ? `${DAY1_MANAGER_ARMS.length} paper-only arms · quote max 15s` : "sealed manager-shadow settings not observed" },
+    { id: "manager-config", label: "MANAGER OBSERVER", state: managerOk ? "CONFIGURED" : observed.state === "checking" ? "CHECKING" : "UNVERIFIED", tone: managerOk ? "green" : observed.state === "checking" ? "neutral" : "red", detail: managerOk ? `${observed.configuredManagerArms} paper-only arms · quote max 15s` : "sealed manager-shadow settings not observed" },
     {
       id: "paper-boundary",
       label: "ORDER BOUNDARY",
@@ -223,16 +238,18 @@ const releaseConfigItems = (events: MarketEvent[], readState: Day1ReleaseReadSta
 
 export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadinessModel {
   const clock = etParts(input.nowMs);
-  const phase = clock.date < COHORT_FROM ? "before-cohort" : "session";
+  const activeRelease = observeActiveRelease(input.releaseEvents, input.releaseReadState);
+  const cohortFrom = activeRelease.lane === "rc54" ? RC54_COHORT_FROM : DAY1_COHORT_FROM;
+  const phase = clock.date < cohortFrom ? "before-cohort" : "session";
   const configuration = releaseConfigItems(input.releaseEvents, input.releaseReadState);
   const sentinel = deriveSentinelReceiptStatus(input.sentinel, input.nowMs);
-  const expectedManagerArms = DAY1_MANAGER_ARMS.length;
+  const expectedManagerArms = activeRelease.configuredManagerArms || DAY1_MANAGER_ARMS.length;
 
   const execution = input.evidence.execution;
   const sessionExecutions = execution.state === "ok"
     ? execution.rows.filter((row) => row.event_at.slice(0, 10) === clock.date)
     : [];
-  const decisions = sessionExecutions.filter((row) => row.event_kind === "decision" && candidateMeta(row));
+  const decisions = sessionExecutions.filter((row) => row.event_kind === "decision" && candidateMeta(row, activeRelease));
   const admittedOpportunityIds = new Set(decisions.flatMap((row) => row.opportunity_id ? [row.opportunity_id] : []));
   const outcomes = input.evidence.outcomes.state === "ok" ? input.evidence.outcomes.rows : [];
   const openedPositionByOpportunity = new Map(outcomes.flatMap((row) =>
@@ -256,7 +273,7 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   if (execution.state !== "ok") {
     evidence.push(execution.state === "error" ? readError("candidates", "CANDIDATE LEDGER", execution) : { id: "candidates", label: "CANDIDATE LEDGER", state: "CHECKING", tone: "neutral", detail: "reading current-session candidate provenance" });
   } else if (phase === "before-cohort") {
-    evidence.push({ id: "candidates", label: "CANDIDATE LEDGER", state: "NOT DUE", tone: "neutral", detail: `RC5 cohort begins ${COHORT_FROM}; prior rows are excluded` });
+    evidence.push({ id: "candidates", label: "CANDIDATE LEDGER", state: "NOT DUE", tone: "neutral", detail: `sealed cohort begins ${cohortFrom}; prior rows are excluded` });
   } else if (candidates === 0) {
     evidence.push({ id: "candidates", label: "CANDIDATE LEDGER", state: "WAITING", tone: "neutral", detail: "no RC5 candidate yet; trade absence is not a failure" });
   } else {
@@ -366,10 +383,10 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   const red = all.filter((item) => item.tone === "red").length;
   const yellow = all.filter((item) => item.tone === "yellow").length;
   const summary: ReadinessItem = red
-    ? { id: "summary", label: "DAY 1 EVIDENCE", state: "BLOCKED", tone: "red", detail: `${red} red · ${yellow} yellow · inspect evidence claims below` }
+    ? { id: "summary", label: "RELEASE EVIDENCE", state: "BLOCKED", tone: "red", detail: `${red} red · ${yellow} yellow · inspect evidence claims below` }
     : yellow
-      ? { id: "summary", label: "DAY 1 EVIDENCE", state: "ATTENTION", tone: "yellow", detail: `${yellow} yellow · execution health remains a separate claim` }
-      : { id: "summary", label: "DAY 1 EVIDENCE", state: phase === "before-cohort" ? "CONFIGURED" : "READY", tone: "green", detail: phase === "before-cohort" ? `sealed runtime configured · cohort begins ${COHORT_FROM}` : "all currently due evidence gates are observed" };
+      ? { id: "summary", label: "RELEASE EVIDENCE", state: "ATTENTION", tone: "yellow", detail: `${yellow} yellow · execution health remains a separate claim` }
+      : { id: "summary", label: "RELEASE EVIDENCE", state: phase === "before-cohort" ? "CONFIGURED" : "READY", tone: "green", detail: phase === "before-cohort" ? `sealed runtime configured · cohort begins ${cohortFrom}` : "all currently due evidence gates are observed" };
 
   return {
     sessionDateEt: clock.date, phase, summary, configuration, evidence,

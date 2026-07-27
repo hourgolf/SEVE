@@ -15,7 +15,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorkspace";
 import type { OpsEvidenceChain, ReadinessItem } from "@/lib/ops/readiness";
 import { deriveOpenPositionRows } from "@/lib/perform/derivePositionsWorkspace";
-import { DAY1_ROOTS } from "@/lib/channels/day1Release";
+import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 
 // PERFORM right rail (slice S2): POSITIONS (row-per-leg with pk glow ring +
 // ratchet/LOCK-RIDE/giveback badges) · SENTINEL (verdict chip + one-line digest
@@ -23,7 +23,6 @@ import { DAY1_ROOTS } from "@/lib/channels/day1Release";
 // All data REUSED: feed.positions + usePositionPeaks (same peak source as the
 // §03 book), useSentinelDigest (same §04 Brief/Sentinel fetch), data.events.
 
-const hasExecutableA13 = (slug: string) => !!DAY1_ROOTS[slug]?.givebackTrail;
 const ONE_DAY = 86_400_000;
 function dteOf(exp?: string | null): number | null {
   if (!exp) return null;
@@ -48,7 +47,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 }
 
 export function PositionsSection({
-  positions, strategists, liveMarks, peaks, write, targeted, reconciliation, evidenceChains,
+  positions, strategists, liveMarks, peaks, write, targeted, reconciliation, evidenceChains, channelWorkspace,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -58,6 +57,7 @@ export function PositionsSection({
   targeted: boolean;
   reconciliation?: ReadinessItem;
   evidenceChains?: OpsEvidenceChain[];
+  channelWorkspace?: ChannelWorkspaceModel;
 }) {
   const closeFlow = usePositionCloseFlow(write);
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
@@ -85,7 +85,8 @@ export function PositionsSection({
           const entry = p.avg_entry_price;
           const evidence = evidenceChains?.find((chain) => chain.positionId === p.id);
           const lock = (s?.config.take_profit_pct ?? 0) > 0;
-          const a13 = hasExecutableA13(p.strategist_slug);
+          const rootPolicy = channelWorkspace?.bySlug[p.strategist_slug]?.rootPolicy;
+          const a13 = rootPolicy?.runner === "a13";
           const dte = dteOf(p.expiration);
           return (
             <div className="pfp-row" key={p.id} style={{ ["--pm" as string]: pm }}>
@@ -103,7 +104,7 @@ export function PositionsSection({
                 <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAPTURE" : "GIVE"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
               </div>
               <div className="pfp-tags">
-                {a13 && <span className="pfp-tag amber">⚡ A13 armed +50% · keep ⅔</span>}
+                {rootPolicy && <span className="pfp-tag amber">{rootPolicy.managerLabel}</span>}
                 <span className="pfp-tag">{a13 ? "RATCHET" : lock ? "LOCK" : "RIDE"}</span>
                 {evidence && <span className={`pfp-tag evidence-${evidence.tone}`}>EVIDENCE {evidence.tone}</span>}
                 {givebackPct != null && givebackPct >= 40 && <span className="pfp-tag warn">giveback {Math.round(givebackPct)}% of pk</span>}
@@ -238,7 +239,7 @@ function TapeSection({ events, strategists, targeted }: { events: MarketEvent[];
 }
 
 export function PerformRail({
-  positions, strategists, liveMarks, peaks, events, symbol, sent, incident, write, section,
+  positions, strategists, liveMarks, peaks, events, symbol, sent, incident, write, section, channelWorkspace,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -250,13 +251,14 @@ export function PerformRail({
   incident: Incident;
   write: SurfaceProps["write"];
   section: PerformSection;
+  channelWorkspace: ChannelWorkspaceModel;
 }) {
   return (
     <aside className="pf-rail">
       {/* P5 slice 3 — deterministic system-health strip; open-position truth visible in every state. */}
       <SystemHealthStrip incident={incident} />
       <IncidentDetail incident={incident} />
-      <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} write={write} targeted={section === "positions"} />
+      <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} write={write} targeted={section === "positions"} channelWorkspace={channelWorkspace} />
       <SentinelSection symbol={symbol} sent={sent} targeted={section === "sentinel"} />
       <TapeSection events={events} strategists={strategists} targeted={section === "tape"} />
     </aside>

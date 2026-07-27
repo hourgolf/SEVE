@@ -99,13 +99,14 @@ export function FolioHomeDesktop({ surface }: { surface: SurfaceProps }) {
               write={surface.write}
               targeted={false}
               reconciliation={reconciliation}
+              channelWorkspace={surface.channelWorkspace}
             />
           </div>
           <FolioSentinelCard surface={surface} />
           <FolioActivityCard surface={surface} />
         </aside>
       </div>
-      <div className="folio-channel-drawer"><PerformDock channels={channels} livePnl={surface.livePnl} /></div>
+      <div className="folio-channel-drawer"><PerformDock channels={channels} livePnl={surface.livePnl} channelWorkspace={surface.channelWorkspace} /></div>
     </div>
   );
 }

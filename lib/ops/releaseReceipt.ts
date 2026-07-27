@@ -1,6 +1,9 @@
 import type { MarketEvent } from "@/lib/types";
 
-export interface Day1ReleaseReceipt {
+export type SealedReleaseLane = "day1" | "rc54";
+
+export interface SealedReleaseReceipt {
+  lane: SealedReleaseLane;
   releaseId: string;
   configHash: string;
   createdAt: string;
@@ -10,10 +13,15 @@ export interface Day1ReleaseReceipt {
   alpacaPaperOrigin: string | null;
 }
 
-const RELEASE_RE = /day1-release\s+ACTIVE\s+(\S+)\s+config=([a-f0-9]{64})/i;
+export type Day1ReleaseReceipt = SealedReleaseReceipt;
 
-/** A startup receipt is evidence of what a worker booted with, not proof of current liveness. */
-export function findDay1ReleaseReceipt(events: MarketEvent[]): Day1ReleaseReceipt | null {
+const RELEASE_RE = /\b(day1|rc54)-release\s+ACTIVE\s+(\S+)\s+config=([a-f0-9]{64})/i;
+
+/** A startup receipt is evidence of what a worker booted with, not proof of
+ * current liveness. The event feed is newest-first; accepting either sealed
+ * lane lets the UI follow the runtime handoff without consulting mutable DB
+ * status as authority. */
+export function findSealedReleaseReceipt(events: MarketEvent[]): SealedReleaseReceipt | null {
   for (const event of events) {
     const match = event.message.match(RELEASE_RE);
     if (!match) continue;
@@ -21,8 +29,9 @@ export function findDay1ReleaseReceipt(events: MarketEvent[]): Day1ReleaseReceip
       ? event.meta as Record<string, unknown>
       : null;
     return {
-      releaseId: match[1],
-      configHash: match[2].toLowerCase(),
+      lane: match[1].toLowerCase() as SealedReleaseLane,
+      releaseId: match[2],
+      configHash: match[3].toLowerCase(),
       createdAt: event.created_at,
       message: event.message,
       dryRun: typeof meta?.dryRun === "boolean" ? meta.dryRun : null,
@@ -31,4 +40,9 @@ export function findDay1ReleaseReceipt(events: MarketEvent[]): Day1ReleaseReceip
     };
   }
   return null;
+}
+
+export function findDay1ReleaseReceipt(events: MarketEvent[]): Day1ReleaseReceipt | null {
+  const receipt = findSealedReleaseReceipt(events.filter((event) => /\bday1-release\s+ACTIVE\b/i.test(event.message)));
+  return receipt?.lane === "day1" ? receipt : null;
 }
