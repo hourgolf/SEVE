@@ -13,7 +13,7 @@ import {
   validateRc54SourceExecutorBoundary,
 } from "../worker/src/rc54ReleasePolicy.js";
 import type { AccountRow, ChannelConfig } from "../worker/src/store.js";
-import { WORKER_VERSION } from "../worker/src/version.js";
+import { RC54_WORKER_VERSION } from "../worker/src/version.js";
 
 function mapChannel(row: any): ChannelConfig {
   const cfg = Array.isArray(row.strategist_config)
@@ -84,11 +84,8 @@ async function main(): Promise<void> {
   const overlaid = applyRc54ReleaseFleetOverlay(fleet);
   const identityErrors = validateRc54IdentitySeal({
     channels: fleet,
-    workerVersion: WORKER_VERSION,
+    workerVersion: RC54_WORKER_VERSION,
   });
-  if (identityErrors.length) {
-    throw new Error(`checked-in identity seal failed: ${identityErrors.join(";")}`);
-  }
   const channelBySlug = new Map(overlaid.map((channel) => [channel.slug, channel]));
   const seal = RC54_ROOTS.map((root) => {
     const channel = channelBySlug.get(root.slug);
@@ -96,7 +93,7 @@ async function main(): Promise<void> {
     const identity = observedPolicyIdentity({
       channel,
       accountId: root.accountId,
-      workerVersion: WORKER_VERSION,
+      workerVersion: RC54_WORKER_VERSION,
       executableManagerProfile: rc54ManagerProfileId(root.slug),
     });
     if (!identity) throw new Error(`${root.slug}: identity unavailable`);
@@ -114,9 +111,11 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify({
     releaseConfigurationSha256: RC54_RELEASE_CONFIGURATION_SHA256,
     fleetCount: fleet.length,
-    identitySealVerified: true,
+    identitySealVerified: identityErrors.length === 0,
+    identityErrors,
     seal,
   }, null, 2)}\n`);
+  if (identityErrors.length) process.exitCode = 1;
 }
 
 void main().catch((cause) => {

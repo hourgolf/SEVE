@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { ShadowDecision } from "./decide.js";
 import type { AccountRow, ChannelConfig, PositionRow } from "./store.js";
-import { WORKER_RUNTIME_VERSION, WORKER_VERSION } from "./version.js";
+import {
+  activeWorkerVersion,
+  RC54_WORKER_VERSION,
+  WORKER_RUNTIME_VERSION,
+  WORKER_VERSION,
+} from "./version.js";
 import { sweepExitAllowed } from "./exitGuard.js";
 import {
   applyDay1ReleaseAdmission,
@@ -447,11 +452,17 @@ check("worker, client, and immutable operational receipt pin the same identities
 ], [true, DAY1_RELEASE_CONFIGURATION_SHA256, WORKER_VERSION, false]);
 check("runtime deployment identity is distinct from sealed strategy identity",
   [String(WORKER_RUNTIME_VERSION) !== String(WORKER_VERSION), WORKER_VERSION], [true, "stream-2026-07-21b"]);
+check("release-specific strategy identity stays fail-closed and explicit", [
+  activeWorkerVersion(false),
+  activeWorkerVersion(true),
+  RC54_WORKER_VERSION,
+], [WORKER_VERSION, RC54_WORKER_VERSION, "stream-2026-07-27a"]);
 check("process liveness uses runtime identity without changing release validation", [
   indexSource.includes("store.openRun(WORKER_RUNTIME_VERSION)"),
   indexSource.includes("store.heartbeat(`${WORKER_RUNTIME_VERSION} cycle`)"),
   indexSource.includes("workerVersion: WORKER_VERSION"),
-], [true, true, true]);
+  indexSource.includes("workerVersion: RC54_WORKER_VERSION"),
+], [true, true, true, true]);
 check("operational receipt seals every regenerated root identity", hotfixReceipt.rootBindings, DAY1_ROOT_BINDINGS.map((binding) => ({
   slug: binding.slug,
   strategistId: binding.strategistId,

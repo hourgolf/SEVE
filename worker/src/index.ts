@@ -12,7 +12,14 @@
 //  orders. Railway: 1 replica, restart-on-crash, sole order-placer.
 // ============================================================================
 
-import { config, policy, WORKER_RUNTIME_VERSION, WORKER_VERSION } from "./config.js";
+import {
+  ACTIVE_WORKER_VERSION,
+  config,
+  policy,
+  RC54_WORKER_VERSION,
+  WORKER_RUNTIME_VERSION,
+  WORKER_VERSION,
+} from "./config.js";
 import { BOOT_ID, INSTANCE_ID } from "./runId.js";
 import { info, warn, error, shadow } from "./log.js";
 import * as alpaca from "./alpaca.js";
@@ -462,7 +469,7 @@ async function reloadConfig(): Promise<void> {
         channels: c.channels,
         accounts,
         fundMode: c.fund.mode,
-        workerVersion: WORKER_VERSION,
+        workerVersion: RC54_WORKER_VERSION,
         expectedConfigurationSha256: config.rc54ReleaseExpectedSha256,
         resolvedCredentialAccountIds: groupByAccount(channels, accounts)
           .filter((group) => group.account.cred_ref
@@ -1420,7 +1427,7 @@ async function onReconnect(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  info(`SEVE streaming worker ${WORKER_RUNTIME_VERSION} · sealed strategy ${WORKER_VERSION} — the third engine driver`);
+  info(`SEVE streaming worker ${WORKER_RUNTIME_VERSION} · sealed strategy ${ACTIVE_WORKER_VERSION} — the third engine driver`);
   const writeMode = config.hasServiceRole
     ? (config.shadowWriteEvents ? "events" : "none (service role, events off)")
     : "none (anon, read-only)";
@@ -1450,7 +1457,7 @@ async function main(): Promise<void> {
   // Boot flags → the DB journal (2026-07-06): env-gated safety switches were previously
   // invisible outside Railway logs — an operator flipping ORPHAN_FLATTEN had no in-band
   // confirmation the restarted worker picked it up. One line per boot, queryable in events.
-  void store.journal("EXEC", `boot: ${WORKER_RUNTIME_VERSION} · sealedStrategy=${WORKER_VERSION} · orphanFlatten=${config.orphanFlatten ? "ARMED" : "detect-only"} · symbols=${SYMBOLS.join(",")}`, { boot_id: BOOT_ID, instance_id: INSTANCE_ID });
+  void store.journal("EXEC", `boot: ${WORKER_RUNTIME_VERSION} · sealedStrategy=${ACTIVE_WORKER_VERSION} · orphanFlatten=${config.orphanFlatten ? "ARMED" : "detect-only"} · symbols=${SYMBOLS.join(",")}`, { boot_id: BOOT_ID, instance_id: INSTANCE_ID });
   // Crash-attribution ledger (external-review P4): open this run + close any prior un-ended run
   // as abrupt. Fail-open, off the trade path. See store.openRun / worker_runs / 67_worker_runs.sql.
   void store.openRun(WORKER_RUNTIME_VERSION);

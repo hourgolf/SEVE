@@ -10,7 +10,13 @@
 // ============================================================================
 
 import dotenv from "dotenv";
-export { WORKER_RUNTIME_VERSION, WORKER_VERSION } from "./version.js";
+import {
+  activeWorkerVersion,
+  RC54_WORKER_VERSION,
+  WORKER_RUNTIME_VERSION,
+  WORKER_VERSION,
+} from "./version.js";
+export { RC54_WORKER_VERSION, WORKER_RUNTIME_VERSION, WORKER_VERSION };
 
 // Load env without overriding anything already set (Railway's real env wins).
 // Local dev convenience: also read the repo-root .env.local (ALPACA_KEY/SECRET +
@@ -219,6 +225,10 @@ export const config = {
   // 2.5 calendar days incl. extended hours = full prior session always present.
   barHistory: Number(opt("BAR_HISTORY", "2400")),
 } as const;
+
+// Evidence emitted by the running process must identify the active sealed era.
+// RC5.3 retains WORKER_VERSION until the separately gated RC5.4 activation.
+export const ACTIVE_WORKER_VERSION = activeWorkerVersion(config.rc54ReleaseEnabled);
 
 // ---- Policy constants (parity with the cron dispatcher 2026-06-11a) ---------
 export const policy = {
