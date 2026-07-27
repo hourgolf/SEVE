@@ -275,6 +275,17 @@ export async function getOpenPositions(): Promise<PositionRow[]> {
   return mapOpenPositions({ data: data as unknown[] | null, error });
 }
 
+/** Startup-only fail-closed open-book read. Unlike getOpenPositions(), null
+ * preserves the distinction between a proven flat book and a failed SELECT. */
+export async function getOpenPositionsStrict(): Promise<PositionRow[] | null> {
+  const result = await sb.from("positions").select("*").eq("status", "open");
+  if (result.error) {
+    warn(`store: strict open-positions read failed — ${result.error.message}`);
+    return null;
+  }
+  return mapOpenPositions({ data: result.data as unknown[] | null, error: null });
+}
+
 /** Durable MFE: persist the running peak option mark (the fast-exit sweep ratchets it).
  *  The in-memory peak is already monotonic, so a direct write is correct. Display-only. */
 export async function markPeak(id: string, peak: number): Promise<void> {

@@ -6,6 +6,7 @@ import {
   dedupeCbboQuotes,
   heldContractsFromTradePathReceipt,
   historicalAccessGate,
+  inspectDatabentoCbboJsonLine,
   parseDatabentoCbboJsonLine,
   parsePersistedDatabentoCbboObject,
   type HeldContractReceipt,
@@ -58,7 +59,10 @@ const line = JSON.stringify({
 const quote = parseDatabentoCbboJsonLine(line);
 check("CBBO line parses exact contract and timestamp", [quote?.occSymbol, quote?.atMs, quote?.bid, quote?.ask], ["SPY260715C00600000", Date.parse("2026-07-14T14:00:11.123Z"), 1.2, 1.25]);
 check("CBBO sizes and source retained", [quote?.bidSize, quote?.askSize, quote?.publisherId, quote?.source], [5, 7, 1, "databento_cbbo_1s"]);
-check("crossed CBBO line is rejected", parseDatabentoCbboJsonLine(JSON.stringify({ ...JSON.parse(line), levels: [{ bid_px: 1.3, ask_px: 1.2 }] })), null);
+const crossedLine = JSON.stringify({ ...JSON.parse(line), levels: [{ bid_px: 1.3, ask_px: 1.2 }] });
+check("crossed CBBO line is rejected", parseDatabentoCbboJsonLine(crossedLine), null);
+check("crossed CBBO line has an explicit parse class", inspectDatabentoCbboJsonLine(crossedLine), { ok: false, issue: "crossed_quote" });
+check("malformed CBBO line remains distinguishable", inspectDatabentoCbboJsonLine("{bad"), { ok: false, issue: "malformed_json" });
 const noBid = parseDatabentoCbboJsonLine(JSON.stringify({
   ...JSON.parse(line),
   levels: [{ bid_px: null, ask_px: "0.01", bid_sz: 0, ask_sz: 447 }],

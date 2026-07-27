@@ -67,6 +67,17 @@ export interface DatabentoCbboQuote {
   source: "databento_cbbo_1s";
 }
 
+export type DatabentoCbboParseIssue =
+  | "malformed_json"
+  | "invalid_symbol"
+  | "invalid_timestamp"
+  | "invalid_price"
+  | "crossed_quote";
+
+export type DatabentoCbboParseResult =
+  | { ok: true; quote: DatabentoCbboQuote }
+  | { ok: false; issue: DatabentoCbboParseIssue };
+
 /** Strict parser for the checksum-verified normalized bytes written by the
  * historical Databento downloader. Malformed rows are counted, never repaired. */
 export function parsePersistedDatabentoCbboObject(input: Buffer | string): {
@@ -208,9 +219,13 @@ export function buildExactContractRequests(
     || a.occSymbol.localeCompare(b.occSymbol));
 }
 
-export function parseDatabentoCbboJsonLine(line: string): DatabentoCbboQuote | null {
-  let row: Record<string, unknown>;
-  try { row = JSON.parse(line) as Record<string, unknown>; } catch { return null; }
+export function inspectDatabentoCbboJsonLine(line: string): DatabentoCbboParseResult {
+  let parsed: unknown;
+  try { parsed = JSON.parse(line); } catch { return { ok: false, issue: "malformed_json" }; }
+  if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, issue: "malformed_json" };
+  }
+  const row = parsed as Record<string, unknown>;
   const levels = Array.isArray(row.levels) ? row.levels as Array<Record<string, unknown>> : [];
   const level = levels[0];
   const symbol = typeof row.symbol === "string" ? databentoRawToCompactOcc(row.symbol) : null;
@@ -226,9 +241,12 @@ export function parseDatabentoCbboJsonLine(line: string): DatabentoCbboQuote | n
   // entire provider object or inventing a bid.
   const bid = level?.bid_px == null ? 0 : numeric(level.bid_px);
   const ask = numeric(level?.ask_px);
-  if (!symbol || ts == null || !finite(ts) || bid == null || ask == null || bid < 0 || ask <= 0 || ask < bid) return null;
+  if (!symbol) return { ok: false, issue: "invalid_symbol" };
+  if (ts == null || !finite(ts)) return { ok: false, issue: "invalid_timestamp" };
+  if (bid == null || ask == null || bid < 0 || ask <= 0) return { ok: false, issue: "invalid_price" };
+  if (ask < bid) return { ok: false, issue: "crossed_quote" };
   const publisherId = numeric((row.hd as Record<string, unknown> | undefined)?.publisher_id);
-  return {
+  return { ok: true, quote: {
     occSymbol: symbol,
     atMs: ts,
     bid,
@@ -237,7 +255,12 @@ export function parseDatabentoCbboJsonLine(line: string): DatabentoCbboQuote | n
     askSize: numeric(level?.ask_sz),
     publisherId,
     source: "databento_cbbo_1s",
-  };
+  } };
+}
+
+export function parseDatabentoCbboJsonLine(line: string): DatabentoCbboQuote | null {
+  const inspected = inspectDatabentoCbboJsonLine(line);
+  return inspected.ok ? inspected.quote : null;
 }
 
 export function dedupeCbboQuotes(quotes: readonly DatabentoCbboQuote[]): DatabentoCbboQuote[] {

@@ -8,6 +8,10 @@ export { deterministicEvidenceUuid } from "../../lib/evidence/identity";
 import { sealPositionPlan, type HarvestPolicy, type PositionPlanV1 } from "../../lib/desk/positionPlan";
 import type { ShadowDecision } from "./decide.js";
 import type { ChannelConfig } from "./store.js";
+import {
+  releaseEvidenceStamp,
+  type ReleaseEvidenceContext,
+} from "./releaseEvidenceContext.js";
 
 export interface PolicyEpochDraft {
   id: string;
@@ -57,6 +61,8 @@ export interface ShadowPlanInput {
   workerVersion: string;
   defaultPremiumStopPct: number;
   executableGivebackTrail?: ExecutableGivebackTrailIdentity | null;
+  executableManagerProfile?: string | null;
+  releaseEvidenceContext?: ReleaseEvidenceContext | null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -91,6 +97,7 @@ export function observedPlanId(opportunityId: string): string {
 function managerPolicy(
   ch: ChannelConfig,
   executableGivebackTrail: ExecutableGivebackTrailIdentity | null = null,
+  executableManagerProfile: string | null = null,
 ): { id: string; harvest: HarvestPolicy; body: Record<string, unknown> } {
   const specManagement = ch.spec_json && typeof ch.spec_json === "object"
     ? ((ch.spec_json as Record<string, unknown>).management ?? null)
@@ -109,7 +116,15 @@ function managerPolicy(
     manualExit: /-manual$/i.test(ch.slug),
     specManagement,
     ...(executableGivebackTrail ? { executableGivebackTrail } : {}),
+    ...(executableManagerProfile ? { executableManagerProfile } : {}),
   };
+  if (executableManagerProfile) {
+    return {
+      id: `sealed-profile:${executableManagerProfile}`,
+      harvest: ch.runner_frac > 0 ? "bank_runner" : "all_out",
+      body,
+    };
+  }
   if (executableGivebackTrail) return { id: "premium-giveback-all-out", harvest: "all_out", body };
   if (/-manual$/i.test(ch.slug)) return { id: "manual-operator", harvest: "structure_time", body };
   if (ch.runner_frac > 0) return { id: "bank-runner", harvest: "bank_runner", body };
@@ -133,10 +148,18 @@ export function observedPolicyIdentity(input: {
   accountId: string;
   workerVersion: string;
   executableGivebackTrail?: ExecutableGivebackTrailIdentity | null;
+  executableManagerProfile?: string | null;
+  releaseEvidenceContext?: ReleaseEvidenceContext | null;
 }): ObservedPolicyIdentity | null {
   const ch = input.channel;
   if (!UUID.test(input.accountId) || !UUID.test(ch.id)) return null;
-  const manager = managerPolicy(ch, input.executableGivebackTrail ?? null);
+  const releaseContext = releaseEvidenceStamp(input.releaseEvidenceContext);
+  if (input.releaseEvidenceContext && !releaseContext) return null;
+  const manager = managerPolicy(
+    ch,
+    input.executableGivebackTrail ?? null,
+    input.executableManagerProfile ?? null,
+  );
   const alpha = { slug: ch.slug, underlying: ch.underlying, spec: ch.spec_json, implementationVersion: input.workerVersion };
   const channelVersion = `sha256:${digest(alpha)}`;
   const managerVersion = `sha256:${digest(manager.body)}`;
@@ -162,6 +185,7 @@ export function observedPolicyIdentity(input: {
       priceBasis: "decision executable ask",
       riskBasis: "maximum long-option debit; stop-budget estimate is diagnostic only",
     },
+    ...(releaseContext ? { releaseEvidence: releaseContext } : {}),
   };
   const configurationEpochId = `sha256:${digest({
     strategistId: ch.id, channelVersion, managerVersion, workerVersion: input.workerVersion, policyJson,
@@ -193,9 +217,15 @@ export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvide
     accountId: input.accountId,
     workerVersion: input.workerVersion,
     executableGivebackTrail: input.executableGivebackTrail,
+    executableManagerProfile: input.executableManagerProfile,
+    releaseEvidenceContext: input.releaseEvidenceContext,
   });
   if (!identity) return null;
-  const manager = managerPolicy(ch, input.executableGivebackTrail ?? null);
+  const manager = managerPolicy(
+    ch,
+    input.executableGivebackTrail ?? null,
+    input.executableManagerProfile ?? null,
+  );
   const { channelVersion, managerVersion, policyJson } = identity;
   const epochId = identity.policyEpochId;
   const opportunityId = observedOpportunityId({

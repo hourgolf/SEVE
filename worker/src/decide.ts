@@ -28,6 +28,15 @@ import { peakBidSince, realizedTodayByChannel, writeShadowEvent, type ChannelCon
 import type { ChainStore } from "./state.js";
 import { entryStateByKey, entryKey } from "./execute.js";
 import { freshExecutableBid } from "./exitRules.js";
+import {
+  rc54A13GivebackReached,
+  rc54BankTargetReached,
+  rc54ManagerProfileFromRow,
+  rc54ManagerStampPresent,
+  rc54NativeAtrExitEligible,
+  rc54RunnerFixedTargetReached,
+} from "./rc54ManagerPolicy.js";
+import { rc54Root } from "./rc54ReleasePolicy.js";
 
 // RTH in ET minutes-since-midnight: 09:30 (570) → 16:00 (960).
 const RTH_OPEN = 570;
@@ -254,10 +263,22 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   const midDiag = rowQuote?.mid ?? 0; // diagnostic — never a trigger input (1b #6)
   const mark = row ? (freshExecutableBid(rowQuote?.bid, ctx.chain.ageMs) ?? alp?.current_price ?? 0) : 0;
   const entryPx = row?.avg_entry_price ?? 0;
+  const rc54Profile = row ? rc54ManagerProfileFromRow(row) : null;
+  // An open position's persisted manager stamp owns its exit semantics. The
+  // release flag controls new admissions, not reinterpretation of existing risk.
+  // An unknown/corrupt stamp remains sealed and loses discretionary exits
+  // instead of silently falling back to the legacy manager.
+  const sealedRc54Row = !!row && rc54ManagerStampPresent(row) && rc54Root(ch.slug) != null;
 
   // ARMABLE TRAIL (compiled specs): underlying ATR-chandelier — once in profit,
   // exit when price retraces k·ATR from the peak favorable underlying (cron parity).
-  if (pos && row && built.trailK != null && f.atr > 0 && (!intent || intent.kind !== "exit")) {
+  if (pos && row && built.trailK != null && f.atr > 0
+      && rc54NativeAtrExitEligible({
+        profile: rc54Profile,
+        isRunner: !!row.runner_of,
+        sealedRc54: sealedRc54Row,
+      })
+      && (!intent || intent.kind !== "exit")) {
     const inProfit = pos.optType === "call" ? f.close > pos.entryUnderlying : f.close < pos.entryUnderlying;
     const retraced = pos.optType === "call"
       ? f.close <= pos.peakFavorable - built.trailK * f.atr
@@ -278,12 +299,23 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // finding: a 0.30% underlying-move stop beats the −50% premium stop). Gates BOTH premium stops below.
   const premStopPct = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
   // Premium profit/stop for compiled specs (needs the option mark).
-  if (pos && row && built.premiumExit && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
+  if (pos && row && !sealedRc54Row && built.premiumExit
+      && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
     const { profitPct, stopPct } = built.premiumExit;
     // RUNNER rows (row.runner_of, R1) skip take-profit intents — they ride; the fast sweep's
     // ratchet is their harvest exit. Stops below still protect them (mirror of exitRules).
     if (profitPct != null && !row.runner_of && mark >= entryPx * (1 + profitPct / 100)) intent = { kind: "exit", reason: "target_premium" };
     else if (premStopPct > 0 && stopPct != null && mark <= entryPx * (1 - stopPct / 100)) intent = { kind: "exit", reason: "stop_premium" };
+  }
+  if (pos && row && (!intent || intent.kind !== "exit") && rc54RunnerFixedTargetReached({
+    profile: rc54Profile, isRunner: !!row.runner_of, entryPrice: entryPx, mark,
+  })) {
+    intent = { kind: "exit", reason: "target_premium" };
+  }
+  if (pos && row && (!intent || intent.kind !== "exit") && rc54BankTargetReached({
+    profile: rc54Profile, isRunner: !!row.runner_of, entryPrice: entryPx, mark,
+  })) {
+    intent = { kind: "exit", reason: "target_premium" };
   }
   // Per-channel TAKE-PROFIT (compound policy, ChannelConfig.take_profit_pct): exit at +pct%
   // of premium; the entry path below re-enters on the next signal when flat → compounding.
@@ -292,7 +324,8 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // compiled specs). Mirrors the engine premiumExit.profitPct — ⚠ the ENGINE backtests this on
   // the MID; live triggers on the BID since 1b #6 (audit 2026-07-11), so live TPs fire ~half a
   // spread later than the backtest models (deliberate: the backtest's mid was never realizable).
-  if (pos && row && !row.runner_of && ch.take_profit_pct > 0 && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0
+  if (pos && row && !sealedRc54Row && !row.runner_of && ch.take_profit_pct > 0
+      && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0
       && mark >= entryPx * (1 + ch.take_profit_pct / 100)) {
     intent = { kind: "exit", reason: "target_premium" };
   }
@@ -311,6 +344,12 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   if (pos && row && premStopPct > 0 && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0 && mark <= entryPx * (1 - premStopPct / 100)) {
     intent = { kind: "exit", reason: "premium_stop" };
   }
+  if (pos && row && (!intent || intent.kind !== "exit") && rc54A13GivebackReached({
+    profile: rc54Profile, isRunner: !!row.runner_of, entryPrice: entryPx,
+    mark, peak: Math.max(row.peak_mark ?? entryPx, mark),
+  })) {
+    intent = { kind: "exit", reason: "trail_giveback" };
+  }
 
   // EVENT STAND-DOWN flatten (calendar-awareness, market-events.ts): a scheduled
   // intraday binary (FOMC 14:00) is not a tape signal — don't hold a directional
@@ -327,7 +366,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // Arm-high giveback trail, per-channel (GIVEBACK_TRAIL map): once the peak mark clears
   // entry×engageMult, exit if it gives back > givebackPct of the peak gain. power +100%/keep-60%;
   // momo-shape +50%/keep-⅔ (A13). Channels absent from the map have no trail (gt undefined → skip).
-  const gt = policy.GIVEBACK_TRAIL[ch.slug];
+  const gt = sealedRc54Row ? undefined : policy.GIVEBACK_TRAIL[ch.slug];
   if (pos && row && gt && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
     // audit 2026-07-11 (1b #5): peakBidSince returns NULL on a READ ERROR — skip the trail
     // evaluation this cycle (the old swallowed →0 silently under-armed the A13/power trail).
