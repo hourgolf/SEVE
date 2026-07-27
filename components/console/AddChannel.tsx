@@ -17,7 +17,8 @@ import { PM_COLORS, pmVar } from "@/lib/desk/colors";
 // Add-Channel sheet: paste/upload a thesis .md → instant frontmatter preview →
 // "Compile" (server-side LLM) → StrategySpec + capability check → "Backtest"
 // (inline modeled quick-check on real bars, plus the real-fills CLI command) →
-// "Arm" (persist as a live channel) or "Save draft" (stored, never trades).
+// "Save draft" (stored, never trades). Activation belongs to the governed
+// proposal / validation / receipt path and is unavailable from this sheet.
 
 // Conservative starting mixer for a freshly-added channel (tune via the knobs).
 const NEW_CHANNEL_CONFIG: StrategistConfig = {
@@ -66,8 +67,8 @@ export function AddChannel({
   const [gateErr, setGateErr] = useState<string | null>(null);
 
   const [accent, setAccent] = useState<PmColor>("cyan");
-  const [arming, setArming] = useState(false);
-  const [armErr, setArmErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
   const fm = parseFrontmatter(md);
@@ -90,7 +91,7 @@ export function AddChannel({
   }
 
   function resetDownstream() {
-    setSpec(null); setGate(null); setGateErr(null); setArmErr(null); setDone(null); setRepairs([]);
+    setSpec(null); setGate(null); setGateErr(null); setSaveErr(null); setDone(null); setRepairs([]);
   }
 
   async function compile() {
@@ -117,7 +118,7 @@ export function AddChannel({
 
   async function runBacktest() {
     if (!spec) return;
-    setGating(true); setGateErr(null); setGate(null); setArmErr(null);
+    setGating(true); setGateErr(null); setGate(null); setSaveErr(null);
     try {
       const r = await fetch("/api/backtest-strategy", {
         method: "POST",
@@ -137,9 +138,9 @@ export function AddChannel({
     }
   }
 
-  async function persist(status: "armed" | "draft") {
+  async function persistDraft() {
     if (!spec || !slug) return;
-    setArming(true); setArmErr(null);
+    setSaving(true); setSaveErr(null);
     const res = await createChannel({
       slug,
       underlying,
@@ -148,40 +149,22 @@ export function AddChannel({
       regime: spec.meta.regime || "",
       accent,
       sortOrder: 100 + existingSlugs.length,
-      status,
+      status: "draft",
       spec,
       thesisMd: md,
       config: NEW_CHANNEL_CONFIG,
     });
-    setArming(false);
+    setSaving(false);
     if (res.ok) {
-      setDone(`${name} ${status === "armed" ? "armed" : "saved as draft"} — reloading…`);
+      setDone(`${name} saved as draft — reloading…`);
       setTimeout(() => { onClose(); window.location.reload(); }, 1000);
     } else {
-      setArmErr(res.error ?? "save failed");
+      setSaveErr(res.error ?? "save failed");
     }
   }
 
-  const canArm = !!spec && !!cap?.runnable && underlyingOk && !!gate && canWrite && !!slug && !collision && !arming && !done;
-  const canDraft = !!spec && canWrite && !!slug && !collision && !arming && !done;
+  const canDraft = !!spec && canWrite && !!slug && !collision && !saving && !done;
   const m = gate?.metrics;
-
-  // Why ARM is disabled — surfaced at the button so it's never a mystery.
-  const armReason: string | null = done
-    ? null
-    : !canWrite
-      ? "Sign in to arm or save a channel."
-      : !spec
-        ? null
-        : collision
-          ? null // the slug-collision error already shows above
-          : cap && !cap.runnable
-            ? `Can't arm — needs ${cap.unsupported.join(" · ")}. Save it as a draft (won't trade), or drop those rules from the thesis.`
-            : !underlyingOk
-              ? `Can't arm — ${underlying} has no live data feed (supported: ${SUPPORTED_UNDERLYINGS.join(", ")}). Add it to market-ingest first, or save as a draft.`
-              : !gate
-                ? "Run the backtest gate to enable Arm."
-                : null;
 
   return (
     <div className="ac-scrim" onClick={onClose}>
@@ -190,9 +173,14 @@ export function AddChannel({
           <span className="ac-title">Add Channel</span>
           <button className="ac-x" onClick={onClose} aria-label="close">✕</button>
         </div>
+        <div className="ac-boundary" role="status">
+          <strong>DRAFT-ONLY · NO ACTIVATION AUTHORITY</strong>
+          <span>Saving writes an unarmed review draft. This surface cannot activate a channel.</span>
+        </div>
         <p className="ac-sub">
           Paste or upload a strategy-thesis <code>.md</code>. It compiles to executable rules;
           inputs the desk can&apos;t run yet (multi-leg, GEX, TICK, event calendar) are flagged.
+          Compilation and modeled gates are preview evidence only.
         </p>
 
         <input className="ac-file" type="file" accept=".md,.markdown,text/markdown,text/plain" onChange={onFile} />
@@ -319,17 +307,15 @@ export function AddChannel({
                 ))}
               </div>
               <div className="ac-arm-btns">
-                <button className="ac-btn ac-draft" disabled={!canDraft} onClick={() => persist("draft")}>
-                  Save draft
+                <button className="ac-btn ac-draft" disabled={!canDraft} onClick={persistDraft}>
+                  {saving ? "Saving…" : "Save draft"}
                 </button>
-                <button className="ac-btn ac-armbtn" disabled={!canArm} onClick={() => persist("armed")}>
-                  {arming ? "Saving…" : "Arm channel"}
+                <button className="ac-btn ac-armbtn" disabled aria-label="channel activation is not authorized">
+                  Activation not authorized
                 </button>
               </div>
-              {armReason && (
-                <div className={cap && !cap.runnable ? "ac-warn" : "ac-foot"}>{armReason}</div>
-              )}
-              {armErr && <div className="ac-err">{armErr}</div>}
+              {!canWrite && <div className="ac-foot">Sign in to save an unarmed review draft.</div>}
+              {saveErr && <div className="ac-err">{saveErr}</div>}
               {done && <div className="ac-ok">{done}</div>}
             </div>
           </div>

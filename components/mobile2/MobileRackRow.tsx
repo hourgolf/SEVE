@@ -155,18 +155,36 @@ export function MobileRackRow({
 
       {open && (
         <div className="m2-insp">
-          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE − / + OR TAP VALUE"}</span><span className="ln" /></div>
+          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE TIGHTEN / WIDEN OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
               <div className="m2-exit-stepper">
-                <button type="button" disabled={!canTune || premStop <= 10} onClick={() => stepPremiumStop(-5)} aria-label="decrease premium stop by 5 percent">−</button>
+                <button
+                  type="button"
+                  className="m2-stop-step"
+                  disabled={!canTune || premStop <= 10}
+                  onClick={() => stepPremiumStop(-5)}
+                  aria-label="tighten premium stop by 5 percentage points"
+                  title="Tighten stop: reduce the maximum premium loss"
+                >
+                  TIGHTEN
+                </button>
                 <FiresPill
                   value={premStop} display={`−${premStop}%`}
                   onCommit={(v) => setCfg({ premium_stop_pct: v })}
                   min={10} max={90} className="m2-fp-val"
                   canWrite={canTune} label="premium stop percent" title="premium stop % — the binding downside"
                 />
-                <button type="button" disabled={!canTune || premStop >= 90} onClick={() => stepPremiumStop(5)} aria-label="increase premium stop by 5 percent">+</button>
+                <button
+                  type="button"
+                  className="m2-stop-step"
+                  disabled={!canTune || premStop >= 90}
+                  onClick={() => stepPremiumStop(5)}
+                  aria-label="widen premium stop by 5 percentage points"
+                  title="Widen stop: allow a larger maximum premium loss"
+                >
+                  WIDEN
+                </button>
               </div>
               <span className="m2-fp-cap">prem stop</span>
             </div>

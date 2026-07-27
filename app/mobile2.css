@@ -404,6 +404,9 @@
   width:44px; min-height:44px; padding:0; border:0; background:transparent; color:inherit;
   font:800 19px/1 var(--mono); cursor:pointer; touch-action:manipulation;
 }
+.m2-exit-stepper>button.m2-stop-step {
+  font-size:7px; letter-spacing:-.03em;
+}
 .m2-exit-stepper>button:disabled { color:var(--dk-dim); opacity:.38; cursor:default; }
 .m2-exit-stepper .chf.m2-fp-val { min-height:44px; display:grid; place-items:center; }
 .m2-fp.eod { flex:.58; min-width:52px; }

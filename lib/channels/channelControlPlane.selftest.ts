@@ -363,4 +363,29 @@ check("unapplied migration is additive, least-privilege, and fail-closed", () =>
   assert.match(sql, /commit;\s*$/);
 });
 
+check("configuration UI cannot disguise stop direction or bypass activation receipts", () => {
+  const rackSource = readFileSync(new URL(
+    "../../components/mobile2/MobileRackRow.tsx",
+    import.meta.url,
+  ), "utf8");
+  const addChannelSource = readFileSync(new URL(
+    "../../components/console/AddChannel.tsx",
+    import.meta.url,
+  ), "utf8");
+
+  assert.match(rackSource, /tighten premium stop by 5 percentage points/);
+  assert.match(rackSource, /widen premium stop by 5 percentage points/);
+  assert.match(rackSource, />\s*TIGHTEN\s*</);
+  assert.match(rackSource, />\s*WIDEN\s*</);
+  assert.doesNotMatch(rackSource, /increase premium stop by 5 percent/);
+  assert.doesNotMatch(rackSource, /decrease premium stop by 5 percent/);
+
+  assert.match(addChannelSource, /DRAFT-ONLY · NO ACTIVATION AUTHORITY/);
+  assert.match(addChannelSource, /This surface cannot activate a channel/);
+  assert.match(addChannelSource, /status: "draft"/);
+  assert.match(addChannelSource, /onClick=\{persistDraft\}/);
+  assert.doesNotMatch(addChannelSource, /persist\("armed"\)/);
+  assert.doesNotMatch(addChannelSource, /onClick=\{\(\) => persist\("armed"\)\}/);
+});
+
 console.log(`channel-control-plane-selftest: ${checks}/${checks} passed · ${compiled.manifest.contentHash}`);
