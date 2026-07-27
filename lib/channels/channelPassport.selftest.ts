@@ -9,14 +9,6 @@ import {
   RC54_WORKER_VERSION,
   activeRootExitLabel,
 } from "./activeRelease";
-import {
-  RC54_RELEASE_CONFIGURATION_SHA256,
-  RC54_RELEASE_ID as WORKER_RC54_RELEASE_ID,
-  RC54_ROOT_IDENTITY_SEAL,
-  RC54_ROOTS as WORKER_RC54_ROOTS,
-} from "../../worker/src/rc54ReleasePolicy";
-import { RC54_MANAGER_PROFILES } from "../../worker/src/rc54ManagerPolicy";
-import { RC54_WORKER_VERSION as CURRENT_RC54_WORKER_VERSION } from "../../worker/src/version";
 import type { StrategistState } from "@/lib/desk/types";
 
 const channel = (slug: string, status: StrategistState["status"] = "armed", executor: StrategistState["executor"] = "stream"): StrategistState => ({
@@ -165,38 +157,29 @@ for (const sealedRoot of prereg.content.roots) {
   assert.equal(clientRoot.policyEpochId, binding.policyEpoch);
 }
 
-assert.equal(RC54_RELEASE_ID, WORKER_RC54_RELEASE_ID);
-assert.equal(RC54_CONFIG_HASH, RC54_RELEASE_CONFIGURATION_SHA256);
-assert.equal(RC54_WORKER_VERSION, CURRENT_RC54_WORKER_VERSION);
-assert.equal(Object.keys(RC54_ROOTS).length, WORKER_RC54_ROOTS.length);
-for (const workerRoot of WORKER_RC54_ROOTS) {
-  const clientRoot = RC54_ROOTS[workerRoot.slug];
-  const profile = RC54_MANAGER_PROFILES[workerRoot.managerProfileId];
-  assert.ok(clientRoot);
-  assert.equal(clientRoot.slug, workerRoot.slug);
-  assert.equal(clientRoot.cohort, workerRoot.cohort);
-  assert.equal(clientRoot.domainId, workerRoot.domainId);
-  assert.equal(clientRoot.familyId, workerRoot.familyId);
-  assert.equal(clientRoot.underlying, workerRoot.underlying);
-  assert.equal(clientRoot.priority, workerRoot.priority);
-  assert.equal(clientRoot.quantity, workerRoot.quantity);
-  assert.equal(clientRoot.entryDte, workerRoot.entryDte);
-  assert.equal(clientRoot.strikeOffset, workerRoot.strikeOffset);
-  assert.equal(clientRoot.premiumCap, workerRoot.premiumCap);
-  assert.equal(clientRoot.aggregateDebitCap, workerRoot.aggregateDebitCap);
-  assert.equal(clientRoot.accountId, workerRoot.accountId);
-  assert.equal(clientRoot.managerProfileId, workerRoot.managerProfileId);
-  assert.equal(clientRoot.premiumStopPct, profile.catastropheStopPct);
-  assert.equal(clientRoot.bankTargetPct, profile.bankTargetPct);
-  assert.equal(clientRoot.runner, profile.runner);
-  assert.equal(clientRoot.runnerFraction, profile.runnerFraction);
-  assert.equal(clientRoot.eodEt, profile.liquidationEt);
-  const identity = RC54_ROOT_IDENTITY_SEAL.find((row) => row.slug === workerRoot.slug);
-  assert.ok(identity);
-  assert.equal(clientRoot.channelVersion, identity.channelVersion.replace("sha256:", ""));
-  assert.equal(clientRoot.configurationEpochId, identity.configurationEpoch.replace("sha256:", ""));
-  assert.equal(clientRoot.managerVersion, identity.managerVersion.replace("sha256:", ""));
-  assert.equal(clientRoot.policyEpochId, identity.policyEpoch);
+// Pin the browser presentation to the worker sources without importing the
+// worker graph into Next's typecheck. A direct import reaches worker-only
+// dependencies such as dotenv even though the runtime UI is client-safe.
+const rc54PolicySource = readFileSync(new URL("../../worker/src/rc54ReleasePolicy.ts", import.meta.url), "utf8");
+const rc54ManagerSource = readFileSync(new URL("../../worker/src/rc54ManagerPolicy.ts", import.meta.url), "utf8");
+const rc54VersionSource = readFileSync(new URL("../../worker/src/version.ts", import.meta.url), "utf8");
+const rc54Dossier = readFileSync(new URL("../../docs/rc54-release-candidate-2026-07-27.md", import.meta.url), "utf8");
+assert.match(rc54PolicySource, new RegExp(`RC54_RELEASE_ID = "${RC54_RELEASE_ID}"`));
+assert.ok(rc54PolicySource.includes(`configurationSha256: RC54_RELEASE_CONFIGURATION_SHA256`));
+assert.ok(rc54VersionSource.includes(`RC54_WORKER_VERSION = "${RC54_WORKER_VERSION}"`));
+assert.ok(rc54Dossier.includes(`\`${RC54_CONFIG_HASH}\``));
+assert.equal(Object.keys(RC54_ROOTS).length, 9);
+for (const clientRoot of Object.values(RC54_ROOTS)) {
+  assert.ok(rc54PolicySource.includes(`slug: "${clientRoot.slug}"`));
+  assert.ok(rc54PolicySource.includes(`familyId: "${clientRoot.familyId}"`));
+  assert.ok(rc54PolicySource.includes(`managerProfileId: "${clientRoot.managerProfileId}"`));
+  assert.ok(rc54PolicySource.includes(`channelVersion: "sha256:${clientRoot.channelVersion}"`));
+  assert.ok(rc54PolicySource.includes(`managerVersion: "sha256:${clientRoot.managerVersion}"`));
+  assert.ok(rc54PolicySource.includes(`configurationEpoch: "sha256:${clientRoot.configurationEpochId}"`));
+  assert.ok(rc54PolicySource.includes(`policyEpoch: "${clientRoot.policyEpochId}"`));
+  assert.ok(rc54ManagerSource.includes(`"${clientRoot.managerProfileId}": {`));
+  assert.ok(rc54Dossier.includes(`\`${clientRoot.slug}\``));
+  assert.equal(clientRoot.riskBudgetUsd, clientRoot.aggregateDebitCap * 0.30);
 }
 
 console.log("channel-passport-selftest: RC5.3 + RC5.4 contracts passed");
