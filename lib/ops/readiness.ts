@@ -252,8 +252,13 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   const decisions = sessionExecutions.filter((row) => row.event_kind === "decision" && candidateMeta(row, activeRelease));
   const admittedOpportunityIds = new Set(decisions.flatMap((row) => row.opportunity_id ? [row.opportunity_id] : []));
   const outcomes = input.evidence.outcomes.state === "ok" ? input.evidence.outcomes.rows : [];
+  // Entry broker observations do not yet carry the inserted position id, so
+  // resolve them through the primary position_opened receipt. A later
+  // position_remainder_opened row belongs to the same opportunity but is a
+  // runner created after a partial exit; letting it overwrite the primary
+  // falsely detaches the entry from its manager and capture evidence.
   const openedPositionByOpportunity = new Map(outcomes.flatMap((row) =>
-    row.opportunity_id && ["position_opened", "position_remainder_opened"].includes(row.event_kind)
+    row.opportunity_id && row.event_kind === "position_opened"
       ? [[row.opportunity_id, row.position_id] as const]
       : []));
   const candidates = execution.summary?.candidates ?? new Set(decisions.map((row) => row.opportunity_id ?? row.id)).size;

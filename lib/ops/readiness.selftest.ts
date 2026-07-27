@@ -112,6 +112,25 @@ const linkedFill = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T14:46
 assert.equal(linkedFill.counts.fills, 1);
 assert.equal(linkedFill.chains.length, 1);
 
+const linkedFillWithRemainder = deriveOpsReadiness(base({
+  nowMs: Date.parse("2026-07-20T14:46:30Z"),
+  evidence: evidence({
+    execution: ok([entryBrokerWithoutPosition, decision]),
+    outcomes: ok([
+      openedOutcome,
+      {
+        ...openedOutcome,
+        id: "runner-opened",
+        event_kind: "position_remainder_opened",
+        event_at: "2026-07-20T14:47:05Z",
+        position_id: "position-runner",
+        quantity: 1,
+      },
+    ]),
+  }),
+}));
+assert.equal(linkedFillWithRemainder.chains[0]?.positionId, "position-1");
+
 const overdue = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]) }) }));
 assert.equal(find(overdue, "capture").state, "MISSING RECEIPT");
 assert.equal(find(overdue, "managers").state, "INCOMPLETE");

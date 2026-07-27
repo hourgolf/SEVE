@@ -9,6 +9,9 @@ const truth = (name: string, value: boolean): void => {
 };
 
 truth("post-close mode is explicit", source.includes('process.argv.includes("--require-flat")'));
+truth("broker/runtime-only mode is explicit", source.includes('process.argv.includes("--broker-runtime-only")'));
+truth("broker/runtime-only mode delegates release identity", source.includes("delegated to the separate current-release binding and identity check"));
+truth("broker/runtime-only mode does not enumerate the legacy root roster", source.includes("brokerRuntimeOnly ? [] : rootPolicies"));
 truth("every account must be reconciled and flat", source.includes("accountFlat = booksMatch && brokerBook.size === 0 && deskBook.size === 0"));
 truth("non-flat account fails closed", source.includes("session-close gate requires broker and desk flat"));
 truth("blocked result names the active gate", source.includes('requireFlat ? "SESSION-CLOSE" : "PRE-OPEN"'));
