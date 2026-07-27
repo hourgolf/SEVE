@@ -101,6 +101,10 @@ export const config = {
   // checksum; a missing/mismatched checksum makes startup fail closed.
   day1ReleaseEnabled: flag("DAY1_RELEASE_ENABLED", false),
   day1ReleaseExpectedSha256: opt("DAY1_RELEASE_EXPECTED_SHA256", ""),
+  // RC5.4 is a separate, default-off release candidate. It cannot coexist
+  // with the RC5.3 overlay, and startup requires this exact sealed checksum.
+  rc54ReleaseEnabled: flag("RC54_RELEASE_ENABLED", false),
+  rc54ReleaseExpectedSha256: opt("RC54_RELEASE_EXPECTED_SHA256", ""),
   // Roster-neutral Week 2 LAB foundation. This switch is intentionally unusable
   // until a later reviewed commit supplies a sealed roster/configuration draft;
   // setting it early makes startup refuse rather than infer candidates.

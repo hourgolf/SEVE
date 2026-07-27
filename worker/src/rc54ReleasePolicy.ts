@@ -1,0 +1,959 @@
+// RC5.4 paper release candidate. Pure and default-off: no broker, database,
+// timer, environment, or execution access lives in this module.
+
+import { createHash } from "node:crypto";
+import type { ShadowDecision } from "./decide.js";
+import type { AccountRow, ChannelConfig, PositionRow } from "./store.js";
+import {
+  buildAdmissionDomainsState,
+  finalizeAdmissionDomains,
+  type AdmissionDomainOccupancy,
+  type AdmissionDomainPolicy,
+  type AdmissionDomainSessionEntry,
+} from "./admissionDomainModel.js";
+import {
+  RC54_MANAGER_POLICY_VERSION,
+  RC54_MANAGER_PROFILES,
+  type Rc54ManagerProfileId,
+} from "./rc54ManagerPolicy.js";
+import {
+  RELEASE_EVIDENCE_CONTEXT_SCHEMA_VERSION,
+  type ReleaseEvidenceContext,
+} from "./releaseEvidenceContext.js";
+import { MANAGER_SHADOW_BOOK_VERSION } from "./managerShadowBookModel.js";
+import { observedPolicyIdentity } from "./planShadowModel.js";
+import {
+  DAY1_DARK_CHANNELS,
+  DAY1_ROOTS,
+  DAY1_SEALED_RUNTIME_POSTURE,
+  type Day1RuntimePostureInput,
+} from "./day1ReleasePolicy.js";
+
+export const RC54_RELEASE_SCHEMA_VERSION = 1 as const;
+export const RC54_RELEASE_ID = "week2-2026-07-27-rc5.4" as const;
+export const RC54_COHORT_ID = "rc54-executable-2026-07-27" as const;
+export const RC54_COHORT_FROM = "2026-07-27" as const;
+export const RC54_CONTROL_DOMAIN = "rc54-control" as const;
+export const RC54_LAB_DOMAIN = "rc54-lab" as const;
+export const RC54_LAB_ACCOUNT_ID = "56daa293-e6bc-447d-83ac-2bfafb4d0ac1" as const;
+
+export const RC54_ROOTS = [
+  {
+    slug: "pb-ride", cohort: "control", domainId: RC54_CONTROL_DOMAIN,
+    familyId: "SPY-PB", underlying: "SPY", priority: 1,
+    entryDte: 1, strikeOffset: 0, quantity: 2, premiumCap: 3.50, aggregateDebitCap: 700,
+    managerProfileId: "RC53-RIDE",
+    strategistId: "4528343d-7151-46ae-8f0d-10c0ef9572b4",
+    accountId: "cd817549-e025-4d38-805e-d32e607052f7",
+  },
+  {
+    slug: "orb-ustop-ctl", cohort: "control", domainId: RC54_CONTROL_DOMAIN,
+    familyId: "SPY-ORB", underlying: "SPY", priority: 4,
+    entryDte: 0, strikeOffset: 0, quantity: 2, premiumCap: 2.00, aggregateDebitCap: 400,
+    managerProfileId: "ORB54-B30-A13",
+    strategistId: "51ab6380-e0db-4e41-ad59-625b151cb9cf",
+    accountId: "995aa327-b0da-4050-bede-97ab462b06cd",
+  },
+  {
+    slug: "grind-v3", cohort: "control", domainId: RC54_CONTROL_DOMAIN,
+    familyId: "SPY-GRIND", underlying: "SPY", priority: 2,
+    entryDte: 0, strikeOffset: 0, quantity: 2, premiumCap: 1.75, aggregateDebitCap: 350,
+    managerProfileId: "RC53-RIDE",
+    strategistId: "1dc15beb-79a5-4f49-9b9b-9b5693c93561",
+    accountId: "995aa327-b0da-4050-bede-97ab462b06cd",
+  },
+  {
+    // Exact replay correction: the clean booked cohort favored the existing
+    // full-position A13 over B30/A13 by $65. MOMO therefore does not split.
+    slug: "momo-shape", cohort: "control", domainId: RC54_CONTROL_DOMAIN,
+    familyId: "SPY-MOMO", underlying: "SPY", priority: 3,
+    entryDte: 0, strikeOffset: 0, quantity: 2, premiumCap: 2.25, aggregateDebitCap: 450,
+    managerProfileId: "RC53-A13",
+    strategistId: "c2efcffa-b0bb-4cde-a3de-25209879ebe1",
+    accountId: "cd817549-e025-4d38-805e-d32e607052f7",
+  },
+  {
+    slug: "orb-qqq-trail", cohort: "control", domainId: RC54_CONTROL_DOMAIN,
+    familyId: "QQQ-ORB", underlying: "QQQ", priority: 1,
+    entryDte: 0, strikeOffset: 0, quantity: 2, premiumCap: 3.00, aggregateDebitCap: 600,
+    managerProfileId: "QQQ54-B20-NATIVE-ATR",
+    strategistId: "62b108c8-535e-4232-8c68-af8fb5b8f932",
+    accountId: "cd817549-e025-4d38-805e-d32e607052f7",
+  },
+  {
+    slug: "breakout-alt-v3-iwm", cohort: "control", domainId: RC54_CONTROL_DOMAIN,
+    familyId: "IWM-BREAKOUT", underlying: "IWM", priority: 1,
+    entryDte: 0, strikeOffset: 0, quantity: 2, premiumCap: 1.25, aggregateDebitCap: 250,
+    managerProfileId: "RC53-RIDE",
+    strategistId: "24889b0e-3ba7-4e47-9430-f73aa2c764a4",
+    accountId: "cd817549-e025-4d38-805e-d32e607052f7",
+  },
+  {
+    slug: "vb-macd-state", cohort: "lab", domainId: RC54_LAB_DOMAIN,
+    familyId: "LAB-SPY-MACD", underlying: "SPY", priority: 1,
+    entryDte: 0, strikeOffset: 0, quantity: 2, premiumCap: 1.75, aggregateDebitCap: 350,
+    managerProfileId: "LAB54-L30-L50",
+    strategistId: "3f75e694-34c3-4b68-8832-4351ce1af180",
+    accountId: RC54_LAB_ACCOUNT_ID,
+  },
+  {
+    slug: "vb-squeeze-break", cohort: "lab", domainId: RC54_LAB_DOMAIN,
+    familyId: "LAB-SPY-SQUEEZE", underlying: "SPY", priority: 2,
+    entryDte: 0, strikeOffset: 0, quantity: 2, premiumCap: 1.75, aggregateDebitCap: 350,
+    managerProfileId: "LAB54-L30-L50",
+    strategistId: "d73d9b4c-c57e-4d24-b899-53e31df2cf9a",
+    accountId: RC54_LAB_ACCOUNT_ID,
+  },
+  {
+    slug: "vb-ribbon-cross-qqq", cohort: "lab", domainId: RC54_LAB_DOMAIN,
+    familyId: "LAB-QQQ-RIBBON", underlying: "QQQ", priority: 1,
+    entryDte: 0, strikeOffset: 0, quantity: 2, premiumCap: 1.75, aggregateDebitCap: 350,
+    managerProfileId: "LAB54-B50-A13",
+    strategistId: "7a5191f4-013f-48d2-b1b8-de548c12861d",
+    accountId: RC54_LAB_ACCOUNT_ID,
+  },
+] as const satisfies readonly {
+  slug: string;
+  cohort: "control" | "lab";
+  domainId: typeof RC54_CONTROL_DOMAIN | typeof RC54_LAB_DOMAIN;
+  familyId: string;
+  underlying: "SPY" | "QQQ" | "IWM";
+  priority: number;
+  entryDte: 0 | 1;
+  strikeOffset: number;
+  quantity: 2;
+  premiumCap: number;
+  aggregateDebitCap: number;
+  managerProfileId: Rc54ManagerProfileId;
+  strategistId: string;
+  accountId: string;
+}[];
+
+export type Rc54Root = typeof RC54_ROOTS[number];
+export type Rc54RootSlug = Rc54Root["slug"];
+
+const rootBySlug = new Map<string, Rc54Root>(
+  RC54_ROOTS.map((root) => [root.slug, root]),
+);
+
+export function rc54Root(slug: string): Rc54Root | null {
+  return rootBySlug.get(slug.toLowerCase()) ?? null;
+}
+
+export function rc54ManagerProfileId(slug: string): Rc54ManagerProfileId | null {
+  return rc54Root(slug)?.managerProfileId ?? null;
+}
+
+export const RC54_CONTROL_ADMISSION_POLICY: AdmissionDomainPolicy = {
+  id: RC54_CONTROL_DOMAIN,
+  enabledForNewEntries: true,
+  maxOpenPerFamily: 1,
+  maxOpenByUnderlying: { SPY: 2, QQQ: 1, IWM: 1 },
+  maxOpenGlobal: 4,
+  sameOccOpenMax: 1,
+  reentry: "disabled",
+  sameClockMaxByUnderlying: { SPY: 1, QQQ: 1, IWM: 1 },
+  priorityBySlug: Object.fromEntries(
+    RC54_ROOTS.filter((root) => root.cohort === "control")
+      .map((root) => [root.slug, root.priority]),
+  ),
+  crossDomainSameOcc: "allow-with-receipt",
+};
+
+export const RC54_LAB_ADMISSION_POLICY: AdmissionDomainPolicy = {
+  id: RC54_LAB_DOMAIN,
+  enabledForNewEntries: true,
+  maxOpenPerFamily: 1,
+  maxOpenByUnderlying: { SPY: 1, QQQ: 1, IWM: 0 },
+  maxOpenGlobal: 2,
+  sameOccOpenMax: 1,
+  reentry: "disabled",
+  sameClockMaxByUnderlying: { SPY: 1, QQQ: 1, IWM: 0 },
+  priorityBySlug: Object.fromEntries(
+    RC54_ROOTS.filter((root) => root.cohort === "lab")
+      .map((root) => [root.slug, root.priority]),
+  ),
+  crossDomainSameOcc: "allow-with-receipt",
+};
+
+/** SELECT-only-derived identities for the exact overlaid nine-root roster.
+ * These are checked startup authority; they do not claim the persisted rows
+ * have already been changed to RC5.4. */
+export const RC54_ROOT_IDENTITY_SEAL = [
+  {
+    slug: "pb-ride",
+    strategistId: "4528343d-7151-46ae-8f0d-10c0ef9572b4",
+    accountId: "cd817549-e025-4d38-805e-d32e607052f7",
+    accountMode: "paper",
+    channelVersion: "sha256:e5e038af744d45ca8136b56ca3d625e0c5cda35c58d603fb8072785e9342c2b1",
+    managerVersion: "sha256:6f6ce7c9a07dc751cc4bf165248df8bed17e416d31b565f0fcc25663aed1c21b",
+    configurationEpoch: "sha256:0de88fdd35fa557798ede010dd226eb2f4ca6bbb75de4152574cce0070c2a342",
+    policyEpoch: "b2b9ba38-769d-5850-9bd5-eab6aefffbea",
+  },
+  {
+    slug: "orb-ustop-ctl",
+    strategistId: "51ab6380-e0db-4e41-ad59-625b151cb9cf",
+    accountId: "995aa327-b0da-4050-bede-97ab462b06cd",
+    accountMode: "paper",
+    channelVersion: "sha256:71a7cc171a002573505cd147d42de109c4bbafb54e52d0fb6b31b2dee76c651e",
+    managerVersion: "sha256:73f4e0653c590eb1826c7c03a55bf161a565428f12b682c3ae43603485fb28d5",
+    configurationEpoch: "sha256:8f3713bfa6df2c70bd397c48edf18e80e4b3f566d47fe3674e67e7ce3b7387fd",
+    policyEpoch: "b0da7e00-7916-5416-94f0-9f8ab6de12dd",
+  },
+  {
+    slug: "grind-v3",
+    strategistId: "1dc15beb-79a5-4f49-9b9b-9b5693c93561",
+    accountId: "995aa327-b0da-4050-bede-97ab462b06cd",
+    accountMode: "paper",
+    channelVersion: "sha256:43b84c0c2065d36e9e20ef473254b86c18d4fe39069865646124553d6fcad077",
+    managerVersion: "sha256:6f6ce7c9a07dc751cc4bf165248df8bed17e416d31b565f0fcc25663aed1c21b",
+    configurationEpoch: "sha256:00264c585e4b483489542a87eea37c60dccb76c7d7cccdddd2c02dced830a47f",
+    policyEpoch: "0c25c4f9-057a-5dda-9632-354848ef282e",
+  },
+  {
+    slug: "momo-shape",
+    strategistId: "c2efcffa-b0bb-4cde-a3de-25209879ebe1",
+    accountId: "cd817549-e025-4d38-805e-d32e607052f7",
+    accountMode: "paper",
+    channelVersion: "sha256:b9259b5a5cd32448c14dc33353d3b1fcdefd57be92193fe446bd7e0b323a0f47",
+    managerVersion: "sha256:c01d2380b0c462ae2b1cd8cf9e9e9bdb18c0b22fcfb36ad0e976d6d69bf4c1d6",
+    configurationEpoch: "sha256:df1fadf43b4cdb7893e2b9711df20d463d7a55220fa277e97f342e152e200e4b",
+    policyEpoch: "748f8079-7198-5588-9d4c-e0197ffb6860",
+  },
+  {
+    slug: "orb-qqq-trail",
+    strategistId: "62b108c8-535e-4232-8c68-af8fb5b8f932",
+    accountId: "cd817549-e025-4d38-805e-d32e607052f7",
+    accountMode: "paper",
+    channelVersion: "sha256:ff1312b0c312b18a4a227ecd1eb6badad5f8d28b70d00e9d0017d3b1eb13fc2a",
+    managerVersion: "sha256:51f6cd029e46a4c512458b95bf5982c39d460a2dc874af2a80b372f069ee843a",
+    configurationEpoch: "sha256:2376cd5b93d2af667c76e79db5ab416215f405e43331173c8ce11c19396b7e3f",
+    policyEpoch: "11e773c2-d905-5629-a99d-adf441b4ce31",
+  },
+  {
+    slug: "breakout-alt-v3-iwm",
+    strategistId: "24889b0e-3ba7-4e47-9430-f73aa2c764a4",
+    accountId: "cd817549-e025-4d38-805e-d32e607052f7",
+    accountMode: "paper",
+    channelVersion: "sha256:75801f4cdd928d4a472b0cd205e6809aee68165eef41bba84314bbd8a7277eec",
+    managerVersion: "sha256:6f6ce7c9a07dc751cc4bf165248df8bed17e416d31b565f0fcc25663aed1c21b",
+    configurationEpoch: "sha256:5fa8738cd93576a14b6f3f4d8b7f67f7a9589e0a27d4fc6833f52647e998ca67",
+    policyEpoch: "40bb07be-5cf4-5e47-9fa8-84e2baecfd7f",
+  },
+  {
+    slug: "vb-macd-state",
+    strategistId: "3f75e694-34c3-4b68-8832-4351ce1af180",
+    accountId: RC54_LAB_ACCOUNT_ID,
+    accountMode: "paper",
+    channelVersion: "sha256:670dcce42cff46c41c43e7962c4e012824b589eea77ee682ce4cebc3dad2ca4e",
+    managerVersion: "sha256:f7ae1cbe1567463ecc08854f860af0bf109c658955cb1cf41b2cab1db781c64a",
+    configurationEpoch: "sha256:ea7182c42392372c187688d8bc3bed435be490ff1b79863a5f2417ab15c4ec27",
+    policyEpoch: "434ac2a9-717b-5d63-b073-6ea815041431",
+  },
+  {
+    slug: "vb-squeeze-break",
+    strategistId: "d73d9b4c-c57e-4d24-b899-53e31df2cf9a",
+    accountId: RC54_LAB_ACCOUNT_ID,
+    accountMode: "paper",
+    channelVersion: "sha256:9dbb4cca0cd85c89989da2ee0ea8d323f5d7b6edc1600316c0418eb9c54ada37",
+    managerVersion: "sha256:f7ae1cbe1567463ecc08854f860af0bf109c658955cb1cf41b2cab1db781c64a",
+    configurationEpoch: "sha256:067a36d875665051ee88eb2e0805ea3eddb6f780b2eba04e6b458c4b6ac3913f",
+    policyEpoch: "ab4af5cb-4d21-5676-b557-365caaaed9f7",
+  },
+  {
+    slug: "vb-ribbon-cross-qqq",
+    strategistId: "7a5191f4-013f-48d2-b1b8-de548c12861d",
+    accountId: RC54_LAB_ACCOUNT_ID,
+    accountMode: "paper",
+    channelVersion: "sha256:4042c823d0925c6d207e4b7e6b8854c7330ef47af58719d5751157f296465aaa",
+    managerVersion: "sha256:bb4bd167538d4b946855a93ddfac334061c02d73ecf1e8e4a2b7c044df54197c",
+    configurationEpoch: "sha256:d422e55d6e96b21873b8bfa173b43f6b706ea46315ec0923335f6e604e751751",
+    policyEpoch: "9980636c-0591-5513-a4c4-d44d76d7e3dc",
+  },
+] as const;
+
+export const RC54_RELEASE_CONFIGURATION = {
+  schemaVersion: RC54_RELEASE_SCHEMA_VERSION,
+  releaseId: RC54_RELEASE_ID,
+  cohortId: RC54_COHORT_ID,
+  cohortFrom: RC54_COHORT_FROM,
+  mode: "paper-only",
+  roots: RC54_ROOTS,
+  rootIdentitySeal: RC54_ROOT_IDENTITY_SEAL,
+  management: {
+    policyVersion: RC54_MANAGER_POLICY_VERSION,
+    profiles: RC54_MANAGER_PROFILES,
+    priceBasis: "executable-option-bid",
+    catastropheStopPct: 30,
+    admissionStopEt: "15:25",
+    liquidationEt: "15:25",
+    reentry: "disabled",
+    adds: 0,
+    pyramiding: 0,
+  },
+  admission: {
+    policies: [RC54_CONTROL_ADMISSION_POLICY, RC54_LAB_ADMISSION_POLICY],
+    globalBrokerTruthRequired: true,
+    crossDomainSameOccIndependentPortfolioClaim: false,
+    crossDomainCovarianceReceiptRequired: true,
+  },
+  evidence: {
+    contextSchemaVersion: RELEASE_EVIDENCE_CONTEXT_SCHEMA_VERSION,
+    shadowBookVersion: MANAGER_SHADOW_BOOK_VERSION,
+    heldCaptureRequired: true,
+    managerShadowRequired: true,
+    manualCloseAttributionRequired: true,
+    historicalEraPoolingAuthorized: false,
+  },
+  authority: {
+    liveMoneyAuthorized: false,
+    automaticPromotionAuthorized: false,
+    migrationAuthorized: false,
+    deploymentAuthorized: false,
+  },
+} as const;
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, child]) => `${JSON.stringify(name)}:${canonical(child)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export const RC54_RELEASE_CONFIGURATION_JSON = canonical(RC54_RELEASE_CONFIGURATION);
+export const RC54_RELEASE_CONFIGURATION_SHA256 = createHash("sha256")
+  .update(RC54_RELEASE_CONFIGURATION_JSON).digest("hex");
+
+export function rc54ReleaseEvidenceContext(root: Rc54Root): ReleaseEvidenceContext {
+  return {
+    schemaVersion: RELEASE_EVIDENCE_CONTEXT_SCHEMA_VERSION,
+    releaseId: RC54_RELEASE_ID,
+    configurationSha256: RC54_RELEASE_CONFIGURATION_SHA256,
+    admissionDomain: root.domainId,
+    cohortId: RC54_COHORT_ID,
+    cohortFrom: RC54_COHORT_FROM,
+    evidenceEra: root.cohort === "lab" ? "lab-executable" : "rc54-control",
+    sourceQuantity: root.quantity,
+    shadowBookVersion: MANAGER_SHADOW_BOOK_VERSION,
+  };
+}
+
+/** Apply the sealed RC5.4 runtime view without mutating persisted config. */
+export function applyRc54ReleaseChannelOverlay(channel: ChannelConfig): ChannelConfig {
+  const root = rc54Root(channel.slug);
+  if (!root) return channel;
+  const profile = RC54_MANAGER_PROFILES[root.managerProfileId];
+  return {
+    ...channel,
+    status: "armed",
+    is_active: true,
+    executor: "stream",
+    account_id: root.accountId,
+    underlying: root.underlying,
+    capital_pct: root.aggregateDebitCap * 0.30,
+    aggression: 0,
+    max_contracts: root.quantity,
+    daily_stop_usd: 0,
+    daily_target_usd: 0,
+    underlying_stop_pct: 0,
+    muted: false,
+    soloed: false,
+    boosted: false,
+    event_policy: "standdown",
+    entry_dte: root.entryDte,
+    strike_offset: root.strikeOffset,
+    premium_stop_pct: profile.catastropheStopPct,
+    take_profit_pct: profile.bankTargetPct ?? 0,
+    pyramid_adds: 0,
+    stall_minutes: 0,
+    stall_max_favor_pct: 0,
+    gap_min: 0,
+    runner_frac: profile.runnerFraction,
+    runner_giveback_pct: 0,
+  };
+}
+
+export function applyRc54ReleaseFleetOverlay(
+  channels: readonly ChannelConfig[],
+): ChannelConfig[] {
+  const present = new Set(channels.map((channel) => channel.slug));
+  const missing = RC54_ROOTS.filter((root) => !present.has(root.slug))
+    .map((root) => root.slug);
+  if (missing.length) throw new Error(`RC5.4 release missing roots: ${missing.join(",")}`);
+  return channels.map(applyRc54ReleaseChannelOverlay);
+}
+
+export function validateRc54SourceExecutorBoundary(
+  channels: readonly Pick<ChannelConfig, "id" | "slug" | "executor" | "status" | "muted" | "account_id">[],
+): string[] {
+  const errors: string[] = [];
+  for (const channel of channels) {
+    const root = rc54Root(channel.slug);
+    if (root) {
+      if (channel.id !== root.strategistId) errors.push(`${channel.slug}:strategist_identity`);
+      if (channel.executor !== "stream") errors.push(`${channel.slug}:source_executor_not_stream`);
+      if (channel.account_id !== root.accountId) errors.push(`${channel.slug}:source_account_binding`);
+      continue;
+    }
+    if (channel.executor === "cron" && channel.status === "armed" && !channel.muted) {
+      errors.push(`${channel.slug}:dark_cron_entry_gate_open`);
+    }
+  }
+  return errors.sort();
+}
+
+export function validateRc54AccountBindings(accounts: readonly AccountRow[]): string[] {
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  const errors: string[] = [];
+  for (const root of RC54_ROOTS) {
+    const account = byId.get(root.accountId);
+    if (!account) errors.push(`${root.slug}:account_missing`);
+    else if (account.mode.toLowerCase() !== "paper") errors.push(`${root.slug}:account_not_paper`);
+  }
+  return [...new Set(errors)].sort();
+}
+
+export function validateRc54IdentitySeal(input: {
+  channels: readonly ChannelConfig[];
+  workerVersion: string;
+}): string[] {
+  const channelBySlug = new Map(
+    applyRc54ReleaseFleetOverlay(input.channels).map((channel) => [channel.slug, channel]),
+  );
+  const errors: string[] = [];
+  for (const sealed of RC54_ROOT_IDENTITY_SEAL) {
+    const channel = channelBySlug.get(sealed.slug);
+    if (!channel) {
+      errors.push(`${sealed.slug}:channel_missing`);
+      continue;
+    }
+    const identity = observedPolicyIdentity({
+      channel,
+      accountId: sealed.accountId,
+      workerVersion: input.workerVersion,
+      executableManagerProfile: rc54ManagerProfileId(sealed.slug),
+    });
+    if (!identity) {
+      errors.push(`${sealed.slug}:identity_unavailable`);
+      continue;
+    }
+    if (identity.channelVersion !== sealed.channelVersion) errors.push(`${sealed.slug}:channel_version`);
+    if (identity.managerVersion !== sealed.managerVersion) errors.push(`${sealed.slug}:manager_version`);
+    if (identity.configurationEpochId !== sealed.configurationEpoch) {
+      errors.push(`${sealed.slug}:configuration_epoch`);
+    }
+    if (identity.policyEpochId !== sealed.policyEpoch) errors.push(`${sealed.slug}:policy_epoch`);
+  }
+  return errors.sort();
+}
+
+export interface Rc54BrokerHolding {
+  accountId: string;
+  occSymbol: string;
+  underlying: string;
+  quantity: number;
+}
+
+export interface Rc54PendingOrderOccupancy {
+  accountId: string;
+  occSymbol: string;
+  underlying: string;
+}
+
+export interface Rc54SnapshotFailure {
+  accountId: string;
+  kind: "account" | "positions" | "account-group-missing";
+}
+
+const rc54DomainForAccount = (accountId: string): string =>
+  accountId === RC54_LAB_ACCOUNT_ID ? RC54_LAB_DOMAIN : RC54_CONTROL_DOMAIN;
+
+/** Convert desk rows plus broker-only or quantity-uncovered lots into the
+ * conservative occupancy model used by both RC5.4 admission domains. */
+export function buildRc54AdmissionOccupancy(input: {
+  openPositions: readonly PositionRow[];
+  sessionPositions: readonly PositionRow[];
+  channelById: ReadonlyMap<string, Pick<ChannelConfig, "slug" | "underlying">>;
+  accountIdByStrategist: ReadonlyMap<string, string>;
+  brokerPositions: readonly Rc54BrokerHolding[];
+  pendingOrders: readonly Rc54PendingOrderOccupancy[];
+}): {
+  open: AdmissionDomainOccupancy[];
+  sessionEntries: AdmissionDomainSessionEntry[];
+} {
+  const open: AdmissionDomainOccupancy[] = [];
+  const sessionEntries: AdmissionDomainSessionEntry[] = [];
+  const deskQuantityByAccountOcc = new Map<string, number>();
+  const occupiedByAccountOcc = new Set<string>();
+
+  for (const row of input.openPositions) {
+    const channel = input.channelById.get(row.strategist_id);
+    const root = channel ? rc54Root(channel.slug) : null;
+    const accountId = input.accountIdByStrategist.get(row.strategist_id) ?? "";
+    const occ = row.occ_symbol.toUpperCase();
+    const key = `${accountId}|${occ}`;
+    deskQuantityByAccountOcc.set(
+      key,
+      (deskQuantityByAccountOcc.get(key) ?? 0) + Math.abs(row.qty),
+    );
+    occupiedByAccountOcc.add(key);
+    const domainIds = root
+      ? [root.domainId]
+      : accountId
+        ? [rc54DomainForAccount(accountId)]
+        // Unknown-account desk truth cannot safely be assigned to one isolated
+        // book. Consume capacity in both domains until routing is proven.
+        : [RC54_CONTROL_DOMAIN, RC54_LAB_DOMAIN];
+    for (const domainId of domainIds) {
+      open.push({
+        domainId,
+        accountId,
+        // An unexpected/open dark row still consumes conservative capacity. It
+        // cannot receive a root family identity or independent-portfolio claim.
+        familyId: root?.familyId ?? `desk-unsealed:${row.strategist_id}`,
+        underlying: (row.underlying || channel?.underlying || root?.underlying || "").toUpperCase(),
+        occSymbol: occ,
+      });
+    }
+  }
+
+  for (const row of input.sessionPositions) {
+    const channel = input.channelById.get(row.strategist_id);
+    const root = channel ? rc54Root(channel.slug) : null;
+    if (root) sessionEntries.push({ domainId: root.domainId, familyId: root.familyId });
+  }
+
+  for (const broker of input.brokerPositions) {
+    const occ = broker.occSymbol.toUpperCase();
+    const accountId = broker.accountId;
+    const key = `${accountId}|${occ}`;
+    const held = Math.abs(broker.quantity);
+    const covered = deskQuantityByAccountOcc.get(key) ?? 0;
+    if (!(held > 0) || !occ || covered >= held) continue;
+    occupiedByAccountOcc.add(key);
+    open.push({
+      domainId: rc54DomainForAccount(accountId),
+      accountId,
+      familyId: `broker-uncovered:${accountId}:${occ}`,
+      underlying: broker.underlying.toUpperCase(),
+      occSymbol: occ,
+    });
+  }
+
+  for (const order of input.pendingOrders) {
+    const occ = order.occSymbol.toUpperCase();
+    const key = `${order.accountId}|${occ}`;
+    if (!occ || occupiedByAccountOcc.has(key)) continue;
+    occupiedByAccountOcc.add(key);
+    open.push({
+      domainId: rc54DomainForAccount(order.accountId),
+      accountId: order.accountId,
+      familyId: `pending-order:${order.accountId}:${occ}`,
+      underlying: order.underlying.toUpperCase(),
+      occSymbol: occ,
+    });
+  }
+  return { open, sessionEntries };
+}
+
+export interface Rc54ReleaseStartupInput {
+  /** Raw persisted fleet; the validator applies the immutable overlay itself. */
+  channels: readonly ChannelConfig[];
+  accounts: readonly AccountRow[];
+  fundMode: string | null;
+  workerVersion: string;
+  expectedConfigurationSha256: string;
+  posture: Day1RuntimePostureInput;
+  resolvedCredentialAccountIds: readonly string[];
+  credentialRouteEvidenceBasis: "runtime-env-presence" | "offline-example-assumption";
+  /** True only when the service-role write path is present. */
+  paperExecutorWriteReady: boolean;
+}
+
+export interface Rc54ReleaseStartupResult {
+  ok: boolean;
+  errors: string[];
+  activeSettingsReceipt: Record<string, unknown> | null;
+}
+
+function paperOrigin(host: string): { origin: string | null; hasCredentials: boolean } {
+  try {
+    const parsed = new URL(host);
+    return {
+      origin: parsed.origin,
+      hasCredentials: !!parsed.username || !!parsed.password,
+    };
+  } catch {
+    return { origin: null, hasCredentials: false };
+  }
+}
+
+export function rc54PaperExecutorPostureErrors(input: {
+  dryRun: boolean;
+  liveTrading: boolean;
+  paperExecutorWriteReady: boolean;
+}): string[] {
+  if (!input.dryRun && input.liveTrading && !input.paperExecutorWriteReady) {
+    return ["paper_executor_write_posture"];
+  }
+  return [];
+}
+
+/** Pure RC5.4 startup gate. This validates the raw source boundary before
+ * deriving and identity-checking the in-memory release overlay. */
+export function validateRc54ReleaseStartup(
+  input: Rc54ReleaseStartupInput,
+): Rc54ReleaseStartupResult {
+  const errors: string[] = [];
+  const expectedSlugs = [...DAY1_ROOTS.map((root) => root.slug), ...DAY1_DARK_CHANNELS];
+  const expectedSet = new Set<string>(expectedSlugs);
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const channel of input.channels) {
+    if (seen.has(channel.slug)) duplicates.add(channel.slug);
+    seen.add(channel.slug);
+  }
+  if (input.channels.length !== expectedSlugs.length) errors.push(`fleet_count:${input.channels.length}`);
+  if (duplicates.size) errors.push(`fleet_duplicate_slug:${[...duplicates].sort().join(",")}`);
+  const missing = expectedSlugs.filter((slug) => !seen.has(slug));
+  const unexpected = [...seen].filter((slug) => !expectedSet.has(slug)).sort();
+  if (missing.length) errors.push(`fleet_missing_slug:${missing.sort().join(",")}`);
+  if (unexpected.length) errors.push(`fleet_unexpected_slug:${unexpected.join(",")}`);
+  errors.push(...validateRc54SourceExecutorBoundary(input.channels));
+  errors.push(...validateRc54AccountBindings(input.accounts));
+
+  if (input.expectedConfigurationSha256 !== RC54_RELEASE_CONFIGURATION_SHA256) {
+    errors.push("release_configuration_hash");
+  }
+  if ((input.fundMode ?? "").toLowerCase() !== DAY1_SEALED_RUNTIME_POSTURE.fundMode) {
+    errors.push("fund_mode");
+  }
+  const host = paperOrigin(input.posture.alpacaPaperHost);
+  if (host.origin !== DAY1_SEALED_RUNTIME_POSTURE.alpacaPaperOrigin || host.hasCredentials) {
+    errors.push("alpaca_paper_origin");
+  }
+  if (input.posture.stockFeed !== DAY1_SEALED_RUNTIME_POSTURE.stockFeed) errors.push("stock_feed");
+  if (input.posture.optionFeed !== DAY1_SEALED_RUNTIME_POSTURE.optionFeed) errors.push("option_feed");
+  errors.push(...rc54PaperExecutorPostureErrors({
+    dryRun: input.posture.dryRun,
+    liveTrading: input.posture.liveTrading,
+    paperExecutorWriteReady: input.paperExecutorWriteReady,
+  }));
+
+  const sealedCapture = DAY1_SEALED_RUNTIME_POSTURE.heldCapture;
+  if (input.posture.heldCaptureEnabled !== sealedCapture.requiredEnabled) {
+    errors.push("held_capture:enabled");
+  }
+  if (input.posture.heldCaptureEnabled) {
+    const captureFields: [string, number, number][] = [
+      ["flush_ms", input.posture.heldCaptureFlushMs, sealedCapture.flushMs],
+      ["target_samples", input.posture.heldCaptureTargetSamples, sealedCapture.targetSamples],
+      ["max_age_ms", input.posture.heldCaptureMaxAgeMs, sealedCapture.maxAgeMs],
+      ["ingress_max_samples", input.posture.heldCaptureIngressMaxSamples, sealedCapture.ingressMaxSamples],
+      ["ingress_max_bytes", input.posture.heldCaptureIngressMaxBytes, sealedCapture.ingressMaxBytes],
+      ["state_max_samples", input.posture.heldCaptureStateMaxSamples, sealedCapture.stateMaxSamples],
+      ["state_max_bytes", input.posture.heldCaptureStateMaxBytes, sealedCapture.stateMaxBytes],
+      ["retry_max_attempts", input.posture.heldCaptureRetryMaxAttempts, sealedCapture.retryMaxAttempts],
+      ["retry_base_delay_ms", input.posture.heldCaptureRetryBaseDelayMs, sealedCapture.retryBaseDelayMs],
+      ["retry_max_delay_ms", input.posture.heldCaptureRetryMaxDelayMs, sealedCapture.retryMaxDelayMs],
+      ["adapter_deadline_ms", input.posture.heldCaptureAdapterDeadlineMs, sealedCapture.adapterDeadlineMs],
+      ["normal_flush_deadline_ms", input.posture.heldCaptureNormalFlushDeadlineMs, sealedCapture.normalFlushDeadlineMs],
+      ["shutdown_deadline_ms", input.posture.heldCaptureShutdownDeadlineMs, sealedCapture.shutdownDeadlineMs],
+    ];
+    for (const [field, actual, expected] of captureFields) {
+      if (actual !== expected) errors.push(`held_capture:${field}`);
+    }
+  }
+  const sealedManager = DAY1_SEALED_RUNTIME_POSTURE.managerShadow;
+  if (input.posture.managerShadowEnabled !== sealedManager.requiredEnabled) {
+    errors.push("manager_shadow:enabled");
+  }
+  if (input.posture.managerShadowEnabled
+      && input.posture.managerShadowQuoteMaxAgeMs !== sealedManager.quoteMaxAgeMs) {
+    errors.push("manager_shadow:quote_max_age_ms");
+  }
+
+  const accountById = new Map(input.accounts.map((account) => [account.id, account]));
+  const credentialAccounts = new Set(input.resolvedCredentialAccountIds);
+  const requiredAccountIds = [...new Set(RC54_ROOTS.map((root) => root.accountId))].sort();
+  for (const accountId of requiredAccountIds) {
+    const account = accountById.get(accountId);
+    if (!credentialAccounts.has(accountId)) errors.push(`${accountId}:credential_route_unresolved`);
+    // Shadow rehearsal may validate while manage-only. An actual executor boot
+    // must not report ACTIVE if any routed account will silently refuse entries.
+    if (!input.posture.dryRun && input.posture.liveTrading) {
+      if (!account?.is_armed) errors.push(`${accountId}:account_not_armed`);
+      if (account?.is_halted) errors.push(`${accountId}:account_halted`);
+    }
+  }
+
+  let overlaid: ChannelConfig[] = [];
+  try {
+    overlaid = applyRc54ReleaseFleetOverlay(input.channels);
+    errors.push(...validateRc54IdentitySeal({
+      channels: input.channels,
+      workerVersion: input.workerVersion,
+    }));
+  } catch (cause) {
+    errors.push(`release_overlay:${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+
+  const roots = RC54_ROOTS.map((root) => {
+    const account = accountById.get(root.accountId);
+    const channel = overlaid.find((candidate) => candidate.slug === root.slug);
+    return {
+      slug: root.slug,
+      cohort: root.cohort,
+      domainId: root.domainId,
+      strategistId: channel?.id ?? null,
+      accountId: root.accountId,
+      accountName: account?.name ?? null,
+      accountMode: account?.mode?.toLowerCase() ?? null,
+      accountArmed: account?.is_armed ?? false,
+      accountHalted: account?.is_halted ?? false,
+      managerProfileId: root.managerProfileId,
+      quantity: root.quantity,
+      aggregateDebitCap: root.aggregateDebitCap,
+    };
+  });
+  const receipt = errors.length ? null : {
+    schemaVersion: RC54_RELEASE_SCHEMA_VERSION,
+    workerVersion: input.workerVersion,
+    releaseId: RC54_RELEASE_ID,
+    cohortId: RC54_COHORT_ID,
+    releaseConfigurationSha256: RC54_RELEASE_CONFIGURATION_SHA256,
+    expectedConfigurationSha256: input.expectedConfigurationSha256,
+    fundMode: input.fundMode,
+    roots,
+    credentialRouteEvidenceBasis: input.credentialRouteEvidenceBasis,
+    accountRoutes: requiredAccountIds.map((accountId) => ({
+      accountId,
+      accountName: accountById.get(accountId)?.name ?? null,
+      accountMode: accountById.get(accountId)?.mode?.toLowerCase() ?? null,
+      resolved: credentialAccounts.has(accountId),
+      rootSlugs: RC54_ROOTS.filter((root) => root.accountId === accountId)
+        .map((root) => root.slug),
+    })),
+    alpacaPaperOrigin: host.origin,
+    stockFeed: input.posture.stockFeed,
+    optionFeed: input.posture.optionFeed,
+    dryRun: input.posture.dryRun,
+    liveTrading: input.posture.liveTrading,
+    heldCapture: {
+      enabled: input.posture.heldCaptureEnabled,
+      flushMs: input.posture.heldCaptureFlushMs,
+      targetSamples: input.posture.heldCaptureTargetSamples,
+      maxAgeMs: input.posture.heldCaptureMaxAgeMs,
+      ingressMaxSamples: input.posture.heldCaptureIngressMaxSamples,
+      ingressMaxBytes: input.posture.heldCaptureIngressMaxBytes,
+      stateMaxSamples: input.posture.heldCaptureStateMaxSamples,
+      stateMaxBytes: input.posture.heldCaptureStateMaxBytes,
+      retryMaxAttempts: input.posture.heldCaptureRetryMaxAttempts,
+      retryBaseDelayMs: input.posture.heldCaptureRetryBaseDelayMs,
+      retryMaxDelayMs: input.posture.heldCaptureRetryMaxDelayMs,
+      adapterDeadlineMs: input.posture.heldCaptureAdapterDeadlineMs,
+      normalFlushDeadlineMs: input.posture.heldCaptureNormalFlushDeadlineMs,
+      shutdownDeadlineMs: input.posture.heldCaptureShutdownDeadlineMs,
+    },
+    managerShadow: {
+      enabled: input.posture.managerShadowEnabled,
+      quoteMaxAgeMs: input.posture.managerShadowQuoteMaxAgeMs,
+    },
+    fleetCount: input.channels.length,
+    rootCount: RC54_ROOTS.length,
+    controlRootCount: RC54_ROOTS.filter((root) => root.cohort === "control").length,
+    labRootCount: RC54_ROOTS.filter((root) => root.cohort === "lab").length,
+    unknownChannelBehavior: "dark",
+    policyChangeAuthorized: false,
+    liveMoneyAuthorized: false,
+  };
+  return {
+    ok: errors.length === 0,
+    errors: [...new Set(errors)].sort(),
+    activeSettingsReceipt: receipt,
+  };
+}
+
+function block(
+  decision: ShadowDecision,
+  reason: string,
+  extra: Record<string, unknown> = {},
+): ShadowDecision {
+  return { ...decision, blocked: reason, detail: { ...(decision.detail ?? {}), ...extra } };
+}
+
+const mandatoryExitReasons = new Set([
+  "premium_stop", "stop_premium", "eod_flatten", "rc54_eod_flatten",
+  "eod_hard_flatten", "halt_flatten", "event_flatten",
+]);
+
+function managerOwnsExit(root: Rc54Root, reason: string): boolean {
+  if (mandatoryExitReasons.has(reason)) return true;
+  const profile = RC54_MANAGER_PROFILES[root.managerProfileId];
+  if (reason === "target_premium") {
+    return profile.bankTargetPct != null || profile.runner === "fixed-50";
+  }
+  if (reason === "trail_giveback") return profile.runner === "a13";
+  if (reason === "trail_chandelier") return profile.runner === "native-atr";
+  return false;
+}
+
+export function prepareRc54ReleaseAdmissions(input: {
+  channels: readonly Pick<ChannelConfig, "id" | "slug">[];
+  decisions: readonly ShadowDecision[];
+  accountId: string;
+  sourceBarAtMs: number;
+  observedAtMs: number;
+  currentEtMinute: number;
+  sessionCloseEtMinute: number;
+  sessionLedgerReady: boolean;
+}): ShadowDecision[] {
+  const channelBySlug = new Map(input.channels.map((channel) => [channel.slug, channel]));
+  return input.decisions.map((decision) => {
+    const root = rc54Root(decision.slug);
+    const channel = channelBySlug.get(decision.slug);
+    let next: ShadowDecision = {
+      ...decision,
+      detail: {
+        ...(decision.detail ?? {}),
+        rc54Candidate: {
+          releaseId: RC54_RELEASE_ID,
+          configurationSha256: RC54_RELEASE_CONFIGURATION_SHA256,
+          cohortId: RC54_COHORT_ID,
+          cohortFrom: RC54_COHORT_FROM,
+          domainId: root?.domainId ?? null,
+          familyId: root?.familyId ?? null,
+          managerProfileId: root?.managerProfileId ?? null,
+          accountId: input.accountId,
+          strategistId: channel?.id ?? null,
+          sourceBarAt: new Date(input.sourceBarAtMs).toISOString(),
+          observedAt: new Date(input.observedAtMs).toISOString(),
+          originalBlockedReason: decision.blocked ?? null,
+        },
+      },
+    };
+    if (decision.action === "add") return block(next, "rc54_adds_disabled");
+    if (decision.action === "exit") {
+      return root && managerOwnsExit(root, decision.reason)
+        ? next
+        : block(next, "rc54_exit_shadow_only", { rc54ObservedExitReason: decision.reason });
+    }
+    if (decision.action !== "enter") return next;
+    if (!root) return block(next, "rc54_dark_lifecycle");
+    if (input.accountId !== root.accountId) return block(next, "rc54_account_binding");
+    const ask = typeof decision.detail?.ask === "number" ? decision.detail.ask : 0;
+    const debit = root.quantity * ask * 100;
+    next = {
+      ...next,
+      qty: root.quantity,
+      detail: {
+        ...(next.detail ?? {}),
+        rc54Quantity: root.quantity,
+        rc54AggregateDebit: debit,
+      },
+    };
+    if (!input.sessionLedgerReady) return block(next, "rc54_session_ledger_unavailable");
+    if (decision.blocked) return next;
+    if (!(ask > 0)) return block(next, "rc54_unproven_entry_ask");
+    if (ask > root.premiumCap || debit > root.aggregateDebitCap + 1e-9) {
+      return block(next, "rc54_premium_debit_cap", {
+        rc54PremiumCap: root.premiumCap,
+        rc54AggregateDebitCap: root.aggregateDebitCap,
+      });
+    }
+    const admissionStop = Math.min(15 * 60 + 25, input.sessionCloseEtMinute - 35);
+    if (input.currentEtMinute >= admissionStop) return block(next, "rc54_admission_closed");
+    return next;
+  });
+}
+
+export interface Rc54PreparedDecision {
+  accountId: string;
+  sourceBarAtMs: number;
+  decision: ShadowDecision;
+  executionEligible?: boolean;
+  executionIneligibleReason?: string | null;
+}
+
+export type Rc54ArbitrationPosture = "shadow-counterfactual" | "paper-executor";
+
+export function finalizeRc54ReleaseAdmissions(input: {
+  prepared: readonly Rc54PreparedDecision[];
+  open: readonly AdmissionDomainOccupancy[];
+  sessionEntries: readonly AdmissionDomainSessionEntry[];
+  globalPositionTruthComplete: boolean;
+  globalOrderTruthComplete: boolean;
+  globalSnapshotFailures?: readonly Rc54SnapshotFailure[];
+  globalOrderFailureAccountIds?: readonly string[];
+  posture?: Rc54ArbitrationPosture;
+}): Rc54PreparedDecision[] {
+  const posture = input.posture ?? "paper-executor";
+  const state = buildAdmissionDomainsState({
+    open: input.open,
+    sessionEntries: input.sessionEntries,
+  });
+  const candidates = input.prepared.map((row) => {
+    const root = rc54Root(row.decision.slug);
+    return {
+      domainId: root?.domainId ?? "unknown",
+      accountId: row.accountId,
+      familyId: root?.familyId ?? "unknown",
+      underlying: root?.underlying ?? "",
+      sourceBarAtMs: row.sourceBarAtMs,
+      decision: row.decision.action === "enter" && !row.decision.blocked
+        && posture === "paper-executor" && row.executionEligible === false
+        ? block(row.decision, row.executionIneligibleReason ?? "rc54_execution_ineligible")
+        : row.decision,
+    };
+  });
+  const finalized = finalizeAdmissionDomains({
+    candidates,
+    policies: new Map([
+      [RC54_CONTROL_DOMAIN, RC54_CONTROL_ADMISSION_POLICY],
+      [RC54_LAB_DOMAIN, RC54_LAB_ADMISSION_POLICY],
+    ]),
+    state,
+    globalPositionTruthComplete: posture === "shadow-counterfactual"
+      ? true
+      : input.globalPositionTruthComplete,
+    globalOrderTruthComplete: posture === "shadow-counterfactual"
+      ? true
+      : input.globalOrderTruthComplete,
+  });
+  return finalized.map((row, index) => ({
+    ...input.prepared[index],
+    decision: {
+      ...row.decision,
+      detail: {
+        ...(row.decision.detail ?? {}),
+        rc54CovarianceReceipts: row.covarianceReceipts,
+        rc54Arbitration: {
+          posture,
+          strategyEligible: row.decision.action === "enter" && !row.decision.blocked,
+          executionEligible: input.prepared[index].executionEligible ?? true,
+          executionIneligibleReason: input.prepared[index].executionIneligibleReason ?? null,
+          brokerExecutable: posture === "paper-executor"
+            && (input.prepared[index].executionEligible ?? true)
+            && input.globalPositionTruthComplete
+            && input.globalOrderTruthComplete,
+          counterfactualOnly: posture === "shadow-counterfactual",
+          globalPositionTruthComplete: input.globalPositionTruthComplete,
+          globalOrderTruthComplete: input.globalOrderTruthComplete,
+          globalSnapshotFailures: input.globalSnapshotFailures ?? [],
+          globalOrderFailureAccountIds: input.globalOrderFailureAccountIds ?? [],
+        },
+      },
+    },
+  }));
+}
+
+export function rc54ReleaseEodDue(
+  slug: string,
+  currentEtMinute: number,
+  sessionCloseEtMinute: number,
+): boolean {
+  return rc54Root(slug) != null && currentEtMinute >= sessionCloseEtMinute - 35;
+}

@@ -151,6 +151,11 @@ check("a hand-edited release hash is rejected", validateLabCanaryReleaseDraft({
 const context = labCanaryEvidenceContext(sealedRelease);
 check("sealed release produces complete executable-era attribution",
   context && validateReleaseEvidenceContext(context), []);
+check("unknown evidence eras fail closed",
+  validateReleaseEvidenceContext({
+    ...context!,
+    evidenceEra: "unregistered-era",
+  } as unknown as Parameters<typeof validateReleaseEvidenceContext>[0]), ["evidence_era"]);
 check("evidence stamp carries domain, cohort, quantity, and manager book", releaseEvidenceStamp(context), {
   schemaVersion: 1,
   releaseId: "week2-lab-canary-fixture-rc1",

@@ -35,6 +35,12 @@ import { capturePositionOutcome } from "./positionOutcome.js";
 import { queueManagerShadowAdmission } from "./managerShadowBook.js";
 import { day1ExecutableGivebackTrail } from "./day1ReleasePolicy.js";
 import { releaseEvidenceStamp, type ReleaseEvidenceContext } from "./releaseEvidenceContext.js";
+import {
+  rc54ConfiguredTakeProfitPct,
+  rc54ManagerProfileFromRow,
+  rc54RunnerConfiguration,
+  type Rc54ManagerProfileId,
+} from "./rc54ManagerPolicy.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -50,6 +56,7 @@ export interface ExitQualityPolicy {
 
 interface ExitQualityContext extends ExitQualityPolicy {
   entryPrice: number;
+  rc54ManagerProfileId: Rc54ManagerProfileId | null;
 }
 
 const WORKING_ORDER = new Set(["new", "accepted", "pending_new", "partially_filled", "held", "calculated", "accepted_for_bidding"]);
@@ -90,6 +97,9 @@ export interface ExecCtx {
   // Present only for a separately sealed successor cohort. RC5.3 omits this,
   // preserving its existing policy identities byte-for-byte.
   releaseEvidenceContext?: ReleaseEvidenceContext | null;
+  // Stamped into entry_features and copied to any runner remainder row.
+  // It is never inferred from the current config for an already-open position.
+  rc54ManagerProfileId?: Rc54ManagerProfileId | null;
 }
 
 /** Seed the per-OCC remaining counter from Alpaca's positions (cycle start). */
@@ -214,6 +224,7 @@ async function placeFill(
           decisionSourceBarAt: new Date(ctx.decisionAtMs).toISOString(),
           fillTimeBasis: "local_terminal_observation",
           providerQuoteTimestampAvailable: false,
+          rc54ManagerProfileId: quality.rc54ManagerProfileId,
         },
       });
     }
@@ -319,7 +330,22 @@ export async function executeExit(
   const alp = ctx.alpacaByOcc.get(occ);
   const heldQty = ctx.remainingByOcc.get(occ) ?? (alp ? Math.max(0, Math.round(alp.qty)) : 0);
   const sellQty = Math.min(heldQty, row.qty);
-  const quality = qualityPolicy ? { ...qualityPolicy, entryPrice: row.avg_entry_price } : null;
+  const stampedRc54Profile = rc54ManagerProfileFromRow(row);
+  const effectiveRunner = rc54RunnerConfiguration(stampedRc54Profile) ?? runner;
+  const quality = qualityPolicy ? {
+    ...qualityPolicy,
+    // Row identity, not the current channel config, owns a successor-cohort
+    // exit. This distinguishes a +30% bank from its +50% runner target.
+    takeProfitPct: stampedRc54Profile
+      ? rc54ConfiguredTakeProfitPct({
+        profile: stampedRc54Profile,
+        isRunner: !!row.runner_of,
+        reason: d.reason,
+      })
+      : qualityPolicy.takeProfitPct,
+    entryPrice: row.avg_entry_price,
+    rc54ManagerProfileId: stampedRc54Profile?.id ?? null,
+  } : null;
 
   // 1b #6 (audit 2026-07-11): the reconcile ESTIMATE fallback is fresh-quote-guarded — a STALE
   // bid must never become a silently-booked exit price; alp.current_price (cycle-fresh) backs it.
@@ -426,9 +452,10 @@ export async function executeExit(
   // A sibling-drained shared lot (held < row.qty) falls through to the proven all-out path —
   // otherwise remainQty inherits a phantom share that over-covers the OCC, masks the 09d/orphan
   // gates, and over-books on a later reconcile (confirmed finding, shared-occ lens).
-  if (d.reason === "target_premium" && runner && runner.frac > 0 && !row.runner_of && sellQty === row.qty) {
-    const split = trancheSplit(sellQty, runner.frac);
-    if (split) { await executeTranche(d, row, ctx, split, runner, quality); return; }
+  if (d.reason === "target_premium" && effectiveRunner && effectiveRunner.frac > 0
+      && !row.runner_of && sellQty === row.qty) {
+    const split = trancheSplit(sellQty, effectiveRunner.frac);
+    if (split) { await executeTranche(d, row, ctx, split, effectiveRunner, quality); return; }
   }
   try {
     let exitPx = alp?.current_price ?? liveBid;
@@ -648,6 +675,13 @@ export async function executeEntry(
         const inserted = await store.insertPosition({
           strategist_id: ch.id, occ_symbol: occ, underlying: ch.underlying,
           expiration: d.detail?.expiry as string ?? ctx.todayET, strike, opt_type: dir, qty: net, avg_entry_price: avg,
+          entry_reason: d.reason,
+          entry_features: {
+            ...(d.detail ?? {}),
+            recovery: "filled-order-lost-insert",
+            release_evidence: releaseEvidenceStamp(ctx.releaseEvidenceContext),
+            rc54_manager_profile: ctx.rc54ManagerProfileId ?? null,
+          },
         });
         if (!inserted.error) {
           if (inserted.id && inserted.openedAt) queueManagerShadowAdmission({
@@ -676,6 +710,7 @@ export async function executeEntry(
     executableGivebackTrail: config.day1ReleaseEnabled
       ? day1ExecutableGivebackTrail(ch.slug)
       : null,
+    executableManagerProfile: ctx.rc54ManagerProfileId ?? null,
     releaseEvidenceContext: ctx.releaseEvidenceContext,
   });
   const opportunityId = !blocked && qty > 0
@@ -684,6 +719,7 @@ export async function executeEntry(
       decision: d,
       accountId: ctx.accountId,
       decisionAtMs: ctx.decisionAtMs,
+      executableManagerProfile: ctx.rc54ManagerProfileId ?? null,
       releaseEvidenceContext: ctx.releaseEvidenceContext,
     })
     : null;
@@ -739,6 +775,7 @@ export async function executeEntry(
         ...(d.detail ?? {}),
         opportunity_id: opportunityId,
         release_evidence: releaseEvidence,
+        rc54_manager_profile: ctx.rc54ManagerProfileId ?? null,
       },
       entry_delta: eq?.delta ?? null,
     });

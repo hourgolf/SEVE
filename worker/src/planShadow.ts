@@ -20,6 +20,7 @@ export function captureObservedPositionPlan(args: {
   decision: ShadowDecision;
   accountId: string;
   decisionAtMs: number;
+  executableManagerProfile?: string | null;
   releaseEvidenceContext?: ReleaseEvidenceContext | null;
 }): string | null {
   let evidence: ShadowPlanEvidence | null;
@@ -31,6 +32,7 @@ export function captureObservedPositionPlan(args: {
       executableGivebackTrail: config.day1ReleaseEnabled
         ? day1ExecutableGivebackTrail(args.channel.slug)
         : null,
+      executableManagerProfile: args.executableManagerProfile ?? null,
       releaseEvidenceContext: args.releaseEvidenceContext,
     });
   } catch (e) {

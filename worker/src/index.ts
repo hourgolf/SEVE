@@ -70,10 +70,32 @@ import {
   LAB_CANARY_FOUNDATION_SHA256,
   validateLabCanaryReleaseDraft,
 } from "./labCanaryPolicy.js";
+import {
+  rc54ManagerProfileFromRow,
+  rc54ManagerStampPresent,
+} from "./rc54ManagerPolicy.js";
+import {
+  applyRc54ReleaseFleetOverlay,
+  buildRc54AdmissionOccupancy,
+  finalizeRc54ReleaseAdmissions,
+  prepareRc54ReleaseAdmissions,
+  RC54_RELEASE_CONFIGURATION_SHA256,
+  RC54_RELEASE_ID,
+  RC54_ROOTS,
+  rc54ManagerProfileId,
+  rc54ReleaseEodDue,
+  rc54ReleaseEvidenceContext,
+  rc54Root,
+  validateRc54ReleaseStartup,
+  type Rc54BrokerHolding,
+  type Rc54PendingOrderOccupancy,
+  type Rc54SnapshotFailure,
+} from "./rc54ReleasePolicy.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
-let day1StartupReceipt: Record<string, unknown> | null = null;
-let day1SourceExecutorBoundaryReady = !config.day1ReleaseEnabled;
+const releaseMode = (): boolean => config.day1ReleaseEnabled || config.rc54ReleaseEnabled;
+let releaseStartupReceipt: Record<string, unknown> | null = null;
+let releaseSourceExecutorBoundaryReady = !releaseMode();
 
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
@@ -112,6 +134,16 @@ function clearSweepPriceState(rowId: string): void {
 function exitQualityPolicyFor(ch: store.ChannelConfig): ExitQualityPolicy {
   if (config.day1ReleaseEnabled && day1Root(ch.slug)) {
     return { premiumStopPct: 30, specPremiumStopPct: null, underlyingStopPct: null, takeProfitPct: null };
+  }
+  if (config.rc54ReleaseEnabled && rc54Root(ch.slug)) {
+    return {
+      premiumStopPct: 30,
+      specPremiumStopPct: null,
+      underlyingStopPct: null,
+      // The row-stamped manager resolves the exact bank/runner threshold in
+      // executeExit; current channel config cannot reinterpret an open lot.
+      takeProfitPct: null,
+    };
   }
   const premiumGate = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
   const specExit = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
@@ -258,11 +290,17 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
   if (!canManage) return;
   const barFresh = Date.now() - lastSession.ts < 180_000;
   if (!barFresh) info(`live pass[${g.account.name}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
-  const exec: ExecCtx = { api: g.api!, accountId: g.account.id, paperMode: cfg.fund?.mode?.toLowerCase() === "paper", decisionAtMs: lastSession.ts, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+  const execBase: ExecCtx = { api: g.api!, accountId: g.account.id, paperMode: cfg.fund?.mode?.toLowerCase() === "paper", decisionAtMs: lastSession.ts, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
   const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
   for (const d of symDecisions) {
     const ch = bySlug.get(d.slug);
     if (!ch || !ownedBy(ch)) continue;
+    const rc54 = config.rc54ReleaseEnabled ? rc54Root(ch.slug) : null;
+    const exec: ExecCtx = rc54 ? {
+      ...execBase,
+      rc54ManagerProfileId: rc54.managerProfileId,
+      releaseEvidenceContext: rc54ReleaseEvidenceContext(rc54),
+    } : execBase;
     if (barFresh) {
       if (d.action === "exit" && d.reason === "event_flatten")
         alertOnce(todayET, "event", "standdown", "⚑ event stand-down", `${d.slug} flattening ${d.occ ?? ""} — entries blocked through the window`);
@@ -348,6 +386,32 @@ async function retry<T>(label: string, fn: () => Promise<T>, attempts = 5, baseM
   throw lastErr;
 }
 
+function sealedRuntimePosture() {
+  return {
+    alpacaPaperHost: config.alpacaPaperHost,
+    stockFeed: config.stockFeed,
+    optionFeed: config.optFeed,
+    dryRun: config.dryRun,
+    liveTrading: config.liveTrading,
+    heldCaptureEnabled: config.heldContractCaptureEnabled,
+    heldCaptureFlushMs: config.heldContractCaptureFlushMs,
+    heldCaptureTargetSamples: config.heldContractCaptureBatchTargetSamples,
+    heldCaptureMaxAgeMs: config.heldContractCaptureBatchMaxAgeMs,
+    heldCaptureIngressMaxSamples: config.heldContractCaptureMaxSamples,
+    heldCaptureIngressMaxBytes: config.heldContractCaptureMaxBytes,
+    heldCaptureStateMaxSamples: config.heldContractCaptureStateMaxSamples,
+    heldCaptureStateMaxBytes: config.heldContractCaptureStateMaxBytes,
+    heldCaptureRetryMaxAttempts: config.heldContractCaptureRetryMaxAttempts,
+    heldCaptureRetryBaseDelayMs: config.heldContractCaptureRetryBaseDelayMs,
+    heldCaptureRetryMaxDelayMs: config.heldContractCaptureRetryMaxDelayMs,
+    heldCaptureAdapterDeadlineMs: HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
+    heldCaptureNormalFlushDeadlineMs: HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
+    heldCaptureShutdownDeadlineMs: HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
+    managerShadowEnabled: config.managerShadowBookEnabled,
+    managerShadowQuoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs,
+  };
+}
+
 async function reloadConfig(): Promise<void> {
   // Halt-transition watch: page the operator when the kill switch / master stop
   // trips while we hold prior state (a boot into an already-halted desk stays
@@ -356,7 +420,7 @@ async function reloadConfig(): Promise<void> {
   const hadFund = !!cfg.fund;
   const prevHalted = cfg.fund?.is_halted ?? false;
   const c = await store.loadConfig();
-  if (config.day1ReleaseEnabled) day1SourceExecutorBoundaryReady = false;
+  if (releaseMode()) releaseSourceExecutorBoundaryReady = false;
   if (c.fund) {
     // Audit 2026-07-10 (critical): a TRANSIENT accounts-read failure must not replace a
     // good routing table with [] — every channel would regroup onto the default account
@@ -370,7 +434,11 @@ async function reloadConfig(): Promise<void> {
         throw new Error(`Day 1 source executor boundary failed before overlay: ${boundaryErrors.join(";")}`);
       }
     }
-    const channels = config.day1ReleaseEnabled ? applyDay1ReleaseFleetOverlay(c.channels) : c.channels;
+    const channels = config.day1ReleaseEnabled
+      ? applyDay1ReleaseFleetOverlay(c.channels)
+      : config.rc54ReleaseEnabled
+        ? applyRc54ReleaseFleetOverlay(c.channels)
+        : c.channels;
     if (config.day1ReleaseEnabled) {
       const validation = validateDay1ReleaseStartup({
         channels,
@@ -384,33 +452,32 @@ async function reloadConfig(): Promise<void> {
             : !!config.alpacaKey && !!config.alpacaSecret)
           .map((group) => group.account.id),
         credentialRouteEvidenceBasis: "runtime-env-presence",
-        posture: {
-          alpacaPaperHost: config.alpacaPaperHost,
-          stockFeed: config.stockFeed,
-          optionFeed: config.optFeed,
-          dryRun: config.dryRun,
-          liveTrading: config.liveTrading,
-          heldCaptureEnabled: config.heldContractCaptureEnabled,
-          heldCaptureFlushMs: config.heldContractCaptureFlushMs,
-          heldCaptureTargetSamples: config.heldContractCaptureBatchTargetSamples,
-          heldCaptureMaxAgeMs: config.heldContractCaptureBatchMaxAgeMs,
-          heldCaptureIngressMaxSamples: config.heldContractCaptureMaxSamples,
-          heldCaptureIngressMaxBytes: config.heldContractCaptureMaxBytes,
-          heldCaptureStateMaxSamples: config.heldContractCaptureStateMaxSamples,
-          heldCaptureStateMaxBytes: config.heldContractCaptureStateMaxBytes,
-          heldCaptureRetryMaxAttempts: config.heldContractCaptureRetryMaxAttempts,
-          heldCaptureRetryBaseDelayMs: config.heldContractCaptureRetryBaseDelayMs,
-          heldCaptureRetryMaxDelayMs: config.heldContractCaptureRetryMaxDelayMs,
-          heldCaptureAdapterDeadlineMs: HELD_CAPTURE_ADAPTER_REQUEST_TIMEOUT_MS,
-          heldCaptureNormalFlushDeadlineMs: HELD_CAPTURE_NORMAL_FLUSH_WALL_CLOCK_MS,
-          heldCaptureShutdownDeadlineMs: HELD_CAPTURE_SHUTDOWN_WALL_CLOCK_MS,
-          managerShadowEnabled: config.managerShadowBookEnabled,
-          managerShadowQuoteMaxAgeMs: config.managerShadowQuoteMaxAgeMs,
-        },
+        posture: sealedRuntimePosture(),
       });
       if (!validation.ok) throw new Error(`Day 1 RC5 startup validation failed: ${validation.errors.join(";")}`);
-      day1StartupReceipt = validation.activeSettingsReceipt;
-      day1SourceExecutorBoundaryReady = true;
+      releaseStartupReceipt = validation.activeSettingsReceipt;
+      releaseSourceExecutorBoundaryReady = true;
+    } else if (config.rc54ReleaseEnabled) {
+      const validation = validateRc54ReleaseStartup({
+        channels: c.channels,
+        accounts,
+        fundMode: c.fund.mode,
+        workerVersion: WORKER_VERSION,
+        expectedConfigurationSha256: config.rc54ReleaseExpectedSha256,
+        resolvedCredentialAccountIds: groupByAccount(channels, accounts)
+          .filter((group) => group.account.cred_ref
+            ? group.api != null
+            : !!config.alpacaKey && !!config.alpacaSecret)
+          .map((group) => group.account.id),
+        credentialRouteEvidenceBasis: "runtime-env-presence",
+        paperExecutorWriteReady: liveMode(),
+        posture: sealedRuntimePosture(),
+      });
+      if (!validation.ok) {
+        throw new Error(`RC5.4 startup validation failed: ${validation.errors.join(";")}`);
+      }
+      releaseStartupReceipt = validation.activeSettingsReceipt;
+      releaseSourceExecutorBoundaryReady = true;
     }
     cfg = { fund: c.fund, channels, accounts };
   }
@@ -514,7 +581,7 @@ async function cycle(trigger: string): Promise<void> {
     const live = liveMode();
     const byId = new Map(cfg.channels.map((c) => [c.id, c]));
     const openRowsArr = await store.getOpenPositions(); // spans accounts; scoped per group below
-    const sessionPositions = config.day1ReleaseEnabled
+    const sessionPositions = releaseMode()
       ? await store.loadDay1SessionPositions(`${todayET}T00:00:00Z`)
       : [];
     // C1 STACK CAP input: desk-wide open ROW count by "UNDERLYING:direction" (OCC root = the
@@ -534,14 +601,18 @@ async function cycle(trigger: string): Promise<void> {
     const decisions: ShadowDecision[] = [];
     const familyAdmissionInputs: FamilyAdmissionInput[] = [];
     const releaseBatches: DecisionExecutionBatch[] = [];
-    const releaseBoundAccountIds = new Set(DAY1_ROOT_BINDINGS.map((binding) => binding.accountId));
+    const releaseBoundAccountIds = new Set(
+      config.rc54ReleaseEnabled
+        ? RC54_ROOTS.map((root) => root.accountId)
+        : DAY1_ROOT_BINDINGS.map((binding) => binding.accountId),
+    );
     const releaseObservedAccountIds = new Set<string>();
-    const releaseBrokerPositions: Day1BrokerHolding[] = [];
-    const releasePendingOrders: Day1PendingOrderOccupancy[] = [];
+    const releaseBrokerPositions: (Day1BrokerHolding | Rc54BrokerHolding)[] = [];
+    const releasePendingOrders: (Day1PendingOrderOccupancy | Rc54PendingOrderOccupancy)[] = [];
     const releaseAccountIdByStrategist = new Map<string, string>();
     let releasePositionSnapshotComplete = true;
     let releaseOrderSnapshotComplete = true;
-    const releaseSnapshotFailures: Day1SnapshotFailure[] = [];
+    const releaseSnapshotFailures: (Day1SnapshotFailure | Rc54SnapshotFailure)[] = [];
     const releaseOrderFailureAccountIds = new Set<string>();
     let totEquity = 0, totCash = 0, totUnreal = 0, snappedAny = false;
     // Per-account orphan-sweep inputs, captured on each bucket's PRE-cycle snapshot and swept
@@ -571,12 +642,12 @@ async function cycle(trigger: string): Promise<void> {
             releasePositionSnapshotComplete = false;
             releaseSnapshotFailures.push({ accountId: g.account.id, kind: "account" });
           }
-          warn(`cycle(${trigger}): account ${g.account.name} account read failed — ${(e as Error).message}; new Day 1 admissions fail closed, risk-reducing management continues where safe`);
+          warn(`cycle(${trigger}): account ${g.account.name} account read failed — ${(e as Error).message}; new sealed-release admissions fail closed, risk-reducing management continues where safe`);
         }
         try { positions = await alpaca.getPositions(api); }
         catch (e) {
           positionsFresh = false;
-          warn(`cycle(${trigger}): account ${g.account.name} initial position read failed — ${(e as Error).message}; Day 1 will require a confirming read before admission`);
+          warn(`cycle(${trigger}): account ${g.account.name} initial position read failed — ${(e as Error).message}; the sealed release will require a confirming read before admission`);
         }
       } else {
         accountFresh = false;
@@ -606,7 +677,7 @@ async function cycle(trigger: string): Promise<void> {
         // still lands in the !ordersFresh path below + the noteOrdersRead escalation.
         try {
           allOrders = await retry(`cycle orders ${g.account.name}`, () => alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()), 3, 500);
-          if (config.day1ReleaseEnabled && isReleaseBoundAccount) {
+          if (releaseMode() && isReleaseBoundAccount) {
             for (const order of allOrders) {
               const match = /^([A-Z]+)\d{6}[CP]\d{8}$/i.exec(order.symbol);
               if (!match || order.side.toLowerCase() !== "buy" || alpaca.TERMINAL_ORDER_STATUS.has(order.status)) continue;
@@ -617,7 +688,7 @@ async function cycle(trigger: string): Promise<void> {
         }
         catch (e) {
           ordersFresh = false;
-          if (config.day1ReleaseEnabled && isReleaseBoundAccount) {
+          if (releaseMode() && isReleaseBoundAccount) {
             releaseOrderSnapshotComplete = false;
             releaseOrderFailureAccountIds.add(g.account.id);
           }
@@ -630,8 +701,8 @@ async function cycle(trigger: string): Promise<void> {
       // A buy can fill between the first two reads and disappear from the working-order
       // set. The confirming position read is therefore the authoritative admission
       // snapshot. On failure we retain the initial positions only for risk-reducing
-      // management and globally block every new Day 1 entry.
-      if (config.day1ReleaseEnabled && live && isReleaseBoundAccount && api) {
+      // management and globally block every new sealed-release entry.
+      if (releaseMode() && live && isReleaseBoundAccount && api) {
         try {
           positions = await retry(`cycle confirming positions ${g.account.name}`, () => alpaca.getPositions(api), 3, 500);
           positionsFresh = true;
@@ -639,17 +710,17 @@ async function cycle(trigger: string): Promise<void> {
           positionsFresh = false;
           releasePositionSnapshotComplete = false;
           releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
-          warn(`cycle(${trigger}): account ${g.account.name} confirming position read failed — ${(e as Error).message}; all new Day 1 admissions fail closed`);
+          warn(`cycle(${trigger}): account ${g.account.name} confirming position read failed — ${(e as Error).message}; all new sealed-release admissions fail closed`);
         }
       } else if (isReleaseBoundAccount && !positionsFresh) {
         releasePositionSnapshotComplete = false;
         releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
       }
 
-      // Outside the sealed Day 1 path, preserve the original fail-closed cycle
+      // Outside a sealed release path, preserve the original fail-closed cycle
       // behavior. Empty/stale position input must never drive a duplicate entry or a
       // false desk reconciliation. The independent fast-exit sweep remains available.
-      if (!config.day1ReleaseEnabled && api && (!accountFresh || !positionsFresh)) continue;
+      if (!releaseMode() && api && (!accountFresh || !positionsFresh)) continue;
 
       if (isReleaseBoundAccount && positionsFresh) {
         for (const position of positions) {
@@ -698,8 +769,7 @@ async function cycle(trigger: string): Promise<void> {
           catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
         }
         const familyObservedAtMs = Date.now();
-        const symDecisions = config.day1ReleaseEnabled
-          ? prepareDay1ReleaseAdmission({
+        const releasePreparation = {
               channels: symChannels,
               decisions: evaluatedDecisions,
               accountId: g.account.id,
@@ -708,18 +778,23 @@ async function cycle(trigger: string): Promise<void> {
               currentEtMinute: alpaca.etParts(Date.now()).min,
               sessionCloseEtMinute: rthClose,
               sessionLedgerReady: sessionPositions != null,
-            })
-          : evaluatedDecisions;
+            };
+        const symDecisions = config.day1ReleaseEnabled
+          ? prepareDay1ReleaseAdmission(releasePreparation)
+          : config.rc54ReleaseEnabled
+            ? prepareRc54ReleaseAdmissions(releasePreparation)
+            : evaluatedDecisions;
         const barFresh = Date.now() - lastSession.ts < 180_000;
-        const executionEligible = live && day1SourceExecutorBoundaryReady
+        const executionEligible = live && releaseSourceExecutorBoundaryReady
           && accountFresh && positionsFresh && ordersFresh && canEnter && barFresh;
+        const releasePrefix = config.rc54ReleaseEnabled ? "rc54" : "day1";
         const executionIneligibleReason = executionEligible ? null
-          : !live ? "day1_shadow_rehearsal"
-          : !day1SourceExecutorBoundaryReady ? "day1_source_executor_boundary"
-          : !accountFresh || !positionsFresh ? "day1_global_snapshot_incomplete"
-          : !ordersFresh ? "day1_global_orders_incomplete"
-          : !canEnter ? "day1_account_manage_only"
-          : "day1_stale_decision_bar";
+          : !live ? `${releasePrefix}_shadow_rehearsal`
+          : !releaseSourceExecutorBoundaryReady ? `${releasePrefix}_source_executor_boundary`
+          : !accountFresh || !positionsFresh ? `${releasePrefix}_global_snapshot_incomplete`
+          : !ordersFresh ? `${releasePrefix}_global_orders_incomplete`
+          : !canEnter ? `${releasePrefix}_account_manage_only`
+          : `${releasePrefix}_stale_decision_bar`;
         const executionBatch: DecisionExecutionBatch = {
           group: g, symbol: sym, channels: symChannels, decisions: symDecisions,
           lastSession, chain, todayET, barMin, canManage, canEnter, allOrders, ordersFresh,
@@ -727,8 +802,8 @@ async function cycle(trigger: string): Promise<void> {
           sourceBarAtMs: lastSession.ts, observedAtMs: familyObservedAtMs,
           executionEligible, executionIneligibleReason,
         };
-        if (config.day1ReleaseEnabled) {
-          // Research tap: capture the per-candidate Day 1 decisions before the
+        if (releaseMode()) {
+          // Research tap: capture each sealed-release candidate before the
           // global arbiter reduces a family to its executable survivor. The pure
           // observer admits only clean root decisions and clean dark-lifecycle
           // siblings; execution never reads these receipts.
@@ -864,21 +939,13 @@ async function cycle(trigger: string): Promise<void> {
     // ---- RC5 PHASES B/C/D: broker-truth state, one global arbiter, then execution ----
     // No release entry can reach executeDecisionBatch above: release batches take
     // the `continue` path until every account/symbol has been evaluated and stamped.
-    if (config.day1ReleaseEnabled) {
+    if (releaseMode()) {
       for (const accountId of releaseBoundAccountIds) {
         if (!releaseObservedAccountIds.has(accountId)) {
           releasePositionSnapshotComplete = false;
           releaseSnapshotFailures.push({ accountId, kind: "account-group-missing" });
         }
       }
-      const releaseState = buildDay1AdmissionState({
-        openPositions: openRowsArr,
-        sessionPositions: sessionPositions ?? [],
-        channelById: byId,
-        accountIdByStrategist: releaseAccountIdByStrategist,
-        brokerPositions: releaseBrokerPositions,
-        pendingOrders: releasePendingOrders,
-      });
       const prepared = releaseBatches.flatMap((batch) => batch.decisions.map((decision) => ({
         accountId: batch.group.account.id,
         sourceBarAtMs: batch.sourceBarAtMs,
@@ -886,22 +953,46 @@ async function cycle(trigger: string): Promise<void> {
         executionEligible: batch.executionEligible,
         executionIneligibleReason: batch.executionIneligibleReason,
       })));
-      const finalized = finalizeDay1ReleaseAdmissions({
-        prepared,
-        state: releaseState,
-        posture: live ? "paper-executor" : "shadow-counterfactual",
-        globalPositionSnapshotComplete: releasePositionSnapshotComplete,
-        globalOrderSnapshotComplete: !live || releaseOrderSnapshotComplete,
-        globalSnapshotFailures: releaseSnapshotFailures,
-        globalOrderFailureAccountIds: [...releaseOrderFailureAccountIds].sort(),
-      });
+      const finalized = config.day1ReleaseEnabled
+        ? finalizeDay1ReleaseAdmissions({
+            prepared,
+            state: buildDay1AdmissionState({
+              openPositions: openRowsArr,
+              sessionPositions: sessionPositions ?? [],
+              channelById: byId,
+              accountIdByStrategist: releaseAccountIdByStrategist,
+              brokerPositions: releaseBrokerPositions,
+              pendingOrders: releasePendingOrders,
+            }),
+            posture: live ? "paper-executor" : "shadow-counterfactual",
+            globalPositionSnapshotComplete: releasePositionSnapshotComplete,
+            globalOrderSnapshotComplete: !live || releaseOrderSnapshotComplete,
+            globalSnapshotFailures: releaseSnapshotFailures,
+            globalOrderFailureAccountIds: [...releaseOrderFailureAccountIds].sort(),
+          })
+        : finalizeRc54ReleaseAdmissions({
+            prepared,
+            ...buildRc54AdmissionOccupancy({
+              openPositions: openRowsArr,
+              sessionPositions: sessionPositions ?? [],
+              channelById: byId,
+              accountIdByStrategist: releaseAccountIdByStrategist,
+              brokerPositions: releaseBrokerPositions,
+              pendingOrders: releasePendingOrders,
+            }),
+            globalPositionTruthComplete: releasePositionSnapshotComplete,
+            globalOrderTruthComplete: !live || releaseOrderSnapshotComplete,
+            globalSnapshotFailures: releaseSnapshotFailures,
+            globalOrderFailureAccountIds: [...releaseOrderFailureAccountIds].sort(),
+            posture: live ? "paper-executor" : "shadow-counterfactual",
+          });
       let cursor = 0;
       for (const batch of releaseBatches) {
         batch.decisions = finalized.slice(cursor, cursor + batch.decisions.length).map((row) => row.decision);
         cursor += batch.decisions.length;
         decisions.push(...batch.decisions);
       }
-      if (cursor !== finalized.length) throw new Error("Day 1 RC5 arbitration mapping mismatch");
+      if (cursor !== finalized.length) throw new Error("RC5 release arbitration mapping mismatch");
       for (const batch of releaseBatches) await executeDecisionBatch(batch, deskStack);
     }
 
@@ -1076,7 +1167,23 @@ async function fastExitSweep(): Promise<void> {
       for (const r of rows) {
       const ch = byId.get(r.strategist_id)!;
       const chain = chainBySym.get(ch.underlying.toUpperCase());
-      const exec: ExecCtx = { api, accountId: g.account.id, paperMode: cfg.fund?.mode?.toLowerCase() === "paper", decisionAtMs: Date.now(), chain: chain!, todayET, etMin: nowMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
+      const rc54 = config.rc54ReleaseEnabled ? rc54Root(ch.slug) : null;
+      const exec: ExecCtx = {
+        api,
+        accountId: g.account.id,
+        paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+        decisionAtMs: Date.now(),
+        chain: chain!,
+        todayET,
+        etMin: nowMin,
+        sinceIso: `${todayET}T00:00:00Z`,
+        allOrders,
+        alpacaByOcc,
+        remainingByOcc,
+        openRowQty,
+        rc54ManagerProfileId: rc54ManagerProfileFromRow(r)?.id ?? null,
+        releaseEvidenceContext: rc54 ? rc54ReleaseEvidenceContext(rc54) : undefined,
+      };
       // ---- KILL/HALT FLATTEN (operator's word, 2026-07-01): close EVERYTHING at market ----
       // Highest priority — runs before every other exit check, incl. the manual twins (a kill
       // switch overrides the human-owns-exits experiment; safety beats the A/B). executeExit's
@@ -1104,6 +1211,26 @@ async function fastExitSweep(): Promise<void> {
           try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "day1_eod_flatten" }, r, exec, undefined, exitQualityPolicyFor(ch)); }
           catch (e) { warn(`day1-eod-flatten ${ch.slug} failed — ${(e as Error).message}`); }
           finally { exitGuard.release(r.id); }
+        }
+        clearSweepPriceState(r.id);
+        continue;
+      }
+      if (config.rc54ReleaseEnabled && rc54ReleaseEodDue(ch.slug, nowMin, rthClose)) {
+        info(`rc54-eod-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — release close, wall-clock mtc ${Math.max(0, rthClose - nowMin)}`);
+        if (exitGuard.claim(r.id)) {
+          try {
+            await executeExit(
+              { slug: ch.slug, status: ch.status, action: "exit", reason: "rc54_eod_flatten" },
+              r,
+              exec,
+              undefined,
+              exitQualityPolicyFor(ch),
+            );
+          } catch (e) {
+            warn(`rc54-eod-flatten ${ch.slug} failed — ${(e as Error).message}`);
+          } finally {
+            exitGuard.release(r.id);
+          }
         }
         clearSweepPriceState(r.id);
         continue;
@@ -1231,11 +1358,16 @@ async function fastExitSweep(): Promise<void> {
       }
       const pe = ch.spec_json ? specPremiumExit(ch.spec_json as StrategySpec) : undefined;
       const day1RootPolicy = config.day1ReleaseEnabled && day1Root(ch.slug) != null;
+      // Existing RC5.4 risk remains bound to its persisted manager profile even
+      // if an operator later disables new RC5.4 admissions.
+      const rc54RootPolicy = rc54ManagerStampPresent(r) && rc54Root(ch.slug) != null;
+      const sealedReleaseRootPolicy = day1RootPolicy || rc54RootPolicy;
       // 1b #6: `mark` = the fresh EXECUTABLE BID, `peak` = the bid-based MFE ratchet above.
       // premiumExitReason stays PURE (unchanged comparisons) — only the input price changed.
       const reason = premiumExitReason({
-        row: r, slug: ch.slug, premiumExit: day1RootPolicy ? undefined : pe,
-        takeProfitPct: day1RootPolicy ? 0 : ch.take_profit_pct, premiumStopPct: ch.premium_stop_pct,
+        row: r, slug: ch.slug, premiumExit: sealedReleaseRootPolicy ? undefined : pe,
+        takeProfitPct: sealedReleaseRootPolicy ? 0 : ch.take_profit_pct,
+        premiumStopPct: ch.premium_stop_pct,
         givebackTrail: day1RootPolicy
           ? day1ExecutableGivebackTrail(ch.slug)
           : policy.GIVEBACK_TRAIL[ch.slug] ?? null,
@@ -1243,6 +1375,7 @@ async function fastExitSweep(): Promise<void> {
         minutesToClose: Math.max(0, rthClose - nowMin),
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)
         isRunner: !!r.runner_of, runnerGivebackPct: ch.runner_giveback_pct, // R1 runner ratchet (0 = off)
+        rc54ManagerProfileId: rc54ManagerProfileFromRow(r)?.id ?? null,
       }, bid, peak);
       if (!reason) continue;
       // 1b #9: ordinary PRICE exits need the order snapshot (late-fill recovery + working-order
@@ -1292,8 +1425,17 @@ async function main(): Promise<void> {
     ? (config.shadowWriteEvents ? "events" : "none (service role, events off)")
     : "none (anon, read-only)";
   info(`feeds: stock=${config.stockFeed} opt=${config.optFeed} · dryRun=${config.dryRun} · liveTrading=${config.liveTrading} · writes=${writeMode}`);
+  if (config.day1ReleaseEnabled && config.rc54ReleaseEnabled) {
+    error("DAY1_RELEASE_ENABLED and RC54_RELEASE_ENABLED are mutually exclusive. Refusing to stack two release overlays.");
+    process.exit(1);
+  }
   if (config.day1ReleaseEnabled && config.day1ReleaseExpectedSha256 !== DAY1_RELEASE_CONFIGURATION_SHA256) {
     error(`Day 1 release checksum mismatch: expected env ${config.day1ReleaseExpectedSha256 || "<missing>"}, code ${DAY1_RELEASE_CONFIGURATION_SHA256}. Refusing to start.`);
+    process.exit(1);
+  }
+  if (config.rc54ReleaseEnabled
+      && config.rc54ReleaseExpectedSha256 !== RC54_RELEASE_CONFIGURATION_SHA256) {
+    error(`RC5.4 release checksum mismatch: expected env ${config.rc54ReleaseExpectedSha256 || "<missing>"}, code ${RC54_RELEASE_CONFIGURATION_SHA256}. Refusing to start.`);
     process.exit(1);
   }
   if (config.labCanaryEnabled) {
@@ -1334,8 +1476,8 @@ async function main(): Promise<void> {
   // via the websocket stream. So we log and carry on rather than exit.
   try { await reloadConfig(); }
   catch (e) {
-    if (config.day1ReleaseEnabled) {
-      error(`config: RC5 initial validation failed — ${(e as Error).message}; refusing to start`);
+    if (releaseMode()) {
+      error(`config: sealed RC5 initial validation failed — ${(e as Error).message}; refusing to start`);
       process.exit(1);
     }
     warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`);
@@ -1344,8 +1486,25 @@ async function main(): Promise<void> {
     error("Day 1 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
     process.exit(1);
   }
+  if (config.rc54ReleaseEnabled
+      && (!cfg.fund || RC54_ROOTS.some((root) =>
+        !cfg.channels.some((channel) => channel.slug === root.slug)))) {
+    error("RC5.4 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
+    process.exit(1);
+  }
+  if (config.rc54ReleaseEnabled) {
+    const openAtBoot = await store.getOpenPositionsStrict();
+    if (openAtBoot == null) {
+      error("RC5.4 cannot prove the book flat at startup. Refusing to establish a new management era on unknown open-position state.");
+      process.exit(1);
+    }
+    if (openAtBoot.length) {
+      error(`RC5.4 requires a flat era boundary; ${openAtBoot.length} position row(s) were already open. Refusing to mix prior-era management or occupancy into the new release.`);
+      process.exit(1);
+    }
+  }
 
-  // Required Day 1 research capture must be constructible before the first boot
+  // Required sealed-release research capture must be constructible before the first boot
   // decision can run. create() verifies paper/OPRA posture, private receipt schema,
   // bounded settings and R2/Supabase credentials. A null runtime is a startup
   // refusal for the sealed release, never a warning followed by trading.
@@ -1356,20 +1515,20 @@ async function main(): Promise<void> {
       paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
     });
   }
-  if (config.day1ReleaseEnabled && !heldContractCapture) {
-    error("Day 1 required held-contract capture is not runtime-ready before the boot decision. Refusing to start.");
+  if (releaseMode() && !heldContractCapture) {
+    error("Sealed RC5 required held-contract capture is not runtime-ready before the boot decision. Refusing to start.");
     process.exit(1);
   }
   heldContractCapture?.start();
 
   info(`config: ${cfg.fund ? `fund cap $${cfg.fund.total_capital_usd} mode=${cfg.fund.mode} halted=${cfg.fund.is_halted}` : "fund MISSING"}, ${cfg.channels.length} channels [${cfg.channels.map((c) => `${c.slug}:${c.status}`).join(", ")}]`);
   if (config.day1ReleaseEnabled) {
-    if (!day1StartupReceipt) {
+    if (!releaseStartupReceipt) {
       error("Day 1 active-settings receipt is unavailable after validation. Refusing to start.");
       process.exit(1);
     }
     const receipt = {
-      ...day1StartupReceipt,
+      ...releaseStartupReceipt,
       runtimeReadiness: {
         heldCaptureReady: true,
         heldCaptureStartedBeforeBootDecision: true,
@@ -1377,8 +1536,28 @@ async function main(): Promise<void> {
     };
     info(`day1-release: ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256} roots=${DAY1_ROOTS.length} dark=${DAY1_DARK_CHANNELS.length} paper-only`);
     void store.journal("EXEC", `day1-release ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`, receipt);
+  } else if (config.rc54ReleaseEnabled) {
+    if (!releaseStartupReceipt) {
+      error("RC5.4 active-settings receipt is unavailable after validation. Refusing to start.");
+      process.exit(1);
+    }
+    const receipt = {
+      ...releaseStartupReceipt,
+      runtimeReadiness: {
+        heldCaptureReady: true,
+        heldCaptureStartedBeforeBootDecision: true,
+        flatEraBoundaryProven: true,
+      },
+    };
+    info(`rc54-release: ACTIVE ${RC54_RELEASE_ID} config=${RC54_RELEASE_CONFIGURATION_SHA256} roots=${RC54_ROOTS.length} control=6 lab=3 paper-only`);
+    void store.journal(
+      "EXEC",
+      `rc54-release ACTIVE ${RC54_RELEASE_ID} config=${RC54_RELEASE_CONFIGURATION_SHA256}`,
+      receipt,
+    );
   } else {
     info(`day1-release: OFF · candidate=${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`);
+    info(`rc54-release: OFF · candidate=${RC54_RELEASE_ID} config=${RC54_RELEASE_CONFIGURATION_SHA256}`);
   }
   info(`lab-canary: OFF · foundation=${LAB_CANARY_FOUNDATION_ID} config=${LAB_CANARY_FOUNDATION_SHA256} roster=unsealed`);
   // Cockpit P3 routing summary: each bucket's posture — LIVE (armed + creds), shadow (decided,

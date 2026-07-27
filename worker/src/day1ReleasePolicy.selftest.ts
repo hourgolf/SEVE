@@ -469,20 +469,19 @@ check("runtime validates the raw executor boundary before applying the overlay",
   return validate >= 0 && overlay >= 0 && validate < overlay;
 })(), true);
 check("runtime preserves executor-boundary failure as an explicit admission censor",
-  indexSource.includes('!day1SourceExecutorBoundaryReady ? "day1_source_executor_boundary"'), true);
+  indexSource.includes("!releaseSourceExecutorBoundaryReady ? `${releasePrefix}_source_executor_boundary`"), true);
 check("runtime globally finalizes all prepared rows before the first release executor call", [
-  indexSource.indexOf("const finalized = finalizeDay1ReleaseAdmissions"),
+  indexSource.indexOf("const finalized = config.day1ReleaseEnabled"),
   indexSource.indexOf("for (const batch of releaseBatches) await executeDecisionBatch"),
-].every((value) => value >= 0) && indexSource.indexOf("const finalized = finalizeDay1ReleaseAdmissions")
+].every((value) => value >= 0) && indexSource.indexOf("const finalized = config.day1ReleaseEnabled")
   < indexSource.indexOf("for (const batch of releaseBatches) await executeDecisionBatch"), true);
-check("runtime builds broker and pending-order occupancy only after every account snapshot", [
-  indexSource.indexOf("for (const g of groupByAccount(cfg.channels, cfg.accounts))"),
-  indexSource.indexOf("const releaseState = buildDay1AdmissionState"),
-  indexSource.indexOf("const finalized = finalizeDay1ReleaseAdmissions"),
-].every((value) => value >= 0) && indexSource.indexOf("for (const g of groupByAccount(cfg.channels, cfg.accounts))")
-  < indexSource.indexOf("const releaseState = buildDay1AdmissionState")
-  && indexSource.indexOf("const releaseState = buildDay1AdmissionState")
-  < indexSource.indexOf("const finalized = finalizeDay1ReleaseAdmissions"), true);
+check("runtime builds broker and pending-order occupancy only after every account snapshot", (() => {
+  const accounts = indexSource.indexOf("for (const g of groupByAccount(cfg.channels, cfg.accounts))");
+  const finalize = indexSource.indexOf("const finalized = config.day1ReleaseEnabled");
+  const state = indexSource.indexOf("state: buildDay1AdmissionState({");
+  return [accounts, finalize, state].every((value) => value >= 0)
+    && accounts < finalize && finalize < state;
+})(), true);
 check("executor admission uses positions-orders-confirming-positions ordering", (() => {
   const initial = indexSource.indexOf("try { positions = await alpaca.getPositions(api); }");
   const orders = indexSource.indexOf("allOrders = await retry(`cycle orders");
@@ -494,14 +493,14 @@ check("executor admission uses positions-orders-confirming-positions ordering", 
 check("failed confirming positions globally censor admission but retain risk-management path", [
   indexSource.includes("releasePositionSnapshotComplete = false;"),
   indexSource.includes('releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" })'),
-  indexSource.includes("all new Day 1 admissions fail closed"),
+  indexSource.includes("all new sealed-release admissions fail closed"),
 ], [true, true, true]);
 check("ordinary non-release cycles fail closed on stale account or position truth", indexSource.includes(
-  "if (!config.day1ReleaseEnabled && api && (!accountFresh || !positionsFresh)) continue;",
+  "if (!releaseMode() && api && (!accountFresh || !positionsFresh)) continue;",
 ), true);
 check("required capture is runtime-ready and started before the boot decision", (() => {
   const create = indexSource.indexOf("heldContractCapture = await CaptureRuntime.create");
-  const refusal = indexSource.indexOf("Day 1 required held-contract capture is not runtime-ready before the boot decision");
+  const refusal = indexSource.indexOf("Sealed RC5 required held-contract capture is not runtime-ready before the boot decision");
   const start = indexSource.indexOf("heldContractCapture?.start();");
   const boot = indexSource.indexOf('await cycle("boot")');
   return [create, refusal, start, boot].every((value) => value >= 0)
@@ -520,7 +519,7 @@ check("Day 1 EOD is a mandatory wall-clock root flatten", [
 ], [true, true]);
 check("fast release roots disable legacy targets but use only the sealed per-root giveback map", [
   indexSource.includes("const day1RootPolicy = config.day1ReleaseEnabled && day1Root(ch.slug) != null"),
-  indexSource.includes("premiumExit: day1RootPolicy ? undefined : pe"),
+  indexSource.includes("premiumExit: sealedReleaseRootPolicy ? undefined : pe"),
   indexSource.includes("? day1ExecutableGivebackTrail(ch.slug)"),
 ], [true, true, true]);
 check("signal rationale carries the pre-admission candidate provenance", /rationale:\s*{[\s\S]*?\.\.\.\(d\.detail \?\? {}\)/.test(executeSource), true);

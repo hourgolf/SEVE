@@ -15,6 +15,13 @@
 
 import { policy } from "./config.js";
 import type { PositionRow } from "./store.js";
+import {
+  rc54A13GivebackReached,
+  rc54BankTargetReached,
+  rc54ManagerProfile,
+  rc54RunnerFixedTargetReached,
+  type Rc54ManagerProfileId,
+} from "./rc54ManagerPolicy.js";
 
 // The fast premium sweep runs every ~10s on live marks; these checks are the
 // exits that must NOT wait for a bar close (stops/targets/ratchets), as opposed
@@ -35,6 +42,7 @@ export interface FastExitCheck {
   // ratchet (stops/stall/EOD still protect it).
   isRunner?: boolean;
   runnerGivebackPct?: number;
+  rc54ManagerProfileId?: Rc54ManagerProfileId | null;
 }
 
 export function premiumExitReason(c: FastExitCheck, mark: number, peak: number): string | null {
@@ -50,6 +58,13 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
     // a bar-close-only target would systematically give back intra-bar). Mirrors decide.ts:take_profit_pct.
     if (c.takeProfitPct != null && c.takeProfitPct > 0 && mark >= entry * (1 + c.takeProfitPct / 100)) return "target_premium";
   }
+  const rc54Profile = rc54ManagerProfile(c.rc54ManagerProfileId);
+  if (rc54BankTargetReached({
+    profile: rc54Profile, isRunner: !!c.isRunner, entryPrice: entry, mark,
+  })) return "target_premium";
+  if (rc54RunnerFixedTargetReached({
+    profile: rc54Profile, isRunner: !!c.isRunner, entryPrice: entry, mark,
+  })) return "target_premium";
   // RUNNER RATCHET (R1): peak-anchored giveback — the remainder ride ends when the mark
   // surrenders runnerGivebackPct of the PEAK. peak > entry guard: the ratchet only ever
   // arms above water (a tranche fired at the TP level, so the peak is ≥ that by then).
@@ -65,6 +80,9 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
   const premStop = c.premiumStopPct ?? policy.PREMIUM_STOP_PCT;
   if (premStop > 0 && c.premiumExit?.stopPct != null && mark <= entry * (1 - c.premiumExit.stopPct / 100)) return "stop_premium";
   if (premStop > 0 && mark <= entry * (1 - premStop / 100)) return "premium_stop";
+  if (rc54A13GivebackReached({
+    profile: rc54Profile, isRunner: !!c.isRunner, entryPrice: entry, mark, peak,
+  })) return "trail_giveback";
   if (c.givebackTrail && peak >= entry * c.givebackTrail.engageMult) {
     const giveback = entry + (peak - entry) * (1 - c.givebackTrail.givebackPct / 100);
     if (mark <= giveback) return "trail_giveback";

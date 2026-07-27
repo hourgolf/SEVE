@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
 import {
-  parseDatabentoCbboJsonLine,
+  inspectDatabentoCbboJsonLine,
   dedupeCbboQuotes,
   historicalAccessGate,
   type DatabentoCbboQuote,
@@ -153,17 +153,27 @@ async function estimate(request: DarkCandidateContractRequest): Promise<number> 
 
 async function fetchQuotes(request: DarkCandidateContractRequest): Promise<{
   quotes: DatabentoCbboQuote[];
+  rawRows: number;
+  crossedQuoteRows: number;
 }> {
   const text = await databento("timeseries.get_range", request, {
     encoding: "json", pretty_px: "true", pretty_ts: "true", map_symbols: "true",
   });
   const parsed: DatabentoCbboQuote[] = [];
+  let rawRows = 0;
+  let crossedQuoteRows = 0;
   for (const [lineIndex, line] of text.split("\n").entries()) {
     if (!line.trim()) continue;
-    const quote = parseDatabentoCbboJsonLine(line);
-    if (!quote) {
-      throw new Error(`malformed or unexpected provider row ${lineIndex + 1} for ${request.occSymbol}`);
+    rawRows++;
+    const inspected = inspectDatabentoCbboJsonLine(line);
+    if (!inspected.ok) {
+      if (inspected.issue === "crossed_quote") {
+        crossedQuoteRows++;
+        continue;
+      }
+      throw new Error(`${inspected.issue} provider row ${lineIndex + 1} for ${request.occSymbol}`);
     }
+    const quote = inspected.quote;
     if (quote.occSymbol !== request.occSymbol) {
       throw new Error(`provider request expansion: expected ${request.occSymbol}, received ${quote.occSymbol}`);
     }
@@ -174,10 +184,26 @@ async function fetchQuotes(request: DarkCandidateContractRequest): Promise<{
   }
   const quotes = dedupeCbboQuotes(parsed);
   if (!quotes.length) throw new Error(`exact provider response empty for ${request.occSymbol}`);
-  return { quotes };
+  if (quotes.length + crossedQuoteRows !== rawRows) {
+    throw new Error(`provider row accounting mismatch for ${request.occSymbol}`);
+  }
+  return { quotes, rawRows, crossedQuoteRows };
 }
 
-function cachedQuotes(request: DarkCandidateContractRequest): { quotes: DatabentoCbboQuote[] } | null {
+interface CachedProviderQuality {
+  schemaVersion: 1;
+  requestId: string;
+  compressedSha256: string;
+  rawRows: number;
+  validRows: number;
+  crossedQuoteRows: number;
+}
+
+function cachedQuotes(request: DarkCandidateContractRequest): {
+  quotes: DatabentoCbboQuote[];
+  rawRows: number;
+  crossedQuoteRows: number;
+} | null {
   const sourceDir = join(OUT_DIR, "source");
   if (!existsSync(sourceDir)) return null;
   const prefix = `${request.sessionDateEt}-${request.occSymbol}-`;
@@ -197,6 +223,11 @@ function cachedQuotes(request: DarkCandidateContractRequest): { quotes: Databent
   if (sha256(compressed) !== compressedSha256) {
     throw new Error(`cached object checksum mismatch for ${request.occSymbol}`);
   }
+  const qualityPath = join(sourceDir, `${request.sessionDateEt}-${request.occSymbol}-${compressedSha256}.quality.json`);
+  if (!existsSync(qualityPath)) return null;
+  let quality: CachedProviderQuality;
+  try { quality = JSON.parse(readFileSync(qualityPath, "utf8")) as CachedProviderQuality; }
+  catch { throw new Error(`cached quality receipt invalid for ${request.occSymbol}`); }
   const parsed = JSON.parse(gunzipSync(compressed).toString("utf8")) as unknown;
   if (!Array.isArray(parsed) || !parsed.length) {
     throw new Error(`cached exact object empty for ${request.occSymbol}`);
@@ -222,8 +253,14 @@ function cachedQuotes(request: DarkCandidateContractRequest): { quotes: Databent
   if (deduped.length !== quotes.length) {
     throw new Error(`cached exact object contains duplicate rows for ${request.occSymbol}`);
   }
-  console.log(`  ${request.occSymbol} · verified local resume ${quotes.length} rows`);
-  return { quotes };
+  if (quality.schemaVersion !== 1 || quality.requestId !== request.requestId
+      || quality.compressedSha256 !== compressedSha256 || quality.validRows !== quotes.length
+      || !Number.isInteger(quality.rawRows) || !Number.isInteger(quality.crossedQuoteRows)
+      || quality.crossedQuoteRows < 0 || quality.rawRows !== quality.validRows + quality.crossedQuoteRows) {
+    throw new Error(`cached quality receipt conflicts for ${request.occSymbol}`);
+  }
+  console.log(`  ${request.occSymbol} · verified local resume ${quotes.length} rows · crossed ${quality.crossedQuoteRows}`);
+  return { quotes, rawRows: quality.rawRows, crossedQuoteRows: quality.crossedQuoteRows };
 }
 
 function writeVerified(path: string, bytes: Buffer): void {
@@ -278,14 +315,29 @@ async function main(): Promise<void> {
     const compressedSha256 = sha256(compressed);
     const objectPath = join(OUT_DIR, "source", `${request.sessionDateEt}-${request.occSymbol}-${compressedSha256}.json.gz`);
     writeVerified(objectPath, compressed);
+    const qualityPath = join(OUT_DIR, "source", `${request.sessionDateEt}-${request.occSymbol}-${compressedSha256}.quality.json`);
+    const quality: CachedProviderQuality = {
+      schemaVersion: 1,
+      requestId: request.requestId,
+      compressedSha256,
+      rawRows: result.rawRows,
+      validRows: result.quotes.length,
+      crossedQuoteRows: result.crossedQuoteRows,
+    };
+    const qualityBytes = Buffer.from(`${JSON.stringify(quality, null, 2)}\n`, "utf8");
+    writeVerified(qualityPath, qualityBytes);
     sourceObjects.push({
       ...request,
       rows: result.quotes.length,
+      rawRows: result.rawRows,
+      crossedQuoteRows: result.crossedQuoteRows,
       contentSha256,
       compressedSha256,
       compressedBytes: compressed.byteLength,
       estimatedCostUsd: costByRequest.get(request.requestId),
       objectPath,
+      qualityPath,
+      qualitySha256: sha256(qualityBytes),
     });
     for (const candidate of rows) {
       // A frozen decision can arrive after its source-bar-derived request

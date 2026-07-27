@@ -6,6 +6,7 @@ export const RELEASE_EVIDENCE_CONTEXT_SCHEMA_VERSION = 1 as const;
 
 export type EvidenceEra =
   | "rc5-control"
+  | "rc54-control"
   | "virtual-bench-development"
   | "t1-exact-replay"
   | "lab-executable";
@@ -25,6 +26,13 @@ export interface ReleaseEvidenceContext {
 const SHA256 = /^[a-f0-9]{64}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._:-]*$/i;
+const EVIDENCE_ERAS = new Set<EvidenceEra>([
+  "rc5-control",
+  "rc54-control",
+  "virtual-bench-development",
+  "t1-exact-replay",
+  "lab-executable",
+]);
 
 export function validateReleaseEvidenceContext(
   context: ReleaseEvidenceContext,
@@ -38,6 +46,7 @@ export function validateReleaseEvidenceContext(
   if (!IDENTIFIER.test(context.admissionDomain)) errors.push("admission_domain");
   if (!IDENTIFIER.test(context.cohortId)) errors.push("cohort_id");
   if (!DATE.test(context.cohortFrom)) errors.push("cohort_from");
+  if (!EVIDENCE_ERAS.has(context.evidenceEra)) errors.push("evidence_era");
   if (!Number.isInteger(context.sourceQuantity) || context.sourceQuantity < 1) {
     errors.push("source_quantity");
   }
