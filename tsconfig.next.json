@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "plugins": [{ "name": "next" }]
+  },
+  "exclude": [
+    "node_modules",
+    "market-ingest.ts",
+    "engine",
+    "supabase",
+    "scripts",
+    "worker",
+    "**/*.selftest.ts",
+    "**/*.selftest.tsx"
+  ]
+}
