@@ -10,7 +10,7 @@ import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveRecentExits } from "@/lib/perform/derivePositionsWorkspace";
 import { SentinelReceiptStrip } from "@/components/perform/SentinelWorkspace";
-import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
+import { findSealedReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { BrokerReconciliationStrip, OpsReadinessPanel, PositionEvidenceChains } from "@/components/ops/OpsReadinessPanel";
 import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
 import { ShadowResearchWorkspace } from "@/components/perform/ShadowResearchWorkspace";
@@ -186,7 +186,7 @@ export function MobileOpsView({ props, channels, onOpenSettings }: { props: Surf
   const risk = active.reduce((sum, channel) => sum + (channel.config.capital_pct || 0), 0);
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug]?.dayPnl ?? 0 })).filter((row) => row.pnl !== 0).sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
   const ingestAge = data.lastIngestTs ? Math.max(0, Math.round((Date.now() - Date.parse(data.lastIngestTs)) / 1000)) : null;
-  const release = findDay1ReleaseReceipt(data.releaseEvents);
+  const release = findSealedReleaseReceipt(data.releaseEvents);
 
   return <>
     <section className={`m2-incident-card ${incident.severity}`}><header><i /><b>{incident.title}</b><span>{incident.severity.toUpperCase()}</span></header>

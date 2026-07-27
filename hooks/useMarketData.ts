@@ -371,7 +371,7 @@ export function useMarketData(symbol: string = "SPY"): MarketData {
           .from("events")
           .select("id,level,strategist_id,message,meta,created_at")
           .gte("created_at", cutoff)
-          .ilike("message", "%day1-release ACTIVE%")
+          .or("message.ilike.%day1-release ACTIVE%,message.ilike.%rc54-release ACTIVE%")
           .order("created_at", { ascending: false })
           .limit(1);
         if (!live()) return;

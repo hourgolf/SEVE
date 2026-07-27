@@ -18,7 +18,11 @@ const rc54 = findSealedReleaseReceipt([row("4", `stream: rc54-release ACTIVE wee
 assert.ok(rc54);
 assert.equal(rc54.lane, "rc54");
 assert.equal(rc54.releaseId, "week2-2026-07-27-rc5.4");
+const day1Old = row("1", `stream: day1-release ACTIVE weekend-day1-2026-07-21-rc5.3 config=${hash}`);
+const rc54New = row("6", `stream: rc54-release ACTIVE week2-2026-07-27-rc5.4 config=${hash}`);
+assert.equal(findSealedReleaseReceipt([day1Old, rc54New])?.lane, "rc54");
+assert.equal(findSealedReleaseReceipt([rc54New, day1Old])?.lane, "rc54");
 assert.equal(findDay1ReleaseReceipt([row("5", `stream: rc54-release ACTIVE week2-2026-07-27-rc5.4 config=${hash}`)]), null);
 assert.equal(findDay1ReleaseReceipt([row("3", "day1-release ACTIVE incomplete config=abc")]), null);
 assert.equal(findDay1ReleaseReceipt([]), null);
-console.log("release-receipt-selftest: 13/13 passed");
+console.log("release-receipt-selftest: 15/15 passed");

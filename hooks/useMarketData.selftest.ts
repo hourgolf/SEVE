@@ -19,6 +19,9 @@ const historyLoad = source.slice(historyStart, dailyStart);
 assert.doesNotMatch(marketPoll, /day1-release ACTIVE/, "market poll must not wait for release lookup");
 assert.match(releasePoll, /\.gte\("created_at", cutoff\)/, "release lookup must be time bounded");
 assert.match(releasePoll, /RELEASE_LOOKBACK_MS/, "release lookup must use the declared lookback");
+assert.match(releasePoll, /day1-release ACTIVE/, "release lookup must retain RC5.3 compatibility");
+assert.match(releasePoll, /rc54-release ACTIVE/, "release lookup must follow the RC5.4 runtime handoff");
+assert.match(releasePoll, /\.order\("created_at", \{ ascending: false \}\)/, "release lookup must prefer the newest startup receipt");
 assert.match(source, /if \(pollInFlight \|\| !live\(\)\) return;/, "market poll must reject overlap");
 assert.match(source, /if \(releaseInFlight \|\| !live\(\)\) return;/, "release poll must reject overlap");
 assert.match(source, /startVisibilityPoll\(pollRelease, RELEASE_POLL_MS\)/, "release polling must use its slow cadence");
@@ -38,4 +41,4 @@ assert.match(strategySource, /SUPPORTED_UNDERLYINGS = \["SPY", "QQQ", "IWM"\]/, 
 assert.match(spotSource, /new Set\(SUPPORTED_UNDERLYINGS\)/, "fast spot allowlist must share the UI capability contract");
 assert.match(marksSource, /SUPPORTED_UNDERLYINGS\.map\(\(sym\) => fetchSpot/, "open-position marks must refresh every supported underlying");
 
-console.log("market-data-read-selftest: 22/22 passed");
+console.log("market-data-read-selftest: 25/25 passed");
