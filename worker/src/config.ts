@@ -111,6 +111,13 @@ export const config = {
   // with the RC5.3 overlay, and startup requires this exact sealed checksum.
   rc54ReleaseEnabled: flag("RC54_RELEASE_ENABLED", false),
   rc54ReleaseExpectedSha256: opt("RC54_RELEASE_EXPECTED_SHA256", ""),
+  // Read-only bridge from the draft/active control-plane rows to the sealed
+  // RC5.4 identity. Default-off and observation-only: it never supplies runtime
+  // configuration, changes routing, or enters the decision/order call graph.
+  controlPlaneBaselineObserverEnabled: flag(
+    "CONTROL_PLANE_BASELINE_OBSERVER_ENABLED",
+    false,
+  ),
   // Roster-neutral Week 2 LAB foundation. This switch is intentionally unusable
   // until a later reviewed commit supplies a sealed roster/configuration draft;
   // setting it early makes startup refuse rather than infer candidates.

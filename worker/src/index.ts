@@ -1557,11 +1557,41 @@ async function main(): Promise<void> {
       },
     };
     info(`rc54-release: ACTIVE ${RC54_RELEASE_ID} config=${RC54_RELEASE_CONFIGURATION_SHA256} roots=${RC54_ROOTS.length} control=6 lab=3 paper-only`);
-    void store.journal(
+    const startupReceiptWrite = store.journal(
       "EXEC",
       `rc54-release ACTIVE ${RC54_RELEASE_ID} config=${RC54_RELEASE_CONFIGURATION_SHA256}`,
       receipt,
     );
+    if (config.controlPlaneBaselineObserverEnabled) {
+      await startupReceiptWrite;
+      const {
+        RC54_CONTROL_PLANE_BASELINE_MANIFEST_KEY,
+        observeRc54ControlPlaneBaseline,
+      } = await import("./rc54ControlPlaneBaselineObserver.js");
+      const identity = await store.loadRc54ControlPlaneBaselineIdentity(
+        RC54_CONTROL_PLANE_BASELINE_MANIFEST_KEY,
+      );
+      const observation = observeRc54ControlPlaneBaseline({
+        readError: identity.error,
+        manifest: identity.manifest,
+        memberships: identity.memberships,
+        worker: {
+          currentReleaseId: RC54_RELEASE_ID,
+          currentWorkerVersion: RC54_WORKER_VERSION,
+          currentWorkerRuntimeVersion: WORKER_RUNTIME_VERSION,
+          bootId: BOOT_ID,
+          paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+          heldCaptureReady: true,
+          startupReceipt: receipt,
+          observedAt: new Date().toISOString(),
+        },
+      });
+      await store.journal(
+        observation.state === "acknowledged" ? "EXEC" : "WARN",
+        `control-plane baseline shadow ${observation.state.toUpperCase()} ${RC54_CONTROL_PLANE_BASELINE_MANIFEST_KEY}`,
+        observation,
+      );
+    } else void startupReceiptWrite;
   } else {
     info(`day1-release: OFF · candidate=${DAY1_RELEASE_ID} config=${DAY1_RELEASE_CONFIGURATION_SHA256}`);
     info(`rc54-release: OFF · candidate=${RC54_RELEASE_ID} config=${RC54_RELEASE_CONFIGURATION_SHA256}`);

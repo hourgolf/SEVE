@@ -23,6 +23,10 @@ import { EXECUTION_OBSERVATION_WRITE_OPTIONS } from "./executionObservationPersi
 import type { ExecutionQualityReceiptDraft } from "../../lib/execution/executionQualityModel.js";
 import type { PositionOutcomeDraft } from "./positionOutcomeModel.js";
 import type { FamilyAdmissionObservationDraft } from "./familyAdmissionModel.js";
+import type {
+  ObservedBaselineManifestIdentity,
+  ObservedBaselineMembershipIdentity,
+} from "./rc54ControlPlaneBaselineObserver.js";
 import {
   MANAGER_SHADOW_BOOK_VERSION,
   encodeManagerShadowRun,
@@ -141,10 +145,93 @@ export interface PositionRow {
   entry_features?: Record<string, unknown> | null;
 }
 
+export interface Rc54ControlPlaneBaselineIdentityRead {
+  manifest: ObservedBaselineManifestIdentity | null;
+  memberships: ObservedBaselineMembershipIdentity[];
+  error: string | null;
+}
+
 const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServiceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
   realtime: { transport: WebSocket as unknown as WSTransport },
 });
+
+export async function loadRc54ControlPlaneBaselineIdentity(
+  manifestKey: string,
+): Promise<Rc54ControlPlaneBaselineIdentityRead> {
+  const manifestRead = await sb.from("release_manifests")
+    .select(
+      "id,manifest_key,release_id,content_hash,legacy_configuration_hash,worker_compatibility_version,status",
+    )
+    .eq("manifest_key", manifestKey)
+    .maybeSingle();
+  if (manifestRead.error) {
+    return {
+      manifest: null,
+      memberships: [],
+      error: `release_manifests:${manifestRead.error.message}`,
+    };
+  }
+  const row = manifestRead.data as Record<string, unknown> | null;
+  if (!row) return { manifest: null, memberships: [], error: null };
+
+  const manifest: ObservedBaselineManifestIdentity = {
+    id: String(row.id ?? ""),
+    manifestKey: String(row.manifest_key ?? ""),
+    releaseId: String(row.release_id ?? ""),
+    contentHash: String(row.content_hash ?? ""),
+    legacyConfigurationHash: String(row.legacy_configuration_hash ?? ""),
+    workerCompatibilityVersion: String(row.worker_compatibility_version ?? ""),
+    status: String(row.status ?? ""),
+  };
+  const membershipRead = await sb.from("release_manifest_channels")
+    .select("ordinal,channel_spec_version_id")
+    .eq("release_manifest_id", manifest.id)
+    .order("ordinal", { ascending: true });
+  if (membershipRead.error) {
+    return {
+      manifest,
+      memberships: [],
+      error: `release_manifest_channels:${membershipRead.error.message}`,
+    };
+  }
+  const membershipRows = (membershipRead.data ?? []) as Array<Record<string, unknown>>;
+  const specIds = membershipRows.map((membership) =>
+    String(membership.channel_spec_version_id ?? ""));
+  if (!specIds.length || specIds.some((id) => !id)) {
+    return { manifest, memberships: [], error: "release_manifest_channels:membership_missing" };
+  }
+  const specsRead = await sb.from("channel_spec_versions")
+    .select("id,version_key,content_hash,status")
+    .in("id", specIds);
+  if (specsRead.error) {
+    return {
+      manifest,
+      memberships: [],
+      error: `channel_spec_versions:${specsRead.error.message}`,
+    };
+  }
+  const specsById = new Map(
+    ((specsRead.data ?? []) as Array<Record<string, unknown>>).map((spec) => [
+      String(spec.id ?? ""),
+      spec,
+    ]),
+  );
+  const memberships: ObservedBaselineMembershipIdentity[] = [];
+  for (const membership of membershipRows) {
+    const spec = specsById.get(String(membership.channel_spec_version_id ?? ""));
+    if (!spec) {
+      return { manifest, memberships: [], error: "channel_spec_versions:membership_unresolved" };
+    }
+    memberships.push({
+      ordinal: Number(membership.ordinal),
+      versionKey: String(spec.version_key ?? ""),
+      contentHash: String(spec.content_hash ?? ""),
+      status: String(spec.status ?? ""),
+    });
+  }
+  return { manifest, memberships, error: null };
+}
 
 export async function loadConfig(): Promise<{ fund: FundState | null; channels: ChannelConfig[]; accounts: AccountRow[]; accountsFresh: boolean }> {
   const { data: fundRow, error: fundErr } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
