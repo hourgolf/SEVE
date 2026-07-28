@@ -11,6 +11,7 @@ export interface SealedReleaseReceipt {
   dryRun: boolean | null;
   liveTrading: boolean | null;
   alpacaPaperOrigin: string | null;
+  meta: Record<string, unknown> | null;
 }
 
 export type Day1ReleaseReceipt = SealedReleaseReceipt;
@@ -40,6 +41,7 @@ export function findSealedReleaseReceipt(events: MarketEvent[]): SealedReleaseRe
       dryRun: typeof meta?.dryRun === "boolean" ? meta.dryRun : null,
       liveTrading: typeof meta?.liveTrading === "boolean" ? meta.liveTrading : null,
       alpacaPaperOrigin: typeof meta?.alpacaPaperOrigin === "string" ? meta.alpacaPaperOrigin : null,
+      meta,
     };
     const receiptAt = Date.parse(receipt.createdAt);
     if (latest == null || (Number.isFinite(receiptAt) && receiptAt > latestAt)) {

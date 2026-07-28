@@ -8,19 +8,37 @@ const truth = (name: string, value: boolean): void => {
   passed += 1;
 };
 
-truth("post-close mode is explicit", source.includes('process.argv.includes("--require-flat")'));
-truth("broker/runtime-only mode is explicit", source.includes('process.argv.includes("--broker-runtime-only")'));
-truth("broker/runtime-only mode delegates release identity", source.includes("delegated to the separate current-release binding and identity check"));
-truth("broker/runtime-only mode does not enumerate the legacy root roster", source.includes("brokerRuntimeOnly ? [] : rootPolicies"));
-truth("every account must be reconciled and flat", source.includes("accountFlat = booksMatch && brokerBook.size === 0 && deskBook.size === 0"));
-truth("non-flat account fails closed", source.includes("session-close gate requires broker and desk flat"));
-truth("blocked result names the active gate", source.includes('requireFlat ? "SESSION-CLOSE" : "PRE-OPEN"'));
-truth("reads all bound broker positions", source.includes('brokerRead("/v2/positions", creds)'));
-truth("database position read is open-only", source.includes('.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open")'));
-truth("readiness compares operational runtime identity", source.includes("worker.version !== WORKER_RUNTIME_VERSION"));
-truth("readiness does not compare the run ledger with the sealed strategy version", !source.includes("worker.version !== DAY1_WORKER_VERSION"));
-truth("readiness displays both runtime and sealed strategy identities", source.includes('sealed strategy ${WORKER_VERSION}'));
-truth("contains no database mutations", !source.match(/\.(insert|update|upsert|delete)\s*\(/));
-truth("contains no broker-order route", !source.match(/\/v2\/orders|orderAndFill|placeFill|closePosition/));
+truth("session-close label remains explicit", source.includes('process.argv.includes("--require-flat")'));
+truth("stable gate uses release-agnostic engine", source.includes("evaluatePreopenReadiness"));
+truth("temporary RC5.4 authority is isolated behind an adapter", source.includes("rc54OperationalContract"));
+truth("temporary receipt parsing is isolated behind the adapter", source.includes("observeRc54ReleaseReceipt")
+  && !source.includes("findSealedReleaseReceipt"));
+truth("draft control-plane manifest is explicitly excluded", source.includes("draft control-plane manifest excluded"));
+truth("all configured paper accounts are selected", source.includes('account.mode.toLowerCase() === "paper"'));
+truth("account queries are not restricted to manifest accounts", !source.match(/accounts[^;]+requiredAccountIds/s));
+truth("every configured account reads broker positions", source.includes('brokerGet(brokerOrigin, "/v2/positions", credentials)'));
+truth("every configured account reads open broker orders", source.includes('brokerGet(brokerOrigin, "/v2/orders?status=open&limit=500'));
+truth("database position read includes immutable position id and remains open-only",
+  source.includes('.from("positions").select("id,strategist_id,occ_symbol,qty").eq("status", "open")'));
+truth("immutable execution routing is queried for all open positions",
+  source.includes('.from("execution_observations")')
+  && source.includes('.select("id,position_id,account_id,event_at")')
+  && source.includes('.in("position_id", positionIds)'));
+truth("shared pure immutable attribution helper is used",
+  source.includes("attributePositionsByImmutableExecutionAccount"));
+truth("immutable attribution failures feed the fail-closed readiness blockers",
+  source.includes("bindingIssues: [...bindings.issues, ...attribution.issues]"));
+truth("mutable strategist account assignment is never an attribution fallback",
+  !source.includes("channelsById")
+  && !source.match(/position\.strategist_id[\s\S]{0,120}account_id/));
+truth("unattributed open desk positions are surfaced", source.includes("unattributedDeskPositionCount"));
+truth("all open worker ledger rows are read for liveness cardinality", source.includes('.from("worker_runs")'));
+truth("sealed release query accepts the active lane instead of Day 1 only", source.includes('.ilike("message", "%release ACTIVE%")'));
+truth("script does not import Day 1 roots", !source.includes("DAY1_ROOTS"));
+truth("script does not import draft control-plane fixtures", !source.includes("RC54_CONTROL_PLANE_FIXTURE"));
+truth("contains no database mutations", !source.match(/\.(insert|update|upsert)\s*\(/)
+  && !source.match(/\.from\([^)]+\)[\s\S]{0,200}\.delete\s*\(/));
+truth("contains no broker order placement route", !source.match(/placeOrder|submitOrder|closePosition|\/v2\/orders[^?]/));
+truth("success disclaims configuration and order authority", source.includes("not configuration approval, activation authority, or order authority"));
 
 console.log(`postclose-readiness-selftest: ${passed}/${passed} PASS`);

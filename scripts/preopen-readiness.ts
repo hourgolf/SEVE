@@ -1,60 +1,55 @@
 // ============================================================================
-//  Pre-open readiness gate — read-only proof of the production paper boundary,
-//  broker/desk flatness, worker liveness, and the effective armed-channel book.
+// Release-agnostic pre-open operational-congruence gate.
 //
-//  Run: npm run preopen
-//
-//  This script never places an order and never writes Supabase. It deliberately
-//  prints no API keys, account numbers, UUIDs, or broker account identifiers.
+// This command is SELECT/GET only. It does not judge or authorize configuration
+// changes, create control-plane records, write evidence, or place orders.
+// The temporary RC5.4 adapter describes the currently active sealed worker
+// overlay. Draft control-plane manifests are intentionally not runtime authority.
 // ============================================================================
 
-import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS } from "@/lib/channels/day1Release";
-import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
-import { deriveSentinelReceiptStatus } from "@/lib/sentinel/receipt";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type { MarketEvent } from "@/lib/types";
-import { DAY1_SEALED_RUNTIME_POSTURE } from "@/worker/src/day1ReleasePolicy";
-import { WORKER_RUNTIME_VERSION, WORKER_VERSION } from "@/worker/src/version";
+import {
+  evaluatePreopenReadiness,
+  type PaperAccountObservation,
+  type WorkerObservation,
+} from "@/lib/ops/preopenReadinessEngine";
+import {
+  attributePositionsByImmutableExecutionAccount,
+  type ExecutionAccountObservation,
+} from "@/lib/ops/brokerReconciliation";
+import {
+  mapRc54ChannelRow,
+  observeRc54ReleaseReceipt,
+  observeRc54Bindings,
+  rc54OperationalContract,
+} from "./ops/rc54ReadinessAdapter";
+import type { AccountRow } from "@/worker/src/store";
 import { createServerSupabaseClient } from "./serverSupabase";
 
-const REQUIRED_PAPER_HOST = "https://paper-api.alpaca.markets";
-const WORKER_FRESH_SEC = 150;
-
-type AccountRow = {
-  id: string;
-  name: string;
-  cred_ref: string | null;
-  is_armed: boolean;
-  is_halted: boolean;
-  master_daily_stop_usd: number | string | null;
+const WORKER_FRESH_MS = 150_000;
+const arg = (name: string): string | null => {
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : null;
 };
 
-type ConfigRow = {
-  max_contracts: number | string | null;
-  capital_pct: number | string | null;
-  daily_stop_usd: number | string | null;
-  daily_target_usd: number | string | null;
-  premium_stop_pct: number | string | null;
-  take_profit_pct: number | string | null;
-  underlying_stop_pct: number | string | null;
-  entry_dte: number | string | null;
-  strike_offset: number | string | null;
-  muted: boolean | null;
-  boosted: boolean | null;
-  event_policy: string | null;
-};
+const envFile = arg("env-file") ?? process.env.SEVE_ENV_FILE ?? null;
+if (envFile) {
+  const path = resolve(envFile);
+  if (!existsSync(path)) throw new Error(`environment file not found: ${path}`);
+  process.loadEnvFile(path);
+} else if (existsSync(resolve(".env.local"))) {
+  process.loadEnvFile(resolve(".env.local"));
+}
 
-type ChannelRow = {
-  id: string;
-  slug: string;
-  status: string;
-  underlying: string | null;
-  executor: string | null;
-  account_id: string | null;
-  is_active: boolean | null;
-  strategist_config: ConfigRow | ConfigRow[] | null;
+type FundRow = {
+  mode: string | null;
+  is_halted: boolean | null;
 };
 
 type PositionRow = {
+  id: string;
   strategist_id: string;
   occ_symbol: string;
   qty: number | string;
@@ -62,7 +57,6 @@ type PositionRow = {
 
 type WorkerRow = {
   version: string | null;
-  git_sha: string | null;
   started_at: string | null;
   last_heartbeat_at: string | null;
   last_phase: string | null;
@@ -70,267 +64,265 @@ type WorkerRow = {
   last_error: string | null;
 };
 
-type BrokerPosition = { symbol?: string; qty?: string | number };
+type BrokerPosition = {
+  symbol?: string;
+  qty?: string | number;
+};
 
-const num = (value: unknown): number => Number(value ?? 0);
-const usd = (value: number): string => `$${Math.round(value).toLocaleString()}`;
-const pad = (value: string, width: number): string => (value + " ".repeat(width)).slice(0, width);
-const padL = (value: string, width: number): string => (" ".repeat(width) + value).slice(-width);
+type BrokerOrder = {
+  id?: string;
+};
 
-function configOf(channel: ChannelRow): ConfigRow | null {
-  if (Array.isArray(channel.strategist_config)) return channel.strategist_config[0] ?? null;
-  return channel.strategist_config;
-}
-
-function envCreds(ref: string | null): { key: string; secret: string } | null {
+function envCredentials(ref: string | null): { key: string; secret: string } | null {
   const suffix = ref ? `_${ref}` : "";
   const key = process.env[`ALPACA_KEY${suffix}`];
   const secret = process.env[`ALPACA_SECRET${suffix}`];
   return key && secret ? { key, secret } : null;
 }
 
-async function brokerRead(path: string, creds: { key: string; secret: string }): Promise<Response> {
-  return fetch(`${REQUIRED_PAPER_HOST}${path}`, {
+async function brokerGet(
+  origin: string,
+  path: string,
+  credentials: { key: string; secret: string },
+): Promise<Response> {
+  return fetch(`${origin}${path}`, {
     headers: {
-      "APCA-API-KEY-ID": creds.key,
-      "APCA-API-SECRET-KEY": creds.secret,
+      "APCA-API-KEY-ID": credentials.key,
+      "APCA-API-SECRET-KEY": credentials.secret,
       accept: "application/json",
     },
     signal: AbortSignal.timeout(15_000),
   });
 }
 
-function aggregateDeskPositions(
-  positions: PositionRow[],
-  channelsById: Map<string, ChannelRow>,
-  accountId: string,
-): Map<string, number> {
+function aggregatePositions(rows: readonly { symbol: string; qty: number }[]): Map<string, number> {
   const result = new Map<string, number>();
-  for (const position of positions) {
-    if (channelsById.get(position.strategist_id)?.account_id !== accountId) continue;
-    result.set(position.occ_symbol, (result.get(position.occ_symbol) ?? 0) + num(position.qty));
+  for (const row of rows) {
+    if (!row.symbol || !Number.isFinite(row.qty)) continue;
+    result.set(row.symbol, (result.get(row.symbol) ?? 0) + row.qty);
+  }
+  for (const [symbol, quantity] of result) {
+    if (Math.abs(quantity) < 0.001) result.delete(symbol);
   }
   return result;
 }
 
-function aggregateBrokerPositions(positions: BrokerPosition[]): Map<string, number> {
-  const result = new Map<string, number>();
-  for (const position of positions) {
-    const symbol = String(position.symbol ?? "");
-    if (!symbol) continue;
-    result.set(symbol, (result.get(symbol) ?? 0) + num(position.qty));
-  }
-  return result;
+function sameBook(left: Map<string, number>, right: Map<string, number>): boolean {
+  const symbols = new Set([...left.keys(), ...right.keys()]);
+  return [...symbols].every((symbol) =>
+    Math.abs((left.get(symbol) ?? 0) - (right.get(symbol) ?? 0)) < 0.001);
 }
 
-function sameBook(a: Map<string, number>, b: Map<string, number>): boolean {
-  const symbols = new Set([...a.keys(), ...b.keys()]);
-  return [...symbols].every((symbol) => Math.abs((a.get(symbol) ?? 0) - (b.get(symbol) ?? 0)) < 0.001);
+async function observePaperAccount(input: {
+  account: AccountRow;
+  deskPositions: PositionRow[];
+  brokerOrigin: string;
+}): Promise<PaperAccountObservation> {
+  const { account, deskPositions, brokerOrigin } = input;
+  const deskBook = aggregatePositions(deskPositions
+    .map((position) => ({ symbol: position.occ_symbol, qty: Number(position.qty) })));
+  const credentials = envCredentials(account.cred_ref);
+  const base = {
+    accountId: account.id,
+    name: account.name,
+    mode: account.mode,
+    configuredArmed: account.is_armed,
+    configuredHalted: account.is_halted,
+    credentialsPresent: credentials != null,
+    deskPositionCount: deskPositions
+      .filter((position) => Math.abs(Number(position.qty)) >= 0.001).length,
+  };
+  if (!credentials) {
+    return {
+      ...base,
+      brokerReachable: false,
+      brokerActive: false,
+      brokerUnblocked: false,
+      brokerIdentity: null,
+      positionsKnown: false,
+      ordersKnown: false,
+      openOrderCount: null,
+      brokerPositionCount: null,
+      booksMatch: false,
+    };
+  }
+
+  try {
+    const [accountResponse, positionsResponse, ordersResponse] = await Promise.all([
+      brokerGet(brokerOrigin, "/v2/account", credentials),
+      brokerGet(brokerOrigin, "/v2/positions", credentials),
+      brokerGet(brokerOrigin, "/v2/orders?status=open&limit=500&direction=asc&nested=false", credentials),
+    ]);
+    const brokerAccount = accountResponse.ok
+      ? await accountResponse.json() as Record<string, unknown>
+      : null;
+    const brokerPositions = positionsResponse.ok
+      ? await positionsResponse.json() as BrokerPosition[]
+      : null;
+    const openOrders = ordersResponse.ok
+      ? await ordersResponse.json() as BrokerOrder[]
+      : null;
+    const positionsKnown = Array.isArray(brokerPositions);
+    const ordersKnown = Array.isArray(openOrders);
+    const brokerBook = positionsKnown
+      ? aggregatePositions(brokerPositions.map((position) => ({
+          symbol: String(position.symbol ?? ""),
+          qty: Number(position.qty ?? 0),
+        })))
+      : new Map<string, number>();
+    return {
+      ...base,
+      brokerReachable: accountResponse.ok,
+      brokerActive: brokerAccount?.status === "ACTIVE",
+      brokerUnblocked: brokerAccount?.account_blocked === false
+        && brokerAccount?.trading_blocked === false,
+      brokerIdentity: brokerAccount
+        ? String(brokerAccount.id ?? brokerAccount.account_number ?? "") || null
+        : null,
+      positionsKnown,
+      ordersKnown,
+      openOrderCount: ordersKnown ? openOrders.length : null,
+      brokerPositionCount: positionsKnown ? brokerBook.size : null,
+      booksMatch: positionsKnown && sameBook(deskBook, brokerBook),
+    };
+  } catch {
+    return {
+      ...base,
+      brokerReachable: false,
+      brokerActive: false,
+      brokerUnblocked: false,
+      brokerIdentity: null,
+      positionsKnown: false,
+      ordersKnown: false,
+      openOrderCount: null,
+      brokerPositionCount: null,
+      booksMatch: false,
+    };
+  }
 }
 
 async function main(): Promise<void> {
-  const requireFlat = process.argv.includes("--require-flat");
-  const brokerRuntimeOnly = process.argv.includes("--broker-runtime-only");
-  const gateLabel = requireFlat
-    ? brokerRuntimeOnly ? "SESSION-CLOSE BROKER/RUNTIME READINESS" : "SESSION-CLOSE READINESS"
-    : "PRE-OPEN READINESS";
-  const configuredHost = process.env.ALPACA_PAPER_HOST ?? REQUIRED_PAPER_HOST;
-  const failures: string[] = [];
-  const warnings: string[] = [];
-  if (configuredHost !== REQUIRED_PAPER_HOST) failures.push(`ALPACA_PAPER_HOST is ${configuredHost}; expected ${REQUIRED_PAPER_HOST}`);
-
-  // The production desk is private: anon reads are intentionally denied by
-  // RLS. This local operator gate therefore uses the server-only service role
-  // for SELECTs. Keep this script structurally read-only; never pass this key to
-  // browser code or add a mutation to the preopen path.
+  const closeMode = process.argv.includes("--require-flat");
   const sb = createServerSupabaseClient("preopen-readiness");
-  const [fundRead, accountsRead, channelsRead, positionsRead, workerRead, releaseRead, sentinelRead] = await Promise.all([
-    sb.from("fund_state").select("mode,is_halted,halted_reason").eq("id", 1).maybeSingle(),
-    sb.from("accounts").select("id,name,cred_ref,is_armed,is_halted,master_daily_stop_usd").order("name"),
-    sb.from("strategists").select("id,slug,status,underlying,executor,account_id,is_active,strategist_config(max_contracts,capital_pct,daily_stop_usd,daily_target_usd,premium_stop_pct,take_profit_pct,underlying_stop_pct,entry_dte,strike_offset,muted,boosted,event_policy)").order("slug"),
-    sb.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open"),
-    sb.from("worker_runs").select("version,git_sha,started_at,last_heartbeat_at,last_phase,ended_at,last_error").is("ended_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
-    sb.from("events").select("id,level,message,created_at,strategist_id,meta").ilike("message", "%day1-release ACTIVE%").order("created_at", { ascending: false }).limit(1),
-    sb.from("events").select("id,level,message,created_at,strategist_id,meta").ilike("message", "sentinel:%").order("created_at", { ascending: false }).limit(1),
+  const [
+    fundRead,
+    accountRead,
+    strategistRead,
+    positionsRead,
+    workerRead,
+    releaseRead,
+  ] = await Promise.all([
+    sb.from("fund_state").select("mode,is_halted").eq("id", 1).maybeSingle(),
+    sb.from("accounts")
+      .select("id,name,mode,cred_ref,is_armed,is_halted,master_daily_stop_usd")
+      .order("name"),
+    sb.from("strategists")
+      .select("id,slug,name,status,spec_json,underlying,executor,account_id,is_active,strategist_config(*)")
+      .order("slug"),
+    sb.from("positions").select("id,strategist_id,occ_symbol,qty").eq("status", "open"),
+    sb.from("worker_runs")
+      .select("version,started_at,last_heartbeat_at,last_phase,ended_at,last_error")
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(20),
+    sb.from("events")
+      .select("id,level,message,created_at,strategist_id,meta")
+      .ilike("message", "%release ACTIVE%")
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   for (const [label, error] of [
-    ["fund_state", fundRead.error], ["accounts", accountsRead.error], ["strategists", channelsRead.error],
-    ["positions", positionsRead.error], ["worker_runs", workerRead.error], ["release receipt", releaseRead.error],
-  ] as const) if (error) failures.push(`${label} read failed: ${error.message}`);
-
-  const fund = fundRead.data as { mode?: string; is_halted?: boolean; halted_reason?: string | null } | null;
-  if (!fund) failures.push("fund_state row missing");
-  else {
-    if (fund.mode !== "paper") failures.push(`fund mode is ${fund.mode ?? "missing"}, not paper`);
-    if (fund.is_halted) warnings.push(`fund is intentionally HALTED${fund.halted_reason ? `: ${fund.halted_reason}` : ""}`);
+    ["fund_state", fundRead.error],
+    ["accounts", accountRead.error],
+    ["strategists", strategistRead.error],
+    ["positions", positionsRead.error],
+    ["worker_runs", workerRead.error],
+    ["release events", releaseRead.error],
+  ] as const) {
+    if (error) throw new Error(`${label} SELECT failed: ${error.message}`);
   }
 
-  const worker = workerRead.data as WorkerRow | null;
-  let workerAgeSec = Infinity;
-  if (!worker?.last_heartbeat_at) failures.push("no open worker run with a heartbeat");
-  else {
-    workerAgeSec = Math.max(0, (Date.now() - Date.parse(worker.last_heartbeat_at)) / 1000);
-    if (workerAgeSec > WORKER_FRESH_SEC) failures.push(`worker heartbeat is ${Math.round(workerAgeSec)}s old`);
-    if (worker.last_error) failures.push(`worker reports an error: ${worker.last_error}`);
-    if (worker.version !== WORKER_RUNTIME_VERSION) failures.push(`worker runtime is ${worker.version ?? "missing"}; expected ${WORKER_RUNTIME_VERSION}`);
-  }
-
-  const release = findDay1ReleaseReceipt((releaseRead.data ?? []) as MarketEvent[]);
-  if (!brokerRuntimeOnly) {
-    if (!release) failures.push("no Day 1 startup receipt observed");
-    else {
-      if (release.releaseId !== DAY1_RELEASE_ID) failures.push(`release id is ${release.releaseId}; expected ${DAY1_RELEASE_ID}`);
-      if (release.configHash !== DAY1_CONFIG_HASH) failures.push(`release hash is ${release.configHash}; expected ${DAY1_CONFIG_HASH}`);
-      if (worker?.started_at && Date.parse(release.createdAt) < Date.parse(worker.started_at)) {
-        failures.push("latest Day 1 receipt predates the current worker run");
-      }
-      if (release.alpacaPaperOrigin !== REQUIRED_PAPER_HOST) {
-        failures.push(`release paper origin is ${release.alpacaPaperOrigin ?? "unverified"}; expected ${REQUIRED_PAPER_HOST}`);
-      }
-      if (release.dryRun !== false || release.liveTrading !== true) {
-        failures.push(`paper executor is not enabled (dryRun=${String(release.dryRun)}, liveTrading=${String(release.liveTrading)})`);
-      }
-    }
-  }
-
-  const sentinelEvent = ((sentinelRead.data ?? []) as MarketEvent[])[0];
-  const sentinelMeta = (sentinelEvent?.meta ?? {}) as Record<string, unknown>;
-  const sentinelBrief = (sentinelMeta.brief ?? {}) as Record<string, unknown>;
-  const sentinelReceipt = deriveSentinelReceiptStatus({
-    state: sentinelRead.error ? "error" : sentinelEvent ? "ok" : "empty",
-    err: sentinelRead.error?.message,
-    date: typeof sentinelMeta.date === "string" ? sentinelMeta.date : undefined,
-    forDate: typeof sentinelMeta.forDate === "string" ? sentinelMeta.forDate : typeof sentinelBrief.forDate === "string" ? sentinelBrief.forDate : undefined,
-    session: typeof sentinelMeta.session === "string" ? sentinelMeta.session : undefined,
-    createdAt: sentinelEvent?.created_at,
-    publishedAt: typeof sentinelMeta.publishedAt === "string" ? sentinelMeta.publishedAt : undefined,
-    message: sentinelEvent?.message,
-    schemaVersion: typeof sentinelMeta.schemaVersion === "number" ? sentinelMeta.schemaVersion : null,
-    publisherVersion: typeof sentinelMeta.publisherVersion === "string" ? sentinelMeta.publisherVersion : undefined,
-    briefAsOf: typeof sentinelBrief.asOf === "string" ? sentinelBrief.asOf : undefined,
+  const allAccounts = (accountRead.data ?? []) as AccountRow[];
+  const configuredPaperAccounts = allAccounts.filter((account) =>
+    account.mode.toLowerCase() === "paper");
+  const fleet = (strategistRead.data ?? []).map((row) =>
+    mapRc54ChannelRow(row as Record<string, unknown>));
+  const bindings = observeRc54Bindings(fleet, allAccounts);
+  const contract = rc54OperationalContract(bindings.roots);
+  const deskPositions = (positionsRead.data ?? []) as PositionRow[];
+  const configuredPaperAccountIds = new Set(configuredPaperAccounts.map((account) => account.id));
+  const positionIds = deskPositions.map((position) => position.id);
+  const routesRead = positionIds.length
+    ? await sb.from("execution_observations")
+      .select("id,position_id,account_id,event_at")
+      .in("position_id", positionIds)
+      .order("event_at", { ascending: false })
+      .order("id", { ascending: false })
+    : { data: [] as ExecutionAccountObservation[], error: null };
+  const attribution = attributePositionsByImmutableExecutionAccount({
+    positions: deskPositions,
+    observations: (routesRead.data ?? []) as ExecutionAccountObservation[],
+    configuredPaperAccountIds,
+    readError: routesRead.error?.message,
   });
-  if (sentinelReceipt.tone !== "green") warnings.push(`Sentinel ${sentinelReceipt.label}: ${sentinelReceipt.detail}`);
+  const unattributedDeskPositionCount =
+    attribution.missingPositionIds.length + attribution.unconfiguredRoutes.length;
+  const accountObservations = await Promise.all(configuredPaperAccounts.map((account) =>
+    observePaperAccount({
+      account,
+      deskPositions: attribution.byAccount.get(account.id) ?? [],
+      brokerOrigin: contract.paperOrigin,
+    })));
+  const workers: WorkerObservation[] = ((workerRead.data ?? []) as WorkerRow[]).map((worker) => ({
+    runtimeVersion: worker.version,
+    startedAt: worker.started_at,
+    heartbeatAt: worker.last_heartbeat_at,
+    lastPhase: worker.last_phase,
+    lastError: worker.last_error,
+  }));
+  const receipt = observeRc54ReleaseReceipt((releaseRead.data ?? []) as MarketEvent[]);
+  const fund = fundRead.data as FundRow | null;
+  const result = evaluatePreopenReadiness({
+    nowMs: Date.now(),
+    workerFreshMs: WORKER_FRESH_MS,
+    fund: { mode: fund?.mode ?? null, halted: fund?.is_halted ?? null },
+    contract,
+    bindingIssues: [...bindings.issues, ...attribution.issues],
+    workers,
+    receipt,
+    configuredPaperAccounts: accountObservations,
+    unattributedDeskPositionCount,
+  });
 
-  const accounts = (accountsRead.data ?? []) as AccountRow[];
-  const allChannels = (channelsRead.data ?? []) as ChannelRow[];
-  const channels = allChannels.filter((channel) => channel.status === "armed" && channel.is_active === true);
-  const positions = (positionsRead.data ?? []) as PositionRow[];
-  const channelsById = new Map(allChannels.map((channel) => [channel.id, channel]));
-  const channelsBySlug = new Map(allChannels.map((channel) => [channel.slug, channel]));
-  const accountById = new Map(accounts.map((account) => [account.id, account]));
-  const identities = new Set<string>();
+  console.log(`\n══ SEVE ${closeMode ? "SESSION-CLOSE" : "PRE-OPEN"} OPERATIONAL CONGRUENCE · READ ONLY ══`);
+  console.log(`Adapter     : ${contract.adapterId}`);
+  console.log(`Authority   : sealed runtime overlay · draft control-plane manifest excluded`);
+  console.log(`Release     : ${contract.releaseId}`);
+  console.log(`Config      : ${contract.configurationSha256}`);
+  console.log(`Fleet       : ${bindings.fleetCount} database rows · ${contract.roots.length} sealed roots`);
+  console.log(`Accounts    : ${accountObservations.length} configured paper account(s) queried`);
+  console.log(`Worker      : ${result.currentWorker?.runtimeVersion ?? "missing"} · ${result.currentWorker?.lastPhase ?? "unknown"}\n`);
 
-  console.log(`\n══ SEVE ${gateLabel} · READ ONLY ══`);
-  console.log(`Broker host : ${configuredHost} ${configuredHost === REQUIRED_PAPER_HOST ? "✓ PAPER" : "✗"}`);
-  console.log(`Fund        : ${fund?.mode ?? "missing"} · halted=${fund?.is_halted ? "TRUE" : "false"}`);
-  console.log(`Worker      : runtime ${worker?.version ?? "missing"} · sealed strategy ${WORKER_VERSION} · ${Math.round(workerAgeSec)}s · ${worker?.last_phase ?? "?"} · ${worker?.last_error ? "ERROR" : "clean"}`);
-  console.log(brokerRuntimeOnly
-    ? "Release     : delegated to the separate current-release binding and identity check"
-    : `Release     : ${release?.releaseId ?? "missing"} · ${release?.configHash.slice(0, 12) ?? "—"}${release ? "…" : ""}`);
-  console.log(brokerRuntimeOnly
-    ? "Execution   : release authority not evaluated in broker/runtime-only mode"
-    : `Execution   : ${release?.dryRun === false && release?.liveTrading === true ? "PAPER EXECUTOR" : "SHADOW / UNVERIFIED"} · dryRun=${String(release?.dryRun ?? null)} · liveTrading=${String(release?.liveTrading ?? null)}`);
-  console.log(`Sentinel    : ${sentinelReceipt.label} · ${sentinelReceipt.detail}`);
-  console.log(`Desk rows   : ${positions.length} open\n`);
-
-  console.log("Paper broker accounts:");
-  for (const account of accounts) {
-    const creds = envCreds(account.cred_ref);
-    if (!creds) {
-      failures.push(`${account.name}: credentials missing for cred_ref ${account.cred_ref ?? "default"}`);
-      console.log(`  ✗ ${pad(account.name, 12)} credentials missing`);
-      continue;
-    }
-    try {
-      const [accountResponse, positionsResponse] = await Promise.all([
-        brokerRead("/v2/account", creds), brokerRead("/v2/positions", creds),
-      ]);
-      const brokerAccount = await accountResponse.json() as Record<string, unknown>;
-      const brokerPositions = positionsResponse.ok ? await positionsResponse.json() as BrokerPosition[] : [];
-      const identity = String(brokerAccount.id ?? brokerAccount.account_number ?? "");
-      const unique = !!identity && !identities.has(identity);
-      if (identity) identities.add(identity);
-      const active = accountResponse.ok && brokerAccount.status === "ACTIVE";
-      const unblocked = brokerAccount.account_blocked === false && brokerAccount.trading_blocked === false;
-      const deskBook = aggregateDeskPositions(positions, channelsById, account.id);
-      const brokerBook = aggregateBrokerPositions(brokerPositions);
-      const booksMatch = positionsResponse.ok && sameBook(deskBook, brokerBook);
-      const accountFlat = booksMatch && brokerBook.size === 0 && deskBook.size === 0;
-      if (!active) failures.push(`${account.name}: paper broker account is not ACTIVE`);
-      if (!unblocked) failures.push(`${account.name}: paper broker account is blocked`);
-      if (!unique) failures.push(`${account.name}: broker identity missing or duplicates another account`);
-      if (!booksMatch) failures.push(`${account.name}: desk open lots do not match paper broker positions`);
-      if (requireFlat && !accountFlat) failures.push(`${account.name}: session-close gate requires broker and desk flat`);
-      if (!account.is_armed || account.is_halted) warnings.push(`${account.name}: entries are ${account.is_halted ? "HALTED" : "DISARMED"}`);
-      console.log(`  ${active && unblocked && unique && booksMatch ? "✓" : "✗"} ${pad(account.name, 12)} ACTIVE · distinct · broker ${brokerBook.size} / desk ${deskBook.size} OCCs${account.is_armed && !account.is_halted ? "" : " · entries off"}`);
-    } catch (error) {
-      failures.push(`${account.name}: paper broker read failed: ${(error as Error).message}`);
-      console.log(`  ✗ ${pad(account.name, 12)} unreachable`);
-    }
+  for (const item of result.checks) {
+    const mark = item.state === "pass" ? "✓" : item.state === "warn" ? "!" : "✗";
+    console.log(`  ${mark} ${item.id} — ${item.fact}`);
   }
 
-  console.log(brokerRuntimeOnly
-    ? "\nSealed release: not evaluated here; the caller must run a current-release binding and identity check"
-    : "\nSealed RC5 runtime roots:");
-  if (!brokerRuntimeOnly) {
-    console.log(`  ${pad("CHANNEL", 28)} ${pad("ACCOUNT", 12)} ${pad("SYM", 4)} ${padL("QTY", 4)} ${padL("RISK", 7)} ${padL("PREM≤", 7)} ${padL("DEBIT≤", 8)} ${padL("STOP", 7)} ${padL("TAKE", 7)} ${pad("EOD", 6)} ${pad("DB", 7)}`);
+  if (result.warnings.length) {
+    console.log(`\nWarnings (${result.warnings.length}) require explanation but are not hidden.`);
   }
-
-  let readyRoots = 0;
-  const rootPolicies = Object.values(DAY1_ROOTS).sort((a, b) => a.accountName.localeCompare(b.accountName) || a.priority - b.priority || a.slug.localeCompare(b.slug));
-  for (const root of brokerRuntimeOnly ? [] : rootPolicies) {
-    const channel = channelsBySlug.get(root.slug);
-    const account = accountById.get(root.accountId);
-    const cfg = channel ? configOf(channel) : null;
-    const dbState = !channel
-      ? "MISSING"
-      : channel.status !== "armed" || channel.is_active !== true
-        ? "OFF"
-        : cfg?.muted
-          ? "MUTED"
-          : account?.is_armed && !account?.is_halted
-            ? "READY"
-            : "OFF";
-
-    if (!channel) failures.push(`${root.slug}: sealed root is missing from armed/active database rows`);
-    else {
-      if (channel.status !== "armed" || channel.is_active !== true) failures.push(`${root.slug}: sealed root is not armed and active in the database`);
-      if (channel.account_id !== root.accountId) failures.push(`${root.slug}: database account does not match the sealed root binding`);
-      if (channel.executor !== "stream") failures.push(`${root.slug}: executor is ${channel.executor ?? "missing"}, expected stream`);
-      if (channel.underlying !== root.underlying) failures.push(`${root.slug}: underlying is ${channel.underlying ?? "missing"}, expected ${root.underlying}`);
-      if (cfg?.muted) failures.push(`${root.slug}: sealed root is database-muted`);
-      if (num(cfg?.max_contracts) < root.quantity) failures.push(`${root.slug}: database max_contracts ${num(cfg?.max_contracts)} is below sealed quantity ${root.quantity}`);
-    }
-    if (!account) failures.push(`${root.slug}: sealed account binding does not resolve`);
-    if (dbState === "READY") readyRoots++;
-
-    const exit = root.givebackTrail ? "A13" : root.takeProfitPct ? `+${root.takeProfitPct}%` : "RIDE";
-    console.log(`  ${pad(root.slug, 28)} ${pad(root.accountName, 12)} ${pad(root.underlying, 4)} ${padL(String(root.quantity), 4)} ${padL(usd(root.riskBudgetUsd), 7)} ${padL(`$${root.premiumCap.toFixed(2)}`, 7)} ${padL(usd(root.aggregateDebitCap), 8)} ${padL(`-${root.premiumStopPct}%`, 7)} ${padL(exit, 7)} ${pad(root.eodEt, 6)} ${pad(dbState, 7)}`);
-  }
-
-  if (!brokerRuntimeOnly) {
-    const darkDatabaseRows = channels.filter((channel) => !DAY1_ROOTS[channel.slug]).length;
-    console.log(`\nRuntime     : ${readyRoots}/${rootPolicies.length} sealed roots ready · ${darkDatabaseRows} other armed/active DB rows suppressed to dark evidence by RC5`);
-    console.log(`Capture     : REQUIRED · ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.targetSamples} samples / ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.maxAgeMs / 1_000}s · ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.retryMaxAttempts} attempts · bounded ${DAY1_SEALED_RUNTIME_POSTURE.heldCapture.stateMaxSamples.toLocaleString()} samples / ${Math.round(DAY1_SEALED_RUNTIME_POSTURE.heldCapture.stateMaxBytes / 1_048_576)} MiB`);
-    console.log(`Observer    : REQUIRED · ${DAY1_MANAGER_ARMS.length} shadow manager arms · quote age ≤${DAY1_SEALED_RUNTIME_POSTURE.managerShadow.quoteMaxAgeMs / 1_000}s`);
-    console.log("DB settings : context only where RC5 overlays policy; the startup receipt + worker version identify the active runtime contract");
-    console.log("Account stop: legacy display only; sealed per-channel risk governs the Day 1 roots above");
-  }
-  if (warnings.length) console.log(`\nWarnings (${warnings.length}):\n  - ${warnings.join("\n  - ")}`);
-  if (failures.length) {
-    console.error(`\n✗ ${requireFlat ? "SESSION-CLOSE" : "PRE-OPEN"} BLOCKED (${failures.length}):\n  - ${failures.join("\n  - ")}\n`);
+  if (!result.ready) {
+    console.error(`\n✗ NO NEW ENTRIES — ${result.blockers.length} operational congruence blocker(s).\n`);
     process.exitCode = 1;
     return;
   }
-  console.log(requireFlat
-    ? brokerRuntimeOnly
-      ? "\n✓ SESSION-CLOSE BROKER/RUNTIME GATES PASS — all paper broker and desk books are reconciled and flat; paper host, fund boundary, and worker liveness are verified\n"
-      : "\n✓ SESSION-CLOSE HARD GATES PASS — all bound paper broker and desk books are reconciled and flat; release, capture, and observer identity remain intact\n"
-    : "\n✓ PRE-OPEN HARD GATES PASS — paper executor, broker/desk books, worker liveness, sealed RC5 identity, and six-root routing\n");
+  console.log("\n✓ AUTOMATED OPERATIONAL CONGRUENCE PASS");
+  console.log("  This is not configuration approval, activation authority, or order authority.");
+  console.log("  Operator must still confirm the signed-in Operations panel agrees before the session.\n");
 }
 
-main().catch((error) => {
-  console.error(`preopen failed: ${(error as Error).message}`);
+void main().catch((cause) => {
+  console.error(`preopen failed closed: ${cause instanceof Error ? cause.message : String(cause)}`);
   process.exit(1);
 });

@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isDeskOperator } from "@/lib/auth/operator";
 import {
+  attributePositionsByImmutableExecutionAccount,
   reconcileBrokerPositions,
   type BrokerAccountInput,
   type BrokerPositionInput,
+  type ExecutionAccountObservation,
 } from "@/lib/ops/brokerReconciliation";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +18,6 @@ const SB_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 interface AccountRow { id: string; name: string; cred_ref: string | null; mode: string }
 interface PositionRow { id: string; strategist_id: string; occ_symbol: string; qty: number }
-interface ExecutionRouteRow { position_id: string | null; account_id: string; event_at: string }
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, {
   status,
@@ -59,36 +60,29 @@ export async function GET(req: Request) {
 
   const accounts = (accountsRead.data ?? []) as AccountRow[];
   const positions = (positionsRead.data ?? []) as PositionRow[];
-  const positionIds = positions.map((position) => position.id);
-  const routesRead = positionIds.length
-    ? await sb.from("execution_observations")
-      .select("position_id,account_id,event_at")
-      .in("position_id", positionIds)
-      .order("event_at", { ascending: false })
-    : { data: [] as ExecutionRouteRow[], error: null };
-  const executionRoutes = new Map<string, string>();
-  if (!routesRead.error) for (const row of (routesRead.data ?? []) as ExecutionRouteRow[]) {
-    if (row.position_id && !executionRoutes.has(row.position_id)) executionRoutes.set(row.position_id, row.account_id);
-  }
-  const deskByAccount = new Map<string, PositionRow[]>();
-  for (const position of positions) {
-    // The deployed positions schema has no account_id. Attribute through the
-    // immutable broker-result observation stamped at execution; never guess
-    // from a channel's mutable current account assignment.
-    const accountId = executionRoutes.get(position.id) ?? "";
-    const rows = deskByAccount.get(accountId) ?? [];
-    rows.push(position);
-    deskByAccount.set(accountId, rows);
-  }
-
   // Read every configured paper account, including soft-retired buckets: an
   // orphan broker lot can outlive account/channel activation state.
   const relevant = accounts.filter((account) => account.mode === "paper");
+  const positionIds = positions.map((position) => position.id);
+  const routesRead = positionIds.length
+    ? await sb.from("execution_observations")
+      .select("id,position_id,account_id,event_at")
+      .in("position_id", positionIds)
+      .order("event_at", { ascending: false })
+      .order("id", { ascending: false })
+    : { data: [] as ExecutionAccountObservation[], error: null };
+  const attribution = attributePositionsByImmutableExecutionAccount({
+    positions,
+    observations: (routesRead.data ?? []) as ExecutionAccountObservation[],
+    configuredPaperAccountIds: new Set(relevant.map((account) => account.id)),
+    readError: routesRead.error?.message,
+  });
   const inputs: BrokerAccountInput[] = await Promise.all(relevant.map(async (account) => {
     const ref = account.cred_ref?.trim() ?? "";
     const key = ref ? process.env[`ALPACA_KEY_${ref}`] : process.env.ALPACA_KEY;
     const secret = ref ? process.env[`ALPACA_SECRET_${ref}`] : process.env.ALPACA_SECRET;
-    const deskPositions = (deskByAccount.get(account.id) ?? []).map((row) => ({ symbol: row.occ_symbol, qty: Number(row.qty) }));
+    const deskPositions = (attribution.byAccount.get(account.id) ?? [])
+      .map((row) => ({ symbol: row.occ_symbol, qty: Number(row.qty) }));
     if (!key || !secret) return {
       accountId: account.id, accountName: account.name, reachable: false,
       error: "paper broker credentials unavailable in the web runtime", brokerPositions: [], deskPositions,
@@ -106,14 +100,16 @@ export async function GET(req: Request) {
     }
   }));
 
-  const unattributed = deskByAccount.get("") ?? [];
-  if (unattributed.length) inputs.push({
+  const blockedPositionIds = new Set([
+    ...attribution.missingPositionIds,
+    ...attribution.unconfiguredRoutes.map((route) => route.positionId),
+  ]);
+  const blockedPositions = positions.filter((position) => blockedPositionIds.has(position.id));
+  if (!attribution.ok) inputs.push({
     accountId: "unattributed", accountName: "UNATTRIBUTED DESK ROWS", reachable: false,
-    error: routesRead.error
-      ? `execution-route evidence unavailable: ${routesRead.error.message}`
-      : "open desk rows lack an immutable execution-account observation",
+    error: attribution.issues.join("; "),
     brokerPositions: [],
-    deskPositions: unattributed.map((row) => ({ symbol: row.occ_symbol, qty: Number(row.qty) })),
+    deskPositions: blockedPositions.map((row) => ({ symbol: row.occ_symbol, qty: Number(row.qty) })),
   });
 
   return json({ ok: true, receipt: reconcileBrokerPositions(inputs) });
