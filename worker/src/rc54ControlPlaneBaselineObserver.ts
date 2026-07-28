@@ -10,6 +10,8 @@ import {
 
 export const RC54_CONTROL_PLANE_BASELINE_OBSERVER_MODE =
   "rc54-control-plane-baseline-observer-disabled" as const;
+export const RC54_CONTROL_PLANE_BASELINE_MANIFEST_KEY =
+  buildRc54ControlPlaneBootstrap().manifest.manifestKey;
 
 type BaselineStatus = "draft" | "active";
 
@@ -72,6 +74,7 @@ export function observeRc54ControlPlaneBaseline(
   if (!input.manifest) {
     blockers.push("control_plane:manifest_missing");
   } else {
+    if (!input.manifest.id.trim()) blockers.push("control_plane:manifest_id_missing");
     if (!["draft", "active"].includes(input.manifest.status)) {
       blockers.push("control_plane:manifest_status_invalid");
     }
