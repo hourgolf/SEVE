@@ -7,10 +7,8 @@
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { DAY1_CONFIG_HASH, DAY1_RELEASE_ID } from "@/lib/channels/day1Release";
 import { etDayRangeUtc } from "@/lib/research/afterCloseResearch";
 import { nextTradingDay } from "@/engine/market-calendar";
-import { findDay1ReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import {
   DETERMINISTIC_SENTINEL_PUBLISHER_VERSION,
   deriveSentinelOperatorPacket,
@@ -18,12 +16,19 @@ import {
   type SentinelOperatorPacketInput,
 } from "@/lib/sentinel/operatorPacket";
 import { auditSentinelManagerBook } from "@/lib/sentinel/managerBookAudit";
+import { auditSentinelRelease } from "@/lib/sentinel/releaseAudit";
+import type { WorkerObservation } from "@/lib/ops/preopenReadinessEngine";
 import type { DarkCandidateFreeze } from "@/lib/research/darkCandidateFreeze";
 import type { DarkEvidenceCompleteness } from "@/lib/research/darkEvidenceCompleteness";
 import type { DarkExactReplayResult } from "@/lib/research/darkExactReplay";
 import type { MarketEvent } from "@/lib/types";
+import {
+  observeRc54ReleaseReceipt,
+  sealedRc54OperationalContract,
+} from "./ops/rc54ReadinessAdapter";
 import { createServerSupabaseClient } from "./serverSupabase";
 
+const WORKER_FRESH_MS = 150_000;
 const arg = (name: string, fallback = ""): string => {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
@@ -65,6 +70,13 @@ interface ManagerRow {
   entry_at: string;
 }
 interface EventRow { id: string; level: string; strategist_id: string | null; message: string; meta: unknown; created_at: string }
+interface WorkerRow {
+  version: string | null;
+  started_at: string | null;
+  last_heartbeat_at: string | null;
+  last_phase: string | null;
+  last_error: string | null;
+}
 interface DarkExactReport {
   inputs: { freezeCanonicalSha256: string };
   completeness: DarkEvidenceCompleteness;
@@ -104,19 +116,36 @@ async function main(): Promise<void> {
   }
 
   const sb = createServerSupabaseClient("deterministic-sentinel");
-  const [releaseRead, positionsRead, managersRead] = await Promise.all([
+  const [releaseRead, workerRead, positionsRead, managersRead] = await Promise.all([
     sb.from("events").select("id,level,strategist_id,message,meta,created_at")
-      .ilike("message", "%day1-release ACTIVE%").order("created_at", { ascending: false }).limit(1),
+      .ilike("message", "%release ACTIVE%").order("created_at", { ascending: false }).limit(50),
+    sb.from("worker_runs").select("version,started_at,last_heartbeat_at,last_phase,last_error")
+      .is("ended_at", null).order("started_at", { ascending: false }).limit(20),
     sb.from("positions").select("id,status,opened_at,closed_at,realized_pnl,close_reason,runner_of")
       .gte("opened_at", range.start).lt("opened_at", range.end).order("opened_at").limit(100),
     sb.from("manager_shadow_runs").select("id,position_id,manager_id,status,evidence_state,censor_code,entry_at")
       .gte("entry_at", range.start).lt("entry_at", range.end).order("entry_at").limit(1_000),
   ]);
-  for (const [label, read] of [["release", releaseRead], ["positions", positionsRead], ["managers", managersRead]] as const) {
+  for (const [label, read] of [["release", releaseRead], ["workers", workerRead], ["positions", positionsRead], ["managers", managersRead]] as const) {
     if (read.error) throw new Error(`${label} read failed: ${read.error.message}`);
   }
 
-  const release = findDay1ReleaseReceipt((releaseRead.data ?? []) as unknown as MarketEvent[]);
+  const releaseContract = sealedRc54OperationalContract();
+  const release = observeRc54ReleaseReceipt((releaseRead.data ?? []) as unknown as MarketEvent[]);
+  const workers = ((workerRead.data ?? []) as WorkerRow[]).map((row): WorkerObservation => ({
+    runtimeVersion: row.version,
+    startedAt: row.started_at,
+    heartbeatAt: row.last_heartbeat_at,
+    lastPhase: row.last_phase,
+    lastError: row.last_error,
+  }));
+  const releaseAudit = auditSentinelRelease({
+    contract: releaseContract,
+    receipt: release,
+    workers,
+    nowMs: Date.parse(generatedAt),
+    workerFreshMs: WORKER_FRESH_MS,
+  });
   const positions = (positionsRead.data ?? []) as PositionRow[];
   const managers = (managersRead.data ?? []) as ManagerRow[];
   const closed = positions.filter((row) => row.status === "closed" || row.closed_at != null);
@@ -136,7 +165,6 @@ async function main(): Promise<void> {
     })),
   );
   const { terminal, censored, active } = managerAudit;
-  const releaseOk = release?.releaseId === DAY1_RELEASE_ID && release.configHash === DAY1_CONFIG_HASH;
   const managersOk = managerAudit.complete;
   const managerDetail = managersOk
     ? `all ${managerAudit.requiredArms} required arms are terminal across ${managerAudit.rootPositions} root live path(s); ${managerAudit.runnerPositions} runner child row(s) excluded from the manager denominator`
@@ -147,12 +175,12 @@ async function main(): Promise<void> {
     forDate,
     generatedAt,
     release: {
-      state: releaseOk ? "ok" : release ? "conflict" : "missing",
-      source: "events:day1-release-startup-receipt",
-      asOf: release?.createdAt ?? null,
-      detail: releaseOk ? "sealed release identity matches the active startup receipt" : "active release identity is absent or conflicts with the sealed code contract",
-      releaseId: release?.releaseId ?? null,
-      configurationSha256: release?.configHash ?? null,
+      state: releaseAudit.state,
+      source: `events:sealed-startup-receipt+worker_runs:${releaseContract.adapterId}`,
+      asOf: releaseAudit.asOf,
+      detail: releaseAudit.detail,
+      releaseId: releaseAudit.releaseId,
+      configurationSha256: releaseAudit.configurationSha256,
     },
     liveBook: {
       state: open === 0 && pnlValues.every((value) => value != null) ? "ok" : open > 0 ? "partial" : "missing",
