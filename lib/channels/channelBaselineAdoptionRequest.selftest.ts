@@ -40,6 +40,7 @@ const packet = {
     configurationEpochId: projection.configurationEpochId,
     workerCompatibilityVersion: projection.workerCompatibilityVersion,
     workerReleaseId: compiled.manifest.releaseId,
+    workerRuntimeVersion: "stream-runtime-2026-07-27a",
     bootId: "boot:fixture",
     accountMode: "paper",
     posture: "baseline-observed-no-order-authority",
@@ -64,9 +65,17 @@ const packet = {
     },
   },
 };
+const refs = {
+  startupReceiptEventId: "event:fixture:startup",
+  workerAcknowledgementEventId: "event:fixture:worker-ack",
+};
 
-const build = (value: unknown = packet) => buildBaselineAdoptionRpcArgs({
+const build = (
+  value: unknown = refs,
+  evidence = packet,
+) => buildBaselineAdoptionRpcArgs({
   value,
+  evidence,
   operatorId: OPERATOR,
   requestId: REQUEST,
   adoptedAt: NOW,
@@ -94,11 +103,23 @@ check("server derives exact immutable baseline identities", () => {
 });
 
 check("unknown request fields fail closed", () => {
-  assert.throws(() => build({ ...packet, activateRuntime: true }), BaselineAdoptionInputError);
+  assert.throws(() => build({ ...refs, activateRuntime: true }), BaselineAdoptionInputError);
+});
+
+check("request body accepts stored event references only", () => {
+  assert.throws(() => build({
+    safeBoundaryProof: packet.safeBoundaryProof,
+    workerAcknowledgement: packet.workerAcknowledgement,
+    startupReceipt: packet.startupReceipt,
+  }), /must contain exactly/);
+  assert.throws(() => build({
+    ...refs,
+    workerAcknowledgementEventId: refs.startupReceiptEventId,
+  }), /must differ/);
 });
 
 check("safe boundary must be current and globally flat", () => {
-  assert.throws(() => build({
+  assert.throws(() => build(refs, {
     ...packet,
     safeBoundaryProof: {
       ...packet.safeBoundaryProof,
@@ -109,7 +130,7 @@ check("safe boundary must be current and globally flat", () => {
 });
 
 check("every configured account requires zero broker positions and orders", () => {
-  assert.throws(() => build({
+  assert.throws(() => build(refs, {
     ...packet,
     safeBoundaryProof: {
       ...packet.safeBoundaryProof,
@@ -121,7 +142,7 @@ check("every configured account requires zero broker positions and orders", () =
 });
 
 check("worker acknowledgement must bind the exact manifest and epoch", () => {
-  assert.throws(() => build({
+  assert.throws(() => build(refs, {
     ...packet,
     workerAcknowledgement: {
       ...packet.workerAcknowledgement,
@@ -131,7 +152,7 @@ check("worker acknowledgement must bind the exact manifest and epoch", () => {
 });
 
 check("worker acknowledgement must be fresh", () => {
-  assert.throws(() => build({
+  assert.throws(() => build(refs, {
     ...packet,
     workerAcknowledgement: {
       ...packet.workerAcknowledgement,
@@ -141,7 +162,7 @@ check("worker acknowledgement must be fresh", () => {
 });
 
 check("startup receipt must preserve exact RC5.4 economics and roster", () => {
-  assert.throws(() => build({
+  assert.throws(() => build(refs, {
     ...packet,
     startupReceipt: {
       ...packet.startupReceipt,
@@ -159,12 +180,15 @@ check("server route is authenticated, service-role-only and authority-free", () 
   ), "utf8");
   assert.match(source, /requireDeskOperator/);
   assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(source, /parseBaselineAdoptionEvidenceRefs/);
+  assert.match(source, /collectBaselineAdoptionServerEvidence/);
   assert.match(source, /adopt_channel_control_plane_baseline/);
   assert.match(source, /idempotency-key/);
   assert.match(source, /runtimeMutation: false/);
   assert.match(source, /orderAuthority: false/);
   assert.match(source, /activationAuthorized: false/);
   assert.doesNotMatch(source, /NEXT_PUBLIC_SUPABASE_ANON_KEY/);
+  assert.doesNotMatch(source, /value\.safeBoundaryProof/);
 });
 
 console.log(`channel-baseline-adoption-request-selftest: ${checks}/${checks} passed`);

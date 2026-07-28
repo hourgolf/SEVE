@@ -3,13 +3,15 @@ import {
   reconstructRc54Bootstrap,
 } from "../../lib/channels/rc54ControlPlaneBootstrap.js";
 import {
+  RC54_CONTROL_PLANE_BASELINE_OBSERVER_MODE,
+} from "../../lib/channels/channelBaselineAdoption.js";
+import {
   stageControlPlaneBaselineShadow,
   type BaselineWorkerAcknowledgement,
   type ControlPlaneBaselineStageInput,
 } from "./channelActivationShadowAdapter.js";
 
-export const RC54_CONTROL_PLANE_BASELINE_OBSERVER_MODE =
-  "rc54-control-plane-baseline-observer-disabled" as const;
+export { RC54_CONTROL_PLANE_BASELINE_OBSERVER_MODE };
 export const RC54_CONTROL_PLANE_BASELINE_MANIFEST_KEY =
   buildRc54ControlPlaneBootstrap().manifest.manifestKey;
 

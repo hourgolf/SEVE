@@ -157,6 +157,7 @@ check("exact current RC5.4 receipt acknowledges the no-change baseline manifest"
   assert.equal(result.acknowledgement?.manifestId, active.manifest.id);
   assert.equal(result.acknowledgement?.manifestContentHash, active.manifest.contentHash);
   assert.equal(result.acknowledgement?.configurationEpochId, result.projection.configurationEpochId);
+  assert.equal(result.acknowledgement?.workerRuntimeVersion, WORKER_RUNTIME_VERSION);
   assert.equal(result.acknowledgement?.posture, "baseline-observed-no-order-authority");
   assert.equal(result.activationAuthorized, false);
 });

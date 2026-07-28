@@ -11,12 +11,20 @@ import {
 import { RC54_CONTROL_PLANE_FIXTURE } from "./rc54ControlPlaneFixture";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const REQUEST_KEYS = ["safeBoundaryProof", "workerAcknowledgement", "startupReceipt"] as const;
+const REQUEST_KEYS = ["startupReceiptEventId", "workerAcknowledgementEventId"] as const;
 const MAX_PACKET_BYTES = 128 * 1024;
 const compiled = compileReleaseManifest(RC54_CONTROL_PLANE_FIXTURE);
 const projection = buildShadowRuntimeProjection(compiled);
 
+export const RC54_CONTROL_PLANE_BASELINE_OBSERVER_MODE =
+  "rc54-control-plane-baseline-observer-disabled" as const;
+
 export interface BaselineAdoptionRequest {
+  startupReceiptEventId: string;
+  workerAcknowledgementEventId: string;
+}
+
+export interface BaselineAdoptionResolvedEvidence {
   safeBoundaryProof: JsonObject;
   workerAcknowledgement: JsonObject;
   startupReceipt: JsonObject;
@@ -78,6 +86,34 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[], fiel
   }
 }
 
+function evidenceEventId(value: unknown, field: string): string {
+  const id = string(value).trim();
+  if (!id || id.length > 200 || /[\u0000-\u001f\u007f]/.test(id)) {
+    throw new BaselineAdoptionInputError(`${field} must be a valid stored event id`);
+  }
+  return id;
+}
+
+export function parseBaselineAdoptionEvidenceRefs(value: unknown): BaselineAdoptionRequest {
+  const body = object(value, "request body");
+  if (Buffer.byteLength(JSON.stringify(body), "utf8") > MAX_PACKET_BYTES) {
+    throw new BaselineAdoptionInputError(`request body exceeds ${MAX_PACKET_BYTES} bytes`);
+  }
+  exactKeys(body, REQUEST_KEYS, "request body");
+  const startupReceiptEventId = evidenceEventId(
+    body.startupReceiptEventId,
+    "startupReceiptEventId",
+  );
+  const workerAcknowledgementEventId = evidenceEventId(
+    body.workerAcknowledgementEventId,
+    "workerAcknowledgementEventId",
+  );
+  if (startupReceiptEventId === workerAcknowledgementEventId) {
+    throw new BaselineAdoptionInputError("startup and worker acknowledgement events must differ");
+  }
+  return { startupReceiptEventId, workerAcknowledgementEventId };
+}
+
 function parseSafeBoundary(value: unknown, nowMs: number): JsonObject {
   const proof = object(value, "safeBoundaryProof");
   if (proof.protocolVersion !== CHANNEL_ACTIVATION_PROTOCOL_VERSION || proof.globalFlat !== true) {
@@ -131,6 +167,7 @@ function parseWorkerAcknowledgement(value: unknown, nowMs: number): JsonObject {
       || acknowledgement.configurationEpochId !== projection.configurationEpochId
       || acknowledgement.workerCompatibilityVersion !== projection.workerCompatibilityVersion
       || acknowledgement.workerReleaseId !== compiled.manifest.releaseId
+      || !string(acknowledgement.workerRuntimeVersion).trim()
       || acknowledgement.accountMode !== "paper"
       || acknowledgement.posture !== "baseline-observed-no-order-authority"
       || !string(acknowledgement.bootId).trim()
@@ -179,6 +216,7 @@ function parseStartupReceipt(value: unknown): JsonObject {
 
 export function buildBaselineAdoptionRpcArgs(input: {
   value: unknown;
+  evidence: BaselineAdoptionResolvedEvidence;
   operatorId: string;
   requestId: string;
   adoptedAt?: string;
@@ -191,11 +229,7 @@ export function buildBaselineAdoptionRpcArgs(input: {
   }
   const adoptedAt = input.adoptedAt ?? new Date().toISOString();
   const nowMs = timestamp(adoptedAt, "server adoption timestamp");
-  const value = object(input.value, "request body");
-  if (Buffer.byteLength(JSON.stringify(value), "utf8") > MAX_PACKET_BYTES) {
-    throw new BaselineAdoptionInputError(`request body exceeds ${MAX_PACKET_BYTES} bytes`);
-  }
-  exactKeys(value, REQUEST_KEYS, "request body");
+  parseBaselineAdoptionEvidenceRefs(input.value);
   if (projection.state !== "comparable") {
     throw new BaselineAdoptionInputError("checked-in baseline projection is blocked", 409);
   }
@@ -207,9 +241,12 @@ export function buildBaselineAdoptionRpcArgs(input: {
     p_approval_evidence_ref: `operator:${input.operatorId.toLowerCase()}:request:${input.requestId.toLowerCase()}`,
     p_approved_at: adoptedAt,
     p_adopted_at: adoptedAt,
-    p_safe_boundary_proof: parseSafeBoundary(value.safeBoundaryProof, nowMs),
-    p_worker_acknowledgement: parseWorkerAcknowledgement(value.workerAcknowledgement, nowMs),
-    p_startup_receipt: parseStartupReceipt(value.startupReceipt),
+    p_safe_boundary_proof: parseSafeBoundary(input.evidence.safeBoundaryProof, nowMs),
+    p_worker_acknowledgement: parseWorkerAcknowledgement(
+      input.evidence.workerAcknowledgement,
+      nowMs,
+    ),
+    p_startup_receipt: parseStartupReceipt(input.evidence.startupReceipt),
     p_validator_versions: [
       CHANNEL_CONTROL_PLANE_COMPILER_VERSION,
       CHANNEL_ACTIVATION_PROTOCOL_VERSION,
@@ -223,5 +260,6 @@ export const BASELINE_ADOPTION_PACKET_IDENTITY = Object.freeze({
   manifestContentHash: projection.manifestContentHash,
   configurationEpochId: projection.configurationEpochId,
   workerCompatibilityVersion: projection.workerCompatibilityVersion,
+  legacyConfigurationHash: compiled.manifest.legacyConfigurationHash,
   activationAuthorized: false as const,
 });

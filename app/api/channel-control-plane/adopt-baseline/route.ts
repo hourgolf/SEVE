@@ -4,7 +4,11 @@ import { requireDeskOperator } from "@/lib/auth/serverOperator";
 import {
   BaselineAdoptionInputError,
   buildBaselineAdoptionRpcArgs,
+  parseBaselineAdoptionEvidenceRefs,
 } from "@/lib/channels/channelBaselineAdoption";
+import {
+  collectBaselineAdoptionServerEvidence,
+} from "@/lib/channels/channelBaselineAdoptionServerEvidence";
 
 export const dynamic = "force-dynamic";
 
@@ -42,17 +46,24 @@ export async function POST(req: Request) {
 
   try {
     const requestId = req.headers.get("idempotency-key")?.trim() ?? "";
-    const args = buildBaselineAdoptionRpcArgs({
-      value: await readJson(req),
-      operatorId: operator.user.id,
-      requestId,
-    });
+    const value = await readJson(req);
+    const refs = parseBaselineAdoptionEvidenceRefs(value);
     const sb = createClient(SB_URL, SB_SERVICE, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
         detectSessionInUrl: false,
       },
+    });
+    const evidence = await collectBaselineAdoptionServerEvidence({
+      sb,
+      refs,
+    });
+    const args = buildBaselineAdoptionRpcArgs({
+      value,
+      evidence,
+      operatorId: operator.user.id,
+      requestId,
     });
     const { data, error } = await sb.rpc(
       "adopt_channel_control_plane_baseline",

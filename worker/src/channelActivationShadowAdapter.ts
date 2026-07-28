@@ -56,6 +56,7 @@ export interface BaselineWorkerAcknowledgement {
   configurationEpochId: string;
   workerCompatibilityVersion: string;
   workerReleaseId: string;
+  workerRuntimeVersion: string;
   bootId: string;
   accountMode: "paper";
   posture: "baseline-observed-no-order-authority";
@@ -219,6 +220,7 @@ export function stageControlPlaneBaselineShadow(
       configurationEpochId: projection.configurationEpochId,
       workerCompatibilityVersion: projection.workerCompatibilityVersion,
       workerReleaseId: input.currentReleaseId,
+      workerRuntimeVersion: input.currentWorkerRuntimeVersion,
       bootId: input.bootId,
       accountMode: "paper",
       posture: "baseline-observed-no-order-authority",
