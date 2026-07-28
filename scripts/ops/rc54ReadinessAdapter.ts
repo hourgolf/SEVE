@@ -23,7 +23,7 @@ import type {
   OperationalReleaseContract,
   OperationalRootIdentity,
   ReleaseReceiptObservation,
-} from "./preopenReadinessEngine";
+} from "@/lib/ops/preopenReadinessEngine";
 
 export interface Rc54BindingObservation {
   issues: string[];

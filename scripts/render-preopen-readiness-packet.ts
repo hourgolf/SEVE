@@ -1,5 +1,5 @@
 import { renderPreopenReadinessPacket } from "@/lib/ops/preopenReadinessPacket";
-import { sealedRc54OperationalContract } from "@/lib/ops/rc54ReadinessAdapter";
+import { sealedRc54OperationalContract } from "./ops/rc54ReadinessAdapter";
 
 const arg = (name: string, fallback: string): string => {
   const index = process.argv.indexOf(`--${name}`);

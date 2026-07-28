@@ -20,7 +20,7 @@ import {
   observeRc54ReleaseReceipt,
   observeRc54Bindings,
   rc54OperationalContract,
-} from "@/lib/ops/rc54ReadinessAdapter";
+} from "./ops/rc54ReadinessAdapter";
 import type { AccountRow, ChannelConfig } from "@/worker/src/store";
 import { createServerSupabaseClient } from "./serverSupabase";
 
