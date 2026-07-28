@@ -16,12 +16,16 @@ import {
   type WorkerObservation,
 } from "@/lib/ops/preopenReadinessEngine";
 import {
+  attributePositionsByImmutableExecutionAccount,
+  type ExecutionAccountObservation,
+} from "@/lib/ops/brokerReconciliation";
+import {
   mapRc54ChannelRow,
   observeRc54ReleaseReceipt,
   observeRc54Bindings,
   rc54OperationalContract,
 } from "./ops/rc54ReadinessAdapter";
-import type { AccountRow, ChannelConfig } from "@/worker/src/store";
+import type { AccountRow } from "@/worker/src/store";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const WORKER_FRESH_MS = 150_000;
@@ -45,6 +49,7 @@ type FundRow = {
 };
 
 type PositionRow = {
+  id: string;
   strategist_id: string;
   occ_symbol: string;
   qty: number | string;
@@ -111,13 +116,10 @@ function sameBook(left: Map<string, number>, right: Map<string, number>): boolea
 async function observePaperAccount(input: {
   account: AccountRow;
   deskPositions: PositionRow[];
-  channelsById: Map<string, ChannelConfig>;
   brokerOrigin: string;
 }): Promise<PaperAccountObservation> {
-  const { account, deskPositions, channelsById, brokerOrigin } = input;
-  const accountDeskPositions = deskPositions
-    .filter((position) => channelsById.get(position.strategist_id)?.account_id === account.id);
-  const deskBook = aggregatePositions(accountDeskPositions
+  const { account, deskPositions, brokerOrigin } = input;
+  const deskBook = aggregatePositions(deskPositions
     .map((position) => ({ symbol: position.occ_symbol, qty: Number(position.qty) })));
   const credentials = envCredentials(account.cred_ref);
   const base = {
@@ -127,7 +129,7 @@ async function observePaperAccount(input: {
     configuredArmed: account.is_armed,
     configuredHalted: account.is_halted,
     credentialsPresent: credentials != null,
-    deskPositionCount: accountDeskPositions
+    deskPositionCount: deskPositions
       .filter((position) => Math.abs(Number(position.qty)) >= 0.001).length,
   };
   if (!credentials) {
@@ -217,7 +219,7 @@ async function main(): Promise<void> {
     sb.from("strategists")
       .select("id,slug,name,status,spec_json,underlying,executor,account_id,is_active,strategist_config(*)")
       .order("slug"),
-    sb.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open"),
+    sb.from("positions").select("id,strategist_id,occ_symbol,qty").eq("status", "open"),
     sb.from("worker_runs")
       .select("version,started_at,last_heartbeat_at,last_phase,ended_at,last_error")
       .is("ended_at", null)
@@ -248,18 +250,28 @@ async function main(): Promise<void> {
     mapRc54ChannelRow(row as Record<string, unknown>));
   const bindings = observeRc54Bindings(fleet, allAccounts);
   const contract = rc54OperationalContract(bindings.roots);
-  const channelsById = new Map(fleet.map((channel) => [channel.id, channel]));
   const deskPositions = (positionsRead.data ?? []) as PositionRow[];
   const configuredPaperAccountIds = new Set(configuredPaperAccounts.map((account) => account.id));
-  const unattributedDeskPositionCount = deskPositions.filter((position) => {
-    const accountId = channelsById.get(position.strategist_id)?.account_id;
-    return !accountId || !configuredPaperAccountIds.has(accountId);
-  }).length;
+  const positionIds = deskPositions.map((position) => position.id);
+  const routesRead = positionIds.length
+    ? await sb.from("execution_observations")
+      .select("id,position_id,account_id,event_at")
+      .in("position_id", positionIds)
+      .order("event_at", { ascending: false })
+      .order("id", { ascending: false })
+    : { data: [] as ExecutionAccountObservation[], error: null };
+  const attribution = attributePositionsByImmutableExecutionAccount({
+    positions: deskPositions,
+    observations: (routesRead.data ?? []) as ExecutionAccountObservation[],
+    configuredPaperAccountIds,
+    readError: routesRead.error?.message,
+  });
+  const unattributedDeskPositionCount =
+    attribution.missingPositionIds.length + attribution.unconfiguredRoutes.length;
   const accountObservations = await Promise.all(configuredPaperAccounts.map((account) =>
     observePaperAccount({
       account,
-      deskPositions,
-      channelsById,
+      deskPositions: attribution.byAccount.get(account.id) ?? [],
       brokerOrigin: contract.paperOrigin,
     })));
   const workers: WorkerObservation[] = ((workerRead.data ?? []) as WorkerRow[]).map((worker) => ({
@@ -276,7 +288,7 @@ async function main(): Promise<void> {
     workerFreshMs: WORKER_FRESH_MS,
     fund: { mode: fund?.mode ?? null, halted: fund?.is_halted ?? null },
     contract,
-    bindingIssues: bindings.issues,
+    bindingIssues: [...bindings.issues, ...attribution.issues],
     workers,
     receipt,
     configuredPaperAccounts: accountObservations,

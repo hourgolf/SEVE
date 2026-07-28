@@ -18,7 +18,19 @@ truth("all configured paper accounts are selected", source.includes('account.mod
 truth("account queries are not restricted to manifest accounts", !source.match(/accounts[^;]+requiredAccountIds/s));
 truth("every configured account reads broker positions", source.includes('brokerGet(brokerOrigin, "/v2/positions", credentials)'));
 truth("every configured account reads open broker orders", source.includes('brokerGet(brokerOrigin, "/v2/orders?status=open&limit=500'));
-truth("database position read remains open-only", source.includes('.from("positions").select("strategist_id,occ_symbol,qty").eq("status", "open")'));
+truth("database position read includes immutable position id and remains open-only",
+  source.includes('.from("positions").select("id,strategist_id,occ_symbol,qty").eq("status", "open")'));
+truth("immutable execution routing is queried for all open positions",
+  source.includes('.from("execution_observations")')
+  && source.includes('.select("id,position_id,account_id,event_at")')
+  && source.includes('.in("position_id", positionIds)'));
+truth("shared pure immutable attribution helper is used",
+  source.includes("attributePositionsByImmutableExecutionAccount"));
+truth("immutable attribution failures feed the fail-closed readiness blockers",
+  source.includes("bindingIssues: [...bindings.issues, ...attribution.issues]"));
+truth("mutable strategist account assignment is never an attribution fallback",
+  !source.includes("channelsById")
+  && !source.match(/position\.strategist_id[\s\S]{0,120}account_id/));
 truth("unattributed open desk positions are surfaced", source.includes("unattributedDeskPositionCount"));
 truth("all open worker ledger rows are read for liveness cardinality", source.includes('.from("worker_runs")'));
 truth("sealed release query accepts the active lane instead of Day 1 only", source.includes('.ilike("message", "%release ACTIVE%")'));

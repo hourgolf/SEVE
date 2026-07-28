@@ -48,6 +48,93 @@ export interface BrokerReconciliationReceipt {
   mismatches: BrokerPositionMismatch[];
 }
 
+export interface ExecutionAccountObservation {
+  id: string;
+  position_id: string | null;
+  account_id: string | null;
+  event_at: string;
+}
+
+export interface ImmutableExecutionAttribution<T extends { id: string }> {
+  byAccount: Map<string, T[]>;
+  missingPositionIds: string[];
+  unconfiguredRoutes: Array<{ positionId: string; accountId: string }>;
+  issues: string[];
+  ok: boolean;
+}
+
+/**
+ * Pure, fail-closed attribution of open desk rows to their immutable execution
+ * accounts. Mutable strategist/channel assignments are deliberately not an
+ * input. For duplicate observations, event time wins and observation id is the
+ * deterministic tie-breaker.
+ */
+export function attributePositionsByImmutableExecutionAccount<T extends { id: string }>(input: {
+  positions: readonly T[];
+  observations: readonly ExecutionAccountObservation[];
+  configuredPaperAccountIds: ReadonlySet<string>;
+  readError?: string | null;
+}): ImmutableExecutionAttribution<T> {
+  const byAccount = new Map<string, T[]>();
+  const missingPositionIds: string[] = [];
+  const unconfiguredRoutes: Array<{ positionId: string; accountId: string }> = [];
+  const issues: string[] = [];
+  const requestedPositionIds = new Set(input.positions.map((position) => position.id));
+  const latest = new Map<string, { accountId: string; eventMs: number; observationId: string }>();
+
+  if (input.readError) {
+    issues.push(`execution-route evidence unavailable: ${input.readError}`);
+    missingPositionIds.push(...input.positions.map((position) => position.id));
+    return { byAccount, missingPositionIds, unconfiguredRoutes, issues, ok: false };
+  }
+
+  for (const observation of input.observations) {
+    const positionId = observation.position_id?.trim() ?? "";
+    const accountId = observation.account_id?.trim() ?? "";
+    const observationId = observation.id?.trim() ?? "";
+    const eventMs = Date.parse(observation.event_at);
+    if (!positionId || !accountId || !observationId || !Number.isFinite(eventMs)
+      || !requestedPositionIds.has(positionId)) continue;
+    const current = latest.get(positionId);
+    if (!current
+      || eventMs > current.eventMs
+      || (eventMs === current.eventMs && observationId.localeCompare(current.observationId) > 0)) {
+      latest.set(positionId, { accountId, eventMs, observationId });
+    }
+  }
+
+  for (const position of input.positions) {
+    const route = latest.get(position.id);
+    if (!route) {
+      missingPositionIds.push(position.id);
+      continue;
+    }
+    if (!input.configuredPaperAccountIds.has(route.accountId)) {
+      unconfiguredRoutes.push({ positionId: position.id, accountId: route.accountId });
+      continue;
+    }
+    const rows = byAccount.get(route.accountId) ?? [];
+    rows.push(position);
+    byAccount.set(route.accountId, rows);
+  }
+
+  if (missingPositionIds.length) {
+    issues.push(`open desk positions lack immutable execution-account routing: ${missingPositionIds.join(",")}`);
+  }
+  if (unconfiguredRoutes.length) {
+    issues.push(`immutable execution-account routes are not configured paper accounts: ${
+      unconfiguredRoutes.map((route) => `${route.positionId}->${route.accountId}`).join(",")
+    }`);
+  }
+  return {
+    byAccount,
+    missingPositionIds,
+    unconfiguredRoutes,
+    issues,
+    ok: issues.length === 0,
+  };
+}
+
 const finiteQty = (value: number): number => Number.isFinite(value) ? Math.round(value) : 0;
 
 const aggregate = <T>(rows: T[], symbolOf: (row: T) => string, qtyOf: (row: T) => number): Map<string, number> => {

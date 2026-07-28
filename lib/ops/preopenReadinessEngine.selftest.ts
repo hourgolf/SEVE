@@ -145,6 +145,10 @@ ready("stale open worker ledger row is warning, not current liveness", (input) =
 blocked("binding mismatch fails closed", "release-bindings", (input) => {
   input.bindingIssues = ["root-1:configuration_epoch"];
 });
+blocked("execution-route read failure fails readiness closed", "release-bindings", (input) => {
+  input.bindingIssues = ["execution-route evidence unavailable: database unavailable"];
+  input.unattributedDeskPositionCount = 1;
+});
 blocked("wrong release hash fails closed", "release-receipt-identity", (input) => {
   input.receipt!.configurationSha256 = sha("e");
 });
