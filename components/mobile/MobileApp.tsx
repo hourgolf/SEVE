@@ -75,7 +75,7 @@ function inRth(): boolean {
   return d >= 1 && d <= 5 && m >= 570 && m < 960;
 }
 
-export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund }: SurfaceProps) {
+export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, reviewEvidence }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
@@ -247,11 +247,23 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
 
         {tab === "tape" && (
           <>
-            <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} acctId={acctId} />
+            <PnlPanel
+              strategists={desk.strategists}
+              pnlByStrategist={livePnl}
+              fundPnl={liveFund}
+              equityCurve={feed.equityCurve}
+              window={reviewEvidence.pnlWindow}
+              setWindow={reviewEvidence.setPnlWindow}
+              windowed={reviewEvidence.windowedPnl}
+            />
             <BriefPanel />
             <SentinelPanel />
-            <AutopsyPanel strategists={desk.strategists} />
-            <ForensicsPanel />
+            <AutopsyPanel strategists={desk.strategists} daily={reviewEvidence.daily} weekly={reviewEvidence.weekly} />
+            <ForensicsPanel
+              forensics={reviewEvidence.forensics}
+              pyramid={reviewEvidence.pyramid}
+              virtualBench={reviewEvidence.virtualBench}
+            />
           </>
         )}
 

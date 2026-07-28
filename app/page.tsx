@@ -36,6 +36,12 @@ import { useRefreshTick } from "@/hooks/useRefreshTick";
 import { useStudioEvidence } from "@/hooks/useStudioEvidence";
 import { useContractHistory } from "@/hooks/useContractHistory";
 import { useShadowResearch } from "@/hooks/useShadowResearch";
+import { useDailyReports } from "@/hooks/useDailyReports";
+import { useWeeklyReports } from "@/hooks/useWeeklyReports";
+import { useForensicsReport } from "@/hooks/useForensicsReport";
+import { usePyramidShadow } from "@/hooks/usePyramidShadow";
+import { useVirtualBench } from "@/hooks/useVirtualBench";
+import { useWindowedPnl, type PnlWindow } from "@/hooks/useWindowedPnl";
 import type { Room } from "@/components/surfaceTypes";
 import { deriveChannelPassports } from "@/lib/channels/channelPassport";
 import { deriveOpsReadiness } from "@/lib/ops/readiness";
@@ -63,7 +69,7 @@ function Surface({
   // Multi-account (cockpit P3): the selected bucket scopes the live feed (NAV / signals /
   // positions / day-P&L) as well as the roster. Declared ABOVE useDeskFeed so the feed reads
   // the selected account's data, not the desk total.
-  const { accounts } = useAccounts();
+  const { accounts, loading: accountsLoading } = useAccounts();
   const [acctId, setAcctId] = useState<string | null>(null);
   const feed = useDeskFeed(acctId);
   const write = useDeskWrite();
@@ -181,6 +187,33 @@ function Surface({
     closedPositions: feed.recentTrades.length,
   });
   const shadowResearch = useShadowResearch(activeRoom === "tape");
+  const reviewEnabled = activeRoom === "tape";
+  const daily = useDailyReports(8, reviewEnabled);
+  const weekly = useWeeklyReports(6, reviewEnabled);
+  const forensics = useForensicsReport(reviewEnabled);
+  const pyramid = usePyramidShadow(14, reviewEnabled);
+  const virtualBench = useVirtualBench(reviewEnabled);
+  const [pnlWindow, setPnlWindow] = useState<PnlWindow>("today");
+  const configuredPaperAccountIds = useMemo(
+    () => accounts.filter((account) => account.mode === "paper").map((account) => account.id),
+    [accounts],
+  );
+  const windowedPnl = useWindowedPnl(
+    pnlWindow,
+    acctId,
+    configuredPaperAccountIds,
+    reviewEnabled && !accountsLoading,
+  );
+  const reviewEvidence = {
+    daily,
+    weekly,
+    forensics,
+    pyramid,
+    virtualBench,
+    pnlWindow,
+    setPnlWindow,
+    windowedPnl,
+  };
   // 909 KIT — audible fills (opt-in via the KIT pad; inert while off). At the
   // seam so desktop + mobile share one diff of the same feed.
   useKitSounds(feed.positions, feed.recentTrades);
@@ -189,7 +222,7 @@ function Surface({
   // operator returns to the same room/layout. Lifted to the seam (passed down).
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, opsReadiness, shadowResearch };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, opsReadiness, shadowResearch, reviewEvidence };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

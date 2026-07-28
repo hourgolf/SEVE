@@ -85,7 +85,7 @@ export interface ForensicsReport { report_date: string; generated_at: string; pa
 
 const TREND_DAYS = 14;
 
-export function useForensicsReport(): { report: ForensicsReport | null; trend: GivebackTrendPoint[]; benchedCum: BenchedCum | null; loading: boolean; error: string | null } {
+export function useForensicsReport(enabled = true): { report: ForensicsReport | null; trend: GivebackTrendPoint[]; benchedCum: BenchedCum | null; loading: boolean; error: string | null } {
   const [report, setReport] = useState<ForensicsReport | null>(null);
   const [trend, setTrend] = useState<GivebackTrendPoint[]>([]);
   const [benchedCum, setBenchedCum] = useState<BenchedCum | null>(null);
@@ -94,6 +94,7 @@ export function useForensicsReport(): { report: ForensicsReport | null; trend: G
   const tick = useRefreshTick();
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     (async () => {
       const sb = getSupabase();
@@ -156,7 +157,7 @@ export function useForensicsReport(): { report: ForensicsReport | null; trend: G
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
     });
     return () => { alive = false; };
-  }, [tick]);
+  }, [enabled, tick]);
 
   return { report, trend, benchedCum, loading, error };
 }

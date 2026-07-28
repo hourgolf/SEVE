@@ -280,6 +280,7 @@
     "closed-position-invariant-selftest": "tsx worker/src/closedPositionInvariant.selftest.ts",
     "position-close-flow-selftest": "tsx lib/positions/positionCloseFlow.selftest.ts",
     "perform-selftest": "tsx lib/perform/perform.selftest.ts",
+    "review-workspace-selftest": "tsx lib/perform/reviewWorkspace.selftest.ts",
     "studio-selftest": "tsx lib/studio/studio.selftest.ts",
     "ride-filter-probe": "tsx --env-file=.env.local engine/ride-filter-probe.ts",
     "gap-orb-gauntlet": "tsx --env-file=.env.local engine/gap-orb-gauntlet.ts",

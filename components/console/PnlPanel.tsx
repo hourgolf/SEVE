@@ -4,7 +4,7 @@ import { useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
 import { useFold } from "@/hooks/useFold";
 import { signedUsd, usd0, timeOfDay } from "@/lib/format";
-import { useWindowedPnl, type PnlWindow, type ChannelStat } from "@/hooks/useWindowedPnl";
+import type { PnlWindow, ChannelStat, WindowedPnl } from "@/hooks/useWindowedPnl";
 import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
@@ -21,23 +21,27 @@ export function PnlPanel({
   pnlByStrategist,
   fundPnl,
   equityCurve,
-  acctId = null,
+  window,
+  setWindow,
+  windowed,
 }: {
   strategists: StrategistState[];
   pnlByStrategist: Record<string, ChannelPnl>;
   fundPnl: { nav: number; dayPnl: number };
   equityCurve: { ts: string; equity: number }[];
-  /** Selected cockpit bucket — scopes the windowed stats + NAV curve (null = desk total). */
-  acctId?: string | null;
+  /** Page-owned Review state and evidence. The panel renders without subscribing. */
+  window: PnlWindow;
+  setWindow: (window: PnlWindow) => void;
+  windowed: WindowedPnl | null;
 }) {
   // Timeframe toggle. "today" uses the live feed props (instant); week/month/all
   // fetch windowed realized P&L (+ open unrealized) + a windowed NAV curve lazily.
-  const [win, setWin] = useState<PnlWindow>("today");
-  const windowed = useWindowedPnl(win, acctId);
+  const win = window;
   // era-4 avg-peak/win per channel (the harvest lens) — published nightly by the sentinel
   const { lens } = useSentinelDigest();
   const isToday = win === "today";
   const loading = !isToday && (windowed?.loading ?? true);
+  const blocked = !isToday && windowed?.evidenceState === "blocked";
   const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();
 
   const statFor = (slug: string): ChannelStat => {
@@ -72,18 +76,27 @@ export function PnlPanel({
       <div className="pbody">
         {/* hero: the window's fund number leads; the seg picks the window */}
         <div className="pnl-hero">
-          <span className={`pnl-big ${fundVal < 0 ? "neg" : "pos"}`}>{loading ? "…" : signedUsd(fundVal)}</span>
+          <span className={`pnl-big ${blocked ? "neg" : fundVal < 0 ? "neg" : "pos"}`}>
+            {loading ? "…" : blocked ? "BLOCKED" : signedUsd(fundVal)}
+          </span>
           <span className="pnl-hero-sub" title={windowed?.sinceNote ? "this bucket's NAV history starts here — the fund number + curve span this range; the channel rows below cover the full window" : undefined}>
             {winLabel}{windowed?.sinceNote ? ` · NAV since ${windowed.sinceNote}` : ""}
           </span>
           <div className="seg" aria-label="P&L timeframe" style={{ marginLeft: "auto" }}>
             {WINDOWS.map((w) => (
-              <button key={w.id} className={win === w.id ? "on" : ""} onClick={() => setWin(w.id)} aria-pressed={win === w.id}>
+                <button key={w.id} className={win === w.id ? "on" : ""} onClick={() => setWindow(w.id)} aria-pressed={win === w.id}>
                 {w.label}
               </button>
             ))}
           </div>
         </div>
+        {blocked && (
+          <div className="review-evidence-blocked" role="alert">
+            <b>Historical attribution unavailable</b>
+            {(windowed?.issues ?? []).map((issue) => <span key={issue}>{issue}</span>)}
+            <small>No strategist-account fallback was used.</small>
+          </div>
+        )}
         <div className="pnl-equity">
           {hasCurve ? (
             <LineChart

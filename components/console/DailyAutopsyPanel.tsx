@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
-import { useDailyReports } from "@/hooks/useDailyReports";
+import type { useDailyReports } from "@/hooks/useDailyReports";
 import type { StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
 
@@ -17,8 +17,14 @@ const topExit = (ex: Record<string, number>) => {
 
 // The DAY view of the merged Autopsy panel (frame + DAY⇄WEEK seg live in AutopsyPanel).
 // Glance = fund line + harvest meter + findings CHIPS + movers; expand = the full report.
-export function DailyAutopsyBody({ strategists }: { strategists: StrategistState[] }) {
-  const { reports, loading, error } = useDailyReports(8);
+export function DailyAutopsyBody({
+  strategists,
+  evidence,
+}: {
+  strategists: StrategistState[];
+  evidence: ReturnType<typeof useDailyReports>;
+}) {
+  const { reports, loading, error } = evidence;
   const [idx, setIdx] = useState(0);
   // findings/actions start FOLDED — expanded reports were monopolizing the column
   const [findingsFolded, toggleFindings] = useFold("daily-findings", true);

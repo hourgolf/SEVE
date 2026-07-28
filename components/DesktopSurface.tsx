@@ -132,6 +132,7 @@ export function DesktopSurface({
   setActiveRoom,
   collapsedMarket,
   setCollapsedMarket,
+  reviewEvidence,
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
@@ -439,11 +440,23 @@ export function DesktopSurface({
             storageKey="seve-rack-tape"
             defaults={{ a: ["pnl", "autopsy", "forensics"], b: ["brief", "sentinel"] }}
             panels={{
-              pnl: <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} acctId={acctId} />,
-              autopsy: <AutopsyPanel strategists={desk.strategists} />,
+              pnl: <PnlPanel
+                strategists={desk.strategists}
+                pnlByStrategist={livePnl}
+                fundPnl={liveFund}
+                equityCurve={feed.equityCurve}
+                window={reviewEvidence.pnlWindow}
+                setWindow={reviewEvidence.setPnlWindow}
+                windowed={reviewEvidence.windowedPnl}
+              />,
+              autopsy: <AutopsyPanel strategists={desk.strategists} daily={reviewEvidence.daily} weekly={reviewEvidence.weekly} />,
               brief: <BriefPanel />,
               sentinel: <SentinelPanel />,
-              forensics: <ForensicsPanel />,
+              forensics: <ForensicsPanel
+                forensics={reviewEvidence.forensics}
+                pyramid={reviewEvidence.pyramid}
+                virtualBench={reviewEvidence.virtualBench}
+              />,
             }}
           />
         )}

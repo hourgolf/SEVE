@@ -33,3 +33,7 @@ jobs:
         run: npm run candle-selftest
       - name: runner exit-rules selftest
         run: npm run runner-selftest
+      - name: native review selftest
+        run: npm run review-workspace-selftest
+      - name: immutable broker attribution selftest
+        run: npm run broker-reconciliation-selftest

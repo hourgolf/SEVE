@@ -26,7 +26,7 @@ const NAME_BY_SLUG: Record<string, string> = {
 };
 export const pyramidName = (slug: string) => NAME_BY_SLUG[slug] ?? slug;
 
-export function usePyramidShadow(days = 14): {
+export function usePyramidShadow(days = 14, enabled = true): {
   events: PyramidShadowEvent[]; execs: PyramidExecEvent[]; byChannel: PyramidChannelAgg[]; loading: boolean; error: string | null;
 } {
   const [events, setEvents] = useState<PyramidShadowEvent[]>([]);
@@ -35,6 +35,7 @@ export function usePyramidShadow(days = 14): {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     (async () => {
       const sb = getSupabase();
@@ -64,7 +65,7 @@ export function usePyramidShadow(days = 14): {
       setEvents(shadows); setExecs(liveAdds); setLoading(false);
     })().catch((e) => { if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); } });
     return () => { alive = false; };
-  }, [days]);
+  }, [days, enabled]);
 
   const byMap = new Map<string, { adds: number; contracts: number }>();
   for (const e of events) { const a = byMap.get(e.slug) ?? { adds: 0, contracts: 0 }; a.adds++; a.contracts += e.wouldQty; byMap.set(e.slug, a); }

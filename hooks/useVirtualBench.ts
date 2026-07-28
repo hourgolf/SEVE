@@ -42,7 +42,7 @@ function fold(rows: VirtualRow[]): BenchAgg[] {
   return [...bySlug.values()].sort((a, b) => b.scored - a.scored || b.n - a.n);
 }
 
-export function useVirtualBench(): {
+export function useVirtualBench(enabled = true): {
   bench: BenchAgg[]; benchToday: BenchAgg[]; todayET: string; since: string | null;
   gateBlocks: { n: number; scored: number; pnl: number }; loading: boolean;
 } {
@@ -57,6 +57,7 @@ export function useVirtualBench(): {
   const tick = useRefreshTick();
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     (async () => {
       try {
@@ -87,7 +88,7 @@ export function useVirtualBench(): {
       if (alive) setLoading(false);
     })();
     return () => { alive = false; };
-  }, [todayET, tick]);
+  }, [enabled, todayET, tick]);
 
   return { bench, benchToday, todayET, since, gateBlocks, loading };
 }
