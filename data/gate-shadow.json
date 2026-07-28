@@ -38680,5 +38680,41 @@
   "mfePct": 9.4,
   "giveback": 20,
   "basis": "mid-upper-bound"
+ },
+ {
+  "signalId": "8307483d-12a8-4936-ab71-7283efa9fccb",
+  "slug": "breakout-alt-v3-iwm",
+  "occ": "IWM260727P00292000",
+  "createdAt": "2026-07-27T17:05:04.284037+00:00",
+  "blocked": "cost_gate",
+  "entryAsk": 0.78,
+  "exitReason": "would_stop",
+  "exitPx": 0.55,
+  "exitAt": "2026-07-27T17:21:06.117249+00:00",
+  "pnlPerContract": -23.4,
+  "stopPct": 30,
+  "tpPct": 22,
+  "nQuotes": 174,
+  "mfePct": 6.4,
+  "giveback": 569,
+  "basis": "mid-upper-bound"
+ },
+ {
+  "signalId": "5a18d97f-befc-41ed-92d9-9a7f28355b6c",
+  "slug": "breakout-alt-v3-iwm",
+  "occ": "IWM260727P00292000",
+  "createdAt": "2026-07-27T17:12:02.72511+00:00",
+  "blocked": "cost_gate",
+  "entryAsk": 0.79,
+  "exitReason": "would_stop",
+  "exitPx": 0.55,
+  "exitAt": "2026-07-27T17:21:06.117249+00:00",
+  "pnlPerContract": -23.7,
+  "stopPct": 30,
+  "tpPct": 22,
+  "nQuotes": 168,
+  "mfePct": 5.1,
+  "giveback": 688,
+  "basis": "mid-upper-bound"
  }
 ]
