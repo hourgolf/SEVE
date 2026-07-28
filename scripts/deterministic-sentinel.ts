@@ -17,6 +17,7 @@ import {
   operatorPacketToJudge,
   type SentinelOperatorPacketInput,
 } from "@/lib/sentinel/operatorPacket";
+import { auditSentinelManagerBook } from "@/lib/sentinel/managerBookAudit";
 import type { DarkCandidateFreeze } from "@/lib/research/darkCandidateFreeze";
 import type { DarkEvidenceCompleteness } from "@/lib/research/darkEvidenceCompleteness";
 import type { DarkExactReplayResult } from "@/lib/research/darkExactReplay";
@@ -52,9 +53,12 @@ interface PositionRow {
   closed_at: string | null;
   realized_pnl: number | string | null;
   close_reason: string | null;
+  runner_of: string | null;
 }
 interface ManagerRow {
   id: string;
+  position_id: string;
+  manager_id: string;
   status: string;
   evidence_state: string | null;
   censor_code: string | null;
@@ -103,9 +107,9 @@ async function main(): Promise<void> {
   const [releaseRead, positionsRead, managersRead] = await Promise.all([
     sb.from("events").select("id,level,strategist_id,message,meta,created_at")
       .ilike("message", "%day1-release ACTIVE%").order("created_at", { ascending: false }).limit(1),
-    sb.from("positions").select("id,status,opened_at,closed_at,realized_pnl,close_reason")
+    sb.from("positions").select("id,status,opened_at,closed_at,realized_pnl,close_reason,runner_of")
       .gte("opened_at", range.start).lt("opened_at", range.end).order("opened_at").limit(100),
-    sb.from("manager_shadow_runs").select("id,status,evidence_state,censor_code,entry_at")
+    sb.from("manager_shadow_runs").select("id,position_id,manager_id,status,evidence_state,censor_code,entry_at")
       .gte("entry_at", range.start).lt("entry_at", range.end).order("entry_at").limit(1_000),
   ]);
   for (const [label, read] of [["release", releaseRead], ["positions", positionsRead], ["managers", managersRead]] as const) {
@@ -122,11 +126,21 @@ async function main(): Promise<void> {
     ? null
     : Math.round(pnlValues.reduce<number>((sum, value) => sum + (value ?? 0), 0) * 100) / 100;
   const manualCloses = closed.filter((row) => /manual|operator/i.test(row.close_reason ?? "")).length;
-  const terminal = managers.filter((row) => row.status === "terminal").length;
-  const censored = managers.filter((row) => row.status === "censored" || row.censor_code != null).length;
-  const active = managers.filter((row) => row.status === "active").length;
+  const managerAudit = auditSentinelManagerBook(
+    positions.map((row) => ({ id: row.id, runnerOf: row.runner_of })),
+    managers.map((row) => ({
+      positionId: row.position_id,
+      managerId: row.manager_id,
+      status: row.status,
+      censorCode: row.censor_code,
+    })),
+  );
+  const { terminal, censored, active } = managerAudit;
   const releaseOk = release?.releaseId === DAY1_RELEASE_ID && release.configHash === DAY1_CONFIG_HASH;
-  const managersOk = managers.length === closed.length * 8 && terminal === managers.length && censored === 0;
+  const managersOk = managerAudit.complete;
+  const managerDetail = managersOk
+    ? `all ${managerAudit.requiredArms} required arms are terminal across ${managerAudit.rootPositions} root live path(s); ${managerAudit.runnerPositions} runner child row(s) excluded from the manager denominator`
+    : `manager completeness failed: ${managerAudit.missingRequiredArms} required missing · ${managerAudit.duplicateRequiredArms} duplicate · ${managerAudit.unexpectedPositionArms} non-root · ${active} active · ${censored} censored`;
 
   const input: SentinelOperatorPacketInput = {
     session: SESSION,
@@ -152,10 +166,10 @@ async function main(): Promise<void> {
       manualCloses,
     },
     managerBook: {
-      state: managersOk ? "ok" : managers.length ? "partial" : closed.length ? "missing" : "ok",
+      state: managersOk ? "ok" : managers.length ? "partial" : managerAudit.rootPositions ? "missing" : "ok",
       source: "manager_shadow_runs:session-entry-cohort",
       asOf: managers.map((row) => row.entry_at).sort().at(-1) ?? generatedAt,
-      detail: managersOk ? "all eight required arms are terminal for every live path" : "manager path count, terminal state, or censor state is incomplete",
+      detail: managerDetail,
       observed: managers.length,
       terminal,
       censored,
