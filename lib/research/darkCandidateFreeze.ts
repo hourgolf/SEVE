@@ -7,6 +7,7 @@
 import { createHash } from "node:crypto";
 import { RTH_OPEN_MIN, sessionCloseMin } from "../../engine/market-calendar.js";
 import { compactOccToDatabentoRaw, EXACT_OPTION_PATH_DATASET, EXACT_OPTION_PATH_SCHEMA } from "./databentoExactPath.js";
+import { isDarkCandidateResearchBlockReason } from "./gateShadowPolicy.js";
 import { canonicalVbCandidateId } from "./vbCandidateEvidence.js";
 
 export const DARK_CANDIDATE_FREEZE_SCHEMA_VERSION = 1 as const;
@@ -15,16 +16,9 @@ export const DARK_CANDIDATE_PATH_END_MINUTES_BEFORE_CLOSE = 5 as const;
 export const DARK_CANDIDATE_REQUEST_PADDING_MS = 2_000 as const;
 export const DARK_CANDIDATE_SIGNAL_EXECUTION_MAX_SKEW_MS = 5_000 as const;
 
-export const RESEARCH_BLOCK_REASONS = [
-  "day1_dark_lifecycle",
-  "day1_reentry_disabled",
-  "day1_spy_same_clock_collision",
-  "halted",
-  "not_armed",
-  "cost_gate",
-  "stale_chain",
-] as const;
-export type ResearchBlockReason = typeof RESEARCH_BLOCK_REASONS[number];
+// Raw reasons are immutable evidence and may carry a release prefix. Eligibility
+// is determined by isDarkCandidateResearchBlockReason's stable semantics.
+export type ResearchBlockReason = string;
 
 export interface DarkSignalEvidenceRow {
   id: string;
@@ -157,8 +151,6 @@ export interface DarkCandidateFreeze {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA = /^sha256:[0-9a-f]{64}$/;
 const ET_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" });
-const reasonSet = new Set<string>(RESEARCH_BLOCK_REASONS);
-
 function record(value: unknown): Record<string, unknown> | null {
   return value != null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -231,7 +223,7 @@ function parseSignal(row: DarkSignalEvidenceRow): ParsedSignal | DarkCandidateCe
   if (!UUID.test(row.id) || !UUID.test(row.strategistId)) {
     return censor(row.id, "invalid_signal_identity", "signal or strategist id is not a UUID");
   }
-  if (!row.blockedReason || !reasonSet.has(row.blockedReason)) {
+  if (!row.blockedReason || !isDarkCandidateResearchBlockReason(row.blockedReason)) {
     return censor(row.id, "unsupported_block_reason", String(row.blockedReason ?? "missing"));
   }
   const rationale = record(row.rationale);

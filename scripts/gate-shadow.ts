@@ -35,8 +35,8 @@ import {
   type VbCandidateReceipt,
 } from "../lib/research/vbCandidateEvidence.js";
 import {
-  GATE_SHADOW_ALL_BLOCKS,
-  GATE_SHADOW_SEQUENTIAL_BLOCKS,
+  isGateShadowBlockReason,
+  isGateShadowSequentialBlockReason,
 } from "../lib/research/gateShadowPolicy.js";
 import { etDayRangeUtc, etSessionCloseUtc, resolveAfterCloseSession } from "../lib/research/afterCloseResearch.js";
 import { createServerSupabaseClient } from "./serverSupabase";
@@ -208,9 +208,12 @@ async function main() {
   // returned the OLDEST 1000 — new days' signals never entered the walk, so the LAB panel
   // froze mid-06 while gate-shadow reported "0 new". Same silent-truncation class as the
   // quote-fetch flicker; same cure — page to completion, then fail LOUD on any shortfall.
+  // Read every blocked decision in the bounded session/window, then classify
+  // stable semantics locally. A database allowlist of raw release strings made
+  // RC5.4's renamed receipts invisible while the workflow still completed.
   const countQuery = sb
     .from("signals").select("id", { count: "exact", head: true })
-    .in("blocked_reason", [...GATE_SHADOW_ALL_BLOCKS]).gte("created_at", since);
+    .not("blocked_reason", "is", null).gte("created_at", since);
   if (until) countQuery.lt("created_at", until);
   const { count: expected, error: cErr } = await countQuery;
   if (cErr) { console.error(`gate-shadow: signals count failed — ${cErr.message}`); process.exit(1); }
@@ -219,7 +222,7 @@ async function main() {
     const pageQuery = sb
       .from("signals")
       .select("id,strategist_id,created_at,blocked_reason,rationale,strategists(slug),direction")
-      .in("blocked_reason", [...GATE_SHADOW_ALL_BLOCKS])
+      .not("blocked_reason", "is", null)
       .gte("created_at", since)
       // id tiebreak: created_at alone is not a total order — same-second signals could
       // shuffle across page boundaries and silently drop/duplicate rows
@@ -235,6 +238,13 @@ async function main() {
     console.error(`gate-shadow: fetched ${sigs.length}/${expected} blocked signals — partial stream; refusing to walk a truncated window`);
     process.exit(1);
   }
+  const unsupportedBlockCounts = new Map<string, number>();
+  const supportedSigs = sigs.filter((signal) => {
+    const reason = String(signal.blocked_reason ?? "");
+    if (isGateShadowBlockReason(reason)) return true;
+    unsupportedBlockCounts.set(reason || "(missing)", (unsupportedBlockCounts.get(reason || "(missing)") ?? 0) + 1);
+    return false;
+  });
 
   const { data: cfgRows } = await sb
     .from("strategists")
@@ -251,11 +261,10 @@ async function main() {
   // `halted` joins the bench walk (data-hole fix 2026-07-02): a KILL window's blocked
   // entries re-signal every bar while flat, exactly like drafts — same one-at-a-time
   // sequential semantics, and without this they vanish at the 7d quote prune.
-  const WALK: ReadonlySet<string> = GATE_SHADOW_SEQUENTIAL_BLOCKS;
   const benchByDay = new Map<string, any[]>();
   const gateSigs: any[] = [];
-  for (const s of (sigs ?? []) as any[]) {
-    if (!WALK.has(s.blocked_reason)) { gateSigs.push(s); continue; }
+  for (const s of supportedSigs as any[]) {
+    if (!isGateShadowSequentialBlockReason(String(s.blocked_reason))) { gateSigs.push(s); continue; }
     const key = `${s.strategist_id}|${String(s.created_at).slice(0, 10)}`;
     const arr = benchByDay.get(key) ?? [];
     arr.push(s);
@@ -290,7 +299,7 @@ async function main() {
       if (error) { console.error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`); process.exit(1); }
       published++;
       // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
-      if (isFresh && !WALK.has(base.blocked) && base.pnlPerContract != null) {
+      if (isFresh && !isGateShadowSequentialBlockReason(base.blocked) && base.pnlPerContract != null) {
         try {
           await sb.from("events").insert({
             level: "INFO",
@@ -384,7 +393,8 @@ async function main() {
   if (HAS_SERVICE) console.log(`  ${published} remote virtual_trades upserts confirmed (idempotent by signal_id)`);
   console.log(`  scored ${scored.length} (mid-basis UPPER BOUND) · Σ would-have $${Math.round(sum)} · avg $${scored.length ? Math.round(sum / scored.length) : 0}/ct`);
   console.log(`  exact-candidate lane: ${candidateReceipts.length} retained receipts → ${CANDIDATE_LEDGER} · ${retainedCensors.length} retained fail-closed censors → ${CANDIDATE_CENSORS}`);
-  for (const grp of GATE_SHADOW_ALL_BLOCKS) {
+  const reportBlockReasons = [...new Set(reportRows.map((row) => row.blocked))].sort();
+  for (const grp of reportBlockReasons) {
     const g = scored.filter((r) => r.blocked === grp);
     if (!g.length) continue;
     console.log(`  ── ${grp === "not_armed" ? "VIRTUAL BENCH (not_armed, re-entry walk)" : grp} · ${g.length} scored`);
@@ -392,6 +402,13 @@ async function main() {
     for (const r of g) { const x = bySlug.get(r.slug) ?? { n: 0, pnl: 0, w: 0 }; x.n++; x.pnl += r.pnlPerContract ?? 0; if ((r.pnlPerContract ?? 0) > 0) x.w++; bySlug.set(r.slug, x); }
     for (const [slug, x] of [...bySlug.entries()].sort((a, b) => b[1].n - a[1].n))
       console.log(`    ${slug.padEnd(28)} n ${String(x.n).padStart(3)} · win ${Math.round((100 * x.w) / x.n)}% · Σ $${Math.round(x.pnl)}/ct`);
+  }
+  if (unsupportedBlockCounts.size) {
+    const summary = [...unsupportedBlockCounts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([reason, count]) => `${reason}=${count}`)
+      .join(" · ");
+    console.log(`  censored unsupported block reasons: ${summary}`);
   }
   console.log(`  ⚠ diagnostic only — capital-blind, mid-basis. No arm from this data; no K change before the ≥30-block check (docs/pre-registered-tests-2026-07.md).\n`);
 }
