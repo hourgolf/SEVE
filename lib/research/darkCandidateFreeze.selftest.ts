@@ -65,6 +65,27 @@ check("request contract is exact CBBO", [base.contractRequests[0].dataset, base.
 check("live ask stays explicitly non-exact", base.candidates.map((row) => [row.liveAskFeed, row.liveAskExact]), [["alpaca_snapshot", false], ["alpaca_snapshot", false]]);
 check("no external or order writes are authorized", [base.methodology.externalWrites, base.methodology.orderPathAuthorized, base.candidates.every((row) => !row.orderPathAuthorized)], [false, false, true]);
 
+const rc54 = freezeDarkCandidates({
+  sessionDateEt: "2026-07-20",
+  signals: [signal(40, t0, { blockedReason: "rc54_dark_lifecycle" })],
+  executionObservations: [observation(41, t0, { blockedReason: "rc54_dark_lifecycle" })],
+});
+check("RC5.4 dark lifecycle is frozen without rewriting immutable raw reason", [rc54.candidates.length, rc54.candidates[0].blockedReason], [1, "rc54_dark_lifecycle"]);
+
+const futureRelease = freezeDarkCandidates({
+  sessionDateEt: "2026-07-20",
+  signals: [signal(42, t0, { blockedReason: "rc55_dark_lifecycle" })],
+  executionObservations: [observation(43, t0, { blockedReason: "rc55_dark_lifecycle" })],
+});
+check("future release prefix reuses stable dark semantics", [futureRelease.candidates.length, futureRelease.candidates[0].blockedReason], [1, "rc55_dark_lifecycle"]);
+
+const disabledConfiguration = freezeDarkCandidates({
+  sessionDateEt: "2026-07-20",
+  signals: [signal(44, t0, { blockedReason: "admission_domain_new_entries_disabled" })],
+  executionObservations: [observation(45, t0, { blockedReason: "admission_domain_new_entries_disabled" })],
+});
+check("disabled configuration remains censored rather than reconstructed", disabledConfiguration.censors[0].code, "unsupported_block_reason");
+
 const reversed = freezeDarkCandidates({
   sessionDateEt: "2026-07-20",
   signals: [signal(2, t1), signal(1, t0)],
@@ -141,5 +162,6 @@ const script = readFileSync(new URL("../../scripts/freeze-dark-candidates.ts", i
 check("adapter contains no Supabase mutation calls", /\.(?:insert|upsert|delete)\s*\(|sb\.from[^;]+\.update\s*\(/s.test(script), false);
 check("adapter contains no order API", /orderAndFill|placeOrder|closePosition/.test(script), false);
 check("adapter labels itself SELECT-only", script.includes("Supabase SELECT-only"), true);
+check("adapter does not query by a release-specific raw-reason allowlist", /\.in\("blocked_reason"/.test(script), false);
 
 console.log(`dark-candidate-freeze-selftest: ${checks}/${checks} PASS`);

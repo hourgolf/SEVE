@@ -6,11 +6,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   freezeDarkCandidates,
-  RESEARCH_BLOCK_REASONS,
   stableResearchJson,
   type DarkExecutionEvidenceRow,
   type DarkSignalEvidenceRow,
 } from "../lib/research/darkCandidateFreeze.js";
+import { isDarkCandidateResearchBlockReason } from "../lib/research/gateShadowPolicy.js";
 import { createServerSupabaseClient } from "./serverSupabase.js";
 
 const arg = (name: string, fallback: string): string => {
@@ -96,19 +96,25 @@ function lines(record: Record<string, number>, empty = "none"): string[] {
 }
 
 async function main(): Promise<void> {
-  const [signals, observations] = await Promise.all([
+  const [rawSignals, rawObservations] = await Promise.all([
     page<SignalDbRow>((from, to) => sb.from("signals")
       .select("id,strategist_id,created_at,blocked_reason,direction,rationale")
-      .in("blocked_reason", [...RESEARCH_BLOCK_REASONS])
+      .not("blocked_reason", "is", null)
       .gte("created_at", startIso).lt("created_at", endIso)
       .order("created_at").order("id").range(from, to), "signals"),
     page<ExecutionDbRow>((from, to) => sb.from("execution_observations")
       .select("id,strategist_id,account_id,channel_slug,opportunity_id,event_kind,action,event_at,source_bar_at,blocked_reason,underlying,occ_symbol,option_side,quote_source,quote_age_ms,ask")
       .eq("event_kind", "decision").eq("action", "enter")
-      .in("blocked_reason", [...RESEARCH_BLOCK_REASONS])
+      .not("blocked_reason", "is", null)
       .gte("event_at", startIso).lt("event_at", endIso)
       .order("event_at").order("id").range(from, to), "execution observations"),
   ]);
+  const signals = rawSignals.filter((row) => row.blocked_reason != null
+    && isDarkCandidateResearchBlockReason(row.blocked_reason));
+  const observations = rawObservations.filter((row) => row.blocked_reason != null
+    && isDarkCandidateResearchBlockReason(row.blocked_reason));
+  const unsupportedSignals = rawSignals.length - signals.length;
+  const unsupportedObservations = rawObservations.length - observations.length;
   const freeze = freezeDarkCandidates({
     sessionDateEt: dateEt,
     signals: signals.map(signalRow),
@@ -140,6 +146,7 @@ async function main(): Promise<void> {
     "",
     `- source signals: ${signals.length}`,
     `- source execution observations: ${observations.length}`,
+    `- unsupported blocked rows censored before freeze: ${unsupportedSignals} signals / ${unsupportedObservations} execution observations`,
     `- validated raw decisions: ${freeze.summary.validRawDecisions}`,
     `- censored signals: ${freeze.summary.censoredSignals}`,
     `- deduplicated exact contracts: ${freeze.summary.exactContracts}`,
