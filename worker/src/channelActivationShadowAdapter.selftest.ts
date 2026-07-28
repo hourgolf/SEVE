@@ -12,6 +12,7 @@ import {
 import { RC54_CONTROL_PLANE_FIXTURE } from "../../lib/channels/rc54ControlPlaneFixture.js";
 import {
   CHANNEL_ACTIVATION_WORKER_ADAPTER_MODE,
+  stageControlPlaneBaselineShadow,
   stageChannelActivationShadow,
   type ChannelActivationWorkerStageInput,
 } from "./channelActivationShadowAdapter.js";
@@ -116,6 +117,22 @@ const stage = (
   patch: Partial<ChannelActivationWorkerStageInput> = {},
 ) => stageChannelActivationShadow({ ...baseline, ...patch });
 
+const stageBaseline = (
+  patch: Partial<Parameters<typeof stageControlPlaneBaselineShadow>[0]> = {},
+) => stageControlPlaneBaselineShadow({
+  compiled: active,
+  currentReleaseId: RC54_RELEASE_ID,
+  currentWorkerVersion: RC54_WORKER_VERSION,
+  currentWorkerRuntimeVersion: WORKER_RUNTIME_VERSION,
+  bootId: "boot:fixture:rc54",
+  paperMode: true,
+  heldCaptureReady: true,
+  startupReceipt,
+  observedAt: "2026-07-28T12:00:10.000Z",
+  evidenceRef: "worker:baseline:fixture",
+  ...patch,
+});
+
 let checks = 0;
 const check = (name: string, fn: () => void): void => {
   fn();
@@ -132,6 +149,29 @@ check("exact current RC5.4 receipt stages the candidate in disabled shadow", () 
   assert.equal(result.acknowledgement?.manifestContentHash, candidate.projection?.manifestContentHash);
   assert.equal(result.acknowledgement?.configurationEpochId, candidate.projection?.configurationEpochId);
   assert.equal(result.acknowledgement?.workerCompatibilityVersion, RC54_WORKER_VERSION);
+});
+
+check("exact current RC5.4 receipt acknowledges the no-change baseline manifest", () => {
+  const result = stageBaseline();
+  assert.equal(result.state, "acknowledged");
+  assert.equal(result.acknowledgement?.manifestId, active.manifest.id);
+  assert.equal(result.acknowledgement?.manifestContentHash, active.manifest.contentHash);
+  assert.equal(result.acknowledgement?.configurationEpochId, result.projection.configurationEpochId);
+  assert.equal(result.acknowledgement?.posture, "baseline-observed-no-order-authority");
+  assert.equal(result.activationAuthorized, false);
+});
+
+check("baseline acknowledgement fails on startup roster drift", () => {
+  const roots = startupReceipt.roots as Array<Record<string, unknown>>;
+  const result = stageBaseline({
+    startupReceipt: {
+      ...startupReceipt,
+      roots: roots.map((root, index) => index === 0 ? { ...root, accountId: "wrong-account" } : root),
+    },
+  });
+  assert.equal(result.state, "blocked");
+  assert.equal(result.blockers.includes("startup_receipt:root_roster_mismatch"), true);
+  assert.equal(result.acknowledgement, null);
 });
 
 check("adapter never acquires runtime, database, order, or activation authority", () => {
