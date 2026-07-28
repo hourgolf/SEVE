@@ -126,6 +126,7 @@
     "channel-config-draft-selftest": "tsx lib/channels/channelConfigDraft.selftest.ts",
     "channel-control-plane-selftest": "tsx lib/channels/channelControlPlane.selftest.ts",
     "channel-activation-selftest": "tsx lib/channels/channelActivation.selftest.ts",
+    "channel-activation-worker-shadow-selftest": "tsx worker/src/channelActivationShadowAdapter.selftest.ts",
     "channel-control-plane-bootstrap-selftest": "tsx lib/channels/rc54ControlPlaneBootstrap.selftest.ts",
     "channel-proposal-write-selftest": "tsx lib/channels/channelProposalWrite.selftest.ts",
     "channel-control-plane-rc54-bootstrap": "tsx scripts/channel-control-plane-rc54-bootstrap.ts",
