@@ -109,6 +109,21 @@ The command performs no network call or persistence and reports
 
 This procedure is intentionally split by operator approval boundaries.
 
+The concrete interfaces are:
+
+| Boundary | Exact interface | Required invariant |
+| --- | --- | --- |
+| Database preparation | apply `20260729010000_channel_proposal_activation_bridge.sql`, then `20260729013000_channel_epoch_evidence_propagation.sql` | Separate migration approval; never run from a preview deployment |
+| Baseline adoption | authenticated `/api/channel-control-plane/adopt-baseline`, which invokes `adopt_channel_control_plane_baseline` | Exact RC5.4 manifest/spec hashes and a fresh current-worker receipt |
+| Runtime observation | deploy reviewed worker code with `CHANNEL_CONFIGURATION_RUNTIME_ENABLED=false` | Byte-identical sealed RC5.4 path |
+| Runtime bridge turn | after baseline adoption, explicitly set `CHANNEL_CONFIGURATION_RUNTIME_ENABLED=true`; keep `CHANNEL_CONFIGURATION_ALLOW_UNADOPTED_RC54_BASELINE=false`, `RC54_RELEASE_ENABLED=true`, and the sealed RC5.4 checksum/posture | One separately approved Railway configuration/restart boundary; baseline-active resolution must still select sealed RC5.4 |
+| Draft proposal | authenticated `/api/channel-proposals`, which invokes `create_channel_change_proposal_draft` | Draft only; `activation_authorized=false` |
+| Validated preview | call `prepare_channel_change_proposal_preview` with the unchanged payload from `prepareActivationPreview` | Exact candidate manifest plus identical worker/dashboard manifest hash; every validation/capture/replay/capacity gate passes |
+| Worker acknowledgement | call `acknowledge_channel_change_proposal_preview` with the unchanged payload from `prepareWorkerAcknowledgement` and the current paper worker `boot_id` | Current `worker_runs` row, exact preview/hash/epoch/compatibility identity, acknowledgement no older than 60 seconds |
+| Atomic activation | call `activate_channel_change_proposal` with the unchanged payload from `prepareProposalActivation` | Fresh global broker/desk flat and order-free proof, explicit operator approval, exact acknowledgement, receipt written before lifecycle promotion |
+| Runtime handoff | no restart or configuration mutation | The already-enabled worker discovers the receipt on its 30-second control-plane poll; only the next eligible entry receives the new epoch |
+| Rollback | generate a new proposal targeting the pinned prior manifest and repeat preview, acknowledgement, approval, safe-boundary, and activation RPCs | A new immutable rollback receipt; never edit or reinterpret prior evidence |
+
 1. **Commit review boundary:** review the local diff and full test/build
    evidence. Commit only after explicit approval.
 2. **Merge/deployment boundary:** review the pull request and release surfaces.
@@ -153,27 +168,29 @@ resolved active manifest. It rejects semantic no-ops for live storage and never
 approves or activates a proposal.
 
 The prepared review input is
-`docs/bounded-channel-proposal-review-2026-07-28.md`. It identifies
-`breakout-alt-v3-iwm` as the first channel-specific question, but selects no
-value because the preregistered evidence floor is not met and the leading
-all-out lock arms are not faithfully representable by the current half-bank
-schema. Until an operator selects a supported value after evidence review, no
-bounded proposal artifact should be mistaken for strategic approval or runtime
-authority.
+`docs/bounded-channel-proposal-review-2026-07-28.md`. It keeps
+`breakout-alt-v3-iwm` as the first strategic channel-specific question and
+selects no strategic value because the preregistered evidence floor is not
+met. Separately, `npm run channel-bounded-proposal` generates a deterministic
+quantity-3 plumbing specimen for `orb-ustop-ctl`. The artifact is explicitly
+non-recommended, non-persisted, validation-incomplete, and
+`activationAuthorized: false`; it proves generator/projection capability only.
 
 ## Remaining production gap
 
-The local protocol and receipt-bound evidence contract are proven, but they are
-not wired into the active worker or database lifecycle. That wiring must be a
-separate reviewed change after the no-op evidence is accepted. In particular:
+The local protocol, receipt-bound evidence contract, temporary RC5.4 adapter,
+and default-off worker integration are implemented and locally testable. None
+of them is deployed, configured, migrated, or active. In particular:
 
 - no live proposal or activation receipt has been created by this work;
-- no active worker consumes a control-plane manifest;
-- the existing activation-receipt database guard is intentionally dormant:
-  proposal rows are constrained to `activation_authorized = false` while the
-  receipt trigger requires `true`, so a later reviewed migration/RPC is required
-  before any live activation can succeed;
+- the production worker does not consume a control-plane manifest because the
+  integration is absent from its deployed commit and the new
+  `CHANNEL_CONFIGURATION_RUNTIME_ENABLED` switch defaults to false;
+- the proposed activation/receipt and evidence-epoch migrations remain
+  unapplied and require independent local database validation plus explicit
+  migration approval;
 - no current runtime row is retroactively stamped;
-- the new relational epoch columns remain dormant until a receipt-authorized
-  next-entry adapter is reviewed and deployed;
+- the relational epoch columns and next-entry write stamps remain dormant until
+  the reviewed code and migrations are deployed and an immutable activation
+  receipt exists;
 - the current sealed RC5.4 execution and capture behavior remains unchanged.

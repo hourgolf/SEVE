@@ -241,10 +241,24 @@ check("a non-paper routed account blocks receipt-bound startup", () => {
   assert.ok(result.blockers.some((item) => item.includes("account_not_paper")));
 });
 
-check("the bridge remains dormant in the active worker entrypoint", () => {
+check("worker integration is explicit, default-off, and fail-closed", () => {
   const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(indexSource, /channelConfigurationRuntimeBridge/);
-  assert.doesNotMatch(indexSource, /resolveDormantChannelRuntimeAuthority/);
+  const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
+  assert.match(
+    configSource,
+    /channelConfigurationRuntimeEnabled:\s*flag\(\s*"CHANNEL_CONFIGURATION_RUNTIME_ENABLED",\s*false/,
+  );
+  assert.match(indexSource, /if \(config\.channelConfigurationRuntimeEnabled\)/);
+  assert.match(
+    indexSource,
+    /loadReceiptBoundControlPlane\(\)[\s\S]*resolveDormantChannelRuntimeAuthority/,
+  );
+  assert.match(
+    indexSource,
+    /resolution\.state === "blocked"[\s\S]*throw new Error/,
+  );
+  assert.match(indexSource, /buildReceiptBoundRc54AdmissionRootResolver/);
+  assert.match(indexSource, /receiptBoundRc54ConfigurationWriteStamp/);
   assert.doesNotMatch(indexSource, /loadDormantChannelRuntimeAuthority/);
 });
 

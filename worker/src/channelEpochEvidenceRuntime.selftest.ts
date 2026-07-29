@@ -231,10 +231,26 @@ check("runner and partial remainders copy the parent epoch verbatim", () => {
   );
 });
 
-check("the new runtime remains dormant in the active worker entrypoint", () => {
+check("runtime stamps only receipt-bound new entries behind the default-off gate", () => {
   const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /configurationWriteStampForChannel/);
-  assert.doesNotMatch(source, /channelConfigurationRuntimeBridge/);
+  const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
+  assert.match(source, /channelConfigurationRuntimeBridge/);
+  assert.match(
+    configSource,
+    /CHANNEL_CONFIGURATION_RUNTIME_ENABLED",\s*false/,
+  );
+  assert.match(
+    source,
+    /currentReceiptRuntime[\s\S]*d\.action === "enter"[\s\S]*receiptBoundRc54ConfigurationWriteStamp/,
+  );
+  assert.match(
+    source,
+    /receiptBoundRoot[\s\S]*currentReceiptRuntime && receiptBoundRoot[\s\S]*d\.action === "enter"/,
+  );
+  assert.match(
+    source,
+    /captureDecisionObservation\(\{[\s\S]*configurationWriteStamp/,
+  );
 });
 
 console.log(`channel epoch evidence runtime self-test passed (${checks} checks)`);

@@ -1,6 +1,34 @@
 # Bounded channel proposal review — 2026-07-28
 
-Status: **PREPARED REVIEW INPUT · NO PROPOSAL ROW · NO VALUE SELECTED · NO AUTHORITY**
+Status: **PREPARED REVIEW INPUT · LOCAL PLUMBING SPECIMEN ONLY · NO PROPOSAL ROW · NO STRATEGIC VALUE SELECTED · NO AUTHORITY**
+
+## Generated plumbing specimen
+
+The local command `npm run channel-bounded-proposal` now proves that the generic
+workflow can generate one coherent bounded proposal and matching worker and
+dashboard projections. Its deterministic evidence hash is:
+
+`sha256:e8ff23187be55a6e73924178133fa86c681965c4935e5be9517fe5ef11969cba`
+
+The specimen changes `orb-ustop-ctl` from quantity 2 to quantity 3 and scales
+its declared debit/risk envelope from 400/120 to 600/180. Those numbers are a
+plumbing fixture, not a recommendation, strategy decision, or request to
+persist a proposal. The generated artifact explicitly records:
+
+- `selectedValueBasis: plumbing-specimen-only`;
+- `strategicRecommendation: false`;
+- `strategicApproval: false`;
+- `persistenceAuthorized: false`;
+- `runtimeAuthority: false`;
+- `orderAuthority: false`;
+- `activationAuthorized: false`;
+- replay, current capacity, safe-boundary, acknowledgement, and activation
+  receipt evidence all absent.
+
+Static schema, paper-account, risk-envelope, collision, and projection checks
+pass. Replay, evidence readiness, and the safe boundary remain `not-run`, so the
+specimen cannot produce a persistable activation preview. No Supabase row or
+runtime authority is created by the command.
 
 ## Candidate decision
 
@@ -13,10 +41,10 @@ Status: **PREPARED REVIEW INPUT · NO PROPOSAL ROW · NO VALUE SELECTED · NO AU
 - Current catastrophe stop: 30% on executable option bid
 - Requested change class: bounded TP/SL or quantity, exact field not yet selected
 
-This is the first non-active bounded-change review packet after the RC5.4 no-op
-canary. It is deliberately not a `ChannelChangeProposal`: choosing a new value
-is a strategic decision and the current evidence does not meet the documented
-activation-quality floor.
+This remains the first strategic bounded-change review packet after the RC5.4
+no-op canary. It is deliberately separate from the plumbing specimen above:
+choosing a real value is an operator strategy decision, and the current
+evidence does not meet the documented activation-quality floor.
 
 ## Why this channel is the review candidate
 
@@ -51,8 +79,9 @@ manager.
 4. No evidence currently supports a quantity change.
 5. Current stop evidence supports keeping the 30% catastrophe stop unchanged.
 
-Generating a syntactically valid patch despite these blockers would create
-false precision and could make an incoherent manager look activation-ready.
+Treating the plumbing specimen as this channel's strategic answer would create
+false precision and could make an unsupported manager or size look
+activation-ready.
 
 ## Operator decision fields
 
@@ -84,8 +113,9 @@ produce an inert draft against the exact active manifest:
 
 ## Decision
 
-No new TP, SL, or quantity value is selected by this packet. RC5.4 remains
-unchanged. The next strategic review should either:
+No new TP, SL, or quantity value is strategically selected by this packet.
+The quantity-3 proposal is only a deterministic local generator specimen.
+RC5.4 remains unchanged. The next strategic review should either:
 
 - confirm that the evidence floor has been reached and select one exact,
   representable manager policy; or

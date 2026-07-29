@@ -1,5 +1,6 @@
 import type {
   ActivationReceipt,
+  ChannelScalePolicy,
   CompiledReleaseManifest,
   WorkerChannelProjection,
 } from "../../lib/channels/channelControlPlane.js";
@@ -26,6 +27,8 @@ export const CHANNEL_CONFIGURATION_RUNTIME_ADAPTER_VERSION =
 
 export interface ReceiptBoundRuntimeRoot extends WorkerChannelProjection {
   configuration: Readonly<ConfigurationEpochIdentity>;
+  reentryPolicy: "disabled" | "bounded";
+  scalePolicy: Readonly<ChannelScalePolicy>;
   releaseManifestDatabaseId: string | null;
   channelSpecVersionDatabaseId: string | null;
 }
@@ -33,6 +36,7 @@ export interface ReceiptBoundRuntimeRoot extends WorkerChannelProjection {
 export interface ReceiptBoundRuntimeConfiguration {
   adapterVersion: typeof CHANNEL_CONFIGURATION_RUNTIME_ADAPTER_VERSION;
   state: "receipt-bound";
+  releaseId: string;
   releaseManifestId: string;
   releaseManifestDatabaseId: string | null;
   manifestContentHash: string;
@@ -106,21 +110,30 @@ export function buildReceiptBoundRuntimeConfiguration(input: {
       || receipt.configurationEpochId !== input.projection.configurationEpochId) {
     throw new Error("runtime configuration receipt disagrees with the manifest projection");
   }
-  const roots = input.compiled.workerProjection.roots.map((root) => ({
-    ...root,
-    configuration: buildConfigurationEpochIdentity({
-      compiled: input.compiled,
-      projection: input.projection,
-      channelSlug: root.slug,
-      activationReceipt: receipt,
-    }),
-    releaseManifestDatabaseId:
-      input.databaseIdentity?.releaseManifestDatabaseId ?? null,
-    channelSpecVersionDatabaseId:
-      input.databaseIdentity?.channelSpecDatabaseIdsByVersionKey[
-        root.channelSpecVersionId
-      ] ?? null,
-  }));
+  const roots = input.compiled.workerProjection.roots.map((root) => {
+    const spec = input.compiled.channelSpecs.find((candidate) =>
+      candidate.id === root.channelSpecVersionId);
+    if (!spec) {
+      throw new Error(`runtime configuration is missing source spec ${root.channelSpecVersionId}`);
+    }
+    return {
+      ...root,
+      configuration: buildConfigurationEpochIdentity({
+        compiled: input.compiled,
+        projection: input.projection,
+        channelSlug: root.slug,
+        activationReceipt: receipt,
+      }),
+      reentryPolicy: spec.reentryPolicy,
+      scalePolicy: spec.scalePolicy,
+      releaseManifestDatabaseId:
+        input.databaseIdentity?.releaseManifestDatabaseId ?? null,
+      channelSpecVersionDatabaseId:
+        input.databaseIdentity?.channelSpecDatabaseIdsByVersionKey[
+          root.channelSpecVersionId
+        ] ?? null,
+    };
+  });
   if (input.databaseIdentity
       && (roots.some((root) => !root.channelSpecVersionDatabaseId)
         || !input.databaseIdentity.releaseManifestDatabaseId)) {
@@ -129,6 +142,7 @@ export function buildReceiptBoundRuntimeConfiguration(input: {
   return freeze({
     adapterVersion: CHANNEL_CONFIGURATION_RUNTIME_ADAPTER_VERSION,
     state: "receipt-bound",
+    releaseId: input.compiled.manifest.releaseId,
     releaseManifestId: input.compiled.manifest.id,
     releaseManifestDatabaseId:
       input.databaseIdentity?.releaseManifestDatabaseId ?? null,

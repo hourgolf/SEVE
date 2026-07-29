@@ -90,6 +90,8 @@ import {
   buildRc54AdmissionOccupancy,
   finalizeRc54ReleaseAdmissions,
   prepareRc54ReleaseAdmissions,
+  rc54OperationalPostureErrors,
+  rc54SourceFleetErrors,
   RC54_RELEASE_CONFIGURATION_SHA256,
   RC54_RELEASE_ID,
   RC54_ROOTS,
@@ -101,12 +103,28 @@ import {
   type Rc54BrokerHolding,
   type Rc54PendingOrderOccupancy,
   type Rc54SnapshotFailure,
+  type Rc54AdmissionRootResolver,
 } from "./rc54ReleasePolicy.js";
+import {
+  resolveDormantChannelRuntimeAuthority,
+} from "./channelConfigurationRuntimeBridge.js";
+import type {
+  ReceiptBoundRuntimeConfiguration,
+} from "./channelConfigurationRuntimeAdapter.js";
+import {
+  buildReceiptBoundRc54AdmissionRootResolver,
+  receiptBoundRc54CandidateIdentity,
+  receiptBoundRc54ConfigurationWriteStamp,
+  receiptBoundRc54ReleaseEvidenceContext,
+  validateReceiptBoundRc54RestartRows,
+} from "./temporaryRc54RuntimeAdapter.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 const releaseMode = (): boolean => config.day1ReleaseEnabled || config.rc54ReleaseEnabled;
 let releaseStartupReceipt: Record<string, unknown> | null = null;
 let releaseSourceExecutorBoundaryReady = !releaseMode();
+let receiptBoundRuntime: Readonly<ReceiptBoundRuntimeConfiguration> | null = null;
+let receiptBoundAdmissionRootResolver: Rc54AdmissionRootResolver | null = null;
 
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
@@ -306,11 +324,32 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
   for (const d of symDecisions) {
     const ch = bySlug.get(d.slug);
     if (!ch || !ownedBy(ch)) continue;
-    const rc54 = config.rc54ReleaseEnabled ? rc54Root(ch.slug) : null;
-    const exec: ExecCtx = rc54 ? {
+    const currentReceiptRuntime = receiptBoundRuntime;
+    const receiptBoundRoot = currentReceiptRuntime?.roots.find((root) =>
+      root.slug === ch.slug) ?? null;
+    const configurationWriteStamp = currentReceiptRuntime && receiptBoundRoot
+      && d.action === "enter"
+      ? receiptBoundRc54ConfigurationWriteStamp(
+        currentReceiptRuntime,
+        ch.slug,
+      )
+      : null;
+    const rc54 = config.rc54ReleaseEnabled && !currentReceiptRuntime
+      ? rc54Root(ch.slug)
+      : null;
+    const releaseEvidenceContext = currentReceiptRuntime && receiptBoundRoot
+      ? receiptBoundRc54ReleaseEvidenceContext(
+        currentReceiptRuntime,
+        ch.slug,
+      )
+      : rc54
+        ? rc54ReleaseEvidenceContext(rc54)
+        : null;
+    const exec: ExecCtx = releaseEvidenceContext || configurationWriteStamp || rc54 ? {
       ...execBase,
-      rc54ManagerProfileId: rc54.managerProfileId,
-      releaseEvidenceContext: rc54ReleaseEvidenceContext(rc54),
+      rc54ManagerProfileId: rc54?.managerProfileId ?? null,
+      releaseEvidenceContext,
+      configurationWriteStamp,
     } : execBase;
     if (barFresh) {
       if (d.action === "exit" && d.reason === "event_flatten")
@@ -341,6 +380,7 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
       decisionAtMs: lastSession.ts,
       observedAtMs: Date.now(),
       chainAgeMs: chain.ageMs,
+      configurationWriteStamp,
     });
     if (!ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit") {
       info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
@@ -423,6 +463,17 @@ function sealedRuntimePosture() {
   };
 }
 
+function resolvedCredentialAccountIds(
+  accounts: readonly store.AccountRow[],
+): string[] {
+  return accounts
+    .filter((account) => account.cred_ref
+      ? config.altAccounts[account.cred_ref] != null
+      : !!config.alpacaKey && !!config.alpacaSecret)
+    .map((account) => account.id)
+    .sort();
+}
+
 async function reloadConfig(): Promise<void> {
   // Halt-transition watch: page the operator when the kill switch / master stop
   // trips while we hold prior state (a boot into an already-halted desk stays
@@ -445,11 +496,90 @@ async function reloadConfig(): Promise<void> {
         throw new Error(`Day 1 source executor boundary failed before overlay: ${boundaryErrors.join(";")}`);
       }
     }
-    const channels = config.day1ReleaseEnabled
+    let nextReceiptBoundRuntime:
+      Readonly<ReceiptBoundRuntimeConfiguration> | null = null;
+    let nextReceiptBoundResolver: Rc54AdmissionRootResolver | null = null;
+    let channels = config.day1ReleaseEnabled
       ? applyDay1ReleaseFleetOverlay(c.channels)
       : config.rc54ReleaseEnabled
         ? applyRc54ReleaseFleetOverlay(c.channels)
         : c.channels;
+    const credentialAccountIds = resolvedCredentialAccountIds(accounts);
+    if (config.channelConfigurationRuntimeEnabled) {
+      if (!config.rc54ReleaseEnabled || config.day1ReleaseEnabled) {
+        throw new Error(
+          "Channel configuration runtime requires the RC5.4 adapter and cannot coexist with Day 1",
+        );
+      }
+      const stored = await store.loadReceiptBoundControlPlane();
+      const resolution = resolveDormantChannelRuntimeAuthority({
+        stored,
+        runtime: {
+          channels: c.channels,
+          accounts,
+          fundMode: c.fund.mode,
+          workerCompatibilityVersion: RC54_WORKER_VERSION,
+          resolvedCredentialAccountIds: credentialAccountIds,
+          allowUnadoptedRc54Baseline:
+            config.channelConfigurationAllowUnadoptedRc54Baseline,
+        },
+      });
+      if (resolution.state === "blocked") {
+        throw new Error(
+          `Channel configuration runtime blocked: ${resolution.blockers.join(";")}`,
+        );
+      }
+      if (resolution.state === "receipt-bound") {
+        const sourceErrors = rc54SourceFleetErrors(c.channels);
+        const postureErrors = rc54OperationalPostureErrors({
+          fundMode: c.fund.mode,
+          posture: sealedRuntimePosture(),
+          paperExecutorWriteReady: liveMode(),
+          accounts,
+          requiredAccountIds: resolution.runtime.roots.map((root) =>
+            root.accountId),
+          resolvedCredentialAccountIds: credentialAccountIds,
+        });
+        const adapterErrors = [
+          ...sourceErrors,
+          ...postureErrors,
+        ];
+        if (adapterErrors.length) {
+          throw new Error(
+            `Receipt-bound RC5.4 adapter validation failed: ${
+              [...new Set(adapterErrors)].sort().join(";")
+            }`,
+          );
+        }
+        nextReceiptBoundRuntime = resolution.runtime;
+        nextReceiptBoundResolver =
+          buildReceiptBoundRc54AdmissionRootResolver(resolution.runtime);
+        channels = [...resolution.channels];
+        releaseStartupReceipt = {
+          schemaVersion: 1,
+          state: "receipt-bound",
+          releaseId: resolution.runtime.releaseId,
+          releaseManifestId: resolution.runtime.releaseManifestId,
+          manifestContentHash: resolution.runtime.manifestContentHash,
+          configurationEpochId: resolution.runtime.configurationEpochId,
+          activationReceiptId: resolution.runtime.activationReceiptId,
+          activatedAt: resolution.runtime.activatedAt,
+          workerCompatibilityVersion:
+            resolution.runtime.workerCompatibilityVersion,
+          adapterVersion: resolution.runtime.adapterVersion,
+          temporaryTopologyAdapter: "RC5.4",
+          paperOnly: true,
+          rootCount: resolution.runtime.roots.length,
+          configuredPaperAccountIds: [
+            ...new Set(resolution.runtime.roots.map((root) => root.accountId)),
+          ].sort(),
+          historicalMutationAuthorized: false,
+          runtimeMutationAuthorized: false,
+          liveMoneyAuthorized: false,
+        };
+        releaseSourceExecutorBoundaryReady = true;
+      }
+    }
     if (config.day1ReleaseEnabled) {
       const validation = validateDay1ReleaseStartup({
         channels,
@@ -457,29 +587,21 @@ async function reloadConfig(): Promise<void> {
         fundMode: c.fund.mode,
         workerVersion: WORKER_VERSION,
         expectedConfigurationSha256: config.day1ReleaseExpectedSha256,
-        resolvedCredentialAccountIds: groupByAccount(channels, accounts)
-          .filter((group) => group.account.cred_ref
-            ? group.api != null
-            : !!config.alpacaKey && !!config.alpacaSecret)
-          .map((group) => group.account.id),
+        resolvedCredentialAccountIds: credentialAccountIds,
         credentialRouteEvidenceBasis: "runtime-env-presence",
         posture: sealedRuntimePosture(),
       });
       if (!validation.ok) throw new Error(`Day 1 RC5 startup validation failed: ${validation.errors.join(";")}`);
       releaseStartupReceipt = validation.activeSettingsReceipt;
       releaseSourceExecutorBoundaryReady = true;
-    } else if (config.rc54ReleaseEnabled) {
+    } else if (config.rc54ReleaseEnabled && !nextReceiptBoundRuntime) {
       const validation = validateRc54ReleaseStartup({
         channels: c.channels,
         accounts,
         fundMode: c.fund.mode,
         workerVersion: RC54_WORKER_VERSION,
         expectedConfigurationSha256: config.rc54ReleaseExpectedSha256,
-        resolvedCredentialAccountIds: groupByAccount(channels, accounts)
-          .filter((group) => group.account.cred_ref
-            ? group.api != null
-            : !!config.alpacaKey && !!config.alpacaSecret)
-          .map((group) => group.account.id),
+        resolvedCredentialAccountIds: credentialAccountIds,
         credentialRouteEvidenceBasis: "runtime-env-presence",
         paperExecutorWriteReady: liveMode(),
         posture: sealedRuntimePosture(),
@@ -490,6 +612,8 @@ async function reloadConfig(): Promise<void> {
       releaseStartupReceipt = validation.activeSettingsReceipt;
       releaseSourceExecutorBoundaryReady = true;
     }
+    receiptBoundRuntime = nextReceiptBoundRuntime;
+    receiptBoundAdmissionRootResolver = nextReceiptBoundResolver;
     cfg = { fund: c.fund, channels, accounts };
   }
   else warn("config: reload returned no fund_state — keeping previous");
@@ -793,7 +917,14 @@ async function cycle(trigger: string): Promise<void> {
         const symDecisions = config.day1ReleaseEnabled
           ? prepareDay1ReleaseAdmission(releasePreparation)
           : config.rc54ReleaseEnabled
-            ? prepareRc54ReleaseAdmissions(releasePreparation)
+            ? prepareRc54ReleaseAdmissions({
+              ...releasePreparation,
+              rootResolver:
+                receiptBoundAdmissionRootResolver ?? undefined,
+              candidateIdentity: receiptBoundRuntime
+                ? receiptBoundRc54CandidateIdentity(receiptBoundRuntime)
+                : undefined,
+            })
             : evaluatedDecisions;
         const barFresh = Date.now() - lastSession.ts < 180_000;
         const executionEligible = live && releaseSourceExecutorBoundaryReady
@@ -996,6 +1127,8 @@ async function cycle(trigger: string): Promise<void> {
             globalSnapshotFailures: releaseSnapshotFailures,
             globalOrderFailureAccountIds: [...releaseOrderFailureAccountIds].sort(),
             posture: live ? "paper-executor" : "shadow-counterfactual",
+            rootResolver:
+              receiptBoundAdmissionRootResolver ?? undefined,
           });
       let cursor = 0;
       for (const batch of releaseBatches) {
@@ -1514,10 +1647,20 @@ async function main(): Promise<void> {
   if (config.rc54ReleaseEnabled) {
     const openAtBoot = await store.getOpenPositionsStrict();
     if (openAtBoot == null) {
-      error("RC5.4 cannot prove the book flat at startup. Refusing to establish a new management era on unknown open-position state.");
+      error("RC5.4 cannot prove the open-position policy state at startup. Refusing to establish runtime authority on unknown desk state.");
       process.exit(1);
     }
-    if (openAtBoot.length) {
+    if (receiptBoundRuntime) {
+      const restart = validateReceiptBoundRc54RestartRows({
+        runtime: receiptBoundRuntime,
+        channels: cfg.channels,
+        rows: openAtBoot,
+      });
+      if (!restart.ok) {
+        error(`Receipt-bound RC5.4 restart validation failed: ${restart.errors.join(";")}. Refusing current-config fallback for open positions.`);
+        process.exit(1);
+      }
+    } else if (openAtBoot.length) {
       error(`RC5.4 requires a flat era boundary; ${openAtBoot.length} position row(s) were already open. Refusing to mix prior-era management or occupancy into the new release.`);
       process.exit(1);
     }
@@ -1565,16 +1708,21 @@ async function main(): Promise<void> {
       runtimeReadiness: {
         heldCaptureReady: true,
         heldCaptureStartedBeforeBootDecision: true,
-        flatEraBoundaryProven: true,
+        flatEraBoundaryProven: receiptBoundRuntime ? false : true,
+        mixedEpochOpenPositionPoliciesValidated:
+          receiptBoundRuntime ? true : false,
       },
     };
-    info(`rc54-release: ACTIVE ${RC54_RELEASE_ID} config=${RC54_RELEASE_CONFIGURATION_SHA256} roots=${RC54_ROOTS.length} control=6 lab=3 paper-only`);
+    const activeReleaseId = receiptBoundRuntime?.releaseId ?? RC54_RELEASE_ID;
+    const activeConfiguration = receiptBoundRuntime?.manifestContentHash
+      ?? RC54_RELEASE_CONFIGURATION_SHA256;
+    info(`rc54-release: ACTIVE ${activeReleaseId} config=${activeConfiguration} roots=${RC54_ROOTS.length} control=6 lab=3 paper-only${receiptBoundRuntime ? " receipt-bound" : ""}`);
     const startupReceiptWrite = store.journal(
       "EXEC",
-      `rc54-release ACTIVE ${RC54_RELEASE_ID} config=${RC54_RELEASE_CONFIGURATION_SHA256}`,
+      `rc54-release ACTIVE ${activeReleaseId} config=${activeConfiguration}`,
       receipt,
     );
-    if (config.controlPlaneBaselineObserverEnabled) {
+    if (config.controlPlaneBaselineObserverEnabled && !receiptBoundRuntime) {
       await startupReceiptWrite;
       const {
         RC54_CONTROL_PLANE_BASELINE_MANIFEST_KEY,

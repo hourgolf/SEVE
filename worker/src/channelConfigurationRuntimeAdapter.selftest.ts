@@ -309,9 +309,16 @@ check("new entry stamp binds the same manifest, spec, and epoch", () => {
   assert.equal(stamp.accountId, root.accountId);
 });
 
-check("adapter remains dormant until the reviewed worker bridge imports it", () => {
+check("adapter is reachable only through the default-off reviewed bridge", () => {
   const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(indexSource, /channelConfigurationRuntimeAdapter/);
+  const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
+  assert.match(indexSource, /channelConfigurationRuntimeAdapter/);
+  assert.match(indexSource, /if \(config\.channelConfigurationRuntimeEnabled\)/);
+  assert.match(
+    configSource,
+    /CHANNEL_CONFIGURATION_RUNTIME_ENABLED",\s*false/,
+  );
+  assert.match(indexSource, /resolution\.state === "blocked"[\s\S]*throw new Error/);
 });
 
 console.log(`channel configuration runtime adapter self-test passed (${checks} checks)`);

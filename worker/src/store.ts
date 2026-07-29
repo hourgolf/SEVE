@@ -33,6 +33,10 @@ import {
   type ManagerShadowDbRow,
   type ManagerShadowRun,
 } from "./managerShadowBookModel.js";
+import {
+  loadStoredReceiptBoundControlPlane,
+  type StoredReceiptBoundControlPlaneRead,
+} from "../../lib/channels/channelControlPlanePersistence.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -158,6 +162,16 @@ const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServi
   auth: { persistSession: false, autoRefreshToken: false },
   realtime: { transport: WebSocket as unknown as WSTransport },
 });
+
+export async function loadReceiptBoundControlPlane(
+): Promise<StoredReceiptBoundControlPlaneRead> {
+  // The repository and worker workspaces install the same Supabase client
+  // package independently. Its protected fields make the two otherwise
+  // identical client classes nominally incompatible to TypeScript.
+  return loadStoredReceiptBoundControlPlane(
+    sb as unknown as Parameters<typeof loadStoredReceiptBoundControlPlane>[0],
+  );
+}
 
 export async function loadRc54ControlPlaneBaselineIdentity(
   manifestKey: string,

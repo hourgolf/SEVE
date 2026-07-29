@@ -144,6 +144,67 @@ export function rc54ManagerProfileId(slug: string): Rc54ManagerProfileId | null 
   return rc54Root(slug)?.managerProfileId ?? null;
 }
 
+/**
+ * The temporary release adapter owns RC5.4 topology and admission mechanics,
+ * while the economics may come from either the sealed RC5.4 constants or one
+ * receipt-bound manifest. Keeping this interface local to the admission layer
+ * prevents the generic control plane from importing RC5.4.
+ */
+export interface Rc54AdmissionRoot {
+  slug: string;
+  domainId: string;
+  familyId: string;
+  underlying: string;
+  quantity: number;
+  premiumCap: number;
+  aggregateDebitCap: number;
+  managerProfileId: string;
+  accountId: string;
+  bankTargetPct: number | null;
+  runnerKind: "none" | "a13" | "fixed-target" | "native-atr";
+  configurationEpochId?: string | null;
+}
+
+export type Rc54AdmissionRootResolver = (
+  slug: string,
+) => Readonly<Rc54AdmissionRoot> | null;
+
+export interface Rc54AdmissionCandidateIdentity {
+  releaseId: string;
+  configurationSha256: string;
+  cohortId: string;
+  cohortFrom: string;
+}
+
+function sealedRc54AdmissionRoot(slug: string): Readonly<Rc54AdmissionRoot> | null {
+  const root = rc54Root(slug);
+  if (!root) return null;
+  const manager = RC54_MANAGER_PROFILES[root.managerProfileId];
+  return {
+    slug: root.slug,
+    domainId: root.domainId,
+    familyId: root.familyId,
+    underlying: root.underlying,
+    quantity: root.quantity,
+    premiumCap: root.premiumCap,
+    aggregateDebitCap: root.aggregateDebitCap,
+    managerProfileId: root.managerProfileId,
+    accountId: root.accountId,
+    bankTargetPct: manager.bankTargetPct,
+    runnerKind: manager.runner === "fixed-50"
+      ? "fixed-target"
+      : manager.runner,
+    configurationEpochId: null,
+  };
+}
+
+function admissionRoot(
+  slug: string,
+  resolver?: Rc54AdmissionRootResolver,
+): Readonly<Rc54AdmissionRoot> | null {
+  return resolver ? resolver(slug) : sealedRc54AdmissionRoot(slug);
+}
+
 export const RC54_CONTROL_ADMISSION_POLICY: AdmissionDomainPolicy = {
   id: RC54_CONTROL_DOMAIN,
   enabledForNewEntries: true,
@@ -579,6 +640,39 @@ export interface Rc54ReleaseStartupResult {
   activeSettingsReceipt: Record<string, unknown> | null;
 }
 
+export function rc54SourceFleetErrors(
+  channels: readonly ChannelConfig[],
+): string[] {
+  const errors: string[] = [];
+  const expectedSlugs = [
+    ...DAY1_ROOTS.map((root) => root.slug),
+    ...DAY1_DARK_CHANNELS,
+  ];
+  const expectedSet = new Set<string>(expectedSlugs);
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const channel of channels) {
+    if (seen.has(channel.slug)) duplicates.add(channel.slug);
+    seen.add(channel.slug);
+  }
+  if (channels.length !== expectedSlugs.length) {
+    errors.push(`fleet_count:${channels.length}`);
+  }
+  if (duplicates.size) {
+    errors.push(`fleet_duplicate_slug:${[...duplicates].sort().join(",")}`);
+  }
+  const missing = expectedSlugs.filter((slug) => !seen.has(slug));
+  const unexpected = [...seen].filter((slug) => !expectedSet.has(slug)).sort();
+  if (missing.length) {
+    errors.push(`fleet_missing_slug:${missing.sort().join(",")}`);
+  }
+  if (unexpected.length) {
+    errors.push(`fleet_unexpected_slug:${unexpected.join(",")}`);
+  }
+  errors.push(...validateRc54SourceExecutorBoundary(channels));
+  return [...new Set(errors)].sort();
+}
+
 function paperOrigin(host: string): { origin: string | null; hasCredentials: boolean } {
   try {
     const parsed = new URL(host);
@@ -602,41 +696,35 @@ export function rc54PaperExecutorPostureErrors(input: {
   return [];
 }
 
-/** Pure RC5.4 startup gate. This validates the raw source boundary before
- * deriving and identity-checking the in-memory release overlay. */
-export function validateRc54ReleaseStartup(
-  input: Rc54ReleaseStartupInput,
-): Rc54ReleaseStartupResult {
+/**
+ * Shared operational wall for both the sealed RC5.4 constants and a
+ * receipt-bound successor that still runs through the temporary RC5.4
+ * topology adapter. Economic identity is deliberately absent from this check.
+ */
+export function rc54OperationalPostureErrors(input: {
+  fundMode: string | null;
+  posture: Day1RuntimePostureInput;
+  paperExecutorWriteReady: boolean;
+  accounts: readonly AccountRow[];
+  requiredAccountIds: readonly string[];
+  resolvedCredentialAccountIds: readonly string[];
+}): string[] {
   const errors: string[] = [];
-  const expectedSlugs = [...DAY1_ROOTS.map((root) => root.slug), ...DAY1_DARK_CHANNELS];
-  const expectedSet = new Set<string>(expectedSlugs);
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const channel of input.channels) {
-    if (seen.has(channel.slug)) duplicates.add(channel.slug);
-    seen.add(channel.slug);
-  }
-  if (input.channels.length !== expectedSlugs.length) errors.push(`fleet_count:${input.channels.length}`);
-  if (duplicates.size) errors.push(`fleet_duplicate_slug:${[...duplicates].sort().join(",")}`);
-  const missing = expectedSlugs.filter((slug) => !seen.has(slug));
-  const unexpected = [...seen].filter((slug) => !expectedSet.has(slug)).sort();
-  if (missing.length) errors.push(`fleet_missing_slug:${missing.sort().join(",")}`);
-  if (unexpected.length) errors.push(`fleet_unexpected_slug:${unexpected.join(",")}`);
-  errors.push(...validateRc54SourceExecutorBoundary(input.channels));
-  errors.push(...validateRc54AccountBindings(input.accounts));
-
-  if (input.expectedConfigurationSha256 !== RC54_RELEASE_CONFIGURATION_SHA256) {
-    errors.push("release_configuration_hash");
-  }
-  if ((input.fundMode ?? "").toLowerCase() !== DAY1_SEALED_RUNTIME_POSTURE.fundMode) {
+  if ((input.fundMode ?? "").toLowerCase()
+      !== DAY1_SEALED_RUNTIME_POSTURE.fundMode) {
     errors.push("fund_mode");
   }
   const host = paperOrigin(input.posture.alpacaPaperHost);
-  if (host.origin !== DAY1_SEALED_RUNTIME_POSTURE.alpacaPaperOrigin || host.hasCredentials) {
+  if (host.origin !== DAY1_SEALED_RUNTIME_POSTURE.alpacaPaperOrigin
+      || host.hasCredentials) {
     errors.push("alpaca_paper_origin");
   }
-  if (input.posture.stockFeed !== DAY1_SEALED_RUNTIME_POSTURE.stockFeed) errors.push("stock_feed");
-  if (input.posture.optionFeed !== DAY1_SEALED_RUNTIME_POSTURE.optionFeed) errors.push("option_feed");
+  if (input.posture.stockFeed !== DAY1_SEALED_RUNTIME_POSTURE.stockFeed) {
+    errors.push("stock_feed");
+  }
+  if (input.posture.optionFeed !== DAY1_SEALED_RUNTIME_POSTURE.optionFeed) {
+    errors.push("option_feed");
+  }
   errors.push(...rc54PaperExecutorPostureErrors({
     dryRun: input.posture.dryRun,
     liveTrading: input.posture.liveTrading,
@@ -672,23 +760,53 @@ export function validateRc54ReleaseStartup(
     errors.push("manager_shadow:enabled");
   }
   if (input.posture.managerShadowEnabled
-      && input.posture.managerShadowQuoteMaxAgeMs !== sealedManager.quoteMaxAgeMs) {
+      && input.posture.managerShadowQuoteMaxAgeMs
+        !== sealedManager.quoteMaxAgeMs) {
     errors.push("manager_shadow:quote_max_age_ms");
   }
 
-  const accountById = new Map(input.accounts.map((account) => [account.id, account]));
+  const accountById = new Map(input.accounts.map((account) => [
+    account.id,
+    account,
+  ]));
   const credentialAccounts = new Set(input.resolvedCredentialAccountIds);
-  const requiredAccountIds = [...new Set(RC54_ROOTS.map((root) => root.accountId))].sort();
-  for (const accountId of requiredAccountIds) {
+  for (const accountId of [...new Set(input.requiredAccountIds)].sort()) {
     const account = accountById.get(accountId);
-    if (!credentialAccounts.has(accountId)) errors.push(`${accountId}:credential_route_unresolved`);
-    // Shadow rehearsal may validate while manage-only. An actual executor boot
-    // must not report ACTIVE if any routed account will silently refuse entries.
+    if (!credentialAccounts.has(accountId)) {
+      errors.push(`${accountId}:credential_route_unresolved`);
+    }
     if (!input.posture.dryRun && input.posture.liveTrading) {
       if (!account?.is_armed) errors.push(`${accountId}:account_not_armed`);
       if (account?.is_halted) errors.push(`${accountId}:account_halted`);
     }
   }
+  return [...new Set(errors)].sort();
+}
+
+/** Pure RC5.4 startup gate. This validates the raw source boundary before
+ * deriving and identity-checking the in-memory release overlay. */
+export function validateRc54ReleaseStartup(
+  input: Rc54ReleaseStartupInput,
+): Rc54ReleaseStartupResult {
+  const errors: string[] = [];
+  errors.push(...rc54SourceFleetErrors(input.channels));
+  errors.push(...validateRc54AccountBindings(input.accounts));
+
+  if (input.expectedConfigurationSha256 !== RC54_RELEASE_CONFIGURATION_SHA256) {
+    errors.push("release_configuration_hash");
+  }
+  const host = paperOrigin(input.posture.alpacaPaperHost);
+  const accountById = new Map(input.accounts.map((account) => [account.id, account]));
+  const credentialAccounts = new Set(input.resolvedCredentialAccountIds);
+  const requiredAccountIds = [...new Set(RC54_ROOTS.map((root) => root.accountId))].sort();
+  errors.push(...rc54OperationalPostureErrors({
+    fundMode: input.fundMode,
+    posture: input.posture,
+    paperExecutorWriteReady: input.paperExecutorWriteReady,
+    accounts: input.accounts,
+    requiredAccountIds,
+    resolvedCredentialAccountIds: input.resolvedCredentialAccountIds,
+  }));
 
   let overlaid: ChannelConfig[] = [];
   try {
@@ -790,14 +908,13 @@ const mandatoryExitReasons = new Set([
   "eod_hard_flatten", "halt_flatten", "event_flatten",
 ]);
 
-function managerOwnsExit(root: Rc54Root, reason: string): boolean {
+function managerOwnsExit(root: Readonly<Rc54AdmissionRoot>, reason: string): boolean {
   if (mandatoryExitReasons.has(reason)) return true;
-  const profile = RC54_MANAGER_PROFILES[root.managerProfileId];
   if (reason === "target_premium") {
-    return profile.bankTargetPct != null || profile.runner === "fixed-50";
+    return root.bankTargetPct != null || root.runnerKind === "fixed-target";
   }
-  if (reason === "trail_giveback") return profile.runner === "a13";
-  if (reason === "trail_chandelier") return profile.runner === "native-atr";
+  if (reason === "trail_giveback") return root.runnerKind === "a13";
+  if (reason === "trail_chandelier") return root.runnerKind === "native-atr";
   return false;
 }
 
@@ -810,20 +927,28 @@ export function prepareRc54ReleaseAdmissions(input: {
   currentEtMinute: number;
   sessionCloseEtMinute: number;
   sessionLedgerReady: boolean;
+  rootResolver?: Rc54AdmissionRootResolver;
+  candidateIdentity?: Readonly<Rc54AdmissionCandidateIdentity>;
 }): ShadowDecision[] {
+  const candidateIdentity = input.candidateIdentity ?? {
+    releaseId: RC54_RELEASE_ID,
+    configurationSha256: RC54_RELEASE_CONFIGURATION_SHA256,
+    cohortId: RC54_COHORT_ID,
+    cohortFrom: RC54_COHORT_FROM,
+  };
   const channelBySlug = new Map(input.channels.map((channel) => [channel.slug, channel]));
   return input.decisions.map((decision) => {
-    const root = rc54Root(decision.slug);
+    const root = admissionRoot(decision.slug, input.rootResolver);
     const channel = channelBySlug.get(decision.slug);
     let next: ShadowDecision = {
       ...decision,
       detail: {
         ...(decision.detail ?? {}),
         rc54Candidate: {
-          releaseId: RC54_RELEASE_ID,
-          configurationSha256: RC54_RELEASE_CONFIGURATION_SHA256,
-          cohortId: RC54_COHORT_ID,
-          cohortFrom: RC54_COHORT_FROM,
+          releaseId: candidateIdentity.releaseId,
+          configurationSha256: candidateIdentity.configurationSha256,
+          cohortId: candidateIdentity.cohortId,
+          cohortFrom: candidateIdentity.cohortFrom,
           domainId: root?.domainId ?? null,
           familyId: root?.familyId ?? null,
           managerProfileId: root?.managerProfileId ?? null,
@@ -832,6 +957,7 @@ export function prepareRc54ReleaseAdmissions(input: {
           sourceBarAt: new Date(input.sourceBarAtMs).toISOString(),
           observedAt: new Date(input.observedAtMs).toISOString(),
           originalBlockedReason: decision.blocked ?? null,
+          configurationEpochId: root?.configurationEpochId ?? null,
         },
       },
     };
@@ -889,6 +1015,7 @@ export function finalizeRc54ReleaseAdmissions(input: {
   globalSnapshotFailures?: readonly Rc54SnapshotFailure[];
   globalOrderFailureAccountIds?: readonly string[];
   posture?: Rc54ArbitrationPosture;
+  rootResolver?: Rc54AdmissionRootResolver;
 }): Rc54PreparedDecision[] {
   const posture = input.posture ?? "paper-executor";
   const state = buildAdmissionDomainsState({
@@ -896,7 +1023,7 @@ export function finalizeRc54ReleaseAdmissions(input: {
     sessionEntries: input.sessionEntries,
   });
   const candidates = input.prepared.map((row) => {
-    const root = rc54Root(row.decision.slug);
+    const root = admissionRoot(row.decision.slug, input.rootResolver);
     return {
       domainId: root?.domainId ?? "unknown",
       accountId: row.accountId,
