@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
-import { readSentinelOperatorPacket, type SentinelOperatorPacket } from "@/lib/sentinel/operatorPacket";
+import {
+  operatorPacketToJudge,
+  readSentinelOperatorPacket,
+  type SentinelOperatorPacket,
+} from "@/lib/sentinel/operatorPacket";
 
 // One read for the whole §04 sentinel pair — the nightly digest event (published by
 // scripts/sentinel.ts to the `events` table). The Brief panel renders `brief` (forward
@@ -132,7 +136,8 @@ export function useSentinelDigest(): {
         }
         setBrief((meta.brief as Brief) ?? null);
         setScan((meta.scan as Scan) ?? null);
-        setJudge((meta.judge as Judge) ?? null);
+        const packet = readSentinelOperatorPacket(meta.operatorPacket);
+        setJudge(packet ? operatorPacketToJudge(packet) : (meta.judge as Judge) ?? null);
         setLens((meta.lens as Lens) ?? null);
         setDigest((meta.digest as string) ?? null);
         setDate((meta.date as string) ?? row?.created_at?.slice(0, 10) ?? "");
@@ -144,7 +149,7 @@ export function useSentinelDigest(): {
         setSchemaVersion(typeof meta.schemaVersion === "number" ? meta.schemaVersion : null);
         setPublisherVersion((meta.publisherVersion as string) ?? "");
         setInterpretiveProvider((meta.interpretiveProvider as string) ?? "");
-        setOperatorPacket(readSentinelOperatorPacket(meta.operatorPacket));
+        setOperatorPacket(packet);
         const evidenceState = meta.publisherEvidenceState;
         setPublisherEvidenceState(evidenceState === "complete" || evidenceState === "partial" || evidenceState === "error" ? evidenceState : "");
         setPublisherEvidenceDetail((meta.publisherEvidenceDetail as string) ?? "");
