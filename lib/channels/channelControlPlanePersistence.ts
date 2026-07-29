@@ -2,16 +2,31 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   canonicalJson,
   compileReleaseManifest,
+  type ActivationReceipt,
   type ChannelSpecStatus,
   type ChannelSpecVersionDraft,
   type CompiledReleaseManifest,
   type JsonObject,
   type ReleaseManifestDraft,
 } from "./channelControlPlane";
+import { buildShadowRuntimeProjection } from "./channelActivation";
 
 export interface StoredControlPlaneRead {
   compiled: CompiledReleaseManifest | null;
   state: "active" | "not-adopted" | "failed";
+  error: string | null;
+}
+
+export interface StoredControlPlaneDatabaseIdentity {
+  releaseManifestDatabaseId: string;
+  channelSpecDatabaseIdsByVersionKey: Record<string, string>;
+}
+
+export interface StoredReceiptBoundControlPlaneRead {
+  compiled: CompiledReleaseManifest | null;
+  activationReceipt: ActivationReceipt | null;
+  databaseIdentity: StoredControlPlaneDatabaseIdentity | null;
+  state: "receipt-bound" | "baseline-active" | "not-adopted" | "failed";
   error: string | null;
 }
 
@@ -110,6 +125,65 @@ function relationKey(value: unknown, key: string): string | null {
   const related = Array.isArray(value) ? record(value[0]) : record(value);
   const candidate = related?.[key];
   return typeof candidate === "string" && candidate ? candidate : null;
+}
+
+export function reconstructStoredActivationReceipt(
+  row: Record<string, unknown>,
+  compiled: CompiledReleaseManifest,
+): ActivationReceipt {
+  const projection = buildShadowRuntimeProjection(compiled);
+  const oldSpecVersionId = relationKey(row.old_spec, "version_key");
+  const newSpecVersionId = relationKey(row.new_spec, "version_key");
+  const releaseManifestId = relationKey(row.manifest, "manifest_key");
+  const exactDiff = jsonObject(row.exact_diff);
+  const safeBoundaryProof = jsonObject(row.safe_boundary_proof);
+  const workerAcknowledgement = jsonObject(row.worker_acknowledgement);
+  const validationResults = Array.isArray(row.validation_results)
+    ? row.validation_results as ActivationReceipt["validationResults"]
+    : null;
+  const validatorVersions = Array.isArray(row.validator_versions)
+    ? row.validator_versions.filter((value): value is string => typeof value === "string")
+    : [];
+  const receipt: ActivationReceipt = {
+    schemaVersion: Number(row.schema_version) as 1,
+    id: text(row, "id"),
+    configurationEpochId: text(row, "configuration_epoch_id"),
+    proposalId: text(row, "proposal_id"),
+    oldSpecVersionId: oldSpecVersionId ?? "",
+    newSpecVersionId: newSpecVersionId ?? "",
+    releaseManifestId: releaseManifestId ?? "",
+    exactDiff: exactDiff ?? {},
+    validationResults: validationResults ?? [],
+    validatorVersions,
+    approvedBy: text(row, "approved_by"),
+    scheduledFor: text(row, "scheduled_for"),
+    activatedAt: text(row, "activated_at"),
+    safeBoundaryProof: safeBoundaryProof ?? {},
+    workerAcknowledgement: workerAcknowledgement ?? {},
+    rollbackTargetManifestId: text(row, "rollback_target_manifest_id"),
+    oldContentHash: text(row, "old_content_hash"),
+    newContentHash: text(row, "new_content_hash"),
+    manifestContentHash: text(row, "manifest_content_hash"),
+  };
+  if (receipt.schemaVersion !== 1
+      || !receipt.id
+      || !receipt.proposalId
+      || !receipt.oldSpecVersionId
+      || !receipt.newSpecVersionId
+      || receipt.releaseManifestId !== compiled.manifest.id
+      || receipt.newSpecVersionId
+        !== compiled.channelSpecs.find((spec) => spec.id === receipt.newSpecVersionId)?.id
+      || receipt.configurationEpochId !== projection.configurationEpochId
+      || receipt.manifestContentHash !== compiled.manifest.contentHash
+      || !SHA256.test(receipt.oldContentHash)
+      || !SHA256.test(receipt.newContentHash)
+      || !receipt.validatorVersions.length
+      || !Number.isFinite(Date.parse(receipt.scheduledFor))
+      || !Number.isFinite(Date.parse(receipt.activatedAt))
+      || Date.parse(receipt.activatedAt) < Date.parse(receipt.scheduledFor)) {
+    throw new Error("active control-plane activation receipt is malformed or drifted");
+  }
+  return receipt;
 }
 
 function jsonObject(value: unknown): JsonObject | null {
@@ -447,4 +521,183 @@ export async function loadActiveCompiledControlPlane(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+const ACTIVATION_RECEIPT_SELECT = [
+  "id",
+  "schema_version",
+  "configuration_epoch_id",
+  "proposal_id",
+  "exact_diff",
+  "validation_results",
+  "validator_versions",
+  "approved_by",
+  "scheduled_for",
+  "activated_at",
+  "safe_boundary_proof",
+  "worker_acknowledgement",
+  "rollback_target_manifest_id",
+  "old_content_hash",
+  "new_content_hash",
+  "manifest_content_hash",
+  "old_spec:old_spec_version_id(version_key)",
+  "new_spec:new_spec_version_id(version_key)",
+  "manifest:release_manifest_id(manifest_key)",
+].join(",");
+
+/**
+ * Resolves the active generic runtime only when an immutable normal activation
+ * receipt binds the exact reconstructed manifest. A baseline-adopted RC5.4
+ * manifest is reported separately so the worker can continue using its sealed
+ * temporary adapter without pretending the baseline receipt is a normal
+ * proposal activation.
+ */
+export async function loadStoredReceiptBoundControlPlane(
+  client: SupabaseClient,
+): Promise<StoredReceiptBoundControlPlaneRead> {
+  const active = await loadActiveCompiledControlPlane(client);
+  if (active.state === "failed") {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: active.error,
+    };
+  }
+  if (!active.compiled) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "not-adopted",
+      error: null,
+    };
+  }
+
+  const manifestRead = await client.from("release_manifests")
+    .select("id")
+    .eq("manifest_key", active.compiled.manifest.id)
+    .eq("status", "active")
+    .maybeSingle();
+  if (manifestRead.error || !manifestRead.data) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: `release_manifests:active_identity:${manifestRead.error?.message ?? "missing"}`,
+    };
+  }
+  const releaseManifestDatabaseId = String(
+    (manifestRead.data as Record<string, unknown>).id ?? "",
+  );
+  const specRead = await client.from("channel_spec_versions")
+    .select("id,version_key")
+    .in("version_key", active.compiled.manifest.channelSpecVersionIds);
+  if (specRead.error) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: `channel_spec_versions:database_identity:${specRead.error.message}`,
+    };
+  }
+  const specRows = (specRead.data ?? []) as unknown as Array<Record<string, unknown>>;
+  const channelSpecDatabaseIdsByVersionKey = Object.fromEntries(
+    specRows.map((row) => [text(row, "version_key"), text(row, "id")]),
+  );
+  if (Object.keys(channelSpecDatabaseIdsByVersionKey).length
+        !== active.compiled.channelSpecs.length
+      || Object.values(channelSpecDatabaseIdsByVersionKey).some((id) => !id)) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: "channel_spec_versions:database_identity:incomplete",
+    };
+  }
+  const databaseIdentity: StoredControlPlaneDatabaseIdentity = {
+    releaseManifestDatabaseId,
+    channelSpecDatabaseIdsByVersionKey,
+  };
+
+  const receiptRead = await client.from("activation_receipts")
+    .select(ACTIVATION_RECEIPT_SELECT)
+    .eq("release_manifest_id", releaseManifestDatabaseId)
+    .order("activated_at", { ascending: false })
+    .limit(2);
+  if (receiptRead.error) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: `activation_receipts:${receiptRead.error.message}`,
+    };
+  }
+  const receipts = (receiptRead.data ?? []) as unknown as Array<Record<string, unknown>>;
+  if (receipts.length > 1) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: "activation_receipts:multiple_for_active_manifest",
+    };
+  }
+  if (receipts.length === 1) {
+    try {
+      return {
+        compiled: active.compiled,
+        activationReceipt: reconstructStoredActivationReceipt(receipts[0], active.compiled),
+        databaseIdentity,
+        state: "receipt-bound",
+        error: null,
+      };
+    } catch (error) {
+      return {
+        compiled: null,
+        activationReceipt: null,
+        databaseIdentity: null,
+        state: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  const adoptionRead = await client.from("control_plane_adoption_receipts")
+    .select("id")
+    .eq("release_manifest_id", releaseManifestDatabaseId)
+    .limit(2);
+  if (adoptionRead.error) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: `control_plane_adoption_receipts:${adoptionRead.error.message}`,
+    };
+  }
+  const adoptions = adoptionRead.data ?? [];
+  if (adoptions.length !== 1) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: adoptions.length
+        ? "control_plane_adoption_receipts:multiple_for_active_manifest"
+        : "active_control_plane:authority_receipt_missing",
+    };
+  }
+  return {
+    compiled: active.compiled,
+    activationReceipt: null,
+    databaseIdentity,
+    state: "baseline-active",
+    error: null,
+  };
 }

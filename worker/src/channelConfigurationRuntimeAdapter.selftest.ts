@@ -2,14 +2,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildRc54NoopConfigurationCanary } from "../../lib/channels/rc54NoopConfigurationCanary.js";
 import {
+  applyReceiptBoundRuntimeFleetOverlay,
+  buildProductionReceiptBoundRuntimeConfiguration,
   buildReceiptBoundRuntimeConfiguration,
+  configurationWriteStampForChannel,
   evaluateNextSafeEntry,
   stampReceiptBoundEntry,
+  validateReceiptBoundRuntimeStartup,
 } from "./channelConfigurationRuntimeAdapter.js";
 import {
   RC54_MANAGER_PROFILES,
 } from "./rc54ManagerPolicy.js";
 import { RC54_ROOTS } from "./rc54ReleasePolicy.js";
+import type { AccountRow, ChannelConfig } from "./store.js";
 
 const canary = buildRc54NoopConfigurationCanary();
 const compiled = canary.simulation.candidate.compiled;
@@ -23,6 +28,67 @@ const runtime = buildReceiptBoundRuntimeConfiguration({
   projection,
   activationReceipt: receipt,
 });
+const productionRuntime = buildProductionReceiptBoundRuntimeConfiguration({
+  compiled,
+  projection,
+  activationReceipt: receipt,
+  databaseIdentity: {
+    releaseManifestDatabaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    channelSpecDatabaseIdsByVersionKey: Object.fromEntries(
+      compiled.channelSpecs.map((spec, index) => [
+        spec.id,
+        `bbbbbbbb-bbbb-4bbb-8bb${index}-bbbbbbbbbbb${index}`,
+      ]),
+    ),
+  },
+});
+
+const sourceChannel = (slug: string): ChannelConfig => {
+  const root = RC54_ROOTS.find((candidate) => candidate.slug === slug);
+  if (!root) throw new Error(`unknown fixture root: ${slug}`);
+  return {
+    id: root.strategistId,
+    slug,
+    name: slug,
+    status: "draft",
+    spec_json: null,
+    underlying: root.underlying,
+    executor: "stream",
+    account_id: null,
+    is_active: true,
+    capital_pct: 1,
+    aggression: 0,
+    max_contracts: 99,
+    daily_stop_usd: 999,
+    daily_target_usd: 999,
+    underlying_stop_pct: 0,
+    muted: false,
+    soloed: false,
+    boosted: false,
+    event_policy: "standdown",
+    entry_dte: 0,
+    strike_offset: 0,
+    premium_stop_pct: 90,
+    take_profit_pct: 90,
+    pyramid_adds: 0,
+    stall_minutes: 0,
+    stall_max_favor_pct: 0,
+    gap_min: 0,
+    runner_frac: 0,
+    runner_giveback_pct: 0,
+  };
+};
+const sourceChannels = RC54_ROOTS.map((root) => sourceChannel(root.slug));
+const accountIds = [...new Set(RC54_ROOTS.map((root) => root.accountId))].sort();
+const accounts: AccountRow[] = accountIds.map((id) => ({
+  id,
+  name: id,
+  mode: "paper",
+  cred_ref: null,
+  is_armed: true,
+  is_halted: false,
+  master_daily_stop_usd: 0,
+}));
 
 let checks = 0;
 const check = (name: string, fn: () => void): void => {
@@ -36,6 +102,8 @@ check("no-op adapter exactly represents sealed RC5.4 economics", () => {
   assert.equal(runtime.paperOnly, true);
   assert.equal(runtime.runtimeMutationAuthorized, false);
   assert.equal(runtime.orderAuthority, false);
+  assert.equal(runtime.configurationAuthority, "receipt-bound-new-entry-only");
+  assert.equal(runtime.historicalMutationAuthorized, false);
   assert.equal(runtime.roots.length, RC54_ROOTS.length);
   for (const sealed of RC54_ROOTS) {
     const root = runtime.roots.find((candidate) => candidate.slug === sealed.slug);
@@ -51,6 +119,107 @@ check("no-op adapter exactly represents sealed RC5.4 economics", () => {
     assert.equal(root.takeProfit.fraction, profile.runnerFraction);
     assert.equal(root.configuration.configurationEpochId, runtime.configurationEpochId);
   }
+});
+
+check("receipt-bound overlay ignores mutable strategist economics and routing", () => {
+  const overlaid = applyReceiptBoundRuntimeFleetOverlay({
+    channels: sourceChannels,
+    runtime: productionRuntime,
+  });
+  for (const root of productionRuntime.roots) {
+    const channel = overlaid.find((candidate) => candidate.slug === root.slug);
+    assert.ok(channel);
+    assert.equal(channel.id, root.strategistId);
+    assert.equal(channel.account_id, root.accountId);
+    assert.equal(channel.max_contracts, root.riskLimits.maxContracts);
+    assert.equal(channel.capital_pct, root.riskLimits.maxRiskUsd);
+    assert.equal(channel.entry_dte, root.entryDte);
+    assert.equal(channel.strike_offset, root.strikeOffset);
+    assert.equal(channel.premium_stop_pct, root.stopLoss.catastrophePct);
+    assert.equal(
+      channel.take_profit_pct,
+      root.takeProfit.kind === "bank" ? root.takeProfit.targetPct : 0,
+    );
+    assert.equal(channel.runner_frac, root.takeProfit.fraction);
+  }
+});
+
+check("one reviewed root produces one exact all-or-none database write stamp", () => {
+  const root = productionRuntime.roots[0];
+  assert.ok(root);
+  const stamp = configurationWriteStampForChannel({
+    runtime: productionRuntime,
+    channelSlug: root.slug,
+  });
+  assert.equal(stamp.channel_spec_version_id, root.channelSpecVersionDatabaseId);
+  assert.equal(stamp.release_manifest_id, productionRuntime.releaseManifestDatabaseId);
+  assert.equal(stamp.configuration_epoch_id, productionRuntime.configurationEpochId);
+  assert.equal(stamp.configuration_identity.channelSlug, root.slug);
+  assert.equal(stamp.configuration_identity.accountId, root.accountId);
+  assert.equal(stamp.configuration_identity.channelSpecContentHash, root.channelSpecContentHash);
+  assert.equal(stamp.entry_policy.configuration.configurationEpochId, runtime.configurationEpochId);
+  assert.equal(stamp.entry_policy.quantity, root.quantity);
+  assert.deepEqual(stamp.entry_policy.takeProfit, root.takeProfit);
+  assert.deepEqual(stamp.entry_policy.stopLoss, root.stopLoss);
+  assert.deepEqual(stamp.entry_policy.ratchetParameters, root.ratchetParameters);
+});
+
+check("simulation-only runtime cannot produce a database write stamp", () => {
+  assert.throws(() => configurationWriteStampForChannel({
+    runtime,
+    channelSlug: runtime.roots[0]?.slug ?? "",
+  }), /verified database identity/);
+});
+
+check("generic startup validation proves paper routes and worker compatibility", () => {
+  const result = validateReceiptBoundRuntimeStartup({
+    runtime: productionRuntime,
+    channels: sourceChannels,
+    accounts,
+    fundMode: "paper",
+    workerCompatibilityVersion: productionRuntime.workerCompatibilityVersion,
+    resolvedCredentialAccountIds: accountIds,
+  });
+  assert.equal(result.state, "ready");
+  assert.deepEqual(result.blockers, []);
+  assert.equal(result.channels.length, sourceChannels.length);
+  assert.deepEqual(result.configuredPaperAccountIds, accountIds);
+  assert.equal(result.configurationEpochId, productionRuntime.configurationEpochId);
+  assert.equal(result.orderAuthority, false);
+});
+
+check("generic startup fails closed on credentials, account mode, or compatibility", () => {
+  const result = validateReceiptBoundRuntimeStartup({
+    runtime: productionRuntime,
+    channels: sourceChannels,
+    accounts: accounts.map((account, index) =>
+      index === 0 ? { ...account, mode: "live" } : account),
+    fundMode: "paper",
+    workerCompatibilityVersion: "wrong-worker-version",
+    resolvedCredentialAccountIds: accountIds.slice(1),
+  });
+  assert.equal(result.state, "blocked");
+  assert.equal(
+    result.blockers.some((blocker) => blocker.includes("account_not_paper")),
+    true,
+  );
+  assert.equal(
+    result.blockers.some((blocker) => blocker.includes("credential_route_missing")),
+    true,
+  );
+  assert.equal(
+    result.blockers.includes("runtime_configuration:worker_compatibility_mismatch"),
+    true,
+  );
+});
+
+check("source strategist mismatch blocks the overlay", () => {
+  assert.throws(() => applyReceiptBoundRuntimeFleetOverlay({
+    runtime: productionRuntime,
+    channels: sourceChannels.map((channel, index) => index
+      ? channel
+      : { ...channel, id: "99999999-9999-4999-8999-999999999999" }),
+  }), /strategist mismatch/);
 });
 
 check("eligible next entry uses the exact receipt-bound quantity and account", () => {
@@ -140,7 +309,7 @@ check("new entry stamp binds the same manifest, spec, and epoch", () => {
   assert.equal(stamp.accountId, root.accountId);
 });
 
-check("adapter is dormant and not imported by the active worker", () => {
+check("adapter remains dormant until the reviewed worker bridge imports it", () => {
   const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
   assert.doesNotMatch(indexSource, /channelConfigurationRuntimeAdapter/);
 });

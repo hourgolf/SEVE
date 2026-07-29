@@ -41,6 +41,15 @@ import {
   rc54RunnerConfiguration,
   type Rc54ManagerProfileId,
 } from "./rc54ManagerPolicy.js";
+import type {
+  ReceiptBoundConfigurationWriteStamp,
+} from "./channelConfigurationRuntimeAdapter.js";
+import {
+  receiptBoundConfiguredTakeProfitPct,
+  receiptBoundEntryPolicyFromRow,
+  receiptBoundEntryPolicyStampPresent,
+  receiptBoundRunnerConfiguration,
+} from "./receiptBoundEntryPolicy.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -100,6 +109,9 @@ export interface ExecCtx {
   // Stamped into entry_features and copied to any runner remainder row.
   // It is never inferred from the current config for an already-open position.
   rc54ManagerProfileId?: Rc54ManagerProfileId | null;
+  // Present only after a reviewed receipt-bound runtime handoff. Existing
+  // position exits inherit from the row and never read this current root.
+  configurationWriteStamp?: Readonly<ReceiptBoundConfigurationWriteStamp> | null;
 }
 
 /** Seed the per-OCC remaining counter from Alpaca's positions (cycle start). */
@@ -155,6 +167,10 @@ async function placeFill(
     decisionAtMs: ctx.decisionAtMs,
     observedAtMs,
     chainAgeMs: ctx.chain.ageMs,
+    positionId,
+    configurationWriteStamp: positionId
+      ? null
+      : ctx.configurationWriteStamp ?? null,
   };
   // Direct fast-sweep exits do not pass through the bar-close decision loop.
   // Deterministic ids make this a harmless no-op when that loop already wrote it.
@@ -331,18 +347,33 @@ export async function executeExit(
   const heldQty = ctx.remainingByOcc.get(occ) ?? (alp ? Math.max(0, Math.round(alp.qty)) : 0);
   const sellQty = Math.min(heldQty, row.qty);
   const stampedRc54Profile = rc54ManagerProfileFromRow(row);
-  const effectiveRunner = rc54RunnerConfiguration(stampedRc54Profile) ?? runner;
+  const receiptBoundPolicy = receiptBoundEntryPolicyFromRow(row);
+  const sealedReceiptBoundRow = receiptBoundEntryPolicyStampPresent(row);
+  const effectiveRunner = receiptBoundRunnerConfiguration(receiptBoundPolicy)
+    ?? rc54RunnerConfiguration(stampedRc54Profile)
+    ?? runner;
   const quality = qualityPolicy ? {
     ...qualityPolicy,
+    premiumStopPct: receiptBoundPolicy
+      ? receiptBoundPolicy.stopLoss.catastrophePct
+      : sealedReceiptBoundRow
+        ? null
+        : qualityPolicy.premiumStopPct,
     // Row identity, not the current channel config, owns a successor-cohort
     // exit. This distinguishes a +30% bank from its +50% runner target.
-    takeProfitPct: stampedRc54Profile
-      ? rc54ConfiguredTakeProfitPct({
+    takeProfitPct: receiptBoundPolicy
+      ? receiptBoundConfiguredTakeProfitPct({
+        policy: receiptBoundPolicy,
+        isRunner: !!row.runner_of,
+        reason: d.reason,
+      })
+      : stampedRc54Profile
+        ? rc54ConfiguredTakeProfitPct({
         profile: stampedRc54Profile,
         isRunner: !!row.runner_of,
         reason: d.reason,
       })
-      : qualityPolicy.takeProfitPct,
+        : qualityPolicy.takeProfitPct,
     entryPrice: row.avg_entry_price,
     rc54ManagerProfileId: stampedRc54Profile?.id ?? null,
   } : null;
@@ -681,7 +712,25 @@ export async function executeEntry(
             recovery: "filled-order-lost-insert",
             release_evidence: releaseEvidenceStamp(ctx.releaseEvidenceContext),
             rc54_manager_profile: ctx.rc54ManagerProfileId ?? null,
+            ...(ctx.configurationWriteStamp
+              ? {
+                configuration_identity:
+                  ctx.configurationWriteStamp.configuration_identity,
+                receipt_bound_entry_policy:
+                  ctx.configurationWriteStamp.entry_policy,
+              }
+              : {}),
           },
+          ...(ctx.configurationWriteStamp
+            ? {
+              channel_spec_version_id:
+                ctx.configurationWriteStamp.channel_spec_version_id,
+              release_manifest_id:
+                ctx.configurationWriteStamp.release_manifest_id,
+              configuration_epoch_id:
+                ctx.configurationWriteStamp.configuration_epoch_id,
+            }
+            : {}),
         });
         if (!inserted.error) {
           if (inserted.id && inserted.openedAt) queueManagerShadowAdmission({
@@ -712,6 +761,7 @@ export async function executeEntry(
       : null,
     executableManagerProfile: ctx.rc54ManagerProfileId ?? null,
     releaseEvidenceContext: ctx.releaseEvidenceContext,
+    configurationWriteStamp: ctx.configurationWriteStamp,
   });
   const opportunityId = !blocked && qty > 0
     ? captureObservedPositionPlan({
@@ -721,6 +771,7 @@ export async function executeEntry(
       decisionAtMs: ctx.decisionAtMs,
       executableManagerProfile: ctx.rc54ManagerProfileId ?? null,
       releaseEvidenceContext: ctx.releaseEvidenceContext,
+      configurationWriteStamp: ctx.configurationWriteStamp,
     })
     : null;
   const releaseEvidence = releaseEvidenceStamp(ctx.releaseEvidenceContext);
@@ -740,11 +791,26 @@ export async function executeEntry(
       account_id: ctx.accountId,
       channel_version: policyIdentity?.channelVersion ?? null,
       manager_version: policyIdentity?.managerVersion ?? null,
-      configuration_epoch_id: policyIdentity?.configurationEpochId ?? null,
+      configuration_epoch_id:
+        ctx.configurationWriteStamp?.configuration_epoch_id
+        ?? policyIdentity?.configurationEpochId
+        ?? null,
+      observed_policy_configuration_epoch_id:
+        policyIdentity?.configurationEpochId ?? null,
       policy_epoch_id: policyIdentity?.policyEpochId ?? null,
       worker_version: ACTIVE_WORKER_VERSION,
       release_evidence: releaseEvidence,
     },
+    ...(ctx.configurationWriteStamp
+      ? {
+        channel_spec_version_id:
+          ctx.configurationWriteStamp.channel_spec_version_id,
+        release_manifest_id:
+          ctx.configurationWriteStamp.release_manifest_id,
+        configuration_epoch_id:
+          ctx.configurationWriteStamp.configuration_epoch_id,
+      }
+      : {}),
   });
   if (blocked || qty <= 0) { if (blocked !== d.blocked) info(`entry ${d.slug} blocked: ${blocked}`); return; }
 
@@ -776,8 +842,26 @@ export async function executeEntry(
         opportunity_id: opportunityId,
         release_evidence: releaseEvidence,
         rc54_manager_profile: ctx.rc54ManagerProfileId ?? null,
+        ...(ctx.configurationWriteStamp
+          ? {
+            configuration_identity:
+              ctx.configurationWriteStamp.configuration_identity,
+            receipt_bound_entry_policy:
+              ctx.configurationWriteStamp.entry_policy,
+          }
+          : {}),
       },
       entry_delta: eq?.delta ?? null,
+      ...(ctx.configurationWriteStamp
+        ? {
+          channel_spec_version_id:
+            ctx.configurationWriteStamp.channel_spec_version_id,
+          release_manifest_id:
+            ctx.configurationWriteStamp.release_manifest_id,
+          configuration_epoch_id:
+            ctx.configurationWriteStamp.configuration_epoch_id,
+        }
+        : {}),
     });
     if (inserted.error) {
       await store.journal("WARN", `${d.slug}: ORDER FILLED but position insert FAILED (${inserted.error}) — reconcile manually`, { occ, order_id: o.id });

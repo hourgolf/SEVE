@@ -5,6 +5,9 @@
 import type { ShadowDecision } from "./decide.js";
 import type { ChannelConfig } from "./store.js";
 import { deterministicEvidenceUuid, observedOpportunityId } from "./planShadowModel.js";
+import type {
+  ReceiptBoundConfigurationWriteStamp,
+} from "./channelConfigurationRuntimeAdapter.js";
 
 export type ExecutionObservationKind = "decision" | "broker_result";
 
@@ -39,6 +42,9 @@ export interface ExecutionObservationDraft {
   broker_status: string | null;
   filled_qty: number | null;
   fill_price: number | null;
+  channel_spec_version_id: string | null;
+  release_manifest_id: string | null;
+  configuration_epoch_id: string | null;
   payload: Record<string, unknown>;
 }
 
@@ -73,10 +79,14 @@ export interface DecisionObservationInput {
   decisionAtMs: number;
   observedAtMs: number;
   chainAgeMs: number;
+  positionId?: string | null;
+  configurationWriteStamp?: Readonly<ReceiptBoundConfigurationWriteStamp> | null;
 }
 
 function traceIdentity(input: DecisionObservationInput): Record<string, unknown> {
   const d = input.decision;
+  const configurationEpochId =
+    input.configurationWriteStamp?.configuration_epoch_id ?? null;
   return {
     strategistId: input.channel.id,
     accountId: input.accountId,
@@ -84,6 +94,7 @@ function traceIdentity(input: DecisionObservationInput): Record<string, unknown>
     action: d.action,
     occ: d.occ ?? null,
     reason: d.reason,
+    ...(configurationEpochId ? { configurationEpochId } : {}),
   };
 }
 
@@ -102,6 +113,8 @@ export function buildDecisionObservation(input: DecisionObservationInput): Execu
     ? observedOpportunityId({
         strategistId: ch.id, accountId: input.accountId, occ: d.occ,
         direction: d.direction, reason: d.reason, decisionAtMs: input.decisionAtMs,
+        configurationEpochId:
+          input.configurationWriteStamp?.configuration_epoch_id ?? null,
       })
     : null;
   const detail = (jsonSafe(d.detail ?? {}) ?? {}) as Record<string, unknown>;
@@ -117,7 +130,7 @@ export function buildDecisionObservation(input: DecisionObservationInput): Execu
     account_id: input.accountId,
     channel_slug: ch.slug,
     opportunity_id: opportunityId,
-    position_id: null,
+    position_id: input.positionId ?? null,
     action: d.action,
     reason: d.reason,
     blocked_reason: d.blocked ?? null,
@@ -142,7 +155,22 @@ export function buildDecisionObservation(input: DecisionObservationInput): Execu
     broker_status: null,
     filled_qty: null,
     fill_price: null,
-    payload: { decisionDetail: detail, status: d.status },
+    channel_spec_version_id:
+      input.configurationWriteStamp?.channel_spec_version_id ?? null,
+    release_manifest_id:
+      input.configurationWriteStamp?.release_manifest_id ?? null,
+    configuration_epoch_id:
+      input.configurationWriteStamp?.configuration_epoch_id ?? null,
+    payload: {
+      decisionDetail: detail,
+      status: d.status,
+      ...(input.configurationWriteStamp
+        ? {
+          configurationIdentity:
+            input.configurationWriteStamp.configuration_identity,
+        }
+        : {}),
+    },
   };
 }
 

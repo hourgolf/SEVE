@@ -82,6 +82,10 @@ import {
   rc54ManagerStampPresent,
 } from "./rc54ManagerPolicy.js";
 import {
+  receiptBoundEntryPolicyFromRow,
+  receiptBoundEntryPolicyStampPresent,
+} from "./receiptBoundEntryPolicy.js";
+import {
   applyRc54ReleaseFleetOverlay,
   buildRc54AdmissionOccupancy,
   finalizeRc54ReleaseAdmissions,
@@ -1368,13 +1372,20 @@ async function fastExitSweep(): Promise<void> {
       // Existing RC5.4 risk remains bound to its persisted manager profile even
       // if an operator later disables new RC5.4 admissions.
       const rc54RootPolicy = rc54ManagerStampPresent(r) && rc54Root(ch.slug) != null;
-      const sealedReleaseRootPolicy = day1RootPolicy || rc54RootPolicy;
+      const receiptBoundPolicy = receiptBoundEntryPolicyFromRow(r);
+      const receiptBoundPolicyStamped = receiptBoundEntryPolicyStampPresent(r);
+      const sealedReleaseRootPolicy =
+        day1RootPolicy || rc54RootPolicy || receiptBoundPolicyStamped;
       // 1b #6: `mark` = the fresh EXECUTABLE BID, `peak` = the bid-based MFE ratchet above.
       // premiumExitReason stays PURE (unchanged comparisons) — only the input price changed.
       const reason = premiumExitReason({
         row: r, slug: ch.slug, premiumExit: sealedReleaseRootPolicy ? undefined : pe,
         takeProfitPct: sealedReleaseRootPolicy ? 0 : ch.take_profit_pct,
-        premiumStopPct: ch.premium_stop_pct,
+        premiumStopPct: receiptBoundPolicy
+          ? receiptBoundPolicy.stopLoss.catastrophePct
+          : receiptBoundPolicyStamped
+            ? 0
+            : ch.premium_stop_pct,
         givebackTrail: day1RootPolicy
           ? day1ExecutableGivebackTrail(ch.slug)
           : policy.GIVEBACK_TRAIL[ch.slug] ?? null,
@@ -1383,6 +1394,7 @@ async function fastExitSweep(): Promise<void> {
         stallMinutes: ch.stall_minutes, stallMaxFavorPct: ch.stall_max_favor_pct, // strand-4 stall-exit (0 = off)
         isRunner: !!r.runner_of, runnerGivebackPct: ch.runner_giveback_pct, // R1 runner ratchet (0 = off)
         rc54ManagerProfileId: rc54ManagerProfileFromRow(r)?.id ?? null,
+        receiptBoundEntryPolicy: receiptBoundPolicy,
       }, bid, peak);
       if (!reason) continue;
       // 1b #9: ordinary PRICE exits need the order snapshot (late-fill recovery + working-order

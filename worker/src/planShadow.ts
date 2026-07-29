@@ -9,6 +9,9 @@ import type { ShadowDecision } from "./decide.js";
 import { buildShadowPlanEvidence, type ShadowPlanEvidence } from "./planShadowModel.js";
 import { day1ExecutableGivebackTrail } from "./day1ReleasePolicy.js";
 import type { ReleaseEvidenceContext } from "./releaseEvidenceContext.js";
+import type {
+  ReceiptBoundConfigurationWriteStamp,
+} from "./channelConfigurationRuntimeAdapter.js";
 
 const seen = new Set<string>();
 const pending = new Set<string>();
@@ -22,6 +25,7 @@ export function captureObservedPositionPlan(args: {
   decisionAtMs: number;
   executableManagerProfile?: string | null;
   releaseEvidenceContext?: ReleaseEvidenceContext | null;
+  configurationWriteStamp?: Readonly<ReceiptBoundConfigurationWriteStamp> | null;
 }): string | null {
   let evidence: ShadowPlanEvidence | null;
   try {

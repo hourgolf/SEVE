@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildRc54ControlPlaneBootstrap } from "./rc54ControlPlaneBootstrap";
-import { reconstructStoredControlPlane } from "./channelControlPlanePersistence";
+import {
+  reconstructStoredActivationReceipt,
+  reconstructStoredControlPlane,
+} from "./channelControlPlanePersistence";
+import { buildRc54NoopConfigurationCanary } from "./rc54NoopConfigurationCanary";
 
 const bootstrap = buildRc54ControlPlaneBootstrap();
 const databaseIds = new Map(
@@ -148,6 +152,57 @@ check("proposal route uses active authority, fails closed, then uses RC5.4 only 
   assert.match(route, /activeRead\.state === "failed"/);
   assert.match(route, /active control-plane identity is unavailable/);
   assert.match(route, /activeRead\.compiled[\s\S]+buildOperatorProposal\([\s\S]+buildRc54OperatorProposal/);
+});
+
+check("stored activation receipt reconstructs only against its exact active manifest", () => {
+  const canary = buildRc54NoopConfigurationCanary();
+  const compiled = canary.simulation.candidate.compiled;
+  const receipt = canary.simulation.receipt;
+  assert.ok(compiled);
+  assert.ok(receipt);
+  const row: Record<string, unknown> = {
+    id: receipt.id,
+    schema_version: receipt.schemaVersion,
+    configuration_epoch_id: receipt.configurationEpochId,
+    proposal_id: receipt.proposalId,
+    exact_diff: receipt.exactDiff,
+    validation_results: receipt.validationResults,
+    validator_versions: receipt.validatorVersions,
+    approved_by: receipt.approvedBy,
+    scheduled_for: receipt.scheduledFor,
+    activated_at: receipt.activatedAt,
+    safe_boundary_proof: receipt.safeBoundaryProof,
+    worker_acknowledgement: receipt.workerAcknowledgement,
+    rollback_target_manifest_id: receipt.rollbackTargetManifestId,
+    old_content_hash: receipt.oldContentHash,
+    new_content_hash: receipt.newContentHash,
+    manifest_content_hash: receipt.manifestContentHash,
+    old_spec: { version_key: receipt.oldSpecVersionId },
+    new_spec: { version_key: receipt.newSpecVersionId },
+    manifest: { manifest_key: receipt.releaseManifestId },
+  };
+  const reconstructed = reconstructStoredActivationReceipt(row, compiled);
+  assert.equal(reconstructed.id, receipt.id);
+  assert.equal(reconstructed.configurationEpochId, receipt.configurationEpochId);
+  assert.throws(
+    () => reconstructStoredActivationReceipt({
+      ...row,
+      manifest_content_hash: `sha256:${"f".repeat(64)}`,
+    }, compiled),
+    /malformed or drifted/,
+  );
+});
+
+check("runtime loader distinguishes baseline adoption from normal receipt authority", () => {
+  const source = readFileSync(new URL(
+    "./channelControlPlanePersistence.ts",
+    import.meta.url,
+  ), "utf8");
+  assert.match(source, /loadStoredReceiptBoundControlPlane/);
+  assert.match(source, /state: "receipt-bound"/);
+  assert.match(source, /state: "baseline-active"/);
+  assert.match(source, /active_control_plane:authority_receipt_missing/);
+  assert.match(source, /multiple_for_active_manifest/);
 });
 
 console.log(`channel control-plane persistence self-test passed (${checks} checks)`);

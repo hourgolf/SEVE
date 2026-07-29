@@ -22,6 +22,12 @@ import {
   rc54RunnerFixedTargetReached,
   type Rc54ManagerProfileId,
 } from "./rc54ManagerPolicy.js";
+import {
+  receiptBoundA13GivebackReached,
+  receiptBoundBankTargetReached,
+  receiptBoundFixedTargetReached,
+  type ReceiptBoundEntryPolicy,
+} from "./receiptBoundEntryPolicy.js";
 
 // The fast premium sweep runs every ~10s on live marks; these checks are the
 // exits that must NOT wait for a bar close (stops/targets/ratchets), as opposed
@@ -43,6 +49,7 @@ export interface FastExitCheck {
   isRunner?: boolean;
   runnerGivebackPct?: number;
   rc54ManagerProfileId?: Rc54ManagerProfileId | null;
+  receiptBoundEntryPolicy?: Readonly<ReceiptBoundEntryPolicy> | null;
 }
 
 export function premiumExitReason(c: FastExitCheck, mark: number, peak: number): string | null {
@@ -58,6 +65,18 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
     // a bar-close-only target would systematically give back intra-bar). Mirrors decide.ts:take_profit_pct.
     if (c.takeProfitPct != null && c.takeProfitPct > 0 && mark >= entry * (1 + c.takeProfitPct / 100)) return "target_premium";
   }
+  if (receiptBoundBankTargetReached({
+    policy: c.receiptBoundEntryPolicy ?? null,
+    isRunner: !!c.isRunner,
+    entryPrice: entry,
+    mark,
+  })) return "target_premium";
+  if (receiptBoundFixedTargetReached({
+    policy: c.receiptBoundEntryPolicy ?? null,
+    isRunner: !!c.isRunner,
+    entryPrice: entry,
+    mark,
+  })) return "target_premium";
   const rc54Profile = rc54ManagerProfile(c.rc54ManagerProfileId);
   if (rc54BankTargetReached({
     profile: rc54Profile, isRunner: !!c.isRunner, entryPrice: entry, mark,
@@ -82,6 +101,13 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
   if (premStop > 0 && mark <= entry * (1 - premStop / 100)) return "premium_stop";
   if (rc54A13GivebackReached({
     profile: rc54Profile, isRunner: !!c.isRunner, entryPrice: entry, mark, peak,
+  })) return "trail_giveback";
+  if (receiptBoundA13GivebackReached({
+    policy: c.receiptBoundEntryPolicy ?? null,
+    isRunner: !!c.isRunner,
+    entryPrice: entry,
+    mark,
+    peak,
   })) return "trail_giveback";
   if (c.givebackTrail && peak >= entry * c.givebackTrail.engageMult) {
     const giveback = entry + (peak - entry) * (1 - c.givebackTrail.givebackPct / 100);
