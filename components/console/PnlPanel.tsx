@@ -8,6 +8,7 @@ import type { PnlWindow, ChannelStat, WindowedPnl } from "@/hooks/useWindowedPnl
 import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
+import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
 
 const WINDOWS: { id: PnlWindow; label: string }[] = [
   { id: "today", label: "Today" },
@@ -53,17 +54,19 @@ export function PnlPanel({
   const blocked = isToday
     ? todayAttribution?.state === "blocked"
     : windowed?.evidenceState === "blocked";
+  const partial = !isToday && windowed?.evidenceState === "partial";
   const evidenceIssues = isToday
     ? todayAttribution?.issues ?? []
-    : windowed?.issues ?? [];
+    : (windowed?.issues ?? []).map((issue) => summarizePerformanceIssue(issue));
   const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();
 
   const statFor = (slug: string): ChannelStat => {
     if (isToday) { const p = pnlByStrategist[slug]; return { pnl: p?.dayPnl ?? 0, trades: p?.trades ?? 0, wins: p?.wins ?? 0, pkSum: p?.pkSum ?? 0, pkN: p?.pkN ?? 0 }; }
     return windowed?.statsBySlug[slug] ?? { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 };
   };
-  const fundVal = isToday ? fundPnl.dayPnl : (windowed?.fundPnl ?? 0);
+  const fundVal = isToday ? fundPnl.dayPnl : windowed?.fundPnl;
   const equityValues = isToday ? equityCurve.map((p) => p.equity) : (windowed?.curve ?? []);
+  const attributionAvailable = isToday || windowed?.attributionEvidenceState === "ok";
 
   const hasCurve =
     equityValues.length >= 2 && Math.max(...equityValues) !== Math.min(...equityValues);
@@ -90,11 +93,12 @@ export function PnlPanel({
       <div className="pbody">
         {/* hero: the window's fund number leads; the seg picks the window */}
         <div className="pnl-hero">
-          <span className={`pnl-big ${blocked ? "neg" : fundVal < 0 ? "neg" : "pos"}`}>
-            {loading ? "…" : blocked ? "BLOCKED" : signedUsd(fundVal)}
+          <span className={`pnl-big ${blocked || fundVal == null ? "neg" : fundVal < 0 ? "neg" : "pos"}`}>
+            {loading ? "…" : fundVal == null ? "UNAVAILABLE" : signedUsd(fundVal)}
           </span>
-          <span className="pnl-hero-sub" title={windowed?.sinceNote ? "this bucket's NAV history starts here — the fund number + curve span this range; the channel rows below cover the full window" : undefined}>
+          <span className="pnl-hero-sub" title={windowed?.sinceNote ? "this bucket's account NAV history starts here; channel rows require independent immutable execution-account attribution" : undefined}>
             {winLabel}{windowed?.sinceNote ? ` · NAV since ${windowed.sinceNote}` : ""}
+            {!isToday && windowed?.fundPnlSource === "immutable_position_attribution" ? " · attributed positions" : ""}
           </span>
           <div className="seg" aria-label="P&L timeframe" style={{ marginLeft: "auto" }}>
             {WINDOWS.map((w) => (
@@ -104,10 +108,20 @@ export function PnlPanel({
             ))}
           </div>
         </div>
-        {blocked && (
+        {(blocked || partial) && (
           <div className="review-evidence-blocked" role="alert">
-            <b>{isToday ? "Current-session attribution unavailable" : "Historical attribution unavailable"}</b>
+            <b>{isToday
+              ? "Current-session attribution unavailable"
+              : blocked
+                ? "Historical evidence unavailable"
+                : "Historical evidence partial"}</b>
             {evidenceIssues.map((issue) => <span key={issue}>{issue}</span>)}
+            {!isToday && windowed?.navEvidenceState === "ok" && windowed.attributionEvidenceState === "blocked" && (
+              <small>Account NAV remains available; channel rows are withheld.</small>
+            )}
+            {!isToday && windowed?.navEvidenceState === "blocked" && windowed.attributionEvidenceState === "ok" && (
+              <small>Immutable channel attribution remains available; account NAV history is unavailable.</small>
+            )}
             <small>No strategist-account fallback was used.</small>
           </div>
         )}
@@ -133,7 +147,7 @@ export function PnlPanel({
         </div>
         {/* channels — diverging bar (loss left / gain right) + the harvest lens (era-4 pk · win).
             amber pk = high peak / low win → spike-carried (fix, don't promote). */}
-        <div style={{ marginTop: 8, opacity: loading ? 0.5 : 1, transition: "opacity 0.15s" }}>
+        {attributionAvailable ? <div style={{ marginTop: 8, opacity: loading ? 0.5 : 1, transition: "opacity 0.15s" }}>
           <div className="dvg dvg-hd">
             <span />
             <span />
@@ -168,7 +182,9 @@ export function PnlPanel({
               {showIdle ? "▾ hide" : "▸"} {idle.length} idle channel{idle.length === 1 ? "" : "s"} ($0 · no trades {winLabel})
             </button>
           )}
-        </div>
+        </div> : (
+          <div className="chart-empty">channel rows withheld — immutable historical account route unavailable</div>
+        )}
       </div>
     </div>
   );
