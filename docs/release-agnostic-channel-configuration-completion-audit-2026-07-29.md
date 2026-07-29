@@ -1,13 +1,15 @@
 # Release-agnostic channel configuration completion audit — 2026-07-29
 
-Status: **LOCAL IMPLEMENTATION READY FOR OPERATOR DIFF REVIEW · UNCOMMITTED · UNPUSHED · UNDEPLOYED · UNMIGRATED · INACTIVE**
+Status: **IMPLEMENTATION BRANCH READY FOR DRAFT PR REVIEW · UNDEPLOYED · UNMIGRATED · INACTIVE**
 
-Baseline local commit: `24901f3a` (`Add receipt-bound activation and immutable epochs`)
+Reviewed implementation base: `6d7025e2` (`Complete RC5.4 configuration activation pathway`)
 
-This audit proves the local implementation state only. It does not authorize a
-commit, push, pull request, merge, deployment, migration, Railway change,
-baseline adoption, live proposal, acknowledgement write, activation, rollback,
-roster/account change, retention change, or order.
+This audit proves the reviewed implementation state only. The implementation
+commits and branch push occurred under separate operator approvals. The
+operator subsequently authorized committing and deploying safe completed work
+for the July 30 preopen objective; that authorization does not include runtime
+activation, a live proposal, configuration/roster/account changes, retention,
+or an order.
 
 ## Requirement audit
 
@@ -28,7 +30,7 @@ roster/account change, retention change, or order.
 | No-op RC5.4 proving sequence | `npm run channel-configuration-noop-canary` returns economics equivalence, full candidate/order/fill/position/close/held/manager chain, acknowledgement, receipt, rollback-ready state, and no mutation | Pass |
 | One non-active bounded proposal | `npm run channel-bounded-proposal` deterministically generates a coherent quantity/risk-envelope specimen, marks it non-recommended/non-persisted/non-authoritative, and leaves replay/capacity/boundary/ack/receipt evidence absent | Pass |
 | Exact production activation procedure | `release-agnostic-channel-configuration-readiness.md` names the two migrations, two flags, API/RPC interfaces, ordering, freshness bounds, next-entry handoff, and rollback repetition | Documented, not executed |
-| Existing RC5.4 and capture remain unchanged | No external mutation occurred; new runtime switch is default false and no repository changes are deployed | Confirmed for this task |
+| Existing RC5.4 and capture remain unchanged | The only external action was pushing the review branch; the new runtime switch is default false and no repository changes are deployed | Confirmed for this task |
 
 ## Deterministic artifacts
 
@@ -48,11 +50,17 @@ recommendation or a live proposal.
 
 ## Validation receipts
 
-- Repository self-test inventory: `119/119` executable scripts passed.
-- Excluded pre-existing script: `nakamoto-selftest`; its command cannot start
-  because `/tmp/nak-golden/bars.csv` is absent. It did not reach assertions and
-  is unrelated to this change.
-- `npx tsc --noEmit`: pass.
+- Prior repository self-test inventory: `119/119` executable scripts passed.
+- Fresh configuration-path audit:
+  - 13 control-plane, activation, runtime, epoch, entry-policy, adapter, and
+    canary commands passed.
+  - deterministic no-op receipt:
+    `sha256:7205897e334f50a8dd2c796daa29dd22c2dfa80a0bad5acb84d42bc8947eec0d`.
+  - GitHub CI command set passed, including 4,385 candle checks, 150 runner
+    checks, and 39 immutable broker-attribution checks.
+- `npx tsc --noEmit`: pass after production build generated Next route types.
+- `npm run typecheck --prefix worker`: pass. The fresh audit caught and
+  corrected four compile-only typing defects before review.
 - `npm run build`: pass.
 - `git diff --check`: pass.
 - PostgreSQL 15 syntax parser:
@@ -74,5 +82,6 @@ separate migration-review boundary.
 - No Supabase migration was applied.
 - No order was placed.
 
-The next action is operator review of the uncommitted diff. A commit requires
-fresh explicit authorization.
+The next action is to commit the fresh audit corrections, update the existing
+review branch, and open one draft pull request. No runtime activation or
+configuration mutation is part of that pull request.

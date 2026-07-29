@@ -66,7 +66,7 @@ export interface BlockedBridgeResolution {
   sourceState: StoredReceiptBoundControlPlaneRead["state"];
   blockers: readonly string[];
   runtime: null;
-  channels: readonly [];
+  channels: readonly ChannelConfig[];
   configurationEpochId: null;
   requiresExistingRc54StartupGate: false;
   runtimeMutationAuthorized: false;
@@ -93,7 +93,7 @@ function blocked(
     sourceState,
     blockers: Object.freeze(uniqueSorted(blockers)),
     runtime: null,
-    channels: Object.freeze([]),
+    channels: Object.freeze([]) as readonly ChannelConfig[],
     configurationEpochId: null,
     requiresExistingRc54StartupGate: false,
     runtimeMutationAuthorized: false,
@@ -137,8 +137,8 @@ function exactRc54BaselineBlockers(
 }
 
 /**
- * Pure authority resolver. This is deliberately not imported by index.ts yet:
- * it proves the future handoff without changing the active Railway worker.
+ * Pure authority resolver. The worker calls it only when the separately
+ * controlled CHANNEL_CONFIGURATION_RUNTIME_ENABLED switch is true.
  */
 export function resolveDormantChannelRuntimeAuthority(input: {
   stored: StoredReceiptBoundControlPlaneRead;
@@ -251,7 +251,13 @@ export async function loadDormantChannelRuntimeAuthority(input: {
   client: SupabaseClient;
   runtime: ChannelRuntimeBridgeInput;
 }): Promise<Readonly<ChannelRuntimeBridgeResolution>> {
-  const stored = await loadStoredReceiptBoundControlPlane(input.client);
+  // Root and worker install the same Supabase package independently. Cast
+  // across that package boundary; the runtime client contract is identical.
+  const stored = await loadStoredReceiptBoundControlPlane(
+    input.client as unknown as Parameters<
+      typeof loadStoredReceiptBoundControlPlane
+    >[0],
+  );
   return resolveDormantChannelRuntimeAuthority({
     stored,
     runtime: input.runtime,

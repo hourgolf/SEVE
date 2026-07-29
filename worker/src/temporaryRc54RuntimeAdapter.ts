@@ -43,7 +43,9 @@ export function validateReceiptBoundRc54Topology(
   runtime: Readonly<ReceiptBoundRuntimeConfiguration>,
 ): string[] {
   const errors: string[] = [];
-  const expectedBySlug = new Map(RC54_ROOTS.map((root) => [root.slug, root]));
+  const expectedBySlug = new Map<string, (typeof RC54_ROOTS)[number]>(
+    RC54_ROOTS.map((root) => [root.slug, root] as const),
+  );
   const observedBySlug = new Map<string, Readonly<ReceiptBoundRuntimeRoot>>();
   for (const root of runtime.roots) {
     if (observedBySlug.has(root.slug)) {

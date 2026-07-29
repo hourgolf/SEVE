@@ -200,7 +200,9 @@ check("one exact activation receipt resolves the generic runtime", () => {
   assert.equal(result.runtime.historicalMutationAuthorized, false);
   assert.equal(result.orderAuthority, false);
   for (const root of result.runtime.roots) {
-    const channel = result.channels.find((item) => item.slug === root.slug);
+    const channel: ChannelConfig | undefined = result.channels.find(
+      (item) => item.slug === root.slug,
+    );
     assert.ok(channel);
     assert.equal(channel.account_id, root.accountId);
     assert.equal(channel.max_contracts, root.riskLimits.maxContracts);
