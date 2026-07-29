@@ -6,6 +6,7 @@ import {
   rc54A13GivebackReached,
   rc54BankTargetReached,
   rc54ConfiguredTakeProfitPct,
+  rc54LotConfiguredTakeProfitPct,
   rc54ManagerProfileFromRow,
   rc54ManagerStampPresent,
   rc54NativeAtrExitEligible,
@@ -90,6 +91,18 @@ check("ratchets do not masquerade as fixed targets", rc54ConfiguredTakeProfitPct
   profile: RC54_MANAGER_PROFILES["ORB54-B30-A13"],
   isRunner: true,
   reason: "trail_giveback",
+}), null);
+check("lot metadata exposes the bank target independently of exit reason", rc54LotConfiguredTakeProfitPct({
+  profile: RC54_MANAGER_PROFILES["ORB54-B30-A13"],
+  isRunner: false,
+}), 30);
+check("lot metadata exposes the fixed runner target independently of exit reason", rc54LotConfiguredTakeProfitPct({
+  profile: RC54_MANAGER_PROFILES["LAB54-L30-L50"],
+  isRunner: true,
+}), 50);
+check("lot metadata does not invent a fixed target for an A13 runner", rc54LotConfiguredTakeProfitPct({
+  profile: RC54_MANAGER_PROFILES["ORB54-B30-A13"],
+  isRunner: true,
 }), null);
 check("native ATR cannot flatten the original two-lot bank row", rc54NativeAtrExitEligible({
   profile: RC54_MANAGER_PROFILES["QQQ54-B20-NATIVE-ATR"],

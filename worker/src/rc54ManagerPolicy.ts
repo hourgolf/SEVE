@@ -98,6 +98,17 @@ export function rc54ConfiguredTakeProfitPct(input: {
   if (!input.profile || (input.reason !== "target_premium" && input.reason !== "target_tranche")) {
     return null;
   }
+  return rc54LotConfiguredTakeProfitPct(input);
+}
+
+/** Target owned by the exact persisted RC5.4 lot, independent of why that lot
+ * is being inspected or closed. This is also the canonical receipt metadata
+ * source for an operator close. */
+export function rc54LotConfiguredTakeProfitPct(input: {
+  profile: Rc54ManagerProfile | null;
+  isRunner: boolean;
+}): number | null {
+  if (!input.profile) return null;
   if (input.isRunner) {
     return input.profile.runner === "fixed-50" ? 50 : null;
   }
