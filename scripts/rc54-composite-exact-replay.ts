@@ -126,7 +126,7 @@ function readVerifiedQuotes(source: SourceObject): Rc54ReplayQuote[] {
   if (parsed.some((row) => row.occSymbol !== source.occSymbol
       || row.source !== "databento_cbbo_1s"
       || !finite(row.atMs) || !finite(row.bid) || !finite(row.ask)
-      || row.bid < 0 || row.ask <= 0 || row.ask < row.bid))
+      || row.bid < 0 || row.ask < 0 || (row.ask > 0 && row.ask < row.bid)))
     throw new Error(`invalid exact quote path: ${source.occSymbol}`);
   return parsed.map((row) => ({ atMs: row.atMs, bid: row.bid }));
 }

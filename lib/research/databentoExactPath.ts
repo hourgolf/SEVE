@@ -98,7 +98,8 @@ export function parsePersistedDatabentoCbboObject(input: Buffer | string): {
     const bid = numeric(row?.bid);
     const ask = numeric(row?.ask);
     if (!occSymbol || compactOccToDatabentoRaw(occSymbol, root) == null
-        || atMs == null || bid == null || ask == null || bid < 0 || ask <= 0 || ask < bid
+        || atMs == null || bid == null || ask == null || bid < 0 || ask < 0
+        || (ask > 0 && ask < bid)
         || row?.source !== "databento_cbbo_1s") {
       invalidRows++;
       continue;
@@ -235,16 +236,16 @@ export function inspectDatabentoCbboJsonLine(line: string): DatabentoCbboParseRe
       : typeof (row.hd as Record<string, unknown> | undefined)?.ts_event === "string"
         ? Date.parse((row.hd as Record<string, unknown>).ts_event as string)
         : null;
-  // Databento truthfully emits `null` when an option has no posted bid. Keep
-  // that market state as bid=0 in the immutable path; downstream managers
-  // must censor an unavailable executable exit rather than rejecting the
-  // entire provider object or inventing a bid.
+  // Databento truthfully emits `null` when an option has no posted bid or ask.
+  // Keep those market states as zero in the immutable path. Downstream entry
+  // logic must require a positive ask and exit logic must require a positive
+  // bid rather than rejecting the provider object or inventing a quote.
   const bid = level?.bid_px == null ? 0 : numeric(level.bid_px);
-  const ask = numeric(level?.ask_px);
+  const ask = level?.ask_px == null ? 0 : numeric(level.ask_px);
   if (!symbol) return { ok: false, issue: "invalid_symbol" };
   if (ts == null || !finite(ts)) return { ok: false, issue: "invalid_timestamp" };
-  if (bid == null || ask == null || bid < 0 || ask <= 0) return { ok: false, issue: "invalid_price" };
-  if (ask < bid) return { ok: false, issue: "crossed_quote" };
+  if (bid == null || ask == null || bid < 0 || ask < 0) return { ok: false, issue: "invalid_price" };
+  if (ask > 0 && ask < bid) return { ok: false, issue: "crossed_quote" };
   const publisherId = numeric((row.hd as Record<string, unknown> | undefined)?.publisher_id);
   return { ok: true, quote: {
     occSymbol: symbol,

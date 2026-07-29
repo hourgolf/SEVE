@@ -18,6 +18,19 @@ export interface Rc54ReplayQuote {
   bid: number;
 }
 
+export const RC54_TARGET_STUDY_RUNNERS = [
+  "ride",
+  "a13",
+  "fixed-50",
+] as const;
+
+export type Rc54TargetStudyRunner = typeof RC54_TARGET_STUDY_RUNNERS[number];
+
+export interface Rc54TargetStudyProfile {
+  targetPct: number;
+  runner: Rc54TargetStudyRunner;
+}
+
 export type Rc54LotExitReason =
   | "target"
   | "prearm_stop"
@@ -184,6 +197,102 @@ function replayNativeAtr(
     ((receipt.exitBid - entryAsk) / entryAsk) * 100,
     "native_atr_exact_receipt",
   );
+}
+
+function replayRide(input: {
+  entryAsk: number;
+  quotes: readonly Rc54ReplayQuote[];
+  flattenAtMs: number;
+}): Rc54LotOutcome | null {
+  return replayLock({
+    lot: "runner",
+    targetPct: Number.POSITIVE_INFINITY,
+    stopPct: -30,
+    entryAsk: input.entryAsk,
+    quotes: input.quotes,
+    flattenAtMs: input.flattenAtMs,
+  });
+}
+
+/**
+ * Research-only target sweep using the exact RC5.4 economic primitives:
+ * two contracts, executable bid exits, a -30% catastrophe stop, no adds, and
+ * a 15:25 caller-supplied flatten clock. The first lot banks at the injected
+ * target; the second lot is deliberately varied only among RC5.4-compatible
+ * runner shapes. This function does not select a target or authorize policy.
+ */
+export function replayRc54TargetStudy(input: {
+  profile: Rc54TargetStudyProfile;
+  entryAsk: number;
+  entryAtMs: number;
+  flattenAtMs: number;
+  quotes: readonly Rc54ReplayQuote[];
+}): Rc54CompositeOutcome & { studyProfile: Rc54TargetStudyProfile } {
+  const targetPct = input.profile.targetPct;
+  if (!finite(targetPct) || targetPct <= 0) {
+    throw new Error("RC5.4 target study requires a positive target");
+  }
+  const censors: Rc54ReplayCensor[] = [];
+  if (!finite(input.entryAsk) || input.entryAsk <= 0) censors.push("invalid_entry");
+  if (!finite(input.entryAtMs) || !finite(input.flattenAtMs)
+      || input.flattenAtMs < input.entryAtMs) censors.push("invalid_clock");
+  if (input.entryAtMs >= input.flattenAtMs) censors.push("entry_after_flatten");
+  const quotes = [...input.quotes]
+    .filter((quote) => finite(quote.atMs) && finite(quote.bid)
+      && quote.atMs >= input.entryAtMs && quote.atMs <= input.flattenAtMs)
+    .sort((a, b) => a.atMs - b.atMs);
+  if (!quotes.some((quote) => quote.bid > 0)) censors.push("missing_executable_path");
+
+  const base = {
+    profile: "L30/L50" as const,
+    studyProfile: input.profile,
+    entryAsk: input.entryAsk,
+    entryAtMs: input.entryAtMs,
+    flattenAtMs: input.flattenAtMs,
+    censors,
+    externalWrites: false as const,
+    orderPathAuthorized: false as const,
+    policyChangeAuthorized: false as const,
+  };
+  if (censors.length) {
+    return { ...base, lots: [], exitAtMs: null, pnl: null, pnlPerContract: null, exact: false };
+  }
+
+  const bank = replayLock({
+    lot: "bank",
+    targetPct,
+    stopPct: -30,
+    entryAsk: input.entryAsk,
+    quotes,
+    flattenAtMs: input.flattenAtMs,
+  });
+  const runner = input.profile.runner === "a13"
+    ? replayA13({ entryAsk: input.entryAsk, quotes, flattenAtMs: input.flattenAtMs })
+    : input.profile.runner === "fixed-50"
+      ? replayLock({
+          lot: "runner",
+          targetPct: 50,
+          stopPct: -30,
+          entryAsk: input.entryAsk,
+          quotes,
+          flattenAtMs: input.flattenAtMs,
+        })
+      : replayRide({ entryAsk: input.entryAsk, quotes, flattenAtMs: input.flattenAtMs });
+  if (!bank || !runner) censors.push("no_executable_flatten_bid");
+  const lots = [bank, runner].filter((row): row is Rc54LotOutcome => row != null);
+  if (censors.length || lots.length !== 2) {
+    return { ...base, censors, lots, exitAtMs: null, pnl: null, pnlPerContract: null, exact: false };
+  }
+  const pnl = round(lots.reduce((sum, lot) => sum + lot.pnl, 0));
+  return {
+    ...base,
+    censors,
+    lots,
+    exitAtMs: Math.max(...lots.map((lot) => lot.exitAtMs)),
+    pnl,
+    pnlPerContract: round(pnl / 2),
+    exact: true,
+  };
 }
 
 export function replayRc54Composite(input: {

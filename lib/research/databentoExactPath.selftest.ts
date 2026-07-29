@@ -68,6 +68,11 @@ const noBid = parseDatabentoCbboJsonLine(JSON.stringify({
   levels: [{ bid_px: null, ask_px: "0.01", bid_sz: 0, ask_sz: 447 }],
 }));
 check("truthful no-posted-bid CBBO state is retained", [noBid?.bid, noBid?.ask, noBid?.bidSize], [0, 0.01, 0]);
+const noAsk = parseDatabentoCbboJsonLine(JSON.stringify({
+  ...JSON.parse(line),
+  levels: [{ bid_px: "0.01", ask_px: null, bid_sz: 447, ask_sz: 0 }],
+}));
+check("truthful no-posted-ask CBBO state is retained", [noAsk?.bid, noAsk?.ask, noAsk?.askSize], [0.01, 0, 0]);
 
 const deduped = dedupeCbboQuotes([quote!, quote!, { ...quote!, atMs: quote!.atMs + 1_000 }]);
 check("CBBO rows dedupe by contract and timestamp", deduped.length, 2);
@@ -76,9 +81,10 @@ const persisted = parsePersistedDatabentoCbboObject(Buffer.from(JSON.stringify([
   quote,
   quote,
   { ...noBid, atMs: (noBid?.atMs ?? 0) + 2_000 },
+  { ...noAsk, atMs: (noAsk?.atMs ?? 0) + 3_000 },
   { ...quote, ask: 1.1 },
 ])));
-check("persisted CBBO bytes retain no-bid states and reject crossed rows", [persisted.quotes.length, persisted.invalidRows], [2, 1]);
+check("persisted CBBO bytes retain one-sided states and reject crossed rows", [persisted.quotes.length, persisted.invalidRows], [3, 1]);
 check("persisted CBBO parser rejects non-JSON bytes", (() => {
   try { parsePersistedDatabentoCbboObject(Buffer.from("not-json")); return false; }
   catch { return true; }
