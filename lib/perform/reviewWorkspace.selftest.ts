@@ -50,9 +50,14 @@ assert.match(pnlHook, /from\("execution_observations"\)/);
 assert.match(pnlHook, /select\("id,position_id,account_id,event_at"\)/);
 assert.match(pnlHook, /attributePositionsByImmutableExecutionAccount/);
 assert.match(pnlHook, /positionLabel:\s*"performance positions"/);
-assert.match(pnlHook, /emptyWindow\(\s*"blocked"/);
+assert.match(pnlHook, /Promise\.allSettled/);
+assert.match(pnlHook, /navEvidenceState/);
+assert.match(pnlHook, /attributionEvidenceState/);
+assert.match(pnlHook, /fundPnlSource/);
 assert.doesNotMatch(pnlHook, /strategists!inner|strategists\.account_id/);
 assert.match(pnlPanel, /No strategist-account fallback was used/);
+assert.match(pnlPanel, /Account NAV remains available; channel rows are withheld/);
+assert.match(pnlPanel, /summarizePerformanceIssue/);
 assert.doesNotMatch(pnlHook, /from\("equity_daily"\)/);
 assert.match(pnlHook, /desk-wide NAV has no identity-safe aggregate series/);
 

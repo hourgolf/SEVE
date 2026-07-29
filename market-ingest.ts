@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { marketIngestWindow } from "./lib/market/marketIngestWindow.ts";
 
 const ALPACA_KEY    = Deno.env.get("ALPACA_KEY");
 const ALPACA_SECRET = Deno.env.get("ALPACA_SECRET");
@@ -40,12 +41,6 @@ const H = {
   "accept": "application/json",
 };
 
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
-function nextTradingDay(d: Date): Date {
-  const n = new Date(d);
-  do { n.setUTCDate(n.getUTCDate() + 1); } while (n.getUTCDay() === 0 || n.getUTCDay() === 6);
-  return n;
-}
 async function getJson(url: string) {
   const r = await fetch(url, { headers: H });
   const body = await r.text();
@@ -122,10 +117,21 @@ Deno.serve(async () => {
   const sb = createClient(SB_URL, SB_SERVICE);
   try {
     if (!ALPACA_KEY || !ALPACA_SECRET) throw new Error("ALPACA_KEY / ALPACA_SECRET secret not set");
-    console.log("market-ingest: starting", UNDERLYINGS.join(","));
     const now = new Date();
-    const today  = ymd(now);
-    const oneDTE = ymd(nextTradingDay(now));
+    const window = marketIngestWindow(now.getTime());
+    if (!window.shouldIngest) {
+      console.log(`market-ingest: skipped ${window.dateEt} ${window.minuteEt}m ET (${window.skipReason})`);
+      return Response.json({
+        ok: true,
+        skipped: true,
+        dateEt: window.dateEt,
+        minuteEt: window.minuteEt,
+        reason: window.skipReason,
+      });
+    }
+    const today = window.dateEt;
+    const oneDTE = window.nextSessionDateEt!;
+    console.log("market-ingest: starting", UNDERLYINGS.join(","), today, oneDTE);
 
     const parts: string[] = [];
     const errs: string[] = [];
