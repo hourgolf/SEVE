@@ -66,10 +66,18 @@ recommendation or a live proposal.
 - PostgreSQL 15 syntax parser:
   - `20260729010000_channel_proposal_activation_bridge.sql`: 59 statements parsed.
   - `20260729013000_channel_epoch_evidence_propagation.sql`: 54 statements parsed.
+- Isolated PostgreSQL-compatible catalog application:
+  - existing control-plane foundation plus both new migrations applied in order;
+  - all eight control-plane/activation tables exist with RLS enabled;
+  - all eight evidence tables carry the exact three-column epoch stamp;
+  - legacy null epochs remain valid and partial epochs fail closed; and
+  - zero proposals, previews, acknowledgements, approvals, or activation
+    receipts were created.
 
-The parser proves PostgreSQL grammar only. The migrations have not been applied
-to a local or remote database, so catalog/permission behavior remains a
-separate migration-review boundary.
+The isolated application proves PostgreSQL catalog, RLS, trigger, function,
+legacy-null, and all-or-none behavior against a production-shaped stub schema.
+The migrations have not been applied to Supabase, so hosted catalog,
+permissions, and lock behavior remain a separate migration boundary.
 
 ## Current authority state
 
