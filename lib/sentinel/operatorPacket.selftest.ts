@@ -22,6 +22,21 @@ assert.equal(operatorPacketToJudge(packet).verdict, "QUEUE");
 assert.match(operatorPacketToJudge(packet).soWhat, /configuration fixed/);
 assert.equal(readSentinelOperatorPacket(packet)?.session, base.session);
 assert.equal(readSentinelOperatorPacket({ ...packet, authority: { ...packet.authority, orderActionAuthorized: true } }), null);
+assert.match(packet.findings.find((finding) => finding.code === "live-session")?.title ?? "", /position rows/);
+
+const logical = deriveSentinelOperatorPacket({
+  ...base,
+  liveBook: {
+    ...base.liveBook,
+    opened: 1,
+    closed: 1,
+    open: 0,
+    positionRows: 2,
+    realizedPnl: 131,
+  },
+});
+assert.match(logical.findings.find((finding) => finding.code === "live-session")?.title ?? "", /1 logical live trade closed/);
+assert.match(logical.findings.find((finding) => finding.code === "live-session")?.detail ?? "", /2 immutable position rows/);
 
 const partial = deriveSentinelOperatorPacket({
   ...base,
@@ -53,5 +68,9 @@ assert.throws(() => deriveSentinelOperatorPacket({
   ...base,
   darkBook: { ...base.darkBook, state: "partial", exactEligible: 1, exactCensored: 1, exactMissing: 1 },
 }), /reconcile to raw decisions/);
+assert.throws(() => deriveSentinelOperatorPacket({
+  ...base,
+  liveBook: { ...base.liveBook, opened: 3, closed: 3, open: 0, positionRows: 2 },
+}), /position rows/);
 
-console.log("sentinel-operator-packet-selftest: 22/22 passed");
+console.log("sentinel-operator-packet-selftest: 26/26 passed");

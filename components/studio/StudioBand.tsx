@@ -29,7 +29,7 @@ export function StudioBand({ fund, fundPnl, positions, recentTrades, strategists
         <small>DESK CONTROL</small><b>{fund.running && !fund.is_halted ? "RUNNING" : fund.is_halted ? "HALTED" : "STOPPED"}</b><span>{fund.mode.toUpperCase()}</span>
       </button>
       <button type="button" className={panel === "session" ? "on" : ""} onClick={() => setPanel(panel === "session" ? null : "session")}>
-        <small>SESSION TAPE</small><b>{positions.length} open · {recentTrades.length} closed</b><span>EXPAND</span>
+        <small>SESSION TAPE</small><b>{positions.length} open rows · {recentTrades.length} closed rows</b><span>EXPAND</span>
       </button>
       <div className="sband-truth"><small>P&amp;L BASIS</small><b>DASHBOARD FEED · {signedUsd(fundPnl.dayPnl)} DAY</b><span className={`broker-${reconciliation?.tone ?? "neutral"}`} title={reconciliation?.detail}>{reconciliation?.state ?? "BROKER CHECKING"}</span></div>
 

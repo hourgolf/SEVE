@@ -125,6 +125,9 @@ export interface Position {
   // the avg-peak lens per trade (peak% + time-to-peak on the closed-trade detail row).
   peak_mark?: number | null;
   peak_at?: string | null;
+  // Runner/remainder lineage. A root plus its runner rows is one logical trade;
+  // the rows remain separate immutable tranche evidence.
+  runner_of?: string | null;
 }
 
 // Drill-down detail for one trade — what triggered it + how it exited. Fetched

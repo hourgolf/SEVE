@@ -12,6 +12,7 @@ import {
   attributePositionsByImmutableExecutionAccount,
   type ExecutionAccountObservation,
 } from "@/lib/ops/brokerReconciliation";
+import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
 
 // Safety-net only — Realtime (positions/signals/equity) drives live updates, so
 // this can run slow and pause while hidden. The poll re-reads the full book
@@ -20,7 +21,7 @@ import {
 const POLL_MS = 45000;
 const MAX_CURVE = 600; // ~1.25 RTH sessions of 1-min fund snapshots — enough to find the current session's open
 const SESSION_GAP_MS = 2 * 3600_000; // a gap this large between snapshots = a new trading session
-const POSITION_FIELDS = "id,occ_symbol,expiration,strike,opt_type,qty,avg_entry_price,current_mark,unrealized_pnl,realized_pnl,opened_at,closed_at,close_reason,peak_mark,peak_at";
+const POSITION_FIELDS = "id,occ_symbol,expiration,strike,opt_type,qty,avg_entry_price,current_mark,unrealized_pnl,realized_pnl,opened_at,closed_at,close_reason,peak_mark,peak_at,runner_of";
 const SIGNAL_FIELDS = "id,signal_type,direction,acted_on,blocked_reason,created_at";
 
 export type FeedStatus = "live" | "empty" | "error";
@@ -29,6 +30,13 @@ export interface DeskFeed {
   positions: Position[];
   /** Today's CLOSED trades (newest first) — for realized P&L + a fills view. */
   recentTrades: Position[];
+  /** Entry-time logical trades; split exits remain separate recentTrades rows. */
+  sessionTrades: {
+    opened: number;
+    closed: number;
+    open: number;
+    positionRows: number;
+  };
   pnlByStrategist: Record<string, ChannelPnl>;
   fundPnl: { nav: number; dayPnl: number };
   equityCurve: { ts: string; equity: number }[];
@@ -74,6 +82,12 @@ export function useDeskFeed(
 
   const [positions, setPositions] = useState<Position[]>([]);
   const [closedToday, setClosedToday] = useState<Position[]>([]);
+  const [sessionTrades, setSessionTrades] = useState<DeskFeed["sessionTrades"]>({
+    opened: 0,
+    closed: 0,
+    open: 0,
+    positionRows: 0,
+  });
   const [signals, setSignals] = useState<Signal[]>([]);
   const [curve, setCurve] = useState<{ ts: string; equity: number }[]>([]);
   const [latestNav, setLatestNav] = useState<number | null>(null);
@@ -223,6 +237,7 @@ export function useDeskFeed(
           // peak instrumentation (A7): the avg-peak lens on the closed-trade detail row
           peak_mark: r.peak_mark != null ? Number(r.peak_mark) : null,
           peak_at: r.peak_at ?? null,
+          runner_of: r.runner_of ?? null,
         });
         const pos: Position[] = scopedPositionRows.filter((row) => row.feedStatus === "open").map(mapPos);
         const closed: Position[] = scopedPositionRows.filter((row) => row.feedStatus === "closed").map(mapPos);
@@ -262,9 +277,19 @@ export function useDeskFeed(
         const sessionClosed = closed.filter(
           (p) => p.closed_at != null && Date.parse(p.closed_at) >= sessionStartMs
         );
+        const logical = summarizeLogicalTradeCohort([...pos, ...sessionClosed], {
+          allowExternalParents: true,
+        });
+        if (logical.issues.length) throw new Error(logical.issues.join("; "));
 
         setPositions(pos);
         setClosedToday(sessionClosed);
+        setSessionTrades({
+          opened: logical.opened,
+          closed: logical.closed,
+          open: logical.open,
+          positionRows: logical.positionRows,
+        });
         setSignals(sigs);
         setStatus(pos.length || sessionClosed.length || sigs.length ? "live" : "empty");
         setUpdatedAt(new Date().toISOString());
@@ -345,6 +370,7 @@ export function useDeskFeed(
   return {
     positions,
     recentTrades: closedToday,
+    sessionTrades,
     pnlByStrategist,
     fundPnl: fp,
     equityCurve: curve,

@@ -48,7 +48,7 @@ export function FolioReviewDesktop({ surface }: { surface: SurfaceProps }) {
   return <div className="folio-native-workspace folio-review">
     <WorkspaceTitle eyebrow="REVIEW" title="Tape linked to outcomes" detail="Operational events stay distinct from position evidence and after-action claims." stats={[
       { label: "EVENTS", value: surface.data.events.length },
-      { label: "CLOSED", value: surface.feed.recentTrades.length },
+      { label: "CLOSED TRADES", value: surface.feed.sessionTrades.closed },
       { label: "REALIZED", value: signedUsd(realized), tone: realized < 0 ? "neg" : realized > 0 ? "pos" : "" },
       { label: "CHAINS", value: surface.opsReadiness.chains.length },
     ]} />

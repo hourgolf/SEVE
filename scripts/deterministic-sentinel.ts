@@ -16,6 +16,7 @@ import {
   type SentinelOperatorPacketInput,
 } from "@/lib/sentinel/operatorPacket";
 import { auditSentinelManagerBook } from "@/lib/sentinel/managerBookAudit";
+import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
 import { auditSentinelRelease } from "@/lib/sentinel/releaseAudit";
 import type { WorkerObservation } from "@/lib/ops/preopenReadinessEngine";
 import type { DarkCandidateFreeze } from "@/lib/research/darkCandidateFreeze";
@@ -48,16 +49,11 @@ if (SUPERSEDES_EVENT_ID && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-
 }
 
 const sha256 = (bytes: string | Buffer): string => createHash("sha256").update(bytes).digest("hex");
-const numeric = (value: unknown): number | null => {
-  if (value == null) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-};
 const dollars = (value: number): string => `${value >= 0 ? "+" : "-"}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
 
 interface PositionRow {
   id: string;
-  status: string;
+  status: "open" | "closed";
   opened_at: string;
   closed_at: string | null;
   realized_pnl: number | string | null;
@@ -153,12 +149,13 @@ async function main(): Promise<void> {
   const positions = (positionsRead.data ?? []) as PositionRow[];
   const managers = (managersRead.data ?? []) as ManagerRow[];
   const closed = positions.filter((row) => row.status === "closed" || row.closed_at != null);
-  const open = positions.length - closed.length;
-  const pnlValues = closed.map((row) => numeric(row.realized_pnl));
-  const realizedPnl = pnlValues.some((value) => value == null)
-    ? null
-    : Math.round(pnlValues.reduce<number>((sum, value) => sum + (value ?? 0), 0) * 100) / 100;
-  const manualCloses = closed.filter((row) => /manual|operator/i.test(row.close_reason ?? "")).length;
+  const logicalBook = summarizeLogicalTradeCohort(positions);
+  if (logicalBook.issues.length) {
+    throw new Error(`logical live-book attribution failed: ${logicalBook.issues.join("; ")}`);
+  }
+  const open = logicalBook.open;
+  const realizedPnl = logicalBook.realizedPnl;
+  const manualCloses = logicalBook.manualCloses;
   const managerAudit = auditSentinelManagerBook(
     positions.map((row) => ({ id: row.id, runnerOf: row.runner_of })),
     managers.map((row) => ({
@@ -187,13 +184,16 @@ async function main(): Promise<void> {
       configurationSha256: releaseAudit.configurationSha256,
     },
     liveBook: {
-      state: open === 0 && pnlValues.every((value) => value != null) ? "ok" : open > 0 ? "partial" : "missing",
-      source: "positions:session-opened-cohort",
+      state: open === 0 && realizedPnl != null ? "ok" : open > 0 ? "partial" : "missing",
+      source: "positions:session-opened-logical-cohort",
       asOf: closed.map((row) => row.closed_at).filter((value): value is string => Boolean(value)).sort().at(-1) ?? generatedAt,
-      detail: open === 0 ? "session-opened position cohort is closed" : `${open} session position(s) remain open`,
-      opened: positions.length,
-      closed: closed.length,
+      detail: open === 0
+        ? `${logicalBook.closed} logical trade(s) closed across ${logicalBook.positionRows} immutable position row(s)`
+        : `${open} session logical trade(s) remain open across ${logicalBook.positionRows} position row(s)`,
+      opened: logicalBook.opened,
+      closed: logicalBook.closed,
       open,
+      positionRows: logicalBook.positionRows,
       realizedPnl,
       manualCloses,
     },

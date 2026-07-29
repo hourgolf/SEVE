@@ -12,6 +12,7 @@ import {
   type CombinedPerformanceEvidenceState,
   type PerformanceEvidenceState,
 } from "@/lib/perform/performanceEvidence";
+import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
 
 export type PnlWindow = "today" | "week" | "month" | "all";
 
@@ -31,6 +32,18 @@ export interface WindowedPnl {
   attributionIssues: string[];
   issues: string[];
 }
+
+type PerformancePositionRow = Record<string, unknown> & {
+  id: string;
+  status: "open" | "closed";
+  qty: number | string;
+  realized_pnl: number | string | null;
+  unrealized_pnl?: number | string | null;
+  peak_mark: number | string | null;
+  avg_entry_price: number | string;
+  runner_of: string | null;
+  strategists?: { slug?: string } | null;
+};
 
 const startISO = (window: PnlWindow): string | null => {
   if (window === "all") return null;
@@ -101,7 +114,7 @@ export function useWindowedPnl(
         const allPositions: Record<string, unknown>[] = [];
         for (let from = 0; from <= 60_000; from += 1_000) {
           let query = sb.from("positions")
-            .select("id,status,realized_pnl,peak_mark,avg_entry_price,strategists(slug)")
+            .select("id,status,qty,realized_pnl,peak_mark,avg_entry_price,runner_of,strategists(slug)")
             .eq("status", "closed");
           if (start) query = query.gte("closed_at", start);
           const result = await query.order("closed_at", { ascending: false }).range(from, from + 999);
@@ -112,15 +125,18 @@ export function useWindowedPnl(
         }
 
         const openResult = await sb.from("positions")
-          .select("id,status,unrealized_pnl,strategists(slug)")
+          .select("id,status,qty,unrealized_pnl,realized_pnl,peak_mark,avg_entry_price,runner_of,strategists(slug)")
           .eq("status", "open")
           .limit(200);
         if (openResult.error) throw new Error(`open-position read failed: ${openResult.error.message}`);
         allPositions.push(...((openResult.data ?? []) as Record<string, unknown>[]));
 
         const positionRows = allPositions.filter(
-          (row): row is Record<string, unknown> & { id: string } =>
-            typeof row.id === "string" && row.id.length > 0,
+          (row): row is PerformancePositionRow =>
+            typeof row.id === "string"
+            && row.id.length > 0
+            && (row.status === "open" || row.status === "closed")
+            && (row.runner_of == null || typeof row.runner_of === "string"),
         );
         if (positionRows.length !== allPositions.length) {
           throw new Error("performance positions contain missing ids");
@@ -145,25 +161,44 @@ export function useWindowedPnl(
           positionLabel: "performance positions",
         });
         if (!attribution.ok) throw new Error(attribution.issues.join("; "));
-        const attributedRows = attribution.byAccount.get(acctId) ?? [];
+        const attributedRows = [...attribution.byAccount.entries()].flatMap(([accountId, rows]) =>
+          rows.map((row) => ({ ...row, immutableAccountId: accountId })));
+        const logical = summarizeLogicalTradeCohort(attributedRows, { allowExternalParents: true });
+        if (logical.issues.length) throw new Error(logical.issues.join("; "));
         const stats: Record<string, ChannelStat> = {};
         const bump = (slug: string): ChannelStat =>
           (stats[slug] ??= { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
-        for (const row of attributedRows) {
-          const channel = bump(slugOf(row));
-          if (row.status === "closed") {
-            const pnl = Number(row.realized_pnl ?? 0);
+        for (const trade of logical.groups) {
+          const accounts = [...new Set(trade.rows.map((row) => row.immutableAccountId))];
+          if (accounts.length !== 1) {
+            throw new Error(`logical trade ${trade.rootPositionId} spans immutable account routes`);
+          }
+          if (accounts[0] !== acctId) continue;
+          const slugs = [...new Set(trade.rows.map((row) => slugOf(row)))];
+          if (slugs.length !== 1) {
+            throw new Error(`logical trade ${trade.rootPositionId} spans channel identities`);
+          }
+          const channel = bump(slugs[0]);
+          if (trade.status === "closed") {
+            const pnl = trade.realizedPnl;
+            if (pnl == null) throw new Error(`logical trade ${trade.rootPositionId} lacks realized P&L`);
             channel.pnl += pnl;
             channel.trades += 1;
             if (pnl > 0) channel.wins += 1;
-            const peak = Number(row.peak_mark);
-            const entry = Number(row.avg_entry_price);
-            if (Number.isFinite(peak) && peak > 0 && entry > 0) {
-              channel.pkSum += Math.max(0, (peak / entry - 1) * 100);
+            const peak = Math.max(...trade.rows
+              .map((row) => Number(row.peak_mark))
+              .filter((value) => Number.isFinite(value) && value > 0));
+            const quantity = trade.rows.reduce((sum, row) => sum + Math.abs(Number(row.qty) || 0), 0);
+            const weightedEntry = quantity > 0
+              ? trade.rows.reduce((sum, row) =>
+                sum + Math.abs(Number(row.qty) || 0) * Number(row.avg_entry_price || 0), 0) / quantity
+              : null;
+            if (Number.isFinite(peak) && weightedEntry != null && weightedEntry > 0) {
+              channel.pkSum += Math.max(0, (peak / weightedEntry - 1) * 100);
               channel.pkN += 1;
             }
           } else {
-            channel.pnl += Number(row.unrealized_pnl ?? 0);
+            channel.pnl += trade.rows.reduce((sum, row) => sum + Number(row.unrealized_pnl ?? 0), 0);
           }
         }
         for (const channel of Object.values(stats)) channel.pnl = Math.round(channel.pnl);

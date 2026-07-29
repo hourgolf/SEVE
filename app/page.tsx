@@ -195,8 +195,8 @@ function Surface({
       publisherEvidenceDetail: sentinel.publisherEvidenceDetail,
       briefAsOf: sentinel.brief?.asOf,
     },
-    openPositions: feed.positions.length,
-    closedPositions: feed.recentTrades.length,
+    openPositions: feed.sessionTrades.open,
+    closedPositions: feed.sessionTrades.closed,
   });
   const shadowResearch = useShadowResearch(activeRoom === "tape");
   const reviewEnabled = activeRoom === "tape";
