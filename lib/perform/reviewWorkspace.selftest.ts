@@ -54,6 +54,8 @@ assert.match(pnlHook, /Promise\.allSettled/);
 assert.match(pnlHook, /navEvidenceState/);
 assert.match(pnlHook, /attributionEvidenceState/);
 assert.match(pnlHook, /fundPnlSource/);
+assert.match(pnlHook, /summarizeLogicalTradeCohort/);
+assert.match(pnlHook, /logical trade .* spans immutable account routes/);
 assert.doesNotMatch(pnlHook, /strategists!inner|strategists\.account_id/);
 assert.match(pnlPanel, /No strategist-account fallback was used/);
 assert.match(pnlPanel, /Account NAV remains available; channel rows are withheld/);

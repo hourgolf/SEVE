@@ -121,6 +121,7 @@
     "day1-release-receipt": "tsx scripts/day1-release-receipt.ts",
     "sentinel-receipt-selftest": "tsx lib/sentinel/receipt.selftest.ts",
     "sentinel-operator-packet-selftest": "tsx lib/sentinel/operatorPacket.selftest.ts",
+    "logical-trade-cohort-selftest": "tsx lib/positions/logicalTradeCohort.selftest.ts",
     "sentinel-manager-book-selftest": "tsx lib/sentinel/managerBookAudit.selftest.ts",
     "sentinel-release-audit-selftest": "tsx lib/sentinel/releaseAudit.selftest.ts",
     "deterministic-sentinel": "tsx --env-file=.env.local scripts/deterministic-sentinel.ts",

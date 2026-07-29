@@ -10,7 +10,7 @@ import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 //   DAY P&L   the NAV-based day number (account truth + live marks) — THE number
 //   ATTRIB Σ  the per-channel attribution sum (shared-OCC approximation)
 //   BOOKS Δ   NAV − attribution — small = clean books; amber/red = go look
-//   TRADES    closed round-trips today · open legs now
+//   TRADES    closed logical trades today · open logical trades now
 //   TOP       the day's biggest absolute mover
 // The LLM autopsies render BELOW this strip as commentary, not as the headline.
 export function DayBooksStrip({
@@ -54,7 +54,7 @@ export function DayBooksStrip({
           <span className="dbk-k">Books Δ</span>
           <span className={`dbk-v dbk-d-${dTone}`}>{signedUsd(delta)}</span>
         </div>
-        <div className="dbk-stat" title="closed round-trips today · open legs right now">
+        <div className="dbk-stat" title="entry-time logical trades; split exit tranches are counted once">
           <span className="dbk-k">Trades</span>
           <span className="dbk-v">{closedToday} closed · {openCount} open</span>
         </div>

@@ -5,6 +5,7 @@
 // ============================================================================
 
 import type { ChannelPnl, PmColor, Position, Step } from "@/lib/desk/types";
+import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
 
 // A position's contribution to today's P&L: realized once closed, unrealized
 // while open. (A fast scalper is closed most of the time, so without the
@@ -24,14 +25,28 @@ export function channelPnl(positions: Position[], liveMarks?: Record<string, num
   for (const p of positions) {
     const c = (out[p.strategist_slug] ??= { dayPnl: 0, openCount: 0, exposure: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
     c.dayPnl += dayContribution(p, liveMarks);
-    if (p.status === "closed") {
-      c.trades += 1;
-      if ((p.realized_pnl ?? 0) > 0) c.wins += 1;
-      // avg-peak lens (61_peak_marks): peak% since entry on the day's closed trades
-      if (p.peak_mark != null && p.avg_entry_price > 0) { c.pkSum += Math.max(0, (Number(p.peak_mark) / p.avg_entry_price - 1) * 100); c.pkN += 1; }
-    } else {
+    if (p.status !== "closed") {
       c.openCount += 1;
       c.exposure += Math.abs(p.qty) * p.current_mark * 100;
+    }
+  }
+  const logical = summarizeLogicalTradeCohort(positions, { allowExternalParents: true });
+  if (logical.issues.length) throw new Error(logical.issues.join("; "));
+  for (const trade of logical.groups) {
+    if (trade.status !== "closed") continue;
+    const slugs = [...new Set(trade.rows.map((row) => row.strategist_slug))];
+    if (slugs.length !== 1) throw new Error(`logical trade ${trade.rootPositionId} spans multiple channels`);
+    const c = (out[slugs[0]] ??= { dayPnl: 0, openCount: 0, exposure: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
+    c.trades += 1;
+    if ((trade.realizedPnl ?? 0) > 0) c.wins += 1;
+    const peak = Math.max(...trade.rows.map((row) => Number(row.peak_mark)).filter((value) => Number.isFinite(value) && value > 0));
+    const entryWeight = trade.rows.reduce((sum, row) => sum + Math.abs(row.qty), 0);
+    const weightedEntry = entryWeight > 0
+      ? trade.rows.reduce((sum, row) => sum + Math.abs(row.qty) * row.avg_entry_price, 0) / entryWeight
+      : null;
+    if (Number.isFinite(peak) && weightedEntry != null && weightedEntry > 0) {
+      c.pkSum += Math.max(0, (peak / weightedEntry - 1) * 100);
+      c.pkN += 1;
     }
   }
   for (const k of Object.keys(out)) out[k].dayPnl = Math.round(out[k].dayPnl);

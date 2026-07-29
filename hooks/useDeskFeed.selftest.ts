@@ -15,5 +15,7 @@ assert.match(source, /attributePositionsByImmutableExecutionAccount/, "position 
 assert.match(source, /positionLabel:\s*"live feed positions"/, "attribution failures must identify the affected live feed");
 assert.match(source, /state:\s*"blocked"/, "routing failures must block attribution");
 assert.doesNotMatch(source, /byAcct\(sb\.from\("positions"\)/, "positions must not fall back to mutable strategist account scope");
+assert.match(source, /POSITION_FIELDS[\s\S]*runner_of/, "the live feed must retain immutable runner lineage");
+assert.match(source, /summarizeLogicalTradeCohort/, "the session denominator must count logical trades");
 
-console.log("desk-feed-egress-selftest: 12/12 passed");
+console.log("desk-feed-egress-selftest: 14/14 passed");

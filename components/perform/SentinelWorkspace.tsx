@@ -62,7 +62,12 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
           <div className="sntw-sub">SESSION RECEIPT</div>
           <ul>
             <li>release {operatorPacket.release.releaseId ?? "missing"} · {operatorPacket.release.state}</li>
-            <li>live {operatorPacket.liveBook.closed}/{operatorPacket.liveBook.opened} closed · {operatorPacket.liveBook.open} open</li>
+            <li>
+              live {operatorPacket.liveBook.closed}/{operatorPacket.liveBook.opened} closed · {operatorPacket.liveBook.open} open
+              {operatorPacket.liveBook.positionRows == null
+                ? " · legacy position-row denominator"
+                : ` · ${operatorPacket.liveBook.positionRows} position rows`}
+            </li>
             <li>manager {operatorPacket.managerBook.terminal}/{operatorPacket.managerBook.observed} terminal · {operatorPacket.managerBook.censored} censored</li>
             <li>dark {operatorPacket.darkBook.rawDecisions} frozen · {operatorPacket.darkBook.exactContracts} exact contracts · {operatorPacket.darkBook.state.replaceAll("_", " ")}</li>
           </ul>

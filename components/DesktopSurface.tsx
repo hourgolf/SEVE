@@ -474,8 +474,8 @@ export function DesktopSurface({
             strategists={desk.strategists}
             pnl={livePnl}
             fund={liveFund}
-            closedToday={feed.recentTrades.length}
-            openCount={feed.positions.length}
+            closedToday={feed.sessionTrades.closed}
+            openCount={feed.sessionTrades.open}
           />
           <div style={{ marginTop: 14 }}>
             <Rack

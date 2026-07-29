@@ -273,7 +273,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
 
         {tab === "ops" && (
           <>
-            <DayBooksStrip strategists={desk.strategists} pnl={livePnl} fund={liveFund} closedToday={feed.recentTrades.length} openCount={feed.positions.length} />
+            <DayBooksStrip strategists={desk.strategists} pnl={livePnl} fund={liveFund} closedToday={feed.sessionTrades.closed} openCount={feed.sessionTrades.open} />
             <OpsPreflight
               strategists={desk.strategists}
               tape={{ lastIngestTs: data.lastIngestTs, snapCount: data.snapshot.length, expirations: data.expirations }}

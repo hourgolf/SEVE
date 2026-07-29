@@ -25,9 +25,12 @@ export interface SentinelOperatorPacketInput {
   generatedAt: string;
   release: SentinelEvidenceFact & { releaseId: string | null; configurationSha256: string | null };
   liveBook: SentinelEvidenceFact & {
+    /** Entry-time logical trades; runner/remainder rows are counted once. */
     opened: number;
     closed: number;
     open: number;
+    /** Durable position rows behind the logical cohort. Absent on legacy v1 receipts. */
+    positionRows?: number;
     realizedPnl: number | null;
     manualCloses: number;
   };
@@ -147,7 +150,13 @@ export function deriveSentinelOperatorPacket(input: SentinelOperatorPacketInput)
   if (input.session >= input.forDate) throw new Error("Sentinel packet forDate must follow the evidence session");
   if (!Number.isFinite(Date.parse(input.generatedAt))) throw new Error("Sentinel packet generatedAt must be an ISO timestamp");
   for (const [label, values] of [
-    ["liveBook", [input.liveBook.opened, input.liveBook.closed, input.liveBook.open, input.liveBook.manualCloses]],
+    ["liveBook", [
+      input.liveBook.opened,
+      input.liveBook.closed,
+      input.liveBook.open,
+      input.liveBook.manualCloses,
+      ...(input.liveBook.positionRows == null ? [] : [input.liveBook.positionRows]),
+    ]],
     ["managerBook", [input.managerBook.observed, input.managerBook.terminal, input.managerBook.censored, input.managerBook.active]],
     ["darkBook", [input.darkBook.rawDecisions, input.darkBook.sourceCensors, input.darkBook.exactContracts]],
   ] as const) {
@@ -158,6 +167,9 @@ export function deriveSentinelOperatorPacket(input: SentinelOperatorPacketInput)
   }
   if (input.liveBook.closed + input.liveBook.open !== input.liveBook.opened) {
     throw new Error("liveBook opened count must equal closed plus open");
+  }
+  if (input.liveBook.positionRows != null && input.liveBook.positionRows < input.liveBook.opened) {
+    throw new Error("liveBook position rows cannot be fewer than logical trades");
   }
   if (input.managerBook.terminal + input.managerBook.censored + input.managerBook.active > input.managerBook.observed) {
     throw new Error("managerBook classified counts cannot exceed observed");
@@ -201,10 +213,14 @@ export function deriveSentinelOperatorPacket(input: SentinelOperatorPacketInput)
   else findings.push({
     code: "live-session",
     tone: "info",
-    title: `${input.liveBook.closed} live trade${input.liveBook.closed === 1 ? "" : "s"} closed · ${money(input.liveBook.realizedPnl)}`,
+    title: input.liveBook.positionRows == null
+      ? `${input.liveBook.closed} closed position row${input.liveBook.closed === 1 ? "" : "s"} · ${money(input.liveBook.realizedPnl)}`
+      : `${input.liveBook.closed} logical live trade${input.liveBook.closed === 1 ? "" : "s"} closed · ${money(input.liveBook.realizedPnl)}`,
     detail: input.liveBook.manualCloses > 0
       ? `${input.liveBook.manualCloses} operator close${input.liveBook.manualCloses === 1 ? "" : "s"} remain separately labeled.`
-      : "No operator close was mixed into the automated outcome cohort.",
+      : input.liveBook.positionRows != null && input.liveBook.positionRows !== input.liveBook.opened
+        ? `${input.liveBook.positionRows} immutable position rows reconcile to the logical cohort; no operator close was mixed in.`
+        : "No operator close was mixed into the automated outcome cohort.",
     action: "collect",
     source: input.liveBook.source,
   });

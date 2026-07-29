@@ -299,12 +299,12 @@ export function PositionsPanel({
       {recentTrades.length > 0 && (
         <div className="recent-trades">
           <div className="rt-head">
-            <span>Today&apos;s trades</span>
+            <span>Today&apos;s closing tranches</span>
             <span
               className={realizedToday < 0 ? "neg" : "pos"}
               title="Σ per-channel fill-net realized = ATTRIBUTION. Channels sharing a netted contract make per-channel rows approximate — Fund (today) on the NAV is the headline truth."
             >
-              attribution {signedUsd(realizedToday)} · {recentTrades.length}
+              attribution {signedUsd(realizedToday)} · {recentTrades.length} rows
             </span>
           </div>
           <div className="rt-list">
