@@ -37,6 +37,14 @@ import {
   rc54RunnerFixedTargetReached,
 } from "./rc54ManagerPolicy.js";
 import { rc54Root } from "./rc54ReleasePolicy.js";
+import {
+  receiptBoundA13GivebackReached,
+  receiptBoundBankTargetReached,
+  receiptBoundEntryPolicyFromRow,
+  receiptBoundEntryPolicyStampPresent,
+  receiptBoundFixedTargetReached,
+  receiptBoundNativeAtrExitEligible,
+} from "./receiptBoundEntryPolicy.js";
 
 // RTH in ET minutes-since-midnight: 09:30 (570) → 16:00 (960).
 const RTH_OPEN = 570;
@@ -264,20 +272,30 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   const mark = row ? (freshExecutableBid(rowQuote?.bid, ctx.chain.ageMs) ?? alp?.current_price ?? 0) : 0;
   const entryPx = row?.avg_entry_price ?? 0;
   const rc54Profile = row ? rc54ManagerProfileFromRow(row) : null;
+  const receiptBoundPolicy = row ? receiptBoundEntryPolicyFromRow(row) : null;
+  const sealedReceiptBoundRow = !!row
+    && receiptBoundEntryPolicyStampPresent(row);
   // An open position's persisted manager stamp owns its exit semantics. The
   // release flag controls new admissions, not reinterpretation of existing risk.
   // An unknown/corrupt stamp remains sealed and loses discretionary exits
   // instead of silently falling back to the legacy manager.
   const sealedRc54Row = !!row && rc54ManagerStampPresent(row) && rc54Root(ch.slug) != null;
+  const sealedManagedRow = sealedRc54Row || sealedReceiptBoundRow;
 
   // ARMABLE TRAIL (compiled specs): underlying ATR-chandelier — once in profit,
   // exit when price retraces k·ATR from the peak favorable underlying (cron parity).
   if (pos && row && built.trailK != null && f.atr > 0
-      && rc54NativeAtrExitEligible({
-        profile: rc54Profile,
-        isRunner: !!row.runner_of,
-        sealedRc54: sealedRc54Row,
-      })
+      && (sealedReceiptBoundRow
+        ? receiptBoundNativeAtrExitEligible({
+          policy: receiptBoundPolicy,
+          isRunner: !!row.runner_of,
+          sealedReceiptBound: true,
+        })
+        : rc54NativeAtrExitEligible({
+          profile: rc54Profile,
+          isRunner: !!row.runner_of,
+          sealedRc54: sealedRc54Row,
+        }))
       && (!intent || intent.kind !== "exit")) {
     const inProfit = pos.optType === "call" ? f.close > pos.entryUnderlying : f.close < pos.entryUnderlying;
     const retraced = pos.optType === "call"
@@ -297,9 +315,13 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // Per-channel PREMIUM-STOP override (47_premium_stop_pct.sql): null → policy default (50,
   // byte-identical); 0 → OFF (the channel runs its underlying_stop instead — the ORB underlying-stop
   // finding: a 0.30% underlying-move stop beats the −50% premium stop). Gates BOTH premium stops below.
-  const premStopPct = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
+  const premStopPct = receiptBoundPolicy
+    ? receiptBoundPolicy.stopLoss.catastrophePct
+    : sealedReceiptBoundRow
+      ? 0
+      : ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
   // Premium profit/stop for compiled specs (needs the option mark).
-  if (pos && row && !sealedRc54Row && built.premiumExit
+  if (pos && row && !sealedManagedRow && built.premiumExit
       && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
     const { profitPct, stopPct } = built.premiumExit;
     // RUNNER rows (row.runner_of, R1) skip take-profit intents — they ride; the fast sweep's
@@ -317,6 +339,24 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   })) {
     intent = { kind: "exit", reason: "target_premium" };
   }
+  if (pos && row && (!intent || intent.kind !== "exit")
+      && receiptBoundFixedTargetReached({
+        policy: receiptBoundPolicy,
+        isRunner: !!row.runner_of,
+        entryPrice: entryPx,
+        mark,
+      })) {
+    intent = { kind: "exit", reason: "target_premium" };
+  }
+  if (pos && row && (!intent || intent.kind !== "exit")
+      && receiptBoundBankTargetReached({
+        policy: receiptBoundPolicy,
+        isRunner: !!row.runner_of,
+        entryPrice: entryPx,
+        mark,
+      })) {
+    intent = { kind: "exit", reason: "target_premium" };
+  }
   // Per-channel TAKE-PROFIT (compound policy, ChannelConfig.take_profit_pct): exit at +pct%
   // of premium; the entry path below re-enters on the next signal when flat → compounding.
   // For channels with NO convex tail (PB: ridden −EV, compound +EV — compound-vs-ride-probe)
@@ -324,7 +364,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // compiled specs). Mirrors the engine premiumExit.profitPct — ⚠ the ENGINE backtests this on
   // the MID; live triggers on the BID since 1b #6 (audit 2026-07-11), so live TPs fire ~half a
   // spread later than the backtest models (deliberate: the backtest's mid was never realizable).
-  if (pos && row && !sealedRc54Row && !row.runner_of && ch.take_profit_pct > 0
+  if (pos && row && !sealedManagedRow && !row.runner_of && ch.take_profit_pct > 0
       && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0
       && mark >= entryPx * (1 + ch.take_profit_pct / 100)) {
     intent = { kind: "exit", reason: "target_premium" };
@@ -350,6 +390,16 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   })) {
     intent = { kind: "exit", reason: "trail_giveback" };
   }
+  if (pos && row && (!intent || intent.kind !== "exit")
+      && receiptBoundA13GivebackReached({
+        policy: receiptBoundPolicy,
+        isRunner: !!row.runner_of,
+        entryPrice: entryPx,
+        mark,
+        peak: Math.max(row.peak_mark ?? entryPx, mark),
+      })) {
+    intent = { kind: "exit", reason: "trail_giveback" };
+  }
 
   // EVENT STAND-DOWN flatten (calendar-awareness, market-events.ts): a scheduled
   // intraday binary (FOMC 14:00) is not a tape signal — don't hold a directional
@@ -366,7 +416,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // Arm-high giveback trail, per-channel (GIVEBACK_TRAIL map): once the peak mark clears
   // entry×engageMult, exit if it gives back > givebackPct of the peak gain. power +100%/keep-60%;
   // momo-shape +50%/keep-⅔ (A13). Channels absent from the map have no trail (gt undefined → skip).
-  const gt = sealedRc54Row ? undefined : policy.GIVEBACK_TRAIL[ch.slug];
+  const gt = sealedManagedRow ? undefined : policy.GIVEBACK_TRAIL[ch.slug];
   if (pos && row && gt && (!intent || intent.kind !== "exit") && entryPx > 0 && mark > 0) {
     // audit 2026-07-11 (1b #5): peakBidSince returns NULL on a READ ERROR — skip the trail
     // evaluation this cycle (the old swallowed →0 silently under-armed the A13/power trail).

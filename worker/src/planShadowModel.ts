@@ -12,6 +12,9 @@ import {
   releaseEvidenceStamp,
   type ReleaseEvidenceContext,
 } from "./releaseEvidenceContext.js";
+import type {
+  ReceiptBoundConfigurationWriteStamp,
+} from "./channelConfigurationRuntimeAdapter.js";
 
 export interface PolicyEpochDraft {
   id: string;
@@ -34,6 +37,9 @@ export interface PositionPlanDraft {
   schema_version: 1;
   state: "planned";
   plan_json: Readonly<PositionPlanV1>;
+  channel_spec_version_id: string | null;
+  release_manifest_id: string | null;
+  configuration_epoch_id: string | null;
 }
 
 export interface ShadowPlanEvidence { epoch: PolicyEpochDraft; plan: PositionPlanDraft }
@@ -63,6 +69,7 @@ export interface ShadowPlanInput {
   executableGivebackTrail?: ExecutableGivebackTrailIdentity | null;
   executableManagerProfile?: string | null;
   releaseEvidenceContext?: ReleaseEvidenceContext | null;
+  configurationWriteStamp?: Readonly<ReceiptBoundConfigurationWriteStamp> | null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -86,8 +93,20 @@ export function observedOpportunityId(input: {
   direction: string;
   reason: string;
   decisionAtMs: number;
+  configurationEpochId?: string | null;
 }): string {
-  return `opp:${deterministicEvidenceUuid("seve-opportunity-v1", input)}`;
+  const identity = {
+    strategistId: input.strategistId,
+    accountId: input.accountId,
+    occ: input.occ,
+    direction: input.direction,
+    reason: input.reason,
+    decisionAtMs: input.decisionAtMs,
+    ...(input.configurationEpochId
+      ? { configurationEpochId: input.configurationEpochId }
+      : {}),
+  };
+  return `opp:${deterministicEvidenceUuid("seve-opportunity-v1", identity)}`;
 }
 
 export function observedPlanId(opportunityId: string): string {
@@ -150,6 +169,7 @@ export function observedPolicyIdentity(input: {
   executableGivebackTrail?: ExecutableGivebackTrailIdentity | null;
   executableManagerProfile?: string | null;
   releaseEvidenceContext?: ReleaseEvidenceContext | null;
+  configurationWriteStamp?: Readonly<ReceiptBoundConfigurationWriteStamp> | null;
 }): ObservedPolicyIdentity | null {
   const ch = input.channel;
   if (!UUID.test(input.accountId) || !UUID.test(ch.id)) return null;
@@ -186,6 +206,14 @@ export function observedPolicyIdentity(input: {
       riskBasis: "maximum long-option debit; stop-budget estimate is diagnostic only",
     },
     ...(releaseContext ? { releaseEvidence: releaseContext } : {}),
+    ...(input.configurationWriteStamp
+      ? {
+        configurationIdentity:
+          input.configurationWriteStamp.configuration_identity,
+        receiptBoundEntryPolicy:
+          input.configurationWriteStamp.entry_policy,
+      }
+      : {}),
   };
   const configurationEpochId = `sha256:${digest({
     strategistId: ch.id, channelVersion, managerVersion, workerVersion: input.workerVersion, policyJson,
@@ -219,6 +247,7 @@ export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvide
     executableGivebackTrail: input.executableGivebackTrail,
     executableManagerProfile: input.executableManagerProfile,
     releaseEvidenceContext: input.releaseEvidenceContext,
+    configurationWriteStamp: input.configurationWriteStamp,
   });
   if (!identity) return null;
   const manager = managerPolicy(
@@ -231,6 +260,8 @@ export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvide
   const opportunityId = observedOpportunityId({
     strategistId: ch.id, accountId: input.accountId, occ: d.occ, direction: d.direction,
     reason: d.reason, decisionAtMs: input.decisionAtMs,
+    configurationEpochId:
+      input.configurationWriteStamp?.configuration_epoch_id ?? null,
   });
   const planId = observedPlanId(opportunityId);
   const stopPct = ch.premium_stop_pct ?? input.defaultPremiumStopPct;
@@ -269,6 +300,12 @@ export function buildShadowPlanEvidence(input: ShadowPlanInput): ShadowPlanEvide
       id: planId, opportunity_id: opportunityId, policy_epoch_id: epochId,
       strategist_id: ch.id, account_id: input.accountId,
       schema_version: 1, state: "planned", plan_json: plan,
+      channel_spec_version_id:
+        input.configurationWriteStamp?.channel_spec_version_id ?? null,
+      release_manifest_id:
+        input.configurationWriteStamp?.release_manifest_id ?? null,
+      configuration_epoch_id:
+        input.configurationWriteStamp?.configuration_epoch_id ?? null,
     },
   };
 }

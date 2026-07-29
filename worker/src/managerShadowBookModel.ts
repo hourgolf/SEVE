@@ -370,6 +370,9 @@ export function buildManagerShadowTerminalObservation(run: ManagerShadowRun): Ex
     broker_status: null,
     filled_qty: null,
     fill_price: null,
+    channel_spec_version_id: null,
+    release_manifest_id: null,
+    configuration_epoch_id: null,
     payload: {
       shadowOnly: true,
       durableShadowBook: true,

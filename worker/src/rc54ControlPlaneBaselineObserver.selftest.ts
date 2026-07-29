@@ -157,7 +157,10 @@ check("worker wiring is default-off and receipt-only", () => {
   const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
   const storeSource = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
   assert.match(configSource, /CONTROL_PLANE_BASELINE_OBSERVER_ENABLED",\s*false/);
-  assert.match(indexSource, /if \(config\.controlPlaneBaselineObserverEnabled\)/);
+  assert.match(
+    indexSource,
+    /if \(config\.controlPlaneBaselineObserverEnabled && !receiptBoundRuntime\)/,
+  );
   assert.match(indexSource, /await import\("\.\/rc54ControlPlaneBaselineObserver\.js"\)/);
   assert.doesNotMatch(indexSource, /^import[\s\S]*from "\.\/rc54ControlPlaneBaselineObserver\.js";/m);
   assert.match(indexSource, /await startupReceiptWrite/);

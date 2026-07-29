@@ -10,6 +10,7 @@
     "supabase",
     "scripts",
     "worker",
+    "lib/channels/rc54NoopConfigurationCanary.ts",
     "**/*.selftest.ts",
     "**/*.selftest.tsx"
   ]

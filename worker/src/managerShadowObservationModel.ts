@@ -12,7 +12,18 @@ export const SHADOW_MANAGER_COHORT_FROM = "2026-07-13T00:00:00-04:00";
 
 export interface ManagerShadowObservationInput {
   channel: Pick<ChannelConfig, "id" | "slug" | "underlying">;
-  position: Pick<PositionRow, "id" | "occ_symbol" | "opt_type" | "qty" | "avg_entry_price" | "opened_at">;
+  position: Pick<
+    PositionRow,
+    | "id"
+    | "occ_symbol"
+    | "opt_type"
+    | "qty"
+    | "avg_entry_price"
+    | "opened_at"
+    | "channel_spec_version_id"
+    | "release_manifest_id"
+    | "configuration_epoch_id"
+  >;
   accountId: string;
   exit: ManagerExit;
   observedAtMs: number;
@@ -82,6 +93,9 @@ export function buildManagerShadowObservation(input: ManagerShadowObservationInp
     broker_status: null,
     filled_qty: null,
     fill_price: null,
+    channel_spec_version_id: row.channel_spec_version_id ?? null,
+    release_manifest_id: row.release_manifest_id ?? null,
+    configuration_epoch_id: row.configuration_epoch_id ?? null,
     payload: {
       shadowOnly: true,
       managerId: exit.managerId,

@@ -33,6 +33,10 @@ import {
   type ManagerShadowDbRow,
   type ManagerShadowRun,
 } from "./managerShadowBookModel.js";
+import {
+  loadStoredReceiptBoundControlPlane,
+  type StoredReceiptBoundControlPlaneRead,
+} from "../../lib/channels/channelControlPlanePersistence.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -143,6 +147,9 @@ export interface PositionRow {
   trough_mark: number | null; // durable MAE twin — the running MIN option mark over the hold (58_trough_mark; stop-calibration instrumentation)
   runner_of: string | null; // R1 (64_runner_tranche): parent row id when this row is a runner remainder — rides, never re-tranches
   entry_features?: Record<string, unknown> | null;
+  channel_spec_version_id?: string | null;
+  release_manifest_id?: string | null;
+  configuration_epoch_id?: string | null;
 }
 
 export interface Rc54ControlPlaneBaselineIdentityRead {
@@ -155,6 +162,16 @@ const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServi
   auth: { persistSession: false, autoRefreshToken: false },
   realtime: { transport: WebSocket as unknown as WSTransport },
 });
+
+export async function loadReceiptBoundControlPlane(
+): Promise<StoredReceiptBoundControlPlaneRead> {
+  // The repository and worker workspaces install the same Supabase client
+  // package independently. Its protected fields make the two otherwise
+  // identical client classes nominally incompatible to TypeScript.
+  return loadStoredReceiptBoundControlPlane(
+    sb as unknown as Parameters<typeof loadStoredReceiptBoundControlPlane>[0],
+  );
+}
 
 export async function loadRc54ControlPlaneBaselineIdentity(
   manifestKey: string,
@@ -590,6 +607,9 @@ export async function closeRun(kind: string, exitCode: number | null, signal: st
 export async function insertSignal(row: {
   strategist_id: string; signal_type: string; underlying_price: number; direction: string;
   acted_on: boolean; blocked_reason: string | null; rationale: Record<string, unknown>;
+  channel_spec_version_id?: string | null;
+  release_manifest_id?: string | null;
+  configuration_epoch_id?: string | null;
 }): Promise<void> {
   try { await sb.from("signals").insert(row); }
   catch (e) { warn(`store: signal insert failed — ${(e as Error).message}`); }
@@ -834,6 +854,9 @@ export async function insertPosition(row: {
   strike: number; opt_type: "call" | "put"; qty: number; avg_entry_price: number;
   // durable per-trade forensics (44_trade_forensics) — the entry side of the dataset.
   entry_reason?: string; entry_features?: Record<string, unknown> | null; entry_delta?: number | null;
+  channel_spec_version_id?: string | null;
+  release_manifest_id?: string | null;
+  configuration_epoch_id?: string | null;
 }): Promise<PositionInsertResult> {
   const { entry_reason, entry_features, entry_delta, ...core } = row;
   const { data, error } = await sb.from("positions").insert({
@@ -908,6 +931,9 @@ async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: 
     peak_mark: Math.max(parent.peak_mark ?? parent.avg_entry_price, mark), trough_mark: parent.trough_mark ?? parent.avg_entry_price,
     peak_at: new Date().toISOString(), trough_at: new Date().toISOString(),
     entry_reason: o.entryReason, entry_features: parent.entry_features ?? null, runner_of: o.runnerOf,
+    channel_spec_version_id: parent.channel_spec_version_id ?? null,
+    release_manifest_id: parent.release_manifest_id ?? null,
+    configuration_epoch_id: parent.configuration_epoch_id ?? null,
   }).select("id,opened_at").single();
   return { id: data?.id ?? null, openedAt: data?.opened_at ?? null, error: error ? error.message : null };
 }

@@ -118,6 +118,19 @@ export const config = {
     "CONTROL_PLANE_BASELINE_OBSERVER_ENABLED",
     false,
   ),
+  // Receipt-bound channel configuration handoff. Default OFF, so the active
+  // RC5.4 worker remains byte-for-byte on its sealed constants until a
+  // separately reviewed deployment and Railway configuration turn this on.
+  // When enabled, any missing/incompatible control-plane identity blocks
+  // startup; an unadopted baseline is allowed only by the second explicit flag.
+  channelConfigurationRuntimeEnabled: flag(
+    "CHANNEL_CONFIGURATION_RUNTIME_ENABLED",
+    false,
+  ),
+  channelConfigurationAllowUnadoptedRc54Baseline: flag(
+    "CHANNEL_CONFIGURATION_ALLOW_UNADOPTED_RC54_BASELINE",
+    false,
+  ),
   // Roster-neutral Week 2 LAB foundation. This switch is intentionally unusable
   // until a later reviewed commit supplies a sealed roster/configuration draft;
   // setting it early makes startup refuse rather than infer candidates.

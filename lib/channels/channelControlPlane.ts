@@ -418,6 +418,10 @@ export interface WorkerChannelProjection {
   quantity: number;
   premiumCap: number;
   aggregateDebitCap: number;
+  takeProfit: ChannelTakeProfitPolicy;
+  stopLoss: ChannelStopLossPolicy;
+  ratchetParameters: ChannelRatchetPolicy;
+  riskLimits: ChannelRiskLimits;
   managerProfileId: string;
   strategistId: string;
   accountId: string;
@@ -660,6 +664,10 @@ export function compileReleaseManifest(
     quantity: spec.quantity,
     premiumCap: Number(spec.entryParameters.premiumCap),
     aggregateDebitCap: spec.maxDebitUsd,
+    takeProfit: spec.takeProfit,
+    stopLoss: spec.stopLoss,
+    ratchetParameters: spec.ratchetParameters,
+    riskLimits: spec.riskLimits,
     managerProfileId: spec.managerProfileId,
     strategistId: spec.channelId,
     accountId: spec.accountId,
