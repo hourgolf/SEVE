@@ -1,5 +1,10 @@
 import { strict as assert } from "node:assert";
-import { replayRc54Composite, type Rc54ReplayQuote } from "./rc54CompositeReplay.js";
+import {
+  replayRc54Composite,
+  replayRc54SealedManager,
+  type Rc54ReplayQuote,
+} from "./rc54CompositeReplay.js";
+import type { Bar } from "../../engine/types.js";
 
 let checks = 0;
 function check(label: string, actual: unknown, expected: unknown): void {
@@ -87,6 +92,110 @@ check("entries after the cutoff are ineligible", afterBell.censors, [
 ]);
 check("replay can never authorize writes, orders, or policy", [
   b30a13.externalWrites, b30a13.orderPathAuthorized, b30a13.policyChangeAuthorized,
+], [false, false, false]);
+
+const sealedRide = replayRc54SealedManager({
+  profile: "RC53-RIDE",
+  entryAsk: 1,
+  entryAtMs: start,
+  flattenAtMs: start + 300 * 60_000,
+  quotes: [at(0, 1), at(20, 1.8), at(300, 1.25)],
+  occSymbol: "QQQ260724C00500000",
+});
+check("full-position RIDE preserves both original contracts through flatten", [
+  sealedRide.lots.map((lot) => [lot.lot, lot.exitReason, lot.exitBid]),
+  sealedRide.pnl,
+], [[["bank", "time_flatten", 1.25], ["runner", "time_flatten", 1.25]], 50]);
+
+const sealedA13 = replayRc54SealedManager({
+  profile: "RC53-A13",
+  entryAsk: 1,
+  entryAtMs: start,
+  flattenAtMs: start + 300 * 60_000,
+  quotes: [at(0, 1), at(20, 1.6), at(21, 1.39), at(300, 1.8)],
+  occSymbol: "QQQ260724C00500000",
+});
+check("full-position A13 applies one immutable exit to both contracts", [
+  sealedA13.lots.map((lot) => [lot.lot, lot.exitReason, lot.exitBid]),
+  sealedA13.pnl,
+], [[["bank", "a13_giveback", 1.39], ["runner", "a13_giveback", 1.39]], 78]);
+
+const bar = (minute: number, close: number, range = 0.1): Bar => ({
+  ts: start + minute * 60_000,
+  open: close,
+  high: close + range / 2,
+  low: close - range / 2,
+  close,
+  volume: 100,
+  vwap: close,
+});
+const warmupBars = Array.from({ length: 16 }, (_, index) => bar(index - 15, 100));
+const atrBars = [
+  ...warmupBars,
+  bar(1, 101),
+  bar(2, 102),
+  bar(3, 101.7),
+];
+const nativeNoBars = replayRc54SealedManager({
+  profile: "QQQ54-B20-NATIVE-ATR",
+  entryAsk: 1,
+  entryAtMs: start,
+  flattenAtMs: start + 300 * 60_000,
+  quotes: [at(0, 1), at(1, 1.21), at(300, 1.1)],
+  occSymbol: "QQQ260724C00500000",
+});
+check("sealed native ATR fails closed without underlying evidence", [
+  nativeNoBars.exact, nativeNoBars.censors,
+], [false, ["native_atr_underlying_path_unavailable"]]);
+
+const sealedNative = replayRc54SealedManager({
+  profile: "QQQ54-B20-NATIVE-ATR",
+  entryAsk: 1,
+  entryAtMs: start,
+  flattenAtMs: start + 300 * 60_000,
+  quotes: [at(0, 1), at(1, 1.21), at(2, 1.5), at(3, 1.4), at(300, 1.1)],
+  occSymbol: "QQQ260724C00500000",
+  underlyingBars: atrBars,
+  nativeAtrTrailK: 1.5,
+});
+check("native ATR banks once then values the underlying trigger at executable bid", [
+  sealedNative.exact,
+  sealedNative.lots.map((lot) => [lot.lot, lot.exitReason, lot.exitBid]),
+  sealedNative.pnl,
+], [true, [["bank", "target", 1.21], ["runner", "native_atr", 1.4]], 61]);
+
+const nativePrebankStop = replayRc54SealedManager({
+  profile: "QQQ54-B20-NATIVE-ATR",
+  entryAsk: 1,
+  entryAtMs: start,
+  flattenAtMs: start + 300 * 60_000,
+  quotes: [at(0, 0.69), at(1, 1.5)],
+  occSymbol: "QQQ260724P00500000",
+  underlyingBars: atrBars,
+});
+check("a pre-bank catastrophe closes the original two-contract row", [
+  nativePrebankStop.lots.map((lot) => [lot.lot, lot.exitReason, lot.exitBid]),
+  nativePrebankStop.pnl,
+], [[["bank", "stop", 0.69], ["runner", "stop", 0.69]], -62]);
+
+const nativeStopAfterBank = replayRc54SealedManager({
+  profile: "QQQ54-B20-NATIVE-ATR",
+  entryAsk: 1,
+  entryAtMs: start,
+  flattenAtMs: start + 300 * 60_000,
+  quotes: [at(0, 1), at(1, 1.21), at(2, 0.69), at(3, 1.4)],
+  occSymbol: "QQQ260724C00500000",
+  underlyingBars: atrBars,
+});
+check("post-bank catastrophe owns an earlier clock than a later ATR exit", [
+  nativeStopAfterBank.lots.map((lot) => [lot.exitReason, lot.exitBid]),
+  nativeStopAfterBank.pnl,
+], [[["target", 1.21], ["stop", 0.69]], -10]);
+
+check("sealed replay remains research-only", [
+  sealedNative.externalWrites,
+  sealedNative.orderPathAuthorized,
+  sealedNative.policyChangeAuthorized,
 ], [false, false, false]);
 
 console.log(`rc54-composite-replay-selftest: ${checks}/${checks} PASS`);

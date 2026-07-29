@@ -1,6 +1,9 @@
-// Pure, replay-only RC5.4 composite-manager model. Each profile represents a
-// two-contract entry split into two one-contract exit paths. It cannot write,
-// authorize orders, or mutate the sealed runtime policy.
+// Pure, replay-only RC5.4 manager model. It covers the split composite
+// profiles plus the sealed full-position RIDE/A13 shapes and the underlying
+// ATR runner. It cannot write, authorize orders, or mutate runtime policy.
+
+import { computeFeatures } from "../../engine/engine";
+import type { Bar } from "../../engine/types";
 
 export const RC54_COMPOSITE_REPLAY_VERSION = "rc54-composite-replay-v1" as const;
 
@@ -12,6 +15,14 @@ export const RC54_COMPOSITE_IDS = [
 ] as const;
 
 export type Rc54CompositeId = typeof RC54_COMPOSITE_IDS[number];
+
+export const RC54_SEALED_REPLAY_IDS = [
+  "RC53-RIDE",
+  "RC53-A13",
+  "QQQ54-B20-NATIVE-ATR",
+] as const;
+
+export type Rc54SealedReplayId = typeof RC54_SEALED_REPLAY_IDS[number];
 
 export interface Rc54ReplayQuote {
   atMs: number;
@@ -56,7 +67,8 @@ export type Rc54ReplayCensor =
   | "entry_after_flatten"
   | "missing_executable_path"
   | "no_executable_flatten_bid"
-  | "native_atr_path_unavailable";
+  | "native_atr_path_unavailable"
+  | "native_atr_underlying_path_unavailable";
 
 export interface Rc54CompositeOutcome {
   profile: Rc54CompositeId;
@@ -77,6 +89,12 @@ export interface Rc54CompositeOutcome {
 interface NativeAtrReceipt {
   exitAtMs: number;
   exitBid: number;
+}
+
+export interface Rc54SealedReplayOutcome
+  extends Omit<Rc54CompositeOutcome, "profile"> {
+  profile: Rc54SealedReplayId;
+  nativeAtrTargetPct: number | null;
 }
 
 const finite = (value: unknown): value is number =>
@@ -149,6 +167,7 @@ function replayLock(input: {
 }
 
 function replayA13(input: {
+  lot?: Rc54LotOutcome["lot"];
   entryAsk: number;
   quotes: readonly Rc54ReplayQuote[];
   flattenAtMs: number;
@@ -163,17 +182,17 @@ function replayA13(input: {
     peakReturnPct = Math.max(peakReturnPct, ret);
     if (!armed) {
       if (ret <= -30)
-        return outcome("runner", input.entryAsk, quote, "prearm_stop", peakReturnPct);
+        return outcome(input.lot ?? "runner", input.entryAsk, quote, "prearm_stop", peakReturnPct);
       if (ret >= armPct) armed = true;
       continue;
     }
     if (ret <= peakReturnPct * keepFraction)
-      return outcome("runner", input.entryAsk, quote, "a13_giveback", peakReturnPct);
+      return outcome(input.lot ?? "runner", input.entryAsk, quote, "a13_giveback", peakReturnPct);
   }
   const flatten = lastExecutableAtOrBefore(input.quotes, input.flattenAtMs);
   return flatten
     ? outcome(
-        "runner",
+        input.lot ?? "runner",
         input.entryAsk,
         flatten,
         "time_flatten",
@@ -200,18 +219,139 @@ function replayNativeAtr(
 }
 
 function replayRide(input: {
+  lot?: Rc54LotOutcome["lot"];
   entryAsk: number;
   quotes: readonly Rc54ReplayQuote[];
   flattenAtMs: number;
 }): Rc54LotOutcome | null {
   return replayLock({
-    lot: "runner",
+    lot: input.lot ?? "runner",
     targetPct: Number.POSITIVE_INFINITY,
     stopPct: -30,
     entryAsk: input.entryAsk,
     quotes: input.quotes,
     flattenAtMs: input.flattenAtMs,
   });
+}
+
+function optionTypeFromOcc(occSymbol: string): "call" | "put" | null {
+  const match = /^[A-Z]{1,6}\d{6}([CP])\d{8}$/.exec(occSymbol);
+  return match?.[1] === "C" ? "call" : match?.[1] === "P" ? "put" : null;
+}
+
+function lastExecutableAtOrBeforeAndAfter(
+  quotes: readonly Rc54ReplayQuote[],
+  atMs: number,
+  afterMs: number,
+): Rc54ReplayQuote | null {
+  for (let index = quotes.length - 1; index >= 0; index--) {
+    const quote = quotes[index];
+    if (quote.atMs <= atMs && quote.atMs >= afterMs && quote.bid > 0) return quote;
+  }
+  return null;
+}
+
+function replayNativeAtrFromUnderlying(input: {
+  entryAsk: number;
+  entryAtMs: number;
+  bank: Rc54LotOutcome;
+  quotes: readonly Rc54ReplayQuote[];
+  flattenAtMs: number;
+  underlyingBars: readonly Bar[];
+  optionType: "call" | "put";
+  trailK: number;
+}): Rc54LotOutcome | null {
+  // Before the bank fills there is no runner row. A pre-bank catastrophe or
+  // time flatten closes the original two-contract row, so the second share
+  // receives the same executable outcome rather than an invented ATR path.
+  if (input.bank.exitReason !== "target") {
+    return {
+      ...input.bank,
+      lot: "runner",
+    };
+  }
+
+  const bars = [...input.underlyingBars]
+    // Keep the complete RTH prefix. ATR14 at the entry/runner clocks must see
+    // the same pre-entry session bars as the worker, not a post-entry slice.
+    .filter((bar) => Number.isFinite(bar.ts) && bar.ts <= input.flattenAtMs)
+    .sort((left, right) => left.ts - right.ts);
+  // Frozen clocks occur a few seconds after the completed decision bar. The
+  // live worker preserves that bar's spot close in entryStateByKey, so anchor
+  // to the last completed bar at/before the candidate clock without lookahead.
+  let entryIndex = -1;
+  for (let index = 0; index < bars.length && bars[index].ts <= input.entryAtMs; index++) {
+    entryIndex = index;
+  }
+  if (entryIndex < 0 || !(input.trailK > 0)) return null;
+
+  let peakFavorable = bars[entryIndex].close;
+  let trailExit: { triggerAtMs: number; quote: Rc54ReplayQuote; peakReturnPct: number } | null = null;
+  for (let index = entryIndex; index < bars.length; index++) {
+    const bar = bars[index];
+    // The 15:25 mandatory flatten runs before ordinary price exits.
+    if (bar.ts >= input.flattenAtMs) break;
+    peakFavorable = input.optionType === "call"
+      ? Math.max(peakFavorable, bar.close)
+      : Math.min(peakFavorable, bar.close);
+    if (bar.ts <= input.bank.exitAtMs) continue;
+    const features = computeFeatures(bars, index);
+    if (!(features.atr > 0)) continue;
+    const entryUnderlying = bars[entryIndex].close;
+    const inProfit = input.optionType === "call"
+      ? features.close > entryUnderlying
+      : features.close < entryUnderlying;
+    const retraced = input.optionType === "call"
+      ? features.close <= peakFavorable - input.trailK * features.atr
+      : features.close >= peakFavorable + input.trailK * features.atr;
+    if (!inProfit || !retraced) continue;
+    const quote = lastExecutableAtOrBeforeAndAfter(
+      input.quotes,
+      bar.ts,
+      input.bank.exitAtMs,
+    );
+    if (!quote) continue;
+    trailExit = {
+      triggerAtMs: bar.ts,
+      quote,
+      peakReturnPct: ((quote.bid - input.entryAsk) / input.entryAsk) * 100,
+    };
+    break;
+  }
+
+  const stop = input.quotes.find((quote) =>
+    quote.atMs >= input.bank.exitAtMs
+      && quote.atMs <= input.flattenAtMs
+      && quote.bid > 0
+      && ((quote.bid - input.entryAsk) / input.entryAsk) * 100 <= -30);
+  if (stop && (!trailExit || stop.atMs <= trailExit.triggerAtMs)) {
+    return outcome(
+      "runner",
+      input.entryAsk,
+      stop,
+      "stop",
+      ((stop.bid - input.entryAsk) / input.entryAsk) * 100,
+    );
+  }
+  if (trailExit) {
+    return outcome(
+      "runner",
+      input.entryAsk,
+      { atMs: trailExit.triggerAtMs, bid: trailExit.quote.bid },
+      "native_atr",
+      trailExit.peakReturnPct,
+    );
+  }
+  const flatten = lastExecutableAtOrBefore(input.quotes, input.flattenAtMs);
+  return flatten && flatten.atMs >= input.bank.exitAtMs
+    ? outcome(
+        "runner",
+        input.entryAsk,
+        flatten,
+        "time_flatten",
+        ((flatten.bid - input.entryAsk) / input.entryAsk) * 100,
+      )
+    : null;
 }
 
 /**
@@ -358,6 +498,145 @@ export function replayRc54Composite(input: {
   const lots = [bank, runner].filter((row): row is Rc54LotOutcome => row != null);
   if (censors.length || lots.length !== 2)
     return { ...base, censors, lots, exitAtMs: null, pnl: null, pnlPerContract: null, exact: false };
+  const pnl = round(lots.reduce((sum, lot) => sum + lot.pnl, 0));
+  return {
+    ...base,
+    censors,
+    lots,
+    exitAtMs: Math.max(...lots.map((lot) => lot.exitAtMs)),
+    pnl,
+    pnlPerContract: round(pnl / 2),
+    exact: true,
+  };
+}
+
+/**
+ * Reconstruct the exact sealed RC5.4 manager shapes that are not represented
+ * by the generic bank/runner target grid. Full-position policies preserve both
+ * original shares. Native ATR uses the same 14-bar feature helper and
+ * 1.5-ATR close/peak rule as the worker, with option exits valued at the last
+ * executable Databento bid available at the bar-close trigger.
+ */
+export function replayRc54SealedManager(input: {
+  profile: Rc54SealedReplayId;
+  entryAsk: number;
+  entryAtMs: number;
+  flattenAtMs: number;
+  quotes: readonly Rc54ReplayQuote[];
+  occSymbol: string;
+  underlyingBars?: readonly Bar[];
+  nativeAtrTargetPct?: number;
+  nativeAtrTrailK?: number;
+}): Rc54SealedReplayOutcome {
+  const censors: Rc54ReplayCensor[] = [];
+  if (!finite(input.entryAsk) || input.entryAsk <= 0) censors.push("invalid_entry");
+  if (!finite(input.entryAtMs) || !finite(input.flattenAtMs)
+      || input.flattenAtMs < input.entryAtMs) censors.push("invalid_clock");
+  if (input.entryAtMs >= input.flattenAtMs) censors.push("entry_after_flatten");
+  const quotes = [...input.quotes]
+    .filter((quote) => finite(quote.atMs) && finite(quote.bid)
+      && quote.atMs >= input.entryAtMs && quote.atMs <= input.flattenAtMs)
+    .sort((left, right) => left.atMs - right.atMs);
+  if (!quotes.some((quote) => quote.bid > 0)) censors.push("missing_executable_path");
+
+  const nativeAtrTargetPct = input.profile === "QQQ54-B20-NATIVE-ATR"
+    ? input.nativeAtrTargetPct ?? 20
+    : null;
+  const base = {
+    profile: input.profile,
+    nativeAtrTargetPct,
+    entryAsk: input.entryAsk,
+    entryAtMs: input.entryAtMs,
+    flattenAtMs: input.flattenAtMs,
+    censors,
+    externalWrites: false as const,
+    orderPathAuthorized: false as const,
+    policyChangeAuthorized: false as const,
+  };
+  if (censors.length) {
+    return {
+      ...base,
+      lots: [],
+      exitAtMs: null,
+      pnl: null,
+      pnlPerContract: null,
+      exact: false,
+    };
+  }
+
+  let lots: Rc54LotOutcome[] = [];
+  if (input.profile === "RC53-RIDE") {
+    const first = replayRide({
+      lot: "bank",
+      entryAsk: input.entryAsk,
+      quotes,
+      flattenAtMs: input.flattenAtMs,
+    });
+    const second = replayRide({
+      lot: "runner",
+      entryAsk: input.entryAsk,
+      quotes,
+      flattenAtMs: input.flattenAtMs,
+    });
+    lots = [first, second].filter((row): row is Rc54LotOutcome => row != null);
+  } else if (input.profile === "RC53-A13") {
+    const first = replayA13({
+      lot: "bank",
+      entryAsk: input.entryAsk,
+      quotes,
+      flattenAtMs: input.flattenAtMs,
+    });
+    const second = replayA13({
+      lot: "runner",
+      entryAsk: input.entryAsk,
+      quotes,
+      flattenAtMs: input.flattenAtMs,
+    });
+    lots = [first, second].filter((row): row is Rc54LotOutcome => row != null);
+  } else {
+    if (!(finite(nativeAtrTargetPct) && nativeAtrTargetPct > 0)) {
+      throw new Error("native ATR replay requires a positive bank target");
+    }
+    const optionType = optionTypeFromOcc(input.occSymbol);
+    if (!optionType || !input.underlyingBars?.length) {
+      censors.push("native_atr_underlying_path_unavailable");
+    } else {
+      const bank = replayLock({
+        lot: "bank",
+        targetPct: nativeAtrTargetPct,
+        stopPct: -30,
+        entryAsk: input.entryAsk,
+        quotes,
+        flattenAtMs: input.flattenAtMs,
+      });
+      const runner = bank
+        ? replayNativeAtrFromUnderlying({
+            entryAsk: input.entryAsk,
+            entryAtMs: input.entryAtMs,
+            bank,
+            quotes,
+            flattenAtMs: input.flattenAtMs,
+            underlyingBars: input.underlyingBars,
+            optionType,
+            trailK: input.nativeAtrTrailK ?? 1.5,
+          })
+        : null;
+      if (!bank || !runner) censors.push("native_atr_underlying_path_unavailable");
+      lots = [bank, runner].filter((row): row is Rc54LotOutcome => row != null);
+    }
+  }
+  if (lots.length !== 2 && !censors.length) censors.push("no_executable_flatten_bid");
+  if (censors.length || lots.length !== 2) {
+    return {
+      ...base,
+      censors,
+      lots,
+      exitAtMs: null,
+      pnl: null,
+      pnlPerContract: null,
+      exact: false,
+    };
+  }
   const pnl = round(lots.reduce((sum, lot) => sum + lot.pnl, 0));
   return {
     ...base,
