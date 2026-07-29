@@ -53,7 +53,7 @@ const dollars = (value: number): string => `${value >= 0 ? "+" : "-"}$${Math.abs
 
 interface PositionRow {
   id: string;
-  status: string;
+  status: "open" | "closed";
   opened_at: string;
   closed_at: string | null;
   realized_pnl: number | string | null;
