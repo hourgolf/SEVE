@@ -15,6 +15,7 @@ const feedHook = read("../../hooks/useDeskFeed.ts");
 const mobileReview = read("../../components/mobile2/MobileDeskSheet.tsx");
 const shadowWorkspace = read("../../components/perform/ShadowResearchWorkspace.tsx");
 const sentinelWorkspace = read("../../components/perform/SentinelWorkspace.tsx");
+const sentinelHook = read("../../hooks/useSentinelDigest.ts");
 const shell = read("../../components/shell/WorkstationShell.tsx");
 
 assert.deepEqual(
@@ -77,6 +78,7 @@ assert.match(mobileReview, /immutable execution routes/);
 assert.match(mobileReview, /ALL PAPER ACCOUNTS/);
 assert.match(shadowWorkspace, /all paper accounts/);
 assert.match(sentinelWorkspace, /all paper accounts/);
+assert.match(sentinelHook, /packet \? operatorPacketToJudge\(packet\) :/);
 
 assert.match(shell, /performSection === "research" \|\| performSection === "tape"/);
 
