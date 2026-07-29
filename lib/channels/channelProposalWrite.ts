@@ -1,15 +1,14 @@
 import {
   CHANNEL_CONTROL_PLANE_SCHEMA_VERSION,
-  compileReleaseManifest,
   projectActiveVersusDraft,
   type ActiveVersusDraftProjection,
   type ChangeClass,
   type ChannelChangeProposal,
   type ChannelSpecVersion,
+  type CompiledReleaseManifest,
   type JsonObject,
   type ValidationGateResult,
 } from "./channelControlPlane";
-import { RC54_CONTROL_PLANE_FIXTURE } from "./rc54ControlPlaneFixture";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
@@ -186,6 +185,7 @@ export function parseOperatorProposalRequest(value: unknown): OperatorProposalRe
 }
 
 export function buildOperatorProposal(
+  active: CompiledReleaseManifest,
   value: unknown,
   operatorId: string,
   requestId: string,
@@ -196,7 +196,6 @@ export function buildOperatorProposal(
   if (!Number.isFinite(Date.parse(createdAt))) throw new ProposalInputError("server proposal timestamp is invalid", 409);
 
   const input = parseOperatorProposalRequest(value);
-  const compiled = compileReleaseManifest(RC54_CONTROL_PLANE_FIXTURE);
   const proposal: ChannelChangeProposal = {
     schemaVersion: CHANNEL_CONTROL_PLANE_SCHEMA_VERSION,
     id: requestId.toLowerCase(),
@@ -222,7 +221,7 @@ export function buildOperatorProposal(
     createdAt,
     activationAuthorized: false,
   };
-  const preview = projectActiveVersusDraft(compiled, proposal);
+  const preview = projectActiveVersusDraft(active, proposal);
   const blockers = preview.validationResults.filter((result) => result.state === "block");
   if (blockers.length) {
     throw new ProposalInputError("proposal failed static validation", 422, blockers);

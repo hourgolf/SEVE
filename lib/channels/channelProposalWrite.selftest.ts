@@ -42,7 +42,7 @@ const expectInputError = (fn: () => void, message: RegExp, status?: number): voi
 };
 
 check("valid bounded request builds a draft-only server-authored proposal", () => {
-  const built = buildOperatorProposal(validRequest, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  const built = buildOperatorProposal(compiled, validRequest, OPERATOR_ID, REQUEST_ID, CREATED_AT);
   assert.equal(built.proposal.id, REQUEST_ID);
   assert.equal(built.proposal.proposedSpecVersionId, `spec:draft:${REQUEST_ID}`);
   assert.equal(built.proposal.authorKind, "operator");
@@ -61,7 +61,7 @@ check("valid bounded request builds a draft-only server-authored proposal", () =
 });
 
 check("client cannot supply identity or lifecycle fields", () => {
-  expectInputError(() => buildOperatorProposal({
+  expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
     authorId: "attacker",
     approvalState: "approved",
@@ -70,43 +70,43 @@ check("client cannot supply identity or lifecycle fields", () => {
 });
 
 check("immutable spec identity cannot be smuggled through the patch", () => {
-  expectInputError(() => buildOperatorProposal({
+  expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
     proposedPatch: { channelId: "smuggled" },
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported proposal fields: channelId/);
 });
 
 check("bounded change class cannot hide a governed account change", () => {
-  expectInputError(() => buildOperatorProposal({
+  expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
     proposedPatch: { accountId: "56daa293-e6bc-447d-83ac-2bfafb4d0ac1" },
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported proposal fields: accountId/);
 });
 
 check("the first server write slice rejects governed and code-level classes", () => {
-  expectInputError(() => buildOperatorProposal({
+  expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
     changeClass: "code-strategy-logic",
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /bounded-parameter proposals only/);
 });
 
 check("semantic no-op is rejected", () => {
-  expectInputError(() => buildOperatorProposal({
+  expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
     proposedPatch: { takeProfit: orb.takeProfit },
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /no semantic change/, 422);
 });
 
 check("base hash drift fails closed before persistence", () => {
-  expectInputError(() => buildOperatorProposal({
+  expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
     baseSpecContentHash: `sha256:${"0".repeat(64)}`,
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /failed static validation/, 422);
 });
 
 check("idempotency key and authenticated operator must be UUIDs", () => {
-  expectInputError(() => buildOperatorProposal(validRequest, OPERATOR_ID, "not-a-uuid", CREATED_AT), /Idempotency-Key/);
-  expectInputError(() => buildOperatorProposal(validRequest, "not-a-uuid", REQUEST_ID, CREATED_AT), /operator identity/, 409);
+  expectInputError(() => buildOperatorProposal(compiled, validRequest, OPERATOR_ID, "not-a-uuid", CREATED_AT), /Idempotency-Key/);
+  expectInputError(() => buildOperatorProposal(compiled, validRequest, "not-a-uuid", REQUEST_ID, CREATED_AT), /operator identity/, 409);
 });
 
 check("server route authenticates before opening the service-role write seam", () => {

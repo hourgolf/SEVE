@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireDeskOperator } from "@/lib/auth/serverOperator";
+import { loadActiveCompiledControlPlane } from "@/lib/channels/channelControlPlanePersistence";
 import {
   ProposalInputError,
   buildOperatorProposal,
 } from "@/lib/channels/channelProposalWrite";
+import { buildRc54OperatorProposal } from "@/lib/channels/rc54ChannelProposalAdapter";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +44,6 @@ export async function POST(req: Request) {
 
   try {
     const requestId = req.headers.get("idempotency-key")?.trim() ?? "";
-    const built = buildOperatorProposal(
-      await readJson(req),
-      operator.user.id,
-      requestId,
-    );
     const sb = createClient(SB_URL, SB_SERVICE, {
       auth: {
         persistSession: false,
@@ -54,6 +51,27 @@ export async function POST(req: Request) {
         detectSessionInUrl: false,
       },
     });
+    const activeRead = await loadActiveCompiledControlPlane(sb);
+    if (activeRead.state === "failed") {
+      return json({
+        ok: false,
+        error: "active control-plane identity is unavailable",
+        activationAuthorized: false,
+      }, 503);
+    }
+    const body = await readJson(req);
+    const built = activeRead.compiled
+      ? buildOperatorProposal(
+        activeRead.compiled,
+        body,
+        operator.user.id,
+        requestId,
+      )
+      : buildRc54OperatorProposal(
+        body,
+        operator.user.id,
+        requestId,
+      );
     const { data, error } = await sb.rpc("create_channel_change_proposal_draft", {
       p_proposal_id: built.proposal.id,
       p_base_version_key: built.proposal.baseSpecVersionId,
