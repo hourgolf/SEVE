@@ -15,10 +15,27 @@ import type { ContractHistory } from "@/hooks/useContractHistory";
 import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 import type { OpsReadinessModel } from "@/lib/ops/readiness";
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
+import type { useDailyReports } from "@/hooks/useDailyReports";
+import type { useWeeklyReports } from "@/hooks/useWeeklyReports";
+import type { useForensicsReport } from "@/hooks/useForensicsReport";
+import type { usePyramidShadow } from "@/hooks/usePyramidShadow";
+import type { useVirtualBench } from "@/hooks/useVirtualBench";
+import type { PnlWindow, WindowedPnl } from "@/hooks/useWindowedPnl";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
 export type Room = "play" | "mix" | "write" | "tape" | "ops";
+
+export interface ReviewEvidence {
+  daily: ReturnType<typeof useDailyReports>;
+  weekly: ReturnType<typeof useWeeklyReports>;
+  forensics: ReturnType<typeof useForensicsReport>;
+  pyramid: ReturnType<typeof usePyramidShadow>;
+  virtualBench: ReturnType<typeof useVirtualBench>;
+  pnlWindow: PnlWindow;
+  setPnlWindow: Dispatch<SetStateAction<PnlWindow>>;
+  windowedPnl: WindowedPnl | null;
+}
 
 // Shared props for the desktop / mobile surfaces. All data hooks are called once
 // in the page and the results passed down, so neither layout re-subscribes.
@@ -77,4 +94,7 @@ export interface SurfaceProps {
   /** Bounded same-session virtual-path ledger, page-owned and enabled only for
    * the Review/Research workspace. Leaves remain subscription-free. */
   shadowResearch: ShadowResearch;
+  /** Native Review evidence is subscribed once at the page seam. Legacy and
+   * native presenters consume this same read model during the parity period. */
+  reviewEvidence: ReviewEvidence;
 }

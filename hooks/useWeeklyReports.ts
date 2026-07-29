@@ -45,13 +45,14 @@ export interface WeeklyReport {
   narrative: WeeklyNarrative | null;
 }
 
-export function useWeeklyReports(limit = 6): { reports: WeeklyReport[]; loading: boolean; error: string | null } {
+export function useWeeklyReports(limit = 6, enabled = true): { reports: WeeklyReport[]; loading: boolean; error: string | null } {
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tick = useRefreshTick();
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     (async () => {
       const sb = getSupabase();
@@ -71,7 +72,7 @@ export function useWeeklyReports(limit = 6): { reports: WeeklyReport[]; loading:
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
     });
     return () => { alive = false; };
-  }, [limit, tick]);
+  }, [enabled, limit, tick]);
 
   return { reports, loading, error };
 }

@@ -58,13 +58,14 @@ export interface DailyReport {
   narrative: ReportNarrative | null;
 }
 
-export function useDailyReports(limit = 10): { reports: DailyReport[]; loading: boolean; error: string | null } {
+export function useDailyReports(limit = 10, enabled = true): { reports: DailyReport[]; loading: boolean; error: string | null } {
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tick = useRefreshTick();
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     (async () => {
       const sb = getSupabase();
@@ -83,7 +84,7 @@ export function useDailyReports(limit = 10): { reports: DailyReport[]; loading: 
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
     });
     return () => { alive = false; };
-  }, [limit, tick]);
+  }, [enabled, limit, tick]);
 
   return { reports, loading, error };
 }

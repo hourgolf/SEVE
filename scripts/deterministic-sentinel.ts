@@ -40,8 +40,12 @@ const SESSION = arg("session", todayEt);
 const FREEZE = arg("freeze", `data/dark-candidate-freezes/${SESSION}/freeze.json`);
 const EXACT_REPORT = arg("exact-report");
 const OUT = arg("out", `data/sentinel-packets/${SESSION}.json`);
+const SUPERSEDES_EVENT_ID = arg("supersedes-event");
 const PUBLISH = process.argv.includes("--publish");
 if (!/^\d{4}-\d{2}-\d{2}$/.test(SESSION)) throw new Error("--session must be YYYY-MM-DD");
+if (SUPERSEDES_EVENT_ID && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(SUPERSEDES_EVENT_ID)) {
+  throw new Error("--supersedes-event must be a UUID");
+}
 
 const sha256 = (bytes: string | Buffer): string => createHash("sha256").update(bytes).digest("hex");
 const numeric = (value: unknown): number | null => {
@@ -243,6 +247,10 @@ async function main(): Promise<void> {
     publisherRunId,
     publisherEvidenceState: packet.overallState === "ok" ? "complete" : "partial",
     publisherEvidenceDetail: `deterministic packet ${packet.overallState}; next action ${packet.nextAction}`,
+    supersedesEventId: SUPERSEDES_EVENT_ID || null,
+    supersessionReason: SUPERSEDES_EVENT_ID
+      ? "release parser correction: replace stale release identity with the latest sealed startup receipt"
+      : null,
     session: SESSION,
     date: SESSION,
     forDate,
@@ -260,7 +268,16 @@ async function main(): Promise<void> {
     interpretiveProvider: "none",
   };
 
-  const output = { schemaVersion: 1, packet, compatibility: { judge, digest }, publication: { publisherRunId, authorized: PUBLISH } };
+  const output = {
+    schemaVersion: 1,
+    packet,
+    compatibility: { judge, digest },
+    publication: {
+      publisherRunId,
+      authorized: PUBLISH,
+      supersedesEventId: SUPERSEDES_EVENT_ID || null,
+    },
+  };
   const outputText = `${JSON.stringify(output, null, 2)}\n`;
   mkdirSync(dirname(OUT), { recursive: true });
   writeFileSync(OUT, outputText);
@@ -271,6 +288,7 @@ async function main(): Promise<void> {
     packetSha256: sha256(outputText),
     freezeSha256: freeze.canonicalSha256,
     externalWrite: PUBLISH,
+    supersedesEventId: SUPERSEDES_EVENT_ID || null,
     configurationChangeAuthorized: false,
     orderActionAuthorized: false,
   };
@@ -278,6 +296,17 @@ async function main(): Promise<void> {
 
   if (PUBLISH) {
     const message = `sentinel: ${SESSION}`;
+    if (SUPERSEDES_EVENT_ID) {
+      const superseded = await sb.from("events").select("id,message,meta,created_at")
+        .eq("id", SUPERSEDES_EVENT_ID).maybeSingle();
+      if (superseded.error) throw new Error(`superseded receipt read failed: ${superseded.error.message}`);
+      if (!superseded.data
+          || superseded.data.message !== message
+          || superseded.data.meta?.session !== SESSION
+          || superseded.data.meta?.publisherRunId === publisherRunId) {
+        throw new Error("superseded receipt does not match this Sentinel session and prior publisher identity");
+      }
+    }
     const prior = await sb.from("events").select("message,created_at,meta")
       .eq("message", message).order("created_at", { ascending: false }).limit(25);
     if (prior.error) throw new Error(`publication identity read failed: ${prior.error.message}`);

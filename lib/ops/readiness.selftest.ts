@@ -52,6 +52,7 @@ assert.equal(find(before, "paper-boundary").tone, "green");
 assert.equal(find(before, "candidates").state, "NOT DUE");
 
 const empty = deriveOpsReadiness(base());
+assert.equal(empty.chainEvidenceState, "ok");
 assert.equal(find(empty, "candidates").state, "WAITING");
 assert.equal(find(empty, "capture").tone, "neutral");
 assert.equal(find(empty, "managers").tone, "neutral");
@@ -101,6 +102,12 @@ assert.equal(find(rc54Ready, "candidates").tone, "green");
 const readFailure = deriveOpsReadiness(base({ evidence: evidence({ execution: failed([decision]) }) }));
 assert.equal(find(readFailure, "candidates").state, "READ ERROR");
 assert.equal(readFailure.counts.candidates, 0);
+assert.equal(readFailure.chainEvidenceState, "blocked");
+assert.match(readFailure.chainEvidenceDetail, /execution/);
+
+const chainLoading = deriveOpsReadiness(base({ evidence: evidence({ outcomes: loading() }) }));
+assert.equal(chainLoading.chainEvidenceState, "checking");
+assert.match(chainLoading.chainEvidenceDetail, /outcomes/);
 
 const justFilled = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T14:46:30Z"), evidence: evidence({ execution: ok([fill, decision]) }) }));
 assert.equal(find(justFilled, "capture").state, "FLUSHING");

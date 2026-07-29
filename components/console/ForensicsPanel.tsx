@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
-import { useForensicsReport, type GivebackTrendPoint, type ShadowCurvePoint } from "@/hooks/useForensicsReport";
-import { usePyramidShadow, pyramidName } from "@/hooks/usePyramidShadow";
-import { useVirtualBench } from "@/hooks/useVirtualBench";
+import { type useForensicsReport, type GivebackTrendPoint, type ShadowCurvePoint } from "@/hooks/useForensicsReport";
+import { type usePyramidShadow, pyramidName } from "@/hooks/usePyramidShadow";
+import type { useVirtualBench } from "@/hooks/useVirtualBench";
 
 // §04 SHADOW BOOK — every would-have instrument vs the live book, ONE GLANCE ROW each
 // (label · picture · one stat), ▸ expands to the clean breakdown. Instruments: one-account
@@ -56,13 +56,13 @@ function NavSparkline({ pts, base }: { pts: ShadowCurvePoint[]; base: number }) 
 // MODULE-LEVEL frame — an inline `const Frame = …` gets a new component identity every
 // render, so each live-feed tick (~3s spot poll re-renders the surface) would unmount +
 // remount the whole panel subtree: the "glitch on every chart tick" bug. Hoisted = stable.
-function Shell({ folded, onFold, dateTag, children }: { folded: boolean; onFold: () => void; dateTag: string; children: React.ReactNode }) {
+function Shell({ folded, onFold, dateTag, children, foldable = true }: { folded: boolean; onFold: () => void; dateTag: string; children: React.ReactNode; foldable?: boolean }) {
   return (
     <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Shadow Book</span>
         <span className="x">would-haves vs the live book{dateTag}</span>
-        <button type="button" className="pfold" onClick={onFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
+        {foldable && <button type="button" className="pfold" onClick={onFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>}
       </div>
       <div className="pbody">{children}</div>
     </div>
@@ -85,11 +85,22 @@ function Inst({ k, label, mid, stat, children }: { k: string; label: string; mid
   );
 }
 
-export function ForensicsPanel() {
-  const { report, trend, benchedCum, loading, error } = useForensicsReport();
-  const ps = usePyramidShadow();
-  const vb = useVirtualBench();
-  const [folded, toggleFold] = useFold("forensics", true); // deep-dive — folded by default (§04 tidy)
+export function ForensicsPanel({
+  forensics,
+  pyramid,
+  virtualBench,
+  alwaysOpen = false,
+}: {
+  forensics: ReturnType<typeof useForensicsReport>;
+  pyramid: ReturnType<typeof usePyramidShadow>;
+  virtualBench: ReturnType<typeof useVirtualBench>;
+  alwaysOpen?: boolean;
+}) {
+  const { report, trend, benchedCum, loading, error } = forensics;
+  const ps = pyramid;
+  const vb = virtualBench;
+  const [storedFolded, toggleFold] = useFold("forensics", true); // deep-dive — folded by default (§04 tidy)
+  const folded = alwaysOpen ? false : storedFolded;
   // scorecard / benched-vs-live windows: today's slice vs the cumulative book
   const [scWin, setScWin] = useState<"today" | "cum">("today");
   const [bvWin, setBvWin] = useState<"today" | "cum">("today");
@@ -97,9 +108,9 @@ export function ForensicsPanel() {
 
   const dateTag = report ? ` · ${shortDate(report.report_date)}` : "";
 
-  if (loading) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}><div className="chart-empty">loading forensics…</div></Shell>;
-  if (error) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}><div className="chart-empty">couldn&apos;t load — {error}</div></Shell>;
-  if (!report) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}><div className="chart-empty">no report yet — run <code>npm run day-report</code> same-week (with APP_URL + PUSH_SECRET set) to publish</div></Shell>;
+  if (loading) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}><div className="chart-empty">loading forensics…</div></Shell>;
+  if (error) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}><div className="chart-empty">couldn&apos;t load — {error}</div></Shell>;
+  if (!report) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}><div className="chart-empty">no report yet — run <code>npm run day-report</code> same-week (with APP_URL + PUSH_SECRET set) to publish</div></Shell>;
 
   const scToday = report.payload.overrideToday ?? null;
   const showToday = scWin === "today" && !!scToday;
@@ -127,7 +138,7 @@ export function ForensicsPanel() {
   const vbRed = vbTop.filter((b) => vbAvg(b) < 0).length;
 
   return (
-    <Shell folded={folded} onFold={toggleFold} dateTag={dateTag}>
+    <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}>
       {/* ── ONE-ACCOUNT — the dream team in a single live-sized cash pool ── */}
       <Inst
         k="oneacct" label="One-acct"

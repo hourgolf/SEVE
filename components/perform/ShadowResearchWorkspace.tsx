@@ -147,7 +147,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   }));
 
   return <section className={`srw${compact ? " compact" : ""}`} id="perform-research" tabIndex={-1} aria-label="Shadow research workspace">
-    <header className="srw-head"><span><b>SHADOW RESEARCH</b><small>native paths now · exact manager truth at T+1</small></span>
+    <header className="srw-head"><span><b>SHADOW RESEARCH</b><small>all paper accounts · native paths now · exact manager truth at T+1</small></span>
       <em>RESEARCH ONLY · ZERO ORDER AUTHORITY</em></header>
     <div className="srw-controls">
       <nav className="srw-sessions" aria-label="research session">

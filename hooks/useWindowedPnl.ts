@@ -3,148 +3,219 @@
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { shortDate, timeOfDay } from "@/lib/format";
+import {
+  attributePositionsByImmutableExecutionAccount,
+  type ExecutionAccountObservation,
+} from "@/lib/ops/brokerReconciliation";
 
 export type PnlWindow = "today" | "week" | "month" | "all";
 
 export interface ChannelStat { pnl: number; trades: number; wins: number; pkSum: number; pkN: number }
 export interface WindowedPnl {
-  statsBySlug: Record<string, ChannelStat>; // realized (closed in window) + open unrealized + win/trade counts
+  statsBySlug: Record<string, ChannelStat>;
   fundPnl: number;
-  curve: number[]; // fund NAV over the window (daily rollup when available, else downsampled minutes)
-  curveLabels: string[]; // x labels aligned 1:1 with `curve` (dates for the daily rollup, times for minutes)
-  /** Set when the NAV series starts materially AFTER the window start (per-account history began
-   *  later, or retention truncated) — the fund number/curve span "since <date>", not the full window. */
+  curve: number[];
+  curveLabels: string[];
   sinceNote: string | null;
   loading: boolean;
+  evidenceState: "checking" | "ok" | "blocked";
+  issues: string[];
 }
 
-const startISO = (w: PnlWindow): string | null => {
-  if (w === "all") return null;
-  const d = new Date();
-  if (w === "week") d.setDate(d.getDate() - 7);
-  else if (w === "month") d.setDate(d.getDate() - 30);
-  return d.toISOString();
+const startISO = (window: PnlWindow): string | null => {
+  if (window === "all") return null;
+  const date = new Date();
+  if (window === "week") date.setDate(date.getDate() - 7);
+  else if (window === "month") date.setDate(date.getDate() - 30);
+  return date.toISOString();
 };
-const slugOf = (r: Record<string, unknown>): string => ((r.strategists as { slug?: string } | null)?.slug ?? "unknown");
 
-// Windowed P&L + win/trade stats + NAV curve for the P&L·Equity panel. Lazy: returns
-// null for "today" (panel uses the live feed props there). For week/month/all it
-// fetches closed positions in the window (realized + win/trade counts, paginated),
-// open positions (unrealized — current in every window since 0DTE closes same-day),
-// and the fund NAV curve.
-//
-// ACCOUNT-SCOPED (fix 2026-07-03 — operator: the windowed curve "jumbled" the three
-// cockpit buckets together): with an acctId, positions inner-join strategists on
-// account_id (the useDeskFeed pattern) and the curve reads that bucket's own
-// per-account snapshots. The equity_daily rollup view is account-BLIND (pre-P3), so
-// it only serves the no-account desk-total view; per-account curves come from
-// equity_snapshots (90d retention — "All" is bounded there, correct > long).
-export function useWindowedPnl(window: PnlWindow, acctId: string | null = null): WindowedPnl | null {
+const slugOf = (row: Record<string, unknown>): string =>
+  ((row.strategists as { slug?: string } | null)?.slug ?? "unknown");
+
+const emptyWindow = (
+  state: WindowedPnl["evidenceState"],
+  loading: boolean,
+  issues: string[] = [],
+): WindowedPnl => ({
+  statsBySlug: {},
+  fundPnl: 0,
+  curve: [],
+  curveLabels: [],
+  sinceNote: null,
+  loading,
+  evidenceState: state,
+  issues,
+});
+
+/**
+ * Page-owned historical P&L evidence. Position rows are account-scoped only
+ * through their latest immutable execution_observations.account_id; mutable
+ * strategist account assignments are retained solely for channel labels.
+ */
+export function useWindowedPnl(
+  window: PnlWindow,
+  acctId: string | null,
+  configuredPaperAccountIds: readonly string[],
+  enabled = true,
+): WindowedPnl | null {
   const [data, setData] = useState<WindowedPnl | null>(null);
+  const configuredKey = [...configuredPaperAccountIds].sort().join(",");
 
   useEffect(() => {
     if (window === "today") { setData(null); return; }
+    if (!enabled) return;
     let alive = true;
-    setData((d) => ({ statsBySlug: d?.statsBySlug ?? {}, fundPnl: d?.fundPnl ?? 0, curve: d?.curve ?? [], curveLabels: d?.curveLabels ?? [], sinceNote: d?.sinceNote ?? null, loading: true }));
+    setData(emptyWindow("checking", true));
+
     (async () => {
       const sb = getSupabase();
       const start = startISO(window);
-      const stats: Record<string, ChannelStat> = {};
-      const bump = (slug: string): ChannelStat => (stats[slug] ??= { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
-      const posSel = acctId ? "strategists!inner(slug,account_id)" : "strategists(slug)";
-      /* eslint-disable @typescript-eslint/no-explicit-any */
-      const byAcct = (q: any) => (acctId ? q.eq("strategists.account_id", acctId) : q);
-
-      // realized P&L + win/trade counts + the avg-peak lens of closed trades in the window (paginated)
-      for (let from = 0; from <= 60000; from += 1000) {
-        let q = byAcct(sb.from("positions").select(`realized_pnl,peak_mark,avg_entry_price,${posSel}`).eq("status", "closed"));
-        if (start) q = q.gte("closed_at", start);
-        const { data: rows, error } = await q.order("closed_at", { ascending: false }).range(from, from + 999);
-        if (error) break;
-        const list = (rows ?? []) as Record<string, unknown>[];
-        for (const r of list) {
-          const c = bump(slugOf(r)); const pnl = Number(r.realized_pnl ?? 0); c.pnl += pnl; c.trades += 1; if (pnl > 0) c.wins += 1;
-          const pk = Number(r.peak_mark), entry = Number(r.avg_entry_price);
-          if (Number.isFinite(pk) && pk > 0 && entry > 0) { c.pkSum += Math.max(0, (pk / entry - 1) * 100); c.pkN += 1; }
-        }
-        if (list.length < 1000) break;
+      const configured = new Set(configuredKey.split(",").filter(Boolean));
+      if (configured.size === 0) throw new Error("configured paper accounts unavailable");
+      if (!acctId) {
+        throw new Error("select a configured paper account; desk-wide NAV has no identity-safe aggregate series");
       }
-      // open positions' unrealized (current standing, in every window)
-      const openRes = await byAcct(sb.from("positions").select(`unrealized_pnl,${posSel}`).eq("status", "open")).limit(200);
-      for (const r of (openRes.data ?? []) as Record<string, unknown>[]) bump(slugOf(r)).pnl += Number(r.unrealized_pnl ?? 0);
+      if (!configured.has(acctId)) {
+        throw new Error("selected account is not a configured paper account");
+      }
 
-      // fund NAV curve — per-account: that bucket's own snapshots; desk-total: the
-      // daily rollup view (cheap, accurate long-range), falling back to snapshots.
-      // Keep the RAW series (not just the downsampled display copy) so the window-end /
-      // window-start NAVs used for the fund P&L are the true endpoints.
+      const allPositions: Record<string, unknown>[] = [];
+      for (let from = 0; from <= 60_000; from += 1_000) {
+        let query = sb.from("positions")
+          .select("id,status,realized_pnl,peak_mark,avg_entry_price,strategists(slug)")
+          .eq("status", "closed");
+        if (start) query = query.gte("closed_at", start);
+        const result = await query.order("closed_at", { ascending: false }).range(from, from + 999);
+        if (result.error) throw new Error(`closed-position read failed: ${result.error.message}`);
+        const rows = (result.data ?? []) as Record<string, unknown>[];
+        allPositions.push(...rows);
+        if (rows.length < 1_000) break;
+      }
+
+      const openResult = await sb.from("positions")
+        .select("id,status,unrealized_pnl,strategists(slug)")
+        .eq("status", "open")
+        .limit(200);
+      if (openResult.error) throw new Error(`open-position read failed: ${openResult.error.message}`);
+      allPositions.push(...((openResult.data ?? []) as Record<string, unknown>[]));
+
+      const positionRows = allPositions.filter(
+        (row): row is Record<string, unknown> & { id: string } =>
+          typeof row.id === "string" && row.id.length > 0,
+      );
+      if (positionRows.length !== allPositions.length) {
+        throw new Error("performance positions contain missing ids");
+      }
+
+      const observations: ExecutionAccountObservation[] = [];
+      for (let from = 0; from < positionRows.length; from += 200) {
+        const positionIds = positionRows.slice(from, from + 200).map((row) => row.id);
+        const routeResult = await sb.from("execution_observations")
+          .select("id,position_id,account_id,event_at")
+          .in("position_id", positionIds);
+        if (routeResult.error) {
+          throw new Error(`execution-route read failed: ${routeResult.error.message}`);
+        }
+        observations.push(...((routeResult.data ?? []) as ExecutionAccountObservation[]));
+      }
+
+      const attribution = attributePositionsByImmutableExecutionAccount({
+        positions: positionRows,
+        observations,
+        configuredPaperAccountIds: configured,
+        positionLabel: "performance positions",
+      });
+      if (!attribution.ok) throw new Error(attribution.issues.join("; "));
+      const attributedRows = attribution.byAccount.get(acctId) ?? [];
+
+      const stats: Record<string, ChannelStat> = {};
+      const bump = (slug: string): ChannelStat =>
+        (stats[slug] ??= { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
+      for (const row of attributedRows) {
+        const channel = bump(slugOf(row));
+        if (row.status === "closed") {
+          const pnl = Number(row.realized_pnl ?? 0);
+          channel.pnl += pnl;
+          channel.trades += 1;
+          if (pnl > 0) channel.wins += 1;
+          const peak = Number(row.peak_mark);
+          const entry = Number(row.avg_entry_price);
+          if (Number.isFinite(peak) && peak > 0 && entry > 0) {
+            channel.pkSum += Math.max(0, (peak / entry - 1) * 100);
+            channel.pkN += 1;
+          }
+        } else {
+          channel.pnl += Number(row.unrealized_pnl ?? 0);
+        }
+      }
+
       let curveRaw: number[] = [];
       let labelsRaw: string[] = [];
-      let firstAt: string | null = null; // true series start — drives the honest "since" label
-      // Paginated ASC snapshot fetch — PostgREST hard-caps responses at ~1000 rows regardless of
-      // .limit(), so a single DESC .limit(6000) silently returned "the newest 1000 minutes" and
-      // Week/Month rendered the SAME curve (the gate-shadow lesson: paginate every big fetch).
-      const fetchSnaps = async (scopeAcct: boolean): Promise<{ nav: number; at: string }[]> => {
-        const out: { nav: number; at: string }[] = [];
+      let firstAt: string | null = null;
+      const fetchSnapshots = async (): Promise<{ nav: number; at: string }[]> => {
+        const output: { nav: number; at: string }[] = [];
         for (let page = 0; page < 40; page++) {
-          let cq = sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null);
-          cq = scopeAcct ? cq.eq("account_id", acctId) : cq.is("account_id", null); // desk-TOTAL rows carry null account (cockpit P3)
-          if (start) cq = cq.gte("captured_at", start);
-          const res = await cq.order("captured_at", { ascending: true }).range(page * 1000, page * 1000 + 999);
-          const rows = (res.data ?? []) as { net_liquidation: number; captured_at: string }[];
-          for (const r of rows) out.push({ nav: Number(r.net_liquidation), at: r.captured_at });
-          if (rows.length < 1000) break;
+          let query = sb.from("equity_snapshots")
+            .select("net_liquidation,captured_at")
+            .is("strategist_id", null)
+            .eq("account_id", acctId);
+          if (start) query = query.gte("captured_at", start);
+          const result = await query.order("captured_at", { ascending: true })
+            .range(page * 1_000, page * 1_000 + 999);
+          if (result.error) throw new Error(`equity-snapshot read failed: ${result.error.message}`);
+          const rows = (result.data ?? []) as { net_liquidation: number; captured_at: string }[];
+          for (const row of rows) output.push({ nav: Number(row.net_liquidation), at: row.captured_at });
+          if (rows.length < 1_000) break;
         }
-        return out;
+        return output;
       };
-      if (acctId) {
-        const rows = await fetchSnaps(true);
-        firstAt = rows[0]?.at ?? null;
-        curveRaw = rows.map((r) => r.nav);
-        labelsRaw = rows.map((r) => (window === "week" ? timeOfDay(r.at) : shortDate(r.at.slice(0, 10))));
-      } else {
-        try {
-          let dq = sb.from("equity_daily").select("et_date,nav").order("et_date", { ascending: true });
-          if (start) dq = dq.gte("et_date", start.slice(0, 10));
-          const dRes = await dq;
-          if (dRes.error) throw dRes.error;
-          const rows = (dRes.data ?? []) as { et_date: string; nav: number }[];
-          firstAt = rows[0]?.et_date ?? null;
-          curveRaw = rows.map((r) => Number(r.nav));
-          labelsRaw = rows.map((r) => shortDate(r.et_date)); // "Jun 4" — one point per session
-        } catch {
-          const rows = await fetchSnaps(false);
-          firstAt = rows[0]?.at ?? null;
-          curveRaw = rows.map((r) => r.nav);
-          labelsRaw = rows.map((r) => timeOfDay(r.at));
-        }
-      }
-      // honest span label: per-account NAV history starts 06-24 (cockpit P3) and snapshots keep 90d —
-      // when the series starts >36h after the requested window start (or the window is "all" on a
-      // bucket), the fund number spans "since <date>", not the full window. The channel rows DO
-      // cover the full window (positions history is complete) — hence the visible mismatch.
+
+      const rows = await fetchSnapshots();
+      firstAt = rows[0]?.at ?? null;
+      curveRaw = rows.map((row) => row.nav);
+      labelsRaw = rows.map((row) =>
+        window === "week" ? timeOfDay(row.at) : shortDate(row.at.slice(0, 10)));
+
       const sinceNote = firstAt && (start
-        ? Date.parse(firstAt.length === 10 ? `${firstAt}T00:00:00Z` : firstAt) - Date.parse(start) > 36 * 3600 * 1000
-        : !!acctId)
+        ? Date.parse(firstAt.length === 10 ? `${firstAt}T00:00:00Z` : firstAt) - Date.parse(start) > 36 * 3_600_000
+        : true)
         ? shortDate(firstAt.slice(0, 10))
         : null;
-      // sample curve + labels with the SAME stride so they stay index-aligned
       const stride = curveRaw.length <= 160 ? 1 : Math.ceil(curveRaw.length / 160);
-      const sample = <T,>(arr: T[]): T[] => (stride <= 1 ? arr : arr.filter((_, i) => i % stride === 0));
+      const sample = <T,>(values: T[]): T[] =>
+        stride <= 1 ? values : values.filter((_, index) => index % stride === 0);
       const curve = sample(curveRaw);
       const curveLabels = sample(labelsRaw);
 
       if (!alive) return;
-      for (const k of Object.keys(stats)) stats[k].pnl = Math.round(stats[k].pnl);
-      // Fund P&L = account truth: NAV at window-end − NAV at window-start (matches the
-      // curve + the live account). Summed position realized over-reports (worker booking
-      // inflation on shared-OCC history) → use it only as a fallback when there's no NAV
-      // curve in the window. Per-channel rows stay position-derived (relative attribution).
-      const navDelta = curveRaw.length >= 2 ? Math.round(curveRaw[curveRaw.length - 1] - curveRaw[0]) : null;
-      const fundPnl = navDelta ?? Math.round(Object.values(stats).reduce((a, c) => a + c.pnl, 0));
-      setData({ statsBySlug: stats, fundPnl, curve, curveLabels, sinceNote, loading: false });
-    })().catch(() => { if (alive) setData((d) => (d ? { ...d, loading: false } : { statsBySlug: {}, fundPnl: 0, curve: [], curveLabels: [], sinceNote: null, loading: false })); });
+      for (const channel of Object.values(stats)) channel.pnl = Math.round(channel.pnl);
+      const navDelta = curveRaw.length >= 2
+        ? Math.round(curveRaw[curveRaw.length - 1] - curveRaw[0])
+        : null;
+      const fundPnl = navDelta ??
+        Math.round(Object.values(stats).reduce((total, channel) => total + channel.pnl, 0));
+      setData({
+        statsBySlug: stats,
+        fundPnl,
+        curve,
+        curveLabels,
+        sinceNote,
+        loading: false,
+        evidenceState: "ok",
+        issues: [],
+      });
+    })().catch((error: unknown) => {
+      if (!alive) return;
+      setData(emptyWindow(
+        "blocked",
+        false,
+        [(error as Error)?.message ?? "performance evidence read failed"],
+      ));
+    });
+
     return () => { alive = false; };
-  }, [window, acctId]);
+  }, [acctId, configuredKey, enabled, window]);
 
   return window === "today" ? null : data;
 }

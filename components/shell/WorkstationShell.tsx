@@ -77,7 +77,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
     surface.setActiveRoom(
       mode === "perform" && performSection === "ops"
         ? "ops"
-        : mode === "perform" && performSection === "research"
+        : mode === "perform" && (performSection === "research" || performSection === "tape")
           ? "tape"
           : mode === "studio"
             ? "mix"

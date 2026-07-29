@@ -8,6 +8,10 @@ import { buildSteps, channelPnl, fundPnl } from "@/lib/desk/derive";
 import type { ChannelPnl, PmColor, Position, Signal, Step } from "@/lib/desk/types";
 import type { EventLevel, OptionType } from "@/lib/types";
 import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
+import {
+  attributePositionsByImmutableExecutionAccount,
+  type ExecutionAccountObservation,
+} from "@/lib/ops/brokerReconciliation";
 
 // Safety-net only — Realtime (positions/signals/equity) drives live updates, so
 // this can run slow and pause while hidden. The poll re-reads the full book
@@ -32,6 +36,10 @@ export interface DeskFeed {
   steps: Step[];
   status: FeedStatus;
   updatedAt: string | null;
+  positionAttribution: {
+    state: "checking" | "ok" | "blocked";
+    issues: string[];
+  };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -56,7 +64,11 @@ function signalMessage(row: any): string {
  * shapes match the sample feed it replaces, so no component changes. Honest
  * empty states until the bots trade; `status: "error"` if reads are denied.
  */
-export function useDeskFeed(acctId: string | null = null): DeskFeed {
+export function useDeskFeed(
+  acctId: string | null = null,
+  configuredPaperAccountIds: readonly string[] = [],
+  enabled = true,
+): DeskFeed {
   const { desk } = useDeskState();
   const totalCapital = desk.fund.total_capital_usd;
 
@@ -68,11 +80,21 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
   const [sessionOpenNav, setSessionOpenNav] = useState<number | null>(null);
   const [status, setStatus] = useState<FeedStatus>("empty");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [positionAttribution, setPositionAttribution] = useState<DeskFeed["positionAttribution"]>({
+    state: "checking",
+    issues: [],
+  });
   const curveRef = useRef<{ ts: string; equity: number }[]>([]);
+  const configuredKey = [...configuredPaperAccountIds].sort().join(",");
 
   useEffect(() => {
+    if (!enabled) {
+      setPositionAttribution({ state: "checking", issues: [] });
+      return;
+    }
     const mounted = { current: true };
     let pollInFlight = false;
+    setPositionAttribution({ state: "checking", issues: [] });
 
     const equityQuery = () => {
       const sb = getSupabase();
@@ -118,34 +140,71 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
       pollInFlight = true;
       try {
         const sb = getSupabase();
+        const configuredAccounts = new Set(configuredKey.split(",").filter(Boolean));
+        if (configuredAccounts.size === 0) throw new Error("configured paper accounts unavailable");
+        if (acctId && !configuredAccounts.has(acctId)) {
+          throw new Error("selected account is not a configured paper account");
+        }
         // Coarse lower bound for closed trades — wide enough to always include the
         // current session even after the ET session crosses midnight UTC; the exact
         // session start is applied in JS below (sessionStartMs).
         const closedSince = new Date(Date.now() - 20 * 3600_000).toISOString();
-        // Cockpit P3 account scoping: when a bucket is selected, the live feed reads ITS
-        // channels' positions/signals (inner-join strategists.account_id) + ITS per-account
-        // equity snapshot; with no acctId it falls back to the desk total (account_id NULL).
-        /* eslint-disable @typescript-eslint/no-explicit-any */
-        const posSel = acctId
-          ? `${POSITION_FIELDS},strategists!inner(slug,account_id)`
-          : `${POSITION_FIELDS},strategists(slug)`;
+        // Position account scope is immutable execution evidence. Signals do not
+        // yet have a position route, so their current channel assignment remains
+        // the appropriate pre-execution display scope.
+        const posSel = `${POSITION_FIELDS},strategists(slug)`;
         const sigSel = acctId
           ? `${SIGNAL_FIELDS},strategists!inner(slug,account_id)`
           : `${SIGNAL_FIELDS},strategists(slug)`;
-        const byAcct = (q: any) => (acctId ? q.eq("strategists.account_id", acctId) : q);
+        const scopeSignal = (query: any) => (acctId ? query.eq("strategists.account_id", acctId) : query);
         const [posRes, sigRes, eqRes, closedRes] = await Promise.all([
-          byAcct(sb.from("positions").select(posSel).eq("status", "open")).limit(24),
-          byAcct(sb.from("signals").select(sigSel)).order("created_at", { ascending: false }).limit(16),
+          sb.from("positions").select(posSel).eq("status", "open").limit(200),
+          scopeSignal(sb.from("signals").select(sigSel)).order("created_at", { ascending: false }).limit(16),
           equityQuery().limit(2),
           // recent CLOSED trades (narrowed to the current session in JS) — for the
           // realized day P&L + the recent-trades view, so fast scalps don't vanish.
-          byAcct(sb.from("positions").select(posSel).eq("status", "closed").gte("closed_at", closedSince))
+          sb.from("positions").select(posSel).eq("status", "closed").gte("closed_at", closedSince)
             .order("closed_at", { ascending: false }).limit(100),
         ]);
-        if (posRes.error || sigRes.error || eqRes.error) throw new Error("read denied");
+        if (posRes.error || closedRes.error || sigRes.error || eqRes.error) throw new Error(
+          posRes.error?.message
+          ?? closedRes.error?.message
+          ?? sigRes.error?.message
+          ?? eqRes.error?.message
+          ?? "read denied",
+        );
         if (!mounted.current) return;
 
-        const mapPos = (r: any, status: "open" | "closed"): Position => ({
+        type UnvalidatedFeedPositionRow = Record<string, any> & { feedStatus: "open" | "closed" };
+        type FeedPositionRow = UnvalidatedFeedPositionRow & { id: string };
+        const unvalidatedPositionRows: UnvalidatedFeedPositionRow[] = [
+          ...((posRes.data ?? []) as Record<string, any>[]).map((row) => ({ ...row, feedStatus: "open" as const })),
+          ...((closedRes.data ?? []) as Record<string, any>[]).map((row) => ({ ...row, feedStatus: "closed" as const })),
+        ];
+        const rawPositionRows = unvalidatedPositionRows.filter(
+          (row): row is FeedPositionRow => typeof row.id === "string" && row.id.length > 0,
+        );
+        if (rawPositionRows.length !== (posRes.data?.length ?? 0) + (closedRes.data?.length ?? 0)) {
+          throw new Error("live feed positions contain missing ids");
+        }
+        const routeRead = rawPositionRows.length
+          ? await sb.from("execution_observations")
+            .select("id,position_id,account_id,event_at")
+            .in("position_id", rawPositionRows.map((row) => row.id))
+          : { data: [], error: null };
+        const attribution = attributePositionsByImmutableExecutionAccount({
+          positions: rawPositionRows,
+          observations: (routeRead.data ?? []) as ExecutionAccountObservation[],
+          configuredPaperAccountIds: configuredAccounts,
+          readError: routeRead.error?.message ?? null,
+          positionLabel: "live feed positions",
+        });
+        if (!attribution.ok) throw new Error(attribution.issues.join("; "));
+        const scopedPositionRows = acctId
+          ? attribution.byAccount.get(acctId) ?? []
+          : [...attribution.byAccount.values()].flat();
+
+        const mapPos = (r: FeedPositionRow): Position => ({
           id: r.id,
           strategist_slug: r.strategists?.slug ?? "unknown",
           occ_symbol: r.occ_symbol,
@@ -156,7 +215,7 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
           avg_entry_price: Number(r.avg_entry_price),
           current_mark: Number(r.current_mark ?? r.avg_entry_price),
           unrealized_pnl: Number(r.unrealized_pnl ?? 0),
-          status,
+          status: r.feedStatus,
           realized_pnl: Number(r.realized_pnl ?? 0),
           opened_at: r.opened_at ?? null,
           closed_at: r.closed_at ?? null,
@@ -165,8 +224,8 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
           peak_mark: r.peak_mark != null ? Number(r.peak_mark) : null,
           peak_at: r.peak_at ?? null,
         });
-        const pos: Position[] = ((posRes.data ?? []) as any[]).map((r) => mapPos(r, "open"));
-        const closed: Position[] = ((closedRes.data ?? []) as any[]).map((r) => mapPos(r, "closed"));
+        const pos: Position[] = scopedPositionRows.filter((row) => row.feedStatus === "open").map(mapPos);
+        const closed: Position[] = scopedPositionRows.filter((row) => row.feedStatus === "closed").map(mapPos);
 
         const sigs: Signal[] = ((sigRes.data ?? []) as any[]).map((r) => ({
           id: r.id,
@@ -209,9 +268,14 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
         setSignals(sigs);
         setStatus(pos.length || sessionClosed.length || sigs.length ? "live" : "empty");
         setUpdatedAt(new Date().toISOString());
-      } catch {
+        setPositionAttribution({ state: "ok", issues: [] });
+      } catch (error) {
         if (!mounted.current) return;
         setStatus("error");
+        setPositionAttribution({
+          state: "blocked",
+          issues: [(error as Error)?.message ?? "live position attribution failed"],
+        });
       } finally {
         pollInFlight = false;
       }
@@ -253,7 +317,7 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
         }
       }
     };
-  }, [acctId]); // re-poll + re-subscribe when the selected bucket changes
+  }, [acctId, configuredKey, enabled]); // re-poll + re-subscribe when account evidence changes
 
   // Day P&L = open (unrealized) + today's closed (realized).
   const dayPositions = useMemo(() => [...positions, ...closedToday], [positions, closedToday]);
@@ -288,5 +352,6 @@ export function useDeskFeed(acctId: string | null = null): DeskFeed {
     steps,
     status,
     updatedAt,
+    positionAttribution,
   };
 }

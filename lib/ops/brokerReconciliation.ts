@@ -74,6 +74,8 @@ export function attributePositionsByImmutableExecutionAccount<T extends { id: st
   observations: readonly ExecutionAccountObservation[];
   configuredPaperAccountIds: ReadonlySet<string>;
   readError?: string | null;
+  /** Human-readable scope for fail-closed evidence messages. */
+  positionLabel?: string;
 }): ImmutableExecutionAttribution<T> {
   const byAccount = new Map<string, T[]>();
   const missingPositionIds: string[] = [];
@@ -119,7 +121,7 @@ export function attributePositionsByImmutableExecutionAccount<T extends { id: st
   }
 
   if (missingPositionIds.length) {
-    issues.push(`open desk positions lack immutable execution-account routing: ${missingPositionIds.join(",")}`);
+    issues.push(`${input.positionLabel ?? "open desk positions"} lack immutable execution-account routing: ${missingPositionIds.join(",")}`);
   }
   if (unconfiguredRoutes.length) {
     issues.push(`immutable execution-account routes are not configured paper accounts: ${

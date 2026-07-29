@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
-import { useWeeklyReports } from "@/hooks/useWeeklyReports";
+import type { useWeeklyReports } from "@/hooks/useWeeklyReports";
 import type { StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
 
@@ -16,8 +16,14 @@ const md = (d: string) => d.slice(5); // "06-01"
 
 // The WEEK view of the merged Autopsy panel (frame + DAY⇄WEEK seg live in AutopsyPanel).
 // Headline = exit efficiency (left on the table); glance = fund line + movers; expand = full.
-export function WeeklyAutopsyBody({ strategists }: { strategists: StrategistState[] }) {
-  const { reports, loading, error } = useWeeklyReports(6);
+export function WeeklyAutopsyBody({
+  strategists,
+  evidence,
+}: {
+  strategists: StrategistState[];
+  evidence: ReturnType<typeof useWeeklyReports>;
+}) {
+  const { reports, loading, error } = evidence;
   const [idx, setIdx] = useState(0);
   // learnings/suggestions start FOLDED — expanded reports were monopolizing the column
   const [learnFolded, toggleLearn] = useFold("weekly-learnings", true);

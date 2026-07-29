@@ -128,6 +128,8 @@ export interface OpsReadinessModel {
     managerArms: number;
     expectedManagerArms: number;
   };
+  chainEvidenceState: "checking" | "ok" | "blocked";
+  chainEvidenceDetail: string;
   chains: OpsEvidenceChain[];
   brokerReceipt: BrokerReconciliationReceipt | null;
 }
@@ -383,6 +385,25 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
     const tone: ReadinessTone = steps.some((step) => step.tone === "red") ? "red" : steps.some((step) => step.tone === "yellow") ? "yellow" : steps.every((step) => step.tone === "green") ? "green" : "neutral";
     return { positionId, channelSlug: fill.channel_slug, occSymbol: fill.occ_symbol ?? "—", opportunityId: fill.opportunity_id ?? "—", tone, steps };
   });
+  const chainReads = [
+    ["execution", execution],
+    ["outcomes", input.evidence.outcomes],
+    ["captures", captures],
+    ["capture health", captureHealth],
+    ["manager arms", managers],
+  ] as const;
+  const failedChainReads = chainReads.filter(([, read]) => read.state === "error");
+  const loadingChainReads = chainReads.filter(([, read]) => read.state === "loading");
+  const chainEvidenceState: OpsReadinessModel["chainEvidenceState"] = failedChainReads.length
+    ? "blocked"
+    : loadingChainReads.length
+      ? "checking"
+      : "ok";
+  const chainEvidenceDetail = failedChainReads.length
+    ? `position-chain reads failed: ${failedChainReads.map(([label, read]) => `${label} (${read.error || "read rejected"})`).join("; ")}`
+    : loadingChainReads.length
+      ? `reading ${loadingChainReads.map(([label]) => label).join(", ")}`
+      : "current-session execution, capture, manager, and close evidence read";
 
   const all = [...configuration, ...evidence];
   const red = all.filter((item) => item.tone === "red").length;
@@ -396,6 +417,8 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   return {
     sessionDateEt: clock.date, phase, summary, configuration, evidence,
     counts: { candidates, suppressed, fills: fillsByPosition.size, capturedPositions, admittedManagerArms: admittedArms.size, managerArms: observingArms.size, expectedManagerArms: expectedArms },
+    chainEvidenceState,
+    chainEvidenceDetail,
     chains,
     brokerReceipt,
   };

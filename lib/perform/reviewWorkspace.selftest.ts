@@ -1,0 +1,76 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { REVIEW_SECTIONS, isReviewSection } from "./reviewWorkspace";
+
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const component = read("../../components/perform/ReviewWorkspace.tsx");
+const page = read("../../app/page.tsx");
+const surfaceTypes = read("../../components/surfaceTypes.ts");
+const dailyPanel = read("../../components/console/DailyAutopsyPanel.tsx");
+const weeklyPanel = read("../../components/console/WeeklyAutopsyPanel.tsx");
+const forensicsPanel = read("../../components/console/ForensicsPanel.tsx");
+const pnlPanel = read("../../components/console/PnlPanel.tsx");
+const pnlHook = read("../../hooks/useWindowedPnl.ts");
+const feedHook = read("../../hooks/useDeskFeed.ts");
+const mobileReview = read("../../components/mobile2/MobileDeskSheet.tsx");
+const shadowWorkspace = read("../../components/perform/ShadowResearchWorkspace.tsx");
+const sentinelWorkspace = read("../../components/perform/SentinelWorkspace.tsx");
+const shell = read("../../components/shell/WorkstationShell.tsx");
+
+assert.deepEqual(
+  REVIEW_SECTIONS.map((section) => section.id),
+  ["tape", "autopsy", "performance", "counterfactuals"],
+);
+assert.equal(isReviewSection("performance"), true);
+assert.equal(isReviewSection("orders"), false);
+
+for (const presenter of ["EventTapeWorkspace", "AutopsyPanel", "PnlPanel", "ForensicsPanel"]) {
+  assert.match(component, new RegExp(`<${presenter}`));
+}
+assert.match(component, /READ ONLY · ZERO ORDER AUTHORITY/);
+assert.match(component, /Would-have paths cannot alter configuration, readiness, risk, lifecycle, or orders/);
+
+for (const hook of [
+  "useDailyReports",
+  "useWeeklyReports",
+  "useForensicsReport",
+  "usePyramidShadow",
+  "useVirtualBench",
+  "useWindowedPnl",
+]) {
+  assert.match(page, new RegExp(`${hook}\\(`));
+}
+assert.match(surfaceTypes, /reviewEvidence: ReviewEvidence/);
+assert.doesNotMatch(dailyPanel, /const\s+\{[^}]*\}\s*=\s*useDailyReports\(/);
+assert.doesNotMatch(weeklyPanel, /const\s+\{[^}]*\}\s*=\s*useWeeklyReports\(/);
+assert.doesNotMatch(forensicsPanel, /=\s*useForensicsReport\(|=\s*usePyramidShadow\(|=\s*useVirtualBench\(/);
+assert.doesNotMatch(pnlPanel, /=\s*useWindowedPnl\(/);
+
+assert.match(pnlHook, /from\("execution_observations"\)/);
+assert.match(pnlHook, /select\("id,position_id,account_id,event_at"\)/);
+assert.match(pnlHook, /attributePositionsByImmutableExecutionAccount/);
+assert.match(pnlHook, /positionLabel:\s*"performance positions"/);
+assert.match(pnlHook, /emptyWindow\(\s*"blocked"/);
+assert.doesNotMatch(pnlHook, /strategists!inner|strategists\.account_id/);
+assert.match(pnlPanel, /No strategist-account fallback was used/);
+assert.doesNotMatch(pnlHook, /from\("equity_daily"\)/);
+assert.match(pnlHook, /desk-wide NAV has no identity-safe aggregate series/);
+
+assert.match(feedHook, /from\("execution_observations"\)/);
+assert.match(feedHook, /select\("id,position_id,account_id,event_at"\)/);
+assert.match(feedHook, /attributePositionsByImmutableExecutionAccount/);
+assert.match(feedHook, /positionLabel:\s*"live feed positions"/);
+assert.match(feedHook, /positionAttribution/);
+assert.doesNotMatch(feedHook, /byAcct\(sb\.from\("positions"\)/);
+
+assert.match(page, /activeRoom === "ops" \|\| activeRoom === "tape"/);
+assert.match(component, /ALL PAPER ACCOUNTS/);
+assert.match(component, /todayAttribution=\{feed\.positionAttribution\}/);
+assert.match(mobileReview, /immutable execution routes/);
+assert.match(mobileReview, /ALL PAPER ACCOUNTS/);
+assert.match(shadowWorkspace, /all paper accounts/);
+assert.match(sentinelWorkspace, /all paper accounts/);
+
+assert.match(shell, /performSection === "research" \|\| performSection === "tape"/);
+
+console.log("review-workspace-selftest: accuracy contract passed");

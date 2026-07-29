@@ -132,6 +132,7 @@ export function DesktopSurface({
   setActiveRoom,
   collapsedMarket,
   setCollapsedMarket,
+  reviewEvidence,
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
@@ -139,6 +140,8 @@ export function DesktopSurface({
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const [composeFolded, toggleCompose] = useFold("compose");
   const { canWrite } = write;
+  const selectedAccount = accounts.find((account) => account.id === acctId);
+  const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
 
   // Room folds (one-page desk): play + mix open, write/tape/ops folded until
   // wanted — folded rooms don't mount, so their data fetches defer too. Persisted.
@@ -439,11 +442,25 @@ export function DesktopSurface({
             storageKey="seve-rack-tape"
             defaults={{ a: ["pnl", "autopsy", "forensics"], b: ["brief", "sentinel"] }}
             panels={{
-              pnl: <PnlPanel strategists={desk.strategists} pnlByStrategist={livePnl} fundPnl={liveFund} equityCurve={feed.equityCurve} acctId={acctId} />,
-              autopsy: <AutopsyPanel strategists={desk.strategists} />,
+              pnl: <PnlPanel
+                strategists={desk.strategists}
+                pnlByStrategist={livePnl}
+                fundPnl={liveFund}
+                equityCurve={feed.equityCurve}
+                window={reviewEvidence.pnlWindow}
+                setWindow={reviewEvidence.setPnlWindow}
+                windowed={reviewEvidence.windowedPnl}
+                scopeLabel={accountScope}
+                todayAttribution={feed.positionAttribution}
+              />,
+              autopsy: <AutopsyPanel strategists={desk.strategists} daily={reviewEvidence.daily} weekly={reviewEvidence.weekly} />,
               brief: <BriefPanel />,
               sentinel: <SentinelPanel />,
-              forensics: <ForensicsPanel />,
+              forensics: <ForensicsPanel
+                forensics={reviewEvidence.forensics}
+                pyramid={reviewEvidence.pyramid}
+                virtualBench={reviewEvidence.virtualBench}
+              />,
             }}
           />
         )}

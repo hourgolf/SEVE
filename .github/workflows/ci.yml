@@ -33,3 +33,19 @@ jobs:
         run: npm run candle-selftest
       - name: runner exit-rules selftest
         run: npm run runner-selftest
+      - name: native review selftest
+        run: npm run review-workspace-selftest
+      - name: mobile review selftest
+        run: npm run mobile-review-selftest
+      - name: immutable live-feed attribution selftest
+        run: npm run desk-feed-egress-selftest
+      - name: review evidence read selftest
+        run: npm run ops-evidence-read-selftest
+      - name: operations readiness selftest
+        run: npm run ops-readiness-selftest
+      - name: after-action tape selftest
+        run: npm run event-tape-selftest
+      - name: account-congruent equity selftest
+        run: npm run account-equity-selftest
+      - name: immutable broker attribution selftest
+        run: npm run broker-reconciliation-selftest
