@@ -298,10 +298,12 @@ export function buildVbExactCandidateDryRun(input: {
   if (responseWindow.some((quote) => quote.occSymbol !== candidate.occSymbol
       || quote.source !== "databento_cbbo_1s")) censors.add("path_identity_mismatch");
   if (responseWindow.some((quote) => !finite(quote.atMs) || !finite(quote.bid) || !finite(quote.ask)
-      || quote.bid < 0 || quote.ask <= 0 || quote.ask < quote.bid)) censors.add("invalid_exact_quote");
+      || quote.bid < 0 || quote.ask < 0 || (quote.ask > 0 && quote.ask < quote.bid))) {
+    censors.add("invalid_exact_quote");
+  }
   const quotes = dedupeCbboQuotes(responseWindow.filter((quote) => quote.occSymbol === candidate.occSymbol
     && quote.source === "databento_cbbo_1s" && finite(quote.atMs) && finite(quote.bid) && finite(quote.ask)
-    && quote.bid >= 0 && quote.ask > 0 && quote.ask >= quote.bid));
+    && quote.bid >= 0 && quote.ask >= 0 && (quote.ask === 0 || quote.ask >= quote.bid)));
   if (!quotes.length) censors.add("missing_exact_path");
   // Databento CBBO interval records are event-sparse: an unchanged BBO does
   // not print a row. Use only the last state published at or before each

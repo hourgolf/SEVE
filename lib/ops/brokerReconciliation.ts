@@ -63,6 +63,39 @@ export interface ImmutableExecutionAttribution<T extends { id: string }> {
   ok: boolean;
 }
 
+export interface LatestImmutableExecutionAccountRoute {
+  accountId: string;
+  eventMs: number;
+  observationId: string;
+}
+
+/**
+ * Shared deterministic reducer for immutable execution-account observations.
+ * Callers decide whether a missing route is a blocker or may use another
+ * immutable identity (for example, a persisted opportunity id).
+ */
+export function latestImmutableExecutionAccountRoutes(
+  observations: readonly ExecutionAccountObservation[],
+  requestedPositionIds?: ReadonlySet<string>,
+): Map<string, LatestImmutableExecutionAccountRoute> {
+  const latest = new Map<string, LatestImmutableExecutionAccountRoute>();
+  for (const observation of observations) {
+    const positionId = observation.position_id?.trim() ?? "";
+    const accountId = observation.account_id?.trim() ?? "";
+    const observationId = observation.id?.trim() ?? "";
+    const eventMs = Date.parse(observation.event_at);
+    if (!positionId || !accountId || !observationId || !Number.isFinite(eventMs)
+      || (requestedPositionIds && !requestedPositionIds.has(positionId))) continue;
+    const current = latest.get(positionId);
+    if (!current
+      || eventMs > current.eventMs
+      || (eventMs === current.eventMs && observationId.localeCompare(current.observationId) > 0)) {
+      latest.set(positionId, { accountId, eventMs, observationId });
+    }
+  }
+  return latest;
+}
+
 /**
  * Pure, fail-closed attribution of open desk rows to their immutable execution
  * accounts. Mutable strategist/channel assignments are deliberately not an
@@ -82,7 +115,6 @@ export function attributePositionsByImmutableExecutionAccount<T extends { id: st
   const unconfiguredRoutes: Array<{ positionId: string; accountId: string }> = [];
   const issues: string[] = [];
   const requestedPositionIds = new Set(input.positions.map((position) => position.id));
-  const latest = new Map<string, { accountId: string; eventMs: number; observationId: string }>();
 
   if (input.readError) {
     issues.push(`execution-route evidence unavailable: ${input.readError}`);
@@ -90,20 +122,10 @@ export function attributePositionsByImmutableExecutionAccount<T extends { id: st
     return { byAccount, missingPositionIds, unconfiguredRoutes, issues, ok: false };
   }
 
-  for (const observation of input.observations) {
-    const positionId = observation.position_id?.trim() ?? "";
-    const accountId = observation.account_id?.trim() ?? "";
-    const observationId = observation.id?.trim() ?? "";
-    const eventMs = Date.parse(observation.event_at);
-    if (!positionId || !accountId || !observationId || !Number.isFinite(eventMs)
-      || !requestedPositionIds.has(positionId)) continue;
-    const current = latest.get(positionId);
-    if (!current
-      || eventMs > current.eventMs
-      || (eventMs === current.eventMs && observationId.localeCompare(current.observationId) > 0)) {
-      latest.set(positionId, { accountId, eventMs, observationId });
-    }
-  }
+  const latest = latestImmutableExecutionAccountRoutes(
+    input.observations,
+    requestedPositionIds,
+  );
 
   for (const position of input.positions) {
     const route = latest.get(position.id);
