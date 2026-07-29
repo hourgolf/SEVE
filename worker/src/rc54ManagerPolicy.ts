@@ -2,7 +2,9 @@
 // environment access. The runtime stamps the selected profile into each
 // position row so a restart cannot silently reinterpret an older cohort.
 
-import type { PositionRow } from "./store.js";
+type Rc54ManagerStampedRow = {
+  entry_features?: Record<string, unknown> | null;
+};
 
 export const RC54_MANAGER_POLICY_VERSION = "rc54-composite-manager-v1" as const;
 
@@ -73,7 +75,7 @@ export function rc54ManagerProfile(
 }
 
 export function rc54ManagerProfileFromRow(
-  row: Pick<PositionRow, "entry_features">,
+  row: Rc54ManagerStampedRow,
 ): Rc54ManagerProfile | null {
   return rc54ManagerProfile(row.entry_features?.rc54_manager_profile);
 }
@@ -81,7 +83,7 @@ export function rc54ManagerProfileFromRow(
 /** Distinguish a legacy row with no RC5.4 stamp from a corrupted/unknown RC5.4
  * stamp. Both fail profile lookup, but only the former may use legacy exits. */
 export function rc54ManagerStampPresent(
-  row: Pick<PositionRow, "entry_features">,
+  row: Rc54ManagerStampedRow,
 ): boolean {
   return !!row.entry_features
     && Object.prototype.hasOwnProperty.call(row.entry_features, "rc54_manager_profile");
@@ -98,6 +100,17 @@ export function rc54ConfiguredTakeProfitPct(input: {
   if (!input.profile || (input.reason !== "target_premium" && input.reason !== "target_tranche")) {
     return null;
   }
+  return rc54LotConfiguredTakeProfitPct(input);
+}
+
+/** Target owned by the exact persisted RC5.4 lot, independent of why that lot
+ * is being inspected or closed. This is also the canonical receipt metadata
+ * source for an operator close. */
+export function rc54LotConfiguredTakeProfitPct(input: {
+  profile: Rc54ManagerProfile | null;
+  isRunner: boolean;
+}): number | null {
+  if (!input.profile) return null;
   if (input.isRunner) {
     return input.profile.runner === "fixed-50" ? 50 : null;
   }

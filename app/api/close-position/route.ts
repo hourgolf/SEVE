@@ -14,6 +14,12 @@ import { isDeskOperator } from "@/lib/auth/operator";
 import { normalizeManualCloseTag } from "@/lib/positions/manualClose";
 import { buildPositionOutcome } from "@/lib/positions/positionOutcome";
 import { buildExecutionQualityReceipt } from "@/lib/execution/executionQualityModel";
+import {
+  manualClosePolicyEvidence,
+  resolveManualCloseAccount,
+  type ManualCloseAccountRow,
+} from "@/lib/positions/manualCloseServerEvidence";
+import type { ExecutionAccountObservation } from "@/lib/ops/brokerReconciliation";
 
 export const dynamic = "force-dynamic";
 
@@ -78,29 +84,34 @@ export async function POST(req: Request) {
   // couldn't see the sell, so its re-buy guard kept RESURRECTING the already-closed position as a
   // ghost row at the stale entry ("recovered … lost insert") and mis-booked the realized. Falls
   // back to `manual` only if the strategist can't be resolved.
-  // Resolve the position's ACCOUNT → its Alpaca creds. Cockpit P3 (2026-06-24) made each
-  // bucket a SEPARATE paper account (strategists.account_id → accounts.cred_ref → the worker's
-  // ALPACA_KEY_<ref>/ALPACA_SECRET_<ref>). This route predated P3 and always used the DEFAULT
-  // keys → closing a Core/Resurrected position queried the WRONG Alpaca account, saw 0 held,
-  // placed NO sell, and booked $0 while the real lot rode on ORPHANED in its bucket. Mirror the
-  // worker's resolveDefaultAccount/apiForAccount: cred_ref null/empty = default keys.
-  // Keep the money-path routing lookup narrow. Quality metadata is fetched
-  // separately after booking so a relationship/schema-cache issue cannot route
-  // a risk-reducing sell through the fallback account.
-  const { data: strat } = await sb.from("strategists")
-    .select("slug,account_id")
-    .eq("id", pos.strategist_id).maybeSingle();
-  const slug = String(strat?.slug ?? "manual");
-  let credRef = "";
-  let effectiveAccountId = strat?.account_id ? String(strat.account_id) : "";
-  if (strat?.account_id) {
-    const { data: acct } = await sb.from("accounts").select("cred_ref").eq("id", strat.account_id).maybeSingle();
-    credRef = acct?.cred_ref ? String(acct.cred_ref) : "";
-  } else {
-    const { data: accounts } = await sb.from("accounts").select("id,cred_ref").limit(20);
-    const defaultAccount = accounts?.find((account) => !account.cred_ref);
-    effectiveAccountId = defaultAccount?.id ? String(defaultAccount.id) : "";
+  // Resolve the position's broker account from immutable execution evidence.
+  // A channel may be reassigned after entry, so mutable strategists.account_id
+  // is neither queried nor accepted as a fallback. Missing/unreadable routing
+  // leaves the row open and places no order.
+  const [stratRead, accountsRead, observationsRead] = await Promise.all([
+    sb.from("strategists").select("slug").eq("id", pos.strategist_id).maybeSingle(),
+    sb.from("accounts").select("id,cred_ref,mode"),
+    sb.from("execution_observations")
+      .select("id,position_id,account_id,event_at")
+      .eq("position_id", id),
+  ]);
+  const slug = String(stratRead.data?.slug ?? "manual");
+  const accountResolution = resolveManualCloseAccount({
+    position: pos,
+    accounts: (accountsRead.data ?? []) as ManualCloseAccountRow[],
+    observations: (observationsRead.data ?? []) as ExecutionAccountObservation[],
+    accountsReadError: accountsRead.error?.message,
+    observationsReadError: observationsRead.error?.message,
+  });
+  if (!accountResolution.ok) {
+    return NextResponse.json({
+      ok: false,
+      error: `${accountResolution.error} — position left open; no order placed`,
+    }, { status: accountResolution.kind === "read_error" ? 502 : 409 });
   }
+  const effectiveAccountId = accountResolution.accountId;
+  const credRef = accountResolution.credRef;
+  const policyEvidence = manualClosePolicyEvidence(pos);
   const acctKey = credRef ? process.env[`ALPACA_KEY_${credRef}`] : AK;
   const acctSecret = credRef ? process.env[`ALPACA_SECRET_${credRef}`] : AS;
   // Fail CLOSED if this bucket's creds aren't in the Vercel env — NEVER sell the wrong account
@@ -214,10 +225,6 @@ export async function POST(req: Request) {
   // Post-booking evidence only: the sell and status-guarded close are already
   // complete. Manual close intentionally does not delay the risk-reducing order
   // to fetch a quote, so quote/leakage fields remain null rather than invented.
-  const { data: stratCfg } = await sb.from("strategist_config")
-    .select("premium_stop_pct,underlying_stop_pct,take_profit_pct")
-    .eq("strategist_id", pos.strategist_id)
-    .maybeSingle();
   const rawOptionSide = String(pos.opt_type ?? "").toLowerCase();
   const optionSide = rawOptionSide === "put" || rawOptionSide === "p"
     ? "put"
@@ -247,9 +254,9 @@ export async function POST(req: Request) {
         decisionBid: null,
         decisionAsk: null,
         fillPrice: fill,
-        configuredPremiumStopPct: Number(stratCfg?.premium_stop_pct ?? 0),
-        configuredUnderlyingStopPct: Number(stratCfg?.underlying_stop_pct ?? 0),
-        configuredTakeProfitPct: Number(stratCfg?.take_profit_pct ?? 0),
+        configuredPremiumStopPct: policyEvidence.configuredPremiumStopPct,
+        configuredUnderlyingStopPct: policyEvidence.configuredUnderlyingStopPct,
+        configuredTakeProfitPct: policyEvidence.configuredTakeProfitPct,
         snapshotAgeMs: null,
         providerQuoteEventAgeMs: null,
         sourceVersion: `web:${process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? "manual-close-v1"}`,
@@ -257,6 +264,9 @@ export async function POST(req: Request) {
           operatorEmail: userData.user.email ?? null,
           decisionQuoteAvailable: false,
           fillTimeBasis: "local_terminal_observation",
+          accountEvidenceBasis: accountResolution.evidenceBasis,
+          policyEvidenceBasis: policyEvidence.evidenceBasis,
+          rc54ManagerProfileId: policyEvidence.managerProfileId,
         },
       })
     : null;
@@ -265,7 +275,14 @@ export async function POST(req: Request) {
   await sb.from("events").insert({
     level: "EXEC",
     message: `manual: close ${occ} ×${soldQty}${soldQty < qty ? `/${qty}` : ""} @ ${fill.toFixed(2)} (realized ${realized >= 0 ? "+" : ""}$${realized.toFixed(0)})`,
-    meta: { order_id: orderId, by: userData.user.email ?? null, sold: soldQty, row_qty: qty },
+    meta: {
+      order_id: orderId,
+      account_id: effectiveAccountId,
+      account_evidence_basis: accountResolution.evidenceBasis,
+      by: userData.user.email ?? null,
+      sold: soldQty,
+      row_qty: qty,
+    },
   });
 
   return NextResponse.json({ ok: true, occ, qty, sold: soldQty, fill, realized: Math.round(realized) });
