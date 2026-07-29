@@ -70,6 +70,7 @@
     "manager-shadow-book-selftest": "tsx worker/src/managerShadowBook.selftest.ts",
     "family-admission-selftest": "tsx worker/src/familyAdmission.selftest.ts",
     "observer-scorecard-selftest": "tsx lib/research/observerScorecard.selftest.ts",
+    "account-equity-selftest": "tsx lib/research/accountEquity.selftest.ts",
     "observer-scorecard": "tsx --env-file=.env.local scripts/observer-scorecard.ts",
     "fleet-evidence-audit-selftest": "tsx lib/research/fleetEvidenceAudit.selftest.ts",
     "fleet-evidence-audit": "tsx --env-file=.env.local scripts/fleet-evidence-audit.ts",

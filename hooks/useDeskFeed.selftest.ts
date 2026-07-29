@@ -10,5 +10,10 @@ assert.doesNotMatch(source, /select\(sel\)/, "recurring positions must not selec
 assert.doesNotMatch(source, /table: "signals"/, "signal inserts must not refetch the full desk bundle");
 assert.doesNotMatch(source, /table: "equity_snapshots"/, "equity inserts must not refetch the full desk bundle");
 assert.match(source, /if \(pollInFlight \|\| !mounted\.current\) return;/, "overlapping desk polls must be rejected");
+assert.match(source, /from\("execution_observations"\)/, "position scope must read immutable execution routes");
+assert.match(source, /attributePositionsByImmutableExecutionAccount/, "position scope must reuse the canonical attribution helper");
+assert.match(source, /positionLabel:\s*"live feed positions"/, "attribution failures must identify the affected live feed");
+assert.match(source, /state:\s*"blocked"/, "routing failures must block attribution");
+assert.doesNotMatch(source, /byAcct\(sb\.from\("positions"\)/, "positions must not fall back to mutable strategist account scope");
 
-console.log("desk-feed-egress-selftest: 7/7 passed");
+console.log("desk-feed-egress-selftest: 12/12 passed");

@@ -11,6 +11,10 @@ const weeklyPanel = read("../../components/console/WeeklyAutopsyPanel.tsx");
 const forensicsPanel = read("../../components/console/ForensicsPanel.tsx");
 const pnlPanel = read("../../components/console/PnlPanel.tsx");
 const pnlHook = read("../../hooks/useWindowedPnl.ts");
+const feedHook = read("../../hooks/useDeskFeed.ts");
+const mobileReview = read("../../components/mobile2/MobileDeskSheet.tsx");
+const shadowWorkspace = read("../../components/perform/ShadowResearchWorkspace.tsx");
+const sentinelWorkspace = read("../../components/perform/SentinelWorkspace.tsx");
 const shell = read("../../components/shell/WorkstationShell.tsx");
 
 assert.deepEqual(
@@ -49,7 +53,24 @@ assert.match(pnlHook, /positionLabel:\s*"performance positions"/);
 assert.match(pnlHook, /emptyWindow\(\s*"blocked"/);
 assert.doesNotMatch(pnlHook, /strategists!inner|strategists\.account_id/);
 assert.match(pnlPanel, /No strategist-account fallback was used/);
+assert.doesNotMatch(pnlHook, /from\("equity_daily"\)/);
+assert.match(pnlHook, /desk-wide NAV has no identity-safe aggregate series/);
+
+assert.match(feedHook, /from\("execution_observations"\)/);
+assert.match(feedHook, /select\("id,position_id,account_id,event_at"\)/);
+assert.match(feedHook, /attributePositionsByImmutableExecutionAccount/);
+assert.match(feedHook, /positionLabel:\s*"live feed positions"/);
+assert.match(feedHook, /positionAttribution/);
+assert.doesNotMatch(feedHook, /byAcct\(sb\.from\("positions"\)/);
+
+assert.match(page, /activeRoom === "ops" \|\| activeRoom === "tape"/);
+assert.match(component, /ALL PAPER ACCOUNTS/);
+assert.match(component, /todayAttribution=\{feed\.positionAttribution\}/);
+assert.match(mobileReview, /immutable execution routes/);
+assert.match(mobileReview, /ALL PAPER ACCOUNTS/);
+assert.match(shadowWorkspace, /all paper accounts/);
+assert.match(sentinelWorkspace, /all paper accounts/);
 
 assert.match(shell, /performSection === "research" \|\| performSection === "tape"/);
 
-console.log("review-workspace-selftest: 31/31 passed");
+console.log("review-workspace-selftest: accuracy contract passed");

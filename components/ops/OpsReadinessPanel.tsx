@@ -31,7 +31,13 @@ export function BrokerReconciliationStrip({ model, compact = false }: { model: O
 export function PositionEvidenceChains({ model, compact = false }: { model: OpsReadinessModel; compact?: boolean }) {
   return <section className={`opsr-drill${compact ? " compact" : ""}`} aria-label="Position evidence chains">
     <header><b>POSITION EVIDENCE CHAINS</b><em>candidate → fill → capture → arms → close</em></header>
-    {model.chains.length === 0 ? <div className="opsr-chain-empty">no RC5 filled position yet · evidence chain is not due</div> : model.chains.map((chain) => <details key={chain.positionId} className={chain.tone}>
+    {model.chainEvidenceState === "blocked"
+      ? <div className="review-evidence-blocked" role="alert"><b>POSITION EVIDENCE BLOCKED</b><span>{model.chainEvidenceDetail}</span><small>No fill-absence claim is made.</small></div>
+      : model.chainEvidenceState === "checking"
+        ? <div className="opsr-chain-empty">checking current-session position evidence · {model.chainEvidenceDetail}</div>
+        : model.chains.length === 0
+          ? <div className="opsr-chain-empty">no RC5 filled position yet · evidence chain is not due</div>
+          : model.chains.map((chain) => <details key={chain.positionId} className={chain.tone}>
       <summary><i aria-hidden="true" /><span><b>{chain.channelSlug}</b><small>{chain.occSymbol}</small></span><em>{chain.opportunityId}</em></summary>
       <div>{chain.steps.map((step) => <Item key={step.id} item={step} />)}</div>
     </details>)}

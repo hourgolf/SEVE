@@ -114,6 +114,12 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
   const brief = sentinel.brief;
   const judge = sentinel.judge;
   const tape = useMemo(() => deriveTapeRows(props.data.events).slice(0, 12), [props.data.events]);
+  const selectedAccount = props.accounts.find((account) => account.id === props.acctId);
+  const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
+  const attributionChecking = feed.positionAttribution.state === "checking";
+  const attributionBlocked = feed.positionAttribution.state === "blocked";
+  const attributedValue = (value: string): string =>
+    attributionChecking ? "…" : attributionBlocked ? "BLOCKED" : value;
 
   return <>
     <nav className="m2-review-modes" aria-label="Review workspace">
@@ -122,19 +128,21 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
 
     {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
     {mobileReviewHas(mode, "session-summary") && <div className="m2-desk-hero">
-      <span><small>DAY P&amp;L</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{signedUsd(liveFund.dayPnl)}</b></span>
+      <span><small>{accountScope} · DAY P&amp;L</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{attributedValue(signedUsd(liveFund.dayPnl))}</b></span>
       <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span>
-      <span><small>CLOSED</small><b>{feed.recentTrades.length}</b></span>
-      <span><small>OPEN</small><b>{feed.positions.length}</b></span>
+      <span><small>CLOSED</small><b>{attributedValue(String(feed.recentTrades.length))}</b></span>
+      <span><small>OPEN</small><b>{attributedValue(String(feed.positions.length))}</b></span>
     </div>}
 
-    {mobileReviewHas(mode, "equity") && <Section title="EQUITY" meta="desk feed · today">
+    {mobileReviewHas(mode, "equity") && <Section title="EQUITY" meta={`${accountScope} · account NAV · today`}>
       {equity.length >= 2 ? <LineChart values={equity} height={92} id="m2-desk-equity" baseline={equity[0]} format={usd0} formatDelta={signedUsd} labels={feed.equityCurve.map((point) => timeOfDay(point.ts))} />
         : <div className="m2-desk-empty">awaiting equity history</div>}
     </Section>}
 
-    {mobileReviewHas(mode, "attribution") && <Section title="CHANNEL ATTRIBUTION" meta="gross desk marks">
-      <div className="m2-review-rows">
+    {mobileReviewHas(mode, "attribution") && <Section title="CHANNEL ATTRIBUTION" meta={`${accountScope} · immutable execution routes`}>
+      {attributionBlocked ? <div className="review-evidence-blocked" role="alert"><b>CURRENT ATTRIBUTION BLOCKED</b>{feed.positionAttribution.issues.map((issue) => <span key={issue}>{issue}</span>)}<small>No strategist-account fallback was used.</small></div>
+        : attributionChecking ? <div className="m2-desk-empty">checking immutable execution-account routes…</div>
+          : <div className="m2-review-rows">
         {rows.map(({ channel, pnl }) => {
           const trades = pnl?.trades ?? 0;
           const peak = pnl?.pkN ? Math.round(pnl.pkSum / pnl.pkN) : null;
@@ -143,7 +151,7 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
             <span className={(pnl?.dayPnl ?? 0) < 0 ? "neg" : (pnl?.dayPnl ?? 0) > 0 ? "pos" : ""}>{signedUsd(pnl?.dayPnl ?? 0)}</span>
             <small>{trades}t · pk {peak ?? "—"}% · win {win ?? "—"}%</small></div>;
         })}
-      </div>
+      </div>}
     </Section>}
 
     {mobileReviewHas(mode, "shadow-research") && <ShadowResearchWorkspace surface={props} compact />}
@@ -161,7 +169,7 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
       <PositionEvidenceChains model={props.opsReadiness} compact />
     </Section>}
 
-    {mobileReviewHas(mode, "nightly-read") && <Section title="NIGHTLY READ" meta={sentinel.date ? `scan ${sentinel.date.slice(5)}` : sentinel.state}>
+    {mobileReviewHas(mode, "nightly-read") && <Section title="NIGHTLY READ" meta={`ALL PAPER ACCOUNTS · ${sentinel.date ? `scan ${sentinel.date.slice(5)}` : sentinel.state}`}>
       {sentinel.state !== "ok" ? <div className="m2-desk-empty">nightly review {sentinel.state}</div> : <div className="m2-nightly">
         {judge && <><div className="verdict"><b>{judge.verdict}</b><span>{judge.soWhat}</span></div>
           {judge.opportunities.length > 0 && <div><small>OPPORTUNITIES</small>{judge.opportunities.map((item, index) => <p key={index}>{item}</p>)}</div>}

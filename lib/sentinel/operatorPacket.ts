@@ -1,5 +1,5 @@
 export const SENTINEL_OPERATOR_PACKET_VERSION = "sentinel-operator-packet-v1" as const;
-export const DETERMINISTIC_SENTINEL_PUBLISHER_VERSION = "deterministic-sentinel-publisher-v1" as const;
+export const DETERMINISTIC_SENTINEL_PUBLISHER_VERSION = "deterministic-sentinel-publisher-v2" as const;
 
 export type SentinelEvidenceState =
   | "ok"

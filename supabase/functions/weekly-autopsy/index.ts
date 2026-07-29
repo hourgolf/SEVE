@@ -4,6 +4,9 @@
 //   OUTPUT NAMING rule; the rendered narrative + the exit lists resolve slug→name; the slug stays
 //   the internal join key in channels[].slug only. Markdown channel header dropped the (slug)
 //   parenthetical. Prior below.)
+// ⚑ WEEKLY-AUTOPSY VERSION: 2026-07-28a  (ACCOUNT-CONGRUENT NAV — desk equity now aggregates
+//   only fresh account-scoped snapshots from every configured paper account. Legacy account-null
+//   snapshots and incomplete capture cohorts are never mixed into the weekly NAV curve.)
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13c  (EXIT-LOGGING TEMPORAL GUARD — the 2026-06-13b report
 //   correctly read the data but cried "system bug: fix exit logging" because close_reason shipped
 //   06-11 eve and 4/5 of the week predates it (06-12 = 34/34 stamped, prior days 0). The autopsy
@@ -70,6 +73,10 @@
 // ============================================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import {
+  deriveAccountCongruentEquity,
+  type AccountEquitySnapshot,
+} from "../_shared/accountEquity.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -111,20 +118,30 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   const bestDay = byDayFund.length ? byDayFund.reduce((b, d) => (d.pnl > b.pnl ? d : b)) : null;
   const worstDay = byDayFund.length ? byDayFund.reduce((b, d) => (d.pnl < b.pnl ? d : b)) : null;
   const startIso = new Date(Date.parse(`${days[0]}T00:00:00Z`) - 12 * 3600_000).toISOString();
-  // PAGINATE — PostgREST caps at 1000 rows; ~480 snaps/day blew past it, truncating the
-  // curve to the first ~2 days (NAV looked flat/negative). Read all + intraday max drawdown.
-  const snapRows: Any[] = [];
+  const { data: paperAccounts, error: accountError } = await sb.from("accounts")
+    .select("id").eq("mode", "paper").order("id");
+  if (accountError) throw new Error(`paper-account read failed: ${accountError.message}`);
+  const paperAccountIds = ((paperAccounts ?? []) as { id: string }[]).map((row) => row.id);
+  // PAGINATE — derive one desk series only from fresh, account-complete capture
+  // cohorts. Unscoped legacy snapshots remain evidence but are never NAV authority.
+  const snapRows: AccountEquitySnapshot[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data } = await sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).gte("captured_at", startIso).order("captured_at", { ascending: true }).range(from, from + 999);
-    const rows = (data ?? []) as Any[];
+    const { data, error } = await sb.from("equity_snapshots")
+      .select("account_id,net_liquidation,captured_at")
+      .is("strategist_id", null)
+      .in("account_id", paperAccountIds)
+      .gte("captured_at", startIso)
+      .order("captured_at", { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(`account-equity read failed: ${error.message}`);
+    const rows = (data ?? []) as AccountEquitySnapshot[];
     snapRows.push(...rows);
     if (rows.length < 1000) break;
   }
-  const byDayNav = new Map<string, number>();
-  let peak = -Infinity, maxDrawdown = 0;
-  for (const s of snapRows) { const d = etDate(Date.parse(s.captured_at)); if (!days.includes(d)) continue; const nav = Number(s.net_liquidation); byDayNav.set(d, nav); if (nav > peak) peak = nav; if (peak - nav > maxDrawdown) maxDrawdown = peak - nav; }
-  const equityCurve = days.filter((d) => byDayNav.has(d)).map((d) => ({ date: d, nav: Math.round(byDayNav.get(d)!) }));
+  const accountEquity = deriveAccountCongruentEquity(snapRows, paperAccountIds, days);
+  const equityCurve = accountEquity.daily;
   const navDelta = equityCurve.length >= 2 ? Math.round(equityCurve[equityCurve.length - 1].nav - equityCurve[0].nav) : null;
+  const maxDrawdown = accountEquity.maxDrawdown;
 
   // slug→id + LIVE lifecycle status (so the report is roster-aware: don't recommend
   // muting a channel that's already benched, and frame verdicts against today's roster

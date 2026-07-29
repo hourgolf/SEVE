@@ -37,5 +37,15 @@ check("mode membership fails closed", () => {
   assert.equal(mobileReviewHas("evidence", "trade-evidence"), true);
   assert.equal(mobileReviewHas("sentinel", "event-tape"), false);
 });
+check("mobile session labels selected-account scope and immutable attribution", () => {
+  const source = readFileSync("components/mobile2/MobileDeskSheet.tsx", "utf8");
+  assert.match(source, /accountScope/);
+  assert.match(source, /immutable execution routes/);
+  assert.match(source, /No strategist-account fallback was used/);
+});
+check("mobile Sentinel labels its all-paper-account scope", () => {
+  const source = readFileSync("components/mobile2/MobileDeskSheet.tsx", "utf8");
+  assert.match(source, /ALL PAPER ACCOUNTS/);
+});
 
 console.log(`${passed}/${passed} mobile review workspace checks passed`);

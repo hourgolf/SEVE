@@ -11,6 +11,9 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
   const [section, setSection] = useState<ReviewSection>("tape");
   const { data, view, feed, livePnl, liveFund, reviewEvidence } = surface;
+  const selectedAccount = surface.accounts.find((account) => account.id === surface.acctId);
+  const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
+  const sectionScope = section === "performance" ? accountScope : "ALL PAPER ACCOUNTS";
 
   return (
     <section className="rvw" id="perform-tape" tabIndex={-1} aria-label="Review workspace">
@@ -34,7 +37,7 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
             </button>
           ))}
         </nav>
-        <span>READ ONLY · ZERO ORDER AUTHORITY</span>
+        <span>{sectionScope} · READ ONLY · ZERO ORDER AUTHORITY</span>
       </header>
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>
@@ -62,6 +65,8 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
             window={reviewEvidence.pnlWindow}
             setWindow={reviewEvidence.setPnlWindow}
             windowed={reviewEvidence.windowedPnl}
+            scopeLabel={accountScope}
+            todayAttribution={feed.positionAttribution}
           />
         )}
         {section === "counterfactuals" && (

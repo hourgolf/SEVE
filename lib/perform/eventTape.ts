@@ -81,6 +81,14 @@ export function deriveEventTapeStatus(
  * liveness claim; it says whether evidence currently due for filled positions
  * is complete. */
 export function deriveAfterActionStatus(model: OpsReadinessModel): AfterActionStatus {
+  if (model.chainEvidenceState === "blocked") return {
+    tone: "red", label: "EVIDENCE BLOCKED",
+    detail: `${model.chainEvidenceDetail} · no fill-absence claim is made`,
+  };
+  if (model.chainEvidenceState === "checking") return {
+    tone: "neutral", label: "CHECKING POSITION EVIDENCE",
+    detail: model.chainEvidenceDetail,
+  };
   if (model.chains.length === 0) return {
     tone: "neutral", label: "WAITING FOR FIRST FILL",
     detail: "no RC5 filled position yet · an evidence chain is not due",

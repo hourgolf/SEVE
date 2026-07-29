@@ -79,6 +79,8 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const { desk, anySolo, isActive } = view;
   // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
   const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
+  const selectedAccount = accounts.find((account) => account.id === acctId);
+  const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
 
   // Traded indices (desk-wide, armed) for the TODAY readiness strip — gaps are market-wide.
   const tradedUnderlyings = [...new Set(desk.strategists.filter((s) => s.status === "armed").map((s) => s.underlying.toUpperCase()))]
@@ -255,6 +257,8 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
               window={reviewEvidence.pnlWindow}
               setWindow={reviewEvidence.setPnlWindow}
               windowed={reviewEvidence.windowedPnl}
+              scopeLabel={accountScope}
+              todayAttribution={feed.positionAttribution}
             />
             <BriefPanel />
             <SentinelPanel />

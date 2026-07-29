@@ -24,6 +24,8 @@ export function PnlPanel({
   window,
   setWindow,
   windowed,
+  scopeLabel,
+  todayAttribution,
 }: {
   strategists: StrategistState[];
   pnlByStrategist: Record<string, ChannelPnl>;
@@ -33,6 +35,11 @@ export function PnlPanel({
   window: PnlWindow;
   setWindow: (window: PnlWindow) => void;
   windowed: WindowedPnl | null;
+  scopeLabel?: string;
+  todayAttribution?: {
+    state: "checking" | "ok" | "blocked";
+    issues: string[];
+  };
 }) {
   // Timeframe toggle. "today" uses the live feed props (instant); week/month/all
   // fetch windowed realized P&L (+ open unrealized) + a windowed NAV curve lazily.
@@ -40,8 +47,15 @@ export function PnlPanel({
   // era-4 avg-peak/win per channel (the harvest lens) — published nightly by the sentinel
   const { lens } = useSentinelDigest();
   const isToday = win === "today";
-  const loading = !isToday && (windowed?.loading ?? true);
-  const blocked = !isToday && windowed?.evidenceState === "blocked";
+  const loading = isToday
+    ? todayAttribution?.state === "checking"
+    : (windowed?.loading ?? true);
+  const blocked = isToday
+    ? todayAttribution?.state === "blocked"
+    : windowed?.evidenceState === "blocked";
+  const evidenceIssues = isToday
+    ? todayAttribution?.issues ?? []
+    : windowed?.issues ?? [];
   const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();
 
   const statFor = (slug: string): ChannelStat => {
@@ -69,7 +83,7 @@ export function PnlPanel({
   return (
     <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
-        <span className="t">P&amp;L · Equity</span>
+        <span className="t">P&amp;L · Equity{scopeLabel ? ` · ${scopeLabel}` : ""}</span>
         <span className="x">NAV {usd0(fundPnl.nav)}</span>
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
@@ -92,8 +106,8 @@ export function PnlPanel({
         </div>
         {blocked && (
           <div className="review-evidence-blocked" role="alert">
-            <b>Historical attribution unavailable</b>
-            {(windowed?.issues ?? []).map((issue) => <span key={issue}>{issue}</span>)}
+            <b>{isToday ? "Current-session attribution unavailable" : "Historical attribution unavailable"}</b>
+            {evidenceIssues.map((issue) => <span key={issue}>{issue}</span>)}
             <small>No strategist-account fallback was used.</small>
           </div>
         )}

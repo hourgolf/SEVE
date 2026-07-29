@@ -73,7 +73,10 @@ export function useWindowedPnl(
       const start = startISO(window);
       const configured = new Set(configuredKey.split(",").filter(Boolean));
       if (configured.size === 0) throw new Error("configured paper accounts unavailable");
-      if (acctId && !configured.has(acctId)) {
+      if (!acctId) {
+        throw new Error("select a configured paper account; desk-wide NAV has no identity-safe aggregate series");
+      }
+      if (!configured.has(acctId)) {
         throw new Error("selected account is not a configured paper account");
       }
 
@@ -124,9 +127,7 @@ export function useWindowedPnl(
         positionLabel: "performance positions",
       });
       if (!attribution.ok) throw new Error(attribution.issues.join("; "));
-      const attributedRows = acctId
-        ? attribution.byAccount.get(acctId) ?? []
-        : [...attribution.byAccount.values()].flat();
+      const attributedRows = attribution.byAccount.get(acctId) ?? [];
 
       const stats: Record<string, ChannelStat> = {};
       const bump = (slug: string): ChannelStat =>
@@ -152,15 +153,13 @@ export function useWindowedPnl(
       let curveRaw: number[] = [];
       let labelsRaw: string[] = [];
       let firstAt: string | null = null;
-      const fetchSnapshots = async (scopeAccount: boolean): Promise<{ nav: number; at: string }[]> => {
+      const fetchSnapshots = async (): Promise<{ nav: number; at: string }[]> => {
         const output: { nav: number; at: string }[] = [];
         for (let page = 0; page < 40; page++) {
           let query = sb.from("equity_snapshots")
             .select("net_liquidation,captured_at")
-            .is("strategist_id", null);
-          query = scopeAccount
-            ? query.eq("account_id", acctId)
-            : query.is("account_id", null);
+            .is("strategist_id", null)
+            .eq("account_id", acctId);
           if (start) query = query.gte("captured_at", start);
           const result = await query.order("captured_at", { ascending: true })
             .range(page * 1_000, page * 1_000 + 999);
@@ -172,33 +171,15 @@ export function useWindowedPnl(
         return output;
       };
 
-      if (acctId) {
-        const rows = await fetchSnapshots(true);
-        firstAt = rows[0]?.at ?? null;
-        curveRaw = rows.map((row) => row.nav);
-        labelsRaw = rows.map((row) =>
-          window === "week" ? timeOfDay(row.at) : shortDate(row.at.slice(0, 10)));
-      } else {
-        try {
-          let query = sb.from("equity_daily").select("et_date,nav").order("et_date", { ascending: true });
-          if (start) query = query.gte("et_date", start.slice(0, 10));
-          const result = await query;
-          if (result.error) throw result.error;
-          const rows = (result.data ?? []) as { et_date: string; nav: number }[];
-          firstAt = rows[0]?.et_date ?? null;
-          curveRaw = rows.map((row) => Number(row.nav));
-          labelsRaw = rows.map((row) => shortDate(row.et_date));
-        } catch {
-          const rows = await fetchSnapshots(false);
-          firstAt = rows[0]?.at ?? null;
-          curveRaw = rows.map((row) => row.nav);
-          labelsRaw = rows.map((row) => timeOfDay(row.at));
-        }
-      }
+      const rows = await fetchSnapshots();
+      firstAt = rows[0]?.at ?? null;
+      curveRaw = rows.map((row) => row.nav);
+      labelsRaw = rows.map((row) =>
+        window === "week" ? timeOfDay(row.at) : shortDate(row.at.slice(0, 10)));
 
       const sinceNote = firstAt && (start
         ? Date.parse(firstAt.length === 10 ? `${firstAt}T00:00:00Z` : firstAt) - Date.parse(start) > 36 * 3_600_000
-        : Boolean(acctId))
+        : true)
         ? shortDate(firstAt.slice(0, 10))
         : null;
       const stride = curveRaw.length <= 160 ? 1 : Math.ceil(curveRaw.length / 160);

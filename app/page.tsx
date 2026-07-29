@@ -71,7 +71,15 @@ function Surface({
   // the selected account's data, not the desk total.
   const { accounts, loading: accountsLoading } = useAccounts();
   const [acctId, setAcctId] = useState<string | null>(null);
-  const feed = useDeskFeed(acctId);
+  const configuredPaperAccountIds = useMemo(
+    () => accounts.filter((account) => account.mode === "paper").map((account) => account.id),
+    [accounts],
+  );
+  const feed = useDeskFeed(
+    acctId,
+    configuredPaperAccountIds,
+    !accountsLoading && acctId != null,
+  );
   const write = useDeskWrite();
   const isMobile = useIsMobile();
   const { mode } = useShell();
@@ -104,7 +112,11 @@ function Surface({
   // Lifted to the seam — called ONCE here so the persistent shell AND both layouts
   // share one accounts/ops poll + one live-marked P&L derivation (no re-subscribe).
   const ops = useOpsStatus();
-  const opsEvidence = useOpsEvidence(120_000, activeRoom === "ops", accounts.map((account) => account.id));
+  const opsEvidence = useOpsEvidence(
+    120_000,
+    activeRoom === "ops" || activeRoom === "tape",
+    configuredPaperAccountIds,
+  );
   useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
@@ -194,10 +206,6 @@ function Surface({
   const pyramid = usePyramidShadow(14, reviewEnabled);
   const virtualBench = useVirtualBench(reviewEnabled);
   const [pnlWindow, setPnlWindow] = useState<PnlWindow>("today");
-  const configuredPaperAccountIds = useMemo(
-    () => accounts.filter((account) => account.mode === "paper").map((account) => account.id),
-    [accounts],
-  );
   const windowedPnl = useWindowedPnl(
     pnlWindow,
     acctId,
