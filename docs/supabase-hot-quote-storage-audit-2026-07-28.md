@@ -103,12 +103,34 @@ Status: **IMPLEMENTED AND TESTED LOCALLY · NOT DEPLOYED**
 Local validation:
 
 - `npm run market-ingest-window-selftest` — pass
+- `npm run market-ingest-edge:selftest` — pass
 - `npm run market-calendar-selftest` — pass
 - `npx tsc --noEmit` — pass
 - `npm run build` — pass
 
-The next review must confirm the multi-file Edge Function packaging path before
-any deployment. No Supabase function or cron was changed by this local work.
+The review found that the root source's relative imports were not directly
+represented in the repository's Supabase function layout. That packaging gap
+is now closed without duplicating calendar authority:
+
+- `npm run market-ingest-edge:build` bundles the reviewed root source and its
+  two pure local dependencies into
+  `supabase/functions/market-ingest/index.ts`;
+- the checked-in file is a generated, self-contained deployment artifact;
+- `npm run market-ingest-edge:selftest` regenerates it in memory, proves the
+  exact three-file source graph, permits only the Supabase JSR import, checks
+  the fail-closed guard markers, and byte-compares it with the checked-in file.
+
+The reviewed deployment command is:
+
+`npx supabase functions deploy market-ingest --project-ref xvdfsxwwedltvdktqdac`
+
+The live pre-deployment metadata check confirmed that deployed
+`market-ingest` v10 is active with `verify_jwt=true`; omitting
+`--no-verify-jwt` preserves that authentication boundary. The command is
+documented for the separately approved production phase; it was not run during
+local implementation or PR review.
+
+No Supabase function or cron was changed by this local work.
 
 ### Phase B — archive parity
 
