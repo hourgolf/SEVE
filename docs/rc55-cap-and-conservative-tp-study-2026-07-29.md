@@ -12,13 +12,27 @@ configuration, account, runtime, or order path was changed.
 - exact Databento objects: 629
 - freeze:
   `sha256:2511cbab2167b87c1b4957f3648e6b70987ba45829b2c4817878894779c9b996`
-- cap/TP study:
-  `sha256:9b3da151364d02e9c3fe337d154e04e743ba88dfdaa56f037f507a9db56e0f8a`
+- cap/TP/entry-frequency study:
+  `sha256:400068b098e2347cee0e79c25f340aaba978e36dfbb0f55c9908bfd45121d901`
 - production writes: 0
 
-The v2 study applies each premium cap before sequential no-reentry replay and
-now scores all nine active roots with either the exact target grid or the
-faithful full-position RIDE, full-position A13, and native-ATR adapters.
+The v3 study applies each premium cap before the manager replay and scores all
+nine active roots with either the exact target grid or the faithful
+full-position RIDE, full-position A13, and native-ATR adapters. The manager
+replay permits a later same-session candidate only after both prior lots exit.
+It now reports one-, two-, three-, and all-sequential-entry views separately.
+
+## Important RC5.4 comparability correction
+
+Sealed RC5.4 does **not** merely prevent overlapping positions. It allows one
+accepted family entry per session, even after that position closes. The prior
+v2 report described the replay as "sequential no-reentry" while reporting all
+later non-overlapping paths. Those paths are useful re-entry counterfactuals,
+but they are not the sealed one-entry RC5.4 baseline.
+
+All baseline and TP figures below now use the first eligible path per
+session/channel/profile. The later paths are isolated in the entry-frequency
+section instead of being mixed into RC5.4 economics.
 
 ## Premium-cap result
 
@@ -32,14 +46,18 @@ faithful full-position RIDE, full-position A13, and native-ATR adapters.
 
 There is no evidence for a broad cap increase.
 
-- `vb-macd-state`: current −$111; +10% −$306; uncapped −$357.
-- `vb-squeeze-break`: current −$442; +10% −$784; uncapped −$904.
+- `vb-macd-state`: its current one-entry baseline is +$515; a +10% cap reduces
+  it to +$316.
+- `vb-squeeze-break`: its current one-entry baseline is −$483; a +10% cap
+  worsens it to −$824.
 - `pb-ride`: admitting its one blocked expensive candidate worsens the faithful
-  RIDE result from −$524 to −$568.
+  one-entry RIDE result from −$70 to −$114.
 - `orb-qqq-trail`: the third, more expensive candidate reduces the two-path
   +$237 result to +$25.
-- `vb-ribbon-cross-qqq` is the exception. Current cap produces +$542; +10%
-  produces +$791; +25% falls to +$137; uncapped falls to −$14.
+- `vb-ribbon-cross-qqq` is the exception. Under the sealed one-entry limit,
+  current cap produces +$478 across 11 sessions and +10% produces +$727 across
+  14 sessions, with positive expectancy in both chronological halves. Broader
+  cap changes remain rejected.
 
 The cap is therefore acting as a useful contract-quality selector. The only
 bounded cap candidate is `vb-ribbon-cross-qqq` from $1.75 to $1.925. That is a
@@ -49,14 +67,14 @@ channel-specific research candidate, not a portfolio-wide change.
 
 | Channel | Current faithful manager | Conservative comparison | Current expectancy / contract | Comparison | Interpretation |
 |---|---|---|---:|---:|---|
-| `pb-ride` | full RIDE | bank 1 +20%, second +50% | −$20.15 | −$0.19 | large risk reduction, but late half remains negative |
-| `grind-v3` | full RIDE | bank 1 +25%, A13 runner | −$38.20 | −$0.95 | large risk reduction, but early/late halves reverse |
-| `momo-shape` | full A13 | bank 1 +25%, A13 runner | +$21.25 | +$17.19 | current full A13 remains better |
+| `pb-ride` | full RIDE | bank 1 +20%, second +50% | −$3.50 | +$16.75 | risk reduction and positive one-entry sample, but late half remains negative |
+| `grind-v3` | full RIDE | bank 1 +25%, A13 runner | −$40.67 | −$16.00 | large loss reduction, but still negative |
+| `momo-shape` | full A13 | bank 1 +25%, A13 runner | +$45.25 | +$20.75 | current full A13 remains better |
 | `orb-qqq-trail` | bank 1 +20%, native ATR | bank 1 +25–50% | +$59.25 | +$65.50 to +$110 | only two current-cap paths; no change justified |
 | `breakout-alt-v3-iwm` | full RIDE | bank 1 +10%, A13 runner | −$21.75 | −$15.37 | still entirely losing in four paths |
-| `vb-macd-state` | bank 1 +30%, second +50% | bank 1 +20%, second +50% | −$0.73 | +$0.41 | full window nearly flat; late half negative |
-| `vb-squeeze-break` | bank 1 +30%, second +50% | bank 1 +15%, second +50% | −$2.63 | +$0.58 | drawdown halves; late half remains negative |
-| `vb-ribbon-cross-qqq` | bank 1 +50%, A13 runner | bank 1 +75–100%, A13 runner | +$18.07 | +$25.57 to +$30.87 | positive in both halves, but only 15 paths |
+| `vb-macd-state` | bank 1 +30%, second +50% | bank 1 +20%, second +50% | +$14.31 | +$14.36 | no meaningful TP advantage; retain current |
+| `vb-squeeze-break` | bank 1 +30%, second +50% | bank 1 +15%, second +50% | −$13.42 | −$1.33 | loss reduction, but still not positive |
+| `vb-ribbon-cross-qqq` | bank 1 +50%, A13 runner | bank 1 +75–100%, A13 runner | +$21.73 | +$32.32 to +$37.68 | promising, but only 11 one-entry sessions |
 
 `orb-ustop-ctl` already banks at +30% and demonstrated the intended live paper
 path on July 29. Its exact pre-July-29 sample is not yet stable enough to
@@ -70,19 +88,79 @@ the 22-session frozen window; signal frequency will vary.
 
 | Channel / decision | Current evidence | Approximate additional trading sessions |
 |---|---:|---:|
-| `vb-ribbon-cross-qqq` +10% cap shadow, TP review | 18 paths / 14 sessions | about 3 |
-| `pb-ride` conservative TP | 16 / 10 | about 6 |
-| `vb-ribbon-cross-qqq` current-cap TP review | 15 / 11 | about 8 |
-| `orb-ustop-ctl` TP review | 12 / 7 | about 15 |
-| `grind-v3` conservative TP | 11 / 6 | about 18 |
-| `momo-shape` TP review | 8 / 4 | about 33 |
+| `vb-macd-state` / `vb-squeeze-break` one-entry review | 18 paths / 18 sessions | about 3 |
+| `vb-ribbon-cross-qqq` +10% cap shadow, TP review | 14 / 14 | about 10 |
+| `pb-ride` conservative TP | 10 / 10 | about 22 |
+| `vb-ribbon-cross-qqq` current-cap TP review | 11 / 11 | about 18 |
+| `orb-ustop-ctl` TP review | 7 / 7 | about 41 |
+| `grind-v3` conservative TP | 6 / 6 | about 52 |
+| `momo-shape` TP review | 4 / 4 | about 88 |
 | `breakout-alt-v3-iwm` TP review | 4 / 4 | about 88 |
 | `orb-qqq-trail` native-ATR TP review at current frequency | 2 / 2 | roughly 198 |
 
-`vb-macd-state` and `vb-squeeze-break` already exceed the observation floor,
-but their chronological instability means there is no honest calendar
-countdown to a final target. More samples must actually resolve the regime
-disagreement.
+`vb-macd-state` and `vb-squeeze-break` are near the observation floor, but
+sample count alone does not resolve the economic question. MACD does not
+improve materially under the alternate target, while squeeze remains negative.
+
+## Channel-specific entry-frequency result
+
+The first bounded comparison holds premium cap and current manager constant.
+It compares sealed RC5.4's one entry with a maximum of two sequential,
+non-overlapping entries.
+
+| Channel | One-entry expectancy / contract | Two-entry expectancy / contract | Second paths | Incremental second-entry P&L | Reading |
+|---|---:|---:|---:|---:|---|
+| `pb-ride` | −$3.50 | −$14.92 | 2 | −$288 | keep one |
+| `orb-ustop-ctl` | −$9.21 | +$3.35 | 3 | +$196 | best research lead; far too thin |
+| `grind-v3` | −$40.67 | −$38.20 | 4 | −$276 | do not re-enter under current manager |
+| `momo-shape` | +$45.25 | +$13.00 | 2 | −$206 | keep one |
+| `orb-qqq-trail` | +$59.25 | +$59.25 | 0 | $0 | no evidence |
+| `breakout-alt-v3-iwm` | −$21.75 | −$21.75 | 0 | $0 | no evidence |
+| `vb-macd-state` | +$14.31 | +$3.71 | 17 | −$255 | keep one |
+| `vb-squeeze-break` | −$13.42 | −$6.54 | 18 | +$12 | economically negligible |
+| `vb-ribbon-cross-qqq` | +$21.73 | +$18.07 | 4 | +$64 | positive but mixed and thin |
+
+No channel has decision-grade evidence for a re-entry activation. The useful
+next research canaries are:
+
+1. `orb-ustop-ctl`: shadow a maximum of two entries, requiring a distinct
+   later candidate and complete closure of both prior lots.
+2. `vb-ribbon-cross-qqq`: shadow a maximum of two entries at the current cap,
+   separately from the +10% cap test.
+3. `vb-squeeze-break`: retain the second-entry shadow only; do not activate it
+   while the overall manager result remains negative.
+
+Never combine a TP, premium-cap, and entry-frequency change in the same first
+canary. The configuration epoch can represent all three, but doing so would
+make the resulting evidence causally ambiguous.
+
+## Plumbing status for an RC5.5 re-entry canary
+
+The immutable evidence path is already position-scoped and can preserve
+multiple same-channel trades as distinct candidates, orders, fills, positions,
+manager books, capture receipts, closes, and configuration epochs. No quote
+capture or historical-data rewrite is required.
+
+The admission configuration is not yet ready to activate a channel-specific
+numeric limit:
+
+- `ChannelSpecVersion.reentryPolicy` distinguishes `disabled` from `bounded`,
+  but does not project an exact maximum.
+- the admission domain currently stores a set of families that traded, not a
+  count by family;
+- the domain policy applies one re-entry posture to every channel in that
+  domain, which conflicts with the required channel-by-channel rule;
+- the temporary RC5.4 adapter intentionally rejects any bounded re-entry.
+
+The smallest release-agnostic extension is to carry
+`entryParameters.maxEntriesPerSession` into the worker projection, interpret
+`disabled` as exactly 1, count accepted family entries, and enforce the
+candidate channel's immutable entry-time limit while retaining family,
+underlying, OCC, same-clock, and global concurrency gates. The existing JSON
+entry-parameters column can hold the number, so this design should not require
+a Supabase schema migration. It does require reviewed worker code, fail-closed
+tests, a Railway deployment, and a fresh startup acknowledgement before any
+bounded re-entry proposal can activate.
 
 ## Why a paper TP canary can begin before final target selection
 
@@ -107,15 +185,18 @@ The correct distinction is:
 
 ## Recommended bounded sequence
 
-1. Keep all caps unchanged while collecting roughly three more sessions of the
-   `vb-ribbon-cross-qqq` +10% cap shadow.
+1. Continue the `vb-ribbon-cross-qqq` +10% cap shadow while preserving its
+   one-entry limit.
 2. If the operator wants an earlier TP canary, use only `pb-ride`: quantity 2,
    bank one contract at +20%, exit the second at +50%, retain the −30% stop,
-   current cap, account, and admission topology.
+   current cap, account, and one-entry topology.
 3. Preserve full RIDE and the complete target grid as shadow arms.
 4. Verify activation at the next safe entry, configuration-epoch stamping,
    tranche receipt, capture continuity, and rollback identity.
-5. Review `grind-v3` bank +25% / A13 only after the first canary proves the
+5. Add a channel-specific `maxEntriesPerSession` research/control-plane field
+   before any re-entry activation. RC5.4 defaults every root to 1; an RC5.5
+   canary may set one reviewed channel to 2. Do not use a desk-wide flag.
+6. Review `grind-v3` bank +25% / A13 only after the first canary proves the
    operational path; do not activate both simultaneously.
 
 This sequence is a risk-control experiment, not a claim that +20% is the final

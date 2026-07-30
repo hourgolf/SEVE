@@ -26,6 +26,7 @@ import {
   deriveRc54SealedManagerStudy,
   type Rc54SealedStudyPath,
 } from "../lib/research/rc54SealedManagerStudy";
+import { selectSessionEntryCap } from "../lib/research/rc55EntryFrequency";
 import { sessionClusteredMeanConfidence95 } from "../lib/research/rc55Research";
 import { RC54_ROOTS } from "../worker/src/rc54ReleasePolicy";
 
@@ -179,6 +180,8 @@ type MetricPath = Pick<
   "candidateId" | "sessionDateEt" | "decisionAt" | "pnl" | "pnlPerContract"
 >;
 
+const entryCaps = [1, 2, 3, null] as const;
+
 function summarizePaths(paths: readonly MetricPath[]) {
   if (!paths.length) {
     return {
@@ -243,6 +246,35 @@ function summarizePaths(paths: readonly MetricPath[]) {
       value: path.pnlPerContract,
     }))),
   };
+}
+
+function summarizeEntryFrequency(paths: readonly MetricPath[]) {
+  const onePerSession = selectSessionEntryCap(paths, 1);
+  const oneIds = new Set(onePerSession.map((path) => path.candidateId));
+  return entryCaps.map((maxEntriesPerSession) => {
+    const selected = selectSessionEntryCap(paths, maxEntriesPerSession);
+    const incremental = selected.filter((path) => !oneIds.has(path.candidateId));
+    return {
+      maxEntriesPerSession,
+      outcome: summarizePaths(selected),
+      incrementalVersusOnePerSession: {
+        paths: incremental.length,
+        sessions: new Set(incremental.map((path) => path.sessionDateEt)).size,
+        totalPnl: round(incremental.reduce((sum, path) => sum + path.pnl, 0)),
+        expectancyPerContract: incremental.length
+          ? round(incremental.reduce((sum, path) => sum + path.pnlPerContract, 0)
+            / incremental.length)
+          : null,
+        evidence: incremental.map((path) => ({
+          candidateId: path.candidateId,
+          sessionDateEt: path.sessionDateEt,
+          decisionAt: path.decisionAt,
+          pnl: path.pnl,
+          pnlPerContract: path.pnlPerContract,
+        })),
+      },
+    };
+  });
 }
 
 const scenarios = [
@@ -357,6 +389,7 @@ function main(): void {
         return {
           ...profile,
           outcome: summarizePaths(paths),
+          entryFrequency: summarizeEntryFrequency(paths),
         };
       });
       return {
@@ -376,6 +409,9 @@ function main(): void {
           ? "faithful exact sealed-manager replay available"
           : "faithful manager replay unavailable",
         comparableOutcome: comparableProfile ? summarizePaths(comparablePaths) : null,
+        comparableEntryFrequency: comparableProfile
+          ? summarizeEntryFrequency(comparablePaths)
+          : [],
         tpReview,
       };
     });
@@ -395,7 +431,7 @@ function main(): void {
     };
   });
   const artifact = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     freezeCanonicalSha256: freeze.canonicalSha256,
     evidenceWindow: {
@@ -409,9 +445,16 @@ function main(): void {
       currentCapsSource: "sealed RC5.4 release adapter",
       managerEvidence:
         "all nine active roots scored with exact target-grid or faithful sealed-manager paths",
+      sealedRc54Reentry:
+        "one accepted family entry per session, including after the prior position closes",
+      replayReentry:
+        "later same-session channel/profile candidates are eligible only after both lots of the prior replay path exit",
+      entryFrequencyCounterfactual:
+        "first 1, 2, 3, or all sequential non-overlapping replay paths selected per session/channel/profile",
       aggregateDebitAtQuantityTwo: "mathematically equal to premium cap times 200 in RC5.4",
       limitations: [
         "Cap scenarios change admission only; they do not model alternate strike selection, quantity scaling, or event overrides.",
+        "Entry-frequency outcomes are channel-isolated and do not replay cross-channel domain capacity or same-clock collisions.",
         "Native-ATR evidence contains only three eligible orb-qqq-trail sessions.",
         "Descriptive replay is not a strategic recommendation or configuration proposal.",
       ],
@@ -432,7 +475,7 @@ function main(): void {
   };
   const text = `${JSON.stringify(artifact, null, 2)}\n`;
   const receipt = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: artifact.generatedAt,
     freezeCanonicalSha256: freeze.canonicalSha256,
     artifactSha256: hash(text),
