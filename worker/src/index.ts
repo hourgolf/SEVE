@@ -580,7 +580,10 @@ async function reloadConfig(): Promise<void> {
           rootCount: resolution.runtime.roots.length,
           entryLimits: Object.fromEntries(
             resolution.runtime.roots
-              .map((root) => [root.slug, root.maxEntriesPerSession])
+              .map((root): [string, number] => [
+                root.slug,
+                root.maxEntriesPerSession,
+              ])
               .sort(([left], [right]) => left.localeCompare(right)),
           ),
           configuredPaperAccountIds: [
