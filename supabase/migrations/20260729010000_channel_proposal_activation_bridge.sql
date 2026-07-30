@@ -393,8 +393,8 @@ begin
   for update;
 
   select * into preview
-  from public.channel_activation_previews
-  where proposal_id = p_proposal_id;
+  from public.channel_activation_previews as preview_by_proposal
+  where preview_by_proposal.proposal_id = p_proposal_id;
 
   if preview.id is not null then
     if base_manifest.id is null
@@ -513,9 +513,9 @@ begin
   end if;
 
   select * into existing
-  from public.channel_activation_worker_acknowledgements
-  where proposal_id = preview.proposal_id
-    and source_boot_id = p_source_boot_id;
+  from public.channel_activation_worker_acknowledgements as acknowledgement_by_worker
+  where acknowledgement_by_worker.proposal_id = preview.proposal_id
+    and acknowledgement_by_worker.source_boot_id = p_source_boot_id;
 
   if existing.id is not null then
     if existing.id <> p_acknowledgement_id
@@ -739,16 +739,16 @@ begin
   );
 
   select * into receipt
-  from public.activation_receipts
-  where proposal_id = p_proposal_id;
+  from public.activation_receipts as receipt_by_proposal
+  where receipt_by_proposal.proposal_id = p_proposal_id;
 
   if receipt.id is not null then
     select * into new_manifest
     from public.release_manifests
     where id = receipt.release_manifest_id;
     select * into approval
-    from public.channel_activation_approvals
-    where proposal_id = p_proposal_id;
+    from public.channel_activation_approvals as approval_by_proposal
+    where approval_by_proposal.proposal_id = p_proposal_id;
     if receipt.id <> p_activation_receipt_id
         or receipt.configuration_epoch_id <> p_configuration_epoch_id
         or receipt.approved_by <> p_operator_id::text
@@ -781,9 +781,9 @@ begin
   for update;
 
   select * into preview
-  from public.channel_activation_previews
-  where id = p_preview_id
-    and proposal_id = p_proposal_id;
+  from public.channel_activation_previews as preview_by_id
+  where preview_by_id.id = p_preview_id
+    and preview_by_id.proposal_id = p_proposal_id;
 
   select * into acknowledgement
   from public.channel_activation_worker_acknowledgements
