@@ -5,6 +5,7 @@ import { loadActiveCompiledControlPlane } from "@/lib/channels/channelControlPla
 import {
   ProposalInputError,
   buildOperatorProposal,
+  proposalDraftRpcName,
 } from "@/lib/channels/channelProposalWrite";
 import { buildRc54OperatorProposal } from "@/lib/channels/rc54ChannelProposalAdapter";
 
@@ -72,9 +73,7 @@ export async function POST(req: Request) {
         operator.user.id,
         requestId,
       );
-    const proposalFunction = built.proposal.changeClass === "governed-operational-policy"
-      ? "create_channel_reentry_proposal_draft"
-      : "create_channel_change_proposal_draft";
+    const proposalFunction = proposalDraftRpcName(built.proposal);
     const { data, error } = await sb.rpc(proposalFunction, {
       p_proposal_id: built.proposal.id,
       p_base_version_key: built.proposal.baseSpecVersionId,

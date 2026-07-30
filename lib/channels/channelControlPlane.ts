@@ -63,6 +63,23 @@ export interface ChannelRatchetPolicy {
   fixedTargetPct: number | null;
 }
 
+export function managerPolicyContentHash(input: {
+  managerProfileId: string;
+  takeProfit: ChannelTakeProfitPolicy;
+  stopLoss: ChannelStopLossPolicy;
+  ratchetParameters: ChannelRatchetPolicy;
+  liquidationEt: unknown;
+}): string {
+  return contentHash({
+    profileId: input.managerProfileId,
+    takeProfit: input.takeProfit,
+    stopLoss: input.stopLoss,
+    ratchetParameters: input.ratchetParameters,
+    liquidationEt: input.liquidationEt ?? null,
+    priceBasis: "executable-option-bid",
+  });
+}
+
 export interface ChannelScalePolicy {
   adds: number;
   pyramiding: "disabled" | "bounded";
@@ -785,6 +802,47 @@ const FORBIDDEN_PATCH_FIELDS = new Set([
   "parentVersionId", "status", "validFrom", "validUntil", "contentHash",
 ]);
 
+const MANAGER_POLICY_PATCH_FIELDS = [
+  "exitParameters",
+  "managerProfileId",
+  "managerVersion",
+  "ratchetParameters",
+  "stopLoss",
+  "takeProfit",
+] as const;
+
+function isAtomicManagerPolicyPatch(
+  active: ChannelSpecVersion,
+  patch: ChannelChangeProposal["proposedPatch"],
+): boolean {
+  const fields = Object.keys(patch).sort();
+  if (canonicalJson(fields) !== canonicalJson([...MANAGER_POLICY_PATCH_FIELDS].sort())) {
+    return false;
+  }
+  const proposedExit = patch.exitParameters;
+  if (!proposedExit || typeof proposedExit !== "object" || Array.isArray(proposedExit)) {
+    return false;
+  }
+  const { managerLabel: _activeLabel, ...activeExitRest } = active.exitParameters;
+  const { managerLabel: proposedLabel, ...proposedExitRest } = proposedExit;
+  if (typeof proposedLabel !== "string"
+      || canonicalJson(activeExitRest) !== canonicalJson(proposedExitRest)
+      || typeof patch.managerProfileId !== "string"
+      || typeof patch.managerVersion !== "string"
+      || !patch.takeProfit
+      || !patch.stopLoss
+      || !patch.ratchetParameters) {
+    return false;
+  }
+  return patch.managerVersion === managerPolicyContentHash({
+    managerProfileId: patch.managerProfileId,
+    takeProfit: patch.takeProfit,
+    stopLoss: patch.stopLoss,
+    ratchetParameters: patch.ratchetParameters,
+    liquidationEt: proposedExit.eodEt,
+  });
+}
+
 export interface ActiveVersusDraftProjection {
   proposalId: string;
   activeSpec: ChannelSpecVersion | null;
@@ -819,12 +877,19 @@ export function projectActiveVersusDraft(
   if (!Object.prototype.hasOwnProperty.call(CHANGE_CLASS_RANK, proposal.changeClass)) {
     issues.push(gate("schema", "block", "proposal:change_class_invalid", "The proposal change class is not recognized."));
   }
+  const atomicManagerPolicy = isAtomicManagerPolicyPatch(active, proposal.proposedPatch);
   for (const field of fields) {
     if (FORBIDDEN_PATCH_FIELDS.has(String(field))) {
       issues.push(gate("schema", "block", `proposal:forbidden_field:${String(field)}`, `${String(field)} cannot be changed by proposal.`));
       continue;
     }
     let required = FIELD_CLASS[field] ?? "code-strategy-logic";
+    if (atomicManagerPolicy
+        && MANAGER_POLICY_PATCH_FIELDS.includes(
+          field as typeof MANAGER_POLICY_PATCH_FIELDS[number],
+        )) {
+      required = "bounded-parameter";
+    }
     if (field === "entryParameters") {
       const proposed = proposal.proposedPatch.entryParameters;
       if (proposed && typeof proposed === "object" && !Array.isArray(proposed)) {

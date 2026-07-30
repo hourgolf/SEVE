@@ -1,10 +1,14 @@
 import {
   CHANNEL_CONTROL_PLANE_SCHEMA_VERSION,
+  managerPolicyContentHash,
   projectActiveVersusDraft,
   type ActiveVersusDraftProjection,
   type ChangeClass,
   type ChannelChangeProposal,
+  type ChannelRatchetPolicy,
   type ChannelSpecVersion,
+  type ChannelStopLossPolicy,
+  type ChannelTakeProfitPolicy,
   type CompiledReleaseManifest,
   type JsonObject,
   type ValidationGateResult,
@@ -23,9 +27,8 @@ const REQUEST_KEYS = new Set([
 const BOUNDED_PATCH_KEYS = new Set([
   "quantity",
   "maxDebitUsd",
-  "takeProfit",
-  "stopLoss",
   "riskLimits",
+  "managerPolicy",
 ]);
 const REENTRY_PATCH_KEYS = new Set(["maxEntriesPerSession"]);
 const MAX_PATCH_BYTES = 16_384;
@@ -36,10 +39,19 @@ export interface OperatorProposalRequest {
   baseSpecContentHash: string;
   proposedPatch: ChannelChangeProposal["proposedPatch"] & {
     maxEntriesPerSession?: number;
+    managerPolicy?: OperatorManagerPolicyRequest;
   };
   reason: string;
   evidenceRefs: string[];
   changeClass: ChangeClass;
+}
+
+export interface OperatorManagerPolicyRequest {
+  managerProfileId: string;
+  managerLabel: string;
+  takeProfit: ChannelTakeProfitPolicy;
+  stopLoss: ChannelStopLossPolicy;
+  ratchetParameters: ChannelRatchetPolicy;
 }
 
 export interface BuiltOperatorProposal {
@@ -48,6 +60,11 @@ export interface BuiltOperatorProposal {
   preview: ActiveVersusDraftProjection;
   capacityCollisionImpact: JsonObject;
 }
+
+export type ProposalDraftRpcName =
+  | "create_channel_change_proposal_draft"
+  | "create_channel_manager_policy_proposal_draft"
+  | "create_channel_reentry_proposal_draft";
 
 export class ProposalInputError extends Error {
   readonly status: 400 | 409 | 422;
@@ -119,25 +136,7 @@ function validateProposalPatch(
       && (typeof patch.maxDebitUsd !== "number" || !Number.isFinite(patch.maxDebitUsd) || patch.maxDebitUsd <= 0)) {
     throw new ProposalInputError("maxDebitUsd must be a positive finite number");
   }
-  if ("takeProfit" in patch) {
-    if (!isObject(patch.takeProfit)) throw new ProposalInputError("takeProfit must be an object");
-    requireExactKeys(patch.takeProfit, ["kind", "targetPct", "fraction"], "takeProfit");
-    if (!["ride", "bank"].includes(String(patch.takeProfit.kind))
-        || !(patch.takeProfit.targetPct === null
-          || (typeof patch.takeProfit.targetPct === "number" && Number.isFinite(patch.takeProfit.targetPct)))
-        || ![0, 0.5].includes(Number(patch.takeProfit.fraction))) {
-      throw new ProposalInputError("takeProfit contains an invalid bounded policy");
-    }
-  }
-  if ("stopLoss" in patch) {
-    if (!isObject(patch.stopLoss)) throw new ProposalInputError("stopLoss must be an object");
-    requireExactKeys(patch.stopLoss, ["catastrophePct", "priceBasis"], "stopLoss");
-    if (typeof patch.stopLoss.catastrophePct !== "number"
-        || !Number.isFinite(patch.stopLoss.catastrophePct)
-        || patch.stopLoss.priceBasis !== "executable-option-bid") {
-      throw new ProposalInputError("stopLoss contains an invalid bounded policy");
-    }
-  }
+  if ("managerPolicy" in patch) validateManagerPolicy(patch.managerPolicy);
   if ("riskLimits" in patch) {
     if (!isObject(patch.riskLimits)) throw new ProposalInputError("riskLimits must be an object");
     requireExactKeys(patch.riskLimits, ["maxContracts", "maxDebitUsd", "maxRiskUsd"], "riskLimits");
@@ -152,6 +151,153 @@ function validateProposalPatch(
       throw new ProposalInputError("riskLimits contains an invalid bounded envelope");
     }
   }
+  if ("managerPolicy" in patch && fields.length !== 1) {
+    throw new ProposalInputError(
+      "managerPolicy must be reviewed without quantity, debit, risk, or re-entry changes",
+    );
+  }
+}
+
+function validateManagerPolicy(value: unknown): asserts value is OperatorManagerPolicyRequest {
+  if (!isObject(value)) throw new ProposalInputError("managerPolicy must be an object");
+  requireExactKeys(value, [
+    "managerLabel",
+    "managerProfileId",
+    "ratchetParameters",
+    "stopLoss",
+    "takeProfit",
+  ], "managerPolicy");
+  if (typeof value.managerProfileId !== "string"
+      || !/^[A-Z0-9][A-Z0-9._/-]{2,99}$/.test(value.managerProfileId)) {
+    throw new ProposalInputError("managerPolicy.managerProfileId is invalid");
+  }
+  if (typeof value.managerLabel !== "string"
+      || value.managerLabel.trim().length < 8
+      || value.managerLabel.trim().length > 160
+      || /[\u0000-\u001f\u007f]/.test(value.managerLabel)) {
+    throw new ProposalInputError("managerPolicy.managerLabel must contain 8 to 160 printable characters");
+  }
+  if (!isObject(value.takeProfit)) {
+    throw new ProposalInputError("managerPolicy.takeProfit must be an object");
+  }
+  requireExactKeys(
+    value.takeProfit,
+    ["fraction", "kind", "targetPct"],
+    "managerPolicy.takeProfit",
+  );
+  const validRide = value.takeProfit.kind === "ride"
+    && value.takeProfit.targetPct === null
+    && value.takeProfit.fraction === 0;
+  const validBank = value.takeProfit.kind === "bank"
+    && typeof value.takeProfit.targetPct === "number"
+    && Number.isFinite(value.takeProfit.targetPct)
+    && value.takeProfit.targetPct > 0
+    && value.takeProfit.fraction === 0.5;
+  if (!validRide && !validBank) {
+    throw new ProposalInputError("managerPolicy.takeProfit contains an invalid bounded policy");
+  }
+  if (!isObject(value.stopLoss)) {
+    throw new ProposalInputError("managerPolicy.stopLoss must be an object");
+  }
+  requireExactKeys(
+    value.stopLoss,
+    ["catastrophePct", "priceBasis"],
+    "managerPolicy.stopLoss",
+  );
+  if (typeof value.stopLoss.catastrophePct !== "number"
+      || !Number.isFinite(value.stopLoss.catastrophePct)
+      || value.stopLoss.catastrophePct <= 0
+      || value.stopLoss.catastrophePct > 100
+      || value.stopLoss.priceBasis !== "executable-option-bid") {
+    throw new ProposalInputError("managerPolicy.stopLoss contains an invalid bounded policy");
+  }
+  if (!isObject(value.ratchetParameters)) {
+    throw new ProposalInputError("managerPolicy.ratchetParameters must be an object");
+  }
+  requireExactKeys(value.ratchetParameters, [
+    "engageReturnPct",
+    "fixedTargetPct",
+    "givebackPct",
+    "kind",
+    "retainGainPct",
+  ], "managerPolicy.ratchetParameters");
+  const ratchet = value.ratchetParameters;
+  const finiteOrNull = ["engageReturnPct", "fixedTargetPct", "givebackPct", "retainGainPct"]
+    .every((field) => ratchet[field] === null
+      || (typeof ratchet[field] === "number" && Number.isFinite(ratchet[field])));
+  const nullTuning = ratchet.engageReturnPct === null
+    && ratchet.givebackPct === null
+    && ratchet.retainGainPct === null
+    && ratchet.fixedTargetPct === null;
+  const validRatchet = finiteOrNull && (
+    ((ratchet.kind === "none" || ratchet.kind === "native-atr") && nullTuning)
+    || (ratchet.kind === "fixed-target"
+      && ratchet.fixedTargetPct != null
+      && Number(ratchet.fixedTargetPct) > 0
+      && ratchet.engageReturnPct === null
+      && ratchet.givebackPct === null
+      && ratchet.retainGainPct === null)
+    || (ratchet.kind === "a13"
+      && ratchet.engageReturnPct != null
+      && Number(ratchet.engageReturnPct) > 0
+      && ratchet.givebackPct != null
+      && Number(ratchet.givebackPct) > 0
+      && Number(ratchet.givebackPct) < 100
+      && ratchet.retainGainPct != null
+      && Number(ratchet.retainGainPct) > 0
+      && Number(ratchet.retainGainPct) < 100
+      && Number(ratchet.givebackPct) + Number(ratchet.retainGainPct) === 100
+      && ratchet.fixedTargetPct === null)
+  );
+  if (!validRatchet) {
+    throw new ProposalInputError("managerPolicy.ratchetParameters contains an invalid bounded policy");
+  }
+}
+
+function expandManagerPolicy(
+  baseSpec: ChannelSpecVersion,
+  managerPolicy: OperatorManagerPolicyRequest,
+): ChannelChangeProposal["proposedPatch"] {
+  const managerProfileId = managerPolicy.managerProfileId.trim();
+  const managerLabel = managerPolicy.managerLabel.trim();
+  const managerVersion = managerPolicyContentHash({
+    managerProfileId,
+    takeProfit: managerPolicy.takeProfit,
+    stopLoss: managerPolicy.stopLoss,
+    ratchetParameters: managerPolicy.ratchetParameters,
+    liquidationEt: baseSpec.exitParameters.eodEt ?? null,
+  });
+  return {
+    managerProfileId,
+    managerVersion,
+    exitParameters: {
+      ...baseSpec.exitParameters,
+      managerLabel,
+    },
+    takeProfit: managerPolicy.takeProfit,
+    stopLoss: managerPolicy.stopLoss,
+    ratchetParameters: managerPolicy.ratchetParameters,
+  };
+}
+
+export function proposalDraftRpcName(
+  proposal: Pick<ChannelChangeProposal, "changeClass" | "proposedPatch">,
+): ProposalDraftRpcName {
+  if (proposal.changeClass === "governed-operational-policy") {
+    return "create_channel_reentry_proposal_draft";
+  }
+  const fields = Object.keys(proposal.proposedPatch).sort();
+  if (fields.join(",") === [
+    "exitParameters",
+    "managerProfileId",
+    "managerVersion",
+    "ratchetParameters",
+    "stopLoss",
+    "takeProfit",
+  ].sort().join(",")) {
+    return "create_channel_manager_policy_proposal_draft";
+  }
+  return "create_channel_change_proposal_draft";
 }
 
 function parseEvidenceRefs(value: unknown): string[] {
@@ -223,9 +369,12 @@ export function buildOperatorProposal(
     throw new ProposalInputError("proposal base specification is missing", 422);
   }
   const requestedLimit = input.proposedPatch.maxEntriesPerSession;
+  const managerPolicy = input.proposedPatch.managerPolicy;
   const proposedPatch: ChannelChangeProposal["proposedPatch"] =
     requestedLimit == null
-      ? input.proposedPatch
+      ? managerPolicy == null
+        ? input.proposedPatch
+        : expandManagerPolicy(baseSpec, managerPolicy)
       : {
         reentryPolicy: requestedLimit === 1 ? "disabled" : "bounded",
         entryParameters: {
