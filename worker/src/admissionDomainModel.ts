@@ -28,11 +28,13 @@ export interface AdmissionDomainOccupancy {
 export interface AdmissionDomainSessionEntry {
   domainId: string;
   familyId: string;
+  /** Immutable logical entry identity. Runner/remainder rows share this id. */
+  entryId: string;
 }
 
 export interface DomainAdmissionState {
   openFamilyCount: Map<string, number>;
-  enteredFamilies: Set<string>;
+  enteredFamilyCount: Map<string, number>;
   openByUnderlying: Map<string, number>;
   openTotal: number;
   openOccCount: Map<string, number>;
@@ -49,6 +51,7 @@ export interface DomainAdmissionCandidate {
   familyId: string;
   underlying: string;
   sourceBarAtMs: number;
+  maxEntriesPerSession: number;
   decision: ShadowDecision;
 }
 
@@ -63,7 +66,7 @@ export interface DomainAdmissionResult extends DomainAdmissionCandidate {
 
 const emptyDomainState = (): DomainAdmissionState => ({
   openFamilyCount: new Map(),
-  enteredFamilies: new Set(),
+  enteredFamilyCount: new Map(),
   openByUnderlying: new Map(),
   openTotal: 0,
   openOccCount: new Map(),
@@ -106,8 +109,16 @@ export function buildAdmissionDomainsState(input: {
       state.openDomainsByOcc.set(occ, domains);
     }
   }
+  const countedEntries = new Set<string>();
   for (const row of input.sessionEntries) {
-    domain(row.domainId).enteredFamilies.add(row.familyId);
+    const logicalKey = `${row.domainId}|${row.familyId}|${row.entryId}`;
+    if (countedEntries.has(logicalKey)) continue;
+    countedEntries.add(logicalKey);
+    const current = domain(row.domainId);
+    current.enteredFamilyCount.set(
+      row.familyId,
+      (current.enteredFamilyCount.get(row.familyId) ?? 0) + 1,
+    );
   }
   return state;
 }
@@ -141,6 +152,13 @@ export function finalizeAdmissionDomains(input: {
   for (const { candidate, index } of eligible) {
     const policy = input.policies.get(candidate.domainId);
     if (!policy) output[index].decision = block(candidate.decision, "admission_domain_unknown");
+    else if (!Number.isInteger(candidate.maxEntriesPerSession)
+        || candidate.maxEntriesPerSession < 1
+        || candidate.maxEntriesPerSession > 3) {
+      output[index].decision = block(candidate.decision, "admission_domain_entry_limit_invalid");
+    } else if (policy.reentry === "disabled" && candidate.maxEntriesPerSession !== 1) {
+      output[index].decision = block(candidate.decision, "admission_domain_reentry_policy_conflict");
+    }
     else if (!policy.enabledForNewEntries) {
       output[index].decision = block(candidate.decision, "admission_domain_new_entries_disabled");
     } else if (!input.globalPositionTruthComplete) {
@@ -204,8 +222,12 @@ export function finalizeAdmissionDomains(input: {
     if ((domain.openFamilyCount.get(candidate.familyId) ?? 0) >= policy.maxOpenPerFamily) {
       reason = "admission_domain_family_open";
     }
-    else if (policy.reentry === "disabled" && domain.enteredFamilies.has(candidate.familyId)) {
+    else if (policy.reentry === "disabled"
+        && (domain.enteredFamilyCount.get(candidate.familyId) ?? 0) > 0) {
       reason = "admission_domain_reentry_disabled";
+    } else if ((domain.enteredFamilyCount.get(candidate.familyId) ?? 0)
+        >= candidate.maxEntriesPerSession) {
+      reason = "admission_domain_session_entry_limit";
     } else if (occ && (domain.openOccCount.get(occ) ?? 0) >= policy.sameOccOpenMax) {
       reason = "admission_domain_same_occ_open";
     } else if (otherDomains.length && policy.crossDomainSameOcc === "block") {
@@ -232,7 +254,10 @@ export function finalizeAdmissionDomains(input: {
       candidate.familyId,
       (domain.openFamilyCount.get(candidate.familyId) ?? 0) + 1,
     );
-    domain.enteredFamilies.add(candidate.familyId);
+    domain.enteredFamilyCount.set(
+      candidate.familyId,
+      (domain.enteredFamilyCount.get(candidate.familyId) ?? 0) + 1,
+    );
     domain.openByUnderlying.set(
       underlying,
       (domain.openByUnderlying.get(underlying) ?? 0) + 1,

@@ -72,7 +72,10 @@ export async function POST(req: Request) {
         operator.user.id,
         requestId,
       );
-    const { data, error } = await sb.rpc("create_channel_change_proposal_draft", {
+    const proposalFunction = built.proposal.changeClass === "governed-operational-policy"
+      ? "create_channel_reentry_proposal_draft"
+      : "create_channel_change_proposal_draft";
+    const { data, error } = await sb.rpc(proposalFunction, {
       p_proposal_id: built.proposal.id,
       p_base_version_key: built.proposal.baseSpecVersionId,
       p_base_content_hash: built.proposal.baseSpecContentHash,

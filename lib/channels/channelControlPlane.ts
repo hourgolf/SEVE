@@ -415,6 +415,7 @@ export interface WorkerChannelProjection {
   priority: number;
   entryDte: number;
   strikeOffset: number;
+  maxEntriesPerSession: number;
   quantity: number;
   premiumCap: number;
   aggregateDebitCap: number;
@@ -427,6 +428,35 @@ export interface WorkerChannelProjection {
   accountId: string;
   channelSpecVersionId: string;
   channelSpecContentHash: string;
+}
+
+/**
+ * RC5.4 specifications predate the numeric re-entry cap. Missing values retain
+ * the sealed one-entry behavior without changing their semantic content hash.
+ * Bounded re-entry must be explicit and is capped at three entries per session.
+ */
+export function maxEntriesPerSessionForSpec(
+  spec: Pick<ChannelSpecVersion, "entryParameters" | "reentryPolicy">,
+): number | null {
+  const raw = spec.entryParameters.maxEntriesPerSession;
+  if (raw == null) return spec.reentryPolicy === "disabled" ? 1 : null;
+  if (!Number.isInteger(raw)) return null;
+  const value = Number(raw);
+  if (spec.reentryPolicy === "disabled") return value === 1 ? 1 : null;
+  return value >= 2 && value <= 3 ? value : null;
+}
+
+export function projectAdmissionPolicyReentry(
+  policies: readonly AdmissionPolicySpec[],
+  specs: readonly Pick<ChannelSpecVersionDraft, "collisionDomain" | "reentryPolicy">[],
+): AdmissionPolicySpec[] {
+  return policies.map((policy) => ({
+    ...policy,
+    reentry: specs.some((spec) =>
+      spec.collisionDomain === policy.id && spec.reentryPolicy === "bounded")
+      ? "bounded"
+      : "disabled",
+  }));
 }
 
 export interface DashboardChannelProjection extends WorkerChannelProjection {
@@ -550,11 +580,14 @@ function compileValidation(
     }
   }
 
-  const compatibilityErrors = specs.filter((spec) =>
-    (spec.reentryPolicy === "disabled" && spec.scalePolicy.adds !== 0)
-    || (spec.scalePolicy.pyramiding === "disabled" && spec.scalePolicy.adds !== 0)
-    || policies.get(spec.collisionDomain)?.reentry !== spec.reentryPolicy,
-  ).map((spec) => `${spec.slug}:reentry_scale_conflict`);
+  const compatibilityErrors = specs.filter((spec) => {
+    const policy = policies.get(spec.collisionDomain);
+    const maxEntries = maxEntriesPerSessionForSpec(spec);
+    return maxEntries == null
+      || (spec.reentryPolicy === "disabled" && spec.scalePolicy.adds !== 0)
+      || (spec.scalePolicy.pyramiding === "disabled" && spec.scalePolicy.adds !== 0)
+      || (policy?.reentry === "disabled" && spec.reentryPolicy !== "disabled");
+  }).map((spec) => `${spec.slug}:reentry_scale_conflict`);
 
   for (const spec of specs) {
     const ratchet = spec.ratchetParameters;
@@ -661,6 +694,7 @@ export function compileReleaseManifest(
     priority: spec.priority,
     entryDte: Number(spec.entryParameters.entryDte),
     strikeOffset: Number(spec.entryParameters.strikeOffset),
+    maxEntriesPerSession: maxEntriesPerSessionForSpec(spec) ?? 0,
     quantity: spec.quantity,
     premiumCap: Number(spec.entryParameters.premiumCap),
     aggregateDebitCap: spec.maxDebitUsd,
@@ -790,7 +824,17 @@ export function projectActiveVersusDraft(
       issues.push(gate("schema", "block", `proposal:forbidden_field:${String(field)}`, `${String(field)} cannot be changed by proposal.`));
       continue;
     }
-    const required = FIELD_CLASS[field] ?? "code-strategy-logic";
+    let required = FIELD_CLASS[field] ?? "code-strategy-logic";
+    if (field === "entryParameters") {
+      const proposed = proposal.proposedPatch.entryParameters;
+      if (proposed && typeof proposed === "object" && !Array.isArray(proposed)) {
+        const { maxEntriesPerSession: _activeLimit, ...activeRest } = active.entryParameters;
+        const { maxEntriesPerSession: _proposedLimit, ...proposedRest } = proposed;
+        if (canonicalJson(activeRest) === canonicalJson(proposedRest)) {
+          required = "governed-operational-policy";
+        }
+      }
+    }
     if (CHANGE_CLASS_RANK[proposal.changeClass] < CHANGE_CLASS_RANK[required]) {
       issues.push(gate("schema", "block", `proposal:change_class:${String(field)}`, `${String(field)} requires ${required}; ${proposal.changeClass} is insufficient.`));
     }
@@ -807,6 +851,10 @@ export function projectActiveVersusDraft(
     status: "draft",
   };
   delete (draftInput as Partial<ChannelSpecVersion>).contentHash;
+  const previewSpecs = compiled.channelSpecs.map((spec): ChannelSpecVersionDraft => {
+    const { contentHash: _contentHash, ...withoutHash } = spec;
+    return spec.id === active.id ? draftInput : withoutHash;
+  });
   const previewManifest = compileReleaseManifest({
     ...compiled.manifest,
     id: `${compiled.manifest.id}:preview:${proposal.id}`,
@@ -815,10 +863,11 @@ export function projectActiveVersusDraft(
     createdBy: `${proposal.authorKind}:${proposal.authorId}`,
     parentManifestId: compiled.manifest.id,
     status: "draft",
-    channelSpecs: compiled.channelSpecs.map((spec): ChannelSpecVersionDraft => {
-      const { contentHash: _contentHash, ...withoutHash } = spec;
-      return spec.id === active.id ? draftInput : withoutHash;
-    }),
+    channelSpecs: previewSpecs,
+    admissionPolicies: projectAdmissionPolicyReentry(
+      compiled.manifest.admissionPolicies,
+      previewSpecs,
+    ),
   }, readiness);
   const draftSpec = previewManifest.channelSpecs.find((spec) => spec.id === proposal.proposedSpecVersionId) ?? null;
   const diffs = fields.map((field) => ({

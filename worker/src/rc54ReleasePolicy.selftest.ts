@@ -413,4 +413,48 @@ check("unknown-account desk truth consumes both isolated domains",
   unknownAccountOccupancy.open.map((row) => row.domainId),
   [RC54_CONTROL_DOMAIN, RC54_LAB_DOMAIN]);
 
+const pbRoot = RC54_ROOTS.find((root) => root.slug === "pb-ride")!;
+const sessionRow = (
+  id: string,
+  opportunityId: string,
+  runnerOf: string | null,
+) => ({
+  id,
+  strategist_id: pbRoot.strategistId,
+  occ_symbol: "SPY260727C00740000",
+  underlying: "SPY",
+  opt_type: "call" as const,
+  qty: 1,
+  avg_entry_price: 1,
+  strike: 740,
+  expiration: "2026-07-27",
+  opened_at: "2026-07-27T14:00:00Z",
+  status: "closed" as const,
+  peak_mark: 1,
+  trough_mark: 1,
+  runner_of: runnerOf,
+  entry_features: { opportunity_id: opportunityId },
+});
+const logicalSessionEntries = buildRc54AdmissionOccupancy({
+  openPositions: [],
+  sessionPositions: [
+    sessionRow("position:one", "opportunity:one", null),
+    sessionRow("position:one:runner", "opportunity:one", "position:one"),
+    sessionRow("position:two", "opportunity:two", null),
+  ],
+  channelById: new Map([[
+    pbRoot.strategistId,
+    { slug: pbRoot.slug, underlying: pbRoot.underlying },
+  ]]),
+  accountIdByStrategist: new Map([[pbRoot.strategistId, pbRoot.accountId]]),
+  brokerPositions: [],
+  pendingOrders: [],
+});
+check("session occupancy preserves immutable logical entry ids for runner de-duplication",
+  logicalSessionEntries.sessionEntries, [
+    { domainId: pbRoot.domainId, familyId: pbRoot.familyId, entryId: "opportunity:one" },
+    { domainId: pbRoot.domainId, familyId: pbRoot.familyId, entryId: "opportunity:one" },
+    { domainId: pbRoot.domainId, familyId: pbRoot.familyId, entryId: "opportunity:two" },
+  ]);
+
 console.log(`rc54-release-policy-selftest: ${checks}/${checks} PASS`);

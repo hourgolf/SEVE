@@ -155,6 +155,7 @@ export interface Rc54AdmissionRoot {
   domainId: string;
   familyId: string;
   underlying: string;
+  maxEntriesPerSession: number;
   quantity: number;
   premiumCap: number;
   aggregateDebitCap: number;
@@ -185,6 +186,7 @@ function sealedRc54AdmissionRoot(slug: string): Readonly<Rc54AdmissionRoot> | nu
     domainId: root.domainId,
     familyId: root.familyId,
     underlying: root.underlying,
+    maxEntriesPerSession: 1,
     quantity: root.quantity,
     premiumCap: root.premiumCap,
     aggregateDebitCap: root.aggregateDebitCap,
@@ -584,7 +586,17 @@ export function buildRc54AdmissionOccupancy(input: {
   for (const row of input.sessionPositions) {
     const channel = input.channelById.get(row.strategist_id);
     const root = channel ? rc54Root(channel.slug) : null;
-    if (root) sessionEntries.push({ domainId: root.domainId, familyId: root.familyId });
+    if (root) {
+      const opportunityId = typeof row.entry_features?.opportunity_id === "string"
+        && row.entry_features.opportunity_id.trim()
+        ? row.entry_features.opportunity_id.trim()
+        : row.runner_of ?? row.id;
+      sessionEntries.push({
+        domainId: root.domainId,
+        familyId: root.familyId,
+        entryId: opportunityId,
+      });
+    }
   }
 
   for (const broker of input.brokerPositions) {
@@ -1016,6 +1028,7 @@ export function finalizeRc54ReleaseAdmissions(input: {
   globalOrderFailureAccountIds?: readonly string[];
   posture?: Rc54ArbitrationPosture;
   rootResolver?: Rc54AdmissionRootResolver;
+  admissionPolicies?: readonly AdmissionDomainPolicy[];
 }): Rc54PreparedDecision[] {
   const posture = input.posture ?? "paper-executor";
   const state = buildAdmissionDomainsState({
@@ -1030,6 +1043,7 @@ export function finalizeRc54ReleaseAdmissions(input: {
       familyId: root?.familyId ?? "unknown",
       underlying: root?.underlying ?? "",
       sourceBarAtMs: row.sourceBarAtMs,
+      maxEntriesPerSession: root?.maxEntriesPerSession ?? 0,
       decision: row.decision.action === "enter" && !row.decision.blocked
         && posture === "paper-executor" && row.executionEligible === false
         ? block(row.decision, row.executionIneligibleReason ?? "rc54_execution_ineligible")
@@ -1038,10 +1052,12 @@ export function finalizeRc54ReleaseAdmissions(input: {
   });
   const finalized = finalizeAdmissionDomains({
     candidates,
-    policies: new Map([
-      [RC54_CONTROL_DOMAIN, RC54_CONTROL_ADMISSION_POLICY],
-      [RC54_LAB_DOMAIN, RC54_LAB_ADMISSION_POLICY],
-    ]),
+    policies: new Map(
+      (input.admissionPolicies ?? [
+        RC54_CONTROL_ADMISSION_POLICY,
+        RC54_LAB_ADMISSION_POLICY,
+      ]).map((policy) => [policy.id, policy]),
+    ),
     state,
     globalPositionTruthComplete: posture === "shadow-counterfactual"
       ? true
