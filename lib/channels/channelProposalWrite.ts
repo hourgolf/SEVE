@@ -27,13 +27,16 @@ const BOUNDED_PATCH_KEYS = new Set([
   "stopLoss",
   "riskLimits",
 ]);
+const REENTRY_PATCH_KEYS = new Set(["maxEntriesPerSession"]);
 const MAX_PATCH_BYTES = 16_384;
 const MAX_EVIDENCE_REFS = 32;
 
 export interface OperatorProposalRequest {
   baseSpecVersionId: string;
   baseSpecContentHash: string;
-  proposedPatch: ChannelChangeProposal["proposedPatch"];
+  proposedPatch: ChannelChangeProposal["proposedPatch"] & {
+    maxEntriesPerSession?: number;
+  };
   reason: string;
   evidenceRefs: string[];
   changeClass: ChangeClass;
@@ -81,9 +84,30 @@ function requireExactKeys(value: Record<string, unknown>, expected: string[], fi
   }
 }
 
-function validateBoundedPatch(patch: Record<string, unknown>): void {
+function validateProposalPatch(
+  patch: Record<string, unknown>,
+  changeClass: unknown,
+): void {
   const fields = Object.keys(patch);
-  if (!fields.length) throw new ProposalInputError("proposedPatch must contain at least one bounded field");
+  if (!fields.length) throw new ProposalInputError("proposedPatch must contain at least one supported field");
+  if (changeClass === "governed-operational-policy") {
+    const unknown = fields.filter((field) => !REENTRY_PATCH_KEYS.has(field));
+    if (unknown.length) {
+      throw new ProposalInputError(`unsupported governed proposal fields: ${unknown.sort().join(", ")}`);
+    }
+    if (fields.length !== 1
+        || !Number.isInteger(patch.maxEntriesPerSession)
+        || Number(patch.maxEntriesPerSession) < 1
+        || Number(patch.maxEntriesPerSession) > 3) {
+      throw new ProposalInputError("maxEntriesPerSession must be an integer from 1 to 3");
+    }
+    return;
+  }
+  if (changeClass !== "bounded-parameter") {
+    throw new ProposalInputError(
+      "this write slice accepts bounded-parameter or governed re-entry proposals only",
+    );
+  }
   const unknown = fields.filter((field) => !BOUNDED_PATCH_KEYS.has(field));
   if (unknown.length) {
     throw new ProposalInputError(`unsupported proposal fields: ${unknown.sort().join(", ")}`);
@@ -169,18 +193,15 @@ export function parseOperatorProposalRequest(value: unknown): OperatorProposalRe
   if (typeof value.reason !== "string" || value.reason.trim().length < 8 || value.reason.trim().length > 2_000) {
     throw new ProposalInputError("reason must contain 8 to 2000 characters");
   }
-  if (value.changeClass !== "bounded-parameter") {
-    throw new ProposalInputError("this write slice accepts bounded-parameter proposals only");
-  }
-  validateBoundedPatch(value.proposedPatch);
+  validateProposalPatch(value.proposedPatch, value.changeClass);
 
   return {
     baseSpecVersionId: value.baseSpecVersionId,
     baseSpecContentHash: value.baseSpecContentHash,
-    proposedPatch: value.proposedPatch as ChannelChangeProposal["proposedPatch"],
+    proposedPatch: value.proposedPatch as OperatorProposalRequest["proposedPatch"],
     reason: value.reason.trim(),
     evidenceRefs: parseEvidenceRefs(value.evidenceRefs),
-    changeClass: value.changeClass,
+    changeClass: value.changeClass as ChangeClass,
   };
 }
 
@@ -196,13 +217,29 @@ export function buildOperatorProposal(
   if (!Number.isFinite(Date.parse(createdAt))) throw new ProposalInputError("server proposal timestamp is invalid", 409);
 
   const input = parseOperatorProposalRequest(value);
+  const baseSpec = active.channelSpecs.find((spec) =>
+    spec.id === input.baseSpecVersionId);
+  if (!baseSpec) {
+    throw new ProposalInputError("proposal base specification is missing", 422);
+  }
+  const requestedLimit = input.proposedPatch.maxEntriesPerSession;
+  const proposedPatch: ChannelChangeProposal["proposedPatch"] =
+    requestedLimit == null
+      ? input.proposedPatch
+      : {
+        reentryPolicy: requestedLimit === 1 ? "disabled" : "bounded",
+        entryParameters: {
+          ...baseSpec.entryParameters,
+          maxEntriesPerSession: requestedLimit,
+        },
+      };
   const proposal: ChannelChangeProposal = {
     schemaVersion: CHANNEL_CONTROL_PLANE_SCHEMA_VERSION,
     id: requestId.toLowerCase(),
     baseSpecVersionId: input.baseSpecVersionId,
     baseSpecContentHash: input.baseSpecContentHash,
     proposedSpecVersionId: `spec:draft:${requestId.toLowerCase()}`,
-    proposedPatch: input.proposedPatch,
+    proposedPatch,
     reason: input.reason,
     evidenceRefs: input.evidenceRefs,
     authorKind: "operator",

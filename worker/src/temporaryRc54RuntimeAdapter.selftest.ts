@@ -10,6 +10,7 @@ import {
   RC54_ROOTS,
 } from "./rc54ReleasePolicy.js";
 import {
+  buildReceiptBoundRc54AdmissionPolicies,
   buildReceiptBoundRc54AdmissionRootResolver,
   receiptBoundRc54CandidateIdentity,
   receiptBoundRc54ConfigurationWriteStamp,
@@ -145,6 +146,46 @@ check("receipt-bound quantity drives admission without changing topology", () =>
     (decision?.detail?.rc54Candidate as Record<string, unknown>)
       ?.configurationSha256,
     runtime.manifestContentHash.replace(/^sha256:/, ""),
+  );
+});
+
+check("receipt-bound bounded re-entry changes only the reviewed sequential-entry seam", () => {
+  const target = runtime.roots.find((root) => root.slug === "pb-ride");
+  assert.ok(target);
+  const bounded = {
+    ...runtime,
+    roots: runtime.roots.map((root) => root.slug === target.slug
+      ? {
+        ...root,
+        reentryPolicy: "bounded" as const,
+        maxEntriesPerSession: 3,
+      }
+      : root),
+    admissionPolicies: runtime.admissionPolicies.map((policy) =>
+      policy.id === target.domainId
+        ? { ...policy, reentry: "bounded" as const }
+        : policy),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.deepEqual(validateReceiptBoundRc54Topology(bounded), []);
+  assert.equal(
+    buildReceiptBoundRc54AdmissionRootResolver(bounded)(target.slug)
+      ?.maxEntriesPerSession,
+    3,
+  );
+  assert.equal(
+    buildReceiptBoundRc54AdmissionPolicies(bounded)
+      .find((policy) => policy.id === target.domainId)?.reentry,
+    "allowed",
+  );
+  const invalid = {
+    ...bounded,
+    roots: bounded.roots.map((root) => root.slug === target.slug
+      ? { ...root, maxEntriesPerSession: 4 }
+      : root),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.ok(
+    validateReceiptBoundRc54Topology(invalid)
+      .includes(`temporary_rc54_adapter:${target.slug}:reentry`),
   );
 });
 

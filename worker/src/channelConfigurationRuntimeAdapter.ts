@@ -1,5 +1,6 @@
 import type {
   ActivationReceipt,
+  AdmissionPolicySpec,
   ChannelScalePolicy,
   CompiledReleaseManifest,
   WorkerChannelProjection,
@@ -23,7 +24,7 @@ import {
 } from "./receiptBoundEntryPolicy.js";
 
 export const CHANNEL_CONFIGURATION_RUNTIME_ADAPTER_VERSION =
-  "channel-configuration-runtime-adapter-v1" as const;
+  "channel-configuration-runtime-adapter-v2" as const;
 
 export interface ReceiptBoundRuntimeRoot extends WorkerChannelProjection {
   configuration: Readonly<ConfigurationEpochIdentity>;
@@ -46,6 +47,7 @@ export interface ReceiptBoundRuntimeConfiguration {
   activatedAt: string;
   paperOnly: true;
   roots: ReadonlyArray<Readonly<ReceiptBoundRuntimeRoot>>;
+  admissionPolicies: ReadonlyArray<Readonly<AdmissionPolicySpec>>;
   databaseIdentityState: "verified" | "simulation-only";
   configurationAuthority: "receipt-bound-new-entry-only";
   historicalMutationAuthorized: false;
@@ -153,6 +155,7 @@ export function buildReceiptBoundRuntimeConfiguration(input: {
     activatedAt: receipt.activatedAt,
     paperOnly: true,
     roots,
+    admissionPolicies: input.compiled.workerProjection.admissionPolicies,
     databaseIdentityState: input.databaseIdentity
       ? "verified"
       : "simulation-only",

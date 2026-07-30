@@ -56,6 +56,72 @@ check("manifest content hash is pinned", () => {
   assert.equal(compiled.manifest.contentHash, EXPECTED_MANIFEST_HASH);
 });
 
+check("legacy RC5.4 specifications retain one-entry projection without hash drift", () => {
+  assert.equal(compiled.workerProjection.roots.every((root) =>
+    root.maxEntriesPerSession === 1), true);
+  assert.equal(compiled.manifest.contentHash, EXPECTED_MANIFEST_HASH);
+});
+
+check("a mixed domain supports explicit bounded re-entry without changing single-shot roots", () => {
+  const result = compileReleaseManifest({
+    ...RC54_CONTROL_PLANE_FIXTURE,
+    channelSpecs: RC54_CONTROL_PLANE_FIXTURE.channelSpecs.map((spec) =>
+      spec.slug === "pb-ride"
+        ? {
+          ...spec,
+          reentryPolicy: "bounded" as const,
+          entryParameters: {
+            ...spec.entryParameters,
+            maxEntriesPerSession: 3,
+          },
+        }
+        : spec),
+    admissionPolicies: RC54_CONTROL_PLANE_FIXTURE.admissionPolicies.map((policy) =>
+      policy.id === "rc54-control"
+        ? { ...policy, reentry: "bounded" as const }
+        : policy),
+  });
+  assert.equal(
+    result.validationResults.find((gate) => gate.gate === "reentry-scaling")?.state,
+    "pass",
+  );
+  assert.equal(
+    result.workerProjection.roots.find((root) => root.slug === "pb-ride")
+      ?.maxEntriesPerSession,
+    3,
+  );
+  assert.equal(
+    result.workerProjection.roots.find((root) => root.slug === "momo-shape")
+      ?.maxEntriesPerSession,
+    1,
+  );
+});
+
+check("bounded re-entry fails closed without a valid two-to-three entry cap", () => {
+  const result = compileReleaseManifest({
+    ...RC54_CONTROL_PLANE_FIXTURE,
+    channelSpecs: RC54_CONTROL_PLANE_FIXTURE.channelSpecs.map((spec) =>
+      spec.slug === "pb-ride"
+        ? {
+          ...spec,
+          reentryPolicy: "bounded" as const,
+          entryParameters: {
+            ...spec.entryParameters,
+            maxEntriesPerSession: 4,
+          },
+        }
+        : spec),
+    admissionPolicies: RC54_CONTROL_PLANE_FIXTURE.admissionPolicies.map((policy) =>
+      policy.id === "rc54-control"
+        ? { ...policy, reentry: "bounded" as const }
+        : policy),
+  });
+  assert.equal(
+    result.validationResults.find((gate) => gate.gate === "reentry-scaling")?.state,
+    "block",
+  );
+});
+
 check("manifest hash is stable across source array order", () => {
   const reversed = compileReleaseManifest({
     ...RC54_CONTROL_PLANE_FIXTURE,

@@ -4,6 +4,7 @@ import {
   canonicalJson,
   compileReleaseManifest,
   contentHash,
+  projectAdmissionPolicyReentry,
   projectActiveVersusDraft,
   type ActivationReceipt,
   type ChannelChangeProposal,
@@ -188,6 +189,10 @@ export function buildShadowActivationCandidate(input: {
       activationAuthorized: false,
     });
   }
+  const channelSpecs = input.active.channelSpecs.map((spec) =>
+    spec.id === preview.activeSpec?.id
+      ? withoutContentHash(preview.draftSpec as ChannelSpecVersion)
+      : withoutContentHash(spec));
   const draft: ReleaseManifestDraft = {
     ...input.active.manifest,
     id: `manifest:candidate:${input.proposal.id}`,
@@ -197,10 +202,11 @@ export function buildShadowActivationCandidate(input: {
     createdBy: `${input.proposal.authorKind}:${input.proposal.authorId}`,
     createdAt: input.proposal.createdAt,
     status: "draft",
-    channelSpecs: input.active.channelSpecs.map((spec) =>
-      spec.id === preview.activeSpec?.id
-        ? withoutContentHash(preview.draftSpec as ChannelSpecVersion)
-        : withoutContentHash(spec)),
+    channelSpecs,
+    admissionPolicies: projectAdmissionPolicyReentry(
+      input.active.manifest.admissionPolicies,
+      channelSpecs,
+    ),
   };
   const compiled = compileReleaseManifest(draft, input.readiness);
   const proposalResults = preview.validationResults.filter((result) => result.code.startsWith("proposal:"));

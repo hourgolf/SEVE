@@ -11,6 +11,8 @@ import type {
 } from "./channelConfigurationRuntimeAdapter.js";
 
 export const RECEIPT_BOUND_ENTRY_POLICY_VERSION =
+  "receipt-bound-entry-policy-v2" as const;
+export const LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION =
   "receipt-bound-entry-policy-v1" as const;
 export const RECEIPT_BOUND_ENTRY_POLICY_FIELD =
   "receipt_bound_entry_policy" as const;
@@ -18,7 +20,8 @@ export const RECEIPT_BOUND_ENTRY_POLICY_FIELD =
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
 
 export interface ReceiptBoundEntryPolicy {
-  policyVersion: typeof RECEIPT_BOUND_ENTRY_POLICY_VERSION;
+  policyVersion: typeof RECEIPT_BOUND_ENTRY_POLICY_VERSION
+    | typeof LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION;
   configuration: Readonly<ConfigurationEpochIdentity>;
   quantity: number;
   premiumCap: number;
@@ -28,6 +31,8 @@ export interface ReceiptBoundEntryPolicy {
   ratchetParameters: Readonly<ChannelRatchetPolicy>;
   managerProfileId: string;
   managerVersion: string;
+  reentryPolicy?: "disabled" | "bounded";
+  maxEntriesPerSession?: number;
   historicalMutationAuthorized: false;
 }
 
@@ -130,6 +135,8 @@ export function buildReceiptBoundEntryPolicy(
     ratchetParameters: root.ratchetParameters,
     managerProfileId: root.managerProfileId,
     managerVersion: root.configuration.managerVersion,
+    reentryPolicy: root.reentryPolicy,
+    maxEntriesPerSession: root.maxEntriesPerSession,
     historicalMutationAuthorized: false,
   };
   const parsed = parseReceiptBoundEntryPolicy(policy);
@@ -150,7 +157,10 @@ export function parseReceiptBoundEntryPolicy(
 ): Readonly<ReceiptBoundEntryPolicy> | null {
   const row = record(value);
   if (!row
-      || row.policyVersion !== RECEIPT_BOUND_ENTRY_POLICY_VERSION
+      || ![
+        RECEIPT_BOUND_ENTRY_POLICY_VERSION,
+        LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION,
+      ].includes(row.policyVersion as typeof RECEIPT_BOUND_ENTRY_POLICY_VERSION)
       || !validConfiguration(row.configuration)
       || !Number.isInteger(row.quantity)
       || Number(row.quantity) < 1
@@ -165,6 +175,15 @@ export function parseReceiptBoundEntryPolicy(
       || !validRatchet(row.ratchetParameters)
       || row.managerProfileId !== row.configuration.managerProfileId
       || row.managerVersion !== row.configuration.managerVersion
+      || (row.policyVersion === RECEIPT_BOUND_ENTRY_POLICY_VERSION
+        && (!["disabled", "bounded"].includes(String(row.reentryPolicy))
+          || !Number.isInteger(row.maxEntriesPerSession)
+          || Number(row.maxEntriesPerSession) < 1
+          || Number(row.maxEntriesPerSession) > 3
+          || (row.reentryPolicy === "disabled" && row.maxEntriesPerSession !== 1)
+          || (row.reentryPolicy === "bounded" && Number(row.maxEntriesPerSession) < 2)))
+      || (row.policyVersion === LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION
+        && (row.reentryPolicy !== undefined || row.maxEntriesPerSession !== undefined))
       || row.historicalMutationAuthorized !== false) {
     return null;
   }

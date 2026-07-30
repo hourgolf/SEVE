@@ -4,11 +4,14 @@ import {
   rc54ManagerStampPresent,
 } from "./rc54ManagerPolicy.js";
 import {
+  RC54_CONTROL_ADMISSION_POLICY,
+  RC54_LAB_ADMISSION_POLICY,
   RC54_ROOTS,
   type Rc54AdmissionCandidateIdentity,
   type Rc54AdmissionRoot,
   type Rc54AdmissionRootResolver,
 } from "./rc54ReleasePolicy.js";
+import type { AdmissionDomainPolicy } from "./admissionDomainModel.js";
 import {
   RELEASE_EVIDENCE_CONTEXT_SCHEMA_VERSION,
   type ReleaseEvidenceContext,
@@ -26,7 +29,7 @@ import {
 import type { ChannelConfig, PositionRow } from "./store.js";
 
 export const TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION =
-  "temporary-rc54-runtime-adapter-v1" as const;
+  "temporary-rc54-runtime-adapter-v2" as const;
 
 const SHA256 = /^sha256:([0-9a-f]{64})$/i;
 
@@ -36,8 +39,9 @@ function uniqueSorted(values: readonly string[]): string[] {
 
 /**
  * RC5.4 remains the temporary topology and admission adapter. Only the bounded
- * economics represented by a receipt-bound root may vary. A topology, route,
- * re-entry, or scaling change requires a different reviewed adapter.
+ * economics and bounded sequential re-entry represented by a receipt-bound
+ * root may vary. A topology, route, scaling, or concurrency change requires a
+ * different reviewed adapter.
  */
 export function validateReceiptBoundRc54Topology(
   runtime: Readonly<ReceiptBoundRuntimeConfiguration>,
@@ -80,7 +84,12 @@ export function validateReceiptBoundRc54Topology(
         errors.push(`temporary_rc54_adapter:${expected.slug}:${field}`);
       }
     }
-    if (root.reentryPolicy !== "disabled") {
+    if (root.reentryPolicy === "disabled" && root.maxEntriesPerSession !== 1) {
+      errors.push(`temporary_rc54_adapter:${expected.slug}:reentry`);
+    } else if (root.reentryPolicy === "bounded"
+        && (!Number.isInteger(root.maxEntriesPerSession)
+          || root.maxEntriesPerSession < 2
+          || root.maxEntriesPerSession > 3)) {
       errors.push(`temporary_rc54_adapter:${expected.slug}:reentry`);
     }
     if (root.scalePolicy.adds !== 0
@@ -104,6 +113,7 @@ function admissionRootFromReceipt(
     domainId: root.domainId,
     familyId: root.familyId,
     underlying: root.underlying,
+    maxEntriesPerSession: root.maxEntriesPerSession,
     quantity: root.quantity,
     premiumCap: root.premiumCap,
     aggregateDebitCap: root.aggregateDebitCap,
@@ -115,6 +125,70 @@ function admissionRootFromReceipt(
     runnerKind: root.ratchetParameters.kind,
     configurationEpochId: root.configuration.configurationEpochId,
   });
+}
+
+export function buildReceiptBoundRc54AdmissionPolicies(
+  runtime: Readonly<ReceiptBoundRuntimeConfiguration>,
+): readonly Readonly<AdmissionDomainPolicy>[] {
+  const topologyErrors = validateReceiptBoundRc54Topology(runtime);
+  if (topologyErrors.length) throw new Error(topologyErrors.join(";"));
+  const sealedById = new Map([
+    [RC54_CONTROL_ADMISSION_POLICY.id, RC54_CONTROL_ADMISSION_POLICY],
+    [RC54_LAB_ADMISSION_POLICY.id, RC54_LAB_ADMISSION_POLICY],
+  ]);
+  const errors: string[] = [];
+  const policies = runtime.admissionPolicies.map((observed) => {
+    const sealed = sealedById.get(observed.id);
+    if (!sealed) {
+      errors.push(`temporary_rc54_adapter:admission_policy_unexpected:${observed.id}`);
+      return null;
+    }
+    for (const [field, actual, expected] of [
+      ["enabled", observed.enabledForNewEntries, sealed.enabledForNewEntries],
+      ["family", observed.maxOpenPerFamily, sealed.maxOpenPerFamily],
+      ["global", observed.maxOpenGlobal, sealed.maxOpenGlobal],
+      ["same_occ", observed.sameOccOpenMax, sealed.sameOccOpenMax],
+      ["cross_domain_occ", observed.crossDomainSameOcc, sealed.crossDomainSameOcc],
+    ] as const) {
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        errors.push(`temporary_rc54_adapter:${observed.id}:admission_${field}`);
+      }
+    }
+    for (const [field, actual, expected] of [
+      ["underlying", observed.maxOpenByUnderlying, sealed.maxOpenByUnderlying],
+      ["clock", observed.sameClockMaxByUnderlying, sealed.sameClockMaxByUnderlying],
+      ["priority", observed.priorityBySlug, sealed.priorityBySlug],
+    ] as const) {
+      if (JSON.stringify(
+        Object.fromEntries(Object.entries(actual).sort()),
+      ) !== JSON.stringify(
+        Object.fromEntries(Object.entries(expected).sort()),
+      )) {
+        errors.push(`temporary_rc54_adapter:${observed.id}:admission_${field}`);
+      }
+    }
+    return Object.freeze({
+      ...observed,
+      reentry: observed.reentry === "bounded" ? "allowed" : "disabled",
+    }) as Readonly<AdmissionDomainPolicy>;
+  }).filter((policy): policy is Readonly<AdmissionDomainPolicy> => policy !== null);
+  if (policies.length !== sealedById.size) {
+    errors.push(`temporary_rc54_adapter:admission_policy_count:${policies.length}:${sealedById.size}`);
+  }
+  for (const id of sealedById.keys()) {
+    if (!policies.some((policy) => policy.id === id)) {
+      errors.push(`temporary_rc54_adapter:admission_policy_missing:${id}`);
+    }
+  }
+  for (const policy of policies) {
+    const boundedRootPresent = runtime.roots.some((root) =>
+      root.domainId === policy.id && root.reentryPolicy === "bounded");
+    if ((policy.reentry === "allowed") !== boundedRootPresent) {
+      errors.push(`temporary_rc54_adapter:${policy.id}:admission_reentry`);
+    }
+  }
+  if (errors.length) throw new Error(uniqueSorted(errors).join(";"));
+  return Object.freeze(policies);
 }
 
 export function buildReceiptBoundRc54AdmissionRootResolver(

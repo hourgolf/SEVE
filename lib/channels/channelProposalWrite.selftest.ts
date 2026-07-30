@@ -87,7 +87,44 @@ check("the first server write slice rejects governed and code-level classes", ()
   expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
     changeClass: "code-strategy-logic",
-  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /bounded-parameter proposals only/);
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /bounded-parameter or governed re-entry proposals only/);
+});
+
+check("governed re-entry request expands into one exact reviewed spec patch", () => {
+  const built = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: { maxEntriesPerSession: 3 },
+    reason: "Allow three sequential ORB entries while preserving collision caps.",
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.equal(built.proposal.changeClass, "governed-operational-policy");
+  assert.equal(built.draftSpec.reentryPolicy, "bounded");
+  assert.equal(built.draftSpec.entryParameters.maxEntriesPerSession, 3);
+  assert.deepEqual(built.proposal.proposedPatch, {
+    reentryPolicy: "bounded",
+    entryParameters: {
+      ...orb.entryParameters,
+      maxEntriesPerSession: 3,
+    },
+  });
+  assert.equal(
+    built.preview.validationResults.find((result) =>
+      result.gate === "reentry-scaling")?.state,
+    "pass",
+  );
+});
+
+check("governed re-entry rejects out-of-range caps and unrelated fields", () => {
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: { maxEntriesPerSession: 4 },
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /integer from 1 to 3/);
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: { maxEntriesPerSession: 3, quantity: 3 },
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported governed proposal fields: quantity/);
 });
 
 check("semantic no-op is rejected", () => {
@@ -115,11 +152,32 @@ check("server route authenticates before opening the service-role write seam", (
     import.meta.url,
   ), "utf8");
   assert.ok(route.indexOf("await requireDeskOperator(req)") < route.indexOf("createClient(SB_URL, SB_SERVICE"));
-  assert.match(route, /\.rpc\("create_channel_change_proposal_draft"/);
+  assert.match(route, /"create_channel_change_proposal_draft"/);
+  assert.match(route, /"create_channel_reentry_proposal_draft"/);
+  assert.match(route, /sb\.rpc\(proposalFunction/);
   assert.match(route, /Idempotency-Key/);
   assert.match(route, /activationAuthorized: false/);
   assert.doesNotMatch(route, /\.from\("channel_change_proposals"\)\.insert/);
   assert.doesNotMatch(route, /export async function (PUT|PATCH|DELETE)/);
+});
+
+check("governed re-entry migration is isolated, idempotent, and activation-dark", () => {
+  const sql = readFileSync(new URL(
+    "../../supabase/migrations/20260729223000_channel_reentry_proposal_server_write.sql",
+    import.meta.url,
+  ), "utf8");
+  assert.match(sql, /^-- Server-only governed re-entry draft creation\./);
+  assert.match(sql, /create or replace function public\.create_channel_reentry_proposal_draft/);
+  assert.match(sql, /pg_advisory_xact_lock/);
+  assert.match(sql, /governed-operational-policy/);
+  assert.match(sql, /exactly reentryPolicy and entryParameters/);
+  assert.match(sql, /requested_limit < 1 or requested_limit > 3/);
+  assert.match(sql, /entry_parameters - 'maxEntriesPerSession'/);
+  assert.match(sql, /'draft',\s+'next-safe-entry', false/);
+  assert.match(sql, /grant execute on function public\.create_channel_reentry_proposal_draft[\s\S]+?to service_role;/);
+  assert.doesNotMatch(sql, /insert into public\.activation_receipts/i);
+  assert.doesNotMatch(sql, /update public\.(positions|position_plans|execution_observations)/i);
+  assert.match(sql, /commit;\s*$/);
 });
 
 check("migration is atomic, service-only, idempotent, and activation-dark", () => {

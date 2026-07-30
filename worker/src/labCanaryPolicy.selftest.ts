@@ -195,12 +195,14 @@ const domainCandidate = (
   underlying: string,
   occ: string,
   sourceBarAtMs = 1,
+  maxEntriesPerSession = 1,
 ): DomainAdmissionCandidate => ({
   domainId,
   accountId: domainId === "lab-canary" ? LAB_ACCOUNT_ID : "control-account",
   familyId,
   underlying,
   sourceBarAtMs,
+  maxEntriesPerSession,
   decision: decision(slug, occ),
 });
 
@@ -286,7 +288,11 @@ check("LAB same-clock arbitration is deterministic within its own domain",
 
 const reentryState = buildAdmissionDomainsState({
   open: [],
-  sessionEntries: [{ domainId: "lab-canary", familyId: "SPY-LAB" }],
+  sessionEntries: [{
+    domainId: "lab-canary",
+    familyId: "SPY-LAB",
+    entryId: "entry:one",
+  }],
 });
 const [reentry] = finalizeAdmissionDomains({
   candidates: [domainCandidate("lab-canary", "lab-spy", "SPY-LAB", "SPY", sharedOcc)],
@@ -297,6 +303,97 @@ const [reentry] = finalizeAdmissionDomains({
 });
 check("re-entry remains a versioned policy decision and defaults closed",
   reentry.decision.blocked, "admission_domain_reentry_disabled");
+
+const boundedPolicy = {
+  ...policy("lab-canary", { "lab-spy": 1 }),
+  reentry: "allowed" as const,
+};
+for (const priorEntries of [0, 1, 2]) {
+  const state = buildAdmissionDomainsState({
+    open: [],
+    sessionEntries: Array.from({ length: priorEntries }, (_, index) => ({
+      domainId: "lab-canary",
+      familyId: "SPY-LAB",
+      entryId: `entry:${index + 1}`,
+    })),
+  });
+  const [result] = finalizeAdmissionDomains({
+    candidates: [
+      domainCandidate(
+        "lab-canary",
+        "lab-spy",
+        "SPY-LAB",
+        "SPY",
+        `${sharedOcc.slice(0, -3)}${priorEntries}00`,
+        priorEntries + 10,
+        3,
+      ),
+    ],
+    policies: new Map([["lab-canary", boundedPolicy]]),
+    state,
+    globalPositionTruthComplete: true,
+    globalOrderTruthComplete: true,
+  });
+  check(`bounded entry ${priorEntries + 1} is admitted only while flat`,
+    result.decision.blocked, null);
+}
+
+const threeEntryState = buildAdmissionDomainsState({
+  open: [],
+  sessionEntries: [1, 2, 3].map((index) => ({
+    domainId: "lab-canary",
+    familyId: "SPY-LAB",
+    entryId: `entry:${index}`,
+  })),
+});
+const [fourthEntry] = finalizeAdmissionDomains({
+  candidates: [
+    domainCandidate("lab-canary", "lab-spy", "SPY-LAB", "SPY", sharedOcc, 20, 3),
+  ],
+  policies: new Map([["lab-canary", boundedPolicy]]),
+  state: threeEntryState,
+  globalPositionTruthComplete: true,
+  globalOrderTruthComplete: true,
+});
+check("a fourth sequential entry is blocked",
+  fourthEntry.decision.blocked, "admission_domain_session_entry_limit");
+
+const duplicateLogicalEntryState = buildAdmissionDomainsState({
+  open: [],
+  sessionEntries: [
+    { domainId: "lab-canary", familyId: "SPY-LAB", entryId: "opportunity:one" },
+    { domainId: "lab-canary", familyId: "SPY-LAB", entryId: "opportunity:one" },
+  ],
+});
+check("runner rows count as one logical session entry",
+  duplicateLogicalEntryState.byDomain.get("lab-canary")?.enteredFamilyCount.get("SPY-LAB"),
+  1);
+
+const overlapState = buildAdmissionDomainsState({
+  open: [{
+    domainId: "lab-canary",
+    accountId: LAB_ACCOUNT_ID,
+    familyId: "SPY-LAB",
+    underlying: "SPY",
+    occSymbol: sharedOcc,
+  }],
+  sessionEntries: [{
+    domainId: "lab-canary",
+    familyId: "SPY-LAB",
+    entryId: "entry:one",
+  }],
+});
+const [overlap] = finalizeAdmissionDomains({
+  candidates: [
+    domainCandidate("lab-canary", "lab-spy", "SPY-LAB", "SPY", sharedOcc, 21, 3),
+  ],
+  policies: new Map([["lab-canary", boundedPolicy]]),
+  state: overlapState,
+  globalPositionTruthComplete: true,
+  globalOrderTruthComplete: true,
+});
+check("bounded re-entry never permits overlapping family positions",
+  overlap.decision.blocked, "admission_domain_family_open");
 
 const incompleteTruthState = buildAdmissionDomainsState({ open: [], sessionEntries: [] });
 const [incompleteTruth] = finalizeAdmissionDomains({

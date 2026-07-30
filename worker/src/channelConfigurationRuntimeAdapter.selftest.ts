@@ -114,6 +114,7 @@ check("no-op adapter exactly represents sealed RC5.4 economics", () => {
     assert.equal(root.premiumCap, sealed.premiumCap);
     assert.equal(root.aggregateDebitCap, sealed.aggregateDebitCap);
     assert.equal(root.managerProfileId, sealed.managerProfileId);
+    assert.equal(root.maxEntriesPerSession, 1);
     assert.equal(root.stopLoss.catastrophePct, profile.catastropheStopPct);
     assert.equal(root.takeProfit.targetPct, profile.bankTargetPct);
     assert.equal(root.takeProfit.fraction, profile.runnerFraction);
@@ -162,6 +163,8 @@ check("one reviewed root produces one exact all-or-none database write stamp", (
   assert.deepEqual(stamp.entry_policy.takeProfit, root.takeProfit);
   assert.deepEqual(stamp.entry_policy.stopLoss, root.stopLoss);
   assert.deepEqual(stamp.entry_policy.ratchetParameters, root.ratchetParameters);
+  assert.equal(stamp.entry_policy.reentryPolicy, "disabled");
+  assert.equal(stamp.entry_policy.maxEntriesPerSession, 1);
 });
 
 check("simulation-only runtime cannot produce a database write stamp", () => {

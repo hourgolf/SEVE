@@ -112,12 +112,14 @@ import type {
   ReceiptBoundRuntimeConfiguration,
 } from "./channelConfigurationRuntimeAdapter.js";
 import {
+  buildReceiptBoundRc54AdmissionPolicies,
   buildReceiptBoundRc54AdmissionRootResolver,
   receiptBoundRc54CandidateIdentity,
   receiptBoundRc54ConfigurationWriteStamp,
   receiptBoundRc54ReleaseEvidenceContext,
   validateReceiptBoundRc54RestartRows,
 } from "./temporaryRc54RuntimeAdapter.js";
+import type { AdmissionDomainPolicy } from "./admissionDomainModel.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 const releaseMode = (): boolean => config.day1ReleaseEnabled || config.rc54ReleaseEnabled;
@@ -125,6 +127,8 @@ let releaseStartupReceipt: Record<string, unknown> | null = null;
 let releaseSourceExecutorBoundaryReady = !releaseMode();
 let receiptBoundRuntime: Readonly<ReceiptBoundRuntimeConfiguration> | null = null;
 let receiptBoundAdmissionRootResolver: Rc54AdmissionRootResolver | null = null;
+let receiptBoundAdmissionPolicies:
+  readonly Readonly<AdmissionDomainPolicy>[] | null = null;
 
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
@@ -499,6 +503,8 @@ async function reloadConfig(): Promise<void> {
     let nextReceiptBoundRuntime:
       Readonly<ReceiptBoundRuntimeConfiguration> | null = null;
     let nextReceiptBoundResolver: Rc54AdmissionRootResolver | null = null;
+    let nextReceiptBoundAdmissionPolicies:
+      readonly Readonly<AdmissionDomainPolicy>[] | null = null;
     let channels = config.day1ReleaseEnabled
       ? applyDay1ReleaseFleetOverlay(c.channels)
       : config.rc54ReleaseEnabled
@@ -554,6 +560,8 @@ async function reloadConfig(): Promise<void> {
         nextReceiptBoundRuntime = resolution.runtime;
         nextReceiptBoundResolver =
           buildReceiptBoundRc54AdmissionRootResolver(resolution.runtime);
+        nextReceiptBoundAdmissionPolicies =
+          buildReceiptBoundRc54AdmissionPolicies(resolution.runtime);
         channels = [...resolution.channels];
         releaseStartupReceipt = {
           schemaVersion: 1,
@@ -570,6 +578,11 @@ async function reloadConfig(): Promise<void> {
           temporaryTopologyAdapter: "RC5.4",
           paperOnly: true,
           rootCount: resolution.runtime.roots.length,
+          entryLimits: Object.fromEntries(
+            resolution.runtime.roots
+              .map((root) => [root.slug, root.maxEntriesPerSession])
+              .sort(([left], [right]) => left.localeCompare(right)),
+          ),
           configuredPaperAccountIds: [
             ...new Set(resolution.runtime.roots.map((root) => root.accountId)),
           ].sort(),
@@ -614,6 +627,7 @@ async function reloadConfig(): Promise<void> {
     }
     receiptBoundRuntime = nextReceiptBoundRuntime;
     receiptBoundAdmissionRootResolver = nextReceiptBoundResolver;
+    receiptBoundAdmissionPolicies = nextReceiptBoundAdmissionPolicies;
     cfg = { fund: c.fund, channels, accounts };
   }
   else warn("config: reload returned no fund_state — keeping previous");
@@ -1129,6 +1143,8 @@ async function cycle(trigger: string): Promise<void> {
             posture: live ? "paper-executor" : "shadow-counterfactual",
             rootResolver:
               receiptBoundAdmissionRootResolver ?? undefined,
+            admissionPolicies:
+              receiptBoundAdmissionPolicies ?? undefined,
           });
       let cursor = 0;
       for (const batch of releaseBatches) {
