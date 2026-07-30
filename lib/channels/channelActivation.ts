@@ -196,7 +196,10 @@ export function buildShadowActivationCandidate(input: {
   const draft: ReleaseManifestDraft = {
     ...input.active.manifest,
     id: `manifest:candidate:${input.proposal.id}`,
-    releaseId: `${input.active.manifest.releaseId}:candidate:${input.proposal.id}`,
+    // Candidate release identities must remain bounded across an arbitrary
+    // sequence of one-channel activations. Appending to the parent release id
+    // eventually breaches the 200-character identifier contract.
+    releaseId: `release:candidate:${input.proposal.id}`,
     rollbackTargetManifestId: input.active.manifest.id,
     parentManifestId: input.active.manifest.id,
     createdBy: `${input.proposal.authorKind}:${input.proposal.authorId}`,

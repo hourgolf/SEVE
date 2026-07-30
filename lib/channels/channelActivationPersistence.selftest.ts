@@ -292,6 +292,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const ambiguityCorrection = readFileSync(
+  new URL(
+    "../../supabase/migrations/20260730023000_channel_activation_bridge_qualified_references.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 check("migration creates immutable preview, acknowledgement, and approval receipts", () => {
   for (const table of [
@@ -407,6 +414,37 @@ check("all write RPCs are service-role only", () => {
       new RegExp(`grant execute on function public\\.${fn}\\([\\s\\S]+?\\) to service_role;`),
     );
   }
+});
+
+check("activation bridge qualifies PL/pgSQL output-name collisions", () => {
+  assert.match(
+    migration,
+    /preview_by_proposal\.proposal_id = p_proposal_id/,
+  );
+  assert.match(
+    migration,
+    /acknowledgement_by_worker\.proposal_id = preview\.proposal_id/,
+  );
+  assert.match(
+    migration,
+    /receipt_by_proposal\.proposal_id = p_proposal_id/,
+  );
+  assert.match(
+    migration,
+    /approval_by_proposal\.proposal_id = p_proposal_id/,
+  );
+  assert.match(
+    migration,
+    /preview_by_id\.proposal_id = p_proposal_id/,
+  );
+  assert.match(
+    ambiguityCorrection,
+    /pg_get_functiondef[\s\S]*prepare_channel_change_proposal_preview/,
+  );
+  assert.match(
+    ambiguityCorrection,
+    /pg_get_functiondef[\s\S]*activate_channel_change_proposal/,
+  );
 });
 
 console.log(`channel activation persistence self-test passed (${checks} checks)`);

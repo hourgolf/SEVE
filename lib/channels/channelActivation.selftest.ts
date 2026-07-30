@@ -84,6 +84,11 @@ const readiness: DynamicReadinessEvidence = {
 const candidate = buildShadowActivationCandidate({ active, proposal, readiness });
 assert.ok(candidate.compiled);
 assert.ok(candidate.projection);
+assert.equal(
+  candidate.compiled.manifest.releaseId,
+  `release:candidate:${proposal.id}`,
+);
+assert.ok(candidate.compiled.manifest.releaseId.length <= 200);
 
 const manifestAccountIds = [...new Set(active.channelSpecs.map((spec) => spec.accountId))].sort();
 const configuredAccountIds = [
