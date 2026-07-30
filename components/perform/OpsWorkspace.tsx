@@ -42,7 +42,7 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
         <StateLamp label="LATEST OPTION SNAPSHOT" state={data.lastIngestTs ? "observed" : "missing"} detail={`${localTime(data.lastIngestTs)} · ${data.snapshot.length} contracts · ${data.expirations} expirations`} />
       </div></section>
 
-      <section className="opsw-card"><header><span>03</span><b>MONDAY RELEASE</b><em>startup receipt ≠ current liveness</em></header>
+      <section className="opsw-card"><header><span>03</span><b>ACTIVE RELEASE</b><em>startup receipt ≠ current liveness</em></header>
         {release ? <div className="opsw-release"><i /><span><small>LAST OBSERVED STARTUP RECEIPT</small><b>{release.releaseId}</b><em>{release.configHash}</em><small>{localTime(release.createdAt)}</small></span></div> : <div className="opsw-empty">no sealed startup receipt returned by the dedicated receipt read</div>}
         <p className="opsw-note">The process heartbeat above establishes current observation. This receipt only identifies the release/config seen at startup.</p>
       </section>

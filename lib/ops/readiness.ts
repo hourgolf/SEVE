@@ -186,16 +186,9 @@ const candidateMeta = (
 };
 
 const eventMeta = (
-  events: MarketEvent[],
+  _events: MarketEvent[],
   release: ActiveReleaseObservation,
-): Record<string, unknown> | null => {
-  const row = events.find((event) =>
-    release.lane != null
-    && event.message.includes(`${release.lane}-release ACTIVE ${release.releaseId}`)
-    && event.message.includes(`config=${release.expectedHash}`)
-  );
-  return object(row?.meta);
-};
+): Record<string, unknown> | null => object(release.receipt?.meta);
 
 const readError = (id: string, label: string, read: OpsEvidenceRead<unknown>): ReadinessItem => ({
   id, label, state: "READ ERROR", tone: "red",

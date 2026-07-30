@@ -207,7 +207,7 @@ export function MobileOpsView({ props, channels, onOpenSettings }: { props: Surf
         <span><b>TAPE</b><em>{data.lastIngestTs ? "OBSERVED" : "MISSING"}</em><small>{age(ingestAge)} · {data.snapshot.length} contracts</small></span>
       </div>
     </Section>
-    <Section title="DAY 1 EVIDENCE" meta="configured ≠ observed · tap to inspect" collapsible>
+    <Section title="OPERATIONAL READINESS" meta="configured ≠ observed · tap to inspect" collapsible>
       <OpsReadinessPanel model={props.opsReadiness} compact />
     </Section>
     <div className="m2-desk-hero">
@@ -217,7 +217,7 @@ export function MobileOpsView({ props, channels, onOpenSettings }: { props: Surf
     <Section title="DAY BOOKS" meta={`${feed.sessionTrades.closed} logical closed · ${feed.sessionTrades.open} open · ${feed.sessionTrades.positionRows} rows`} collapsible>
       {rows.length === 0 ? <div className="m2-desk-empty">no attributed P&amp;L today</div> : <div className="m2-daybooks">{rows.map(({ channel, pnl }) => <span key={channel.slug}><i style={{ background: pmVar(channel.color) }} /><b>{channel.slug}</b><em className={pnl < 0 ? "neg" : "pos"}>{signedUsd(pnl)}</em></span>)}</div>}
     </Section>
-    <Section title="MONDAY RELEASE" meta="startup receipt · not liveness" collapsible>
+    <Section title="ACTIVE RELEASE" meta="startup receipt · not liveness" collapsible>
       {release ? <div className="m2-release-receipt"><b>{release.releaseId}</b><small>{release.configHash}</small></div> : <div className="m2-desk-empty">dedicated release receipt unavailable</div>}
     </Section>
     <button type="button" className="m2-open-settings" onClick={onOpenSettings}>OPEN SETTINGS · AUTH · PUSH · LOG</button>
