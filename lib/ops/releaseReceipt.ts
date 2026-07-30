@@ -16,7 +16,8 @@ export interface SealedReleaseReceipt {
 
 export type Day1ReleaseReceipt = SealedReleaseReceipt;
 
-const RELEASE_RE = /\b(day1|rc54)-release\s+ACTIVE\s+(\S+)\s+config=([a-f0-9]{64})/i;
+const RELEASE_RE =
+  /\b(day1|rc54)-release\s+ACTIVE\s+(\S+)\s+config=(?:sha256:)?([a-f0-9]{64})\b/i;
 
 /** A startup receipt is evidence of what a worker booted with, not proof of
  * current liveness. Accepting either sealed lane lets the UI follow the

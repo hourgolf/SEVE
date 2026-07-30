@@ -264,6 +264,7 @@ export interface ActiveReleaseObservation {
   expectedHash: string;
   workerVersion: string;
   roots: Readonly<Record<string, ActiveRootPolicy>>;
+  rootSlugs: readonly string[];
   configuredManagerArms: number;
   fact: string;
 }
@@ -284,6 +285,66 @@ const expectedFor = (lane: SealedReleaseLane) => lane === "rc54"
       arms: DAY1_MANAGER_ARMS.length,
     };
 
+const SHA256 = /^sha256:([a-f0-9]{64})$/i;
+
+const object = (value: unknown): Record<string, unknown> | null =>
+  value != null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+
+const string = (value: unknown): string | null =>
+  typeof value === "string" ? value : null;
+
+function receiptBoundRootSlugs(
+  receipt: SealedReleaseReceipt,
+): { slugs: string[]; issue: string | null } {
+  const meta = receipt.meta;
+  const manifestHash = string(meta?.manifestContentHash)?.match(SHA256)?.[1]?.toLowerCase() ?? null;
+  const epoch = string(meta?.configurationEpochId);
+  const releaseId = string(meta?.releaseId);
+  const activationReceiptId = string(meta?.activationReceiptId);
+  const workerVersion = string(meta?.workerCompatibilityVersion);
+  if (receipt.lane !== "rc54"
+      || meta?.state !== "receipt-bound"
+      || meta?.paperOnly !== true
+      || releaseId !== receipt.releaseId
+      || manifestHash !== receipt.configHash
+      || !epoch?.match(SHA256)
+      || !activationReceiptId
+      || workerVersion !== RC54_WORKER_VERSION) {
+    return { slugs: [], issue: "receipt-bound startup identity is incomplete or internally inconsistent" };
+  }
+  if (!Array.isArray(meta.roots) || meta.roots.length !== Object.keys(RC54_ROOTS).length) {
+    return { slugs: [], issue: "receipt-bound startup topology is incomplete" };
+  }
+  const slugs: string[] = [];
+  for (const value of meta.roots) {
+    const root = object(value);
+    const slug = string(root?.slug);
+    const expected = slug ? RC54_ROOTS[slug] : null;
+    const channelHash = string(root?.channelSpecContentHash);
+    const managerHash = string(root?.managerVersion);
+    const rootEpoch = string(root?.configurationEpochId);
+    const entries = Number(root?.maxEntriesPerSession);
+    if (!slug
+        || !expected
+        || string(root?.accountId) !== expected.accountId
+        || Number(root?.quantity) !== expected.quantity
+        || !string(root?.managerProfileId)
+        || !channelHash?.match(SHA256)
+        || !managerHash?.match(SHA256)
+        || !rootEpoch?.match(SHA256)
+        || !Number.isInteger(entries)
+        || entries < 1
+        || entries > 3
+        || slugs.includes(slug)) {
+      return { slugs: [], issue: `receipt-bound startup topology is invalid${slug ? ` at ${slug}` : ""}` };
+    }
+    slugs.push(slug);
+  }
+  return { slugs: slugs.sort(), issue: null };
+}
+
 export function observeActiveRelease(
   events: MarketEvent[],
   readState: Day1ReleaseReadState = "ok",
@@ -300,12 +361,45 @@ export function observeActiveRelease(
       expectedHash: fallback.hash,
       workerVersion: fallback.workerVersion,
       roots: {},
+      rootSlugs: [],
       configuredManagerArms: 0,
       fact: state === "checking"
         ? "Checking the sealed startup-receipt read; no runtime lifecycle claim yet."
         : state === "read-error"
           ? "Release-receipt read failed; database rows cannot establish the active runtime lifecycle."
           : "No sealed startup receipt is present in the retained event view; runtime lifecycle is unverified.",
+    };
+  }
+  if (receipt.meta?.state === "receipt-bound") {
+    const projection = receiptBoundRootSlugs(receipt);
+    if (projection.issue) {
+      return {
+        state: "mismatch",
+        lane: receipt.lane,
+        receipt,
+        releaseId: receipt.releaseId,
+        expectedHash: receipt.configHash,
+        workerVersion: RC54_WORKER_VERSION,
+        roots: {},
+        rootSlugs: [],
+        configuredManagerArms: 0,
+        fact: `${projection.issue}; runtime lifecycle remains unverified.`,
+      };
+    }
+    return {
+      state: "verified",
+      lane: receipt.lane,
+      receipt,
+      releaseId: receipt.releaseId,
+      expectedHash: receipt.configHash,
+      workerVersion: string(receipt.meta.workerCompatibilityVersion) ?? RC54_WORKER_VERSION,
+      // The compact startup receipt proves root identities, routes, quantity,
+      // and epochs, but does not carry the full economic projection. Never
+      // backfill mutable or legacy economics into this map.
+      roots: {},
+      rootSlugs: projection.slugs,
+      configuredManagerArms: DAY1_MANAGER_ARMS.length,
+      fact: `Immutable activation receipt ${string(receipt.meta.activationReceiptId)} binds the active paper runtime. Receipt identity is not a liveness claim.`,
     };
   }
   const expected = expectedFor(receipt.lane);
@@ -318,6 +412,7 @@ export function observeActiveRelease(
       expectedHash: expected.hash,
       workerVersion: expected.workerVersion,
       roots: {},
+      rootSlugs: [],
       configuredManagerArms: 0,
       fact: `Observed ${receipt.releaseId} ${receipt.configHash.slice(0, 10)}…; expected sealed ${expected.releaseId}.`,
     };
@@ -330,6 +425,7 @@ export function observeActiveRelease(
     expectedHash: expected.hash,
     workerVersion: expected.workerVersion,
     roots: expected.roots,
+    rootSlugs: Object.keys(expected.roots).sort(),
     configuredManagerArms: expected.arms,
     fact: `Exact ${expected.releaseId} startup receipt observed. Receipt identity is not a liveness claim.`,
   };

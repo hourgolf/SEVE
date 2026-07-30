@@ -136,7 +136,9 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
               <span><small>MANAGER</small><b>{passport.rootPolicy.managerLabel}</b></span>
               <span><small>EXIT</small><b>{activeRootExitLabel(passport.rootPolicy)}</b></span>
               <span><small>ADMISSION</small><b>priority {passport.rootPolicy.priority} · one/family</b></span>
-            </> : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
+            </> : passport?.lifecycle === "paper-root"
+              ? <span className="runtime-wide"><small>RECEIPT-BOUND ROOT</small><b>exact economics are governed by immutable control-plane evidence</b></span>
+              : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
           </div>}
         </section>
         <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} />

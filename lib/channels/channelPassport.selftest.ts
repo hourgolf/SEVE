@@ -19,9 +19,9 @@ const channel = (slug: string, status: StrategistState["status"] = "armed", exec
   defaults: { capital_pct: 100, aggression: 1, max_contracts: 2, daily_stop_usd: 0, muted: false, soloed: false },
 });
 
-const event = (message: string) => ({
+const event = (message: string, meta: Record<string, unknown> | null = null) => ({
   id: message, level: "EXEC" as const, message, created_at: "2026-07-18T15:00:00Z",
-  strategist_id: null, meta: null,
+  strategist_id: null, meta,
 });
 const verified = [event(`stream: day1-release ACTIVE ${DAY1_RELEASE_ID} config=${DAY1_CONFIG_HASH}`)];
 
@@ -122,6 +122,62 @@ assert.equal(rc54.bySlug["vb-macd-state"].database.differsFromRuntime, true);
 assert.equal(rc54.bySlug["vb-macd-state-qqq"].evidence.darkLifecycleCensors, 1);
 assert.equal(activeRootExitLabel(RC54_ROOTS["orb-ustop-ctl"]), "−30% catastrophe · bank 1 @ +30% / A13 runner · 15:25 ET");
 assert.equal(activeRootExitLabel(RC54_ROOTS["vb-macd-state"], true), "−30% · B30/R50 · 15:25");
+
+const receiptBoundHash = "c".repeat(64);
+const receiptBoundEpoch = `sha256:${"d".repeat(64)}`;
+const receiptBoundReleaseId = "release:candidate:receipt-bound-test";
+const receiptBoundRoots = Object.values(RC54_ROOTS).map((root) => ({
+  slug: root.slug,
+  accountId: root.accountId,
+  quantity: root.quantity,
+  managerProfileId: root.managerProfileId,
+  managerVersion: `sha256:${root.managerVersion}`,
+  channelSpecContentHash: `sha256:${root.channelVersion}`,
+  configurationEpochId: receiptBoundEpoch,
+  maxEntriesPerSession: root.slug === "pb-ride" ? 3 : 1,
+}));
+const receiptBoundEvents = [event(
+  `stream: rc54-release ACTIVE ${receiptBoundReleaseId} config=sha256:${receiptBoundHash}`,
+  {
+    state: "receipt-bound",
+    paperOnly: true,
+    releaseId: receiptBoundReleaseId,
+    manifestContentHash: `sha256:${receiptBoundHash}`,
+    configurationEpochId: receiptBoundEpoch,
+    activationReceiptId: "activation-receipt-test",
+    workerCompatibilityVersion: RC54_WORKER_VERSION,
+    roots: receiptBoundRoots,
+  },
+)];
+const receiptBound = deriveChannelPassports({
+  channels: [channel("pb-ride"), channel("pb-ride-2")],
+  events: receiptBoundEvents,
+  signals: [], positions: [], recentTrades: [], evidenceBySlug: {},
+});
+assert.equal(receiptBound.release.state, "verified");
+assert.equal(receiptBound.release.expectedHash, receiptBoundHash);
+assert.equal(receiptBound.release.releaseId, receiptBoundReleaseId);
+assert.equal(receiptBound.roots, 1);
+assert.equal(receiptBound.dark, 1);
+assert.equal(receiptBound.bySlug["pb-ride"].lifecycle, "paper-root");
+assert.equal(receiptBound.bySlug["pb-ride"].rootPolicy, null);
+assert.match(receiptBound.bySlug["pb-ride"].lifecycleFact, /immutable activation receipt/i);
+assert.equal(receiptBound.bySlug["pb-ride-2"].lifecycle, "dark-evidence");
+
+const invalidReceiptBound = deriveChannelPassports({
+  channels: [channel("pb-ride")],
+  events: [event(
+    `stream: rc54-release ACTIVE ${receiptBoundReleaseId} config=sha256:${receiptBoundHash}`,
+    {
+      ...receiptBoundEvents[0].meta,
+      roots: receiptBoundRoots.map((root) =>
+        root.slug === "pb-ride" ? { ...root, accountId: "mutable-account-route" } : root),
+    },
+  )],
+  signals: [], positions: [], recentTrades: [], evidenceBySlug: {},
+});
+assert.equal(invalidReceiptBound.release.state, "mismatch");
+assert.equal(invalidReceiptBound.bySlug["pb-ride"].lifecycle, "unverified");
 
 // Keep browser code free of worker/Node dependencies, but pin every displayed
 // release field to the sealed machine receipts so a future RC cannot silently

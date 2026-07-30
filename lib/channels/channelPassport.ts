@@ -102,14 +102,17 @@ export function deriveChannelPassport(input: {
 }): ChannelPassport {
   const { channel, release } = input;
   const rootPolicy = release.state === "verified" ? release.roots[channel.slug] ?? null : null;
+  const runtimeRoot = release.state === "verified" && release.rootSlugs.includes(channel.slug);
   const lifecycle: RuntimeLifecycle = release.state !== "verified"
     ? "unverified"
-    : rootPolicy
+    : runtimeRoot
       ? "paper-root"
       : "dark-evidence";
   const lifecycleLabel = lifecycle === "paper-root" ? "PAPER ROOT" : lifecycle === "dark-evidence" ? "DARK EVIDENCE" : "UNVERIFIED";
   const lifecycleFact = lifecycle === "paper-root"
-    ? `${rootPolicy?.familyId} may submit paper entries under the verified sealed release.`
+    ? rootPolicy
+      ? `${rootPolicy.familyId} may submit paper entries under the verified sealed release.`
+      : "This paper root is bound to the immutable activation receipt; exact economics remain control-plane evidence, not a legacy UI fallback."
     : lifecycle === "dark-evidence"
       ? "Candidate decisions are retained, but the sealed release authorizes no fills for this channel."
       : "A matching startup receipt is required before the UI can assert runtime lifecycle.";
@@ -160,7 +163,9 @@ export function deriveChannelPassport(input: {
       configuredArms: lifecycle === "paper-root" ? release.configuredManagerArms : 0,
       state: observerState,
       fact: lifecycle === "paper-root"
-        ? `${release.configuredManagerArms} manager arms observe the exact two-lot root path; only explicitly sealed root exits govern orders.`
+        ? rootPolicy
+          ? `${release.configuredManagerArms} manager arms observe the exact two-lot root path; only explicitly sealed root exits govern orders.`
+          : `${release.configuredManagerArms} manager arms observe this receipt-bound paper root; only its immutable entry policy governs orders.`
         : lifecycle === "dark-evidence"
           ? "Dark candidates feed T+1 exact-path research; no redundant fill or manager claim is made."
           : "Observer status is withheld until the release receipt verifies.",

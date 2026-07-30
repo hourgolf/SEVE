@@ -1,6 +1,11 @@
 import { strict as assert } from "node:assert";
 import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID } from "../channels/day1Release";
-import { RC54_CONFIG_HASH, RC54_RELEASE_ID } from "../channels/activeRelease";
+import {
+  RC54_CONFIG_HASH,
+  RC54_RELEASE_ID,
+  RC54_ROOTS,
+  RC54_WORKER_VERSION,
+} from "../channels/activeRelease";
 import { deriveOpsReadiness, type DeriveOpsReadinessInput, type OpsEvidence, type OpsEvidenceRead } from "./readiness";
 
 const MONDAY = Date.parse("2026-07-20T15:00:00Z"); // 11:00 ET
@@ -98,6 +103,68 @@ assert.match(find(rc54Ready, "release").detail, /week2-2026-07-27-rc5\.4/);
 assert.equal(find(rc54Ready, "manager-config").detail, "8 paper-only arms · quote max 15s");
 assert.equal(rc54Ready.counts.candidates, 1);
 assert.equal(find(rc54Ready, "candidates").tone, "green");
+
+const receiptBoundHash = "c".repeat(64);
+const receiptBoundEpoch = `sha256:${"d".repeat(64)}`;
+const receiptBoundReleaseId = "release:candidate:readiness-test";
+const receiptBoundRelease = [{
+  ...release[0],
+  id: "receipt-bound-release",
+  message: `stream: rc54-release ACTIVE ${receiptBoundReleaseId} config=sha256:${receiptBoundHash}`,
+  created_at: "2026-07-27T12:31:00.000Z",
+  meta: {
+    ...release[0].meta,
+    state: "receipt-bound",
+    paperOnly: true,
+    releaseId: receiptBoundReleaseId,
+    manifestContentHash: `sha256:${receiptBoundHash}`,
+    configurationEpochId: receiptBoundEpoch,
+    activationReceiptId: "activation-receipt-readiness-test",
+    workerCompatibilityVersion: RC54_WORKER_VERSION,
+    roots: Object.values(RC54_ROOTS).map((root) => ({
+      slug: root.slug,
+      accountId: root.accountId,
+      quantity: root.quantity,
+      managerProfileId: root.managerProfileId,
+      managerVersion: `sha256:${root.managerVersion}`,
+      channelSpecContentHash: `sha256:${root.channelVersion}`,
+      configurationEpochId: receiptBoundEpoch,
+      maxEntriesPerSession: root.slug === "pb-ride" ? 3 : 1,
+    })),
+  },
+}];
+const receiptBoundDecision = {
+  ...rc54Decision,
+  id: "receipt-bound-decision",
+  payload: {
+    decisionDetail: {
+      rc54Candidate: {
+        releaseId: receiptBoundReleaseId,
+        configurationSha256: receiptBoundHash,
+      },
+    },
+  },
+};
+const receiptBoundReady = deriveOpsReadiness(base({
+  nowMs: Date.parse("2026-07-27T15:00:00Z"),
+  releaseEvents: receiptBoundRelease,
+  evidence: evidence({ execution: ok([receiptBoundDecision]) }),
+}));
+assert.equal(find(receiptBoundReady, "release").state, "VERIFIED");
+assert.equal(find(receiptBoundReady, "capture-config").tone, "green");
+assert.equal(find(receiptBoundReady, "manager-config").tone, "green");
+assert.equal(find(receiptBoundReady, "paper-boundary").state, "PAPER EXECUTOR");
+assert.equal(receiptBoundReady.counts.candidates, 1);
+
+const malformedReceiptBound = deriveOpsReadiness(base({
+  nowMs: Date.parse("2026-07-27T15:00:00Z"),
+  releaseEvents: [{
+    ...receiptBoundRelease[0],
+    meta: { ...receiptBoundRelease[0].meta, activationReceiptId: null },
+  }],
+}));
+assert.equal(find(malformedReceiptBound, "release").state, "MISMATCH");
+assert.equal(find(malformedReceiptBound, "paper-boundary").tone, "red");
 
 const readFailure = deriveOpsReadiness(base({ evidence: evidence({ execution: failed([decision]) }) }));
 assert.equal(find(readFailure, "candidates").state, "READ ERROR");
