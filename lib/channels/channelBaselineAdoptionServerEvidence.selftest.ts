@@ -227,7 +227,27 @@ async function main(): Promise<void> {
     );
   });
 
-  await check("multiple or stale workers fail closed", async () => {
+  await check("a stopped predecessor is excluded from current-worker identity", async () => {
+    const evidence = await collectBaselineAdoptionServerEvidence({
+      sb: fakeSupabase({
+        worker_runs: [
+          ...workers,
+          {
+            ...workers[0],
+            boot_id: "boot:prior",
+            started_at: "2026-07-28T11:55:00.000Z",
+            last_heartbeat_at: "2026-07-28T11:59:59.000Z",
+          },
+        ],
+      }),
+      refs,
+      now: NOW,
+      fetchImpl: emptyBroker,
+    });
+    assert.equal(evidence.workerAcknowledgement.bootId, "boot:fixture:rc54");
+  });
+
+  await check("overlapping, duplicate, or stale workers fail closed", async () => {
     await assert.rejects(
       collectBaselineAdoptionServerEvidence({
         sb: fakeSupabase({ worker_runs: [...workers, { ...workers[0] }] }),
@@ -235,7 +255,26 @@ async function main(): Promise<void> {
         now: NOW,
         fetchImpl: emptyBroker,
       }),
-      /exactly one current worker/,
+      /non-overlapping current worker/,
+    );
+    await assert.rejects(
+      collectBaselineAdoptionServerEvidence({
+        sb: fakeSupabase({
+          worker_runs: [
+            ...workers,
+            {
+              ...workers[0],
+              boot_id: "boot:overlap",
+              started_at: "2026-07-28T11:55:00.000Z",
+              last_heartbeat_at: "2026-07-28T12:00:01.000Z",
+            },
+          ],
+        }),
+        refs,
+        now: NOW,
+        fetchImpl: emptyBroker,
+      }),
+      /non-overlapping current worker/,
     );
     await assert.rejects(
       collectBaselineAdoptionServerEvidence({

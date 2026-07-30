@@ -53,13 +53,16 @@ function currentWorker(
   rows: WorkerRow[],
   nowMs: number,
 ): WorkerRow {
-  if (rows.length !== 1) {
+  if (!rows.length) {
     throw new BaselineAdoptionInputError(
-      `baseline adoption requires exactly one current worker; observed ${rows.length}`,
+      "baseline adoption requires one current worker; observed 0",
       409,
     );
   }
-  const worker = rows[0];
+  const ordered = [...rows].sort((left, right) =>
+    timestamp(right.started_at, "current worker start")
+      - timestamp(left.started_at, "current worker start"));
+  const worker = ordered[0];
   const startedAt = timestamp(worker.started_at, "current worker start");
   const heartbeatAt = timestamp(worker.last_heartbeat_at, "current worker heartbeat");
   if (!worker.version?.trim()
@@ -69,6 +72,24 @@ function currentWorker(
       || Boolean(worker.last_error?.trim())) {
     throw new BaselineAdoptionInputError(
       "current worker identity, liveness, or error posture is not exact",
+      409,
+    );
+  }
+  const overlapping = ordered.slice(1).filter((candidate) => {
+    const candidateStartedAt = timestamp(
+      candidate.started_at,
+      "prior worker start",
+    );
+    const candidateHeartbeatAt = timestamp(
+      candidate.last_heartbeat_at,
+      "prior worker heartbeat",
+    );
+    return candidateStartedAt >= startedAt
+      || candidateHeartbeatAt >= startedAt;
+  });
+  if (overlapping.length) {
+    throw new BaselineAdoptionInputError(
+      `baseline adoption requires one non-overlapping current worker; observed ${overlapping.length + 1}`,
       409,
     );
   }
