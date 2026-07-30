@@ -10,6 +10,7 @@ import {
   RC54_ROOTS,
 } from "./rc54ReleasePolicy.js";
 import {
+  buildReceiptBoundRc54StartupReceipt,
   buildReceiptBoundRc54AdmissionPolicies,
   buildReceiptBoundRc54AdmissionRootResolver,
   receiptBoundRc54CandidateIdentity,
@@ -221,6 +222,41 @@ check("write and release evidence carry the exact receipt identity", () => {
     runtime.manifestContentHash.replace(/^sha256:/, ""),
   );
   assert.equal(evidence.sourceQuantity, root.quantity);
+});
+
+check("receipt-bound startup carries exact authority and operational posture", () => {
+  const startup = buildReceiptBoundRc54StartupReceipt({
+    runtime,
+    operationalReceipt: {
+      alpacaPaperOrigin: "https://paper-api.alpaca.markets",
+      stockFeed: "sip",
+      optionFeed: "opra",
+      dryRun: false,
+      liveTrading: true,
+      heldCapture: { enabled: true, targetSamples: 12, maxAgeMs: 60_000 },
+      managerShadow: { enabled: true, quoteMaxAgeMs: 15_000 },
+    },
+  });
+  assert.equal(startup.state, "receipt-bound");
+  assert.equal(startup.releaseId, runtime.releaseId);
+  assert.equal(startup.manifestContentHash, runtime.manifestContentHash);
+  assert.equal(startup.configurationEpochId, runtime.configurationEpochId);
+  assert.equal(startup.activationReceiptId, runtime.activationReceiptId);
+  assert.equal(startup.workerVersion, runtime.workerCompatibilityVersion);
+  assert.deepEqual(
+    startup.entryLimits,
+    Object.fromEntries(runtime.roots.map((root): [string, number] => [
+      root.slug,
+      root.maxEntriesPerSession,
+    ]).sort(([left], [right]) => left.localeCompare(right))),
+  );
+  assert.throws(
+    () => buildReceiptBoundRc54StartupReceipt({
+      runtime,
+      operationalReceipt: {},
+    }),
+    /startup posture missing/,
+  );
 });
 
 check("restart accepts immutable RC5.4 and receipt-bound open policies", () => {

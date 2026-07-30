@@ -248,6 +248,7 @@
     "server-supabase-selftest": "tsx scripts/serverSupabase.selftest.ts",
     "preopen": "tsx scripts/preopen-readiness.ts",
     "preopen-readiness-selftest": "tsx lib/ops/preopenReadinessEngine.selftest.ts",
+    "preopen-adapter-selftest": "tsx scripts/ops/rc54ReadinessAdapter.selftest.ts",
     "preopen-packet": "tsx scripts/render-preopen-readiness-packet.ts",
     "postclose-readiness": "tsx scripts/preopen-readiness.ts --require-flat",
     "postclose-readiness-selftest": "tsx scripts/postclose-readiness.selftest.ts",

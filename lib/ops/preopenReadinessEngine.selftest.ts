@@ -25,6 +25,8 @@ const contract = (rootCount = 6): OperationalReleaseContract => ({
   authoritySource: "sealed-runtime-adapter",
   releaseId: "fixture-release",
   configurationSha256: sha("d"),
+  configurationEpoch: null,
+  activationReceiptId: null,
   strategyWorkerVersion: "strategy-v1",
   runtimeVersion: "runtime-v1",
   roots: roots(rootCount),
@@ -77,6 +79,8 @@ const base = (): PreopenReadinessInput => ({
   receipt: {
     releaseId: "fixture-release",
     configurationSha256: sha("d"),
+    configurationEpoch: null,
+    activationReceiptId: null,
     strategyWorkerVersion: "strategy-v1",
     createdAt: "2026-07-28T11:55:01.000Z",
     dryRun: false,
@@ -128,6 +132,15 @@ ready("quantity and take-profit changes do not change gate logic", (input) => {
     roots: roots(9, 8, 35),
   };
 });
+ready("receipt-bound authority requires its exact epoch and activation receipt", (input) => {
+  input.contract.authoritySource = "immutable-activation-receipt";
+  input.contract.configurationEpoch = sha("c");
+  input.contract.activationReceiptId = "activation-receipt-1";
+  input.receipt!.configurationEpoch = sha("c");
+  input.receipt!.activationReceiptId = "activation-receipt-1";
+  input.contract.flatBoundaryReceiptRequired = false;
+  input.receipt!.flatEraBoundaryProven = false;
+});
 ready("non-manifest paper account may be configured disarmed", (input) => {
   input.configuredPaperAccounts[2].configuredArmed = false;
   input.configuredPaperAccounts[2].configuredHalted = true;
@@ -154,6 +167,13 @@ blocked("wrong release hash fails closed", "release-receipt-identity", (input) =
 });
 blocked("wrong strategy worker fails closed", "release-receipt-identity", (input) => {
   input.receipt!.strategyWorkerVersion = "other";
+});
+blocked("wrong activation epoch fails closed", "release-receipt-identity", (input) => {
+  input.contract.authoritySource = "immutable-activation-receipt";
+  input.contract.configurationEpoch = sha("c");
+  input.contract.activationReceiptId = "activation-receipt-1";
+  input.receipt!.configurationEpoch = sha("e");
+  input.receipt!.activationReceiptId = "activation-receipt-1";
 });
 blocked("receipt before worker start fails closed", "release-receipt-freshness", (input) => {
   input.receipt!.createdAt = "2026-07-28T11:54:59.000Z";

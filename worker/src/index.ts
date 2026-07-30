@@ -90,8 +90,6 @@ import {
   buildRc54AdmissionOccupancy,
   finalizeRc54ReleaseAdmissions,
   prepareRc54ReleaseAdmissions,
-  rc54OperationalPostureErrors,
-  rc54SourceFleetErrors,
   RC54_RELEASE_CONFIGURATION_SHA256,
   RC54_RELEASE_ID,
   RC54_ROOTS,
@@ -112,6 +110,7 @@ import type {
   ReceiptBoundRuntimeConfiguration,
 } from "./channelConfigurationRuntimeAdapter.js";
 import {
+  buildReceiptBoundRc54StartupReceipt,
   buildReceiptBoundRc54AdmissionPolicies,
   buildReceiptBoundRc54AdmissionRootResolver,
   receiptBoundRc54CandidateIdentity,
@@ -536,20 +535,18 @@ async function reloadConfig(): Promise<void> {
         );
       }
       if (resolution.state === "receipt-bound") {
-        const sourceErrors = rc54SourceFleetErrors(c.channels);
-        const postureErrors = rc54OperationalPostureErrors({
-          fundMode: c.fund.mode,
-          posture: sealedRuntimePosture(),
-          paperExecutorWriteReady: liveMode(),
+        const operationalValidation = validateRc54ReleaseStartup({
+          channels: c.channels,
           accounts,
-          requiredAccountIds: resolution.runtime.roots.map((root) =>
-            root.accountId),
+          fundMode: c.fund.mode,
+          workerVersion: RC54_WORKER_VERSION,
+          expectedConfigurationSha256: config.rc54ReleaseExpectedSha256,
           resolvedCredentialAccountIds: credentialAccountIds,
+          credentialRouteEvidenceBasis: "runtime-env-presence",
+          paperExecutorWriteReady: liveMode(),
+          posture: sealedRuntimePosture(),
         });
-        const adapterErrors = [
-          ...sourceErrors,
-          ...postureErrors,
-        ];
+        const adapterErrors = [...operationalValidation.errors];
         if (adapterErrors.length) {
           throw new Error(
             `Receipt-bound RC5.4 adapter validation failed: ${
@@ -563,36 +560,11 @@ async function reloadConfig(): Promise<void> {
         nextReceiptBoundAdmissionPolicies =
           buildReceiptBoundRc54AdmissionPolicies(resolution.runtime);
         channels = [...resolution.channels];
-        releaseStartupReceipt = {
-          schemaVersion: 1,
-          state: "receipt-bound",
-          releaseId: resolution.runtime.releaseId,
-          releaseManifestId: resolution.runtime.releaseManifestId,
-          manifestContentHash: resolution.runtime.manifestContentHash,
-          configurationEpochId: resolution.runtime.configurationEpochId,
-          activationReceiptId: resolution.runtime.activationReceiptId,
-          activatedAt: resolution.runtime.activatedAt,
-          workerCompatibilityVersion:
-            resolution.runtime.workerCompatibilityVersion,
-          adapterVersion: resolution.runtime.adapterVersion,
-          temporaryTopologyAdapter: "RC5.4",
-          paperOnly: true,
-          rootCount: resolution.runtime.roots.length,
-          entryLimits: Object.fromEntries(
-            resolution.runtime.roots
-              .map((root): [string, number] => [
-                root.slug,
-                root.maxEntriesPerSession,
-              ])
-              .sort(([left], [right]) => left.localeCompare(right)),
-          ),
-          configuredPaperAccountIds: [
-            ...new Set(resolution.runtime.roots.map((root) => root.accountId)),
-          ].sort(),
-          historicalMutationAuthorized: false,
-          runtimeMutationAuthorized: false,
-          liveMoneyAuthorized: false,
-        };
+        releaseStartupReceipt = buildReceiptBoundRc54StartupReceipt({
+          runtime: resolution.runtime,
+          operationalReceipt: operationalValidation.activeSettingsReceipt
+            ?? {},
+        });
         releaseSourceExecutorBoundaryReady = true;
       }
     }

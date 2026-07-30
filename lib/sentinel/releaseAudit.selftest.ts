@@ -12,6 +12,8 @@ const contract = (releaseId = "week2-2026-07-27-rc5.4"): OperationalReleaseContr
   authoritySource: "sealed-runtime-adapter",
   releaseId,
   configurationSha256: hash("a"),
+  configurationEpoch: null,
+  activationReceiptId: null,
   strategyWorkerVersion: "stream-2026-07-27a",
   runtimeVersion: "stream-runtime-2026-07-27a",
   roots: [{
@@ -34,6 +36,8 @@ const contract = (releaseId = "week2-2026-07-27-rc5.4"): OperationalReleaseContr
 const receipt = (releaseId = contract().releaseId): ReleaseReceiptObservation => ({
   releaseId,
   configurationSha256: hash("a"),
+  configurationEpoch: null,
+  activationReceiptId: null,
   strategyWorkerVersion: "stream-2026-07-27a",
   createdAt: "2026-07-28T12:50:10.775Z",
   dryRun: false,
