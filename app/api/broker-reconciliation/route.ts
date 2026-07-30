@@ -33,9 +33,21 @@ async function readBrokerPositions(key: string, secret: string): Promise<BrokerP
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new Error(`Alpaca positions ${response.status}: ${(await response.text()).slice(0, 120)}`);
-  const rows = await response.json() as Array<{ symbol?: unknown; qty?: unknown }>;
+  const rows = await response.json() as Array<{
+    symbol?: unknown;
+    qty?: unknown;
+    avg_entry_price?: unknown;
+    current_price?: unknown;
+    unrealized_pl?: unknown;
+  }>;
   if (!Array.isArray(rows)) throw new Error("Alpaca positions response was not an array");
-  return rows.map((row) => ({ symbol: String(row.symbol ?? ""), qty: Number(row.qty ?? 0) }));
+  return rows.map((row) => ({
+    symbol: String(row.symbol ?? ""),
+    qty: Number(row.qty ?? 0),
+    averageEntryPrice: Number(row.avg_entry_price ?? Number.NaN),
+    currentPrice: Number(row.current_price ?? Number.NaN),
+    unrealizedPnl: Number(row.unrealized_pl ?? Number.NaN),
+  }));
 }
 
 /** Authenticated, read-only current-book comparison. No orders, Supabase writes,

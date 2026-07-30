@@ -12,10 +12,14 @@ assert.doesNotMatch(source, /table: "equity_snapshots"/, "equity inserts must no
 assert.match(source, /if \(pollInFlight \|\| !mounted\.current\) return;/, "overlapping desk polls must be rejected");
 assert.match(source, /from\("execution_observations"\)/, "position scope must read immutable execution routes");
 assert.match(source, /attributePositionsByImmutableExecutionAccount/, "position scope must reuse the canonical attribution helper");
+assert.match(source, /recoverPositionsByImmutableOpportunityAccountForDisplay/, "legacy display recovery must reuse a pure immutable helper");
+assert.match(source, /position_outcome_events[\s\S]*position_remainder_opened/, "legacy recovery must begin from immutable position outcomes");
+assert.match(source, /\.eq\("event_kind", "broker_result"\)[\s\S]*\.eq\("action", "enter"\)[\s\S]*\.gt\("filled_qty", 0\)/, "legacy recovery must require positive filled-entry evidence");
+assert.match(source, /state:\s*"recovered"/, "legacy recovery must remain visibly distinct from direct attribution");
 assert.match(source, /positionLabel:\s*"live feed positions"/, "attribution failures must identify the affected live feed");
 assert.match(source, /state:\s*"blocked"/, "routing failures must block attribution");
 assert.doesNotMatch(source, /byAcct\(sb\.from\("positions"\)/, "positions must not fall back to mutable strategist account scope");
 assert.match(source, /POSITION_FIELDS[\s\S]*runner_of/, "the live feed must retain immutable runner lineage");
 assert.match(source, /summarizeLogicalTradeCohort/, "the session denominator must count logical trades");
 
-console.log("desk-feed-egress-selftest: 14/14 passed");
+console.log("desk-feed-egress-selftest: 18/18 passed");

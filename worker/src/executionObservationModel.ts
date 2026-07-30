@@ -210,3 +210,103 @@ export function buildBrokerObservation(input: BrokerObservationInput): Execution
     },
   };
 }
+
+export type PositionRouteKind =
+  | "entry"
+  | "recovered_entry"
+  | "partial_remainder"
+  | "runner_remainder";
+
+export interface PositionRouteObservationInput {
+  channel: Pick<ChannelConfig, "id" | "slug" | "underlying">;
+  accountId: string;
+  positionId: string;
+  observedAtMs: number;
+  sourceBarAtMs: number;
+  occSymbol: string;
+  optionSide: string;
+  quantity: number;
+  routeKind: PositionRouteKind;
+  opportunityId?: string | null;
+  parentPositionId?: string | null;
+  configurationIds?: {
+    channel_spec_version_id: string | null;
+    release_manifest_id: string | null;
+    configuration_epoch_id: string | null;
+  } | null;
+}
+
+/**
+ * Immutable post-insert account binding for a concrete position row. Entry
+ * broker observations are created before the row id exists, so this separate
+ * deterministic receipt binds the successful row insert to the exact execution
+ * account context. Mutable strategist account assignment is deliberately not
+ * an input.
+ */
+export function buildPositionRouteObservation(
+  input: PositionRouteObservationInput,
+): ExecutionObservationDraft | null {
+  const { channel: ch } = input;
+  if (!UUID.test(ch.id) || !UUID.test(input.accountId) || !UUID.test(input.positionId)
+    || !ch.slug || !ch.underlying || !input.occSymbol || !input.optionSide) return null;
+  const eventAt = new Date(input.observedAtMs);
+  const sourceBarAt = new Date(input.sourceBarAtMs);
+  const quantity = integerOrNull(input.quantity);
+  if (Number.isNaN(eventAt.getTime()) || Number.isNaN(sourceBarAt.getTime())
+    || quantity == null || quantity < 1) return null;
+  if (input.parentPositionId != null && !UUID.test(input.parentPositionId)) return null;
+  const ids = input.configurationIds ?? null;
+  const configurationValues = ids
+    ? [ids.channel_spec_version_id, ids.release_manifest_id, ids.configuration_epoch_id]
+    : [];
+  const configuredCount = configurationValues.filter((value) => value != null).length;
+  if (configuredCount !== 0 && configuredCount !== 3) return null;
+  if (configurationValues.some((value) => value != null && !UUID.test(value))) return null;
+
+  const identity = {
+    positionId: input.positionId,
+    accountId: input.accountId,
+    routeKind: input.routeKind,
+  };
+  const traceId = deterministicEvidenceUuid("seve-position-account-route-trace-v1", identity);
+  return {
+    id: deterministicEvidenceUuid("seve-position-account-route-observation-v1", identity),
+    trace_id: traceId,
+    schema_version: 1,
+    event_kind: "decision",
+    event_at: eventAt.toISOString(),
+    source_bar_at: sourceBarAt.toISOString(),
+    strategist_id: ch.id,
+    account_id: input.accountId,
+    channel_slug: ch.slug,
+    opportunity_id: input.opportunityId ?? null,
+    position_id: input.positionId,
+    action: "reconcile",
+    reason: "position_account_route_bound",
+    blocked_reason: "observation_only",
+    underlying: ch.underlying,
+    occ_symbol: input.occSymbol,
+    option_side: input.optionSide,
+    quote_source: null,
+    quote_age_ms: null,
+    bid: null,
+    ask: null,
+    mid: null,
+    delta: null,
+    underlying_price: null,
+    requested_qty: quantity,
+    client_order_id: null,
+    broker_order_id: null,
+    broker_status: null,
+    filled_qty: null,
+    fill_price: null,
+    channel_spec_version_id: ids?.channel_spec_version_id ?? null,
+    release_manifest_id: ids?.release_manifest_id ?? null,
+    configuration_epoch_id: ids?.configuration_epoch_id ?? null,
+    payload: {
+      routeKind: input.routeKind,
+      parentPositionId: input.parentPositionId ?? null,
+      source: "post_insert_execution_context",
+    },
+  };
+}

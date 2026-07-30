@@ -206,6 +206,7 @@
     "fixture-lane-selftest": "tsx lib/ui/fixtureLane.selftest.ts",
     "ui-control-contract-selftest": "tsx lib/ui/controlContract.selftest.ts",
     "execution-observation-persistence-selftest": "tsx worker/src/executionObservationPersistence.selftest.ts",
+    "position-route-observation-selftest": "tsx worker/src/positionRouteObservation.selftest.ts",
     "a6-read": "tsx --env-file=.env.local scripts/a6-read.ts",
     "backup-archives": "tsx scripts/backup-archives.ts",
     "iv-bank": "tsx --env-file=.env.local scripts/iv-bank.ts",

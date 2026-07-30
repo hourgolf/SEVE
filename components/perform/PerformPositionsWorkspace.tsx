@@ -18,6 +18,34 @@ const reason = (value?: string | null) => {
   return value.replaceAll("_", " ");
 };
 
+function BrokerTruthFallback({ surface }: { surface: SurfaceProps }) {
+  const receipt = surface.opsReadiness.brokerReceipt;
+  if (!receipt) return <section className="pf-screen pf-hardware pf-broker-truth">
+    <div className="pf-head"><span className="t">BROKER TRUTH</span><span className="grow" /><span className="pf-basis">checking</span></div>
+    <div className="pf-ghost">waiting for authenticated broker position evidence</div>
+  </section>;
+  const accounts = receipt.accounts.filter((account) => account.brokerPositions.length > 0);
+  return <section className="pf-screen pf-hardware pf-broker-truth" aria-label="Current broker positions">
+    <div className="pf-head"><span className="t">BROKER TRUTH · {receipt.brokerContracts} CONTRACTS</span><span className="grow" />
+      <span className="pf-basis">read only · no channel fallback</span></div>
+    {accounts.length === 0 ? <div className="pf-ghost">
+      {receipt.allAccountsReachable ? "broker confirms no open contracts" : "broker account evidence is incomplete"}
+    </div> : <div className="pf-broker-truth-list">{accounts.map((account) => <div key={account.accountId}>
+      <header><b>{account.accountName}</b><span>{account.brokerContracts} contracts</span></header>
+      {account.brokerPositions.map((position) => <article key={`${account.accountId}:${position.symbol}`}>
+        <b>{position.symbol}</b>
+        <span>×{Math.abs(position.qty)}</span>
+        <span>in {position.averageEntryPrice == null ? "—" : position.averageEntryPrice.toFixed(2)}</span>
+        <span>mark {position.currentPrice == null ? "—" : position.currentPrice.toFixed(2)}</span>
+        <strong className={(position.unrealizedPnl ?? 0) < 0 ? "neg" : "pos"}>
+          {position.unrealizedPnl == null ? "P&L —" : signedUsd(position.unrealizedPnl)}
+        </strong>
+      </article>)}
+    </div>)}</div>}
+    <footer>Broker holdings are shown without strategist attribution until immutable position routes are complete.</footer>
+  </section>;
+}
+
 export function AggregateExposure({ surface }: { surface: SurfaceProps }) {
   const model = derivePositionsWorkspace(surface.feed.positions, surface.feed.recentTrades, surface.liveMarks);
   const { open, exposure } = model;
@@ -83,6 +111,7 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
   const manualExits = model.exits.rows.filter(({ position }) => position.close_reason?.startsWith("manual"));
   const lastManualReason = manualExits.at(0)?.position.close_reason?.slice("manual:".length).replaceAll("_", " ");
   const realizedTone: SeveMetricTone = model.exits.realized > 0 ? "success" : model.exits.realized < 0 ? "danger" : "neutral";
+  const attributionBlocked = surface.feed.positionAttribution.state === "blocked";
 
   return <section className="pf-positions-shell" data-nav-target="true" tabIndex={-1}>
     <SeveWorkspaceHeader
@@ -92,12 +121,12 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
     />
     <BrokerReconciliationStrip model={surface.opsReadiness} />
     <SeveMetricStrip metrics={[
-      { label: "REALIZED", value: signedUsd(model.exits.realized), tone: realizedTone },
-      { label: "WINNERS", value: model.exits.wins },
-      { label: "LOSSES", value: model.exits.losses, tone: model.exits.losses > 0 ? "danger" : "neutral" },
-      { label: "MANUAL", value: manualExits.length === 0 ? "0" : `${manualExits.length} ${lastManualReason ?? "TAGGED"}`, tone: manualExits.length > 0 ? "attention" : "neutral" },
+      { label: "REALIZED", value: attributionBlocked ? "—" : signedUsd(model.exits.realized), tone: attributionBlocked ? "attention" : realizedTone },
+      { label: "WINNERS", value: attributionBlocked ? "—" : model.exits.wins },
+      { label: "LOSSES", value: attributionBlocked ? "—" : model.exits.losses, tone: !attributionBlocked && model.exits.losses > 0 ? "danger" : "neutral" },
+      { label: "MANUAL", value: attributionBlocked ? "—" : manualExits.length === 0 ? "0" : `${manualExits.length} ${lastManualReason ?? "TAGGED"}`, tone: !attributionBlocked && manualExits.length > 0 ? "attention" : "neutral" },
     ]} />
-    <div className="pf-positions-workspace" data-flat={surface.feed.positions.length === 0 || undefined}>
+    <div className="pf-positions-workspace" data-flat={!attributionBlocked && surface.feed.positions.length === 0 || undefined} data-attribution-blocked={attributionBlocked || undefined}>
       <PositionsSection
         positions={surface.feed.positions}
         strategists={surface.view.desk.strategists}
@@ -107,8 +136,11 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
         targeted
         reconciliation={reconciliation}
         evidenceChains={surface.opsReadiness.chains}
+        attribution={surface.feed.positionAttribution}
       />
-      <aside className="pf-positions-context"><AggregateExposure surface={surface} /><RecentExits surface={surface} /></aside>
+      <aside className="pf-positions-context">
+        {attributionBlocked ? <BrokerTruthFallback surface={surface} /> : <><AggregateExposure surface={surface} /><RecentExits surface={surface} /></>}
+      </aside>
     </div>
   </section>;
 }

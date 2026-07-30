@@ -48,6 +48,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 
 export function PositionsSection({
   positions, strategists, liveMarks, peaks, write, targeted, reconciliation, evidenceChains, channelWorkspace,
+  attribution,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -58,6 +59,7 @@ export function PositionsSection({
   reconciliation?: ReadinessItem;
   evidenceChains?: OpsEvidenceChain[];
   channelWorkspace?: ChannelWorkspaceModel;
+  attribution?: SurfaceProps["feed"]["positionAttribution"];
 }) {
   const closeFlow = usePositionCloseFlow(write);
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
@@ -67,15 +69,26 @@ export function PositionsSection({
   return (
     <section className="pf-screen pf-hardware" id="perform-positions" data-nav-target={targeted || undefined} tabIndex={-1}>
       <div className="pf-head">
-        <span className="t">POSITIONS · {positions.length} OPEN</span>
+        <span className="t">POSITIONS · {attribution?.state === "blocked" ? "UNKNOWN" : `${positions.length} OPEN`}</span>
         <span className="grow" />
         <span className={`pf-basis${reconciliation ? ` reconciliation-${reconciliation.tone}` : ""}`} title={reconciliation?.detail ?? "Desk marks are operational estimates; broker reconciliation is shown in the full Book workspace."}>
           {reconciliation ? reconciliation.state.toLowerCase() : "desk marks · broker check in book"}
         </span>
         {positions.length > 0 && <span className={`x num ${total < 0 ? "neg" : "up"}`}>Σ {signedUsd(total)}</span>}
       </div>
+      {attribution?.state === "recovered" && <div className="pf-position-attribution-recovered" role="status">
+        <b>LEGACY ROUTE RECOVERED</b>
+        <span>{attribution.issues.join(" · ")}</span>
+        <small>Display attribution uses immutable opportunity and filled-entry evidence. Formal reconciliation still requires a position-bound receipt.</small>
+      </div>}
       <div className="pfp-body">
-        {positions.length === 0 ? (
+        {attribution?.state === "blocked" ? (
+          <div className="pf-position-attribution-blocked" role="alert">
+            <b>DESK ATTRIBUTION BLOCKED</b>
+            <span>{attribution.issues.join(" · ") || "immutable execution-account routing is unavailable"}</span>
+            <small>No mutable channel-account fallback was used. See broker truth alongside this panel.</small>
+          </div>
+        ) : positions.length === 0 ? (
           <div className="pf-ghost">flat — no open positions</div>
         ) : rows.map((row) => {
           const p = row.position;

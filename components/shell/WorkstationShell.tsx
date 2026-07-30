@@ -105,6 +105,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
     : `${dayPnlPct >= 0 ? "+" : "-"}${Math.abs(dayPnlPct).toFixed(2)}`;
   const capacityLed = ledCompact(deskCapacity);
   const positionsLed = ledCompact(feed.positions.length);
+  const positionAttributionBlocked = feed.positionAttribution.state === "blocked";
   const riskLedValue = riskUsed.toFixed(1);
   const dayLedColor = liveFund.dayPnl < 0 ? "var(--led-red)" : "var(--pm-green)";
   const activeNav = NAV.find((item) => mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section))) ?? NAV[0];
@@ -184,8 +185,8 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
           </div>
         </div>
         <div className="ws-metric ws-metric--led"><small>DESK CAPACITY</small><div className="ws-led-readout neutral" role="img" aria-label={`Desk capacity ${compactUsd(deskCapacity)}`}><span aria-hidden="true">$</span><LedDisplay value={capacityLed.value} digits={capacityLed.digits} color="var(--ws-led-neutral)" unit={capacityLed.unit} /></div></div>
-        <div className="ws-metric ws-metric--led"><small>OPEN POSITIONS</small><div className="ws-led-readout neutral" role="img" aria-label={`${feed.positions.length} open positions`}><LedDisplay value={positionsLed.value} digits={Math.max(2, positionsLed.digits)} color="var(--ws-led-neutral)" /></div></div>
-        <div className="ws-metric ws-metric--led"><small>RISK USED</small><div className="ws-led-readout neutral" role="img" aria-label={`Risk used ${riskLedValue} percent`}><LedDisplay value={riskLedValue} digits={riskLedValue.replace(".", "").length} color="var(--ws-led-neutral)" unit="%" /></div></div>
+        <div className="ws-metric ws-metric--led"><small>OPEN POSITIONS</small><div className="ws-led-readout neutral" role="img" aria-label={positionAttributionBlocked ? "Open positions unavailable because immutable account attribution is blocked" : `${feed.positions.length} open positions`}>{positionAttributionBlocked ? <span className="ws-led-unknown">—</span> : <LedDisplay value={positionsLed.value} digits={Math.max(2, positionsLed.digits)} color="var(--ws-led-neutral)" />}</div></div>
+        <div className="ws-metric ws-metric--led"><small>RISK USED</small><div className="ws-led-readout neutral" role="img" aria-label={positionAttributionBlocked ? "Risk used unavailable because immutable account attribution is blocked" : `Risk used ${riskLedValue} percent`}>{positionAttributionBlocked ? <span className="ws-led-unknown">—</span> : <LedDisplay value={riskLedValue} digits={riskLedValue.replace(".", "").length} color="var(--ws-led-neutral)" unit="%" />}</div></div>
         <div className={`ws-metric ws-state ${processTelemetry.tone}`} title={processTelemetry.detail}><small>DATA</small><strong>{processTelemetry.label}<i /></strong></div>
         <div className={`ws-metric ws-state ${brokerTelemetry.tone}`} title={brokerTelemetry.detail}><small>BROKER</small><strong>{brokerTelemetry.label}<i /></strong></div>
         <div className="ws-clock">

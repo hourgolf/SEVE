@@ -29,7 +29,11 @@ import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 import { captureObservedPositionPlan } from "./planShadow.js";
 import { observedPolicyIdentity } from "./planShadowModel.js";
-import { captureBrokerObservation, captureDecisionObservation } from "./executionObservation.js";
+import {
+  captureBrokerObservation,
+  captureDecisionObservation,
+  capturePositionRouteObservation,
+} from "./executionObservation.js";
 import { captureExecutionQualityReceipt } from "./executionQuality.js";
 import { capturePositionOutcome } from "./positionOutcome.js";
 import { queueManagerShadowAdmission } from "./managerShadowBook.js";
@@ -127,6 +131,46 @@ const opportunityFor = (row: store.PositionRow): string | null => {
   const value = row.entry_features?.opportunity_id;
   return typeof value === "string" && value.startsWith("opp:") ? value : null;
 };
+
+function capturePositionRoute(input: {
+  positionId: string;
+  channel: Pick<store.ChannelConfig, "id" | "slug" | "underlying">;
+  occSymbol: string;
+  optionSide: string;
+  quantity: number;
+  routeKind: "entry" | "recovered_entry" | "partial_remainder" | "runner_remainder";
+  ctx: ExecCtx;
+  opportunityId?: string | null;
+  parent?: store.PositionRow | null;
+}): void {
+  const stamp = input.parent
+    ? {
+      channel_spec_version_id: input.parent.channel_spec_version_id ?? null,
+      release_manifest_id: input.parent.release_manifest_id ?? null,
+      configuration_epoch_id: input.parent.configuration_epoch_id ?? null,
+    }
+    : input.ctx.configurationWriteStamp
+      ? {
+        channel_spec_version_id: input.ctx.configurationWriteStamp.channel_spec_version_id,
+        release_manifest_id: input.ctx.configurationWriteStamp.release_manifest_id,
+        configuration_epoch_id: input.ctx.configurationWriteStamp.configuration_epoch_id,
+      }
+      : null;
+  capturePositionRouteObservation({
+    channel: input.channel,
+    accountId: input.ctx.accountId,
+    positionId: input.positionId,
+    observedAtMs: Date.now(),
+    sourceBarAtMs: input.ctx.decisionAtMs,
+    occSymbol: input.occSymbol,
+    optionSide: input.optionSide,
+    quantity: input.quantity,
+    routeKind: input.routeKind,
+    opportunityId: input.opportunityId ?? null,
+    parentPositionId: input.parent?.id ?? null,
+    configurationIds: stamp,
+  });
+}
 
 function captureBookedOutcome(
   row: store.PositionRow, quantity: number, exitPrice: number, realized: number,
@@ -331,6 +375,17 @@ async function bookPartialExit(
     eventKind: "position_remainder_opened", eventAtMs: Date.now(), positionId: remainder.id,
     parentPositionId: row.id, opportunityId: opportunityFor(row), quantity: pr.remain,
     avgEntryPrice: row.avg_entry_price, payload: { remainderKind: "partial_exit" },
+  });
+  if (remainder.id) capturePositionRoute({
+    positionId: remainder.id,
+    channel: { id: row.strategist_id, slug: d.slug, underlying: row.underlying },
+    occSymbol: row.occ_symbol,
+    optionSide: row.opt_type,
+    quantity: pr.remain,
+    routeKind: "partial_remainder",
+    ctx,
+    opportunityId: opportunityFor(row),
+    parent: row,
   });
   await store.journal("EXEC",
     `${d.slug}: partial exit ${occ} sold ×${pr.sold}/${row.qty} @ ${exitPx.toFixed(2)} (${d.reason}${via ? ` · ${via}` : ""}) → $${realized.toFixed(0)}; remainder ×${pr.remain} re-rowed (normal TP/stop, fresh exit coid)`);
@@ -617,6 +672,17 @@ async function executeTranche(
         parentPositionId: row.id, opportunityId: opportunityFor(row), quantity: remainQty,
         avgEntryPrice: row.avg_entry_price, payload: { remainderKind: "runner" },
       });
+      if (remainder.id) capturePositionRoute({
+        positionId: remainder.id,
+        channel: { id: row.strategist_id, slug: d.slug, underlying: row.underlying },
+        occSymbol: row.occ_symbol,
+        optionSide: row.opt_type,
+        quantity: remainQty,
+        routeKind: "runner_remainder",
+        ctx,
+        opportunityId: opportunityFor(row),
+        parent: row,
+      });
       await store.journal("EXEC",
         `${d.slug}: runner tranche ${occ} banked ×${soldQty} @ ${exitPx.toFixed(2)} → $${realized.toFixed(0)}; runner ×${remainQty} rides (ratchet ${runner.givebackPct}% off peak)`);
       void store.writeShadowEvent(`RUNNER ${d.slug} ${occ} banked ×${soldQty} → $${realized.toFixed(0)}, riding ×${remainQty}`,
@@ -733,6 +799,15 @@ export async function executeEntry(
             : {}),
         });
         if (!inserted.error) {
+          if (inserted.id) capturePositionRoute({
+            positionId: inserted.id,
+            channel: ch,
+            occSymbol: occ,
+            optionSide: dir,
+            quantity: net,
+            routeKind: "recovered_entry",
+            ctx,
+          });
           if (inserted.id && inserted.openedAt) queueManagerShadowAdmission({
             positionId: inserted.id, strategistId: ch.id, accountId: ctx.accountId,
             channelSlug: ch.slug, occSymbol: occ, underlying: ch.underlying,
@@ -871,6 +946,16 @@ export async function executeEntry(
       eventKind: "position_opened", eventAtMs: Date.now(), positionId: inserted.id,
       opportunityId, quantity: fillQty, avgEntryPrice: entryPx,
       payload: { brokerOrderId: o.id, brokerStatus: o.status },
+    });
+    if (inserted.id) capturePositionRoute({
+      positionId: inserted.id,
+      channel: ch,
+      occSymbol: occ,
+      optionSide: dir,
+      quantity: fillQty,
+      routeKind: "entry",
+      ctx,
+      opportunityId,
     });
     if (inserted.id && inserted.openedAt) queueManagerShadowAdmission({
       positionId: inserted.id, strategistId: ch.id, accountId: ctx.accountId,

@@ -8,9 +8,11 @@ import type { ShadowDecision } from "./decide.js";
 import {
   buildBrokerObservation,
   buildDecisionObservation,
+  buildPositionRouteObservation,
   type BrokerObservationInput,
   type DecisionObservationInput,
   type ExecutionObservationDraft,
+  type PositionRouteObservationInput,
 } from "./executionObservationModel.js";
 import {
   buildManagerShadowObservation,
@@ -43,6 +45,11 @@ export function captureDecisionObservation(input: DecisionObservationInput): str
 export function captureBrokerObservation(input: BrokerObservationInput): string | null {
   try { return enqueue(buildBrokerObservation(input)); }
   catch (e) { warn(`execution-observation: broker draft rejected — ${(e as Error).message}`); return null; }
+}
+
+export function capturePositionRouteObservation(input: PositionRouteObservationInput): string | null {
+  try { return enqueue(buildPositionRouteObservation(input)); }
+  catch (e) { warn(`execution-observation: position route draft rejected — ${(e as Error).message}`); return null; }
 }
 
 export function captureManagerShadowObservation(input: ManagerShadowObservationInput): string | null {

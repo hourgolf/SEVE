@@ -5,6 +5,7 @@ import { normalizeContractHistoryRows } from "./contractHistory";
 import type { ChannelPnl, Position, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
 import type { OptionQuote } from "@/lib/types";
+import { readFileSync } from "node:fs";
 
 let passed = 0;
 function check(label: string, got: unknown, want: unknown) {
@@ -93,5 +94,18 @@ const quote = (id: string, captured_at: string): OptionQuote => ({
 check("bounded contract history restores chronological order", normalizeContractHistoryRows([
   quote("new", "2026-07-15T15:31:00Z"), quote("old", "2026-07-15T15:30:00Z"),
 ]).map((row) => row.id), ["old", "new"]);
+
+const positionsWorkspaceSource = readFileSync(
+  new URL("../../components/perform/PerformPositionsWorkspace.tsx", import.meta.url),
+  "utf8",
+);
+const positionsRailSource = readFileSync(
+  new URL("../../components/perform/PerformRail.tsx", import.meta.url),
+  "utf8",
+);
+check("blocked attribution suppresses false realized zero", positionsWorkspaceSource.includes('value: attributionBlocked ? "—"'), true);
+check("blocked attribution exposes broker truth", positionsWorkspaceSource.includes("<BrokerTruthFallback surface={surface} />"), true);
+check("blocked attribution never claims flat", positionsRailSource.includes("DESK ATTRIBUTION BLOCKED"), true);
+check("recovered legacy attribution remains visibly qualified", positionsRailSource.includes("LEGACY ROUTE RECOVERED"), true);
 
 console.log(`perform-selftest: ${passed}/${passed} passed`);

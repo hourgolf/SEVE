@@ -33,6 +33,8 @@ jobs:
         run: npm run candle-selftest
       - name: runner exit-rules selftest
         run: npm run runner-selftest
+      - name: immutable position-route receipt selftest
+        run: npm run position-route-observation-selftest
       - name: native review selftest
         run: npm run review-workspace-selftest
       - name: mobile review selftest

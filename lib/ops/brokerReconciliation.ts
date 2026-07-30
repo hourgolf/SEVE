@@ -1,6 +1,9 @@
 export interface BrokerPositionInput {
   symbol: string;
   qty: number;
+  averageEntryPrice?: number | null;
+  currentPrice?: number | null;
+  unrealizedPnl?: number | null;
 }
 
 export interface DeskPositionInput {
@@ -34,6 +37,7 @@ export interface BrokerAccountReceipt {
   brokerContracts: number;
   deskContracts: number;
   mismatchCount: number;
+  brokerPositions: BrokerPositionInput[];
 }
 
 export interface BrokerReconciliationReceipt {
@@ -67,6 +71,30 @@ export interface LatestImmutableExecutionAccountRoute {
   accountId: string;
   eventMs: number;
   observationId: string;
+}
+
+export interface PositionOutcomeOpportunityRoute {
+  id: string;
+  position_id: string;
+  opportunity_id: string | null;
+  event_at: string;
+}
+
+export interface OpportunityExecutionAccountObservation {
+  id: string;
+  opportunity_id: string | null;
+  account_id: string | null;
+  event_at: string;
+  event_kind: string;
+  action: string;
+  filled_qty: number | null;
+}
+
+export interface ImmutableOpportunityAccountRecovery<T extends { id: string }> {
+  byAccount: Map<string, T[]>;
+  recoveredPositionIds: string[];
+  issues: string[];
+  ok: boolean;
 }
 
 /**
@@ -159,7 +187,91 @@ export function attributePositionsByImmutableExecutionAccount<T extends { id: st
   };
 }
 
+/**
+ * Display-only recovery for legacy rows created before post-insert position
+ * route receipts existed. It requires an exact position→outcome→opportunity
+ * join and exactly one immutable filled-entry account for that opportunity.
+ * Formal broker reconciliation and readiness deliberately do not call this:
+ * they continue to require a position_id-bound execution observation.
+ */
+export function recoverPositionsByImmutableOpportunityAccountForDisplay<T extends { id: string }>(input: {
+  positions: readonly T[];
+  outcomes: readonly PositionOutcomeOpportunityRoute[];
+  observations: readonly OpportunityExecutionAccountObservation[];
+  configuredPaperAccountIds: ReadonlySet<string>;
+  readError?: string | null;
+}): ImmutableOpportunityAccountRecovery<T> {
+  const byAccount = new Map<string, T[]>();
+  const recoveredPositionIds: string[] = [];
+  const issues: string[] = [];
+  if (input.readError) {
+    return {
+      byAccount,
+      recoveredPositionIds,
+      issues: [`legacy immutable route evidence unavailable: ${input.readError}`],
+      ok: false,
+    };
+  }
+
+  const requested = new Set(input.positions.map((position) => position.id));
+  const opportunityByPosition = new Map<string, {
+    opportunityId: string;
+    eventMs: number;
+    outcomeId: string;
+  }>();
+  for (const outcome of input.outcomes) {
+    const positionId = outcome.position_id?.trim() ?? "";
+    const opportunityId = outcome.opportunity_id?.trim() ?? "";
+    const outcomeId = outcome.id?.trim() ?? "";
+    const eventMs = Date.parse(outcome.event_at);
+    if (!requested.has(positionId) || !opportunityId || !outcomeId || !Number.isFinite(eventMs)) continue;
+    const current = opportunityByPosition.get(positionId);
+    if (!current || eventMs > current.eventMs
+      || (eventMs === current.eventMs && outcomeId.localeCompare(current.outcomeId) > 0)) {
+      opportunityByPosition.set(positionId, { opportunityId, eventMs, outcomeId });
+    }
+  }
+
+  const accountsByOpportunity = new Map<string, Set<string>>();
+  for (const observation of input.observations) {
+    const opportunityId = observation.opportunity_id?.trim() ?? "";
+    const accountId = observation.account_id?.trim() ?? "";
+    if (!opportunityId || !accountId || observation.event_kind !== "broker_result"
+      || observation.action !== "enter" || !(Number(observation.filled_qty) > 0)
+      || !Number.isFinite(Date.parse(observation.event_at))) continue;
+    const accounts = accountsByOpportunity.get(opportunityId) ?? new Set<string>();
+    accounts.add(accountId);
+    accountsByOpportunity.set(opportunityId, accounts);
+  }
+
+  for (const position of input.positions) {
+    const route = opportunityByPosition.get(position.id);
+    if (!route) {
+      issues.push(`${position.id} lacks an immutable position outcome opportunity`);
+      continue;
+    }
+    const accounts = [...(accountsByOpportunity.get(route.opportunityId) ?? [])].sort();
+    if (accounts.length !== 1) {
+      issues.push(`${position.id} has ${accounts.length || "no"} immutable filled-entry account routes`);
+      continue;
+    }
+    const accountId = accounts[0];
+    if (!input.configuredPaperAccountIds.has(accountId)) {
+      issues.push(`${position.id} recovered to non-paper or unconfigured account ${accountId}`);
+      continue;
+    }
+    const rows = byAccount.get(accountId) ?? [];
+    rows.push(position);
+    byAccount.set(accountId, rows);
+    recoveredPositionIds.push(position.id);
+  }
+
+  return { byAccount, recoveredPositionIds, issues, ok: issues.length === 0 };
+}
+
 const finiteQty = (value: number): number => Number.isFinite(value) ? Math.round(value) : 0;
+const finiteOrNull = (value: number | null | undefined): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
 
 const aggregate = <T>(rows: T[], symbolOf: (row: T) => string, qtyOf: (row: T) => number): Map<string, number> => {
   const result = new Map<string, number>();
@@ -220,6 +332,16 @@ export function reconcileBrokerPositions(
       brokerContracts: accountBroker,
       deskContracts: accountDesk,
       mismatchCount,
+      brokerPositions: account.brokerPositions
+        .map((position) => ({
+          symbol: position.symbol.trim().toUpperCase(),
+          qty: finiteQty(position.qty),
+          averageEntryPrice: finiteOrNull(position.averageEntryPrice),
+          currentPrice: finiteOrNull(position.currentPrice),
+          unrealizedPnl: finiteOrNull(position.unrealizedPnl),
+        }))
+        .filter((position) => position.symbol && position.qty !== 0)
+        .sort((a, b) => a.symbol.localeCompare(b.symbol)),
     });
   }
 
