@@ -13,7 +13,13 @@ truth("stable gate uses release-agnostic engine", source.includes("evaluatePreop
 truth("temporary RC5.4 authority is isolated behind an adapter", source.includes("rc54OperationalContract"));
 truth("temporary receipt parsing is isolated behind the adapter", source.includes("observeRc54ReleaseReceipt")
   && !source.includes("findSealedReleaseReceipt"));
-truth("draft control-plane manifest is explicitly excluded", source.includes("draft control-plane manifest excluded"));
+truth("draft control-plane manifests are explicitly excluded", source.includes("draft control-plane manifests excluded"));
+truth("immutable receipt-bound authority is loaded through the canonical store reader",
+  source.includes("loadStoredReceiptBoundControlPlane")
+  && source.includes('storedAuthority.state === "receipt-bound"'));
+truth("receipt-bound readiness uses the exact activated runtime projection",
+  source.includes("buildProductionReceiptBoundRuntimeConfiguration")
+  && source.includes("receiptBoundRc54OperationalContract"));
 truth("all configured paper accounts are selected", source.includes('account.mode.toLowerCase() === "paper"'));
 truth("account queries are not restricted to manifest accounts", !source.match(/accounts[^;]+requiredAccountIds/s));
 truth("every configured account reads broker positions", source.includes('brokerGet(brokerOrigin, "/v2/positions", credentials)'));

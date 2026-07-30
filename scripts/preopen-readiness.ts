@@ -3,8 +3,8 @@
 //
 // This command is SELECT/GET only. It does not judge or authorize configuration
 // changes, create control-plane records, write evidence, or place orders.
-// The temporary RC5.4 adapter describes the currently active sealed worker
-// overlay. Draft control-plane manifests are intentionally not runtime authority.
+// The temporary RC5.4 adapter describes either the sealed baseline or one
+// immutable receipt-bound successor. Draft manifests are never runtime authority.
 // ============================================================================
 
 import { existsSync } from "node:fs";
@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import type { MarketEvent } from "@/lib/types";
 import {
   evaluatePreopenReadiness,
+  type OperationalReleaseContract,
   type PaperAccountObservation,
   type WorkerObservation,
 } from "@/lib/ops/preopenReadinessEngine";
@@ -21,10 +22,16 @@ import {
 } from "@/lib/ops/brokerReconciliation";
 import {
   mapRc54ChannelRow,
+  observeReceiptBoundRc54Bindings,
   observeRc54ReleaseReceipt,
   observeRc54Bindings,
+  receiptBoundRc54OperationalContract,
   rc54OperationalContract,
+  type Rc54BindingObservation,
 } from "./ops/rc54ReadinessAdapter";
+import { buildShadowRuntimeProjection } from "@/lib/channels/channelActivation";
+import { loadStoredReceiptBoundControlPlane } from "@/lib/channels/channelControlPlanePersistence";
+import { buildProductionReceiptBoundRuntimeConfiguration } from "@/worker/src/channelConfigurationRuntimeAdapter";
 import type { AccountRow } from "@/worker/src/store";
 import { createServerSupabaseClient } from "./serverSupabase";
 
@@ -248,8 +255,49 @@ async function main(): Promise<void> {
     account.mode.toLowerCase() === "paper");
   const fleet = (strategistRead.data ?? []).map((row) =>
     mapRc54ChannelRow(row as Record<string, unknown>));
-  const bindings = observeRc54Bindings(fleet, allAccounts);
-  const contract = rc54OperationalContract(bindings.roots);
+  const fund = fundRead.data as FundRow | null;
+  const storedAuthority = await loadStoredReceiptBoundControlPlane(
+    sb as unknown as Parameters<typeof loadStoredReceiptBoundControlPlane>[0],
+  );
+  if (storedAuthority.state === "failed") {
+    throw new Error(
+      `active control-plane authority read failed: ${storedAuthority.error ?? "unknown"}`,
+    );
+  }
+  const resolvedCredentialAccountIds = allAccounts
+    .filter((account) => envCredentials(account.cred_ref) != null)
+    .map((account) => account.id);
+  let bindings: Rc54BindingObservation;
+  let contract: OperationalReleaseContract;
+  if (storedAuthority.state === "receipt-bound") {
+    if (!storedAuthority.compiled || !storedAuthority.activationReceipt
+        || !storedAuthority.databaseIdentity) {
+      throw new Error("receipt-bound control-plane authority is incomplete");
+    }
+    const projection = buildShadowRuntimeProjection(storedAuthority.compiled);
+    if (projection.state !== "comparable") {
+      throw new Error(
+        `receipt-bound control-plane projection blocked: ${projection.blockers.join(",")}`,
+      );
+    }
+    const runtime = buildProductionReceiptBoundRuntimeConfiguration({
+      compiled: storedAuthority.compiled,
+      projection,
+      activationReceipt: storedAuthority.activationReceipt,
+      databaseIdentity: storedAuthority.databaseIdentity,
+    });
+    bindings = observeReceiptBoundRc54Bindings({
+      fleet,
+      accounts: allAccounts,
+      runtime,
+      fundMode: fund?.mode ?? null,
+      resolvedCredentialAccountIds,
+    });
+    contract = receiptBoundRc54OperationalContract(runtime);
+  } else {
+    bindings = observeRc54Bindings(fleet, allAccounts);
+    contract = rc54OperationalContract(bindings.roots);
+  }
   const deskPositions = (positionsRead.data ?? []) as PositionRow[];
   const configuredPaperAccountIds = new Set(configuredPaperAccounts.map((account) => account.id));
   const positionIds = deskPositions.map((position) => position.id);
@@ -281,8 +329,10 @@ async function main(): Promise<void> {
     lastPhase: worker.last_phase,
     lastError: worker.last_error,
   }));
-  const receipt = observeRc54ReleaseReceipt((releaseRead.data ?? []) as MarketEvent[]);
-  const fund = fundRead.data as FundRow | null;
+  const receipt = observeRc54ReleaseReceipt(
+    (releaseRead.data ?? []) as MarketEvent[],
+    contract,
+  );
   const result = evaluatePreopenReadiness({
     nowMs: Date.now(),
     workerFreshMs: WORKER_FRESH_MS,
@@ -297,10 +347,10 @@ async function main(): Promise<void> {
 
   console.log(`\n══ SEVE ${closeMode ? "SESSION-CLOSE" : "PRE-OPEN"} OPERATIONAL CONGRUENCE · READ ONLY ══`);
   console.log(`Adapter     : ${contract.adapterId}`);
-  console.log(`Authority   : sealed runtime overlay · draft control-plane manifest excluded`);
+  console.log(`Authority   : ${contract.authoritySource} · draft control-plane manifests excluded`);
   console.log(`Release     : ${contract.releaseId}`);
   console.log(`Config      : ${contract.configurationSha256}`);
-  console.log(`Fleet       : ${bindings.fleetCount} database rows · ${contract.roots.length} sealed roots`);
+  console.log(`Fleet       : ${bindings.fleetCount} database rows · ${contract.roots.length} authority roots`);
   console.log(`Accounts    : ${accountObservations.length} configured paper account(s) queried`);
   console.log(`Worker      : ${result.currentWorker?.runtimeVersion ?? "missing"} · ${result.currentWorker?.lastPhase ?? "unknown"}\n`);
 

@@ -105,6 +105,74 @@ export function validateReceiptBoundRc54Topology(
   return uniqueSorted(errors);
 }
 
+/**
+ * Carries the already-validated RC5.4 operational posture into the immutable
+ * receipt-bound startup identity. The receipt-bound manifest replaces only
+ * configuration identity; it must not lose paper/order/feed/capture evidence.
+ */
+export function buildReceiptBoundRc54StartupReceipt(input: {
+  runtime: Readonly<ReceiptBoundRuntimeConfiguration>;
+  operationalReceipt: Readonly<Record<string, unknown>>;
+}): Readonly<Record<string, unknown>> {
+  const topologyErrors = validateReceiptBoundRc54Topology(input.runtime);
+  if (topologyErrors.length) throw new Error(topologyErrors.join(";"));
+  for (const field of [
+    "alpacaPaperOrigin",
+    "stockFeed",
+    "optionFeed",
+    "dryRun",
+    "liveTrading",
+    "heldCapture",
+    "managerShadow",
+  ] as const) {
+    if (input.operationalReceipt[field] == null) {
+      throw new Error(`receipt-bound startup posture missing ${field}`);
+    }
+  }
+  return Object.freeze({
+    ...input.operationalReceipt,
+    schemaVersion: 1,
+    state: "receipt-bound",
+    workerVersion: input.runtime.workerCompatibilityVersion,
+    releaseId: input.runtime.releaseId,
+    releaseManifestId: input.runtime.releaseManifestId,
+    manifestContentHash: input.runtime.manifestContentHash,
+    configurationEpochId: input.runtime.configurationEpochId,
+    activationReceiptId: input.runtime.activationReceiptId,
+    activatedAt: input.runtime.activatedAt,
+    workerCompatibilityVersion: input.runtime.workerCompatibilityVersion,
+    adapterVersion: input.runtime.adapterVersion,
+    temporaryTopologyAdapter: "RC5.4",
+    paperOnly: true,
+    roots: input.runtime.roots.map((root) => ({
+      slug: root.slug,
+      accountId: root.accountId,
+      channelSpecVersionId: root.channelSpecVersionId,
+      channelSpecContentHash: root.channelSpecContentHash,
+      managerProfileId: root.configuration.managerProfileId,
+      managerVersion: root.configuration.managerVersion,
+      configurationEpochId: root.configuration.configurationEpochId,
+      quantity: root.quantity,
+      maxEntriesPerSession: root.maxEntriesPerSession,
+    })),
+    rootCount: input.runtime.roots.length,
+    entryLimits: Object.fromEntries(
+      input.runtime.roots
+        .map((root): [string, number] => [
+          root.slug,
+          root.maxEntriesPerSession,
+        ])
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ),
+    configuredPaperAccountIds: [
+      ...new Set(input.runtime.roots.map((root) => root.accountId)),
+    ].sort(),
+    historicalMutationAuthorized: false,
+    runtimeMutationAuthorized: false,
+    liveMoneyAuthorized: false,
+  });
+}
+
 function admissionRootFromReceipt(
   root: Readonly<ReceiptBoundRuntimeRoot>,
 ): Readonly<Rc54AdmissionRoot> {

@@ -19,6 +19,11 @@ import {
   WORKER_RUNTIME_VERSION,
 } from "@/worker/src/version";
 import { observedPolicyIdentity } from "@/worker/src/planShadowModel";
+import {
+  validateReceiptBoundRuntimeStartup,
+  type ReceiptBoundRuntimeConfiguration,
+} from "@/worker/src/channelConfigurationRuntimeAdapter";
+import { validateReceiptBoundRc54Topology } from "@/worker/src/temporaryRc54RuntimeAdapter";
 import type {
   OperationalReleaseContract,
   OperationalRootIdentity,
@@ -45,7 +50,83 @@ const numberValue = (value: unknown): number | null =>
 const stringValue = (value: unknown): string | null =>
   typeof value === "string" ? value : null;
 
-export function observeRc54ReleaseReceipt(events: MarketEvent[]): ReleaseReceiptObservation | null {
+const SHA256 = /^sha256:([0-9a-f]{64})$/i;
+
+function receiptBoundEvent(events: MarketEvent[]): MarketEvent | null {
+  let latest: MarketEvent | null = null;
+  let latestAt = Number.NEGATIVE_INFINITY;
+  for (const event of events) {
+    const meta = object(event.meta);
+    const candidate = meta?.state === "receipt-bound"
+      || /\brc54-release\s+ACTIVE\s+release:candidate:\S+\s+config=sha256:[a-f0-9]{64}\b/i
+        .test(event.message);
+    if (!candidate) continue;
+    const createdAt = Date.parse(event.created_at);
+    if (latest == null || (Number.isFinite(createdAt) && createdAt > latestAt)) {
+      latest = event;
+      latestAt = Number.isFinite(createdAt) ? createdAt : latestAt;
+    }
+  }
+  return latest;
+}
+
+function observeReceiptBoundRc54ReleaseReceipt(
+  events: MarketEvent[],
+): ReleaseReceiptObservation | null {
+  const event = receiptBoundEvent(events);
+  if (!event) return null;
+  const meta = object(event.meta);
+  const releaseId = stringValue(meta?.releaseId);
+  const manifestContentHash = stringValue(meta?.manifestContentHash);
+  const configurationEpochId = stringValue(meta?.configurationEpochId);
+  const activationReceiptId = stringValue(meta?.activationReceiptId);
+  const hash = manifestContentHash?.match(SHA256)?.[1]?.toLowerCase() ?? null;
+  const exactMessage = releaseId && manifestContentHash
+    ? `stream: rc54-release ACTIVE ${releaseId} config=${manifestContentHash}`
+    : null;
+  const coherent = meta?.state === "receipt-bound"
+    && Boolean(releaseId)
+    && Boolean(hash)
+    && Boolean(configurationEpochId?.match(SHA256))
+    && Boolean(activationReceiptId)
+    && event.message === exactMessage;
+  const heldCapture = object(meta?.heldCapture);
+  const managerObserver = object(meta?.managerShadow);
+  const runtimeReadiness = object(meta?.runtimeReadiness);
+  return {
+    releaseId: coherent ? releaseId ?? "" : "",
+    configurationSha256: coherent ? hash ?? "" : "",
+    configurationEpoch: coherent ? configurationEpochId : null,
+    activationReceiptId: coherent ? activationReceiptId : null,
+    strategyWorkerVersion: coherent
+      ? stringValue(meta?.workerCompatibilityVersion)
+      : null,
+    createdAt: event.created_at,
+    dryRun: booleanValue(meta?.dryRun),
+    liveTrading: booleanValue(meta?.liveTrading),
+    alpacaPaperOrigin: stringValue(meta?.alpacaPaperOrigin),
+    stockFeed: stringValue(meta?.stockFeed),
+    optionFeed: stringValue(meta?.optionFeed),
+    heldCaptureEnabled: booleanValue(heldCapture?.enabled),
+    heldCaptureTargetSamples: numberValue(heldCapture?.targetSamples),
+    heldCaptureMaxAgeMs: numberValue(heldCapture?.maxAgeMs),
+    heldCaptureReady: booleanValue(runtimeReadiness?.heldCaptureReady),
+    heldCaptureStartedBeforeBootDecision: booleanValue(
+      runtimeReadiness?.heldCaptureStartedBeforeBootDecision,
+    ),
+    managerObserverEnabled: booleanValue(managerObserver?.enabled),
+    managerObserverQuoteMaxAgeMs: numberValue(managerObserver?.quoteMaxAgeMs),
+    flatEraBoundaryProven: booleanValue(runtimeReadiness?.flatEraBoundaryProven),
+  };
+}
+
+export function observeRc54ReleaseReceipt(
+  events: MarketEvent[],
+  contract?: OperationalReleaseContract,
+): ReleaseReceiptObservation | null {
+  if (contract?.authoritySource === "immutable-activation-receipt") {
+    return observeReceiptBoundRc54ReleaseReceipt(events);
+  }
   const receipt = findSealedReleaseReceipt(events);
   if (!receipt) return null;
   const meta = receipt.meta;
@@ -55,6 +136,8 @@ export function observeRc54ReleaseReceipt(events: MarketEvent[]): ReleaseReceipt
   return {
     releaseId: receipt.releaseId,
     configurationSha256: receipt.configHash,
+    configurationEpoch: null,
+    activationReceiptId: null,
     strategyWorkerVersion: stringValue(meta?.workerVersion),
     createdAt: receipt.createdAt,
     dryRun: receipt.dryRun,
@@ -70,6 +153,44 @@ export function observeRc54ReleaseReceipt(events: MarketEvent[]): ReleaseReceipt
     managerObserverEnabled: booleanValue(managerObserver?.enabled),
     managerObserverQuoteMaxAgeMs: numberValue(managerObserver?.quoteMaxAgeMs),
     flatEraBoundaryProven: booleanValue(runtimeReadiness?.flatEraBoundaryProven),
+  };
+}
+
+export function observeReceiptBoundRc54Bindings(input: {
+  fleet: readonly ChannelConfig[];
+  accounts: readonly AccountRow[];
+  runtime: Readonly<ReceiptBoundRuntimeConfiguration>;
+  fundMode: string | null;
+  resolvedCredentialAccountIds: readonly string[];
+}): Rc54BindingObservation {
+  const startup = validateReceiptBoundRuntimeStartup({
+    runtime: input.runtime,
+    channels: input.fleet,
+    accounts: input.accounts,
+    fundMode: input.fundMode,
+    workerCompatibilityVersion: RC54_WORKER_VERSION,
+    resolvedCredentialAccountIds: input.resolvedCredentialAccountIds,
+  });
+  const issues = [
+    ...validateRc54SourceExecutorBoundary(input.fleet),
+    ...validateRc54AccountBindings(input.accounts),
+    ...validateReceiptBoundRc54Topology(input.runtime),
+    ...startup.blockers,
+  ];
+  return {
+    issues: [...new Set(issues)].sort(),
+    fleetCount: input.fleet.length,
+    roots: input.runtime.roots.map((root) => ({
+      slug: root.slug,
+      accountId: root.accountId,
+      channelVersion: root.channelSpecContentHash,
+      managerVersion: root.configuration.managerVersion,
+      configurationEpoch: root.configuration.configurationEpochId,
+      quantity: root.quantity,
+      takeProfitPct: root.takeProfit.kind === "bank"
+        ? root.takeProfit.targetPct
+        : null,
+    })),
   };
 }
 
@@ -174,6 +295,8 @@ export function rc54OperationalContract(roots: readonly OperationalRootIdentity[
     authoritySource: "sealed-runtime-adapter",
     releaseId: RC54_RELEASE_ID,
     configurationSha256: RC54_RELEASE_CONFIGURATION_SHA256,
+    configurationEpoch: null,
+    activationReceiptId: null,
     strategyWorkerVersion: RC54_WORKER_VERSION,
     runtimeVersion: WORKER_RUNTIME_VERSION,
     roots,
@@ -191,6 +314,56 @@ export function rc54OperationalContract(roots: readonly OperationalRootIdentity[
       quoteMaxAgeMs: DAY1_SEALED_RUNTIME_POSTURE.managerShadow.quoteMaxAgeMs,
     },
     flatBoundaryReceiptRequired: true,
+  };
+}
+
+export function receiptBoundRc54OperationalContract(
+  runtime: Readonly<ReceiptBoundRuntimeConfiguration>,
+): OperationalReleaseContract {
+  const topologyErrors = validateReceiptBoundRc54Topology(runtime);
+  if (topologyErrors.length) {
+    throw new Error(`receipt-bound RC5.4 topology mismatch: ${topologyErrors.join(",")}`);
+  }
+  return {
+    adapterId: "receipt-bound-rc54-runtime-adapter-v1",
+    authoritySource: "immutable-activation-receipt",
+    releaseId: runtime.releaseId,
+    configurationSha256:
+      runtime.manifestContentHash.match(SHA256)?.[1]?.toLowerCase() ?? "",
+    configurationEpoch: runtime.configurationEpochId,
+    activationReceiptId: runtime.activationReceiptId,
+    strategyWorkerVersion: runtime.workerCompatibilityVersion,
+    runtimeVersion: WORKER_RUNTIME_VERSION,
+    roots: runtime.roots.map((root) => ({
+      slug: root.slug,
+      accountId: root.accountId,
+      channelVersion: root.channelSpecContentHash,
+      managerVersion: root.configuration.managerVersion,
+      configurationEpoch: root.configuration.configurationEpochId,
+      quantity: root.quantity,
+      takeProfitPct: root.takeProfit.kind === "bank"
+        ? root.takeProfit.targetPct
+        : null,
+    })),
+    requiredAccountIds: [
+      ...new Set(runtime.roots.map((root) => root.accountId)),
+    ].sort(),
+    paperOrigin: DAY1_SEALED_RUNTIME_POSTURE.alpacaPaperOrigin,
+    stockFeed: DAY1_SEALED_RUNTIME_POSTURE.stockFeed,
+    optionFeed: DAY1_SEALED_RUNTIME_POSTURE.optionFeed,
+    capture: {
+      required: DAY1_SEALED_RUNTIME_POSTURE.heldCapture.requiredEnabled,
+      targetSamples: DAY1_SEALED_RUNTIME_POSTURE.heldCapture.targetSamples,
+      maxAgeMs: DAY1_SEALED_RUNTIME_POSTURE.heldCapture.maxAgeMs,
+    },
+    managerObserver: {
+      required: DAY1_SEALED_RUNTIME_POSTURE.managerShadow.requiredEnabled,
+      quoteMaxAgeMs: DAY1_SEALED_RUNTIME_POSTURE.managerShadow.quoteMaxAgeMs,
+    },
+    // Fresh broker/desk flatness is queried across every configured paper
+    // account below; an activation intentionally preserves any pre-existing
+    // position's immutable entry policy instead of claiming a new flat era.
+    flatBoundaryReceiptRequired: false,
   };
 }
 

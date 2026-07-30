@@ -21,6 +21,8 @@ export interface OperationalReleaseContract {
   authoritySource: string;
   releaseId: string;
   configurationSha256: string;
+  configurationEpoch: string | null;
+  activationReceiptId: string | null;
   strategyWorkerVersion: string;
   runtimeVersion: string;
   roots: readonly OperationalRootIdentity[];
@@ -51,6 +53,8 @@ export interface WorkerObservation {
 export interface ReleaseReceiptObservation {
   releaseId: string;
   configurationSha256: string;
+  configurationEpoch: string | null;
+  activationReceiptId: string | null;
   strategyWorkerVersion: string | null;
   createdAt: string;
   dryRun: boolean | null;
@@ -130,6 +134,8 @@ export function evaluatePreopenReadiness(input: PreopenReadinessInput): PreopenR
   const roots = [...contract.roots];
   const rootSlugs = new Set(roots.map((root) => root.slug));
   const requiredAccountIds = new Set(contract.requiredAccountIds);
+  const receiptBoundAuthority =
+    contract.authoritySource === "immutable-activation-receipt";
 
   check(
     checks,
@@ -138,6 +144,9 @@ export function evaluatePreopenReadiness(input: PreopenReadinessInput): PreopenR
       && contract.authoritySource.trim().length > 0
       && contract.releaseId.trim().length > 0
       && SHA256.test(contract.configurationSha256)
+      && (!receiptBoundAuthority
+        || ((contract.activationReceiptId?.trim().length ?? 0) > 0
+          && SHA256.test(contract.configurationEpoch?.replace(/^sha256:/, "") ?? "")))
       && roots.length > 0
       && rootSlugs.size === roots.length
       && requiredAccountIds.size > 0
@@ -147,14 +156,14 @@ export function evaluatePreopenReadiness(input: PreopenReadinessInput): PreopenR
         && SHA256.test(root.channelVersion.replace(/^sha256:/, ""))
         && SHA256.test(root.managerVersion.replace(/^sha256:/, ""))
         && SHA256.test(root.configurationEpoch.replace(/^sha256:/, ""))),
-    `sealed runtime contract ${contract.releaseId} · ${roots.length} roots`,
-    "sealed runtime contract identity is incomplete or internally inconsistent",
+    `runtime authority contract ${contract.releaseId} · ${roots.length} roots`,
+    "runtime authority contract identity is incomplete or internally inconsistent",
   );
   check(
     checks,
     "release-bindings",
     input.bindingIssues.length === 0,
-    "database fleet and checked-in sealed identities are congruent",
+    "database fleet and authority identities are congruent",
     `release binding mismatch: ${input.bindingIssues.join(", ") || "unknown"}`,
   );
   check(
@@ -201,7 +210,10 @@ export function evaluatePreopenReadiness(input: PreopenReadinessInput): PreopenR
     "release-receipt-identity",
     receipt?.releaseId === contract.releaseId
       && receipt.configurationSha256 === contract.configurationSha256
-      && receipt.strategyWorkerVersion === contract.strategyWorkerVersion,
+      && receipt.strategyWorkerVersion === contract.strategyWorkerVersion
+      && (!receiptBoundAuthority
+        || (receipt.configurationEpoch === contract.configurationEpoch
+          && receipt.activationReceiptId === contract.activationReceiptId)),
     `exact ${contract.releaseId} receipt matches release, configuration, and strategy worker`,
     `release receipt identity mismatch or missing for ${contract.releaseId}`,
   );
@@ -222,7 +234,7 @@ export function evaluatePreopenReadiness(input: PreopenReadinessInput): PreopenR
     receipt?.alpacaPaperOrigin === contract.paperOrigin
       && receipt.dryRun === false
       && receipt.liveTrading === true,
-    "paper broker origin and two-key paper executor match the sealed receipt",
+    "paper broker origin and two-key paper executor match the current receipt",
     "paper broker origin or two-key paper executor is not established by the current receipt",
   );
   check(
@@ -247,8 +259,8 @@ export function evaluatePreopenReadiness(input: PreopenReadinessInput): PreopenR
     capturePass,
     contract.capture.required
       ? `held capture ready before boot decision · ${contract.capture.targetSamples} samples / ${contract.capture.maxAgeMs / 1_000}s`
-      : "held capture is not required by this sealed contract",
-    "held capture configuration or runtime readiness does not match the sealed contract",
+      : "held capture is not required by this authority contract",
+    "held capture configuration or runtime readiness does not match the authority contract",
   );
 
   const managerPass = !contract.managerObserver.required || (
@@ -261,8 +273,8 @@ export function evaluatePreopenReadiness(input: PreopenReadinessInput): PreopenR
     managerPass,
     contract.managerObserver.required
       ? `manager observer ready · quote max ${contract.managerObserver.quoteMaxAgeMs / 1_000}s`
-      : "manager observation is not required by this sealed contract",
-    "manager observer configuration does not match the sealed contract",
+      : "manager observation is not required by this authority contract",
+    "manager observer configuration does not match the authority contract",
   );
   check(
     checks,
@@ -270,7 +282,7 @@ export function evaluatePreopenReadiness(input: PreopenReadinessInput): PreopenR
     !contract.flatBoundaryReceiptRequired || receipt?.flatEraBoundaryProven === true,
     contract.flatBoundaryReceiptRequired
       ? "startup receipt records a proven flat era boundary"
-      : "flat era boundary receipt is not required by this sealed contract",
+      : "flat era boundary receipt is not required by this authority contract",
     "current release receipt does not prove the required flat era boundary",
   );
 
