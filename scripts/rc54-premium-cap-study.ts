@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { Bar } from "../engine/types";
 import {
   rc54ComparableCanonicalSha256,
   type Rc54ComparableFreeze,
@@ -21,6 +22,11 @@ import {
   type Rc54ComparableSourceManifest,
 } from "../lib/research/rc54ComparableSource";
 import type { DatabentoCbboQuote } from "../lib/research/databentoExactPath";
+import {
+  deriveRc54SealedManagerStudy,
+  type Rc54SealedStudyPath,
+} from "../lib/research/rc54SealedManagerStudy";
+import { sessionClusteredMeanConfidence95 } from "../lib/research/rc55Research";
 import { RC54_ROOTS } from "../worker/src/rc54ReleasePolicy";
 
 const arg = (name: string): string | null => {
@@ -30,10 +36,12 @@ const arg = (name: string): string | null => {
 
 const FREEZE_FILE = resolve(arg("freeze") ?? "data/rc54-comparable/freeze.json");
 const SOURCE_DIR = resolve(arg("source-dir") ?? "data/rc54-comparable/exact/source");
+const BARS_DIR = resolve(arg("bars-dir") ?? "data/bars-archive");
 const OUTPUT_DIR = resolve(arg("out-dir") ?? "data/rc54-comparable/cap-study");
 
 if (!existsSync(FREEZE_FILE)) throw new Error(`freeze file not found: ${FREEZE_FILE}`);
 if (!existsSync(SOURCE_DIR)) throw new Error(`exact source directory not found: ${SOURCE_DIR}`);
+if (!existsSync(BARS_DIR)) throw new Error(`underlying bars directory not found: ${BARS_DIR}`);
 
 const freeze = JSON.parse(readFileSync(FREEZE_FILE, "utf8")) as Rc54ComparableFreeze;
 const { canonicalSha256, ...freezeBody } = freeze;
@@ -102,11 +110,63 @@ function candidateEntries(
   });
 }
 
-const currentComparableProfiles: Readonly<Record<string, string>> = {
-  "orb-ustop-ctl": "BANK30/A13",
-  "vb-macd-state": "BANK30/FIXED-50",
-  "vb-squeeze-break": "BANK30/FIXED-50",
-  "vb-ribbon-cross-qqq": "BANK50/A13",
+const currentComparableProfiles: Readonly<Record<
+  string,
+  { source: "target-grid" | "sealed-manager"; profileId: string }
+>> = {
+  "pb-ride": { source: "sealed-manager", profileId: "FULL-RIDE" },
+  "orb-ustop-ctl": { source: "target-grid", profileId: "BANK30/A13" },
+  "grind-v3": { source: "sealed-manager", profileId: "FULL-RIDE" },
+  "momo-shape": { source: "sealed-manager", profileId: "FULL-A13" },
+  "orb-qqq-trail": { source: "sealed-manager", profileId: "BANK20/NATIVE-ATR" },
+  "breakout-alt-v3-iwm": { source: "sealed-manager", profileId: "FULL-RIDE" },
+  "vb-macd-state": { source: "target-grid", profileId: "BANK30/FIXED-50" },
+  "vb-squeeze-break": { source: "target-grid", profileId: "BANK30/FIXED-50" },
+  "vb-ribbon-cross-qqq": { source: "target-grid", profileId: "BANK50/A13" },
+};
+
+const tpReviewProfiles: Readonly<Record<
+  string,
+  readonly { source: "target-grid" | "sealed-manager"; profileId: string }[]
+>> = {
+  "pb-ride": [
+    { source: "target-grid", profileId: "BANK20/FIXED-50" },
+    { source: "target-grid", profileId: "BANK50/FIXED-50" },
+  ],
+  "orb-ustop-ctl": [
+    { source: "target-grid", profileId: "BANK15/A13" },
+    { source: "target-grid", profileId: "BANK30/A13" },
+  ],
+  "grind-v3": [
+    { source: "target-grid", profileId: "BANK25/A13" },
+    { source: "target-grid", profileId: "BANK50/A13" },
+  ],
+  "momo-shape": [
+    { source: "target-grid", profileId: "BANK20/A13" },
+    { source: "target-grid", profileId: "BANK25/A13" },
+  ],
+  "orb-qqq-trail": [
+    { source: "sealed-manager", profileId: "BANK20/NATIVE-ATR" },
+    { source: "sealed-manager", profileId: "BANK25/NATIVE-ATR" },
+    { source: "sealed-manager", profileId: "BANK35/NATIVE-ATR" },
+    { source: "sealed-manager", profileId: "BANK50/NATIVE-ATR" },
+  ],
+  "breakout-alt-v3-iwm": [
+    { source: "target-grid", profileId: "BANK10/A13" },
+  ],
+  "vb-macd-state": [
+    { source: "target-grid", profileId: "BANK20/FIXED-50" },
+    { source: "target-grid", profileId: "BANK30/FIXED-50" },
+  ],
+  "vb-squeeze-break": [
+    { source: "target-grid", profileId: "BANK15/FIXED-50" },
+    { source: "target-grid", profileId: "BANK30/FIXED-50" },
+  ],
+  "vb-ribbon-cross-qqq": [
+    { source: "target-grid", profileId: "BANK50/A13" },
+    { source: "target-grid", profileId: "BANK75/A13" },
+    { source: "target-grid", profileId: "BANK100/A13" },
+  ],
 };
 
 function round(value: number, places = 2): number {
@@ -114,7 +174,12 @@ function round(value: number, places = 2): number {
   return Math.round((value + Number.EPSILON) * factor) / factor;
 }
 
-function summarizePaths(paths: readonly Rc54ComparablePath[]) {
+type MetricPath = Pick<
+  Rc54ComparablePath | Rc54SealedStudyPath,
+  "candidateId" | "sessionDateEt" | "decisionAt" | "pnl" | "pnlPerContract"
+>;
+
+function summarizePaths(paths: readonly MetricPath[]) {
   if (!paths.length) {
     return {
       paths: 0,
@@ -126,6 +191,11 @@ function summarizePaths(paths: readonly Rc54ComparablePath[]) {
       expectancyPerContract: null,
       profitFactor: null,
       maxDrawdown: null,
+      earlyExpectancyPerContract: null,
+      lateExpectancyPerContract: null,
+      earlySessions: 0,
+      lateSessions: 0,
+      clusteredExpectancy95: sessionClusteredMeanConfidence95([]),
     };
   }
   const ordered = [...paths].sort((a, b) => a.decisionAt.localeCompare(b.decisionAt)
@@ -144,9 +214,15 @@ function summarizePaths(paths: readonly Rc54ComparablePath[]) {
   }
   const wins = paths.filter((path) => path.pnl > 0).length;
   const losses = paths.filter((path) => path.pnl < 0).length;
+  const sessions = [...new Set(ordered.map((path) => path.sessionDateEt))].sort();
+  const split = Math.ceil(sessions.length / 2);
+  const early = new Set(sessions.slice(0, split));
+  const late = new Set(sessions.slice(split));
+  const average = (values: readonly number[]): number | null =>
+    values.length ? round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
   return {
     paths: paths.length,
-    sessions: new Set(paths.map((path) => path.sessionDateEt)).size,
+    sessions: sessions.length,
     wins,
     losses,
     winRate: round(wins / paths.length),
@@ -154,6 +230,18 @@ function summarizePaths(paths: readonly Rc54ComparablePath[]) {
     expectancyPerContract: round(paths.reduce((sum, path) => sum + path.pnlPerContract, 0) / paths.length),
     profitFactor: grossLoss > 0 ? round(grossProfit / grossLoss) : null,
     maxDrawdown: round(maxDrawdown),
+    earlyExpectancyPerContract: average(ordered
+      .filter((path) => early.has(path.sessionDateEt))
+      .map((path) => path.pnlPerContract)),
+    lateExpectancyPerContract: average(ordered
+      .filter((path) => late.has(path.sessionDateEt))
+      .map((path) => path.pnlPerContract)),
+    earlySessions: sessions.slice(0, split).length,
+    lateSessions: sessions.slice(split).length,
+    clusteredExpectancy95: sessionClusteredMeanConfidence95(ordered.map((path) => ({
+      session: path.sessionDateEt,
+      value: path.pnlPerContract,
+    }))),
   };
 }
 
@@ -169,8 +257,64 @@ function hash(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+interface ArchiveBar {
+  ts: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  vwap: number;
+}
+
+const etClock = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+function etMinute(atMs: number): number {
+  const parts = etClock.formatToParts(new Date(atMs));
+  return (Number(parts.find((part) => part.type === "hour")?.value ?? 0) % 24) * 60
+    + Number(parts.find((part) => part.type === "minute")?.value ?? 0);
+}
+
+function readBars(): Map<string, readonly Bar[]> {
+  const required = new Set(activeCandidates
+    .filter((candidate) => candidate.channelSlug === "orb-qqq-trail")
+    .map((candidate) => `${candidate.sessionDateEt}\u0000QQQ`));
+  const barsByUnderlyingSession = new Map<string, readonly Bar[]>();
+  for (const key of required) {
+    const [sessionDateEt, underlying] = key.split("\u0000");
+    const file = resolve(BARS_DIR, underlying, `${sessionDateEt}.json`);
+    if (!existsSync(file)) throw new Error(`underlying bars missing for ${key}`);
+    const rows = JSON.parse(readFileSync(file, "utf8")) as ArchiveBar[];
+    const bars = rows.flatMap((row): Bar[] => {
+      const ts = Date.parse(row.ts);
+      const minute = etMinute(ts);
+      if (!Number.isFinite(ts) || minute < 9 * 60 + 30 || minute > 15 * 60 + 25) return [];
+      if (![row.open, row.high, row.low, row.close, row.volume, row.vwap]
+        .every(Number.isFinite)) return [];
+      return [{
+        ts,
+        open: row.open,
+        high: row.high,
+        low: row.low,
+        close: row.close,
+        volume: row.volume,
+        vwap: row.vwap,
+      }];
+    }).sort((left, right) => left.ts - right.ts);
+    if (!bars.length) throw new Error(`no valid RTH bars for ${key}`);
+    barsByUnderlyingSession.set(key, bars);
+  }
+  return barsByUnderlyingSession;
+}
+
 function main(): void {
   const quotesByOccSession = readSources();
+  const barsByUnderlyingSession = readBars();
   const entries = candidateEntries(quotesByOccSession);
   const exactIds = new Set(entries.filter((entry) => entry.exact).map((entry) => entry.candidateId));
   const results = scenarios.map((scenario) => {
@@ -185,14 +329,36 @@ function main(): void {
       candidates: activeCandidates.filter((candidate) => eligibleIds.has(candidate.candidateId)),
       quotesByOccSession,
     });
+    const sealedReplay = deriveRc54SealedManagerStudy({
+      candidates: activeCandidates.filter((candidate) => eligibleIds.has(candidate.candidateId)),
+      quotesByOccSession,
+      barsByUnderlyingSession,
+      nativeAtrTargetGrid: [20, 25, 35, 50],
+    });
     const channels = RC54_ROOTS.map((root) => {
       const exact = entries.filter((entry) => entry.channelSlug === root.slug && entry.exact);
       const admitted = exact.filter((entry) => eligibleIds.has(entry.candidateId));
-      const comparableProfileId = currentComparableProfiles[root.slug] ?? null;
-      const comparablePaths = comparableProfileId
+      const comparableProfile = currentComparableProfiles[root.slug] ?? null;
+      const comparablePaths = comparableProfile?.source === "target-grid"
         ? replay.paths.filter((path) =>
-            path.channelSlug === root.slug && path.profileId === comparableProfileId)
-        : [];
+            path.channelSlug === root.slug
+            && path.profileId === comparableProfile.profileId)
+        : sealedReplay.paths.filter((path) =>
+            path.channelSlug === root.slug
+            && path.profileId === comparableProfile?.profileId);
+      const tpReview = (tpReviewProfiles[root.slug] ?? []).map((profile) => {
+        const paths = profile.source === "target-grid"
+          ? replay.paths.filter((path) =>
+              path.channelSlug === root.slug
+              && path.profileId === profile.profileId)
+          : sealedReplay.paths.filter((path) =>
+              path.channelSlug === root.slug
+              && path.profileId === profile.profileId);
+        return {
+          ...profile,
+          outcome: summarizePaths(paths),
+        };
+      });
       return {
         channelSlug: root.slug,
         cohort: root.cohort,
@@ -204,25 +370,32 @@ function main(): void {
         admittedCandidateClocks: admitted.length,
         premiumBlockedCandidateClocks: exact.length - admitted.length,
         admissionRate: exact.length ? round(admitted.length / exact.length, 4) : null,
-        comparableProfileId,
-        comparableProfileFact: comparableProfileId
-          ? "exact target-study analogue available"
-          : "sealed manager is not faithfully represented by the target-study grid",
-        comparableOutcome: comparableProfileId ? summarizePaths(comparablePaths) : null,
+        comparableProfileId: comparableProfile?.profileId ?? null,
+        comparableProfileSource: comparableProfile?.source ?? null,
+        comparableProfileFact: comparableProfile
+          ? "faithful exact sealed-manager replay available"
+          : "faithful manager replay unavailable",
+        comparableOutcome: comparableProfile ? summarizePaths(comparablePaths) : null,
+        tpReview,
       };
     });
+    if (channels.some((channel) =>
+      channel.comparableProfileId == null || channel.comparableOutcome?.paths === 0)) {
+      throw new Error(`scenario ${scenario.id} lacks a faithful active-root manager outcome`);
+    }
     return {
       id: scenario.id,
       multiplier: scenario.multiplier,
       exactCandidateClocks: exactIds.size,
       admittedCandidateClocks: eligibleIds.size,
       premiumBlockedCandidateClocks: exactIds.size - eligibleIds.size,
-      replayIndependentManagerPaths: replay.source.independentManagerPaths,
+      targetGridIndependentManagerPaths: replay.source.independentManagerPaths,
+      sealedManagerIndependentPaths: sealedReplay.source.independentManagerPaths,
       channels,
     };
   });
   const artifact = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     freezeCanonicalSha256: freeze.canonicalSha256,
     evidenceWindow: {
@@ -234,10 +407,12 @@ function main(): void {
       source: "local Databento CBBO-1s exact artifacts",
       scenarioApplication: "premium cap applied before sequential manager replay",
       currentCapsSource: "sealed RC5.4 release adapter",
+      managerEvidence:
+        "all nine active roots scored with exact target-grid or faithful sealed-manager paths",
       aggregateDebitAtQuantityTwo: "mathematically equal to premium cap times 200 in RC5.4",
       limitations: [
-        "Four sealed managers have exact target-study analogues; RC53-RIDE, RC53-A13, and native-ATR do not.",
         "Cap scenarios change admission only; they do not model alternate strike selection, quantity scaling, or event overrides.",
+        "Native-ATR evidence contains only three eligible orb-qqq-trail sessions.",
         "Descriptive replay is not a strategic recommendation or configuration proposal.",
       ],
     },
@@ -257,7 +432,7 @@ function main(): void {
   };
   const text = `${JSON.stringify(artifact, null, 2)}\n`;
   const receipt = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: artifact.generatedAt,
     freezeCanonicalSha256: freeze.canonicalSha256,
     artifactSha256: hash(text),
