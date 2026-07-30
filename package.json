@@ -114,6 +114,8 @@
     "rc54-comparable-score": "tsx scripts/rc54-comparable-score.ts",
     "rc54-premium-cap-study": "tsx scripts/rc54-premium-cap-study.ts",
     "rc55-entry-frequency-selftest": "tsx lib/research/rc55EntryFrequency.selftest.ts",
+    "rc55-ride-harvest-plan": "tsx scripts/rc55-ride-harvest-plan.ts",
+    "rc55-ride-harvest-selftest": "tsx lib/channels/rc55RideHarvestCanary.selftest.ts",
     "rc54-release-bindings": "tsx scripts/rc54-release-bindings.ts",
     "lab-canary-foundation-receipt": "tsx scripts/lab-canary-foundation-receipt.ts",
     "backfill:trade-option-paths": "tsx --env-file=.env.local scripts/backfill-trade-option-paths.ts",

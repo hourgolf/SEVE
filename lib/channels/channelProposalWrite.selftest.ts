@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   ProposalInputError,
   buildOperatorProposal,
+  proposalDraftRpcName,
 } from "./channelProposalWrite";
 import { compileReleaseManifest } from "./channelControlPlane";
 import { RC54_CONTROL_PLANE_FIXTURE } from "./rc54ControlPlaneFixture";
@@ -18,7 +19,13 @@ const validRequest = {
   baseSpecVersionId: orb.id,
   baseSpecContentHash: orb.contentHash,
   proposedPatch: {
-    takeProfit: { kind: "bank", targetPct: 35, fraction: 0.5 },
+    managerPolicy: {
+      managerProfileId: "ORB55-B35-A13",
+      managerLabel: "BANK 1 @ +35% · RUN 1 ON A13",
+      takeProfit: { kind: "bank" as const, targetPct: 35, fraction: 0.5 as const },
+      stopLoss: orb.stopLoss,
+      ratchetParameters: orb.ratchetParameters,
+    },
   },
   reason: "Raise the bounded ORB bank target for review.",
   evidenceRefs: ["receipt:operator-note", "receipt:operator-note"],
@@ -53,7 +60,17 @@ check("valid bounded request builds a draft-only server-authored proposal", () =
   assert.equal(built.draftSpec.parentVersionId, orb.id);
   assert.equal(built.draftSpec.createdBy, `operator:${OPERATOR_ID}`);
   assert.equal(built.draftSpec.takeProfit.targetPct, 35);
-  assert.equal(built.preview.diffs.length, 1);
+  assert.deepEqual(
+    built.preview.diffs.map((diff) => diff.field).sort(),
+    [
+      "exitParameters",
+      "managerProfileId",
+      "managerVersion",
+      "ratchetParameters",
+      "stopLoss",
+      "takeProfit",
+    ],
+  );
   assert.equal(built.preview.validationResults.some((result) => result.state === "block"), false);
   assert.equal(built.preview.validationResults.filter((result) => result.state === "not-run").length, 3);
   assert.deepEqual(built.proposal.evidenceRefs, ["receipt:operator-note"]);
@@ -127,10 +144,88 @@ check("governed re-entry rejects out-of-range caps and unrelated fields", () => 
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported governed proposal fields: quantity/);
 });
 
+check("manager policy expands into one immutable policy identity", () => {
+  const built = buildOperatorProposal(
+    compiled,
+    validRequest,
+    OPERATOR_ID,
+    REQUEST_ID,
+    CREATED_AT,
+  );
+  assert.deepEqual(Object.keys(built.proposal.proposedPatch).sort(), [
+    "exitParameters",
+    "managerProfileId",
+    "managerVersion",
+    "ratchetParameters",
+    "stopLoss",
+    "takeProfit",
+  ]);
+  assert.equal(built.draftSpec.managerProfileId, "ORB55-B35-A13");
+  assert.match(built.draftSpec.managerVersion, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(
+    built.draftSpec.exitParameters.managerLabel,
+    "BANK 1 @ +35% · RUN 1 ON A13",
+  );
+  assert.equal(
+    proposalDraftRpcName(built.proposal),
+    "create_channel_manager_policy_proposal_draft",
+  );
+});
+
+check("manager policy cannot be mixed with an unrelated economic change", () => {
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      ...validRequest.proposedPatch,
+      quantity: 3,
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /must be reviewed without quantity/);
+});
+
+check("raw target and ratchet fields cannot bypass manager identity generation", () => {
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      takeProfit: { kind: "bank", targetPct: 35, fraction: 0.5 },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported proposal fields: takeProfit/);
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      ratchetParameters: orb.ratchetParameters,
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported proposal fields: ratchetParameters/);
+});
+
+check("manager policy rejects internally inconsistent target and ratchet shapes", () => {
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      managerPolicy: {
+        ...validRequest.proposedPatch.managerPolicy,
+        takeProfit: { kind: "bank", targetPct: null, fraction: 0.5 },
+      },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /takeProfit contains an invalid/);
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      managerPolicy: {
+        ...validRequest.proposedPatch.managerPolicy,
+        ratchetParameters: {
+          ...orb.ratchetParameters,
+          givebackPct: 40,
+          retainGainPct: 67,
+        },
+      },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /ratchetParameters contains an invalid/);
+});
+
 check("semantic no-op is rejected", () => {
   expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
-    proposedPatch: { takeProfit: orb.takeProfit },
+    proposedPatch: { quantity: orb.quantity },
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /no semantic change/, 422);
 });
 
@@ -152,13 +247,61 @@ check("server route authenticates before opening the service-role write seam", (
     import.meta.url,
   ), "utf8");
   assert.ok(route.indexOf("await requireDeskOperator(req)") < route.indexOf("createClient(SB_URL, SB_SERVICE"));
-  assert.match(route, /"create_channel_change_proposal_draft"/);
-  assert.match(route, /"create_channel_reentry_proposal_draft"/);
+  assert.match(route, /proposalDraftRpcName\(built\.proposal\)/);
   assert.match(route, /sb\.rpc\(proposalFunction/);
   assert.match(route, /Idempotency-Key/);
   assert.match(route, /activationAuthorized: false/);
   assert.doesNotMatch(route, /\.from\("channel_change_proposals"\)\.insert/);
   assert.doesNotMatch(route, /export async function (PUT|PATCH|DELETE)/);
+});
+
+check("storage RPC routing distinguishes bounded, manager, and re-entry drafts", () => {
+  const bounded = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      quantity: 3,
+      maxDebitUsd: 600,
+      riskLimits: {
+        maxContracts: 3,
+        maxDebitUsd: 600,
+        maxRiskUsd: 180,
+      },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  const governed = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: { maxEntriesPerSession: 3 },
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.equal(
+    proposalDraftRpcName(bounded.proposal),
+    "create_channel_change_proposal_draft",
+  );
+  assert.equal(
+    proposalDraftRpcName(governed.proposal),
+    "create_channel_reentry_proposal_draft",
+  );
+});
+
+check("manager-policy migration is atomic, service-only, and activation-dark", () => {
+  const sql = readFileSync(new URL(
+    "../../supabase/migrations/20260730034500_channel_manager_policy_proposal_server_write.sql",
+    import.meta.url,
+  ), "utf8");
+  assert.match(sql, /^-- Server-only atomic manager-policy draft creation\./);
+  assert.match(sql, /create or replace function public\.create_channel_manager_policy_proposal_draft/);
+  assert.match(sql, /pg_advisory_xact_lock/);
+  assert.match(sql, /exactly six identity and policy fields/);
+  assert.match(sql, /\(p_proposed_spec -> 'exitParameters'\) - 'managerLabel'[\s\S]+?base_row\.exit_parameters - 'managerLabel'/);
+  assert.match(sql, /manager-policy patch contains an invalid bounded policy/);
+  assert.match(sql, /manager-policy proposal attempted a non-manager spec change/);
+  assert.match(sql, /proposed specification does not match its manager-policy patch/);
+  assert.match(sql, /'draft',\s+'next-safe-entry', false/);
+  assert.match(sql, /grant execute on function public\.create_channel_manager_policy_proposal_draft[\s\S]+?to service_role;/);
+  assert.doesNotMatch(sql, /jsonb_object_length/);
+  assert.doesNotMatch(sql, /insert into public\.activation_receipts/i);
+  assert.doesNotMatch(sql, /update public\.(positions|position_plans|execution_observations)/i);
+  assert.match(sql, /commit;\s*$/);
 });
 
 check("governed re-entry migration is isolated, idempotent, and activation-dark", () => {

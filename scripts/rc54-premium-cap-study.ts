@@ -130,18 +130,22 @@ const tpReviewProfiles: Readonly<Record<
   string,
   readonly { source: "target-grid" | "sealed-manager"; profileId: string }[]
 >> = {
-  "pb-ride": [
-    { source: "target-grid", profileId: "BANK20/FIXED-50" },
-    { source: "target-grid", profileId: "BANK50/FIXED-50" },
-  ],
+  "pb-ride": [10, 15, 20, 25, 30, 35, 40, 50, 75, 100].flatMap(
+    (target) => [
+      { source: "target-grid" as const, profileId: `BANK${target}/A13` },
+      { source: "target-grid" as const, profileId: `BANK${target}/FIXED-50` },
+    ],
+  ),
   "orb-ustop-ctl": [
     { source: "target-grid", profileId: "BANK15/A13" },
     { source: "target-grid", profileId: "BANK30/A13" },
   ],
-  "grind-v3": [
-    { source: "target-grid", profileId: "BANK25/A13" },
-    { source: "target-grid", profileId: "BANK50/A13" },
-  ],
+  "grind-v3": [10, 15, 20, 25, 30, 35, 40, 50, 75, 100].map(
+    (target) => ({
+      source: "target-grid" as const,
+      profileId: `BANK${target}/A13`,
+    }),
+  ),
   "momo-shape": [
     { source: "target-grid", profileId: "BANK20/A13" },
     { source: "target-grid", profileId: "BANK25/A13" },
@@ -152,9 +156,12 @@ const tpReviewProfiles: Readonly<Record<
     { source: "sealed-manager", profileId: "BANK35/NATIVE-ATR" },
     { source: "sealed-manager", profileId: "BANK50/NATIVE-ATR" },
   ],
-  "breakout-alt-v3-iwm": [
-    { source: "target-grid", profileId: "BANK10/A13" },
-  ],
+  "breakout-alt-v3-iwm": [10, 15, 20, 25, 30, 35, 40, 50, 75, 100].map(
+    (target) => ({
+      source: "target-grid" as const,
+      profileId: `BANK${target}/A13`,
+    }),
+  ),
   "vb-macd-state": [
     { source: "target-grid", profileId: "BANK20/FIXED-50" },
     { source: "target-grid", profileId: "BANK30/FIXED-50" },
