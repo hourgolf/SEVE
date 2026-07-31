@@ -26,6 +26,15 @@ import type { MarketEvent } from "@/lib/types";
 import { observeRc54ReleaseReceipt } from "./ops/rc54ReadinessAdapter";
 import { loadActiveRc54OperationalAuthority } from "./ops/activeOperationalContract";
 import { createServerSupabaseClient } from "./serverSupabase";
+import {
+  buildVersionedChannelDecisionPacket,
+  readVersionedChannelDecisionPacket,
+  type ExactCurrentChannelCohort,
+} from "@/lib/channels/channelDecisionPacket";
+import {
+  CHANNEL_DECISION_PACKET_VERSION,
+} from "@/lib/channels/channelDecisionEvidence";
+import { contentHash } from "@/lib/channels/channelControlPlane";
 
 const WORKER_FRESH_MS = 150_000;
 const arg = (name: string, fallback = ""): string => {
@@ -57,6 +66,8 @@ interface PositionRow {
   realized_pnl: number | string | null;
   close_reason: string | null;
   runner_of: string | null;
+  channel_spec_version_id?: string | null;
+  configuration_epoch_id?: string | null;
 }
 interface ManagerRow {
   id: string;
@@ -79,6 +90,95 @@ interface DarkExactReport {
   inputs: { freezeCanonicalSha256: string };
   completeness: DarkEvidenceCompleteness;
   replay: DarkExactReplayResult;
+}
+
+function dateEt(value: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+}
+
+function exactCurrentCohorts(input: {
+  rows: PositionRow[];
+  runtime: NonNullable<
+    Awaited<ReturnType<typeof loadActiveRc54OperationalAuthority>>["runtime"]
+  >;
+}): ExactCurrentChannelCohort[] {
+  const slugBySpecDatabaseId = new Map(
+    input.runtime.roots.flatMap((root) =>
+      root.channelSpecVersionDatabaseId
+        ? [[root.channelSpecVersionDatabaseId, {
+          slug: root.slug,
+          versionId: root.configuration.channelSpecVersionId,
+        }] as const]
+        : []),
+  );
+  const rowsByLogicalId = new Map<string, PositionRow[]>();
+  for (const row of input.rows) {
+    const logicalId = row.runner_of ?? row.id;
+    rowsByLogicalId.set(
+      logicalId,
+      [...(rowsByLogicalId.get(logicalId) ?? []), row],
+    );
+  }
+  const grouped = new Map<string, {
+    slug: string;
+    channelSpecVersionId: string;
+    sessions: Set<string>;
+    totalUsd: number;
+    logicalIds: string[];
+  }>();
+  for (const [logicalId, rows] of rowsByLogicalId) {
+    const root = rows.find((row) => row.id === logicalId) ?? rows[0];
+    if (!root
+        || rows.some((row) => row.status !== "closed" && !row.closed_at)
+        || root.configuration_epoch_id !== input.runtime.configurationEpochId) {
+      continue;
+    }
+    const spec = root.channel_spec_version_id
+      ? slugBySpecDatabaseId.get(root.channel_spec_version_id)
+      : null;
+    if (!spec) continue;
+    const realized = rows.reduce((sum, row) => {
+      const value = Number(row.realized_pnl);
+      return Number.isFinite(value) ? sum + value : sum;
+    }, 0);
+    const current = grouped.get(spec.slug) ?? {
+      slug: spec.slug,
+      channelSpecVersionId: spec.versionId,
+      sessions: new Set<string>(),
+      totalUsd: 0,
+      logicalIds: [],
+    };
+    current.sessions.add(dateEt(root.opened_at));
+    current.totalUsd += realized;
+    current.logicalIds.push(logicalId);
+    grouped.set(spec.slug, current);
+  }
+  return [...grouped.values()].sort((a, b) =>
+    a.slug.localeCompare(b.slug)).map((cohort) => {
+    const evidenceRef = contentHash({
+      kind: "exact-current-channel-cohort",
+      slug: cohort.slug,
+      channelSpecVersionId: cohort.channelSpecVersionId,
+      configurationEpochId: input.runtime.configurationEpochId,
+      logicalIds: [...cohort.logicalIds].sort(),
+      sessions: [...cohort.sessions].sort(),
+      totalUsd: cohort.totalUsd,
+    });
+    return {
+      slug: cohort.slug,
+      channelSpecVersionId: cohort.channelSpecVersionId,
+      configurationEpochId: input.runtime.configurationEpochId,
+      observations: cohort.logicalIds.length,
+      sessions: cohort.sessions.size,
+      totalUsd: cohort.totalUsd,
+      evidenceRef,
+    };
+  });
 }
 
 function renderDigest(packet: ReturnType<typeof deriveSentinelOperatorPacket>): string {
@@ -247,6 +347,73 @@ async function main(): Promise<void> {
     },
   };
   const packet = deriveSentinelOperatorPacket(input);
+  let channelDecisionPacket = null;
+  if (operationalAuthority.runtime) {
+    const specDatabaseIds = operationalAuthority.runtime.roots
+      .map((root) => root.channelSpecVersionDatabaseId)
+      .filter((value): value is string => Boolean(value));
+    const [cohortRead, priorPacketRead, strategistsRead] = await Promise.all([
+      specDatabaseIds.length
+        ? sb.from("positions")
+          .select(
+            "id,status,opened_at,closed_at,realized_pnl,close_reason,runner_of,channel_spec_version_id,configuration_epoch_id",
+          )
+          .eq(
+            "configuration_epoch_id",
+            operationalAuthority.runtime.configurationEpochId,
+          )
+          .in("channel_spec_version_id", specDatabaseIds)
+          .order("opened_at")
+          .limit(10_000)
+        : Promise.resolve({ data: [], error: null }),
+      sb.from("events")
+        .select("meta,created_at")
+        .like("message", "sentinel:%")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      sb.from("strategists")
+        .select("slug")
+        .order("slug")
+        .limit(1_000),
+    ]);
+    if (cohortRead.error) {
+      throw new Error(
+        `current configuration cohort read failed: ${cohortRead.error.message}`,
+      );
+    }
+    if (priorPacketRead.error) {
+      throw new Error(
+        `prior channel packet read failed: ${priorPacketRead.error.message}`,
+      );
+    }
+    if (strategistsRead.error) {
+      throw new Error(
+        `channel inventory read failed: ${strategistsRead.error.message}`,
+      );
+    }
+    const predecessor = (priorPacketRead.data ?? []).map((row) =>
+      readVersionedChannelDecisionPacket(row.meta?.channelDecisionPacket))
+      .find((value) => value != null) ?? null;
+    channelDecisionPacket = buildVersionedChannelDecisionPacket({
+      sessionDateEt: SESSION,
+      generatedAt,
+      releaseId: operationalAuthority.runtime.releaseId,
+      manifestContentHash: operationalAuthority.runtime.manifestContentHash,
+      configurationEpochId:
+        operationalAuthority.runtime.configurationEpochId,
+      predecessorContentHash: predecessor?.contentHash ?? null,
+      slugs: (strategistsRead.data ?? []).map((row) => String(row.slug)),
+      exactCurrentCohorts: exactCurrentCohorts({
+        rows: (cohortRead.data ?? []) as PositionRow[],
+        runtime: operationalAuthority.runtime,
+      }),
+      reviewBasisVersion: CHANNEL_DECISION_PACKET_VERSION,
+      sourceEvidenceRefs: [
+        `sentinel-operator-packet:${SESSION}:${packet.version}`,
+        `dark-freeze:sha256:${freeze.canonicalSha256}`,
+      ],
+    });
+  }
   const judge = operatorPacketToJudge(packet);
   const digest = renderDigest(packet);
   const publisherRunId = `${DETERMINISTIC_SENTINEL_PUBLISHER_VERSION}:${SESSION}:${forDate}`;
@@ -275,12 +442,14 @@ async function main(): Promise<void> {
     judge,
     lens: null,
     operatorPacket: packet,
+    channelDecisionPacket,
     interpretiveProvider: "none",
   };
 
   const output = {
     schemaVersion: 1,
     packet,
+    channelDecisionPacket,
     compatibility: { judge, digest },
     publication: {
       publisherRunId,
@@ -296,6 +465,8 @@ async function main(): Promise<void> {
     session: SESSION,
     forDate,
     packetSha256: sha256(outputText),
+    channelDecisionPacketContentHash:
+      channelDecisionPacket?.contentHash ?? null,
     freezeSha256: freeze.canonicalSha256,
     externalWrite: PUBLISH,
     supersedesEventId: SUPERSEDES_EVENT_ID || null,

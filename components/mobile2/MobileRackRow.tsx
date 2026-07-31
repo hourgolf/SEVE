@@ -6,6 +6,7 @@ import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftP
 import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
+import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState, StrategistConfig } from "@/lib/desk/types";
@@ -50,7 +51,18 @@ export function MobileRackRow({
   const dragging = useRef(false);
   const [writeError, setWriteError] = useState<string | null>(null);
   const [passportOpen, setPassportOpen] = useState(false);
-  const draft = useChannelConfigDraft(strategist, passport);
+  const activeSpec = controlPlane?.view?.bySlug[strategist.slug] ?? null;
+  const draft = useChannelConfigDraft(
+    strategist,
+    passport,
+    activeSpec,
+    controlPlane?.view?.configurationEpochId,
+  );
+  const governedProposal = useChannelManagerProposal({
+    model: draft.model,
+    activeSpec,
+    onSealed: draft.discard,
+  });
   const { id, slug, color, status, config: databaseConfig } = strategist;
   const sealed = passport?.release.state === "verified";
   const rootPolicy = passport?.rootPolicy;
@@ -293,7 +305,20 @@ export function MobileRackRow({
             </>}
           </div>
           {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
-          <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} compact />
+          <ChannelConfigDraftPanel
+            model={draft.model}
+            active={draft.active}
+            canStart={write.canWrite && sealed}
+            onStart={draft.begin}
+            onDiscard={draft.discard}
+            canSeal={governedProposal.canSeal}
+            sealBusy={governedProposal.busy}
+            sealReason={governedProposal.reason}
+            sealNotice={governedProposal.notice}
+            sealError={governedProposal.error}
+            onSeal={() => void governedProposal.seal()}
+            compact
+          />
         </div>
       )}
     </section>

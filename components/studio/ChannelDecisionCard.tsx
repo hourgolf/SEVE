@@ -1,6 +1,5 @@
 import "@/app/channel-decision.css";
 import {
-  CHANNEL_DECISION_AS_OF,
   buildChannelDecisionCardModel,
   type DecisionEvidenceLayer,
 } from "@/lib/channels/channelDecisionEvidence";
@@ -40,7 +39,19 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
   compact?: boolean;
 }) {
   const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
-  const model = buildChannelDecisionCardModel(effective, todayEt);
+  const packet = controlPlane?.decisionPacket ?? null;
+  const packetReview = packet?.reviews[effective.slug]
+    ? {
+      asOfDateEt: packet.sessionDateEt,
+      packetVersion: packet.version,
+      review: packet.reviews[effective.slug],
+    }
+    : null;
+  const model = buildChannelDecisionCardModel(
+    effective,
+    todayEt,
+    packetReview,
+  );
   const economics = effective.economics;
   const activeSpec = controlPlane?.view?.bySlug[effective.slug] ?? null;
   const activation = useChannelActivationControl({
@@ -60,7 +71,7 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
   return (
     <details className={`channel-decision-card ${model.tone}${compact ? " compact" : ""}`} open={!compact}>
       <summary>
-        <span><small>READ-ONLY DECISION · {CHANNEL_DECISION_AS_OF}</small><b>{model.label}</b></span>
+        <span><small>READ-ONLY DECISION · {model.asOfDateEt}</small><b>{model.label}</b></span>
         <em>{model.confidence === "reviewable-experiment" ? "EXPERIMENT REVIEW" : "NO DECISION FLOOR"}</em>
         <i aria-hidden="true">▾</i>
       </summary>

@@ -57,6 +57,7 @@ jobs:
           npm run dark-candidate-freeze-selftest
           npm run sentinel-manager-book-selftest
           npm run sentinel-release-audit-selftest
+          npm run channel-decision-packet-selftest
       - name: Build and publish session research
         shell: bash
         env:

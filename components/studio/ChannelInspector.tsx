@@ -28,12 +28,18 @@ export function ChannelInspector({ strategist, summary, passport, write, control
 }) {
   const dispatch = useDeskDispatch();
   const { persistConfig, setChannelStatus, duplicateChannel, deleteChannel } = write;
-  const draft = useChannelConfigDraft(strategist, passport);
+  const activeSpec = strategist
+    ? controlPlane?.view?.bySlug[strategist.slug] ?? null
+    : null;
+  const draft = useChannelConfigDraft(
+    strategist,
+    passport,
+    activeSpec,
+    controlPlane?.view?.configurationEpochId,
+  );
   const managerProposal = useChannelManagerProposal({
     model: draft.model,
-    activeSpec: strategist
-      ? controlPlane?.view?.bySlug[strategist.slug] ?? null
-      : null,
+    activeSpec,
     onSealed: draft.discard,
   });
   const [confirmDel, setConfirmDel] = useState(false);
@@ -107,7 +113,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           {knob(config.capital_pct, 25, 5000, 25, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
           {knob(config.daily_stop_usd, 0, 5000, 50, "ENTRY LATCH", (v) => v === 0 ? "OFF" : `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
           {knob(premStop, 10, 90, 5, "PREM STOP · POLICY", (v) => `−${v}%`, "premium_stop_pct", "#25272a", false)}
-          {knob(config.max_contracts, 1, 60, 1, "HARD CAP", (v) => `${v} ct`, "max_contracts")}
+          {knob(config.max_contracts, 1, 12, 1, "HARD CAP", (v) => `${v} ct`, "max_contracts")}
         </div></section>
 
         <section className="mix-bank"><header>{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : "EXIT SHAPE"}</header><div className="mix-bank-body two-col">

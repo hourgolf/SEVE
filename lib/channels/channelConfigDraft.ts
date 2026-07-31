@@ -95,7 +95,7 @@ const validateValue = (key: ChannelConfigDraftKey, value: number | string): stri
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a finite number";
   if (key === "capital_pct" && (value < 25 || value > 5_000)) return "must be between $25 and $5,000";
   if (key === "daily_stop_usd" && (value < 0 || value > 5_000)) return "must be between $0 and $5,000";
-  if (key === "max_contracts" && (!Number.isInteger(value) || value < 1 || value > 60)) return "must be a whole number from 1 to 60";
+  if (key === "max_contracts" && (!Number.isInteger(value) || value < 1 || value > 12)) return "must be a whole number from 1 to 12";
   if (key === "entry_dte" && value !== 0 && value !== 1) return "must be 0DTE or 1DTE";
   if (key === "premium_stop_pct" && (value < 10 || value > 90)) return "must be between 10% and 90%";
   if (key === "take_profit_pct" && (value < 0 || value > 300)) return "must be ride or 5%–300%";
@@ -141,7 +141,7 @@ export function deriveChannelConfigDraft(input: {
   if (!input.configurationEpochId) issues.push({
     key: "identity", tone: "warning",
     message: "This channel has no active RC5 configuration epoch; review must assign a new identity before sealing.",
-  }); else if (!/^[a-f0-9]{64}$/i.test(input.configurationEpochId)) issues.push({
+  }); else if (!/^(?:sha256:)?[a-f0-9]{64}$/i.test(input.configurationEpochId)) issues.push({
     key: "identity", tone: "blocker",
     message: "The source configuration epoch is not a valid SHA-256 identity.",
   });

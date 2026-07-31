@@ -262,6 +262,39 @@ check("semantic no-op is rejected", () => {
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /no semantic change/, 422);
 });
 
+check("sizing is bounded to the governed 12-contract paper envelope", () => {
+  const built = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      quantity: 8,
+      maxDebitUsd: Number(orb.entryParameters.premiumCap) * 8 * 100,
+      riskLimits: {
+        maxContracts: 8,
+        maxDebitUsd:
+          Number(orb.entryParameters.premiumCap) * 8 * 100,
+        maxRiskUsd:
+          Number(orb.entryParameters.premiumCap) * 8 * 30,
+      },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.equal(built.draftSpec.quantity, 8);
+  assert.equal(built.capacityCollisionImpact.state, "not-run");
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      quantity: 13,
+      maxDebitUsd: Number(orb.entryParameters.premiumCap) * 13 * 100,
+      riskLimits: {
+        maxContracts: 13,
+        maxDebitUsd:
+          Number(orb.entryParameters.premiumCap) * 13 * 100,
+        maxRiskUsd:
+          Number(orb.entryParameters.premiumCap) * 13 * 30,
+      },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /integer from 1 to 12/);
+});
+
 check("base hash drift fails closed before persistence", () => {
   expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,

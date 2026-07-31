@@ -8,6 +8,7 @@ import type {
 } from "@/lib/channels/channelControlPlaneOperatorView";
 
 const MANAGER_KEYS = new Set(["take_profit_pct", "premium_stop_pct"]);
+const SIZING_KEYS = new Set(["capital_pct", "max_contracts"]);
 
 export function useChannelManagerProposal(input: {
   model: ChannelConfigDraftModel | null;
@@ -25,15 +26,19 @@ export function useChannelManagerProposal(input: {
       return { ready: false, reason: "Create a reviewable draft first." };
     }
     const keys = Object.keys(model.patch);
-    if (!keys.length || keys.some((key) => !MANAGER_KEYS.has(key))) {
+    const managerOnly = keys.length > 0
+      && keys.every((key) => MANAGER_KEYS.has(key));
+    const sizingOnly = keys.length > 0
+      && keys.every((key) => SIZING_KEYS.has(key));
+    if (!managerOnly && !sizingOnly) {
       return {
         ready: false,
         reason:
-          "This activation slice seals premium-stop and take-profit manager changes only; risk, size, entry, event, latch, underlying-stop, and pyramid controls remain review-only.",
+          "Seal either a TP/SL manager adjustment or a sizing/risk adjustment. Entry, event, latch, underlying-stop, pyramid, and mixed manager/size changes remain review-only.",
       };
     }
     const requestedTarget = model.patch.take_profit_pct;
-    if (requestedTarget != null
+    if (managerOnly && requestedTarget != null
         && ((spec.takeProfit.kind === "ride" && requestedTarget !== 0)
           || (spec.takeProfit.kind === "bank" && requestedTarget <= 0))) {
       return {
@@ -42,7 +47,12 @@ export function useChannelManagerProposal(input: {
           "Changing between ride and bank manager families requires a separately preregistered manager profile.",
       };
     }
-    return { ready: true, reason: null };
+    return {
+      ready: true,
+      reason: sizingOnly
+        ? "Sizing is bounded to 1–12 contracts and still requires fresh flat-book capacity validation, worker acknowledgement, and explicit next-safe-entry apply."
+        : null,
+    };
   }, [input.activeSpec, input.model]);
 
   const seal = async () => {
@@ -53,10 +63,35 @@ export function useChannelManagerProposal(input: {
     setError(null);
     setNotice(null);
     try {
+      const keys = Object.keys(model.patch);
+      const sizingOnly = keys.every((key) => SIZING_KEYS.has(key));
       const targetPct = model.patch.take_profit_pct;
       const catastrophePct = model.patch.premium_stop_pct;
-      const proposedPatch = {
-        managerPolicy: {
+      const quantity = model.patch.max_contracts ?? spec.quantity;
+      const maxDebitUsd =
+        Math.round(spec.premiumCap * quantity * 10_000) / 100;
+      const currentRiskRatio = spec.maxDebitUsd > 0
+        ? spec.maxRiskUsd / spec.maxDebitUsd
+        : 0;
+      const maxRiskUsd = model.patch.capital_pct
+        ?? Math.round(maxDebitUsd * currentRiskRatio * 100) / 100;
+      if (sizingOnly && maxRiskUsd > maxDebitUsd) {
+        throw new Error(
+          `risk / trade (${maxRiskUsd}) cannot exceed the ${quantity}-contract debit cap (${maxDebitUsd})`,
+        );
+      }
+      const proposedPatch = sizingOnly
+        ? {
+          quantity,
+          maxDebitUsd,
+          riskLimits: {
+            maxContracts: quantity,
+            maxDebitUsd,
+            maxRiskUsd,
+          },
+        }
+        : {
+          managerPolicy: {
           managerProfileId: spec.managerProfileId,
           managerLabel: spec.managerLabel,
           takeProfit: targetPct == null
@@ -73,9 +108,9 @@ export function useChannelManagerProposal(input: {
               ...spec.stopLoss,
               catastrophePct,
             },
-          ratchetParameters: spec.ratchetParameters,
-        },
-      };
+            ratchetParameters: spec.ratchetParameters,
+          },
+        };
       const response = await fetch("/api/channel-proposals", {
         method: "POST",
         headers: {
@@ -87,8 +122,9 @@ export function useChannelManagerProposal(input: {
           baseSpecVersionId: spec.channelSpecVersionId,
           baseSpecContentHash: spec.channelSpecContentHash,
           proposedPatch,
-          reason:
-            "Operator-reviewed manager-only TP/SL adjustment from the immutable active specification.",
+          reason: sizingOnly
+            ? "Operator-reviewed bounded sizing and risk adjustment from the immutable active specification."
+            : "Operator-reviewed manager-only TP/SL adjustment from the immutable active specification.",
           evidenceRefs: [
             ...new Set([
               ...model.diffs.map((diff) =>
@@ -104,14 +140,18 @@ export function useChannelManagerProposal(input: {
         error?: string;
       };
       if (!response.ok || !body.ok) {
-        throw new Error(body.error ?? "manager proposal was rejected");
+        throw new Error(body.error ?? "governed proposal was rejected");
       }
-      setNotice("Immutable manager proposal created. Validate it in the activation card.");
+      setNotice(
+        sizingOnly
+          ? "Immutable sizing proposal created. Validate capacity and collision evidence in the activation card."
+          : "Immutable manager proposal created. Validate it in the activation card.",
+      );
       input.onSealed();
     } catch (writeError) {
       setError(writeError instanceof Error
         ? writeError.message
-        : "manager proposal failed");
+        : "governed proposal failed");
     } finally {
       setBusy(false);
     }
