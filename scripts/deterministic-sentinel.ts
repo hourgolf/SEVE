@@ -23,10 +23,8 @@ import type { DarkCandidateFreeze } from "@/lib/research/darkCandidateFreeze";
 import type { DarkEvidenceCompleteness } from "@/lib/research/darkEvidenceCompleteness";
 import type { DarkExactReplayResult } from "@/lib/research/darkExactReplay";
 import type { MarketEvent } from "@/lib/types";
-import {
-  observeRc54ReleaseReceipt,
-  sealedRc54OperationalContract,
-} from "./ops/rc54ReadinessAdapter";
+import { observeRc54ReleaseReceipt } from "./ops/rc54ReadinessAdapter";
+import { loadActiveRc54OperationalAuthority } from "./ops/activeOperationalContract";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const WORKER_FRESH_MS = 150_000;
@@ -116,7 +114,13 @@ async function main(): Promise<void> {
   }
 
   const sb = createServerSupabaseClient("deterministic-sentinel");
-  const [releaseRead, workerRead, positionsRead, managersRead] = await Promise.all([
+  const [
+    releaseRead,
+    workerRead,
+    positionsRead,
+    managersRead,
+    operationalAuthority,
+  ] = await Promise.all([
     sb.from("events").select("id,level,strategist_id,message,meta,created_at")
       .ilike("message", "%release ACTIVE%").order("created_at", { ascending: false }).limit(50),
     sb.from("worker_runs").select("version,started_at,last_heartbeat_at,last_phase,last_error")
@@ -125,13 +129,19 @@ async function main(): Promise<void> {
       .gte("opened_at", range.start).lt("opened_at", range.end).order("opened_at").limit(100),
     sb.from("manager_shadow_runs").select("id,position_id,manager_id,status,evidence_state,censor_code,entry_at")
       .gte("entry_at", range.start).lt("entry_at", range.end).order("entry_at").limit(1_000),
+    loadActiveRc54OperationalAuthority(
+      sb as unknown as Parameters<typeof loadActiveRc54OperationalAuthority>[0],
+    ),
   ]);
   for (const [label, read] of [["release", releaseRead], ["workers", workerRead], ["positions", positionsRead], ["managers", managersRead]] as const) {
     if (read.error) throw new Error(`${label} read failed: ${read.error.message}`);
   }
 
-  const releaseContract = sealedRc54OperationalContract();
-  const release = observeRc54ReleaseReceipt((releaseRead.data ?? []) as unknown as MarketEvent[]);
+  const releaseContract = operationalAuthority.contract;
+  const release = observeRc54ReleaseReceipt(
+    (releaseRead.data ?? []) as unknown as MarketEvent[],
+    releaseContract,
+  );
   const workers = ((workerRead.data ?? []) as WorkerRow[]).map((row): WorkerObservation => ({
     runtimeVersion: row.version,
     startedAt: row.started_at,

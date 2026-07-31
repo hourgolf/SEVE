@@ -25,13 +25,11 @@ import {
   observeReceiptBoundRc54Bindings,
   observeRc54ReleaseReceipt,
   observeRc54Bindings,
-  receiptBoundRc54OperationalContract,
   rc54OperationalContract,
   type Rc54BindingObservation,
 } from "./ops/rc54ReadinessAdapter";
-import { buildShadowRuntimeProjection } from "@/lib/channels/channelActivation";
 import { loadStoredReceiptBoundControlPlane } from "@/lib/channels/channelControlPlanePersistence";
-import { buildProductionReceiptBoundRuntimeConfiguration } from "@/worker/src/channelConfigurationRuntimeAdapter";
+import { resolveStoredRc54OperationalAuthority } from "./ops/activeOperationalContract";
 import type { AccountRow } from "@/worker/src/store";
 import { createServerSupabaseClient } from "./serverSupabase";
 
@@ -259,41 +257,21 @@ async function main(): Promise<void> {
   const storedAuthority = await loadStoredReceiptBoundControlPlane(
     sb as unknown as Parameters<typeof loadStoredReceiptBoundControlPlane>[0],
   );
-  if (storedAuthority.state === "failed") {
-    throw new Error(
-      `active control-plane authority read failed: ${storedAuthority.error ?? "unknown"}`,
-    );
-  }
+  const activeAuthority = resolveStoredRc54OperationalAuthority(storedAuthority);
   const resolvedCredentialAccountIds = allAccounts
     .filter((account) => envCredentials(account.cred_ref) != null)
     .map((account) => account.id);
   let bindings: Rc54BindingObservation;
   let contract: OperationalReleaseContract;
-  if (storedAuthority.state === "receipt-bound") {
-    if (!storedAuthority.compiled || !storedAuthority.activationReceipt
-        || !storedAuthority.databaseIdentity) {
-      throw new Error("receipt-bound control-plane authority is incomplete");
-    }
-    const projection = buildShadowRuntimeProjection(storedAuthority.compiled);
-    if (projection.state !== "comparable") {
-      throw new Error(
-        `receipt-bound control-plane projection blocked: ${projection.blockers.join(",")}`,
-      );
-    }
-    const runtime = buildProductionReceiptBoundRuntimeConfiguration({
-      compiled: storedAuthority.compiled,
-      projection,
-      activationReceipt: storedAuthority.activationReceipt,
-      databaseIdentity: storedAuthority.databaseIdentity,
-    });
+  if (activeAuthority.runtime) {
     bindings = observeReceiptBoundRc54Bindings({
       fleet,
       accounts: allAccounts,
-      runtime,
+      runtime: activeAuthority.runtime,
       fundMode: fund?.mode ?? null,
       resolvedCredentialAccountIds,
     });
-    contract = receiptBoundRc54OperationalContract(runtime);
+    contract = activeAuthority.contract;
   } else {
     bindings = observeRc54Bindings(fleet, allAccounts);
     contract = rc54OperationalContract(bindings.roots);
