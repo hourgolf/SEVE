@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("./preopen-readiness.ts", import.meta.url), "utf8");
+const authoritySource = readFileSync(
+  new URL("./ops/activeOperationalContract.ts", import.meta.url),
+  "utf8",
+);
 let passed = 0;
 const truth = (name: string, value: boolean): void => {
   assert.equal(value, true, name);
@@ -16,10 +20,11 @@ truth("temporary receipt parsing is isolated behind the adapter", source.include
 truth("draft control-plane manifests are explicitly excluded", source.includes("draft control-plane manifests excluded"));
 truth("immutable receipt-bound authority is loaded through the canonical store reader",
   source.includes("loadStoredReceiptBoundControlPlane")
-  && source.includes('storedAuthority.state === "receipt-bound"'));
+  && source.includes("resolveStoredRc54OperationalAuthority")
+  && authoritySource.includes('stored.state !== "receipt-bound"'));
 truth("receipt-bound readiness uses the exact activated runtime projection",
-  source.includes("buildProductionReceiptBoundRuntimeConfiguration")
-  && source.includes("receiptBoundRc54OperationalContract"));
+  authoritySource.includes("buildProductionReceiptBoundRuntimeConfiguration")
+  && authoritySource.includes("receiptBoundRc54OperationalContract"));
 truth("all configured paper accounts are selected", source.includes('account.mode.toLowerCase() === "paper"'));
 truth("account queries are not restricted to manifest accounts", !source.match(/accounts[^;]+requiredAccountIds/s));
 truth("every configured account reads broker positions", source.includes('brokerGet(brokerOrigin, "/v2/positions", credentials)'));

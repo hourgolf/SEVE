@@ -249,6 +249,67 @@ check("database epoch triple remains distinct from sealed release identity", () 
   assert.equal(second.configuration.configurationEpochId, "epoch-2");
 });
 
+check("runner lineage inherits a root epoch only with matching sealed release evidence", () => {
+  const input = fixture({
+    positions: [
+      position({
+        channel_spec_version_id: "spec-1",
+        release_manifest_id: "manifest-1",
+        configuration_epoch_id: "epoch-1",
+      }),
+      position({
+        id: "runner-1",
+        runner_of: "root-1",
+        entry_reason: "runner_tranche",
+        realized_pnl: -10,
+      }),
+    ],
+    outcomes: fixture().outcomes.slice(0, 2),
+    executionRoutes: fixture().executionRoutes.slice(0, 2),
+    executionQuality: [],
+    managerShadow: [],
+  });
+  const ledger = buildProfitabilityLedger(input);
+  const trade = ledger.logicalTrades[0];
+  assert.equal(trade.status, "closed");
+  assert.equal(trade.comparability, "exact_configuration");
+  assert.equal(trade.configuration.configurationEpochId, "epoch-1");
+  assert.equal(trade.realizedPnlUsd, 40);
+  assert.ok(ledger.evidence.warnings.some((warning) =>
+    /inherited its root configuration epoch/.test(warning)));
+});
+
+check("runner lineage with conflicting sealed release evidence still fails closed", () => {
+  const input = fixture({
+    positions: [
+      position({
+        channel_spec_version_id: "spec-1",
+        release_manifest_id: "manifest-1",
+        configuration_epoch_id: "epoch-1",
+      }),
+      position({
+        id: "runner-1",
+        runner_of: "root-1",
+        entry_reason: "runner_tranche",
+        entry_features: {
+          ...SEALED,
+          release_evidence: {
+            ...SEALED.release_evidence,
+            configurationSha256: "different",
+          },
+        },
+      }),
+    ],
+    outcomes: fixture().outcomes.slice(0, 2),
+    executionRoutes: fixture().executionRoutes.slice(0, 2),
+    executionQuality: [],
+    managerShadow: [],
+  });
+  const ledger = buildProfitabilityLedger(input);
+  assert.equal(ledger.logicalTrades[0].status, "censored");
+  assert.ok(ledger.logicalTrades[0].censorCodes.includes("conflicting_configuration_identity"));
+});
+
 check("latest immutable execution route attributes the logical trade", () => {
   assert.equal(first.accountId, "account-a");
   assert.equal(first.accountName, "FIRST-TEAM");

@@ -396,6 +396,8 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
   }
 
   const logicalTrades: LogicalTrade[] = [];
+  let inheritedRootEpochLineages = 0;
+  let inheritedRootEpochRowsTotal = 0;
   for (const [groupKey, rowsUnsorted] of groups) {
     const rows = [...rowsUnsorted].sort((left, right) =>
       Date.parse(left.opened_at) - Date.parse(right.opened_at) || left.id.localeCompare(right.id));
@@ -471,6 +473,10 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     }
 
     const configurationIdentities: ConfigurationIdentity[] = [];
+    const rootRow = rows.find((row) => row.id === root) ?? null;
+    const rootEpoch = rootRow ? epochIdentity(rootRow) : null;
+    const rootSealed = rootRow ? sealedReleaseIdentity(rootRow) : null;
+    let inheritedRootEpochRows = 0;
     for (const row of rows) {
       const epoch = epochIdentity(row);
       if (epoch === "partial") {
@@ -478,8 +484,24 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
         censorCodes.push("partial_configuration_epoch");
         continue;
       }
-      const identity = epoch ?? sealedReleaseIdentity(row);
+      const sealed = sealedReleaseIdentity(row);
+      const identity = epoch ?? (
+        row.id !== root
+          && rootEpoch != null
+          && rootEpoch !== "partial"
+          && rootSealed != null
+          && sealed?.key === rootSealed.key
+          ? rootEpoch
+          : sealed
+      );
+      if (!epoch && rootEpoch != null && rootEpoch !== "partial" && identity === rootEpoch) {
+        inheritedRootEpochRows += 1;
+      }
       if (identity) configurationIdentities.push(identity);
+    }
+    if (inheritedRootEpochRows > 0) {
+      inheritedRootEpochLineages += 1;
+      inheritedRootEpochRowsTotal += inheritedRootEpochRows;
     }
     if (configurationIdentities.length > 0 && configurationIdentities.length !== rows.length) {
       pushIssue(
@@ -608,6 +630,12 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
       closeReasons: distinct(rows.flatMap((row) => row.close_reason ? [row.close_reason] : [])).sort(),
       censorCodes: distinct(censorCodes).sort(),
     });
+  }
+  if (inheritedRootEpochLineages > 0) {
+    warnings.push(
+      `${inheritedRootEpochLineages} logical trade(s) inherited its root configuration epoch for `
+        + `${inheritedRootEpochRowsTotal} immutable descendant row(s) with matching sealed release evidence`,
+    );
   }
   logicalTrades.sort((left, right) =>
     Date.parse(left.openedAt) - Date.parse(right.openedAt) || left.id.localeCompare(right.id));
