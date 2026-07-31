@@ -145,6 +145,7 @@
     "channel-passport-selftest": "tsx lib/channels/channelPassport.selftest.ts",
     "effective-channel-state-selftest": "tsx lib/channels/effectiveChannelState.selftest.ts",
     "channel-decision-evidence-selftest": "tsx lib/channels/channelDecisionEvidence.selftest.ts",
+    "channel-decision-packet-selftest": "tsx lib/channels/channelDecisionPacket.selftest.ts",
     "channel-decision-card-selftest": "tsx components/studio/ChannelDecisionCard.selftest.ts",
     "studio-evidence-read-selftest": "tsx hooks/useStudioEvidence.selftest.ts",
     "channel-config-draft-selftest": "tsx lib/channels/channelConfigDraft.selftest.ts",

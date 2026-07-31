@@ -5,18 +5,34 @@ import { deriveChannelConfigDraft, type ChannelConfigDraftPatch } from "@/lib/ch
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { activeRootRuntimeConfig } from "@/lib/channels/activeRelease";
 import type { StrategistState } from "@/lib/desk/types";
+import type { ChannelControlPlaneSpecView } from "@/lib/channels/channelControlPlaneOperatorView";
 
 /** Local-only proposal state. Drafts survive row changes within the mounted
  * workspace, but never cross into the desk reducer, Supabase, or the worker. */
-export function useChannelConfigDraft(channel?: StrategistState, passport?: ChannelPassport) {
+export function useChannelConfigDraft(
+  channel?: StrategistState,
+  passport?: ChannelPassport,
+  activeSpec?: ChannelControlPlaneSpecView | null,
+  activeConfigurationEpochId?: string | null,
+) {
   const [drafts, setDrafts] = useState<Record<string, ChannelConfigDraftPatch>>({});
   const slug = channel?.slug ?? "";
   const active = !!slug && Object.prototype.hasOwnProperty.call(drafts, slug);
   const patch = active ? drafts[slug] : {};
   const baseConfig = channel
-    ? passport?.release.state === "verified" && passport.rootPolicy
-      ? activeRootRuntimeConfig(channel.config, passport.rootPolicy)
-      : channel.config
+    ? passport?.release.state === "verified" && activeSpec
+      ? {
+        ...channel.config,
+        capital_pct: activeSpec.maxRiskUsd,
+        max_contracts: activeSpec.quantity,
+        premium_stop_pct: activeSpec.stopLoss.catastrophePct,
+        take_profit_pct: activeSpec.takeProfit.kind === "bank"
+          ? activeSpec.takeProfit.targetPct ?? 0
+          : 0,
+      }
+      : passport?.release.state === "verified" && passport.rootPolicy
+        ? activeRootRuntimeConfig(channel.config, passport.rootPolicy)
+        : channel.config
     : undefined;
   const proposed = baseConfig ? { ...baseConfig, ...patch } : undefined;
   const model = useMemo(() => channel && passport ? deriveChannelConfigDraft({
@@ -26,8 +42,17 @@ export function useChannelConfigDraft(channel?: StrategistState, passport?: Chan
     releaseState: passport.release.state,
     releaseId: passport.release.releaseId,
     releaseHash: passport.release.receipt?.configHash ?? passport.release.expectedHash,
-    configurationEpochId: passport.rootPolicy?.configurationEpochId ?? null,
-  }) : null, [channel, passport, patch, baseConfig]);
+    configurationEpochId:
+      activeConfigurationEpochId
+      ?? passport.rootPolicy?.configurationEpochId
+      ?? null,
+  }) : null, [
+    activeConfigurationEpochId,
+    baseConfig,
+    channel,
+    passport,
+    patch,
+  ]);
 
   const begin = () => {
     if (!slug) return;

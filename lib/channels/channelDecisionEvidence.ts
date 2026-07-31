@@ -44,8 +44,8 @@ export interface ChannelDecisionReview {
 }
 
 export interface ChannelDecisionCardModel extends ChannelDecisionReview {
-  asOfDateEt: typeof CHANNEL_DECISION_AS_OF;
-  packetVersion: typeof CHANNEL_DECISION_PACKET_VERSION;
+  asOfDateEt: string;
+  packetVersion: string;
   runtime: EffectiveChannelState;
   layers: DecisionEvidenceLayer[];
   receiptRefs: string[];
@@ -204,19 +204,19 @@ const reviews: Record<string, ChannelDecisionReview> = {
   ),
   "vb-macd-state": review(
     "vb-macd-state", "hold-collect", "HOLD · COLLECT", "hold",
-    "Retain the sealed LAB root. Early execution is positive, while the larger exact T+1 baseline is slightly negative.",
+    "Retain the sealed PAPER 2 root. Early execution is positive, while the larger exact T+1 baseline is slightly negative.",
     [current(3, 3, 367, 122.33), replay(85, 18, -357, -2.1, "BANK30/FIXED-50"), prospective(51, 8, 4.85), broad(3, 3, 367, 122.33)],
     ["No stable target plateau"],
   ),
   "vb-ribbon-cross-qqq": review(
     "vb-ribbon-cross-qqq", "hold-collect", "HOLD · COLLECT", "hold",
-    "Retain the sealed LAB root. Exact current execution is one loss and the larger exact manager baseline is flat.",
+    "Retain the sealed PAPER 2 root. Exact current execution is one loss and the larger exact manager baseline is flat.",
     [current(1, 1, -114, -114), replay(31, 17, -14, -0.23, "BANK50/A13"), prospective(15, 8, 14.07), broad(1, 1, -114, -114)],
     ["Collect exact current execution", "No stable target plateau"],
   ),
   "vb-squeeze-break": review(
     "vb-squeeze-break", "hold-collect", "HOLD · COLLECT", "hold",
-    "Retain the sealed LAB root. Small positive current results conflict with the larger exact T+1 manager baseline.",
+    "Retain the sealed PAPER 2 root. Small positive current results conflict with the larger exact T+1 manager baseline.",
     [current(4, 3, 46, 11.5), replay(88, 18, -904, -5.14, "BANK30/FIXED-50"), prospective(61, 9, 2.56), broad(4, 3, 46, 11.5)],
     ["No stable target plateau"],
   ),
@@ -309,18 +309,28 @@ function recentLayer(runtime: EffectiveChannelState): DecisionEvidenceLayer | nu
 export function buildChannelDecisionCardModel(
   runtime: EffectiveChannelState,
   nowDateEt: string = CHANNEL_DECISION_AS_OF,
+  packetReview?: {
+    asOfDateEt: string;
+    packetVersion: string;
+    review: ChannelDecisionReview;
+  } | null,
 ): ChannelDecisionCardModel {
-  const base = reviews[runtime.slug] ?? fallback(runtime.slug, runtime);
+  const base = packetReview?.review
+    ?? reviews[runtime.slug]
+    ?? fallback(runtime.slug, runtime);
   const recent = recentLayer(runtime);
   const layers = recent ? [recent, ...base.layers] : base.layers;
   return {
     ...base,
-    asOfDateEt: CHANNEL_DECISION_AS_OF,
-    packetVersion: CHANNEL_DECISION_PACKET_VERSION,
+    asOfDateEt: packetReview?.asOfDateEt ?? CHANNEL_DECISION_AS_OF,
+    packetVersion:
+      packetReview?.packetVersion ?? CHANNEL_DECISION_PACKET_VERSION,
     runtime,
     layers,
     receiptRefs: [...new Set(layers.map((layer) => layer.receipt))],
-    stale: nowDateEt > CHANNEL_DECISION_AS_OF,
+    stale: nowDateEt > (
+      packetReview?.asOfDateEt ?? CHANNEL_DECISION_AS_OF
+    ),
     mutationAuthorized: false,
   };
 }

@@ -13,6 +13,7 @@ import {
   type JsonObject,
   type ValidationGateResult,
 } from "./channelControlPlane";
+import { MAX_GOVERNED_ROOT_QUANTITY } from "./activeRelease";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
@@ -197,8 +198,12 @@ function validateProposalPatch(
   if (unknown.length) {
     throw new ProposalInputError(`unsupported proposal fields: ${unknown.sort().join(", ")}`);
   }
-  if ("quantity" in patch && (!Number.isInteger(patch.quantity) || Number(patch.quantity) < 1)) {
-    throw new ProposalInputError("quantity must be a positive integer");
+  if ("quantity" in patch && (!Number.isInteger(patch.quantity)
+      || Number(patch.quantity) < 1
+      || Number(patch.quantity) > MAX_GOVERNED_ROOT_QUANTITY)) {
+    throw new ProposalInputError(
+      `quantity must be an integer from 1 to ${MAX_GOVERNED_ROOT_QUANTITY}`,
+    );
   }
   if ("maxDebitUsd" in patch
       && (typeof patch.maxDebitUsd !== "number" || !Number.isFinite(patch.maxDebitUsd) || patch.maxDebitUsd <= 0)) {
@@ -210,6 +215,7 @@ function validateProposalPatch(
     requireExactKeys(patch.riskLimits, ["maxContracts", "maxDebitUsd", "maxRiskUsd"], "riskLimits");
     if (!Number.isInteger(patch.riskLimits.maxContracts)
         || Number(patch.riskLimits.maxContracts) < 1
+        || Number(patch.riskLimits.maxContracts) > MAX_GOVERNED_ROOT_QUANTITY
         || typeof patch.riskLimits.maxDebitUsd !== "number"
         || !Number.isFinite(patch.riskLimits.maxDebitUsd)
         || patch.riskLimits.maxDebitUsd <= 0
@@ -217,6 +223,12 @@ function validateProposalPatch(
         || !Number.isFinite(patch.riskLimits.maxRiskUsd)
         || patch.riskLimits.maxRiskUsd <= 0) {
       throw new ProposalInputError("riskLimits contains an invalid bounded envelope");
+    }
+    if (Number(patch.riskLimits.maxRiskUsd)
+        > Number(patch.riskLimits.maxDebitUsd)) {
+      throw new ProposalInputError(
+        "riskLimits maxRiskUsd cannot exceed maxDebitUsd",
+      );
     }
   }
   if ("managerPolicy" in patch && fields.length !== 1) {

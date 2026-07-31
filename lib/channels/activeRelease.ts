@@ -300,6 +300,7 @@ const expectedFor = (lane: SealedReleaseLane) => lane === "rc54"
     };
 
 const SHA256 = /^sha256:([a-f0-9]{64})$/i;
+export const MAX_GOVERNED_ROOT_QUANTITY = 12;
 
 const object = (value: unknown): Record<string, unknown> | null =>
   value != null && typeof value === "object" && !Array.isArray(value)
@@ -361,7 +362,9 @@ function receiptBoundRootBindings(
     if (!slug
         || !expected
         || accountId !== expected.accountId
-        || quantity !== expected.quantity
+        || !Number.isInteger(quantity)
+        || quantity < 1
+        || quantity > MAX_GOVERNED_ROOT_QUANTITY
         || !managerProfileId
         || !channelHash?.match(SHA256)
         || !managerHash?.match(SHA256)

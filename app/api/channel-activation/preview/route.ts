@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     }
     const evidence = await collectChannelActivationPreviewServerEvidence({
       sb,
-      activeManifestContentHash: activeRead.compiled.manifest.contentHash,
+      active: activeRead.compiled,
       proposal: proposalRead.proposal,
       storedCapacityCollisionImpact: proposalRead.capacityCollisionImpact,
     });

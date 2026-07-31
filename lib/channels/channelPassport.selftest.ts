@@ -164,6 +164,24 @@ assert.equal(receiptBound.bySlug["pb-ride"].rootPolicy, null);
 assert.match(receiptBound.bySlug["pb-ride"].lifecycleFact, /immutable activation receipt/i);
 assert.equal(receiptBound.bySlug["pb-ride-2"].lifecycle, "dark-evidence");
 
+const resizedReceiptBound = deriveChannelPassports({
+  channels: [channel("pb-ride")],
+  events: [event(
+    `stream: rc54-release ACTIVE ${receiptBoundReleaseId} config=sha256:${receiptBoundHash}`,
+    {
+      ...receiptBoundEvents[0].meta,
+      roots: receiptBoundRoots.map((root) =>
+        root.slug === "pb-ride" ? { ...root, quantity: 8 } : root),
+    },
+  )],
+  signals: [], positions: [], recentTrades: [], evidenceBySlug: {},
+});
+assert.equal(resizedReceiptBound.release.state, "verified");
+assert.equal(
+  resizedReceiptBound.bySlug["pb-ride"].effective.economics.quantity,
+  8,
+);
+
 const invalidReceiptBound = deriveChannelPassports({
   channels: [channel("pb-ride")],
   events: [event(

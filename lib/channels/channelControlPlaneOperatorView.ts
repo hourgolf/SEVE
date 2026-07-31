@@ -28,6 +28,7 @@ export interface ChannelControlPlaneSpecView {
   accountId: string;
   accountLabel: string;
   quantity: number;
+  premiumCap: number;
   maxDebitUsd: number;
   maxRiskUsd: number;
   riskLimits: CompiledReleaseManifest["channelSpecs"][number]["riskLimits"];
@@ -113,6 +114,7 @@ export function projectChannelControlPlaneOperatorView(input: {
       accountId: spec.accountId,
       accountLabel: paperAccountLabel(spec.accountId, "PAPER ACCOUNT"),
       quantity: spec.quantity,
+      premiumCap: Number(spec.entryParameters.premiumCap),
       maxDebitUsd: spec.maxDebitUsd,
       maxRiskUsd: spec.riskLimits.maxRiskUsd,
       riskLimits: spec.riskLimits,

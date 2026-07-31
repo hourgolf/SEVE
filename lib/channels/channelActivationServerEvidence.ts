@@ -6,6 +6,7 @@ import {
 import {
   contentHash,
   type ChannelChangeProposal,
+  type CompiledReleaseManifest,
   type DynamicReadinessEvidence,
   type JsonObject,
   type ProposalReplaySummary,
@@ -109,7 +110,7 @@ export interface ChannelActivationPreviewServerEvidence {
 
 export async function collectChannelActivationPreviewServerEvidence(input: {
   sb: SupabaseClient;
-  activeManifestContentHash: string;
+  active: CompiledReleaseManifest;
   proposal: ChannelChangeProposal;
   storedCapacityCollisionImpact: JsonObject | null;
   now?: string;
@@ -194,10 +195,44 @@ export async function collectChannelActivationPreviewServerEvidence(input: {
   });
   const protocolEvidenceRef = contentHash({
     kind: "channel-activation-protocol-simulation",
-    activeManifestContentHash: input.activeManifestContentHash,
+    activeManifestContentHash: input.active.manifest.contentHash,
     proposalId: input.proposal.id,
     proposedPatch: input.proposal.proposedPatch,
   });
+  const activeSpec = input.active.channelSpecs.find(
+    (spec) => spec.id === input.proposal.baseSpecVersionId,
+  );
+  if (!activeSpec) {
+    throw new ChannelActivationServerEvidenceError(
+      "proposal base specification is absent from the active manifest",
+    );
+  }
+  const proposedQuantity = Number(
+    input.proposal.proposedPatch.quantity ?? activeSpec.quantity,
+  );
+  const proposedMaxDebitUsd = Number(
+    input.proposal.proposedPatch.maxDebitUsd ?? activeSpec.maxDebitUsd,
+  );
+  const proposedRiskLimits =
+    record(input.proposal.proposedPatch.riskLimits)
+    ?? activeSpec.riskLimits;
+  const proposedMaxRiskUsd = Number(
+    proposedRiskLimits.maxRiskUsd ?? activeSpec.riskLimits.maxRiskUsd,
+  );
+  const accountSpecs = input.active.channelSpecs.filter(
+    (spec) => spec.accountId === activeSpec.accountId,
+  );
+  const accountMaxDebitBefore = accountSpecs.reduce(
+    (sum, spec) => sum + spec.maxDebitUsd,
+    0,
+  );
+  const accountMaxRiskBefore = accountSpecs.reduce(
+    (sum, spec) => sum + spec.riskLimits.maxRiskUsd,
+    0,
+  );
+  const sizingChanged = proposedQuantity !== activeSpec.quantity
+    || proposedMaxDebitUsd !== activeSpec.maxDebitUsd
+    || proposedMaxRiskUsd !== activeSpec.riskLimits.maxRiskUsd;
   const capacityCollisionImpact: JsonObject = {
     ...(input.storedCapacityCollisionImpact ?? {}),
     state: "pass",
@@ -210,8 +245,48 @@ export async function collectChannelActivationPreviewServerEvidence(input: {
       ),
     ].filter((value, index, values) =>
       typeof value === "string" && values.indexOf(value) === index),
-    fact:
-      "The canonical candidate compiler and admission projection produced one deterministic paper-only collision and capacity result.",
+    sizing: {
+      changed: sizingChanged,
+      channel: activeSpec.slug,
+      quantityBefore: activeSpec.quantity,
+      quantityAfter: proposedQuantity,
+      maxDebitUsdBefore: activeSpec.maxDebitUsd,
+      maxDebitUsdAfter: proposedMaxDebitUsd,
+      maxRiskUsdBefore: activeSpec.riskLimits.maxRiskUsd,
+      maxRiskUsdAfter: proposedMaxRiskUsd,
+      accountId: activeSpec.accountId,
+      accountConfiguredMaxDebitUsdBefore: accountMaxDebitBefore,
+      accountConfiguredMaxDebitUsdAfter:
+        accountMaxDebitBefore - activeSpec.maxDebitUsd + proposedMaxDebitUsd,
+      accountConfiguredMaxRiskUsdBefore: accountMaxRiskBefore,
+      accountConfiguredMaxRiskUsdAfter:
+        accountMaxRiskBefore
+        - activeSpec.riskLimits.maxRiskUsd
+        + proposedMaxRiskUsd,
+      liveDeskPositions:
+        boundary.boundary.deskOpenPositions.state === "observed"
+          ? boundary.boundary.deskOpenPositions.count
+          : -1,
+      liveBrokerPositions: boundary.boundary.brokerAccounts.reduce(
+        (sum, account) => sum + (
+          account.openPositions.state === "observed"
+            ? account.openPositions.count
+            : 0
+        ),
+        0,
+      ),
+      liveBrokerOrders: boundary.boundary.brokerAccounts.reduce(
+        (sum, account) => sum + (
+          account.openOrders.state === "observed"
+            ? account.openOrders.count
+            : 0
+        ),
+        0,
+      ),
+    },
+    fact: sizingChanged
+      ? `Fresh flat-book simulation passed ${activeSpec.slug} at ${activeSpec.quantity}→${proposedQuantity} contracts; account configured debit/risk envelopes were recomputed without changing route, family, collision domain, priority, or entry frequency.`
+      : "The canonical candidate compiler and admission projection produced one deterministic paper-only collision and capacity result.",
   };
   const captureObservations: CapturePathObservation[] = [
     observed(

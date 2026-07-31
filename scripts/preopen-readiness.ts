@@ -32,6 +32,7 @@ import { loadStoredReceiptBoundControlPlane } from "@/lib/channels/channelContro
 import { resolveStoredRc54OperationalAuthority } from "./ops/activeOperationalContract";
 import type { AccountRow } from "@/worker/src/store";
 import { createServerSupabaseClient } from "./serverSupabase";
+import { paperAccountLabel } from "@/lib/channels/paperAccountLabel";
 
 const WORKER_FRESH_MS = 150_000;
 const arg = (name: string): string | null => {
@@ -129,7 +130,7 @@ async function observePaperAccount(input: {
   const credentials = envCredentials(account.cred_ref);
   const base = {
     accountId: account.id,
-    name: account.name,
+    name: paperAccountLabel(account.id, "PAPER ACCOUNT"),
     mode: account.mode,
     configuredArmed: account.is_armed,
     configuredHalted: account.is_halted,
