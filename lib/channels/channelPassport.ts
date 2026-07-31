@@ -6,14 +6,20 @@ import {
   type ActiveReleaseObservation,
   type ActiveRootPolicy,
 } from "@/lib/channels/activeRelease";
+import {
+  deriveEffectiveChannelState,
+  type EffectiveChannelEvidenceInput,
+  type EffectiveChannelState,
+} from "@/lib/channels/effectiveChannelState";
 import type { Day1ReleaseReadState } from "@/lib/channels/day1Release";
 
 export type RuntimeLifecycle = "paper-root" | "dark-evidence" | "unverified";
 
 export interface ChannelPassport {
   slug: string;
+  effective: EffectiveChannelState;
   lifecycle: RuntimeLifecycle;
-  lifecycleLabel: "PAPER ROOT" | "DARK EVIDENCE" | "UNVERIFIED";
+  lifecycleLabel: "PAPER EXECUTING" | "OBSERVE ONLY" | "UNVERIFIED";
   lifecycleFact: string;
   release: ActiveReleaseObservation;
   rootPolicy: ActiveRootPolicy | null;
@@ -76,21 +82,16 @@ function presentRelease(release: ActiveReleaseObservation, roots: number, dark: 
   return {
     label,
     accountLifecycleLabel: release.state === "verified"
-      ? `${roots} ACCOUNT ROOT · ${dark} ACCOUNT DARK`
+      ? `${roots} EXECUTING · ${dark} OBSERVE ONLY`
       : "DATABASE VIEW ONLY",
     compactAccountLifecycleLabel: release.state === "verified"
-      ? `${roots} ACCT ROOT · ${dark} ACCT DARK`
+      ? `${roots} EXEC · ${dark} OBSERVE`
       : "DATABASE VIEW ONLY",
     shortHash: `${(release.receipt?.configHash ?? release.expectedHash).slice(0, 12)}…`,
     databaseOnly: release.state !== "verified",
   };
 }
 const latestFirst = (a: Signal, b: Signal) => Date.parse(b.created_at) - Date.parse(a.created_at);
-
-function databaseState(channel: StrategistState): string {
-  if (channel.config.muted) return "MUTED";
-  return channel.status.toUpperCase();
-}
 
 export function deriveChannelPassport(input: {
   channel: StrategistState;
@@ -99,16 +100,23 @@ export function deriveChannelPassport(input: {
   positions: Position[];
   recentTrades: Position[];
   ledger?: StudioChannelEvidence;
+  evidenceSnapshot?: Omit<EffectiveChannelEvidenceInput, "ledger">;
+  nowMs?: number;
 }): ChannelPassport {
   const { channel, release } = input;
+  const effective = deriveEffectiveChannelState({
+    channel,
+    release,
+    evidence: { ...input.evidenceSnapshot, ledger: input.ledger },
+    nowMs: input.nowMs,
+  });
   const rootPolicy = release.state === "verified" ? release.roots[channel.slug] ?? null : null;
-  const runtimeRoot = release.state === "verified" && release.rootSlugs.includes(channel.slug);
-  const lifecycle: RuntimeLifecycle = release.state !== "verified"
-    ? "unverified"
-    : runtimeRoot
-      ? "paper-root"
-      : "dark-evidence";
-  const lifecycleLabel = lifecycle === "paper-root" ? "PAPER ROOT" : lifecycle === "dark-evidence" ? "DARK EVIDENCE" : "UNVERIFIED";
+  const lifecycle: RuntimeLifecycle = effective.execution.posture === "paper-executing"
+    ? "paper-root"
+    : effective.execution.posture === "observe-only"
+      ? "dark-evidence"
+      : "unverified";
+  const lifecycleLabel = lifecycle === "paper-root" ? "PAPER EXECUTING" : lifecycle === "dark-evidence" ? "OBSERVE ONLY" : "UNVERIFIED";
   const lifecycleFact = lifecycle === "paper-root"
     ? rootPolicy
       ? `${rootPolicy.familyId} may submit paper entries under the verified sealed release.`
@@ -126,22 +134,15 @@ export function deriveChannelPassport(input: {
     signal.blocked_reason === "day1_dark_lifecycle"
     || signal.blocked_reason === "rc54_dark_lifecycle"
   ).length;
-  const dbState = databaseState(channel);
-  const executor = channel.executor ?? "cron";
-  const differsFromRuntime = lifecycle === "paper-root"
-    ? channel.status !== "armed" || channel.config.muted || executor !== "stream"
-    : lifecycle === "dark-evidence"
-      ? channel.status === "armed" && !channel.config.muted
-      : false;
-  const databaseFact = lifecycle === "unverified"
-    ? "Database assignment only; no verified runtime comparison."
-    : differsFromRuntime
-      ? `${dbState} / ${executor} in the database differs from the sealed ${lifecycleLabel.toLowerCase()} overlay.`
-      : `${dbState} / ${executor} agrees with the sealed runtime lane.`;
+  const dbState = effective.database.state;
+  const executor = effective.database.executor;
+  const differsFromRuntime = effective.database.differsFromRuntime;
+  const databaseFact = effective.database.fact;
   const observerState = lifecycle === "paper-root" ? "configured" : lifecycle === "dark-evidence" ? "not-applicable" : "unverified";
 
   return {
     slug: channel.slug,
+    effective,
     lifecycle,
     lifecycleLabel,
     lifecycleFact,
@@ -167,7 +168,7 @@ export function deriveChannelPassport(input: {
           ? `${release.configuredManagerArms} manager arms observe the exact two-lot root path; only explicitly sealed root exits govern orders.`
           : `${release.configuredManagerArms} manager arms observe this receipt-bound paper root; only its immutable entry policy governs orders.`
         : lifecycle === "dark-evidence"
-          ? "Dark candidates feed T+1 exact-path research; no redundant fill or manager claim is made."
+          ? "Observe-only candidates feed T+1 exact-path research; no redundant fill or manager claim is made."
           : "Observer status is withheld until the release receipt verifies.",
     },
   };
@@ -180,7 +181,9 @@ export function deriveChannelPassports(input: {
   positions: Position[];
   recentTrades: Position[];
   evidenceBySlug: Record<string, StudioChannelEvidence>;
+  evidenceSnapshot?: Omit<EffectiveChannelEvidenceInput, "ledger">;
   releaseReadState?: Day1ReleaseReadState;
+  nowMs?: number;
 }): ChannelWorkspaceModel {
   const release = observeActiveRelease(input.events, input.releaseReadState);
   const passports = input.channels.map((channel) => deriveChannelPassport({
@@ -190,6 +193,8 @@ export function deriveChannelPassports(input: {
     positions: input.positions,
     recentTrades: input.recentTrades,
     ledger: input.evidenceBySlug[channel.slug],
+    evidenceSnapshot: input.evidenceSnapshot,
+    nowMs: input.nowMs,
   }));
   const roots = passports.filter((passport) => passport.lifecycle === "paper-root").length;
   const dark = passports.filter((passport) => passport.lifecycle === "dark-evidence").length;

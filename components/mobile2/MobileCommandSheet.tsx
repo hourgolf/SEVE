@@ -27,7 +27,7 @@ export function MobileCommandSheet({
 }) {
   const { mode, skin, density, setMode, toggleSkin, toggleDensity } = useShell();
   const dispatch = useDeskDispatch();
-  const { canWrite, persistConfig, persistFund } = useDeskWrite();
+  const { canDirectConfigure: canWrite, persistConfig, persistFund } = useDeskWrite();
 
   const [query, setQuery] = useState("");
   const [hold, setHold] = useState(0); // KILL fill 0→1

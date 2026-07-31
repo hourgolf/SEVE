@@ -22,7 +22,7 @@ import type { StudioScope } from "@/components/studio/StudioFleet";
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, incident, studioEvidence, channelWorkspace, opsReadiness }: SurfaceProps) {
+export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, incident, studioEvidence, channelWorkspace, channelControlPlane, opsReadiness }: SurfaceProps) {
   void symbol;
   const { desk } = view;
 
@@ -63,7 +63,7 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
         onSelect={setSelSlug}
       />
 
-      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} />
+      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} controlPlane={channelControlPlane} />
 
       <StudioModules
         selected={selectedRow}

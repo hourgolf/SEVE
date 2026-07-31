@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { paperAccountLabel, paperAccountSlot } from "@/lib/channels/paperAccountLabel";
 import type { Account } from "@/lib/desk/types";
 
 // Reads the `accounts` table (multi-account cockpit, 36_accounts_foundation). Anon read;
@@ -23,7 +24,21 @@ export function useAccounts(): { accounts: Account[]; loading: boolean } {
           .order("sort_order", { ascending: true });
         if (!alive) return;
         if (error) setAccounts([]);
-        else setAccounts((data ?? []) as Account[]);
+        else setAccounts(((data ?? []) as Account[])
+          .map((account) => ({
+            ...account,
+            name: account.mode === "paper"
+              ? paperAccountLabel(account.id, "PAPER ACCOUNT")
+              : account.name,
+          }))
+          .sort((left, right) => {
+            const leftSlot = paperAccountSlot(left.id);
+            const rightSlot = paperAccountSlot(right.id);
+            if (leftSlot && rightSlot) return leftSlot - rightSlot;
+            if (leftSlot) return -1;
+            if (rightSlot) return 1;
+            return left.sort_order - right.sort_order;
+          }));
       } catch {
         if (alive) setAccounts([]);
       } finally {

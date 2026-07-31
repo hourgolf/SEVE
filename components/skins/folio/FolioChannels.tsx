@@ -43,8 +43,8 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
       <header className="folio-workspace-title">
         <span><small>CHANNEL PORTFOLIO</small><b>{release.label}</b><em>{release.accountLifecycleLabel} · {release.shortHash}</em></span>
         <div>
-          <span><small>ROOTS</small><b>{surface.channelWorkspace.roots}</b></span>
-          <span><small>DARK</small><b>{surface.channelWorkspace.dark}</b></span>
+          <span><small>EXECUTING</small><b>{surface.channelWorkspace.roots}</b></span>
+          <span><small>OBSERVE</small><b>{surface.channelWorkspace.dark}</b></span>
           <span><small>OPEN</small><b>{summary.openPositions}</b></span>
           <span><small>DAY</small><b className={summary.dayPnl < 0 ? "neg" : summary.dayPnl > 0 ? "pos" : ""}>{signedUsd(summary.dayPnl)}</b></span>
         </div>
@@ -52,7 +52,7 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
 
       <div className="folio-channel-grid">
         <section className="folio-channel-list">
-          <header><div role="group" aria-label="Channel lifecycle"><button className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>ROOTS</button><button className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>DARK</button><button className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL</button></div><label>SORT<select value={sort} onChange={(event) => setSort(event.target.value as StudioSort)}>{SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></header>
+          <header><div role="group" aria-label="Channel lifecycle"><button className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>EXECUTING</button><button className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVE</button><button className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL</button></div><label>SORT<select value={sort} onChange={(event) => setSort(event.target.value as StudioSort)}>{SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></header>
           <div className="folio-channel-rows">
             {visible.map((row) => {
               const passport = surface.channelWorkspace.bySlug[row.channel.slug];
@@ -67,7 +67,7 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
             {visible.length === 0 && <p>No channels match this lifecycle.</p>}
           </div>
         </section>
-        <ChannelInspector strategist={selected?.channel} summary={selected} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} write={surface.write} />
+        <ChannelInspector strategist={selected?.channel} summary={selected} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} write={surface.write} controlPlane={surface.channelControlPlane} />
       </div>
       <StudioModules selected={selected} evidence={selected ? surface.studioEvidence.bySlug[selected.channel.slug] : undefined} evidenceState={surface.studioEvidence} positions={surface.feed.positions} recentTrades={surface.feed.recentTrades} incident={surface.incident} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} />
     </div>

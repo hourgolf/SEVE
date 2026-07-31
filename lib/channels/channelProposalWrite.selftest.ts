@@ -74,7 +74,9 @@ check("valid bounded request builds a draft-only server-authored proposal", () =
   assert.equal(built.preview.validationResults.some((result) => result.state === "block"), false);
   assert.equal(built.preview.validationResults.filter((result) => result.state === "not-run").length, 3);
   assert.deepEqual(built.proposal.evidenceRefs, ["receipt:operator-note"]);
-  assert.equal(built.capacityCollisionImpact.state, "not-run");
+  assert.equal(built.capacityCollisionImpact.state, "pass");
+  assert.deepEqual(built.capacityCollisionImpact.changedCapacityFields, []);
+  assert.equal((built.capacityCollisionImpact.evidenceRefs as string[]).length, 2);
 });
 
 check("client cannot supply identity or lifecycle fields", () => {
@@ -129,6 +131,11 @@ check("governed re-entry request expands into one exact reviewed spec patch", ()
       result.gate === "reentry-scaling")?.state,
     "pass",
   );
+  assert.equal(built.capacityCollisionImpact.state, "not-run");
+  assert.deepEqual(built.capacityCollisionImpact.changedCapacityFields, [
+    "entryParameters",
+    "reentryPolicy",
+  ]);
 });
 
 check("governed re-entry rejects out-of-range caps and unrelated fields", () => {
@@ -277,6 +284,12 @@ check("storage RPC routing distinguishes bounded, manager, and re-entry drafts",
     proposalDraftRpcName(bounded.proposal),
     "create_channel_change_proposal_draft",
   );
+  assert.equal(bounded.capacityCollisionImpact.state, "not-run");
+  assert.deepEqual(bounded.capacityCollisionImpact.changedCapacityFields, [
+    "maxDebitUsd",
+    "quantity",
+    "riskLimits",
+  ]);
   assert.equal(
     proposalDraftRpcName(governed.proposal),
     "create_channel_reentry_proposal_draft",

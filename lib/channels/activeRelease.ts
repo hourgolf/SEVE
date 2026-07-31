@@ -264,9 +264,23 @@ export interface ActiveReleaseObservation {
   expectedHash: string;
   workerVersion: string;
   roots: Readonly<Record<string, ActiveRootPolicy>>;
+  rootBindings: Readonly<Record<string, ActiveRootBinding>>;
   rootSlugs: readonly string[];
   configuredManagerArms: number;
   fact: string;
+}
+
+export interface ActiveRootBinding {
+  slug: string;
+  accountId: string;
+  accountName: string;
+  quantity: number;
+  managerProfileId: string;
+  managerVersion: string;
+  channelSpecContentHash: string;
+  configurationEpochId: string;
+  maxEntriesPerSession: number;
+  source: "sealed-policy" | "activation-receipt";
 }
 
 const expectedFor = (lane: SealedReleaseLane) => lane === "rc54"
@@ -295,9 +309,24 @@ const object = (value: unknown): Record<string, unknown> | null =>
 const string = (value: unknown): string | null =>
   typeof value === "string" ? value : null;
 
-function receiptBoundRootSlugs(
+function bindingFromPolicy(root: ActiveRootPolicy): ActiveRootBinding {
+  return {
+    slug: root.slug,
+    accountId: root.accountId,
+    accountName: root.accountName,
+    quantity: root.quantity,
+    managerProfileId: root.managerProfileId,
+    managerVersion: `sha256:${root.managerVersion}`,
+    channelSpecContentHash: `sha256:${root.channelVersion}`,
+    configurationEpochId: `sha256:${root.configurationEpochId}`,
+    maxEntriesPerSession: root.slug === "pb-ride" ? 3 : 1,
+    source: "sealed-policy",
+  };
+}
+
+function receiptBoundRootBindings(
   receipt: SealedReleaseReceipt,
-): { slugs: string[]; issue: string | null } {
+): { bindings: Record<string, ActiveRootBinding>; issue: string | null } {
   const meta = receipt.meta;
   const manifestHash = string(meta?.manifestContentHash)?.match(SHA256)?.[1]?.toLowerCase() ?? null;
   const epoch = string(meta?.configurationEpochId);
@@ -312,12 +341,12 @@ function receiptBoundRootSlugs(
       || !epoch?.match(SHA256)
       || !activationReceiptId
       || workerVersion !== RC54_WORKER_VERSION) {
-    return { slugs: [], issue: "receipt-bound startup identity is incomplete or internally inconsistent" };
+    return { bindings: {}, issue: "receipt-bound startup identity is incomplete or internally inconsistent" };
   }
   if (!Array.isArray(meta.roots) || meta.roots.length !== Object.keys(RC54_ROOTS).length) {
-    return { slugs: [], issue: "receipt-bound startup topology is incomplete" };
+    return { bindings: {}, issue: "receipt-bound startup topology is incomplete" };
   }
-  const slugs: string[] = [];
+  const bindings: Record<string, ActiveRootBinding> = {};
   for (const value of meta.roots) {
     const root = object(value);
     const slug = string(root?.slug);
@@ -325,24 +354,38 @@ function receiptBoundRootSlugs(
     const channelHash = string(root?.channelSpecContentHash);
     const managerHash = string(root?.managerVersion);
     const rootEpoch = string(root?.configurationEpochId);
+    const accountId = string(root?.accountId);
+    const quantity = Number(root?.quantity);
+    const managerProfileId = string(root?.managerProfileId);
     const entries = Number(root?.maxEntriesPerSession);
     if (!slug
         || !expected
-        || string(root?.accountId) !== expected.accountId
-        || Number(root?.quantity) !== expected.quantity
-        || !string(root?.managerProfileId)
+        || accountId !== expected.accountId
+        || quantity !== expected.quantity
+        || !managerProfileId
         || !channelHash?.match(SHA256)
         || !managerHash?.match(SHA256)
         || !rootEpoch?.match(SHA256)
         || !Number.isInteger(entries)
         || entries < 1
         || entries > 3
-        || slugs.includes(slug)) {
-      return { slugs: [], issue: `receipt-bound startup topology is invalid${slug ? ` at ${slug}` : ""}` };
+        || Object.prototype.hasOwnProperty.call(bindings, slug)) {
+      return { bindings: {}, issue: `receipt-bound startup topology is invalid${slug ? ` at ${slug}` : ""}` };
     }
-    slugs.push(slug);
+    bindings[slug] = {
+      slug,
+      accountId,
+      accountName: expected.accountName,
+      quantity,
+      managerProfileId,
+      managerVersion: managerHash!,
+      channelSpecContentHash: channelHash!,
+      configurationEpochId: rootEpoch!,
+      maxEntriesPerSession: entries,
+      source: "activation-receipt",
+    };
   }
-  return { slugs: slugs.sort(), issue: null };
+  return { bindings, issue: null };
 }
 
 export function observeActiveRelease(
@@ -361,6 +404,7 @@ export function observeActiveRelease(
       expectedHash: fallback.hash,
       workerVersion: fallback.workerVersion,
       roots: {},
+      rootBindings: {},
       rootSlugs: [],
       configuredManagerArms: 0,
       fact: state === "checking"
@@ -371,7 +415,7 @@ export function observeActiveRelease(
     };
   }
   if (receipt.meta?.state === "receipt-bound") {
-    const projection = receiptBoundRootSlugs(receipt);
+    const projection = receiptBoundRootBindings(receipt);
     if (projection.issue) {
       return {
         state: "mismatch",
@@ -381,6 +425,7 @@ export function observeActiveRelease(
         expectedHash: receipt.configHash,
         workerVersion: RC54_WORKER_VERSION,
         roots: {},
+        rootBindings: {},
         rootSlugs: [],
         configuredManagerArms: 0,
         fact: `${projection.issue}; runtime lifecycle remains unverified.`,
@@ -397,7 +442,8 @@ export function observeActiveRelease(
       // and epochs, but does not carry the full economic projection. Never
       // backfill mutable or legacy economics into this map.
       roots: {},
-      rootSlugs: projection.slugs,
+      rootBindings: projection.bindings,
+      rootSlugs: Object.keys(projection.bindings).sort(),
       configuredManagerArms: DAY1_MANAGER_ARMS.length,
       fact: `Immutable activation receipt ${string(receipt.meta.activationReceiptId)} binds the active paper runtime. Receipt identity is not a liveness claim.`,
     };
@@ -412,6 +458,7 @@ export function observeActiveRelease(
       expectedHash: expected.hash,
       workerVersion: expected.workerVersion,
       roots: {},
+      rootBindings: {},
       rootSlugs: [],
       configuredManagerArms: 0,
       fact: `Observed ${receipt.releaseId} ${receipt.configHash.slice(0, 10)}…; expected sealed ${expected.releaseId}.`,
@@ -425,6 +472,9 @@ export function observeActiveRelease(
     expectedHash: expected.hash,
     workerVersion: expected.workerVersion,
     roots: expected.roots,
+    rootBindings: Object.fromEntries(
+      Object.values(expected.roots).map((root) => [root.slug, bindingFromPolicy(root)]),
+    ),
     rootSlugs: Object.keys(expected.roots).sort(),
     configuredManagerArms: expected.arms,
     fact: `Exact ${expected.releaseId} startup receipt observed. Receipt identity is not a liveness claim.`,

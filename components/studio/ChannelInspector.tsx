@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Knob } from "@/components/console/hw/Knob";
 import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftPanel";
+import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { pmVar } from "@/lib/desk/colors";
@@ -13,14 +14,16 @@ import type { StudioChannelRow } from "@/lib/studio/deriveStudioView";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write }: {
+export function ChannelInspector({ strategist, summary, passport, write, controlPlane }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
   write: SurfaceProps["write"];
+  controlPlane?: ChannelControlPlaneViewRead;
 }) {
   const dispatch = useDeskDispatch();
   const { persistConfig, setChannelStatus, duplicateChannel, deleteChannel } = write;
@@ -39,7 +42,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
   const config = draft.active
     ? draft.proposed ?? draft.baseConfig ?? databaseConfig
     : draft.baseConfig ?? databaseConfig;
-  const canPersist = write.canWrite && !sealed;
+  const canPersist = write.canDirectConfigure && !sealed;
   const canTune = draft.active || canPersist;
   const dte = config.entry_dte ?? 0;
   const eventPolicy = config.event_policy ?? "standdown";
@@ -81,7 +84,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
       <div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">{slug}</span></div>
       <div className="insp-hero">
         <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
-        {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{passport.lifecycleLabel}</span>}
+        {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{passport.effective.execution.label}</span>}
         {a13 && <span className="ih-tag amber">⚡ A13</span>}
         <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
@@ -111,7 +114,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
           <button type="button" className={databaseConfig.boosted ? "on boost" : ""} disabled={!canPersist} onClick={() => setCfg({ boosted: !databaseConfig.boosted })}><i />BOOST<small>{databaseConfig.boosted ? "2× today" : "normal"}</small></button>
         </div></section>
         <div className="mixer-meter">
-          <span><small>RUNTIME</small><b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b></span>
+          <span><small>RUNTIME</small><b>{passport?.effective.execution.label ?? "UNVERIFIED"}</b></span>
           <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
           <span><small>POLICY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
         </div>
@@ -141,6 +144,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
               : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
           </div>}
         </section>
+        {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} />}
         <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} />
       </div>
 
@@ -149,7 +153,7 @@ export function ChannelInspector({ strategist, summary, passport, write }: {
         <button type="button" className="life" disabled={!canPersist || busy} onClick={doDuplicate}>{busy ? "…" : "DUPLICATE"}</button>
         {!confirmDel ? <button type="button" className="life del" disabled={!canPersist} onClick={() => setConfirmDel(true)}>DELETE</button> : <><button type="button" className="life del" onClick={doDelete}>CONFIRM</button><button type="button" className="life" onClick={() => setConfirmDel(false)}>CANCEL</button></>}
       </div>
-      {sealed && <div className="insp-note sealed">SEALED RELEASE · ACTIVE CONTROLS ARE READ-ONLY · LOCAL DRAFTS REQUIRE REVIEW + A NEW SEALED RELEASE</div>}
+      {sealed && <div className="insp-note sealed">RECEIPT-BOUND RUNTIME · DIRECT WRITES FENCED · FORK A GOVERNED DRAFT FOR REVIEW</div>}
       {(msg || err) && <div className={`insp-note${err ? " err" : ""}`}>{err ?? msg}</div>}
     </aside>
   );

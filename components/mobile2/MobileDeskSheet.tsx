@@ -229,7 +229,7 @@ function BuildView({ props, channels, onAddChannel }: { props: SurfaceProps; cha
   return <>
     <Section title="ADD CHANNEL" meta="thesis → spec → gate → arm">
       <p className="m2-build-copy">Import a strategy thesis, compile it into executable rules, run the modeled gate, then arm it or save it to the bench.</p>
-      <button type="button" className="m2-build-add" disabled={!props.write.canWrite} onClick={onAddChannel}>{props.write.canWrite ? "+ ADD CHANNEL" : "SIGN IN TO ADD CHANNEL"}</button>
+      <button type="button" className="m2-build-add" disabled={!props.write.canDirectConfigure} title={props.write.canDirectConfigure ? "Add a channel" : props.write.configurationWriteFact} onClick={onAddChannel}>{props.write.canWrite ? "+ ADD VIA PROPOSAL" : "SIGN IN TO REVIEW"}</button>
     </Section>
     <Section title="BENCH" meta="draft · disabled · wind-down">
       {bench.length === 0 ? <div className="m2-desk-empty">bench empty</div> : <div className="m2-bench-list">{bench.map((channel) => <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><span><b>{channel.slug}</b><small>{channel.regime} · {channel.underlying}</small></span><em>{channel.status.toUpperCase()}</em></div>)}</div>}

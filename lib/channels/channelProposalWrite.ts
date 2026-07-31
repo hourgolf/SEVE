@@ -33,6 +33,20 @@ const BOUNDED_PATCH_KEYS = new Set([
 const REENTRY_PATCH_KEYS = new Set(["maxEntriesPerSession"]);
 const MAX_PATCH_BYTES = 16_384;
 const MAX_EVIDENCE_REFS = 32;
+const CAPACITY_COLLISION_FIELDS = new Set([
+  "accountId",
+  "cohort",
+  "collisionDomain",
+  "entryParameters",
+  "familyId",
+  "maxDebitUsd",
+  "priority",
+  "quantity",
+  "reentryPolicy",
+  "riskLimits",
+  "scalePolicy",
+  "symbolScope",
+]);
 
 export interface OperatorProposalRequest {
   baseSpecVersionId: string;
@@ -80,6 +94,40 @@ export class ProposalInputError extends Error {
     this.status = status;
     this.validationResults = validationResults;
   }
+}
+
+export function deriveStaticCapacityCollisionImpact(input: {
+  activeManifestContentHash: string;
+  draftSpecContentHash: string;
+  diffFields: string[];
+}): JsonObject {
+  const changedCapacityFields = [...new Set(
+    input.diffFields.filter((field) => CAPACITY_COLLISION_FIELDS.has(field)),
+  )].sort();
+  const evidenceRefs = [
+    `active-manifest:${input.activeManifestContentHash}`,
+    `draft-spec:${input.draftSpecContentHash}`,
+  ];
+  if (!changedCapacityFields.length) {
+    return {
+      state: "pass",
+      fact:
+        "The draft preserves account route, entry frequency, quantity, risk caps, family, collision domain, priority, and admission policy.",
+      changedCapacityFields,
+      evidenceRefs,
+    };
+  }
+  return {
+    state: "not-run",
+    fact:
+      "The draft changes capacity or collision inputs and requires fresh broker positions, open orders, desk inventory, and deterministic admission simulation before preview.",
+    changedCapacityFields,
+    evidenceRefs,
+    limitations: [
+      "Static compilation is not current-session capacity evidence.",
+      "Same-OCC availability remains entry-time broker truth.",
+    ],
+  };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -420,10 +468,10 @@ export function buildOperatorProposal(
   }
 
   proposal.validationResults = preview.validationResults;
-  const capacityCollisionImpact: JsonObject = {
-    state: "not-run",
-    limitations: ["Current-session capacity and collision evidence has not been attached to this draft."],
-    evidenceRefs: [],
-  };
+  const capacityCollisionImpact = deriveStaticCapacityCollisionImpact({
+    activeManifestContentHash: active.manifest.contentHash,
+    draftSpecContentHash: preview.draftSpec.contentHash,
+    diffFields: preview.diffs.map((diff) => diff.field),
+  });
   return { proposal, draftSpec: preview.draftSpec, preview, capacityCollisionImpact };
 }

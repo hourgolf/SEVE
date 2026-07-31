@@ -182,7 +182,16 @@ export function TradeShapeBar({
 
 function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle, dragging, compact, onExpand }: ChannelStripProps) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, duplicateChannel, deleteChannel, canWrite } = useDeskWrite();
+  const {
+    persistConfig,
+    renameChannel,
+    setChannelAccent,
+    setChannelStatus,
+    setChannelExecutor,
+    duplicateChannel,
+    deleteChannel,
+    canDirectConfigure: canWrite,
+  } = useDeskWrite();
   const { id, slug, underlying, name, regime, color, status, config } = strategist;
   const executor = strategist.executor ?? "cron";
   const ustop = config.underlying_stop_pct ?? 0;

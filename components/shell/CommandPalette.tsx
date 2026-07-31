@@ -39,7 +39,7 @@ export interface CommandPaletteProps {
 export function CommandPalette({ channels }: CommandPaletteProps) {
   const { mode, setMode, skin, toggleSkin, density, toggleDensity } = useShell();
   const dispatch = useDeskDispatch();
-  const { canWrite, persistConfig, persistFund } = useDeskWrite();
+  const { canDirectConfigure: canWrite, persistConfig, persistFund } = useDeskWrite();
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
