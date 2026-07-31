@@ -54,6 +54,7 @@ import { captureFamilyAdmissionObservations } from "./familyAdmission.js";
 import type { FamilyAdmissionInput } from "./familyAdmissionModel.js";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
 import type { Bar } from "../../engine/types";
+import { paperAccountLabel } from "../../lib/channels/paperAccountLabel.js";
 import {
   applyDay1ReleaseFleetOverlay,
   buildDay1AdmissionState,
@@ -79,6 +80,7 @@ import {
   validateLabCanaryReleaseDraft,
 } from "./labCanaryPolicy.js";
 import {
+  rc54ManagerProfile,
   rc54ManagerProfileFromRow,
   rc54ManagerStampPresent,
 } from "./rc54ManagerPolicy.js";
@@ -119,6 +121,9 @@ import {
   receiptBoundRc54ReleaseEvidenceContext,
   validateReceiptBoundRc54RestartRows,
 } from "./temporaryRc54RuntimeAdapter.js";
+import {
+  releaseEvidenceContextFromStamp,
+} from "./releaseEvidenceContext.js";
 import type { AdmissionDomainPolicy } from "./admissionDomainModel.js";
 import {
   applyChannelCollectionRuntime,
@@ -126,6 +131,12 @@ import {
 import {
   stageStoredChannelActivationPreview,
 } from "./channelActivationPreviewWatcher.js";
+import {
+  stageStoredChannelRosterBundle,
+} from "./channelRosterBundleWatcher.js";
+import {
+  channelControlMutationWindow,
+} from "../../lib/channels/channelControlMutationWindow.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 const releaseMode = (): boolean => config.day1ReleaseEnabled || config.rc54ReleaseEnabled;
@@ -141,6 +152,8 @@ let activationPreviewWatchBusy = false;
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
 const liveMode = (): boolean => !config.dryRun && config.liveTrading && config.hasServiceRole;
+const operatorAccountLabel = (account: Pick<store.AccountRow, "id">): string =>
+  paperAccountLabel(account.id, "PAPER ACCOUNT");
 // A channel this instance EXECUTES: stream-owned + one of THIS worker's symbols.
 // Multi-symbol (B3): one instance holds N symbols, each with its own bars/chain,
 // behind ONE 'stream' heartbeat — so it must reliably handle every symbol it lists.
@@ -252,6 +265,11 @@ let cycling = false;
 async function acknowledgePendingChannelActivationPreviews(): Promise<void> {
   if (!config.channelActivationPreviewWatcherEnabled
       || activationPreviewWatchBusy) return;
+  // The worker is an independent service-role writer, so it must enforce the
+  // same session boundary as the dashboard instead of trusting route guards.
+  // Pending drafts remain inert through premarket and RTH and can be staged
+  // only once the shared calendar proves the market is closed.
+  if (!channelControlMutationWindow(Date.now()).allowed) return;
   activationPreviewWatchBusy = true;
   try {
     const activeRead = await store.loadReceiptBoundControlPlane();
@@ -307,6 +325,51 @@ async function acknowledgePendingChannelActivationPreviews(): Promise<void> {
         info(
           `channel-activation watcher ACKNOWLEDGED ${stage.proposalId}`
           + ` preview=${stage.previewId} runtime-mutation=false order-authority=false`,
+        );
+      }
+    }
+    const pendingBundles = await store.loadPendingChannelRosterBundles();
+    if (pendingBundles.error) {
+      warn(`channel-roster watcher read failed: ${pendingBundles.error}`);
+      return;
+    }
+    for (const envelope of pendingBundles.rows) {
+      const observedAt = new Date().toISOString();
+      const stage = stageStoredChannelRosterBundle({
+        active: activeRead.compiled,
+        envelope,
+        acknowledgementId: randomUUID(),
+        validatedLifecycleReceiptId: randomUUID(),
+        currentReleaseId: activeRead.compiled.manifest.releaseId,
+        currentWorkerVersion: RC54_WORKER_VERSION,
+        currentWorkerRuntimeVersion: WORKER_RUNTIME_VERSION,
+        bootId: BOOT_ID,
+        paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+        heldCaptureReady: currentStartupReceipt !== null,
+        startupReceipt: currentStartupReceipt,
+        observedAt,
+      });
+      if (!stage.acknowledgementRpcArgs) {
+        warn(
+          `channel-roster watcher blocked ${stage.bundleId || "unknown"}: ${
+            stage.blockers.join(";")
+          }`,
+        );
+        continue;
+      }
+      const write = await store.acknowledgeChannelRosterBundle(
+        stage.acknowledgementRpcArgs,
+      );
+      if (write.error) {
+        warn(
+          `channel-roster watcher acknowledgement failed ${stage.bundleId}: ${
+            write.error
+          }`,
+        );
+      } else {
+        info(
+          `channel-roster watcher ACKNOWLEDGED ${stage.bundleId}`
+          + " runtime-mutation=false order-authority=false",
         );
       }
     }
@@ -403,7 +466,7 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
     openRows, alpacaByOcc, remainingByOcc, openRowQty } = batch;
   if (!canManage) return;
   const barFresh = Date.now() - lastSession.ts < 180_000;
-  if (!barFresh) info(`live pass[${g.account.name}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
+  if (!barFresh) info(`live pass[${operatorAccountLabel(g.account)}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
   const execBase: ExecCtx = { api: g.api!, accountId: g.account.id, paperMode: cfg.fund?.mode?.toLowerCase() === "paper", decisionAtMs: lastSession.ts, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
   const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
   for (const d of symDecisions) {
@@ -432,7 +495,10 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
         : null;
     const exec: ExecCtx = releaseEvidenceContext || configurationWriteStamp || rc54 ? {
       ...execBase,
-      rc54ManagerProfileId: rc54?.managerProfileId ?? null,
+      rc54ManagerProfileId:
+        rc54ManagerProfile(receiptBoundRoot?.managerProfileId)?.id
+        ?? rc54?.managerProfileId
+        ?? null,
       releaseEvidenceContext,
       configurationWriteStamp,
     } : execBase;
@@ -468,21 +534,21 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
       configurationWriteStamp,
     });
     if (!ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit") {
-      info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
+      info(`live pass[${operatorAccountLabel(g.account)}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
       continue;
     }
     try {
       if (d.action === "reconcile" && row) await executeReconcile(d, row, exec);
       else if (d.action === "exit" && row && !d.blocked && barFresh) {
         if (!exitGuard.claim(row.id)) {
-          info(`live pass[${g.account.name}/${sym}]: ${d.slug} exit skipped — an exit for this row is already in flight (sweep)`);
+          info(`live pass[${operatorAccountLabel(g.account)}/${sym}]: ${d.slug} exit skipped — an exit for this row is already in flight (sweep)`);
         } else {
           try { await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }, exitQualityPolicyFor(ch)); }
           finally { exitGuard.release(row.id); }
         }
       }
       else if ((d.action === "add" || d.action === "enter") && !canEnter) {
-        if (barFresh) info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
+        if (barFresh) info(`live pass[${operatorAccountLabel(g.account)}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
       }
       else if (d.action === "add" && row && !d.blocked && barFresh) await executeAdd(d, ch, row, exec);
       else if (d.action === "enter" && barFresh) {
@@ -629,6 +695,21 @@ async function reloadConfig(): Promise<void> {
           posture: sealedRuntimePosture(),
         });
         const adapterErrors = [...operationalValidation.errors];
+        if (liveMode()) {
+          const runtimeAccountIds = new Set(
+            resolution.runtime.roots.map((root) => root.accountId),
+          );
+          for (const accountId of [...runtimeAccountIds].sort()) {
+            const account = accounts.find((candidate) =>
+              candidate.id === accountId);
+            if (!account?.is_armed) {
+              adapterErrors.push(`${accountId}:account_not_armed`);
+            }
+            if (account?.is_halted) {
+              adapterErrors.push(`${accountId}:account_halted`);
+            }
+          }
+        }
         if (adapterErrors.length) {
           throw new Error(
             `Receipt-bound RC5.4 adapter validation failed: ${
@@ -792,20 +873,21 @@ async function orphanSweep(
     const seen = (orphanSeen.get(key) ?? 0) + 1;
     orphanSeen.set(key, seen);
     if (seen < 2) continue; // grace: one cycle to let a same-cycle fill→insert settle
-    warn(`orphan: ${g.account.name} holds ${uncovered}× ${occ} with no open desk row (held ${held}, desk-open ${covered.get(occ) ?? 0})`);
-    await store.journal("WARN", `orphan: ${g.account.name} holds ${uncovered}× ${occ} the desk thinks is flat`, { account: g.account.name, occ, uncovered, held });
-    alertOnce(todayET, "orphan", key, "⚠ orphaned lot", `${g.account.name} holds ${uncovered} ${occ} the desk thinks is flat — close it / check the bucket`);
+    const accountLabel = operatorAccountLabel(g.account);
+    warn(`orphan: ${accountLabel} holds ${uncovered}× ${occ} with no open desk row (held ${held}, desk-open ${covered.get(occ) ?? 0})`);
+    await store.journal("WARN", `orphan: ${accountLabel} holds ${uncovered}× ${occ} the desk thinks is flat`, { account: accountLabel, account_id: g.account.id, occ, uncovered, held });
+    alertOnce(todayET, "orphan", key, "⚠ orphaned lot", `${accountLabel} holds ${uncovered} ${occ} the desk thinks is flat — close it / check the bucket`);
     if (config.orphanFlatten && canManage && g.api) {
       try {
         const o = await alpaca.orderAndFill(
           { symbol: occ, qty: String(uncovered), side: "sell", type: "market", time_in_force: "day", client_order_id: `orphan-${occ}-${Date.now()}` },
           g.api,
         );
-        await store.journal("EXEC", `orphan-flatten: ${g.account.name} sold ${o.filledQty}/${uncovered} ${occ} @ ${o.fill.toFixed(2)} (${o.status})`,
-          { account: g.account.name, occ, sold: o.filledQty, order_id: o.id });
+        await store.journal("EXEC", `orphan-flatten: ${accountLabel} sold ${o.filledQty}/${uncovered} ${occ} @ ${o.fill.toFixed(2)} (${o.status})`,
+          { account: accountLabel, account_id: g.account.id, occ, sold: o.filledQty, order_id: o.id });
         if (o.filledQty >= uncovered) orphanSeen.delete(key); // fully cleared; else re-page next round
       } catch (e) {
-        await store.journal("WARN", `orphan-flatten ${g.account.name} ${occ} failed — ${(e as Error).message}`);
+        await store.journal("WARN", `orphan-flatten ${accountLabel} ${occ} failed — ${(e as Error).message}`);
       }
     }
   }
@@ -845,7 +927,8 @@ async function cycle(trigger: string): Promise<void> {
     const releaseBatches: DecisionExecutionBatch[] = [];
     const releaseBoundAccountIds = new Set(
       config.rc54ReleaseEnabled
-        ? RC54_ROOTS.map((root) => root.accountId)
+        ? (receiptBoundRuntime?.roots ?? RC54_ROOTS)
+          .map((root) => root.accountId)
         : DAY1_ROOT_BINDINGS.map((binding) => binding.accountId),
     );
     const releaseObservedAccountIds = new Set<string>();
@@ -884,12 +967,12 @@ async function cycle(trigger: string): Promise<void> {
             releasePositionSnapshotComplete = false;
             releaseSnapshotFailures.push({ accountId: g.account.id, kind: "account" });
           }
-          warn(`cycle(${trigger}): account ${g.account.name} account read failed — ${(e as Error).message}; new sealed-release admissions fail closed, risk-reducing management continues where safe`);
+          warn(`cycle(${trigger}): account ${operatorAccountLabel(g.account)} account read failed — ${(e as Error).message}; new sealed-release admissions fail closed, risk-reducing management continues where safe`);
         }
         try { positions = await alpaca.getPositions(api); }
         catch (e) {
           positionsFresh = false;
-          warn(`cycle(${trigger}): account ${g.account.name} initial position read failed — ${(e as Error).message}; the sealed release will require a confirming read before admission`);
+          warn(`cycle(${trigger}): account ${operatorAccountLabel(g.account)} initial position read failed — ${(e as Error).message}; the sealed release will require a confirming read before admission`);
         }
       } else {
         accountFresh = false;
@@ -898,7 +981,7 @@ async function cycle(trigger: string): Promise<void> {
           releasePositionSnapshotComplete = false;
           releaseSnapshotFailures.push({ accountId: g.account.id, kind: "account" }, { accountId: g.account.id, kind: "positions" });
         }
-        warn(`cycle(${trigger}): account ${g.account.name} (cred_ref ${g.account.cred_ref}) has no creds in env — shadow only`);
+        warn(`cycle(${trigger}): account ${operatorAccountLabel(g.account)} has no resolved credentials — shadow only`);
       }
       const groupRows = openRowsArr.filter((r) => rowAccountId(r, byId, cfg.accounts) === g.account.id);
       const openRows = new Map(groupRows.map((r) => [r.strategist_id, r]));
@@ -918,7 +1001,7 @@ async function cycle(trigger: string): Promise<void> {
         // so a transient orders-API blip never even degrades the cycle; a persistent failure
         // still lands in the !ordersFresh path below + the noteOrdersRead escalation.
         try {
-          allOrders = await retry(`cycle orders ${g.account.name}`, () => alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()), 3, 500);
+          allOrders = await retry(`cycle orders ${operatorAccountLabel(g.account)}`, () => alpaca.getOrders(500, api!, new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString()), 3, 500);
           if (releaseMode() && isReleaseBoundAccount) {
             for (const order of allOrders) {
               const match = /^([A-Z]+)\d{6}[CP]\d{8}$/i.exec(order.symbol);
@@ -926,7 +1009,7 @@ async function cycle(trigger: string): Promise<void> {
               releasePendingOrders.push({ accountId: g.account.id, occSymbol: order.symbol.toUpperCase(), underlying: match[1].toUpperCase() });
             }
           }
-          noteOrdersRead(g.account.id, g.account.name, true, todayET);
+          noteOrdersRead(g.account.id, operatorAccountLabel(g.account), true, todayET);
         }
         catch (e) {
           ordersFresh = false;
@@ -934,8 +1017,8 @@ async function cycle(trigger: string): Promise<void> {
             releaseOrderSnapshotComplete = false;
             releaseOrderFailureAccountIds.add(g.account.id);
           }
-          noteOrdersRead(g.account.id, g.account.name, false, todayET);
-          warn(`cycle(${trigger}): ${g.account.name} order read failed — ${(e as Error).message}; entries/adds/reconcile suppressed this cycle (exits still run)`);
+          noteOrdersRead(g.account.id, operatorAccountLabel(g.account), false, todayET);
+          warn(`cycle(${trigger}): ${operatorAccountLabel(g.account)} order read failed — ${(e as Error).message}; entries/adds/reconcile suppressed this cycle (exits still run)`);
         }
       }
 
@@ -946,13 +1029,13 @@ async function cycle(trigger: string): Promise<void> {
       // management and globally block every new sealed-release entry.
       if (releaseMode() && live && isReleaseBoundAccount && api) {
         try {
-          positions = await retry(`cycle confirming positions ${g.account.name}`, () => alpaca.getPositions(api), 3, 500);
+          positions = await retry(`cycle confirming positions ${operatorAccountLabel(g.account)}`, () => alpaca.getPositions(api), 3, 500);
           positionsFresh = true;
         } catch (e) {
           positionsFresh = false;
           releasePositionSnapshotComplete = false;
           releaseSnapshotFailures.push({ accountId: g.account.id, kind: "positions" });
-          warn(`cycle(${trigger}): account ${g.account.name} confirming position read failed — ${(e as Error).message}; all new sealed-release admissions fail closed`);
+          warn(`cycle(${trigger}): account ${operatorAccountLabel(g.account)} confirming position read failed — ${(e as Error).message}; all new sealed-release admissions fail closed`);
         }
       } else if (isReleaseBoundAccount && !positionsFresh) {
         releasePositionSnapshotComplete = false;
@@ -1082,7 +1165,7 @@ async function cycle(trigger: string): Promise<void> {
           // STALE-BAR ORDER GUARD (per symbol): a boot/restart decides on the last KNOWN
           // bar — orders need a fresh decision bar; reconcile + mark are always safe.
           const barFresh = Date.now() - lastSession.ts < 180_000;
-          if (!barFresh) info(`live pass[${g.account.name}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
+          if (!barFresh) info(`live pass[${operatorAccountLabel(g.account)}/${sym}]: decision bar stale (boot/off-hours) — orders suppressed, bookkeeping only`);
           const exec: ExecCtx = { api: api!, accountId: g.account.id, paperMode: cfg.fund?.mode?.toLowerCase() === "paper", decisionAtMs: lastSession.ts, chain, todayET, etMin: barMin, sinceIso: `${todayET}T00:00:00Z`, allOrders, alpacaByOcc, remainingByOcc, openRowQty };
           const bySlug = new Map(symChannels.map((c) => [c.slug, c]));
           for (const d of symDecisions) {
@@ -1131,7 +1214,7 @@ async function cycle(trigger: string): Promise<void> {
             // deterministic per-row coid (Alpaca rejects a duplicate) + min(held,row) sell-cap
             // + status-guarded close make a degraded re-issue safe even blind to late fills.
             if (!ordersFresh && d.action !== "hold" && d.action !== "skip" && d.action !== "exit") {
-              info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
+              info(`live pass[${operatorAccountLabel(g.account)}/${sym}]: ${d.slug} ${d.action} suppressed — order snapshot unavailable`);
               continue;
             }
             try {
@@ -1140,7 +1223,7 @@ async function cycle(trigger: string): Promise<void> {
                 // 1b #8: per-row claim — the sweep runs concurrently now; if it already holds
                 // this row's exit, skip (never wait). Release in finally so a throw can't wedge.
                 if (!exitGuard.claim(row.id)) {
-                  info(`live pass[${g.account.name}/${sym}]: ${d.slug} exit skipped — an exit for this row is already in flight (sweep)`);
+                  info(`live pass[${operatorAccountLabel(g.account)}/${sym}]: ${d.slug} exit skipped — an exit for this row is already in flight (sweep)`);
                 } else {
                   try { await executeExit(d, row, exec, { frac: ch.runner_frac, givebackPct: ch.runner_giveback_pct }, exitQualityPolicyFor(ch)); }
                   finally { exitGuard.release(row.id); }
@@ -1149,7 +1232,7 @@ async function cycle(trigger: string): Promise<void> {
               // 1b #1: is_armed (and per-account halt) gates NEW RISK only — a manage-only
               // account skips enter/add here while every exit/reconcile/mark above kept running.
               else if ((d.action === "add" || d.action === "enter") && !canEnter) {
-                if (barFresh) info(`live pass[${g.account.name}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
+                if (barFresh) info(`live pass[${operatorAccountLabel(g.account)}/${sym}]: ${d.slug} ${d.action} skipped — account not armed for entries (manage-only)`);
               }
               else if (d.action === "add" && row && !d.blocked && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
               else if (d.action === "enter" && barFresh) {
@@ -1181,7 +1264,7 @@ async function cycle(trigger: string): Promise<void> {
         const unreal = positions.reduce((a, p) => a + p.unrealized_pl, 0);
         totEquity += account.equity; totCash += account.cash; totUnreal += unreal; snappedAny = true;
         try { await store.insertEquitySnapshot(account.equity, account.cash, unreal, g.account.id); }
-        catch (e) { warn(`equity snapshot[${g.account.name}] failed — ${(e as Error).message}`); }
+        catch (e) { warn(`equity snapshot[${operatorAccountLabel(g.account)}] failed — ${(e as Error).message}`); }
       }
     }
 
@@ -1228,6 +1311,8 @@ async function cycle(trigger: string): Promise<void> {
               accountIdByStrategist: releaseAccountIdByStrategist,
               brokerPositions: releaseBrokerPositions,
               pendingOrders: releasePendingOrders,
+              rootResolver:
+                receiptBoundAdmissionRootResolver ?? undefined,
             }),
             globalPositionTruthComplete: releasePositionSnapshotComplete,
             globalOrderTruthComplete: !live || releaseOrderSnapshotComplete,
@@ -1295,7 +1380,7 @@ async function cycle(trigger: string): Promise<void> {
     // Live-only (no pages on shadow/boot); each sweep is isolated so it can never break the cycle.
     if (live) for (const si of sweepInputs) {
       try { await orphanSweep(si.g, si.alpacaByOcc, si.groupRows, si.canManage, todayET); }
-      catch (e) { warn(`orphan-sweep[${si.g.account.name}] failed — ${(e as Error).message}`); }
+      catch (e) { warn(`orphan-sweep[${operatorAccountLabel(si.g.account)}] failed — ${(e as Error).message}`); }
     }
     // Desk-wide TOTAL snapshot (account_id null = the sum across buckets) — the existing
     // dashboard equity curve reads the null rows; per-bucket rows are tagged above.
@@ -1403,15 +1488,15 @@ async function fastExitSweep(): Promise<void> {
       let positions: alpaca.AlpacaPosition[] = [], allOrders: alpaca.AlpacaOrder[] = [];
       let ordersFresh = true;
       const ordersAfterIso = new Date(Date.parse(`${todayET}T00:00:00Z`) - 2 * 86_400_000).toISOString();
-      try { positions = await retry(`fast-exit positions ${g.account.name}`, () => alpaca.getPositions(api), 3, 500); }
-      catch (e) { warn(`fast-exit[${g.account.name}] positions read failed — ${(e as Error).message}; skip bucket`); continue; }
+      try { positions = await retry(`fast-exit positions ${operatorAccountLabel(g.account)}`, () => alpaca.getPositions(api), 3, 500); }
+      catch (e) { warn(`fast-exit[${operatorAccountLabel(g.account)}] positions read failed — ${(e as Error).message}; skip bucket`); continue; }
       try {
-        allOrders = await retry(`fast-exit orders ${g.account.name}`, () => alpaca.getOrders(500, api, ordersAfterIso), 3, 500);
-        noteOrdersRead(g.account.id, g.account.name, true, todayET);
+        allOrders = await retry(`fast-exit orders ${operatorAccountLabel(g.account)}`, () => alpaca.getOrders(500, api, ordersAfterIso), 3, 500);
+        noteOrdersRead(g.account.id, operatorAccountLabel(g.account), true, todayET);
       } catch (e) {
         ordersFresh = false;
-        noteOrdersRead(g.account.id, g.account.name, false, todayET);
-        warn(`fast-exit[${g.account.name}] orders read failed — ${(e as Error).message}; DEGRADED pass (mandatory flattens only)`);
+        noteOrdersRead(g.account.id, operatorAccountLabel(g.account), false, todayET);
+        warn(`fast-exit[${operatorAccountLabel(g.account)}] orders read failed — ${(e as Error).message}; DEGRADED pass (mandatory flattens only)`);
       }
       const alpacaByOcc = new Map(positions.map((p) => [p.symbol, p]));
       const remainingByOcc = seedRemaining(positions);
@@ -1420,7 +1505,9 @@ async function fastExitSweep(): Promise<void> {
       for (const r of rows) {
       const ch = byId.get(r.strategist_id)!;
       const chain = chainBySym.get(ch.underlying.toUpperCase());
-      const rc54 = config.rc54ReleaseEnabled ? rc54Root(ch.slug) : null;
+      const releaseEvidenceContext = releaseEvidenceContextFromStamp(
+        r.entry_features?.release_evidence,
+      );
       const exec: ExecCtx = {
         api,
         accountId: g.account.id,
@@ -1435,7 +1522,9 @@ async function fastExitSweep(): Promise<void> {
         remainingByOcc,
         openRowQty,
         rc54ManagerProfileId: rc54ManagerProfileFromRow(r)?.id ?? null,
-        releaseEvidenceContext: rc54 ? rc54ReleaseEvidenceContext(rc54) : undefined,
+        // An exit belongs to the epoch that admitted this exact position, not
+        // whichever manifest happens to be active when the exit fires.
+        releaseEvidenceContext,
       };
       // ---- KILL/HALT FLATTEN (operator's word, 2026-07-01): close EVERYTHING at market ----
       // Highest priority — runs before every other exit check, incl. the manual twins (a kill
@@ -1445,7 +1534,7 @@ async function fastExitSweep(): Promise<void> {
       // MANDATORY flatten (1b #9: runs even on a degraded orders pass — sweepExitAllowed('halt_flatten', ·) is always true).
       // 1b #8: per-row exitGuard claim on every sweep exit — the concurrent cycle may hold this row.
       if (acctFlatten) {
-        info(`halt-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — kill switch (${haltFlatten ? "fund" : g.account.name})`);
+        info(`halt-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — kill switch (${haltFlatten ? "fund" : operatorAccountLabel(g.account)})`);
         if (exitGuard.claim(r.id)) {
           try { await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "halt_flatten" }, r, exec, undefined, exitQualityPolicyFor(ch)); }
           catch (e) { warn(`halt-flatten ${ch.slug} failed — ${(e as Error).message}`); }
@@ -1468,7 +1557,11 @@ async function fastExitSweep(): Promise<void> {
         clearSweepPriceState(r.id);
         continue;
       }
-      if (config.rc54ReleaseEnabled && rc54ReleaseEodDue(ch.slug, nowMin, rthClose)) {
+      const receiptBoundReleaseRow = receiptBoundEntryPolicyStampPresent(r);
+      if (config.rc54ReleaseEnabled && (
+        rc54ReleaseEodDue(ch.slug, nowMin, rthClose)
+        || (receiptBoundReleaseRow && nowMin >= rthClose - 35)
+      )) {
         info(`rc54-eod-flatten: ${ch.slug} ${r.occ_symbol} ×${r.qty} — release close, wall-clock mtc ${Math.max(0, rthClose - nowMin)}`);
         if (exitGuard.claim(r.id)) {
           try {
@@ -1748,7 +1841,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   if (config.rc54ReleaseEnabled
-      && (!cfg.fund || RC54_ROOTS.some((root) =>
+      && (!cfg.fund || (receiptBoundRuntime?.roots ?? RC54_ROOTS).some((root) =>
         !cfg.channels.some((channel) => channel.slug === root.slug)))) {
     error("RC5.4 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
     process.exit(1);
@@ -1826,7 +1919,12 @@ async function main(): Promise<void> {
     const activeReleaseId = receiptBoundRuntime?.releaseId ?? RC54_RELEASE_ID;
     const activeConfiguration = receiptBoundRuntime?.manifestContentHash
       ?? RC54_RELEASE_CONFIGURATION_SHA256;
-    info(`rc54-release: ACTIVE ${activeReleaseId} config=${activeConfiguration} roots=${RC54_ROOTS.length} control=6 lab=3 paper-only${receiptBoundRuntime ? " receipt-bound" : ""}`);
+    const activeRoots = receiptBoundRuntime?.roots ?? RC54_ROOTS;
+    const paperRootCount = activeRoots.filter((root) =>
+      !("executionPosture" in root)
+        || root.executionPosture === "paper").length;
+    const observeOnlyRootCount = activeRoots.length - paperRootCount;
+    info(`rc54-release: ACTIVE ${activeReleaseId} config=${activeConfiguration} roots=${activeRoots.length} paper=${paperRootCount} observe-only=${observeOnlyRootCount} paper-only${receiptBoundRuntime ? " receipt-bound" : ""}`);
     const startupReceiptWrite = store.journal(
       "EXEC",
       `rc54-release ACTIVE ${activeReleaseId} config=${activeConfiguration}`,
@@ -1870,7 +1968,7 @@ async function main(): Promise<void> {
   // Cockpit P3 routing summary: each bucket's posture — LIVE (armed + creds), shadow (decided,
   // no orders), or no-creds (cred_ref set but env keys absent). The shadow-first verification view.
   const acctSummary = groupByAccount(cfg.channels, cfg.accounts)
-    .map((g) => `${g.account.name}[${g.api ? (liveMode() ? (g.account.is_armed && !g.account.is_halted ? "LIVE" : "manage-only") : "shadow") : "no-creds"}]×${g.channels.length}`).join(", ");
+    .map((g) => `${operatorAccountLabel(g.account)}[${g.api ? (liveMode() ? (g.account.is_armed && !g.account.is_halted ? "LIVE" : "manage-only") : "shadow") : "no-creds"}]×${g.channels.length}`).join(", ");
   info(`accounts (cockpit P3): ${acctSummary || "single-account"}; alt-creds: [${Object.keys(config.altAccounts).join(",") || "none"}]`);
   try { await seed(); }
   catch (e) { error(`seed failed after retries — continuing; the websocket will populate bars live (${(e as Error).message})`); }
@@ -1881,7 +1979,7 @@ async function main(): Promise<void> {
     void acknowledgePendingChannelActivationPreviews();
     setInterval(() => {
       void acknowledgePendingChannelActivationPreviews();
-    }, 120_000);
+    }, 30_000); // one-shot draft acknowledgement; operator window is five minutes
   }
   // Run-liveness beat (external-review P4): freshens worker_runs.last_heartbeat_at + memory_rss
   // every 60s REGARDLESS of live/shadow, so a crash gap and an RSS climb are both visible even

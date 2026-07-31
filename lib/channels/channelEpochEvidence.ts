@@ -1,6 +1,5 @@
 import {
   canonicalJson,
-  type ActivationReceipt,
   type CompiledReleaseManifest,
 } from "./channelControlPlane";
 import type {
@@ -30,6 +29,26 @@ export interface ConfigurationEpochIdentity {
   accountId: string;
   managerProfileId: string;
   managerVersion: string;
+}
+
+/**
+ * The runtime only needs an immutable authority receipt that binds one exact
+ * manifest epoch. A legacy proposal receipt names its changed spec directly;
+ * an atomic roster receipt binds the complete candidate roster instead.
+ */
+export interface ConfigurationActivationAuthority {
+  id: string;
+  receiptKind?: "single-channel" | "roster-bundle";
+  configurationEpochId: string;
+  releaseManifestId: string;
+  manifestContentHash: string;
+  activatedAt: string;
+  newSpecVersionId?: string;
+  newContentHash?: string;
+  activatedSpecs?: ReadonlyArray<Readonly<{
+    versionId: string;
+    contentHash: string;
+  }>>;
 }
 
 export interface ConfigurationEvidenceStamp {
@@ -83,7 +102,7 @@ export function buildConfigurationEpochIdentity(input: {
   compiled: CompiledReleaseManifest;
   projection: Readonly<ShadowRuntimeProjection>;
   channelSlug: string;
-  activationReceipt: Readonly<ActivationReceipt> | null;
+  activationReceipt: Readonly<ConfigurationActivationAuthority> | null;
 }): Readonly<ConfigurationEpochIdentity> {
   const receipt = input.activationReceipt;
   if (!receipt) throw new Error("configuration identity requires an immutable activation receipt");
@@ -96,9 +115,28 @@ export function buildConfigurationEpochIdentity(input: {
       || receipt.configurationEpochId !== input.projection.configurationEpochId) {
     throw new Error("configuration identity activation receipt disagrees with projection");
   }
-  if (!input.compiled.channelSpecs.some((spec) => spec.id === receipt.newSpecVersionId
-      && spec.contentHash === receipt.newContentHash)) {
+  const authoritySpecs = receipt.activatedSpecs?.length
+    ? receipt.activatedSpecs
+    : receipt.newSpecVersionId && receipt.newContentHash
+      ? [{
+        versionId: receipt.newSpecVersionId,
+        contentHash: receipt.newContentHash,
+      }]
+      : [];
+  if (!authoritySpecs.some((authority) =>
+    input.compiled.channelSpecs.some((spec) =>
+      spec.id === authority.versionId
+      && spec.contentHash === authority.contentHash))) {
     throw new Error("configuration identity activation receipt lacks the activated specification");
+  }
+  if (receipt.receiptKind === "roster-bundle") {
+    const expected = input.compiled.channelSpecs
+      .map((spec) => `${spec.id}:${spec.contentHash}`).sort();
+    const observed = authoritySpecs
+      .map((spec) => `${spec.versionId}:${spec.contentHash}`).sort();
+    if (canonicalJson(observed) !== canonicalJson(expected)) {
+      throw new Error("configuration identity roster receipt does not bind the exact active roster");
+    }
   }
   if (!Number.isFinite(Date.parse(receipt.activatedAt))) {
     throw new Error("configuration identity activation receipt has an invalid timestamp");

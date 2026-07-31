@@ -72,3 +72,27 @@ export function releaseEvidenceStamp(
     shadowBookVersion: context.shadowBookVersion,
   };
 }
+
+/**
+ * Recover the immutable release attribution carried by an existing position.
+ * Exit paths must use this row-owned stamp rather than the currently active
+ * manifest, because a pause, rollback, or successor epoch cannot reinterpret
+ * a lot that was admitted earlier.
+ */
+export function releaseEvidenceContextFromStamp(
+  value: unknown,
+): ReleaseEvidenceContext | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as ReleaseEvidenceContext;
+  return validateReleaseEvidenceContext(candidate).length ? null : {
+    schemaVersion: candidate.schemaVersion,
+    releaseId: candidate.releaseId,
+    configurationSha256: candidate.configurationSha256.toLowerCase(),
+    admissionDomain: candidate.admissionDomain,
+    cohortId: candidate.cohortId,
+    cohortFrom: candidate.cohortFrom,
+    evidenceEra: candidate.evidenceEra,
+    sourceQuantity: candidate.sourceQuantity,
+    shadowBookVersion: candidate.shadowBookVersion,
+  };
+}

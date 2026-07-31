@@ -145,6 +145,26 @@ check("receipt-bound overlay ignores mutable strategist economics and routing", 
   }
 });
 
+check("non-roster channels are new-entry-dark while collection eligibility is preserved", () => {
+  const unknown = {
+    ...sourceChannel("pb-ride"),
+    id: "99999999-9999-4999-8999-999999999999",
+    slug: "dark-research-channel",
+    status: "armed" as const,
+    is_active: true,
+  };
+  const overlaid = applyReceiptBoundRuntimeFleetOverlay({
+    channels: [...sourceChannels, unknown],
+    runtime: productionRuntime,
+  });
+  const dark = overlaid.find((channel) => channel.slug === unknown.slug);
+  assert.ok(dark);
+  assert.equal(dark.status, "draft");
+  assert.equal(dark.is_active, true);
+  assert.equal(dark.account_id, unknown.account_id);
+  assert.equal(dark.executor, unknown.executor);
+});
+
 check("one reviewed root produces one exact all-or-none database write stamp", () => {
   const root = productionRuntime.roots[0];
   assert.ok(root);

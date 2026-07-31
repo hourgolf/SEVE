@@ -1,5 +1,4 @@
 import type {
-  ActivationReceipt,
   AdmissionPolicySpec,
   ChannelScalePolicy,
   CompiledReleaseManifest,
@@ -12,6 +11,7 @@ import {
 } from "../../lib/channels/channelActivation.js";
 import {
   buildConfigurationEpochIdentity,
+  type ConfigurationActivationAuthority,
   type ConfigurationEpochIdentity,
 } from "../../lib/channels/channelEpochEvidence.js";
 import type { AccountRow, ChannelConfig } from "./store.js";
@@ -24,7 +24,7 @@ import {
 } from "./receiptBoundEntryPolicy.js";
 
 export const CHANNEL_CONFIGURATION_RUNTIME_ADAPTER_VERSION =
-  "channel-configuration-runtime-adapter-v2" as const;
+  "channel-configuration-runtime-adapter-v3" as const;
 
 export interface ReceiptBoundRuntimeRoot extends WorkerChannelProjection {
   configuration: Readonly<ConfigurationEpochIdentity>;
@@ -99,7 +99,7 @@ function freeze<T>(value: T): Readonly<T> {
 export function buildReceiptBoundRuntimeConfiguration(input: {
   compiled: CompiledReleaseManifest;
   projection: Readonly<ShadowRuntimeProjection>;
-  activationReceipt: Readonly<ActivationReceipt> | null;
+  activationReceipt: Readonly<ConfigurationActivationAuthority> | null;
   databaseIdentity?: Readonly<StoredControlPlaneDatabaseIdentity> | null;
 }): Readonly<ReceiptBoundRuntimeConfiguration> {
   const receipt = input.activationReceipt;
@@ -169,7 +169,7 @@ export function buildReceiptBoundRuntimeConfiguration(input: {
 export function buildProductionReceiptBoundRuntimeConfiguration(input: {
   compiled: CompiledReleaseManifest;
   projection: Readonly<ShadowRuntimeProjection>;
-  activationReceipt: Readonly<ActivationReceipt> | null;
+  activationReceipt: Readonly<ConfigurationActivationAuthority> | null;
   databaseIdentity: Readonly<StoredControlPlaneDatabaseIdentity> | null;
 }): Readonly<ReceiptBoundRuntimeConfiguration> {
   if (!input.databaseIdentity) {
@@ -227,8 +227,9 @@ function overlayRoot(channel: ChannelConfig, root: Readonly<ReceiptBoundRuntimeR
 /**
  * Applies a receipt-bound projection to the mutable strategist rows only in
  * memory. The stored strategist account and economic knobs are source
- * material, not authority. Unknown/non-manifest channels remain untouched and
- * therefore cannot silently join the reviewed release.
+ * material, not authority. Every non-manifest channel is forced new-entry-dark
+ * in memory; `is_active` remains untouched so the independent collection
+ * runtime can continue collecting research evidence.
  */
 export function applyReceiptBoundRuntimeFleetOverlay(input: {
   channels: readonly ChannelConfig[];
@@ -251,7 +252,10 @@ export function applyReceiptBoundRuntimeFleetOverlay(input: {
   const roots = new Map(input.runtime.roots.map((root) => [root.slug, root]));
   return input.channels.map((channel) => {
     const root = roots.get(channel.slug);
-    if (!root) return channel;
+    if (!root) return {
+      ...channel,
+      status: "draft",
+    };
     if (channel.id !== root.strategistId) {
       throw new Error(`receipt-bound runtime strategist mismatch: ${root.slug}`);
     }

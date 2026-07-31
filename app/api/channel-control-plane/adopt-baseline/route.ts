@@ -9,6 +9,7 @@ import {
 import {
   collectBaselineAdoptionServerEvidence,
 } from "@/lib/channels/channelBaselineAdoptionServerEvidence";
+import { channelControlMutationWindow } from "@/lib/channels/channelControlMutationWindow";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,18 @@ export async function POST(req: Request) {
   }
 
   try {
+    const mutationWindow = channelControlMutationWindow(Date.now());
+    if (!mutationWindow.allowed) {
+      return json({
+        ok: false,
+        error: mutationWindow.message,
+        errorCode: mutationWindow.code,
+        mutationWindow,
+        runtimeMutation: false,
+        orderAuthority: false,
+        activationAuthorized: false,
+      }, 409);
+    }
     const requestId = req.headers.get("idempotency-key")?.trim() ?? "";
     const value = await readJson(req);
     const refs = parseBaselineAdoptionEvidenceRefs(value);

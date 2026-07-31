@@ -8,6 +8,7 @@ import {
   proposalDraftRpcName,
 } from "@/lib/channels/channelProposalWrite";
 import { buildRc54OperatorProposal } from "@/lib/channels/rc54ChannelProposalAdapter";
+import { channelControlMutationWindow } from "@/lib/channels/channelControlMutationWindow";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,16 @@ export async function POST(req: Request) {
   }
 
   try {
+    const mutationWindow = channelControlMutationWindow(Date.now());
+    if (!mutationWindow.allowed) {
+      return json({
+        ok: false,
+        error: mutationWindow.message,
+        errorCode: mutationWindow.code,
+        mutationWindow,
+        activationAuthorized: false,
+      }, 409);
+    }
     const requestId = req.headers.get("idempotency-key")?.trim() ?? "";
     const sb = createClient(SB_URL, SB_SERVICE, {
       auth: {
@@ -115,6 +126,7 @@ export async function POST(req: Request) {
         validationResults: built.preview.validationResults,
         activationAuthorized: false,
       },
+      mutationWindow,
     });
   } catch (error) {
     if (error instanceof ProposalInputError) {

@@ -10,9 +10,12 @@ const truth = (name: string, value: boolean): void => {
 
 truth("default mode is plan-only", source.includes('mode: runReadOnly ? "execute-read-only" : "plan-only"'));
 truth("execution requires explicit market-close acknowledgement", source.includes('if (!marketClosedAcknowledged) throw new Error'));
+truth("execution independently verifies the market session", source.includes("channelControlMutationWindow(Date.now())"));
+truth("open or unknown sessions block the gate", source.includes("if (!verifiedWindow.allowed)"));
 truth("execution requires an explicit absolute env file", source.includes('!envFile || !isAbsolute(envFile) || !existsSync(envFile)'));
 truth("subprocess execution does not use a shell", source.includes('shell: false'));
 truth("OPS evidence join regression is included", source.includes('"ops-readiness-selftest"'));
+truth("activation MVP affected suite is included", source.includes('"channel-activation-mvp-selftest"'));
 truth("post-close read-only boundary regression is included", source.includes('"postclose-readiness-selftest"'));
 truth("current RC5.4 identity binding is included", source.includes('scripts/rc54-release-bindings.ts'));
 truth("broker and desk flatness is required", source.includes('scripts/preopen-readiness.ts", "--require-flat"'));

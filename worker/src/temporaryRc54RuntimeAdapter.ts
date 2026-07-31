@@ -29,7 +29,7 @@ import {
 import type { ChannelConfig, PositionRow } from "./store.js";
 
 export const TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION =
-  "temporary-rc54-runtime-adapter-v2" as const;
+  "temporary-rc54-runtime-adapter-v3" as const;
 
 const SHA256 = /^sha256:([0-9a-f]{64})$/i;
 
@@ -38,10 +38,12 @@ function uniqueSorted(values: readonly string[]): string[] {
 }
 
 /**
- * RC5.4 remains the temporary topology and admission adapter. Only the bounded
- * economics and bounded sequential re-entry represented by a receipt-bound
- * root may vary. A topology, route, scaling, or concurrency change requires a
- * different reviewed adapter.
+ * RC5.4 remains the temporary execution-mechanics and admission adapter. The
+ * immutable manifest may change roster membership and bounded per-root
+ * economics/posture. Existing RC5.4 roots may not silently change topology or
+ * route, and every newly admitted research root must fit the already sealed
+ * paper domains and supported symbol/entry envelope. Scaling or concurrency
+ * changes still require a different reviewed adapter.
  */
 export function validateReceiptBoundRc54Topology(
   runtime: Readonly<ReceiptBoundRuntimeConfiguration>,
@@ -57,49 +59,97 @@ export function validateReceiptBoundRc54Topology(
     }
     observedBySlug.set(root.slug, root);
   }
-  if (runtime.roots.length !== RC54_ROOTS.length) {
-    errors.push(
-      `temporary_rc54_adapter:root_count:${runtime.roots.length}:${RC54_ROOTS.length}`,
-    );
+  if (!runtime.roots.length) {
+    errors.push("temporary_rc54_adapter:root_count:0");
   }
-  for (const expected of RC54_ROOTS) {
-    const root = observedBySlug.get(expected.slug);
-    if (!root) {
-      errors.push(`temporary_rc54_adapter:root_missing:${expected.slug}`);
-      continue;
-    }
-    const topology: Array<[string, unknown, unknown]> = [
-      ["cohort", root.cohort, expected.cohort],
-      ["domain", root.domainId, expected.domainId],
-      ["family", root.familyId, expected.familyId],
-      ["underlying", root.underlying, expected.underlying],
-      ["priority", root.priority, expected.priority],
-      ["entry_dte", root.entryDte, expected.entryDte],
-      ["strike_offset", root.strikeOffset, expected.strikeOffset],
-      ["strategist", root.strategistId, expected.strategistId],
-      ["account", root.accountId, expected.accountId],
-    ];
-    for (const [field, actual, sealed] of topology) {
-      if (actual !== sealed) {
-        errors.push(`temporary_rc54_adapter:${expected.slug}:${field}`);
+  const strategistIds = new Set<string>();
+  for (const root of runtime.roots) {
+    const expected = expectedBySlug.get(root.slug);
+    if (expected) {
+      const topology: Array<[string, unknown, unknown]> = [
+        ["cohort", root.cohort, expected.cohort],
+        ["domain", root.domainId, expected.domainId],
+        ["family", root.familyId, expected.familyId],
+        ["underlying", root.underlying, expected.underlying],
+        ["priority", root.priority, expected.priority],
+        ["entry_dte", root.entryDte, expected.entryDte],
+        ["strike_offset", root.strikeOffset, expected.strikeOffset],
+        ["strategist", root.strategistId, expected.strategistId],
+        ["account", root.accountId, expected.accountId],
+      ];
+      for (const [field, actual, sealed] of topology) {
+        if (actual !== sealed) {
+          errors.push(`temporary_rc54_adapter:${expected.slug}:${field}`);
+        }
+      }
+    } else {
+      if (![RC54_CONTROL_ADMISSION_POLICY.id, RC54_LAB_ADMISSION_POLICY.id]
+        .includes(root.domainId)) {
+        errors.push(`temporary_rc54_adapter:${root.slug}:domain`);
+      }
+      if (!root.familyId.trim()) {
+        errors.push(`temporary_rc54_adapter:${root.slug}:family`);
+      }
+      if (!["SPY", "QQQ", "IWM"].includes(root.underlying)) {
+        errors.push(`temporary_rc54_adapter:${root.slug}:underlying`);
+      }
+      if (!Number.isInteger(root.priority) || root.priority < 1) {
+        errors.push(`temporary_rc54_adapter:${root.slug}:priority`);
+      }
+      if (!Number.isInteger(root.entryDte)
+          || root.entryDte < 0 || root.entryDte > 1) {
+        errors.push(`temporary_rc54_adapter:${root.slug}:entry_dte`);
+      }
+      if (!Number.isInteger(root.strikeOffset)
+          || Math.abs(root.strikeOffset) > 20) {
+        errors.push(`temporary_rc54_adapter:${root.slug}:strike_offset`);
+      }
+      if (!root.strategistId.trim()) {
+        errors.push(`temporary_rc54_adapter:${root.slug}:strategist`);
+      }
+      if (!root.accountId.trim()) {
+        errors.push(`temporary_rc54_adapter:${root.slug}:account`);
       }
     }
+    const expectedDomain = root.cohort === "control"
+      ? RC54_CONTROL_ADMISSION_POLICY.id
+      : RC54_LAB_ADMISSION_POLICY.id;
+    if (root.domainId !== expectedDomain) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:domain_cohort`);
+    }
+    if (strategistIds.has(root.strategistId)) {
+      errors.push(`temporary_rc54_adapter:duplicate_strategist:${root.strategistId}`);
+    }
+    strategistIds.add(root.strategistId);
+    if (root.executionPosture !== "paper"
+        && root.executionPosture !== "observe-only") {
+      errors.push(`temporary_rc54_adapter:${root.slug}:execution_posture`);
+    }
+    if (!Number.isInteger(root.quantity) || root.quantity < 1
+        || root.quantity > 12
+        || !Number.isFinite(root.premiumCap) || root.premiumCap <= 0
+        || !Number.isFinite(root.aggregateDebitCap)
+        || root.aggregateDebitCap <= 0) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:economic_envelope`);
+    }
+    if (!Number.isInteger(root.riskLimits.maxContracts)
+        || root.riskLimits.maxContracts < root.quantity
+        || root.riskLimits.maxDebitUsd < root.aggregateDebitCap
+        || !(root.riskLimits.maxRiskUsd > 0)
+        || root.riskLimits.maxRiskUsd > root.riskLimits.maxDebitUsd) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:risk_envelope`);
+    }
     if (root.reentryPolicy === "disabled" && root.maxEntriesPerSession !== 1) {
-      errors.push(`temporary_rc54_adapter:${expected.slug}:reentry`);
+      errors.push(`temporary_rc54_adapter:${root.slug}:reentry`);
     } else if (root.reentryPolicy === "bounded"
         && (!Number.isInteger(root.maxEntriesPerSession)
           || root.maxEntriesPerSession < 2
           || root.maxEntriesPerSession > 3)) {
-      errors.push(`temporary_rc54_adapter:${expected.slug}:reentry`);
+      errors.push(`temporary_rc54_adapter:${root.slug}:reentry`);
     }
     if (root.scalePolicy.adds !== 0
         || root.scalePolicy.pyramiding !== "disabled") {
-      errors.push(`temporary_rc54_adapter:${expected.slug}:scaling`);
-    }
-  }
-  for (const slug of observedBySlug.keys()) {
-    if (!expectedBySlug.has(slug)) {
-      errors.push(`temporary_rc54_adapter:unexpected_root:${slug}`);
+      errors.push(`temporary_rc54_adapter:${root.slug}:scaling`);
     }
   }
   return uniqueSorted(errors);
@@ -143,6 +193,7 @@ export function buildReceiptBoundRc54StartupReceipt(input: {
     workerCompatibilityVersion: input.runtime.workerCompatibilityVersion,
     adapterVersion: input.runtime.adapterVersion,
     temporaryTopologyAdapter: "RC5.4",
+    temporaryTopologyAdapterVersion: TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION,
     paperOnly: true,
     roots: input.runtime.roots.map((root) => ({
       slug: root.slug,
@@ -225,7 +276,6 @@ export function buildReceiptBoundRc54AdmissionPolicies(
     for (const [field, actual, expected] of [
       ["underlying", observed.maxOpenByUnderlying, sealed.maxOpenByUnderlying],
       ["clock", observed.sameClockMaxByUnderlying, sealed.sameClockMaxByUnderlying],
-      ["priority", observed.priorityBySlug, sealed.priorityBySlug],
     ] as const) {
       if (JSON.stringify(
         Object.fromEntries(Object.entries(actual).sort()),
@@ -234,6 +284,15 @@ export function buildReceiptBoundRc54AdmissionPolicies(
       )) {
         errors.push(`temporary_rc54_adapter:${observed.id}:admission_${field}`);
       }
+    }
+    const expectedPriorities = Object.fromEntries(runtime.roots
+      .filter((root) => root.domainId === observed.id)
+      .map((root): [string, number] => [root.slug, root.priority])
+      .sort(([left], [right]) => left.localeCompare(right)));
+    if (JSON.stringify(
+      Object.fromEntries(Object.entries(observed.priorityBySlug).sort()),
+    ) !== JSON.stringify(expectedPriorities)) {
+      errors.push(`temporary_rc54_adapter:${observed.id}:admission_priority`);
     }
     return Object.freeze({
       ...observed,

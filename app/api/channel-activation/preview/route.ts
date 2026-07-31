@@ -14,6 +14,7 @@ import {
   ChannelActivationServerEvidenceError,
   collectChannelActivationPreviewServerEvidence,
 } from "@/lib/channels/channelActivationServerEvidence";
+import { channelControlMutationWindow } from "@/lib/channels/channelControlMutationWindow";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,16 @@ export async function POST(req: Request) {
     return json({ ok: false, error: "activation storage is not configured" }, 503);
   }
   try {
+    const mutationWindow = channelControlMutationWindow(Date.now());
+    if (!mutationWindow.allowed) {
+      return json({
+        ok: false,
+        error: mutationWindow.message,
+        errorCode: mutationWindow.code,
+        mutationWindow,
+        activationAuthorized: false,
+      }, 409);
+    }
     const value = await body(req);
     if (Object.keys(value).sort().join(",") !== "proposalId") {
       return json({ ok: false, error: "request must contain only proposalId" }, 400);

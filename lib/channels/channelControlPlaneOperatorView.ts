@@ -1,8 +1,8 @@
 import type {
-  ActivationReceipt,
   AdmissionPolicySpec,
   CompiledReleaseManifest,
 } from "./channelControlPlane";
+import type { ConfigurationActivationAuthority } from "./channelEpochEvidence";
 import { paperAccountLabel } from "./paperAccountLabel";
 
 export const CHANNEL_CONTROL_PLANE_OPERATOR_VIEW_VERSION =
@@ -48,6 +48,7 @@ export interface ChannelControlPlaneOperatorView {
   state: "receipt-bound" | "blocked";
   observedAt: string;
   releaseId: string | null;
+  manifestId: string | null;
   manifestContentHash: string | null;
   configurationEpochId: string | null;
   activationReceiptId: string | null;
@@ -58,7 +59,8 @@ export interface ChannelControlPlaneOperatorView {
     managerOnlyStaticCapacityProof: true;
     freshCapacityEvidenceRequiredForSizingOrReentry: true;
     activationApiAvailable: true;
-    dormantPromotionAvailable: false;
+    dormantPromotionAvailable: true;
+    dormantPromotionRequiresPaperEligibleRegistration: true;
     researchCollectionControlAvailable: true;
   };
   blockers: string[];
@@ -71,7 +73,7 @@ function maxEntries(spec: CompiledReleaseManifest["channelSpecs"][number]): numb
 
 export function projectChannelControlPlaneOperatorView(input: {
   compiled: CompiledReleaseManifest | null;
-  activationReceipt: ActivationReceipt | null;
+  activationReceipt: ConfigurationActivationAuthority | null;
   state: string;
   observedAt: string;
 }): ChannelControlPlaneOperatorView {
@@ -84,6 +86,7 @@ export function projectChannelControlPlaneOperatorView(input: {
       state: "blocked",
       observedAt: input.observedAt,
       releaseId: null,
+      manifestId: null,
       manifestContentHash: null,
       configurationEpochId: null,
       activationReceiptId: null,
@@ -94,7 +97,8 @@ export function projectChannelControlPlaneOperatorView(input: {
         managerOnlyStaticCapacityProof: true,
         freshCapacityEvidenceRequiredForSizingOrReentry: true,
         activationApiAvailable: true,
-        dormantPromotionAvailable: false,
+        dormantPromotionAvailable: true,
+        dormantPromotionRequiresPaperEligibleRegistration: true,
         researchCollectionControlAvailable: true,
       },
       blockers: ["receipt_bound_control_plane:unavailable"],
@@ -141,13 +145,14 @@ export function projectChannelControlPlaneOperatorView(input: {
     };
   });
   const blockers = [
-    "dormant_promotion:spec_registry_missing",
+    "dormant_promotion:paper_eligible_registration_required",
   ];
   return {
     viewVersion: CHANNEL_CONTROL_PLANE_OPERATOR_VIEW_VERSION,
     state: "receipt-bound",
     observedAt: input.observedAt,
     releaseId: input.compiled.manifest.releaseId,
+    manifestId: input.compiled.manifest.id,
     manifestContentHash: input.compiled.manifest.contentHash,
     configurationEpochId: input.activationReceipt.configurationEpochId,
     activationReceiptId: input.activationReceipt.id,
@@ -158,7 +163,8 @@ export function projectChannelControlPlaneOperatorView(input: {
       managerOnlyStaticCapacityProof: true,
       freshCapacityEvidenceRequiredForSizingOrReentry: true,
       activationApiAvailable: true,
-      dormantPromotionAvailable: false,
+      dormantPromotionAvailable: true,
+      dormantPromotionRequiresPaperEligibleRegistration: true,
       researchCollectionControlAvailable: true,
     },
     blockers,

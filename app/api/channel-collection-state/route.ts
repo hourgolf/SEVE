@@ -8,6 +8,7 @@ import {
   loadChannelCollectionInventory,
   parseCollectionStateChanges,
 } from "@/lib/channels/channelCollectionStateServer";
+import { channelControlMutationWindow } from "@/lib/channels/channelControlMutationWindow";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +117,17 @@ export async function POST(req: Request) {
         "action must be preview or apply",
       );
     }
+    const mutationWindow = channelControlMutationWindow(Date.now());
+    if (!mutationWindow.allowed) {
+      return json({
+        ok: false,
+        error: mutationWindow.message,
+        errorCode: mutationWindow.code,
+        mutationWindow,
+        executionAuthority: false,
+        orderAuthority: false,
+      }, 409);
+    }
     const suppliedHash = String(body.previewHash ?? "");
     if (suppliedHash !== built.preview.previewHash) {
       throw new ChannelCollectionStateServerError(
@@ -173,6 +185,7 @@ export async function POST(req: Request) {
       previewHash: built.preview.previewHash,
       receipts: write.data ?? [],
       preservesHistory: true,
+      mutationWindow,
       executionAuthority: false,
       orderAuthority: false,
     });

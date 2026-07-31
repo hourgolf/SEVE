@@ -208,6 +208,8 @@ assert.doesNotMatch(routeSource, /\.insert\(|\.update\(|\.delete\(/);
 assert.match(routeSource, /from\("execution_observations"\)/);
 assert.match(routeSource, /select\("id,strategist_id,occ_symbol,qty"\)/);
 assert.match(routeSource, /attributePositionsByImmutableExecutionAccount/);
+assert.match(routeSource, /paperAccountLabel\(account\.id, "PAPER ACCOUNT"\)/);
+assert.doesNotMatch(routeSource, /accountName: account\.name/);
 assert.doesNotMatch(routeSource, /strategists?\.account_id|channelsById/);
 
-console.log("broker-reconciliation-selftest: 49/49 passed");
+console.log("broker-reconciliation-selftest: 51/51 passed");

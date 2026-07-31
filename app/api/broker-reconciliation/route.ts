@@ -8,6 +8,7 @@ import {
   type BrokerPositionInput,
   type ExecutionAccountObservation,
 } from "@/lib/ops/brokerReconciliation";
+import { paperAccountLabel } from "@/lib/channels/paperAccountLabel";
 
 export const dynamic = "force-dynamic";
 
@@ -90,23 +91,24 @@ export async function GET(req: Request) {
     readError: routesRead.error?.message,
   });
   const inputs: BrokerAccountInput[] = await Promise.all(relevant.map(async (account) => {
+    const accountName = paperAccountLabel(account.id, "PAPER ACCOUNT");
     const ref = account.cred_ref?.trim() ?? "";
     const key = ref ? process.env[`ALPACA_KEY_${ref}`] : process.env.ALPACA_KEY;
     const secret = ref ? process.env[`ALPACA_SECRET_${ref}`] : process.env.ALPACA_SECRET;
     const deskPositions = (attribution.byAccount.get(account.id) ?? [])
       .map((row) => ({ symbol: row.occ_symbol, qty: Number(row.qty) }));
     if (!key || !secret) return {
-      accountId: account.id, accountName: account.name, reachable: false,
+      accountId: account.id, accountName, reachable: false,
       error: "paper broker credentials unavailable in the web runtime", brokerPositions: [], deskPositions,
     };
     try {
       return {
-        accountId: account.id, accountName: account.name, reachable: true,
+        accountId: account.id, accountName, reachable: true,
         brokerPositions: await readBrokerPositions(key, secret), deskPositions,
       };
     } catch (error) {
       return {
-        accountId: account.id, accountName: account.name, reachable: false,
+        accountId: account.id, accountName, reachable: false,
         error: errorMessage(error), brokerPositions: [], deskPositions,
       };
     }

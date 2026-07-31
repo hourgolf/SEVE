@@ -14,10 +14,19 @@ import {
   type ValidationGateResult,
 } from "./channelControlPlane";
 import { buildShadowRuntimeProjection } from "./channelActivation";
+import type {
+  ConfigurationActivationAuthority,
+} from "./channelEpochEvidence";
 
 export interface StoredControlPlaneRead {
   compiled: CompiledReleaseManifest | null;
   state: "active" | "not-adopted" | "failed";
+  error: string | null;
+}
+
+export interface StoredManifestControlPlaneRead {
+  compiled: CompiledReleaseManifest | null;
+  state: "loaded" | "failed";
   error: string | null;
 }
 
@@ -28,7 +37,7 @@ export interface StoredControlPlaneDatabaseIdentity {
 
 export interface StoredReceiptBoundControlPlaneRead {
   compiled: CompiledReleaseManifest | null;
-  activationReceipt: ActivationReceipt | null;
+  activationReceipt: ConfigurationActivationAuthority | null;
   databaseIdentity: StoredControlPlaneDatabaseIdentity | null;
   state: "receipt-bound" | "baseline-active" | "not-adopted" | "failed";
   error: string | null;
@@ -357,6 +366,58 @@ export function reconstructStoredActivationReceipt(
     throw new Error("active control-plane activation receipt is malformed or drifted");
   }
   return receipt;
+}
+
+export function reconstructStoredRosterBundleActivationAuthority(
+  row: Record<string, unknown>,
+  compiled: CompiledReleaseManifest,
+): ConfigurationActivationAuthority {
+  const projection = buildShadowRuntimeProjection(compiled);
+  const exactDiffs = row.exact_diffs;
+  const capacity = jsonObject(row.capacity_evaluation);
+  const safeBoundary = jsonObject(row.safe_boundary_proof);
+  const acknowledgement = jsonObject(row.worker_acknowledgement);
+  const authority: ConfigurationActivationAuthority = {
+    id: text(row, "id"),
+    receiptKind: "roster-bundle",
+    configurationEpochId: text(row, "configuration_epoch_id"),
+    releaseManifestId: compiled.manifest.id,
+    manifestContentHash: text(row, "candidate_manifest_content_hash"),
+    activatedAt: text(row, "activated_at"),
+    activatedSpecs: compiled.channelSpecs.map((spec) => ({
+      versionId: spec.id,
+      contentHash: spec.contentHash,
+    })),
+  };
+  if (Number(row.schema_version) !== 1
+      || !authority.id
+      || text(row, "candidate_manifest_key") !== compiled.manifest.id
+      || authority.manifestContentHash !== compiled.manifest.contentHash
+      || authority.configurationEpochId !== projection.configurationEpochId
+      || text(row, "rollback_target_manifest_key")
+        !== compiled.manifest.rollbackTargetManifestId
+      || !Array.isArray(exactDiffs)
+      || exactDiffs.length === 0
+      || capacity?.state !== "pass"
+      || !safeBoundary
+      || safeBoundary.globalFlat !== true
+      || !acknowledgement
+      || text(row, "activation_scope") !== "prospective-new-entry-only"
+      || text(row, "open_position_policy_preservation")
+        !== "entry-epoch-immutable"
+      || row.historical_evidence_mutation !== false
+      || row.order_authority !== false
+      || !Number.isFinite(Date.parse(authority.activatedAt))) {
+    throw new Error(
+      "active control-plane roster activation receipt is malformed or drifted",
+    );
+  }
+  return Object.freeze({
+    ...authority,
+    activatedSpecs: Object.freeze(
+      authority.activatedSpecs?.map((spec) => Object.freeze(spec)) ?? [],
+    ),
+  });
 }
 
 function jsonObject(value: unknown): JsonObject | null {
@@ -729,6 +790,74 @@ export async function loadActiveCompiledControlPlane(
   }
 }
 
+export async function loadCompiledControlPlaneByManifestKey(
+  client: SupabaseClient,
+  manifestKey: string,
+): Promise<StoredManifestControlPlaneRead> {
+  if (!manifestKey.trim()) {
+    return { compiled: null, state: "failed", error: "release_manifests:key_missing" };
+  }
+  const manifestRead = await client.from("release_manifests")
+    .select(MANIFEST_SELECT)
+    .eq("manifest_key", manifestKey)
+    .limit(2);
+  if (manifestRead.error) {
+    return { compiled: null, state: "failed", error: `release_manifests:${manifestRead.error.message}` };
+  }
+  const manifests = (manifestRead.data ?? []) as unknown as Array<Record<string, unknown>>;
+  if (manifests.length !== 1) {
+    return {
+      compiled: null,
+      state: "failed",
+      error: `release_manifests:expected_one:${manifests.length}`,
+    };
+  }
+  const manifestId = text(manifests[0], "id");
+  const membershipRead = await client.from("release_manifest_channels")
+    .select("ordinal,channel_spec_version_id")
+    .eq("release_manifest_id", manifestId)
+    .order("ordinal", { ascending: true });
+  if (membershipRead.error) {
+    return {
+      compiled: null,
+      state: "failed",
+      error: `release_manifest_channels:${membershipRead.error.message}`,
+    };
+  }
+  const memberships = (membershipRead.data ?? []) as Array<Record<string, unknown>>;
+  const specIds = memberships.map((membership) =>
+    text(membership, "channel_spec_version_id"));
+  if (!specIds.length || specIds.some((id) => !id)) {
+    return { compiled: null, state: "failed", error: "release_manifest_channels:membership_missing" };
+  }
+  let specsRead = await client.from("channel_spec_versions")
+    .select(SPEC_SELECT).in("id", specIds);
+  if (missingExecutionPostureColumn(specsRead.error)) {
+    specsRead = await client.from("channel_spec_versions")
+      .select(LEGACY_SPEC_SELECT).in("id", specIds);
+  }
+  if (specsRead.error) {
+    return { compiled: null, state: "failed", error: `channel_spec_versions:${specsRead.error.message}` };
+  }
+  try {
+    return {
+      compiled: reconstructStoredControlPlane({
+        manifestRow: manifests[0],
+        membershipRows: memberships,
+        specRows: (specsRead.data ?? []) as unknown as Array<Record<string, unknown>>,
+      }),
+      state: "loaded",
+      error: null,
+    };
+  } catch (error) {
+    return {
+      compiled: null,
+      state: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 const ACTIVATION_RECEIPT_SELECT = [
   "id",
   "schema_version",
@@ -751,12 +880,40 @@ const ACTIVATION_RECEIPT_SELECT = [
   "manifest:release_manifest_id(manifest_key)",
 ].join(",");
 
+const ROSTER_BUNDLE_ACTIVATION_RECEIPT_SELECT = [
+  "id",
+  "schema_version",
+  "configuration_epoch_id",
+  "candidate_manifest_key",
+  "candidate_manifest_content_hash",
+  "rollback_target_manifest_key",
+  "exact_diffs",
+  "capacity_evaluation",
+  "safe_boundary_proof",
+  "worker_acknowledgement",
+  "activated_at",
+  "activation_scope",
+  "open_position_policy_preservation",
+  "historical_evidence_mutation",
+  "order_authority",
+].join(",");
+
+function missingRosterBundleReceiptRelation(error: {
+  code?: string;
+  message?: string;
+} | null): boolean {
+  if (!error) return false;
+  return error.code === "42P01"
+    || /channel_roster_bundle_activation_receipts.*(?:does not exist|schema cache)/i
+      .test(error.message ?? "");
+}
+
 /**
- * Resolves the active generic runtime only when an immutable normal activation
- * receipt binds the exact reconstructed manifest. A baseline-adopted RC5.4
- * manifest is reported separately so the worker can continue using its sealed
- * temporary adapter without pretending the baseline receipt is a normal
- * proposal activation.
+ * Resolves the active generic runtime only when one immutable single-channel
+ * or atomic-roster receipt binds the exact reconstructed manifest. A
+ * baseline-adopted RC5.4 manifest is reported separately so the worker can
+ * continue using its sealed temporary adapter without pretending the baseline
+ * receipt is a normal proposal activation.
  */
 export async function loadStoredReceiptBoundControlPlane(
   client: SupabaseClient,
@@ -854,11 +1011,74 @@ export async function loadStoredReceiptBoundControlPlane(
       error: "activation_receipts:multiple_for_active_manifest",
     };
   }
+  const rosterReceiptRead = await client
+    .from("channel_roster_bundle_activation_receipts")
+    .select(ROSTER_BUNDLE_ACTIVATION_RECEIPT_SELECT)
+    .eq("release_manifest_id", releaseManifestDatabaseId)
+    .order("activated_at", { ascending: false })
+    .limit(2);
+  if (rosterReceiptRead.error
+      && !missingRosterBundleReceiptRelation(rosterReceiptRead.error)) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error:
+        `channel_roster_bundle_activation_receipts:${rosterReceiptRead.error.message}`,
+    };
+  }
+  const rosterReceipts = rosterReceiptRead.error
+    ? []
+    : (rosterReceiptRead.data ?? []) as unknown as Array<Record<string, unknown>>;
+  if (rosterReceipts.length > 1) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: "channel_roster_bundle_activation_receipts:multiple_for_active_manifest",
+    };
+  }
+  if (receipts.length + rosterReceipts.length > 1) {
+    return {
+      compiled: null,
+      activationReceipt: null,
+      databaseIdentity: null,
+      state: "failed",
+      error: "active_control_plane:multiple_authority_receipt_families",
+    };
+  }
   if (receipts.length === 1) {
     try {
       return {
         compiled: active.compiled,
-        activationReceipt: reconstructStoredActivationReceipt(receipts[0], active.compiled),
+        activationReceipt: reconstructStoredActivationReceipt(
+          receipts[0],
+          active.compiled,
+        ),
+        databaseIdentity,
+        state: "receipt-bound",
+        error: null,
+      };
+    } catch (error) {
+      return {
+        compiled: null,
+        activationReceipt: null,
+        databaseIdentity: null,
+        state: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  if (rosterReceipts.length === 1) {
+    try {
+      return {
+        compiled: active.compiled,
+        activationReceipt: reconstructStoredRosterBundleActivationAuthority(
+          rosterReceipts[0],
+          active.compiled,
+        ),
         databaseIdentity,
         state: "receipt-bound",
         error: null,

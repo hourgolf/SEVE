@@ -4,7 +4,9 @@ import { buildRc54ControlPlaneBootstrap } from "./rc54ControlPlaneBootstrap";
 import {
   reconstructStoredActivationReceipt,
   reconstructStoredControlPlane,
+  reconstructStoredRosterBundleActivationAuthority,
 } from "./channelControlPlanePersistence";
+import { buildShadowRuntimeProjection } from "./channelActivation";
 import { buildRc54NoopConfigurationCanary } from "./rc54NoopConfigurationCanary";
 
 const bootstrap = buildRc54ControlPlaneBootstrap();
@@ -193,6 +195,40 @@ check("stored activation receipt reconstructs only against its exact active mani
   );
 });
 
+check("atomic roster receipt reconstructs as exact runtime authority", () => {
+  const canary = buildRc54NoopConfigurationCanary();
+  const compiled = canary.simulation.candidate.compiled;
+  assert.ok(compiled);
+  const projection = buildShadowRuntimeProjection(compiled);
+  const row: Record<string, unknown> = {
+    id: "91919191-9191-4919-8919-919191919191",
+    schema_version: 1,
+    configuration_epoch_id: projection.configurationEpochId,
+    candidate_manifest_key: compiled.manifest.id,
+    candidate_manifest_content_hash: compiled.manifest.contentHash,
+    rollback_target_manifest_key: compiled.manifest.rollbackTargetManifestId,
+    exact_diffs: [{ slug: compiled.channelSpecs[0].slug }],
+    capacity_evaluation: { state: "pass" },
+    safe_boundary_proof: { globalFlat: true },
+    worker_acknowledgement: { posture: "staged-no-order-authority" },
+    activated_at: "2026-07-31T21:05:00.000Z",
+    activation_scope: "prospective-new-entry-only",
+    open_position_policy_preservation: "entry-epoch-immutable",
+    historical_evidence_mutation: false,
+    order_authority: false,
+  };
+  const authority = reconstructStoredRosterBundleActivationAuthority(
+    row,
+    compiled,
+  );
+  assert.equal(authority.receiptKind, "roster-bundle");
+  assert.equal(authority.activatedSpecs?.length, compiled.channelSpecs.length);
+  assert.throws(() => reconstructStoredRosterBundleActivationAuthority({
+    ...row,
+    candidate_manifest_content_hash: `sha256:${"f".repeat(64)}`,
+  }, compiled), /malformed or drifted/);
+});
+
 check("runtime loader distinguishes baseline adoption from normal receipt authority", () => {
   const source = readFileSync(new URL(
     "./channelControlPlanePersistence.ts",
@@ -201,6 +237,8 @@ check("runtime loader distinguishes baseline adoption from normal receipt author
   assert.match(source, /loadStoredReceiptBoundControlPlane/);
   assert.match(source, /state: "receipt-bound"/);
   assert.match(source, /state: "baseline-active"/);
+  assert.match(source, /channel_roster_bundle_activation_receipts/);
+  assert.match(source, /multiple_authority_receipt_families/);
   assert.match(source, /active_control_plane:authority_receipt_missing/);
   assert.match(source, /multiple_for_active_manifest/);
 });

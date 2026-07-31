@@ -42,4 +42,7 @@ ENV DRY_RUN=true
 # the worker's deps install under /app/worker, but the child runs with cwd=/app (repo root),
 # where a relative ./node_modules/.bin/tsx would not resolve.
 ENV TSX_BIN=/app/worker/node_modules/.bin/tsx
-CMD ["npm", "start"]
+# Run the worker directly as PID 1. An npm wrapper can consume Railway's
+# SIGTERM before the Node process reaches its graceful shutdown handler, which
+# leaves a normal platform restart misclassified as abrupt_or_unknown.
+CMD ["/app/worker/node_modules/.bin/tsx", "src/index.ts"]
