@@ -38,7 +38,7 @@ export function PnlPanel({
   windowed: WindowedPnl | null;
   scopeLabel?: string;
   todayAttribution?: {
-    state: "checking" | "ok" | "blocked";
+    state: "checking" | "ok" | "recovered" | "blocked";
     issues: string[];
   };
 }) {
@@ -54,6 +54,7 @@ export function PnlPanel({
   const blocked = isToday
     ? todayAttribution?.state === "blocked"
     : windowed?.evidenceState === "blocked";
+  const recovered = isToday && todayAttribution?.state === "recovered";
   const partial = !isToday && windowed?.evidenceState === "partial";
   const evidenceIssues = isToday
     ? todayAttribution?.issues ?? []
@@ -123,6 +124,13 @@ export function PnlPanel({
               <small>Immutable channel attribution remains available; account NAV history is unavailable.</small>
             )}
             <small>No strategist-account fallback was used.</small>
+          </div>
+        )}
+        {recovered && (
+          <div className="pf-position-attribution-recovered" role="status">
+            <b>Current-session legacy route recovered</b>
+            {evidenceIssues.map((issue) => <span key={issue}>{issue}</span>)}
+            <small>Channel display uses immutable opportunity and filled-entry evidence; readiness still requires a position-bound receipt.</small>
           </div>
         )}
         <div className="pnl-equity">

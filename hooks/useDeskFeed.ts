@@ -10,7 +10,10 @@ import type { EventLevel, OptionType } from "@/lib/types";
 import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
 import {
   attributePositionsByImmutableExecutionAccount,
+  recoverPositionsByImmutableOpportunityAccountForDisplay,
   type ExecutionAccountObservation,
+  type OpportunityExecutionAccountObservation,
+  type PositionOutcomeOpportunityRoute,
 } from "@/lib/ops/brokerReconciliation";
 import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
 
@@ -45,7 +48,7 @@ export interface DeskFeed {
   status: FeedStatus;
   updatedAt: string | null;
   positionAttribution: {
-    state: "checking" | "ok" | "blocked";
+    state: "checking" | "ok" | "recovered" | "blocked";
     issues: string[];
   };
 }
@@ -206,17 +209,61 @@ export function useDeskFeed(
             .select("id,position_id,account_id,event_at")
             .in("position_id", rawPositionRows.map((row) => row.id))
           : { data: [], error: null };
-        const attribution = attributePositionsByImmutableExecutionAccount({
+        const directAttribution = attributePositionsByImmutableExecutionAccount({
           positions: rawPositionRows,
           observations: (routeRead.data ?? []) as ExecutionAccountObservation[],
           configuredPaperAccountIds: configuredAccounts,
           readError: routeRead.error?.message ?? null,
           positionLabel: "live feed positions",
         });
-        if (!attribution.ok) throw new Error(attribution.issues.join("; "));
+        if (routeRead.error || directAttribution.unconfiguredRoutes.length) {
+          throw new Error(directAttribution.issues.join("; "));
+        }
+        const attributionByAccount = new Map(directAttribution.byAccount);
+        let recoveredPositionIds: string[] = [];
+        if (directAttribution.missingPositionIds.length) {
+          const missing = rawPositionRows.filter((row) =>
+            directAttribution.missingPositionIds.includes(row.id)
+          );
+          const outcomesRead = await sb.from("position_outcome_events")
+            .select("id,position_id,opportunity_id,event_at")
+            .in("position_id", directAttribution.missingPositionIds)
+            .in("event_kind", ["position_opened", "position_remainder_opened"])
+            .order("event_at", { ascending: false })
+            .limit(250);
+          const opportunityIds = [...new Set(
+            ((outcomesRead.data ?? []) as PositionOutcomeOpportunityRoute[])
+              .map((row) => row.opportunity_id?.trim() ?? "")
+              .filter(Boolean),
+          )];
+          const opportunityRead = opportunityIds.length
+            ? await sb.from("execution_observations")
+              .select("id,opportunity_id,account_id,event_at,event_kind,action,filled_qty")
+              .in("opportunity_id", opportunityIds)
+              .eq("event_kind", "broker_result")
+              .eq("action", "enter")
+              .gt("filled_qty", 0)
+              .limit(250)
+            : { data: [] as OpportunityExecutionAccountObservation[], error: null };
+          const recovery = recoverPositionsByImmutableOpportunityAccountForDisplay({
+            positions: missing,
+            outcomes: (outcomesRead.data ?? []) as PositionOutcomeOpportunityRoute[],
+            observations: (opportunityRead.data ?? []) as OpportunityExecutionAccountObservation[],
+            configuredPaperAccountIds: configuredAccounts,
+            readError: outcomesRead.error?.message ?? opportunityRead.error?.message ?? null,
+          });
+          if (!recovery.ok) throw new Error(recovery.issues.join("; "));
+          recoveredPositionIds = recovery.recoveredPositionIds;
+          for (const [accountId, rows] of recovery.byAccount) {
+            attributionByAccount.set(accountId, [
+              ...(attributionByAccount.get(accountId) ?? []),
+              ...rows,
+            ]);
+          }
+        }
         const scopedPositionRows = acctId
-          ? attribution.byAccount.get(acctId) ?? []
-          : [...attribution.byAccount.values()].flat();
+          ? attributionByAccount.get(acctId) ?? []
+          : [...attributionByAccount.values()].flat();
 
         const mapPos = (r: FeedPositionRow): Position => ({
           id: r.id,
@@ -293,7 +340,12 @@ export function useDeskFeed(
         setSignals(sigs);
         setStatus(pos.length || sessionClosed.length || sigs.length ? "live" : "empty");
         setUpdatedAt(new Date().toISOString());
-        setPositionAttribution({ state: "ok", issues: [] });
+        setPositionAttribution(recoveredPositionIds.length
+          ? {
+            state: "recovered",
+            issues: [`legacy immutable opportunity routing recovered for ${recoveredPositionIds.join(",")}`],
+          }
+          : { state: "ok", issues: [] });
       } catch (error) {
         if (!mounted.current) return;
         setStatus("error");

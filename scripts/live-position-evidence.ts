@@ -15,6 +15,7 @@ interface PositionRow {
   avg_entry_price: number | string;
   opened_at: string;
   peak_mark: number | string | null;
+  runner_of: string | null;
   strategists: { slug?: string; account_id?: string } | Array<{ slug?: string; account_id?: string }> | null;
 }
 
@@ -27,7 +28,7 @@ const state = (ok: boolean, pending = false): string => ok ? "GREEN" : pending ?
 async function main(): Promise<void> {
   const sb = createServerSupabaseClient("live-position-evidence");
   const positionsRead = await sb.from("positions")
-    .select("id,occ_symbol,qty,avg_entry_price,opened_at,peak_mark,strategists!inner(slug,account_id)")
+    .select("id,occ_symbol,qty,avg_entry_price,opened_at,peak_mark,runner_of,strategists!inner(slug,account_id)")
     .eq("status", "open").order("opened_at", { ascending: true }).limit(24);
   if (positionsRead.error) throw new Error(`open position read failed: ${positionsRead.error.message}`);
   const positions = (positionsRead.data ?? []) as unknown as PositionRow[];
@@ -41,13 +42,14 @@ async function main(): Promise<void> {
     const channel = relation(position.strategists).slug ?? "unknown";
     const expectedManagers = managerIdsForChannel(channel).length;
     const since = position.opened_at;
+    const managerPositionId = position.runner_of ?? position.id;
     const [outcomes, managers, captures, captureHealth] = await Promise.all([
       sb.from("position_outcome_events")
         .select("event_kind,event_at,plan_id,opportunity_id,quantity,avg_entry_price,close_reason")
         .eq("position_id", position.id).order("event_at", { ascending: true }).limit(8),
       sb.from("manager_shadow_runs")
         .select("manager_id,status,evidence_state,entry_at,first_quote_at,last_quote_at,last_observed_at,consecutive_quote_misses,quote_max_age_ms,censor_code,economic_mode,original_qty")
-        .eq("position_id", position.id).order("manager_id", { ascending: true }).limit(12),
+        .eq("position_id", managerPositionId).order("manager_id", { ascending: true }).limit(12),
       sb.from("held_contract_capture_receipts")
         .select("sample_count,successful_quote_count,dropped_samples,first_fetch_at,last_fetch_at,completed_at,gap_count,max_observation_gap_ms")
         .eq("position_id", position.id).order("completed_at", { ascending: false }).limit(3),
@@ -67,7 +69,9 @@ async function main(): Promise<void> {
     }
 
     const outcomeRows = outcomes.data ?? [];
-    const openedOutcome = outcomeRows.find((row) => row.event_kind === "position_opened");
+    const openedOutcome = outcomeRows.find((row) =>
+      row.event_kind === "position_opened" || row.event_kind === "position_remainder_opened"
+    );
     const opportunityId = openedOutcome?.opportunity_id;
     const [opportunityObservations, plan] = await Promise.all([
       opportunityId
@@ -112,7 +116,7 @@ async function main(): Promise<void> {
     if (!entryOk || !managerComplete || (!captureOk && !capturePending)) hardFailures += 1;
     console.log(`\n${channel} · ${position.occ_symbol} · qty ${position.qty} · open ${openAgeSec}s`);
     console.log(`  ${state(entryOk)} entry lineage · opportunity=${opportunityId ? "bound" : "missing"} decision=${decision} fill=${fill} plan=${plan.data?.state ?? "missing"}/${planBound ? "bound" : "unbound"} outcome=${outcomeOpen}`);
-    console.log(`  ${state(managerEvidenceReady, managerEvidencePending)} manager arms · ${managerIds.size}/${expectedManagers} · observing=${observing} · states=${[...new Set(managerRows.map((row) => `${row.status}/${row.evidence_state}`))].join(",") || "none"}`);
+    console.log(`  ${state(managerEvidenceReady, managerEvidencePending)} manager arms${position.runner_of ? " · inherited from root" : ""} · ${managerIds.size}/${expectedManagers} · observing=${observing} · states=${[...new Set(managerRows.map((row) => `${row.status}/${row.evidence_state}`))].join(",") || "none"}`);
     if (managerRows.length) {
       const misses = managerRows.reduce((sum, row) => sum + Number(row.consecutive_quote_misses ?? 0), 0);
       console.log(`    quote evidence: first=${managerRows[0].first_quote_at ?? "none"} last=${managerRows[0].last_quote_at ?? "none"} misses=${misses} maxAgeMs=${managerRows[0].quote_max_age_ms}`);

@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import {
   attributePositionsByImmutableExecutionAccount,
+  recoverPositionsByImmutableOpportunityAccountForDisplay,
   reconcileBrokerPositions,
   type BrokerAccountInput,
   type ExecutionAccountObservation,
@@ -18,12 +19,22 @@ assert.equal(flat.booksMatch, true);
 assert.equal(flat.flatConfirmed, true);
 
 const matchedOpen = reconcileBrokerPositions([account({
-  brokerPositions: [{ symbol: "SPY260720C00600000", qty: 2 }],
+  brokerPositions: [{
+    symbol: "SPY260720C00600000", qty: 2,
+    averageEntryPrice: 1.2, currentPrice: 1.5, unrealizedPnl: 60,
+  }],
   deskPositions: [{ symbol: "SPY260720C00600000", qty: 1 }, { symbol: "SPY260720C00600000", qty: 1 }],
 })]);
 assert.equal(matchedOpen.booksMatch, true);
 assert.equal(matchedOpen.flatConfirmed, false);
 assert.equal(matchedOpen.brokerContracts, 2);
+assert.deepEqual(matchedOpen.accounts[0].brokerPositions, [{
+  symbol: "SPY260720C00600000",
+  qty: 2,
+  averageEntryPrice: 1.2,
+  currentPrice: 1.5,
+  unrealizedPnl: 60,
+}]);
 
 const drift = reconcileBrokerPositions([account({
   brokerPositions: [{ symbol: "SPY260720C00600000", qty: 2 }],
@@ -131,6 +142,62 @@ assert.deepEqual(unconfiguredAttribution.unconfiguredRoutes, [{
   accountId: "live-account",
 }]);
 
+const legacyPosition = { id: "legacy-position" };
+const legacyOutcome = {
+  id: "legacy-outcome",
+  position_id: legacyPosition.id,
+  opportunity_id: "opp:legacy",
+  event_at: "2026-07-30T14:13:03.000Z",
+};
+const legacyFill = {
+  id: "legacy-fill",
+  opportunity_id: "opp:legacy",
+  account_id: "account-a",
+  event_at: "2026-07-30T14:13:02.000Z",
+  event_kind: "broker_result",
+  action: "enter",
+  filled_qty: 2,
+};
+const legacyRecovery = recoverPositionsByImmutableOpportunityAccountForDisplay({
+  positions: [legacyPosition],
+  outcomes: [legacyOutcome],
+  observations: [legacyFill],
+  configuredPaperAccountIds: new Set(["account-a"]),
+});
+assert.equal(legacyRecovery.ok, true);
+assert.deepEqual(legacyRecovery.recoveredPositionIds, [legacyPosition.id]);
+assert.deepEqual(legacyRecovery.byAccount.get("account-a"), [legacyPosition]);
+
+const conflictingLegacyRecovery = recoverPositionsByImmutableOpportunityAccountForDisplay({
+  positions: [legacyPosition],
+  outcomes: [legacyOutcome],
+  observations: [
+    legacyFill,
+    { ...legacyFill, id: "legacy-fill-b", account_id: "account-b" },
+  ],
+  configuredPaperAccountIds: new Set(["account-a", "account-b"]),
+});
+assert.equal(conflictingLegacyRecovery.ok, false);
+assert.match(conflictingLegacyRecovery.issues.join(" "), /2 immutable filled-entry account routes/);
+
+const nonFillRecovery = recoverPositionsByImmutableOpportunityAccountForDisplay({
+  positions: [legacyPosition],
+  outcomes: [legacyOutcome],
+  observations: [{ ...legacyFill, event_kind: "decision", filled_qty: null }],
+  configuredPaperAccountIds: new Set(["account-a"]),
+});
+assert.equal(nonFillRecovery.ok, false);
+assert.match(nonFillRecovery.issues.join(" "), /no immutable filled-entry account routes/);
+
+const unconfiguredRecovery = recoverPositionsByImmutableOpportunityAccountForDisplay({
+  positions: [legacyPosition],
+  outcomes: [legacyOutcome],
+  observations: [legacyFill],
+  configuredPaperAccountIds: new Set(["account-b"]),
+});
+assert.equal(unconfiguredRecovery.ok, false);
+assert.match(unconfiguredRecovery.issues.join(" "), /non-paper or unconfigured account/);
+
 const routeSource = readFileSync(new URL("../../app/api/broker-reconciliation/route.ts", import.meta.url), "utf8");
 assert.match(routeSource, /export async function GET\(/);
 assert.doesNotMatch(routeSource, /export async function POST\(/);
@@ -143,4 +210,4 @@ assert.match(routeSource, /select\("id,strategist_id,occ_symbol,qty"\)/);
 assert.match(routeSource, /attributePositionsByImmutableExecutionAccount/);
 assert.doesNotMatch(routeSource, /strategists?\.account_id|channelsById/);
 
-console.log("broker-reconciliation-selftest: 39/39 passed");
+console.log("broker-reconciliation-selftest: 49/49 passed");

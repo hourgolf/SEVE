@@ -35,18 +35,20 @@ export async function GET(req: Request) {
     const [admitted, fills, candidates, suppressed] = await Promise.all([
       sb.from("execution_observations").select(FIELDS)
         .eq("account_id", accountId).gte("event_at", since)
-        .eq("event_kind", "decision").is("blocked_reason", null)
+        .eq("event_kind", "decision").eq("action", "enter").is("blocked_reason", null)
         .order("event_at", { ascending: false }).limit(100).abortSignal(AbortSignal.timeout(8_000)),
       sb.from("execution_observations").select(FIELDS)
         .eq("account_id", accountId).gte("event_at", since)
         .eq("event_kind", "broker_result").gt("filled_qty", 0)
         .order("event_at", { ascending: false }).limit(100).abortSignal(AbortSignal.timeout(8_000)),
       sb.from("execution_observations").select("id", { count: "exact", head: true })
-        .eq("account_id", accountId).gte("event_at", since).eq("event_kind", "decision")
+        .eq("account_id", accountId).gte("event_at", since)
+        .eq("event_kind", "decision").eq("action", "enter")
         .abortSignal(AbortSignal.timeout(8_000)),
       sb.from("execution_observations").select("id", { count: "exact", head: true })
         .eq("account_id", accountId).gte("event_at", since)
-        .eq("event_kind", "decision").not("blocked_reason", "is", null)
+        .eq("event_kind", "decision").eq("action", "enter")
+        .not("blocked_reason", "is", null)
         .abortSignal(AbortSignal.timeout(8_000)),
     ]);
     const failed = [admitted, fills, candidates, suppressed].find((result) => result.error);

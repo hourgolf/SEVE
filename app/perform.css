@@ -499,6 +499,44 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   letter-spacing: 0.12em; text-transform: uppercase; color: var(--dk-dim);
 }
 
+.shell-root.ws909[data-mode="perform"] .pf-position-attribution-blocked {
+  display:flex; flex-direction:column; gap:8px; min-height:180px; justify-content:center;
+  padding:20px; color:var(--hw-amber); background:rgba(190,125,24,.06);
+}
+.shell-root.ws909[data-mode="perform"] .pf-position-attribution-blocked b {
+  font:800 var(--fs-body)/1 var(--sh-mono); letter-spacing:.13em;
+}
+.shell-root.ws909[data-mode="perform"] .pf-position-attribution-blocked span,
+.shell-root.ws909[data-mode="perform"] .pf-position-attribution-blocked small {
+  color:var(--dk-dim); font:600 var(--fs-chip)/1.45 var(--sh-mono);
+}
+.shell-root.ws909[data-mode="perform"] .pf-position-attribution-recovered {
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:7px 11px;
+  border-bottom:1px solid var(--pf-line); color:var(--hw-amber);
+  background:rgba(190,125,24,.055); font:650 var(--fs-chip)/1.35 var(--sh-mono);
+}
+.shell-root.ws909[data-mode="perform"] .pf-position-attribution-recovered span,
+.shell-root.ws909[data-mode="perform"] .pf-position-attribution-recovered small { color:var(--dk-dim); }
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth { min-height:0; }
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth-list { overflow:auto; }
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth-list>div>header,
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth-list article {
+  display:grid; grid-template-columns:minmax(230px,1fr) repeat(4,auto); gap:16px;
+  align-items:center; padding:9px 12px; border-bottom:1px solid var(--pf-line);
+  font:650 var(--fs-chip)/1.25 var(--sh-mono);
+}
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth-list>div>header {
+  grid-template-columns:1fr auto; color:var(--dk-dim); background:rgba(255,255,255,.025);
+}
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth-list article>b { color:var(--dk-ink); }
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth-list article>span { color:var(--dk-dim); }
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth-list article>strong.pos { color:var(--hw-green); }
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth-list article>strong.neg { color:var(--hw-red); }
+.shell-root.ws909[data-mode="perform"] .pf-broker-truth>footer {
+  padding:7px 12px; color:var(--dk-dim); border-top:1px solid var(--pf-line);
+  font:600 var(--fs-chip)/1.35 var(--sh-mono);
+}
+
 /* ---------- POSITIONS ------------------------------------------------------- */
 .shell-root[data-mode="perform"] .pfp-body { overflow-y: auto; }
 .shell-root[data-mode="perform"] .pfp-row {

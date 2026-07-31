@@ -133,17 +133,17 @@ function applyRead<T>(previous: OpsEvidenceRead<T>, settled: PromiseSettledResul
   };
 }
 
-function expireInitialLoads(previous: OpsEvidence, nowMs: number): OpsEvidence {
+function expireInitialLoads(previous: OpsEvidence, nowMs: number, deepEnabled: boolean): OpsEvidence {
   const expire = <T,>(read: OpsEvidenceRead<T>): OpsEvidenceRead<T> => read.state === "loading"
     ? { ...read, state: "error", error: "OPS evidence read timed out", fetchedAtMs: nowMs }
     : read;
   return {
-    execution: expire(previous.execution),
-    managers: expire(previous.managers),
-    captures: expire(previous.captures),
-    captureHealth: expire(previous.captureHealth),
-    publisher: expire(previous.publisher),
-    outcomes: expire(previous.outcomes),
+    execution: deepEnabled ? expire(previous.execution) : previous.execution,
+    managers: deepEnabled ? expire(previous.managers) : previous.managers,
+    captures: deepEnabled ? expire(previous.captures) : previous.captures,
+    captureHealth: deepEnabled ? expire(previous.captureHealth) : previous.captureHealth,
+    publisher: deepEnabled ? expire(previous.publisher) : previous.publisher,
+    outcomes: deepEnabled ? expire(previous.outcomes) : previous.outcomes,
     broker: expire(previous.broker),
   };
 }
@@ -155,17 +155,13 @@ function expireInitialLoads(previous: OpsEvidence, nowMs: number): OpsEvidence {
  * independent errors and never become fabricated empty ledgers. Leaves receive
  * this result through SurfaceProps and do not subscribe on their own.
  */
-export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: string[] = []): OpsEvidence {
+export function useOpsEvidence(pollMs = 120_000, deepEnabled = true, accountIds: string[] = []): OpsEvidence {
   const [state, setState] = useState<OpsEvidence>(INITIAL);
   const accountScope = [...accountIds].sort().join(",");
 
   useEffect(() => {
-    // These are deliberately deeper operational ledgers, not shell telemetry.
-    // Loading them from every PLAY/STUDIO/BOOK/REVIEW surface multiplied a
-    // multi-table read across every open dashboard even though only OPS renders
-    // the result. Keep the hook at the page-owned seam, but activate its remote
-    // reads only while the operator is actually in OPS.
-    if (!enabled) return;
+    // Broker truth is compact shell telemetry and remains available to the
+    // Positions workspace. The deeper Supabase ledgers stay OPS/Review-only.
     let alive = true;
     const poll = async () => {
       const sb = getSupabase();
@@ -183,7 +179,10 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
         });
       };
 
-      // Each ledger owns its own state transition. A slow or failed deep read
+      settle("broker", accessToken.then((token) => readBrokerReceipt(token)));
+      if (!deepEnabled) return;
+
+      // Each deep ledger owns its own state transition. A slow or failed read
       // must not leave broker reconciliation and every unrelated evidence gate
       // stuck in a shared CHECKING state.
       settle("execution", accessToken.then((token) => readExecutions(scopedAccounts, token)));
@@ -198,24 +197,22 @@ export function useOpsEvidence(pollMs = 120_000, enabled = true, accountIds: str
         .ilike("message", "%shadow-publish:%").gte("created_at", since)
         .order("created_at", { ascending: false }).limit(12));
       settle("outcomes", readOutcomes(since));
-      settle("broker", accessToken.then((token) => readBrokerReceipt(token)));
     };
     void poll();
     const stop = startVisibilityPoll(() => void poll(), pollMs);
     return () => { alive = false; stop(); };
-  }, [accountScope, enabled, pollMs]);
+  }, [accountScope, deepEnabled, pollMs]);
 
   // Browser auth/session libraries can occasionally fail to resolve even when
   // their underlying network request has its own timeout. This watchdog is a
   // separate effect from the poll itself so even a synchronous setup failure
   // cannot leave the operator surface neutral forever.
   useEffect(() => {
-    if (!enabled) return;
     const watchdog = setTimeout(() => {
-      setState((previous) => expireInitialLoads(previous, Date.now()));
+      setState((previous) => expireInitialLoads(previous, Date.now(), deepEnabled));
     }, 15_000);
     return () => clearTimeout(watchdog);
-  }, [accountScope, enabled]);
+  }, [accountScope, deepEnabled]);
 
   return state;
 }

@@ -34,7 +34,10 @@ const evidence = (overrides: Partial<OpsEvidence> = {}): OpsEvidence => ({
   broker: ok([{
     state: "matched", observedAt: "2026-07-20T14:59:00Z", allAccountsReachable: true,
     booksMatch: true, flatConfirmed: true, brokerContracts: 0, deskContracts: 0,
-    accounts: [{ accountId: "first", accountName: "FIRST-TEAM", reachable: true, error: "", brokerContracts: 0, deskContracts: 0, mismatchCount: 0 }],
+    accounts: [{
+      accountId: "first", accountName: "FIRST-TEAM", reachable: true, error: "",
+      brokerContracts: 0, deskContracts: 0, mismatchCount: 0, brokerPositions: [],
+    }],
     mismatches: [],
   }]),
   ...overrides,
@@ -304,7 +307,11 @@ assert.equal(booked.chains[0].steps.find((step) => step.id === "close")?.state, 
 const brokerDrift = deriveOpsReadiness(base({ evidence: evidence({ broker: ok([{
   state: "drift", observedAt: "2026-07-20T15:00:00Z", allAccountsReachable: true,
   booksMatch: false, flatConfirmed: false, brokerContracts: 2, deskContracts: 1,
-  accounts: [{ accountId: "first", accountName: "FIRST-TEAM", reachable: true, error: "", brokerContracts: 2, deskContracts: 1, mismatchCount: 1 }],
+  accounts: [{
+    accountId: "first", accountName: "FIRST-TEAM", reachable: true, error: "",
+    brokerContracts: 2, deskContracts: 1, mismatchCount: 1,
+    brokerPositions: [{ symbol: "SPY260720C00600000", qty: 2 }],
+  }],
   mismatches: [{ accountId: "first", accountName: "FIRST-TEAM", symbol: "SPY260720C00600000", brokerQty: 2, deskQty: 1, delta: -1 }],
 }]) }) }));
 assert.equal(find(brokerDrift, "reconciliation").state, "DRIFT");
@@ -313,7 +320,10 @@ assert.equal(find(brokerDrift, "reconciliation").tone, "red");
 const brokerPartial = deriveOpsReadiness(base({ evidence: evidence({ broker: ok([{
   state: "partial", observedAt: "2026-07-20T15:00:00Z", allAccountsReachable: false,
   booksMatch: false, flatConfirmed: false, brokerContracts: 0, deskContracts: 0,
-  accounts: [{ accountId: "first", accountName: "FIRST-TEAM", reachable: false, error: "timeout", brokerContracts: 0, deskContracts: 0, mismatchCount: 0 }], mismatches: [],
+  accounts: [{
+    accountId: "first", accountName: "FIRST-TEAM", reachable: false, error: "timeout",
+    brokerContracts: 0, deskContracts: 0, mismatchCount: 0, brokerPositions: [],
+  }], mismatches: [],
 }]) }) }));
 assert.equal(find(brokerPartial, "reconciliation").tone, "yellow");
 

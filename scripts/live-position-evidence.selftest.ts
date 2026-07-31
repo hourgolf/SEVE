@@ -10,6 +10,8 @@ const truth = (name: string, value: boolean): void => {
 
 truth("starts from bounded open positions", source.includes('.eq("status", "open").order("opened_at", { ascending: true }).limit(24)'));
 truth("follows indexed position outcome lineage", source.includes('.eq("position_id", position.id)'));
+truth("runner remainders inherit manager evidence from their root", source.includes("const managerPositionId = position.runner_of ?? position.id"));
+truth("runner remainder outcome is accepted as open lineage", source.includes('row.event_kind === "position_remainder_opened"'));
 truth("follows immutable opportunity join", source.includes('.eq("opportunity_id", opportunityId)'));
 truth("manager reads are position bounded", source.includes('from("manager_shadow_runs")') && source.includes('.limit(12)'));
 truth("capture reads are position bounded", source.includes('from("held_contract_capture_receipts")') && source.includes('.limit(3)'));
