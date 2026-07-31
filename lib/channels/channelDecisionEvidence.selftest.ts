@@ -32,6 +32,7 @@ const release = observeActiveRelease([{
   message: `stream: rc54-release ACTIVE ${RC54_RELEASE_ID} config=${RC54_CONFIG_HASH}`,
   created_at: "2026-07-30T23:00:00.000Z",
   strategist_id: null,
+  meta: {},
 }]);
 const runtime = (slug: string) => deriveEffectiveChannelState({ channel: channel(slug), release });
 
