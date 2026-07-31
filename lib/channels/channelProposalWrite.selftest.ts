@@ -74,7 +74,9 @@ check("valid bounded request builds a draft-only server-authored proposal", () =
   assert.equal(built.preview.validationResults.some((result) => result.state === "block"), false);
   assert.equal(built.preview.validationResults.filter((result) => result.state === "not-run").length, 3);
   assert.deepEqual(built.proposal.evidenceRefs, ["receipt:operator-note"]);
-  assert.equal(built.capacityCollisionImpact.state, "not-run");
+  assert.equal(built.capacityCollisionImpact.state, "pass");
+  assert.deepEqual(built.capacityCollisionImpact.changedCapacityFields, []);
+  assert.equal((built.capacityCollisionImpact.evidenceRefs as string[]).length, 2);
 });
 
 check("client cannot supply identity or lifecycle fields", () => {
@@ -129,6 +131,11 @@ check("governed re-entry request expands into one exact reviewed spec patch", ()
       result.gate === "reentry-scaling")?.state,
     "pass",
   );
+  assert.equal(built.capacityCollisionImpact.state, "not-run");
+  assert.deepEqual(built.capacityCollisionImpact.changedCapacityFields, [
+    "entryParameters",
+    "reentryPolicy",
+  ]);
 });
 
 check("governed re-entry rejects out-of-range caps and unrelated fields", () => {
@@ -142,6 +149,32 @@ check("governed re-entry rejects out-of-range caps and unrelated fields", () => 
     proposedPatch: { maxEntriesPerSession: 3, quantity: 3 },
     changeClass: "governed-operational-policy",
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported governed proposal fields: quantity/);
+});
+
+check("governed execution posture is one explicit pause or resume axis", () => {
+  const paused = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: { executionPosture: "observe-only" },
+    reason: "Pause new paper entries while preserving research collection.",
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.deepEqual(paused.proposal.proposedPatch, {
+    executionPosture: "observe-only",
+  });
+  assert.equal(paused.draftSpec.executionPosture, "observe-only");
+  assert.equal(paused.capacityCollisionImpact.state, "pass");
+  assert.equal(
+    proposalDraftRpcName(paused.proposal),
+    "create_channel_execution_posture_proposal_draft",
+  );
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      executionPosture: "observe-only",
+      maxEntriesPerSession: 2,
+    },
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /exactly one/);
 });
 
 check("manager policy expands into one immutable policy identity", () => {
@@ -255,7 +288,7 @@ check("server route authenticates before opening the service-role write seam", (
   assert.doesNotMatch(route, /export async function (PUT|PATCH|DELETE)/);
 });
 
-check("storage RPC routing distinguishes bounded, manager, and re-entry drafts", () => {
+check("storage RPC routing distinguishes bounded, manager, re-entry, and posture drafts", () => {
   const bounded = buildOperatorProposal(compiled, {
     ...validRequest,
     proposedPatch: {
@@ -273,13 +306,29 @@ check("storage RPC routing distinguishes bounded, manager, and re-entry drafts",
     proposedPatch: { maxEntriesPerSession: 3 },
     changeClass: "governed-operational-policy",
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  const posture = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: { executionPosture: "observe-only" },
+    reason: "Pause new entries while continuing research collection.",
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
   assert.equal(
     proposalDraftRpcName(bounded.proposal),
     "create_channel_change_proposal_draft",
   );
+  assert.equal(bounded.capacityCollisionImpact.state, "not-run");
+  assert.deepEqual(bounded.capacityCollisionImpact.changedCapacityFields, [
+    "maxDebitUsd",
+    "quantity",
+    "riskLimits",
+  ]);
   assert.equal(
     proposalDraftRpcName(governed.proposal),
     "create_channel_reentry_proposal_draft",
+  );
+  assert.equal(
+    proposalDraftRpcName(posture.proposal),
+    "create_channel_execution_posture_proposal_draft",
   );
 });
 

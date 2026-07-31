@@ -35,7 +35,7 @@ interface ChannelRackRowProps {
 
 function ChannelRackRowImpl({ strategist, pnl, active, selected, onSelect }: ChannelRackRowProps) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, canWrite } = useDeskWrite();
+  const { persistConfig, canDirectConfigure: canWrite } = useDeskWrite();
   const { id, slug, underlying, color, status, config } = strategist;
 
   const tp = config.take_profit_pct ?? 0;

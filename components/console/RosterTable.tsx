@@ -20,7 +20,7 @@ export function RosterTable({
   livePnl: Record<string, ChannelPnl>;
 }) {
   const dispatch = useDeskDispatch();
-  const { persistConfig, canWrite } = useDeskWrite();
+  const { persistConfig, canDirectConfigure: canWrite } = useDeskWrite();
 
   const setCfg = (slug: string, id: string, patch: Partial<StrategistConfig>) => {
     dispatch({ type: "SET_CONFIG", slug, patch });

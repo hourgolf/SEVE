@@ -3,11 +3,15 @@ import {
   canonicalJson,
   compileReleaseManifest,
   type ActivationReceipt,
+  type ChangeClass,
+  type ChannelChangeProposal,
   type ChannelSpecStatus,
   type ChannelSpecVersionDraft,
   type CompiledReleaseManifest,
   type JsonObject,
+  type ProposalReplaySummary,
   type ReleaseManifestDraft,
+  type ValidationGateResult,
 } from "./channelControlPlane";
 import { buildShadowRuntimeProjection } from "./channelActivation";
 
@@ -80,6 +84,7 @@ interface StoredSpec {
   scalePolicy: ChannelSpecVersionDraft["scalePolicy"];
   collisionDomain: string;
   riskLimits: ChannelSpecVersionDraft["riskLimits"];
+  executionPosture?: "paper" | "observe-only";
   validFrom: string;
   validUntil: string | null;
   createdBy: string;
@@ -125,6 +130,174 @@ function relationKey(value: unknown, key: string): string | null {
   const related = Array.isArray(value) ? record(value[0]) : record(value);
   const candidate = related?.[key];
   return typeof candidate === "string" && candidate ? candidate : null;
+}
+
+function parseValidationResults(value: unknown): ValidationGateResult[] | null {
+  if (!Array.isArray(value)) return null;
+  const results: ValidationGateResult[] = [];
+  for (const item of value) {
+    const row = record(item);
+    if (!row
+        || typeof row.gate !== "string"
+        || !["pass", "block", "not-run"].includes(text(row, "state"))
+        || !text(row, "code")
+        || !text(row, "fact")
+        || !Array.isArray(row.evidenceRefs)
+        || row.evidenceRefs.some((ref) => typeof ref !== "string")) {
+      return null;
+    }
+    results.push({
+      gate: text(row, "gate") as ValidationGateResult["gate"],
+      state: text(row, "state") as ValidationGateResult["state"],
+      code: text(row, "code"),
+      fact: text(row, "fact"),
+      evidenceRefs: row.evidenceRefs as string[],
+    });
+  }
+  return results;
+}
+
+function parseReplaySummary(value: unknown): ProposalReplaySummary | null {
+  const row = record(value);
+  if (!row
+      || !["not-run", "sufficient", "insufficient", "censored"].includes(
+        text(row, "state"),
+      )
+      || !Number.isInteger(row.exactSamples)
+      || !Number.isInteger(row.censoredSamples)
+      || !Array.isArray(row.limitations)
+      || row.limitations.some((item) => typeof item !== "string")
+      || !Array.isArray(row.evidenceRefs)
+      || row.evidenceRefs.some((item) => typeof item !== "string")) {
+    return null;
+  }
+  return {
+    state: text(row, "state") as ProposalReplaySummary["state"],
+    exactSamples: row.exactSamples as number,
+    censoredSamples: row.censoredSamples as number,
+    limitations: row.limitations as string[],
+    evidenceRefs: row.evidenceRefs as string[],
+  };
+}
+
+export function reconstructStoredChannelProposal(
+  row: Record<string, unknown>,
+): ChannelChangeProposal {
+  const baseSpecVersionId = relationKey(row.base, "version_key");
+  const proposedSpecVersionId = relationKey(row.proposed, "version_key");
+  const proposedPatch = jsonObject(row.proposed_patch);
+  const validationResults = parseValidationResults(row.validation_results);
+  const replaySummary = parseReplaySummary(row.replay_summary);
+  const approvalState = text(row, "approval_state");
+  const authorKind = text(row, "author_kind");
+  const evidenceRefs = row.evidence_refs;
+  if (!text(row, "id")
+      || !baseSpecVersionId
+      || !proposedSpecVersionId
+      || !SHA256.test(text(row, "base_spec_content_hash"))
+      || !proposedPatch
+      || !Array.isArray(evidenceRefs)
+      || evidenceRefs.some((ref) => typeof ref !== "string")
+      || !["operator", "sentinel", "system"].includes(authorKind)
+      || !text(row, "author_id")
+      || !validationResults
+      || !replaySummary
+      || !["draft", "validated", "approved", "rejected", "canceled"].includes(
+        approvalState,
+      )
+      || text(row, "requested_activation_boundary") !== "next-safe-entry"
+      || row.activation_authorized !== false
+      || !Number.isFinite(Date.parse(text(row, "created_at")))) {
+    throw new Error("stored channel proposal is malformed");
+  }
+  return {
+    schemaVersion: 1,
+    id: text(row, "id"),
+    baseSpecVersionId,
+    baseSpecContentHash: text(row, "base_spec_content_hash"),
+    proposedSpecVersionId,
+    proposedPatch,
+    reason: text(row, "reason"),
+    evidenceRefs: evidenceRefs as string[],
+    authorKind: authorKind as ChannelChangeProposal["authorKind"],
+    authorId: text(row, "author_id"),
+    changeClass: text(row, "change_class") as ChangeClass,
+    validationResults,
+    replaySummary,
+    approvalState: approvalState as ChannelChangeProposal["approvalState"],
+    requestedActivationBoundary: "next-safe-entry",
+    createdAt: text(row, "created_at"),
+    activationAuthorized: false,
+  };
+}
+
+const PROPOSAL_SELECT = [
+  "id",
+  "base_spec_content_hash",
+  "proposed_patch",
+  "reason",
+  "evidence_refs",
+  "author_kind",
+  "author_id",
+  "change_class",
+  "validation_results",
+  "replay_summary",
+  "capacity_collision_impact",
+  "approval_state",
+  "requested_activation_boundary",
+  "created_at",
+  "activation_authorized",
+  "base:base_spec_version_id(version_key)",
+  "proposed:proposed_spec_version_id(version_key)",
+].join(",");
+
+export async function loadStoredChannelProposal(
+  client: SupabaseClient,
+  proposalId: string,
+): Promise<{
+  proposal: ChannelChangeProposal | null;
+  capacityCollisionImpact: JsonObject | null;
+  row: Record<string, unknown> | null;
+  error: string | null;
+}> {
+  const read = await client.from("channel_change_proposals")
+    .select(PROPOSAL_SELECT)
+    .eq("id", proposalId)
+    .maybeSingle();
+  if (read.error) {
+    return {
+      proposal: null,
+      capacityCollisionImpact: null,
+      row: null,
+      error: read.error.message,
+    };
+  }
+  const row = read.data as unknown as Record<string, unknown> | null;
+  if (!row) {
+    return {
+      proposal: null,
+      capacityCollisionImpact: null,
+      row: null,
+      error: null,
+    };
+  }
+  try {
+    return {
+      proposal: reconstructStoredChannelProposal(row),
+      capacityCollisionImpact: jsonObject(row.capacity_collision_impact),
+      row,
+      error: null,
+    };
+  } catch (readError) {
+    return {
+      proposal: null,
+      capacityCollisionImpact: null,
+      row,
+      error: readError instanceof Error
+        ? readError.message
+        : "stored proposal is malformed",
+    };
+  }
 }
 
 export function reconstructStoredActivationReceipt(
@@ -241,6 +414,8 @@ function parseSpec(row: Record<string, unknown>): StoredSpec | null {
   const riskLimits = jsonObject(row.risk_limits);
   if (!STATUSES.has(status)
       || text(row, "account_mode") !== "paper"
+      || (text(row, "execution_posture")
+        && !["paper", "observe-only"].includes(text(row, "execution_posture")))
       || !["control", "lab"].includes(text(row, "cohort"))
       || !["disabled", "bounded"].includes(text(row, "reentry_policy"))
       || !Array.isArray(symbolScope)
@@ -286,6 +461,12 @@ function parseSpec(row: Record<string, unknown>): StoredSpec | null {
     scalePolicy: scalePolicy as unknown as ChannelSpecVersionDraft["scalePolicy"],
     collisionDomain: text(row, "collision_domain"),
     riskLimits: riskLimits as unknown as ChannelSpecVersionDraft["riskLimits"],
+    ...(text(row, "execution_posture")
+      ? {
+        executionPosture: text(row, "execution_posture") as
+          "paper" | "observe-only",
+      }
+      : {}),
     validFrom: text(row, "valid_from"),
     validUntil: typeof row.valid_until === "string" ? row.valid_until : null,
     createdBy: text(row, "created_by"),
@@ -355,6 +536,9 @@ export function reconstructStoredControlPlane(input: {
     scalePolicy: spec.scalePolicy,
     collisionDomain: spec.collisionDomain,
     riskLimits: spec.riskLimits,
+    ...(spec.executionPosture
+      ? { executionPosture: spec.executionPosture }
+      : {}),
     validFrom: spec.validFrom,
     validUntil: spec.validUntil,
     createdBy: spec.createdBy,
@@ -452,6 +636,7 @@ const SPEC_SELECT = [
   "scale_policy",
   "collision_domain",
   "risk_limits",
+  "execution_posture",
   "valid_from",
   "valid_until",
   "created_by",
@@ -460,6 +645,19 @@ const SPEC_SELECT = [
   "status",
   "parent:parent_version_id(version_key)",
 ].join(",");
+const LEGACY_SPEC_SELECT = SPEC_SELECT
+  .split(",")
+  .filter((field) => field !== "execution_posture")
+  .join(",");
+
+function missingExecutionPostureColumn(error: {
+  code?: string;
+  message?: string;
+} | null): boolean {
+  if (!error) return false;
+  return error.code === "42703"
+    || /execution_posture/i.test(error.message ?? "");
+}
 
 export async function loadActiveCompiledControlPlane(
   client: SupabaseClient,
@@ -498,9 +696,17 @@ export async function loadActiveCompiledControlPlane(
       error: "release_manifest_channels:membership_missing",
     };
   }
-  const specsRead = await client.from("channel_spec_versions")
+  let specsRead = await client.from("channel_spec_versions")
     .select(SPEC_SELECT)
     .in("id", specIds);
+  // A dashboard deploy may briefly precede the additive migration. Keep the
+  // existing active control-plane read available in that interval; collection
+  // and posture writes still fail closed until the new column exists.
+  if (missingExecutionPostureColumn(specsRead.error)) {
+    specsRead = await client.from("channel_spec_versions")
+      .select(LEGACY_SPEC_SELECT)
+      .in("id", specIds);
+  }
   if (specsRead.error) {
     return { compiled: null, state: "failed", error: `channel_spec_versions:${specsRead.error.message}` };
   }

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { FiresPill, TradeShapeBar } from "@/components/console/ChannelStrip";
 import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftPanel";
+import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { pmVar } from "@/lib/desk/colors";
@@ -12,6 +13,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
+import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -31,7 +33,7 @@ const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
 }).format(new Date(iso));
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle, write, passport,
+  strategist, pnl, active, open, onToggle, write, passport, controlPlane,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
@@ -40,6 +42,7 @@ export function MobileRackRow({
   onToggle: () => void;
   write: SurfaceProps["write"];
   passport?: ChannelPassport;
+  controlPlane?: ChannelControlPlaneViewRead;
 }) {
   const dispatch = useDeskDispatch();
   const { persistConfig } = write;
@@ -54,7 +57,7 @@ export function MobileRackRow({
   const config = draft.active
     ? draft.proposed ?? draft.baseConfig ?? databaseConfig
     : draft.baseConfig ?? databaseConfig;
-  const canPersist = write.canWrite && !sealed;
+  const canPersist = write.canDirectConfigure && !sealed;
   const canTune = draft.active || canPersist;
 
   const tp = config.take_profit_pct ?? 0;
@@ -127,8 +130,8 @@ export function MobileRackRow({
     : passport?.lifecycle === "dark-evidence"
       ? false
       : active && status === "armed" && !config.muted;
-  const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "PAPER ROOT", cls: "root" }
-    : passport?.lifecycle === "dark-evidence" ? { txt: "DARK", cls: "dark" }
+  const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "PAPER", cls: "root" }
+    : passport?.lifecycle === "dark-evidence" ? { txt: "OBSERVE", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
   const firesSummary = passport?.rootPolicy
     ? activeRootExitLabel(passport.rootPolicy, true)
@@ -289,6 +292,7 @@ export function MobileRackRow({
               {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
             </>}
           </div>
+          {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
           <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} compact />
         </div>
       )}

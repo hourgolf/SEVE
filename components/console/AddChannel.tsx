@@ -53,7 +53,7 @@ export function AddChannel({
   onClose: () => void;
   existingSlugs?: string[];
 }) {
-  const { canWrite, createChannel } = useDeskWrite();
+  const { canDirectConfigure: canWrite, createChannel } = useDeskWrite();
   const { session } = useAuth();
   const [md, setMd] = useState("");
   const [compiling, setCompiling] = useState(false);

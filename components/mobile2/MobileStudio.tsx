@@ -27,7 +27,7 @@ export function MobileStudio({
 }) {
   const { view, feed } = props;
   const { desk, anySolo, isActive } = view;
-  const { canWrite } = props.write;
+  const { canWrite, canDirectConfigure } = props.write;
   const passports = props.channelWorkspace;
   const [scope, setScope] = useState<"roots" | "dark" | "all">("roots");
   const visibleChannels = useMemo(() => channels.filter((channel) => {
@@ -47,13 +47,13 @@ export function MobileStudio({
   return (
     <>
       <div className="m2-scroll">
-        <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" onClick={canWrite ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD CHANNEL" : "SIGN IN TO TUNE"}</button></div>
+        <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" disabled={canWrite && !canDirectConfigure} title={canDirectConfigure ? "Add a channel" : props.write.configurationWriteFact} onClick={canDirectConfigure ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD VIA PROPOSAL" : "SIGN IN TO REVIEW"}</button></div>
         <div className="m2-channel-scope" role="group" aria-label="Channel runtime scope">
-          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>ROOTS <b>{passports.roots}</b></button>
-          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>DARK <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>EXECUTING <b>{passports.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVE <b>{passports.dark}</b></button>
           <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL <b>{channels.length}</b></button>
         </div>
-        <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · REVIEW CONTROLS · FORK DRAFT TO EDIT SEALED ROOTS" : "READ ONLY · SIGN IN TO CHANGE CONTROLS"}</span><span className="ln" /></div>
+        <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · FORK GOVERNED DRAFT · DIRECT WRITES FENCED" : "READ ONLY · SIGN IN TO REVIEW CONTROLS"}</span><span className="ln" /></div>
         {visibleChannels.length === 0 ? (
           <div className="m2-ghost">no channels in this runtime scope</div>
         ) : visibleChannels.map((s) => (
@@ -64,6 +64,7 @@ export function MobileStudio({
             active={isActive(s.slug) && !(anySolo && !s.config.soloed && !s.config.muted)}
             write={props.write}
             passport={passports.bySlug[s.slug]}
+            controlPlane={props.channelControlPlane}
             open={openSlug === s.slug}
             onToggle={() => setOpenSlug(openSlug === s.slug ? null : s.slug)}
           />

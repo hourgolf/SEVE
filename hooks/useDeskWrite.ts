@@ -3,10 +3,16 @@
 import { useCallback } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  LEGACY_CONFIGURATION_WRITES_ENABLED,
+  legacyConfigurationWriteFact,
+} from "@/lib/channels/channelMutationAuthority";
 import type { ChannelStatus, FundState, PmColor, StrategistConfig } from "@/lib/desk/types";
 import type { StrategySpec } from "@/lib/desk/strategySpec";
 
 export interface DeskWriteResult { ok: boolean; error?: string }
+
+const PROPOSAL_REQUIRED = legacyConfigurationWriteFact();
 
 // A new compiled channel to persist (strategists row + its strategist_config).
 export interface NewChannelInput {
@@ -30,10 +36,16 @@ export interface NewChannelInput {
 export function useDeskWrite() {
   const { session, operator } = useAuth();
   const canWrite = !!session && operator;
+  // Authentication still permits manual position/risk actions and
+  // presentation-only metadata. Runtime configuration is receipt-bound, so
+  // legacy direct writes are fenced until they are replaced by the proposal
+  // preview -> worker acknowledgement -> approval -> receipt path.
+  const canDirectConfigure = canWrite && LEGACY_CONFIGURATION_WRITES_ENABLED;
 
   const persistConfig = useCallback(
     async (strategistId: string, patch: Partial<StrategistConfig>): Promise<DeskWriteResult> => {
       if (!session || !operator || !strategistId) return { ok: false, error: "operator authorization required" };
+      if (!canDirectConfigure) return { ok: false, error: PROPOSAL_REQUIRED };
       try {
         const { error } = await getSupabase()
           .from("strategist_config")
@@ -70,6 +82,7 @@ export function useDeskWrite() {
   const createChannel = useCallback(
     async (input: NewChannelInput): Promise<{ ok: boolean; id?: string; error?: string }> => {
       if (!session || !operator) return { ok: false, error: "operator authorization required" };
+      if (!canDirectConfigure) return { ok: false, error: PROPOSAL_REQUIRED };
       try {
         const sb = getSupabase();
         const { data, error } = await sb
@@ -122,6 +135,7 @@ export function useDeskWrite() {
   const duplicateChannel = useCallback(
     async (sourceId: string): Promise<{ ok: boolean; slug?: string; name?: string; error?: string }> => {
       if (!session || !operator || !sourceId) return { ok: false, error: "operator authorization required" };
+      if (!canDirectConfigure) return { ok: false, error: PROPOSAL_REQUIRED };
       try {
         const sb = getSupabase();
         const { data: src, error: e1 } = await sb
@@ -211,6 +225,7 @@ export function useDeskWrite() {
   const setChannelStatus = useCallback(
     async (id: string, status: ChannelStatus): Promise<{ ok: boolean; error?: string }> => {
       if (!session || !operator || !id) return { ok: false, error: "operator authorization required" };
+      if (!canDirectConfigure) return { ok: false, error: PROPOSAL_REQUIRED };
       try {
         const { error } = await getSupabase().from("strategists").update({ status }).eq("id", id);
         return error ? { ok: false, error: error.message } : { ok: true };
@@ -227,6 +242,7 @@ export function useDeskWrite() {
   const setChannelExecutor = useCallback(
     async (id: string, executor: "cron" | "stream"): Promise<{ ok: boolean; error?: string }> => {
       if (!session || !operator || !id) return { ok: false, error: "operator authorization required" };
+      if (!canDirectConfigure) return { ok: false, error: PROPOSAL_REQUIRED };
       try {
         const { error } = await getSupabase().from("strategists").update({ executor }).eq("id", id);
         return error ? { ok: false, error: error.message } : { ok: true };
@@ -244,6 +260,7 @@ export function useDeskWrite() {
   const deleteChannel = useCallback(
     async (id: string): Promise<{ ok: boolean; mode?: "deleted" | "disabled"; error?: string }> => {
       if (!session || !operator || !id) return { ok: false, error: "operator authorization required" };
+      if (!canDirectConfigure) return { ok: false, error: PROPOSAL_REQUIRED };
       try {
         const sb = getSupabase();
         const { error } = await sb.from("strategists").delete().eq("id", id);
@@ -325,5 +342,21 @@ export function useDeskWrite() {
     [session, operator]
   );
 
-  return { canWrite, persistConfig, persistFund, createChannel, duplicateChannel, renameChannel, setChannelAccent, setChannelStatus, setChannelExecutor, deleteChannel, closePosition, tagClose, reorderChannels };
+  return {
+    canWrite,
+    canDirectConfigure,
+    configurationWriteFact: PROPOSAL_REQUIRED,
+    persistConfig,
+    persistFund,
+    createChannel,
+    duplicateChannel,
+    renameChannel,
+    setChannelAccent,
+    setChannelStatus,
+    setChannelExecutor,
+    deleteChannel,
+    closePosition,
+    tagClose,
+    reorderChannels,
+  };
 }

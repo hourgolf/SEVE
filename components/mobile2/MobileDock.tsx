@@ -41,7 +41,7 @@ function Chicklet({
   const muted = ch.config.muted;
   const armed = ch.status === "armed" && !muted;
   const dim = muted ? " off" : ch.status !== "armed" ? " dark" : "";
-  const tag = muted ? "MUTED" : ch.status !== "armed" ? (ch.status === "disabled" ? "DARK" : "DRAFT") : null;
+  const tag = muted ? "MUTED" : ch.status !== "armed" ? (ch.status === "disabled" ? "OBSERVE" : "DRAFT") : null;
   const { pk, win } = pkWin(ch.slug, lens, pnl);
   const day = pnl?.dayPnl;
   const dayCls = day == null || day === 0 ? "flat" : day < 0 ? "neg" : "pos";
@@ -87,7 +87,7 @@ export function MobileDock({
   onOpenChannel?: (slug: string) => void;
 }) {
   const dispatch = useDeskDispatch();
-  const { canWrite, persistConfig } = write;
+  const { canDirectConfigure: canWrite, persistConfig } = write;
   const [open, setOpen] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
   const muted = channels.filter((channel) => channel.config.muted).length;

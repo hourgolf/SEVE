@@ -5,6 +5,7 @@ import { signedUsd, usd0 } from "@/lib/format";
 import type { StudioChannelRow, StudioFleetSummary, StudioSort } from "@/lib/studio/deriveStudioView";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
 import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
+import { ChannelCollectionCullPanel } from "@/components/studio/ChannelCollectionCullPanel";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -51,8 +52,8 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
       <div className="fleet-tools">
         <div className="fleet-scope" role="group" aria-label="Channel scope">
           <button type="button" className={scope === "attention" ? "on" : ""} onClick={() => onScope("attention")}>ATTENTION <b>{summary.attention}</b></button>
-          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>ROOTS <b>{passports.roots}</b></button>
-          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>DARK <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>EXECUTING <b>{passports.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>OBSERVE <b>{passports.dark}</b></button>
           <button type="button" className={scope === "all" ? "on" : ""} onClick={() => onScope("all")}>ALL <b>{summary.total}</b></button>
         </div>
         <label className="fleet-sort">SORT
@@ -61,6 +62,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
           </select>
         </label>
       </div>
+      <ChannelCollectionCullPanel />
 
       <div className="fleet-table" role="table" aria-label={`${scope} strategy channels`}>
         <div className="fleet-grid fleet-head" role="row">
@@ -87,7 +89,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
               >
                 <span className="fleet-channel" role="cell"><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></span>
                 <span className="fleet-runtime" role="cell">
-                  <em className={`fleet-state ${passport?.lifecycle ?? row.stateLabel.toLowerCase()}`}>{passport?.lifecycleLabel ?? row.stateLabel}</em>
+                  <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{passport?.effective.execution.label ?? row.stateLabel}</em>
                   <small className={passport?.database.differsFromRuntime ? "diff" : ""}>DB {passport?.database.state ?? row.stateLabel} · {passport?.database.executor ?? row.channel.executor ?? "cron"}</small>
                 </span>
                 <span className="fleet-position" role="cell">

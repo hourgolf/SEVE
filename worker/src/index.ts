@@ -12,6 +12,7 @@
 //  orders. Railway: 1 replica, restart-on-crash, sole order-placer.
 // ============================================================================
 
+import { randomUUID } from "node:crypto";
 import {
   ACTIVE_WORKER_VERSION,
   config,
@@ -119,15 +120,23 @@ import {
   validateReceiptBoundRc54RestartRows,
 } from "./temporaryRc54RuntimeAdapter.js";
 import type { AdmissionDomainPolicy } from "./admissionDomainModel.js";
+import {
+  applyChannelCollectionRuntime,
+} from "./channelCollectionRuntime.js";
+import {
+  stageStoredChannelActivationPreview,
+} from "./channelActivationPreviewWatcher.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 const releaseMode = (): boolean => config.day1ReleaseEnabled || config.rc54ReleaseEnabled;
 let releaseStartupReceipt: Record<string, unknown> | null = null;
+let currentStartupReceipt: Record<string, unknown> | null = null;
 let releaseSourceExecutorBoundaryReady = !releaseMode();
 let receiptBoundRuntime: Readonly<ReceiptBoundRuntimeConfiguration> | null = null;
 let receiptBoundAdmissionRootResolver: Rc54AdmissionRootResolver | null = null;
 let receiptBoundAdmissionPolicies:
   readonly Readonly<AdmissionDomainPolicy>[] | null = null;
+let activationPreviewWatchBusy = false;
 
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
@@ -239,6 +248,79 @@ const gammaLogged = new Set<string>(); // `${sym}|${etDate}` — once-per-day ga
 let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[]; accounts: store.AccountRow[] } = { fund: null, channels: [], accounts: [] };
 let reloadPending = false;
 let cycling = false;
+
+async function acknowledgePendingChannelActivationPreviews(): Promise<void> {
+  if (!config.channelActivationPreviewWatcherEnabled
+      || activationPreviewWatchBusy) return;
+  activationPreviewWatchBusy = true;
+  try {
+    const activeRead = await store.loadReceiptBoundControlPlane();
+    if (activeRead.state !== "receipt-bound"
+        && activeRead.state !== "baseline-active") {
+      warn(
+        `channel-activation watcher blocked: active control plane is ${activeRead.state}`,
+      );
+      return;
+    }
+    if (!activeRead.compiled) {
+      warn("channel-activation watcher blocked: compiled active manifest is missing");
+      return;
+    }
+    const pending = await store.loadPendingChannelActivationPreviews();
+    if (pending.error) {
+      warn(`channel-activation watcher read failed: ${pending.error}`);
+      return;
+    }
+    for (const envelope of pending.rows) {
+      const observedAt = new Date().toISOString();
+      const stage = stageStoredChannelActivationPreview({
+        active: activeRead.compiled,
+        envelope,
+        acknowledgementId: randomUUID(),
+        currentReleaseId: activeRead.compiled.manifest.releaseId,
+        currentWorkerVersion: RC54_WORKER_VERSION,
+        currentWorkerRuntimeVersion: WORKER_RUNTIME_VERSION,
+        bootId: BOOT_ID,
+        paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
+        heldCaptureReady: currentStartupReceipt !== null,
+        startupReceipt: currentStartupReceipt,
+        observedAt,
+      });
+      if (!stage.acknowledgementRpcArgs) {
+        warn(
+          `channel-activation watcher blocked ${stage.proposalId || "unknown"}: ${
+            stage.blockers.join(";")
+          }`,
+        );
+        continue;
+      }
+      const write = await store.acknowledgeChannelActivationPreview(
+        stage.acknowledgementRpcArgs,
+      );
+      if (write.error) {
+        warn(
+          `channel-activation watcher acknowledgement failed ${stage.proposalId}: ${
+            write.error
+          }`,
+        );
+      } else {
+        info(
+          `channel-activation watcher ACKNOWLEDGED ${stage.proposalId}`
+          + ` preview=${stage.previewId} runtime-mutation=false order-authority=false`,
+        );
+      }
+    }
+  } catch (watchError) {
+    warn(
+      `channel-activation watcher failed closed: ${
+        watchError instanceof Error ? watchError.message : String(watchError)
+      }`,
+    );
+  } finally {
+    activationPreviewWatchBusy = false;
+  }
+}
+
 // audit 2026-07-11 (1b #8): the fast exit sweep runs on its OWN mutex — it used to share
 // `cycling`, so a slow/hung bar-close cycle disabled every safety backstop (halt/EOD/event
 // flatten + premium stops) for its whole duration. Now cycle and sweep run CONCURRENTLY;
@@ -600,9 +682,45 @@ async function reloadConfig(): Promise<void> {
       releaseStartupReceipt = validation.activeSettingsReceipt;
       releaseSourceExecutorBoundaryReady = true;
     }
+    if (config.channelCollectionRuntimeEnabled) {
+      const collectionRead = await store.loadChannelCollectionStates();
+      if (collectionRead.error) {
+        throw new Error(
+          `Channel collection runtime blocked: ${collectionRead.error}`,
+        );
+      }
+      const executingSlugs = nextReceiptBoundRuntime
+        ? nextReceiptBoundRuntime.roots
+          .filter((root) => root.executionPosture === "paper")
+          .map((root) => root.slug)
+        : config.rc54ReleaseEnabled
+          ? RC54_ROOTS.map((root) => root.slug)
+          : config.day1ReleaseEnabled
+            ? DAY1_ROOTS.map((root) => root.slug)
+            : channels
+              .filter((channel) => channel.status === "armed")
+              .map((channel) => channel.slug);
+      const collection = applyChannelCollectionRuntime({
+        channels,
+        collection: collectionRead.rows,
+        executingSlugs,
+      });
+      if (collection.state !== "ready") {
+        throw new Error(
+          `Channel collection runtime blocked: ${collection.blockers.join(";")}`,
+        );
+      }
+      channels = collection.channels;
+    }
     receiptBoundRuntime = nextReceiptBoundRuntime;
     receiptBoundAdmissionRootResolver = nextReceiptBoundResolver;
     receiptBoundAdmissionPolicies = nextReceiptBoundAdmissionPolicies;
+    if (currentStartupReceipt && releaseStartupReceipt) {
+      currentStartupReceipt = {
+        ...releaseStartupReceipt,
+        runtimeReadiness: currentStartupReceipt.runtimeReadiness,
+      };
+    }
     cfg = { fund: c.fund, channels, accounts };
   }
   else warn("config: reload returned no fund_state — keeping previous");
@@ -1704,6 +1822,7 @@ async function main(): Promise<void> {
           receiptBoundRuntime ? true : false,
       },
     };
+    currentStartupReceipt = receipt;
     const activeReleaseId = receiptBoundRuntime?.releaseId ?? RC54_RELEASE_ID;
     const activeConfiguration = receiptBoundRuntime?.manifestContentHash
       ?? RC54_RELEASE_CONFIGURATION_SHA256;
@@ -1758,6 +1877,12 @@ async function main(): Promise<void> {
 
   store.subscribeConfig(() => { reloadPending = true; });
   setInterval(() => { reloadPending = true; }, 30_000); // poll fallback if realtime is off
+  if (config.channelActivationPreviewWatcherEnabled) {
+    void acknowledgePendingChannelActivationPreviews();
+    setInterval(() => {
+      void acknowledgePendingChannelActivationPreviews();
+    }, 120_000);
+  }
   // Run-liveness beat (external-review P4): freshens worker_runs.last_heartbeat_at + memory_rss
   // every 60s REGARDLESS of live/shadow, so a crash gap and an RSS climb are both visible even
   // when the trading heartbeat is silent (shadow / outside RTH). Fail-open telemetry.

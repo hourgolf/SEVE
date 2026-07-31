@@ -22,6 +22,7 @@ import {
   type DynamicReadinessEvidence,
   type JsonObject,
   type ProposalReplaySummary,
+  type ValidationGateResult,
 } from "./channelControlPlane";
 
 export const CHANNEL_ACTIVATION_PERSISTENCE_VERSION =
@@ -99,6 +100,128 @@ export class ChannelActivationPersistenceError extends Error {
     this.name = "ChannelActivationPersistenceError";
     this.blockers = [...new Set(blockers)].sort();
   }
+}
+
+function storedValidationResults(value: unknown): ValidationGateResult[] {
+  if (!Array.isArray(value)) {
+    throw new ChannelActivationPersistenceError(
+      "stored activation preview validation results are malformed",
+    );
+  }
+  return value as ValidationGateResult[];
+}
+
+function readinessFromStoredValidation(
+  results: ValidationGateResult[],
+): DynamicReadinessEvidence {
+  const evidence = (gate: ValidationGateResult["gate"]) => {
+    const result = results.find((item) => item.gate === gate);
+    if (!result) {
+      throw new ChannelActivationPersistenceError(
+        `stored activation preview is missing ${gate}`,
+      );
+    }
+    return {
+      ok: result.state === "pass",
+      fact: result.fact,
+      evidenceRefs: result.evidenceRefs,
+    };
+  };
+  return {
+    replaySufficiency: evidence("replay-sufficiency"),
+    evidenceReadiness: evidence("evidence-readiness"),
+    safeBoundary: evidence("safe-boundary"),
+  };
+}
+
+/**
+ * Rebuilds an immutable persisted preview for a later apply request. The
+ * canonical compiler must reproduce every stored projection exactly; otherwise
+ * the apply path fails closed before it can construct an approval receipt.
+ */
+export function reconstructPreparedActivationPreview(input: {
+  active: CompiledReleaseManifest;
+  proposal: ChannelChangeProposal;
+  row: Record<string, unknown>;
+}): Readonly<PreparedActivationPreview> {
+  const results = storedValidationResults(input.row.validation_results);
+  const replay = input.row.replay_summary as ProposalReplaySummary;
+  const capacity = input.row.capacity_collision_impact as JsonObject;
+  const capture = input.row.capture_continuity as PreparedActivationPreview["captureContinuity"];
+  assertReplaySummary(replay);
+  assertCapacityCollisionImpact(capacity);
+  if (!capture || capture.state !== "pass"
+      || !Array.isArray(capture.evidenceRefs)
+      || capture.evidenceRefs.length < 5) {
+    throw new ChannelActivationPersistenceError(
+      "stored capture continuity is incomplete",
+    );
+  }
+  const candidate = buildShadowActivationCandidate({
+    active: input.active,
+    proposal: input.proposal,
+    readiness: readinessFromStoredValidation(results),
+  });
+  if (!candidate.compiled || !candidate.projection
+      || !candidate.validationReady) {
+    throw new ChannelActivationPersistenceError(
+      "stored activation candidate cannot be reconstructed",
+      ["candidate:reconstruction_failed"],
+    );
+  }
+  for (const [label, actual, stored] of [
+    ["manifest", candidate.compiled.manifest, input.row.candidate_manifest],
+    ["worker projection", candidate.compiled.workerProjection,
+      input.row.worker_projection],
+    ["dashboard projection", candidate.compiled.dashboardProjection,
+      input.row.dashboard_projection],
+    ["validation results", candidate.validationResults,
+      input.row.validation_results],
+  ] as const) {
+    if (canonicalJson(actual) !== canonicalJson(stored)) {
+      throw new ChannelActivationPersistenceError(
+        `stored activation ${label} drifted`,
+        [`preview:${label.replaceAll(" ", "_")}_drift`],
+      );
+    }
+  }
+  if (candidate.projection.configurationEpochId
+      !== String(input.row.configuration_epoch_id ?? "")) {
+    throw new ChannelActivationPersistenceError(
+      "stored activation configuration epoch drifted",
+      ["preview:configuration_epoch_drift"],
+    );
+  }
+  return Object.freeze({
+    persistenceVersion: CHANNEL_ACTIVATION_PERSISTENCE_VERSION,
+    candidate,
+    captureContinuity: capture,
+    rpcArgs: {
+      p_preview_id: assertUuid(String(input.row.id ?? ""), "previewId"),
+      p_proposal_id: assertUuid(input.proposal.id, "proposal.id"),
+      p_base_manifest_key: input.active.manifest.id,
+      p_candidate_manifest: asJsonObject(candidate.compiled.manifest),
+      p_configuration_epoch_id: candidate.projection.configurationEpochId,
+      p_worker_projection: asJsonObject(candidate.compiled.workerProjection),
+      p_dashboard_projection: asJsonObject(
+        candidate.compiled.dashboardProjection,
+      ),
+      p_validation_results: candidate.validationResults.map(asJsonObject),
+      p_replay_summary: asJsonObject(replay),
+      p_capacity_collision_impact: capacity,
+      p_capture_continuity: asJsonObject(capture),
+      p_prepared_by: assertUuid(
+        String(input.row.prepared_by ?? ""),
+        "preparedBy",
+      ),
+      p_prepared_at: assertTimestamp(
+        String(input.row.prepared_at ?? ""),
+        "preparedAt",
+      ),
+    },
+    runtimeMutation: false,
+    orderAuthority: false,
+  });
 }
 
 function asJsonObject<T>(value: T): JsonObject {

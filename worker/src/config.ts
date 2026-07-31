@@ -131,6 +131,20 @@ export const config = {
     "CHANNEL_CONFIGURATION_ALLOW_UNADOPTED_RC54_BASELINE",
     false,
   ),
+  // Independent evidence-collection posture. Default OFF until the append-only
+  // collection-state registry is verified in production. When enabled, a
+  // missing/duplicate state or any paused executing root blocks startup/reload.
+  channelCollectionRuntimeEnabled: flag(
+    "CHANNEL_COLLECTION_RUNTIME_ENABLED",
+    false,
+  ),
+  // Candidate-specific validation acknowledgements. Default OFF; when enabled
+  // the current paper worker independently reconstructs immutable previews and
+  // appends no-authority acknowledgements. It never applies a proposal.
+  channelActivationPreviewWatcherEnabled: flag(
+    "CHANNEL_ACTIVATION_PREVIEW_WATCHER_ENABLED",
+    false,
+  ),
   // Roster-neutral Week 2 LAB foundation. This switch is intentionally unusable
   // until a later reviewed commit supplies a sealed roster/configuration draft;
   // setting it early makes startup refuse rather than infer candidates.

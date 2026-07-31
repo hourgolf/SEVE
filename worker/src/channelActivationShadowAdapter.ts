@@ -27,6 +27,7 @@ interface CurrentWorkerRootReceipt {
 
 export interface ChannelActivationWorkerStageInput {
   candidate: Readonly<ShadowActivationCandidate>;
+  expectedCurrentReleaseId?: string;
   currentReleaseId: string;
   currentWorkerVersion: string;
   currentWorkerRuntimeVersion: string;
@@ -140,11 +141,14 @@ function canonicalRoster(roots: CurrentWorkerRootReceipt[]): string {
 function startupReceiptBlockers(input: {
   receipt: Record<string, unknown> | null;
   expectedRoots: CurrentWorkerRootReceipt[];
+  expectedReleaseId?: string;
 }): string[] {
   const blockers: string[] = [];
   const receipt = input.receipt;
   if (!receipt) return ["startup_receipt:missing"];
-  if (string(receipt.releaseId) !== RC54_RELEASE_ID) blockers.push("startup_receipt:release_mismatch");
+  if (string(receipt.releaseId) !== (input.expectedReleaseId ?? RC54_RELEASE_ID)) {
+    blockers.push("startup_receipt:release_mismatch");
+  }
   if (string(receipt.workerVersion) !== RC54_WORKER_VERSION) {
     blockers.push("startup_receipt:worker_version_mismatch");
   }
@@ -166,6 +170,7 @@ function startupReceiptBlockers(input: {
 }
 
 function workerPostureBlockers(input: {
+  expectedReleaseId?: string;
   currentReleaseId: string;
   currentWorkerVersion: string;
   currentWorkerRuntimeVersion: string;
@@ -176,7 +181,9 @@ function workerPostureBlockers(input: {
   evidenceRef: string;
 }): string[] {
   const blockers: string[] = [];
-  if (input.currentReleaseId !== RC54_RELEASE_ID) blockers.push("worker:release_mismatch");
+  if (input.currentReleaseId !== (input.expectedReleaseId ?? RC54_RELEASE_ID)) {
+    blockers.push("worker:release_mismatch");
+  }
   if (input.currentWorkerVersion !== RC54_WORKER_VERSION) blockers.push("worker:sealed_version_mismatch");
   if (input.currentWorkerRuntimeVersion !== WORKER_RUNTIME_VERSION) {
     blockers.push("worker:runtime_version_mismatch");
@@ -204,6 +211,7 @@ export function stageControlPlaneBaselineShadow(
   }
   blockers.push(...startupReceiptBlockers({
     receipt: input.startupReceipt,
+    expectedReleaseId: RC54_RELEASE_ID,
     expectedRoots: input.compiled.channelSpecs.map((spec) => ({
       slug: spec.slug,
       accountId: spec.accountId,
@@ -269,12 +277,16 @@ export function stageChannelActivationShadow(
     }
   }
 
-  blockers.push(...workerPostureBlockers(input));
+  blockers.push(...workerPostureBlockers({
+    ...input,
+    expectedReleaseId: input.expectedCurrentReleaseId,
+  }));
   if (!compiled || !input.candidate.activeSpec || !input.candidate.proposedSpec) {
     blockers.push("startup_receipt:root_roster_invalid");
   } else {
     blockers.push(...startupReceiptBlockers({
       receipt: input.startupReceipt,
+      expectedReleaseId: input.expectedCurrentReleaseId,
       expectedRoots: compiled.channelSpecs.map((spec): CurrentWorkerRootReceipt => {
         const current = spec.id === input.candidate.proposedSpec?.id
           ? input.candidate.activeSpec as typeof spec

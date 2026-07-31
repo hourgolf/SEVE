@@ -164,11 +164,11 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
         </label> : null}
       </nav>
       <nav className="srw-window" aria-label="research window"><button type="button" className={windowMode === "day" ? "on" : ""} onClick={() => setWindowMode("day")}>DAY</button><button type="button" className={windowMode === "cumulative" ? "on" : ""} onClick={() => setWindowMode("cumulative")}>CUMULATIVE</button></nav>
-      <nav className="srw-lanes" aria-label="research lane"><button type="button" className={lane === "vb" ? "on" : ""} onClick={() => setLane("vb")}>VB SWARM</button><button type="button" className={lane === "all" ? "on" : ""} onClick={() => setLane("all")}>ALL DARK</button></nav>
+      <nav className="srw-lanes" aria-label="research lane"><button type="button" className={lane === "vb" ? "on" : ""} onClick={() => setLane("vb")}>VB SWARM</button><button type="button" className={lane === "all" ? "on" : ""} onClick={() => setLane("all")}>ALL OBSERVE</button></nav>
       <span className={`srw-read ${shadowResearch.state}${shadowResearch.truncated ? " partial" : ""}`}>{shadowResearch.truncated ? "PARTIAL" : shadowResearch.state.toUpperCase()}</span>
     </div>
     {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>
-      <span><small>RUNNING {lane === "vb" ? "VB SWARM" : "ALL DARK"} · SINCE {shadowResearch.cohortStart}</small>
+      <span><small>RUNNING {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shadowResearch.cohortStart}</small>
         <b className={running.pnl >= 0 ? "pos" : "neg"}>{money(running.pnl)} Σ/CT</b></span>
       <em>{windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} strategies · ` : ""}{running.scored} scored · {shadowResearch.cumulative.sessionCount} sessions · {percent(running.winners, running.scored)} win</em>
     </div> : null}

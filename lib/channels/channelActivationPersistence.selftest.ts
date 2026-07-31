@@ -299,6 +299,13 @@ const ambiguityCorrection = readFileSync(
   ),
   "utf8",
 );
+const activationLayerMigration = readFileSync(
+  new URL(
+    "../../supabase/migrations/20260731050000_channel_execution_posture_and_collection_state.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 check("migration creates immutable preview, acknowledgement, and approval receipts", () => {
   for (const table of [
@@ -444,6 +451,55 @@ check("activation bridge qualifies PL/pgSQL output-name collisions", () => {
   assert.match(
     ambiguityCorrection,
     /pg_get_functiondef[\s\S]*activate_channel_change_proposal/,
+  );
+});
+
+check("current worker can append a fresh acknowledgement during review", () => {
+  assert.match(
+    activationLayerMigration,
+    /drop constraint if exists\s+channel_activation_worker_acknowledgements_proposal_id_source_boot_id_key/,
+  );
+  assert.match(
+    activationLayerMigration,
+    /where id = p_acknowledgement_id/,
+  );
+  assert.doesNotMatch(
+    activationLayerMigration,
+    /where acknowledgement_by_worker\.proposal_id = preview\.proposal_id/,
+  );
+});
+
+check("non-posture draft writers preserve observe-only execution state", () => {
+  assert.match(
+    activationLayerMigration,
+    /create_channel_change_proposal_draft[\s\S]*create_channel_manager_policy_proposal_draft[\s\S]*create_channel_reentry_proposal_draft[\s\S]*base_row\.execution_posture/,
+  );
+  assert.match(
+    activationLayerMigration,
+    /execution-posture preservation did not match/,
+  );
+});
+
+check("collection-state receipts are append-only and cannot pause an executing root", () => {
+  assert.match(
+    activationLayerMigration,
+    /create table if not exists public\.channel_collection_state_receipts/,
+  );
+  assert.match(
+    activationLayerMigration,
+    /channel collection receipts are append-only/,
+  );
+  assert.match(
+    activationLayerMigration,
+    /executing paper channel collection must remain active/,
+  );
+  assert.doesNotMatch(
+    activationLayerMigration,
+    /grant[^;]*update[^;]*channel_collection_state_receipts/i,
+  );
+  assert.doesNotMatch(
+    activationLayerMigration,
+    /grant[^;]*delete[^;]*channel_collection_state_receipts/i,
   );
 });
 

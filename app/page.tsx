@@ -41,6 +41,7 @@ import { useWeeklyReports } from "@/hooks/useWeeklyReports";
 import { useForensicsReport } from "@/hooks/useForensicsReport";
 import { usePyramidShadow } from "@/hooks/usePyramidShadow";
 import { useVirtualBench } from "@/hooks/useVirtualBench";
+import { useChannelControlPlaneView } from "@/hooks/useChannelControlPlaneView";
 import { useWindowedPnl, type PnlWindow } from "@/hooks/useWindowedPnl";
 import type { Room } from "@/components/surfaceTypes";
 import { deriveChannelPassports } from "@/lib/channels/channelPassport";
@@ -128,7 +129,8 @@ function Surface({
   const sentinel = useSentinelDigest();
   const workerRuns = useWorkerRuns();
   const positionPeaks = usePositionPeaks(feed.positions, liveMarks);
-  const studioEvidence = useStudioEvidence(acctId, mode === "studio");
+  const studioEvidence = useStudioEvidence(acctId, mode === "studio", configuredPaperAccountIds);
+  const channelControlPlane = useChannelControlPlaneView(mode === "studio");
   // Channel runtime identity is a page-owned, skin-neutral view model. Desktop,
   // mobile, and any future visual shell receive the exact same release state,
   // lifecycle classification, evidence counts, and policy identity.
@@ -143,12 +145,18 @@ function Surface({
     positions: feed.positions,
     recentTrades: feed.recentTrades,
     evidenceBySlug: studioEvidence.bySlug,
+    evidenceSnapshot: {
+      asOf: studioEvidence.asOf,
+      loading: studioEvidence.loading,
+      error: studioEvidence.error,
+      basis: studioEvidence.basis,
+    },
     releaseReadState: data.releaseReceiptHealth.lastError
       ? "error"
       : data.releaseReceiptHealth.lastSuccessAt
         ? "ok"
         : "checking",
-  }), [accountChannels, data.releaseEvents, data.releaseReceiptHealth.lastError, data.releaseReceiptHealth.lastSuccessAt, feed.signals, feed.positions, feed.recentTrades, studioEvidence.bySlug]);
+  }), [accountChannels, data.releaseEvents, data.releaseReceiptHealth.lastError, data.releaseReceiptHealth.lastSuccessAt, feed.signals, feed.positions, feed.recentTrades, studioEvidence.asOf, studioEvidence.basis, studioEvidence.bySlug, studioEvidence.error, studioEvidence.loading]);
   // P5 slice 3 — deterministic incident, derived ONCE at the seam from ops/workerRuns/positions/fund/
   // session. A 15s tick (+ the hook polls) keeps nowMs fresh so time-based escalation re-renders.
   useRefreshTick(15_000);
@@ -230,7 +238,7 @@ function Surface({
   // operator returns to the same room/layout. Lifted to the seam (passed down).
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, opsReadiness, shadowResearch, reviewEvidence };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, channelControlPlane, opsReadiness, shadowResearch, reviewEvidence };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

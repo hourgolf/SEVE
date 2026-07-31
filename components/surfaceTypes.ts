@@ -21,6 +21,7 @@ import type { useForensicsReport } from "@/hooks/useForensicsReport";
 import type { usePyramidShadow } from "@/hooks/usePyramidShadow";
 import type { useVirtualBench } from "@/hooks/useVirtualBench";
 import type { PnlWindow, WindowedPnl } from "@/hooks/useWindowedPnl";
+import type { useChannelControlPlaneView } from "@/hooks/useChannelControlPlaneView";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
@@ -88,6 +89,9 @@ export interface SurfaceProps {
   /** Skin-neutral channel runtime/evidence contract derived once at the page
    *  seam. Every shell renders the same lifecycle and release truth. */
   channelWorkspace: ChannelWorkspaceModel;
+  /** Authenticated, receipt-bound active specification and admission-policy
+   * projection. Read-only; mutation authority remains in the governed flow. */
+  channelControlPlane: ReturnType<typeof useChannelControlPlaneView>;
   /** Day 1 capture/observer/publisher evidence, derived once at the page seam.
    * Configured startup claims remain separate from observed session receipts. */
   opsReadiness: OpsReadinessModel;

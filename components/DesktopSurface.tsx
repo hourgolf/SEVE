@@ -139,7 +139,7 @@ export function DesktopSurface({
   const [rosterView, setRosterView] = useState<"strips" | "table">("strips"); // Mixer: per-channel strips vs the fleet table
   const [hlTrade, setHlTrade] = useState<Position | null>(null); // trade highlighted on the chart
   const [composeFolded, toggleCompose] = useFold("compose");
-  const { canWrite } = write;
+  const { canWrite, canDirectConfigure } = write;
   const selectedAccount = accounts.find((account) => account.id === acctId);
   const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
 
@@ -425,7 +425,14 @@ export function DesktopSurface({
                     the 5-window backtest gate, then arm to the bench. Duplicates for A/Bs live on each
                     strip&apos;s flip-editor in MIX.
                   </p>
-                  <button className="add-channel-btn" onClick={() => setAddOpen(true)}>+ Add Channel</button>
+                  <button
+                    className="add-channel-btn"
+                    disabled={!canDirectConfigure}
+                    title={canDirectConfigure ? "Add a channel" : write.configurationWriteFact}
+                    onClick={() => setAddOpen(true)}
+                  >
+                    + Add via proposal
+                  </button>
                 </div>
               </div>
             </div>

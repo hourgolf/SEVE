@@ -37,8 +37,8 @@ const result = deriveChannelPassports({
 
 assert.equal(result.release.state, "verified");
 assert.equal(result.releaseView.label, "SEALED RELEASE RUNTIME");
-assert.equal(result.releaseView.accountLifecycleLabel, "1 ACCOUNT ROOT · 1 ACCOUNT DARK");
-assert.equal(result.releaseView.compactAccountLifecycleLabel, "1 ACCT ROOT · 1 ACCT DARK");
+assert.equal(result.releaseView.accountLifecycleLabel, "1 EXECUTING · 1 OBSERVE ONLY");
+assert.equal(result.releaseView.compactAccountLifecycleLabel, "1 EXEC · 1 OBSERVE");
 assert.equal(result.releaseView.databaseOnly, false);
 assert.equal(result.roots, 1);
 assert.equal(result.dark, 1);

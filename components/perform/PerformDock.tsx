@@ -28,8 +28,8 @@ function Chicklet({
   const armed = ch.status === "armed" && !muted;
   const dim = muted ? " off" : ch.status !== "armed" ? " dark" : "";
   const open = pnl?.openCount ?? 0;
-  const tag = open > 0 ? `OPEN ${open}` : muted ? "MUTED" : ch.config.boosted ? "BOOSTED" : ch.status !== "armed" ? (ch.status === "disabled" ? "DARK" : "DRAFT") : "ARMED";
-  const tagClass = muted ? "muted" : tag === "DARK" || tag === "DRAFT" ? "darkch" : open > 0 ? "open" : tag === "BOOSTED" ? "boosted" : "armed";
+  const tag = open > 0 ? `OPEN ${open}` : muted ? "MUTED" : ch.config.boosted ? "BOOSTED" : ch.status !== "armed" ? (ch.status === "disabled" ? "OBSERVE" : "DRAFT") : "ARMED";
+  const tagClass = muted ? "muted" : tag === "OBSERVE" || tag === "DRAFT" ? "darkch" : open > 0 ? "open" : tag === "BOOSTED" ? "boosted" : "armed";
   const day = pnl?.dayPnl;
   const dayCls = day == null || day === 0 ? "flat" : day < 0 ? "neg" : "pos";
 
@@ -69,7 +69,7 @@ export function PerformDock({
   channelWorkspace: ChannelWorkspaceModel;
 }) {
   const dispatch = useDeskDispatch();
-  const { canWrite, persistConfig } = useDeskWrite();
+  const { canDirectConfigure: canWrite, persistConfig } = useDeskWrite();
   const [showInactive, setShowInactive] = useState(false);
   const prioritized = useMemo(() => prioritizeChannels(channels, livePnl), [channels, livePnl]);
   const shown = showInactive ? [...prioritized.visible, ...prioritized.inactive] : prioritized.visible;
