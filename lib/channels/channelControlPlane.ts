@@ -119,6 +119,12 @@ export interface ChannelSpecVersion {
   scalePolicy: ChannelScalePolicy;
   collisionDomain: string;
   riskLimits: ChannelRiskLimits;
+  /**
+   * Omitted on the sealed RC5.4 baseline so its historic semantic hashes stay
+   * byte-stable. A proposal may explicitly pause or resume new paper entries;
+   * this never controls research collection.
+   */
+  executionPosture?: "paper" | "observe-only";
   validFrom: string;
   validUntil: string | null;
   createdBy: string;
@@ -247,6 +253,7 @@ export const CHANNEL_SPEC_VERSION_SCHEMA = {
     schemaVersion: { const: CHANNEL_CONTROL_PLANE_SCHEMA_VERSION },
     contentHash: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
     accountMode: { const: "paper" },
+    executionPosture: { enum: ["paper", "observe-only"] },
     quantity: { type: "integer", minimum: 1 },
     maxDebitUsd: { type: "number", exclusiveMinimum: 0 },
   },
@@ -365,12 +372,20 @@ function semanticChannelSpec(spec: ChannelSpecVersionDraft | ChannelSpecVersion)
     scalePolicy: spec.scalePolicy as unknown as JsonObject,
     collisionDomain: spec.collisionDomain,
     riskLimits: spec.riskLimits as unknown as JsonObject,
+    ...(spec.executionPosture && spec.executionPosture !== "paper"
+      ? { executionPosture: spec.executionPosture }
+      : {}),
   };
 }
 
 function validateSpecShape(spec: ChannelSpecVersion): string[] {
   const errors: string[] = [];
   if (spec.schemaVersion !== CHANNEL_CONTROL_PLANE_SCHEMA_VERSION) errors.push(`${spec.slug}:schema_version`);
+  if (spec.executionPosture != null
+      && spec.executionPosture !== "paper"
+      && spec.executionPosture !== "observe-only") {
+    errors.push(`${spec.slug}:execution_posture`);
+  }
   for (const [name, value] of [
     ["id", spec.id], ["channel_id", spec.channelId], ["slug", spec.slug],
     ["strategy_identity", spec.strategyIdentity], ["strategy_version", spec.strategyVersion],
@@ -443,6 +458,7 @@ export interface WorkerChannelProjection {
   managerProfileId: string;
   strategistId: string;
   accountId: string;
+  executionPosture: "paper" | "observe-only";
   channelSpecVersionId: string;
   channelSpecContentHash: string;
 }
@@ -722,6 +738,7 @@ export function compileReleaseManifest(
     managerProfileId: spec.managerProfileId,
     strategistId: spec.channelId,
     accountId: spec.accountId,
+    executionPosture: spec.executionPosture ?? "paper",
     channelSpecVersionId: spec.id,
     channelSpecContentHash: spec.contentHash,
   }));
@@ -787,6 +804,7 @@ const FIELD_CLASS: Partial<Record<keyof ChannelSpecVersionDraft, ChangeClass>> =
   reentryPolicy: "governed-operational-policy",
   scalePolicy: "governed-operational-policy",
   collisionDomain: "governed-operational-policy",
+  executionPosture: "governed-operational-policy",
   strategyIdentity: "code-strategy-logic",
   strategyVersion: "code-strategy-logic",
   signalVersion: "code-strategy-logic",
@@ -937,8 +955,10 @@ export function projectActiveVersusDraft(
   const draftSpec = previewManifest.channelSpecs.find((spec) => spec.id === proposal.proposedSpecVersionId) ?? null;
   const diffs = fields.map((field) => ({
     field: String(field),
-    before: canonicalJson(active[field]),
-    after: canonicalJson(draftSpec?.[field]),
+    before: canonicalJson(active[field] === undefined ? null : active[field]),
+    after: canonicalJson(draftSpec?.[field] === undefined
+      ? null
+      : draftSpec?.[field]),
   }));
   const validationResults = [...issues, ...previewManifest.validationResults];
   const state = validationResults.some((result) => result.state !== "pass") ? "blocked" : "reviewable";

@@ -42,7 +42,9 @@ assert.equal(view.bySlug["vb-macd-state"].accountLabel, "PAPER 2");
 assert.equal(view.bySlug["orb-ustop-ctl"].accountLabel, "PAPER 3");
 assert.equal(view.bySlug["orb-ustop-ctl"].capacity.maxOpenPerFamily, 1);
 assert.equal(view.bySlug["orb-ustop-ctl"].capacity.sameOccOpenMax, 1);
-assert.equal(view.capabilities.activationApiAvailable, false);
+assert.equal(view.bySlug["pb-ride"].executionPosture, "paper");
+assert.equal(view.capabilities.activationApiAvailable, true);
+assert.equal(view.capabilities.researchCollectionControlAvailable, true);
 assert.ok(view.blockers.includes("dormant_promotion:spec_registry_missing"));
 
 const blocked = projectChannelControlPlaneOperatorView({

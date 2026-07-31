@@ -423,6 +423,100 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
   border: 1px solid var(--hw-line); border-radius: 4px; background: var(--hw-well); color: var(--hw-ink);
   padding: 3px 22px 3px 6px; font: 700 var(--fs-chip)/1 var(--sh-mono);
 }
+.shell-root[data-mode="studio"] .collection-cull {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--hw-line);
+  background: color-mix(in srgb, var(--amber) 5%, var(--hw-well));
+  font-family: var(--sh-mono);
+}
+.shell-root[data-mode="studio"] .collection-cull > summary {
+  min-height: 31px;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  list-style: none;
+}
+.shell-root[data-mode="studio"] .collection-cull > summary::-webkit-details-marker { display: none; }
+.shell-root[data-mode="studio"] .collection-cull > summary span { display: grid; }
+.shell-root[data-mode="studio"] .collection-cull > summary b,
+.shell-root[data-mode="studio"] .collection-cull > summary em {
+  font-size: var(--fs-label);
+  letter-spacing: .08em;
+}
+.shell-root[data-mode="studio"] .collection-cull > summary small {
+  color: var(--hw-soft);
+  font-size: var(--fs-label);
+}
+.shell-root[data-mode="studio"] .collection-cull > summary em {
+  margin-left: auto;
+  color: var(--amber);
+  font-style: normal;
+}
+.shell-root[data-mode="studio"] .collection-cull > div {
+  max-height: 210px;
+  overflow-y: auto;
+  padding: 7px 10px 9px;
+  border-top: 1px solid var(--hw-line);
+}
+.shell-root[data-mode="studio"] .collection-cull header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.shell-root[data-mode="studio"] .collection-cull p {
+  margin: 0;
+  color: var(--hw-soft);
+  font-size: var(--fs-label);
+}
+.shell-root[data-mode="studio"] .collection-cull button {
+  padding: 5px 7px;
+  border: 1px solid var(--hw-line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--hw-ink);
+  font: 700 var(--fs-label)/1 var(--sh-mono);
+}
+.shell-root[data-mode="studio"] .collection-cull button:disabled { opacity: .4; }
+.shell-root[data-mode="studio"] .collection-cull-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 7px 0;
+}
+.shell-root[data-mode="studio"] .collection-cull-grid label {
+  min-width: 0;
+  padding: 5px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 5px;
+  border: 1px solid var(--hw-line);
+  background: var(--hw);
+}
+.shell-root[data-mode="studio"] .collection-cull-grid input { grid-row: 1 / 3; }
+.shell-root[data-mode="studio"] .collection-cull-grid b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--fs-chip);
+}
+.shell-root[data-mode="studio"] .collection-cull-grid small {
+  color: var(--hw-soft);
+  font-size: var(--fs-label);
+}
+.shell-root[data-mode="studio"] .collection-cull footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.shell-root[data-mode="studio"] .collection-cull footer span {
+  color: var(--green-soft);
+  font-size: var(--fs-label);
+}
+.shell-root[data-mode="studio"] .collection-cull footer p { flex-basis: 100%; }
+.shell-root[data-mode="studio"] .collection-cull footer p.error { color: var(--red-soft); }
 
 .shell-root[data-mode="studio"] .fleet-table { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .shell-root[data-mode="studio"] .fleet-grid {

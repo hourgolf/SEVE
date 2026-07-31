@@ -37,6 +37,9 @@ import {
   loadStoredReceiptBoundControlPlane,
   type StoredReceiptBoundControlPlaneRead,
 } from "../../lib/channels/channelControlPlanePersistence.js";
+import type {
+  StoredActivationPreviewEnvelope,
+} from "./channelActivationPreviewWatcher.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -130,6 +133,12 @@ export interface AccountRow {
   is_armed: boolean;
   is_halted: boolean;
   master_daily_stop_usd: number;
+}
+export interface ChannelCollectionStateRow {
+  channelId: string;
+  channelSlug: string;
+  state: "active" | "paused" | "archived";
+  receiptId: string;
 }
 export interface PositionRow {
   id: string;
@@ -326,6 +335,92 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
     master_daily_stop_usd: Number(a.master_daily_stop_usd ?? 0),
   }));
   return { fund, channels, accounts, accountsFresh: !acctErr || acctMissingTable };
+}
+
+export async function loadChannelCollectionStates(): Promise<{
+  rows: ChannelCollectionStateRow[];
+  error: string | null;
+}> {
+  const read = await sb.from("channel_collection_state_current")
+    .select("channel_id,channel_slug,state,receipt_id")
+    .order("channel_slug");
+  if (read.error) {
+    return { rows: [], error: read.error.message };
+  }
+  const rows = (read.data ?? []).map((row) => ({
+    channelId: String(row.channel_id ?? ""),
+    channelSlug: String(row.channel_slug ?? ""),
+    state: String(row.state ?? "") as ChannelCollectionStateRow["state"],
+    receiptId: String(row.receipt_id ?? ""),
+  }));
+  return { rows, error: null };
+}
+
+export async function loadPendingChannelActivationPreviews(): Promise<{
+  rows: StoredActivationPreviewEnvelope[];
+  error: string | null;
+}> {
+  const previewRead = await sb.from("channel_activation_previews")
+    .select(
+      "id,proposal_id,candidate_manifest,worker_projection,dashboard_projection,validation_results,replay_summary,capacity_collision_impact,capture_continuity,configuration_epoch_id,prepared_at",
+    )
+    .order("prepared_at", { ascending: false })
+    .limit(20);
+  if (previewRead.error) return { rows: [], error: previewRead.error.message };
+  const previews = (previewRead.data ?? []) as Array<Record<string, unknown>>;
+  const proposalIds = previews.map((row) => String(row.proposal_id ?? ""))
+    .filter(Boolean);
+  if (!proposalIds.length) return { rows: [], error: null };
+  const [proposalRead, receiptRead] = await Promise.all([
+    sb.from("channel_change_proposals")
+      .select(
+        "id,base_spec_content_hash,proposed_patch,reason,evidence_refs,author_kind,author_id,change_class,validation_results,replay_summary,approval_state,requested_activation_boundary,created_at,activation_authorized,base:base_spec_version_id(version_key),proposed:proposed_spec_version_id(version_key)",
+      )
+      .in("id", proposalIds)
+      .eq("approval_state", "validated"),
+    sb.from("activation_receipts")
+      .select("proposal_id")
+      .in("proposal_id", proposalIds),
+  ]);
+  if (proposalRead.error) return { rows: [], error: proposalRead.error.message };
+  if (receiptRead.error) return { rows: [], error: receiptRead.error.message };
+  const activated = new Set(
+    (receiptRead.data ?? []).map((row) => String(row.proposal_id ?? "")),
+  );
+  const proposals = new Map(
+    ((proposalRead.data ?? []) as unknown as Array<Record<string, unknown>>)
+      .map((row) => [String(row.id ?? ""), row]),
+  );
+  const rows: StoredActivationPreviewEnvelope[] = [];
+  for (const preview of previews) {
+    const proposalId = String(preview.proposal_id ?? "");
+    const proposal = proposals.get(proposalId);
+    if (proposal && !activated.has(proposalId)) rows.push({ proposal, preview });
+  }
+  return { rows, error: null };
+}
+
+export async function acknowledgeChannelActivationPreview(args: {
+  p_acknowledgement_id: string;
+  p_preview_id: string;
+  p_source_boot_id: string;
+  p_worker_release_id: string;
+  p_acknowledged_at: string;
+  p_evidence_ref: string;
+  p_acknowledgement: Record<string, unknown>;
+}): Promise<{ receipt: Record<string, unknown> | null; error: string | null }> {
+  if (!config.hasServiceRole) {
+    return { receipt: null, error: "service role is unavailable" };
+  }
+  const write = await sb.rpc(
+    "acknowledge_channel_change_proposal_preview",
+    args,
+  ).abortSignal(AbortSignal.timeout(8_000)).single();
+  if (write.error) return { receipt: null, error: write.error.message };
+  return {
+    receipt: (write.data ?? null) as Record<string, unknown> | null,
+    error: null,
+  };
 }
 
 // A closed position's realized P&L (for the shadow-management A/B finalize).

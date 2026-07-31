@@ -59,7 +59,33 @@ check("manifest content hash is pinned", () => {
 check("legacy RC5.4 specifications retain one-entry projection without hash drift", () => {
   assert.equal(compiled.workerProjection.roots.every((root) =>
     root.maxEntriesPerSession === 1), true);
+  assert.equal(compiled.workerProjection.roots.every((root) =>
+    root.executionPosture === "paper"), true);
   assert.equal(compiled.manifest.contentHash, EXPECTED_MANIFEST_HASH);
+});
+
+check("execution posture is explicit without changing legacy paper hashes", () => {
+  const paused = compileReleaseManifest({
+    ...RC54_CONTROL_PLANE_FIXTURE,
+    channelSpecs: RC54_CONTROL_PLANE_FIXTURE.channelSpecs.map((spec) =>
+      spec.slug === "pb-ride"
+        ? { ...spec, executionPosture: "observe-only" as const }
+        : spec),
+  });
+  assert.equal(
+    paused.workerProjection.roots.find((root) => root.slug === "pb-ride")
+      ?.executionPosture,
+    "observe-only",
+  );
+  assert.notEqual(paused.manifest.contentHash, EXPECTED_MANIFEST_HASH);
+  const explicitPaper = compileReleaseManifest({
+    ...RC54_CONTROL_PLANE_FIXTURE,
+    channelSpecs: RC54_CONTROL_PLANE_FIXTURE.channelSpecs.map((spec) =>
+      spec.slug === "pb-ride"
+        ? { ...spec, executionPosture: "paper" as const }
+        : spec),
+  });
+  assert.equal(explicitPaper.manifest.contentHash, EXPECTED_MANIFEST_HASH);
 });
 
 check("a mixed domain supports explicit bounded re-entry without changing single-shot roots", () => {

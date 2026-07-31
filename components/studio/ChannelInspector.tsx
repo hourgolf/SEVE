@@ -6,6 +6,7 @@ import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftP
 import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
+import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import { strikeLabel } from "@/lib/studio/channelDecision";
@@ -28,6 +29,13 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const dispatch = useDeskDispatch();
   const { persistConfig, setChannelStatus, duplicateChannel, deleteChannel } = write;
   const draft = useChannelConfigDraft(strategist, passport);
+  const managerProposal = useChannelManagerProposal({
+    model: draft.model,
+    activeSpec: strategist
+      ? controlPlane?.view?.bySlug[strategist.slug] ?? null
+      : null,
+    onSealed: draft.discard,
+  });
   const [confirmDel, setConfirmDel] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -145,7 +153,19 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           </div>}
         </section>
         {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} />}
-        <ChannelConfigDraftPanel model={draft.model} active={draft.active} canStart={write.canWrite && sealed} onStart={draft.begin} onDiscard={draft.discard} />
+        <ChannelConfigDraftPanel
+          model={draft.model}
+          active={draft.active}
+          canStart={write.canWrite && sealed}
+          onStart={draft.begin}
+          onDiscard={draft.discard}
+          canSeal={managerProposal.canSeal}
+          sealBusy={managerProposal.busy}
+          sealReason={managerProposal.reason}
+          sealNotice={managerProposal.notice}
+          sealError={managerProposal.error}
+          onSeal={() => void managerProposal.seal()}
+        />
       </div>
 
       <div className="insp-foot">

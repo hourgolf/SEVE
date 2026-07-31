@@ -30,7 +30,10 @@ const BOUNDED_PATCH_KEYS = new Set([
   "riskLimits",
   "managerPolicy",
 ]);
-const REENTRY_PATCH_KEYS = new Set(["maxEntriesPerSession"]);
+const GOVERNED_PATCH_KEYS = new Set([
+  "executionPosture",
+  "maxEntriesPerSession",
+]);
 const MAX_PATCH_BYTES = 16_384;
 const MAX_EVIDENCE_REFS = 32;
 const CAPACITY_COLLISION_FIELDS = new Set([
@@ -52,6 +55,7 @@ export interface OperatorProposalRequest {
   baseSpecVersionId: string;
   baseSpecContentHash: string;
   proposedPatch: ChannelChangeProposal["proposedPatch"] & {
+    executionPosture?: "paper" | "observe-only";
     maxEntriesPerSession?: number;
     managerPolicy?: OperatorManagerPolicyRequest;
   };
@@ -78,7 +82,8 @@ export interface BuiltOperatorProposal {
 export type ProposalDraftRpcName =
   | "create_channel_change_proposal_draft"
   | "create_channel_manager_policy_proposal_draft"
-  | "create_channel_reentry_proposal_draft";
+  | "create_channel_reentry_proposal_draft"
+  | "create_channel_execution_posture_proposal_draft";
 
 export class ProposalInputError extends Error {
   readonly status: 400 | 409 | 422;
@@ -156,15 +161,30 @@ function validateProposalPatch(
   const fields = Object.keys(patch);
   if (!fields.length) throw new ProposalInputError("proposedPatch must contain at least one supported field");
   if (changeClass === "governed-operational-policy") {
-    const unknown = fields.filter((field) => !REENTRY_PATCH_KEYS.has(field));
+    const unknown = fields.filter((field) => !GOVERNED_PATCH_KEYS.has(field));
     if (unknown.length) {
       throw new ProposalInputError(`unsupported governed proposal fields: ${unknown.sort().join(", ")}`);
     }
-    if (fields.length !== 1
-        || !Number.isInteger(patch.maxEntriesPerSession)
+    if (fields.length !== 1) {
+      throw new ProposalInputError(
+        "a governed proposal must change exactly one of executionPosture or maxEntriesPerSession",
+      );
+    }
+    if ("executionPosture" in patch) {
+      if (patch.executionPosture !== "paper"
+          && patch.executionPosture !== "observe-only") {
+        throw new ProposalInputError(
+          "executionPosture must be paper or observe-only",
+        );
+      }
+      return;
+    }
+    if (!Number.isInteger(patch.maxEntriesPerSession)
         || Number(patch.maxEntriesPerSession) < 1
         || Number(patch.maxEntriesPerSession) > 3) {
-      throw new ProposalInputError("maxEntriesPerSession must be an integer from 1 to 3");
+      throw new ProposalInputError(
+        "maxEntriesPerSession must be an integer from 1 to 3",
+      );
     }
     return;
   }
@@ -332,6 +352,9 @@ export function proposalDraftRpcName(
   proposal: Pick<ChannelChangeProposal, "changeClass" | "proposedPatch">,
 ): ProposalDraftRpcName {
   if (proposal.changeClass === "governed-operational-policy") {
+    if (proposal.proposedPatch.executionPosture) {
+      return "create_channel_execution_posture_proposal_draft";
+    }
     return "create_channel_reentry_proposal_draft";
   }
   const fields = Object.keys(proposal.proposedPatch).sort();
@@ -417,9 +440,12 @@ export function buildOperatorProposal(
     throw new ProposalInputError("proposal base specification is missing", 422);
   }
   const requestedLimit = input.proposedPatch.maxEntriesPerSession;
+  const requestedPosture = input.proposedPatch.executionPosture;
   const managerPolicy = input.proposedPatch.managerPolicy;
   const proposedPatch: ChannelChangeProposal["proposedPatch"] =
-    requestedLimit == null
+    requestedPosture != null
+      ? { executionPosture: requestedPosture }
+      : requestedLimit == null
       ? managerPolicy == null
         ? input.proposedPatch
         : expandManagerPolicy(baseSpec, managerPolicy)

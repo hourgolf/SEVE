@@ -196,7 +196,7 @@ function overlayRoot(channel: ChannelConfig, root: Readonly<ReceiptBoundRuntimeR
       : root.ratchetParameters.givebackPct ?? 0;
   return {
     ...channel,
-    status: "armed",
+    status: root.executionPosture === "paper" ? "armed" : "draft",
     is_active: true,
     executor: "stream",
     account_id: root.accountId,

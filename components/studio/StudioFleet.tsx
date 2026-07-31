@@ -5,6 +5,7 @@ import { signedUsd, usd0 } from "@/lib/format";
 import type { StudioChannelRow, StudioFleetSummary, StudioSort } from "@/lib/studio/deriveStudioView";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
 import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
+import { ChannelCollectionCullPanel } from "@/components/studio/ChannelCollectionCullPanel";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -61,6 +62,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
           </select>
         </label>
       </div>
+      <ChannelCollectionCullPanel />
 
       <div className="fleet-table" role="table" aria-label={`${scope} strategy channels`}>
         <div className="fleet-grid fleet-head" role="row">

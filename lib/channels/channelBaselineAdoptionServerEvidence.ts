@@ -17,7 +17,7 @@ import { findSealedReleaseReceipt } from "@/lib/ops/releaseReceipt";
 const PAPER_ORIGIN = "https://paper-api.alpaca.markets";
 const WORKER_FRESH_MS = 150_000;
 
-interface AccountRow {
+export interface PaperAccountEvidenceRow {
   id: string;
   name: string;
   mode: string;
@@ -206,7 +206,9 @@ function resolveStoredWorkerEvidence(input: {
   };
 }
 
-function credentials(account: AccountRow): { key: string; secret: string } | null {
+function credentials(
+  account: PaperAccountEvidenceRow,
+): { key: string; secret: string } | null {
   const ref = account.cred_ref?.trim() ?? "";
   const suffix = ref ? `_${ref}` : "";
   const key = process.env[`ALPACA_KEY${suffix}`];
@@ -215,7 +217,7 @@ function credentials(account: AccountRow): { key: string; secret: string } | nul
 }
 
 async function brokerCount(input: {
-  account: AccountRow;
+  account: PaperAccountEvidenceRow;
   path: string;
   label: "positions" | "orders";
   observedAt: string;
@@ -261,12 +263,15 @@ async function brokerCount(input: {
   }
 }
 
-async function resolveSafeBoundary(input: {
-  accounts: AccountRow[];
+export async function collectFreshSafeBoundary(input: {
+  accounts: PaperAccountEvidenceRow[];
   deskOpenPositionCount: number;
   nowMs: number;
   fetchImpl: typeof fetch;
-}): Promise<BaselineAdoptionResolvedEvidence["safeBoundaryProof"]> {
+}): Promise<{
+  boundary: SafeBoundaryInput;
+  proof: BaselineAdoptionResolvedEvidence["safeBoundaryProof"];
+}> {
   const paperAccounts = input.accounts.filter((account) =>
     account.mode.toLowerCase() === "paper");
   if (!paperAccounts.length
@@ -321,7 +326,7 @@ async function resolveSafeBoundary(input: {
       409,
     );
   }
-  return evaluated.proof;
+  return { boundary, proof: evaluated.proof };
 }
 
 export async function collectBaselineAdoptionServerEvidence(input: {
@@ -371,14 +376,14 @@ export async function collectBaselineAdoptionServerEvidence(input: {
     worker,
     nowMs,
   });
-  const safeBoundaryProof = await resolveSafeBoundary({
-    accounts: (accountsRead.data ?? []) as AccountRow[],
+  const safeBoundary = await collectFreshSafeBoundary({
+    accounts: (accountsRead.data ?? []) as PaperAccountEvidenceRow[],
     deskOpenPositionCount: (positionsRead.data ?? []).length,
     nowMs,
     fetchImpl: input.fetchImpl ?? fetch,
   });
   return {
     ...stored,
-    safeBoundaryProof,
+    safeBoundaryProof: safeBoundary.proof,
   };
 }

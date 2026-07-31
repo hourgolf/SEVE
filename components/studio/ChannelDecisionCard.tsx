@@ -6,6 +6,7 @@ import {
 } from "@/lib/channels/channelDecisionEvidence";
 import type { EffectiveChannelState } from "@/lib/channels/effectiveChannelState";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
+import { useChannelActivationControl } from "@/hooks/useChannelActivationControl";
 import { signedUsd, usd0 } from "@/lib/format";
 
 const short = (value: string | null): string => value ? `${value.replace(/^sha256:/, "").slice(0, 10)}…` : "—";
@@ -42,6 +43,13 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
   const model = buildChannelDecisionCardModel(effective, todayEt);
   const economics = effective.economics;
   const activeSpec = controlPlane?.view?.bySlug[effective.slug] ?? null;
+  const activation = useChannelActivationControl({
+    slug: effective.slug,
+    baseSpecVersionId: activeSpec?.channelSpecVersionId ?? null,
+    baseSpecContentHash: activeSpec?.channelSpecContentHash ?? null,
+    executionPosture: activeSpec?.executionPosture ?? "observe-only",
+    evidenceRefs: model.receiptRefs,
+  });
   const activationState = controlPlane?.loading
     ? "CHECKING CONTROL PLANE"
     : controlPlane?.error || controlPlane?.view?.state === "blocked"
@@ -68,7 +76,7 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
           {!model.layers.length && <span className="decision-evidence-empty">No comparable versioned evidence layer is present in this packet.</span>}
         </div>
         <section className={`channel-activation-readiness ${activeSpec ? "ready" : "blocked"}`} aria-label="Activation and capacity readiness">
-          <header><small>ACTIVATION LAYER · READ ONLY</small><b>{activationState}</b></header>
+          <header><small>GOVERNED ACTIVATION LAYER</small><b>{activationState}</b></header>
           {activeSpec ? <div>
             <span><small>ROUTE / SIZE</small><b>{activeSpec.accountLabel} · {activeSpec.quantity} ct</b><i>{usd0(activeSpec.maxRiskUsd)} risk · {usd0(activeSpec.maxDebitUsd)} debit cap</i></span>
             <span><small>COLLISION DOMAIN</small><b>{activeSpec.capacity.domainId}</b><i>{activeSpec.capacity.familyId} · priority {activeSpec.capacity.priority}</i></span>
@@ -80,15 +88,47 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
           <footer>
             <span>Manager-only drafts can prove capacity preservation statically.</span>
             <span>Sizing, re-entry, route, or roster changes require fresh positions, orders, desk inventory, and admission simulation.</span>
-            <strong>APPLY BLOCKED UNTIL PREVIEW + WORKER ACK + EXPLICIT APPROVAL + RECEIPT</strong>
+            <strong>DRAFT → VALIDATE/PREVIEW → WORKER ACK → EXPLICIT NEXT-SAFE-ENTRY RECEIPT</strong>
           </footer>
+          {activeSpec && <div className="channel-activation-actions">
+            {!activation.proposal && <button
+              type="button"
+              disabled={!activation.signedIn || activation.busy || controlPlane?.view?.state !== "receipt-bound"}
+              onClick={() => void activation.createPostureDraft()}
+            >
+              {activeSpec.executionPosture === "paper"
+                ? "DRAFT PAUSE · KEEP COLLECTING"
+                : "DRAFT RESUME · PAPER"}
+            </button>}
+            {activation.proposal?.approval_state === "draft" && <button
+              type="button"
+              disabled={activation.busy}
+              onClick={() => void activation.preparePreview()}
+            >
+              VALIDATE + SEAL PREVIEW
+            </button>}
+            {activation.proposal?.approval_state === "validated"
+              && activation.acknowledgementFresh && <button
+                type="button"
+                disabled={activation.busy}
+                onClick={() => void activation.apply()}
+              >
+                APPLY NEXT SAFE ENTRY
+              </button>}
+            {activation.proposal?.approval_state === "validated"
+              && !activation.acknowledgementFresh
+              && <span>WAITING FOR FRESH WORKER ACK</span>}
+            {activation.loading && <span>REFRESHING GOVERNED STATE…</span>}
+            {activation.notice && <p>{activation.notice}</p>}
+            {activation.error && <p className="error">{activation.error}</p>}
+          </div>}
         </section>
         {!!model.secondary.length && <ul>{model.secondary.map((item) => <li key={item}>{item}</li>)}</ul>}
         <footer>
           <span>CONFIG EPOCH <code>{short(economics.configurationEpochId)}</code></span>
           <span>REVIEW RECEIPTS <code>{model.receiptRefs.length ? `${short(model.receiptRefs[0])}${model.receiptRefs.length > 1 ? ` +${model.receiptRefs.length - 1}` : ""}` : "none"}</code></span>
           <strong>{model.stale ? "HISTORICAL REVIEW · REFRESH BEFORE ACTION" : "REVIEW CURRENT THROUGH CLOSE"}</strong>
-          <b>NO APPLY AUTHORITY</b>
+          <b>NO DIRECT-WRITE OR ORDER AUTHORITY</b>
         </footer>
       </div>
     </details>

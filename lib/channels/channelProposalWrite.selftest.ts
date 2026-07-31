@@ -151,6 +151,32 @@ check("governed re-entry rejects out-of-range caps and unrelated fields", () => 
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported governed proposal fields: quantity/);
 });
 
+check("governed execution posture is one explicit pause or resume axis", () => {
+  const paused = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: { executionPosture: "observe-only" },
+    reason: "Pause new paper entries while preserving research collection.",
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.deepEqual(paused.proposal.proposedPatch, {
+    executionPosture: "observe-only",
+  });
+  assert.equal(paused.draftSpec.executionPosture, "observe-only");
+  assert.equal(paused.capacityCollisionImpact.state, "pass");
+  assert.equal(
+    proposalDraftRpcName(paused.proposal),
+    "create_channel_execution_posture_proposal_draft",
+  );
+  expectInputError(() => buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      executionPosture: "observe-only",
+      maxEntriesPerSession: 2,
+    },
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /exactly one/);
+});
+
 check("manager policy expands into one immutable policy identity", () => {
   const built = buildOperatorProposal(
     compiled,
@@ -262,7 +288,7 @@ check("server route authenticates before opening the service-role write seam", (
   assert.doesNotMatch(route, /export async function (PUT|PATCH|DELETE)/);
 });
 
-check("storage RPC routing distinguishes bounded, manager, and re-entry drafts", () => {
+check("storage RPC routing distinguishes bounded, manager, re-entry, and posture drafts", () => {
   const bounded = buildOperatorProposal(compiled, {
     ...validRequest,
     proposedPatch: {
@@ -280,6 +306,12 @@ check("storage RPC routing distinguishes bounded, manager, and re-entry drafts",
     proposedPatch: { maxEntriesPerSession: 3 },
     changeClass: "governed-operational-policy",
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  const posture = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: { executionPosture: "observe-only" },
+    reason: "Pause new entries while continuing research collection.",
+    changeClass: "governed-operational-policy",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
   assert.equal(
     proposalDraftRpcName(bounded.proposal),
     "create_channel_change_proposal_draft",
@@ -293,6 +325,10 @@ check("storage RPC routing distinguishes bounded, manager, and re-entry drafts",
   assert.equal(
     proposalDraftRpcName(governed.proposal),
     "create_channel_reentry_proposal_draft",
+  );
+  assert.equal(
+    proposalDraftRpcName(posture.proposal),
+    "create_channel_execution_posture_proposal_draft",
   );
 });
 

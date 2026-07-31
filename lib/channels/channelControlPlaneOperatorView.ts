@@ -30,8 +30,11 @@ export interface ChannelControlPlaneSpecView {
   quantity: number;
   maxDebitUsd: number;
   maxRiskUsd: number;
+  riskLimits: CompiledReleaseManifest["channelSpecs"][number]["riskLimits"];
   managerProfileId: string;
   managerVersion: string;
+  managerLabel: string;
+  executionPosture: "paper" | "observe-only";
   takeProfit: CompiledReleaseManifest["channelSpecs"][number]["takeProfit"];
   stopLoss: CompiledReleaseManifest["channelSpecs"][number]["stopLoss"];
   ratchetParameters: CompiledReleaseManifest["channelSpecs"][number]["ratchetParameters"];
@@ -53,9 +56,9 @@ export interface ChannelControlPlaneOperatorView {
     existingRootDrafts: true;
     managerOnlyStaticCapacityProof: true;
     freshCapacityEvidenceRequiredForSizingOrReentry: true;
-    activationApiAvailable: false;
+    activationApiAvailable: true;
     dormantPromotionAvailable: false;
-    researchCollectionControlAvailable: false;
+    researchCollectionControlAvailable: true;
   };
   blockers: string[];
 }
@@ -89,9 +92,9 @@ export function projectChannelControlPlaneOperatorView(input: {
         existingRootDrafts: true,
         managerOnlyStaticCapacityProof: true,
         freshCapacityEvidenceRequiredForSizingOrReentry: true,
-        activationApiAvailable: false,
+        activationApiAvailable: true,
         dormantPromotionAvailable: false,
-        researchCollectionControlAvailable: false,
+        researchCollectionControlAvailable: true,
       },
       blockers: ["receipt_bound_control_plane:unavailable"],
     };
@@ -112,8 +115,11 @@ export function projectChannelControlPlaneOperatorView(input: {
       quantity: spec.quantity,
       maxDebitUsd: spec.maxDebitUsd,
       maxRiskUsd: spec.riskLimits.maxRiskUsd,
+      riskLimits: spec.riskLimits,
       managerProfileId: spec.managerProfileId,
       managerVersion: spec.managerVersion,
+      managerLabel: String(spec.exitParameters.managerLabel ?? spec.managerProfileId),
+      executionPosture: spec.executionPosture ?? "paper",
       takeProfit: spec.takeProfit,
       stopLoss: spec.stopLoss,
       ratchetParameters: spec.ratchetParameters,
@@ -133,9 +139,7 @@ export function projectChannelControlPlaneOperatorView(input: {
     };
   });
   const blockers = [
-    "activation_api:not_available",
     "dormant_promotion:spec_registry_missing",
-    "research_collection:independent_control_missing",
   ];
   return {
     viewVersion: CHANNEL_CONTROL_PLANE_OPERATOR_VIEW_VERSION,
@@ -151,9 +155,9 @@ export function projectChannelControlPlaneOperatorView(input: {
       existingRootDrafts: true,
       managerOnlyStaticCapacityProof: true,
       freshCapacityEvidenceRequiredForSizingOrReentry: true,
-      activationApiAvailable: false,
+      activationApiAvailable: true,
       dormantPromotionAvailable: false,
-      researchCollectionControlAvailable: false,
+      researchCollectionControlAvailable: true,
     },
     blockers,
   };
