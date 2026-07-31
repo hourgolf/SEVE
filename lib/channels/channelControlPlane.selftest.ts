@@ -164,6 +164,32 @@ check("all channel spec hashes are unique and pinned into the manifest", () => {
   assert.deepEqual(compiled.manifest.channelSpecContentHashes, compiled.channelSpecs.map((spec) => spec.contentHash));
 });
 
+check("all-out bank targets are represented without a retained runner", () => {
+  const allOut = compileReleaseManifest({
+    ...RC54_CONTROL_PLANE_FIXTURE,
+    channelSpecs: RC54_CONTROL_PLANE_FIXTURE.channelSpecs.map((spec) =>
+      spec.slug === "pb-ride"
+        ? {
+          ...spec,
+          takeProfit: {
+            kind: "bank" as const,
+            targetPct: 27,
+            fraction: 0 as const,
+          },
+        }
+        : spec),
+  });
+  assert.equal(
+    allOut.validationResults.find((gate) => gate.gate === "risk")?.state,
+    "pass",
+  );
+  assert.equal(
+    allOut.workerProjection.roots.find((root) => root.slug === "pb-ride")
+      ?.takeProfit.fraction,
+    0,
+  );
+});
+
 check("legacy RC5.4 release identity is unchanged", () => {
   assert.equal(compiled.manifest.releaseId, WORKER_RELEASE_ID);
   assert.equal(compiled.manifest.releaseId, DASHBOARD_RELEASE_ID);

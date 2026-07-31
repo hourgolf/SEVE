@@ -18,6 +18,7 @@ import {
   compatibilityFromWorkerAcknowledgement,
 } from "@/lib/channels/channelActivationServerEvidence";
 import { canonicalJson } from "@/lib/channels/channelControlPlane";
+import { channelControlMutationWindow } from "@/lib/channels/channelControlMutationWindow";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,16 @@ export async function POST(req: Request) {
     return json({ ok: false, error: "activation storage is not configured" }, 503);
   }
   try {
+    const mutationWindow = channelControlMutationWindow(Date.now());
+    if (!mutationWindow.allowed) {
+      return json({
+        ok: false,
+        error: mutationWindow.message,
+        errorCode: mutationWindow.code,
+        mutationWindow,
+        orderAuthority: false,
+      }, 409);
+    }
     const body = await readBody(req);
     if (Object.keys(body).sort().join(",")
         !== "acknowledgementId,confirmation,configurationEpochId,previewId,proposalId") {

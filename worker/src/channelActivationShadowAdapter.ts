@@ -7,6 +7,11 @@ import {
   type WorkerActivationAcknowledgement,
 } from "../../lib/channels/channelActivation.js";
 import type { CompiledReleaseManifest } from "../../lib/channels/channelControlPlane.js";
+import type { ChannelRosterBundlePreview } from "../../lib/channels/channelRosterBundle.js";
+import {
+  buildRosterBundleWorkerAcknowledgement,
+  type ChannelRosterBundleWorkerAcknowledgement,
+} from "../../lib/channels/channelRosterBundleActivation.js";
 import {
   RC54_RELEASE_CONFIGURATION_SHA256,
   RC54_RELEASE_ID,
@@ -84,6 +89,32 @@ export interface ControlPlaneBaselineStageResult {
   blockers: readonly string[];
   projection: Readonly<ShadowRuntimeProjection>;
   acknowledgement: Readonly<BaselineWorkerAcknowledgement> | null;
+  runtimeMutation: false;
+  databaseWriteAuthority: false;
+  orderAuthority: false;
+  activationAuthorized: false;
+}
+
+export interface RosterBundleWorkerStageInput {
+  preview: ChannelRosterBundlePreview;
+  acknowledgementId: string;
+  current: CompiledReleaseManifest;
+  currentReleaseId: string;
+  currentWorkerVersion: string;
+  currentWorkerRuntimeVersion: string;
+  bootId: string;
+  paperMode: boolean;
+  heldCaptureReady: boolean;
+  startupReceipt: Record<string, unknown> | null;
+  observedAt: string;
+  evidenceRef: string;
+}
+
+export interface RosterBundleWorkerStageResult {
+  adapterMode: typeof CHANNEL_ACTIVATION_WORKER_ADAPTER_MODE;
+  state: "acknowledged" | "blocked";
+  blockers: readonly string[];
+  acknowledgement: Readonly<ChannelRosterBundleWorkerAcknowledgement> | null;
   runtimeMutation: false;
   databaseWriteAuthority: false;
   orderAuthority: false;
@@ -315,6 +346,85 @@ export function stageChannelActivationShadow(
     adapterMode: CHANNEL_ACTIVATION_WORKER_ADAPTER_MODE,
     state: blockers.length ? "blocked" : "acknowledged",
     blockers: Object.freeze([...blockers]),
+    acknowledgement,
+    runtimeMutation: false,
+    databaseWriteAuthority: false,
+    orderAuthority: false,
+    activationAuthorized: false,
+  });
+}
+
+export function stageRosterBundleShadow(
+  input: RosterBundleWorkerStageInput,
+): Readonly<RosterBundleWorkerStageResult> {
+  const blockers: string[] = [];
+  const candidate = input.preview.candidate;
+  if (input.preview.state !== "ready-for-worker-ack" || !candidate
+      || !input.preview.capacity || !input.preview.configurationEpochId) {
+    blockers.push("bundle:preview_not_ready");
+  } else {
+    if (!candidate.validationReady
+        || candidate.validationResults.some((result) => result.state !== "pass")) {
+      blockers.push("bundle:validation_not_ready");
+    }
+    if (input.preview.capacity.state !== "pass"
+        || input.preview.capacity.executionAuthority !== false
+        || input.preview.capacity.runtimeMutationAuthorized !== false
+        || input.preview.capacity.orderAuthority !== false) {
+      blockers.push("bundle:capacity_not_ready");
+    }
+    if (candidate.manifest.parentManifestId !== input.current.manifest.id
+        || input.preview.activeManifestId !== input.current.manifest.id
+        || input.preview.activeManifestContentHash
+          !== input.current.manifest.contentHash) {
+      blockers.push("bundle:base_manifest_drift");
+    }
+    if (candidate.manifest.workerCompatibilityVersion
+        !== input.currentWorkerVersion) {
+      blockers.push("worker:compatibility_mismatch");
+    }
+    if (candidate.manifest.legacyConfigurationHash
+        !== RC54_RELEASE_CONFIGURATION_SHA256) {
+      blockers.push("worker:legacy_configuration_mismatch");
+    }
+  }
+  blockers.push(...workerPostureBlockers({
+    ...input,
+    expectedReleaseId: input.current.manifest.releaseId,
+  }));
+  blockers.push(...startupReceiptBlockers({
+    receipt: input.startupReceipt,
+    expectedReleaseId: input.current.manifest.releaseId,
+    expectedRoots: input.current.channelSpecs.map((spec) => ({
+      slug: spec.slug,
+      accountId: spec.accountId,
+      managerProfileId: spec.managerProfileId,
+      quantity: spec.quantity,
+    })),
+  }));
+  let acknowledgement: Readonly<ChannelRosterBundleWorkerAcknowledgement>
+    | null = null;
+  if (!blockers.length) {
+    try {
+      acknowledgement = buildRosterBundleWorkerAcknowledgement({
+        preview: input.preview,
+        id: input.acknowledgementId,
+        baseManifestContentHash: input.current.manifest.contentHash,
+        workerRuntimeVersion: input.currentWorkerRuntimeVersion,
+        bootId: input.bootId,
+        acknowledgedAt: input.observedAt,
+        evidenceRef: input.evidenceRef,
+      });
+    } catch (error) {
+      blockers.push(`bundle:acknowledgement_invalid:${
+        error instanceof Error ? error.message : "unknown"
+      }`);
+    }
+  }
+  return Object.freeze({
+    adapterMode: CHANNEL_ACTIVATION_WORKER_ADAPTER_MODE,
+    state: blockers.length ? "blocked" : "acknowledged",
+    blockers: Object.freeze([...new Set(blockers)].sort()),
     acknowledgement,
     runtimeMutation: false,
     databaseWriteAuthority: false,

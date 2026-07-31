@@ -23,6 +23,7 @@ import {
 import { observedPolicyIdentity } from "./planShadowModel.js";
 import {
   releaseEvidenceStamp,
+  releaseEvidenceContextFromStamp,
   validateReleaseEvidenceContext,
 } from "./releaseEvidenceContext.js";
 
@@ -167,6 +168,10 @@ check("evidence stamp carries domain, cohort, quantity, and manager book", relea
   sourceQuantity: 2,
   shadowBookVersion: LAB_CANARY_FOUNDATION.evidence.shadowBookVersion,
 });
+check("immutable evidence context round-trips from a position stamp",
+  releaseEvidenceContextFromStamp(releaseEvidenceStamp(context)), context);
+check("invalid position evidence stamp fails closed",
+  releaseEvidenceContextFromStamp({ ...releaseEvidenceStamp(context), sourceQuantity: 0 }), null);
 
 const decision = (slug: string, occ: string): ShadowDecision => ({
   slug,

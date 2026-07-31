@@ -543,6 +543,7 @@ export function buildRc54AdmissionOccupancy(input: {
   accountIdByStrategist: ReadonlyMap<string, string>;
   brokerPositions: readonly Rc54BrokerHolding[];
   pendingOrders: readonly Rc54PendingOrderOccupancy[];
+  rootResolver?: Rc54AdmissionRootResolver;
 }): {
   open: AdmissionDomainOccupancy[];
   sessionEntries: AdmissionDomainSessionEntry[];
@@ -551,10 +552,11 @@ export function buildRc54AdmissionOccupancy(input: {
   const sessionEntries: AdmissionDomainSessionEntry[] = [];
   const deskQuantityByAccountOcc = new Map<string, number>();
   const occupiedByAccountOcc = new Set<string>();
+  const resolveRoot = input.rootResolver ?? sealedRc54AdmissionRoot;
 
   for (const row of input.openPositions) {
     const channel = input.channelById.get(row.strategist_id);
-    const root = channel ? rc54Root(channel.slug) : null;
+    const root = channel ? resolveRoot(channel.slug) : null;
     const accountId = input.accountIdByStrategist.get(row.strategist_id) ?? "";
     const occ = row.occ_symbol.toUpperCase();
     const key = `${accountId}|${occ}`;
@@ -585,7 +587,7 @@ export function buildRc54AdmissionOccupancy(input: {
 
   for (const row of input.sessionPositions) {
     const channel = input.channelById.get(row.strategist_id);
-    const root = channel ? rc54Root(channel.slug) : null;
+    const root = channel ? resolveRoot(channel.slug) : null;
     if (root) {
       const opportunityId = typeof row.entry_features?.opportunity_id === "string"
         && row.entry_features.opportunity_id.trim()

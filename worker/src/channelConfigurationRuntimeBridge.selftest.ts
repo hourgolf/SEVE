@@ -209,6 +209,46 @@ check("one exact activation receipt resolves the generic runtime", () => {
   }
 });
 
+check("one atomic roster receipt survives worker reload as generic runtime authority", () => {
+  const rosterAuthority = {
+    id: "92929292-9292-4929-8929-929292929292",
+    receiptKind: "roster-bundle" as const,
+    configurationEpochId: receipt.configurationEpochId,
+    releaseManifestId: candidate.manifest.id,
+    manifestContentHash: candidate.manifest.contentHash,
+    activatedAt: receipt.activatedAt,
+    activatedSpecs: candidate.channelSpecs.map((spec) => ({
+      versionId: spec.id,
+      contentHash: spec.contentHash,
+    })),
+  };
+  const result = resolveDormantChannelRuntimeAuthority({
+    stored: {
+      ...receiptBoundStored,
+      activationReceipt: rosterAuthority,
+    },
+    runtime,
+  });
+  assert.equal(result.state, "receipt-bound");
+  if (result.state !== "receipt-bound") throw new Error("roster fixture did not resolve");
+  assert.equal(result.runtime.activationReceiptId, rosterAuthority.id);
+  assert.equal(result.runtime.roots.length, candidate.channelSpecs.length);
+
+  const drifted = resolveDormantChannelRuntimeAuthority({
+    stored: {
+      ...receiptBoundStored,
+      activationReceipt: {
+        ...rosterAuthority,
+        activatedSpecs: rosterAuthority.activatedSpecs.slice(1),
+      },
+    },
+    runtime,
+  });
+  assert.equal(drifted.state, "blocked");
+  assert.ok(drifted.blockers.some((blocker) =>
+    blocker.includes("does not bind the exact active roster")));
+});
+
 check("receipt-bound state without a receipt blocks", () => {
   const result = resolveDormantChannelRuntimeAuthority({
     stored: { ...receiptBoundStored, activationReceipt: null },

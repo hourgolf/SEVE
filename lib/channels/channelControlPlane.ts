@@ -568,7 +568,9 @@ function compileValidation(
       errors.push(`${spec.slug}:ride_target`);
     }
     if (spec.takeProfit.kind === "bank" && (!(Number(spec.takeProfit.targetPct) >= 5)
-        || !(Number(spec.takeProfit.targetPct) <= 300) || spec.takeProfit.fraction !== 0.5)) {
+        || !(Number(spec.takeProfit.targetPct) <= 300)
+        || (spec.takeProfit.fraction !== 0
+          && spec.takeProfit.fraction !== 0.5))) {
       errors.push(`${spec.slug}:bank_target`);
     }
     if (!(spec.stopLoss.catastrophePct >= 10 && spec.stopLoss.catastrophePct <= 90)) {

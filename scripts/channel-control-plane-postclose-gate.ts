@@ -5,6 +5,9 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import {
+  channelControlMutationWindow,
+} from "../lib/channels/channelControlMutationWindow";
 
 type Check = {
   label: string;
@@ -26,6 +29,7 @@ const tsx = resolve("node_modules/.bin/tsx");
 
 const staticChecks: Check[] = [
   { label: "control-plane compiler/contracts", command: "npm", args: ["run", "channel-control-plane-selftest"] },
+  { label: "operator activation MVP affected suite", command: "npm", args: ["run", "channel-activation-mvp-selftest"] },
   { label: "OPS evidence joins", command: "npm", args: ["run", "ops-readiness-selftest"] },
   { label: "post-close read-only boundary", command: "npm", args: ["run", "postclose-readiness-selftest"] },
   { label: "RC5.4 manager contract", command: "npm", args: ["run", "rc54-manager-policy-selftest"] },
@@ -73,6 +77,15 @@ if (!runReadOnly) {
 }
 
 if (!marketClosedAcknowledged) throw new Error("--run-read-only requires --ack-market-closed");
+const verifiedWindow = channelControlMutationWindow(Date.now());
+if (!verifiedWindow.allowed) {
+  throw new Error(
+    `post-close gate requires a machine-verified closed session: ${
+      verifiedWindow.code
+    }`,
+  );
+}
+console.log(`\nMARKET SESSION VERIFIED: ${verifiedWindow.session} · ${verifiedWindow.code}`);
 if (!envFile || !isAbsolute(envFile) || !existsSync(envFile)) {
   throw new Error("--run-read-only requires --env-file with an existing absolute path");
 }

@@ -6,6 +6,7 @@ import {
 } from "./channelConfigurationRuntimeAdapter.js";
 import { buildReceiptBoundEntryPolicy } from "./receiptBoundEntryPolicy.js";
 import {
+  finalizeRc54ReleaseAdmissions,
   prepareRc54ReleaseAdmissions,
   RC54_ROOTS,
 } from "./rc54ReleasePolicy.js";
@@ -188,6 +189,195 @@ check("receipt-bound bounded re-entry changes only the reviewed sequential-entry
     validateReceiptBoundRc54Topology(invalid)
       .includes(`temporary_rc54_adapter:${target.slug}:reentry`),
   );
+});
+
+check("receipt-bound roster may exclude a sealed root without relaxing policy caps", () => {
+  const removed = runtime.roots[0];
+  assert.ok(removed);
+  const reduced = {
+    ...runtime,
+    roots: runtime.roots.filter((root) => root.slug !== removed.slug),
+    admissionPolicies: runtime.admissionPolicies.map((policy) => ({
+      ...policy,
+      priorityBySlug: Object.fromEntries(Object.entries(policy.priorityBySlug)
+        .filter(([slug]) => slug !== removed.slug)),
+    })),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.deepEqual(validateReceiptBoundRc54Topology(reduced), []);
+  const policies = buildReceiptBoundRc54AdmissionPolicies(reduced);
+  const policy = policies.find((candidate) =>
+    candidate.id === removed.domainId);
+  assert.ok(policy);
+  assert.equal(policy.priorityBySlug[removed.slug], undefined);
+  assert.deepEqual(
+    policy.maxOpenByUnderlying,
+    runtime.admissionPolicies.find((candidate) =>
+      candidate.id === removed.domainId)?.maxOpenByUnderlying,
+  );
+  assert.equal(
+    buildReceiptBoundRc54AdmissionRootResolver(reduced)(removed.slug),
+    null,
+  );
+});
+
+check("registered research topology can join a sealed domain with exact priority projection", () => {
+  const source = runtime.roots.find((root) => root.slug === "vb-macd-state");
+  assert.ok(source);
+  const added = {
+    ...source,
+    slug: "dark-macd-candidate",
+    familyId: "LAB-SPY-MACD-CANDIDATE",
+    priority: 3,
+    strategistId: "99999999-9999-4999-8999-999999999999",
+    executionPosture: "observe-only" as const,
+    channelSpecVersionId: "spec:dark-macd-candidate:v1",
+    channelSpecContentHash:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    configuration: {
+      ...source.configuration,
+      channelSlug: "dark-macd-candidate",
+      accountId: source.accountId,
+      channelSpecVersionId: "spec:dark-macd-candidate:v1",
+      channelSpecContentHash:
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    },
+  };
+  const expanded = {
+    ...runtime,
+    roots: [...runtime.roots, added],
+    admissionPolicies: runtime.admissionPolicies.map((policy) =>
+      policy.id === added.domainId
+        ? {
+          ...policy,
+          priorityBySlug: {
+            ...policy.priorityBySlug,
+            [added.slug]: added.priority,
+          },
+        }
+        : policy),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.deepEqual(validateReceiptBoundRc54Topology(expanded), []);
+  assert.equal(
+    buildReceiptBoundRc54AdmissionPolicies(expanded)
+      .find((policy) => policy.id === added.domainId)
+      ?.priorityBySlug[added.slug],
+    added.priority,
+  );
+  const priorityDrift = {
+    ...expanded,
+    admissionPolicies: expanded.admissionPolicies.map((policy) =>
+      policy.id === added.domainId
+        ? {
+          ...policy,
+          priorityBySlug: { ...policy.priorityBySlug, [added.slug]: 99 },
+        }
+        : policy),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.throws(
+    () => buildReceiptBoundRc54AdmissionPolicies(priorityDrift),
+    /admission_priority/,
+  );
+
+  const promoted = { ...added, executionPosture: "paper" as const };
+  const paperExpanded = {
+    ...expanded,
+    roots: [...runtime.roots, promoted],
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  const resolver = buildReceiptBoundRc54AdmissionRootResolver(paperExpanded);
+  const admissionPolicies = buildReceiptBoundRc54AdmissionPolicies(paperExpanded);
+  const occ = "SPY260803C00750000";
+  const prepared = prepareRc54ReleaseAdmissions({
+    channels: [{ id: promoted.strategistId, slug: promoted.slug }],
+    decisions: [{
+      slug: promoted.slug,
+      status: "armed",
+      action: "enter",
+      reason: "dynamic-root-occupancy-test",
+      direction: "call",
+      occ,
+      qty: 99,
+      detail: { ask: 1 },
+    }],
+    accountId: promoted.accountId,
+    sourceBarAtMs: 1,
+    observedAtMs: 2,
+    currentEtMinute: 600,
+    sessionCloseEtMinute: 960,
+    sessionLedgerReady: true,
+    rootResolver: resolver,
+  })[0];
+  assert.equal(prepared.blocked, undefined);
+  assert.equal(prepared.qty, promoted.quantity);
+
+  const withinDomain = finalizeRc54ReleaseAdmissions({
+    prepared: [{
+      accountId: promoted.accountId,
+      sourceBarAtMs: 1,
+      decision: prepared,
+    }],
+    open: [{
+      domainId: promoted.domainId,
+      accountId: promoted.accountId,
+      familyId: "LAB-SPY-OTHER",
+      underlying: promoted.underlying,
+      occSymbol: occ,
+    }],
+    sessionEntries: [],
+    globalPositionTruthComplete: true,
+    globalOrderTruthComplete: true,
+    rootResolver: resolver,
+    admissionPolicies,
+  });
+  assert.equal(
+    withinDomain[0].decision.blocked,
+    "admission_domain_same_occ_open",
+  );
+
+  const otherDomain = runtime.roots.find((root) =>
+    root.domainId !== promoted.domainId);
+  assert.ok(otherDomain);
+  const crossDomain = finalizeRc54ReleaseAdmissions({
+    prepared: [{
+      accountId: promoted.accountId,
+      sourceBarAtMs: 1,
+      decision: prepared,
+    }],
+    open: [{
+      domainId: otherDomain.domainId,
+      accountId: otherDomain.accountId,
+      familyId: otherDomain.familyId,
+      underlying: promoted.underlying,
+      occSymbol: occ,
+    }],
+    sessionEntries: [],
+    globalPositionTruthComplete: true,
+    globalOrderTruthComplete: true,
+    rootResolver: resolver,
+    admissionPolicies,
+  });
+  assert.equal(crossDomain[0].decision.blocked, undefined);
+  assert.deepEqual(
+    crossDomain[0].decision.detail?.rc54CovarianceReceipts,
+    [{
+      kind: "cross-domain-same-occ",
+      occSymbol: occ,
+      candidateDomain: promoted.domainId,
+      observedOpenDomains: [otherDomain.domainId],
+    }],
+  );
+
+  const wrongAccount = prepareRc54ReleaseAdmissions({
+    channels: [{ id: promoted.strategistId, slug: promoted.slug }],
+    decisions: [{ ...prepared, blocked: undefined }],
+    accountId: otherDomain.accountId,
+    sourceBarAtMs: 1,
+    observedAtMs: 2,
+    currentEtMinute: 600,
+    sessionCloseEtMinute: 960,
+    sessionLedgerReady: true,
+    rootResolver: resolver,
+  })[0];
+  assert.equal(wrongAccount.blocked, "rc54_account_binding");
 });
 
 check("route or topology changes are rejected by the temporary adapter", () => {

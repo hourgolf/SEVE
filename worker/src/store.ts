@@ -40,6 +40,9 @@ import {
 import type {
   StoredActivationPreviewEnvelope,
 } from "./channelActivationPreviewWatcher.js";
+import type {
+  StoredChannelRosterBundleEnvelope,
+} from "./channelRosterBundleWatcher.js";
 
 // supabase realtime-js needs a WebSocket implementation; Node <22 has no global
 // one (it throws on createClient). Provide `ws` explicitly so it works on any
@@ -414,6 +417,52 @@ export async function acknowledgeChannelActivationPreview(args: {
   }
   const write = await sb.rpc(
     "acknowledge_channel_change_proposal_preview",
+    args,
+  ).abortSignal(AbortSignal.timeout(8_000)).single();
+  if (write.error) return { receipt: null, error: write.error.message };
+  return {
+    receipt: (write.data ?? null) as Record<string, unknown> | null,
+    error: null,
+  };
+}
+
+export async function loadPendingChannelRosterBundles(): Promise<{
+  rows: StoredChannelRosterBundleEnvelope[];
+  error: string | null;
+}> {
+  const read = await sb.from("channel_roster_bundle_current")
+    .select(
+      "id,state,lifecycle_receipt_id,base_manifest_key,base_manifest_content_hash,candidate_manifest,candidate_specs,worker_projection,dashboard_projection,validation_results,capacity_evaluation,exact_diffs,evidence_refs,configuration_epoch_id,created_at",
+    )
+    // One immutable worker acknowledgement advances a draft to validated.
+    // Validated bundles are intentionally not re-acknowledged in a polling
+    // loop; an expired operator window requires cancel + reseal.
+    .eq("state", "draft")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (read.error) return { rows: [], error: read.error.message };
+  return {
+    rows: ((read.data ?? []) as Array<Record<string, unknown>>)
+      .map((bundle) => ({ bundle })),
+    error: null,
+  };
+}
+
+export async function acknowledgeChannelRosterBundle(args: {
+  p_acknowledgement_id: string;
+  p_validated_lifecycle_receipt_id: string;
+  p_bundle_id: string;
+  p_source_boot_id: string;
+  p_worker_runtime_version: string;
+  p_acknowledged_at: string;
+  p_evidence_ref: string;
+  p_acknowledgement: Record<string, unknown>;
+}): Promise<{ receipt: Record<string, unknown> | null; error: string | null }> {
+  if (!config.hasServiceRole) {
+    return { receipt: null, error: "service role is unavailable" };
+  }
+  const write = await sb.rpc(
+    "acknowledge_channel_roster_bundle",
     args,
   ).abortSignal(AbortSignal.timeout(8_000)).single();
   if (write.error) return { receipt: null, error: write.error.message };

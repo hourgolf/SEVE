@@ -255,6 +255,33 @@ check("manager policy rejects internally inconsistent target and ratchet shapes"
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /ratchetParameters contains an invalid/);
 });
 
+check("all-out manager policy is explicit and remains a manager-only draft", () => {
+  const built = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      managerPolicy: {
+        ...validRequest.proposedPatch.managerPolicy,
+        managerProfileId: "ORB55-ALL-OUT-35",
+        managerLabel: "ALL OUT @ +35%",
+        takeProfit: { kind: "bank", targetPct: 35, fraction: 0 },
+        ratchetParameters: {
+          kind: "none",
+          engageReturnPct: null,
+          givebackPct: null,
+          retainGainPct: null,
+          fixedTargetPct: null,
+        },
+      },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.equal(built.draftSpec.takeProfit.fraction, 0);
+  assert.equal(
+    proposalDraftRpcName(built.proposal),
+    "create_channel_manager_policy_proposal_draft",
+  );
+  assert.equal(built.proposal.activationAuthorized, false);
+});
+
 check("semantic no-op is rejected", () => {
   expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
@@ -384,6 +411,17 @@ check("manager-policy migration is atomic, service-only, and activation-dark", (
   assert.doesNotMatch(sql, /insert into public\.activation_receipts/i);
   assert.doesNotMatch(sql, /update public\.(positions|position_plans|execution_observations)/i);
   assert.match(sql, /commit;\s*$/);
+});
+
+check("manager all-out migration narrowly amends the proposal validator", () => {
+  const sql = readFileSync(new URL(
+    "../../supabase/migrations/20260731143000_channel_manager_all_out_policy.sql",
+    import.meta.url,
+  ), "utf8");
+  assert.match(sql, /pg_get_functiondef/);
+  assert.match(sql, /numeric not in \(0, 0\.5\)/);
+  assert.match(sql, /correction did not match/);
+  assert.doesNotMatch(sql, /insert into|update public\.|delete from/i);
 });
 
 check("governed re-entry migration is isolated, idempotent, and activation-dark", () => {

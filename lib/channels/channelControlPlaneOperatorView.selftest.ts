@@ -36,6 +36,7 @@ const view = projectChannelControlPlaneOperatorView({
   observedAt: "2026-07-30T20:01:00.000Z",
 });
 assert.equal(view.state, "receipt-bound");
+assert.equal(view.manifestId, compiled.manifest.id);
 assert.equal(view.specs.length, 9);
 assert.equal(view.bySlug["pb-ride"].accountLabel, "PAPER 1");
 assert.equal(view.bySlug["vb-macd-state"].accountLabel, "PAPER 2");
@@ -45,7 +46,14 @@ assert.equal(view.bySlug["orb-ustop-ctl"].capacity.sameOccOpenMax, 1);
 assert.equal(view.bySlug["pb-ride"].executionPosture, "paper");
 assert.equal(view.capabilities.activationApiAvailable, true);
 assert.equal(view.capabilities.researchCollectionControlAvailable, true);
-assert.ok(view.blockers.includes("dormant_promotion:spec_registry_missing"));
+assert.equal(view.capabilities.dormantPromotionAvailable, true);
+assert.equal(
+  view.capabilities.dormantPromotionRequiresPaperEligibleRegistration,
+  true,
+);
+assert.ok(view.blockers.includes(
+  "dormant_promotion:paper_eligible_registration_required",
+));
 
 const blocked = projectChannelControlPlaneOperatorView({
   compiled: null,
@@ -54,6 +62,7 @@ const blocked = projectChannelControlPlaneOperatorView({
   observedAt: "2026-07-30T20:01:00.000Z",
 });
 assert.equal(blocked.state, "blocked");
+assert.equal(blocked.manifestId, null);
 assert.equal(blocked.specs.length, 0);
 
 const route = readFileSync(new URL(

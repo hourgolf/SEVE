@@ -272,7 +272,8 @@ function validateManagerPolicy(value: unknown): asserts value is OperatorManager
     && typeof value.takeProfit.targetPct === "number"
     && Number.isFinite(value.takeProfit.targetPct)
     && value.takeProfit.targetPct > 0
-    && value.takeProfit.fraction === 0.5;
+    && (value.takeProfit.fraction === 0
+      || value.takeProfit.fraction === 0.5);
   if (!validRide && !validBank) {
     throw new ProposalInputError("managerPolicy.takeProfit contains an invalid bounded policy");
   }

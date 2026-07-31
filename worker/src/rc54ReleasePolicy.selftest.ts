@@ -386,6 +386,81 @@ check("an unexpected dark row consumes conservative LAB capacity",
     "SPY260727C00742000",
   ]]);
 
+const receiptBoundDarkOccupancy = buildRc54AdmissionOccupancy({
+  openPositions: [{
+    id: "row-receipt-bound-dark",
+    strategist_id: "00000000-0000-4000-8000-000000000099",
+    occ_symbol: "SPY260727C00742000",
+    underlying: "SPY",
+    opt_type: "call",
+    qty: 2,
+    avg_entry_price: 1,
+    strike: 742,
+    expiration: "2026-07-27",
+    opened_at: "2026-07-27T14:00:00Z",
+    status: "open",
+    peak_mark: 1,
+    trough_mark: 1,
+    runner_of: null,
+  }],
+  sessionPositions: [{
+    id: "row-receipt-bound-session",
+    strategist_id: "00000000-0000-4000-8000-000000000099",
+    occ_symbol: "SPY260727C00742000",
+    underlying: "SPY",
+    opt_type: "call",
+    qty: 2,
+    avg_entry_price: 1,
+    strike: 742,
+    expiration: "2026-07-27",
+    opened_at: "2026-07-27T14:00:00Z",
+    status: "closed",
+    peak_mark: 1,
+    trough_mark: 1,
+    runner_of: null,
+    entry_features: { opportunity_id: "receipt-bound-opportunity" },
+  }],
+  channelById: new Map([[
+    "00000000-0000-4000-8000-000000000099",
+    { slug: "dark-unsealed", underlying: "SPY" },
+  ]]),
+  accountIdByStrategist: new Map([[
+    "00000000-0000-4000-8000-000000000099",
+    RC54_LAB_ACCOUNT_ID,
+  ]]),
+  brokerPositions: [],
+  pendingOrders: [],
+  rootResolver: (slug) => slug === "dark-unsealed" ? {
+    slug,
+    domainId: RC54_LAB_DOMAIN,
+    familyId: "LAB-SPY-RECEIPT-BOUND",
+    underlying: "SPY",
+    maxEntriesPerSession: 2,
+    quantity: 2,
+    premiumCap: 2,
+    aggregateDebitCap: 400,
+    managerProfileId: "premium-all-out",
+    accountId: RC54_LAB_ACCOUNT_ID,
+    bankTargetPct: 30,
+    runnerKind: "none",
+    configurationEpochId: `sha256:${"a".repeat(64)}`,
+  } : null,
+});
+check("receipt-bound research roots preserve family and session occupancy identity",
+  {
+    open: receiptBoundDarkOccupancy.open.map((row) => [
+      row.domainId, row.familyId, row.occSymbol,
+    ]),
+    sessionEntries: receiptBoundDarkOccupancy.sessionEntries,
+  }, {
+    open: [[RC54_LAB_DOMAIN, "LAB-SPY-RECEIPT-BOUND", "SPY260727C00742000"]],
+    sessionEntries: [{
+      domainId: RC54_LAB_DOMAIN,
+      familyId: "LAB-SPY-RECEIPT-BOUND",
+      entryId: "receipt-bound-opportunity",
+    }],
+  });
+
 const unknownAccountOccupancy = buildRc54AdmissionOccupancy({
   openPositions: [{
     id: "row-unknown",

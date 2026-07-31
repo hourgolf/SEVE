@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Knob } from "@/components/console/hw/Knob";
 import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftPanel";
 import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
+import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRosterActivationConsole";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -159,6 +160,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           </div>}
         </section>
         {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} />}
+        <ChannelRosterActivationConsole selectedSlug={slug} controlPlane={controlPlane} />
         <ChannelConfigDraftPanel
           model={draft.model}
           active={draft.active}
