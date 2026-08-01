@@ -41,7 +41,7 @@ const ROOMS: { id: MobileRoom; label: string; sub: string }[] = [
 ];
 
 export function MobileShell(props: SurfaceProps) {
-  const { data, view, accounts, acctId, setAcctId, spotUp, liveFund, livePnl, symbol } = props;
+  const { data, view, accounts, acctId, setAcctId, liveFund, livePnl } = props;
   const { skin, setSkin } = useShell();
   const sent = props.sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
 
@@ -50,14 +50,6 @@ export function MobileShell(props: SurfaceProps) {
   const [setOpen, setSetOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>(null); // studio accordion — one at a time
-  const [now, setNow] = useState<Date | null>(null);
-
-  useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const id = window.setInterval(tick, 30_000);
-    return () => window.clearInterval(id);
-  }, []);
 
   // REVIEW enables the bounded page-owned research ledger. Hidden phone rooms
   // remain quiet, while every leaf stays subscription-free.
@@ -73,15 +65,9 @@ export function MobileShell(props: SurfaceProps) {
     [desk.strategists, acctId],
   );
 
-  const running = desk.fund.running && !desk.fund.is_halted;
-  const runLabel = desk.fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
-  const runCls = desk.fund.is_halted ? "halt" : running ? "on" : "off";
-
   const down = liveFund.dayPnl < 0;
-  const dayLed = (down ? "-" : "") + Math.abs(Math.round(liveFund.dayPnl));
+  const dayLed = `${down ? "-" : "+"}$${Math.abs(Math.round(liveFund.dayPnl))}`;
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
-  const spotStr = data.spot != null ? data.spot.toFixed(2) : "----";
-  const spotColor = spotUp == null ? "var(--led-red)" : spotUp ? "var(--pm-green)" : "var(--led-red)";
   const statusOn = props.incident.severity !== "normal";
   const openMarket = (next: MobileMarketView) => {
     setMarketView(next);
@@ -91,10 +77,6 @@ export function MobileShell(props: SurfaceProps) {
     setOpenSlug(slug);
     setRoom("studio");
   };
-  const clock = now?.toLocaleTimeString("en-US", {
-    hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles",
-  }) ?? "--:--";
-
   return (
     <div className="m2-app" data-mode={room === "studio" ? "studio" : "perform"} data-room={room} data-skin={skin}>
       <span className="m2-screw m2-screw--tl" /><span className="m2-screw m2-screw--tr" />
@@ -109,22 +91,15 @@ export function MobileShell(props: SurfaceProps) {
               <i />
               <span className="m2-status-copy"><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {props.feed.positions.length} · {props.incident.session.replaceAll("_", " ")}</small></span>
             </span>
-            <em>{clock} PT</em>
           </button>
+          <MobileKillControl halted={desk.fund.is_halted} write={props.write} />
           <button type="button" className="m2-cog" onClick={() => setSetOpen(true)} aria-label="settings and log"><IcCog /></button>
         </div>
         <div className="m2-head-meta">
           <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
-          <span className="grow" />
-          <span className={`m2-pill m2-run ${runCls}`}>{runLabel} · {desk.fund.mode === "live" ? "LIVE" : "PAPER"}</span>
-          <MobileKillControl halted={desk.fund.is_halted} write={props.write} />
-        </div>
-        <div className="m2-head-r2">
-          <div className="m2-led-mod">
-            <LedDisplay value={spotStr} digits={6} color={spotColor} caption={`${symbol} spot`} />
-          </div>
-          <div className="m2-led-mod">
-            <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
+          <div className="m2-account-pnl" role="img" aria-label={`Selected account P and L ${dayLed}`}>
+            <b>P&amp;L</b>
+            <LedDisplay value={dayLed} digits={6} color={dayColor} />
           </div>
         </div>
       </header>

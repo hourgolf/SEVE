@@ -699,7 +699,7 @@
 
 .m2-app:not(.folio-mobile) .m2-head-r1 {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
+  grid-template-columns: minmax(0, 1fr) 64px 44px;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -748,7 +748,7 @@
 .m2-app:not(.folio-mobile) .m2-status {
   min-height: 44px;
   height: 44px;
-  grid-template-columns: 77px minmax(0, 1fr) 77px;
+  grid-template-columns: 77px minmax(0, 1fr);
   gap: 0;
   padding: 5px 10px;
   border: 0;
@@ -779,6 +779,23 @@
   justify-self: end;
 }
 
+.m2-app:not(.folio-mobile) .m2-head-r1 > .m2-kill-wrap {
+  width: 64px;
+  height: 44px;
+  display: block;
+  border-left: 1px solid rgba(100, 205, 115, .24);
+}
+
+.m2-app:not(.folio-mobile) .m2-head-r1 > .m2-kill-wrap .m2-kill {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  height: 44px;
+  border-width: 0;
+  border-radius: 0;
+  font-size: 10px;
+}
+
 .m2-app:not(.folio-mobile) .m2-cog {
   width: 44px;
   height: 44px;
@@ -793,15 +810,58 @@
 }
 
 .m2-app:not(.folio-mobile) .m2-head-meta {
-  min-height: 40px;
+  min-height: 44px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 54px;
+  grid-template-columns: minmax(0, 3fr) minmax(124px, 2fr);
   align-items: stretch;
   gap: 6px;
 }
 
 .m2-app:not(.folio-mobile) .m2-head-meta > .grow {
   display: none;
+}
+
+.m2-app:not(.folio-mobile) .m2-account-pnl {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 44px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 4px 7px;
+  overflow: hidden;
+  color: var(--909-positive-text);
+  background: var(--909-surface-instrument);
+  border: 1px solid var(--909-border-strong);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 5px #000;
+}
+
+.m2-app:not(.folio-mobile) .m2-account-pnl > b {
+  font: 700 10px/1.1 var(--mono);
+  letter-spacing: .07em;
+  white-space: nowrap;
+}
+
+.m2-app:not(.folio-mobile) .m2-account-pnl .led,
+.m2-app:not(.folio-mobile) .m2-account-pnl .led-window {
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.m2-app:not(.folio-mobile) .m2-account-pnl .led-window {
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.m2-app:not(.folio-mobile) .m2-account-pnl .seven-seg {
+  width: 12px;
+  height: 24px;
 }
 
 .m2-app:not(.folio-mobile) .m2-head-meta .acct-switch {
@@ -1704,11 +1764,7 @@
 
   .m2-app:not(.folio-mobile) .m2-status {
     padding-inline: 8px;
-    grid-template-columns: 71px minmax(0, 1fr) 71px;
-  }
-
-  .m2-app:not(.folio-mobile) .m2-status em {
-    display: none;
+    grid-template-columns: 71px minmax(0, 1fr);
   }
 }
 
