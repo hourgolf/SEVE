@@ -62,7 +62,10 @@ export function reconstructStoredResearchRegistry(
       `registration ${row.registration_key} declared blockers`,
     ),
     registeredBy: row.registered_by,
-    registeredAt: row.registered_at,
+    // PostgREST serializes UTC timestamptz values with a +00:00 offset, while
+    // registrations are sealed from JavaScript ISO instants using Z. Preserve
+    // the original semantic instant before recomputing the immutable hash.
+    registeredAt: new Date(row.registered_at).toISOString(),
   }));
   const registry = buildResearchChannelRegistry(drafts);
   const storedByKey = new Map(rows.map((row) => [row.registration_key, row]));
