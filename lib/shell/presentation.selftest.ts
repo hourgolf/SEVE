@@ -99,6 +99,8 @@ assert.doesNotMatch(mobileStudio, /Runtime release identity/);
 assert.match(mobileDock, /onOpenChannel\?: \(slug: string\) => void/);
 assert.match(mobileDock, /aria-label=\{`Open \$\{ch\.slug\} in Studio`\}/);
 assert.match(mobileShell, /const openStudioChannel = \(slug: string\) => \{[\s\S]*setOpenSlug\(slug\);[\s\S]*setRoom\("studio"\)/);
+assert.match(mobileShell, /const \{ skin, setSkin, setMode \} = useShell\(\)/);
+assert.match(mobileShell, /setMode\(room === "studio" \? "studio" : "perform"\)/);
 assert.match(mobileCss, /\.m2-studio-sequencer \.m-sqbody \{[^}]*padding-top:6px/);
 assert.match(sessionSequencer, /if \(variant === "dock"\)[\s\S]*className="m-sqbody"[\s\S]*className="m-sqhead"/);
 assert.match(mobileCss, /\.m2-app\[data-room="studio"\] \.m2-padbar \{ margin-top:0/);
@@ -136,4 +138,4 @@ for (const family of [
   assert.ok(themeContract.includes(family), `theme contract does not cover ${family}`);
 }
 
-console.log("presentation-selftest: 99/99 passed");
+console.log("presentation-selftest: 101/101 passed");

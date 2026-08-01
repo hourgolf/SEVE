@@ -42,7 +42,7 @@ const ROOMS: { id: MobileRoom; label: string; sub: string }[] = [
 
 export function MobileShell(props: SurfaceProps) {
   const { data, view, accounts, acctId, setAcctId, liveFund, livePnl } = props;
-  const { skin, setSkin } = useShell();
+  const { skin, setSkin, setMode } = useShell();
   const sent = props.sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
 
   const [room, setRoom] = useState<MobileRoom>("play");
@@ -54,10 +54,13 @@ export function MobileShell(props: SurfaceProps) {
   // REVIEW enables the bounded page-owned research ledger. Hidden phone rooms
   // remain quiet, while every leaf stays subscription-free.
   useEffect(() => {
+    // Keep the shared shell mode aligned with the phone-native room. Page-owned
+    // Studio hooks use this mode as their subscription gate.
+    setMode(room === "studio" ? "studio" : "perform");
     props.setActiveRoom(
       room === "studio" ? "mix" : room === "review" ? "tape" : room === "ops" ? "ops" : "play",
     );
-  }, [room, props.setActiveRoom]);
+  }, [room, props.setActiveRoom, setMode]);
 
   const { desk } = view;
   const channels = useMemo(
