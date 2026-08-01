@@ -29,6 +29,10 @@ assert.match(mobileShell, /<LedWordmark value="\$EVE" color=\{dayColor\}/);
 assert.match(mobileShell, /const dayColor = down \? "var\(--led-red\)" : "var\(--pm-green\)"/);
 assert.match(ledDisplay, /"\$": "afgcd"[\s\S]*"E": "afged"[\s\S]*"V": ""/);
 assert.match(mobileShell, /className="m2-status-center"/);
+assert.match(mobileShell, /className="m2-status-center"[\s\S]*<MobileKillControl[\s\S]*className="m2-cog"/);
+assert.match(mobileShell, /className="m2-account-pnl"[\s\S]*<b>P&amp;L<\/b>[\s\S]*value=\{dayLed\}/);
+assert.doesNotMatch(mobileShell, /m2-head-r2|m2-run|spotStr|\{clock\} PT/);
+assert.match(foundationCss, /\.m2-account-pnl > b \{[\s\S]{0,100}10px\/1\.1/);
 assert.doesNotMatch(mobileShell, /className="m2-band"/);
 assert.match(shadowResearch, /const RECENT_SESSION_LIMIT = 4/);
 assert.match(shadowResearch, /aria-label="Older research session"/);
@@ -80,6 +84,11 @@ assert.match(workstationShell, /ws-metric ws-metric--led"><small>RISK USED/);
 assert.match(performCss, /grid-auto-flow: column; grid-auto-columns: minmax\(182px, 1fr\)/);
 assert.match(intradayChart, /hideTitle = false/);
 assert.match(mobilePerform, /onSymbolChange=\{setSymbol\}[\s\S]*hideTitle/);
+assert.match(mobilePerform, /aria-label="Chart settings"[\s\S]*mobileSettingsOpen=\{chartSettingsOpen\}/);
+assert.match(mobilePerform, /onMobileSettingsOpenChange=\{setChartSettingsOpen\}[\s\S]*compactTickerInToolbar/);
+assert.match(intradayChart, /className="chart-toolbar-led"[\s\S]*\$\{symbol\} price \$\{ledSpot\.toFixed\(2\)\}/);
+assert.match(foundationCss, /\.m2-chart-body \.seg--range button \{[\s\S]{0,180}min-width:\s*44px;[\s\S]{0,100}min-height:\s*34px/);
+assert.match(foundationCss, /@media \(max-width: 380px\)[\s\S]*\.chart-toolbar-led \.seven-seg \{[\s\S]{0,80}width:\s*6px;[\s\S]*\.seg--range button \{[\s\S]{0,80}min-width:\s*40px/);
 assert.ok(mobileRackRow.indexOf('className="m2-fireslbl') < mobileRackRow.indexOf("m2-passport lane-"));
 assert.ok(mobileRackRow.indexOf("m2-passport lane-") < mobileRackRow.lastIndexOf("<ChannelConfigDraftPanel"));
 assert.match(mobileRackRow, /className="m2-passport-toggle"[\s\S]*aria-expanded=\{passportOpen\}/);
@@ -93,6 +102,10 @@ assert.match(mobileShell, /const openStudioChannel = \(slug: string\) => \{[\s\S
 assert.match(mobileCss, /\.m2-studio-sequencer \.m-sqbody \{[^}]*padding-top:6px/);
 assert.match(sessionSequencer, /if \(variant === "dock"\)[\s\S]*className="m-sqbody"[\s\S]*className="m-sqhead"/);
 assert.match(mobileCss, /\.m2-app\[data-room="studio"\] \.m2-padbar \{ margin-top:0/);
+assert.match(mobileCss, /\.m2-app\[data-mode="studio"\] \.roster-console-body \{[^}]*display:grid/);
+assert.match(mobileCss, /\.m2-app\[data-mode="studio"\] \.roster-workflow ol \{[^}]*grid-template-columns:1fr 1fr/);
+assert.match(mobileCss, /\.m2-app\[data-mode="studio"\] \.roster-selected \{[^}]*grid-template-columns:1fr 1fr/);
+assert.match(mobileCss, /\.m2-app\[data-mode="studio"\] \.roster-console-body :is\(select,input,textarea\) \{[\s\S]{0,220}min-height:44px/);
 assert.match(foundationCss, /\[data-skin="blackout"\] \.m2-desk-section > header,[\s\S]{0,180}\.m2-desk-disclosure > summary/);
 assert.match(foundationCss, /\.m2-market-switch button \{[\s\S]{0,120}min-height:\s*46px/);
 assert.match(foundationCss, /\.m2-chart-body :is\(\.chart-toggle, \.seg\) button \{[\s\S]{0,120}min-height:\s*42px/);
@@ -123,4 +136,4 @@ for (const family of [
   assert.ok(themeContract.includes(family), `theme contract does not cover ${family}`);
 }
 
-console.log("presentation-selftest: 95/95 passed");
+console.log("presentation-selftest: 99/99 passed");

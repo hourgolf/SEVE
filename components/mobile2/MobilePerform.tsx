@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { IntradayChart } from "@/components/IntradayChart";
 import { MobileDock } from "@/components/mobile2/MobileDock";
 import { MobilePositions } from "@/components/mobile2/MobilePositions";
@@ -138,6 +138,7 @@ export function MobilePerform({
   onOpenChannel?: (slug: string) => void;
 }) {
   const { data, view, feed, spotUp, symbol, setSymbol, selected, setSelected, contractHistory } = props;
+  const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   const changeSymbol = (next: string) => {
     setSelected(null);
     setSymbol(next);
@@ -158,6 +159,16 @@ export function MobilePerform({
             <span className="idx">01</span>
             <span className="t">{symbol} · LIVE</span>
             <span className="grow" />
+            <button
+              type="button"
+              className={`m2-chart-settings${chartSettingsOpen ? " on" : ""}`}
+              onClick={() => setChartSettingsOpen((open) => !open)}
+              aria-label="Chart settings"
+              aria-expanded={chartSettingsOpen}
+              title="Chart settings — interval, indicators, and line or candles"
+            >
+              <span aria-hidden="true">⚙</span>
+            </button>
           </div>
           <div className="m2-chart-body">
             <IntradayChart
@@ -172,6 +183,9 @@ export function MobilePerform({
               onSymbolChange={setSymbol}
               hideTitle
               hideSymbolSelector
+              mobileSettingsOpen={chartSettingsOpen}
+              onMobileSettingsOpenChange={setChartSettingsOpen}
+              compactTickerInToolbar
             />
           </div>
         </section>

@@ -14,6 +14,15 @@ const mobileRackRow = readFileSync(new URL(
   "../mobile2/MobileRackRow.tsx",
   import.meta.url,
 ), "utf8");
+const mobileStudio = readFileSync(new URL(
+  "../mobile2/MobileStudio.tsx",
+  import.meta.url,
+), "utf8");
+const canary = readFileSync(new URL(
+  "./CanaryCommandCenter.tsx",
+  import.meta.url,
+), "utf8");
+const fleet = readFileSync(new URL("./StudioFleet.tsx", import.meta.url), "utf8");
 
 assert.match(component, /ATOMIC ROSTER · PROSPECTIVE PAPER ENTRY/);
 assert.match(component, /EXCLUDE · KEEP SHADOW/);
@@ -35,6 +44,21 @@ assert.match(component, /GIVEBACK/);
 assert.match(component, /EVIDENCE LIMITS/);
 assert.match(component, /NEXT SAFE ENTRY/);
 assert.match(component, /HISTORY/);
+assert.match(component, /SAFE CHANGE WORKFLOW/);
+assert.match(component, /ONE REVIEWABLE BUNDLE · NO DIRECT WRITES/);
+assert.doesNotMatch(component, /<CanaryCommandCenter/);
+assert.match(canary, /CANARY COMMAND CENTER/);
+assert.match(canary, /SEALED · PREOPEN GATE NEXT/);
+assert.match(canary, /PAPER · NEXT SAFE ENTRY/);
+assert.match(canary, /EXECUTION EXCLUDED · COLLECTION INDEPENDENT/);
+assert.match(canary, /Authority card, not liveness/);
+assert.match(canary, /rollback_target_manifest_key/);
+assert.match(mobileStudio, /<CanaryCommandCenter/);
+assert.match(mobileStudio, /PAPER IN VIEW/);
+assert.match(fleet, /RUNTIME ROSTER RECONCILIATION/);
+assert.match(fleet, /<CanaryCommandCenter/);
+assert.match(fleet, /IMMUTABLE RECEIPT AUTHORITY/);
+assert.match(fleet, /PAPER IN VIEW/);
 assert.doesNotMatch(component, /\bfetch\s*\(/);
 assert.match(hook, /\/api\/channel-roster-bundles\/preview/);
 assert.match(hook, /\/api\/channel-roster-bundles\/apply/);

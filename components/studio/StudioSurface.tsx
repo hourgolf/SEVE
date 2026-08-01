@@ -58,6 +58,7 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
         scope={scope}
         sort={sort}
         passports={channelWorkspace}
+        controlPlane={channelControlPlane}
         onScope={setScope}
         onSort={setSort}
         onSelect={setSelSlug}

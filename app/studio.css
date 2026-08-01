@@ -874,6 +874,84 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 .shell-root[data-mode="studio"] .passport-grid b.warning { color: var(--amber); }
 .shell-root[data-mode="studio"] .passport-fact { margin: 7px 0; color: #9ea5a8; font-size: var(--fs-chip); line-height: 1.35; }
 
+/* Receipt authority and desk presentation deliberately use separate counts. */
+.shell-root[data-mode="studio"] .runtime-roster-map {
+  flex:0 0 auto; border-bottom:1px solid var(--hw-line); background:color-mix(in srgb,var(--green-soft) 4%,var(--hw-well)); font-family:var(--sh-mono);
+}
+.shell-root[data-mode="studio"] .runtime-roster-map > summary { min-height:36px; padding:6px 10px; display:flex; align-items:center; gap:10px; cursor:pointer; list-style:none; }
+.shell-root[data-mode="studio"] .runtime-roster-map > summary::-webkit-details-marker { display:none; }
+.shell-root[data-mode="studio"] .runtime-roster-map > summary span { min-width:0; display:grid; gap:2px; }
+.shell-root[data-mode="studio"] .runtime-roster-map > summary b { color:var(--green-soft); font-size:var(--fs-label); letter-spacing:.08em; }
+.shell-root[data-mode="studio"] .runtime-roster-map > summary small { color:var(--hw-soft); font-size:var(--fs-label); }
+.shell-root[data-mode="studio"] .runtime-roster-map > summary em { margin-left:auto; color:var(--hw-ink); font:800 var(--fs-label)/1.2 var(--sh-mono); text-align:right; }
+.shell-root[data-mode="studio"] .runtime-roster-map > summary i { color:var(--green-soft); font-style:normal; }
+.shell-root[data-mode="studio"] .runtime-roster-map > div { display:grid; grid-template-columns:1fr 1fr; gap:1px; padding:0 10px 8px; }
+.shell-root[data-mode="studio"] .runtime-roster-map > div > span { min-width:0; display:grid; gap:4px; padding:7px; border:1px solid var(--hw-line); background:var(--hw); }
+.shell-root[data-mode="studio"] .runtime-roster-map > div small { color:var(--hw-soft); font-size:var(--fs-label); letter-spacing:.07em; }
+.shell-root[data-mode="studio"] .runtime-roster-map > div b { overflow-wrap:anywhere; color:var(--hw-ink); font-size:var(--fs-label); line-height:1.4; }
+.shell-root[data-mode="studio"] .runtime-roster-map > div p { grid-column:1/-1; margin:5px 0 0; color:var(--hw-soft); font-size:var(--fs-label); line-height:1.35; }
+
+.shell-root[data-mode="studio"] .canary-command-center { overflow:hidden; border:1px solid color-mix(in srgb,var(--green-soft) 55%,var(--line)); border-radius:6px; background:linear-gradient(180deg,color-mix(in srgb,var(--green-soft) 8%,#111416),#0b0d0e); }
+.shell-root[data-mode="studio"] .fleet > .canary-command-center.compact { flex:0 0 auto; border-width:0 0 1px; border-radius:0; }
+.shell-root[data-mode="studio"] .canary-command-center > header { min-height:40px; padding:7px 9px; display:flex; align-items:center; justify-content:space-between; gap:9px; border-bottom:1px solid var(--line); }
+.shell-root[data-mode="studio"] .canary-command-center > header span { display:grid; gap:2px; }
+.shell-root[data-mode="studio"] .canary-command-center > header small { color:var(--dk-dim); font-size:var(--fs-label); letter-spacing:.08em; }
+.shell-root[data-mode="studio"] .canary-command-center > header b { color:var(--lcd-ink); font-size:var(--fs-chip); letter-spacing:.1em; }
+.shell-root[data-mode="studio"] .canary-command-center > header em { padding:4px 6px; border:1px solid currentColor; border-radius:3px; font:800 var(--fs-label)/1 var(--sh-mono); font-style:normal; }
+.shell-root[data-mode="studio"] .canary-command-center > header em.ready { color:var(--green-soft); }
+.shell-root[data-mode="studio"] .canary-command-center > header em.blocked { color:var(--red-soft); }
+.shell-root[data-mode="studio"] .canary-command-body { display:grid; gap:6px; padding:7px; }
+.shell-root[data-mode="studio"] .canary-command-body article { display:grid; gap:5px; padding:7px; border:1px solid var(--line); border-left:3px solid var(--green-soft); border-radius:4px; background:#0d0f10; }
+.shell-root[data-mode="studio"] .canary-command-title { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; }
+.shell-root[data-mode="studio"] .canary-command-title > span { min-width:0; display:grid; gap:2px; }
+.shell-root[data-mode="studio"] .canary-command-title small,
+.shell-root[data-mode="studio"] .canary-command-policy small,
+.shell-root[data-mode="studio"] .canary-command-exclusions small,
+.shell-root[data-mode="studio"] .canary-command-body footer small { color:var(--dk-dim); font-size:var(--fs-label); letter-spacing:.07em; }
+.shell-root[data-mode="studio"] .canary-command-title b { color:var(--green-soft); font-size:clamp(13px,1.2vw,17px); }
+.shell-root[data-mode="studio"] .canary-command-title strong { color:var(--lcd-ink); font-size:var(--fs-chip); }
+.shell-root[data-mode="studio"] .canary-command-policy { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; background:var(--line); }
+.shell-root[data-mode="studio"] .canary-command-policy > span { min-width:0; display:grid; gap:3px; padding:6px; background:#151718; }
+.shell-root[data-mode="studio"] .canary-command-policy b { overflow-wrap:anywhere; color:var(--lcd-ink); font-size:var(--fs-label); }
+.shell-root[data-mode="studio"] .canary-command-exclusions { display:grid; gap:3px; padding:6px 7px; border:1px dashed var(--line-2); border-radius:4px; }
+.shell-root[data-mode="studio"] .canary-command-exclusions b { color:var(--amber); font-size:var(--fs-chip); }
+.shell-root[data-mode="studio"] .canary-command-exclusions span { color:var(--dk-mut); font-size:var(--fs-label); line-height:1.35; }
+.shell-root[data-mode="studio"] .canary-command-sequence,
+.shell-root[data-mode="studio"] .roster-workflow ol { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; margin:0; padding:0; list-style:none; }
+.shell-root[data-mode="studio"] .canary-command-sequence li,
+.shell-root[data-mode="studio"] .roster-workflow li { min-width:0; display:grid; grid-template-columns:20px minmax(0,1fr); align-items:center; gap:5px; padding:6px; border:1px solid var(--line); border-radius:4px; background:#111416; }
+.shell-root[data-mode="studio"] .canary-command-sequence li > b,
+.shell-root[data-mode="studio"] .roster-workflow li > b { width:18px; height:18px; display:grid; place-items:center; border:1px solid var(--line-2); border-radius:50%; color:var(--dk-dim); font-size:var(--fs-label); }
+.shell-root[data-mode="studio"] .canary-command-sequence li span,
+.shell-root[data-mode="studio"] .roster-workflow li span { min-width:0; display:grid; gap:2px; }
+.shell-root[data-mode="studio"] .canary-command-sequence li small,
+.shell-root[data-mode="studio"] .roster-workflow li small { color:var(--dk-dim); font-size:var(--fs-label); }
+.shell-root[data-mode="studio"] .canary-command-sequence li strong,
+.shell-root[data-mode="studio"] .roster-workflow li strong { overflow-wrap:anywhere; color:var(--dk-mut); font-size:var(--fs-label); }
+.shell-root[data-mode="studio"] .canary-command-sequence li.done > b { color:#08110a; border-color:var(--green-soft); background:var(--green-soft); }
+.shell-root[data-mode="studio"] .canary-command-sequence li.next,
+.shell-root[data-mode="studio"] .roster-workflow li.active { border-color:var(--amber); background:color-mix(in srgb,var(--amber) 7%,#111416); }
+.shell-root[data-mode="studio"] .canary-command-sequence li.next > b,
+.shell-root[data-mode="studio"] .roster-workflow li.active > b { color:var(--amber); border-color:var(--amber); }
+.shell-root[data-mode="studio"] .canary-command-body footer { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+.shell-root[data-mode="studio"] .canary-command-body footer > span { min-width:0; display:grid; gap:2px; padding:5px; background:#111416; }
+.shell-root[data-mode="studio"] .canary-command-body footer code { overflow:hidden; text-overflow:ellipsis; color:var(--lcd-ink); font-size:var(--fs-label); }
+.shell-root[data-mode="studio"] .canary-command-body footer > strong { grid-column:1/-1; color:var(--dk-mut); font-size:var(--fs-label); line-height:1.35; }
+.shell-root[data-mode="studio"] .canary-command-center.compact > header { min-height:34px; padding:5px 10px; }
+.shell-root[data-mode="studio"] .canary-command-center.compact .canary-command-body { grid-template-columns:minmax(0,2fr) minmax(150px,.8fr); gap:5px; padding:5px 10px 7px; }
+.shell-root[data-mode="studio"] .canary-command-center.compact .canary-command-body article { padding:5px 6px; }
+.shell-root[data-mode="studio"] .canary-command-center.compact .canary-command-title b { font-size:var(--fs-num); }
+.shell-root[data-mode="studio"] .canary-command-center.compact .canary-command-exclusions { align-content:center; padding:5px 6px; }
+.shell-root[data-mode="studio"] .canary-command-center.compact .canary-command-sequence { grid-column:1/-1; }
+.shell-root[data-mode="studio"] .canary-command-center.compact .canary-command-sequence li { padding:4px 5px; }
+.shell-root[data-mode="studio"] .roster-workflow { display:grid; gap:6px; padding:7px; border:1px solid var(--line); border-radius:4px; background:#0d0f10; }
+.shell-root[data-mode="studio"] .roster-workflow > header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.shell-root[data-mode="studio"] .roster-workflow > header span { display:grid; gap:2px; }
+.shell-root[data-mode="studio"] .roster-workflow > header small { color:var(--dk-dim); font-size:var(--fs-label); }
+.shell-root[data-mode="studio"] .roster-workflow > header b { color:var(--lcd-ink); font-size:var(--fs-label); }
+.shell-root[data-mode="studio"] .roster-workflow > header em { color:var(--amber); font:800 var(--fs-label)/1 var(--sh-mono); font-style:normal; }
+.shell-root[data-mode="studio"] .roster-workflow p { margin:0; color:var(--dk-mut); font-size:var(--fs-label); line-height:1.35; }
+
 @media (max-width: 1180px) {
   .shell-root[data-mode="studio"] .studio-v4b { --insp-w: 350px; }
   .shell-root[data-mode="studio"] .studio-modules { grid-template-columns: 1fr 1fr; }
@@ -890,6 +968,9 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
   .shell-root[data-mode="studio"] .roster-activation-packet { grid-template-columns:1fr 1fr; }
   .shell-root[data-mode="studio"] .roster-pending > div { grid-template-columns:1fr auto; }
   .shell-root[data-mode="studio"] .roster-pending input { grid-column:1 / -1; }
+  .shell-root[data-mode="studio"] .canary-command-policy,
+  .shell-root[data-mode="studio"] .canary-command-sequence,
+  .shell-root[data-mode="studio"] .roster-workflow ol { grid-template-columns:1fr 1fr; }
 }
 @media (max-width: 950px) {
   .shell-root[data-mode="studio"] .studio-v4b { --insp-w: 310px; }

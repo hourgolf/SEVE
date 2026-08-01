@@ -37,8 +37,8 @@ const result = deriveChannelPassports({
 
 assert.equal(result.release.state, "verified");
 assert.equal(result.releaseView.label, "SEALED RELEASE RUNTIME");
-assert.equal(result.releaseView.accountLifecycleLabel, "1 EXECUTING · 1 OBSERVE ONLY");
-assert.equal(result.releaseView.compactAccountLifecycleLabel, "1 EXEC · 1 OBSERVE");
+assert.equal(result.releaseView.accountLifecycleLabel, `${Object.keys(DAY1_ROOTS).length} AUTHORITY ROOTS · 1 PAPER IN VIEW · 1 OBSERVE IN VIEW`);
+assert.equal(result.releaseView.compactAccountLifecycleLabel, `${Object.keys(DAY1_ROOTS).length} ROOTS · 1 PAPER · 1 OBSERVE`);
 assert.equal(result.releaseView.databaseOnly, false);
 assert.equal(result.roots, 1);
 assert.equal(result.dark, 1);

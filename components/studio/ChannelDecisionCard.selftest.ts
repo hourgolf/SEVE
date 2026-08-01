@@ -8,6 +8,10 @@ const mobile = readFileSync(new URL("../mobile2/MobileRackRow.tsx", import.meta.
 assert.match(card, /READ-ONLY DECISION/);
 assert.match(card, /NO DIRECT-WRITE OR ORDER AUTHORITY/);
 assert.match(card, /EffectiveChannelState/);
+assert.match(card, /COLLECTION/);
+assert.match(card, /MEMBERSHIP/);
+assert.match(card, /EVIDENCE/);
+assert.match(card, /useChannelCollectionControl/);
 assert.match(card, /Decision evidence layers/);
 assert.match(card, /GOVERNED ACTIVATION LAYER/);
 assert.match(card, /DRAFT → VALIDATE\/PREVIEW → WORKER ACK → EXPLICIT NEXT-SAFE-ENTRY RECEIPT/);

@@ -2,6 +2,8 @@
 
 import { MobileRackRow } from "@/components/mobile2/MobileRackRow";
 import { SessionSequencer } from "@/components/console/SessionSequencer";
+import { CanaryCommandCenter } from "@/components/studio/CanaryCommandCenter";
+import { useChannelRosterBundleControl } from "@/hooks/useChannelRosterBundleControl";
 import { useEffect, useMemo, useState } from "react";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -29,6 +31,7 @@ export function MobileStudio({
   const { desk, anySolo, isActive } = view;
   const { canWrite, canDirectConfigure } = props.write;
   const passports = props.channelWorkspace;
+  const roster = useChannelRosterBundleControl(props.channelControlPlane);
   const [scope, setScope] = useState<"roots" | "dark" | "all">("roots");
   const visibleChannels = useMemo(() => channels.filter((channel) => {
     const lifecycle = passports.bySlug[channel.slug]?.lifecycle;
@@ -47,12 +50,18 @@ export function MobileStudio({
   return (
     <>
       <div className="m2-scroll">
+        <CanaryCommandCenter
+          controlPlane={props.channelControlPlane}
+          bundles={roster.bundles}
+          compact
+        />
         <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" disabled={canWrite && !canDirectConfigure} title={canDirectConfigure ? "Add a channel" : props.write.configurationWriteFact} onClick={canDirectConfigure ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD VIA PROPOSAL" : "SIGN IN TO REVIEW"}</button></div>
         <div className="m2-channel-scope" role="group" aria-label="Channel runtime scope">
-          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>EXECUTING <b>{passports.roots}</b></button>
-          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVE <b>{passports.dark}</b></button>
-          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL <b>{channels.length}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>PAPER IN VIEW <b>{passports.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVE IN VIEW <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>DESK ROWS <b>{channels.length}</b></button>
         </div>
+        {passports.release.state === "verified" && <p className="m2-roster-reconciliation">Receipt authority: <b>{passports.release.rootSlugs.length} paper roots</b> · this rack shows {passports.roots} paper and {passports.dark} observe-only desk rows.</p>}
         <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · FORK GOVERNED DRAFT · DIRECT WRITES FENCED" : "READ ONLY · SIGN IN TO REVIEW CONTROLS"}</span><span className="ln" /></div>
         {visibleChannels.length === 0 ? (
           <div className="m2-ghost">no channels in this runtime scope</div>
