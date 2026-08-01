@@ -139,7 +139,7 @@ class SessionLayer implements ISeriesPrimitive<Time> {
 export function IntradayChart({
   bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
   symbol = "SPY", onSymbolChange, fill = false, hideTitle = false, hideSymbolSelector = false,
-  mobileSettingsOpen, onMobileSettingsOpenChange,
+  mobileSettingsOpen, onMobileSettingsOpenChange, compactTickerInToolbar = false,
 }: {
   bars: UnderlyingBar[];
   dailyBars?: UnderlyingBar[];
@@ -159,6 +159,9 @@ export function IntradayChart({
    *  section header while this chart continues to own the settings panel. */
   mobileSettingsOpen?: boolean;
   onMobileSettingsOpenChange?: (open: boolean) => void;
+  /** The current compact shell reserves the toolbar's left edge for the live
+   *  ticker LED so the chart canvas remains unobstructed. */
+  compactTickerInToolbar?: boolean;
   /** §01 instrument label (SPY/QQQ) — titles the chart + the spot LED caption. */
   symbol?: string;
   /** When provided, renders the SPY/QQQ toggle in the chart header. */
@@ -742,6 +745,11 @@ export function IntradayChart({
               CFG
             </button>
           )}
+          {compactTickerInToolbar && ledSpot != null && (
+            <span className="chart-toolbar-led" role="img" aria-label={`${symbol} price ${ledSpot.toFixed(2)}`}>
+              <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption={`${symbol} $`} color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"} />
+            </span>
+          )}
           {/* duration (top) over candle-interval (bottom), stacked + right-justified on mobile */}
           <span className="chart-controls-right">
             <span className="seg seg--range" role="group" aria-label="range">
@@ -775,7 +783,7 @@ export function IntradayChart({
               width: "100%",
             }}
           />
-          {ledSpot != null && (
+          {!compactTickerInToolbar && ledSpot != null && (
             <div className="chart-led">
               <LedDisplay value={ledSpot.toFixed(2)} digits={6} caption={`${symbol.toLowerCase()} $`} color={spotUp == null ? undefined : spotUp ? "var(--pm-green)" : "var(--led-red)"} />
             </div>

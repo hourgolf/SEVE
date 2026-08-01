@@ -1318,9 +1318,41 @@
 
 .m2-app:not(.folio-mobile) .m2-chart-body .chart-head--untitled .phead-right {
   display: grid;
-  grid-template-columns: auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   width: 100%;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-toolbar-led {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  justify-self: start;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-toolbar-led .led {
+  gap: 1px;
+  align-items: center;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-toolbar-led .led-window {
+  gap: 1px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-toolbar-led .seven-seg {
+  width: 8px;
+  height: 16px;
+}
+
+.m2-app:not(.folio-mobile) .m2-chart-body .chart-toolbar-led .led-caption {
+  color: var(--909-text-secondary);
+  font-size: 7px;
+  line-height: 1;
+  letter-spacing: .06em;
 }
 
 .m2-app:not(.folio-mobile) .m2-chart-body .sym-toggle {
@@ -1336,9 +1368,12 @@
 }
 
 .m2-app:not(.folio-mobile) .m2-chart-body .chart-controls-right {
-  grid-column: 1 / -1;
+  grid-column: 2;
+  grid-row: 1;
   width: auto;
   justify-self: end;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .m2-app:not(.folio-mobile) .m2-chart-body .seg--range {

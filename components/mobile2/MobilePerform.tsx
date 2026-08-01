@@ -185,6 +185,7 @@ export function MobilePerform({
               hideSymbolSelector
               mobileSettingsOpen={chartSettingsOpen}
               onMobileSettingsOpenChange={setChartSettingsOpen}
+              compactTickerInToolbar
             />
           </div>
         </section>
