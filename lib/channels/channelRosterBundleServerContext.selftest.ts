@@ -32,6 +32,20 @@ const registry = reconstructStoredResearchRegistry([{
 assert.equal(registry.entries.length, 1);
 assert.equal(registry.entries[0].contentHash, registration.contentHash);
 assert.equal(registry.entries[0].state, "registered-blocked");
+const postgrestRegistry = reconstructStoredResearchRegistry([{
+  registration_key: registration.id,
+  channel_id: registration.channelId,
+  channel_slug: registration.slug,
+  cartridge: registration.cartridge,
+  candidate_spec: registration.candidateSpec,
+  state: registration.state,
+  declared_blockers: registration.declaredBlockers,
+  blockers: registration.blockers,
+  content_hash: registration.contentHash,
+  registered_by: registration.registeredBy,
+  registered_at: "2026-07-31T20:00:00.000+00:00",
+}]);
+assert.equal(postgrestRegistry.entries[0].contentHash, registration.contentHash);
 assert.throws(() => reconstructStoredResearchRegistry([{
   registration_key: registration.id,
   channel_id: registration.channelId,
@@ -59,4 +73,4 @@ assert.match(source, /buildOperatorPaperCapacityEnvelope/);
 assert.doesNotMatch(source, /method:\s*["']POST["']/);
 assert.doesNotMatch(source, /placeOrder|submitOrder|insert\(|update\(|delete\(/);
 
-console.log("channel-roster-bundle-server-context-selftest: 12/12 passed");
+console.log("channel-roster-bundle-server-context-selftest: 13/13 passed");
