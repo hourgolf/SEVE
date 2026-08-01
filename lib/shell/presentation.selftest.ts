@@ -102,6 +102,10 @@ assert.match(mobileShell, /const openStudioChannel = \(slug: string\) => \{[\s\S
 assert.match(mobileCss, /\.m2-studio-sequencer \.m-sqbody \{[^}]*padding-top:6px/);
 assert.match(sessionSequencer, /if \(variant === "dock"\)[\s\S]*className="m-sqbody"[\s\S]*className="m-sqhead"/);
 assert.match(mobileCss, /\.m2-app\[data-room="studio"\] \.m2-padbar \{ margin-top:0/);
+assert.match(mobileCss, /\.m2-app\[data-mode="studio"\] \.roster-console-body \{[^}]*display:grid/);
+assert.match(mobileCss, /\.m2-app\[data-mode="studio"\] \.roster-workflow ol \{[^}]*grid-template-columns:1fr 1fr/);
+assert.match(mobileCss, /\.m2-app\[data-mode="studio"\] \.roster-selected \{[^}]*grid-template-columns:1fr 1fr/);
+assert.match(mobileCss, /\.m2-app\[data-mode="studio"\] \.roster-console-body :is\(select,input,textarea\) \{[\s\S]{0,220}min-height:44px/);
 assert.match(foundationCss, /\[data-skin="blackout"\] \.m2-desk-section > header,[\s\S]{0,180}\.m2-desk-disclosure > summary/);
 assert.match(foundationCss, /\.m2-market-switch button \{[\s\S]{0,120}min-height:\s*46px/);
 assert.match(foundationCss, /\.m2-chart-body :is\(\.chart-toggle, \.seg\) button \{[\s\S]{0,120}min-height:\s*42px/);
@@ -132,4 +136,4 @@ for (const family of [
   assert.ok(themeContract.includes(family), `theme contract does not cover ${family}`);
 }
 
-console.log("presentation-selftest: 95/95 passed");
+console.log("presentation-selftest: 99/99 passed");

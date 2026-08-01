@@ -378,6 +378,118 @@
 .m2-app[data-mode="studio"] .canary-command-body footer > span:last-of-type { grid-column:1/-1; }
 .m2-app[data-mode="studio"] .canary-command-body footer code { overflow:hidden; text-overflow:ellipsis; color:var(--lcd-ink); font-size:8px; }
 .m2-app[data-mode="studio"] .canary-command-body footer > strong { grid-column:1/-1; color:var(--dk-mut); font-size:8px; line-height:1.4; }
+
+/* The roster console is shared with the desktop workstation, whose styles are
+   intentionally scoped to `.shell-root`. Give the compact shell its own
+   layout contract so governed controls never fall back to raw browser chrome. */
+.m2-app[data-mode="studio"] .roster-activation-console {
+  min-width:0; overflow:hidden; border:1px solid color-mix(in srgb,var(--m2-amber) 45%,var(--line-2)); border-radius:7px;
+  background:var(--lcd); color:var(--lcd-ink); font-family:var(--mono);
+}
+.m2-app[data-mode="studio"] .roster-activation-console > header {
+  min-height:36px; display:flex; align-items:center; padding:7px 8px; border-bottom:1px solid var(--line);
+  background:var(--lcd-2); color:var(--m2-amber); font:800 9px/1.3 var(--mono); letter-spacing:.07em;
+}
+.m2-app[data-mode="studio"] .roster-console-body { min-width:0; display:grid; gap:7px; padding:7px; font:700 9px/1.35 var(--mono); }
+.m2-app[data-mode="studio"] .roster-console-body :is(header,span,label,div,article,details) { min-width:0; }
+.m2-app[data-mode="studio"] .roster-console-body :is(p,li,footer,summary,b,strong,small,em,code) { overflow-wrap:anywhere; }
+.m2-app[data-mode="studio"] .roster-console-body button {
+  min-height:44px; border:1px solid var(--line-2); border-radius:5px; padding:6px 8px; cursor:pointer;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--lcd-2) 78%,#fff),var(--lcd-2)); color:var(--lcd-ink);
+  font:800 8px/1.2 var(--mono); letter-spacing:.05em;
+}
+.m2-app[data-mode="studio"] .roster-console-body button:disabled { opacity:.44; cursor:not-allowed; }
+.m2-app[data-mode="studio"] .roster-console-body :is(select,input,textarea) {
+  box-sizing:border-box; width:100%; min-width:0; min-height:44px; border:1px solid var(--line-2); border-radius:5px;
+  background:var(--lcd-2); color:var(--lcd-ink); padding:7px; font:750 10px/1.25 var(--mono);
+}
+.m2-app[data-mode="studio"] .roster-console-body textarea { min-height:72px; resize:vertical; }
+.m2-app[data-mode="studio"] .roster-workflow { display:grid; gap:6px; padding:7px; border:1px solid var(--line); border-radius:5px; background:rgba(0,0,0,.1); }
+.m2-app[data-mode="studio"] .roster-workflow > header { display:grid; gap:4px; }
+.m2-app[data-mode="studio"] .roster-workflow > header span { display:grid; gap:2px; }
+.m2-app[data-mode="studio"] .roster-workflow > header small { color:var(--dk-dim); font-size:7px; letter-spacing:.08em; }
+.m2-app[data-mode="studio"] .roster-workflow > header b { color:var(--lcd-ink); font-size:9px; }
+.m2-app[data-mode="studio"] .roster-workflow > header em { color:var(--m2-amber); font:800 8px/1.2 var(--mono); font-style:normal; }
+.m2-app[data-mode="studio"] .roster-workflow ol { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin:0; padding:0; list-style:none; }
+.m2-app[data-mode="studio"] .roster-workflow li {
+  display:grid; grid-template-columns:22px minmax(0,1fr); align-items:center; gap:5px; min-height:44px; padding:6px;
+  border:1px solid var(--line); border-radius:5px; background:var(--lcd-2);
+}
+.m2-app[data-mode="studio"] .roster-workflow li > b { width:20px; height:20px; display:grid; place-items:center; border:1px solid var(--line-2); border-radius:50%; color:var(--dk-dim); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-workflow li span { display:grid; gap:2px; }
+.m2-app[data-mode="studio"] .roster-workflow li small { color:var(--dk-dim); font-size:7px; }
+.m2-app[data-mode="studio"] .roster-workflow li strong { color:var(--dk-mut); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-workflow li.active { border-color:var(--m2-amber); }
+.m2-app[data-mode="studio"] .roster-workflow li.active > b { color:var(--m2-amber); border-color:var(--m2-amber); }
+.m2-app[data-mode="studio"] .roster-workflow p { margin:0; color:var(--dk-mut); font-size:8px; line-height:1.45; }
+.m2-app[data-mode="studio"] .roster-note,
+.m2-app[data-mode="studio"] .roster-blocked { margin:0; padding:7px; border:1px dashed var(--line-2); border-radius:5px; color:var(--m2-amber); font-size:8px; line-height:1.4; }
+.m2-app[data-mode="studio"] .roster-note.ok { color:var(--m2-green-soft); }
+.m2-app[data-mode="studio"] .roster-note.error { color:var(--m2-red-soft); }
+.m2-app[data-mode="studio"] .promotion-shortlist,
+.m2-app[data-mode="studio"] .roster-registry-blockers { border:1px solid color-mix(in srgb,var(--m2-green-soft) 38%,var(--line)); border-radius:5px; background:rgba(0,0,0,.08); }
+.m2-app[data-mode="studio"] .promotion-shortlist > summary,
+.m2-app[data-mode="studio"] .roster-registry-blockers > summary { min-height:44px; display:flex; align-items:center; padding:7px 8px; cursor:pointer; color:var(--m2-green-soft); font:800 8px/1.35 var(--mono); letter-spacing:.04em; }
+.m2-app[data-mode="studio"] .promotion-shortlist > p { margin:0; border-top:1px solid var(--line); padding:7px 8px; color:var(--dk-mut); font-size:8px; line-height:1.4; }
+.m2-app[data-mode="studio"] .promotion-candidate-list { display:grid; gap:6px; padding:0 6px 6px; }
+.m2-app[data-mode="studio"] .promotion-candidate-list article { display:grid; gap:6px; border:1px solid var(--line); border-radius:5px; padding:7px; background:var(--lcd-2); }
+.m2-app[data-mode="studio"] .promotion-candidate-list article.selected { border-color:var(--m2-amber); box-shadow:inset 3px 0 0 var(--m2-amber); }
+.m2-app[data-mode="studio"] .promotion-candidate-list article > header,
+.m2-app[data-mode="studio"] .promotion-candidate-list article > footer { display:grid; gap:5px; }
+.m2-app[data-mode="studio"] .promotion-candidate-list article > header b { color:var(--lcd-ink); font-size:10px; }
+.m2-app[data-mode="studio"] .promotion-candidate-list article > header em { color:var(--m2-amber); font:800 8px/1.2 var(--mono); font-style:normal; }
+.m2-app[data-mode="studio"] .promotion-candidate-list article > p { margin:0; color:var(--dk-mut); font-size:8px; }
+.m2-app[data-mode="studio"] .promotion-candidate-list article > div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; background:var(--line); }
+.m2-app[data-mode="studio"] .promotion-candidate-list article > div span { display:grid; gap:2px; padding:6px; background:var(--lcd); }
+.m2-app[data-mode="studio"] .promotion-candidate-list small { color:var(--dk-dim); font-size:7px; }
+.m2-app[data-mode="studio"] .promotion-candidate-list article > div b { color:var(--lcd-ink); font-size:9px; }
+.m2-app[data-mode="studio"] .promotion-evidence-limits { border-top:1px solid var(--line); padding-top:5px; }
+.m2-app[data-mode="studio"] .promotion-evidence-limits summary { min-height:34px; display:flex; align-items:center; color:var(--dk-dim); font:750 8px/1.3 var(--mono); cursor:pointer; }
+.m2-app[data-mode="studio"] .promotion-evidence-limits ul,
+.m2-app[data-mode="studio"] .roster-registry-blockers ul { display:grid; gap:4px; margin:5px 0 0; padding:0 8px 8px 22px; color:var(--dk-mut); font-size:8px; line-height:1.4; }
+.m2-app[data-mode="studio"] .promotion-candidate-list footer span { color:var(--dk-mut); font-size:8px; line-height:1.4; }
+.m2-app[data-mode="studio"] .roster-effective-policy,
+.m2-app[data-mode="studio"] .roster-registry-fact,
+.m2-app[data-mode="studio"] .roster-activation-packet { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); }
+.m2-app[data-mode="studio"] :is(.roster-effective-policy,.roster-registry-fact,.roster-activation-packet) > span { display:grid; gap:3px; padding:6px; background:var(--lcd-2); }
+.m2-app[data-mode="studio"] .roster-effective-policy > span:last-child { grid-column:1/-1; }
+.m2-app[data-mode="studio"] :is(.roster-effective-policy,.roster-registry-fact,.roster-activation-packet) small { color:var(--dk-dim); font-size:7px; letter-spacing:.05em; }
+.m2-app[data-mode="studio"] :is(.roster-effective-policy,.roster-registry-fact,.roster-activation-packet) :is(b,code) { overflow:hidden; text-overflow:ellipsis; color:var(--lcd-ink); font-size:9px; white-space:nowrap; }
+.m2-app[data-mode="studio"] .roster-activation-packet b { color:var(--m2-green-soft); }
+.m2-app[data-mode="studio"] .roster-selected { display:grid; grid-template-columns:1fr 1fr; gap:7px; align-items:end; }
+.m2-app[data-mode="studio"] .roster-selected > span { grid-column:1/-1; display:grid; gap:3px; }
+.m2-app[data-mode="studio"] .roster-selected > span small,
+.m2-app[data-mode="studio"] .roster-selected label { color:var(--dk-dim); font-size:8px; letter-spacing:.05em; }
+.m2-app[data-mode="studio"] .roster-selected label { display:grid; gap:4px; }
+.m2-app[data-mode="studio"] .roster-selected > span b { color:var(--lcd-ink); font-size:11px; }
+.m2-app[data-mode="studio"] .roster-selected > button { grid-column:1/-1; }
+.m2-app[data-mode="studio"] .roster-registry-blockers { border-color:color-mix(in srgb,var(--m2-amber) 45%,var(--line)); }
+.m2-app[data-mode="studio"] .roster-registry-blockers > summary { color:var(--m2-amber); }
+.m2-app[data-mode="studio"] .roster-registry-blockers footer { border-top:1px solid var(--line); padding:7px 8px; color:var(--dk-mut); font-size:8px; line-height:1.4; }
+.m2-app[data-mode="studio"] :is(.roster-staged,.roster-preview,.roster-pending) { display:grid; gap:6px; padding:7px; border:1px solid var(--line); border-radius:5px; background:var(--lcd-2); }
+.m2-app[data-mode="studio"] :is(.roster-staged,.roster-preview,.roster-pending) > header { display:grid; gap:2px; color:var(--dk-mut); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-staged > span { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px; align-items:center; border-top:1px solid var(--line); padding-top:5px; }
+.m2-app[data-mode="studio"] .roster-staged > span small { grid-column:1/-1; color:var(--dk-mut); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-staged > span b { color:var(--lcd-ink); font-size:10px; }
+.m2-app[data-mode="studio"] .roster-staged label { display:grid; gap:4px; color:var(--dk-dim); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-preview.ready-for-worker-ack { border-color:color-mix(in srgb,var(--m2-green-soft) 55%,transparent); }
+.m2-app[data-mode="studio"] .roster-preview.blocked { border-color:color-mix(in srgb,var(--m2-red-soft) 55%,transparent); }
+.m2-app[data-mode="studio"] .roster-diff { display:grid; gap:4px; border-top:1px solid var(--line); padding-top:6px; }
+.m2-app[data-mode="studio"] .roster-diff > b { color:var(--lcd-ink); font-size:10px; }
+.m2-app[data-mode="studio"] .roster-diff > span { display:grid; grid-template-columns:minmax(72px,.65fr) minmax(0,1fr); gap:5px; color:var(--dk-mut); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-diff i { font-style:normal; overflow-wrap:anywhere; }
+.m2-app[data-mode="studio"] .roster-preview details > span { display:flex; justify-content:space-between; gap:7px; font-size:8px; }
+.m2-app[data-mode="studio"] .roster-preview details > span.block,
+.m2-app[data-mode="studio"] .roster-preview ul { color:var(--m2-red-soft); }
+.m2-app[data-mode="studio"] .roster-preview ul { margin:0; padding-left:18px; font-size:8px; }
+.m2-app[data-mode="studio"] .roster-preview footer { color:var(--dk-dim); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-pending > div { display:grid; grid-template-columns:1fr auto; gap:5px; align-items:center; border-top:1px solid var(--line); padding-top:6px; }
+.m2-app[data-mode="studio"] .roster-pending > div > span { display:grid; gap:2px; }
+.m2-app[data-mode="studio"] .roster-pending :is(input,em) { grid-column:1/-1; }
+.m2-app[data-mode="studio"] .roster-pending b { color:var(--m2-amber); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-pending :is(code,small,em) { color:var(--dk-dim); font-size:8px; }
+.m2-app[data-mode="studio"] .roster-rollback { display:grid; gap:6px; padding:7px; border:1px dashed var(--line-2); border-radius:5px; }
+.m2-app[data-mode="studio"] .roster-rollback > span { display:grid; gap:3px; color:var(--dk-mut); font-size:8px; }
 .m2-roster-reconciliation { margin:5px 7px 8px; color:var(--dk-mut); font:700 8px/1.4 var(--mono); }
 .m2-roster-reconciliation b { color:var(--m2-green-soft); }
 
