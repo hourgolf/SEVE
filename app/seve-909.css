@@ -1801,6 +1801,20 @@
     padding-inline: 8px;
     grid-template-columns: 71px minmax(0, 1fr);
   }
+
+  .m2-app:not(.folio-mobile) .m2-chart-body .chart-toolbar-led .led-window {
+    padding-inline: 2px;
+  }
+
+  .m2-app:not(.folio-mobile) .m2-chart-body .chart-toolbar-led .seven-seg {
+    width: 6px;
+    height: 14px;
+  }
+
+  .m2-app:not(.folio-mobile) .m2-chart-body .seg--range button {
+    min-width: 40px;
+    padding-inline: 6px;
+  }
 }
 
 /* Positions: complete the cream-mode surface and semantic-color contract. */

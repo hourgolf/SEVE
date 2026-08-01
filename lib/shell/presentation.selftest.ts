@@ -88,6 +88,7 @@ assert.match(mobilePerform, /aria-label="Chart settings"[\s\S]*mobileSettingsOpe
 assert.match(mobilePerform, /onMobileSettingsOpenChange=\{setChartSettingsOpen\}[\s\S]*compactTickerInToolbar/);
 assert.match(intradayChart, /className="chart-toolbar-led"[\s\S]*\$\{symbol\} price \$\{ledSpot\.toFixed\(2\)\}/);
 assert.match(foundationCss, /\.m2-chart-body \.seg--range button \{[\s\S]{0,180}min-width:\s*44px;[\s\S]{0,100}min-height:\s*34px/);
+assert.match(foundationCss, /@media \(max-width: 380px\)[\s\S]*\.chart-toolbar-led \.seven-seg \{[\s\S]{0,80}width:\s*6px;[\s\S]*\.seg--range button \{[\s\S]{0,80}min-width:\s*40px/);
 assert.ok(mobileRackRow.indexOf('className="m2-fireslbl') < mobileRackRow.indexOf("m2-passport lane-"));
 assert.ok(mobileRackRow.indexOf("m2-passport lane-") < mobileRackRow.lastIndexOf("<ChannelConfigDraftPanel"));
 assert.match(mobileRackRow, /className="m2-passport-toggle"[\s\S]*aria-expanded=\{passportOpen\}/);
