@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { FiresPill, TradeShapeBar } from "@/components/console/ChannelStrip";
 import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftPanel";
 import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
+import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRosterActivationConsole";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -305,6 +306,7 @@ export function MobileRackRow({
             </>}
           </div>
           {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
+          <ChannelRosterActivationConsole selectedSlug={slug} controlPlane={controlPlane} />
           <ChannelConfigDraftPanel
             model={draft.model}
             active={draft.active}

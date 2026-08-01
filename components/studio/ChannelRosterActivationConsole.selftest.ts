@@ -10,6 +10,10 @@ const hook = readFileSync(new URL(
   import.meta.url,
 ), "utf8");
 const inspector = readFileSync(new URL("./ChannelInspector.tsx", import.meta.url), "utf8");
+const mobileRackRow = readFileSync(new URL(
+  "../mobile2/MobileRackRow.tsx",
+  import.meta.url,
+), "utf8");
 
 assert.match(component, /ATOMIC ROSTER · PROSPECTIVE PAPER ENTRY/);
 assert.match(component, /EXCLUDE · KEEP SHADOW/);
@@ -24,15 +28,25 @@ assert.match(component, /SUPERSEDE →/);
 assert.match(component, /WHY THIS RESEARCH CHANNEL CANNOT BE PROMOTED YET/);
 assert.match(component, /shadow collection continues · zero order authority/);
 assert.match(component, /no runtime mutation · no order authority · history untouched/);
+assert.match(component, /MONDAY PAPER CANDIDATES/);
+assert.match(component, /FREEZE PAPER ELIGIBILITY/);
+assert.match(component, /STAGE CONSERVATIVE CANARY/);
+assert.match(component, /GIVEBACK/);
+assert.match(component, /EVIDENCE LIMITS/);
+assert.match(component, /NEXT SAFE ENTRY/);
+assert.match(component, /HISTORY/);
 assert.doesNotMatch(component, /\bfetch\s*\(/);
 assert.match(hook, /\/api\/channel-roster-bundles\/preview/);
 assert.match(hook, /\/api\/channel-roster-bundles\/apply/);
 assert.match(hook, /\/api\/channel-roster-bundles\/rollback/);
 assert.match(hook, /bundle supersession failed closed/);
 assert.match(hook, /\/api\/research-channel-registry/);
+assert.match(hook, /\/api\/channel-promotion-candidates/);
+assert.match(hook, /candidate qualification failed closed/);
 assert.doesNotMatch(hook, /safeBoundaryProof:/);
 assert.doesNotMatch(hook, /capacityEvaluation:/);
 assert.doesNotMatch(hook, /brokerPositions:/);
 assert.match(inspector, /<ChannelRosterActivationConsole selectedSlug=\{slug\}/);
+assert.match(mobileRackRow, /<ChannelRosterActivationConsole selectedSlug=\{slug\}/);
 
 console.log("channel roster activation console self-test passed");
