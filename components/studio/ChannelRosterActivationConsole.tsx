@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
 import {
   useChannelRosterBundleControl,
+  type PromotionCandidateView,
   type RosterBundleView,
 } from "@/hooks/useChannelRosterBundleControl";
 
@@ -27,6 +28,8 @@ export function ChannelRosterActivationConsole({
   const active = controlPlane?.view?.bySlug[selectedSlug] ?? null;
   const registration = roster.registrations.find((item) =>
     item.channel_slug === selectedSlug) ?? null;
+  const selectedCandidate = roster.candidates.find((item) =>
+    item.slug === selectedSlug) ?? null;
   const existing = roster.changes.find((item) => item.slug === selectedSlug);
   const [posture, setPosture] = useState<"paper" | "observe-only">("observe-only");
   const [quantity, setQuantity] = useState(1);
@@ -71,6 +74,52 @@ export function ChannelRosterActivationConsole({
     });
   };
 
+  const stageSuggestedCanary = (candidate: PromotionCandidateView) => {
+    roster.setTarget({
+      slug: candidate.slug,
+      membership: "include",
+      executionPosture: "paper",
+      quantity: candidate.quantity,
+    });
+    if (controlPlane?.view?.bySlug[candidate.displacedRoot]) {
+      roster.setTarget({
+        slug: candidate.displacedRoot,
+        membership: "exclude",
+      });
+    }
+    roster.setReason(
+      `One-contract paper canary for ${candidate.slug}; atomically pause ${candidate.displacedRoot}, preserve both shadow streams, and retain the exact prior manifest as rollback.`,
+    );
+  };
+
+  const takeProfitLabel = active?.takeProfit.kind === "ride"
+    ? "RIDE"
+    : active?.takeProfit.targetPct == null
+      ? "—"
+      : `+${active.takeProfit.targetPct}%`;
+  const candidateSpec = registration?.candidate_spec;
+  const selectedPolicy = active ? {
+    account: active.accountLabel,
+    quantity: active.quantity,
+    takeProfit: takeProfitLabel,
+    stopLoss: `−${active.stopLoss.catastrophePct}%`,
+    collision: active.capacity.domainId,
+    posture: active.executionPosture,
+  } : candidateSpec ? {
+    account: selectedCandidate?.accountLabel ?? candidateSpec.accountRole ?? "PAPER",
+    quantity: candidateSpec.quantity ?? 1,
+    takeProfit: candidateSpec.takeProfit?.kind === "ride"
+      ? "RIDE"
+      : candidateSpec.takeProfit?.targetPct == null
+        ? "—"
+        : `+${candidateSpec.takeProfit.targetPct}%`,
+    stopLoss: candidateSpec.stopLoss?.catastrophePct == null
+      ? "—"
+      : `−${candidateSpec.stopLoss.catastrophePct}%`,
+    collision: candidateSpec.collisionDomain ?? "—",
+    posture: candidateSpec.executionPosture ?? "observe-only",
+  } : null;
+
   const freshAck = (bundle: RosterBundleView) => {
     const at = bundle.latestWorkerAcknowledgement?.acknowledged_at;
     return at ? Date.now() - Date.parse(at) <= 5 * 60_000 : false;
@@ -84,6 +133,44 @@ export function ChannelRosterActivationConsole({
       }`}><b>{roster.mutationWindow.allowed
         ? "AFTER-CLOSE WRITE WINDOW"
         : "SESSION READ-ONLY"}</b> · {roster.mutationWindow.message}</p>}
+
+      <details className="promotion-shortlist" open={Boolean(selectedCandidate)}>
+        <summary>MONDAY PAPER CANDIDATES · {roster.candidates.length} EVIDENCE-BACKED · NO AUTO-PROMOTION</summary>
+        <div className="promotion-candidate-list">
+          {roster.candidates.map((candidate) => {
+            const candidateRegistration = roster.registrations.find((item) =>
+              item.channel_slug === candidate.slug);
+            const eligible = candidateRegistration?.state === "paper-eligible";
+            const displacementActive = Boolean(
+              controlPlane?.view?.bySlug[candidate.displacedRoot],
+            );
+            return <article key={candidate.slug} className={candidate.slug === selectedSlug ? "selected" : ""}>
+              <header><b>#{candidate.rank} · {candidate.slug}</b><em>{eligible ? "PAPER-ELIGIBLE" : "QUALIFICATION NEEDED"}</em></header>
+              <p>{candidate.displayName} · {candidate.underlying} · {candidate.accountLabel}</p>
+              <div>
+                <span><small>SAMPLE</small><b>{candidate.evidence.sample}</b></span>
+                <span><small>WIN</small><b>{candidate.evidence.winRatePct}%</b></span>
+                <span><small>PEAK</small><b>{candidate.evidence.peakPct}%</b></span>
+                <span><small>NET / CT</small><b>+${candidate.evidence.netPerContractUsd}</b></span>
+              </div>
+              <footer>
+                <span>start 1 ct · TP +{candidate.takeProfitPct}% · SL −{candidate.stopLossPct}% · replace {candidate.displacedRoot}</span>
+                {!eligible ? <button type="button" disabled={roster.busy || roster.mutationWindow?.allowed !== true} onClick={() => void roster.qualifyCandidate(candidate)}>FREEZE PAPER ELIGIBILITY</button>
+                  : <button type="button" disabled={roster.busy || !displacementActive} onClick={() => stageSuggestedCanary(candidate)}>STAGE CONSERVATIVE CANARY</button>}
+              </footer>
+            </article>;
+          })}
+        </div>
+        <p>Qualification seals source, manager, route, and evidence identity only. Staging is local. Preview rechecks all three paper books, collision, and capacity. Apply still requires a fresh worker acknowledgement plus the exact operator phrase.</p>
+      </details>
+
+      {selectedPolicy && <div className="roster-effective-policy" aria-label="Current selected channel policy">
+        <span><small>ROUTE</small><b>{selectedPolicy.account}</b></span>
+        <span><small>SIZE</small><b>{selectedPolicy.quantity} ct</b></span>
+        <span><small>TP / SL</small><b>{selectedPolicy.takeProfit} / {selectedPolicy.stopLoss}</b></span>
+        <span><small>POSTURE</small><b>{selectedPolicy.posture.toUpperCase()}</b></span>
+        <span><small>COLLISION</small><b>{selectedPolicy.collision}</b></span>
+      </div>}
       <div className="roster-selected">
         <span><small>SELECTED</small><b>{selectedSlug}</b></span>
         <label>MEMBERSHIP
@@ -125,6 +212,12 @@ export function ChannelRosterActivationConsole({
           <small>{change.membership === "exclude" ? "EXCLUDE · SHADOW PRESERVED" : `${change.executionPosture?.toUpperCase()} · ${change.quantity} ct`}</small>
           <button type="button" onClick={() => roster.removeTarget(change.slug)}>REMOVE</button>
         </span>)}
+        <div className="roster-activation-packet">
+          <span><small>BOUNDARY</small><b>NEXT SAFE ENTRY</b></span>
+          <span><small>SHADOW</small><b>CONTINUES</b></span>
+          <span><small>HISTORY</small><b>IMMUTABLE</b></span>
+          <span><small>ROLLBACK</small><b>{short(controlPlane?.view?.manifestId)}</b></span>
+        </div>
         <label>OPERATOR REASON
           <textarea maxLength={2_000} value={roster.reason} onChange={(event) => roster.setReason(event.target.value)} placeholder="Why this bounded paper roster experiment should exist (8+ characters)" />
         </label>

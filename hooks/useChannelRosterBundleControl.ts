@@ -11,7 +11,43 @@ export interface RosterRegistrationView {
   channel_slug: string;
   state: "paper-eligible" | "registered-blocked";
   blockers: string[];
-  candidate_spec: { quantity?: number; executionPosture?: "paper" | "observe-only" } | null;
+  candidate_spec: {
+    quantity?: number;
+    executionPosture?: "paper" | "observe-only";
+    accountRole?: string;
+    collisionDomain?: string;
+    takeProfit?: { kind: "ride" | "bank"; targetPct: number | null; fraction: 0 | 0.5 };
+    stopLoss?: { catastrophePct: number };
+  } | null;
+}
+
+export interface PromotionCandidateView {
+  version: "channel-promotion-candidate-v1";
+  rank: 1 | 2 | 3;
+  slug: string;
+  displayName: string;
+  underlying: "SPY" | "QQQ";
+  sourceContentHash: string;
+  accountLabel: "PAPER 2";
+  collisionDomain: "rc54-lab";
+  quantity: 1;
+  executionPosture: "observe-only";
+  takeProfitPct: number;
+  stopLossPct: 30;
+  displacedRoot: string;
+  evidence: {
+    observedThrough: string;
+    source: string;
+    sample: number;
+    peakPct: number;
+    winRatePct: number;
+    netPerContractUsd: number;
+    givebackPct: number;
+    limitations: string[];
+  };
+  qualificationAuthority: false;
+  activationAuthority: false;
+  orderAuthority: false;
 }
 
 export interface RosterBundleView {
@@ -82,6 +118,7 @@ export function useChannelRosterBundleControl(
 ) {
   const { session, operator } = useAuth();
   const [registrations, setRegistrations] = useState<RosterRegistrationView[]>([]);
+  const [candidates, setCandidates] = useState<PromotionCandidateView[]>([]);
   const [bundles, setBundles] = useState<RosterBundleView[]>([]);
   const [mutationWindow, setMutationWindow] =
     useState<RosterMutationWindowView | null>(null);
@@ -104,6 +141,7 @@ export function useChannelRosterBundleControl(
   const refresh = useCallback(async () => {
     if (!session || !operator) {
       setRegistrations([]);
+      setCandidates([]);
       setBundles([]);
       setMutationWindow(null);
       return;
@@ -111,9 +149,10 @@ export function useChannelRosterBundleControl(
     setLoading(true);
     try {
       const auth = { authorization: `Bearer ${session.access_token}` };
-      const [bundleResponse, registryResponse] = await Promise.all([
+      const [bundleResponse, registryResponse, candidateResponse] = await Promise.all([
         fetch("/api/channel-roster-bundles", { headers: auth, cache: "no-store" }),
         fetch("/api/research-channel-registry", { headers: auth, cache: "no-store" }),
+        fetch("/api/channel-promotion-candidates", { headers: auth, cache: "no-store" }),
       ]);
       const bundleBody = await bundleResponse.json().catch(() => ({})) as {
         ok?: boolean; error?: string; bundles?: RosterBundleView[];
@@ -122,15 +161,22 @@ export function useChannelRosterBundleControl(
       const registryBody = await registryResponse.json().catch(() => ({})) as {
         ok?: boolean; error?: string; registrations?: RosterRegistrationView[];
       };
+      const candidateBody = await candidateResponse.json().catch(() => ({})) as {
+        ok?: boolean; error?: string; candidates?: PromotionCandidateView[];
+      };
       if (!bundleResponse.ok || !bundleBody.ok) {
         throw new Error(bundleBody.error ?? "roster bundle read failed");
       }
       if (!registryResponse.ok || !registryBody.ok) {
         throw new Error(registryBody.error ?? "research registry read failed");
       }
+      if (!candidateResponse.ok || !candidateBody.ok) {
+        throw new Error(candidateBody.error ?? "promotion candidate read failed");
+      }
       setBundles(bundleBody.bundles ?? []);
       setMutationWindow(bundleBody.mutationWindow ?? null);
       setRegistrations(registryBody.registrations ?? []);
+      setCandidates(candidateBody.candidates ?? []);
       setError(null);
     } catch (readFailure) {
       setError(readError(readFailure, "operator activation state read failed"));
@@ -365,6 +411,31 @@ export function useChannelRosterBundleControl(
     }
   }, [refresh, request]);
 
+  const qualifyCandidate = useCallback(async (
+    candidate: PromotionCandidateView,
+  ) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await request("/api/channel-promotion-candidates", {
+        expectedSourceContentHash: candidate.sourceContentHash,
+        slug: candidate.slug,
+      }, true);
+      setNotice(
+        `${candidate.slug} is now paper-eligible and remains observe-only, authority-dark, and unapplied.`,
+      );
+      await refresh();
+    } catch (qualificationFailure) {
+      setError(readError(
+        qualificationFailure,
+        "candidate qualification failed closed",
+      ));
+    } finally {
+      setBusy(false);
+    }
+  }, [refresh, request]);
+
   const activeOrEligible = useMemo(() => {
     const active = new Set(controlPlane?.view?.specs.map((spec) => spec.slug) ?? []);
     return registrations.filter((registration) =>
@@ -373,6 +444,7 @@ export function useChannelRosterBundleControl(
 
   return {
     registrations,
+    candidates,
     paperEligibleRegistrations: activeOrEligible,
     bundles,
     mutationWindow,
@@ -393,6 +465,7 @@ export function useChannelRosterBundleControl(
     supersede,
     apply,
     rollback,
+    qualifyCandidate,
     refresh,
   };
 }
