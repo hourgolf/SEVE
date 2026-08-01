@@ -14,6 +14,10 @@ import {
   type SealedReleaseReceipt,
 } from "@/lib/ops/releaseReceipt";
 import type { StrategistConfig } from "@/lib/desk/types";
+import {
+  paperAccountLabel,
+  paperAccountSlot,
+} from "@/lib/channels/paperAccountLabel";
 
 export const RC54_RELEASE_ID = "week2-2026-07-27-rc5.4";
 export const RC54_CONFIG_HASH = "a1dda169e9c578e83f725c09b01af0af675d4ebc6d26e4c75fd1d520e828b227";
@@ -300,6 +304,8 @@ const expectedFor = (lane: SealedReleaseLane) => lane === "rc54"
     };
 
 const SHA256 = /^sha256:([a-f0-9]{64})$/i;
+const RECEIPT_BOUND_SLUG = /^[a-z0-9][a-z0-9-]{1,98}[a-z0-9]$/;
+const MAX_RECEIPT_BOUND_ROOTS = 68;
 export const MAX_GOVERNED_ROOT_QUANTITY = 12;
 
 const object = (value: unknown): Record<string, unknown> | null =>
@@ -344,24 +350,27 @@ function receiptBoundRootBindings(
       || workerVersion !== RC54_WORKER_VERSION) {
     return { bindings: {}, issue: "receipt-bound startup identity is incomplete or internally inconsistent" };
   }
-  if (!Array.isArray(meta.roots) || meta.roots.length !== Object.keys(RC54_ROOTS).length) {
+  if (!Array.isArray(meta.roots)
+      || meta.roots.length < 1
+      || meta.roots.length > MAX_RECEIPT_BOUND_ROOTS) {
     return { bindings: {}, issue: "receipt-bound startup topology is incomplete" };
   }
   const bindings: Record<string, ActiveRootBinding> = {};
   for (const value of meta.roots) {
     const root = object(value);
     const slug = string(root?.slug);
-    const expected = slug ? RC54_ROOTS[slug] : null;
     const channelHash = string(root?.channelSpecContentHash);
     const managerHash = string(root?.managerVersion);
     const rootEpoch = string(root?.configurationEpochId);
     const accountId = string(root?.accountId);
+    const accountSlot = paperAccountSlot(accountId);
     const quantity = Number(root?.quantity);
     const managerProfileId = string(root?.managerProfileId);
     const entries = Number(root?.maxEntriesPerSession);
     if (!slug
-        || !expected
-        || accountId !== expected.accountId
+        || !RECEIPT_BOUND_SLUG.test(slug)
+        || !accountId
+        || !accountSlot
         || !Number.isInteger(quantity)
         || quantity < 1
         || quantity > MAX_GOVERNED_ROOT_QUANTITY
@@ -378,7 +387,7 @@ function receiptBoundRootBindings(
     bindings[slug] = {
       slug,
       accountId,
-      accountName: expected.accountName,
+      accountName: paperAccountLabel(accountId),
       quantity,
       managerProfileId,
       managerVersion: managerHash!,

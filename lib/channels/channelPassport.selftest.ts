@@ -182,6 +182,31 @@ assert.equal(
   8,
 );
 
+const dynamicRoot = {
+  ...receiptBoundRoots.find((root) => root.slug === "vb-squeeze-break")!,
+  slug: "vb-gap-drift",
+  quantity: 1,
+};
+const dynamicReceiptBound = deriveChannelPassports({
+  channels: [channel("vb-gap-drift"), channel("vb-squeeze-break")],
+  events: [event(
+    `stream: rc54-release ACTIVE ${receiptBoundReleaseId} config=sha256:${receiptBoundHash}`,
+    {
+      ...receiptBoundEvents[0].meta,
+      roots: [
+        ...receiptBoundRoots.filter((root) => root.slug !== "vb-squeeze-break"),
+        dynamicRoot,
+      ],
+    },
+  )],
+  signals: [], positions: [], recentTrades: [], evidenceBySlug: {},
+});
+assert.equal(dynamicReceiptBound.release.state, "verified");
+assert.equal(dynamicReceiptBound.bySlug["vb-gap-drift"].lifecycle, "paper-root");
+assert.equal(dynamicReceiptBound.bySlug["vb-gap-drift"].effective.route.accountName, "PAPER 2");
+assert.equal(dynamicReceiptBound.bySlug["vb-gap-drift"].effective.economics.quantity, 1);
+assert.equal(dynamicReceiptBound.bySlug["vb-squeeze-break"].lifecycle, "dark-evidence");
+
 const invalidReceiptBound = deriveChannelPassports({
   channels: [channel("pb-ride")],
   events: [event(
