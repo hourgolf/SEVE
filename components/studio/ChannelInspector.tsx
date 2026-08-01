@@ -20,12 +20,13 @@ import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlane
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write, controlPlane }: {
+export function ChannelInspector({ strategist, summary, passport, write, controlPlane, onClose }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
   write: SurfaceProps["write"];
   controlPlane?: ChannelControlPlaneViewRead;
+  onClose?: () => void;
 }) {
   const dispatch = useDeskDispatch();
   const { persistConfig, setChannelStatus, duplicateChannel, deleteChannel } = write;
@@ -49,7 +50,9 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const [busy, setBusy] = useState(false);
   const [passportOpen, setPassportOpen] = useState(false);
 
-  if (!strategist) return <aside className="inspector mixer-inspector"><div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">select a fleet row</span></div><div className="insp-empty">no channel selected</div></aside>;
+  if (!strategist) return <aside className="inspector mixer-inspector collapsed" aria-label="Channel inspector; select a fleet row to open">
+    <div className="inspector-rail" aria-hidden="true"><span>02</span><b>INSPECTOR</b><i>SELECT CHANNEL</i></div>
+  </aside>;
 
   const { id, slug, underlying, color, status, config: databaseConfig } = strategist;
   const sealed = passport?.release.state === "verified";
@@ -96,7 +99,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
 
   return (
     <aside className="inspector mixer-inspector" style={{ ["--pm" as string]: pmVar(color) }}>
-      <div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><span className="x">{slug}</span></div>
+      <div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><button type="button" className="insp-close" onClick={onClose} aria-label="Close channel inspector">×</button></div>
       <div className="insp-hero">
         <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
         {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{passport.effective.execution.label}</span>}

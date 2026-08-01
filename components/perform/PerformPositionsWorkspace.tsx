@@ -112,22 +112,26 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
   const lastManualReason = manualExits.at(0)?.position.close_reason?.slice("manual:".length).replaceAll("_", " ");
   const realizedTone: SeveMetricTone = model.exits.realized > 0 ? "success" : model.exits.realized < 0 ? "danger" : "neutral";
   const attributionBlocked = surface.feed.positionAttribution.state === "blocked";
+  const hasOpenPositions = surface.feed.positions.length > 0;
+  const hasRecentExits = model.exits.rows.length > 0;
+  const isQuietBook = !attributionBlocked && !hasOpenPositions && !hasRecentExits;
+  const showReconciliation = reconciliation?.tone !== "green";
 
   return <section className="pf-positions-shell" data-nav-target="true" tabIndex={-1}>
-    <SeveWorkspaceHeader
-      title="POSITIONS"
-      subtitle="broker-truth position ledger · executable exits · operator attribution"
-      boundary="PAPER ONLY · MANUAL CLOSE REQUIRES CONFIRMATION"
-    />
-    <BrokerReconciliationStrip model={surface.opsReadiness} />
+      <SeveWorkspaceHeader
+        title="POSITIONS"
+        boundary="PAPER · CONFIRM TO CLOSE"
+      />
+    {showReconciliation && <BrokerReconciliationStrip model={surface.opsReadiness} />}
+    {isQuietBook ? <div className="pf-positions-empty" role="status"><b>NO OPEN POSITIONS</b><span>No session exits</span></div> : <>
     <SeveMetricStrip metrics={[
       { label: "REALIZED", value: attributionBlocked ? "—" : signedUsd(model.exits.realized), tone: attributionBlocked ? "attention" : realizedTone },
       { label: "WINNERS", value: attributionBlocked ? "—" : model.exits.wins },
       { label: "LOSSES", value: attributionBlocked ? "—" : model.exits.losses, tone: !attributionBlocked && model.exits.losses > 0 ? "danger" : "neutral" },
       { label: "MANUAL", value: attributionBlocked ? "—" : manualExits.length === 0 ? "0" : `${manualExits.length} ${lastManualReason ?? "TAGGED"}`, tone: !attributionBlocked && manualExits.length > 0 ? "attention" : "neutral" },
     ]} />
-    <div className="pf-positions-workspace" data-flat={!attributionBlocked && surface.feed.positions.length === 0 || undefined} data-attribution-blocked={attributionBlocked || undefined}>
-      <PositionsSection
+    <div className="pf-positions-workspace" data-has-open={hasOpenPositions || undefined} data-has-exits={hasRecentExits || undefined} data-attribution-blocked={attributionBlocked || undefined}>
+      {(hasOpenPositions || attributionBlocked) && <PositionsSection
         positions={surface.feed.positions}
         strategists={surface.view.desk.strategists}
         liveMarks={surface.liveMarks}
@@ -137,10 +141,11 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
         reconciliation={reconciliation}
         evidenceChains={surface.opsReadiness.chains}
         attribution={surface.feed.positionAttribution}
-      />
+      />}
       <aside className="pf-positions-context">
-        {attributionBlocked ? <BrokerTruthFallback surface={surface} /> : <><AggregateExposure surface={surface} /><RecentExits surface={surface} /></>}
+        {attributionBlocked ? <BrokerTruthFallback surface={surface} /> : <>{hasOpenPositions && <AggregateExposure surface={surface} />}{hasRecentExits && <RecentExits surface={surface} />}</>}
       </aside>
     </div>
+    </>}
   </section>;
 }

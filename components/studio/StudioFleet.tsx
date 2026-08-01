@@ -43,23 +43,18 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
   return (
     <section className="fleet" aria-label="Strategy channel fleet">
       <div className={`fleet-release ${passports.release.state}`} role="status">
-        <span><i /><b>{passports.releaseView.label}</b><small>{passports.release.fact}</small></span>
-        <em>{passports.releaseView.accountLifecycleLabel}</em>
-        <code>{passports.releaseView.shortHash}</code>
+        <span title={passports.release.fact}><i /><b>{passports.release.state === "verified" ? "RUNTIME SEALED" : passports.releaseView.label}</b></span>
       </div>
       <CanaryCommandCenter controlPlane={controlPlane} bundles={roster.bundles} compact />
       <header className="fleet-summary">
         <div className="fleet-title">
           <span className="fleet-kicker">STUDIO · FLEET</span>
           <strong>{summary.attention ? `${summary.attention} need attention` : "fleet nominal"}</strong>
-          <span>{summary.total} desk channels · {authorityRootSlugs.length || "—"} receipt authority roots</span>
         </div>
         <div className="fleet-metrics" aria-label="Fleet summary">
-          <span><small>DB ACTIVE</small><b>{summary.armed}</b></span>
-          <span className={summary.openPositions ? "hot" : ""}><small>OPEN</small><b>{summary.openPositions}</b></span>
-          <span><small>DB MUTED</small><b>{summary.muted}</b></span>
-          <span><small>DB BOOST</small><b>{summary.boosted}</b></span>
-          <span className={summary.dayPnl < 0 ? "neg" : summary.dayPnl > 0 ? "pos" : ""}><small>DAY</small><b>{signedUsd(summary.dayPnl)}</b></span>
+          <span><small>ARMED</small><b>{summary.armed}</b></span>
+          <span><small>MUTED</small><b>{summary.muted}</b></span>
+          <span><small>BOOST</small><b>{summary.boosted}</b></span>
         </div>
       </header>
 
@@ -78,8 +73,8 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
       </div>
       {passports.release.state === "verified" && <details className="runtime-roster-map">
         <summary>
-          <span><b>RUNTIME ROSTER RECONCILIATION</b><small>receipt authority and desk presentation are separate projections</small></span>
-          <em>{authorityRootSlugs.length} AUTHORITY ROOTS · {passports.roots} PAPER DESK ROWS · {passports.dark} OBSERVE DESK ROWS</em>
+          <b>RECEIPT AUTHORITY</b>
+          <em>{authorityRootSlugs.length} ROOTS</em>
           <i aria-hidden="true">▾</i>
         </summary>
         <div>

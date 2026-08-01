@@ -51,8 +51,8 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
   const below = terrain?.below ?? brief?.carry.below ?? [];
 
   return <section className="sntw" id="perform-sentinel" tabIndex={-1} aria-label="Sentinel evidence workspace">
-    <header className="sntw-head"><span><b>SENTINEL</b><small>all paper accounts · next-open terrain · close review · evidence provenance</small></span>
-      <em>DETERMINISTIC HEALTH ≠ INTERPRETIVE READ</em></header>
+    <header className="sntw-head"><span><b>SENTINEL</b><small>ALL PAPER · NEXT OPEN · CLOSE REVIEW</small></span>
+      <em>READ ONLY</em></header>
     <SentinelReceiptStrip sentinel={sentinel} />
     {state !== "ok" ? <div className="sntw-state"><b>{state.toUpperCase()}</b><span>{err || "Sentinel evidence is not available yet."}</span></div> : <div className="sntw-grid">
       <section className="sntw-card sntw-next">

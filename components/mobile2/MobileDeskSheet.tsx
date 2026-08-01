@@ -51,21 +51,26 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
   const { feed, liveMarks } = props;
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
   const recentExits = useMemo(() => deriveRecentExits(feed.recentTrades), [feed.recentTrades]);
-  const signals = feed.signals.slice(0, 18);
+  const reconciliation = props.opsReadiness.evidence.find((item) => item.id === "reconciliation");
+  const attributionBlocked = feed.positionAttribution.state === "blocked";
+  const hasOpenPositions = feed.positions.length > 0;
+  const hasRecentExits = recentExits.rows.length > 0;
+  const isQuietBook = !attributionBlocked && !hasOpenPositions && !hasRecentExits;
 
   return <>
-    <div className="m2-book-nav"><span><b>LIVE BOOK</b><small>positions first · exposure second</small></span>{onViewMarket && <div><button type="button" onClick={() => onViewMarket("chart")}>CHART</button><button type="button" onClick={() => onViewMarket("chain")}>CHAIN</button></div>}</div>
-    <BrokerReconciliationStrip model={props.opsReadiness} compact />
-    <MobilePositions props={props} strategists={props.view.desk.strategists} compact />
-    <div className="m2-desk-hero">
+    <div className="m2-book-nav"><span><b>BOOK</b><small>POSITIONS · EXPOSURE · EXITS</small></span>{onViewMarket && <div><button type="button" onClick={() => onViewMarket("chart")}>CHART</button><button type="button" onClick={() => onViewMarket("chain")}>CHAIN</button></div>}</div>
+    {reconciliation?.tone !== "green" && <BrokerReconciliationStrip model={props.opsReadiness} compact />}
+    {isQuietBook ? <div className="m2-book-empty" role="status"><b>NO OPEN POSITIONS</b><span>No session exits</span></div> : <>
+    {(hasOpenPositions || attributionBlocked) && <MobilePositions props={props} strategists={props.view.desk.strategists} compact />}
+    {hasOpenPositions && <div className="m2-desk-hero">
       <span><small>OPEN</small><b>{feed.positions.length}</b></span>
       <span><small>CONTRACTS</small><b>{exposure.totalContracts}</b></span>
       <span><small>STACKED</small><b className={exposure.stackedOccCount ? "warn" : ""}>{exposure.stackedOccCount}/{exposure.occCount}</b></span>
       <span><small>NOTIONAL</small><b>{moneyK(exposure.totalNotional)}</b></span>
-    </div>
+    </div>}
 
-    <Section title="NET EXPOSURE" meta="correlated lot · no caps">
-      {exposure.occCount === 0 ? <div className="m2-desk-empty">flat — no aggregate exposure</div> : <>
+    {hasOpenPositions && <Section title="NET EXPOSURE" meta="correlated lot · no caps">
+      <>
         <div className="m2-desk-directions">
           {exposure.byUnderlying.map((row) => <span key={row.underlying}><b>{row.underlying}</b><i className="pos">{row.callContracts}C</i><i className="neg">{row.putContracts}P</i><em>{moneyK(row.notional)}</em></span>)}
         </div>
@@ -75,12 +80,12 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
             <span>×{Math.abs(row.contracts)}</span><span>{row.channels.length} ch</span><em>{moneyK(row.notional)}</em>
           </div>)}
         </div>
-      </>}
-    </Section>
+      </>
+    </Section>}
 
-    <Section title="RECENT EXITS" meta={`${recentExits.rows.length} today · ${signedUsd(recentExits.realized)}`}>
+    {hasRecentExits && <Section title="RECENT EXITS" meta={`${recentExits.rows.length} today · ${signedUsd(recentExits.realized)}`}>
       <div className="m2-recent-exits">
-        {recentExits.rows.length === 0 ? <div className="m2-desk-empty">no completed exits in the current feed</div> : recentExits.rows.slice(0, 10).map((row) => {
+        {recentExits.rows.slice(0, 10).map((row) => {
           const trade = row.position;
           const realized = trade.realized_pnl ?? 0;
           const root = trade.occ_symbol.match(/^([A-Z]+)\d/)?.[1] ?? "?";
@@ -92,17 +97,8 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
           </div>;
         })}
       </div>
-    </Section>
-
-    <Section title="SIGNALS" meta={`${signals.length} latest · tap to inspect`} collapsible>
-      <div className="m2-desk-signals">
-        {signals.length === 0 ? <div className="m2-desk-empty">listening for signals</div> : signals.map((signal) => <div key={signal.id}>
-          <time>{timeOfDay(signal.created_at)}</time><b className={signal.level.toLowerCase()}>{signal.level}</b>
-          <span><strong>{signal.strategist_slug}</strong> · {signal.signal_type} · {signal.message}</span>
-        </div>)}
-      </div>
-    </Section>
-
+    </Section>}
+    </>}
   </>;
 }
 

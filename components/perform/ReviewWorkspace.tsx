@@ -13,14 +13,13 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
   const { data, view, feed, livePnl, liveFund, reviewEvidence } = surface;
   const selectedAccount = surface.accounts.find((account) => account.id === surface.acctId);
   const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
-  const sectionScope = section === "performance" ? accountScope : "ALL PAPER ACCOUNTS";
 
   return (
     <section className="rvw" id="perform-tape" tabIndex={-1} aria-label="Review workspace">
       <header className="rvw-head">
         <div>
           <small>REVIEW</small>
-          <b>Session evidence and research archive</b>
+          <b>SESSION EVIDENCE</b>
         </div>
         <nav role="tablist" aria-label="Review sections">
           {REVIEW_SECTIONS.map((item) => (
@@ -37,7 +36,6 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
             </button>
           ))}
         </nav>
-        <span>{sectionScope} · READ ONLY · ZERO ORDER AUTHORITY</span>
       </header>
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>
@@ -47,6 +45,7 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
             health={data.readHealth.events}
             strategists={view.desk.strategists}
             readiness={surface.opsReadiness}
+            embedded
           />
         )}
         {section === "autopsy" && (

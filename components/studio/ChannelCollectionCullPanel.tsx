@@ -8,7 +8,7 @@ export function ChannelCollectionCullPanel() {
   return (
     <details className="collection-cull">
       <summary>
-        <span><b>RESEARCH COLLECTION CULL</b><small>independent of paper execution</small></span>
+        <b>COLLECTION</b>
         <em>{control.cullable.length} ACTIVE · {control.resumable.length} PAUSED</em>
         <i aria-hidden="true">▾</i>
       </summary>

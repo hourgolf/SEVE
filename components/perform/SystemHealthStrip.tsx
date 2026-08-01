@@ -23,15 +23,15 @@ export function SystemHealthStrip({ incident }: { incident: Incident }) {
   return (
     <div className="sys-health" data-tone={TONE[severity]}>
       <span className={`sys-chip sys-${TONE[severity]}`}>{healthLabel(severity, session)}</span>
-      <span className="sys-item sys-pos">
+      {p.total > 0 && <span className="sys-item sys-pos">
         <span className="sys-k">OPEN</span>
         <span className="sys-v">{p.total}</span>
-        {p.total > 0 && (
+        {(
           <span className="sys-attr">
             {p.streamConfigured}<i>s</i>/{p.cronConfigured}<i>c</i>{p.unknown > 0 ? <>/<b className="sys-unk">{p.unknown}?</b></> : null}
           </span>
         )}
-      </span>
+      </span>}
       <span className="sys-item sys-sess">
         <span className="sys-k">SESSION</span>
         <span className="sys-v">{session}{coverageKnown ? "" : " · cal?"}</span>
