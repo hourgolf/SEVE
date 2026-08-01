@@ -155,6 +155,9 @@
 .m2-phead .t { font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--plate-ink); }
 .m2-phead .idx { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--accent); }
 .m2-phead .x { font-family: var(--mono); font-size: 12.5px; color: var(--dk-mut); white-space: nowrap; }
+.m2-chart-settings { width:24px; height:24px; display:grid; place-items:center; padding:0; border:1px solid #68665f; border-radius:5px; background:linear-gradient(180deg,#333532,#202220); color:var(--dk-mut); box-shadow:inset 0 1px 0 rgba(255,255,255,.08); cursor:pointer; }
+.m2-chart-settings span { font-size:15px; line-height:1; transform:translateY(-.5px); }
+.m2-chart-settings.on { color:var(--m2-green); border-color:var(--m2-green); box-shadow:inset 0 -2px 0 var(--m2-green); }
 .m2-ok { color: var(--m2-green-soft); }
 .m2-receipt-green{color:var(--m2-green-soft)}.m2-receipt-yellow{color:var(--m2-amber)}.m2-receipt-red{color:#d5523b}.m2-receipt-neutral{color:var(--m2-mut)}
 .m2-chart-body { background: var(--scr); }

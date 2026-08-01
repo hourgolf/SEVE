@@ -139,6 +139,7 @@ class SessionLayer implements ISeriesPrimitive<Time> {
 export function IntradayChart({
   bars, dailyBars = [], spot, spotUp = null, mobile = false, trades = [], openPositions = [], highlightTrade = null,
   symbol = "SPY", onSymbolChange, fill = false, hideTitle = false, hideSymbolSelector = false,
+  mobileSettingsOpen, onMobileSettingsOpenChange,
 }: {
   bars: UnderlyingBar[];
   dailyBars?: UnderlyingBar[];
@@ -154,6 +155,10 @@ export function IntradayChart({
   /** A parent workspace owns the instrument selector. Avoid rendering a
    *  second SPY/QQQ/IWM bank inside the chart module. */
   hideSymbolSelector?: boolean;
+  /** Compact workspaces may place the chart-settings toggle in their own
+   *  section header while this chart continues to own the settings panel. */
+  mobileSettingsOpen?: boolean;
+  onMobileSettingsOpenChange?: (open: boolean) => void;
   /** §01 instrument label (SPY/QQQ) — titles the chart + the spot LED caption. */
   symbol?: string;
   /** When provided, renders the SPY/QQQ toggle in the chart header. */
@@ -168,7 +173,13 @@ export function IntradayChart({
   const [mode, setMode] = useState<Mode>("line");
   // mobile: the control chrome collapses behind a CFG chip (one row instead of
   // ~121px of wrapping toggles above the exit-timing canvas — tidy pass B6)
-  const [cfgOpen, setCfgOpen] = useState(false);
+  const [localCfgOpen, setLocalCfgOpen] = useState(false);
+  const cfgOpen = mobileSettingsOpen ?? localCfgOpen;
+  const toggleCfgOpen = () => {
+    const next = !cfgOpen;
+    if (onMobileSettingsOpenChange) onMobileSettingsOpenChange(next);
+    else setLocalCfgOpen(next);
+  };
   const [range, setRange] = useState<RangeKey>("1D");
   const [tf, setTf] = useState<number>(RANGES["1D"].tf);
   const [showVwap, setShowVwap] = useState(true);
@@ -720,11 +731,11 @@ export function IntradayChart({
               ))}
             </span>
           )}
-          {mobile && (
+          {mobile && mobileSettingsOpen === undefined && (
             <button
               type="button"
               className={`chart-cfg-chip${cfgOpen ? " on" : ""}`}
-              onClick={() => setCfgOpen((o) => !o)}
+              onClick={toggleCfgOpen}
               aria-expanded={cfgOpen}
               title="chart settings — interval · indicators · line/candles"
             >
