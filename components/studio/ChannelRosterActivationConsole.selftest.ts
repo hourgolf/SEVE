@@ -10,6 +10,10 @@ const hook = readFileSync(new URL(
   import.meta.url,
 ), "utf8");
 const inspector = readFileSync(new URL("./ChannelInspector.tsx", import.meta.url), "utf8");
+const mobileRackRow = readFileSync(new URL(
+  "../mobile2/MobileRackRow.tsx",
+  import.meta.url,
+), "utf8");
 
 assert.match(component, /ATOMIC ROSTER · PROSPECTIVE PAPER ENTRY/);
 assert.match(component, /EXCLUDE · KEEP SHADOW/);
@@ -27,6 +31,8 @@ assert.match(component, /no runtime mutation · no order authority · history un
 assert.match(component, /MONDAY PAPER CANDIDATES/);
 assert.match(component, /FREEZE PAPER ELIGIBILITY/);
 assert.match(component, /STAGE CONSERVATIVE CANARY/);
+assert.match(component, /GIVEBACK/);
+assert.match(component, /EVIDENCE LIMITS/);
 assert.match(component, /NEXT SAFE ENTRY/);
 assert.match(component, /HISTORY/);
 assert.doesNotMatch(component, /\bfetch\s*\(/);
@@ -41,5 +47,6 @@ assert.doesNotMatch(hook, /safeBoundaryProof:/);
 assert.doesNotMatch(hook, /capacityEvaluation:/);
 assert.doesNotMatch(hook, /brokerPositions:/);
 assert.match(inspector, /<ChannelRosterActivationConsole selectedSlug=\{slug\}/);
+assert.match(mobileRackRow, /<ChannelRosterActivationConsole selectedSlug=\{slug\}/);
 
 console.log("channel roster activation console self-test passed");

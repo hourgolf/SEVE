@@ -152,7 +152,13 @@ export function ChannelRosterActivationConsole({
                 <span><small>WIN</small><b>{candidate.evidence.winRatePct}%</b></span>
                 <span><small>PEAK</small><b>{candidate.evidence.peakPct}%</b></span>
                 <span><small>NET / CT</small><b>+${candidate.evidence.netPerContractUsd}</b></span>
+                <span><small>GIVEBACK</small><b>{candidate.evidence.givebackPct}%</b></span>
               </div>
+              <details className="promotion-evidence-limits">
+                <summary>EVIDENCE LIMITS · THROUGH {candidate.evidence.observedThrough}</summary>
+                <ul>{candidate.evidence.limitations.map((limitation) =>
+                  <li key={limitation}>{limitation}</li>)}</ul>
+              </details>
               <footer>
                 <span>start 1 ct · TP +{candidate.takeProfitPct}% · SL −{candidate.stopLossPct}% · replace {candidate.displacedRoot}</span>
                 {!eligible ? <button type="button" disabled={roster.busy || roster.mutationWindow?.allowed !== true} onClick={() => void roster.qualifyCandidate(candidate)}>FREEZE PAPER ELIGIBILITY</button>
