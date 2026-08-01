@@ -82,10 +82,10 @@ function presentRelease(release: ActiveReleaseObservation, roots: number, dark: 
   return {
     label,
     accountLifecycleLabel: release.state === "verified"
-      ? `${roots} EXECUTING · ${dark} OBSERVE ONLY`
+      ? `${release.rootSlugs.length} AUTHORITY ROOTS · ${roots} PAPER IN VIEW · ${dark} OBSERVE IN VIEW`
       : "DATABASE VIEW ONLY",
     compactAccountLifecycleLabel: release.state === "verified"
-      ? `${roots} EXEC · ${dark} OBSERVE`
+      ? `${release.rootSlugs.length} ROOTS · ${roots} PAPER · ${dark} OBSERVE`
       : "DATABASE VIEW ONLY",
     shortHash: `${(release.receipt?.configHash ?? release.expectedHash).slice(0, 12)}…`,
     databaseOnly: release.state !== "verified",

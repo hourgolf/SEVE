@@ -6,6 +6,7 @@ import {
 import type { EffectiveChannelState } from "@/lib/channels/effectiveChannelState";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
 import { useChannelActivationControl } from "@/hooks/useChannelActivationControl";
+import { useChannelCollectionControl } from "@/hooks/useChannelCollectionControl";
 import { signedUsd, usd0 } from "@/lib/format";
 
 const short = (value: string | null): string => value ? `${value.replace(/^sha256:/, "").slice(0, 10)}…` : "—";
@@ -54,6 +55,9 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
   );
   const economics = effective.economics;
   const activeSpec = controlPlane?.view?.bySlug[effective.slug] ?? null;
+  const collection = useChannelCollectionControl();
+  const collectionItem = collection.inventory.find((item) =>
+    item.channelSlug === effective.slug) ?? null;
   const activation = useChannelActivationControl({
     slug: effective.slug,
     baseSpecVersionId: activeSpec?.channelSpecVersionId ?? null,
@@ -79,8 +83,11 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
         <p className="channel-decision-summary">{model.summary}</p>
         <div className="channel-decision-axes" aria-label="Effective channel state">
           <span><small>EXECUTION</small><b>{effective.execution.label}</b><i>{effective.execution.fact}</i></span>
+          <span><small>COLLECTION</small><b>{collectionItem?.collectionState.toUpperCase() ?? (collection.error ? "READ ERROR" : "CHECKING")}</b><i>{collectionItem ? "Append-only collection state is governed independently from paper execution." : collection.error ?? "Loading the latest collection receipt."}</i></span>
           <span><small>ROUTE</small><b>{effective.route.accountName ?? "NO ORDER ROUTE"}</b><i>{effective.route.differsFromDatabase ? "immutable route differs from DB" : effective.route.fact}</i></span>
+          <span><small>MEMBERSHIP</small><b>{activeSpec ? "IN ACTIVE MANIFEST" : "NOT IN ACTIVE MANIFEST"}</b><i>{activeSpec ? "The current immutable manifest includes this channel." : "No current manifest entry grants paper authority."}</i></span>
           <span><small>ECONOMICS</small><b>{economics.quantity == null ? "NOT EXECUTABLE" : `${economics.quantity} ct · ${economics.riskBudgetUsd == null ? "receipt summary" : usd0(economics.riskBudgetUsd)}`}</b><i>{economics.managerProfileId ?? economics.fact}</i></span>
+          <span><small>EVIDENCE</small><b>{effective.evidence.freshness.toUpperCase()}</b><i>{effective.evidence.fact}</i></span>
         </div>
         <div className="channel-decision-evidence" aria-label="Decision evidence layers">
           {model.layers.map((layer) => <EvidenceLayer key={`${layer.kind}:${layer.label}`} layer={layer} />)}

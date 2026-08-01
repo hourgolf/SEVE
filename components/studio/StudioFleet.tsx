@@ -6,6 +6,9 @@ import type { StudioChannelRow, StudioFleetSummary, StudioSort } from "@/lib/stu
 import { channelDecisionState } from "@/lib/studio/channelDecision";
 import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 import { ChannelCollectionCullPanel } from "@/components/studio/ChannelCollectionCullPanel";
+import { CanaryCommandCenter } from "@/components/studio/CanaryCommandCenter";
+import { useChannelRosterBundleControl } from "@/hooks/useChannelRosterBundleControl";
+import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -16,17 +19,27 @@ const SORTS: { value: StudioSort; label: string }[] = [
 
 export type StudioScope = "attention" | "roots" | "dark" | "all";
 
-export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, onScope, onSort, onSelect }: {
+export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, onScope, onSort, onSelect }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
   selectedSlug?: string;
   scope: StudioScope;
   sort: StudioSort;
   passports: ChannelWorkspaceModel;
+  controlPlane?: ChannelControlPlaneViewRead;
   onScope: (scope: StudioScope) => void;
   onSort: (sort: StudioSort) => void;
   onSelect: (slug: string) => void;
 }) {
+  const roster = useChannelRosterBundleControl(controlPlane);
+  const authorityRootSlugs = passports.release.state === "verified"
+    ? passports.release.rootSlugs
+    : [];
+  const deskPaperSlugs = Object.values(passports.bySlug)
+    .filter((passport) => passport.lifecycle === "paper-root")
+    .map((passport) => passport.slug);
+  const outsideDeskView = authorityRootSlugs.filter((slug) =>
+    !deskPaperSlugs.includes(slug));
   return (
     <section className="fleet" aria-label="Strategy channel fleet">
       <div className={`fleet-release ${passports.release.state}`} role="status">
@@ -34,14 +47,15 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
         <em>{passports.releaseView.accountLifecycleLabel}</em>
         <code>{passports.releaseView.shortHash}</code>
       </div>
+      <CanaryCommandCenter controlPlane={controlPlane} bundles={roster.bundles} compact />
       <header className="fleet-summary">
         <div className="fleet-title">
           <span className="fleet-kicker">STUDIO · FLEET</span>
           <strong>{summary.attention ? `${summary.attention} need attention` : "fleet nominal"}</strong>
-          <span>{summary.total} channels · desk-ledger P&amp;L</span>
+          <span>{summary.total} desk channels · {authorityRootSlugs.length || "—"} receipt authority roots</span>
         </div>
         <div className="fleet-metrics" aria-label="Fleet summary">
-          <span><small>DB ARMED</small><b>{summary.armed}</b></span>
+          <span><small>DB ACTIVE</small><b>{summary.armed}</b></span>
           <span className={summary.openPositions ? "hot" : ""}><small>OPEN</small><b>{summary.openPositions}</b></span>
           <span><small>DB MUTED</small><b>{summary.muted}</b></span>
           <span><small>DB BOOST</small><b>{summary.boosted}</b></span>
@@ -52,9 +66,9 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
       <div className="fleet-tools">
         <div className="fleet-scope" role="group" aria-label="Channel scope">
           <button type="button" className={scope === "attention" ? "on" : ""} onClick={() => onScope("attention")}>ATTENTION <b>{summary.attention}</b></button>
-          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>EXECUTING <b>{passports.roots}</b></button>
-          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>OBSERVE <b>{passports.dark}</b></button>
-          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => onScope("all")}>ALL <b>{summary.total}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>PAPER IN VIEW <b>{passports.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>OBSERVE IN VIEW <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => onScope("all")}>DESK ROWS <b>{summary.total}</b></button>
         </div>
         <label className="fleet-sort">SORT
           <select value={sort} onChange={(event) => onSort(event.target.value as StudioSort)}>
@@ -62,12 +76,24 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
           </select>
         </label>
       </div>
+      {passports.release.state === "verified" && <details className="runtime-roster-map">
+        <summary>
+          <span><b>RUNTIME ROSTER RECONCILIATION</b><small>receipt authority and desk presentation are separate projections</small></span>
+          <em>{authorityRootSlugs.length} AUTHORITY ROOTS · {passports.roots} PAPER DESK ROWS · {passports.dark} OBSERVE DESK ROWS</em>
+          <i aria-hidden="true">▾</i>
+        </summary>
+        <div>
+          <span><small>IMMUTABLE RECEIPT AUTHORITY</small><b>{authorityRootSlugs.join(" · ")}</b></span>
+          <span><small>NOT PRESENT IN THE {summary.total}-ROW DESK VIEW</small><b>{outsideDeskView.length ? outsideDeskView.join(" · ") : "NONE"}</b></span>
+          <p>The receipt list governs paper entry authority. The desk rows are a curated operating view; their counts must not be read as the full runtime roster.</p>
+        </div>
+      </details>}
       <ChannelCollectionCullPanel />
 
       <div className="fleet-table" role="table" aria-label={`${scope} strategy channels`}>
         <div className="fleet-grid fleet-head" role="row">
           <span role="columnheader">CHANNEL</span>
-          <span role="columnheader">RUNTIME / DB</span>
+          <span role="columnheader">RECEIPT / DATABASE</span>
           <span role="columnheader">POSITION</span>
           <span className="fc-risk" role="columnheader">RISK / TRADE</span>
           <span className="fc-signal" role="columnheader">DECISION</span>
