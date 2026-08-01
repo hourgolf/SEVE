@@ -176,7 +176,6 @@ function SentinelSection({ symbol, sent, targeted }: { symbol: string; sent: Dig
       <div className="pf-head">
         <span className="t">SENTINEL</span>
         <span className="grow" />
-        <span className="pf-basis">interpretive</span>
         <span className={`x pf-receipt-${receipt.tone}`}>{receiptText} {receipt.tone === "green" ? "✓" : "!"}</span>
       </div>
       <div className="pfs-body">
@@ -185,7 +184,6 @@ function SentinelSection({ symbol, sent, targeted }: { symbol: string; sent: Dig
         ) : (
           <>
             <div className="pfs-top">
-              <span className="pfs-source">LLM</span>
               <span className={`pfs-verdict ${vcls}`}>{verdict}</span>
               <span className="pfs-msg">{judge.soWhat}</span>
             </div>
@@ -232,7 +230,6 @@ function TapeSection({ events, strategists, targeted }: { events: MarketEvent[];
       <div className="pf-head">
         <span className="t">TAPE</span>
         <span className="grow" />
-        <span className="pf-basis">adjacent repeats collapsed</span>
         <span className="x"><span className="pf-livedot" />LIVE</span>
       </div>
       <div className="pft-body">
@@ -271,7 +268,7 @@ export function PerformRail({
       {/* P5 slice 3 — deterministic system-health strip; open-position truth visible in every state. */}
       <SystemHealthStrip incident={incident} />
       <IncidentDetail incident={incident} />
-      <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} write={write} targeted={section === "positions"} channelWorkspace={channelWorkspace} />
+      {positions.length > 0 && <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} write={write} targeted={section === "positions"} channelWorkspace={channelWorkspace} />}
       <SentinelSection symbol={symbol} sent={sent} targeted={section === "sentinel"} />
       <TapeSection events={events} strategists={strategists} targeted={section === "tape"} />
     </aside>

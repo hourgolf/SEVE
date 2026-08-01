@@ -22,13 +22,15 @@ assert.deepEqual(
   REVIEW_SECTIONS.map((section) => section.id),
   ["tape", "autopsy", "performance", "counterfactuals"],
 );
+assert.equal(REVIEW_SECTIONS.every((section) => section.label === section.label.toUpperCase()), true);
 assert.equal(isReviewSection("performance"), true);
 assert.equal(isReviewSection("orders"), false);
 
 for (const presenter of ["EventTapeWorkspace", "AutopsyPanel", "PnlPanel", "ForensicsPanel"]) {
   assert.match(component, new RegExp(`<${presenter}`));
 }
-assert.match(component, /READ ONLY · ZERO ORDER AUTHORITY/);
+assert.doesNotMatch(component, /sectionScope|ALL PAPER ACCOUNTS/);
+assert.doesNotMatch(component, /READ ONLY · ZERO ORDER AUTHORITY/);
 assert.match(component, /Would-have paths cannot alter configuration, readiness, risk, lifecycle, or orders/);
 
 for (const hook of [
@@ -72,12 +74,11 @@ assert.match(feedHook, /positionAttribution/);
 assert.doesNotMatch(feedHook, /byAcct\(sb\.from\("positions"\)/);
 
 assert.match(page, /activeRoom === "ops" \|\| activeRoom === "tape"/);
-assert.match(component, /ALL PAPER ACCOUNTS/);
 assert.match(component, /todayAttribution=\{feed\.positionAttribution\}/);
 assert.match(mobileReview, /immutable execution routes/);
 assert.match(mobileReview, /ALL PAPER ACCOUNTS/);
-assert.match(shadowWorkspace, /all paper accounts/);
-assert.match(sentinelWorkspace, /all paper accounts/);
+assert.match(shadowWorkspace, /ALL PAPER · NATIVE NOW/);
+assert.match(sentinelWorkspace, /ALL PAPER · NEXT OPEN/);
 assert.match(sentinelHook, /packet \? operatorPacketToJudge\(packet\) :/);
 
 assert.match(shell, /performSection === "research" \|\| performSection === "tape"/);

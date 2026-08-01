@@ -1,6 +1,5 @@
 "use client";
 
-import { SystemHealthStrip } from "@/components/perform/SystemHealthStrip";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { findSealedReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
@@ -25,9 +24,8 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
     <SeveWorkspaceHeader
       title="OPERATIONS"
       subtitle="read-only control-plane evidence · paper desk"
-      boundary="HEALTH CLAIMS REQUIRE THEIR OWN RECEIPT"
+      boundary="EVIDENCE ONLY"
     />
-    <SystemHealthStrip incident={incident} />
     <div className="opsw-grid">
       <section className="opsw-card opsw-readiness"><header><span>00</span><b>CAPTURE + OBSERVER READINESS</b><em>configured ≠ observed</em></header><OpsReadinessPanel model={surface.opsReadiness} /></section>
       <section className="opsw-card"><header><span>01</span><b>PROCESS + EXECUTORS</b><em>liveness clocks remain distinct</em></header><div className="opsw-lamps">

@@ -61,7 +61,7 @@ export function MobileStudio({
           <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVE IN VIEW <b>{passports.dark}</b></button>
           <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>DESK ROWS <b>{channels.length}</b></button>
         </div>
-        {passports.release.state === "verified" && <p className="m2-roster-reconciliation">Receipt authority: <b>{passports.release.rootSlugs.length} paper roots</b> · this rack shows {passports.roots} paper and {passports.dark} observe-only desk rows.</p>}
+        {passports.release.state === "verified" && <p className="m2-roster-reconciliation">RECEIPT AUTHORITY · <b>{passports.release.rootSlugs.length} ROOTS</b></p>}
         <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · FORK GOVERNED DRAFT · DIRECT WRITES FENCED" : "READ ONLY · SIGN IN TO REVIEW CONTROLS"}</span><span className="ln" /></div>
         {visibleChannels.length === 0 ? (
           <div className="m2-ghost">no channels in this runtime scope</div>

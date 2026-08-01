@@ -23,6 +23,8 @@ const canary = readFileSync(new URL(
   import.meta.url,
 ), "utf8");
 const fleet = readFileSync(new URL("./StudioFleet.tsx", import.meta.url), "utf8");
+const surface = readFileSync(new URL("./StudioSurface.tsx", import.meta.url), "utf8");
+const studioCss = readFileSync(new URL("../../app/studio.css", import.meta.url), "utf8");
 
 assert.match(component, /ATOMIC ROSTER · PROSPECTIVE PAPER ENTRY/);
 assert.match(component, /EXCLUDE · KEEP SHADOW/);
@@ -44,8 +46,9 @@ assert.match(component, /GIVEBACK/);
 assert.match(component, /EVIDENCE LIMITS/);
 assert.match(component, /NEXT SAFE ENTRY/);
 assert.match(component, /HISTORY/);
-assert.match(component, /SAFE CHANGE WORKFLOW/);
-assert.match(component, /ONE REVIEWABLE BUNDLE · NO DIRECT WRITES/);
+assert.match(component, /SAFE CHANGE/);
+assert.match(component, /ONE REVIEWABLE BUNDLE/);
+assert.match(component, /<details className="roster-workflow" open=\{Boolean\(workflowStep\)\}/);
 assert.doesNotMatch(component, /<CanaryCommandCenter/);
 assert.match(canary, /CANARY COMMAND CENTER/);
 assert.match(canary, /SEALED · PREOPEN GATE NEXT/);
@@ -53,9 +56,10 @@ assert.match(canary, /PAPER · NEXT SAFE ENTRY/);
 assert.match(canary, /EXECUTION EXCLUDED · COLLECTION INDEPENDENT/);
 assert.match(canary, /Authority card, not liveness/);
 assert.match(canary, /rollback_target_manifest_key/);
+assert.match(canary, /if \(compact\) return <details className="canary-command-center compact"/);
 assert.match(mobileStudio, /<CanaryCommandCenter/);
 assert.match(mobileStudio, /PAPER IN VIEW/);
-assert.match(fleet, /RUNTIME ROSTER RECONCILIATION/);
+assert.match(fleet, /<b>RECEIPT AUTHORITY<\/b>/);
 assert.match(fleet, /<CanaryCommandCenter/);
 assert.match(fleet, /IMMUTABLE RECEIPT AUTHORITY/);
 assert.match(fleet, /PAPER IN VIEW/);
@@ -71,6 +75,13 @@ assert.doesNotMatch(hook, /safeBoundaryProof:/);
 assert.doesNotMatch(hook, /capacityEvaluation:/);
 assert.doesNotMatch(hook, /brokerPositions:/);
 assert.match(inspector, /<ChannelRosterActivationConsole selectedSlug=\{slug\}/);
+assert.match(inspector, /className="inspector mixer-inspector collapsed"/);
+assert.match(inspector, /aria-label="Close channel inspector"/);
+assert.match(surface, /selectedRow \? "inspector-open" : "inspector-collapsed"/);
+assert.match(surface, /current === slug \? null : slug/);
+assert.doesNotMatch(surface, /\?\? visibleRows\[0\]/);
+assert.doesNotMatch(surface, /<StudioModules/);
+assert.match(studioCss, /\.studio-v4b\.inspector-collapsed \{ --insp-w: 44px; \}/);
 assert.match(mobileRackRow, /<ChannelRosterActivationConsole selectedSlug=\{slug\}/);
 
 console.log("channel roster activation console self-test passed");

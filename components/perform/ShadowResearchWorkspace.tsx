@@ -57,10 +57,10 @@ function ExactStatus({ surface, session }: { surface: SurfaceProps; session: str
         <small>{money(row.managerPnlPerContract)} vs bell {money(row.bellPnlPerContract)} · {row.note}</small>
       </span>)}
     </div>
-    <footer>Partial means exact quote gaps were truthfully censored. This receipt cannot arm, mute, resize, or promote a channel.</footer>
+    <footer>EXACT GAPS CENSORED · READ ONLY</footer>
   </section>;
   if (current) return <section className={`srw-exact ${current.state}`}>
-    <header><span><b>EXACT MANAGER REPLAY</b><small>{current.source}</small></span><em>{current.state.replaceAll("_", " ").toUpperCase()}</em></header>
+    <header><span><b>EXACT MANAGER REPLAY</b><small title={current.source}>CURRENT SESSION</small></span><em>{current.state.replaceAll("_", " ").toUpperCase()}</em></header>
     <div className="srw-kpis">
       <span><small>RAW CLOCKS</small><b>{current.rawDecisions}</b></span>
       <span><small>CONTRACTS</small><b>{current.exactContracts}</b></span>
@@ -69,8 +69,7 @@ function ExactStatus({ surface, session }: { surface: SurfaceProps; session: str
       <span><small>EXACT CENSORS</small><b>{current.exactCensored ?? "—"}</b></span>
       <span><small>INDEPENDENT PATHS</small><b>{current.independentManagerPaths ?? "—"}</b></span>
     </div>
-    <p>{current.detail}</p>
-    <footer>Same-day virtual outcomes remain provisional until this checksum-bound T+1 layer completes.</footer>
+    <p title={current.detail}>T+1 exact replay pending; same-day outcomes remain provisional.</p>
   </section>;
   return <section className="srw-exact missing"><header><span><b>EXACT MANAGER REPLAY</b><small>no session-matched receipt</small></span><em>MISSING</em></header>
     <p>The native ledger is visible, but no exact manager receipt is attached to this session.</p></section>;
@@ -147,8 +146,8 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   }));
 
   return <section className={`srw${compact ? " compact" : ""}`} id="perform-research" tabIndex={-1} aria-label="Shadow research workspace">
-    <header className="srw-head"><span><b>SHADOW RESEARCH</b><small>all paper accounts · native paths now · exact manager truth at T+1</small></span>
-      <em>RESEARCH ONLY · ZERO ORDER AUTHORITY</em></header>
+    <header className="srw-head"><span><b>SHADOW LEDGER</b><small>ALL PAPER · NATIVE NOW · EXACT T+1</small></span>
+      <em>READ ONLY</em></header>
     <div className="srw-controls">
       <nav className="srw-sessions" aria-label="research session">
         {recentSessions.map((item) => <button type="button" key={item.session} className={windowMode === "day" && selected?.session === item.session ? "on" : ""} onClick={() => { setSession(item.session); setWindowMode("day"); }}>{shortSession(item.session)}</button>)}
@@ -186,7 +185,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
             <span><small>AVG / PATH</small><b>{money(totals.average)}</b></span>
           </div>
           <NativeTable rows={rows} selectable={windowMode === "cumulative"} excluded={excluded[lane]} onToggle={toggleStrategy} onToggleAll={toggleAllStrategies} />
-          <footer>{windowMode === "cumulative" ? "Checked strategies contribute to the cumulative summary above. " : ""}Native figures are correlated would-haves, not portfolio P&amp;L. Rankings are descriptive and cannot change the desk.{shadowResearch.truncated ? ` Cumulative evidence is PARTIAL at the ${(10_000).toLocaleString()}-row safety cap.` : ""}</footer>
+          <footer>{windowMode === "cumulative" ? "CHECKED ROWS DRIVE THIS SUMMARY · " : ""}CORRELATED SIMULATION · NOT PORTFOLIO P&amp;L{shadowResearch.truncated ? ` · PARTIAL ${(10_000).toLocaleString()}-ROW CAP` : ""}</footer>
         </section>
         <ExactStatus surface={surface} session={selected.session} />
       </>}

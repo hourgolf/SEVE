@@ -6,11 +6,11 @@ export function SeveWorkspaceHeader({
   boundary,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   boundary: string;
 }) {
   return <header className="sv909-workspace-head">
-    <span><b>{title}</b><small>{subtitle}</small></span>
+    <span><b>{title}</b>{subtitle && <small>{subtitle}</small>}</span>
     <em>{boundary}</em>
   </header>;
 }

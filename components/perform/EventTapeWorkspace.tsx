@@ -40,8 +40,8 @@ export function TapeReadStrip({ health, events, compact = false }: {
   </div>;
 }
 
-export function EventTapeWorkspace({ events, health, strategists, readiness }: {
-  events: MarketEvent[]; health: MarketReadHealth; strategists: StrategistState[]; readiness: OpsReadinessModel;
+export function EventTapeWorkspace({ events, health, strategists, readiness, embedded = false }: {
+  events: MarketEvent[]; health: MarketReadHealth; strategists: StrategistState[]; readiness: OpsReadinessModel; embedded?: boolean;
 }) {
   const [view, setView] = useState<"live" | "evidence">("live");
   const [filter, setFilter] = useState<EventTapeFilter>("all");
@@ -51,7 +51,7 @@ export function EventTapeWorkspace({ events, health, strategists, readiness }: {
   const evidenceStatus = deriveAfterActionStatus(readiness);
 
   return <section className="etw" id="perform-tape" tabIndex={-1} aria-label="Event Tape evidence workspace">
-    <header className="etw-head"><span><b>REVIEW</b><small>live operational tape + linked after-action evidence</small></span><nav aria-label="review view"><button type="button" className={view === "live" ? "on" : ""} onClick={() => setView("live")}>LIVE TAPE</button><button type="button" className={view === "evidence" ? "on" : ""} onClick={() => setView("evidence")}>TRADE EVIDENCE</button></nav></header>
+    <header className={`etw-head${embedded ? " embedded" : ""}`}>{!embedded && <span><b>EVENT TAPE</b><small>live operations + linked after-action evidence</small></span>}<nav aria-label="review view"><button type="button" className={view === "live" ? "on" : ""} onClick={() => setView("live")}>LIVE TAPE</button><button type="button" className={view === "evidence" ? "on" : ""} onClick={() => setView("evidence")}>TRADE EVIDENCE</button></nav></header>
     {view === "live" ? <TapeReadStrip health={health} events={events} /> : <div className={`tape-read-strip evidence ${evidenceStatus.tone}`} role="status"><i /><span><b>{evidenceStatus.label}</b><small>{evidenceStatus.detail}</small></span></div>}
     <div className="etw-tools">
       {view === "live" ? <><nav aria-label="event tape filter">{FILTERS.map((item) => <button type="button" key={item.id} className={filter === item.id ? "on" : ""} onClick={() => setFilter(item.id)}>{item.label}<span>{counts[item.id] ?? 0}</span></button>)}</nav><p>Supabase <code>events</code> · newest {events.length}/14 rows queried · filters apply only to this retained window</p></>

@@ -19,6 +19,11 @@ Green must not be used to mean “selected tab.” Amber must not imply that a
 system is healthy. Orange must not be used as a full navigation fill or for
 data meaning.
 
+Desktop exclusive choices use connected 30px segmented rails. Mobile choices
+use separated 38px touch targets with the same type, radius, and amber selected
+locator. Count badges are subordinate to their filter label. Status pills do
+not inherit interactive selected styling.
+
 ## Mounted control inventory
 
 ### Mobile
@@ -36,17 +41,25 @@ data meaning.
 
 ### Desktop
 
-- Workstation mode: `.ws-mode-tabs`
+- Workstation command rail: `.ws-rail`
 - Workstation section: `.ws-left`
 - Account: `.acct-switch` / `.acct-opt`
 - Chart exclusive selectors: `.chart-toggle`, `.seg`
 - Chart overlay toggles: `.ind-chip`, `.chart-cfg-chip`
+- Review sections: `.rvw-head nav`
+- Event Tape view: `.etw-head nav`
+- Event Tape filters: `.etw-tools nav`
 - Shadow Research: `.srw-controls`
+- Studio fleet scope: `.fleet-scope`
 - Studio inspector: `.iseg`, `.cfg-seg`
 - Alternate analytical views: `.roster-toggle`, `.theme-toggle`
 
 `components/mobile/MobileApp.tsx` and the earlier `DeskShell` room tabs are
 archived/unmounted surfaces and are not part of the current contract.
+
+The desktop workspace mode is owned solely by `.ws-left`; the former duplicate
+PERFORM/STUDIO switch is retired. The command rail carries brand, account,
+essential desk telemetry, consolidated system truth, and operator utilities.
 
 ## Verification matrix
 

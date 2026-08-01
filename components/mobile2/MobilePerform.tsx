@@ -190,7 +190,7 @@ export function MobilePerform({
           </div>
         </section>
 
-        <MobilePositions props={props} strategists={view.desk.strategists} />
+        {feed.positions.length > 0 && <MobilePositions props={props} strategists={view.desk.strategists} />}
         <SentinelSection symbol={symbol} sent={sent} />
         <TapeSection events={data.events} strategists={view.desk.strategists} health={data.readHealth.events} />
         </> : <>

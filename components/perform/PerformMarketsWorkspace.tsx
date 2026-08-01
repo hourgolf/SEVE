@@ -31,8 +31,8 @@ export function MarketReadStrip({ surface, compact = false }: { surface: Surface
   const detail = data.lastIngestTs
     ? `${pacificTime(data.lastIngestTs)} PT · ${data.snapshot.length} contracts${data.deltasModeled ? " · modeled Δ" : ""}`
     : "no observed option snapshot";
-  return <div className={`market-read-strip ${tone}${compact ? " compact" : ""}`} role="status" title={readFailed ? health.lastError ?? undefined : undefined}>
-    <i /><b>{label}</b><span>{detail}</span><em>observed quotes · not executable</em>
+  return <div className={`market-read-strip ${tone}${compact ? " compact" : ""}`} role="status" title={readFailed ? health.lastError ?? undefined : "Observed quotes only; not executable."}>
+    <i /><span><b>{label}</b><small>{detail}</small></span>
   </div>;
 }
 
@@ -40,13 +40,16 @@ export function MarketOpenRisk({ surface, compact = false }: { surface: SurfaceP
   const { feed, view, liveMarks, selected, setSelected } = surface;
   const risk = deriveMarketRisk(feed.positions, view.desk.strategists, liveMarks);
   const reconciliation = surface.opsReadiness.evidence.find((item) => item.id === "reconciliation");
+  const reconciliationNeedsAttention = reconciliation?.tone !== "green";
+
+  if (risk.rows.length === 0 && !reconciliationNeedsAttention) return null;
 
   return (
     <section className={`pf-market-risk pf-screen${compact ? " compact" : ""}`} aria-label="Open risk while inspecting contracts">
       <div className="pf-head">
         <span className="t">OPEN RISK · {feed.positions.length}</span>
         <span className="grow" />
-        <span className={`pf-basis${reconciliation ? ` reconciliation-${reconciliation.tone}` : ""}`} title={reconciliation?.detail}>{reconciliation?.state.toLowerCase() ?? "desk marks · reconciliation checking"}</span>
+        {reconciliationNeedsAttention && <span className={`pf-basis${reconciliation ? ` reconciliation-${reconciliation.tone}` : ""}`} title={reconciliation?.detail}>{reconciliation?.state.toLowerCase() ?? "reconciliation checking"}</span>}
         {feed.positions.length > 0 && <span className={`x num ${risk.totalUnrealized < 0 ? "neg" : "up"}`}>Σ {signedUsd(risk.totalUnrealized)}</span>}
       </div>
       <div className="pf-market-risk-body">

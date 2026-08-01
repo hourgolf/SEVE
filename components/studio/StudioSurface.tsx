@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { ChannelInspector } from "@/components/studio/ChannelInspector";
 import { StudioFleet } from "@/components/studio/StudioFleet";
 import { StudioBand } from "@/components/studio/StudioBand";
-import { StudioModules } from "@/components/studio/StudioModules";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort } from "@/lib/studio/deriveStudioView";
 import type { StudioScope } from "@/components/studio/StudioFleet";
@@ -22,7 +21,7 @@ import type { StudioScope } from "@/components/studio/StudioFleet";
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, incident, studioEvidence, channelWorkspace, channelControlPlane, opsReadiness }: SurfaceProps) {
+export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, channelWorkspace, channelControlPlane }: SurfaceProps) {
   void symbol;
   const { desk } = view;
 
@@ -47,10 +46,12 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
     if (scope === "dark") return lifecycle === "dark-evidence";
     return true;
   }), sort), [rows, scope, sort, channelWorkspace]);
-  const selectedRow = visibleRows.find((row) => row.channel.slug === selSlug) ?? visibleRows[0];
+  const selectedRow = selSlug
+    ? visibleRows.find((row) => row.channel.slug === selSlug)
+    : undefined;
 
   return (
-    <div className="studio studio-v4 studio-v4b">
+    <div className={`studio studio-v4 studio-v4b ${selectedRow ? "inspector-open" : "inspector-collapsed"}`}>
       <StudioFleet
         rows={visibleRows}
         summary={summary}
@@ -61,20 +62,10 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
         controlPlane={channelControlPlane}
         onScope={setScope}
         onSort={setSort}
-        onSelect={setSelSlug}
+        onSelect={(slug) => setSelSlug((current) => current === slug ? null : slug)}
       />
 
-      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} controlPlane={channelControlPlane} />
-
-      <StudioModules
-        selected={selectedRow}
-        evidence={selectedRow ? studioEvidence.bySlug[selectedRow.channel.slug] : undefined}
-        evidenceState={studioEvidence}
-        positions={feed.positions}
-        recentTrades={feed.recentTrades}
-        incident={incident}
-        passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined}
-      />
+      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} controlPlane={channelControlPlane} onClose={() => setSelSlug(null)} />
 
       <StudioBand
         fund={desk.fund}
@@ -82,7 +73,6 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
         positions={feed.positions}
         recentTrades={feed.recentTrades}
         strategists={desk.strategists}
-        reconciliation={opsReadiness.evidence.find((item) => item.id === "reconciliation")}
       />
     </div>
   );

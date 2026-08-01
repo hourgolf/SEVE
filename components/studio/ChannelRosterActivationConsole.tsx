@@ -135,16 +135,18 @@ export function ChannelRosterActivationConsole({
   return <section className="mix-bank roster-activation-console" aria-label="Atomic channel roster activation console">
     <header>ATOMIC ROSTER · PROSPECTIVE PAPER ENTRY</header>
     <div className="roster-console-body">
-      <div className="roster-workflow" aria-label="Governed channel change workflow">
-        <header><span><small>SAFE CHANGE WORKFLOW</small><b>ONE REVIEWABLE BUNDLE · NO DIRECT WRITES</b></span><em>{workflowStep ? `STEP ${workflowStep} ACTIVE` : "NO CHANGE STAGED"}</em></header>
-        <ol>
-          <li className={workflowStep === 1 ? "active" : ""}><b>1</b><span><small>CHOOSE</small><strong>ROSTER · ROUTE · SIZE</strong></span></li>
-          <li className={workflowStep === 2 ? "active" : ""}><b>2</b><span><small>PROVE</small><strong>FLAT BOOK · CAPACITY</strong></span></li>
-          <li className={workflowStep === 3 ? "active" : ""}><b>3</b><span><small>SEAL</small><strong>WORKER ACK · EXACT DIFF</strong></span></li>
-          <li><b>4</b><span><small>APPLY</small><strong>EXPLICIT NEXT-SAFE-ENTRY</strong></span></li>
-        </ol>
-        <p>Nothing below changes the active runtime until the immutable preview passes, a fresh worker acknowledges the exact epoch, and the operator types the required phrase.</p>
-      </div>
+      <details className="roster-workflow" open={Boolean(workflowStep)} aria-label="Governed channel change workflow">
+        <summary><span><small>SAFE CHANGE</small><b>ONE REVIEWABLE BUNDLE</b></span><em>{workflowStep ? `STEP ${workflowStep} ACTIVE` : "NO CHANGE STAGED"}</em><i aria-hidden="true">▾</i></summary>
+        <div className="roster-workflow-body">
+          <ol>
+            <li className={workflowStep === 1 ? "active" : ""}><b>1</b><span><small>CHOOSE</small><strong>ROSTER · ROUTE · SIZE</strong></span></li>
+            <li className={workflowStep === 2 ? "active" : ""}><b>2</b><span><small>PROVE</small><strong>FLAT BOOK · CAPACITY</strong></span></li>
+            <li className={workflowStep === 3 ? "active" : ""}><b>3</b><span><small>SEAL</small><strong>WORKER ACK · EXACT DIFF</strong></span></li>
+            <li><b>4</b><span><small>APPLY</small><strong>EXPLICIT NEXT-SAFE-ENTRY</strong></span></li>
+          </ol>
+          <p>No runtime change occurs until preview, worker acknowledgement, and the required operator phrase all pass.</p>
+        </div>
+      </details>
 
       {roster.mutationWindow && <p className={`roster-note ${
         roster.mutationWindow.allowed ? "ok" : ""
