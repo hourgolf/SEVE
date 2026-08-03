@@ -49,6 +49,7 @@ export interface ExecutionObservationDraft {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256 = /^sha256:[0-9a-f]{64}$/i;
 const numberOrNull = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
 const nonnegativeOrNull = (value: unknown): number | null => {
   const n = numberOrNull(value);
@@ -261,7 +262,11 @@ export function buildPositionRouteObservation(
     : [];
   const configuredCount = configurationValues.filter((value) => value != null).length;
   if (configuredCount !== 0 && configuredCount !== 3) return null;
-  if (configurationValues.some((value) => value != null && !UUID.test(value))) return null;
+  if (ids && (
+    !UUID.test(ids.channel_spec_version_id ?? "")
+    || !UUID.test(ids.release_manifest_id ?? "")
+    || !SHA256.test(ids.configuration_epoch_id ?? "")
+  )) return null;
 
   const identity = {
     positionId: input.positionId,
