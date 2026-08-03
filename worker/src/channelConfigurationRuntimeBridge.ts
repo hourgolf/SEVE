@@ -79,6 +79,23 @@ export type ChannelRuntimeBridgeResolution =
   | ReceiptBoundBridgeResolution
   | BlockedBridgeResolution;
 
+/**
+ * Identifies a receipt-bound authority transition that must be made observable
+ * outside the worker. A null next runtime is never an adoption; a null prior
+ * runtime is an adoption only after startup has already established a sealed
+ * receipt (the caller owns that lifecycle guard).
+ */
+export function receiptBoundRuntimeIdentityChanged(
+  previous: Readonly<ReceiptBoundRuntimeConfiguration> | null,
+  next: Readonly<ReceiptBoundRuntimeConfiguration> | null,
+): boolean {
+  if (!next) return false;
+  return !previous
+    || previous.releaseId !== next.releaseId
+    || previous.manifestContentHash !== next.manifestContentHash
+    || previous.configurationEpochId !== next.configurationEpochId;
+}
+
 function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values)].sort();
 }

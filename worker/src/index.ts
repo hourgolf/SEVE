@@ -108,6 +108,7 @@ import {
   type Rc54AdmissionRootResolver,
 } from "./rc54ReleasePolicy.js";
 import {
+  receiptBoundRuntimeIdentityChanged,
   resolveDormantChannelRuntimeAuthority,
 } from "./channelConfigurationRuntimeBridge.js";
 import type {
@@ -648,6 +649,7 @@ async function reloadConfig(): Promise<void> {
         throw new Error(`Day 1 source executor boundary failed before overlay: ${boundaryErrors.join(";")}`);
       }
     }
+    const previousReceiptBoundRuntime = receiptBoundRuntime;
     let nextReceiptBoundRuntime:
       Readonly<ReceiptBoundRuntimeConfiguration> | null = null;
     let nextReceiptBoundResolver: Rc54AdmissionRootResolver | null = null;
@@ -797,6 +799,29 @@ async function reloadConfig(): Promise<void> {
         ...releaseStartupReceipt,
         runtimeReadiness: currentStartupReceipt.runtimeReadiness,
       };
+      const hotAdoptedReceiptBoundRuntime = receiptBoundRuntimeIdentityChanged(
+        previousReceiptBoundRuntime,
+        nextReceiptBoundRuntime,
+      );
+      if (hotAdoptedReceiptBoundRuntime && nextReceiptBoundRuntime) {
+        const paperRootCount = nextReceiptBoundRuntime.roots.filter((root) =>
+          root.executionPosture === "paper").length;
+        const observeOnlyRootCount =
+          nextReceiptBoundRuntime.roots.length - paperRootCount;
+        info(
+          `rc54-release: ACTIVE ${nextReceiptBoundRuntime.releaseId}`
+          + ` config=${nextReceiptBoundRuntime.manifestContentHash}`
+          + ` roots=${nextReceiptBoundRuntime.roots.length}`
+          + ` paper=${paperRootCount} observe-only=${observeOnlyRootCount}`
+          + " paper-only receipt-bound hot-adopted",
+        );
+        await store.journal(
+          "EXEC",
+          `rc54-release ACTIVE ${nextReceiptBoundRuntime.releaseId}`
+          + ` config=${nextReceiptBoundRuntime.manifestContentHash}`,
+          currentStartupReceipt,
+        );
+      }
     }
     cfg = { fund: c.fund, channels, accounts };
   }
