@@ -533,6 +533,23 @@
   border-color: var(--909-border-strong);
 }
 
+.shell-root.ws909[data-skin="cream"] .srw-table-controls {
+  border-color: var(--909-border);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-table-controls label > span,
+.shell-root.ws909[data-skin="cream"] .srw-table-controls em {
+  color: var(--909-text-tertiary);
+}
+
+.shell-root.ws909[data-skin="cream"] .srw-table-controls input,
+.shell-root.ws909[data-skin="cream"] .srw-table-controls select,
+.shell-root.ws909[data-skin="cream"] .srw-sort-direction {
+  color: var(--909-text-secondary);
+  background: var(--909-surface-panel-raised);
+  border-color: var(--909-border-strong);
+}
+
 .shell-root.ws909[data-skin="cream"] .srw-head small,
 .shell-root.ws909[data-skin="cream"] .srw-native header small,
 .shell-root.ws909[data-skin="cream"] .srw-exact header small,

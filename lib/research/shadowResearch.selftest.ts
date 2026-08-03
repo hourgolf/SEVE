@@ -3,6 +3,8 @@ import {
   deriveShadowCumulative,
   deriveShadowSessions,
   isVirtualBenchSlug,
+  sortShadowChannelSummaries,
+  type ShadowChannelSummary,
   type ShadowResearchRow,
 } from "./shadowResearch";
 
@@ -64,5 +66,41 @@ assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averagePerP
 assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averageMfePct, 12);
 assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averageGivebackPct, 42.5);
 assert.equal(deriveShadowCumulative([row({ signalAt: "bad" })]), null);
+
+const sortable = sessions[0].dark;
+assert.deepEqual(
+  sortShadowChannelSummaries(sortable, "channel", "asc").map((item) => item.slug),
+  ["root-dark", "vb-alpha"],
+);
+assert.deepEqual(
+  sortShadowChannelSummaries(sortable, "average", "desc").map((item) => item.slug),
+  ["root-dark", "vb-alpha"],
+);
+assert.deepEqual(
+  sortShadowChannelSummaries(sortable, "paths", "desc").map((item) => item.slug),
+  ["vb-alpha", "root-dark"],
+);
+assert.deepEqual(
+  sortShadowChannelSummaries(sessions[1].vb, "win", "desc").map((item) => item.slug),
+  ["vb-prior"],
+  "rows with unscored evidence remain visible and sort last",
+);
+
+const sortRows: ShadowChannelSummary[] = [
+  { slug: "alpha", paths: 10, scored: 10, winners: 8, targets: 8, stops: 2, flattens: 0, pnlPerContract: 100, averagePerPath: 10, averageMfePct: 5, averageGivebackPct: 20, lastAt: "2026-07-22T14:00:00Z" },
+  { slug: "beta", paths: 20, scored: 10, winners: 5, targets: 1, stops: 9, flattens: 0, pnlPerContract: 200, averagePerPath: 20, averageMfePct: 15, averageGivebackPct: 40, lastAt: "2026-07-22T14:01:00Z" },
+  { slug: "pending", paths: 5, scored: 0, winners: 0, targets: 0, stops: 0, flattens: 0, pnlPerContract: 0, averagePerPath: null, averageMfePct: null, averageGivebackPct: null, lastAt: "2026-07-22T14:02:00Z" },
+];
+const order = (key: Parameters<typeof sortShadowChannelSummaries>[1], direction: Parameters<typeof sortShadowChannelSummaries>[2]) =>
+  sortShadowChannelSummaries(sortRows, key, direction).map((item) => item.slug);
+assert.deepEqual(order("channel", "asc"), ["alpha", "beta", "pending"]);
+assert.deepEqual(order("paths", "desc"), ["beta", "alpha", "pending"]);
+assert.deepEqual(order("win", "desc"), ["alpha", "beta", "pending"]);
+assert.deepEqual(order("average", "desc"), ["beta", "alpha", "pending"]);
+assert.deepEqual(order("average", "asc"), ["alpha", "beta", "pending"], "null metrics stay last in either direction");
+assert.deepEqual(order("total", "desc"), ["beta", "alpha", "pending"]);
+assert.deepEqual(order("mfe", "desc"), ["beta", "alpha", "pending"]);
+assert.deepEqual(order("exits", "desc"), ["alpha", "beta", "pending"]);
+assert.deepEqual(sortRows.map((item) => item.slug), ["alpha", "beta", "pending"], "sorting must not mutate evidence order");
 
 console.log("shadow-research-selftest: PASS");

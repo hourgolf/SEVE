@@ -11,7 +11,9 @@ import {
   RC54_LAB_DOMAIN,
   RC54_RELEASE_CONFIGURATION_SHA256,
   RC54_ROOTS,
+  rc54AccountRouteAvailabilityErrors,
   rc54ManagerProfileId,
+  rc54OperationalPostureErrors,
   rc54PaperExecutorPostureErrors,
   validateRc54AccountBindings,
   validateRc54SourceExecutorBoundary,
@@ -123,6 +125,69 @@ check("shadow rehearsal does not require the write path",
     liveTrading: false,
     paperExecutorWriteReady: false,
   }), []);
+
+const operationalPosture = {
+  dryRun: false,
+  liveTrading: true,
+  alpacaPaperHost: "https://paper-api.alpaca.markets",
+  stockFeed: "sip",
+  optionFeed: "opra",
+  heldCaptureEnabled: true,
+  heldCaptureFlushMs: 30_000,
+  heldCaptureTargetSamples: 12,
+  heldCaptureMaxAgeMs: 60_000,
+  heldCaptureIngressMaxSamples: 10_000,
+  heldCaptureIngressMaxBytes: 8_388_608,
+  heldCaptureStateMaxSamples: 10_000,
+  heldCaptureStateMaxBytes: 8_388_608,
+  heldCaptureRetryMaxAttempts: 5,
+  heldCaptureRetryBaseDelayMs: 30_000,
+  heldCaptureRetryMaxDelayMs: 300_000,
+  heldCaptureAdapterDeadlineMs: 5_000,
+  heldCaptureNormalFlushDeadlineMs: 15_000,
+  heldCaptureShutdownDeadlineMs: 30_000,
+  managerShadowEnabled: true,
+  managerShadowQuoteMaxAgeMs: 15_000,
+} as const;
+const manageOnlyAccount: AccountRow = {
+  id: "manage-only",
+  name: "MANAGE-ONLY",
+  mode: "paper",
+  cred_ref: "MANAGE_ONLY",
+  is_armed: false,
+  is_halted: true,
+  master_daily_stop_usd: 0,
+};
+check("disarmed or halted account state does not block manage-only restart",
+  rc54OperationalPostureErrors({
+    fundMode: "paper",
+    posture: operationalPosture,
+    paperExecutorWriteReady: true,
+    accounts: [manageOnlyAccount],
+    requiredAccountIds: [manageOnlyAccount.id],
+    resolvedCredentialAccountIds: [manageOnlyAccount.id],
+  }), []);
+check("manage-only restart still fails closed without its credential route",
+  rc54OperationalPostureErrors({
+    fundMode: "paper",
+    posture: operationalPosture,
+    paperExecutorWriteReady: true,
+    accounts: [manageOnlyAccount],
+    requiredAccountIds: [manageOnlyAccount.id],
+    resolvedCredentialAccountIds: [],
+  }), ["manage-only:credential_route_unresolved"]);
+check("receipt-bound account availability also ignores arm/halt state",
+  rc54AccountRouteAvailabilityErrors({
+    accounts: [manageOnlyAccount],
+    requiredAccountIds: [manageOnlyAccount.id],
+    resolvedCredentialAccountIds: [manageOnlyAccount.id],
+  }), []);
+check("receipt-bound account availability requires identity and credentials",
+  rc54AccountRouteAvailabilityErrors({
+    accounts: [],
+    requiredAccountIds: [manageOnlyAccount.id],
+    resolvedCredentialAccountIds: [],
+  }), ["manage-only:account_missing", "manage-only:credential_route_unresolved"]);
 
 const macd = applyRc54ReleaseChannelOverlay(channel("vb-macd-state"));
 check("LAB ladder overlay is two-lot 30/50", {

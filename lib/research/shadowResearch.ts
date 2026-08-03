@@ -23,6 +23,51 @@ export interface ShadowChannelSummary {
   lastAt: string;
 }
 
+export type ShadowChannelSortKey =
+  | "channel"
+  | "paths"
+  | "win"
+  | "average"
+  | "total"
+  | "mfe"
+  | "exits";
+export type ShadowChannelSortDirection = "asc" | "desc";
+
+const comparable = (
+  row: ShadowChannelSummary,
+  key: ShadowChannelSortKey,
+): string | number | null => {
+  if (key === "channel") return row.slug;
+  if (key === "paths") return row.paths;
+  if (key === "win") return row.scored ? row.winners / row.scored : null;
+  if (key === "average") return row.averagePerPath;
+  if (key === "total") return row.pnlPerContract;
+  if (key === "mfe") return row.averageMfePct;
+  const exits = row.targets + row.stops + row.flattens;
+  return exits ? row.targets / exits : null;
+};
+
+/** Stable operator-selected presentation order. Null evidence always sorts last. */
+export function sortShadowChannelSummaries(
+  rows: readonly ShadowChannelSummary[],
+  key: ShadowChannelSortKey,
+  direction: ShadowChannelSortDirection,
+): ShadowChannelSummary[] {
+  const sign = direction === "asc" ? 1 : -1;
+  return rows.map((row, index) => ({ row, index })).sort((left, right) => {
+    const a = comparable(left.row, key);
+    const b = comparable(right.row, key);
+    if (a == null || b == null) {
+      if (a == null && b == null) return left.index - right.index;
+      return a == null ? 1 : -1;
+    }
+    const primary = typeof a === "string" && typeof b === "string"
+      ? a.localeCompare(b)
+      : Number(a) - Number(b);
+    return primary ? primary * sign : left.index - right.index;
+  }).map(({ row }) => row);
+}
+
 export interface ShadowSessionSummary {
   session: string;
   paths: number;

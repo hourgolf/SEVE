@@ -710,6 +710,29 @@ export function rc54PaperExecutorPostureErrors(input: {
   return [];
 }
 
+/** Availability wall for a sealed or receipt-bound account route. Arm/halt is
+ * intentionally absent: those fields gate new risk after boot, while identity
+ * and credential resolution are required for both entry and management. */
+export function rc54AccountRouteAvailabilityErrors(input: {
+  accounts: readonly AccountRow[];
+  requiredAccountIds: readonly string[];
+  resolvedCredentialAccountIds: readonly string[];
+}): string[] {
+  const errors: string[] = [];
+  const accountById = new Map(input.accounts.map((account) => [
+    account.id,
+    account,
+  ]));
+  const credentialAccounts = new Set(input.resolvedCredentialAccountIds);
+  for (const accountId of [...new Set(input.requiredAccountIds)].sort()) {
+    if (!accountById.has(accountId)) errors.push(`${accountId}:account_missing`);
+    if (!credentialAccounts.has(accountId)) {
+      errors.push(`${accountId}:credential_route_unresolved`);
+    }
+  }
+  return [...new Set(errors)].sort();
+}
+
 /**
  * Shared operational wall for both the sealed RC5.4 constants and a
  * receipt-bound successor that still runs through the temporary RC5.4
@@ -779,21 +802,7 @@ export function rc54OperationalPostureErrors(input: {
     errors.push("manager_shadow:quote_max_age_ms");
   }
 
-  const accountById = new Map(input.accounts.map((account) => [
-    account.id,
-    account,
-  ]));
-  const credentialAccounts = new Set(input.resolvedCredentialAccountIds);
-  for (const accountId of [...new Set(input.requiredAccountIds)].sort()) {
-    const account = accountById.get(accountId);
-    if (!credentialAccounts.has(accountId)) {
-      errors.push(`${accountId}:credential_route_unresolved`);
-    }
-    if (!input.posture.dryRun && input.posture.liveTrading) {
-      if (!account?.is_armed) errors.push(`${accountId}:account_not_armed`);
-      if (account?.is_halted) errors.push(`${accountId}:account_halted`);
-    }
-  }
+  errors.push(...rc54AccountRouteAvailabilityErrors(input));
   return [...new Set(errors)].sort();
 }
 
