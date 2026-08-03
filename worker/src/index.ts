@@ -96,6 +96,7 @@ import {
   RC54_RELEASE_CONFIGURATION_SHA256,
   RC54_RELEASE_ID,
   RC54_ROOTS,
+  rc54AccountRouteAvailabilityErrors,
   rc54ManagerProfileId,
   rc54ReleaseEodDue,
   rc54ReleaseEvidenceContext,
@@ -699,16 +700,11 @@ async function reloadConfig(): Promise<void> {
           const runtimeAccountIds = new Set(
             resolution.runtime.roots.map((root) => root.accountId),
           );
-          for (const accountId of [...runtimeAccountIds].sort()) {
-            const account = accounts.find((candidate) =>
-              candidate.id === accountId);
-            if (!account?.is_armed) {
-              adapterErrors.push(`${accountId}:account_not_armed`);
-            }
-            if (account?.is_halted) {
-              adapterErrors.push(`${accountId}:account_halted`);
-            }
-          }
+          adapterErrors.push(...rc54AccountRouteAvailabilityErrors({
+            accounts,
+            requiredAccountIds: [...runtimeAccountIds],
+            resolvedCredentialAccountIds: credentialAccountIds,
+          }));
         }
         if (adapterErrors.length) {
           throw new Error(
@@ -1464,8 +1460,9 @@ async function fastExitSweep(): Promise<void> {
     // refresh only the chains for symbols that have owned open positions
     const activeSyms = new Set(allRows.map((r) => byId.get(r.strategist_id)!.underlying.toUpperCase()));
     for (const sym of activeSyms) await refreshChain(sym);
-    // Per-account (cockpit P3): only ARMED buckets with resolved creds sweep; each reads its OWN
-    // positions/orders so an exit sells the right account's lot (the same OCC can live in two).
+    // Per-account (cockpit P3): only buckets with resolved creds sweep; arm/halt
+    // state cannot strand management. Each reads its OWN positions/orders so an
+    // exit sells the right account's lot (the same OCC can live in two).
     for (const g of groupByAccount(owned, cfg.accounts)) {
       const api = g.api;
       // A halted bucket is NOT skipped anymore — it enters flatten mode below (kill = close all).

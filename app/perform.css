@@ -190,6 +190,21 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .srw-kpis small { color:#70797c; font-size:8px; letter-spacing:.08em; }
 .shell-root.ws909 .srw-kpis b { font-size:14px; color:#edf0ef; }
 .shell-root.ws909 .srw-table { min-width:760px; display:grid; }
+.shell-root.ws909 .srw-table-controls {
+  min-height:38px; display:flex; align-items:center; gap:8px; padding:4px 8px;
+  border-bottom:1px solid #262b2c;
+}
+.shell-root.ws909 .srw-table-controls label { display:flex; align-items:center; gap:6px; }
+.shell-root.ws909 .srw-table-controls label > span,
+.shell-root.ws909 .srw-table-controls em { color:#667074; font-size:8px; font-style:normal; letter-spacing:.08em; }
+.shell-root.ws909 .srw-table-controls input,
+.shell-root.ws909 .srw-table-controls select,
+.shell-root.ws909 .srw-sort-direction {
+  min-height:26px; border:1px solid #343b3c; border-radius:4px; padding:4px 7px;
+  background:#0b0e0f; color:#aab1b2; font:700 9px/1 var(--mono);
+}
+.shell-root.ws909 .srw-table-controls input { width:150px; }
+.shell-root.ws909 .srw-table-controls em { margin-left:auto; }
 .shell-root.ws909 .srw-table-head,
 .shell-root.ws909 .srw-row {
   display:grid; grid-template-columns:minmax(175px,1.6fr) .5fr .5fr .65fr .65fr .5fr 1.1fr;
@@ -197,6 +212,13 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   border-bottom:1px solid #262b2c; font-size:10px;
 }
 .shell-root.ws909 .srw-table-head { color:#667074; font-size:8px; letter-spacing:.08em; }
+.shell-root.ws909 .srw-sort {
+  min-height:0; display:inline-flex; align-items:center; gap:4px; padding:0; border:0;
+  background:transparent; color:inherit; font:inherit; letter-spacing:inherit; cursor:pointer;
+}
+.shell-root.ws909 .srw-sort:hover,
+.shell-root.ws909 .srw-sort.on { color:#e6b13c; }
+.shell-root.ws909 .srw-sort i { font-size:7px; font-style:normal; }
 .shell-root.ws909 .srw-row b { overflow:hidden; text-overflow:ellipsis; color:#e6e9e8; }
 .shell-root.ws909 .srw-row span { color:#939b9d; }
 .shell-root.ws909 .srw-channel-cell {

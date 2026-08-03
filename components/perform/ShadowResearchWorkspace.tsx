@@ -5,8 +5,11 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { exactShadowReceipt } from "@/lib/research/exactShadowArchive";
 import type {
   ShadowChannelSummary,
+  ShadowChannelSortDirection,
+  ShadowChannelSortKey,
   ShadowSessionSummary,
 } from "@/lib/research/shadowResearch";
+import { sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
 import { signedUsd } from "@/lib/format";
 
 const percent = (wins: number, scored: number): string =>
@@ -87,11 +90,41 @@ function NativeTable({
   onToggle?: (slug: string) => void;
   onToggleAll?: () => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<ShadowChannelSortKey>("average");
+  const [sortDirection, setSortDirection] = useState<ShadowChannelSortDirection>("desc");
   const selectedCount = rows.filter((row) => !excluded.includes(row.slug)).length;
   const allSelected = rows.length > 0 && selectedCount === rows.length;
+  const visibleRows = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    const matched = normalized
+      ? rows.filter((row) => row.slug.toLowerCase().includes(normalized))
+      : rows;
+    return sortShadowChannelSummaries(matched, sortKey, sortDirection);
+  }, [query, rows, sortDirection, sortKey]);
+  const chooseSort = (key: ShadowChannelSortKey) => {
+    if (key === sortKey) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(key === "channel" ? "asc" : "desc");
+  };
+  const sortLabel = (key: ShadowChannelSortKey, label: string) => <button
+    type="button"
+    className={`srw-sort${sortKey === key ? " on" : ""}`}
+    aria-label={`Sort by ${label}${sortKey === key ? `, currently ${sortDirection}ending` : ""}`}
+    onClick={() => chooseSort(key)}
+  >{label}{sortKey === key ? <i aria-hidden="true">{sortDirection === "asc" ? "▲" : "▼"}</i> : null}</button>;
   return <div className="srw-table">
-    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}CHANNEL</span><span>PATHS</span><span>WIN</span><span>AVG/CT</span><span>Σ/CT</span><span>MFE</span><span>EXIT MIX</span></div>
-    {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : rows.map((row) => <div className="srw-row" key={row.slug}>
+    <div className="srw-table-controls">
+      <label><span>FILTER</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="channel name" aria-label="Filter research channels" /></label>
+      <label><span>SORT</span><select value={sortKey} onChange={(event) => chooseSort(event.target.value as ShadowChannelSortKey)} aria-label="Sort research channels"><option value="channel">CHANNEL</option><option value="paths">PATHS</option><option value="win">WIN</option><option value="average">AVG/CT</option><option value="total">Σ/CT</option><option value="mfe">MFE</option><option value="exits">EXIT MIX</option></select></label>
+      <button type="button" className="srw-sort-direction" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} aria-label={`Change sort direction, currently ${sortDirection}ending`}>{sortDirection === "asc" ? "ASC ▲" : "DESC ▼"}</button>
+      {query ? <em>{visibleRows.length}/{rows.length} MATCH</em> : null}
+    </div>
+    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "PATHS")}</span><span>{sortLabel("win", "WIN")}</span><span>{sortLabel("average", "AVG/CT")}</span><span>{sortLabel("total", "Σ/CT")}</span><span>{sortLabel("mfe", "MFE")}</span><span>{sortLabel("exits", "EXIT MIX")}</span></div>
+    {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : visibleRows.map((row) => <div className="srw-row" key={row.slug}>
       <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span>{row.slug}</span></b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
       <strong className={`srw-cell-avg ${(row.averagePerPath ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.averagePerPath)}</strong>
       <span className="srw-cell-total">{money(row.pnlPerContract)}</span><span className="srw-cell-mfe">{row.averageMfePct == null ? "—" : `${row.averageMfePct}%`}</span>
