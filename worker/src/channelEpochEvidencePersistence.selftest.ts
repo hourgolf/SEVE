@@ -9,6 +9,14 @@ const migration = readFileSync(
   "utf8",
 );
 
+const rosterReceiptAuthorityMigration = readFileSync(
+  new URL(
+    "../../supabase/migrations/20260803141500_channel_epoch_roster_receipt_authority.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
 let checks = 0;
 function check(name: string, run: () => void): void {
   run();
@@ -75,6 +83,32 @@ check("every non-null stamp requires one exact receipt and manifest membership",
     migration,
     /membership\.channel_spec_version_id = new\.channel_spec_version_id/,
   );
+});
+
+check("roster-bundle receipts authorize the same exact immutable epoch triple", () => {
+  for (const receiptTable of [
+    "activation_receipts",
+    "channel_roster_bundle_activation_receipts",
+  ]) {
+    assert.match(
+      rosterReceiptAuthorityMigration,
+      new RegExp(`from public\\.${receiptTable} receipt`),
+    );
+  }
+  assert.match(
+    rosterReceiptAuthorityMigration,
+    /membership\.release_manifest_id = receipt\.release_manifest_id/,
+  );
+  assert.match(
+    rosterReceiptAuthorityMigration,
+    /receipt\.configuration_epoch_id = new\.configuration_epoch_id/,
+  );
+  assert.match(
+    rosterReceiptAuthorityMigration,
+    /membership\.channel_spec_version_id = new\.channel_spec_version_id/,
+  );
+  assert.doesNotMatch(rosterReceiptAuthorityMigration, /from public\.strategists/i);
+  assert.doesNotMatch(rosterReceiptAuthorityMigration, /from public\.accounts/i);
 });
 
 check("configuration stamps are immutable after insert", () => {
