@@ -9,6 +9,7 @@ import type {
   StoredReceiptBoundControlPlaneRead,
 } from "../../lib/channels/channelControlPlanePersistence.js";
 import {
+  receiptBoundRuntimeIdentityChanged,
   resolveDormantChannelRuntimeAuthority,
   type ChannelRuntimeBridgeInput,
 } from "./channelConfigurationRuntimeBridge.js";
@@ -88,6 +89,7 @@ const receiptBoundStored: StoredReceiptBoundControlPlaneRead = {
   state: "receipt-bound",
   error: null,
 };
+
 const baselineStored: StoredReceiptBoundControlPlaneRead = {
   compiled: baseline,
   activationReceipt: null,
@@ -110,6 +112,32 @@ function check(name: string, run: () => void): void {
   checks++;
   void name;
 }
+
+check("runtime identity change detection covers hot adoption without startup noise", () => {
+  const resolved = resolveDormantChannelRuntimeAuthority({
+    stored: receiptBoundStored,
+    runtime,
+  });
+  assert.equal(resolved.state, "receipt-bound");
+  if (resolved.state !== "receipt-bound") return;
+  const active = resolved.runtime;
+  assert.equal(receiptBoundRuntimeIdentityChanged(null, null), false);
+  assert.equal(receiptBoundRuntimeIdentityChanged(active, null), false);
+  assert.equal(receiptBoundRuntimeIdentityChanged(null, active), true);
+  assert.equal(receiptBoundRuntimeIdentityChanged(active, active), false);
+  assert.equal(receiptBoundRuntimeIdentityChanged(active, {
+    ...active,
+    configurationEpochId: `sha256:${"f".repeat(64)}`,
+  }), true);
+  assert.equal(receiptBoundRuntimeIdentityChanged(active, {
+    ...active,
+    manifestContentHash: `sha256:${"e".repeat(64)}`,
+  }), true);
+  assert.equal(receiptBoundRuntimeIdentityChanged(active, {
+    ...active,
+    releaseId: `${active.releaseId}:successor`,
+  }), true);
+});
 
 check("an explicit pre-adoption fallback preserves sealed RC5.4", () => {
   const result = resolveDormantChannelRuntimeAuthority({
@@ -301,6 +329,13 @@ check("worker integration is explicit, default-off, and fail-closed", () => {
   );
   assert.match(indexSource, /buildReceiptBoundRc54AdmissionRootResolver/);
   assert.match(indexSource, /receiptBoundRc54ConfigurationWriteStamp/);
+  assert.match(indexSource, /previousReceiptBoundRuntime/);
+  assert.match(indexSource, /hotAdoptedReceiptBoundRuntime/);
+  assert.match(
+    indexSource,
+    /hotAdoptedReceiptBoundRuntime[\s\S]*rc54-release ACTIVE[\s\S]*store\.journal/,
+  );
+  assert.match(indexSource, /receiptBoundRuntimeIdentityChanged/);
   assert.doesNotMatch(indexSource, /loadDormantChannelRuntimeAuthority/);
 });
 
