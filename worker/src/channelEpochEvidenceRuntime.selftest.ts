@@ -217,6 +217,19 @@ check("execution path stamps entry artifacts but not current-config exits", () =
 
 check("runner and partial remainders copy the parent epoch verbatim", () => {
   const source = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+  const mapper = readFileSync(new URL("./exitGuard.ts", import.meta.url), "utf8");
+  assert.match(
+    mapper,
+    /channel_spec_version_id: p\.channel_spec_version_id \?\? null/,
+  );
+  assert.match(
+    mapper,
+    /release_manifest_id: p\.release_manifest_id \?\? null/,
+  );
+  assert.match(
+    mapper,
+    /configuration_epoch_id: p\.configuration_epoch_id \?\? null/,
+  );
   assert.match(
     source,
     /channel_spec_version_id: parent\.channel_spec_version_id \?\? null/,

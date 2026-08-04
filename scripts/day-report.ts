@@ -71,6 +71,7 @@ const pct = (v: number | null) => (v == null ? "  —" : `${v >= 0 ? "+" : ""}${
 
 interface Trade {
   id: string; slug: string; name: string; cp: "call" | "put"; strike: number; qty: number; occ: string;
+  strategistId: string; accountId: string | null; runnerOf: string | null;
   entry: number; exit: number; pnl: number; openedAt: string; closedAt: string;
   peak: number | null; mfePct: number | null; gavePct: number | null; reason: string;
   manual: boolean;
@@ -224,7 +225,7 @@ async function main() {
   const posRaw: Array<Record<string, unknown>> = [];
   for (let from = 0; from < 50_000; from += 1000) {
     const { data } = await sb.from("positions")
-      .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,strategists(slug,name)")
+      .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,runner_of,strategists(slug,name)")
       .eq("status", "closed").gte("closed_at", `${DATE}T13:00:00Z`).lte("closed_at", `${DATE}T22:00:00Z`)
       .order("opened_at").order("id").range(from, from + 999); // id tiebreak (audit [18]): opened_at is not a total order
     const batch = (data ?? []) as typeof posRaw;
@@ -247,14 +248,17 @@ async function main() {
   // Per-channel executor + arm state (W2 migration: which executor OWNS each channel).
   // NOTE: this is CURRENT config, not the config at trade time — accurate for a
   // same-day report (the normal use), approximate when re-running an old date.
-  const { data: stratRaw } = await sb.from("strategists").select("slug,name,executor,status,strategist_config(muted,daily_stop_usd)");
+  const { data: stratRaw } = await sb.from("strategists").select("id,slug,name,executor,status,account_id,strategist_config(muted,daily_stop_usd)");
   const execBySlug = new Map<string, { executor: string; armed: boolean; muted: boolean }>();
   const nameBySlug = new Map<string, string>();
+  const accountByStrategist = new Map<string, string | null>();
+  const accountNameById = new Map(((acctRows ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]));
   const dailyStopBySlug = new Map<string, number>(); // for the foul-out replay (live decide.ts:304 gate)
   for (const s of (stratRaw ?? []) as any[]) {
     const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
     execBySlug.set(s.slug, { executor: String(s.executor ?? "cron"), armed: s.status === "armed", muted: !!cfg?.muted });
     nameBySlug.set(s.slug, s.name ?? s.slug);
+    accountByStrategist.set(String(s.id), s.account_id ? String(s.account_id) : null);
     dailyStopBySlug.set(s.slug, Number(cfg?.daily_stop_usd ?? 0));
   }
   const execOf = (slug: string) => execBySlug.get(slug)?.executor ?? "cron";
@@ -281,6 +285,9 @@ async function main() {
     const reason = ev?.message.match(/\(([a-z_0-9]+)\)\s*$/i)?.[1] ?? (ev && /reconcil/i.test(ev.message) ? "reconciled" : "—");
     allTrades.push({
       id: p.id, slug, name, cp: p.opt_type, strike: Number(p.strike), qty, occ: p.occ_symbol,
+      strategistId: p.strategist_id,
+      accountId: accountByStrategist.get(p.strategist_id) ?? null,
+      runnerOf: p.runner_of ?? null,
       entry, exit, pnl, openedAt: p.opened_at, closedAt: p.closed_at,
       peak, mfePct, gavePct,
       reason: p.close_reason ?? reason, // column beats journal-parse once stamped
@@ -403,17 +410,41 @@ async function main() {
   const g2r = auto.filter((t) => (t.mfePct ?? 0) >= 20 && t.pnl <= 0);
   const left = g2r.reduce((a, t) => a + (t.peak! - t.exit) * t.qty * 100, 0);
   console.log(`  green→red (MFE ≥+20% → closed ≤0): ${g2r.length} trades · $${Math.round(left).toLocaleString()} given back from peaks${g2r.length ? "  ← " + g2r.map((t) => t.name).join(", ") : ""}`);
-  // entry clusters: same minute + same side across ≥3 channels
-  const clusters = new Map<string, Trade[]>();
-  for (const t of auto) {
-    const k = `${hhmm(t.openedAt)}|${t.cp}`;
-    clusters.set(k, [...(clusters.get(k) ?? []), t]);
+  // Portfolio concentration, not an execution collision: two separately
+  // routed channels may intentionally buy the same OCC in different accounts
+  // and then test different exits. Collapse runner/tranche rows back to their
+  // logical roots so a two-channel cluster never masquerades as four entries.
+  // Runners point at their parent, while a partial-exit remainder deliberately
+  // keeps runner_of null. Both preserve strategist/OCC/opened_at, so that
+  // immutable entry identity is the reliable way to collapse every child row.
+  const logicalByEntry = new Map<string, Trade[]>();
+  for (const trade of auto) {
+    const key = `${trade.strategistId}|${trade.occ}|${trade.openedAt}`;
+    logicalByEntry.set(key, [...(logicalByEntry.get(key) ?? []), trade]);
   }
-  for (const [k, ts] of clusters) {
-    if (ts.length >= 3) {
-      const [min, side] = k.split("|");
-      console.log(`  CLUSTER ${min} ${side.toUpperCase()}: ${ts.length} channels entered together (${ts.map((t) => t.slug).join(", ")}) → Σ ${sgn(ts.reduce((a, t) => a + t.pnl, 0))}  ← one bet ×${ts.length}`);
-    }
+  const logicalRoots = [...logicalByEntry.values()].map((cohort) =>
+    cohort.find((trade) => trade.runnerOf == null) ?? cohort[0]);
+  const logicalCohort = (root: Trade): Trade[] =>
+    logicalByEntry.get(`${root.strategistId}|${root.occ}|${root.openedAt}`) ?? [root];
+  const crossAccountOcc = new Map<string, Trade[]>();
+  for (const root of logicalRoots) {
+    const key = `${hhmm(root.openedAt)}|${root.occ}`;
+    crossAccountOcc.set(key, [...(crossAccountOcc.get(key) ?? []), root]);
+  }
+  for (const [key, roots] of crossAccountOcc) {
+    const accounts = new Set(roots.flatMap((trade) => trade.accountId ? [trade.accountId] : []));
+    const channels = new Set(roots.map((trade) => trade.slug));
+    if (accounts.size < 2 || channels.size < 2) continue;
+    const [minute, occ] = key.split("|");
+    const contracts = roots.reduce((sum, root) =>
+      sum + logicalCohort(root).reduce((cohortSum, trade) => cohortSum + trade.qty, 0), 0);
+    const pnl = roots.reduce((sum, root) =>
+      sum + logicalCohort(root).reduce((cohortSum, trade) => cohortSum + trade.pnl, 0), 0);
+    const accountNames = [...accounts].map((id) => accountNameById.get(id) ?? id.slice(0, 8));
+    console.log(
+      `  CROSS-ACCOUNT OCC (allowed) ${minute} ${occ}: ${channels.size} channels / ${accounts.size} accounts / ×${contracts} contracts `
+      + `(${[...channels].join(", ")} · ${accountNames.join(", ")}) → logical Σ ${sgn(pnl)} · exits remain independently attributable`,
+    );
   }
   // re-lean churn: entry within 10m after the same channel's same-side loss
   for (const t of auto) {

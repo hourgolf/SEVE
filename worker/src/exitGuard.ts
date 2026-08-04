@@ -88,5 +88,12 @@ export function mapOpenPositions(res: RowsReadResult): PositionRow[] {
     trough_mark: p.trough_mark != null ? Number(p.trough_mark) : null,
     runner_of: p.runner_of ?? null,
     entry_features: p.entry_features && typeof p.entry_features === "object" ? p.entry_features : null,
+    // Receipt-bound exits can split an open root into a runner or partial
+    // remainder. Preserve the immutable relational identity fetched by the
+    // SELECT so insertRemainderRow and its exact account-route receipt inherit
+    // the entry-era configuration instead of silently degrading to nulls.
+    channel_spec_version_id: p.channel_spec_version_id ?? null,
+    release_manifest_id: p.release_manifest_id ?? null,
+    configuration_epoch_id: p.configuration_epoch_id ?? null,
   }));
 }
