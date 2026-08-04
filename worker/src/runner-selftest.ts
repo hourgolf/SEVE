@@ -430,8 +430,25 @@ check("fresh orders: mandatory flattens allowed", sweepExitAllowed("halt_flatten
   try { mapOpenPositions({ data: [{}], error: { message: "boom" } }); } catch { threw2 = true; }
   check("open-positions: error + partial data still throws", threw2, true);
   check("open-positions: empty data + no error → genuinely flat []", mapOpenPositions({ data: null, error: null }), []);
-  const mapped = mapOpenPositions({ data: [{ id: "p1", strategist_id: "s1", occ_symbol: "SPY260711C00746000", opt_type: "call", qty: "3", avg_entry_price: "1.25", strike: "746", expiration: "2026-07-11", opened_at: "2026-07-11T14:00:00Z", status: "open", underlying: "SPY", peak_mark: null, trough_mark: "1.10", runner_of: null }], error: null });
+  const mapped = mapOpenPositions({ data: [{
+    id: "p1", strategist_id: "s1", occ_symbol: "SPY260711C00746000", opt_type: "call",
+    qty: "3", avg_entry_price: "1.25", strike: "746", expiration: "2026-07-11",
+    opened_at: "2026-07-11T14:00:00Z", status: "open", underlying: "SPY",
+    peak_mark: null, trough_mark: "1.10", runner_of: null,
+    channel_spec_version_id: "55555555-5555-4555-8555-555555555555",
+    release_manifest_id: "66666666-6666-4666-8666-666666666666",
+    configuration_epoch_id: `sha256:${"7".repeat(64)}`,
+  }], error: null });
   check("open-positions: rows map with numeric coercion", [mapped[0].qty, mapped[0].avg_entry_price, mapped[0].peak_mark, mapped[0].trough_mark], [3, 1.25, null, 1.1]);
+  check("open-positions: immutable configuration identity survives the runtime map", [
+    mapped[0].channel_spec_version_id,
+    mapped[0].release_manifest_id,
+    mapped[0].configuration_epoch_id,
+  ], [
+    "55555555-5555-4555-8555-555555555555",
+    "66666666-6666-4666-8666-666666666666",
+    `sha256:${"7".repeat(64)}`,
+  ]);
 }
 
 // ---- 1b #6 (audit 2026-07-11): bid-basis triggers + the quote-age guard ----
