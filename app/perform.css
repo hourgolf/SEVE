@@ -98,7 +98,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
    manager evidence. This surface is descriptive and has no write controls. */
 .shell-root.ws909[data-mode="perform"] .srw {
   min-width:0; min-height:0; height:100%; overflow:auto;
-  display:grid; align-content:start; gap:8px; padding:10px;
+  display:grid; grid-auto-rows:max-content; align-content:start; gap:8px; padding:10px;
   color:#d8dcdb; background:#0c1011; border:1px solid #34393a;
   border-radius:9px; font-family:var(--mono);
 }
@@ -189,7 +189,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .srw-kpis > span:last-child { border-right:0; }
 .shell-root.ws909 .srw-kpis small { color:#70797c; font-size:8px; letter-spacing:.08em; }
 .shell-root.ws909 .srw-kpis b { font-size:14px; color:#edf0ef; }
-.shell-root.ws909 .srw-table { min-width:760px; display:grid; }
+.shell-root.ws909 .srw-table { min-width:760px; display:grid; grid-auto-rows:max-content; }
 .shell-root.ws909 .srw-table-controls {
   min-height:38px; display:flex; align-items:center; gap:8px; padding:4px 8px;
   border-bottom:1px solid #262b2c;
@@ -249,7 +249,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .srw-channel-cell.excluded > span { opacity:.35; }
 .shell-root.ws909 .srw-inline-detail {
   min-width:0; display:grid; gap:8px; padding:8px;
-  border-bottom:1px solid #303637; background:#080b0c;
+  border-bottom:1px solid var(--909-border-strong,#303637); background:var(--909-surface-panel-inset,#080b0c);
   box-shadow:inset 2px 0 0 #e6b13c;
 }
 .shell-root.ws909 .srw-inline-detail > :is(.dpc,.cme) { min-width:0; }

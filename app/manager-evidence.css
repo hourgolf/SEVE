@@ -44,3 +44,90 @@
 .mfh-channel,.mfh-cell { min-height:43px; border:0; border-right:1px solid #252c2d; border-bottom:1px solid #252c2d; background:transparent; color:inherit; font-family:inherit; cursor:pointer; }.mfh-channel { position:sticky; left:0; z-index:1; display:grid; align-content:center; gap:2px; padding:5px 8px; background:#101415; text-align:left; }.mfh-channel b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px; }.mfh-channel em { color:#748083; font-size:7px; font-style:normal; text-transform:uppercase; }.mfh-channel:hover,.mfh-channel.selected { color:#e1ab41; box-shadow:2px 0 0 #e1ab41 inset; }
 .mfh-cell { display:flex; align-items:center; justify-content:center; gap:5px; }.mfh-cell b { font-size:9px; }.mfh-cell small { color:currentColor; font-size:6px; opacity:.65; }.mfh-cell.promising { color:#9de7ab; background:rgba(76,177,97,.18); }.mfh-cell.mixed { color:#e4b656; background:rgba(205,153,48,.13); }.mfh-cell.inferior { color:#f0907d; background:rgba(196,75,55,.17); }.mfh-cell.collecting { color:#8a9597; background:rgba(125,137,140,.08); }.mfh-cell:hover { opacity:1!important; outline:1px solid currentColor; outline-offset:-2px; }
 .mfh > footer { padding:7px 10px; border-top:1px solid rgba(255,255,255,.1); color:#647073; font-size:7px; letter-spacing:.05em; line-height:1.4; }.mfh.empty { min-height:62px; }.mfh.empty > header em { color:#7d888a; }
+
+/* Manager tables and capture evidence share the shell skin instead of owning
+   a permanent blackout palette. Fallbacks above cover isolated story renders. */
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme {
+  --me-line:var(--909-border);
+  --me-ink:var(--909-text-primary);
+  --me-muted:var(--909-text-secondary);
+  --me-green:var(--909-positive-text);
+  --me-red:var(--909-negative-text);
+  --me-amber:var(--909-warning-text);
+  color:var(--909-text-primary);
+  background:linear-gradient(180deg,var(--909-surface-panel),var(--909-surface-panel-inset));
+  border-color:var(--909-border-strong);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] :is(.cme-head > em,.cme-scope button,.cme-detail-head > div) {
+  border-color:var(--909-border-strong);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] :is(.cme-ladder-head,.cme-ladder footer,.cme-tape footer,.cme-boundary,.cme-legend em,.cme-tape > header) {
+  color:var(--909-text-tertiary);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-manager {
+  border-top-color:var(--909-border);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] :is(.cme-manager:hover,.cme-manager.selected) {
+  border-color:var(--909-border-strong);
+  background:color-mix(in srgb,var(--909-text-primary) 4%,transparent);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-detail-head {
+  background:var(--909-surface-panel-inset);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] :is(.cme-scope button.on,.cme-detail-head button.on) {
+  color:var(--909-control-selected-text);
+  background:linear-gradient(180deg,var(--909-control-selected-top),var(--909-control-selected-bottom));
+  border-color:var(--909-control-selected-border);
+  box-shadow:inset 0 -2px 0 var(--909-control-selected-strike);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-whisker .zero { background:var(--909-text-tertiary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-whisker .range { background:var(--909-text-secondary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-whisker .median { background:var(--909-text-primary); box-shadow:0 0 0 2px var(--909-surface-panel-inset); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-scatter svg text { fill:var(--909-text-tertiary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-scatter .axis { stroke:var(--909-text-secondary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-scatter .grid { stroke:var(--909-border-strong); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-scatter .pair { stroke:var(--909-text-secondary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-scatter circle.actual { fill:var(--909-surface-panel-inset); stroke:var(--909-text-primary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-scatter circle.manager { stroke:var(--909-surface-panel); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-legend { color:var(--909-text-secondary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-legend i.actual { border-color:var(--909-text-primary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-tape > div { border-color:var(--909-border); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-tape time { color:var(--909-text-secondary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-tape-track .zero { background:var(--909-text-tertiary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-tape-track .pair { background:var(--909-text-secondary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .cme-tape-track .actual { border-color:var(--909-text-primary); background:var(--909-surface-panel-inset); }
+
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh {
+  color:var(--909-text-primary);
+  background:var(--909-surface-panel);
+  border-color:var(--909-border-strong);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh > header,
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh > footer {
+  border-color:var(--909-border);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] :is(.mfh > header small,.mfh-channel em,.mfh.empty > header em) { color:var(--909-text-secondary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh > footer { color:var(--909-text-tertiary); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] :is(.mfh-corner,.mfh-col) {
+  color:var(--909-text-tertiary);
+  background:var(--909-surface-panel-inset);
+  border-color:var(--909-border);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] :is(.mfh-channel,.mfh-cell) { border-color:var(--909-border); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh-channel { background:var(--909-surface-panel); }
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh-cell.promising {
+  color:var(--909-positive-text);
+  background:var(--909-positive-fill);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh-cell.mixed {
+  color:var(--909-warning-text);
+  background:color-mix(in srgb,var(--909-warning-text) 10%,transparent);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh-cell.inferior {
+  color:var(--909-negative-text);
+  background:var(--909-negative-fill);
+}
+:is(.shell-root.ws909,.m2-app:not(.folio-mobile))[data-skin] .mfh-cell.collecting {
+  color:var(--909-text-secondary);
+  background:color-mix(in srgb,var(--909-text-primary) 4%,transparent);
+}
