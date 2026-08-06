@@ -1,4 +1,4 @@
-import { sessionCloseMin } from "../../engine/market-calendar.js";
+import { isTradingDay, sessionCloseMin } from "../../engine/market-calendar.js";
 
 const ET_DATE = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/New_York",
@@ -8,6 +8,7 @@ const ET_DATE = new Intl.DateTimeFormat("en-CA", {
 });
 
 export const AFTER_CLOSE_RESEARCH_VERSION = "after-close-research-v1";
+export const AFTER_CLOSE_SETTLE_MINUTES = 15;
 
 export function etDateAt(nowMs: number): string {
   return ET_DATE.format(new Date(nowMs));
@@ -54,6 +55,35 @@ export function etWallMinuteUtc(dateET: string, minuteET: number): string {
 /** Exclusive regular-session quote boundary for one ET session. */
 export function etSessionCloseUtc(dateET: string): string {
   return etWallMinuteUtc(dateET, sessionCloseMin(dateET));
+}
+
+/** Earliest safe reconstruction clock for a completed session. The short settle
+ * window keeps a manual dispatch from freezing a path while final quote writes
+ * are still landing. */
+export function afterCloseReadyAtMs(
+  dateET: string,
+  settleMinutes = AFTER_CLOSE_SETTLE_MINUTES,
+): number {
+  if (!Number.isInteger(settleMinutes) || settleMinutes < 0) {
+    throw new Error("after-close settle minutes must be a non-negative integer");
+  }
+  if (!isTradingDay(dateET)) throw new Error(`${dateET} is not a trading session`);
+  return Date.parse(etSessionCloseUtc(dateET)) + settleMinutes * 60_000;
+}
+
+/** Fail closed before an ET session has completed and its quote archive has
+ * settled. Historical sessions pass naturally; current/future sessions do not. */
+export function assertAfterCloseSessionReady(
+  dateET: string,
+  nowMs: number,
+  settleMinutes = AFTER_CLOSE_SETTLE_MINUTES,
+): void {
+  const readyAtMs = afterCloseReadyAtMs(dateET, settleMinutes);
+  if (nowMs < readyAtMs) {
+    throw new Error(
+      `session ${dateET} is not ready for reconstruction until ${new Date(readyAtMs).toISOString()}`,
+    );
+  }
 }
 
 /** Exact [start, end) UTC bounds for one New York calendar date, including 23/25-hour DST days. */

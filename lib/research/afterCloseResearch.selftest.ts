@@ -1,5 +1,13 @@
 import { readFileSync } from "node:fs";
-import { etDateAt, etDayRangeUtc, etSessionCloseUtc, etWallMinuteUtc, resolveAfterCloseSession } from "./afterCloseResearch";
+import {
+  afterCloseReadyAtMs,
+  assertAfterCloseSessionReady,
+  etDateAt,
+  etDayRangeUtc,
+  etSessionCloseUtc,
+  etWallMinuteUtc,
+  resolveAfterCloseSession,
+} from "./afterCloseResearch";
 
 let passed = 0;
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -20,6 +28,18 @@ check("summer session close", etSessionCloseUtc("2026-07-21"), "2026-07-21T20:00
 check("winter session close", etSessionCloseUtc("2026-01-12"), "2026-01-12T21:00:00.000Z");
 check("early session close", etSessionCloseUtc("2026-11-27"), "2026-11-27T18:00:00.000Z");
 check("summer 15:25 wall minute", etWallMinuteUtc("2026-07-21", 15 * 60 + 25), "2026-07-21T19:25:00.000Z");
+check("summer archive ready", new Date(afterCloseReadyAtMs("2026-08-03")).toISOString(), "2026-08-03T20:15:00.000Z");
+check("early-close archive ready", new Date(afterCloseReadyAtMs("2026-11-27")).toISOString(), "2026-11-27T18:15:00.000Z");
+
+let premature = false;
+try { assertAfterCloseSessionReady("2026-08-03", Date.parse("2026-08-03T20:14:59.999Z")); } catch { premature = true; }
+check("incomplete session fails closed", premature, true);
+assertAfterCloseSessionReady("2026-08-03", Date.parse("2026-08-03T20:15:00.000Z"));
+passed++;
+
+let closedDay = false;
+try { assertAfterCloseSessionReady("2026-07-04", Date.parse("2026-07-05T00:00:00.000Z")); } catch { closedDay = true; }
+check("closed date fails closed", closedDay, true);
 
 const workflow = readFileSync(new URL("../../.github/workflows/after-close-research.yml", import.meta.url), "utf8");
 check("hosted workflow freezes dark candidates", workflow.includes("npm run dark-candidate-freeze:hosted"), true);
@@ -27,6 +47,11 @@ check("hosted workflow uses one resolved ET session", workflow.includes("SESSION
 check("hosted workflow retains exact-contract manifest", workflow.includes("data/dark-candidate-freezes/**"), true);
 check("hosted workflow builds deterministic Sentinel packet", workflow.includes("npm run deterministic-sentinel:hosted"), true);
 check("hosted workflow retains deterministic packet", workflow.includes("data/sentinel-packets/**"), true);
+check("hosted workflow retains rebuild receipt", workflow.includes("data/gate-shadow-receipt.json"), true);
+check("hosted workflow retains independent verification", workflow.includes("data/gate-shadow-verification.json"), true);
+check("hosted workflow has redundant after-hours pass", workflow.includes('cron: "30 23 * * 1-5"'), true);
+check("hosted workflow suppresses event writes", workflow.includes("--virtual-trades-only"), true);
+check("hosted workflow independently verifies publication", workflow.includes("verify-shadow-rebuild:hosted"), true);
 check("hosted workflow remains credential-minimal", /DATABENTO|ALPACA|R2_/.test(workflow), false);
 
 let invalid = false;

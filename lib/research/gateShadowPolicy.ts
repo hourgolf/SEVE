@@ -12,9 +12,11 @@ export const GATE_SHADOW_BLOCK_SEMANTICS = [
   "dark_lifecycle",
   "premium_debit_cap",
   "same_clock_collision",
+  "session_entry_limit",
   "family_open",
   "reentry_disabled",
   "same_occ_open",
+  "cross_domain_same_occ",
   "underlying_concurrency",
   "global_concurrency",
 ] as const;
@@ -48,9 +50,11 @@ const LEGACY_DAY1_SEMANTICS = new Map<string, GateShadowBlockSemantic>([
 
 const ADMISSION_DOMAIN_SEMANTICS = new Map<string, GateShadowBlockSemantic>([
   ["admission_domain_same_clock_collision", "same_clock_collision"],
+  ["admission_domain_session_entry_limit", "session_entry_limit"],
   ["admission_domain_family_open", "family_open"],
   ["admission_domain_reentry_disabled", "reentry_disabled"],
   ["admission_domain_same_occ_open", "same_occ_open"],
+  ["admission_cross_domain_same_occ_open", "cross_domain_same_occ"],
   ["admission_domain_underlying_concurrency", "underlying_concurrency"],
   ["admission_domain_global_concurrency", "global_concurrency"],
 ]);

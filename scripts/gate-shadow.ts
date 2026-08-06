@@ -38,10 +38,19 @@ import {
   isGateShadowBlockReason,
   isGateShadowSequentialBlockReason,
 } from "../lib/research/gateShadowPolicy.js";
-import { etDayRangeUtc, etSessionCloseUtc, resolveAfterCloseSession } from "../lib/research/afterCloseResearch.js";
+import {
+  afterCloseReadyAtMs,
+  assertAfterCloseSessionReady,
+  etDateAt,
+  etDayRangeUtc,
+  etSessionCloseUtc,
+  resolveAfterCloseSession,
+} from "../lib/research/afterCloseResearch.js";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const READ_ONLY = process.argv.includes("--read-only");
+const VIRTUAL_TRADES_ONLY = process.argv.includes("--virtual-trades-only");
+const NOW_MS = Date.now();
 // A read-only audit may authenticate with the backend credential when no anon
 // key is available, but every external write branch remains disabled.
 const HAS_SERVICE = !!process.env.SUPABASE_SERVICE_ROLE_KEY && !READ_ONLY;
@@ -50,7 +59,9 @@ const sb = createServerSupabaseClient("gate-shadow");
 const daysArg = process.argv.indexOf("--days");
 const DAYS = daysArg > 0 ? Math.max(1, Number(process.argv[daysArg + 1]) || 6) : 6;
 const sessionArg = process.argv.indexOf("--session");
-const SESSION = resolveAfterCloseSession(sessionArg > 0 ? String(process.argv[sessionArg + 1] ?? "") : null, Date.now());
+const SESSION = resolveAfterCloseSession(sessionArg > 0 ? String(process.argv[sessionArg + 1] ?? "") : null, NOW_MS);
+const SETTLEMENT_SESSION = SESSION ?? etDateAt(NOW_MS);
+assertAfterCloseSessionReady(SETTLEMENT_SESSION, NOW_MS);
 const outputDirArg = process.argv.indexOf("--output-dir");
 const OUTPUT_DIR = outputDirArg > 0 ? String(process.argv[outputDirArg + 1] ?? "").trim() : "data";
 if (!OUTPUT_DIR) throw new Error("--output-dir requires a path");
@@ -279,7 +290,8 @@ async function main() {
     if ("code" in candidate) candidateCensors.push(candidate);
     else candidateDecisions.push(candidate);
   };
-  let fresh = 0, published = 0;
+  let fresh = 0, published = 0, eventInserts = 0;
+  const publishedSignalIds = new Set<string>();
   const bank = async (s: any, base: ShadowRow, isFresh: boolean) => {
     if (HAS_SERVICE) {
       // Upsert the virtual_trades row FIRST and LEDGER (= the later-runs dedup) only if it lands.
@@ -298,14 +310,18 @@ async function main() {
       }, { onConflict: "signal_id" });
       if (error) { console.error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`); process.exit(1); }
       published++;
+      publishedSignalIds.add(base.signalId);
       // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
-      if (isFresh && !isGateShadowSequentialBlockReason(base.blocked) && base.pnlPerContract != null) {
+      if (!VIRTUAL_TRADES_ONLY && isFresh
+          && !isGateShadowSequentialBlockReason(base.blocked)
+          && base.pnlPerContract != null) {
         try {
-          await sb.from("events").insert({
+          const { error: eventError } = await sb.from("events").insert({
             level: "INFO",
             message: `gate-shadow: ${base.slug} ${base.occ} blocked(${base.blocked}) → ${base.exitReason} $${base.pnlPerContract.toFixed(0)}/ct (mid-basis)`,
             meta: { kind: "gate-shadow", ...base },
           });
+          if (!eventError) eventInserts++;
         } catch { /* best-effort — journal only, non-load-bearing */ }
       }
     }
@@ -352,6 +368,37 @@ async function main() {
     }
   }
 
+  // An HTTP 2xx upsert response is necessary but not sufficient evidence that
+  // the rebuild is complete. Read every attempted signal_id back in bounded
+  // pages before freezing the local ledger or reporting success.
+  let remoteVerified = 0;
+  if (HAS_SERVICE) {
+    const expectedIds = [...publishedSignalIds].sort();
+    const observedIds = new Set<string>();
+    for (let from = 0; from < expectedIds.length; from += 200) {
+      const chunk = expectedIds.slice(from, from + 200);
+      const { data, error } = await sb
+        .from("virtual_trades")
+        .select("signal_id")
+        .in("signal_id", chunk);
+      if (error) {
+        console.error(`gate-shadow: virtual_trades verification failed — ${error.message}`);
+        process.exit(1);
+      }
+      for (const row of (data ?? []) as Array<{ signal_id: string }>) {
+        observedIds.add(String(row.signal_id));
+      }
+    }
+    const missing = expectedIds.filter((id) => !observedIds.has(id));
+    if (missing.length) {
+      console.error(
+        `gate-shadow: remote verification missing ${missing.length}/${expectedIds.length} rows (${missing.slice(0, 5).join(", ")})`,
+      );
+      process.exit(1);
+    }
+    remoteVerified = observedIds.size;
+  }
+
   // ── GAMMA-OPEN LEDGER (data-hole fix 2026-07-02): the 9:35 implied-move readings — the A5
   // classifier's own input — live only in `events`, which PRUNES AT 30d; the earliest readings
   // (06-17) would evaporate the week of the A5 read. Bank message+meta durably, keyed sym|date.
@@ -388,9 +435,35 @@ async function main() {
   const reportRows = SESSION ? rows.filter((r) => r.createdAt.startsWith(SESSION)) : rows;
   const scored = reportRows.filter((r) => r.pnlPerContract != null);
   const sum = scored.reduce((a, r) => a + (r.pnlPerContract ?? 0), 0);
+  const receipt = {
+    version: "gate-shadow-rebuild-v1",
+    session: SESSION,
+    rollingDays: SESSION ? null : DAYS,
+    readyAt: new Date(afterCloseReadyAtMs(SETTLEMENT_SESSION)).toISOString(),
+    mode: HAS_SERVICE ? "publish-and-verify" : "read-only",
+    source: {
+      blockedSignals: sigs.length,
+      supportedSignals: supportedSigs.length,
+      unsupportedSignals: sigs.length - supportedSigs.length,
+      unsupportedBlockReasons: Object.fromEntries([...unsupportedBlockCounts.entries()].sort()),
+    },
+    reconstruction: {
+      paths: reportRows.length,
+      scored: scored.length,
+      withoutQuotes: reportRows.filter((row) => row.nQuotes === 0).length,
+    },
+    remote: {
+      upserts: published,
+      verified: remoteVerified,
+      eventInserts,
+      allowedTables: VIRTUAL_TRADES_ONLY ? ["virtual_trades"] : ["virtual_trades", "events"],
+    },
+  };
+  writeFileSync(join(OUTPUT_DIR, "gate-shadow-receipt.json"), JSON.stringify(receipt, null, 2));
   console.log(`\n  GATE-SHADOW v2 (re-entry-aware, cap ${MAX_PER_DAY}/day)${SESSION ? ` · session ${SESSION}` : ""}${READ_ONLY ? " · REMOTE READ-ONLY" : ""}`);
   console.log(`  ${fresh} new / ${rows.length} total banked · ${reportRows.length} in report window → ${LEDGER} + virtual_trades`);
-  if (HAS_SERVICE) console.log(`  ${published} remote virtual_trades upserts confirmed (idempotent by signal_id)`);
+  if (HAS_SERVICE) console.log(`  ${published} remote virtual_trades upserts confirmed · ${remoteVerified} read back (idempotent by signal_id)`);
+  console.log(`  rebuild receipt → ${join(OUTPUT_DIR, "gate-shadow-receipt.json")}`);
   console.log(`  scored ${scored.length} (mid-basis UPPER BOUND) · Σ would-have $${Math.round(sum)} · avg $${scored.length ? Math.round(sum / scored.length) : 0}/ct`);
   console.log(`  exact-candidate lane: ${candidateReceipts.length} retained receipts → ${CANDIDATE_LEDGER} · ${retainedCensors.length} retained fail-closed censors → ${CANDIDATE_CENSORS}`);
   const reportBlockReasons = [...new Set(reportRows.map((row) => row.blocked))].sort();

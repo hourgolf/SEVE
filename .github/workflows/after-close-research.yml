@@ -4,6 +4,9 @@ on:
   schedule:
     # 17:30 ET in summer / 16:30 ET in winter: after the quote archive settles.
     - cron: "30 21 * * 1-5"
+    # Redundant, idempotent catch-up pass. It is research-only and carries no
+    # broker credentials, so scheduler delay cannot silently cost a session.
+    - cron: "30 23 * * 1-5"
   workflow_dispatch:
     inputs:
       session:
@@ -64,11 +67,16 @@ jobs:
           DRY_RUN_INPUT: ${{ inputs.dry_run }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          args=(--session "$SESSION_DATE_ET")
+          args=(--session "$SESSION_DATE_ET" --virtual-trades-only)
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN_INPUT" == "true" ]]; then
             args+=(--read-only)
           fi
           npm run gate-shadow:hosted -- "${args[@]}"
+          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$DRY_RUN_INPUT" != "true" ]]; then
+            npm run verify-shadow-rebuild:hosted -- \
+              --session "$SESSION_DATE_ET" \
+              --output-dir data
+          fi
       - name: Freeze dark candidate exact-contract requests
         shell: bash
         run: |
@@ -93,17 +101,22 @@ jobs:
       - name: Freeze artifact checksums
         shell: bash
         run: |
-          sha256sum \
-            data/gate-shadow.json \
-            data/vb-candidates.json \
-            data/vb-candidate-censors.json \
-            "data/dark-candidate-freezes/$SESSION_DATE_ET/freeze.json" \
-            "data/dark-candidate-freezes/$SESSION_DATE_ET/contract-manifest.json" \
-            "data/dark-candidate-freezes/$SESSION_DATE_ET/report.md" \
-            "data/dark-candidate-freezes/$SESSION_DATE_ET/receipt.json" \
-            "data/sentinel-packets/$SESSION_DATE_ET.json" \
-            "data/sentinel-packets/$SESSION_DATE_ET.receipt.json" \
-            | tee after-close-sha256.txt
+          {
+            sha256sum \
+              data/gate-shadow.json \
+              data/gate-shadow-receipt.json \
+              data/vb-candidates.json \
+              data/vb-candidate-censors.json \
+              "data/dark-candidate-freezes/$SESSION_DATE_ET/freeze.json" \
+              "data/dark-candidate-freezes/$SESSION_DATE_ET/contract-manifest.json" \
+              "data/dark-candidate-freezes/$SESSION_DATE_ET/report.md" \
+              "data/dark-candidate-freezes/$SESSION_DATE_ET/receipt.json" \
+              "data/sentinel-packets/$SESSION_DATE_ET.json" \
+              "data/sentinel-packets/$SESSION_DATE_ET.receipt.json"
+            if [[ -f data/gate-shadow-verification.json ]]; then
+              sha256sum data/gate-shadow-verification.json
+            fi
+          } | tee after-close-sha256.txt
           {
             echo "## After-close research receipt"
             echo '```text'
@@ -116,6 +129,8 @@ jobs:
           name: after-close-research-${{ github.run_id }}
           path: |
             data/gate-shadow.json
+            data/gate-shadow-receipt.json
+            data/gate-shadow-verification.json
             data/vb-candidates.json
             data/vb-candidate-censors.json
             data/dark-candidate-freezes/**
