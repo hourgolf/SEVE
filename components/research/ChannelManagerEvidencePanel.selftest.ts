@@ -17,5 +17,7 @@ assert.match(heatmap, /exact backfill collecting/);
 assert.match(heatmap, /NEVER POOLED WITH FILLED-POSITION PAIRS/);
 assert.match(inspector, /currentConfigurationEpochId=\{controlPlane\?\.view\?\.configurationEpochId\}/);
 assert.match(research, /channelSlugs=\{surface\.view\.desk\.strategists\.map/);
+assert.match(research, /className="srw-inline-detail"/);
+assert.match(research, /<ChannelManagerEvidencePanel/);
 
 console.log("channel-manager-evidence-panel-selftest: PASS");

@@ -14,6 +14,7 @@ assert.match(component, /NOT EXECUTABLE P&amp;L OR A MANAGER COMPARISON/);
 assert.match(inspector, /<ChannelDryPowderCurve curve=\{dryPowder\}/);
 assert.match(research, /dryPowderBySession\[selected\.session\]/);
 assert.match(research, /dryPowderBySlug\[focusSlug\]/);
+assert.match(research, /className="srw-inline-detail"/);
 assert.match(hook, /exit_at,occ,entry_px/);
 
 console.log("channel-dry-powder-curve-selftest: PASS");
