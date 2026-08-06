@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
+import { ManagerFleetHeatmap } from "@/components/research/ManagerFleetHeatmap";
 import { exactShadowReceipt } from "@/lib/research/exactShadowArchive";
 import type {
   ShadowChannelSummary,
@@ -77,18 +79,22 @@ function ExactStatus({ surface, session }: { surface: SurfaceProps; session: str
   return <section className="srw-exact missing"><header><span><b>EXACT MANAGER REPLAY</b><small>no session-matched receipt</small></span><em>MISSING</em></header>
     <p>The native ledger is visible, but no exact manager receipt is attached to this session.</p></section>;
 }
-function NativeTable({
+export function NativeTable({
   rows,
   selectable = false,
   excluded = [],
   onToggle,
   onToggleAll,
+  selectedSlug,
+  onInspect,
 }: {
   rows: ShadowChannelSummary[];
   selectable?: boolean;
   excluded?: string[];
   onToggle?: (slug: string) => void;
   onToggleAll?: () => void;
+  selectedSlug?: string;
+  onInspect?: (slug: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<ShadowChannelSortKey>("average");
@@ -124,8 +130,8 @@ function NativeTable({
       {query ? <em>{visibleRows.length}/{rows.length} MATCH</em> : null}
     </div>
     <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "PATHS")}</span><span>{sortLabel("win", "WIN")}</span><span>{sortLabel("average", "AVG/CT")}</span><span>{sortLabel("total", "Σ/CT")}</span><span>{sortLabel("mfe", "MFE")}</span><span>{sortLabel("exits", "EXIT MIX")}</span></div>
-    {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : visibleRows.map((row) => <div className="srw-row" key={row.slug}>
-      <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span>{row.slug}</span></b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
+    {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : visibleRows.map((row) => <div className={`srw-row${selectedSlug === row.slug ? " selected" : ""}`} key={row.slug}>
+      <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}</b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
       <strong className={`srw-cell-avg ${(row.averagePerPath ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.averagePerPath)}</strong>
       <span className="srw-cell-total">{money(row.pnlPerContract)}</span><span className="srw-cell-mfe">{row.averageMfePct == null ? "—" : `${row.averageMfePct}%`}</span>
       <span className="srw-cell-exits">{row.targets}T · {row.stops}S · {row.flattens}B</span>
@@ -139,6 +145,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   const [lane, setLane] = useState<ResearchLane>("vb");
   const [windowMode, setWindowMode] = useState<"day" | "cumulative">("day");
   const [excluded, setExcluded] = useState<Record<ResearchLane, string[]>>({ vb: [], all: [] });
+  const [focusSlug, setFocusSlug] = useState("");
   useEffect(() => {
     if (!session && shadowResearch.sessions.length) setSession(shadowResearch.sessions[0].session);
   }, [session, shadowResearch.sessions]);
@@ -157,6 +164,13 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     ? rows.filter((row) => !excluded[lane].includes(row.slug))
     : rows;
   const totals = laneTotals(filteredRows);
+  const focusedCurve = windowMode === "cumulative"
+    ? shadowResearch.dryPowderBySlug[focusSlug]
+    : selected ? shadowResearch.dryPowderBySession[selected.session]?.[focusSlug] : undefined;
+  useEffect(() => {
+    if (!rows.length) { setFocusSlug(""); return; }
+    if (!rows.some((row) => row.slug === focusSlug)) setFocusSlug(rows[0].slug);
+  }, [focusSlug, rows]);
   const runningRows = shadowResearch.cumulative
     ? (lane === "vb" ? shadowResearch.cumulative.vb : shadowResearch.cumulative.dark)
     : [];
@@ -217,10 +231,12 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
             <span><small>TARGET / STOP</small><b>{totals.targets} / {totals.stops}</b></span>
             <span><small>AVG / PATH</small><b>{money(totals.average)}</b></span>
           </div>
-          <NativeTable rows={rows} selectable={windowMode === "cumulative"} excluded={excluded[lane]} onToggle={toggleStrategy} onToggleAll={toggleAllStrategies} />
+          <NativeTable rows={rows} selectable={windowMode === "cumulative"} excluded={excluded[lane]} onToggle={toggleStrategy} onToggleAll={toggleAllStrategies} selectedSlug={focusSlug} onInspect={setFocusSlug} />
+          <ChannelDryPowderCurve curve={focusedCurve} />
           <footer>{windowMode === "cumulative" ? "CHECKED ROWS DRIVE THIS SUMMARY · " : ""}CORRELATED SIMULATION · NOT PORTFOLIO P&amp;L{shadowResearch.truncated ? ` · PARTIAL ${(10_000).toLocaleString()}-ROW CAP` : ""}</footer>
         </section>
         <ExactStatus surface={surface} session={selected.session} />
+        <ManagerFleetHeatmap book={surface.managerEvidence.book} channelSlugs={surface.view.desk.strategists.map((channel) => channel.slug)} selectedSlug={focusSlug} onSelect={setFocusSlug} />
       </>}
   </section>;
 }
