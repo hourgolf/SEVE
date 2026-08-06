@@ -5,6 +5,8 @@ import { Knob } from "@/components/console/hw/Knob";
 import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftPanel";
 import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRosterActivationConsole";
+import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
+import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -17,15 +19,19 @@ import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
+import type { ChannelDryPowderCurve as DryPowderCurve } from "@/lib/research/shadowResearch";
+import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write, controlPlane, onClose }: {
+export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, managerEvidence, onClose }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
   write: SurfaceProps["write"];
   controlPlane?: ChannelControlPlaneViewRead;
+  dryPowder?: DryPowderCurve;
+  managerEvidence?: ChannelManagerEvidence;
   onClose?: () => void;
 }) {
   const dispatch = useDeskDispatch();
@@ -107,6 +113,8 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
       <div className="mixer-deck">
+        <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
+        <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />
         <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : rootPolicy ? "SEALED RUNTIME · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
           <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
           <div className="ctl"><span className="cl">strike offset</span><span className="ival" title="effective configured strike offset">{strikeLabel(config.strike_offset ?? 0)}</span></div>

@@ -5,6 +5,8 @@ import { FiresPill, TradeShapeBar } from "@/components/console/ChannelStrip";
 import { ChannelConfigDraftPanel } from "@/components/studio/ChannelConfigDraftPanel";
 import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRosterActivationConsole";
+import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
+import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -16,6 +18,8 @@ import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
+import type { ChannelDryPowderCurve as DryPowderCurve } from "@/lib/research/shadowResearch";
+import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -35,7 +39,7 @@ const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
 }).format(new Date(iso));
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle, write, passport, controlPlane,
+  strategist, pnl, active, open, onToggle, write, passport, dryPowder, managerEvidence, controlPlane,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
@@ -44,6 +48,8 @@ export function MobileRackRow({
   onToggle: () => void;
   write: SurfaceProps["write"];
   passport?: ChannelPassport;
+  dryPowder?: DryPowderCurve;
+  managerEvidence?: ChannelManagerEvidence;
   controlPlane?: ChannelControlPlaneViewRead;
 }) {
   const dispatch = useDeskDispatch();
@@ -305,6 +311,8 @@ export function MobileRackRow({
               {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
             </>}
           </div>
+          <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
+          <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={rootPolicy?.managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />
           {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
           <ChannelRosterActivationConsole selectedSlug={slug} controlPlane={controlPlane} />
           <ChannelConfigDraftPanel

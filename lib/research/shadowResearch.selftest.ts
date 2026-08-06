@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {
+  deriveChannelDryPowderCurves,
+  deriveSessionDryPowderCurves,
   deriveShadowCumulative,
   deriveShadowSessions,
   isVirtualBenchSlug,
@@ -103,4 +105,34 @@ assert.deepEqual(order("mfe", "desc"), ["beta", "alpha", "pending"]);
 assert.deepEqual(order("exits", "desc"), ["alpha", "beta", "pending"]);
 assert.deepEqual(sortRows.map((item) => item.slug), ["alpha", "beta", "pending"], "sorting must not mutate evidence order");
 
+const dryRows: ShadowResearchRow[] = [
+  row({ signalId: "a1", slug: "vb-dry", signalAt: "2026-08-04T14:00:00Z", exitAt: "2026-08-04T14:10:00Z", entryPrice: 1, pnlPerContract: 10, blocked: "rc54_premium_debit_cap" }),
+  row({ signalId: "a2", slug: "vb-dry", signalAt: "2026-08-04T14:05:00Z", exitAt: "2026-08-04T14:20:00Z", entryPrice: 2, pnlPerContract: 20, blocked: "admission_domain_underlying_concurrency" }),
+  row({ signalId: "a3", slug: "vb-dry", signalAt: "2026-08-04T14:25:00Z", exitAt: "2026-08-04T14:30:00Z", entryPrice: 0.5, pnlPerContract: -30, blocked: "admission_domain_session_entry_limit" }),
+  row({ signalId: "b1", slug: "vb-dry", signalAt: "2026-08-05T14:00:00Z", exitAt: "2026-08-05T14:05:00Z", entryPrice: 1.5, pnlPerContract: 30, blocked: "day1_dark_lifecycle" }),
+  row({ signalId: "b2", slug: "vb-dry", signalAt: "2026-08-05T14:10:00Z", exitAt: "2026-08-05T14:15:00Z", entryPrice: 1.25, pnlPerContract: -10, blocked: "other_gate" }),
+];
+const dry = deriveChannelDryPowderCurves(dryRows, 3)["vb-dry"];
+assert.ok(dry);
+assert.equal(dry.sessionCount, 2);
+assert.equal(dry.points.length, 3);
+assert.deepEqual(dry.points[0], {
+  entryBudget: 1, marginalPaths: 2, marginalScored: 2, marginalWinners: 2,
+  marginalPnlPerContract: 40, marginalAveragePerPath: 20,
+  selectedPaths: 2, selectedScored: 2, selectedPnlPerContract: 40,
+  averagePnlPerSession: 20, peakConcurrentPositions: 1, peakDebitPerContract: 150,
+});
+assert.equal(dry.points[1].marginalAveragePerPath, 5);
+assert.equal(dry.points[1].selectedPnlPerContract, 50);
+assert.equal(dry.points[1].averagePnlPerSession, 25);
+assert.equal(dry.points[1].peakConcurrentPositions, 2);
+assert.equal(dry.points[1].peakDebitPerContract, 300);
+assert.equal(dry.points[2].marginalAveragePerPath, -30);
+assert.equal(dry.points[2].selectedPnlPerContract, 20);
+assert.deepEqual(dry.gates, { premiumOrDebit: 1, concurrency: 1, frequency: 1, lifecycle: 1, other: 1 });
+const dryBySession = deriveSessionDryPowderCurves(dryRows, 3);
+assert.equal(dryBySession["2026-08-04"]["vb-dry"].sessionCount, 1);
+assert.equal(dryBySession["2026-08-04"]["vb-dry"].points[2].selectedPnlPerContract, 0);
+assert.equal(dryBySession["2026-08-05"]["vb-dry"].points.length, 2);
+assert.equal(deriveChannelDryPowderCurves([row({ signalAt: "bad" })])["vb-alpha"], undefined);
 console.log("shadow-research-selftest: PASS");

@@ -1,11 +1,48 @@
 export interface ShadowResearchRow {
+  signalId?: string;
   slug: string;
   blocked: string;
   exitReason: string;
   pnlPerContract: number | null;
   signalAt: string;
+  exitAt?: string | null;
+  occ?: string | null;
+  entryPrice?: number | null;
   mfePct: number | null;
   givebackPct: number | null;
+}
+
+export interface DryPowderPoint {
+  entryBudget: number;
+  marginalPaths: number;
+  marginalScored: number;
+  marginalWinners: number;
+  marginalPnlPerContract: number;
+  marginalAveragePerPath: number | null;
+  selectedPaths: number;
+  selectedScored: number;
+  selectedPnlPerContract: number;
+  averagePnlPerSession: number;
+  peakConcurrentPositions: number | null;
+  peakDebitPerContract: number | null;
+}
+
+export interface ChannelDryPowderCurve {
+  slug: string;
+  fromSession: string;
+  throughSession: string;
+  sessionCount: number;
+  paths: number;
+  scored: number;
+  points: DryPowderPoint[];
+  gates: {
+    premiumOrDebit: number;
+    concurrency: number;
+    frequency: number;
+    lifecycle: number;
+    other: number;
+  };
+  basis: "capital-blind native virtual paths";
 }
 
 export interface ShadowChannelSummary {
@@ -114,6 +151,148 @@ export const shadowSessionDate = (value: string): string => {
 
 const rounded = (value: number): number => Math.round(value * 100) / 100;
 export const isVirtualBenchSlug = (slug: string): boolean => slug.startsWith("vb-");
+
+const finiteDate = (value: string | null | undefined): number | null => {
+  const parsed = Date.parse(value ?? "");
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const gateBucket = (blocked: string): keyof ChannelDryPowderCurve["gates"] => {
+  const value = blocked.toLowerCase();
+  if (value.includes("premium") || value.includes("debit") || value.includes("cost_gate")) return "premiumOrDebit";
+  if (value.includes("concurrency") || value.includes("family_open") || value.includes("same_occ") || value.includes("global")) return "concurrency";
+  if (value.includes("reentry") || value.includes("session_entry")) return "frequency";
+  if (value.includes("lifecycle") || value.includes("not_armed") || value.includes("muted")) return "lifecycle";
+  return "other";
+};
+
+function peakNativeExposure(rows: readonly ShadowResearchRow[]): {
+  positions: number | null;
+  debitPerContract: number | null;
+} {
+  const events: Array<{ at: number; count: number; debit: number }> = [];
+  for (const row of rows) {
+    const openedAt = finiteDate(row.signalAt);
+    const closedAt = finiteDate(row.exitAt);
+    const debit = Number(row.entryPrice) * 100;
+    if (openedAt == null || closedAt == null || closedAt < openedAt || !(debit > 0)) continue;
+    events.push({ at: openedAt, count: 1, debit });
+    events.push({ at: closedAt, count: -1, debit: -debit });
+  }
+  if (!events.length) return { positions: null, debitPerContract: null };
+  events.sort((left, right) => left.at - right.at || left.count - right.count);
+  let open = 0;
+  let debit = 0;
+  let peakOpen = 0;
+  let peakDebit = 0;
+  for (const event of events) {
+    open += event.count;
+    debit += event.debit;
+    peakOpen = Math.max(peakOpen, open);
+    peakDebit = Math.max(peakDebit, debit);
+  }
+  return { positions: peakOpen, debitPerContract: rounded(peakDebit) };
+}
+
+/**
+ * Build a channel-by-channel entry-budget curve. Signal ordinal is assigned
+ * independently inside each ET session. Each point answers two separate
+ * questions: the marginal quality of the Nth opportunity, and the observed
+ * native-path capital stack if the first N opportunities had been retained.
+ * It deliberately does not claim executable fills, manager fidelity, or
+ * portfolio additivity.
+ */
+export function deriveChannelDryPowderCurves(
+  rows: readonly ShadowResearchRow[],
+  maxEntryBudget = 6,
+): Record<string, ChannelDryPowderCurve> {
+  const byChannel = new Map<string, Map<string, ShadowResearchRow[]>>();
+  for (const row of rows) {
+    const session = shadowSessionDate(row.signalAt);
+    if (!session || !row.slug) continue;
+    const sessions = byChannel.get(row.slug) ?? new Map<string, ShadowResearchRow[]>();
+    const sessionRows = sessions.get(session) ?? [];
+    sessionRows.push(row);
+    sessions.set(session, sessionRows);
+    byChannel.set(row.slug, sessions);
+  }
+
+  return Object.fromEntries([...byChannel.entries()].map(([slug, sessionMap]) => {
+    const sessions = [...sessionMap.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([session, sessionRows]) => ({
+        session,
+        rows: [...sessionRows].sort((left, right) =>
+          left.signalAt.localeCompare(right.signalAt)
+          || String(left.signalId ?? "").localeCompare(String(right.signalId ?? ""))),
+      }));
+    const allRows = sessions.flatMap((session) => session.rows);
+    const gates: ChannelDryPowderCurve["gates"] = {
+      premiumOrDebit: 0,
+      concurrency: 0,
+      frequency: 0,
+      lifecycle: 0,
+      other: 0,
+    };
+    for (const row of allRows) gates[gateBucket(row.blocked)] += 1;
+    const maximumObserved = Math.max(0, ...sessions.map((session) => session.rows.length));
+    const budget = Math.max(0, Math.min(Math.floor(maxEntryBudget), maximumObserved));
+    const points: DryPowderPoint[] = [];
+    for (let index = 0; index < budget; index += 1) {
+      const marginal = sessions.map((session) => session.rows[index]).filter((row): row is ShadowResearchRow => !!row);
+      const selected = sessions.flatMap((session) => session.rows.slice(0, index + 1));
+      const marginalScored = marginal.filter((row) => row.pnlPerContract != null);
+      const selectedScored = selected.filter((row) => row.pnlPerContract != null);
+      const marginalPnl = marginalScored.reduce((sum, row) => sum + Number(row.pnlPerContract), 0);
+      const selectedPnl = selectedScored.reduce((sum, row) => sum + Number(row.pnlPerContract), 0);
+      const exposure = peakNativeExposure(selected);
+      points.push({
+        entryBudget: index + 1,
+        marginalPaths: marginal.length,
+        marginalScored: marginalScored.length,
+        marginalWinners: marginalScored.filter((row) => Number(row.pnlPerContract) > 0).length,
+        marginalPnlPerContract: rounded(marginalPnl),
+        marginalAveragePerPath: marginalScored.length ? rounded(marginalPnl / marginalScored.length) : null,
+        selectedPaths: selected.length,
+        selectedScored: selectedScored.length,
+        selectedPnlPerContract: rounded(selectedPnl),
+        averagePnlPerSession: sessions.length ? rounded(selectedPnl / sessions.length) : 0,
+        peakConcurrentPositions: exposure.positions,
+        peakDebitPerContract: exposure.debitPerContract,
+      });
+    }
+    const curve: ChannelDryPowderCurve = {
+      slug,
+      fromSession: sessions[0]?.session ?? "",
+      throughSession: sessions.at(-1)?.session ?? "",
+      sessionCount: sessions.length,
+      paths: allRows.length,
+      scored: allRows.filter((row) => row.pnlPerContract != null).length,
+      points,
+      gates,
+      basis: "capital-blind native virtual paths",
+    };
+    return [slug, curve];
+  }));
+}
+
+export function deriveSessionDryPowderCurves(
+  rows: readonly ShadowResearchRow[],
+  maxEntryBudget = 6,
+): Record<string, Record<string, ChannelDryPowderCurve>> {
+  const sessions = new Map<string, ShadowResearchRow[]>();
+  for (const row of rows) {
+    const session = shadowSessionDate(row.signalAt);
+    if (!session) continue;
+    const existing = sessions.get(session) ?? [];
+    existing.push(row);
+    sessions.set(session, existing);
+  }
+  return Object.fromEntries([...sessions.entries()].map(([session, sessionRows]) => [
+    session,
+    deriveChannelDryPowderCurves(sessionRows, maxEntryBudget),
+  ]));
+}
 
 function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
   const channels = new Map<string, {

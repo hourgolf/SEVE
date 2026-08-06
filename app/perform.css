@@ -221,6 +221,13 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .srw-sort i { font-size:7px; font-style:normal; }
 .shell-root.ws909 .srw-row b { overflow:hidden; text-overflow:ellipsis; color:#e6e9e8; }
 .shell-root.ws909 .srw-row span { color:#939b9d; }
+.shell-root.ws909 .srw-row.selected { background:rgba(230,177,60,.045); box-shadow:2px 0 0 #e6b13c inset; }
+.shell-root.ws909 .srw-channel-open {
+  min-width:0; padding:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  border:0; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer;
+}
+.shell-root.ws909 .srw-channel-open:hover,
+.shell-root.ws909 .srw-channel-open[aria-pressed="true"] { color:#e6b13c; }
 .shell-root.ws909 .srw-channel-cell {
   min-width:0; display:flex; align-items:center; gap:7px;
 }
@@ -240,6 +247,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 }
 .shell-root.ws909 .srw-check:focus-visible { outline:2px solid #f1c45b; outline-offset:2px; }
 .shell-root.ws909 .srw-channel-cell.excluded > span { opacity:.35; }
+.shell-root.ws909 .srw-native > .dpc { margin:8px; }
 .shell-root.ws909 .srw .pos { color:#55d981; }
 .shell-root.ws909 .srw .neg { color:#ff735b; }
 .shell-root.ws909 .srw-manager-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 10px; }

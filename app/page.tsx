@@ -36,6 +36,7 @@ import { useRefreshTick } from "@/hooks/useRefreshTick";
 import { useStudioEvidence } from "@/hooks/useStudioEvidence";
 import { useContractHistory } from "@/hooks/useContractHistory";
 import { useShadowResearch } from "@/hooks/useShadowResearch";
+import { useChannelManagerEvidence } from "@/hooks/useChannelManagerEvidence";
 import { useDailyReports } from "@/hooks/useDailyReports";
 import { useWeeklyReports } from "@/hooks/useWeeklyReports";
 import { useForensicsReport } from "@/hooks/useForensicsReport";
@@ -206,7 +207,10 @@ function Surface({
     openPositions: feed.sessionTrades.open,
     closedPositions: feed.sessionTrades.closed,
   });
-  const shadowResearch = useShadowResearch(activeRoom === "tape");
+  // Keep the bounded prospective ledger warm so channel-level dry-powder
+  // diagnostics are already present when the operator opens an inspector.
+  const shadowResearch = useShadowResearch(true);
+  const managerEvidence = useChannelManagerEvidence(true);
   const reviewEnabled = activeRoom === "tape";
   const daily = useDailyReports(8, reviewEnabled);
   const weekly = useWeeklyReports(6, reviewEnabled);
@@ -238,7 +242,7 @@ function Surface({
   // operator returns to the same room/layout. Lifted to the seam (passed down).
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, channelControlPlane, opsReadiness, shadowResearch, reviewEvidence };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, reviewEvidence };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/
