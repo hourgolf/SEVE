@@ -233,6 +233,8 @@
     "reconcile-alpaca": "tsx --env-file=.env.local scripts/reconcile-alpaca.ts",
     "gate-shadow": "tsx --env-file=.env.local scripts/gate-shadow.ts",
     "gate-shadow:hosted": "tsx scripts/gate-shadow.ts",
+    "verify-shadow-rebuild": "tsx --env-file=.env.local scripts/verify-shadow-rebuild.ts",
+    "verify-shadow-rebuild:hosted": "tsx scripts/verify-shadow-rebuild.ts",
     "gate-shadow-policy-selftest": "tsx lib/research/gateShadowPolicy.selftest.ts",
     "after-close-research-selftest": "tsx lib/research/afterCloseResearch.selftest.ts",
     "fixture-lane-selftest": "tsx lib/ui/fixtureLane.selftest.ts",
