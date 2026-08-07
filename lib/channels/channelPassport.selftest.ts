@@ -182,6 +182,31 @@ assert.equal(
   8,
 );
 
+const observeOnlyReceiptBound = deriveChannelPassports({
+  channels: [channel("pb-ride"), channel("orb-ustop-ctl")],
+  events: [event(
+    `stream: rc54-release ACTIVE ${receiptBoundReleaseId} config=sha256:${receiptBoundHash}`,
+    {
+      ...receiptBoundEvents[0].meta,
+      roots: receiptBoundRoots.map((root) =>
+        root.slug === "pb-ride"
+          ? { ...root, executionPosture: "observe-only" }
+          : { ...root, executionPosture: "paper" }),
+    },
+  )],
+  signals: [], positions: [], recentTrades: [], evidenceBySlug: {},
+});
+assert.equal(observeOnlyReceiptBound.release.state, "verified");
+assert.equal(observeOnlyReceiptBound.bySlug["pb-ride"].lifecycle, "dark-evidence");
+assert.equal(
+  observeOnlyReceiptBound.bySlug["pb-ride"].effective.execution.label,
+  "OBSERVE ONLY",
+);
+assert.equal(
+  observeOnlyReceiptBound.bySlug["orb-ustop-ctl"].lifecycle,
+  "paper-root",
+);
+
 const dynamicRoot = {
   ...receiptBoundRoots.find((root) => root.slug === "vb-squeeze-break")!,
   slug: "vb-gap-drift",
