@@ -40,6 +40,8 @@ if (envFile) {
 const outputDir = resolve(arg("out-dir") ?? "data/decision-atlas/latest");
 const ledgerFile = resolve(arg("ledger-file") ?? "data/profitability-ledger/ledger.json");
 const snapshotFile = arg("snapshot-file");
+const virtualCatchupFile = arg("virtual-catchup-file");
+const virtualCatchupManifestFile = arg("virtual-catchup-manifest");
 const cohortFrom = arg("cohort-from") ?? "2026-07-01T04:00:00.000Z";
 const throughSession = arg("through") ?? etDateOf(new Date().toISOString());
 const readOptions = { pageSize: 1_000, max: 50_000, attempts: 3,
@@ -47,8 +49,82 @@ const readOptions = { pageSize: 1_000, max: 50_000, attempts: 3,
 
 interface ProfitabilityArtifact { ledger: ProfitabilityLedger }
 
+interface LocalVirtualCatchupRow {
+  signalId: string;
+  slug: string;
+  occ: string;
+  createdAt: string;
+  blocked: string;
+  entryAsk: number;
+  exitReason: string;
+  exitPx: number | null;
+  exitAt: string | null;
+  pnlPerContract: number | null;
+  mfePct: number | null;
+  giveback: number | null;
+}
+
+interface VirtualCatchupManifest {
+  mode: string;
+  missingSignalIds: string[];
+  exactWriteRequired: boolean;
+  productionWrites: number;
+}
+
 const sha256 = (value: string): string => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 const safeName = (value: string): string => value.replace(/[^a-z0-9-]/gi, "-").replace(/-+/g, "-");
+
+function applyLocalVirtualCatchup(snapshot: DecisionAtlasSourceSnapshot): {
+  snapshot: DecisionAtlasSourceSnapshot;
+  metadata: null | { rows: number; dataSha256: string; manifestSha256: string; mode: string };
+} {
+  if (!virtualCatchupFile && !virtualCatchupManifestFile) return { snapshot, metadata: null };
+  if (!virtualCatchupFile || !virtualCatchupManifestFile) {
+    throw new Error("--virtual-catchup-file and --virtual-catchup-manifest must be provided together");
+  }
+  const dataPath = resolve(virtualCatchupFile);
+  const manifestPath = resolve(virtualCatchupManifestFile);
+  if (!existsSync(dataPath) || !existsSync(manifestPath)) throw new Error("virtual catch-up artifact or manifest not found");
+  const dataJson = readFileSync(dataPath, "utf8");
+  const manifestJson = readFileSync(manifestPath, "utf8");
+  const local = JSON.parse(dataJson) as LocalVirtualCatchupRow[];
+  const manifest = JSON.parse(manifestJson) as VirtualCatchupManifest;
+  if (manifest.mode !== "read-only-select-audit" || manifest.productionWrites !== 0) {
+    throw new Error("virtual catch-up manifest is not a zero-write read-only audit");
+  }
+  const missingIds = [...new Set(manifest.missingSignalIds)].sort();
+  if (manifest.exactWriteRequired !== (missingIds.length > 0)) throw new Error("virtual catch-up manifest requirement is inconsistent");
+  const remoteIds = new Set(snapshot.virtualTrades.map((row) => row.signal_id));
+  const stale = missingIds.filter((id) => remoteIds.has(id));
+  if (stale.length) throw new Error(`virtual catch-up manifest is stale; ${stale.length} listed row(s) are now remote`);
+  const localById = new Map(local.map((row) => [row.signalId, row]));
+  const signalsById = new Map(snapshot.signals.map((row) => [row.id, row]));
+  const additions = missingIds.map((id): AtlasVirtualTradeRow => {
+    const row = localById.get(id);
+    const signal = signalsById.get(id);
+    if (!row || !signal) throw new Error(`virtual catch-up lineage missing for ${id}`);
+    return {
+      signal_id: id,
+      strategist_id: signal.strategist_id,
+      slug: row.slug,
+      occ: row.occ || null,
+      signal_at: row.createdAt,
+      blocked: row.blocked || null,
+      entry_px: row.entryAsk > 0 ? row.entryAsk : null,
+      exit_reason: row.exitReason || null,
+      exit_px: row.exitPx,
+      exit_at: row.exitAt,
+      pnl_per_contract: row.pnlPerContract,
+      mfe_pct: row.mfePct,
+      giveback_pct: row.giveback,
+    };
+  });
+  return {
+    snapshot: { ...snapshot, virtualTrades: [...snapshot.virtualTrades, ...additions]
+      .sort((left, right) => left.signal_at.localeCompare(right.signal_at) || left.signal_id.localeCompare(right.signal_id)) },
+    metadata: { rows: additions.length, dataSha256: sha256(dataJson), manifestSha256: sha256(manifestJson), mode: manifest.mode },
+  };
+}
 
 async function collect(ledger: ProfitabilityLedger): Promise<{
   snapshot: DecisionAtlasSourceSnapshot;
@@ -151,6 +227,8 @@ async function main(): Promise<void> {
     posture = "select_only_local_artifacts";
     controlPlaneState = collected.controlPlaneState;
   }
+  const catchup = applyLocalVirtualCatchup(snapshot);
+  snapshot = catchup.snapshot;
   const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt, throughSession });
   const atlas = buildDecisionAtlas(normalized);
   const snapshotJson = `${JSON.stringify(snapshot, null, 2)}\n`;
@@ -166,6 +244,7 @@ async function main(): Promise<void> {
     ledgerFile,
     cohortFrom,
     timingsMs,
+    localVirtualCatchup: catchup.metadata,
     sourceRows: {
       logicalTrades: snapshot.ledger.logicalTrades.length,
       signals: snapshot.signals.length,

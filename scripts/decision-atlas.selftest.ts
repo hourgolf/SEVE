@@ -18,6 +18,12 @@ assert.match(runner, /schemaVersion:\s*3/);
 assert.match(runner, /scheduleActivationAuthorized:\s*false/);
 assert.match(runner, /activeChannelSpecDatabaseIdsByVersionKey/,
   "nightly snapshot must preserve the active database spec identity per channel");
+assert.match(runner, /read-only-select-audit/,
+  "a final Atlas may overlay only a frozen zero-write catch-up manifest");
+assert.match(runner, /virtual catch-up manifest is stale/,
+  "local catch-up evidence must fail closed if remote truth has changed");
+assert.match(runner, /localVirtualCatchup: catchup\.metadata/,
+  "the receipt must disclose local catch-up rows and hashes");
 assert.doesNotMatch(runner, /\.from\([^\n]+\)\.(?:insert|upsert|update|delete)\(/);
 assert.doesNotMatch(runner, /\.rpc\(/);
 assert.match(library, /logicalOpportunityId/);
