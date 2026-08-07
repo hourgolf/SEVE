@@ -22,5 +22,7 @@ assert.match(library, /additionalDisplacedOtherOpportunitiesVsOneContract/,
 assert.match(report, /no order, configuration, roster, or deployment authority/i);
 assert.match(report, /Default table answers what is working/i);
 assert.match(report, /PROPOSALS ONLY · NOTHING APPLIED/i);
+assert.match(report, /Moving from two to four contracts changes replayed portfolio result/i,
+  "pending size proposals must compare the proposed size with the current two-contract baseline");
 
 console.log("decision-atlas runner selftest: PASS");

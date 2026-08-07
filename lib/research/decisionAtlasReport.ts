@@ -97,12 +97,23 @@ function recommendation(review: PendingAtlasReview, dossier: AtlasChannelDossier
   if (!dossier) return { state: "HOLD", reason: "No Decision Atlas dossier is available." };
   if (review.change === "hold") return { state: "GO", reason: `The requested no-change posture preserves ${dossier.lifecycle.evidenceSessions} sessions of evidence.` };
   if (review.change === "size") {
+    const two = dossier.capacity.points.find((point) => point.contracts === 2);
     const four = dossier.capacity.points.find((point) => point.contracts === 4);
+    const portfolioChange = two && four
+      ? Math.round((four.portfolioTotalResultUsd - two.portfolioTotalResultUsd) * 100) / 100
+      : null;
+    const addedDisplacements = two && four
+      ? four.displacedOtherOpportunities - two.displacedOtherOpportunities
+      : null;
+    const changeText = portfolioChange == null
+      ? "an unresolved amount"
+      : `${portfolioChange >= 0 ? "+" : "−"}$${Math.abs(portfolioChange).toLocaleString("en-US")}`;
+    const displacementText = addedDisplacements == null ? "an unknown number of" : String(addedDisplacements);
     return dossier.disposition === "size"
     && (dossier.capacity.bestSupportedContracts ?? 0) >= 4
-    ? { state: "GO", reason: `Four contracts change replayed portfolio result by ${four?.marginalPortfolioResultVsOneContractUsd == null ? "an unresolved amount" : `${four.marginalPortfolioResultVsOneContractUsd >= 0 ? "+" : "−"}$${Math.abs(four.marginalPortfolioResultVsOneContractUsd).toLocaleString("en-US")}`} versus one contract and cause ${four?.additionalDisplacedOtherOpportunitiesVsOneContract ?? "an unknown number of"} additional competing-opportunity displacement(s).` }
+    ? { state: "GO", reason: `Moving from two to four contracts changes replayed portfolio result by ${changeText} and causes ${displacementText} additional competing-opportunity displacement(s).` }
     : dossier.capacity.bestSupportedContracts != null && dossier.capacity.bestSupportedContracts >= 4
-      ? { state: "HOLD", reason: `${dossier.decisionCohort.sessions} sessions/${dossier.decisionCohort.opportunities} opportunities under the unchanged channel specification; four contracts change replayed portfolio result by ${four?.marginalPortfolioResultVsOneContractUsd == null ? "an unresolved amount" : `${four.marginalPortfolioResultVsOneContractUsd >= 0 ? "+" : "−"}$${Math.abs(four.marginalPortfolioResultVsOneContractUsd).toLocaleString("en-US")}`} with ${four?.additionalDisplacedOtherOpportunitiesVsOneContract ?? "unknown"} additional competing displacements, but the lifecycle uncertainty remains unresolved.` }
+      ? { state: "HOLD", reason: `${dossier.decisionCohort.sessions} sessions/${dossier.decisionCohort.opportunities} opportunities under the unchanged channel specification; moving from two to four contracts changes replayed portfolio result by ${changeText} with ${displacementText} additional competing displacements, but the lifecycle uncertainty remains unresolved.` }
       : { state: "HOLD", reason: `The replay supports ${dossier.capacity.bestSupportedContracts ?? "no verified"} contract level; four is not yet defensible.` };
   }
   if (review.change === "retirement") return dossier.disposition === "retire"
