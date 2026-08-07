@@ -60,6 +60,33 @@ const opportunities: AtlasOpportunity[] = [
     blockedReason: "blocked by capital",
     evidenceLayer: "prospective_virtual",
   }),
+  ...sessions.flatMap((_session, index) => [
+    opportunity("positive", index, 20 + index, {
+      logicalOpportunityId: `positive:${index}:a`, id: `positive:${index}:a`,
+      signalAt: `${sessions[index]}T14:32:00.000Z`, occSymbol: `SPY-POS-${index}-A`,
+    }),
+    opportunity("positive", index, 22 + index, {
+      logicalOpportunityId: `positive:${index}:b`, id: `positive:${index}:b`,
+      signalAt: `${sessions[index]}T14:33:00.000Z`, occSymbol: `SPY-POS-${index}-B`,
+    }),
+    opportunity("positive", index, 0, {
+      logicalOpportunityId: `positive:${index}:unscored`, id: `positive:${index}:unscored`,
+      signalAt: `${sessions[index]}T14:34:00.000Z`, occSymbol: null,
+      exitAt: null, contractSelected: false, quoteEligible: null, admissionAllowed: null,
+      filled: false, blockedReason: "no contract selected", resultPerContractUsd: null,
+      returnPct: null, mfePct: null, maePct: null, captureRatio: null,
+    }),
+  ]),
+  ...sessions.flatMap((_session, index) => {
+    const count = index < 4 ? 1 : 4;
+    const result = index < 4 ? -10 : 10;
+    return Array.from({ length: count }, (_unused, item) => opportunity("mixed-density", index, result, {
+      logicalOpportunityId: `mixed-density:${index}:${item}`,
+      id: `mixed-density:${index}:${item}`,
+      signalAt: `${sessions[index]}T14:${40 + item}:00.000Z`,
+      occSymbol: `SPY-MIX-${index}-${item}`,
+    }));
+  }),
 ];
 
 const managers: AtlasManagerPath[] = sessions.map((_session, index) => ({
@@ -102,6 +129,22 @@ assert.equal(atlas.channels.alpha.evidenceLayers.length, 2,
   "actual and prospective evidence remain visibly separate for the same opportunity");
 assert.equal(atlas.channels.alpha.firstGlance.length, 5);
 assert.equal(atlas.channels.alpha.firstGlance[0].label, "typical result");
+assert.equal(atlas.channels.positive.decisionCohort.opportunities, 18,
+  "observed signals remain visible");
+assert.equal(atlas.channels.positive.decisionCohort.scoredOpportunities, 12,
+  "decision maturity must count scored logical outcomes only");
+assert.equal(atlas.channels.positive.decisionCohort.scoredSessions, 6);
+assert.equal(atlas.channels.positive.lifecycle.decisionGroup, "actionable_now");
+assert.equal(atlas.channels.positive.lifecycle.typicalSessionUsd, 23.5);
+assert.equal(atlas.channels.positive.lifecycle.configurationCertainty, "exact_current");
+assert.equal(atlas.channels["mixed-density"].lifecycle.typicalOpportunityUsd, 10);
+assert.equal(atlas.channels["mixed-density"].lifecycle.typicalSessionUsd, -10);
+assert.equal(atlas.channels["mixed-density"].lifecycle.decisionGroup, "single_variable_experiment",
+  "positive path-level results must not hide a negative typical session");
+assert.equal(atlas.channels.blocked.lifecycle.decisionGroup, "needs_more_evidence");
+assert(atlas.decisionGroups.actionable_now.includes("positive"));
+assert(atlas.decisionGroups.single_variable_experiment.includes("mixed-density"));
+assert(atlas.decisionGroups.needs_more_evidence.includes("blocked"));
 assert.equal(atlas.channels.blocked.waterfall.blocked[0].reason, "blocked by capital");
 assert.equal(atlas.channels.blocked.waterfall.blocked[0].typicalCounterfactualUsd, 35);
 assert.equal(atlas.channels.alpha.frontiers.length, 2);

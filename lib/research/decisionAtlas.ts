@@ -1,7 +1,12 @@
 // Pure, read-only Decision Atlas. Every result is derived from one logical
 // opportunity; fills, runner rows, and manager arms never become extra trades.
 
-export const DECISION_ATLAS_VERSION = "decision-atlas-v2" as const;
+export const DECISION_ATLAS_VERSION = "decision-atlas-v3" as const;
+
+export type AtlasDecisionGroup =
+  | "actionable_now"
+  | "single_variable_experiment"
+  | "needs_more_evidence";
 
 export type AtlasEvidenceLayer =
   | "actual_portfolio"
@@ -194,8 +199,18 @@ export interface AtlasCapacityReplay {
 
 export interface AtlasLifecycle {
   disposition: AtlasDisposition;
+  decisionGroup: AtlasDecisionGroup;
   plainLanguage: string;
   evidenceSessions: number;
+  scoredOpportunities: number;
+  typicalOpportunityUsd: number | null;
+  typicalSessionUsd: number | null;
+  positiveSessions: number;
+  negativeSessions: number;
+  flatSessions: number;
+  positiveSessionRate: number | null;
+  directionConsistency: number | null;
+  configurationCertainty: "exact_current" | "versioned_historical" | "historical_unstamped";
   additionalIndependentSessions: number | null;
   uniqueness: "unique" | "partly_overlapping" | "redundant" | "unknown";
   decisionDrivers: string[];
@@ -212,6 +227,8 @@ export interface AtlasChannelDossier {
     portfolioConfigurationEras: string[];
     opportunities: number;
     sessions: number;
+    scoredOpportunities: number;
+    scoredSessions: number;
     fact: string;
   };
   evidenceLayers: Array<{
@@ -233,12 +250,13 @@ export interface AtlasChannelDossier {
 }
 
 export interface DecisionAtlas {
-  schemaVersion: 2;
+  schemaVersion: 3;
   atlasVersion: typeof DECISION_ATLAS_VERSION;
   generatedAt: string;
   throughSession: string;
   channels: Record<string, AtlasChannelDossier>;
   collisionGraph: AtlasPairEdge[];
+  decisionGroups: Record<AtlasDecisionGroup, string[]>;
   evidence: {
     inputOpportunities: number;
     logicalOpportunities: number;
@@ -679,16 +697,6 @@ export function buildCapacityReplay(input: {
   return { points, bestSupportedContracts: supported.at(-1)?.contracts ?? null, limitations: [...limitations] };
 }
 
-function neededSessions(interval: AtlasInterval, observedSessions: number): number | null {
-  const floor = Math.max(0, 5 - observedSessions);
-  if (observedSessions < 2 || interval.lower == null || interval.upper == null) return floor;
-  const center = (interval.lower + interval.upper) / 2;
-  const half = (interval.upper - interval.lower) / 2;
-  if (Math.abs(center) >= half) return floor;
-  if (center === 0) return null;
-  return Math.max(floor, Math.min(30, Math.max(1, Math.ceil(observedSessions * (half / Math.abs(center)) ** 2 - observedSessions))));
-}
-
 function lifecycle(input: {
   rows: readonly AtlasOpportunity[];
   frontiers: readonly AtlasEntryExitFrontier[];
@@ -696,64 +704,93 @@ function lifecycle(input: {
   edges: readonly AtlasPairEdge[];
 }): AtlasLifecycle {
   const outcomes = input.rows.map((row) => row.resultPerContractUsd).filter(finite);
-  const sessions = new Set(input.rows.filter((row) => finite(row.resultPerContractUsd)).map((row) => row.session)).size;
-  const clustered = clusteredInterval(input.rows.flatMap((row) => finite(row.resultPerContractUsd)
-    ? [{ session: row.session, value: row.resultPerContractUsd }] : []));
-  const stability = validation(input.rows.flatMap((row) => finite(row.resultPerContractUsd)
-    ? [{ session: row.session, value: row.resultPerContractUsd }] : []));
+  const bySession = new Map<string, number[]>();
+  for (const row of input.rows) if (finite(row.resultPerContractUsd)) {
+    bySession.set(row.session, [...(bySession.get(row.session) ?? []), row.resultPerContractUsd]);
+  }
+  const sessionOutcomes = [...bySession.values()].map((values) => median(values)).filter(finite);
+  const sessions = sessionOutcomes.length;
   const typical = median(outcomes);
+  const typicalSession = median(sessionOutcomes);
+  const positiveSessions = sessionOutcomes.filter((value) => value > 0).length;
+  const negativeSessions = sessionOutcomes.filter((value) => value < 0).length;
+  const flatSessions = sessions - positiveSessions - negativeSessions;
+  const positiveSessionRate = sessions ? round(positiveSessions / sessions) : null;
+  const directionConsistency = sessions ? round(Math.max(positiveSessions, negativeSessions) / sessions) : null;
+  const mature = sessions >= 5 && outcomes.length >= 10;
+  const positiveConsistent = mature && typical != null && typical > 0 && typicalSession != null
+    && typicalSession > 0 && positiveSessions / sessions >= 2 / 3;
+  const negativeConsistent = mature && typical != null && typical < 0 && typicalSession != null
+    && typicalSession < 0 && negativeSessions / sessions >= 2 / 3;
+  const directionConflict = typical != null && typicalSession != null
+    && Math.sign(typical) !== 0 && Math.sign(typicalSession) !== 0
+    && Math.sign(typical) !== Math.sign(typicalSession);
   const current = input.frontiers.at(-1);
   const bestManager = current?.managers.find((manager) => (manager.typicalBenefitPct ?? 0) > 0
     && manager.pairedOpportunities >= 10 && manager.sessions >= 5
     && manager.improvementFrequency != null && manager.improvementFrequency >= 0.6
-    && manager.leaveSessionOutStable !== false && manager.chronologicalStable !== false);
+    && manager.benefitInterval95.lower != null && manager.benefitInterval95.lower > 0
+    && manager.leaveSessionOutStable === true && manager.chronologicalStable === true);
   const highEdges = input.edges.filter((edge) => edge.redundancy === "high");
   const uniqueness: AtlasLifecycle["uniqueness"] = input.edges.length === 0 ? "unknown"
     : highEdges.length ? "redundant" : input.edges.some((edge) => edge.redundancy === "moderate")
       ? "partly_overlapping" : "unique";
   let disposition: AtlasDisposition = "continue_collecting";
+  let decisionGroup: AtlasDecisionGroup = "needs_more_evidence";
   const drivers: string[] = [];
-  if (sessions >= 5 && typical != null && typical < 0 && clustered.upper != null && clustered.upper < 0 && uniqueness === "redundant") {
+  if (!mature) {
+    drivers.push(`${sessions} scored session(s) and ${outcomes.length} scored logical outcome(s); start inference at 5 sessions and 10 outcomes.`);
+  } else if (negativeConsistent && uniqueness === "redundant") {
     disposition = "retire";
-    drivers.push("Typical outcomes are negative across independent sessions.", "Another channel supplies substantially similar evidence.");
-  } else if (bestManager && bestManager.benefitInterval95.lower != null && bestManager.benefitInterval95.lower > 0) {
+    decisionGroup = "actionable_now";
+    drivers.push("The typical opportunity and typical session are negative in at least two-thirds of scored sessions.",
+      "Another channel supplies substantially similar evidence.");
+  } else if (bestManager) {
     disposition = "change_manager";
+    decisionGroup = "actionable_now";
     drivers.push(`${bestManager.managerId} improves the typical paired opportunity with session-level support.`);
-  } else if (sessions >= 5 && typical != null && typical > 0
-    && clustered.lower != null && clustered.lower > 0
-    && stability.leaveOut === true && stability.chronological === true
+  } else if (positiveConsistent && (current?.nativeOutlierShare ?? 1) <= 0.35
+    && input.rows[0]?.evidenceLayer === "exact_current_configuration"
     && input.capacity.bestSupportedContracts && input.capacity.bestSupportedContracts > 1) {
     disposition = "size";
+    decisionGroup = "actionable_now";
     drivers.push(`Positive typical outcomes persist in the bounded replay through ${input.capacity.bestSupportedContracts} contracts.`);
-  } else if (sessions >= 5 && typical != null && typical > 0
-    && clustered.lower != null && clustered.lower > 0
-    && stability.leaveOut === true && stability.chronological === true
-    && current?.nativeTypicalCapture != null && current.nativeTypicalCapture < 0.45) {
-    disposition = "retune_one_variable";
-    drivers.push("Entries find opportunity, but the current exit keeps less than half of the available move.");
-  } else if (sessions >= 5 && typical != null && typical > 0
-    && clustered.lower != null && clustered.lower > 0
-    && stability.leaveOut === true && stability.chronological === true) {
+  } else if (positiveConsistent && (current?.nativeOutlierShare ?? 1) <= 0.35) {
     disposition = "promote";
-    drivers.push("The typical opportunity is positive across enough independent sessions for review.");
+    decisionGroup = "actionable_now";
+    drivers.push("The typical opportunity and typical session are positive in at least two-thirds of scored sessions.");
   } else {
-    drivers.push("The direction of the typical result is not yet resolved across independent sessions.");
+    disposition = "retune_one_variable";
+    decisionGroup = "single_variable_experiment";
+    if (directionConflict) drivers.push("The typical opportunity and typical session point in opposite directions; test one admission or entry-frequency rule.");
+    else if (negativeConsistent) drivers.push("Negative session behavior is consistent, but unique or partly overlapping evidence warrants one controlled retune before retirement.");
+    else if ((current?.nativeOutlierShare ?? 0) > 0.35) drivers.push("The result depends too heavily on a small number of winners; isolate one entry or exit variable.");
+    else if (typical != null && typical > 0
+      && current?.nativeTypicalCapture != null && current.nativeTypicalCapture < 0.45)
+      drivers.push("Entries find opportunity, but the current exit keeps less than half of the available move.");
+    else drivers.push("There is enough scored evidence to establish mixed session behavior; collect the next evidence through one bounded variable experiment.");
   }
   const language: Record<AtlasDisposition, string> = {
     promote: "Entry evidence is promising enough for a bounded promotion review.",
     size: "The current shape is promising; review additional size without changing its logic.",
     change_manager: "The entry appears useful, but a paired exit alternative is more consistent.",
     retune_one_variable: "The entry finds opportunity, but one exit variable deserves a controlled test.",
-    continue_collecting: "Keep collecting; the typical outcome is not resolved yet.",
+    continue_collecting: "Keep collecting until at least 5 scored sessions and 10 scored outcomes are available.",
     retire: "Retire from collection review: evidence is negative and largely duplicated.",
   };
   return {
-    disposition, plainLanguage: language[disposition], evidenceSessions: sessions,
-    additionalIndependentSessions: neededSessions(clustered, sessions), uniqueness,
+    disposition, decisionGroup, plainLanguage: language[disposition], evidenceSessions: sessions,
+    scoredOpportunities: outcomes.length, typicalOpportunityUsd: typical,
+    typicalSessionUsd: typicalSession, positiveSessions, negativeSessions, flatSessions,
+    positiveSessionRate, directionConsistency,
+    configurationCertainty: input.rows[0]?.evidenceLayer === "exact_current_configuration" ? "exact_current"
+      : /unstamped|legacy/i.test(input.rows[0]?.configurationEra ?? "") ? "historical_unstamped" : "versioned_historical",
+    additionalIndependentSessions: sessions < 5 ? 5 - sessions : null, uniqueness,
     decisionDrivers: drivers,
     limitations: [
       ...(input.rows.some((row) => !row.configurationEra) ? ["Legacy rows without an exact configuration era remain separate."] : []),
-      ...(clustered.method === "requires_two_sessions" ? ["At least two independent sessions are required for uncertainty."] : []),
+      ...(/unstamped|legacy/i.test(input.rows[0]?.configurationEra ?? "")
+        ? ["Historical virtual evidence is not stamped to a verified channel specification; use it for research grouping, not exact-current claims."] : []),
     ],
   };
 }
@@ -842,10 +879,14 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
           row.portfolioConfigurationEra ?? "portfolio:unstamped"))].sort(),
         opportunities: decisionRows.length,
         sessions: new Set(decisionRows.map((row) => row.session)).size,
+        scoredOpportunities: life.scoredOpportunities,
+        scoredSessions: life.evidenceSessions,
         fact: decisionRows[0]?.evidenceLayer === "exact_current_configuration"
           ? "Default metrics use the unchanged current channel specification across portfolio receipts."
           : decisionRows[0]?.evidenceLayer === "prospective_virtual"
-            ? "Default metrics use the latest prospective virtual cohort; not portfolio P&L."
+            ? /unstamped|legacy/i.test(decisionRows[0]?.configurationEra ?? "")
+              ? "Default metrics use historical virtual paths with an unverified configuration stamp; not portfolio P&L."
+              : "Default metrics use the latest versioned prospective virtual cohort; not portfolio P&L."
             : "Default metrics use the latest available era; exact-current evidence is not available.",
       },
       evidenceLayers: (["actual_portfolio", "structural_history", "exact_current_configuration", "prospective_virtual"] as const)
@@ -862,9 +903,10 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
         { label: "best move", value: metric(median(mfe), "%"), detail: "Typical maximum favorable move while the position was open." },
         { label: "gave back", value: metric(median(giveback), " pts"), detail: "Typical best move minus the final return." },
         { label: "additional opportunity", value: moneyMetric(additional, " replay"), detail: "Change in total portfolio result at the best supported size versus one contract, after displacement." },
-        { label: "evidence", value: `${life.evidenceSessions} sessions`, detail: life.additionalIndependentSessions == null
-          ? "Uncertainty horizon unresolved."
-          : `${life.additionalIndependentSessions} additional sessions estimated for uncertainty; not a fixed decision gate.` },
+        { label: "evidence", value: `${life.evidenceSessions}s / ${life.scoredOpportunities} scored`, detail:
+          life.decisionGroup === "needs_more_evidence"
+            ? "Start inference at 5 scored sessions and 10 scored logical outcomes."
+            : `${life.decisionGroup.replaceAll("_", " ")} · ${life.configurationCertainty.replaceAll("_", " ")}.` },
       ], waterfall, frontiers, capacity, lifecycle: life,
     };
     return [channel, dossier];
@@ -876,9 +918,14 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
     prospective_virtual: rows.filter((row) => row.evidenceLayer === "prospective_virtual").length,
     manager_counterfactual: input.managerPaths.length,
   };
+  const decisionGroups: DecisionAtlas["decisionGroups"] = {
+    actionable_now: [], single_variable_experiment: [], needs_more_evidence: [],
+  };
+  for (const dossier of Object.values(dossiers)) decisionGroups[dossier.lifecycle.decisionGroup].push(dossier.channel);
+  for (const group of Object.values(decisionGroups)) group.sort();
   return {
-    schemaVersion: 2, atlasVersion: DECISION_ATLAS_VERSION, generatedAt: input.generatedAt,
-    throughSession: input.throughSession, channels: dossiers, collisionGraph: graph,
+    schemaVersion: 3, atlasVersion: DECISION_ATLAS_VERSION, generatedAt: input.generatedAt,
+    throughSession: input.throughSession, channels: dossiers, collisionGraph: graph, decisionGroups,
     evidence: {
       inputOpportunities: input.opportunities.length, logicalOpportunities: rows.length,
       duplicateRowsRemoved: input.opportunities.length - rows.length,
@@ -890,6 +937,8 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
         "Blocked counterfactuals are reported only when a durable virtual outcome exists.",
         "Cross-account same-OCC overlap is allowed and retains independent exits.",
         "Missing stage evidence is shown as missing and is never inferred from timestamps.",
+        "Decision maturity counts scored logical outcomes, not every observed signal.",
+        "Trade-level and session-level typical results are reported separately so signal density cannot impersonate consistency.",
       ],
     },
     productionWrites: 0, orderAuthority: false, configurationAuthority: false,

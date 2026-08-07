@@ -116,7 +116,9 @@ function renderDossier(channel: string, atlas: ReturnType<typeof buildDecisionAt
     "",
     ...dossier.firstGlance.map((metric) => `- ${metric.label}: **${metric.value}** — ${metric.detail}`),
     "",
-    `Basis: ${dossier.decisionCohort.sessions} sessions · ${dossier.decisionCohort.opportunities} logical opportunities · ${dossier.decisionCohort.portfolioConfigurationEras.length} portfolio receipt(s). ${dossier.decisionCohort.fact}`,
+    `Decision group: **${dossier.lifecycle.decisionGroup.replaceAll("_", " ")}**.`,
+    "",
+    `Basis: ${dossier.decisionCohort.scoredSessions} scored sessions · ${dossier.decisionCohort.scoredOpportunities} scored logical outcomes · ${dossier.decisionCohort.opportunities} observed signals · ${dossier.decisionCohort.portfolioConfigurationEras.length} portfolio receipt(s). ${dossier.decisionCohort.fact}`,
     "",
     `Channel era: \`${dossier.decisionCohort.configurationEra}\`.`,
     "",
@@ -156,7 +158,7 @@ async function main(): Promise<void> {
   const report = renderDecisionAtlasMarkdown(atlas);
   const proposals = renderDecisionAtlasProposalPacket(atlas);
   const receipt = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt,
     throughSession,
     posture,

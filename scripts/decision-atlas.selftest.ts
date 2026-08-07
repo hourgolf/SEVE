@@ -10,6 +10,7 @@ assert.equal(pkg.scripts["decision-atlas"], "tsx scripts/decision-atlas.ts");
 assert.equal(pkg.scripts["decision-atlas-selftest"], "tsx lib/research/decisionAtlas.selftest.ts && tsx lib/research/decisionAtlasAdapter.selftest.ts && tsx scripts/decision-atlas.selftest.ts");
 assert.match(runner, /allowedMethods:\s*\["SELECT", "GET"\]/);
 assert.match(runner, /productionWrites:\s*0/);
+assert.match(runner, /schemaVersion:\s*3/);
 assert.match(runner, /scheduleActivationAuthorized:\s*false/);
 assert.match(runner, /activeChannelSpecDatabaseIdsByVersionKey/,
   "nightly snapshot must preserve the active database spec identity per channel");
@@ -19,8 +20,19 @@ assert.match(library, /logicalOpportunityId/);
 assert.match(library, /cross-account same-OCC overlap is allowed/i);
 assert.match(library, /additionalDisplacedOtherOpportunitiesVsOneContract/,
   "capacity replay must distinguish baseline suppression from displacement caused by added size");
+assert.match(library, /decisionGroups/,
+  "Atlas output must separate actionable, experiment, and insufficient-evidence channels");
+assert.match(library, /decision-atlas-v3/);
+assert.match(library, /scoredOpportunities/,
+  "decision maturity must use scored logical outcomes rather than all observed signals");
 assert.match(report, /no order, configuration, roster, or deployment authority/i);
-assert.match(report, /Default table answers what is working/i);
+assert.match(report, /default groups answer what can support a proposal now/i);
+assert.match(report, /Typical session/i);
+assert.match(report, /\["single_variable_experiment", "Single-variable experiments"\]/);
+assert.match(report, /<details><summary><strong>\$\{title\}/,
+  "long research queues must remain behind progressive disclosure");
+assert.match(report, /Actionable now” means enough evidence to draft a proposal/,
+  "actionable research must not imply production authority");
 assert.match(report, /PROPOSALS ONLY · NOTHING APPLIED/i);
 assert.match(report, /Moving from two to four contracts changes replayed portfolio result/i,
   "pending size proposals must compare the proposed size with the current two-contract baseline");

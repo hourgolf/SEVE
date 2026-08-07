@@ -8,20 +8,50 @@ export function renderDecisionAtlasMarkdown(atlas: DecisionAtlas): string {
     "",
     "**READ ONLY · NO ORDER, CONFIGURATION, ROSTER, OR DEPLOYMENT AUTHORITY**",
     "",
-    "The default table answers what is working, what is not, and what deserves the next controlled investigation. Channel evidence resets only when that channel specification changes; portfolio receipt eras remain separate for routing and capacity replay.",
+    "The default groups answer what can support a proposal now, what deserves one controlled experiment, and what genuinely lacks scored evidence. Channel evidence resets only when that channel specification changes; portfolio receipt eras remain separate for routing and capacity replay.",
+    "“Actionable now” means enough evidence to draft a proposal—not permission to apply it. Historical unstamped evidence requires a frozen channel specification before promotion or retirement.",
     "",
-    "| Channel | Disposition | Typical result | Best move | Gave back | Additional opportunity | Evidence | Basis |",
-    "|---|---|---:|---:|---:|---:|---:|---|",
+    "## Decision groups",
+    "",
+    `- **Actionable now:** ${atlas.decisionGroups.actionable_now.length}`,
+    `- **Single-variable experiment:** ${atlas.decisionGroups.single_variable_experiment.length}`,
+    `- **Needs more evidence:** ${atlas.decisionGroups.needs_more_evidence.length}`,
+    "",
+    "### Actionable now",
+    "",
+    "| Channel | Proposed review | Typical path | Typical session | Positive sessions | Scored evidence | Configuration |",
+    "|---|---|---:|---:|---:|---:|---|",
   ];
-  for (const dossier of Object.values(atlas.channels).sort((a, b) => a.channel.localeCompare(b.channel))) {
+  const summaryRow = (dossier: AtlasChannelDossier, includeGroup: boolean): string => {
     const metrics = Object.fromEntries(dossier.firstGlance.map((metric) => [metric.label, metric.value]));
-    lines.push(`| ${[
-      dossier.channel, dossier.disposition.replaceAll("_", " "), metrics["typical result"],
-      metrics["best move"], metrics["gave back"], metrics["additional opportunity"],
-      metrics.evidence, `${dossier.decisionCohort.evidenceLayer} · ${dossier.decisionCohort.configurationEra}`,
-    ].map(cell).join(" | ")} |`);
+    return `| ${[
+      dossier.channel,
+      ...(includeGroup ? [dossier.lifecycle.decisionGroup.replaceAll("_", " ")] : []),
+      dossier.disposition.replaceAll("_", " "), metrics["typical result"],
+      dossier.lifecycle.typicalSessionUsd == null ? "—" : `${dossier.lifecycle.typicalSessionUsd >= 0 ? "+" : "−"}$${Math.abs(dossier.lifecycle.typicalSessionUsd).toLocaleString("en-US")}`,
+      `${dossier.lifecycle.positiveSessions}/${dossier.lifecycle.evidenceSessions}`,
+      `${dossier.lifecycle.scoredOpportunities} paths / ${dossier.lifecycle.evidenceSessions} sessions`,
+      dossier.lifecycle.configurationCertainty.replaceAll("_", " "),
+    ].map(cell).join(" | ")} |`;
+  };
+  for (const channel of atlas.decisionGroups.actionable_now) lines.push(summaryRow(atlas.channels[channel], false));
+  for (const [group, title] of [
+    ["single_variable_experiment", "Single-variable experiments"],
+    ["needs_more_evidence", "Needs more evidence"],
+  ] as const) {
+    lines.push("", `<details><summary><strong>${title} (${atlas.decisionGroups[group].length})</strong></summary>`, "",
+      "| Channel | Proposed review | Typical path | Typical session | Positive sessions | Scored evidence | Configuration |",
+      "|---|---|---:|---:|---:|---:|---|");
+    for (const channel of atlas.decisionGroups[group]) lines.push(summaryRow(atlas.channels[channel], false));
+    lines.push("", "</details>", "");
   }
-  lines.push("", "## Channel dossiers", "");
+  lines.push("", "<details><summary><strong>Complete channel summary</strong></summary>", "",
+    "| Channel | Group | Disposition | Typical path | Typical session | Positive sessions | Scored evidence | Configuration |",
+    "|---|---|---|---:|---:|---:|---:|---|");
+  for (const dossier of Object.values(atlas.channels).sort((a, b) => a.channel.localeCompare(b.channel))) {
+    lines.push(summaryRow(dossier, true));
+  }
+  lines.push("", "</details>", "", "## Channel dossiers", "");
   for (const dossier of Object.values(atlas.channels).sort((a, b) => a.channel.localeCompare(b.channel))) {
     const supportedCapacity = dossier.capacity.bestSupportedContracts
       ? dossier.capacity.points[dossier.capacity.bestSupportedContracts - 1] : null;
@@ -30,12 +60,14 @@ export function renderDecisionAtlasMarkdown(atlas: DecisionAtlas): string {
       "",
       dossier.summary,
       "",
-      `- Decision cohort: ${dossier.decisionCohort.sessions} sessions and ${dossier.decisionCohort.opportunities} logical opportunities under one channel specification across ${dossier.decisionCohort.portfolioConfigurationEras.length} portfolio receipt(s). ${dossier.decisionCohort.fact}`,
+      `- Decision group: ${dossier.lifecycle.decisionGroup.replaceAll("_", " ")}. ${dossier.lifecycle.decisionDrivers.join(" ")}`,
+      `- Scored evidence: ${dossier.decisionCohort.scoredOpportunities} logical outcomes across ${dossier.decisionCohort.scoredSessions} sessions; ${dossier.decisionCohort.opportunities} total observed signals across ${dossier.decisionCohort.sessions} sessions. ${dossier.decisionCohort.fact}`,
+      `- Session consistency: ${dossier.lifecycle.positiveSessions} positive / ${dossier.lifecycle.negativeSessions} negative / ${dossier.lifecycle.flatSessions} flat; typical session ${dossier.lifecycle.typicalSessionUsd ?? "—"} per contract.`,
       `- Opportunity path: ${dossier.waterfall.opportunities} signals → ${dossier.waterfall.contractSelected}/${dossier.waterfall.coverage.contractSelectedObserved} observed contracts → ${dossier.waterfall.quoteEligible}/${dossier.waterfall.coverage.quoteEligibilityObserved} observed eligible quotes → ${dossier.waterfall.admitted}/${dossier.waterfall.coverage.admissionObserved} observed admissions → ${dossier.waterfall.filled}/${dossier.waterfall.coverage.fillObserved} observed fills → ${dossier.waterfall.scored} scored outcomes.`,
       `- Supported size: ${dossier.capacity.bestSupportedContracts ?? "not established"} contract(s).`,
       `- Capacity effect: ${supportedCapacity == null ? "not established." : `${supportedCapacity.marginalPortfolioResultVsOneContractUsd == null ? "—" : `${supportedCapacity.marginalPortfolioResultVsOneContractUsd >= 0 ? "+" : "−"}$${Math.abs(supportedCapacity.marginalPortfolioResultVsOneContractUsd).toLocaleString("en-US")}`} portfolio result versus one contract; ${supportedCapacity.additionalDisplacedOtherOpportunitiesVsOneContract ?? 0} additional competing opportunities displaced; $${Math.abs(supportedCapacity.additionalDisplacedOtherCounterfactualUsdVsOneContract ?? 0).toLocaleString("en-US")} displaced counterfactual; $${supportedCapacity.portfolioMaxDrawdownUsd.toLocaleString("en-US")} portfolio drawdown.`}`,
       `- Portfolio behavior: ${dossier.lifecycle.uniqueness.replaceAll("_", " ")}.`,
-      `- Uncertainty horizon: ${dossier.lifecycle.additionalIndependentSessions == null ? "unresolved" : `${dossier.lifecycle.additionalIndependentSessions} additional session(s) estimated for the session-clustered interval`}—an uncertainty estimate, not an automatic decision gate.`,
+      `- Configuration certainty: ${dossier.lifecycle.configurationCertainty.replaceAll("_", " ")}.`,
       "",
     );
     if (dossier.waterfall.blocked.length) {
@@ -62,7 +94,7 @@ export function renderDecisionAtlasMarkdown(atlas: DecisionAtlas): string {
     "",
     "## Evidence and limitations",
     "",
-    `- Logical opportunities: ${atlas.evidence.logicalOpportunities} (${atlas.evidence.duplicateRowsRemoved} duplicate evidence rows removed).`,
+    `- Observed logical opportunities: ${atlas.evidence.logicalOpportunities} (${atlas.evidence.duplicateRowsRemoved} duplicate evidence rows removed); decision maturity uses scored outcomes only.`,
     `- Manager paths: ${atlas.evidence.managerPaths}.`,
     `- Configuration eras: ${atlas.evidence.configurationEras.join(", ") || "none"}.`,
     ...atlas.evidence.limitations.map((limitation) => `- ${limitation}`),
@@ -95,7 +127,7 @@ function recommendation(review: PendingAtlasReview, dossier: AtlasChannelDossier
   reason: string;
 } {
   if (!dossier) return { state: "HOLD", reason: "No Decision Atlas dossier is available." };
-  if (review.change === "hold") return { state: "GO", reason: `The requested no-change posture preserves ${dossier.lifecycle.evidenceSessions} sessions of evidence.` };
+  if (review.change === "hold") return { state: "GO", reason: `The requested no-change posture preserves ${dossier.lifecycle.scoredOpportunities} scored outcomes across ${dossier.lifecycle.evidenceSessions} sessions.` };
   if (review.change === "size") {
     const two = dossier.capacity.points.find((point) => point.contracts === 2);
     const four = dossier.capacity.points.find((point) => point.contracts === 4);
@@ -113,7 +145,7 @@ function recommendation(review: PendingAtlasReview, dossier: AtlasChannelDossier
     && (dossier.capacity.bestSupportedContracts ?? 0) >= 4
     ? { state: "GO", reason: `Moving from two to four contracts changes replayed portfolio result by ${changeText} and causes ${displacementText} additional competing-opportunity displacement(s).` }
     : dossier.capacity.bestSupportedContracts != null && dossier.capacity.bestSupportedContracts >= 4
-      ? { state: "HOLD", reason: `${dossier.decisionCohort.sessions} sessions/${dossier.decisionCohort.opportunities} opportunities under the unchanged channel specification; moving from two to four contracts changes replayed portfolio result by ${changeText} with ${displacementText} additional competing displacements, but the lifecycle uncertainty remains unresolved.` }
+      ? { state: "HOLD", reason: `${dossier.lifecycle.evidenceSessions} scored sessions/${dossier.lifecycle.scoredOpportunities} scored outcomes; moving from two to four contracts changes replayed portfolio result by ${changeText} with ${displacementText} additional competing displacements, but the channel is grouped for ${dossier.lifecycle.decisionGroup.replaceAll("_", " ")}.` }
       : { state: "HOLD", reason: `The replay supports ${dossier.capacity.bestSupportedContracts ?? "no verified"} contract level; four is not yet defensible.` };
   }
   if (review.change === "retirement") return dossier.disposition === "retire"
