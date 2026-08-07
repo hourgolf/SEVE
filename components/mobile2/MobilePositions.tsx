@@ -67,16 +67,16 @@ export function MobilePositions({ props, strategists, compact = false }: {
           <div className="m2-p-decision">
             <span>IN <b>{entry.toFixed(2)}</b></span><i>→</i><span>MARK <b>{mark.toFixed(2)}</b></span>
             <span className={(returnPct ?? 0) < 0 ? "neg" : "pos"}>RET <b>{returnPct == null ? "—" : `${returnPct >= 0 ? "+" : ""}${Math.round(returnPct)}%`}</b></span>
-            <span>PK <b>{peakPct == null ? "—" : `+${Math.round(peakPct)}%`}</b></span>
-            <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAP" : "GIVE"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
+            <span>BEST <b>{peakPct == null ? "—" : `+${Math.round(peakPct)}%`}</b></span>
+            <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAPTURE" : "GIVEBACK"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
           </div>
           <div className="m2-p-tags">
             {rootPolicy && <span className="m2-tag amber">{rootPolicy.managerLabel}</span>}
             <span className="m2-tag">{a13 ? "RATCHET" : lock ? "LOCK" : "RIDE"}</span>
             {evidence && <span className={`m2-tag evidence-${evidence.tone}`}>EVIDENCE {evidence.tone}</span>}
-            {givebackPct != null && givebackPct >= 40 && <span className="m2-tag warn">giveback {Math.round(givebackPct)}% of pk</span>}
+            {givebackPct != null && givebackPct >= 40 && <span className="m2-tag warn">gave back {Math.round(givebackPct)}% of best gain</span>}
           </div>
-          <div className="m2-p-pk">{peakPct != null ? <Ring pct={peakPct} color={pm} /> : null}<span className="lbl">pk <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span></div>
+          <div className="m2-p-pk">{peakPct != null ? <Ring pct={peakPct} color={pm} /> : null}<span className="lbl">best <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span></div>
           {write.canWrite && <div className="m2-pos-actions">
             {closeFlow.closingId === position.id ? <span className="m2-pos-closing">CLOSING…</span>
               : closeFlow.confirmId === position.id ? <><button type="button" className="confirm" onClick={() => closeFlow.confirmClose(position)}>CONFIRM CLOSE</button><button type="button" onClick={closeFlow.cancelClose}>CANCEL</button></>

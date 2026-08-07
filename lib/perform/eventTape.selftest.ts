@@ -22,6 +22,14 @@ assert.equal(rows[0].count, 2);
 assert.equal(filterTapeRows(rows, "data").length, 2);
 assert.equal(filterTapeRows(rows, "execution").length, 1);
 
+const observerRestartRows = deriveTapeRows([
+  event("5", "WARN", "stream: manager observer admission delayed >20s — pb-ride SPY260720C00755000"),
+  event("6", "WARN", "stream: manager observer admission delayed >20s — orb-qqq-trail QQQ260720C00600000"),
+]);
+assert.equal(observerRestartRows.length, 1);
+assert.equal(observerRestartRows[0].count, 2);
+assert.equal(observerRestartRows[0].message, "Manager observers started slowly during restart");
+
 const emptyHealth = { failureCount: 0, firstFailureAt: null, lastFailureAt: null, lastSuccessAt: null, lastError: null };
 assert.equal(deriveEventTapeStatus(emptyHealth, []).label, "CHECKING TAPE");
 assert.equal(deriveEventTapeStatus({ ...emptyHealth, lastSuccessAt: "2026-07-17T20:00:00Z" }, []).tone, "yellow");
@@ -53,4 +61,4 @@ assert.equal(deriveAfterActionStatus(model([chain("yellow", "OPEN")])).tone, "ye
 assert.equal(deriveAfterActionStatus(model([chain("green", "BOOKED")])).label, "CHAINS COMPLETE");
 assert.equal(deriveAfterActionStatus(model([chain("neutral", "OPEN")])).label, "EVIDENCE IN PROGRESS");
 
-console.log("event-tape-selftest: 21/21 passed");
+console.log("event-tape-selftest: 24/24 passed");

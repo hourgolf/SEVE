@@ -58,9 +58,9 @@ function Chicklet({
         {tag ? (
           <span className={`m2-chick-tag ${tag === "MUTED" ? "muted" : "darkch"}`}>{tag}</span>
         ) : pk == null && win == null ? (
-          <span className="m2-chick-pw">pk—·win—</span>
+          <span className="m2-chick-pw">best— · win—</span>
         ) : (
-          <span className="m2-chick-pw">pk<b>{pk != null ? Math.round(pk) : "—"}</b>·win<b>{win != null ? Math.round(win) : "—"}</b></span>
+          <span className="m2-chick-pw">best <b>{pk != null ? Math.round(pk) : "—"}</b> · win <b>{win != null ? Math.round(win) : "—"}</b></span>
         )}
       </button>
       <button

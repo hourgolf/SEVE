@@ -367,8 +367,8 @@ export function PositionsPanel({
                             const gave = pk > entry && exit < pk ? Math.min(999, Math.round(((pk - exit) / (pk - entry)) * 100)) : 0;
                             return (
                               <span className={`rtd-dim rtd-peak${gave >= 50 ? " rtd-peak--hot" : ""}`}
-                                title={`peaked $${pk.toFixed(2)}${ttp != null ? ` after ${ttp}m` : ""} · exit kept ${100 - gave}% of the peak gain`}>
-                                peak +{pkPct.toFixed(0)}%{ttp != null ? ` @${ttp}m` : ""}{gave >= 50 ? ` · gave ${gave}%` : ""}
+                                title={`best mark $${pk.toFixed(2)}${ttp != null ? ` after ${ttp}m` : ""} · exit kept ${100 - gave}% of the available gain`}>
+                                best +{pkPct.toFixed(0)}%{ttp != null ? ` @${ttp}m` : ""}{gave >= 50 ? ` · gave back ${gave}%` : ""}
                               </span>
                             );
                           })()}

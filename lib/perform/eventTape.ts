@@ -39,13 +39,15 @@ export function eventCategory(level: EventLevel, message: string): EventTapeCate
 export function deriveTapeRows(events: MarketEvent[]): TapeRow[] {
   const rows: TapeRow[] = [];
   for (const event of events) {
-    const category = eventCategory(event.level, event.message);
+    const message = /manager observer admission delayed >20s/i.test(event.message) ? "Manager observers started slowly during restart" : event.message;
+    const normalized = { ...event, message };
+    const category = eventCategory(normalized.level, normalized.message);
     const previous = rows[rows.length - 1];
-    if (previous && previous.level === event.level && previous.message.trim() === event.message.trim()) {
+    if (previous && previous.level === normalized.level && previous.message.trim() === normalized.message.trim()) {
       previous.count += 1;
       continue;
     }
-    rows.push({ ...event, count: 1, category });
+    rows.push({ ...normalized, count: 1, category });
   }
   return rows;
 }

@@ -93,7 +93,7 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
           return <div key={trade.id} style={{ ["--pm" as string]: pmVar(props.view.desk.strategists.find((channel) => channel.slug === trade.strategist_slug)?.color ?? "green") }}>
             <i /><span><b>{trade.strategist_slug}</b><small>{root} {trade.strike.toFixed(0)}{trade.opt_type === "call" ? "C" : "P"} ×{Math.abs(trade.qty)} · {closeReason}</small></span>
             <em className={realized < 0 ? "neg" : "pos"}>{signedUsd(realized)}</em>
-            <p>in {trade.avg_entry_price.toFixed(2)} → out {trade.current_mark.toFixed(2)} · {row.returnPct == null ? "ret —" : `ret ${row.returnPct >= 0 ? "+" : ""}${Math.round(row.returnPct)}%`} · {row.peakPct == null ? "pk —" : `pk +${Math.round(row.peakPct)}%`}{row.peakExceeded ? " · exit > recorded pk" : row.capturePct == null ? "" : ` · kept ${Math.round(row.capturePct)}%`}</p>
+            <p>in {trade.avg_entry_price.toFixed(2)} → out {trade.current_mark.toFixed(2)} · {row.returnPct == null ? "return —" : `return ${row.returnPct >= 0 ? "+" : ""}${Math.round(row.returnPct)}%`} · {row.peakPct == null ? "best move —" : `best +${Math.round(row.peakPct)}%`}{row.peakExceeded ? " · exit exceeded recorded best" : row.capturePct == null ? "" : row.capturePct < 0 ? " · gave back the gain and finished below entry" : ` · kept ${Math.round(row.capturePct)}% of the best move`}</p>
           </div>;
         })}
       </div>
@@ -145,7 +145,7 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
           const win = trades ? Math.round((100 * pnl.wins) / trades) : null;
           return <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b>
             <span className={(pnl?.dayPnl ?? 0) < 0 ? "neg" : (pnl?.dayPnl ?? 0) > 0 ? "pos" : ""}>{signedUsd(pnl?.dayPnl ?? 0)}</span>
-            <small>{trades}t · pk {peak ?? "—"}% · win {win ?? "—"}%</small></div>;
+            <small>{trades} trades · best move {peak ?? "—"}% · win {win ?? "—"}%</small></div>;
         })}
       </div>}
     </Section>}
@@ -178,7 +178,7 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
     </Section>}
     {mobileReviewHas(mode, "deterministic-scan") && <Section title="DETERMINISTIC SCAN" meta="descriptive · not an arm gate">
       {!sentinel.scan ? <div className="m2-desk-empty">scan evidence unavailable</div> : <div className="m2-review-scan">
-        {[...sentinel.scan.promote.map((row) => ({ ...row, kind: "PROMOTE" })), ...sentinel.scan.fixable.map((row) => ({ ...row, kind: "FIX" })), ...sentinel.scan.leaks.map((row) => ({ ...row, kind: "LEAK" }))].slice(0, 12).map((row) => <div key={`${row.kind}-${row.slug}`}><b>{row.kind}</b><span>{row.slug}</span><small>pk {Math.round(row.peak)}% · win {Math.round(row.win)}% · give {row.give == null ? "—" : `${Math.round(row.give)}%`} · {row.n}t</small></div>)}
+        {[...sentinel.scan.promote.map((row) => ({ ...row, kind: "PROMOTE" })), ...sentinel.scan.fixable.map((row) => ({ ...row, kind: "FIX" })), ...sentinel.scan.leaks.map((row) => ({ ...row, kind: "LEAK" }))].slice(0, 12).map((row) => <div key={`${row.kind}-${row.slug}`}><b>{row.kind}</b><span>{row.slug}</span><small>best move {Math.round(row.peak)}% · win {Math.round(row.win)}% · giveback {row.give == null ? "—" : `${Math.round(row.give)}%`} · {row.n} trades</small></div>)}
       </div>}
     </Section>}
   </>;

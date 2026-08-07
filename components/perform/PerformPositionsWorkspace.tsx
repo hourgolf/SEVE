@@ -93,13 +93,13 @@ export function RecentExits({ surface }: { surface: SurfaceProps }) {
           <div className="pf-exit-stats">
             <span>in {trade.avg_entry_price.toFixed(2)} → out {trade.current_mark.toFixed(2)}</span>
             <span className={(row.returnPct ?? 0) < 0 ? "neg" : "pos"}>{row.returnPct == null ? "ret —" : `ret ${row.returnPct >= 0 ? "+" : ""}${Math.round(row.returnPct)}%`}</span>
-            <span>{row.peakPct == null ? "pk —" : `pk +${Math.round(row.peakPct)}%`}</span>
-            <span className={row.peakExceeded || (row.givebackPct ?? 0) >= 50 ? "warn" : ""}>{row.peakExceeded ? "exit > recorded pk" : row.capturePct == null ? "capture —" : `kept ${Math.round(row.capturePct)}% of pk`}</span>
+            <span>{row.peakPct == null ? "best move —" : `best +${Math.round(row.peakPct)}%`}</span>
+            <span className={row.peakExceeded || (row.givebackPct ?? 0) >= 50 ? "warn" : ""}>{row.peakExceeded ? "exit exceeded recorded best" : row.capturePct == null ? "capture unavailable" : row.capturePct < 0 ? "gave back the gain and finished below entry" : `kept ${Math.round(row.capturePct)}% of the best move`}</span>
           </div>
         </article>;
       })}
     </div>
-    <footer>per-channel fill-net attribution · broker state shown in the shared receipt · peak fields are era-dependent</footer>
+    <footer>Per-channel realized results · broker reconciliation is shown in System status.</footer>
   </section>;
 }
 

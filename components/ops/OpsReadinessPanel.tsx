@@ -47,10 +47,26 @@ export function PositionEvidenceChains({ model, compact = false }: { model: OpsR
 /** Skin-neutral readiness content. Desktop and mobile receive the same model
  * from the page seam; this component performs no reads or health derivation. */
 export function OpsReadinessPanel({ model, compact = false }: { model: OpsReadinessModel; compact?: boolean }) {
+  const all = [...model.configuration, ...model.evidence];
+  const lane = (label: string, ids: string[], ready: string) => {
+    const items = all.filter((item) => ids.includes(item.id));
+    const tone = items.some((item) => item.tone === "red") ? "red"
+      : items.some((item) => item.tone === "yellow") ? "yellow"
+        : items.some((item) => item.tone === "neutral") && !items.some((item) => item.tone === "green") ? "neutral" : "green";
+    return { label, tone, state: tone === "red" ? "NEEDS REVIEW" : tone === "yellow" ? "ATTENTION" : tone === "neutral" ? "CHECKING" : ready };
+  };
+  const lanes = [
+    lane("TRADING", ["release", "paper-boundary", "reconciliation"], "READY"),
+    lane("DATA", ["capture-config", "manager-config", "candidates", "fills", "capture", "managers", "publisher"], "COMPLETE"),
+    lane("RESEARCH", ["sentinel"], "CURRENT"),
+  ];
   return <section className={`opsr ${compact ? "compact" : ""}`} aria-label="Day 1 capture and observer readiness" data-ops-read-model="bounded-independent-v2">
     <header className={`opsr-summary ${model.summary.tone}`}>
       <i aria-hidden="true" /><span><small>{model.summary.label} · SESSION {model.sessionDateEt}</small><b>{model.summary.state}</b><em>{model.summary.detail}</em></span>
     </header>
+    <div className="opsr-lanes" aria-label="Trading, data, and research health">
+      {lanes.map((item) => <span key={item.label} className={item.tone}><small>{item.label}</small><b>{item.state}</b></span>)}
+    </div>
     <div className="opsr-groups">
       <section><header><b>CONFIGURED AT BOOT</b><em>receipt claims</em></header><div className="opsr-items">{model.configuration.map((item) => <Item key={item.id} item={item} />)}</div></section>
       <section><header><b>SESSION EVIDENCE</b><em>observed receipts</em></header><div className="opsr-items">{model.evidence.map((item) => <Item key={item.id} item={item} />)}</div></section>

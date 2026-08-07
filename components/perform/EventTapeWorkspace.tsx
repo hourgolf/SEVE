@@ -23,7 +23,11 @@ const localTime = (value: string): string => value ? new Date(value).toLocaleStr
   timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit",
 }) + " PT" : "—";
 
-function EventMessage({ event, strategists }: { event: TapeRow; strategists: StrategistState[] }) {
+function EventMessage({ event, strategists, readiness }: { event: TapeRow; strategists: StrategistState[]; readiness: OpsReadinessModel }) {
+  if (event.message === "Manager observers started slowly during restart") {
+    const managers = readiness.evidence.find((item) => item.id === "managers");
+    return <span>{managers?.tone === "green" ? `Manager observers started slowly during restart · resolved (${managers.detail})` : event.message}</span>;
+  }
   const hit = strategists.find((row) => event.message.includes(row.slug));
   if (!hit) return <span>{event.message}</span>;
   const index = event.message.indexOf(hit.slug);
@@ -60,7 +64,7 @@ export function EventTapeWorkspace({ events, health, strategists, readiness, emb
     {view === "live" ? <div className="etw-list">
       {visible.length === 0 ? <div className="etw-empty">no {filter === "all" ? "" : `${filter} `}events in the retained window</div> : visible.map((event) => <article key={event.id} data-kind={event.category}>
         <time>{timeOfDay(event.created_at)}</time><span className="etw-level">{event.level}</span><span className="etw-category">{event.category}</span>
-        <EventMessage event={event} strategists={strategists} />
+        <EventMessage event={event} strategists={strategists} readiness={readiness} />
         {event.count > 1 && <strong title={`${event.count} adjacent identical events`}>×{event.count}</strong>}
       </article>)}
     </div> : <div className="etw-evidence"><PositionEvidenceChains model={readiness} /></div>}

@@ -46,7 +46,7 @@ export function MarketHoursFixtureLab() {
             {scenario.positions.length === 0 ? <p>FLAT — NO OPEN POSITIONS</p> : scenario.positions.map((position) => <article key={position.id}>
               <div><b>{position.channel}</b><span>{position.contract}</span></div>
               <strong className={position.mark >= position.entry ? "positive" : "negative"}>{usd((position.mark - position.entry) * position.quantity * 100)}</strong>
-              <footer><span>{position.quantity} ct · {position.entry.toFixed(2)} → {position.mark.toFixed(2)}</span><em>pk {position.peakPct}% · {position.manager}</em></footer>
+              <footer><span>{position.quantity} ct · {position.entry.toFixed(2)} → {position.mark.toFixed(2)}</span><em>best move {position.peakPct}% · {position.manager}</em></footer>
             </article>)}
           </aside>
           <section className="fixture-channels"><header><span>CHANNELS</span><b>{scenario.channels.length} representative</b></header>{scenario.channels.map((channel) => <article key={channel.slug} data-tone={channel.tone}><i /><div><b>{channel.slug}</b><span>{channel.family}</span></div><em>{channel.state}</em><small>{channel.detail}</small></article>)}</section>

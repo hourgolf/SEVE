@@ -113,18 +113,18 @@ export function PositionsSection({
               <div className="pfp-decision">
                 <span>IN <b>{entry.toFixed(2)}</b></span><i>→</i><span>MARK <b>{mark.toFixed(2)}</b></span>
                 <span className={(returnPct ?? 0) < 0 ? "neg" : "pos"}>RET <b>{returnPct == null ? "—" : `${returnPct >= 0 ? "+" : ""}${Math.round(returnPct)}%`}</b></span>
-                <span>PK <b>{peakPct == null ? "—" : `+${Math.round(peakPct)}%`}</b></span>
-                <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAPTURE" : "GIVE"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
+                <span>BEST <b>{peakPct == null ? "—" : `+${Math.round(peakPct)}%`}</b></span>
+                <span className={(givebackPct ?? 0) >= 40 ? "warn" : ""}>{givebackPct == null ? "CAPTURE" : "GIVEBACK"} <b>{givebackPct == null ? (capturePct == null ? "—" : `${Math.round(capturePct)}%`) : `${Math.round(givebackPct)}%`}</b></span>
               </div>
               <div className="pfp-tags">
                 {rootPolicy && <span className="pfp-tag amber">{rootPolicy.managerLabel}</span>}
                 <span className="pfp-tag">{a13 ? "RATCHET" : lock ? "LOCK" : "RIDE"}</span>
                 {evidence && <span className={`pfp-tag evidence-${evidence.tone}`}>EVIDENCE {evidence.tone}</span>}
-                {givebackPct != null && givebackPct >= 40 && <span className="pfp-tag warn">giveback {Math.round(givebackPct)}% of pk</span>}
+                {givebackPct != null && givebackPct >= 40 && <span className="pfp-tag warn">gave back {Math.round(givebackPct)}% of best gain</span>}
               </div>
               <div className="pfp-pk">
                 {peakPct != null ? <Ring pct={peakPct} color={pm} /> : <span className="pfp-nopk">—</span>}
-                <span className="pfp-pklbl">pk <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span>
+                <span className="pfp-pklbl">best <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span>
               </div>
               {write.canWrite && <div className="pfp-actions">
                 {closeFlow.closingId === p.id ? <span className="pfp-closing">CLOSING…</span>

@@ -1782,10 +1782,11 @@
 
 .m2-app:not(.folio-mobile) .srw-cell-paths::before { content: "PATHS"; }
 .m2-app:not(.folio-mobile) .srw-cell-win::before { content: "WIN"; }
-.m2-app:not(.folio-mobile) .srw-cell-avg::before { content: "AVG/CT"; }
-.m2-app:not(.folio-mobile) .srw-cell-total::before { content: "Σ/CT"; }
-.m2-app:not(.folio-mobile) .srw-cell-mfe::before { content: "MFE"; }
-.m2-app:not(.folio-mobile) .srw-cell-exits::before { content: "EXIT MIX"; }
+.m2-app:not(.folio-mobile) .srw-cell-avg::before { content: "TYPICAL/CT"; }
+.m2-app:not(.folio-mobile) .srw-cell-total::before { content: "TOTAL/CT"; }
+.m2-app:not(.folio-mobile) .srw-cell-mfe::before { content: "BEST MOVE"; }
+.m2-app:not(.folio-mobile) .srw-cell-exits::before { content: "EXITS"; }
+.srw-channel-analysis,.srw-deep-dive{display:block;overflow:hidden;border:1px solid var(--909-line,rgba(70,65,55,.24));border-radius:6px;background:var(--909-panel,#ebe8df)}.srw-deep-dive{margin-top:8px}.srw-channel-analysis>summary,.srw-deep-dive>summary{min-height:42px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;list-style:none}.srw-channel-analysis>summary::-webkit-details-marker,.srw-deep-dive>summary::-webkit-details-marker{display:none}.srw-channel-analysis>summary span,.srw-deep-dive>summary span{display:grid;gap:2px}.srw-channel-analysis>summary small,.srw-deep-dive>summary small{color:var(--909-muted,#777168);font-size:var(--fs-chip,8px);letter-spacing:.09em}.srw-channel-analysis>summary b,.srw-deep-dive>summary b{font-size:var(--fs-num,10px);letter-spacing:.06em}.srw-channel-analysis>summary em,.srw-deep-dive>summary em{color:var(--909-muted,#777168);font-size:var(--fs-chip,8px);font-style:normal}.srw-channel-analysis>summary i,.srw-deep-dive>summary i{font-style:normal;transition:transform .15s}.srw-channel-analysis:not([open])>summary i,.srw-deep-dive:not([open])>summary i{transform:rotate(-90deg)}.srw-channel-analysis>div,.srw-deep-dive>div{display:grid;gap:8px;padding:8px;border-top:1px solid var(--909-line,rgba(70,65,55,.18))}.shell-root[data-skin="blackout"] .srw-channel-analysis,.shell-root[data-skin="blackout"] .srw-deep-dive,.m2-app[data-skin="blackout"] .srw-channel-analysis,.m2-app[data-skin="blackout"] .srw-deep-dive{background:#101415;border-color:rgba(255,255,255,.12)}
 
 .m2-app:not(.folio-mobile) .srw-manager-list > div {
   grid-template-columns: minmax(0, 1fr) auto;

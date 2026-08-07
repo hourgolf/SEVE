@@ -399,13 +399,22 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
       : "current-session execution, capture, manager, and close evidence read";
 
   const all = [...configuration, ...evidence];
-  const red = all.filter((item) => item.tone === "red").length;
-  const yellow = all.filter((item) => item.tone === "yellow").length;
-  const summary: ReadinessItem = red
-    ? { id: "summary", label: "RELEASE EVIDENCE", state: "BLOCKED", tone: "red", detail: `${red} red · ${yellow} yellow · inspect evidence claims below` }
-    : yellow
-      ? { id: "summary", label: "RELEASE EVIDENCE", state: "ATTENTION", tone: "yellow", detail: `${yellow} yellow · execution health remains a separate claim` }
-      : { id: "summary", label: "RELEASE EVIDENCE", state: phase === "before-cohort" ? "CONFIGURED" : "READY", tone: "green", detail: phase === "before-cohort" ? `sealed runtime configured · cohort begins ${cohortFrom}` : "all currently due evidence gates are observed" };
+  const trading = all.filter((item) => ["release", "paper-boundary", "reconciliation"].includes(item.id));
+  const data = all.filter((item) => !["release", "paper-boundary", "reconciliation", "sentinel"].includes(item.id));
+  const research = all.filter((item) => item.id === "sentinel");
+  const laneState = (items: ReadinessItem[]): "ready" | "attention" | "blocked" | "checking" =>
+    items.some((item) => item.tone === "red") ? "blocked"
+      : items.some((item) => item.tone === "yellow") ? "attention"
+        : items.some((item) => item.tone === "neutral") && !items.some((item) => item.tone === "green") ? "checking" : "ready";
+  const tradingState = laneState(trading);
+  const dataState = laneState(data);
+  const researchState = laneState(research);
+  const supportingAttention = dataState === "blocked" || dataState === "attention" || researchState === "blocked" || researchState === "attention";
+  const summary: ReadinessItem = tradingState === "blocked"
+    ? { id: "summary", label: "DESK READINESS", state: "TRADING BLOCKED", tone: "red", detail: `trading blocked · data ${dataState} · research ${researchState}` }
+    : supportingAttention
+      ? { id: "summary", label: "DESK READINESS", state: "TRADING READY", tone: "yellow", detail: `trading ${tradingState} · data ${dataState} · research ${researchState}` }
+      : { id: "summary", label: "DESK READINESS", state: phase === "before-cohort" ? "CONFIGURED" : "READY", tone: "green", detail: phase === "before-cohort" ? `sealed runtime configured · cohort begins ${cohortFrom}` : `trading ${tradingState} · data ${dataState} · research ${researchState}` };
 
   return {
     sessionDateEt: clock.date, phase, summary, configuration, evidence,

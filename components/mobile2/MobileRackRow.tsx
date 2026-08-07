@@ -311,9 +311,12 @@ export function MobileRackRow({
               {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
             </>}
           </div>
-          <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
-          <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={rootPolicy?.managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />
           {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
+          <details className="channel-disclosure"><summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary><div>
+            <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
+            <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={rootPolicy?.managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />
+          </div></details>
+          <details className="channel-disclosure change-control"><summary><span><small>CHANGE</small><b>GOVERNED DRAFT</b></span><em>REVIEW BEFORE APPLY</em><i>▾</i></summary><div>
           <ChannelRosterActivationConsole selectedSlug={slug} controlPlane={controlPlane} />
           <ChannelConfigDraftPanel
             model={draft.model}
@@ -328,7 +331,7 @@ export function MobileRackRow({
             sealError={governedProposal.error}
             onSeal={() => void governedProposal.seal()}
             compact
-          />
+          /></div></details>
         </div>
       )}
     </section>
