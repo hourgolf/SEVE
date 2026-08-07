@@ -5,10 +5,12 @@ const runner = readFileSync(new URL("./decision-atlas.ts", import.meta.url), "ut
 const library = readFileSync(new URL("../lib/research/decisionAtlas.ts", import.meta.url), "utf8");
 const report = readFileSync(new URL("../lib/research/decisionAtlasReport.ts", import.meta.url), "utf8");
 const actionable = readFileSync(new URL("./decision-atlas-actionable-review.ts", import.meta.url), "utf8");
+const packets = readFileSync(new URL("./decision-atlas-change-packets.ts", import.meta.url), "utf8");
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string> };
 
 assert.equal(pkg.scripts["decision-atlas"], "tsx scripts/decision-atlas.ts");
 assert.equal(pkg.scripts["decision-atlas-actionable-review"], "tsx scripts/decision-atlas-actionable-review.ts");
+assert.equal(pkg.scripts["decision-atlas-change-packets"], "tsx scripts/decision-atlas-change-packets.ts");
 assert.equal(pkg.scripts["decision-atlas-selftest"], "tsx lib/research/decisionAtlas.selftest.ts && tsx lib/research/decisionAtlasAdapter.selftest.ts && tsx scripts/decision-atlas.selftest.ts");
 assert.match(runner, /allowedMethods:\s*\["SELECT", "GET"\]/);
 assert.match(runner, /productionWrites:\s*0/);
@@ -49,5 +51,13 @@ assert.match(actionable, /alternativeArms:\s*1/,
   "bounded retunes must compare the baseline with one alternative rather than a parameter grid");
 assert.doesNotMatch(actionable, /\.from\([^\n]+\)\.(?:insert|upsert|update|delete)\(/);
 assert.doesNotMatch(actionable, /\.rpc\(/);
+assert.match(packets, /simulatedFlatBoundary:\s*true/,
+  "structural sizing preparation must disclose its simulated flat boundary");
+assert.match(packets, /prepared_but_blocked/,
+  "promotion packet must fail closed when the research registration is incomplete");
+assert.match(packets, /productionWrites:\s*0/);
+assert.match(packets, /activationAuthorized:\s*false/);
+assert.doesNotMatch(packets, /\.from\([^\n]+\)\.(?:insert|upsert|update|delete)\(/);
+assert.doesNotMatch(packets, /\.rpc\(/);
 
 console.log("decision-atlas runner selftest: PASS");

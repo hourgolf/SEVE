@@ -213,6 +213,7 @@
     "profitability-ledger-selftest": "tsx lib/profitability/profitabilityLedger.selftest.ts",
     "decision-atlas": "tsx scripts/decision-atlas.ts",
     "decision-atlas-actionable-review": "tsx scripts/decision-atlas-actionable-review.ts",
+    "decision-atlas-change-packets": "tsx scripts/decision-atlas-change-packets.ts",
     "decision-atlas-selftest": "tsx lib/research/decisionAtlas.selftest.ts && tsx lib/research/decisionAtlasAdapter.selftest.ts && tsx scripts/decision-atlas.selftest.ts",
     "decision-atlas-preview-selftest": "tsx lib/research/decisionAtlasPreview.selftest.ts && tsx components/research/DecisionAtlasPreviewCard.selftest.ts",
     "rc55-research": "tsx scripts/rc55-research.ts",

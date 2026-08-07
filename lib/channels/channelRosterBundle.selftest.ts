@@ -288,6 +288,27 @@ check("half-bank manager cannot be resized to an indivisible odd lot", () => {
   ));
 });
 
+check("quantity-only change does not materialize an implicit paper posture", () => {
+  const quantityOnly = draft();
+  quantityOnly.changes = [{ slug: "orb-ustop-ctl", quantity: 4 }];
+  const result = buildChannelRosterBundlePreview({
+    active,
+    registry: registry(),
+    draft: quantityOnly,
+    envelope: envelope(),
+    live: flat(),
+    collectionStates: collectionStates(),
+  });
+  assert.equal(result.state, "ready-for-worker-ack");
+  const diff = result.diffs.find((row) => row.slug === "orb-ustop-ctl");
+  assert.ok(diff);
+  assert.deepEqual(diff.fields.map((field) => field.field), [
+    "quantity", "maxDebitUsd", "riskLimits",
+  ]);
+  assert.equal(result.candidate?.channelSpecs.find((spec) =>
+    spec.slug === "orb-ustop-ctl")?.executionPosture, undefined);
+});
+
 check("portfolio overrun blocks an otherwise valid atomic roster", () => {
   const constrained = envelope();
   const paper3 = constrained.accounts.find((limit) =>
