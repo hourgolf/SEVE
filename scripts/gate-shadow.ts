@@ -368,37 +368,6 @@ async function main() {
     }
   }
 
-  // An HTTP 2xx upsert response is necessary but not sufficient evidence that
-  // the rebuild is complete. Read every attempted signal_id back in bounded
-  // pages before freezing the local ledger or reporting success.
-  let remoteVerified = 0;
-  if (HAS_SERVICE) {
-    const expectedIds = [...publishedSignalIds].sort();
-    const observedIds = new Set<string>();
-    for (let from = 0; from < expectedIds.length; from += 200) {
-      const chunk = expectedIds.slice(from, from + 200);
-      const { data, error } = await sb
-        .from("virtual_trades")
-        .select("signal_id")
-        .in("signal_id", chunk);
-      if (error) {
-        console.error(`gate-shadow: virtual_trades verification failed — ${error.message}`);
-        process.exit(1);
-      }
-      for (const row of (data ?? []) as Array<{ signal_id: string }>) {
-        observedIds.add(String(row.signal_id));
-      }
-    }
-    const missing = expectedIds.filter((id) => !observedIds.has(id));
-    if (missing.length) {
-      console.error(
-        `gate-shadow: remote verification missing ${missing.length}/${expectedIds.length} rows (${missing.slice(0, 5).join(", ")})`,
-      );
-      process.exit(1);
-    }
-    remoteVerified = observedIds.size;
-  }
-
   // ── GAMMA-OPEN LEDGER (data-hole fix 2026-07-02): the 9:35 implied-move readings — the A5
   // classifier's own input — live only in `events`, which PRUNES AT 30d; the earliest readings
   // (06-17) would evaporate the week of the A5 read. Bank message+meta durably, keyed sym|date.
@@ -435,6 +404,39 @@ async function main() {
   const reportRows = SESSION ? rows.filter((r) => r.createdAt.startsWith(SESSION)) : rows;
   const scored = reportRows.filter((r) => r.pnlPerContract != null);
   const sum = scored.reduce((a, r) => a + (r.pnlPerContract ?? 0), 0);
+  // A publish run verifies every attempted upsert. A read-only close audit uses
+  // the same SELECT path to compare every locally reconstructed session row to
+  // durable virtual_trades truth. This makes a catch-up need exact and bounded
+  // instead of inferring it from counts or stale UI state.
+  const expectedRemoteIds = (HAS_SERVICE ? [...publishedSignalIds] : reportRows.map((row) => row.signalId)).sort();
+  const observedRemoteIds = new Set<string>();
+  for (let from = 0; from < expectedRemoteIds.length; from += 200) {
+    const chunk = expectedRemoteIds.slice(from, from + 200);
+    const { data, error } = await sb
+      .from("virtual_trades")
+      .select("signal_id")
+      .in("signal_id", chunk);
+    if (error) throw new Error(`virtual_trades verification failed — ${error.message}`);
+    for (const row of (data ?? []) as Array<{ signal_id: string }>) observedRemoteIds.add(String(row.signal_id));
+  }
+  const missingRemoteIds = expectedRemoteIds.filter((id) => !observedRemoteIds.has(id));
+  if (HAS_SERVICE && missingRemoteIds.length) {
+    throw new Error(
+      `remote verification missing ${missingRemoteIds.length}/${expectedRemoteIds.length} rows (${missingRemoteIds.slice(0, 5).join(", ")})`,
+    );
+  }
+  const catchupManifest = {
+    version: "gate-shadow-catchup-manifest-v1",
+    session: SESSION,
+    mode: HAS_SERVICE ? "publish-and-verify" : "read-only-select-audit",
+    expectedSignalIds: expectedRemoteIds,
+    presentSignalIds: expectedRemoteIds.filter((id) => observedRemoteIds.has(id)),
+    missingSignalIds: missingRemoteIds,
+    exactWriteRequired: missingRemoteIds.length > 0,
+    allowedWriteTableIfSeparatelyAuthorized: "virtual_trades",
+    productionWrites: published + eventInserts,
+  };
+  writeFileSync(join(OUTPUT_DIR, "gate-shadow-catchup-manifest.json"), JSON.stringify(catchupManifest, null, 2));
   const receipt = {
     version: "gate-shadow-rebuild-v1",
     session: SESSION,
@@ -454,7 +456,10 @@ async function main() {
     },
     remote: {
       upserts: published,
-      verified: remoteVerified,
+      expected: expectedRemoteIds.length,
+      verified: observedRemoteIds.size,
+      missing: missingRemoteIds.length,
+      catchupRequired: missingRemoteIds.length > 0,
       eventInserts,
       allowedTables: VIRTUAL_TRADES_ONLY ? ["virtual_trades"] : ["virtual_trades", "events"],
     },
@@ -462,7 +467,8 @@ async function main() {
   writeFileSync(join(OUTPUT_DIR, "gate-shadow-receipt.json"), JSON.stringify(receipt, null, 2));
   console.log(`\n  GATE-SHADOW v2 (re-entry-aware, cap ${MAX_PER_DAY}/day)${SESSION ? ` · session ${SESSION}` : ""}${READ_ONLY ? " · REMOTE READ-ONLY" : ""}`);
   console.log(`  ${fresh} new / ${rows.length} total banked · ${reportRows.length} in report window → ${LEDGER} + virtual_trades`);
-  if (HAS_SERVICE) console.log(`  ${published} remote virtual_trades upserts confirmed · ${remoteVerified} read back (idempotent by signal_id)`);
+  console.log(`  remote parity: ${observedRemoteIds.size}/${expectedRemoteIds.length} expected signal ids present · ${missingRemoteIds.length} exact catch-up row(s)`);
+  console.log(`  catch-up manifest → ${join(OUTPUT_DIR, "gate-shadow-catchup-manifest.json")}`);
   console.log(`  rebuild receipt → ${join(OUTPUT_DIR, "gate-shadow-receipt.json")}`);
   console.log(`  scored ${scored.length} (mid-basis UPPER BOUND) · Σ would-have $${Math.round(sum)} · avg $${scored.length ? Math.round(sum / scored.length) : 0}/ct`);
   console.log(`  exact-candidate lane: ${candidateReceipts.length} retained receipts → ${CANDIDATE_LEDGER} · ${retainedCensors.length} retained fail-closed censors → ${CANDIDATE_CENSORS}`);

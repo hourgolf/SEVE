@@ -58,11 +58,14 @@ assert.doesNotMatch(script, /\.in\("blocked_reason"/, "raw block strings must no
 assert.match(script, /isGateShadowBlockReason/, "raw blocked decisions must be classified by stable semantics");
 assert.match(script, /VIRTUAL_TRADES_ONLY/, "bounded recovery must support a virtual-trades-only write scope");
 assert.match(script, /!VIRTUAL_TRADES_ONLY && isFresh/, "journal events must be suppressed in the bounded write scope");
+assert.match(script, /read-only-select-audit/, "read-only close audit must compare reconstructed rows to remote truth");
+assert.match(script, /gate-shadow-catchup-manifest\.json/, "close audit must freeze an exact catch-up manifest");
+assert.match(script, /missingSignalIds/, "catch-up manifest must identify exact missing signal ids");
 const verifier = readFileSync(new URL("../../scripts/verify-shadow-rebuild.ts", import.meta.url), "utf8");
 assert.match(verifier, /remoteSelectOnly: true/, "independent verifier must declare its SELECT-only boundary");
 assert.match(verifier, /productionWrites: 0/, "independent verifier must declare zero production writes");
 assert.match(verifier, /localPayloadSha256/, "independent verifier must hash the local payload");
 assert.match(verifier, /remotePayloadSha256/, "independent verifier must hash the remote payload");
 
-const checks = (legacyReleaseSuppressions.length + domainReleaseSuppressions.length) * 2 + 24;
+const checks = (legacyReleaseSuppressions.length + domainReleaseSuppressions.length) * 2 + 27;
 console.log(`gate-shadow-policy-selftest: ${checks}/${checks} passed`);
