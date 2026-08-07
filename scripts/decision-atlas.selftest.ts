@@ -4,9 +4,11 @@ import { readFileSync } from "node:fs";
 const runner = readFileSync(new URL("./decision-atlas.ts", import.meta.url), "utf8");
 const library = readFileSync(new URL("../lib/research/decisionAtlas.ts", import.meta.url), "utf8");
 const report = readFileSync(new URL("../lib/research/decisionAtlasReport.ts", import.meta.url), "utf8");
+const actionable = readFileSync(new URL("./decision-atlas-actionable-review.ts", import.meta.url), "utf8");
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string> };
 
 assert.equal(pkg.scripts["decision-atlas"], "tsx scripts/decision-atlas.ts");
+assert.equal(pkg.scripts["decision-atlas-actionable-review"], "tsx scripts/decision-atlas-actionable-review.ts");
 assert.equal(pkg.scripts["decision-atlas-selftest"], "tsx lib/research/decisionAtlas.selftest.ts && tsx lib/research/decisionAtlasAdapter.selftest.ts && tsx scripts/decision-atlas.selftest.ts");
 assert.match(runner, /allowedMethods:\s*\["SELECT", "GET"\]/);
 assert.match(runner, /productionWrites:\s*0/);
@@ -36,5 +38,16 @@ assert.match(report, /Actionable now” means enough evidence to draft a proposa
 assert.match(report, /PROPOSALS ONLY · NOTHING APPLIED/i);
 assert.match(report, /Moving from two to four contracts changes replayed portfolio result/i,
   "pending size proposals must compare the proposed size with the current two-contract baseline");
+assert.match(actionable, /proposal_baseline_excluded/,
+  "promotion replay must compare candidate admission against a zero-candidate portfolio baseline");
+assert.match(actionable, /crossAccountSameOccPermitted:\s*true/,
+  "cross-account same-OCC positions must remain permitted");
+assert.match(actionable, /productionWrites:\s*0/);
+assert.match(actionable, /configurationAuthority:\s*false/);
+assert.match(actionable, /activationAuthorized:\s*false/);
+assert.match(actionable, /alternativeArms:\s*1/,
+  "bounded retunes must compare the baseline with one alternative rather than a parameter grid");
+assert.doesNotMatch(actionable, /\.from\([^\n]+\)\.(?:insert|upsert|update|delete)\(/);
+assert.doesNotMatch(actionable, /\.rpc\(/);
 
 console.log("decision-atlas runner selftest: PASS");
