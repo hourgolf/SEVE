@@ -11,12 +11,20 @@
 //   npm run evening-digest -- --force # test on a non-session day
 
 import { isTradingDay } from "../engine/market-calendar";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import type { ProfitabilityLedger } from "../lib/profitability/profitabilityLedger";
+import { etDateOf } from "../lib/profitability/profitabilityLedger";
 import { etDayRangeUtc } from "../lib/research/afterCloseResearch";
 import { buildEveningDigest, EVENING_DIGEST_READ_FAILURE, type EveningDigestBucket, type EveningDigestMover } from "../lib/ops/eveningDigest";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const FORCE = process.argv.includes("--force");
 const sb = createServerSupabaseClient("evening-digest");
+const arg = (name: string): string | null => {
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : null;
+};
 function etToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -26,18 +34,26 @@ async function main() {
   if (!isTradingDay(day) && !FORCE) { console.log(`  digest: ${day} not a session — skipped`); return; }
   const range = etDayRangeUtc(day);
 
-  // ---- per-bucket day P&L (desk attribution; NAV truth is the broker, this is the shape) ----
-  const closedRead = await sb.from("positions")
-    .select("realized_pnl,strategist_id,strategists(slug,account_id,accounts:account_id(name))")
-    .eq("status", "closed").gte("opened_at", range.start).lt("opened_at", range.end);
-  if (closedRead.error) throw new Error(`positions read failed: ${closedRead.error.message}`);
-  const closed = closedRead.data ?? [];
+  // ---- canonical logical trades, attributed by immutable execution route ----
+  const ledgerFile = resolve(arg("ledger-file") ?? "data/profitability-ledger/ledger.json");
+  if (!existsSync(ledgerFile)) throw new Error(`canonical profitability artifact not found: ${ledgerFile}`);
+  const artifact = JSON.parse(readFileSync(ledgerFile, "utf8")) as {
+    ledger: ProfitabilityLedger;
+    report?: { asOfDateEt?: string };
+  };
+  if ((artifact.report?.asOfDateEt ?? "") < day) throw new Error(`canonical profitability artifact is stale for ${day}`);
+  const closed = artifact.ledger.logicalTrades.filter((trade) =>
+    trade.status === "closed" && trade.closedAt != null && etDateOf(trade.closedAt) === day);
+  const unattributed = closed.filter((trade) =>
+    !trade.accountId || !trade.accountName || (trade.accountRouteEvidence !== "immutable_position_route"
+      && trade.accountRouteEvidence !== "immutable_opportunity_route"));
+  if (unattributed.length) throw new Error(`${unattributed.length} session logical trade(s) lack immutable execution-account attribution`);
   const byBucket = new Map<string, { pnl: number; n: number }>();
   const byChan = new Map<string, number>();
-  for (const r of closed as any[]) {
-    const acct = r.strategists?.accounts?.name ?? "?";
-    const slug = r.strategists?.slug ?? "?";
-    const p = Number(r.realized_pnl ?? 0);
+  for (const trade of closed) {
+    const acct = trade.accountName as string;
+    const slug = trade.channelSlug;
+    const p = Number(trade.realizedPnlUsd ?? 0);
     const b = byBucket.get(acct) ?? { pnl: 0, n: 0 };
     b.pnl += p; b.n += 1; byBucket.set(acct, b);
     byChan.set(slug, (byChan.get(slug) ?? 0) + p);

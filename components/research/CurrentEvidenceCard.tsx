@@ -48,7 +48,7 @@ export function CurrentEvidenceCard({
         <span><small>CURRENT EXECUTED</small><b>{comparison.executedSlug}</b><strong className={comparison.executedTypicalPerContract >= 0 ? "pos" : "neg"}>{money(comparison.executedTypicalPerContract)} typical/ct</strong><em>{money(comparison.executedTotalPerContract)} total/ct · {comparison.executedWins}/{comparison.pairs} positive</em></span>
         <span><small>SAME-CLOCK VIRTUAL</small><b>{comparison.virtualSlug}</b><strong className={comparison.virtualTypicalPerContract >= 0 ? "pos" : "neg"}>{money(comparison.virtualTypicalPerContract)} typical/ct</strong><em>{money(comparison.virtualTotalPerContract)} total/ct · {comparison.virtualWins}/{comparison.pairs} positive</em></span>
       </div>
-      <footer><b>{leader} {comparison.executedLeads === comparison.virtualLeads ? "split" : "led"} {Math.max(comparison.executedLeads, comparison.virtualLeads)} of {comparison.pairs}</b><span>through {through} · same entry clocks · independent exits · virtual side is not a fill</span></footer>
+      <footer><b>{leader} {comparison.executedLeads === comparison.virtualLeads ? "split" : "led"} {Math.max(comparison.executedLeads, comparison.virtualLeads)} of {comparison.pairs}</b><span>through {through} · {comparison.executedAccountIds.length} immutable routed account{comparison.executedAccountIds.length === 1 ? "" : "s"} · independent exits · virtual side is not a fill</span></footer>
     </> : <>
       <div className="srw-current-kpis">
         <span><small>TYPICAL RESULT</small><b className={(currentSummary?.typicalPerContract ?? 0) >= 0 ? "pos" : "neg"}>{money(currentSummary?.typicalPerContract ?? null)}/ct</b></span>
@@ -56,7 +56,7 @@ export function CurrentEvidenceCard({
         <span><small>POSITIVE</small><b>{currentSummary?.winners ?? 0}/{currentSummary?.opportunities ?? 0}</b></span>
         <span><small>SESSIONS</small><b>{currentSummary?.sessions ?? 0}</b></span>
       </div>
-      <footer><b>LATEST CONFIGURATION</b><span>through {through} · logical trades, not position rows</span></footer>
+      <footer><b>LATEST CONFIGURATION</b><span>through {through} · {currentSummary?.accountIds.length ?? 0} immutable routed account{currentSummary?.accountIds.length === 1 ? "" : "s"} · logical trades</span></footer>
     </>}
     {truncated ? <p>Current execution read reached its safety cap; comparison may be partial.</p> : null}
   </section>;

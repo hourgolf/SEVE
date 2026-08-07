@@ -1,4 +1,5 @@
 import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
+import { areReviewedChannelVariants } from "@/lib/research/channelVariantFamilies";
 
 export interface ShadowResearchRow {
   signalId?: string;
@@ -16,6 +17,7 @@ export interface ShadowResearchRow {
 
 export interface ExecutedResearchRow {
   id: string;
+  accountId: string;
   slug: string;
   quantity: number;
   realizedPnl: number | null;
@@ -26,6 +28,7 @@ export interface ExecutedResearchRow {
 }
 
 export interface CurrentExecutedOpportunity {
+  accountId: string;
   slug: string;
   openedAt: string;
   session: string;
@@ -35,6 +38,7 @@ export interface CurrentExecutedOpportunity {
 
 export interface CurrentExecutedSummary {
   slug: string;
+  accountIds: string[];
   configurationEpochId: string;
   opportunities: number;
   sessions: number;
@@ -49,6 +53,7 @@ export interface CurrentExecutedSummary {
 export interface PairedCurrentComparison {
   executedSlug: string;
   virtualSlug: string;
+  executedAccountIds: string[];
   pairs: number;
   sessions: number;
   executedWins: number;
@@ -211,13 +216,6 @@ const median = (values: readonly number[]): number | null => {
 };
 export const isVirtualBenchSlug = (slug: string): boolean => slug.startsWith("vb-");
 
-const researchFamily = (slug: string): string => {
-  if (/^pb-ride(?:-2|-itm)?$/.test(slug)) return "pb-ride";
-  if (/^momo-shape(?:-2)?$/.test(slug)) return "momo-shape";
-  if (/^grind-(?:v3|v3-2|smart-entries)$/.test(slug)) return "grind";
-  return slug;
-};
-
 /**
  * Collapse immutable exit tranches into logical trades, then retain only the
  * latest observed configuration epoch for each channel. This is deliberately
@@ -240,6 +238,8 @@ export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow
     const group = trade.rows;
     const slugs = [...new Set(group.map((row) => row.slug))];
     if (slugs.length !== 1) throw new Error(`logical trade ${trade.rootPositionId} spans channel identities`);
+    const accountIds = [...new Set(group.map((row) => row.accountId))];
+    if (accountIds.length !== 1) throw new Error(`logical trade ${trade.rootPositionId} spans immutable account routes`);
     const root = group.find((row) => !row.runnerOf) ?? group[0];
     const configurationEpochId = root.configurationEpochId?.trim() ?? "";
     const session = shadowSessionDate(root.openedAt);
@@ -248,6 +248,7 @@ export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow
     const total = trade.realizedPnl;
     if (total == null) return [];
     return [{
+      accountId: accountIds[0],
       slug: root.slug,
       openedAt: root.openedAt,
       session,
@@ -275,6 +276,7 @@ export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow
     const outcomes = channelRows.map((row) => row.pnlPerContract);
     return [slug, {
       slug,
+      accountIds: [...new Set(channelRows.map((row) => row.accountId))].sort(),
       configurationEpochId: channelRows.at(-1)?.configurationEpochId ?? "",
       opportunities: channelRows.length,
       sessions: sessions.length,
@@ -301,7 +303,7 @@ export function derivePairedCurrentComparisons(
   const comparisons: PairedCurrentComparison[] = [];
   for (const [executedSlug, actualRows] of byExecutedSlug) {
     for (const virtualSlug of virtualSlugs) {
-      if (virtualSlug === executedSlug || researchFamily(virtualSlug) !== researchFamily(executedSlug)) continue;
+      if (!areReviewedChannelVariants(virtualSlug, executedSlug)) continue;
       const virtualRows = virtual
         .filter((row) => row.slug === virtualSlug && row.pnlPerContract != null && Number.isFinite(Date.parse(row.signalAt)))
         .sort((left, right) => left.signalAt.localeCompare(right.signalAt));
@@ -331,6 +333,7 @@ export function derivePairedCurrentComparisons(
       comparisons.push({
         executedSlug,
         virtualSlug,
+        executedAccountIds: [...new Set(pairs.map((pair) => pair.actual.accountId))].sort(),
         pairs: pairs.length,
         sessions: sessions.length,
         executedWins: actualOutcomes.filter((value) => value > 0).length,

@@ -5,6 +5,10 @@ import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
 import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
 import {
+  attributePositionsByImmutableExecutionAccount,
+  type ExecutionAccountObservation,
+} from "@/lib/ops/brokerReconciliation";
+import {
   deriveChannelDryPowderCurves,
   deriveCurrentExecutedEvidence,
   derivePairedCurrentComparisons,
@@ -57,9 +61,13 @@ const EMPTY: ShadowResearch = {
   currentExecutedError: "",
   currentExecutedTruncated: false,
   virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity", fromSession: null, throughSession: null,
-    configurationEpochId: null, completeness: "unavailable", source: "virtual_trades", asOf: null }),
+    configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
+    completeness: "unavailable", reconciliation: "unverified", source: "virtual_trades", receiptHash: null,
+    limitations: ["Virtual rows do not yet carry configuration epoch provenance."], asOf: null }),
   currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade", fromSession: null, throughSession: null,
-    configurationEpochId: null, completeness: "unavailable", source: "positions lineage", asOf: null }),
+    configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
+    completeness: "unavailable", reconciliation: "blocked", source: "positions lineage + immutable execution route", receiptHash: null,
+    limitations: ["No attributed current execution cohort is available."], asOf: null }),
   cohortStart: COHORT_START,
   truncated: false,
   error: "",
@@ -79,8 +87,9 @@ const message = (error: unknown): string =>
  * this bounded ledger warm so selected-channel diagnostics never depend on the
  * operator visiting Research first.
  */
-export function useShadowResearch(enabled: boolean): ShadowResearch {
+export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: readonly string[]): ShadowResearch {
   const [state, setState] = useState<ShadowResearch>(EMPTY);
+  const configuredKey = [...configuredPaperAccountIds].sort().join(",");
 
   useEffect(() => {
     if (!enabled) return;
@@ -133,7 +142,7 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
             .order("opened_at", { ascending: true })
             .limit(MAX_EXECUTED_ROWS);
           if (executedRead.error) throw executedRead.error;
-          const executedRows = ((executedRead.data ?? []) as Record<string, unknown>[]).flatMap((row): ExecutedResearchRow[] => {
+          const rawExecutedRows = ((executedRead.data ?? []) as Record<string, unknown>[]).flatMap((row) => {
             const relation = Array.isArray(row.strategists) ? row.strategists[0] : row.strategists;
             const slug = relation && typeof relation === "object" && "slug" in relation
               ? String((relation as { slug?: unknown }).slug ?? "")
@@ -150,6 +159,23 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
               configurationEpochId: row.configuration_epoch_id == null ? null : String(row.configuration_epoch_id),
             }];
           });
+          const observations: ExecutionAccountObservation[] = [];
+          for (let from = 0; from < rawExecutedRows.length; from += 200) {
+            const routeRead = await getSupabase().from("execution_observations")
+              .select("id,position_id,account_id,event_at")
+              .in("position_id", rawExecutedRows.slice(from, from + 200).map((row) => row.id));
+            if (routeRead.error) throw routeRead.error;
+            observations.push(...((routeRead.data ?? []) as ExecutionAccountObservation[]));
+          }
+          const attribution = attributePositionsByImmutableExecutionAccount({
+            positions: rawExecutedRows,
+            observations,
+            configuredPaperAccountIds: new Set(configuredKey.split(",").filter(Boolean)),
+            positionLabel: "current executed research positions",
+          });
+          if (!attribution.ok) throw new Error(attribution.issues.join("; "));
+          const executedRows: ExecutedResearchRow[] = [...attribution.byAccount.entries()].flatMap(([accountId, accountRows]) =>
+            accountRows.map((row) => ({ ...row, accountId })));
           const current = deriveCurrentExecutedEvidence(executedRows);
           currentExecutedBySlug = current.bySlug;
           pairedCurrent = derivePairedCurrentComparisons(current.opportunities, rows);
@@ -175,12 +201,19 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
           currentExecutedTruncated,
           virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity",
             fromSession: cumulative?.fromSession ?? null, throughSession: cumulative?.throughSession ?? null,
-            configurationEpochId: null, completeness: total > MAX_ROWS ? "partial" : sessions.length ? "complete" : "unavailable",
-            source: "virtual_trades", asOf }),
+            configurationEpochId: null, managerVersion: null,
+            scope: { kind: "portfolio", accountIds: [], channelSlugs: [...new Set(rows.map((row) => row.slug))] },
+            completeness: total > MAX_ROWS ? "partial" : sessions.length ? "complete" : "unavailable",
+            reconciliation: "unverified", source: "virtual_trades", receiptHash: null,
+            limitations: ["Virtual rows do not yet carry configuration epoch provenance.", ...(total > MAX_ROWS ? ["Read reached its bounded row cap."] : [])], asOf }),
           currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade",
             fromSession: currentSessions[0] ?? null, throughSession: currentSessions.at(-1) ?? null,
-            configurationEpochId: null, completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
-            source: "positions lineage · latest channel configuration epoch", asOf }),
+            configurationEpochId: null, managerVersion: null,
+            scope: { kind: "portfolio", accountIds: [...new Set(Object.values(currentExecutedBySlug).flatMap((summary) => summary.accountIds))], channelSlugs: Object.keys(currentExecutedBySlug) },
+            completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
+            reconciliation: currentExecutedState === "ok" ? "reconciled" : "blocked",
+            source: "positions lineage + immutable execution route · latest channel configuration epoch", receiptHash: null,
+            limitations: ["Configuration epochs are selected independently per channel.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : [])], asOf }),
           cohortStart: COHORT_START,
           truncated: total > MAX_ROWS,
           error: "",
@@ -202,7 +235,7 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
     void poll();
     const stop = startVisibilityPoll(() => void poll(), 10 * 60_000);
     return () => { alive = false; stop(); };
-  }, [enabled]);
+  }, [configuredKey, enabled]);
 
   return state;
 }

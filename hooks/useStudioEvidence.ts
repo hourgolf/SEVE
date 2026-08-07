@@ -22,7 +22,9 @@ const EMPTY: StudioEvidence = {
   bySlug: {}, sessionDates: [], totalTrades: 0,
   loading: false, error: false, asOf: null, basis: "gross desk attribution",
   evidence: evidenceEnvelope({ layer: "historical_executed", unit: "logical_trade", fromSession: null, throughSession: null,
-    configurationEpochId: null, completeness: "unavailable", source: "positions + immutable execution route", asOf: null }),
+    configurationEpochId: null, managerVersion: null, scope: { kind: "account", accountIds: [], channelSlugs: [] },
+    completeness: "unavailable", reconciliation: "blocked", source: "positions + immutable execution route", receiptHash: null,
+    limitations: ["No selected account cohort is available."], asOf: null }),
 };
 
 /** Page-seam read for STUDIO only. Leaves consume the snapshot and never subscribe. */
@@ -91,8 +93,11 @@ export function useStudioEvidence(
         setState({ ...snapshot, loading: false, error: false, asOf, basis: "gross desk attribution",
           evidence: evidenceEnvelope({ layer: "historical_executed", unit: "logical_trade",
             fromSession: snapshot.sessionDates[0] ?? null, throughSession: snapshot.sessionDates.at(-1) ?? null,
-            configurationEpochId: null, completeness: snapshot.totalTrades ? "complete" : "unavailable",
-            source: "positions + immutable execution route", asOf }) });
+            configurationEpochId: null, managerVersion: null,
+            scope: { kind: "account", accountIds: [acctId], channelSlugs: Object.keys(snapshot.bySlug) },
+            completeness: snapshot.totalTrades ? "complete" : "unavailable", reconciliation: "reconciled",
+            source: "positions + immutable execution route", receiptHash: null,
+            limitations: ["Historical configurations are pooled in this Studio summary."], asOf }) });
       } catch {
         if (alive) setState((prior) => ({ ...prior, loading: false, error: true,
           evidence: evidenceEnvelope({ ...prior.evidence, completeness: prior.asOf ? "stale" : "unavailable" }) }));

@@ -3,10 +3,20 @@ export type EvidenceLayer =
   | "current_executed"
   | "historical_executed"
   | "historical_virtual"
-  | "manager_counterfactual";
+  | "session_virtual"
+  | "manager_counterfactual"
+  | "capacity_replay"
+  | "proposal_simulation";
 
-export type EvidenceUnit = "account" | "logical_trade" | "opportunity" | "contract" | "session";
+export type EvidenceUnit = "account" | "position_row" | "logical_trade" | "logical_opportunity" | "opportunity" | "contract" | "session";
 export type EvidenceCompleteness = "complete" | "partial" | "stale" | "unavailable";
+export type EvidenceReconciliation = "reconciled" | "difference_explained" | "unverified" | "blocked";
+
+export interface EvidenceScope {
+  kind: "account" | "channel" | "portfolio";
+  accountIds: string[];
+  channelSlugs: string[];
+}
 
 /** Canonical provenance carried with every decision-bearing aggregate. */
 export interface EvidenceEnvelope {
@@ -15,8 +25,13 @@ export interface EvidenceEnvelope {
   fromSession: string | null;
   throughSession: string | null;
   configurationEpochId: string | null;
+  managerVersion: string | null;
+  scope: EvidenceScope;
   completeness: EvidenceCompleteness;
+  reconciliation: EvidenceReconciliation;
   source: string;
+  receiptHash: string | null;
+  limitations: string[];
   asOf: string | null;
 }
 
@@ -26,5 +41,22 @@ export const evidenceEnvelope = (value: EvidenceEnvelope): EvidenceEnvelope => {
   if (value.fromSession && value.throughSession && value.fromSession > value.throughSession) {
     throw new Error("evidence session range is reversed");
   }
-  return Object.freeze({ ...value });
+  if (value.receiptHash != null && !/^[a-f0-9]{64}$/i.test(value.receiptHash)) {
+    throw new Error("evidence receipt hash must be SHA-256");
+  }
+  if (value.scope.kind === "account" && value.scope.accountIds.length > 1) {
+    throw new Error("account evidence scope permits at most one account id");
+  }
+  if (value.scope.kind === "account" && value.completeness !== "unavailable" && value.scope.accountIds.length !== 1) {
+    throw new Error("available account evidence scope requires exactly one account id");
+  }
+  return Object.freeze({
+    ...value,
+    scope: Object.freeze({
+      ...value.scope,
+      accountIds: Object.freeze([...new Set(value.scope.accountIds)].sort()) as unknown as string[],
+      channelSlugs: Object.freeze([...new Set(value.scope.channelSlugs)].sort()) as unknown as string[],
+    }),
+    limitations: Object.freeze([...value.limitations]) as unknown as string[],
+  });
 };

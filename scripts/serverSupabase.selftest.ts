@@ -52,7 +52,6 @@ const criticalScripts = [
   "scripts/evening-digest.ts",
   "scripts/a6-watch.ts",
   "scripts/a6-read.ts",
-  "scripts/weekly-readout.ts",
   "scripts/gate-shadow.ts",
   "scripts/sentinel.ts",
   "engine/realsource.ts",
@@ -64,6 +63,10 @@ for (const file of criticalScripts) {
   check(`${file} uses the server-only client`, source.includes("createServerSupabaseClient"));
   check(`${file} never consumes the anonymous key`, !source.includes("NEXT_PUBLIC_SUPABASE_ANON_KEY"));
 }
+
+const weeklyReadout = readFileSync("scripts/weekly-readout.ts", "utf8");
+check("weekly readout consumes frozen local artifacts", weeklyReadout.includes("ledgerFile") && weeklyReadout.includes("atlasFile"));
+check("weekly readout has no production database client", !weeklyReadout.includes("serverSupabase") && !weeklyReadout.includes(".from("));
 
 for (const file of ["app/page.tsx", "lib/supabaseClient.ts", "hooks/useAuth.tsx"]) {
   const source = readFileSync(file, "utf8");

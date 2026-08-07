@@ -5,8 +5,8 @@ import { deriveCurrentExecutedEvidence } from "../research/shadowResearch";
 import { deriveStudioEvidence } from "../studio/deriveStudioEvidence";
 
 const executed = [
-  { id: "root", slug: "alpha", quantity: 1, realizedPnl: 40, openedAt: "2026-08-07T14:00:00Z", closedAt: "2026-08-07T14:20:00Z", runnerOf: null, configurationEpochId: "epoch-current" },
-  { id: "runner", slug: "alpha", quantity: 1, realizedPnl: -10, openedAt: "2026-08-07T14:00:00Z", closedAt: "2026-08-07T14:25:00Z", runnerOf: "root", configurationEpochId: null },
+  { id: "root", accountId: "paper-1", slug: "alpha", quantity: 1, realizedPnl: 40, openedAt: "2026-08-07T14:00:00Z", closedAt: "2026-08-07T14:20:00Z", runnerOf: null, configurationEpochId: "epoch-current" },
+  { id: "runner", accountId: "paper-1", slug: "alpha", quantity: 1, realizedPnl: -10, openedAt: "2026-08-07T14:00:00Z", closedAt: "2026-08-07T14:25:00Z", runnerOf: "root", configurationEpochId: null },
 ];
 const current = deriveCurrentExecutedEvidence(executed);
 const studio = deriveStudioEvidence(executed.map((row) => ({
@@ -20,15 +20,18 @@ assert.equal(studio.bySlug.alpha.grossPerContract, 15);
 
 assert.deepEqual(evidenceEnvelope({
   layer: "current_executed", unit: "logical_trade", fromSession: "2026-08-07", throughSession: "2026-08-07",
-  configurationEpochId: "epoch-current", completeness: "complete", source: "fixture", asOf: "2026-08-07T20:00:00Z",
+  configurationEpochId: "epoch-current", managerVersion: null, scope: { kind: "account", accountIds: ["paper-1"], channelSlugs: ["alpha"] },
+  completeness: "complete", reconciliation: "reconciled", source: "fixture", receiptHash: null, limitations: [], asOf: "2026-08-07T20:00:00Z",
 }).unit, "logical_trade");
 assert.throws(() => evidenceEnvelope({
   layer: "historical_virtual", unit: "opportunity", fromSession: "2026-08-08", throughSession: "2026-08-07",
-  configurationEpochId: null, completeness: "complete", source: "fixture", asOf: null,
+  configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
+  completeness: "complete", reconciliation: "unverified", source: "fixture", receiptHash: null, limitations: [], asOf: null,
 }), /reversed/);
 assert.equal(evidenceEnvelope({
   layer: "historical_executed", unit: "logical_trade", fromSession: "2026-08-07", throughSession: "2026-08-07",
-  configurationEpochId: null, completeness: "stale", source: "fixture", asOf: "2026-08-07T20:00:00Z",
+  configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
+  completeness: "stale", reconciliation: "unverified", source: "fixture", receiptHash: null, limitations: [], asOf: "2026-08-07T20:00:00Z",
 }).completeness, "stale");
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");

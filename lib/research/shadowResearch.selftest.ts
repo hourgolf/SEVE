@@ -143,6 +143,7 @@ assert.equal(deriveChannelDryPowderCurves([row({ signalAt: "bad" })])["vb-alpha"
 
 const executed = (overrides: Partial<ExecutedResearchRow>): ExecutedResearchRow => ({
   id: "position-1",
+  accountId: "paper-1",
   slug: "pb-ride",
   quantity: 2,
   realizedPnl: 160,
@@ -162,6 +163,7 @@ assert.equal(currentExecution.opportunities.length, 2, "legacy configuration epo
 assert.deepEqual(currentExecution.opportunities.map((item) => item.pnlPerContract), [139.5, -86]);
 assert.deepEqual(currentExecution.bySlug["pb-ride"], {
   slug: "pb-ride",
+  accountIds: ["paper-1"],
   configurationEpochId: "epoch-current",
   opportunities: 2,
   sessions: 2,
@@ -172,6 +174,10 @@ assert.deepEqual(currentExecution.bySlug["pb-ride"], {
   throughSession: "2026-08-05",
   lastAt: "2026-08-05T16:20:03Z",
 });
+assert.throws(() => deriveCurrentExecutedEvidence([
+  executed({ id: "cross-account-root", quantity: 1, realizedPnl: 10 }),
+  executed({ id: "cross-account-runner", accountId: "paper-2", quantity: 1, realizedPnl: 10, runnerOf: "cross-account-root", configurationEpochId: null }),
+]), /spans immutable account routes/);
 
 const paired = derivePairedCurrentComparisons(currentExecution.opportunities, [
   row({ slug: "pb-ride-2", signalAt: "2026-08-04T14:26:03Z", pnlPerContract: 25.8 }),
@@ -179,10 +185,14 @@ const paired = derivePairedCurrentComparisons(currentExecution.opportunities, [
   row({ slug: "pb-ride-itm", signalAt: "2026-08-04T14:26:02Z", pnlPerContract: 31 }),
   row({ slug: "unrelated", signalAt: "2026-08-04T14:26:03Z", pnlPerContract: 999 }),
 ]);
+assert.equal(derivePairedCurrentComparisons(currentExecution.opportunities, [
+  row({ slug: "pb-ride-new-undeclared", signalAt: "2026-08-04T14:26:03Z", pnlPerContract: 999 }),
+]).length, 0, "name similarity must not create an unreviewed comparison family");
 assert.equal(paired.length, 2, "same-clock rows from unrelated channel families are not presented as pairs");
 assert.deepEqual(paired[0], {
   executedSlug: "pb-ride",
   virtualSlug: "pb-ride-2",
+  executedAccountIds: ["paper-1"],
   pairs: 2,
   sessions: 2,
   executedWins: 1,
