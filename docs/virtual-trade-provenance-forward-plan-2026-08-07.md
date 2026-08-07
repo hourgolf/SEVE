@@ -1,12 +1,12 @@
 # Virtual-trade provenance — forward-only plan
 
-Status: **proposal only; no migration, publisher change, backfill, or production write has been applied**.
+Status: **reviewable schema, source-signal capture, and opt-in publisher prepared locally; unapplied**. No publisher activation, backfill, deployment, or production write has been applied.
 
 ## Why this is needed
 
 `virtual_trades` can currently prove the signal, contract path, and virtual result, but it cannot prove which sealed channel configuration produced the opportunity. The dashboard must therefore label these rows **historical virtual** and **configuration unstamped**. Timestamp proximity or today's strategist configuration is not sufficient evidence.
 
-## Proposed forward fields
+## Prepared forward fields
 
 Add nullable, immutable provenance to new `virtual_trades` rows:
 
@@ -17,6 +17,12 @@ Add nullable, immutable provenance to new `virtual_trades` rows:
 - `research_publisher_version` — the deterministic publisher version that produced the row.
 
 The three configuration identity fields must be all-null or all-present. Null means **unstamped**, never “current.” Existing historical rows remain null.
+
+The prepared migration is `20260807143000_virtual_trade_forward_provenance.sql`. It performs no update or backfill, validates the all-or-none rule against existing null rows, accepts only exact activation-receipt and release-manifest membership, and makes all five provenance fields immutable. Its focused self-test also rejects mutable strategist/account authority and timestamp-based inference.
+
+The worker-side source capture is also prepared but not deployed. Each future signal will carry a content-addressed `virtual_path_policy` containing the exact stop and target used by the shadow scorer, the native manager identity, and the explicit catastrophic-stop fallback used when the live premium stop is off. This is evidence-only signal metadata; it does not participate in admission, sizing, order placement, or exits.
+
+The publisher integration is gated by `--stamp-provenance` and refuses to run without one explicit session and `--virtual-trades-only`. It scores from the signal-time policy instead of current strategist settings, inserts new rows rather than updating old rows, refuses conflicting identities, and compares hashes of every complete inserted payload with its remote readback. The existing historical recovery path remains the default; a fresh SELECT-only replay reproduced its frozen ledger and manifest byte-for-byte after these changes.
 
 ## Publication rule
 

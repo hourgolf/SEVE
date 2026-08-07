@@ -54,6 +54,7 @@ import {
   receiptBoundEntryPolicyStampPresent,
   receiptBoundRunnerConfiguration,
 } from "./receiptBoundEntryPolicy.js";
+import { virtualPathPolicyStamp } from "../../lib/research/virtualPathPolicy.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -866,6 +867,11 @@ export async function executeEntry(
       account_id: ctx.accountId,
       channel_version: policyIdentity?.channelVersion ?? null,
       manager_version: policyIdentity?.managerVersion ?? null,
+      virtual_path_policy: virtualPathPolicyStamp({
+        channel: ch,
+        defaultPremiumStopPct: policy.PREMIUM_STOP_PCT,
+        managerVersion: policyIdentity?.managerVersion ?? null,
+      }),
       configuration_epoch_id:
         ctx.configurationWriteStamp?.configuration_epoch_id
         ?? policyIdentity?.configurationEpochId
