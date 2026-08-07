@@ -191,7 +191,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             })}
           </div>
           <div className="m-led"><LedDisplay value={navK} digits={5} unit="K" color={dayColor} caption="fund $" /></div>
-          <div className="m-led"><LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" /></div>
+          <div className="m-led"><LedDisplay value={dayLed} digits={6} color={dayColor} caption="session nav Δ $" /></div>
         </div>
       </header>
 

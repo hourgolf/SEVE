@@ -43,6 +43,8 @@ export function DailyAutopsyBody({
 
   const r = reports[Math.min(idx, reports.length - 1)];
   const d = r.digest, n = r.narrative;
+  const logicalEvidence = d.evidence?.unit === "logical_trade";
+  const observationLabel = logicalEvidence ? "logical trades" : "legacy position rows";
   const traded = (d.channels ?? []).filter((c) => c.metrics.nTrades > 0);
   const dormant = (d.channels ?? []).filter((c) => c.metrics.nTrades === 0);
   const nFindings = n?.systemFindings?.length ?? 0;
@@ -77,9 +79,9 @@ export function DailyAutopsyBody({
 
       {d.fund && (
         <div className="au-fund">
-          <span>{d.fund.trades} trades · {d.fund.channelsTraded} ch</span>
+          <span title={logicalEvidence ? `${d.evidence?.positionRows ?? 0} position rows · ${d.evidence?.runnerRowsCollapsed ?? 0} runners collapsed · immutable routes` : "This stored report predates logical-trade evidence; do not compare its count directly with current reports."}>{d.fund.trades} {observationLabel} · {d.fund.channelsTraded} ch</span>
           <span className={d.fund.dayRealized < 0 ? "neg" : "pos"}>{signedUsd(d.fund.dayRealized)}</span>
-          <span>win {Math.round(d.fund.winRate * 100)}%</span>
+          <span>positive {Math.round(d.fund.winRate * 100)}%</span>
         </div>
       )}
 

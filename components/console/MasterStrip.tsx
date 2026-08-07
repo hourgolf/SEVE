@@ -38,14 +38,14 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
       <div
         className="master-led"
         onClick={compact ? undefined : () => setShowNav((v) => !v)}
-        title={compact ? undefined : "click to toggle NAV / day P&L"}
+        title={compact ? undefined : "click to toggle NAV / session NAV change"}
       >
         <LedDisplay
           value={compact ? navK : ledRaw}
           digits={compact ? 4 : 7}
           unit={compact ? "K" : undefined}
           color={fund.is_halted ? "var(--amber)" : "var(--led-red)"}
-          caption={compact ? "fund nav $" : showNav ? "fund nav $" : "day p&l $"}
+          caption={compact ? "fund nav $" : showNav ? "fund nav $" : "session nav Δ $"}
         />
       </div>
 
@@ -63,7 +63,7 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
             format={usd0}
           />
           <div className={`master-day ${fundPnl.dayPnl < 0 ? "neg" : "pos"}`}>
-            {signedUsd(fundPnl.dayPnl)} day
+            {signedUsd(fundPnl.dayPnl)} session NAV Δ
           </div>
         </div>
       )}

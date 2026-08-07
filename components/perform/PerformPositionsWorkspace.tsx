@@ -79,9 +79,9 @@ export function RecentExits({ surface }: { surface: SurfaceProps }) {
   const exits = derivePositionsWorkspace(surface.feed.positions, surface.feed.recentTrades, surface.liveMarks).exits;
   const colorOf = (slug: string) => pmVar(surface.view.desk.strategists.find((channel) => channel.slug === slug)?.color ?? "green");
   return <section className="pf-screen pf-hardware pf-recent-exits" aria-label="Recent closed positions">
-    <div className="pf-head"><span className="t">RECENT EXITS · {exits.rows.length}</span><span className="grow" />
-      <span className="pf-basis">desk attribution</span><span className={`x num ${exits.realized < 0 ? "neg" : "up"}`}>{signedUsd(exits.realized)}</span></div>
-    <div className="pf-exit-summary"><span><small>WINS</small><b>{exits.wins}</b></span><span><small>LOSSES</small><b>{exits.losses}</b></span><span><small>FLAT</small><b>{exits.rows.length - exits.wins - exits.losses}</b></span></div>
+    <div className="pf-head"><span className="t">RECENT EXIT TRANCHES · {exits.rows.length}</span><span className="grow" />
+      <span className="pf-basis">{exits.logicalTrades} logical trades · desk attribution</span><span className={`x num ${exits.realized < 0 ? "neg" : "up"}`}>{signedUsd(exits.realized)}</span></div>
+    <div className="pf-exit-summary"><span><small>TRADE WINS</small><b>{exits.wins}</b></span><span><small>TRADE LOSSES</small><b>{exits.losses}</b></span><span><small>TRADE FLAT</small><b>{exits.flats}</b></span></div>
     <div className="pf-exit-list">
       {exits.rows.length === 0 ? <div className="pf-ghost">no exits in the current session feed</div> : exits.rows.map((row) => {
         const trade = row.position;

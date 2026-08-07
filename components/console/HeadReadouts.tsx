@@ -39,7 +39,7 @@ export function HeadReadouts({
           {fund.mode === "live" ? "LIVE" : "PAPER"}
         </span>
       </div>
-      <LedDisplay value={dayLed} digits={6} color={dayColor} caption="day p&l $" />
+      <LedDisplay value={dayLed} digits={6} color={dayColor} caption="session nav Δ $" />
       <LedDisplay
         value={spot != null ? spot.toFixed(2) : "----"}
         digits={6}

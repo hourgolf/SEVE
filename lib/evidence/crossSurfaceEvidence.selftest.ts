@@ -39,11 +39,28 @@ const atlasCard = read("../../components/research/DecisionAtlasPreviewCard.tsx")
 const currentCard = read("../../components/research/CurrentEvidenceCard.tsx");
 const studioPanel = read("../../components/studio/StudioModules.tsx");
 const review = read("../../hooks/useWindowedPnl.ts");
+const dailyPanel = read("../../components/console/DailyAutopsyPanel.tsx");
+const dailyGenerator = read("../../supabase/functions/daily-autopsy/index.ts");
+const weeklyPanel = read("../../components/console/WeeklyAutopsyPanel.tsx");
+const weeklyGenerator = read("../../supabase/functions/weekly-autopsy/index.ts");
+const workstationShell = read("../../components/shell/WorkstationShell.tsx");
+const mobileShell = read("../../components/mobile2/MobileShell.tsx");
+const positionsWorkspace = read("../../components/perform/PerformPositionsWorkspace.tsx");
 assert.match(atlasCard, /HISTORICAL VIRTUAL/);
 assert.match(atlasCard, /NOT EXECUTED/);
 assert.match(currentCard, /CURRENT EXECUTED/);
 assert.match(currentCard, /SAME-CLOCK VIRTUAL/);
 assert.match(studioPanel, /GROSS \/ LOGICAL TRADE/);
 assert.match(review, /summarizeLogicalTradeCohort/);
+assert.match(dailyPanel, /legacy position rows/);
+assert.match(dailyGenerator, /collapseDailyLogicalTrades/);
+assert.match(dailyGenerator, /immutable_execution_routes/);
+assert.match(weeklyPanel, /legacy position rows/);
+assert.match(weeklyGenerator, /weekly logical-trade evidence blocked/);
+assert.match(weeklyGenerator, /exitEfficiencyUnit: "position_tranche"/);
+assert.match(workstationShell, /SESSION NAV Δ/);
+assert.match(mobileShell, /NAV Δ/);
+assert.match(positionsWorkspace, /RECENT EXIT TRANCHES/);
+assert.match(positionsWorkspace, /logical trades · desk attribution/);
 
 console.log("cross-surface-evidence-selftest: PASS");

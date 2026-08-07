@@ -30,7 +30,7 @@ export interface WeeklyChannelDigest {
   byDay: { date: string; pnl: number; trades: number }[];
   exitReasons: Record<string, number>;
   recurringFlaws: { type: string; days: number; severity: string }[];
-  exitEfficiency: { trades: number; mfeUpside: number; captured: number; captureRatio: number; biggestRunner: WeeklyRunner | null };
+  exitEfficiency: { positionTranches?: number; trades?: number; unit?: "position_tranche"; mfeUpside: number; captured: number; captureRatio: number; biggestRunner: WeeklyRunner | null };
 }
 export interface WeeklyDigest {
   weekStart: string; weekEnd: string; mode: string; days: string[];
@@ -38,6 +38,16 @@ export interface WeeklyDigest {
   regimeLedger: { date: string; instrument: string; returnPct: number; efficiency: number; note: string }[];
   channels: WeeklyChannelDigest[];
   exitEfficiency: { totalUpsideLeft: number; worstCaptureChannels: { slug: string; captureRatio: number; left: number }[]; redThatRanGreen: WeeklyRunner[] };
+  evidence?: {
+    schemaVersion: number;
+    layer: string;
+    unit: "logical_trade" | "position_row";
+    scope: string;
+    reconciliation: string;
+    sourceDailyReports: string[];
+    exitEfficiencyUnit: "position_tranche";
+    limitations: string[];
+  };
 }
 export interface WeeklyReport {
   week_start: string; week_end: string; mode: string;

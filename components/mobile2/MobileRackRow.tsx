@@ -180,7 +180,7 @@ export function MobileRackRow({
         </span>
         <span className="m2-rr-right">
           <span className="m2-rr-fires num">{firesSummary}</span>
-          <span className={`m2-rr-pnl num ${pnlCls}`}>{signedUsd(day)}</span>
+          <span className={`m2-rr-pnl num ${pnlCls}`} title="current-session channel attribution; not account NAV">{signedUsd(day)}</span>
           <span className="m2-rr-chev">{open ? "▾" : "▸"}</span>
         </span>
       </button>

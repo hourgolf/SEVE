@@ -42,6 +42,8 @@ export function WeeklyAutopsyBody({
 
   const r = reports[Math.min(idx, reports.length - 1)];
   const d = r.digest, n = r.narrative;
+  const logicalEvidence = d.evidence?.unit === "logical_trade";
+  const observationLabel = logicalEvidence ? "logical trades" : "legacy position rows";
   const ee = d.exitEfficiency;
   const traded = (d.channels ?? []).filter((c) => c.metrics.nTrades > 0).sort((a, b) => b.metrics.realizedPnl - a.metrics.realizedPnl);
   // collapsed view: top movers only (traded is already sorted desc by realized P&L)
@@ -61,11 +63,11 @@ export function WeeklyAutopsyBody({
       )}
 
       <div className="au-fund">
-        <span>{md(d.weekStart)}–{md(d.weekEnd)} · {d.days.length}d · {d.fund.trades} trades</span>
+        <span title={logicalEvidence ? "Immutable-route daily logical trades; tranche exit-efficiency is separately labeled." : "This stored weekly report predates logical-trade evidence; do not compare its count directly with current reports."}>{md(d.weekStart)}–{md(d.weekEnd)} · {d.days.length}d · {d.fund.trades} {observationLabel}</span>
         <span className={d.fund.realized < 0 ? "neg" : "pos"}>{signedUsd(d.fund.realized)}</span>
         {d.fund.navDelta != null && <span className={d.fund.navDelta < 0 ? "neg" : "pos"}>NAV {signedUsd(d.fund.navDelta)}</span>}
         {d.fund.maxDrawdown != null && <span className="neg" title="intraday peak-to-trough drawdown">maxDD −${Math.abs(d.fund.maxDrawdown).toFixed(0)}</span>}
-        <span>win {pct(d.fund.winRate)}</span>
+        <span>positive {pct(d.fund.winRate)}</span>
       </div>
       {d.fund.bestDay && d.fund.worstDay && (
         <div className="wk-extremes">

@@ -12,7 +12,7 @@ import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlane
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
-  { value: "pnl", label: "Day P&L" },
+  { value: "pnl", label: "Session attribution" },
   { value: "risk", label: "Risk" },
   { value: "name", label: "Name" },
 ];

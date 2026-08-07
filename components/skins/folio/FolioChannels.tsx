@@ -46,7 +46,7 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
           <span><small>EXECUTING</small><b>{surface.channelWorkspace.roots}</b></span>
           <span><small>OBSERVE</small><b>{surface.channelWorkspace.dark}</b></span>
           <span><small>OPEN</small><b>{summary.openPositions}</b></span>
-          <span><small>DAY</small><b className={summary.dayPnl < 0 ? "neg" : summary.dayPnl > 0 ? "pos" : ""}>{signedUsd(summary.dayPnl)}</b></span>
+          <span><small>SESSION ATTRIB</small><b className={summary.dayPnl < 0 ? "neg" : summary.dayPnl > 0 ? "pos" : ""}>{signedUsd(summary.dayPnl)}</b></span>
         </div>
       </header>
 

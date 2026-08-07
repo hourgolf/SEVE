@@ -157,10 +157,10 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
         </div>
         <div className="ws-metric ws-metric--led ws-metric--nav"><small>NAV</small><div className="ws-led-readout neutral" role="img" aria-label={`NAV ${compactUsd(liveFund.nav)}`}><span aria-hidden="true">$</span><LedDisplay value={navLed.value} digits={navLed.digits} color="var(--ws-led-neutral)" unit={navLed.unit} /></div></div>
         <div className={`ws-metric ws-metric--led ws-metric--pnl ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}>
-          <small>DAY P&amp;L</small>
+          <small>SESSION NAV Δ</small>
           <div className="ws-day-readouts">
-            <div className="ws-led-readout" role="img" aria-label={`Day P and L ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div>
-            <div className="ws-led-percent" role="img" aria-label={dayPnlPct == null ? "Day P and L percentage unavailable" : `Day P and L ${dayPnlPct.toFixed(2)} percent`}>
+            <div className="ws-led-readout" role="img" aria-label={`Session NAV change ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div>
+            <div className="ws-led-percent" role="img" aria-label={dayPnlPct == null ? "Session NAV change percentage unavailable" : `Session NAV change ${dayPnlPct.toFixed(2)} percent`}>
               {dayPctLed ? <LedDisplay value={dayPctLed} digits={dayPctLed.replace(".", "").length} color={dayLedColor} unit="%" /> : <span>—</span>}
             </div>
           </div>
