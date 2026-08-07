@@ -38,7 +38,7 @@ export function RosterTable({
             <th className="rt-num">Take</th>
             <th className="rt-num">Risk/tr</th>
             <th className="rt-num" title="daily realized-loss LATCH — halts NEW entries for the day once realized P&L ≤ −$X">HALT/day</th>
-            <th className="rt-num">Day P&amp;L</th>
+            <th className="rt-num">Session attrib</th>
           </tr>
         </thead>
         <tbody>

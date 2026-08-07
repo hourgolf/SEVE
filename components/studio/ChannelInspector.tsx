@@ -7,6 +7,8 @@ import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRosterActivationConsole";
 import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
+import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
+import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -19,19 +21,22 @@ import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
-import type { ChannelDryPowderCurve as DryPowderCurve } from "@/lib/research/shadowResearch";
+import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } from "@/lib/research/shadowResearch";
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
+import type { ShadowResearch } from "@/hooks/useShadowResearch";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, managerEvidence, onClose }: {
+export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, researchEvidence, onClose }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
   write: SurfaceProps["write"];
   controlPlane?: ChannelControlPlaneViewRead;
   dryPowder?: DryPowderCurve;
+  shadowSummary?: ShadowChannelSummary;
   managerEvidence?: ChannelManagerEvidence;
+  researchEvidence?: ShadowResearch;
   onClose?: () => void;
 }) {
   const dispatch = useDeskDispatch();
@@ -77,6 +82,11 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
   const managerLabel = rootPolicy?.managerLabel;
   const a13 = rootPolicy?.runner === "a13";
+  const pairedCurrent = researchEvidence?.pairedCurrent.find((item) =>
+    item.executedSlug === slug || item.virtualSlug === slug);
+  const currentExecuted = pairedCurrent
+    ? researchEvidence?.currentExecutedBySlug[pairedCurrent.executedSlug]
+    : researchEvidence?.currentExecutedBySlug[slug];
 
   const stageCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : dispatch({ type: "SET_CONFIG", slug, patch });
   const commitCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : persistConfig(id, patch);
@@ -110,9 +120,13 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
         {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{passport.effective.execution.label}</span>}
         {a13 && <span className="ih-tag amber">⚡ A13</span>}
-        <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
+        <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
       {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
+      {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
+        state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
+        truncated={researchEvidence.currentExecutedTruncated} compact />}
+      <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} compact />
       <div className="mixer-deck">
         <details className="channel-disclosure">
           <summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary>

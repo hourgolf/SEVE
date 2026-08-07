@@ -209,7 +209,7 @@ function Surface({
   });
   // Keep the bounded prospective ledger warm so channel-level dry-powder
   // diagnostics are already present when the operator opens an inspector.
-  const shadowResearch = useShadowResearch(true);
+  const shadowResearch = useShadowResearch(!accountsLoading, configuredPaperAccountIds);
   const managerEvidence = useChannelManagerEvidence(true);
   const reviewEnabled = activeRoom === "tape";
   const daily = useDailyReports(8, reviewEnabled);

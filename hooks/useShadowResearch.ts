@@ -3,12 +3,22 @@
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
+import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
+import {
+  attributePositionsByImmutableExecutionAccount,
+  type ExecutionAccountObservation,
+} from "@/lib/ops/brokerReconciliation";
 import {
   deriveChannelDryPowderCurves,
+  deriveCurrentExecutedEvidence,
+  derivePairedCurrentComparisons,
   deriveSessionDryPowderCurves,
   deriveShadowCumulative,
   deriveShadowSessions,
   type ChannelDryPowderCurve,
+  type CurrentExecutedSummary,
+  type ExecutedResearchRow,
+  type PairedCurrentComparison,
   type ShadowCumulativeSummary,
   type ShadowResearchRow,
   type ShadowSessionSummary,
@@ -18,6 +28,7 @@ const COHORT_START = "2026-07-20";
 const COHORT_START_ISO = "2026-07-20T04:00:00.000Z";
 const PAGE_SIZE = 1_000;
 const MAX_ROWS = 10_000;
+const MAX_EXECUTED_ROWS = 2_000;
 
 export interface ShadowResearch {
   state: "idle" | "loading" | "ok" | "empty" | "error";
@@ -25,6 +36,13 @@ export interface ShadowResearch {
   cumulative: ShadowCumulativeSummary | null;
   dryPowderBySlug: Record<string, ChannelDryPowderCurve>;
   dryPowderBySession: Record<string, Record<string, ChannelDryPowderCurve>>;
+  currentExecutedBySlug: Record<string, CurrentExecutedSummary>;
+  pairedCurrent: PairedCurrentComparison[];
+  currentExecutedState: "ok" | "empty" | "error";
+  currentExecutedError: string;
+  currentExecutedTruncated: boolean;
+  virtualEvidence: EvidenceEnvelope;
+  currentExecutedEvidence: EvidenceEnvelope;
   cohortStart: typeof COHORT_START;
   truncated: boolean;
   error: string;
@@ -37,6 +55,19 @@ const EMPTY: ShadowResearch = {
   cumulative: null,
   dryPowderBySlug: {},
   dryPowderBySession: {},
+  currentExecutedBySlug: {},
+  pairedCurrent: [],
+  currentExecutedState: "empty",
+  currentExecutedError: "",
+  currentExecutedTruncated: false,
+  virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity", fromSession: null, throughSession: null,
+    configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
+    completeness: "unavailable", reconciliation: "unverified", source: "virtual_trades", receiptHash: null,
+    limitations: ["Virtual rows do not yet carry configuration epoch provenance."], asOf: null }),
+  currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade", fromSession: null, throughSession: null,
+    configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
+    completeness: "unavailable", reconciliation: "blocked", source: "positions lineage + immutable execution route", receiptHash: null,
+    limitations: ["No attributed current execution cohort is available."], asOf: null }),
   cohortStart: COHORT_START,
   truncated: false,
   error: "",
@@ -56,8 +87,9 @@ const message = (error: unknown): string =>
  * this bounded ledger warm so selected-channel diagnostics never depend on the
  * operator visiting Research first.
  */
-export function useShadowResearch(enabled: boolean): ShadowResearch {
+export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: readonly string[]): ShadowResearch {
   const [state, setState] = useState<ShadowResearch>(EMPTY);
+  const configuredKey = [...configuredPaperAccountIds].sort().join(",");
 
   useEffect(() => {
     if (!enabled) return;
@@ -97,27 +129,113 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
         const cumulative = deriveShadowCumulative(rows);
         const dryPowderBySlug = deriveChannelDryPowderCurves(rows);
         const dryPowderBySession = deriveSessionDryPowderCurves(rows);
+        let currentExecutedBySlug: Record<string, CurrentExecutedSummary> = {};
+        let pairedCurrent: PairedCurrentComparison[] = [];
+        let currentExecutedState: ShadowResearch["currentExecutedState"] = "empty";
+        let currentExecutedError = "";
+        let currentExecutedTruncated = false;
+        try {
+          const executedRead = await getSupabase().from("positions")
+            .select("id,qty,realized_pnl,opened_at,closed_at,runner_of,configuration_epoch_id,strategists(slug)", { count: "exact" })
+            .eq("status", "closed")
+            .gte("opened_at", COHORT_START_ISO)
+            .order("opened_at", { ascending: true })
+            .limit(MAX_EXECUTED_ROWS);
+          if (executedRead.error) throw executedRead.error;
+          const rawExecutedRows = ((executedRead.data ?? []) as Record<string, unknown>[]).flatMap((row) => {
+            const relation = Array.isArray(row.strategists) ? row.strategists[0] : row.strategists;
+            const slug = relation && typeof relation === "object" && "slug" in relation
+              ? String((relation as { slug?: unknown }).slug ?? "")
+              : "";
+            if (!slug || !row.id || !row.opened_at || row.realized_pnl == null) return [];
+            return [{
+              id: String(row.id),
+              slug,
+              quantity: Number(row.qty ?? 0),
+              realizedPnl: Number(row.realized_pnl),
+              openedAt: String(row.opened_at),
+              closedAt: row.closed_at == null ? null : String(row.closed_at),
+              runnerOf: row.runner_of == null ? null : String(row.runner_of),
+              configurationEpochId: row.configuration_epoch_id == null ? null : String(row.configuration_epoch_id),
+            }];
+          });
+          const observations: ExecutionAccountObservation[] = [];
+          for (let from = 0; from < rawExecutedRows.length; from += 200) {
+            const routeRead = await getSupabase().from("execution_observations")
+              .select("id,position_id,account_id,event_at")
+              .in("position_id", rawExecutedRows.slice(from, from + 200).map((row) => row.id));
+            if (routeRead.error) throw routeRead.error;
+            observations.push(...((routeRead.data ?? []) as ExecutionAccountObservation[]));
+          }
+          const attribution = attributePositionsByImmutableExecutionAccount({
+            positions: rawExecutedRows,
+            observations,
+            configuredPaperAccountIds: new Set(configuredKey.split(",").filter(Boolean)),
+            positionLabel: "current executed research positions",
+          });
+          if (!attribution.ok) throw new Error(attribution.issues.join("; "));
+          const executedRows: ExecutedResearchRow[] = [...attribution.byAccount.entries()].flatMap(([accountId, accountRows]) =>
+            accountRows.map((row) => ({ ...row, accountId })));
+          const current = deriveCurrentExecutedEvidence(executedRows);
+          currentExecutedBySlug = current.bySlug;
+          pairedCurrent = derivePairedCurrentComparisons(current.opportunities, rows);
+          currentExecutedState = current.opportunities.length ? "ok" : "empty";
+          currentExecutedTruncated = (executedRead.count ?? executedRows.length) > MAX_EXECUTED_ROWS;
+        } catch (error) {
+          currentExecutedState = "error";
+          currentExecutedError = message(error);
+        }
         if (!alive) return;
+        const asOf = new Date().toISOString();
+        const currentSessions = Object.values(currentExecutedBySlug).flatMap((summary) => [summary.fromSession, summary.throughSession]).filter(Boolean).sort();
         setState({
           state: sessions.length ? "ok" : "empty",
           sessions,
           cumulative,
           dryPowderBySlug,
           dryPowderBySession,
+          currentExecutedBySlug,
+          pairedCurrent,
+          currentExecutedState,
+          currentExecutedError,
+          currentExecutedTruncated,
+          virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity",
+            fromSession: cumulative?.fromSession ?? null, throughSession: cumulative?.throughSession ?? null,
+            configurationEpochId: null, managerVersion: null,
+            scope: { kind: "portfolio", accountIds: [], channelSlugs: [...new Set(rows.map((row) => row.slug))] },
+            completeness: total > MAX_ROWS ? "partial" : sessions.length ? "complete" : "unavailable",
+            reconciliation: "unverified", source: "virtual_trades", receiptHash: null,
+            limitations: ["Virtual rows do not yet carry configuration epoch provenance.", ...(total > MAX_ROWS ? ["Read reached its bounded row cap."] : [])], asOf }),
+          currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade",
+            fromSession: currentSessions[0] ?? null, throughSession: currentSessions.at(-1) ?? null,
+            configurationEpochId: null, managerVersion: null,
+            scope: { kind: "portfolio", accountIds: [...new Set(Object.values(currentExecutedBySlug).flatMap((summary) => summary.accountIds))], channelSlugs: Object.keys(currentExecutedBySlug) },
+            completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
+            reconciliation: currentExecutedState === "ok" ? "reconciled" : "blocked",
+            source: "positions lineage + immutable execution route · latest channel configuration epoch", receiptHash: null,
+            limitations: ["Configuration epochs are selected independently per channel.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : [])], asOf }),
           cohortStart: COHORT_START,
           truncated: total > MAX_ROWS,
           error: "",
-          asOf: new Date().toISOString(),
+          asOf,
           basis: "native virtual paths since Day 1",
         });
       } catch (error) {
-        if (alive) setState((previous) => ({ ...previous, state: "error", error: message(error) }));
+        if (alive) setState((previous) => ({
+          ...previous,
+          state: "error",
+          error: message(error),
+          virtualEvidence: evidenceEnvelope({ ...previous.virtualEvidence,
+            completeness: previous.asOf ? "stale" : "unavailable" }),
+          currentExecutedEvidence: evidenceEnvelope({ ...previous.currentExecutedEvidence,
+            completeness: previous.asOf ? "stale" : "unavailable" }),
+        }));
       }
     };
     void poll();
     const stop = startVisibilityPoll(() => void poll(), 10 * 60_000);
     return () => { alive = false; stop(); };
-  }, [enabled]);
+  }, [configuredKey, enabled]);
 
   return state;
 }

@@ -78,12 +78,12 @@ test("signed strike offsets are rendered truthfully", () => {
 });
 test("evidence uses the latest five account sessions and session-aware confidence", () => {
   const rows = [
-    { slug: "a", qty: 2, pnl: 100, closedAt: "2026-07-01T15:00:00Z" },
-    { slug: "a", qty: 2, pnl: -40, closedAt: "2026-07-02T15:00:00Z" },
-    { slug: "a", qty: 2, pnl: 80, closedAt: "2026-07-06T15:00:00Z" },
-    { slug: "a", qty: 2, pnl: -20, closedAt: "2026-07-07T15:00:00Z" },
-    { slug: "a", qty: 2, pnl: 60, closedAt: "2026-07-08T15:00:00Z" },
-    { slug: "a", qty: 4, pnl: 40, closedAt: "2026-07-09T15:00:00Z" },
+    { id: "a0", slug: "a", qty: 2, pnl: 100, closedAt: "2026-07-01T15:00:00Z", runnerOf: null },
+    { id: "a1", slug: "a", qty: 2, pnl: -40, closedAt: "2026-07-02T15:00:00Z", runnerOf: null },
+    { id: "a2", slug: "a", qty: 2, pnl: 80, closedAt: "2026-07-06T15:00:00Z", runnerOf: null },
+    { id: "a3", slug: "a", qty: 2, pnl: -20, closedAt: "2026-07-07T15:00:00Z", runnerOf: null },
+    { id: "a4", slug: "a", qty: 2, pnl: 60, closedAt: "2026-07-08T15:00:00Z", runnerOf: null },
+    { id: "a5", slug: "a", qty: 4, pnl: 40, closedAt: "2026-07-09T15:00:00Z", runnerOf: null },
   ];
   const evidence = deriveStudioEvidence(rows, 5);
   assert.deepEqual(evidence.sessionDates, ["2026-07-02", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09"]);
@@ -91,6 +91,17 @@ test("evidence uses the latest five account sessions and session-aware confidenc
   assert.equal(evidence.bySlug.a.pnl, 120);
   assert.equal(evidence.bySlug.a.grossPerContract, 10);
   assert.equal(evidence.bySlug.a.confidence, "building");
+});
+test("runner rows remain one logical trade", () => {
+  const evidence = deriveStudioEvidence([
+    { id: "root", slug: "a", qty: 1, pnl: 40, closedAt: "2026-07-09T15:00:00Z", runnerOf: null },
+    { id: "runner", slug: "a", qty: 1, pnl: -10, closedAt: "2026-07-09T15:05:00Z", runnerOf: "root" },
+  ]);
+  assert.equal(evidence.totalTrades, 1);
+  assert.equal(evidence.bySlug.a.trades, 1);
+  assert.equal(evidence.bySlug.a.pnl, 30);
+  assert.equal(evidence.bySlug.a.grossPerContract, 15);
+  assert.equal(evidence.bySlug.a.winPct, 100);
 });
 
 console.log(`studio-selftest: ${passed}/${passed} passed`);

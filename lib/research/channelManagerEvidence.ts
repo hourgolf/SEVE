@@ -1,4 +1,5 @@
 import { DAY1_MANAGER_ARMS } from "@/lib/channels/day1Release";
+import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
 
 export const COMMON_MANAGER_ARMS = DAY1_MANAGER_ARMS;
 export type CommonManagerId = (typeof COMMON_MANAGER_ARMS)[number];
@@ -104,6 +105,7 @@ export interface ChannelManagerEvidenceBook {
   cohortFrom: string;
   defaultShadowBookVersion: string;
   sourceRows: { managerRuns: number; positions: number };
+  evidence: EvidenceEnvelope;
   channels: Record<string, ChannelManagerEvidence>;
   productionWrites: 0;
   basis: "durable paired manager-shadow paths";
@@ -336,6 +338,8 @@ export function deriveChannelManagerEvidenceBook(input: {
     });
     return [slug, evidence];
   }));
+  const sessions = selected.map((row) => etDate(row.entry_at)).sort();
+  const complete = Object.values(channels).every((channel) => channel.coverage === 1);
 
   return {
     schemaVersion: 1,
@@ -343,6 +347,17 @@ export function deriveChannelManagerEvidenceBook(input: {
     cohortFrom: input.cohortFrom ?? "2026-07-13",
     defaultShadowBookVersion: defaultVersion,
     sourceRows: { managerRuns: input.managerRuns.length, positions: input.positions.length },
+    evidence: evidenceEnvelope({
+      layer: "manager_counterfactual", unit: "logical_trade",
+      fromSession: sessions[0] ?? null, throughSession: sessions.at(-1) ?? null,
+      configurationEpochId: null, managerVersion: defaultVersion,
+      scope: { kind: "portfolio", accountIds: [], channelSlugs: Object.keys(channels) },
+      completeness: selected.length ? complete ? "complete" : "partial" : "unavailable",
+      reconciliation: "difference_explained", source: "manager_shadow_runs + canonical root/runner position lineage",
+      receiptHash: null,
+      limitations: ["Configuration epochs and manager policy versions remain partitionable per channel; the book-level envelope spans them.", "Account identity is not required for the paired exit counterfactual and is not exposed by this compact book."],
+      asOf: input.generatedAt,
+    }),
     channels,
     productionWrites: 0,
     basis: "durable paired manager-shadow paths",

@@ -41,8 +41,8 @@ function Chicklet({
         {a13 && <span className="pfc-a13">⚡A13</span>}
       </div>
       <div className="pfc-mid">
-        <div className={`pfc-pnl num ${dayCls}`} title="Desk-derived today P&L; not broker-reconciled.">{day != null ? signedUsd(day) : "—"}</div>
-        <span className="pfc-basis">desk today</span>
+        <div className={`pfc-pnl num ${dayCls}`} title="Current-session channel attribution from immutable routed positions; not account NAV.">{day != null ? signedUsd(day) : "—"}</div>
+        <span className="pfc-basis">session attrib</span>
       </div>
       <div className="pfc-r3">
         <span className={`pfc-tag ${tagClass}`}>{tag}</span>

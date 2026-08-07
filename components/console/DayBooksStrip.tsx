@@ -43,7 +43,7 @@ export function DayBooksStrip({
       </div>
       <div className="pbody dbk-row">
         <div className="dbk-stat" title="account-truth day P&L (NAV delta, re-marked live)">
-          <span className="dbk-k">Day P&L (NAV)</span>
+          <span className="dbk-k">Session NAV Δ</span>
           <span className={`dbk-v ${fund.dayPnl < 0 ? "neg" : "pos"}`}>{signedUsd(fund.dayPnl)}</span>
         </div>
         <div className="dbk-stat" title="Σ per-channel day P&L — the attribution view (approximate under shared OCCs)">
@@ -55,7 +55,7 @@ export function DayBooksStrip({
           <span className={`dbk-v dbk-d-${dTone}`}>{signedUsd(delta)}</span>
         </div>
         <div className="dbk-stat" title="entry-time logical trades; split exit tranches are counted once">
-          <span className="dbk-k">Trades</span>
+          <span className="dbk-k">Logical trades</span>
           <span className="dbk-v">{closedToday} closed · {openCount} open</span>
         </div>
         {topSlug && (

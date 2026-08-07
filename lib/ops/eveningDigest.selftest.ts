@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { buildEveningDigest, EVENING_DIGEST_READ_FAILURE } from "./eveningDigest";
 
 const digest = buildEveningDigest({
@@ -18,4 +19,8 @@ assert.doesNotMatch(digest.body, /era-4|A6|NO HEARTBEAT|no closed trades/i);
 const missingWorker = buildEveningDigest({ session: "2026-08-06", totalPnl: 0, trades: 0, buckets: [], movers: [], workerNote: null, workerAgeMinutes: null, archiveReceipt: null });
 assert.match(missingWorker.body, /not proof the worker is offline/);
 assert.match(EVENING_DIGEST_READ_FAILURE.body, /No zero-trade conclusion was made/);
+const script = readFileSync(new URL("../../scripts/evening-digest.ts", import.meta.url), "utf8");
+assert.match(script, /logicalTrades/);
+assert.match(script, /immutable execution-account attribution/);
+assert.doesNotMatch(script, /from\("positions"\)|strategists\(slug,account_id/);
 console.log("evening digest selftest passed");

@@ -124,10 +124,10 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
 
     {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
     {mobileReviewHas(mode, "session-summary") && <div className="m2-desk-hero">
-      <span><small>{accountScope} · DAY P&amp;L</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{attributedValue(signedUsd(liveFund.dayPnl))}</b></span>
+      <span><small>{accountScope} · SESSION NAV Δ</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{attributedValue(signedUsd(liveFund.dayPnl))}</b></span>
       <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span>
-      <span><small>CLOSED TRADES</small><b>{attributedValue(String(feed.sessionTrades.closed))}</b></span>
-      <span><small>OPEN TRADES</small><b>{attributedValue(String(feed.sessionTrades.open))}</b></span>
+      <span><small>CLOSED LOGICAL</small><b>{attributedValue(String(feed.sessionTrades.closed))}</b></span>
+      <span><small>OPEN LOGICAL</small><b>{attributedValue(String(feed.sessionTrades.open))}</b></span>
     </div>}
 
     {mobileReviewHas(mode, "equity") && <Section title="EQUITY" meta={`${accountScope} · account NAV · today`}>
@@ -207,11 +207,11 @@ export function MobileOpsView({ props, channels, onOpenSettings }: { props: Surf
       <OpsReadinessPanel model={props.opsReadiness} compact />
     </Section>
     <div className="m2-desk-hero">
-      <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span><span><small>DAY</small><b>{signedUsd(liveFund.dayPnl)}</b></span>
+      <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span><span><small>SESSION NAV Δ</small><b>{signedUsd(liveFund.dayPnl)}</b></span>
       <span><small>DB ACTIVE</small><b>{active.length}</b></span><span><small>DB RISK</small><b>{moneyK(risk)}</b></span>
     </div>
-    <Section title="DAY BOOKS" meta={`${feed.sessionTrades.closed} logical closed · ${feed.sessionTrades.open} open · ${feed.sessionTrades.positionRows} rows`} collapsible>
-      {rows.length === 0 ? <div className="m2-desk-empty">no attributed P&amp;L today</div> : <div className="m2-daybooks">{rows.map(({ channel, pnl }) => <span key={channel.slug}><i style={{ background: pmVar(channel.color) }} /><b>{channel.slug}</b><em className={pnl < 0 ? "neg" : "pos"}>{signedUsd(pnl)}</em></span>)}</div>}
+    <Section title="SESSION BOOKS" meta={`${feed.sessionTrades.closed} logical closed · ${feed.sessionTrades.open} open · ${feed.sessionTrades.positionRows} rows`} collapsible>
+      {rows.length === 0 ? <div className="m2-desk-empty">no channel attribution this session</div> : <div className="m2-daybooks">{rows.map(({ channel, pnl }) => <span key={channel.slug}><i style={{ background: pmVar(channel.color) }} /><b>{channel.slug}</b><em className={pnl < 0 ? "neg" : "pos"}>{signedUsd(pnl)}</em></span>)}</div>}
     </Section>
     <Section title="ACTIVE RELEASE" meta="startup receipt · not liveness" collapsible>
       {release ? <div className="m2-release-receipt"><b>{release.releaseId}</b><small>{release.configHash}</small></div> : <div className="m2-desk-empty">dedicated release receipt unavailable</div>}

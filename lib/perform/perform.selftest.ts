@@ -83,6 +83,11 @@ check("recent exit computes peak giveback", Math.round(exitSummary.rows[0].giveb
 check("recent exit computes peak capture", Math.round(exitSummary.rows[0].capturePct ?? 0), 50);
 check("recent exit computes hold minutes", exitSummary.rows[0].holdMinutes, 30);
 check("recent exit preserves realized attribution", [exitSummary.realized, exitSummary.wins, exitSummary.losses], [200, 1, 0]);
+const splitExit = deriveRecentExits([
+  { ...closedTrade, id: "split-root", qty: 1, realized_pnl: 100 },
+  { ...closedTrade, id: "split-runner", qty: 1, realized_pnl: -40, runner_of: "split-root" },
+]);
+check("split exits remain rows but count as one logical win", [splitExit.rows.length, splitExit.logicalTrades, splitExit.realized, splitExit.wins, splitExit.losses, splitExit.flats], [2, 1, 60, 1, 0, 0]);
 const incompletePeak = deriveRecentExits([{ ...closedTrade, current_mark: 2.1, peak_mark: 2 }]);
 check("exit above recorded peak is flagged, not over-captured", [incompletePeak.rows[0].peakExceeded, incompletePeak.rows[0].capturePct], [true, null]);
 

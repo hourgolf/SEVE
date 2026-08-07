@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   deriveChannelDryPowderCurves,
+  deriveCurrentExecutedEvidence,
+  derivePairedCurrentComparisons,
   deriveSessionDryPowderCurves,
   deriveShadowCumulative,
   deriveShadowSessions,
   isVirtualBenchSlug,
   sortShadowChannelSummaries,
   type ShadowChannelSummary,
+  type ExecutedResearchRow,
   type ShadowResearchRow,
 } from "./shadowResearch";
 
@@ -48,6 +52,7 @@ assert.equal(sessions[0].averagePerPath, -5);
 assert.deepEqual(sessions[0].blocked, { day1_dark_lifecycle: 2, day1_reentry_disabled: 1 });
 assert.equal(sessions[0].vb.length, 1, "VB classification follows the durable slug identity, not a stale blocked reason");
 assert.equal(sessions[0].vb[0].averagePerPath, -10);
+assert.equal(sessions[0].vb[0].typicalPerPath, -10);
 assert.equal(sessions[0].vb[0].averageMfePct, 12);
 assert.equal(sessions[0].vb[0].averageGivebackPct, 42.5);
 assert.equal(sessions[0].vb[0].targets, 1);
@@ -89,9 +94,9 @@ assert.deepEqual(
 );
 
 const sortRows: ShadowChannelSummary[] = [
-  { slug: "alpha", paths: 10, scored: 10, winners: 8, targets: 8, stops: 2, flattens: 0, pnlPerContract: 100, averagePerPath: 10, averageMfePct: 5, averageGivebackPct: 20, lastAt: "2026-07-22T14:00:00Z" },
-  { slug: "beta", paths: 20, scored: 10, winners: 5, targets: 1, stops: 9, flattens: 0, pnlPerContract: 200, averagePerPath: 20, averageMfePct: 15, averageGivebackPct: 40, lastAt: "2026-07-22T14:01:00Z" },
-  { slug: "pending", paths: 5, scored: 0, winners: 0, targets: 0, stops: 0, flattens: 0, pnlPerContract: 0, averagePerPath: null, averageMfePct: null, averageGivebackPct: null, lastAt: "2026-07-22T14:02:00Z" },
+  { slug: "alpha", paths: 10, scored: 10, winners: 8, targets: 8, stops: 2, flattens: 0, pnlPerContract: 100, averagePerPath: 10, typicalPerPath: 12, largestWinnerShare: .3, averageMfePct: 5, averageGivebackPct: 20, lastAt: "2026-07-22T14:00:00Z" },
+  { slug: "beta", paths: 20, scored: 10, winners: 5, targets: 1, stops: 9, flattens: 0, pnlPerContract: 200, averagePerPath: 20, typicalPerPath: 18, largestWinnerShare: .7, averageMfePct: 15, averageGivebackPct: 40, lastAt: "2026-07-22T14:01:00Z" },
+  { slug: "pending", paths: 5, scored: 0, winners: 0, targets: 0, stops: 0, flattens: 0, pnlPerContract: 0, averagePerPath: null, typicalPerPath: null, largestWinnerShare: null, averageMfePct: null, averageGivebackPct: null, lastAt: "2026-07-22T14:02:00Z" },
 ];
 const order = (key: Parameters<typeof sortShadowChannelSummaries>[1], direction: Parameters<typeof sortShadowChannelSummaries>[2]) =>
   sortShadowChannelSummaries(sortRows, key, direction).map((item) => item.slug);
@@ -135,4 +140,76 @@ assert.equal(dryBySession["2026-08-04"]["vb-dry"].sessionCount, 1);
 assert.equal(dryBySession["2026-08-04"]["vb-dry"].points[2].selectedPnlPerContract, 0);
 assert.equal(dryBySession["2026-08-05"]["vb-dry"].points.length, 2);
 assert.equal(deriveChannelDryPowderCurves([row({ signalAt: "bad" })])["vb-alpha"], undefined);
+
+const executed = (overrides: Partial<ExecutedResearchRow>): ExecutedResearchRow => ({
+  id: "position-1",
+  accountId: "paper-1",
+  slug: "pb-ride",
+  quantity: 2,
+  realizedPnl: 160,
+  openedAt: "2026-08-04T17:24:07.000Z",
+  closedAt: "2026-08-04T19:25:00.000Z",
+  runnerOf: null,
+  configurationEpochId: "epoch-current",
+  ...overrides,
+});
+const currentExecution = deriveCurrentExecutedEvidence([
+  executed({ id: "legacy", openedAt: "2026-08-03T15:00:00Z", realizedPnl: -100, configurationEpochId: "epoch-legacy" }),
+  executed({ id: "split-root", quantity: 1, realizedPnl: 110, openedAt: "2026-08-04T14:26:07Z" }),
+  executed({ id: "split-runner", quantity: 1, realizedPnl: 169, openedAt: "2026-08-04T14:26:07Z", runnerOf: "split-root", configurationEpochId: null }),
+  executed({ id: "position-2", quantity: 2, realizedPnl: -172, openedAt: "2026-08-05T16:20:03Z" }),
+]);
+assert.equal(currentExecution.opportunities.length, 2, "legacy configuration epochs stay outside the current execution summary");
+assert.deepEqual(currentExecution.opportunities.map((item) => item.pnlPerContract), [139.5, -86]);
+assert.deepEqual(currentExecution.bySlug["pb-ride"], {
+  slug: "pb-ride",
+  accountIds: ["paper-1"],
+  configurationEpochId: "epoch-current",
+  opportunities: 2,
+  sessions: 2,
+  winners: 1,
+  typicalPerContract: 26.75,
+  totalPerContract: 53.5,
+  fromSession: "2026-08-04",
+  throughSession: "2026-08-05",
+  lastAt: "2026-08-05T16:20:03Z",
+});
+assert.throws(() => deriveCurrentExecutedEvidence([
+  executed({ id: "cross-account-root", quantity: 1, realizedPnl: 10 }),
+  executed({ id: "cross-account-runner", accountId: "paper-2", quantity: 1, realizedPnl: 10, runnerOf: "cross-account-root", configurationEpochId: null }),
+]), /spans immutable account routes/);
+
+const paired = derivePairedCurrentComparisons(currentExecution.opportunities, [
+  row({ slug: "pb-ride-2", signalAt: "2026-08-04T14:26:03Z", pnlPerContract: 25.8 }),
+  row({ slug: "pb-ride-2", signalAt: "2026-08-05T16:20:04Z", pnlPerContract: -39.9 }),
+  row({ slug: "pb-ride-itm", signalAt: "2026-08-04T14:26:02Z", pnlPerContract: 31 }),
+  row({ slug: "unrelated", signalAt: "2026-08-04T14:26:03Z", pnlPerContract: 999 }),
+]);
+assert.equal(derivePairedCurrentComparisons(currentExecution.opportunities, [
+  row({ slug: "pb-ride-new-undeclared", signalAt: "2026-08-04T14:26:03Z", pnlPerContract: 999 }),
+]).length, 0, "name similarity must not create an unreviewed comparison family");
+assert.equal(paired.length, 2, "same-clock rows from unrelated channel families are not presented as pairs");
+assert.deepEqual(paired[0], {
+  executedSlug: "pb-ride",
+  virtualSlug: "pb-ride-2",
+  executedAccountIds: ["paper-1"],
+  pairs: 2,
+  sessions: 2,
+  executedWins: 1,
+  virtualWins: 1,
+  executedLeads: 1,
+  virtualLeads: 1,
+  ties: 0,
+  executedTypicalPerContract: 26.75,
+  virtualTypicalPerContract: -7.05,
+  executedTotalPerContract: 53.5,
+  virtualTotalPerContract: -14.1,
+  throughSession: "2026-08-05",
+});
+const workspaceSource = readFileSync("components/perform/ShadowResearchWorkspace.tsx", "utf8");
+const currentCardSource = readFileSync("components/research/CurrentEvidenceCard.tsx", "utf8");
+assert.match(workspaceSource, /HISTORICAL VIRTUAL/, "cumulative rows keep their evidence layer visible");
+assert.match(currentCardSource, /CURRENT EXECUTED/, "executed evidence is explicitly separated from virtual paths");
+assert.match(currentCardSource, /SAME-CLOCK VIRTUAL/, "paired comparison labels its counterfactual side");
+assert.match(workspaceSource, /every table row is virtual/, "the default table cannot imply portfolio execution");
 console.log("shadow-research-selftest: PASS");

@@ -106,6 +106,11 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   const days: string[] = rows.map((r) => r.report_date);
   const mode = rows[rows.length - 1].mode ?? "paper";
   const digests: Any[] = rows.map((r) => r.digest);
+  const nonLogicalDays = rows.filter((row) => row.digest?.evidence?.unit !== "logical_trade"
+    || row.digest?.evidence?.reconciliation !== "immutable_execution_routes");
+  if (nonLogicalDays.length) {
+    throw new Error(`weekly logical-trade evidence blocked; daily reports require regeneration: ${nonLogicalDays.map((row) => row.report_date).join(",")}`);
+  }
 
   const regimeLedger = digests.flatMap((d: Any) => [
     d.market ? { date: d.date, instrument: "SPY", returnPct: d.market.returnPct, efficiency: d.market.efficiency, note: d.market.note } : null,
@@ -211,7 +216,7 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
       liveStatus: liveStatusBySlug.get(slug) ?? meta.status, scalp, exitLogging,
       metrics: { nTrades: allTrades.length, wins: wins.length, winRate: allTrades.length ? Number((wins.length / allTrades.length).toFixed(3)) : 0, realizedPnl: Math.round(allTrades.reduce((a: number, t: Any) => a + t.pnl, 0)), avgWin: Math.round(mean(wins.map((t: Any) => t.pnl))), avgLoss: Math.round(mean(losses.map((t: Any) => t.pnl))), avgR: Number(mean(allTrades.map((t: Any) => t.R)).toFixed(2)), medianHoldMin: medHold, bestTrade: Math.round(Math.max(0, ...allTrades.map((t: Any) => t.pnl))), worstTrade: Math.round(Math.min(0, ...allTrades.map((t: Any) => t.pnl))) },
       byDay, exitReasons, recurringFlaws,
-      exitEfficiency: { trades: chPos.length, mfeUpside, captured, captureRatio, biggestRunner },
+      exitEfficiency: { positionTranches: chPos.length, unit: "position_tranche", mfeUpside, captured, captureRatio, biggestRunner },
     });
   }
   // Capture leak board EXCLUDES scalpers (their fast-target exit is the design, not a leak)
@@ -227,7 +232,11 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
   // POST-feature NULL closes (the only real "logging bug" signal; legacy NULLs are expected).
   const exitLoggingHealth = { since: closeReasonSince ? etDate(closeReasonSince) : null, channelsWithGap: channels.filter((c) => c.exitLogging.status === "gap").map((c) => ({ slug: c.slug, gapNull: c.exitLogging.gapNull })) };
 
-  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, roster, exitLoggingHealth, fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen } };
+  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, roster, exitLoggingHealth, fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen }, evidence: {
+    schemaVersion: 2, layer: "historical_executed", unit: "logical_trade", scope: "all_configured_paper_accounts",
+    reconciliation: "immutable_execution_routes_plus_account_complete_nav", sourceDailyReports: days,
+    exitEfficiencyUnit: "position_tranche", limitations: ["Exit-efficiency path reconstruction remains tranche-specific and is not a trade count."]
+  } };
 }
 
 function renderSkeleton(w: Any): string {

@@ -30,7 +30,7 @@ assert.match(mobileShell, /const dayColor = down \? "var\(--led-red\)" : "var\(-
 assert.match(ledDisplay, /"\$": "afgcd"[\s\S]*"E": "afged"[\s\S]*"V": ""/);
 assert.match(mobileShell, /className="m2-status-center"/);
 assert.match(mobileShell, /className="m2-status-center"[\s\S]*<MobileKillControl[\s\S]*className="m2-cog"/);
-assert.match(mobileShell, /className="m2-account-pnl"[\s\S]*<b>P&amp;L<\/b>[\s\S]*value=\{dayLed\}/);
+assert.match(mobileShell, /className="m2-account-pnl"[\s\S]*<b>SESSION<br \/>NAV Δ<\/b>[\s\S]*value=\{dayLed\}/);
 assert.doesNotMatch(mobileShell, /m2-head-r2|m2-run|spotStr|\{clock\} PT/);
 assert.match(foundationCss, /\.m2-account-pnl > b \{[\s\S]{0,100}10px\/1\.1/);
 assert.doesNotMatch(mobileShell, /className="m2-band"/);

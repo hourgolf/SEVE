@@ -87,7 +87,7 @@ export function PnlPanel({
   return (
     <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
-        <span className="t">P&amp;L · Equity{scopeLabel ? ` · ${scopeLabel}` : ""}</span>
+        <span className="t">Results · Equity{scopeLabel ? ` · ${scopeLabel}` : ""}</span>
         <span className="x">NAV {usd0(fundPnl.nav)}</span>
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
@@ -98,7 +98,7 @@ export function PnlPanel({
             {loading ? "…" : fundVal == null ? "UNAVAILABLE" : signedUsd(fundVal)}
           </span>
           <span className="pnl-hero-sub" title={windowed?.sinceNote ? "this bucket's account NAV history starts here; channel rows require independent immutable execution-account attribution" : undefined}>
-            {winLabel}{windowed?.sinceNote ? ` · NAV since ${windowed.sinceNote}` : ""}
+            {isToday ? "session NAV change" : winLabel}{windowed?.sinceNote ? ` · NAV since ${windowed.sinceNote}` : ""}
             {!isToday && windowed?.fundPnlSource === "immutable_position_attribution" ? " · attributed positions" : ""}
           </span>
           <div className="seg" aria-label="P&L timeframe" style={{ marginLeft: "auto" }}>

@@ -68,7 +68,7 @@ export function StudioModules({ selected, evidence, evidenceState, positions, re
           : evidenceState.error ? <div className="module-empty warn">evidence read unavailable · no performance claim</div>
             : evidence ? <>
               <div className={`evidence-hero${evidence.grossPerTrade < 0 ? " neg" : evidence.grossPerTrade > 0 ? " pos" : ""}`}>
-                <small>GROSS / TRADE</small><strong>{signedUsd(evidence.grossPerTrade)}</strong><span>{evidence.confidence} · {evidence.trades} trades / {evidence.sessions} sessions</span>
+                <small>GROSS / LOGICAL TRADE</small><strong>{signedUsd(evidence.grossPerTrade)}</strong><span>{evidence.confidence} · {evidence.trades} logical trades / {evidence.sessions} sessions</span>
               </div>
               <div className="evidence-grid">
                 <span><small>GROSS</small><b>{signedUsd(evidence.pnl)}</b></span>
@@ -78,8 +78,8 @@ export function StudioModules({ selected, evidence, evidenceState, positions, re
                 <span><small>MAX DRAWDOWN</small><b>{usd0(evidence.maxDrawdown)}</b></span>
                 <span><small>WIN % · SECONDARY</small><b>{evidence.winPct.toFixed(0)}%</b></span>
               </div>
-              <footer>latest {evidenceState.sessionDates.length} account sessions · mixed pre-RC5 configurations · context only, not a Day 1 score · fees and broker-net unavailable</footer>
-            </> : <div className="module-empty">no closed rows in the recent account window</div>}
+              <footer>historical executed · latest {evidenceState.sessionDates.length} account sessions · runner rows collapsed · mixed configurations · context only · fees and broker-net unavailable</footer>
+            </> : <div className="module-empty">no executed logical trades in the recent account window</div>}
       </Panel>
 
       <Panel index="05" title="EVIDENCE PASSPORT" meta={passport?.lifecycleLabel ?? incident.severity.toUpperCase()}>

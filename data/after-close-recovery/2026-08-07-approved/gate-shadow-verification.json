@@ -1,0 +1,27 @@
+{
+  "version": "gate-shadow-independent-verification-v1",
+  "generatedAt": "2026-08-07T21:11:53.494Z",
+  "session": "2026-08-07",
+  "range": {
+    "start": "2026-08-07T04:00:00.000Z",
+    "end": "2026-08-08T04:00:00.000Z"
+  },
+  "localRows": 129,
+  "remoteRows": 129,
+  "localPayloadSha256": "sha256:c865f5eb32e5662fb604222126c663aa2feab2236b9c155e878a4dcad92b778d",
+  "remotePayloadSha256": "sha256:c865f5eb32e5662fb604222126c663aa2feab2236b9c155e878a4dcad92b778d",
+  "duplicateLocalIds": 0,
+  "duplicateRemoteIds": 0,
+  "missingRemoteIds": [],
+  "extraRemoteIds": [],
+  "payloadMismatches": [],
+  "publishedRows": 9,
+  "publishedPayloadsVerified": 9,
+  "receiptIssues": [],
+  "guarantees": {
+    "remoteSelectOnly": true,
+    "productionWrites": 0,
+    "orderAuthority": false
+  },
+  "passed": true
+}

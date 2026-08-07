@@ -100,8 +100,8 @@ export function MobileShell(props: SurfaceProps) {
         </div>
         <div className="m2-head-meta">
           <AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} />
-          <div className="m2-account-pnl" role="img" aria-label={`Selected account P and L ${dayLed}`}>
-            <b>P&amp;L</b>
+          <div className="m2-account-pnl" role="img" aria-label={`Selected account session NAV change ${dayLed}`}>
+            <b>SESSION<br />NAV Δ</b>
             <LedDisplay value={dayLed} digits={6} color={dayColor} />
           </div>
         </div>

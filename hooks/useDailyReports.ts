@@ -50,6 +50,18 @@ export interface ReportDigest {
   market?: { open: number; close: number; returnPct: number; rangePct: number; efficiency: number; note: string } | null;
   fund?: { dayRealized: number; trades: number; winRate: number; channelsTraded: number };
   channels?: ReportDigestChannel[];
+  evidence?: {
+    schemaVersion: number;
+    layer: string;
+    unit: "logical_trade" | "position_row";
+    scope: string;
+    reconciliation: string;
+    positionRows: number;
+    runnerRowsCollapsed: number;
+    configuration: string;
+    managerVersion: string | null;
+    limitations: string[];
+  };
 }
 export interface DailyReport {
   report_date: string;

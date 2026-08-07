@@ -1,6 +1,7 @@
 import { computeNetExposure, type NetExposure } from "@/lib/desk/netExposure";
 import type { Position } from "@/lib/desk/types";
 import { operationalMark } from "@/lib/perform/deriveMarketWorkspace";
+import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
 
 export interface OpenBookSummary {
   count: number;
@@ -34,8 +35,10 @@ export interface RecentExitRow {
 export interface RecentExitSummary {
   rows: RecentExitRow[];
   realized: number;
+  logicalTrades: number;
   wins: number;
   losses: number;
+  flats: number;
 }
 
 export interface PositionsWorkspaceModel {
@@ -112,11 +115,16 @@ export function deriveRecentExits(recentTrades: Position[]): RecentExitSummary {
       : null;
     return { position, returnPct, peakPct, givebackPct, capturePct, peakExceeded, holdMinutes };
   });
+  const logical = summarizeLogicalTradeCohort(recentTrades, { allowExternalParents: true });
+  if (logical.issues.length) throw new Error(logical.issues.join("; "));
+  const closed = logical.groups.filter((trade) => trade.status === "closed" && trade.realizedPnl != null);
   return {
     rows,
-    realized: rows.reduce((sum, row) => sum + (row.position.realized_pnl ?? 0), 0),
-    wins: rows.filter((row) => (row.position.realized_pnl ?? 0) > 0).length,
-    losses: rows.filter((row) => (row.position.realized_pnl ?? 0) < 0).length,
+    realized: closed.reduce((sum, trade) => sum + Number(trade.realizedPnl), 0),
+    logicalTrades: closed.length,
+    wins: closed.filter((trade) => Number(trade.realizedPnl) > 0).length,
+    losses: closed.filter((trade) => Number(trade.realizedPnl) < 0).length,
+    flats: closed.filter((trade) => Number(trade.realizedPnl) === 0).length,
   };
 }
 

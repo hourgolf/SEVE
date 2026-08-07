@@ -64,7 +64,14 @@ interface RebuildReceipt {
   session: string | null;
   mode: string;
   reconstruction: { paths: number; scored: number; withoutQuotes: number };
-  remote: { upserts: number; verified: number; eventInserts: number; allowedTables: string[] };
+  remote: {
+    upserts: number;
+    upsertSignalIds: string[];
+    expected: number;
+    verified: number;
+    eventInserts: number;
+    allowedTables: string[];
+  };
 }
 
 const number = (value: number | string | null): number | null => {
@@ -140,12 +147,23 @@ async function main(): Promise<void> {
         !== JSON.stringify(remoteRow[field as keyof typeof remoteRow]));
     return [{ signalId: id, fields }];
   });
+  const publishedIds = Array.isArray(receipt.remote.upsertSignalIds)
+    ? receipt.remote.upsertSignalIds.map(String) : [];
+  const uniquePublishedIds = new Set(publishedIds);
+  const publishedPayloadsVerified = [...uniquePublishedIds].filter((id) => {
+    const localRow = localById.get(id);
+    const remoteRow = remoteById.get(id);
+    return localRow != null && remoteRow != null && JSON.stringify(localRow) === JSON.stringify(remoteRow);
+  }).length;
   const receiptIssues = [
     receipt.version !== "gate-shadow-rebuild-v1" ? "receipt_version" : null,
     receipt.session !== SESSION ? "receipt_session" : null,
     receipt.mode !== "publish-and-verify" ? "receipt_mode" : null,
     receipt.reconstruction.paths !== local.length ? "receipt_path_count" : null,
-    receipt.remote.upserts !== receipt.remote.verified ? "receipt_remote_readback" : null,
+    receipt.remote.upserts !== publishedIds.length ? "receipt_upsert_id_count" : null,
+    uniquePublishedIds.size !== publishedIds.length ? "receipt_duplicate_upsert_ids" : null,
+    receipt.remote.upserts !== publishedPayloadsVerified ? "receipt_upsert_payload_readback" : null,
+    receipt.remote.expected !== local.length ? "receipt_expected_count" : null,
     receipt.remote.verified !== local.length ? "receipt_remote_count" : null,
     receipt.remote.eventInserts !== 0 ? "receipt_unexpected_event_writes" : null,
     JSON.stringify(receipt.remote.allowedTables) !== JSON.stringify(["virtual_trades"])
@@ -168,6 +186,8 @@ async function main(): Promise<void> {
     missingRemoteIds,
     extraRemoteIds,
     payloadMismatches,
+    publishedRows: receipt.remote.upserts,
+    publishedPayloadsVerified,
     receiptIssues,
     guarantees: { remoteSelectOnly: true, productionWrites: 0, orderAuthority: false },
     passed,

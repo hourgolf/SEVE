@@ -8,5 +8,7 @@ assert.match(source, /attributePositionsByImmutableExecutionAccount/);
 assert.match(source, /configuredPaperAccountIds/);
 assert.doesNotMatch(source, /strategists\.account_id/);
 assert.doesNotMatch(source, /\.eq\("strategists\.account_id"/);
+assert.match(source, /runner_of/);
+assert.match(source, /deriveStudioEvidence/);
 
 console.log("studio-evidence-read-selftest: immutable account attribution passed");

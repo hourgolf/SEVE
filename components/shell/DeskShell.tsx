@@ -110,7 +110,7 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
             <span className="led-dollar" style={{ color: dayColor }}>$</span>
             <LedDisplay value={String(dayVal)} digits={String(Math.abs(dayVal)).length + (dayVal < 0 ? 1 : 0)} color={dayColor} />
           </div>
-          <span className="silk">DAY P&amp;L</span>
+          <span className="silk">SESSION NAV Δ</span>
         </div>
 
         {/* NAV LCD */}

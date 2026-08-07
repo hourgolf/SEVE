@@ -112,8 +112,7 @@ function applyTarget(input: {
     id: `spec:bundle:${input.bundle.id}:${input.source.slug}`,
     parentVersionId: input.source.id,
     executionPosture: input.target.executionPosture
-      ?? input.source.executionPosture
-      ?? "paper",
+      ?? input.source.executionPosture,
     quantity,
     maxDebitUsd,
     riskLimits: {

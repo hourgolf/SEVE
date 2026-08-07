@@ -2,8 +2,11 @@
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { buildDecisionAtlasPreview } from "@/lib/research/decisionAtlasPreview";
 import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
+import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
+import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
 import { ManagerFleetHeatmap } from "@/components/research/ManagerFleetHeatmap";
 import { exactShadowReceipt } from "@/lib/research/exactShadowArchive";
 import type {
@@ -12,7 +15,7 @@ import type {
   ShadowChannelSortKey,
   ShadowSessionSummary,
 } from "@/lib/research/shadowResearch";
-import { sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
+import { shadowSessionDate, sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
 import { signedUsd } from "@/lib/format";
 
 const percent = (wins: number, scored: number): string =>
@@ -21,6 +24,7 @@ const money = (value: number | null): string => value == null ? "—" : signedUs
 const shortSession = (session: string): string => session.slice(5).replace("-", "/");
 const RECENT_SESSION_LIMIT = 4;
 type ResearchLane = "vb" | "all";
+type EvidenceLabel = "HISTORICAL VIRTUAL" | "SESSION VIRTUAL";
 const laneTotals = (rows: ShadowChannelSummary[]) => {
   const scored = rows.reduce((sum, row) => sum + row.scored, 0);
   const pnl = rows.reduce((sum, row) => sum + row.pnlPerContract, 0);
@@ -80,6 +84,7 @@ function ExactStatus({ surface, session }: { surface: SurfaceProps; session: str
   return <section className="srw-exact missing"><header><span><b>EXACT MANAGER REPLAY</b><small>no session-matched receipt</small></span><em>MISSING</em></header>
     <p>The native ledger is visible, but no exact manager receipt is attached to this session.</p></section>;
 }
+
 export function NativeTable({
   rows,
   selectable = false,
@@ -89,6 +94,7 @@ export function NativeTable({
   selectedSlug,
   onInspect,
   renderDetail,
+  evidenceLabel,
 }: {
   rows: ShadowChannelSummary[];
   selectable?: boolean;
@@ -98,6 +104,7 @@ export function NativeTable({
   selectedSlug?: string;
   onInspect?: (slug: string) => void;
   renderDetail?: (slug: string) => ReactNode;
+  evidenceLabel: EvidenceLabel;
 }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<ShadowChannelSortKey>("average");
@@ -135,8 +142,8 @@ export function NativeTable({
     <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "PATHS")}</span><span>{sortLabel("win", "WIN")}</span><span>{sortLabel("average", "TYPICAL/CT")}</span><span>{sortLabel("total", "TOTAL/CT")}</span><span>{sortLabel("mfe", "BEST MOVE")}</span><span>{sortLabel("exits", "EXITS")}</span></div>
     {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : visibleRows.map((row) => <Fragment key={row.slug}>
       <div className={`srw-row${selectedSlug === row.slug ? " selected" : ""}`}>
-        <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}</b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
-        <strong className={`srw-cell-avg ${(row.averagePerPath ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.averagePerPath)}</strong>
+        <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span className="srw-channel-identity">{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}<small>{evidenceLabel} · THRU {shortSession(shadowSessionDate(row.lastAt))}</small></span></b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
+        <strong className={`srw-cell-avg ${(row.typicalPerPath ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.typicalPerPath)}</strong>
         <span className="srw-cell-total">{money(row.pnlPerContract)}</span><span className="srw-cell-mfe">{row.averageMfePct == null ? "—" : `${row.averageMfePct}%`}</span>
         <span className="srw-cell-exits">{row.targets}T · {row.stops}S · {row.flattens}B</span>
       </div>
@@ -170,11 +177,28 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     ? rows.filter((row) => !excluded[lane].includes(row.slug))
     : rows;
   const totals = laneTotals(filteredRows);
+  const atlasReads = rows.map((row) => ({
+    slug: row.slug,
+    read: buildDecisionAtlasPreview({
+      summary: row,
+      dryPowder: windowMode === "cumulative"
+        ? shadowResearch.dryPowderBySlug[row.slug]
+        : selected ? shadowResearch.dryPowderBySession[selected.session]?.[row.slug] : undefined,
+      managerEvidence: surface.managerEvidence.book?.channels[row.slug],
+    }),
+  }));
+  const atlasWorking = atlasReads.filter((item) => item.read.label === "TEST CAPACITY" || item.read.label === "REVIEW MANAGER");
+  const atlasReview = atlasReads.filter((item) => item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT");
+  const atlasNext = [...atlasWorking, ...atlasReview][0] ?? null;
   const focusedCurve = windowMode === "cumulative"
     ? shadowResearch.dryPowderBySlug[focusSlug]
     : selected ? shadowResearch.dryPowderBySession[selected.session]?.[focusSlug] : undefined;
   const focusedPassport = surface.channelWorkspace.bySlug[focusSlug];
+  const focusedSummary = rows.find((row) => row.slug === focusSlug);
   const focusedManagerEvidence = surface.managerEvidence.book?.channels[focusSlug];
+  const focusedExecuted = shadowResearch.currentExecutedBySlug[focusSlug];
+  const focusedComparison = shadowResearch.pairedCurrent.find((item) =>
+    item.executedSlug === focusSlug || item.virtualSlug === focusSlug);
   const focusedLead = focusedCurve?.points[0]?.marginalAveragePerPath ?? null;
   const focusedBestManager = focusedManagerEvidence?.managers
     .filter((manager) => manager.medianDeltaPct != null)
@@ -191,8 +215,8 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     : runningRows;
   const running = laneTotals(filteredRunningRows);
   const nativeTitle = windowMode === "cumulative" && shadowResearch.cumulative
-    ? `CUMULATIVE NATIVE PATHS · ${shadowResearch.cumulative.fromSession} → ${shadowResearch.cumulative.throughSession}`
-    : `SAME-DAY NATIVE PATHS · ${selected?.session ?? "—"}`;
+    ? `HISTORICAL VIRTUAL PATHS · ${shadowResearch.cumulative.fromSession} → ${shadowResearch.cumulative.throughSession}`
+    : `SESSION VIRTUAL PATHS · ${selected?.session ?? "—"}`;
   const toggleStrategy = (slug: string) => setExcluded((previous) => ({
     ...previous,
     [lane]: previous[lane].includes(slug)
@@ -226,7 +250,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
       <span className={`srw-read ${shadowResearch.state}${shadowResearch.truncated ? " partial" : ""}`}>{shadowResearch.truncated ? "PARTIAL" : shadowResearch.state.toUpperCase()}</span>
     </div>
     {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>
-      <span><small>RUNNING {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shadowResearch.cohortStart}</small>
+      <span><small>RUNNING VIRTUAL · {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shadowResearch.cohortStart}</small>
         <b className={running.pnl >= 0 ? "pos" : "neg"}>{money(running.pnl)} TOTAL/CT</b></span>
       <em>{windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} strategies · ` : ""}{running.scored} scored · {shadowResearch.cumulative.sessionCount} sessions · {percent(running.winners, running.scored)} win</em>
     </div> : null}
@@ -234,8 +258,15 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
       : shadowResearch.state === "error" ? <div className="srw-empty error">research read failed · {shadowResearch.error}</div>
       : !selected ? <div className="srw-empty">no reconstructed virtual paths since the Day 1 cohort</div>
       : <>
+        <section className="srw-atlas-brief" aria-label="Decision Atlas research summary">
+          <span><small>DECISION ATLAS</small><b>WHAT DESERVES REVIEW?</b></span>
+          <span><small>WORKING</small><b>{atlasWorking.length}</b></span>
+          <span><small>NEEDS REVIEW</small><b>{atlasReview.length}</b></span>
+          <span><small>COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></span>
+          <span><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.read.label}` : "NO CLEAR LEAD"}</b></span>
+        </section>
         <section className="srw-native">
-          <header><span><b>{nativeTitle}</b><small>hypothetical entries · current channel exits · not portfolio P&amp;L</small></span>
+          <header><span><b>{nativeTitle}</b><small>every table row is virtual · hypothetical entries · not portfolio P&amp;L</small></span>
             <em>{totals.scored} {lane === "vb" ? "VB" : "ALL"} PATHS</em></header>
           <div className="srw-kpis">
             <span><small>SCORED</small><b>{totals.scored}</b></span>
@@ -251,14 +282,23 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
             onToggleAll={toggleAllStrategies}
             selectedSlug={focusSlug}
             onInspect={setFocusSlug}
-            renderDetail={() => <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
+            evidenceLabel={windowMode === "cumulative" ? "HISTORICAL VIRTUAL" : "SESSION VIRTUAL"}
+            renderDetail={() => <><CurrentEvidenceCard
+              selectedSlug={focusSlug}
+              executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted}
+              comparison={focusedComparison}
+              state={shadowResearch.currentExecutedState}
+              error={shadowResearch.currentExecutedError}
+              truncated={shadowResearch.currentExecutedTruncated}
+            /><DecisionAtlasPreviewCard summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} />
+              <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
               <ChannelDryPowderCurve curve={focusedCurve} />
               <ChannelManagerEvidencePanel
                 evidence={focusedManagerEvidence}
                 currentManagerLabel={focusedPassport?.rootPolicy?.managerLabel}
                 currentConfigurationEpochId={surface.channelControlPlane.view?.configurationEpochId}
               />
-            </div></details>}
+            </div></details></>}
           />
           <footer>{windowMode === "cumulative" ? "CHECKED ROWS DRIVE THIS SUMMARY · " : ""}CORRELATED SIMULATION · NOT PORTFOLIO P&amp;L{shadowResearch.truncated ? ` · PARTIAL ${(10_000).toLocaleString()}-ROW CAP` : ""}</footer>
         </section>

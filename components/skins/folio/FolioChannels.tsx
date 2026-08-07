@@ -46,7 +46,7 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
           <span><small>EXECUTING</small><b>{surface.channelWorkspace.roots}</b></span>
           <span><small>OBSERVE</small><b>{surface.channelWorkspace.dark}</b></span>
           <span><small>OPEN</small><b>{summary.openPositions}</b></span>
-          <span><small>DAY</small><b className={summary.dayPnl < 0 ? "neg" : summary.dayPnl > 0 ? "pos" : ""}>{signedUsd(summary.dayPnl)}</b></span>
+          <span><small>SESSION ATTRIB</small><b className={summary.dayPnl < 0 ? "neg" : summary.dayPnl > 0 ? "pos" : ""}>{signedUsd(summary.dayPnl)}</b></span>
         </div>
       </header>
 
@@ -67,7 +67,7 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
             {visible.length === 0 && <p>No channels match this lifecycle.</p>}
           </div>
         </section>
-        <ChannelInspector strategist={selected?.channel} summary={selected} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} write={surface.write} controlPlane={surface.channelControlPlane} dryPowder={selected ? surface.shadowResearch.dryPowderBySlug[selected.channel.slug] : undefined} managerEvidence={selected ? surface.managerEvidence.book?.channels[selected.channel.slug] : undefined} />
+        <ChannelInspector strategist={selected?.channel} summary={selected} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} write={surface.write} controlPlane={surface.channelControlPlane} dryPowder={selected ? surface.shadowResearch.dryPowderBySlug[selected.channel.slug] : undefined} shadowSummary={selected ? surface.shadowResearch.cumulative?.dark.find((item) => item.slug === selected.channel.slug) : undefined} managerEvidence={selected ? surface.managerEvidence.book?.channels[selected.channel.slug] : undefined} researchEvidence={surface.shadowResearch} />
       </div>
       <StudioModules selected={selected} evidence={selected ? surface.studioEvidence.bySlug[selected.channel.slug] : undefined} evidenceState={surface.studioEvidence} positions={surface.feed.positions} recentTrades={surface.feed.recentTrades} incident={surface.incident} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} />
     </div>

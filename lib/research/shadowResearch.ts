@@ -1,3 +1,6 @@
+import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
+import { areReviewedChannelVariants } from "@/lib/research/channelVariantFamilies";
+
 export interface ShadowResearchRow {
   signalId?: string;
   slug: string;
@@ -10,6 +13,59 @@ export interface ShadowResearchRow {
   entryPrice?: number | null;
   mfePct: number | null;
   givebackPct: number | null;
+}
+
+export interface ExecutedResearchRow {
+  id: string;
+  accountId: string;
+  slug: string;
+  quantity: number;
+  realizedPnl: number | null;
+  openedAt: string;
+  closedAt: string | null;
+  runnerOf: string | null;
+  configurationEpochId: string | null;
+}
+
+export interface CurrentExecutedOpportunity {
+  accountId: string;
+  slug: string;
+  openedAt: string;
+  session: string;
+  pnlPerContract: number;
+  configurationEpochId: string;
+}
+
+export interface CurrentExecutedSummary {
+  slug: string;
+  accountIds: string[];
+  configurationEpochId: string;
+  opportunities: number;
+  sessions: number;
+  winners: number;
+  typicalPerContract: number;
+  totalPerContract: number;
+  fromSession: string;
+  throughSession: string;
+  lastAt: string;
+}
+
+export interface PairedCurrentComparison {
+  executedSlug: string;
+  virtualSlug: string;
+  executedAccountIds: string[];
+  pairs: number;
+  sessions: number;
+  executedWins: number;
+  virtualWins: number;
+  executedLeads: number;
+  virtualLeads: number;
+  ties: number;
+  executedTypicalPerContract: number;
+  virtualTypicalPerContract: number;
+  executedTotalPerContract: number;
+  virtualTotalPerContract: number;
+  throughSession: string;
 }
 
 export interface DryPowderPoint {
@@ -55,6 +111,8 @@ export interface ShadowChannelSummary {
   flattens: number;
   pnlPerContract: number;
   averagePerPath: number | null;
+  typicalPerPath: number | null;
+  largestWinnerShare: number | null;
   averageMfePct: number | null;
   averageGivebackPct: number | null;
   lastAt: string;
@@ -77,7 +135,7 @@ const comparable = (
   if (key === "channel") return row.slug;
   if (key === "paths") return row.paths;
   if (key === "win") return row.scored ? row.winners / row.scored : null;
-  if (key === "average") return row.averagePerPath;
+  if (key === "average") return row.typicalPerPath;
   if (key === "total") return row.pnlPerContract;
   if (key === "mfe") return row.averageMfePct;
   const exits = row.targets + row.stops + row.flattens;
@@ -150,7 +208,152 @@ export const shadowSessionDate = (value: string): string => {
 };
 
 const rounded = (value: number): number => Math.round(value * 100) / 100;
+const median = (values: readonly number[]): number | null => {
+  if (!values.length) return null;
+  const ordered = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(ordered.length / 2);
+  return rounded(ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2);
+};
 export const isVirtualBenchSlug = (slug: string): boolean => slug.startsWith("vb-");
+
+/**
+ * Collapse immutable exit tranches into logical trades, then retain only the
+ * latest observed configuration epoch for each channel. This is deliberately
+ * separate from virtual paths: one is executed portfolio evidence and the
+ * other is a counterfactual research path.
+ */
+export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow[]): {
+  opportunities: CurrentExecutedOpportunity[];
+  bySlug: Record<string, CurrentExecutedSummary>;
+} {
+  const canonicalRows = rows.filter((row) => row.slug && row.openedAt && row.realizedPnl != null).map((row) => ({
+    ...row,
+    status: "closed" as const,
+    runner_of: row.runnerOf,
+    realized_pnl: row.realizedPnl,
+  }));
+  const logical = summarizeLogicalTradeCohort(canonicalRows, { allowExternalParents: true });
+  if (logical.issues.length) throw new Error(logical.issues.join("; "));
+  const candidates = logical.groups.flatMap((trade): CurrentExecutedOpportunity[] => {
+    const group = trade.rows;
+    const slugs = [...new Set(group.map((row) => row.slug))];
+    if (slugs.length !== 1) throw new Error(`logical trade ${trade.rootPositionId} spans channel identities`);
+    const accountIds = [...new Set(group.map((row) => row.accountId))];
+    if (accountIds.length !== 1) throw new Error(`logical trade ${trade.rootPositionId} spans immutable account routes`);
+    const root = group.find((row) => !row.runnerOf) ?? group[0];
+    const configurationEpochId = root.configurationEpochId?.trim() ?? "";
+    const session = shadowSessionDate(root.openedAt);
+    const contracts = group.reduce((sum, row) => sum + Math.abs(Number(row.quantity) || 0), 0);
+    if (!configurationEpochId || !session || !(contracts > 0)) return [];
+    const total = trade.realizedPnl;
+    if (total == null) return [];
+    return [{
+      accountId: accountIds[0],
+      slug: root.slug,
+      openedAt: root.openedAt,
+      session,
+      pnlPerContract: rounded(total / contracts),
+      configurationEpochId,
+    }];
+  });
+
+  const latestEpoch = new Map<string, { epoch: string; at: string }>();
+  for (const opportunity of candidates) {
+    const current = latestEpoch.get(opportunity.slug);
+    if (!current || opportunity.openedAt > current.at) {
+      latestEpoch.set(opportunity.slug, { epoch: opportunity.configurationEpochId, at: opportunity.openedAt });
+    }
+  }
+  const opportunities = candidates
+    .filter((row) => row.configurationEpochId === latestEpoch.get(row.slug)?.epoch)
+    .sort((left, right) => left.openedAt.localeCompare(right.openedAt) || left.slug.localeCompare(right.slug));
+  const grouped = new Map<string, CurrentExecutedOpportunity[]>();
+  for (const opportunity of opportunities) {
+    grouped.set(opportunity.slug, [...(grouped.get(opportunity.slug) ?? []), opportunity]);
+  }
+  const bySlug = Object.fromEntries([...grouped.entries()].map(([slug, channelRows]) => {
+    const sessions = [...new Set(channelRows.map((row) => row.session))].sort();
+    const outcomes = channelRows.map((row) => row.pnlPerContract);
+    return [slug, {
+      slug,
+      accountIds: [...new Set(channelRows.map((row) => row.accountId))].sort(),
+      configurationEpochId: channelRows.at(-1)?.configurationEpochId ?? "",
+      opportunities: channelRows.length,
+      sessions: sessions.length,
+      winners: outcomes.filter((value) => value > 0).length,
+      typicalPerContract: median(outcomes) ?? 0,
+      totalPerContract: rounded(outcomes.reduce((sum, value) => sum + value, 0)),
+      fromSession: sessions[0] ?? "",
+      throughSession: sessions.at(-1) ?? "",
+      lastAt: channelRows.at(-1)?.openedAt ?? "",
+    } satisfies CurrentExecutedSummary];
+  }));
+  return { opportunities, bySlug };
+}
+
+/** Pair latest-epoch executions only with same-family virtual paths at the same clock. */
+export function derivePairedCurrentComparisons(
+  executed: readonly CurrentExecutedOpportunity[],
+  virtual: readonly ShadowResearchRow[],
+  toleranceMs = 60_000,
+): PairedCurrentComparison[] {
+  const byExecutedSlug = new Map<string, CurrentExecutedOpportunity[]>();
+  for (const row of executed) byExecutedSlug.set(row.slug, [...(byExecutedSlug.get(row.slug) ?? []), row]);
+  const virtualSlugs = [...new Set(virtual.map((row) => row.slug))].sort();
+  const comparisons: PairedCurrentComparison[] = [];
+  for (const [executedSlug, actualRows] of byExecutedSlug) {
+    for (const virtualSlug of virtualSlugs) {
+      if (!areReviewedChannelVariants(virtualSlug, executedSlug)) continue;
+      const virtualRows = virtual
+        .filter((row) => row.slug === virtualSlug && row.pnlPerContract != null && Number.isFinite(Date.parse(row.signalAt)))
+        .sort((left, right) => left.signalAt.localeCompare(right.signalAt));
+      const used = new Set<number>();
+      const pairs: Array<{ actual: CurrentExecutedOpportunity; virtual: ShadowResearchRow }> = [];
+      for (const actual of actualRows) {
+        const at = Date.parse(actual.openedAt);
+        let match = -1;
+        let distance = Number.POSITIVE_INFINITY;
+        for (let index = 0; index < virtualRows.length; index += 1) {
+          if (used.has(index)) continue;
+          const difference = Math.abs(at - Date.parse(virtualRows[index].signalAt));
+          if (difference <= toleranceMs && difference < distance) {
+            match = index;
+            distance = difference;
+          }
+        }
+        if (match >= 0) {
+          used.add(match);
+          pairs.push({ actual, virtual: virtualRows[match] });
+        }
+      }
+      if (!pairs.length) continue;
+      const actualOutcomes = pairs.map((pair) => pair.actual.pnlPerContract);
+      const virtualOutcomes = pairs.map((pair) => Number(pair.virtual.pnlPerContract));
+      const sessions = [...new Set(pairs.map((pair) => pair.actual.session))].sort();
+      comparisons.push({
+        executedSlug,
+        virtualSlug,
+        executedAccountIds: [...new Set(pairs.map((pair) => pair.actual.accountId))].sort(),
+        pairs: pairs.length,
+        sessions: sessions.length,
+        executedWins: actualOutcomes.filter((value) => value > 0).length,
+        virtualWins: virtualOutcomes.filter((value) => value > 0).length,
+        executedLeads: pairs.filter((pair) => pair.actual.pnlPerContract > Number(pair.virtual.pnlPerContract)).length,
+        virtualLeads: pairs.filter((pair) => Number(pair.virtual.pnlPerContract) > pair.actual.pnlPerContract).length,
+        ties: pairs.filter((pair) => Number(pair.virtual.pnlPerContract) === pair.actual.pnlPerContract).length,
+        executedTypicalPerContract: median(actualOutcomes) ?? 0,
+        virtualTypicalPerContract: median(virtualOutcomes) ?? 0,
+        executedTotalPerContract: rounded(actualOutcomes.reduce((sum, value) => sum + value, 0)),
+        virtualTotalPerContract: rounded(virtualOutcomes.reduce((sum, value) => sum + value, 0)),
+        throughSession: sessions.at(-1) ?? "",
+      });
+    }
+  }
+  return comparisons.sort((left, right) =>
+    right.pairs - left.pairs
+    || left.executedSlug.localeCompare(right.executedSlug)
+    || left.virtualSlug.localeCompare(right.virtualSlug));
+}
 
 const finiteDate = (value: string | null | undefined): number | null => {
   const parsed = Date.parse(value ?? "");
@@ -304,6 +507,7 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     stops: number;
     flattens: number;
     pnl: number;
+    outcomes: number[];
     mfe: number;
     mfeCount: number;
     giveback: number;
@@ -320,6 +524,7 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
       stops: 0,
       flattens: 0,
       pnl: 0,
+      outcomes: [],
       mfe: 0,
       mfeCount: 0,
       giveback: 0,
@@ -330,6 +535,7 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     if (row.pnlPerContract != null) {
       channel.scored += 1;
       channel.pnl += row.pnlPerContract;
+      channel.outcomes.push(row.pnlPerContract);
       if (row.pnlPerContract > 0) channel.winners += 1;
     }
     if (row.mfePct != null) {
@@ -356,11 +562,17 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     flattens: channel.flattens,
     pnlPerContract: rounded(channel.pnl),
     averagePerPath: channel.scored ? rounded(channel.pnl / channel.scored) : null,
+    typicalPerPath: median(channel.outcomes),
+    largestWinnerShare: (() => {
+      const winners = channel.outcomes.filter((value) => value > 0);
+      const total = winners.reduce((sum, value) => sum + value, 0);
+      return total > 0 ? rounded(Math.max(...winners) / total) : null;
+    })(),
     averageMfePct: channel.mfeCount ? rounded(channel.mfe / channel.mfeCount) : null,
     averageGivebackPct: channel.givebackCount ? rounded(channel.giveback / channel.givebackCount) : null,
     lastAt: channel.lastAt,
   })).sort((a, b) =>
-    (b.averagePerPath ?? Number.NEGATIVE_INFINITY) - (a.averagePerPath ?? Number.NEGATIVE_INFINITY)
+    (b.typicalPerPath ?? Number.NEGATIVE_INFINITY) - (a.typicalPerPath ?? Number.NEGATIVE_INFINITY)
     || b.scored - a.scored
     || a.slug.localeCompare(b.slug));
 }
