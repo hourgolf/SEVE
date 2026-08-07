@@ -55,6 +55,7 @@ import {
   receiptBoundRunnerConfiguration,
 } from "./receiptBoundEntryPolicy.js";
 import { virtualPathPolicyStamp } from "../../lib/research/virtualPathPolicy.js";
+import { boundedRetuneSignalStamp } from "./boundedRetuneSignalStamp.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -872,6 +873,7 @@ export async function executeEntry(
         defaultPremiumStopPct: policy.PREMIUM_STOP_PCT,
         managerVersion: policyIdentity?.managerVersion ?? null,
       }),
+      bounded_retune_experiment: boundedRetuneSignalStamp(ch),
       configuration_epoch_id:
         ctx.configurationWriteStamp?.configuration_epoch_id
         ?? policyIdentity?.configurationEpochId

@@ -1,5 +1,6 @@
 import type { ChannelManagerEvidence } from "./channelManagerEvidence";
 import type { ChannelDryPowderCurve, ShadowChannelSummary } from "./shadowResearch";
+import { boundedRetuneForChannel, type BoundedRetuneExperimentDefinition } from "./boundedRetuneRegistry";
 
 export interface DecisionAtlasPreviewMetric {
   label: "typical result" | "best move" | "gave back" | "next entry" | "evidence";
@@ -8,11 +9,12 @@ export interface DecisionAtlasPreviewMetric {
 }
 
 export interface DecisionAtlasPreview {
-  label: "REVIEW MANAGER" | "TEST CAPACITY" | "REVIEW EXIT" | "REVIEW ENTRY" | "KEEP COLLECTING";
+  label: "DARK TEST" | "REVIEW MANAGER" | "TEST CAPACITY" | "REVIEW EXIT" | "REVIEW ENTRY" | "KEEP COLLECTING";
   tone: "positive" | "warning" | "neutral";
   summary: string;
   metrics: DecisionAtlasPreviewMetric[];
   evidenceFact: string;
+  experiment: BoundedRetuneExperimentDefinition | null;
 }
 
 const signed = (value: number | null, suffix = ""): string => value == null
@@ -30,10 +32,17 @@ export function buildDecisionAtlasPreview(input: {
   const manager = input.managerEvidence?.managers.find((item) => item.verdict === "promising"
     && item.terminalPaths >= 10 && item.sessions >= 5
     && item.deltaConfidence95.lower != null && item.deltaConfidence95.lower > 0) ?? null;
+  const experiment = input.summary ? boundedRetuneForChannel(input.summary.slug) : null;
   let label: DecisionAtlasPreview["label"] = "KEEP COLLECTING";
   let tone: DecisionAtlasPreview["tone"] = "neutral";
   let summary = "Virtual evidence is not settled enough to prefer a change.";
-  if (manager) {
+  if (experiment) {
+    label = "DARK TEST";
+    tone = "warning";
+    summary = experiment.variable === "max_entries_per_session"
+      ? `Compare every signal with the first ${experiment.alternativeValue} per session. Exit, manager, and size stay fixed.`
+      : `Compare the native +${experiment.controlValue}% exit with +${experiment.alternativeValue}%. Entry, stop, manager, and size stay fixed.`;
+  } else if (manager) {
     label = "REVIEW MANAGER";
     tone = "positive";
     summary = `${manager.managerId} improves the typical paired virtual exit with session-level support.`;
@@ -67,7 +76,8 @@ export function buildDecisionAtlasPreview(input: {
         fact: "Independent market sessions represented." },
     ],
     evidenceFact: input.summary
-      ? `${input.summary.scored}/${input.summary.paths} native paths scored · largest winner ${input.summary.largestWinnerShare == null ? "unknown" : `${Math.round(input.summary.largestWinnerShare * 100)}% of positive result`}. Full configuration-era, collision, capital, and paired-exit checks remain in the nightly dossier.`
+      ? `${input.summary.scored}/${input.summary.paths} historical native paths scored · largest winner ${input.summary.largestWinnerShare == null ? "unknown" : `${Math.round(input.summary.largestWinnerShare * 100)}% of positive result`}.${experiment ? ` Prospective scoring starts ${experiment.cohortStartSession}; review waits for 5 sessions and 10 logical outcomes.` : ""} Full configuration-era, collision, capital, and paired-exit checks remain in the nightly dossier.`
       : "No cumulative native-path summary is available. Full methodology remains in the nightly dossier.",
+    experiment,
   };
 }
