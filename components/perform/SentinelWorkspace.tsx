@@ -31,7 +31,7 @@ const dateTime = (value: string): string => value ? new Date(value).toLocaleStri
 function EvidenceRows({ rows, empty }: { rows: ScanRow[]; empty: string }) {
   if (rows.length === 0) return <div className="sntw-empty">{empty}</div>;
   return <div className="sntw-evidence-rows">{rows.slice(0, 8).map((row) => <div key={row.slug}>
-    <b>{row.slug}</b><span>pk {pct(row.peak)}</span><span>win {pct(row.win)}</span><span>give {pct(row.give)}</span><em>{row.n}t</em>
+    <b>{row.slug}</b><span>best move {pct(row.peak)}</span><span>win {pct(row.win)}</span><span>giveback {pct(row.give)}</span><em>{row.n} trades</em>
   </div>)}</div>;
 }
 

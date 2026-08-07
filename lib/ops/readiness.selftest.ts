@@ -297,6 +297,13 @@ assert.equal(find(sameDayPublisher, "publisher").tone, "green");
 
 const sentinelConflict = deriveOpsReadiness(base({ sentinel: { state: "ok", session: "2026-07-18", date: "2026-07-18", briefAsOf: "2026-07-17", forDate: "2026-07-20" } }));
 assert.equal(find(sentinelConflict, "sentinel").tone, "yellow");
+assert.equal(sentinelConflict.summary.state, "TRADING READY");
+
+const sentinelStale = deriveOpsReadiness(base({ sentinel: { state: "ok", session: "2026-07-17", date: "2026-07-17", briefAsOf: "2026-07-17", forDate: "2026-07-17", schemaVersion: 2 } }));
+assert.equal(find(sentinelStale, "sentinel").tone, "red");
+assert.equal(sentinelStale.summary.state, "TRADING READY");
+assert.equal(sentinelStale.summary.tone, "yellow");
+assert.match(sentinelStale.summary.detail, /trading ready.*research blocked/);
 
 const booked = deriveOpsReadiness(base({ evidence: evidence({
   execution: ok([fill, decision]), captures: ok([capture]), managers: ok(managers),

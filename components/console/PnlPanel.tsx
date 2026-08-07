@@ -160,7 +160,7 @@ export function PnlPanel({
             <span />
             <span />
             <span className="dvg-val">{winLabel}</span>
-            <span className="dvg-pk">pk</span>
+            <span className="dvg-pk">best</span>
             <span className="dvg-wn">win</span>
           </div>
           {shown.map(({ s, st, lens: L }) => {
@@ -171,7 +171,7 @@ export function PnlPanel({
             const win = st.trades > 0 ? Math.round((100 * st.wins) / st.trades) : null;
             const hot = pk != null && win != null && st.trades >= 5 && pk >= 25 && win < 40;
             return (
-              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades}t in ${winLabel}${L ? ` · era-4 character: peak ${L.p}% · win ${L.w}% (n=${L.n})` : ""}${hot ? " · high peak / low win in window — spike-carried" : ""}`}>
+              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades}t in ${winLabel}${L ? ` · historical pattern: best move ${L.p}% · win ${L.w}% (n=${L.n})` : ""}${hot ? " · large moves but low win rate in this window" : ""}`}>
                 <span className="dvg-nm">
                   <span className="dvg-dot" style={{ background: pmVar(s.color), boxShadow: `0 0 5px ${pmVar(s.color)}` }} />
                   {s.name}

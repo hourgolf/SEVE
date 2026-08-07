@@ -136,7 +136,7 @@ export function BriefPanel() {
       </button>
       {!baseFolded && (
         <>
-          <div className="brief-mini">regime priors (era-4, gap-state)</div>
+          <div className="brief-mini">market-regime comparison · gap vs flat</div>
           <div className="fx-rows">
             {b.priors.map((p) => (
               <div className="fx-row" key={p.book}>

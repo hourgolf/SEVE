@@ -112,9 +112,13 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         {a13 && <span className="ih-tag amber">⚡ A13</span>}
         <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
+      {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
       <div className="mixer-deck">
-        <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
-        <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />
+        <details className="channel-disclosure">
+          <summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary>
+          <div><ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
+            <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact /></div>
+        </details>
         <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : rootPolicy ? "SEALED RUNTIME · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
           <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
           <div className="ctl"><span className="cl">strike offset</span><span className="ival" title="effective configured strike offset">{strikeLabel(config.strike_offset ?? 0)}</span></div>
@@ -170,9 +174,10 @@ export function ChannelInspector({ strategist, summary, passport, write, control
               : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
           </div>}
         </section>
-        {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} />}
-        <ChannelRosterActivationConsole selectedSlug={slug} controlPlane={controlPlane} />
-        <ChannelConfigDraftPanel
+        <details className="channel-disclosure change-control">
+          <summary><span><small>CHANGE</small><b>GOVERNED DRAFT</b></span><em>REVIEW BEFORE APPLY</em><i>▾</i></summary><div>
+          <ChannelRosterActivationConsole selectedSlug={slug} controlPlane={controlPlane} />
+          <ChannelConfigDraftPanel
           model={draft.model}
           active={draft.active}
           canStart={write.canWrite && sealed}
@@ -184,7 +189,8 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           sealNotice={managerProposal.notice}
           sealError={managerProposal.error}
           onSeal={() => void managerProposal.seal()}
-        />
+          /></div>
+        </details>
       </div>
 
       <div className="insp-foot">

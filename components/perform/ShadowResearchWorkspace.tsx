@@ -128,11 +128,11 @@ export function NativeTable({
   return <div className="srw-table">
     <div className="srw-table-controls">
       <label><span>FILTER</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="channel name" aria-label="Filter research channels" /></label>
-      <label><span>SORT</span><select value={sortKey} onChange={(event) => chooseSort(event.target.value as ShadowChannelSortKey)} aria-label="Sort research channels"><option value="channel">CHANNEL</option><option value="paths">PATHS</option><option value="win">WIN</option><option value="average">AVG/CT</option><option value="total">Σ/CT</option><option value="mfe">MFE</option><option value="exits">EXIT MIX</option></select></label>
+      <label><span>SORT</span><select value={sortKey} onChange={(event) => chooseSort(event.target.value as ShadowChannelSortKey)} aria-label="Sort research channels"><option value="channel">CHANNEL</option><option value="paths">PATHS</option><option value="win">WIN</option><option value="average">TYPICAL/CT</option><option value="total">TOTAL/CT</option><option value="mfe">BEST MOVE</option><option value="exits">EXITS</option></select></label>
       <button type="button" className="srw-sort-direction" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} aria-label={`Change sort direction, currently ${sortDirection}ending`}>{sortDirection === "asc" ? "ASC ▲" : "DESC ▼"}</button>
       {query ? <em>{visibleRows.length}/{rows.length} MATCH</em> : null}
     </div>
-    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "PATHS")}</span><span>{sortLabel("win", "WIN")}</span><span>{sortLabel("average", "AVG/CT")}</span><span>{sortLabel("total", "Σ/CT")}</span><span>{sortLabel("mfe", "MFE")}</span><span>{sortLabel("exits", "EXIT MIX")}</span></div>
+    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "PATHS")}</span><span>{sortLabel("win", "WIN")}</span><span>{sortLabel("average", "TYPICAL/CT")}</span><span>{sortLabel("total", "TOTAL/CT")}</span><span>{sortLabel("mfe", "BEST MOVE")}</span><span>{sortLabel("exits", "EXITS")}</span></div>
     {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : visibleRows.map((row) => <Fragment key={row.slug}>
       <div className={`srw-row${selectedSlug === row.slug ? " selected" : ""}`}>
         <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}</b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
@@ -175,6 +175,10 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     : selected ? shadowResearch.dryPowderBySession[selected.session]?.[focusSlug] : undefined;
   const focusedPassport = surface.channelWorkspace.bySlug[focusSlug];
   const focusedManagerEvidence = surface.managerEvidence.book?.channels[focusSlug];
+  const focusedLead = focusedCurve?.points[0]?.marginalAveragePerPath ?? null;
+  const focusedBestManager = focusedManagerEvidence?.managers
+    .filter((manager) => manager.medianDeltaPct != null)
+    .sort((left, right) => (right.medianDeltaPct ?? -Infinity) - (left.medianDeltaPct ?? -Infinity))[0];
   useEffect(() => {
     if (!rows.length) { setFocusSlug(""); return; }
     if (!rows.some((row) => row.slug === focusSlug)) setFocusSlug(rows[0].slug);
@@ -223,7 +227,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     </div>
     {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>
       <span><small>RUNNING {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shadowResearch.cohortStart}</small>
-        <b className={running.pnl >= 0 ? "pos" : "neg"}>{money(running.pnl)} Σ/CT</b></span>
+        <b className={running.pnl >= 0 ? "pos" : "neg"}>{money(running.pnl)} TOTAL/CT</b></span>
       <em>{windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} strategies · ` : ""}{running.scored} scored · {shadowResearch.cumulative.sessionCount} sessions · {percent(running.winners, running.scored)} win</em>
     </div> : null}
     {shadowResearch.state === "loading" || shadowResearch.state === "idle" ? <div className="srw-empty">loading bounded research ledger…</div>
@@ -231,7 +235,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
       : !selected ? <div className="srw-empty">no reconstructed virtual paths since the Day 1 cohort</div>
       : <>
         <section className="srw-native">
-          <header><span><b>{nativeTitle}</b><small>capital-blind mid-basis triage · current native exits</small></span>
+          <header><span><b>{nativeTitle}</b><small>hypothetical entries · current channel exits · not portfolio P&amp;L</small></span>
             <em>{totals.scored} {lane === "vb" ? "VB" : "ALL"} PATHS</em></header>
           <div className="srw-kpis">
             <span><small>SCORED</small><b>{totals.scored}</b></span>
@@ -247,19 +251,21 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
             onToggleAll={toggleAllStrategies}
             selectedSlug={focusSlug}
             onInspect={setFocusSlug}
-            renderDetail={() => <>
+            renderDetail={() => <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
               <ChannelDryPowderCurve curve={focusedCurve} />
               <ChannelManagerEvidencePanel
                 evidence={focusedManagerEvidence}
                 currentManagerLabel={focusedPassport?.rootPolicy?.managerLabel}
                 currentConfigurationEpochId={surface.channelControlPlane.view?.configurationEpochId}
               />
-            </>}
+            </div></details>}
           />
           <footer>{windowMode === "cumulative" ? "CHECKED ROWS DRIVE THIS SUMMARY · " : ""}CORRELATED SIMULATION · NOT PORTFOLIO P&amp;L{shadowResearch.truncated ? ` · PARTIAL ${(10_000).toLocaleString()}-ROW CAP` : ""}</footer>
         </section>
-        <ExactStatus surface={surface} session={selected.session} />
-        <ManagerFleetHeatmap book={surface.managerEvidence.book} channelSlugs={surface.view.desk.strategists.map((channel) => channel.slug)} selectedSlug={focusSlug} onSelect={setFocusSlug} />
+        <details className="srw-deep-dive"><summary><span><small>DEEP RESEARCH</small><b>EXACT REPLAY + MANAGER MAP</b></span><em>OPEN COMPARISON</em><i>▾</i></summary><div>
+          <ExactStatus surface={surface} session={selected.session} />
+          <ManagerFleetHeatmap book={surface.managerEvidence.book} channelSlugs={surface.view.desk.strategists.map((channel) => channel.slug)} selectedSlug={focusSlug} onSelect={setFocusSlug} />
+        </div></details>
       </>}
   </section>;
 }
