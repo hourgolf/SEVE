@@ -48,6 +48,7 @@ assert.equal(sessions[0].averagePerPath, -5);
 assert.deepEqual(sessions[0].blocked, { day1_dark_lifecycle: 2, day1_reentry_disabled: 1 });
 assert.equal(sessions[0].vb.length, 1, "VB classification follows the durable slug identity, not a stale blocked reason");
 assert.equal(sessions[0].vb[0].averagePerPath, -10);
+assert.equal(sessions[0].vb[0].typicalPerPath, -10);
 assert.equal(sessions[0].vb[0].averageMfePct, 12);
 assert.equal(sessions[0].vb[0].averageGivebackPct, 42.5);
 assert.equal(sessions[0].vb[0].targets, 1);
@@ -89,9 +90,9 @@ assert.deepEqual(
 );
 
 const sortRows: ShadowChannelSummary[] = [
-  { slug: "alpha", paths: 10, scored: 10, winners: 8, targets: 8, stops: 2, flattens: 0, pnlPerContract: 100, averagePerPath: 10, averageMfePct: 5, averageGivebackPct: 20, lastAt: "2026-07-22T14:00:00Z" },
-  { slug: "beta", paths: 20, scored: 10, winners: 5, targets: 1, stops: 9, flattens: 0, pnlPerContract: 200, averagePerPath: 20, averageMfePct: 15, averageGivebackPct: 40, lastAt: "2026-07-22T14:01:00Z" },
-  { slug: "pending", paths: 5, scored: 0, winners: 0, targets: 0, stops: 0, flattens: 0, pnlPerContract: 0, averagePerPath: null, averageMfePct: null, averageGivebackPct: null, lastAt: "2026-07-22T14:02:00Z" },
+  { slug: "alpha", paths: 10, scored: 10, winners: 8, targets: 8, stops: 2, flattens: 0, pnlPerContract: 100, averagePerPath: 10, typicalPerPath: 12, largestWinnerShare: .3, averageMfePct: 5, averageGivebackPct: 20, lastAt: "2026-07-22T14:00:00Z" },
+  { slug: "beta", paths: 20, scored: 10, winners: 5, targets: 1, stops: 9, flattens: 0, pnlPerContract: 200, averagePerPath: 20, typicalPerPath: 18, largestWinnerShare: .7, averageMfePct: 15, averageGivebackPct: 40, lastAt: "2026-07-22T14:01:00Z" },
+  { slug: "pending", paths: 5, scored: 0, winners: 0, targets: 0, stops: 0, flattens: 0, pnlPerContract: 0, averagePerPath: null, typicalPerPath: null, largestWinnerShare: null, averageMfePct: null, averageGivebackPct: null, lastAt: "2026-07-22T14:02:00Z" },
 ];
 const order = (key: Parameters<typeof sortShadowChannelSummaries>[1], direction: Parameters<typeof sortShadowChannelSummaries>[2]) =>
   sortShadowChannelSummaries(sortRows, key, direction).map((item) => item.slug);

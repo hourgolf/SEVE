@@ -74,6 +74,7 @@ export function MobileStudio({
             write={props.write}
             passport={passports.bySlug[s.slug]}
             dryPowder={props.shadowResearch.dryPowderBySlug[s.slug]}
+            shadowSummary={props.shadowResearch.cumulative?.dark.find((item) => item.slug === s.slug)}
             managerEvidence={props.managerEvidence.book?.channels[s.slug]}
             controlPlane={props.channelControlPlane}
             open={openSlug === s.slug}

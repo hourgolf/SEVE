@@ -67,7 +67,7 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
             {visible.length === 0 && <p>No channels match this lifecycle.</p>}
           </div>
         </section>
-        <ChannelInspector strategist={selected?.channel} summary={selected} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} write={surface.write} controlPlane={surface.channelControlPlane} dryPowder={selected ? surface.shadowResearch.dryPowderBySlug[selected.channel.slug] : undefined} managerEvidence={selected ? surface.managerEvidence.book?.channels[selected.channel.slug] : undefined} />
+        <ChannelInspector strategist={selected?.channel} summary={selected} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} write={surface.write} controlPlane={surface.channelControlPlane} dryPowder={selected ? surface.shadowResearch.dryPowderBySlug[selected.channel.slug] : undefined} shadowSummary={selected ? surface.shadowResearch.cumulative?.dark.find((item) => item.slug === selected.channel.slug) : undefined} managerEvidence={selected ? surface.managerEvidence.book?.channels[selected.channel.slug] : undefined} />
       </div>
       <StudioModules selected={selected} evidence={selected ? surface.studioEvidence.bySlug[selected.channel.slug] : undefined} evidenceState={surface.studioEvidence} positions={surface.feed.positions} recentTrades={surface.feed.recentTrades} incident={surface.incident} passport={selected ? surface.channelWorkspace.bySlug[selected.channel.slug] : undefined} />
     </div>

@@ -7,6 +7,7 @@ import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRosterActivationConsole";
 import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
+import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -19,18 +20,19 @@ import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
-import type { ChannelDryPowderCurve as DryPowderCurve } from "@/lib/research/shadowResearch";
+import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } from "@/lib/research/shadowResearch";
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, managerEvidence, onClose }: {
+export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, onClose }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
   write: SurfaceProps["write"];
   controlPlane?: ChannelControlPlaneViewRead;
   dryPowder?: DryPowderCurve;
+  shadowSummary?: ShadowChannelSummary;
   managerEvidence?: ChannelManagerEvidence;
   onClose?: () => void;
 }) {
@@ -113,6 +115,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · day <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
       {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
+      <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} compact />
       <div className="mixer-deck">
         <details className="channel-disclosure">
           <summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary>

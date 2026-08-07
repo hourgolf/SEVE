@@ -7,6 +7,7 @@ import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRosterActivationConsole";
 import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
+import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -18,7 +19,7 @@ import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { activeRootExitLabel } from "@/lib/channels/activeRelease";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
-import type { ChannelDryPowderCurve as DryPowderCurve } from "@/lib/research/shadowResearch";
+import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } from "@/lib/research/shadowResearch";
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 
 // =============================================================================
@@ -39,7 +40,7 @@ const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
 }).format(new Date(iso));
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle, write, passport, dryPowder, managerEvidence, controlPlane,
+  strategist, pnl, active, open, onToggle, write, passport, dryPowder, shadowSummary, managerEvidence, controlPlane,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
@@ -49,6 +50,7 @@ export function MobileRackRow({
   write: SurfaceProps["write"];
   passport?: ChannelPassport;
   dryPowder?: DryPowderCurve;
+  shadowSummary?: ShadowChannelSummary;
   managerEvidence?: ChannelManagerEvidence;
   controlPlane?: ChannelControlPlaneViewRead;
 }) {
@@ -312,6 +314,7 @@ export function MobileRackRow({
             </>}
           </div>
           {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
+          <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} compact />
           <details className="channel-disclosure"><summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary><div>
             <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
             <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={rootPolicy?.managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />

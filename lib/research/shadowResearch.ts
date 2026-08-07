@@ -55,6 +55,8 @@ export interface ShadowChannelSummary {
   flattens: number;
   pnlPerContract: number;
   averagePerPath: number | null;
+  typicalPerPath: number | null;
+  largestWinnerShare: number | null;
   averageMfePct: number | null;
   averageGivebackPct: number | null;
   lastAt: string;
@@ -77,7 +79,7 @@ const comparable = (
   if (key === "channel") return row.slug;
   if (key === "paths") return row.paths;
   if (key === "win") return row.scored ? row.winners / row.scored : null;
-  if (key === "average") return row.averagePerPath;
+  if (key === "average") return row.typicalPerPath;
   if (key === "total") return row.pnlPerContract;
   if (key === "mfe") return row.averageMfePct;
   const exits = row.targets + row.stops + row.flattens;
@@ -150,6 +152,12 @@ export const shadowSessionDate = (value: string): string => {
 };
 
 const rounded = (value: number): number => Math.round(value * 100) / 100;
+const median = (values: readonly number[]): number | null => {
+  if (!values.length) return null;
+  const ordered = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(ordered.length / 2);
+  return rounded(ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2);
+};
 export const isVirtualBenchSlug = (slug: string): boolean => slug.startsWith("vb-");
 
 const finiteDate = (value: string | null | undefined): number | null => {
@@ -304,6 +312,7 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     stops: number;
     flattens: number;
     pnl: number;
+    outcomes: number[];
     mfe: number;
     mfeCount: number;
     giveback: number;
@@ -320,6 +329,7 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
       stops: 0,
       flattens: 0,
       pnl: 0,
+      outcomes: [],
       mfe: 0,
       mfeCount: 0,
       giveback: 0,
@@ -330,6 +340,7 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     if (row.pnlPerContract != null) {
       channel.scored += 1;
       channel.pnl += row.pnlPerContract;
+      channel.outcomes.push(row.pnlPerContract);
       if (row.pnlPerContract > 0) channel.winners += 1;
     }
     if (row.mfePct != null) {
@@ -356,11 +367,17 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     flattens: channel.flattens,
     pnlPerContract: rounded(channel.pnl),
     averagePerPath: channel.scored ? rounded(channel.pnl / channel.scored) : null,
+    typicalPerPath: median(channel.outcomes),
+    largestWinnerShare: (() => {
+      const winners = channel.outcomes.filter((value) => value > 0);
+      const total = winners.reduce((sum, value) => sum + value, 0);
+      return total > 0 ? rounded(Math.max(...winners) / total) : null;
+    })(),
     averageMfePct: channel.mfeCount ? rounded(channel.mfe / channel.mfeCount) : null,
     averageGivebackPct: channel.givebackCount ? rounded(channel.giveback / channel.givebackCount) : null,
     lastAt: channel.lastAt,
   })).sort((a, b) =>
-    (b.averagePerPath ?? Number.NEGATIVE_INFINITY) - (a.averagePerPath ?? Number.NEGATIVE_INFINITY)
+    (b.typicalPerPath ?? Number.NEGATIVE_INFINITY) - (a.typicalPerPath ?? Number.NEGATIVE_INFINITY)
     || b.scored - a.scored
     || a.slug.localeCompare(b.slug));
 }
