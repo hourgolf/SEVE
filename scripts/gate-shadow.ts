@@ -27,6 +27,7 @@
 //    npm run gate-shadow -- --days 3
 // ============================================================================
 
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
@@ -47,10 +48,16 @@ import {
   resolveAfterCloseSession,
 } from "../lib/research/afterCloseResearch.js";
 import { authorizeGateShadowCatchup } from "../lib/research/gateShadowCatchupAuthorization.js";
+import {
+  assertVirtualTradePolicyEconomics,
+  deriveVirtualTradeProvenance,
+  type VirtualTradeProvenanceColumns,
+} from "../lib/research/virtualTradeProvenance.js";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const READ_ONLY = process.argv.includes("--read-only");
 const VIRTUAL_TRADES_ONLY = process.argv.includes("--virtual-trades-only");
+const STAMP_PROVENANCE = process.argv.includes("--stamp-provenance");
 const valueArg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && process.argv[index + 1] ? String(process.argv[index + 1]) : null;
@@ -92,13 +99,65 @@ function loadAuthorizedCatchup(): Set<string> | null {
 }
 
 const authorizedCatchupIds = loadAuthorizedCatchup();
+if (STAMP_PROVENANCE && (!SESSION || !VIRTUAL_TRADES_ONLY || authorizedCatchupIds)) {
+  throw new Error("forward provenance requires a bounded session, --virtual-trades-only, and no historical catch-up manifest");
+}
 
 interface ShadowRow {
   signalId: string; slug: string; occ: string; createdAt: string; blocked: string;
   entryAsk: number; exitReason: string; exitPx: number | null; exitAt: string | null;
   pnlPerContract: number | null; stopPct: number; tpPct: number; nQuotes: number;
   mfePct: number | null; giveback: number | null; basis: "mid-upper-bound";
+  channelSpecVersionId?: string | null;
+  releaseManifestId?: string | null;
+  configurationEpochId?: string | null;
+  nativeManagerPolicyVersion?: string | null;
+  researchPublisherVersion?: string | null;
 }
+
+interface StoredVirtualTradeProvenance {
+  signal_id: string;
+  channel_spec_version_id: string | null;
+  release_manifest_id: string | null;
+  configuration_epoch_id: string | null;
+  native_manager_policy_version: string | null;
+  research_publisher_version: string | null;
+}
+
+const numeric = (value: unknown): number | null => {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+function canonicalForwardPayload(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    signal_id: String(row.signal_id),
+    strategist_id: String(row.strategist_id),
+    slug: String(row.slug),
+    occ: String(row.occ),
+    signal_at: String(row.signal_at),
+    blocked: String(row.blocked),
+    entry_px: numeric(row.entry_px),
+    exit_reason: String(row.exit_reason),
+    exit_px: numeric(row.exit_px),
+    exit_at: row.exit_at == null ? null : String(row.exit_at),
+    pnl_per_contract: numeric(row.pnl_per_contract),
+    tp_pct: numeric(row.tp_pct),
+    stop_pct: numeric(row.stop_pct),
+    n_quotes: numeric(row.n_quotes),
+    mfe_pct: numeric(row.mfe_pct),
+    giveback_pct: numeric(row.giveback_pct),
+    channel_spec_version_id: row.channel_spec_version_id == null ? null : String(row.channel_spec_version_id),
+    release_manifest_id: row.release_manifest_id == null ? null : String(row.release_manifest_id),
+    configuration_epoch_id: row.configuration_epoch_id == null ? null : String(row.configuration_epoch_id),
+    native_manager_policy_version: row.native_manager_policy_version == null ? null : String(row.native_manager_policy_version),
+    research_publisher_version: row.research_publisher_version == null ? null : String(row.research_publisher_version),
+  };
+}
+
+const payloadSha256 = (rows: Record<string, unknown>[]): string => `sha256:${createHash("sha256")
+  .update(JSON.stringify(rows)).digest("hex")}`;
 
 interface CandidateCensor { signalId: string; code: string }
 
@@ -251,10 +310,14 @@ async function main() {
   const { count: expected, error: cErr } = await countQuery;
   if (cErr) { console.error(`gate-shadow: signals count failed — ${cErr.message}`); process.exit(1); }
   const sigs: any[] = [];
+  const signalColumns = [
+    "id", "strategist_id", "created_at", "blocked_reason", "rationale", "strategists(slug)", "direction",
+    ...(STAMP_PROVENANCE ? ["channel_spec_version_id", "release_manifest_id", "configuration_epoch_id"] : []),
+  ].join(",");
   for (let from = 0; ; from += 1000) {
     const pageQuery = sb
       .from("signals")
-      .select("id,strategist_id,created_at,blocked_reason,rationale,strategists(slug),direction")
+      .select(signalColumns)
       .not("blocked_reason", "is", null)
       .gte("created_at", since)
       // id tiebreak: created_at alone is not a total order — same-second signals could
@@ -288,6 +351,18 @@ async function main() {
       return [r.id, { stop: c?.premium_stop_pct == null ? POLICY_STOP : Number(c.premium_stop_pct), tp: Number(c?.take_profit_pct ?? 0) }];
     }),
   );
+  const forwardBySignal = new Map<string, ReturnType<typeof deriveVirtualTradeProvenance>>();
+  const forwardFor = (signal: any): ReturnType<typeof deriveVirtualTradeProvenance> => {
+    const id = String(signal.id);
+    const cached = forwardBySignal.get(id);
+    if (cached) return cached;
+    const derived = deriveVirtualTradeProvenance(signal);
+    forwardBySignal.set(id, derived);
+    return derived;
+  };
+  const cfgFor = (signal: any): Cfg => STAMP_PROVENANCE
+    ? { stop: forwardFor(signal).policy.scoredStopPct, tp: forwardFor(signal).policy.takeProfitPct }
+    : cfgById.get(signal.strategist_id) ?? { stop: POLICY_STOP, tp: 0 };
 
   // Split populations: every gate block processes; bench signals group per (channel, ET day)
   // for the sequential re-entry walk.
@@ -304,6 +379,18 @@ async function main() {
     benchByDay.set(key, arr);
   }
 
+  const existingForwardRows = new Map<string, StoredVirtualTradeProvenance>();
+  if (STAMP_PROVENANCE) {
+    const ids = supportedSigs.map((signal) => String(signal.id));
+    for (let from = 0; from < ids.length; from += 200) {
+      const { data, error } = await sb.from("virtual_trades")
+        .select("signal_id,channel_spec_version_id,release_manifest_id,configuration_epoch_id,native_manager_policy_version,research_publisher_version")
+        .in("signal_id", ids.slice(from, from + 200));
+      if (error) throw new Error(`forward provenance schema/readiness unavailable — ${error.message}`);
+      for (const row of (data ?? []) as StoredVirtualTradeProvenance[]) existingForwardRows.set(String(row.signal_id), row);
+    }
+  }
+
   const ledger = loadLedger();
   const candidateDecisions: VbCandidateDecision[] = [];
   const candidateCensors: CandidateCensor[] = [];
@@ -314,20 +401,32 @@ async function main() {
   };
   let fresh = 0, published = 0, eventInserts = 0;
   const publishedSignalIds = new Set<string>();
+  const publishedForwardPayloads: Record<string, unknown>[] = [];
   const pendingAuthorized = new Map<string, { signal: any; row: ShadowRow; isFresh: boolean }>();
   const publish = async (s: any, base: ShadowRow, isFresh: boolean): Promise<void> => {
     // Upsert the virtual_trades row FIRST and ledger only after it lands. Supabase
     // errors are returned, not thrown, so fail loudly before the signal can be
     // treated as durable.
-    const { error } = await sb.from("virtual_trades").upsert({
-        signal_id: base.signalId, strategist_id: s.strategist_id, slug: base.slug, occ: base.occ,
-        signal_at: base.createdAt, blocked: base.blocked,
-        entry_px: base.entryAsk > 0 ? base.entryAsk : null,
-        exit_reason: base.exitReason, exit_px: base.exitPx, exit_at: base.exitAt,
-        pnl_per_contract: base.pnlPerContract, tp_pct: base.tpPct, stop_pct: base.stopPct, n_quotes: base.nQuotes,
-        mfe_pct: base.mfePct, giveback_pct: base.giveback, // avg-peak lens on the bench (cols added 2026-07-09)
-      }, { onConflict: "signal_id" });
+    const payload = {
+      signal_id: base.signalId, strategist_id: s.strategist_id, slug: base.slug, occ: base.occ,
+      signal_at: base.createdAt, blocked: base.blocked,
+      entry_px: base.entryAsk > 0 ? base.entryAsk : null,
+      exit_reason: base.exitReason, exit_px: base.exitPx, exit_at: base.exitAt,
+      pnl_per_contract: base.pnlPerContract, tp_pct: base.tpPct, stop_pct: base.stopPct, n_quotes: base.nQuotes,
+      mfe_pct: base.mfePct, giveback_pct: base.giveback,
+      ...(STAMP_PROVENANCE ? {
+        channel_spec_version_id: base.channelSpecVersionId ?? null,
+        release_manifest_id: base.releaseManifestId ?? null,
+        configuration_epoch_id: base.configurationEpochId ?? null,
+        native_manager_policy_version: base.nativeManagerPolicyVersion ?? null,
+        research_publisher_version: base.researchPublisherVersion ?? null,
+      } : {}),
+    };
+    const { error } = STAMP_PROVENANCE
+      ? await sb.from("virtual_trades").insert(payload)
+      : await sb.from("virtual_trades").upsert(payload, { onConflict: "signal_id" });
     if (error) throw new Error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`);
+    if (STAMP_PROVENANCE) publishedForwardPayloads.push(payload);
     published++;
     publishedSignalIds.add(base.signalId);
     // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
@@ -345,7 +444,32 @@ async function main() {
     }
   };
   const bank = async (s: any, base: ShadowRow, isFresh: boolean) => {
-    const shouldPublish = !authorizedCatchupIds || authorizedCatchupIds.has(base.signalId);
+    const existingForward = STAMP_PROVENANCE ? existingForwardRows.get(base.signalId) ?? null : null;
+    if (STAMP_PROVENANCE) {
+      const forward = forwardFor(s);
+      assertVirtualTradePolicyEconomics(forward.policy, base);
+      const columns: VirtualTradeProvenanceColumns = existingForward
+        ? {
+          channel_spec_version_id: existingForward.channel_spec_version_id,
+          release_manifest_id: existingForward.release_manifest_id,
+          configuration_epoch_id: existingForward.configuration_epoch_id,
+          native_manager_policy_version: existingForward.native_manager_policy_version ?? "",
+          research_publisher_version: existingForward.research_publisher_version as VirtualTradeProvenanceColumns["research_publisher_version"],
+        }
+        : forward.columns;
+      const legacyExisting = existingForward != null
+        && Object.values(columns).every((value) => value == null || value === "");
+      if (existingForward && !legacyExisting && JSON.stringify(columns) !== JSON.stringify(forward.columns)) {
+        throw new Error(`existing virtual_trades provenance conflicts with source signal ${base.signalId}`);
+      }
+      base.channelSpecVersionId = legacyExisting ? null : columns.channel_spec_version_id;
+      base.releaseManifestId = legacyExisting ? null : columns.release_manifest_id;
+      base.configurationEpochId = legacyExisting ? null : columns.configuration_epoch_id;
+      base.nativeManagerPolicyVersion = legacyExisting ? null : columns.native_manager_policy_version;
+      base.researchPublisherVersion = legacyExisting ? null : columns.research_publisher_version;
+    }
+    const shouldPublish = (!authorizedCatchupIds || authorizedCatchupIds.has(base.signalId))
+      && (!STAMP_PROVENANCE || !existingForward);
     if (HAS_SERVICE && shouldPublish) {
       // Reconstruct and validate the entire approved set before its first write,
       // preventing a changed/partial manifest from causing a partial recovery.
@@ -366,7 +490,7 @@ async function main() {
       continue;
     }
     const slug = String(s.strategists?.slug ?? "?");
-    await bank(s, await reconstruct(s, slug, cfgById.get(s.strategist_id) ?? { stop: POLICY_STOP, tp: 0 }), true);
+    await bank(s, await reconstruct(s, slug, cfgFor(s)), true);
   }
 
   // ── bench fleet: sequential re-entry walk per (channel, day) ──
@@ -387,7 +511,7 @@ async function main() {
         continue;
       }
       const slug = String(s.strategists?.slug ?? "?");
-      const base = await reconstruct(s, slug, cfgById.get(s.strategist_id) ?? { stop: POLICY_STOP, tp: 0 });
+      const base = await reconstruct(s, slug, cfgFor(s));
       await bank(s, base, true);
       collectCandidate(s, base);
       taken++;
@@ -479,6 +603,34 @@ async function main() {
       `remote verification missing ${missingRemoteIds.length}/${expectedRemoteIds.length} rows (${missingRemoteIds.slice(0, 5).join(", ")})`,
     );
   }
+  let publishedPayloadSha256: string | null = null;
+  let publishedReadbackSha256: string | null = null;
+  let publishedPayloadReadbacks = 0;
+  if (HAS_SERVICE && STAMP_PROVENANCE) {
+    const localPayloads = publishedForwardPayloads.map(canonicalForwardPayload)
+      .sort((left, right) => String(left.signal_id).localeCompare(String(right.signal_id)));
+    const remotePayloads: Record<string, unknown>[] = [];
+    const publishedIds = [...publishedSignalIds].sort();
+    for (let from = 0; from < publishedIds.length; from += 200) {
+      const { data, error } = await sb.from("virtual_trades")
+        .select([
+          "signal_id", "strategist_id", "slug", "occ", "signal_at", "blocked", "entry_px", "exit_reason",
+          "exit_px", "exit_at", "pnl_per_contract", "tp_pct", "stop_pct", "n_quotes", "mfe_pct", "giveback_pct",
+          "channel_spec_version_id", "release_manifest_id", "configuration_epoch_id",
+          "native_manager_policy_version", "research_publisher_version",
+        ].join(","))
+        .in("signal_id", publishedIds.slice(from, from + 200));
+      if (error) throw new Error(`forward provenance readback failed — ${error.message}`);
+      remotePayloads.push(...(data ?? []).map((row) => canonicalForwardPayload(row as Record<string, unknown>)));
+    }
+    remotePayloads.sort((left, right) => String(left.signal_id).localeCompare(String(right.signal_id)));
+    publishedPayloadSha256 = payloadSha256(localPayloads);
+    publishedReadbackSha256 = payloadSha256(remotePayloads);
+    publishedPayloadReadbacks = remotePayloads.length;
+    if (publishedPayloadReadbacks !== published || publishedPayloadSha256 !== publishedReadbackSha256) {
+      throw new Error(`forward provenance payload verification failed: ${publishedPayloadReadbacks}/${published}`);
+    }
+  }
   const catchupManifest = {
     version: "gate-shadow-catchup-manifest-v1",
     session: SESSION,
@@ -523,6 +675,10 @@ async function main() {
       catchupRequired: missingRemoteIds.length > 0,
       eventInserts,
       allowedTables: VIRTUAL_TRADES_ONLY ? ["virtual_trades"] : ["virtual_trades", "events"],
+      provenanceStamped: STAMP_PROVENANCE,
+      publishedPayloadReadbacks,
+      publishedPayloadSha256,
+      publishedReadbackSha256,
     },
   };
   writeFileSync(join(OUTPUT_DIR, "gate-shadow-receipt.json"), JSON.stringify(receipt, null, 2));
