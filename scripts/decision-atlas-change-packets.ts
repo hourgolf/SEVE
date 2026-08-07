@@ -24,16 +24,22 @@ if (!existsSync(envFile)) throw new Error(`environment file not found: ${envFile
 process.loadEnvFile(envFile);
 const generatedAt = arg("generated-at", new Date().toISOString());
 const outputDir = resolve(arg("out-dir", "data/decision-atlas/change-packets/latest"));
+const reviewFile = resolve(arg("review-file", "data/decision-atlas/actionable-review/actionable-review.json"));
 if (!Number.isFinite(Date.parse(generatedAt))) throw new Error("generated-at must be ISO-8601");
-
-const PAUSES = [
-  "breakout-manual",
-  "vb-gap-drift-iwm",
-  "vb-macd-state-iwm",
-  "vb-squeeze-break-iwm",
-] as const;
-const PRESERVE_PAUSED = "vb-pm-trend-qqq";
 const ACTIONABLE_EVIDENCE = "decision-atlas:actionable-review:2026-08-07";
+
+interface ActionableReview {
+  promotions: Array<{ channel: string; recommendation: string }>;
+  sizing: Array<{ channel: string; currentContracts: number; proposedContracts: number; goNoGo: string }>;
+  retirements: Array<{ channel: string; proposal: "pause_collection" | "preserve_existing_pause" }>;
+}
+
+if (!existsSync(reviewFile)) throw new Error(`actionable review not found: ${reviewFile}`);
+const review = JSON.parse(readFileSync(reviewFile, "utf8")) as ActionableReview;
+const sizingProposals = review.sizing.filter((row) => row.goNoGo === "conditional_go");
+const pauseSlugs = review.retirements.filter((row) => row.proposal === "pause_collection").map((row) => row.channel).sort();
+const preservedPauseSlugs = review.retirements.filter((row) => row.proposal === "preserve_existing_pause").map((row) => row.channel).sort();
+const promotionSlug = review.promotions.find((row) => row.recommendation === "qualify_first")?.channel ?? null;
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -80,11 +86,11 @@ async function main(): Promise<void> {
       .order("captured_at", { ascending: false }).limit(500),
     sb.from("research_channel_registration_current")
       .select("registration_key,channel_id,channel_slug,state,blockers,content_hash,candidate_spec,cartridge")
-      .eq("channel_slug", "pb-ride-2").maybeSingle(),
+      .eq("channel_slug", promotionSlug ?? "__no_qualified_promotion__").maybeSingle(),
     sb.from("strategists").select([
       "id", "slug", "name", "underlying", "account_id", "status", "is_active",
       "strategist_config(capital_pct,max_contracts,daily_stop_usd,premium_stop_pct,take_profit_pct,entry_dte,strike_offset,event_policy,pyramid_adds,stall_minutes,stall_max_favor_pct)",
-    ].join(",")).eq("slug", "pb-ride-2").maybeSingle(),
+    ].join(",")).eq("slug", promotionSlug ?? "__no_qualified_promotion__").maybeSingle(),
   ]);
   if (!control.compiled || control.state === "failed") throw new Error(`active control plane unavailable: ${control.error ?? control.state}`);
   for (const [label, error] of [["equity", equitiesRead.error], ["promotion registration", promotionRead.error], ["promotion config", configRead.error]] as const) {
@@ -97,34 +103,43 @@ async function main(): Promise<void> {
     underlyings: control.compiled.channelSpecs.flatMap((spec) => spec.symbolScope),
   });
   const collectionStates = new Map(collectionInventory.map((item) => [item.channelId, item.collectionState]));
-  const sizeDraft: ChannelRosterBundleDraft = {
-    id: deterministicUuid(`${control.compiled.manifest.contentHash}:orb-ustop-ctl:2-to-4`),
-    baseManifestId: control.compiled.manifest.id,
-    baseManifestContentHash: control.compiled.manifest.contentHash,
-    changes: [{ slug: "orb-ustop-ctl", quantity: 4 }],
-    reason: "Decision Atlas bounded sizing proposal: increase orb-ustop-ctl from two to four paper contracts without changing entry, stop, exit, manager, routing, or admission priority.",
-    evidenceRefs: [ACTIONABLE_EVIDENCE, "decision-atlas:capacity-replay:orb-ustop-ctl:2-to-4"],
-    operatorId: deterministicUuid("operator:decision-atlas:proposal-only"),
-    createdAt: generatedAt,
-  };
-  const sizePreview = buildChannelRosterBundlePreview({
-    active: control.compiled,
-    registry: buildResearchChannelRegistry([]),
-    draft: sizeDraft,
-    envelope,
-    // Explicit counterfactual used only to compile and validate the draft.
-    // The governed API must replace this with fresh broker/desk observations.
-    live: { complete: true, observedAt: generatedAt, openOrders: 0, positions: [] },
-    collectionStates,
+  const sizePackets = sizingProposals.map((proposal) => {
+    const draft: ChannelRosterBundleDraft = {
+      id: deterministicUuid(`${control.compiled!.manifest.contentHash}:${proposal.channel}:${proposal.currentContracts}-to-${proposal.proposedContracts}`),
+      baseManifestId: control.compiled!.manifest.id,
+      baseManifestContentHash: control.compiled!.manifest.contentHash,
+      changes: [{ slug: proposal.channel, quantity: proposal.proposedContracts }],
+      reason: `Decision Atlas bounded sizing proposal: increase ${proposal.channel} from ${proposal.currentContracts} to ${proposal.proposedContracts} paper contracts without changing entry, stop, exit, manager, routing, or admission priority.`,
+      evidenceRefs: [ACTIONABLE_EVIDENCE, `decision-atlas:capacity-replay:${proposal.channel}:${proposal.currentContracts}-to-${proposal.proposedContracts}`],
+      operatorId: deterministicUuid("operator:decision-atlas:proposal-only"),
+      createdAt: generatedAt,
+    };
+    const preview = buildChannelRosterBundlePreview({
+      active: control.compiled!,
+      registry: buildResearchChannelRegistry([]),
+      draft,
+      envelope,
+      // Explicit counterfactual used only to compile and validate each draft.
+      // The governed API must replace this with fresh broker/desk observations.
+      live: { complete: true, observedAt: generatedAt, openOrders: 0, positions: [] },
+      collectionStates,
+    });
+    return {
+      channel: proposal.channel,
+      fromContracts: proposal.currentContracts,
+      toContracts: proposal.proposedContracts,
+      state: preview.state === "ready-for-worker-ack" ? "prepared_requires_fresh_postclose_preview" : "structurally_blocked",
+      simulatedFlatBoundary: true,
+      draft,
+      preview,
+      applyAuthorized: false,
+    };
   });
-  if (sizePreview.state !== "ready-for-worker-ack") {
-    throw new Error(`sizing structural preview blocked: ${sizePreview.blockers.join("; ")}`);
-  }
 
   const bySlug = new Map(collectionInventory.map((item) => [item.channelSlug, item]));
   const collectionPreview = previewChannelCollectionCull({
     inventory: collectionInventory,
-    changes: PAUSES.map((slug) => {
+    changes: pauseSlugs.map((slug) => {
       const current = bySlug.get(slug);
       if (!current) throw new Error(`collection inventory missing ${slug}`);
       return {
@@ -136,15 +151,18 @@ async function main(): Promise<void> {
     }),
   });
   if (collectionPreview.state !== "reviewable") throw new Error(`collection preview blocked: ${collectionPreview.blockers.join("; ")}`);
-  const alreadyPaused = bySlug.get(PRESERVE_PAUSED);
-  if (!alreadyPaused || alreadyPaused.collectionState !== "paused") throw new Error(`${PRESERVE_PAUSED} is not currently paused`);
+  const preservedPauses = preservedPauseSlugs.map((slug) => {
+    const current = bySlug.get(slug);
+    if (!current || current.collectionState !== "paused") throw new Error(`${slug} is not currently paused`);
+    return { channel: slug, state: current.collectionState, receiptId: current.currentReceiptId };
+  });
 
   const active = control.compiled.channelSpecs.map((spec) => ({
     channel: spec.slug,
     account: spec.accountRole,
     quantityBefore: spec.quantity,
-    quantityAfter: spec.slug === "orb-ustop-ctl" ? 4 : spec.quantity,
-    decision: spec.slug === "orb-ustop-ctl" ? "stay_and_size" : "stay_unchanged",
+    quantityAfter: spec.quantity,
+    decision: sizingProposals.some((proposal) => proposal.channel === spec.slug) ? "independent_size_proposal" : "stay_unchanged",
     entryChanged: false,
     exitChanged: false,
     managerChanged: false,
@@ -156,11 +174,11 @@ async function main(): Promise<void> {
     ? rawPromotion?.strategist_config[0] as Record<string, unknown> | undefined
     : rawPromotion?.strategist_config as Record<string, unknown> | undefined;
   const promotion = {
-    channel: "pb-ride-2",
+    channel: promotionSlug,
     decision: "prepared_but_blocked",
     intendedChange: "add one paper-executing channel at two contracts",
     evidencePreservingConfiguration: {
-      underlying: rawPromotion?.underlying ?? "SPY",
+      underlying: rawPromotion?.underlying ?? null,
       quantity: 2,
       entryDte: number(rawConfig?.entry_dte),
       strikeOffset: number(rawConfig?.strike_offset),
@@ -182,8 +200,8 @@ async function main(): Promise<void> {
       hasCandidateSpec: !!registration.candidate_spec,
     } : null,
     placementDecisionRequired: {
-      controlDomain: "Would compete with pb-ride under rc54-control same-clock SPY=1 and max-open-per-family=1.",
-      recommendedDirection: "Prepare a separate LAB-domain/account experiment so pb-ride and pb-ride-2 retain independent exits; re-run collision and capacity preview after the candidate spec exists.",
+      controlDomain: "Candidate placement must be replayed against current same-clock, family, OCC, occupancy, and capital limits.",
+      recommendedDirection: `Prepare ${promotionSlug ?? "the candidate"} as a sealed limited-size experiment; preserve independent exits and re-run collision/capacity preview after its candidate spec exists.`,
       notSilentlyChosen: true,
     },
     activationReady: false,
@@ -197,37 +215,29 @@ async function main(): Promise<void> {
       activeManifestContentHash: control.compiled.manifest.contentHash,
       activeConfigurationEpochId: control.activationReceipt?.configurationEpochId ?? null,
       collectionInventoryRows: collectionInventory.length,
+      actionableReviewFile: reviewFile,
+      actionableReviewHash: sha256(readFileSync(reviewFile, "utf8")),
       methods: ["SELECT", "GET"],
     },
     plainSummary: {
       executingBefore: active.length,
       executingAfterApprovedReadyChanges: active.length,
-      executingAfterBlockedPromotionResolved: active.length + 1,
+      executingAfterBlockedPromotionResolved: active.length + (promotionSlug ? 1 : 0),
       unchangedExecutingChannels: active.filter((row) => row.decision === "stay_unchanged").length,
-      sizedExecutingChannels: 1,
+      independentSizingProposals: sizePackets.length,
       newlyPausedCollectors: collectionPreview.changes.length,
-      alreadyPausedCollectorsPreserved: 1,
+      alreadyPausedCollectorsPreserved: preservedPauses.length,
       entryChanges: 0,
       exitChanges: 0,
       managerChanges: 0,
       routingChangesReadyNow: 0,
     },
     executingRoster: active,
-    sizingPacket: {
-      state: "prepared_requires_fresh_postclose_preview",
-      simulatedFlatBoundary: true,
-      draft: sizeDraft,
-      preview: sizePreview,
-      applyAuthorized: false,
-    },
+    sizingPackets: sizePackets,
     collectionPacket: {
       state: "prepared_reviewable",
       preview: collectionPreview,
-      preservedExistingPause: {
-        channel: PRESERVE_PAUSED,
-        state: alreadyPaused.collectionState,
-        receiptId: alreadyPaused.currentReceiptId,
-      },
+      preservedExistingPauses: preservedPauses,
       applyAuthorized: false,
     },
     promotionPacket: promotion,
@@ -244,8 +254,12 @@ async function main(): Promise<void> {
     artifactHash: sha256(json),
     sourceManifest: control.compiled.manifest.contentHash,
     collectionPreviewHash: collectionPreview.previewHash,
-    sizingCandidateManifestHash: sizePreview.candidate?.manifest.contentHash ?? null,
-    sizingCandidateConfigurationEpochId: sizePreview.configurationEpochId,
+    sizingCandidates: sizePackets.map((item) => ({
+      channel: item.channel,
+      manifestHash: item.preview.candidate?.manifest.contentHash ?? null,
+      configurationEpochId: item.preview.configurationEpochId,
+      state: item.state,
+    })),
     productionWrites: 0,
     authority: "none",
   };
@@ -253,7 +267,7 @@ async function main(): Promise<void> {
   writeFileSync(resolve(outputDir, "change-packets.json"), json);
   writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   console.log(`decision-atlas-change-packets: PASS · ${active.length} executing · ${collectionPreview.changes.length} collector pauses`);
-  console.log(`  sizing: prepared · promotion: blocked (${registration?.blockers.length ?? 0} registration blockers)`);
+  console.log(`  sizing: ${sizePackets.length} independent proposal(s) · promotion: ${promotionSlug ?? "none"} blocked (${registration?.blockers.length ?? 0} registration blockers)`);
   console.log(`  output: ${outputDir}`);
   console.log("  production writes: 0 · authority: none");
 }

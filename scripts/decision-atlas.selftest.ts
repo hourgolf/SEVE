@@ -61,6 +61,12 @@ assert.match(packets, /simulatedFlatBoundary:\s*true/,
   "structural sizing preparation must disclose its simulated flat boundary");
 assert.match(packets, /prepared_but_blocked/,
   "promotion packet must fail closed when the research registration is incomplete");
+assert.match(packets, /const reviewFile = resolve/,
+  "change packets must derive their candidates from the frozen actionable review");
+assert.match(packets, /sizingPackets: sizePackets/,
+  "sizing proposals must remain independently reversible");
+assert.doesNotMatch(packets, /const PAUSES =|const PRESERVE_PAUSED =/,
+  "retirement packets must not use a stale hardcoded channel list");
 assert.match(packets, /productionWrites:\s*0/);
 assert.match(packets, /activationAuthorized:\s*false/);
 assert.doesNotMatch(packets, /\.from\([^\n]+\)\.(?:insert|upsert|update|delete)\(/);
