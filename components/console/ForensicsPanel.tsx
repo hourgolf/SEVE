@@ -226,7 +226,7 @@ export function ForensicsPanel({
             <div className="au-fund">
               <span>kept <b className={gb.capturePct >= 50 ? "pos" : "neg"}>{gb.capturePct}%</b> of peak</span>
               <span>gave back <b className="neg">{signedUsd(-gb.givenBackUsd)}</b></span>
-              <span>{gb.nPeakers}/{gb.nClosed} peaked</span>
+              <span title={gb.unit === "position_tranche" ? "Exit-path analysis is tranche-specific; this is not a logical-trade count." : "Legacy report: count unit was not persisted."}>{gb.nPeakers}/{gb.nClosed} {gb.unit === "position_tranche" ? "tranches peaked" : "legacy rows peaked"}</span>
             </div>
             {gb.byChannel.length > 0 && (
               <div className="fx-rows">

@@ -310,8 +310,8 @@ async function main() {
   if (!buckets.length) console.log(`  (no per-account snapshots for ${DATE} — worker down, or pre-cockpit date)`);
   for (const b of buckets)
     console.log(`  ${b.name.padEnd(14)} ${Math.round(b.open).toLocaleString().padStart(11)} → ${Math.round(b.close).toLocaleString().padStart(11)}   ${sgn(b.delta).padStart(7)}`);
-  console.log(`  ── TOTAL ${navDelta == null ? "n/a" : sgn(navDelta)} · Σ ledger attribution ${sgn(ledgerTot)} · ${allTrades.length} executed trades`);
-  console.log(`  ── strategy-scored ${sgn(scoredTot)} (auto ${sgn(auto.reduce((a, t) => a + t.pnl, 0))}, manual ${sgn(trades.filter((t) => t.manual).reduce((a, t) => a + t.pnl, 0))}) · ${trades.length} eligible trades · ${excludedTrades.length} excluded`);
+  console.log(`  ── TOTAL ${navDelta == null ? "n/a" : sgn(navDelta)} · Σ row attribution ${sgn(ledgerTot)} · ${allTrades.length} executed position rows`);
+  console.log(`  ── strategy-scored rows ${sgn(scoredTot)} (auto ${sgn(auto.reduce((a, t) => a + t.pnl, 0))}, manual ${sgn(trades.filter((t) => t.manual).reduce((a, t) => a + t.pnl, 0))}) · ${trades.length} eligible position rows · ${excludedTrades.length} excluded`);
   if (navDelta != null && Math.abs(navDelta - ledgerTot) > 300) console.log(`  ⚠ attribution drifts ${sgn(ledgerTot - navDelta)} from NAV (per-account snapshot timing / shared-OCC residue / a mis-booked close — e.g. the close-route account bug)`);
   for (const t of excludedTrades) console.log(`  ↳ EXCLUDED ${t.id} · ${t.slug} ${sgn(t.pnl)} · ${t.researchAnnotation!.analysisClass}: ${t.researchAnnotation!.note}`);
 
@@ -724,6 +724,7 @@ async function main() {
   for (const t of gbPeakers) { const e = gbChan.get(t.slug) ?? { name: t.name, peaked: 0, kept: 0, n: 0 }; e.peaked += peakGainUsd(t); e.kept += t.pnl; e.n++; gbChan.set(t.slug, e); }
   const giveback = {
     date: DATE,
+    unit: "position_tranche" as const,
     nPeakers: gbPeakers.length,
     nClosed: trades.length,
     peakedUsd: Math.round(gbPeaked),
@@ -734,7 +735,7 @@ async function main() {
       .map((e) => ({ key: e.name, capturePct: e.peaked > 0 ? Math.round((e.kept / e.peaked) * 100) : 0, givenBackUsd: Math.round(e.peaked - e.kept), n: e.n }))
       .sort((a, b) => b.givenBackUsd - a.givenBackUsd),
   };
-  console.log(`\nGIVE-BACK (peak→close) — ${giveback.nPeakers}/${giveback.nClosed} trades peaked +; kept ${giveback.capturePct ?? "—"}% of peak · $${giveback.givenBackUsd} given back (peaked ${sgn(giveback.peakedUsd)} → kept ${sgn(giveback.keptUsd)})`);
+  console.log(`\nGIVE-BACK (peak→close, tranche path) — ${giveback.nPeakers}/${giveback.nClosed} position tranches peaked +; kept ${giveback.capturePct ?? "—"}% of peak · $${giveback.givenBackUsd} given back (peaked ${sgn(giveback.peakedUsd)} → kept ${sgn(giveback.keptUsd)})`);
 
   // ---- publish to the §03 dashboard panel (override scorecard + benched-vs-live) ----------
   const [ledgerNow, fouloutNow] = await Promise.all([loadLedger(), loadFoulout()]);

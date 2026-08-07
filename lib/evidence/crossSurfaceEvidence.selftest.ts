@@ -46,6 +46,8 @@ const weeklyGenerator = read("../../supabase/functions/weekly-autopsy/index.ts")
 const workstationShell = read("../../components/shell/WorkstationShell.tsx");
 const mobileShell = read("../../components/mobile2/MobileShell.tsx");
 const positionsWorkspace = read("../../components/perform/PerformPositionsWorkspace.tsx");
+const dayReport = read("../../scripts/day-report.ts");
+const forensicsPanel = read("../../components/console/ForensicsPanel.tsx");
 assert.match(atlasCard, /HISTORICAL VIRTUAL/);
 assert.match(atlasCard, /NOT EXECUTED/);
 assert.match(currentCard, /CURRENT EXECUTED/);
@@ -62,5 +64,8 @@ assert.match(workstationShell, /SESSION NAV Δ/);
 assert.match(mobileShell, /NAV Δ/);
 assert.match(positionsWorkspace, /RECENT EXIT TRANCHES/);
 assert.match(positionsWorkspace, /logical trades · desk attribution/);
+assert.match(dayReport, /unit: "position_tranche"/);
+assert.match(dayReport, /executed position rows/);
+assert.match(forensicsPanel, /tranches peaked/);
 
 console.log("cross-surface-evidence-selftest: PASS");

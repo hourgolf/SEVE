@@ -25,6 +25,7 @@ export interface BenchedCum { since: string; sessions: number; rows: BenchedCumR
 export interface GivebackCut { key: string; capturePct: number; givenBackUsd: number; n: number }
 export interface GivebackPayload {
   date: string; nPeakers: number; nClosed: number;
+  unit?: "position_tranche";
   peakedUsd: number; keptUsd: number; givenBackUsd: number;
   capturePct: number | null; byChannel: GivebackCut[];
 }
