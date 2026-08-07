@@ -162,7 +162,7 @@ function ChannelRackRowImpl({ strategist, pnl, active, selected, onSelect }: Cha
         />
       </div>
 
-      <div className={`r-pnl ${pnlCls}`}>{signedUsd(day)}</div>
+      <div className={`r-pnl ${pnlCls}`} title="Current-session channel attribution from immutable routed positions; not account NAV." aria-label={`Session channel attribution ${signedUsd(day)}`}>{signedUsd(day)}</div>
 
       {/* MUTE · BOOST — reused PadButton, real write paths */}
       <div className="r-pads" onClick={(e) => e.stopPropagation()}>

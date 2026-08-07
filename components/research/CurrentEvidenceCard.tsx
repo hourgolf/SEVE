@@ -6,6 +6,13 @@ import type {
 
 const money = (value: number | null): string => value == null ? "—" : signedUsd(value);
 
+function unavailableSummary(error: string): string {
+  const match = error.match(/(?:missing|lack) immutable execution-account routing:\s*([^;]+)/i);
+  const missing = match?.[1]?.split(",").map((value) => value.trim()).filter(Boolean).length ?? 0;
+  if (missing) return `${missing} closed position record${missing === 1 ? " is" : "s are"} missing immutable account lineage. Current comparisons are withheld until lineage is repaired.`;
+  return "Executed evidence could not be reconciled, so the current comparison is withheld rather than shown as zero.";
+}
+
 export function CurrentEvidenceCard({
   selectedSlug,
   executed,
@@ -25,7 +32,8 @@ export function CurrentEvidenceCard({
 }) {
   if (state === "error") return <section className={`srw-current-evidence unavailable${compact ? " compact" : ""}`}>
     <header><span><small>CURRENT EXECUTED</small><b>COMPARISON UNAVAILABLE</b></span><em>READ FAILED</em></header>
-    <p>{error || "Current execution evidence could not be read."}</p>
+    <p>{unavailableSummary(error)}</p>
+    {error ? <details className="srw-current-evidence-detail"><summary>EVIDENCE DETAILS</summary><p>{error}</p></details> : null}
   </section>;
   if (!executed && !comparison) return <section className={`srw-current-evidence empty${compact ? " compact" : ""}`}>
     <header><span><small>CURRENT EXECUTED</small><b>{selectedSlug}</b></span><em>NO CURRENT SAMPLE</em></header>

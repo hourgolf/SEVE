@@ -89,7 +89,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
         <div className="fleet-grid fleet-head" role="row">
           <span role="columnheader">CHANNEL</span>
           <span role="columnheader">RECEIPT / DATABASE</span>
-          <span role="columnheader">POSITION</span>
+          <span role="columnheader">POSITION / SESSION ATTRIB</span>
           <span className="fc-risk" role="columnheader">RISK / TRADE</span>
           <span className="fc-signal" role="columnheader">DECISION</span>
           <span className="fc-tune" role="columnheader">POSTURE / POLICY</span>
@@ -115,7 +115,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                 </span>
                 <span className="fleet-position" role="cell">
                   <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : "—"}</b>
-                  <small className={pnlClass}>{row.pnl.dayPnl ? signedUsd(row.pnl.dayPnl) : "$0"} day</small>
+                  <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{row.pnl.dayPnl ? signedUsd(row.pnl.dayPnl) : "$0"} attrib</small>
                 </span>
                 <span className="fc-risk fleet-value" role="cell">{usd0(passport?.rootPolicy?.riskBudgetUsd ?? row.channel.config.capital_pct)}</span>
                 <span className="fc-signal fleet-signal" role="cell" title={row.lastSignal?.message}>

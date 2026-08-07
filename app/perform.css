@@ -294,6 +294,9 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 }
 .shell-root.ws909 .srw-current-evidence > footer b { color:#dfe5e2; font-size:9px; }
 .shell-root.ws909 .srw-current-evidence > p { margin:0; color:#87918e; font-size:9px; line-height:1.4; }
+.shell-root.ws909 .srw-current-evidence-detail { min-width:0; color:#87918e; font-size:8px; }
+.shell-root.ws909 .srw-current-evidence-detail summary { cursor:pointer; letter-spacing:.08em; }
+.shell-root.ws909 .srw-current-evidence-detail p { margin:6px 0 0; max-height:80px; overflow:auto; overflow-wrap:anywhere; line-height:1.4; }
 .shell-root.ws909 .srw-current-evidence.unavailable { border-color:#71443e; }
 .shell-root.ws909 .srw-current-evidence.empty { border-color:#3a4141; }
 .shell-root.ws909 .srw .pos { color:#55d981; }

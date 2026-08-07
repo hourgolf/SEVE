@@ -567,7 +567,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
             {statusBadge}
           </div>
           <div className="mc-head-r">
-            <div className={`mc-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
+            <div className={`mc-pnl ${day < 0 ? "neg" : "pos"}`} title="Current-session channel attribution; not account NAV." aria-label={`Session channel attribution ${signedUsd(day)}`}>{signedUsd(day)}</div>
           </div>
         </div>
         {/* the binding exits at a glance (read-only here — tap expands to the editable pills) */}
@@ -630,7 +630,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
         </div>
 
         <div className="ch-foot">
-          <div className={`ch-pnl ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
+          <div className={`ch-pnl ${day < 0 ? "neg" : "pos"}`} title="Current-session channel attribution; not account NAV." aria-label={`Session channel attribution ${signedUsd(day)}`}>{signedUsd(day)}</div>
           {pads}
         </div>
         {editOverlay}
@@ -668,7 +668,7 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
       {firesReadout}
 
       <div className="ch-lcd">
-        <div className={`ch-lcd-v ${day < 0 ? "neg" : "pos"}`}>{signedUsd(day)}</div>
+        <div className={`ch-lcd-v ${day < 0 ? "neg" : "pos"}`} title="Current-session channel attribution; not account NAV." aria-label={`Session channel attribution ${signedUsd(day)}`}>{signedUsd(day)}</div>
         <div className="ch-lcd-bar"><i className={day < 0 ? "neg" : "pos"} style={{ width: `${mag * 100}%` }} /></div>
       </div>
 

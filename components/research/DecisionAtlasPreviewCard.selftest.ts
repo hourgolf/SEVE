@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
 const card = read("./DecisionAtlasPreviewCard.tsx");
+const current = read("./CurrentEvidenceCard.tsx");
 const inspector = read("../studio/ChannelInspector.tsx");
 const research = read("../perform/ShadowResearchWorkspace.tsx");
 const mobile = read("../mobile2/MobileRackRow.tsx");
@@ -13,6 +14,10 @@ assert.match(card, /DECISION ATLAS · HISTORICAL VIRTUAL/);
 assert.match(card, /NOT EXECUTED/);
 assert.match(card, /model\.metrics\.map/);
 assert.match(card, /<details><summary>Why this read\?/);
+assert.match(current, /withheld rather than shown as zero/);
+assert.match(current, /<details className="srw-current-evidence-detail">/);
+assert.doesNotMatch(current, /<p>\{error \|\|/,
+  "raw lineage diagnostics must stay out of the default card");
 assert.doesNotMatch(card, /hash|sha256|confidence interval|configuration epoch/i,
   "technical provenance stays out of the first-glance card");
 assert.match(inspector, /<DecisionAtlasPreviewCard/);
