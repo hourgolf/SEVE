@@ -1,8 +1,12 @@
+import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
+
 export interface StudioEvidencePosition {
+  id: string;
   slug: string;
   qty: number;
   pnl: number;
   closedAt: string;
+  runnerOf: string | null;
 }
 
 export type EvidenceConfidence = "none" | "thin" | "early" | "building";
@@ -33,11 +37,29 @@ const etDate = (iso: string): string =>
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 
 export function deriveStudioEvidence(rows: StudioEvidencePosition[], maxSessions = 5): StudioEvidenceSnapshot {
-  const allDates = [...new Set(rows.map((row) => etDate(row.closedAt)))].sort();
+  const cohort = summarizeLogicalTradeCohort(rows.map((row) => ({
+    ...row,
+    status: "closed" as const,
+    runner_of: row.runnerOf,
+    realized_pnl: row.pnl,
+  })), { allowExternalParents: true });
+  if (cohort.issues.length) throw new Error(cohort.issues.join("; "));
+  const logicalTrades = cohort.groups.map((trade) => {
+    const slugs = [...new Set(trade.rows.map((row) => row.slug))];
+    if (slugs.length !== 1) throw new Error(`logical trade ${trade.rootPositionId} spans channel identities`);
+    const closedAt = trade.rows.map((row) => row.closedAt).sort().at(-1) ?? "";
+    return {
+      slug: slugs[0],
+      qty: trade.rows.reduce((sum, row) => sum + Math.abs(Number(row.qty) || 0), 0),
+      pnl: trade.realizedPnl ?? 0,
+      closedAt,
+    };
+  }).sort((left, right) => left.closedAt.localeCompare(right.closedAt));
+  const allDates = [...new Set(logicalTrades.map((row) => etDate(row.closedAt)))].sort();
   const sessionDates = allDates.slice(-maxSessions);
   const allowed = new Set(sessionDates);
-  const scoped = rows.filter((row) => allowed.has(etDate(row.closedAt)));
-  const grouped = new Map<string, StudioEvidencePosition[]>();
+  const scoped = logicalTrades.filter((row) => allowed.has(etDate(row.closedAt)));
+  const grouped = new Map<string, typeof logicalTrades>();
   for (const row of scoped) {
     const list = grouped.get(row.slug) ?? [];
     list.push(row);

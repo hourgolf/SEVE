@@ -1,3 +1,5 @@
+import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
+
 export interface ShadowResearchRow {
   signalId?: string;
   slug: string;
@@ -226,32 +228,25 @@ export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow
   opportunities: CurrentExecutedOpportunity[];
   bySlug: Record<string, CurrentExecutedSummary>;
 } {
-  const byId = new Map(rows.filter((row) => row.id).map((row) => [row.id, row]));
-  const rootId = (row: ExecutedResearchRow): string => {
-    const seen = new Set<string>();
-    let current = row;
-    while (current.runnerOf && !seen.has(current.id)) {
-      seen.add(current.id);
-      const parent = byId.get(current.runnerOf);
-      if (!parent) return current.runnerOf;
-      current = parent;
-    }
-    return current.id;
-  };
-  const groups = new Map<string, ExecutedResearchRow[]>();
-  for (const row of rows) {
-    if (!row.slug || !row.openedAt || row.realizedPnl == null) continue;
-    const key = `${row.slug}:${rootId(row)}`;
-    groups.set(key, [...(groups.get(key) ?? []), row]);
-  }
-
-  const candidates = [...groups.values()].flatMap((group): CurrentExecutedOpportunity[] => {
+  const canonicalRows = rows.filter((row) => row.slug && row.openedAt && row.realizedPnl != null).map((row) => ({
+    ...row,
+    status: "closed" as const,
+    runner_of: row.runnerOf,
+    realized_pnl: row.realizedPnl,
+  }));
+  const logical = summarizeLogicalTradeCohort(canonicalRows, { allowExternalParents: true });
+  if (logical.issues.length) throw new Error(logical.issues.join("; "));
+  const candidates = logical.groups.flatMap((trade): CurrentExecutedOpportunity[] => {
+    const group = trade.rows;
+    const slugs = [...new Set(group.map((row) => row.slug))];
+    if (slugs.length !== 1) throw new Error(`logical trade ${trade.rootPositionId} spans channel identities`);
     const root = group.find((row) => !row.runnerOf) ?? group[0];
     const configurationEpochId = root.configurationEpochId?.trim() ?? "";
     const session = shadowSessionDate(root.openedAt);
     const contracts = group.reduce((sum, row) => sum + Math.abs(Number(row.quantity) || 0), 0);
     if (!configurationEpochId || !session || !(contracts > 0)) return [];
-    const total = group.reduce((sum, row) => sum + Number(row.realizedPnl ?? 0), 0);
+    const total = trade.realizedPnl;
+    if (total == null) return [];
     return [{
       slug: root.slug,
       openedAt: root.openedAt,

@@ -9,16 +9,19 @@ const mobile = read("../mobile2/MobileRackRow.tsx");
 const css = read("../../app/decision-atlas.css");
 const workspaceCss = read("../../app/seve-909.css");
 
-assert.match(card, /DECISION ATLAS · LIVE PREVIEW/);
+assert.match(card, /DECISION ATLAS · HISTORICAL VIRTUAL/);
+assert.match(card, /NOT EXECUTED/);
 assert.match(card, /model\.metrics\.map/);
 assert.match(card, /<details><summary>Why this read\?/);
 assert.doesNotMatch(card, /hash|sha256|confidence interval|configuration epoch/i,
   "technical provenance stays out of the first-glance card");
 assert.match(inspector, /<DecisionAtlasPreviewCard/);
+assert.match(inspector, /<CurrentEvidenceCard/);
 assert.match(research, /<DecisionAtlasPreviewCard/);
 assert.match(research, /srw-atlas-brief/);
 assert.match(research, /WHAT DESERVES REVIEW\?/);
 assert.match(mobile, /<DecisionAtlasPreviewCard/);
+assert.match(mobile, /<CurrentEvidenceCard/);
 assert(inspector.indexOf("<DecisionAtlasPreviewCard") < inspector.indexOf("<details className=\"channel-disclosure\""),
   "decision-first summary must precede deep analysis");
 assert.match(css, /data-skin="blackout"/);

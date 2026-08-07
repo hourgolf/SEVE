@@ -197,8 +197,9 @@ assert.deepEqual(paired[0], {
   throughSession: "2026-08-05",
 });
 const workspaceSource = readFileSync("components/perform/ShadowResearchWorkspace.tsx", "utf8");
+const currentCardSource = readFileSync("components/research/CurrentEvidenceCard.tsx", "utf8");
 assert.match(workspaceSource, /HISTORICAL VIRTUAL/, "cumulative rows keep their evidence layer visible");
-assert.match(workspaceSource, /CURRENT EXECUTED/, "executed evidence is explicitly separated from virtual paths");
-assert.match(workspaceSource, /SAME-CLOCK VIRTUAL/, "paired comparison labels its counterfactual side");
+assert.match(currentCardSource, /CURRENT EXECUTED/, "executed evidence is explicitly separated from virtual paths");
+assert.match(currentCardSource, /SAME-CLOCK VIRTUAL/, "paired comparison labels its counterfactual side");
 assert.match(workspaceSource, /every table row is virtual/, "the default table cannot imply portfolio execution");
 console.log("shadow-research-selftest: PASS");

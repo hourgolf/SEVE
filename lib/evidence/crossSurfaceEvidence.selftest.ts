@@ -1,0 +1,46 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { evidenceEnvelope } from "./evidenceEnvelope";
+import { deriveCurrentExecutedEvidence } from "../research/shadowResearch";
+import { deriveStudioEvidence } from "../studio/deriveStudioEvidence";
+
+const executed = [
+  { id: "root", slug: "alpha", quantity: 1, realizedPnl: 40, openedAt: "2026-08-07T14:00:00Z", closedAt: "2026-08-07T14:20:00Z", runnerOf: null, configurationEpochId: "epoch-current" },
+  { id: "runner", slug: "alpha", quantity: 1, realizedPnl: -10, openedAt: "2026-08-07T14:00:00Z", closedAt: "2026-08-07T14:25:00Z", runnerOf: "root", configurationEpochId: null },
+];
+const current = deriveCurrentExecutedEvidence(executed);
+const studio = deriveStudioEvidence(executed.map((row) => ({
+  id: row.id, slug: row.slug, qty: row.quantity, pnl: row.realizedPnl ?? 0,
+  closedAt: row.closedAt ?? row.openedAt, runnerOf: row.runnerOf,
+})));
+assert.equal(current.bySlug.alpha.opportunities, 1);
+assert.equal(studio.bySlug.alpha.trades, 1);
+assert.equal(current.bySlug.alpha.totalPerContract, 15);
+assert.equal(studio.bySlug.alpha.grossPerContract, 15);
+
+assert.deepEqual(evidenceEnvelope({
+  layer: "current_executed", unit: "logical_trade", fromSession: "2026-08-07", throughSession: "2026-08-07",
+  configurationEpochId: "epoch-current", completeness: "complete", source: "fixture", asOf: "2026-08-07T20:00:00Z",
+}).unit, "logical_trade");
+assert.throws(() => evidenceEnvelope({
+  layer: "historical_virtual", unit: "opportunity", fromSession: "2026-08-08", throughSession: "2026-08-07",
+  configurationEpochId: null, completeness: "complete", source: "fixture", asOf: null,
+}), /reversed/);
+assert.equal(evidenceEnvelope({
+  layer: "historical_executed", unit: "logical_trade", fromSession: "2026-08-07", throughSession: "2026-08-07",
+  configurationEpochId: null, completeness: "stale", source: "fixture", asOf: "2026-08-07T20:00:00Z",
+}).completeness, "stale");
+
+const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
+const atlasCard = read("../../components/research/DecisionAtlasPreviewCard.tsx");
+const currentCard = read("../../components/research/CurrentEvidenceCard.tsx");
+const studioPanel = read("../../components/studio/StudioModules.tsx");
+const review = read("../../hooks/useWindowedPnl.ts");
+assert.match(atlasCard, /HISTORICAL VIRTUAL/);
+assert.match(atlasCard, /NOT EXECUTED/);
+assert.match(currentCard, /CURRENT EXECUTED/);
+assert.match(currentCard, /SAME-CLOCK VIRTUAL/);
+assert.match(studioPanel, /GROSS \/ LOGICAL TRADE/);
+assert.match(review, /summarizeLogicalTradeCohort/);
+
+console.log("cross-surface-evidence-selftest: PASS");

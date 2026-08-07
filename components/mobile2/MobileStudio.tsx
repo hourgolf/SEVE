@@ -76,6 +76,7 @@ export function MobileStudio({
             dryPowder={props.shadowResearch.dryPowderBySlug[s.slug]}
             shadowSummary={props.shadowResearch.cumulative?.dark.find((item) => item.slug === s.slug)}
             managerEvidence={props.managerEvidence.book?.channels[s.slug]}
+            researchEvidence={props.shadowResearch}
             controlPlane={props.channelControlPlane}
             open={openSlug === s.slug}
             onToggle={() => setOpenSlug(openSlug === s.slug ? null : s.slug)}

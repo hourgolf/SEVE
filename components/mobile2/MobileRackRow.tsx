@@ -8,6 +8,7 @@ import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRoste
 import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
 import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
+import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -21,6 +22,7 @@ import { channelDecisionState } from "@/lib/studio/channelDecision";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
 import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } from "@/lib/research/shadowResearch";
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
+import type { ShadowResearch } from "@/hooks/useShadowResearch";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -40,7 +42,7 @@ const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
 }).format(new Date(iso));
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle, write, passport, dryPowder, shadowSummary, managerEvidence, controlPlane,
+  strategist, pnl, active, open, onToggle, write, passport, dryPowder, shadowSummary, managerEvidence, researchEvidence, controlPlane,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
@@ -52,6 +54,7 @@ export function MobileRackRow({
   dryPowder?: DryPowderCurve;
   shadowSummary?: ShadowChannelSummary;
   managerEvidence?: ChannelManagerEvidence;
+  researchEvidence?: ShadowResearch;
   controlPlane?: ChannelControlPlaneViewRead;
 }) {
   const dispatch = useDeskDispatch();
@@ -88,6 +91,11 @@ export function MobileRackRow({
   const day = pnl?.dayPnl ?? 0;
   const pnlCls = day > 0 ? "pos" : day < 0 ? "neg" : "flat";
   const pm = pmVar(color);
+  const pairedCurrent = researchEvidence?.pairedCurrent.find((item) =>
+    item.executedSlug === slug || item.virtualSlug === slug);
+  const currentExecuted = pairedCurrent
+    ? researchEvidence?.currentExecutedBySlug[pairedCurrent.executedSlug]
+    : researchEvidence?.currentExecutedBySlug[slug];
 
   const persistPatch = (patch: Partial<StrategistConfig>) => {
     if (draft.active) { draft.update(patch); return; }
@@ -314,6 +322,9 @@ export function MobileRackRow({
             </>}
           </div>
           {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
+          {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
+            state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
+            truncated={researchEvidence.currentExecutedTruncated} compact />}
           <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} compact />
           <details className="channel-disclosure"><summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary><div>
             <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />

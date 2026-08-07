@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
+import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
 import {
   deriveChannelDryPowderCurves,
   deriveCurrentExecutedEvidence,
@@ -36,6 +37,8 @@ export interface ShadowResearch {
   currentExecutedState: "ok" | "empty" | "error";
   currentExecutedError: string;
   currentExecutedTruncated: boolean;
+  virtualEvidence: EvidenceEnvelope;
+  currentExecutedEvidence: EvidenceEnvelope;
   cohortStart: typeof COHORT_START;
   truncated: boolean;
   error: string;
@@ -53,6 +56,10 @@ const EMPTY: ShadowResearch = {
   currentExecutedState: "empty",
   currentExecutedError: "",
   currentExecutedTruncated: false,
+  virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity", fromSession: null, throughSession: null,
+    configurationEpochId: null, completeness: "unavailable", source: "virtual_trades", asOf: null }),
+  currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade", fromSession: null, throughSession: null,
+    configurationEpochId: null, completeness: "unavailable", source: "positions lineage", asOf: null }),
   cohortStart: COHORT_START,
   truncated: false,
   error: "",
@@ -153,6 +160,8 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
           currentExecutedError = message(error);
         }
         if (!alive) return;
+        const asOf = new Date().toISOString();
+        const currentSessions = Object.values(currentExecutedBySlug).flatMap((summary) => [summary.fromSession, summary.throughSession]).filter(Boolean).sort();
         setState({
           state: sessions.length ? "ok" : "empty",
           sessions,
@@ -164,14 +173,30 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
           currentExecutedState,
           currentExecutedError,
           currentExecutedTruncated,
+          virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity",
+            fromSession: cumulative?.fromSession ?? null, throughSession: cumulative?.throughSession ?? null,
+            configurationEpochId: null, completeness: total > MAX_ROWS ? "partial" : sessions.length ? "complete" : "unavailable",
+            source: "virtual_trades", asOf }),
+          currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade",
+            fromSession: currentSessions[0] ?? null, throughSession: currentSessions.at(-1) ?? null,
+            configurationEpochId: null, completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
+            source: "positions lineage · latest channel configuration epoch", asOf }),
           cohortStart: COHORT_START,
           truncated: total > MAX_ROWS,
           error: "",
-          asOf: new Date().toISOString(),
+          asOf,
           basis: "native virtual paths since Day 1",
         });
       } catch (error) {
-        if (alive) setState((previous) => ({ ...previous, state: "error", error: message(error) }));
+        if (alive) setState((previous) => ({
+          ...previous,
+          state: "error",
+          error: message(error),
+          virtualEvidence: evidenceEnvelope({ ...previous.virtualEvidence,
+            completeness: previous.asOf ? "stale" : "unavailable" }),
+          currentExecutedEvidence: evidenceEnvelope({ ...previous.currentExecutedEvidence,
+            completeness: previous.asOf ? "stale" : "unavailable" }),
+        }));
       }
     };
     void poll();

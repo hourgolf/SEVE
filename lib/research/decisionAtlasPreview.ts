@@ -32,23 +32,23 @@ export function buildDecisionAtlasPreview(input: {
     && item.deltaConfidence95.lower != null && item.deltaConfidence95.lower > 0) ?? null;
   let label: DecisionAtlasPreview["label"] = "KEEP COLLECTING";
   let tone: DecisionAtlasPreview["tone"] = "neutral";
-  let summary = "Evidence is not settled enough to prefer a change.";
+  let summary = "Virtual evidence is not settled enough to prefer a change.";
   if (manager) {
     label = "REVIEW MANAGER";
     tone = "positive";
-    summary = `${manager.managerId} improves the typical paired exit with session-level support.`;
+    summary = `${manager.managerId} improves the typical paired virtual exit with session-level support.`;
   } else if (sessions >= 5 && (typical ?? 0) > 0 && (first ?? 0) > 0 && (next ?? 0) > 0) {
     label = "TEST CAPACITY";
     tone = "positive";
-    summary = "The typical path and the next entry are positive; run the full capital replay before sizing.";
+    summary = "The typical virtual path and the next entry are positive; run the full capital replay before sizing.";
   } else if (sessions >= 5 && (typical ?? 0) > 0 && (input.summary?.averageGivebackPct ?? 0) >= 40) {
     label = "REVIEW EXIT";
     tone = "warning";
-    summary = "Entries find opportunity, but the current exit gives back a large share of the move.";
+    summary = "Virtual entries find opportunity, but the modeled exit gives back a large share of the move.";
   } else if (sessions >= 10 && typical != null && typical < 0) {
     label = "REVIEW ENTRY";
     tone = "warning";
-    summary = "The typical path is negative; check uniqueness and configuration era before keeping or retiring it.";
+    summary = "The typical virtual path is negative; check uniqueness and configuration era before keeping or retiring it.";
   }
   return {
     label,
