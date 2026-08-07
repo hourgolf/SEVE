@@ -198,6 +198,7 @@ export function buildReceiptBoundRc54StartupReceipt(input: {
     roots: input.runtime.roots.map((root) => ({
       slug: root.slug,
       accountId: root.accountId,
+      executionPosture: root.executionPosture,
       channelSpecVersionId: root.channelSpecVersionId,
       channelSpecContentHash: root.channelSpecContentHash,
       managerProfileId: root.configuration.managerProfileId,

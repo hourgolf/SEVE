@@ -434,6 +434,16 @@ check("receipt-bound startup carries exact authority and operational posture", (
   assert.equal(startup.activationReceiptId, runtime.activationReceiptId);
   assert.equal(startup.workerVersion, runtime.workerCompatibilityVersion);
   assert.deepEqual(
+    (startup.roots as Array<Record<string, unknown>>).map((root) => ({
+      slug: root.slug,
+      executionPosture: root.executionPosture,
+    })),
+    runtime.roots.map((root) => ({
+      slug: root.slug,
+      executionPosture: root.executionPosture,
+    })),
+  );
+  assert.deepEqual(
     startup.entryLimits,
     Object.fromEntries(runtime.roots.map((root): [string, number] => [
       root.slug,
