@@ -61,6 +61,10 @@ assert.equal(lock.verdict, "collecting", "two sessions cannot become a recommend
 assert.equal(book.sourceRows.managerRuns, 17, "source receipt includes the excluded legacy row");
 assert.equal(book.defaultShadowBookVersion, "manager-shadow-book-v2");
 assert.equal(book.productionWrites, 0);
+assert.equal(book.evidence.layer, "manager_counterfactual");
+assert.equal(book.evidence.unit, "logical_trade");
+assert.equal(book.evidence.managerVersion, "manager-shadow-book-v2");
+assert.equal(book.evidence.completeness, "complete");
 assert.deepEqual(alpha.configurationEpochs, [{ id: "epoch-a", positions: 2, sessions: 2 }]);
 const current = filterChannelManagerEvidenceByEpoch(alpha, "epoch-a");
 assert.equal(current.positions, 2);
