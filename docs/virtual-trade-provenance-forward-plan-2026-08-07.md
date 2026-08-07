@@ -1,6 +1,6 @@
 # Virtual-trade provenance — forward-only plan
 
-Status: **reviewable schema migration prepared locally; unapplied**. No publisher change, backfill, deployment, or production write has been applied.
+Status: **reviewable schema and source-signal capture prepared locally; unapplied**. No publisher activation, backfill, deployment, or production write has been applied.
 
 ## Why this is needed
 
@@ -19,6 +19,8 @@ Add nullable, immutable provenance to new `virtual_trades` rows:
 The three configuration identity fields must be all-null or all-present. Null means **unstamped**, never “current.” Existing historical rows remain null.
 
 The prepared migration is `20260807143000_virtual_trade_forward_provenance.sql`. It performs no update or backfill, validates the all-or-none rule against existing null rows, accepts only exact activation-receipt and release-manifest membership, and makes all five provenance fields immutable. Its focused self-test also rejects mutable strategist/account authority and timestamp-based inference.
+
+The worker-side source capture is also prepared but not deployed. Each future signal will carry a content-addressed `virtual_path_policy` containing the exact stop and target used by the shadow scorer, the native manager identity, and the explicit catastrophic-stop fallback used when the live premium stop is off. This is evidence-only signal metadata; it does not participate in admission, sizing, order placement, or exits.
 
 ## Publication rule
 
