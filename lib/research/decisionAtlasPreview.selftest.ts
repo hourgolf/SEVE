@@ -33,4 +33,13 @@ const negative = buildDecisionAtlasPreview({ summary: { ...summary, typicalPerPa
   dryPowder: { ...curve, sessionCount: 12, points: [] } });
 assert.equal(negative.label, "REVIEW ENTRY");
 
+const experiment = buildDecisionAtlasPreview({
+  summary: { ...summary, slug: "vb-vwap-revert" },
+  dryPowder: curve,
+});
+assert.equal(experiment.label, "DARK TEST");
+assert.equal(experiment.experiment?.variable, "max_entries_per_session");
+assert.match(experiment.summary, /first 2 per session/);
+assert.match(experiment.evidenceFact, /Prospective scoring starts 2026-08-10/);
+
 console.log("decision-atlas preview selftest: PASS");

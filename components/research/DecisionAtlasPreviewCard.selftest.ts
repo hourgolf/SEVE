@@ -11,9 +11,11 @@ const css = read("../../app/decision-atlas.css");
 const workspaceCss = read("../../app/seve-909.css");
 
 assert.match(card, /DECISION ATLAS · HISTORICAL VIRTUAL/);
+assert.match(card, /DECISION ATLAS · PROSPECTIVE TEST/);
+assert.match(card, /CONTROL UNCHANGED/);
 assert.match(card, /NOT EXECUTED/);
 assert.match(card, /model\.metrics\.map/);
-assert.match(card, /<details><summary>Why this read\?/);
+assert.match(card, /Experiment \+ evidence/);
 assert.match(current, /withheld rather than shown as zero/);
 assert.match(current, /<details className="srw-current-evidence-detail">/);
 assert.doesNotMatch(current, /<p>\{error \|\|/,

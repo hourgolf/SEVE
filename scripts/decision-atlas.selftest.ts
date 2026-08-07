@@ -6,12 +6,14 @@ const library = readFileSync(new URL("../lib/research/decisionAtlas.ts", import.
 const report = readFileSync(new URL("../lib/research/decisionAtlasReport.ts", import.meta.url), "utf8");
 const actionable = readFileSync(new URL("./decision-atlas-actionable-review.ts", import.meta.url), "utf8");
 const packets = readFileSync(new URL("./decision-atlas-change-packets.ts", import.meta.url), "utf8");
+const retunes = readFileSync(new URL("../lib/research/boundedRetuneExperiments.ts", import.meta.url), "utf8");
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string> };
 
 assert.equal(pkg.scripts["decision-atlas"], "tsx scripts/decision-atlas.ts");
 assert.equal(pkg.scripts["decision-atlas-actionable-review"], "tsx scripts/decision-atlas-actionable-review.ts");
 assert.equal(pkg.scripts["decision-atlas-change-packets"], "tsx scripts/decision-atlas-change-packets.ts");
-assert.equal(pkg.scripts["decision-atlas-selftest"], "tsx lib/research/decisionAtlas.selftest.ts && tsx lib/research/decisionAtlasAdapter.selftest.ts && tsx scripts/decision-atlas.selftest.ts");
+assert.match(pkg.scripts["decision-atlas-selftest"], /boundedRetuneExperiments\.selftest\.ts/);
+assert.match(pkg.scripts["decision-atlas-selftest"], /boundedRetuneSignalStamp\.selftest\.ts/);
 assert.match(runner, /allowedMethods:\s*\["SELECT", "GET"\]/);
 assert.match(runner, /productionWrites:\s*0/);
 assert.match(runner, /schemaVersion:\s*3/);
@@ -24,6 +26,8 @@ assert.match(runner, /virtual catch-up manifest is stale/,
   "local catch-up evidence must fail closed if remote truth has changed");
 assert.match(runner, /localVirtualCatchup: catchup\.metadata/,
   "the receipt must disclose local catch-up rows and hashes");
+assert.match(runner, /bounded-retunes\.json/);
+assert.match(runner, /bounded-retunes\.md/);
 assert.doesNotMatch(runner, /\.from\([^\n]+\)\.(?:insert|upsert|update|delete)\(/);
 assert.doesNotMatch(runner, /\.rpc\(/);
 assert.match(library, /logicalOpportunityId/);
@@ -71,5 +75,10 @@ assert.match(packets, /productionWrites:\s*0/);
 assert.match(packets, /activationAuthorized:\s*false/);
 assert.doesNotMatch(packets, /\.from\([^\n]+\)\.(?:insert|upsert|update|delete)\(/);
 assert.doesNotMatch(packets, /\.rpc\(/);
+assert.match(retunes, /missingExperimentStamp/);
+assert.match(retunes, /baselineMismatch/);
+assert.match(retunes, /pairedSessionImprovement/);
+assert.match(retunes, /productionWrites:\s*0/);
+assert.match(retunes, /executionAuthority:\s*false/);
 
 console.log("decision-atlas runner selftest: PASS");

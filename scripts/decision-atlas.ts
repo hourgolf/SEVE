@@ -10,6 +10,10 @@ import type { ProfitabilityLedger } from "../lib/profitability/profitabilityLedg
 import { etDateOf } from "../lib/profitability/profitabilityLedger";
 import { buildDecisionAtlas } from "../lib/research/decisionAtlas";
 import {
+  buildBoundedRetuneBook,
+  renderBoundedRetuneBookMarkdown,
+} from "../lib/research/boundedRetuneExperiments";
+import {
   adaptDecisionAtlasSnapshot,
   type AtlasEquitySnapshotRow,
   type AtlasExecutionRow,
@@ -231,8 +235,15 @@ async function main(): Promise<void> {
   snapshot = catchup.snapshot;
   const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt, throughSession });
   const atlas = buildDecisionAtlas(normalized);
+  const boundedRetunes = buildBoundedRetuneBook({
+    generatedAt,
+    throughSession,
+    opportunities: normalized.opportunities,
+  });
   const snapshotJson = `${JSON.stringify(snapshot, null, 2)}\n`;
   const atlasJson = `${JSON.stringify(atlas, null, 2)}\n`;
+  const boundedRetunesJson = `${JSON.stringify(boundedRetunes, null, 2)}\n`;
+  const boundedRetunesReport = renderBoundedRetuneBookMarkdown(boundedRetunes);
   const report = renderDecisionAtlasMarkdown(atlas);
   const proposals = renderDecisionAtlasProposalPacket(atlas);
   const receipt = {
@@ -262,6 +273,8 @@ async function main(): Promise<void> {
       atlas: sha256(atlasJson),
       report: sha256(report),
       proposals: sha256(proposals),
+      boundedRetunes: sha256(boundedRetunesJson),
+      boundedRetunesReport: sha256(boundedRetunesReport),
     },
     sourceTables: ["strategists", "signals", "execution_observations", "virtual_trades",
       "manager_shadow_runs", "equity_snapshots", "release_manifests", "release_manifest_channels",
@@ -277,6 +290,8 @@ async function main(): Promise<void> {
   writeFileSync(resolve(outputDir, "atlas.json"), atlasJson);
   writeFileSync(resolve(outputDir, "atlas.md"), report);
   writeFileSync(resolve(outputDir, "proposals.md"), proposals);
+  writeFileSync(resolve(outputDir, "bounded-retunes.json"), boundedRetunesJson);
+  writeFileSync(resolve(outputDir, "bounded-retunes.md"), boundedRetunesReport);
   writeFileSync(resolve(outputDir, "collision-redundancy.json"), `${JSON.stringify(atlas.collisionGraph, null, 2)}\n`);
   for (const channel of Object.keys(atlas.channels).sort()) {
     writeFileSync(resolve(outputDir, "channels", `${safeName(channel)}.json`), `${JSON.stringify(atlas.channels[channel], null, 2)}\n`);

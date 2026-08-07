@@ -2,6 +2,7 @@ import type { ChannelSpecVersion } from "@/lib/channels/channelControlPlane";
 import { buildOperatorPaperCapacityEnvelope } from "@/lib/channels/channelPortfolioCapacityPolicy";
 import { etDateOf, type LogicalTrade, type ProfitabilityLedger } from "@/lib/profitability/profitabilityLedger";
 import type { ChannelManagerRunRow } from "@/lib/research/channelManagerEvidence";
+import { parseBoundedRetuneSignalStamp } from "@/lib/research/boundedRetuneRegistry";
 import type {
   AtlasAccountBudget,
   AtlasInput,
@@ -354,6 +355,7 @@ export function adaptDecisionAtlasSnapshot(input: {
       maePct: null,
       captureRatio: mfePct != null && mfePct > 0 && returnPct != null ? returnPct / mfePct : null,
       stopExposurePerContractUsd: spec ? spec.riskLimits.maxRiskUsd / spec.quantity : null,
+      boundedRetuneStamp: parseBoundedRetuneSignalStamp(rationale?.bounded_retune_experiment),
       sourceRefs: [
         `signals:${signal.id}`,
         ...(virtual ? [`virtual_trades:${virtual.signal_id}`] : []),
@@ -383,6 +385,7 @@ export function adaptDecisionAtlasSnapshot(input: {
       resultPerContractUsd: pnl, returnPct, mfePct, maePct: null,
       captureRatio: mfePct != null && mfePct > 0 && returnPct != null ? returnPct / mfePct : null,
       stopExposurePerContractUsd: spec ? spec.riskLimits.maxRiskUsd / spec.quantity : null,
+      boundedRetuneStamp: null,
       sourceRefs: [`virtual_trades:${virtual.signal_id}`, "limitation:signal-row-missing"],
     });
   }

@@ -55,6 +55,8 @@ export interface AtlasOpportunity {
   maePct: number | null;
   captureRatio: number | null;
   stopExposurePerContractUsd: number | null;
+  /** Exact prospective experiment identity copied from the source signal. */
+  boundedRetuneStamp?: import("./boundedRetuneRegistry").BoundedRetuneSignalStamp | null;
   sourceRefs: string[];
 }
 
