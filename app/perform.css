@@ -234,6 +234,13 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .srw-channel-cell > span {
   min-width:0; overflow:hidden; text-overflow:ellipsis; color:inherit;
 }
+.shell-root.ws909 .srw-channel-identity {
+  min-width:0; display:grid; gap:2px;
+}
+.shell-root.ws909 .srw-channel-identity > small {
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:#6f797b; font:700 7px/1.15 var(--mono); letter-spacing:.06em;
+}
 .shell-root.ws909 .srw-check {
   width:14px; height:14px; min-height:0; flex:0 0 14px; display:grid; place-items:center;
   padding:0; border:1px solid #4b5354; border-radius:3px; background:#090c0d; cursor:pointer;
@@ -253,6 +260,42 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
   box-shadow:inset 2px 0 0 #e6b13c;
 }
 .shell-root.ws909 .srw-inline-detail > :is(.dpc,.cme) { min-width:0; }
+.shell-root.ws909 .srw-current-evidence {
+  min-width:0; display:grid; gap:7px; padding:9px;
+  border:1px solid #365544; border-radius:6px; background:#101817;
+}
+.shell-root.ws909 .srw-current-evidence > header {
+  min-width:0; display:flex; align-items:center; justify-content:space-between; gap:10px;
+}
+.shell-root.ws909 .srw-current-evidence > header span { min-width:0; display:grid; gap:2px; }
+.shell-root.ws909 .srw-current-evidence > header small,
+.shell-root.ws909 .srw-current-evidence .srw-current-pair small,
+.shell-root.ws909 .srw-current-evidence .srw-current-kpis small {
+  color:#82908c; font-size:8px; letter-spacing:.08em;
+}
+.shell-root.ws909 .srw-current-evidence > header b { overflow:hidden; text-overflow:ellipsis; font-size:11px; }
+.shell-root.ws909 .srw-current-evidence > header em {
+  flex:0 0 auto; color:#5bd988; font-size:8px; font-style:normal; letter-spacing:.08em;
+}
+.shell-root.ws909 .srw-current-pair,
+.shell-root.ws909 .srw-current-kpis { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.shell-root.ws909 .srw-current-pair > span,
+.shell-root.ws909 .srw-current-kpis > span {
+  min-width:0; display:grid; gap:4px; padding:8px; border:1px solid #2d3836; border-radius:4px; background:#0b100f;
+}
+.shell-root.ws909 .srw-current-pair b { font-size:10px; }
+.shell-root.ws909 .srw-current-pair strong { font-size:13px; }
+.shell-root.ws909 .srw-current-pair em { color:#929c99; font-size:8px; font-style:normal; }
+.shell-root.ws909 .srw-current-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.shell-root.ws909 .srw-current-kpis b { font-size:12px; }
+.shell-root.ws909 .srw-current-evidence > footer {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  color:#87918e; font-size:8px;
+}
+.shell-root.ws909 .srw-current-evidence > footer b { color:#dfe5e2; font-size:9px; }
+.shell-root.ws909 .srw-current-evidence > p { margin:0; color:#87918e; font-size:9px; line-height:1.4; }
+.shell-root.ws909 .srw-current-evidence.unavailable { border-color:#71443e; }
+.shell-root.ws909 .srw-current-evidence.empty { border-color:#3a4141; }
 .shell-root.ws909 .srw .pos { color:#55d981; }
 .shell-root.ws909 .srw .neg { color:#ff735b; }
 .shell-root.ws909 .srw-manager-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 10px; }

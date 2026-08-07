@@ -12,6 +12,55 @@ export interface ShadowResearchRow {
   givebackPct: number | null;
 }
 
+export interface ExecutedResearchRow {
+  id: string;
+  slug: string;
+  quantity: number;
+  realizedPnl: number | null;
+  openedAt: string;
+  closedAt: string | null;
+  runnerOf: string | null;
+  configurationEpochId: string | null;
+}
+
+export interface CurrentExecutedOpportunity {
+  slug: string;
+  openedAt: string;
+  session: string;
+  pnlPerContract: number;
+  configurationEpochId: string;
+}
+
+export interface CurrentExecutedSummary {
+  slug: string;
+  configurationEpochId: string;
+  opportunities: number;
+  sessions: number;
+  winners: number;
+  typicalPerContract: number;
+  totalPerContract: number;
+  fromSession: string;
+  throughSession: string;
+  lastAt: string;
+}
+
+export interface PairedCurrentComparison {
+  executedSlug: string;
+  virtualSlug: string;
+  pairs: number;
+  sessions: number;
+  executedWins: number;
+  virtualWins: number;
+  executedLeads: number;
+  virtualLeads: number;
+  ties: number;
+  executedTypicalPerContract: number;
+  virtualTypicalPerContract: number;
+  executedTotalPerContract: number;
+  virtualTotalPerContract: number;
+  throughSession: string;
+}
+
 export interface DryPowderPoint {
   entryBudget: number;
   marginalPaths: number;
@@ -159,6 +208,154 @@ const median = (values: readonly number[]): number | null => {
   return rounded(ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2);
 };
 export const isVirtualBenchSlug = (slug: string): boolean => slug.startsWith("vb-");
+
+const researchFamily = (slug: string): string => {
+  if (/^pb-ride(?:-2|-itm)?$/.test(slug)) return "pb-ride";
+  if (/^momo-shape(?:-2)?$/.test(slug)) return "momo-shape";
+  if (/^grind-(?:v3|v3-2|smart-entries)$/.test(slug)) return "grind";
+  return slug;
+};
+
+/**
+ * Collapse immutable exit tranches into logical trades, then retain only the
+ * latest observed configuration epoch for each channel. This is deliberately
+ * separate from virtual paths: one is executed portfolio evidence and the
+ * other is a counterfactual research path.
+ */
+export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow[]): {
+  opportunities: CurrentExecutedOpportunity[];
+  bySlug: Record<string, CurrentExecutedSummary>;
+} {
+  const byId = new Map(rows.filter((row) => row.id).map((row) => [row.id, row]));
+  const rootId = (row: ExecutedResearchRow): string => {
+    const seen = new Set<string>();
+    let current = row;
+    while (current.runnerOf && !seen.has(current.id)) {
+      seen.add(current.id);
+      const parent = byId.get(current.runnerOf);
+      if (!parent) return current.runnerOf;
+      current = parent;
+    }
+    return current.id;
+  };
+  const groups = new Map<string, ExecutedResearchRow[]>();
+  for (const row of rows) {
+    if (!row.slug || !row.openedAt || row.realizedPnl == null) continue;
+    const key = `${row.slug}:${rootId(row)}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+
+  const candidates = [...groups.values()].flatMap((group): CurrentExecutedOpportunity[] => {
+    const root = group.find((row) => !row.runnerOf) ?? group[0];
+    const configurationEpochId = root.configurationEpochId?.trim() ?? "";
+    const session = shadowSessionDate(root.openedAt);
+    const contracts = group.reduce((sum, row) => sum + Math.abs(Number(row.quantity) || 0), 0);
+    if (!configurationEpochId || !session || !(contracts > 0)) return [];
+    const total = group.reduce((sum, row) => sum + Number(row.realizedPnl ?? 0), 0);
+    return [{
+      slug: root.slug,
+      openedAt: root.openedAt,
+      session,
+      pnlPerContract: rounded(total / contracts),
+      configurationEpochId,
+    }];
+  });
+
+  const latestEpoch = new Map<string, { epoch: string; at: string }>();
+  for (const opportunity of candidates) {
+    const current = latestEpoch.get(opportunity.slug);
+    if (!current || opportunity.openedAt > current.at) {
+      latestEpoch.set(opportunity.slug, { epoch: opportunity.configurationEpochId, at: opportunity.openedAt });
+    }
+  }
+  const opportunities = candidates
+    .filter((row) => row.configurationEpochId === latestEpoch.get(row.slug)?.epoch)
+    .sort((left, right) => left.openedAt.localeCompare(right.openedAt) || left.slug.localeCompare(right.slug));
+  const grouped = new Map<string, CurrentExecutedOpportunity[]>();
+  for (const opportunity of opportunities) {
+    grouped.set(opportunity.slug, [...(grouped.get(opportunity.slug) ?? []), opportunity]);
+  }
+  const bySlug = Object.fromEntries([...grouped.entries()].map(([slug, channelRows]) => {
+    const sessions = [...new Set(channelRows.map((row) => row.session))].sort();
+    const outcomes = channelRows.map((row) => row.pnlPerContract);
+    return [slug, {
+      slug,
+      configurationEpochId: channelRows.at(-1)?.configurationEpochId ?? "",
+      opportunities: channelRows.length,
+      sessions: sessions.length,
+      winners: outcomes.filter((value) => value > 0).length,
+      typicalPerContract: median(outcomes) ?? 0,
+      totalPerContract: rounded(outcomes.reduce((sum, value) => sum + value, 0)),
+      fromSession: sessions[0] ?? "",
+      throughSession: sessions.at(-1) ?? "",
+      lastAt: channelRows.at(-1)?.openedAt ?? "",
+    } satisfies CurrentExecutedSummary];
+  }));
+  return { opportunities, bySlug };
+}
+
+/** Pair latest-epoch executions only with same-family virtual paths at the same clock. */
+export function derivePairedCurrentComparisons(
+  executed: readonly CurrentExecutedOpportunity[],
+  virtual: readonly ShadowResearchRow[],
+  toleranceMs = 60_000,
+): PairedCurrentComparison[] {
+  const byExecutedSlug = new Map<string, CurrentExecutedOpportunity[]>();
+  for (const row of executed) byExecutedSlug.set(row.slug, [...(byExecutedSlug.get(row.slug) ?? []), row]);
+  const virtualSlugs = [...new Set(virtual.map((row) => row.slug))].sort();
+  const comparisons: PairedCurrentComparison[] = [];
+  for (const [executedSlug, actualRows] of byExecutedSlug) {
+    for (const virtualSlug of virtualSlugs) {
+      if (virtualSlug === executedSlug || researchFamily(virtualSlug) !== researchFamily(executedSlug)) continue;
+      const virtualRows = virtual
+        .filter((row) => row.slug === virtualSlug && row.pnlPerContract != null && Number.isFinite(Date.parse(row.signalAt)))
+        .sort((left, right) => left.signalAt.localeCompare(right.signalAt));
+      const used = new Set<number>();
+      const pairs: Array<{ actual: CurrentExecutedOpportunity; virtual: ShadowResearchRow }> = [];
+      for (const actual of actualRows) {
+        const at = Date.parse(actual.openedAt);
+        let match = -1;
+        let distance = Number.POSITIVE_INFINITY;
+        for (let index = 0; index < virtualRows.length; index += 1) {
+          if (used.has(index)) continue;
+          const difference = Math.abs(at - Date.parse(virtualRows[index].signalAt));
+          if (difference <= toleranceMs && difference < distance) {
+            match = index;
+            distance = difference;
+          }
+        }
+        if (match >= 0) {
+          used.add(match);
+          pairs.push({ actual, virtual: virtualRows[match] });
+        }
+      }
+      if (!pairs.length) continue;
+      const actualOutcomes = pairs.map((pair) => pair.actual.pnlPerContract);
+      const virtualOutcomes = pairs.map((pair) => Number(pair.virtual.pnlPerContract));
+      const sessions = [...new Set(pairs.map((pair) => pair.actual.session))].sort();
+      comparisons.push({
+        executedSlug,
+        virtualSlug,
+        pairs: pairs.length,
+        sessions: sessions.length,
+        executedWins: actualOutcomes.filter((value) => value > 0).length,
+        virtualWins: virtualOutcomes.filter((value) => value > 0).length,
+        executedLeads: pairs.filter((pair) => pair.actual.pnlPerContract > Number(pair.virtual.pnlPerContract)).length,
+        virtualLeads: pairs.filter((pair) => Number(pair.virtual.pnlPerContract) > pair.actual.pnlPerContract).length,
+        ties: pairs.filter((pair) => Number(pair.virtual.pnlPerContract) === pair.actual.pnlPerContract).length,
+        executedTypicalPerContract: median(actualOutcomes) ?? 0,
+        virtualTypicalPerContract: median(virtualOutcomes) ?? 0,
+        executedTotalPerContract: rounded(actualOutcomes.reduce((sum, value) => sum + value, 0)),
+        virtualTotalPerContract: rounded(virtualOutcomes.reduce((sum, value) => sum + value, 0)),
+        throughSession: sessions.at(-1) ?? "",
+      });
+    }
+  }
+  return comparisons.sort((left, right) =>
+    right.pairs - left.pairs
+    || left.executedSlug.localeCompare(right.executedSlug)
+    || left.virtualSlug.localeCompare(right.virtualSlug));
+}
 
 const finiteDate = (value: string | null | undefined): number | null => {
   const parsed = Date.parse(value ?? "");

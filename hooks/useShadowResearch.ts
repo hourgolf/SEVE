@@ -5,10 +5,15 @@ import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
 import {
   deriveChannelDryPowderCurves,
+  deriveCurrentExecutedEvidence,
+  derivePairedCurrentComparisons,
   deriveSessionDryPowderCurves,
   deriveShadowCumulative,
   deriveShadowSessions,
   type ChannelDryPowderCurve,
+  type CurrentExecutedSummary,
+  type ExecutedResearchRow,
+  type PairedCurrentComparison,
   type ShadowCumulativeSummary,
   type ShadowResearchRow,
   type ShadowSessionSummary,
@@ -18,6 +23,7 @@ const COHORT_START = "2026-07-20";
 const COHORT_START_ISO = "2026-07-20T04:00:00.000Z";
 const PAGE_SIZE = 1_000;
 const MAX_ROWS = 10_000;
+const MAX_EXECUTED_ROWS = 2_000;
 
 export interface ShadowResearch {
   state: "idle" | "loading" | "ok" | "empty" | "error";
@@ -25,6 +31,11 @@ export interface ShadowResearch {
   cumulative: ShadowCumulativeSummary | null;
   dryPowderBySlug: Record<string, ChannelDryPowderCurve>;
   dryPowderBySession: Record<string, Record<string, ChannelDryPowderCurve>>;
+  currentExecutedBySlug: Record<string, CurrentExecutedSummary>;
+  pairedCurrent: PairedCurrentComparison[];
+  currentExecutedState: "ok" | "empty" | "error";
+  currentExecutedError: string;
+  currentExecutedTruncated: boolean;
   cohortStart: typeof COHORT_START;
   truncated: boolean;
   error: string;
@@ -37,6 +48,11 @@ const EMPTY: ShadowResearch = {
   cumulative: null,
   dryPowderBySlug: {},
   dryPowderBySession: {},
+  currentExecutedBySlug: {},
+  pairedCurrent: [],
+  currentExecutedState: "empty",
+  currentExecutedError: "",
+  currentExecutedTruncated: false,
   cohortStart: COHORT_START,
   truncated: false,
   error: "",
@@ -97,6 +113,45 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
         const cumulative = deriveShadowCumulative(rows);
         const dryPowderBySlug = deriveChannelDryPowderCurves(rows);
         const dryPowderBySession = deriveSessionDryPowderCurves(rows);
+        let currentExecutedBySlug: Record<string, CurrentExecutedSummary> = {};
+        let pairedCurrent: PairedCurrentComparison[] = [];
+        let currentExecutedState: ShadowResearch["currentExecutedState"] = "empty";
+        let currentExecutedError = "";
+        let currentExecutedTruncated = false;
+        try {
+          const executedRead = await getSupabase().from("positions")
+            .select("id,qty,realized_pnl,opened_at,closed_at,runner_of,configuration_epoch_id,strategists(slug)", { count: "exact" })
+            .eq("status", "closed")
+            .gte("opened_at", COHORT_START_ISO)
+            .order("opened_at", { ascending: true })
+            .limit(MAX_EXECUTED_ROWS);
+          if (executedRead.error) throw executedRead.error;
+          const executedRows = ((executedRead.data ?? []) as Record<string, unknown>[]).flatMap((row): ExecutedResearchRow[] => {
+            const relation = Array.isArray(row.strategists) ? row.strategists[0] : row.strategists;
+            const slug = relation && typeof relation === "object" && "slug" in relation
+              ? String((relation as { slug?: unknown }).slug ?? "")
+              : "";
+            if (!slug || !row.id || !row.opened_at || row.realized_pnl == null) return [];
+            return [{
+              id: String(row.id),
+              slug,
+              quantity: Number(row.qty ?? 0),
+              realizedPnl: Number(row.realized_pnl),
+              openedAt: String(row.opened_at),
+              closedAt: row.closed_at == null ? null : String(row.closed_at),
+              runnerOf: row.runner_of == null ? null : String(row.runner_of),
+              configurationEpochId: row.configuration_epoch_id == null ? null : String(row.configuration_epoch_id),
+            }];
+          });
+          const current = deriveCurrentExecutedEvidence(executedRows);
+          currentExecutedBySlug = current.bySlug;
+          pairedCurrent = derivePairedCurrentComparisons(current.opportunities, rows);
+          currentExecutedState = current.opportunities.length ? "ok" : "empty";
+          currentExecutedTruncated = (executedRead.count ?? executedRows.length) > MAX_EXECUTED_ROWS;
+        } catch (error) {
+          currentExecutedState = "error";
+          currentExecutedError = message(error);
+        }
         if (!alive) return;
         setState({
           state: sessions.length ? "ok" : "empty",
@@ -104,6 +159,11 @@ export function useShadowResearch(enabled: boolean): ShadowResearch {
           cumulative,
           dryPowderBySlug,
           dryPowderBySession,
+          currentExecutedBySlug,
+          pairedCurrent,
+          currentExecutedState,
+          currentExecutedError,
+          currentExecutedTruncated,
           cohortStart: COHORT_START,
           truncated: total > MAX_ROWS,
           error: "",

@@ -9,12 +9,14 @@ import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPre
 import { ManagerFleetHeatmap } from "@/components/research/ManagerFleetHeatmap";
 import { exactShadowReceipt } from "@/lib/research/exactShadowArchive";
 import type {
+  CurrentExecutedSummary,
+  PairedCurrentComparison,
   ShadowChannelSummary,
   ShadowChannelSortDirection,
   ShadowChannelSortKey,
   ShadowSessionSummary,
 } from "@/lib/research/shadowResearch";
-import { sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
+import { shadowSessionDate, sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
 import { signedUsd } from "@/lib/format";
 
 const percent = (wins: number, scored: number): string =>
@@ -23,6 +25,7 @@ const money = (value: number | null): string => value == null ? "—" : signedUs
 const shortSession = (session: string): string => session.slice(5).replace("-", "/");
 const RECENT_SESSION_LIMIT = 4;
 type ResearchLane = "vb" | "all";
+type EvidenceLabel = "HISTORICAL VIRTUAL" | "SESSION VIRTUAL";
 const laneTotals = (rows: ShadowChannelSummary[]) => {
   const scored = rows.reduce((sum, row) => sum + row.scored, 0);
   const pnl = rows.reduce((sum, row) => sum + row.pnlPerContract, 0);
@@ -82,6 +85,57 @@ function ExactStatus({ surface, session }: { surface: SurfaceProps; session: str
   return <section className="srw-exact missing"><header><span><b>EXACT MANAGER REPLAY</b><small>no session-matched receipt</small></span><em>MISSING</em></header>
     <p>The native ledger is visible, but no exact manager receipt is attached to this session.</p></section>;
 }
+
+function CurrentEvidenceCard({
+  selectedSlug,
+  executed,
+  comparison,
+  state,
+  error,
+  truncated,
+}: {
+  selectedSlug: string;
+  executed?: CurrentExecutedSummary;
+  comparison?: PairedCurrentComparison;
+  state: "ok" | "empty" | "error";
+  error: string;
+  truncated: boolean;
+}) {
+  if (state === "error") return <section className="srw-current-evidence unavailable">
+    <header><span><small>CURRENT EXECUTED</small><b>COMPARISON UNAVAILABLE</b></span><em>READ FAILED</em></header>
+    <p>{error || "Current execution evidence could not be read."}</p>
+  </section>;
+  if (!executed && !comparison) return <section className="srw-current-evidence empty">
+    <header><span><small>CURRENT EXECUTED</small><b>{selectedSlug}</b></span><em>NO CURRENT SAMPLE</em></header>
+    <p>This row is virtual research only. No latest-configuration executed trade is being implied.</p>
+  </section>;
+
+  const current = comparison ? comparison.executedSlug : executed?.slug ?? selectedSlug;
+  const currentSummary = comparison ? null : executed;
+  const leader = comparison
+    ? comparison.executedLeads === comparison.virtualLeads
+      ? "Neither path"
+      : comparison.executedLeads > comparison.virtualLeads ? comparison.executedSlug : comparison.virtualSlug
+    : null;
+  return <section className="srw-current-evidence">
+    <header><span><small>{comparison ? "PAIRED CURRENT CHECK" : "CURRENT EXECUTED"}</small><b>{comparison ? `${comparison.executedSlug} ↔ ${comparison.virtualSlug}` : current}</b></span>
+      <em>{comparison ? `${comparison.pairs} MATCHED CLOCKS` : `${currentSummary?.opportunities ?? 0} LOGICAL TRADES`}</em></header>
+    {comparison ? <>
+      <div className="srw-current-pair">
+        <span><small>CURRENT EXECUTED</small><b>{comparison.executedSlug}</b><strong className={comparison.executedTypicalPerContract >= 0 ? "pos" : "neg"}>{money(comparison.executedTypicalPerContract)} typical/ct</strong><em>{money(comparison.executedTotalPerContract)} total/ct · {comparison.executedWins}/{comparison.pairs} positive</em></span>
+        <span><small>SAME-CLOCK VIRTUAL</small><b>{comparison.virtualSlug}</b><strong className={comparison.virtualTypicalPerContract >= 0 ? "pos" : "neg"}>{money(comparison.virtualTypicalPerContract)} typical/ct</strong><em>{money(comparison.virtualTotalPerContract)} total/ct · {comparison.virtualWins}/{comparison.pairs} positive</em></span>
+      </div>
+      <footer><b>{leader} {comparison.executedLeads === comparison.virtualLeads ? "split" : "led"} {Math.max(comparison.executedLeads, comparison.virtualLeads)} of {comparison.pairs}</b><span>same entry clocks · independent exits · virtual side is not a fill</span></footer>
+    </> : <div className="srw-current-kpis">
+      <span><small>TYPICAL RESULT</small><b className={(currentSummary?.typicalPerContract ?? 0) >= 0 ? "pos" : "neg"}>{money(currentSummary?.typicalPerContract ?? null)}/ct</b></span>
+      <span><small>TOTAL RESULT</small><b className={(currentSummary?.totalPerContract ?? 0) >= 0 ? "pos" : "neg"}>{money(currentSummary?.totalPerContract ?? null)}/ct</b></span>
+      <span><small>POSITIVE</small><b>{currentSummary?.winners ?? 0}/{currentSummary?.opportunities ?? 0}</b></span>
+      <span><small>SESSIONS</small><b>{currentSummary?.sessions ?? 0}</b></span>
+    </div>}
+    {truncated ? <p>Current execution read reached its safety cap; comparison may be partial.</p> : null}
+  </section>;
+}
+
 export function NativeTable({
   rows,
   selectable = false,
@@ -91,6 +145,7 @@ export function NativeTable({
   selectedSlug,
   onInspect,
   renderDetail,
+  evidenceLabel,
 }: {
   rows: ShadowChannelSummary[];
   selectable?: boolean;
@@ -100,6 +155,7 @@ export function NativeTable({
   selectedSlug?: string;
   onInspect?: (slug: string) => void;
   renderDetail?: (slug: string) => ReactNode;
+  evidenceLabel: EvidenceLabel;
 }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<ShadowChannelSortKey>("average");
@@ -137,7 +193,7 @@ export function NativeTable({
     <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "PATHS")}</span><span>{sortLabel("win", "WIN")}</span><span>{sortLabel("average", "TYPICAL/CT")}</span><span>{sortLabel("total", "TOTAL/CT")}</span><span>{sortLabel("mfe", "BEST MOVE")}</span><span>{sortLabel("exits", "EXITS")}</span></div>
     {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : visibleRows.map((row) => <Fragment key={row.slug}>
       <div className={`srw-row${selectedSlug === row.slug ? " selected" : ""}`}>
-        <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}</b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
+        <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span className="srw-channel-identity">{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}<small>{evidenceLabel} · THRU {shortSession(shadowSessionDate(row.lastAt))}</small></span></b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
         <strong className={`srw-cell-avg ${(row.typicalPerPath ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.typicalPerPath)}</strong>
         <span className="srw-cell-total">{money(row.pnlPerContract)}</span><span className="srw-cell-mfe">{row.averageMfePct == null ? "—" : `${row.averageMfePct}%`}</span>
         <span className="srw-cell-exits">{row.targets}T · {row.stops}S · {row.flattens}B</span>
@@ -191,6 +247,9 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   const focusedPassport = surface.channelWorkspace.bySlug[focusSlug];
   const focusedSummary = rows.find((row) => row.slug === focusSlug);
   const focusedManagerEvidence = surface.managerEvidence.book?.channels[focusSlug];
+  const focusedExecuted = shadowResearch.currentExecutedBySlug[focusSlug];
+  const focusedComparison = shadowResearch.pairedCurrent.find((item) =>
+    item.executedSlug === focusSlug || item.virtualSlug === focusSlug);
   const focusedLead = focusedCurve?.points[0]?.marginalAveragePerPath ?? null;
   const focusedBestManager = focusedManagerEvidence?.managers
     .filter((manager) => manager.medianDeltaPct != null)
@@ -207,8 +266,8 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     : runningRows;
   const running = laneTotals(filteredRunningRows);
   const nativeTitle = windowMode === "cumulative" && shadowResearch.cumulative
-    ? `CUMULATIVE NATIVE PATHS · ${shadowResearch.cumulative.fromSession} → ${shadowResearch.cumulative.throughSession}`
-    : `SAME-DAY NATIVE PATHS · ${selected?.session ?? "—"}`;
+    ? `HISTORICAL VIRTUAL PATHS · ${shadowResearch.cumulative.fromSession} → ${shadowResearch.cumulative.throughSession}`
+    : `SESSION VIRTUAL PATHS · ${selected?.session ?? "—"}`;
   const toggleStrategy = (slug: string) => setExcluded((previous) => ({
     ...previous,
     [lane]: previous[lane].includes(slug)
@@ -242,7 +301,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
       <span className={`srw-read ${shadowResearch.state}${shadowResearch.truncated ? " partial" : ""}`}>{shadowResearch.truncated ? "PARTIAL" : shadowResearch.state.toUpperCase()}</span>
     </div>
     {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>
-      <span><small>RUNNING {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shadowResearch.cohortStart}</small>
+      <span><small>RUNNING VIRTUAL · {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shadowResearch.cohortStart}</small>
         <b className={running.pnl >= 0 ? "pos" : "neg"}>{money(running.pnl)} TOTAL/CT</b></span>
       <em>{windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} strategies · ` : ""}{running.scored} scored · {shadowResearch.cumulative.sessionCount} sessions · {percent(running.winners, running.scored)} win</em>
     </div> : null}
@@ -258,7 +317,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
           <span><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.read.label}` : "NO CLEAR LEAD"}</b></span>
         </section>
         <section className="srw-native">
-          <header><span><b>{nativeTitle}</b><small>hypothetical entries · current channel exits · not portfolio P&amp;L</small></span>
+          <header><span><b>{nativeTitle}</b><small>every table row is virtual · hypothetical entries · not portfolio P&amp;L</small></span>
             <em>{totals.scored} {lane === "vb" ? "VB" : "ALL"} PATHS</em></header>
           <div className="srw-kpis">
             <span><small>SCORED</small><b>{totals.scored}</b></span>
@@ -274,7 +333,15 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
             onToggleAll={toggleAllStrategies}
             selectedSlug={focusSlug}
             onInspect={setFocusSlug}
-            renderDetail={() => <><DecisionAtlasPreviewCard summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} />
+            evidenceLabel={windowMode === "cumulative" ? "HISTORICAL VIRTUAL" : "SESSION VIRTUAL"}
+            renderDetail={() => <><CurrentEvidenceCard
+              selectedSlug={focusSlug}
+              executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted}
+              comparison={focusedComparison}
+              state={shadowResearch.currentExecutedState}
+              error={shadowResearch.currentExecutedError}
+              truncated={shadowResearch.currentExecutedTruncated}
+            /><DecisionAtlasPreviewCard summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} />
               <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
               <ChannelDryPowderCurve curve={focusedCurve} />
               <ChannelManagerEvidencePanel
