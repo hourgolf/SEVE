@@ -44,6 +44,8 @@ Sizing scales both profit and stop exposure. The replay is not permission to tra
 4. Resolve `breakout`’s nine registration blockers and repeat collision/capacity review before any promotion decision. Do not silently choose an account or collision domain.
 5. Start priority-A retunes as versioned dark cohorts. Do not change the live baseline, manager, and size in the same experiment.
 
+The bounded recovery command is hash-bound to the frozen zero-write manifest and refuses to run if any of the nine rows appears before publication. It reconstructs the complete set before its first write, writes only the nine manifest IDs to `virtual_trades`, suppresses event inserts, and then requires nine payload readbacks plus 129/129 full-session parity from the independent verifier.
+
 ## Frozen boundaries and receipts
 
 - Post-close readiness passed at 2026-08-07 13:15 PT: three paper accounts flat, zero open orders, broker/desk congruent.

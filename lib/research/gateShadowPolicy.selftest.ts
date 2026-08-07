@@ -8,6 +8,8 @@ import {
   isGateShadowSequentialBlockReason,
 } from "./gateShadowPolicy.js";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { authorizeGateShadowCatchup } from "./gateShadowCatchupAuthorization.js";
 
 const legacyReleaseSuppressions = [
   "day1_spy_same_clock_collision",
@@ -61,11 +63,37 @@ assert.match(script, /!VIRTUAL_TRADES_ONLY && isFresh/, "journal events must be 
 assert.match(script, /read-only-select-audit/, "read-only close audit must compare reconstructed rows to remote truth");
 assert.match(script, /gate-shadow-catchup-manifest\.json/, "close audit must freeze an exact catch-up manifest");
 assert.match(script, /missingSignalIds/, "catch-up manifest must identify exact missing signal ids");
+assert.match(script, /authorized-catchup-manifest/, "bounded publication must consume the approved exact manifest");
+assert.match(script, /authorized-catchup-sha256/, "bounded publication must bind the operator-approved manifest hash");
+assert.match(script, /authorizedCatchupIds\.has\(base\.signalId\)/, "bounded publication must write only manifest-listed missing ids");
+assert.match(script, /pendingAuthorized/, "bounded publication must reconstruct the complete approved set before writing");
+assert.match(script, /manifest is stale/, "bounded publication must refuse rows that appeared after authorization");
 const verifier = readFileSync(new URL("../../scripts/verify-shadow-rebuild.ts", import.meta.url), "utf8");
 assert.match(verifier, /remoteSelectOnly: true/, "independent verifier must declare its SELECT-only boundary");
 assert.match(verifier, /productionWrites: 0/, "independent verifier must declare zero production writes");
 assert.match(verifier, /localPayloadSha256/, "independent verifier must hash the local payload");
 assert.match(verifier, /remotePayloadSha256/, "independent verifier must hash the remote payload");
+assert.match(verifier, /publishedPayloadsVerified/, "independent verifier must prove every bounded upsert by payload readback");
 
-const checks = (legacyReleaseSuppressions.length + domainReleaseSuppressions.length) * 2 + 27;
+const manifest = {
+  version: "gate-shadow-catchup-manifest-v1",
+  session: "2026-08-07",
+  mode: "read-only-select-audit",
+  expectedSignalIds: ["present", "missing"],
+  presentSignalIds: ["present"],
+  missingSignalIds: ["missing"],
+  exactWriteRequired: true,
+  allowedWriteTableIfSeparatelyAuthorized: "virtual_trades",
+  productionWrites: 0,
+};
+const manifestBytes = Buffer.from(JSON.stringify(manifest));
+const manifestHash = `sha256:${createHash("sha256").update(manifestBytes).digest("hex")}`;
+assert.deepEqual([...authorizeGateShadowCatchup(manifestBytes, manifestHash, "2026-08-07").signalIds], ["missing"]);
+assert.throws(() => authorizeGateShadowCatchup(manifestBytes, "sha256:bad", "2026-08-07"), /hash mismatch/);
+assert.throws(() => authorizeGateShadowCatchup(manifestBytes, manifestHash, "2026-08-08"), /failed closed/);
+const broadenedBytes = Buffer.from(JSON.stringify({ ...manifest, allowedWriteTableIfSeparatelyAuthorized: "events" }));
+const broadenedHash = `sha256:${createHash("sha256").update(broadenedBytes).digest("hex")}`;
+assert.throws(() => authorizeGateShadowCatchup(broadenedBytes, broadenedHash, "2026-08-07"), /failed closed/);
+
+const checks = (legacyReleaseSuppressions.length + domainReleaseSuppressions.length) * 2 + 37;
 console.log(`gate-shadow-policy-selftest: ${checks}/${checks} passed`);

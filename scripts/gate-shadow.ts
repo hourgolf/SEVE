@@ -28,7 +28,7 @@
 // ============================================================================
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   coalesceVbCandidateDecisions,
   type VbCandidateDecision,
@@ -46,10 +46,17 @@ import {
   etSessionCloseUtc,
   resolveAfterCloseSession,
 } from "../lib/research/afterCloseResearch.js";
+import { authorizeGateShadowCatchup } from "../lib/research/gateShadowCatchupAuthorization.js";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const READ_ONLY = process.argv.includes("--read-only");
 const VIRTUAL_TRADES_ONLY = process.argv.includes("--virtual-trades-only");
+const valueArg = (name: string): string | null => {
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 && process.argv[index + 1] ? String(process.argv[index + 1]) : null;
+};
+const AUTHORIZED_CATCHUP_MANIFEST = valueArg("authorized-catchup-manifest");
+const AUTHORIZED_CATCHUP_SHA256 = valueArg("authorized-catchup-sha256");
 const NOW_MS = Date.now();
 // A read-only audit may authenticate with the backend credential when no anon
 // key is available, but every external write branch remains disabled.
@@ -70,6 +77,21 @@ const CANDIDATE_LEDGER = join(OUTPUT_DIR, "vb-candidates.json");
 const CANDIDATE_CENSORS = join(OUTPUT_DIR, "vb-candidate-censors.json");
 const POLICY_STOP = 50; // worker policy.PREMIUM_STOP_PCT — the shadow's fallback stop
 const MAX_PER_DAY = 6;  // bench churn cap per (channel, day) — daily-stop latch isn't modeled
+
+function loadAuthorizedCatchup(): Set<string> | null {
+  if (!AUTHORIZED_CATCHUP_MANIFEST && !AUTHORIZED_CATCHUP_SHA256) return null;
+  if (!AUTHORIZED_CATCHUP_MANIFEST || !AUTHORIZED_CATCHUP_SHA256) {
+    throw new Error("--authorized-catchup-manifest and --authorized-catchup-sha256 are required together");
+  }
+  if (READ_ONLY || !VIRTUAL_TRADES_ONLY || !SESSION) {
+    throw new Error("an authorized catch-up requires a session publish with --virtual-trades-only");
+  }
+  const path = resolve(AUTHORIZED_CATCHUP_MANIFEST);
+  const bytes = readFileSync(path);
+  return authorizeGateShadowCatchup(bytes, AUTHORIZED_CATCHUP_SHA256, SESSION).signalIds;
+}
+
+const authorizedCatchupIds = loadAuthorizedCatchup();
 
 interface ShadowRow {
   signalId: string; slug: string; occ: string; createdAt: string; blocked: string;
@@ -292,15 +314,12 @@ async function main() {
   };
   let fresh = 0, published = 0, eventInserts = 0;
   const publishedSignalIds = new Set<string>();
-  const bank = async (s: any, base: ShadowRow, isFresh: boolean) => {
-    if (HAS_SERVICE) {
-      // Upsert the virtual_trades row FIRST and LEDGER (= the later-runs dedup) only if it lands.
-      // supabase-js returns API errors via `.error` — it does NOT throw — so the old try/catch
-      // guarded nothing: a validation / rate-limit / statement-timeout / lagged-migration failure
-      // was swallowed, yet the ledger (set before the upsert) still deduped the signal → it was
-      // NEVER retried → a PERMANENT gap in virtual_trades (the §03 LAB panel + the sentinel
-      // bench-promote scan). Fail LOUD instead (audit [9]); the capture chain surfaces the exit code.
-      const { error } = await sb.from("virtual_trades").upsert({
+  const pendingAuthorized = new Map<string, { signal: any; row: ShadowRow; isFresh: boolean }>();
+  const publish = async (s: any, base: ShadowRow, isFresh: boolean): Promise<void> => {
+    // Upsert the virtual_trades row FIRST and ledger only after it lands. Supabase
+    // errors are returned, not thrown, so fail loudly before the signal can be
+    // treated as durable.
+    const { error } = await sb.from("virtual_trades").upsert({
         signal_id: base.signalId, strategist_id: s.strategist_id, slug: base.slug, occ: base.occ,
         signal_at: base.createdAt, blocked: base.blocked,
         entry_px: base.entryAsk > 0 ? base.entryAsk : null,
@@ -308,22 +327,30 @@ async function main() {
         pnl_per_contract: base.pnlPerContract, tp_pct: base.tpPct, stop_pct: base.stopPct, n_quotes: base.nQuotes,
         mfe_pct: base.mfePct, giveback_pct: base.giveback, // avg-peak lens on the bench (cols added 2026-07-09)
       }, { onConflict: "signal_id" });
-      if (error) { console.error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`); process.exit(1); }
-      published++;
-      publishedSignalIds.add(base.signalId);
-      // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
-      if (!VIRTUAL_TRADES_ONLY && isFresh
-          && !isGateShadowSequentialBlockReason(base.blocked)
-          && base.pnlPerContract != null) {
-        try {
-          const { error: eventError } = await sb.from("events").insert({
-            level: "INFO",
-            message: `gate-shadow: ${base.slug} ${base.occ} blocked(${base.blocked}) → ${base.exitReason} $${base.pnlPerContract.toFixed(0)}/ct (mid-basis)`,
-            meta: { kind: "gate-shadow", ...base },
-          });
-          if (!eventError) eventInserts++;
-        } catch { /* best-effort — journal only, non-load-bearing */ }
-      }
+    if (error) throw new Error(`gate-shadow: virtual_trades upsert failed (${base.signalId}) — ${error.message}`);
+    published++;
+    publishedSignalIds.add(base.signalId);
+    // Events row only for the ARMED-channel gate blocks — the bench fleet would spam the journal.
+    if (!VIRTUAL_TRADES_ONLY && isFresh
+        && !isGateShadowSequentialBlockReason(base.blocked)
+        && base.pnlPerContract != null) {
+      try {
+        const { error: eventError } = await sb.from("events").insert({
+          level: "INFO",
+          message: `gate-shadow: ${base.slug} ${base.occ} blocked(${base.blocked}) → ${base.exitReason} $${base.pnlPerContract.toFixed(0)}/ct (mid-basis)`,
+          meta: { kind: "gate-shadow", ...base },
+        });
+        if (!eventError) eventInserts++;
+      } catch { /* best-effort — journal only, non-load-bearing */ }
+    }
+  };
+  const bank = async (s: any, base: ShadowRow, isFresh: boolean) => {
+    const shouldPublish = !authorizedCatchupIds || authorizedCatchupIds.has(base.signalId);
+    if (HAS_SERVICE && shouldPublish) {
+      // Reconstruct and validate the entire approved set before its first write,
+      // preventing a changed/partial manifest from causing a partial recovery.
+      if (authorizedCatchupIds) pendingAuthorized.set(base.signalId, { signal: s, row: base, isFresh });
+      else await publish(s, base, isFresh);
     }
     // Ledger + fresh count AFTER the DB row lands (or immediately in the anon ledger-only mode with
     // no service role) — a failed night exits above WITHOUT ledgering, so the signal re-tries next run.
@@ -368,6 +395,24 @@ async function main() {
     }
   }
 
+  if (HAS_SERVICE && authorizedCatchupIds) {
+    const plannedIds = [...pendingAuthorized.keys()].sort();
+    const authorizedIds = [...authorizedCatchupIds].sort();
+    if (JSON.stringify(plannedIds) !== JSON.stringify(authorizedIds)) {
+      throw new Error(`authorized catch-up reconstruction scope mismatch: ${plannedIds.length}/${authorizedIds.length}`);
+    }
+    const { data: staleRows, error: staleError } = await sb.from("virtual_trades")
+      .select("signal_id").in("signal_id", authorizedIds);
+    if (staleError) throw new Error(`authorized catch-up stale-manifest check failed — ${staleError.message}`);
+    if ((staleRows ?? []).length) {
+      throw new Error(`authorized catch-up manifest is stale; ${(staleRows ?? []).length} approved row(s) are already present`);
+    }
+    for (const id of authorizedIds) {
+      const item = pendingAuthorized.get(id)!;
+      await publish(item.signal, item.row, item.isFresh);
+    }
+  }
+
   // ── GAMMA-OPEN LEDGER (data-hole fix 2026-07-02): the 9:35 implied-move readings — the A5
   // classifier's own input — live only in `events`, which PRUNES AT 30d; the earliest readings
   // (06-17) would evaporate the week of the A5 read. Bank message+meta durably, keyed sym|date.
@@ -408,7 +453,16 @@ async function main() {
   // the same SELECT path to compare every locally reconstructed session row to
   // durable virtual_trades truth. This makes a catch-up need exact and bounded
   // instead of inferring it from counts or stale UI state.
-  const expectedRemoteIds = (HAS_SERVICE ? [...publishedSignalIds] : reportRows.map((row) => row.signalId)).sort();
+  if (HAS_SERVICE && authorizedCatchupIds) {
+    const unaccounted = [...authorizedCatchupIds].filter((id) => !publishedSignalIds.has(id)).sort();
+    if (unaccounted.length) {
+      throw new Error(`authorized catch-up did not reconstruct/publish ${unaccounted.length} row(s): ${unaccounted.join(", ")}`);
+    }
+    if (publishedSignalIds.size !== authorizedCatchupIds.size) {
+      throw new Error(`authorized catch-up write scope mismatch: ${publishedSignalIds.size}/${authorizedCatchupIds.size}`);
+    }
+  }
+  const expectedRemoteIds = reportRows.map((row) => row.signalId).sort();
   const observedRemoteIds = new Set<string>();
   for (let from = 0; from < expectedRemoteIds.length; from += 200) {
     const chunk = expectedRemoteIds.slice(from, from + 200);
@@ -435,6 +489,12 @@ async function main() {
     exactWriteRequired: missingRemoteIds.length > 0,
     allowedWriteTableIfSeparatelyAuthorized: "virtual_trades",
     productionWrites: published + eventInserts,
+    ...(HAS_SERVICE ? {
+      authorizedCatchupManifestSha256: authorizedCatchupIds
+        ? (AUTHORIZED_CATCHUP_SHA256!.startsWith("sha256:") ? AUTHORIZED_CATCHUP_SHA256 : `sha256:${AUTHORIZED_CATCHUP_SHA256}`)
+        : null,
+      publishedSignalIds: [...publishedSignalIds].sort(),
+    } : {}),
   };
   writeFileSync(join(OUTPUT_DIR, "gate-shadow-catchup-manifest.json"), JSON.stringify(catchupManifest, null, 2));
   const receipt = {
@@ -456,6 +516,7 @@ async function main() {
     },
     remote: {
       upserts: published,
+      upsertSignalIds: [...publishedSignalIds].sort(),
       expected: expectedRemoteIds.length,
       verified: observedRemoteIds.size,
       missing: missingRemoteIds.length,
