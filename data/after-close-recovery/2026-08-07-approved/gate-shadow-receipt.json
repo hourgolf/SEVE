@@ -1,0 +1,46 @@
+{
+  "version": "gate-shadow-rebuild-v1",
+  "session": "2026-08-07",
+  "rollingDays": null,
+  "readyAt": "2026-08-07T20:15:00.000Z",
+  "mode": "publish-and-verify",
+  "source": {
+    "blockedSignals": 1029,
+    "supportedSignals": 972,
+    "unsupportedSignals": 57,
+    "unsupportedBlockReasons": {
+      "muted": 57
+    }
+  },
+  "reconstruction": {
+    "paths": 129,
+    "scored": 129,
+    "withoutQuotes": 0
+  },
+  "remote": {
+    "upserts": 9,
+    "upsertSignalIds": [
+      "3402553c-fef9-4c09-8c03-2de993a56ed3",
+      "41affd47-b692-4889-906c-5fcf3fb95ace",
+      "643c0d1a-09aa-4e44-9d3f-052da5619ca4",
+      "6570aeed-e197-4e75-b7c3-bd876498f919",
+      "9c87ec88-5f05-4a5b-8e8e-02aab745d53e",
+      "a7c384b2-1930-4e2d-8b2d-2ac040b3c280",
+      "c52c38a5-9599-42cf-adc7-4cc63b0c12a7",
+      "cd2fe975-fb58-486c-859a-e8d7302b5b8c",
+      "fa688f9f-db34-4066-b279-3ed05e56cec6"
+    ],
+    "expected": 129,
+    "verified": 129,
+    "missing": 0,
+    "catchupRequired": false,
+    "eventInserts": 0,
+    "allowedTables": [
+      "virtual_trades"
+    ],
+    "provenanceStamped": false,
+    "publishedPayloadReadbacks": 0,
+    "publishedPayloadSha256": null,
+    "publishedReadbackSha256": null
+  }
+}

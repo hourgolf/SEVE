@@ -1,6 +1,6 @@
 # SEVE weekend decision package — August 7, 2026
 
-Status: frozen local read-only proposal. Nothing in this packet changes a channel, manager, size, account, roster, collector, order, worker, schedule, or production table.
+Status: production shadow evidence recovered and independently verified; every behavioral proposal remains unapplied. The recovery added exactly nine authorized research rows to `virtual_trades` and changed no channel, manager, size, account, roster, collector, order, worker, schedule, or trading configuration.
 
 ## What the reconciled evidence says
 
@@ -38,7 +38,7 @@ Sizing scales both profit and stop exposure. The replay is not permission to tra
 
 ## Sequence and stops
 
-1. Decide whether to authorize the exact nine-row `virtual_trades` catch-up. The manifest names each missing signal ID; it permits no other table and currently records zero writes.
+1. **Completed:** the exact nine-row `virtual_trades` catch-up was manifest-bound, published, and independently verified. All 129 August 7 payloads now match; no event row was inserted.
 2. Review collector pauses separately from runtime changes. Roll back by resuming collection with a new receipt; never delete evidence.
 3. If desired, approve one sizing proposal at a time. Re-run the fresh flat-book preview immediately before activation. Roll back on unexpected displacement, broker/desk incongruence, a changed manifest hash, or materially worse session drawdown.
 4. Resolve `breakout`’s nine registration blockers and repeat collision/capacity review before any promotion decision. Do not silently choose an account or collision domain.
@@ -50,12 +50,12 @@ The bounded recovery command is hash-bound to the frozen zero-write manifest and
 
 - Post-close readiness passed at 2026-08-07 13:15 PT: three paper accounts flat, zero open orders, broker/desk congruent.
 - Canonical ledger: 1,519 closed logical trades; 0 open; 0 censored; no blocking integrity issues. Ledger hash `sha256:c263c9aa35919b78cfc8676eb09364c1615bdaa65233ac5e2f93ad58c46ec2fd`.
-- Shadow catch-up: 129 reconstructed August 7 paths, 120 durable remotely, 9 exact missing rows, 0 writes. Manifest hash `sha256:34d64deadde0fcd9d21b56541942938703636ee6dbbe03033ee56fd5d47096bc`.
-- Decision Atlas: 68 channels, 38,066 logical opportunities, including the nine-row hashed local overlay. Atlas hash `sha256:eb72b29f57c329d8520b2ac744cce5a8368e0b2e30ee5c346641945570036816`.
+- Shadow recovery: exactly 9 authorized `virtual_trades` upserts, 9/9 published payload readbacks, 129/129 full-session payload parity, 0 missing, and 0 event inserts. Independent local and remote payload hash `sha256:c865f5eb32e5662fb604222126c663aa2feab2236b9c155e878a4dcad92b778d`. Verification receipt hash `sha256:83032c88e0a4ca0bad78e7c37cc2da24fa6842cd74b2df1a60896ca5cca3d5e7`.
+- Decision Atlas: regenerated directly from production with no local catch-up overlay; 68 channels and 38,066 logical opportunities. Its snapshot and Atlas hashes are byte-identical to the frozen overlay-backed analysis: `sha256:5e4cfb408c96ffeeca7a9969242ced1263dd18b279bf74ef3d6400a3581d8080` and `sha256:eb72b29f57c329d8520b2ac744cce5a8368e0b2e30ee5c346641945570036816`.
 - Actionable review hash `sha256:3bf2202b98babe1abe0765fd2db6e2b7534ed33785c59cedd3c8bd8709356605`.
 - Reversible change-packet hash `sha256:637c64cdbe6d7d542dd4d74a3763ec54bc370e7b8a9730f1a8a72e1753d75d85`.
 - Weekly readout hash `sha256:5538ff1555532f60790845f8f286d236847b871cb6b3253f4fbfb08badf4d0f4`.
-- Production writes, order authority, configuration authority, and activation authority: **0 / none**.
+- Production writes: **9 authorized rows to `virtual_trades` only**. Event inserts, order authority, configuration authority, activation authority, and trading-behavior changes: **0 / none**.
 
 ## Known limitations
 
