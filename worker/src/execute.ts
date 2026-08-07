@@ -54,7 +54,7 @@ import {
   receiptBoundEntryPolicyStampPresent,
   receiptBoundRunnerConfiguration,
 } from "./receiptBoundEntryPolicy.js";
-import { virtualPathPolicyStamp } from "./virtualPathPolicy.js";
+import { virtualPathPolicyStamp } from "../../lib/research/virtualPathPolicy.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit

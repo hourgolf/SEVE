@@ -245,6 +245,8 @@
     "verify-shadow-rebuild:hosted": "tsx scripts/verify-shadow-rebuild.ts",
     "gate-shadow-policy-selftest": "tsx lib/research/gateShadowPolicy.selftest.ts",
     "virtual-trade-provenance-selftest": "tsx lib/research/virtualTradeProvenance.selftest.ts",
+    "virtual-trade-provenance-model-selftest": "tsx lib/research/virtualTradeProvenanceModel.selftest.ts",
+    "virtual-trade-forward-publisher-selftest": "tsx lib/research/virtualTradeForwardPublisher.selftest.ts",
     "virtual-path-policy-selftest": "tsx worker/src/virtualPathPolicy.selftest.ts",
     "after-close-research-selftest": "tsx lib/research/afterCloseResearch.selftest.ts",
     "fixture-lane-selftest": "tsx lib/ui/fixtureLane.selftest.ts",

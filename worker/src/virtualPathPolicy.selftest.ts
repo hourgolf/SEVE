@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { virtualPathPolicyStamp } from "./virtualPathPolicy.js";
+import { parseVirtualPathPolicyStamp, virtualPathPolicyStamp } from "../../lib/research/virtualPathPolicy.js";
 
 const base = virtualPathPolicyStamp({
   channel: { premium_stop_pct: 30, take_profit_pct: 25 },
@@ -10,6 +10,7 @@ const base = virtualPathPolicyStamp({
 assert.equal(base.scoredStopPct, 30);
 assert.equal(base.takeProfitPct, 25);
 assert.match(base.policyVersion, /^sha256:[0-9a-f]{64}$/);
+assert.deepEqual(parseVirtualPathPolicyStamp(base), base);
 assert.deepEqual(base, virtualPathPolicyStamp({
   channel: { premium_stop_pct: 30, take_profit_pct: 25 },
   defaultPremiumStopPct: 50,
@@ -34,6 +35,12 @@ assert.notEqual(virtualPathPolicyStamp({
   defaultPremiumStopPct: 50,
   managerVersion: `sha256:${"b".repeat(64)}`,
 }).policyVersion, base.policyVersion, "manager changes the policy identity");
+assert.equal(parseVirtualPathPolicyStamp({ ...base, takeProfitPct: 26 }), null, "tampered policy fails closed");
+assert.throws(() => virtualPathPolicyStamp({
+  channel: { premium_stop_pct: -1, take_profit_pct: 25 },
+  defaultPremiumStopPct: 50,
+  managerVersion: null,
+}), /invalid virtual-path source policy/);
 
 const execute = readFileSync(new URL("./execute.ts", import.meta.url), "utf8");
 assert.match(execute, /virtual_path_policy:\s*virtualPathPolicyStamp/);
