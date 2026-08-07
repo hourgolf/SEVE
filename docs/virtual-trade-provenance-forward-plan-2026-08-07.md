@@ -1,12 +1,12 @@
 # Virtual-trade provenance — forward-only plan
 
-Status: **reviewable schema migration prepared locally; unapplied**. No publisher change, backfill, deployment, or production write has been applied.
+Status: **proposal only; no migration, publisher change, backfill, or production write has been applied**.
 
 ## Why this is needed
 
 `virtual_trades` can currently prove the signal, contract path, and virtual result, but it cannot prove which sealed channel configuration produced the opportunity. The dashboard must therefore label these rows **historical virtual** and **configuration unstamped**. Timestamp proximity or today's strategist configuration is not sufficient evidence.
 
-## Prepared forward fields
+## Proposed forward fields
 
 Add nullable, immutable provenance to new `virtual_trades` rows:
 
@@ -17,8 +17,6 @@ Add nullable, immutable provenance to new `virtual_trades` rows:
 - `research_publisher_version` — the deterministic publisher version that produced the row.
 
 The three configuration identity fields must be all-null or all-present. Null means **unstamped**, never “current.” Existing historical rows remain null.
-
-The prepared migration is `20260807143000_virtual_trade_forward_provenance.sql`. It performs no update or backfill, validates the all-or-none rule against existing null rows, accepts only exact activation-receipt and release-manifest membership, and makes all five provenance fields immutable. Its focused self-test also rejects mutable strategist/account authority and timestamp-based inference.
 
 ## Publication rule
 
