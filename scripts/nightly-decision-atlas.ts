@@ -15,6 +15,11 @@ const through = arg("through") ?? etDateOf(new Date().toISOString());
 const outputRoot = resolve(arg("out-dir") ?? `data/decision-atlas/runs/${through}`);
 const envFile = resolve(arg("env-file") ?? process.env.SEVE_ENV_FILE ?? ".env.local");
 if (!existsSync(envFile)) throw new Error(`environment file not found: ${envFile}`);
+const virtualCatchupFile = arg("virtual-catchup-file");
+const virtualCatchupManifest = arg("virtual-catchup-manifest");
+if (Boolean(virtualCatchupFile) !== Boolean(virtualCatchupManifest)) {
+  throw new Error("--virtual-catchup-file and --virtual-catchup-manifest must be supplied together");
+}
 const ledgerDir = resolve(outputRoot, "profitability");
 const atlasDir = resolve(outputRoot, "atlas");
 const weeklyDir = resolve(outputRoot, "weekly");
@@ -24,7 +29,10 @@ const run = (script: string, args: string[]): void => {
 };
 
 run("scripts/profitability-ledger.ts", ["--env-file", envFile, "--as-of", through, "--out-dir", ledgerDir]);
-run("scripts/decision-atlas.ts", ["--env-file", envFile, "--through", through, "--ledger-file", resolve(ledgerDir, "ledger.json"), "--out-dir", atlasDir]);
+run("scripts/decision-atlas.ts", ["--env-file", envFile, "--through", through,
+  "--ledger-file", resolve(ledgerDir, "ledger.json"), "--out-dir", atlasDir,
+  ...(virtualCatchupFile && virtualCatchupManifest
+    ? ["--virtual-catchup-file", resolve(virtualCatchupFile), "--virtual-catchup-manifest", resolve(virtualCatchupManifest)] : [])]);
 run("scripts/weekly-readout.ts", ["--through", through, "--ledger-file", resolve(ledgerDir, "ledger.json"),
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--atlas-file", resolve(atlasDir, "atlas.json"), "--out-dir", weeklyDir]);
 console.log(`nightly-decision-atlas: PASS · local artifacts only · ${outputRoot}`);

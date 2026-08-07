@@ -7,4 +7,7 @@ assert.match(source, /decision-atlas\.ts/);
 assert.match(source, /weekly-readout\.ts/);
 assert.doesNotMatch(source, /capture-forward|launchctl|cron|\.from\(|insert\(|upsert\(/);
 assert.match(source, /intentionally unscheduled/);
+assert.match(source, /--virtual-catchup-file/);
+assert.match(source, /--virtual-catchup-manifest/);
+assert.match(source, /must be supplied together/);
 console.log("nightly-decision-atlas-selftest: PASS");
