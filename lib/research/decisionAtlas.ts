@@ -1,7 +1,7 @@
 // Pure, read-only Decision Atlas. Every result is derived from one logical
 // opportunity; fills, runner rows, and manager arms never become extra trades.
 
-export const DECISION_ATLAS_VERSION = "decision-atlas-v1" as const;
+export const DECISION_ATLAS_VERSION = "decision-atlas-v2" as const;
 
 export type AtlasEvidenceLayer =
   | "actual_portfolio"
@@ -27,7 +27,10 @@ export interface AtlasOpportunity {
   session: string;
   signalAt: string;
   exitAt: string | null;
+  /** Entry/exit/manager/economics identity for this channel only. */
   configurationEra: string | null;
+  /** Receipt/manifest identity for portfolio routing, roster, and capacity replay. */
+  portfolioConfigurationEra: string | null;
   managerVersion: string | null;
   evidenceLayer: Exclude<AtlasEvidenceLayer, "manager_counterfactual">;
   accountId: string | null;
@@ -77,6 +80,8 @@ export interface AtlasInput {
   opportunities: readonly AtlasOpportunity[];
   managerPaths: readonly AtlasManagerPath[];
   accountBudgets: readonly AtlasAccountBudget[];
+  activeChannels?: readonly string[];
+  currentChannelConfigurationEras?: Readonly<Record<string, string>>;
   channelPremiumCaps?: Readonly<Record<string, number>>;
   channelMaxEntriesPerSession?: Readonly<Record<string, number>>;
 }
@@ -168,6 +173,17 @@ export interface AtlasCapacityPoint {
   displacedOpportunities: number;
   displacedCounterfactualUsd: number;
   maxDrawdownUsd: number;
+  portfolioEligibleOpportunities: number;
+  portfolioDeployedOpportunities: number;
+  portfolioTotalResultUsd: number;
+  marginalPortfolioResultVsOneContractUsd: number | null;
+  portfolioMaxDrawdownUsd: number;
+  displacedTargetOpportunities: number;
+  displacedOtherOpportunities: number;
+  displacedOtherCounterfactualUsd: number;
+  additionalDisplacedOtherOpportunitiesVsOneContract: number | null;
+  additionalDisplacedOtherCounterfactualUsdVsOneContract: number | null;
+  displacedByChannel: Array<{ channel: string; opportunities: number; counterfactualUsd: number }>;
 }
 
 export interface AtlasCapacityReplay {
@@ -193,7 +209,9 @@ export interface AtlasChannelDossier {
   decisionCohort: {
     evidenceLayer: Exclude<AtlasEvidenceLayer, "manager_counterfactual">;
     configurationEra: string;
+    portfolioConfigurationEras: string[];
     opportunities: number;
+    sessions: number;
     fact: string;
   };
   evidenceLayers: Array<{
@@ -201,6 +219,7 @@ export interface AtlasChannelDossier {
     opportunities: number;
     sessions: number;
     configurationEras: string[];
+    portfolioConfigurationEras: string[];
   }>;
   firstGlance: Array<{
     label: "typical result" | "best move" | "gave back" | "additional opportunity" | "evidence";
@@ -214,7 +233,7 @@ export interface AtlasChannelDossier {
 }
 
 export interface DecisionAtlas {
-  schemaVersion: 1;
+  schemaVersion: 2;
   atlasVersion: typeof DECISION_ATLAS_VERSION;
   generatedAt: string;
   throughSession: string;
@@ -510,32 +529,64 @@ interface OpenReplay {
   stop: number;
   accountId: string;
   occSymbol: string | null;
-  result: number;
+  channel: string;
+}
+
+function replayableAdmission(row: AtlasOpportunity): boolean {
+  if (row.admissionAllowed !== false) return true;
+  return /capital|capacity|collision|\bocc\b|occup|open.position|position.exists|account.*busy|buying.power|\bslot\b/i
+    .test(row.blockedReason ?? "");
 }
 
 export function buildCapacityReplay(input: {
-  rows: readonly AtlasOpportunity[];
+  targetChannel: string;
+  targetRows: readonly AtlasOpportunity[];
+  portfolioRows: readonly AtlasOpportunity[];
   accountBudgets: readonly AtlasAccountBudget[];
-  premiumCap: number | null;
-  maxEntriesPerSession: number | null;
+  channelPremiumCaps?: Readonly<Record<string, number>>;
+  channelMaxEntriesPerSession?: Readonly<Record<string, number>>;
 }): AtlasCapacityReplay {
   const budgets = new Map(input.accountBudgets.map((budget) => [budget.accountId, budget]));
   const points: AtlasCapacityPoint[] = [];
   const limitations = new Set<string>();
   if (!input.accountBudgets.length) limitations.add("No verified account budgets; deployment replay is censored.");
-  const eligible = input.rows.filter((row) => finite(row.entryPrice) && finite(row.resultPerContractUsd)
-    && row.exitAt && row.accountId).sort((a, b) => a.signalAt.localeCompare(b.signalAt) || a.id.localeCompare(b.id));
-  if (eligible.length < input.rows.length) limitations.add("Rows missing account, entry price, exit time, or outcome were excluded.");
+  const sessions = new Set(input.targetRows.map((row) => row.session));
+  const targetIds = new Set(input.targetRows.map((row) => row.logicalOpportunityId));
+  const candidates = [
+    ...input.portfolioRows.filter((row) => sessions.has(row.session)
+      && row.channel !== input.targetChannel && !targetIds.has(row.logicalOpportunityId)),
+    ...input.targetRows,
+  ];
+  const unique = [...new Map(candidates.map((row) => [row.logicalOpportunityId, row])).values()];
+  const complete = unique.filter((row) => finite(row.entryPrice) && finite(row.resultPerContractUsd)
+    && row.exitAt && row.accountId);
+  const eligible = complete.filter(replayableAdmission)
+    .sort((a, b) => a.signalAt.localeCompare(b.signalAt) || a.id.localeCompare(b.id));
+  if (complete.length < unique.length) limitations.add("Portfolio rows missing account, entry price, exit time, or outcome were excluded.");
+  if (eligible.length < complete.length) limitations.add("Policy- or quote-blocked opportunities remain ineligible; only capital and collision decisions are replayed.");
+  if (eligible.some((row) => row.stopExposurePerContractUsd == null)) {
+    limitations.add("Missing historical stop exposure is conservatively approximated by position debit.");
+  }
+  limitations.add("Current account envelopes and deterministic signal-time priority are applied to the historical opportunity sequence.");
+  if (!eligible.some((row) => row.channel !== input.targetChannel)) {
+    limitations.add("No competing portfolio opportunities were observable in the target sessions.");
+  }
+  const targetEligibleOpportunities = eligible.filter((row) => row.channel === input.targetChannel).length;
   for (let contracts = 1; contracts <= 6; contracts += 1) {
     const open: OpenReplay[] = [];
-    const deployedResults: number[] = [];
+    const targetResults: number[] = [];
+    const portfolioOutcomes: Array<{ exitAt: number; result: number }> = [];
     let debit = 0;
     let stop = 0;
     let peakDebit = 0;
     let peakStop = 0;
     let displaced = 0;
+    let displacedTarget = 0;
+    let displacedOther = 0;
     let displacedCounterfactual = 0;
-    const entriesBySession = new Map<string, number>();
+    let displacedOtherCounterfactual = 0;
+    const displacedByChannel = new Map<string, { opportunities: number; counterfactualUsd: number }>();
+    const entriesBySessionChannel = new Map<string, number>();
     for (const row of eligible) {
       const now = Date.parse(row.signalAt);
       for (let index = open.length - 1; index >= 0; index -= 1) if (open[index].exitAt <= now) {
@@ -544,49 +595,87 @@ export function buildCapacityReplay(input: {
         open.splice(index, 1);
       }
       const budget = budgets.get(row.accountId!);
+      const isTarget = row.channel === input.targetChannel;
+      const desiredContracts = isTarget ? contracts : Math.max(1, Math.floor(row.quantity ?? 1));
       const perContractDebit = row.entryPrice! * 100;
-      const positionDebit = perContractDebit * contracts;
-      const positionStop = (row.stopExposurePerContractUsd ?? perContractDebit) * contracts;
+      const positionDebit = perContractDebit * desiredContracts;
+      const positionStop = (row.stopExposurePerContractUsd ?? perContractDebit) * desiredContracts;
       const accountOpen = open.filter((item) => item.accountId === row.accountId);
       const accountDebit = accountOpen.reduce((sum, item) => sum + item.debit, 0);
       const accountStop = accountOpen.reduce((sum, item) => sum + item.stop, 0);
-      const sessionEntries = entriesBySession.get(row.session) ?? 0;
-      const pass = !!budget && row.admissionAllowed !== false
-        && (input.premiumCap == null || perContractDebit <= input.premiumCap)
-        && (input.maxEntriesPerSession == null || sessionEntries < input.maxEntriesPerSession)
+      const entryKey = `${row.session}\u0000${row.channel}`;
+      const sessionEntries = entriesBySessionChannel.get(entryKey) ?? 0;
+      const premiumCap = input.channelPremiumCaps?.[row.channel] ?? null;
+      const maxEntries = input.channelMaxEntriesPerSession?.[row.channel] ?? null;
+      const pass = !!budget
+        && (premiumCap == null || perContractDebit <= premiumCap)
+        && (maxEntries == null || sessionEntries < maxEntries)
         && accountOpen.length < budget.maxOpenPositions
         && !accountOpen.some((item) => row.occSymbol && item.occSymbol === row.occSymbol)
         && accountDebit + positionDebit <= Math.min(budget.buyingPowerUsd, budget.maxConcurrentDebitUsd)
         && accountStop + positionStop <= budget.maxConcurrentStopExposureUsd;
       if (!pass) {
         displaced += 1;
-        displacedCounterfactual += row.resultPerContractUsd! * contracts;
+        const counterfactual = row.resultPerContractUsd! * desiredContracts;
+        displacedCounterfactual += counterfactual;
+        if (isTarget) displacedTarget += 1;
+        else {
+          displacedOther += 1;
+          displacedOtherCounterfactual += counterfactual;
+        }
+        const prior = displacedByChannel.get(row.channel) ?? { opportunities: 0, counterfactualUsd: 0 };
+        displacedByChannel.set(row.channel, {
+          opportunities: prior.opportunities + 1,
+          counterfactualUsd: prior.counterfactualUsd + counterfactual,
+        });
         continue;
       }
-      entriesBySession.set(row.session, sessionEntries + 1);
+      entriesBySessionChannel.set(entryKey, sessionEntries + 1);
       open.push({ exitAt: Date.parse(row.exitAt!), debit: positionDebit, stop: positionStop,
-        accountId: row.accountId!, occSymbol: row.occSymbol,
-        result: row.resultPerContractUsd! * contracts });
+        accountId: row.accountId!, occSymbol: row.occSymbol, channel: row.channel });
       debit += positionDebit;
       stop += positionStop;
       peakDebit = Math.max(peakDebit, debit);
       peakStop = Math.max(peakStop, stop);
-      deployedResults.push(row.resultPerContractUsd! * contracts);
+      const result = row.resultPerContractUsd! * desiredContracts;
+      portfolioOutcomes.push({ exitAt: Date.parse(row.exitAt!), result });
+      if (isTarget) targetResults.push(result);
     }
-    const total = round(deployedResults.reduce((sum, value) => sum + value, 0));
+    portfolioOutcomes.sort((a, b) => a.exitAt - b.exitAt || a.result - b.result);
+    const total = round(targetResults.reduce((sum, value) => sum + value, 0));
+    const portfolioTotal = round(portfolioOutcomes.reduce((sum, value) => sum + value.result, 0));
     points.push({
-      contracts, eligibleOpportunities: eligible.length, deployedOpportunities: deployedResults.length,
-      deploymentFrequency: eligible.length ? round(deployedResults.length / eligible.length) : null,
-      totalResultUsd: total, typicalResultPerOpportunityUsd: median(deployedResults),
+      contracts,
+      eligibleOpportunities: targetEligibleOpportunities,
+      deployedOpportunities: targetResults.length,
+      deploymentFrequency: targetEligibleOpportunities ? round(targetResults.length / targetEligibleOpportunities) : null,
+      totalResultUsd: total, typicalResultPerOpportunityUsd: median(targetResults),
       marginalResultVsPriorUsd: contracts === 1 ? null : round(total - points[contracts - 2].totalResultUsd),
       peakDebitUsd: round(peakDebit), peakStopExposureUsd: round(peakStop),
       displacedOpportunities: displaced, displacedCounterfactualUsd: round(displacedCounterfactual),
-      maxDrawdownUsd: maxDrawdown(deployedResults),
+      maxDrawdownUsd: maxDrawdown(targetResults),
+      portfolioEligibleOpportunities: eligible.length,
+      portfolioDeployedOpportunities: portfolioOutcomes.length,
+      portfolioTotalResultUsd: portfolioTotal,
+      marginalPortfolioResultVsOneContractUsd: contracts === 1 ? null
+        : round(portfolioTotal - points[0].portfolioTotalResultUsd),
+      portfolioMaxDrawdownUsd: maxDrawdown(portfolioOutcomes.map((item) => item.result)),
+      displacedTargetOpportunities: displacedTarget,
+      displacedOtherOpportunities: displacedOther,
+      displacedOtherCounterfactualUsd: round(displacedOtherCounterfactual),
+      additionalDisplacedOtherOpportunitiesVsOneContract: contracts === 1 ? null
+        : displacedOther - points[0].displacedOtherOpportunities,
+      additionalDisplacedOtherCounterfactualUsdVsOneContract: contracts === 1 ? null
+        : round(displacedOtherCounterfactual - points[0].displacedOtherCounterfactualUsd),
+      displacedByChannel: [...displacedByChannel].map(([channel, value]) => ({
+        channel, opportunities: value.opportunities, counterfactualUsd: round(value.counterfactualUsd),
+      })).sort((a, b) => b.opportunities - a.opportunities || a.channel.localeCompare(b.channel)),
     });
   }
   const supported = points.filter((point) => point.deployedOpportunities >= 5
     && point.typicalResultPerOpportunityUsd != null && point.typicalResultPerOpportunityUsd > 0
-    && (point.marginalResultVsPriorUsd == null || point.marginalResultVsPriorUsd > 0));
+    && (point.marginalResultVsPriorUsd == null || point.marginalResultVsPriorUsd > 0)
+    && (point.marginalPortfolioResultVsOneContractUsd == null || point.marginalPortfolioResultVsOneContractUsd > 0));
   return { points, bestSupportedContracts: supported.at(-1)?.contracts ?? null, limitations: [...limitations] };
 }
 
@@ -704,6 +793,18 @@ function selectDecisionCohort(rows: readonly AtlasOpportunity[]): AtlasOpportuni
 
 export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
   const rows = dedupe(input.opportunities);
+  const activeChannels = new Set(input.activeChannels
+    ?? rows.filter((row) => row.evidenceLayer === "actual_portfolio").map((row) => row.channel));
+  const portfolioRank: Record<AtlasOpportunity["evidenceLayer"], number> = {
+    exact_current_configuration: 4, actual_portfolio: 3, prospective_virtual: 2, structural_history: 1,
+  };
+  const replayCandidates = rows.filter((row) => activeChannels.has(row.channel)
+    && (!input.currentChannelConfigurationEras?.[row.channel]
+      || row.configurationEra === input.currentChannelConfigurationEras[row.channel]));
+  const portfolioRows = [...new Map([...replayCandidates]
+    .sort((a, b) => portfolioRank[a.evidenceLayer] - portfolioRank[b.evidenceLayer]
+      || a.signalAt.localeCompare(b.signalAt) || a.id.localeCompare(b.id))
+    .map((row) => [row.logicalOpportunityId, row])).values()];
   const graphRows = [...new Set(rows.map((row) => row.channel))].flatMap((channel) =>
     selectDecisionCohort(rows.filter((row) => row.channel === channel)));
   const graph = buildCollisionGraph(graphRows);
@@ -714,9 +815,12 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
     const paths = input.managerPaths.filter((path) => path.channel === channel);
     const waterfall = buildSignalToDollarWaterfall(decisionRows);
     const frontiers = buildEntryExitFrontiers(channelRows, paths);
-    const capacity = buildCapacityReplay({ rows: decisionRows, accountBudgets: input.accountBudgets,
-      premiumCap: input.channelPremiumCaps?.[channel] ?? null,
-      maxEntriesPerSession: input.channelMaxEntriesPerSession?.[channel] ?? null });
+    const targetReplayRows = portfolioRows.filter((row) => row.channel === channel);
+    const capacity = buildCapacityReplay({ targetChannel: channel,
+      targetRows: targetReplayRows.length ? targetReplayRows : decisionRows,
+      portfolioRows, accountBudgets: input.accountBudgets,
+      channelPremiumCaps: input.channelPremiumCaps,
+      channelMaxEntriesPerSession: input.channelMaxEntriesPerSession });
     const edges = graph.filter((edge) => edge.left === channel || edge.right === channel);
     const life = lifecycle({ rows: decisionRows, frontiers: frontiers.filter((frontier) =>
       frontier.evidenceLayer === decisionRows[0]?.evidenceLayer
@@ -725,20 +829,21 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
     const mfe = decisionRows.map((row) => row.mfePct).filter(finite);
     const giveback = decisionRows.flatMap((row) => finite(row.mfePct) && finite(row.returnPct)
       ? [row.mfePct - row.returnPct] : []);
-    const capacityOne = capacity.points[0];
     const capacityBest = capacity.bestSupportedContracts
       ? capacity.points[capacity.bestSupportedContracts - 1] : null;
-    const additional = capacityBest && capacityOne
-      ? capacityBest.totalResultUsd - capacityOne.totalResultUsd : null;
+    const additional = capacityBest?.marginalPortfolioResultVsOneContractUsd ?? null;
     const dossier: AtlasChannelDossier = {
       channel, disposition: life.disposition,
       summary: life.plainLanguage,
       decisionCohort: {
         evidenceLayer: decisionRows[0]?.evidenceLayer ?? "structural_history",
         configurationEra: decisionRows[0]?.configurationEra ?? "legacy / unstamped",
+        portfolioConfigurationEras: [...new Set(decisionRows.map((row) =>
+          row.portfolioConfigurationEra ?? "portfolio:unstamped"))].sort(),
         opportunities: decisionRows.length,
+        sessions: new Set(decisionRows.map((row) => row.session)).size,
         fact: decisionRows[0]?.evidenceLayer === "exact_current_configuration"
-          ? "Default metrics use only the latest exact current-configuration cohort."
+          ? "Default metrics use the unchanged current channel specification across portfolio receipts."
           : decisionRows[0]?.evidenceLayer === "prospective_virtual"
             ? "Default metrics use the latest prospective virtual cohort; not portfolio P&L."
             : "Default metrics use the latest available era; exact-current evidence is not available.",
@@ -748,14 +853,18 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
           const layerRows = channelRows.filter((row) => row.evidenceLayer === layer);
           return { layer, opportunities: layerRows.length,
             sessions: new Set(layerRows.map((row) => row.session)).size,
-            configurationEras: [...new Set(layerRows.map((row) => row.configurationEra ?? "legacy / unstamped"))].sort() };
+            configurationEras: [...new Set(layerRows.map((row) => row.configurationEra ?? "legacy / unstamped"))].sort(),
+            portfolioConfigurationEras: [...new Set(layerRows.map((row) =>
+              row.portfolioConfigurationEra ?? "portfolio:unstamped"))].sort() };
         }).filter((layer) => layer.opportunities > 0),
       firstGlance: [
         { label: "typical result", value: `${metric(median(returns), " / ct")}`, detail: "Median logical opportunity; not total profit." },
         { label: "best move", value: metric(median(mfe), "%"), detail: "Typical maximum favorable move while the position was open." },
         { label: "gave back", value: metric(median(giveback), " pts"), detail: "Typical best move minus the final return." },
-        { label: "additional opportunity", value: moneyMetric(additional, " replay"), detail: "Added result at the best supported size versus one contract, after displacement." },
-        { label: "evidence", value: `${life.evidenceSessions} sessions`, detail: life.additionalIndependentSessions == null ? "Decision horizon unresolved." : `${life.additionalIndependentSessions} additional independent sessions estimated.` },
+        { label: "additional opportunity", value: moneyMetric(additional, " replay"), detail: "Change in total portfolio result at the best supported size versus one contract, after displacement." },
+        { label: "evidence", value: `${life.evidenceSessions} sessions`, detail: life.additionalIndependentSessions == null
+          ? "Uncertainty horizon unresolved."
+          : `${life.additionalIndependentSessions} additional sessions estimated for uncertainty; not a fixed decision gate.` },
       ], waterfall, frontiers, capacity, lifecycle: life,
     };
     return [channel, dossier];
@@ -768,7 +877,7 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
     manager_counterfactual: input.managerPaths.length,
   };
   return {
-    schemaVersion: 1, atlasVersion: DECISION_ATLAS_VERSION, generatedAt: input.generatedAt,
+    schemaVersion: 2, atlasVersion: DECISION_ATLAS_VERSION, generatedAt: input.generatedAt,
     throughSession: input.throughSession, channels: dossiers, collisionGraph: graph,
     evidence: {
       inputOpportunities: input.opportunities.length, logicalOpportunities: rows.length,

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  buildCapacityReplay,
   buildDecisionAtlas,
   type AtlasManagerPath,
   type AtlasOpportunity,
@@ -20,6 +21,7 @@ const opportunity = (
   signalAt: `${sessions[index]}T14:30:00.000Z`,
   exitAt: `${sessions[index]}T15:00:00.000Z`,
   configurationEra: "epoch-current",
+  portfolioConfigurationEra: `portfolio-receipt-${index % 3}`,
   managerVersion: "native-v1",
   evidenceLayer: "exact_current_configuration",
   accountId: channel === "gamma" ? "paper-2" : "paper-1",
@@ -91,6 +93,11 @@ assert.equal(atlas.configurationAuthority, false);
 assert.equal(atlas.evidence.duplicateRowsRemoved, 1, "one opportunity id, not one fill row");
 assert.equal(atlas.channels.alpha.waterfall.opportunities, 6);
 assert.equal(atlas.channels.alpha.decisionCohort.evidenceLayer, "exact_current_configuration");
+assert.equal(atlas.channels.alpha.decisionCohort.configurationEra, "epoch-current");
+assert.deepEqual(atlas.channels.alpha.decisionCohort.portfolioConfigurationEras,
+  ["portfolio-receipt-0", "portfolio-receipt-1", "portfolio-receipt-2"],
+  "portfolio receipt churn must not reset an unchanged channel configuration");
+assert.equal(atlas.channels.alpha.decisionCohort.sessions, 6);
 assert.equal(atlas.channels.alpha.evidenceLayers.length, 2,
   "actual and prospective evidence remain visibly separate for the same opportunity");
 assert.equal(atlas.channels.alpha.firstGlance.length, 5);
@@ -129,6 +136,55 @@ const replay = buildDecisionAtlas({
 });
 assert.equal(replay.channels["same-occ"].capacity.points[0].deployedOpportunities, 1,
   "same account OCC collision displaces the second opportunity");
+
+const target = opportunity("target", 0, 20, {
+  evidenceLayer: "exact_current_configuration",
+  signalAt: "2026-07-27T14:30:00.000Z",
+  exitAt: "2026-07-27T16:00:00.000Z",
+  occSymbol: "SPY-SAME",
+  entryPrice: 1,
+  quantity: 1,
+});
+const sameAccountCompetitor = opportunity("competitor", 0, 50, {
+  evidenceLayer: "actual_portfolio",
+  signalAt: "2026-07-27T14:30:10.000Z",
+  exitAt: "2026-07-27T16:00:00.000Z",
+  occSymbol: "SPY-OTHER",
+  entryPrice: 1,
+  quantity: 2,
+});
+const crossAccountSameOcc = opportunity("cross-account", 0, 10, {
+  evidenceLayer: "actual_portfolio",
+  accountId: "paper-2",
+  signalAt: "2026-07-27T14:30:20.000Z",
+  exitAt: "2026-07-27T16:00:00.000Z",
+  occSymbol: "SPY-SAME",
+  entryPrice: 1,
+  quantity: 1,
+});
+const portfolioReplay = buildCapacityReplay({
+  targetChannel: "target",
+  targetRows: [target],
+  portfolioRows: [sameAccountCompetitor, crossAccountSameOcc],
+  accountBudgets: [
+    { accountId: "paper-1", buyingPowerUsd: 300, maxConcurrentDebitUsd: 300,
+      maxConcurrentStopExposureUsd: 300, maxOpenPositions: 4 },
+    { accountId: "paper-2", buyingPowerUsd: 300, maxConcurrentDebitUsd: 300,
+      maxConcurrentStopExposureUsd: 300, maxOpenPositions: 4 },
+  ],
+});
+assert.equal(portfolioReplay.points[0].portfolioTotalResultUsd, 130);
+assert.equal(portfolioReplay.points[1].displacedOtherOpportunities, 1,
+  "larger target size must expose displacement of another channel");
+assert.equal(portfolioReplay.points[1].displacedOtherCounterfactualUsd, 100);
+assert.equal(portfolioReplay.points[1].additionalDisplacedOtherOpportunitiesVsOneContract, 1);
+assert.equal(portfolioReplay.points[1].additionalDisplacedOtherCounterfactualUsdVsOneContract, 100);
+assert.deepEqual(portfolioReplay.points[1].displacedByChannel,
+  [{ channel: "competitor", opportunities: 1, counterfactualUsd: 100 }]);
+assert.equal(portfolioReplay.points[1].portfolioDeployedOpportunities, 2,
+  "cross-account same-OCC opportunity remains independently deployable");
+assert.equal(portfolioReplay.points[1].marginalPortfolioResultVsOneContractUsd, -80,
+  "target gain must be net of the opportunity it displaces");
 
 assert.deepEqual(atlas, buildDecisionAtlas({
   generatedAt: "2026-08-06T21:00:00.000Z",

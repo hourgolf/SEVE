@@ -85,6 +85,7 @@ export interface DecisionAtlasSourceSnapshot {
   managerRuns: ChannelManagerRunRow[];
   equitySnapshots: AtlasEquitySnapshotRow[];
   activeChannelSpecs: ChannelSpecVersion[];
+  activeChannelSpecDatabaseIdsByVersionKey?: Record<string, string>;
   currentConfigurationEpochId: string | null;
 }
 
@@ -106,13 +107,25 @@ function tradeLogicalId(trade: LogicalTrade): string {
   return trade.opportunityId ? `opportunity:${trade.opportunityId}` : trade.id;
 }
 
-function exactCurrent(trade: LogicalTrade, currentEpoch: string | null): boolean {
-  return !!currentEpoch
-    && trade.configuration.kind === "configuration_epoch"
-    && trade.configuration.configurationEpochId === currentEpoch;
+export function channelConfigurationEra(configuration: LogicalTrade["configuration"]): string {
+  if (configuration.channelSpecVersionId) {
+    return `channel-spec:${configuration.channelSpecVersionId}`;
+  }
+  if (configuration.kind === "sealed_release") {
+    return `sealed-channel:${configuration.evidenceEra ?? "unknown"}:${configuration.configurationSha256 ?? configuration.releaseId ?? "unstamped"}`;
+  }
+  return "legacy-channel:unstamped";
 }
 
-function tradeOpportunity(trade: LogicalTrade, layer: AtlasOpportunity["evidenceLayer"]): AtlasOpportunity {
+export function isExactCurrentChannelConfiguration(
+  configuration: LogicalTrade["configuration"], activeSpecId: string | null,
+): boolean {
+  return !!activeSpecId
+    && configuration.kind === "configuration_epoch"
+    && configuration.channelSpecVersionId === activeSpecId;
+}
+
+function tradeOpportunity(trade: LogicalTrade, layer: AtlasOpportunity["evidenceLayer"], matchingActiveSpec?: ChannelSpecVersion): AtlasOpportunity {
   const perContract = trade.realizedPnlUsd != null && trade.quantity > 0
     ? trade.realizedPnlUsd / trade.quantity : null;
   return {
@@ -122,7 +135,8 @@ function tradeOpportunity(trade: LogicalTrade, layer: AtlasOpportunity["evidence
     session: etDateOf(trade.openedAt),
     signalAt: trade.openedAt,
     exitAt: trade.closedAt,
-    configurationEra: trade.configuration.key,
+    configurationEra: channelConfigurationEra(trade.configuration),
+    portfolioConfigurationEra: trade.configuration.key,
     managerVersion: null,
     evidenceLayer: layer,
     accountId: trade.accountId,
@@ -142,7 +156,8 @@ function tradeOpportunity(trade: LogicalTrade, layer: AtlasOpportunity["evidence
     mfePct: trade.mfePct,
     maePct: trade.maePct,
     captureRatio: trade.mfeCaptureRatio,
-    stopExposurePerContractUsd: null,
+    stopExposurePerContractUsd: matchingActiveSpec
+      ? matchingActiveSpec.riskLimits.maxRiskUsd / matchingActiveSpec.quantity : null,
     sourceRefs: [`profitability-ledger:${trade.id}`, `configuration:${trade.configuration.key}`],
   };
 }
@@ -159,7 +174,7 @@ interface ExecutionFacts {
   blockedReason: string | null;
   quantity: number | null;
   fillPrice: number | null;
-  configurationEra: string | null;
+  portfolioConfigurationEra: string | null;
   refs: string[];
 }
 
@@ -184,7 +199,7 @@ function executionFacts(rows: readonly AtlasExecutionRow[]): ExecutionFacts {
     quantity: number(broker.find((row) => (number(row.filled_qty) ?? 0) > 0)?.filled_qty)
       ?? number(decisions.find((row) => number(row.requested_qty) != null)?.requested_qty),
     fillPrice: number(broker.find((row) => (number(row.filled_qty) ?? 0) > 0)?.fill_price),
-    configurationEra: ordered.find((row) => row.configuration_epoch_id)?.configuration_epoch_id ?? null,
+    portfolioConfigurationEra: ordered.find((row) => row.configuration_epoch_id)?.configuration_epoch_id ?? null,
     refs: ordered.map((row) => `execution_observations:${row.id}`),
   };
 }
@@ -204,7 +219,7 @@ function enrich(row: AtlasOpportunity, facts: ExecutionFacts | undefined): Atlas
     blockedReason: facts.blockedReason ?? row.blockedReason,
     quantity: row.quantity ?? facts.quantity,
     entryPrice: row.entryPrice ?? facts.fillPrice,
-    configurationEra: row.configurationEra ?? facts.configurationEra,
+    portfolioConfigurationEra: row.portfolioConfigurationEra ?? facts.portfolioConfigurationEra,
     sourceRefs: [...new Set([...row.sourceRefs, ...facts.refs])].sort(),
   };
 }
@@ -241,6 +256,24 @@ export function adaptDecisionAtlasSnapshot(input: {
   const { snapshot } = input;
   const strategistById = new Map(snapshot.strategists.map((row) => [row.id, row]));
   const specBySlug = new Map(snapshot.activeChannelSpecs.map((spec) => [spec.slug, spec]));
+  const currentChannelSpecIdBySlug = new Map(snapshot.activeChannelSpecs.flatMap((spec) => {
+    const databaseId = snapshot.activeChannelSpecDatabaseIdsByVersionKey?.[spec.id];
+    return databaseId ? [[spec.slug, databaseId] as const] : [];
+  }));
+  const channelSpecIdBySlugEpoch = new Map<string, string>();
+  for (const trade of snapshot.ledger.logicalTrades) {
+    if (trade.configuration.kind === "configuration_epoch"
+      && trade.configuration.configurationEpochId
+      && trade.configuration.channelSpecVersionId) {
+      channelSpecIdBySlugEpoch.set(`${trade.channelSlug}\u0000${trade.configuration.configurationEpochId}`,
+        trade.configuration.channelSpecVersionId);
+    }
+    if (trade.configuration.kind === "configuration_epoch"
+      && trade.configuration.configurationEpochId === snapshot.currentConfigurationEpochId
+      && trade.configuration.channelSpecVersionId) {
+      currentChannelSpecIdBySlug.set(trade.channelSlug, trade.configuration.channelSpecVersionId);
+    }
+  }
   const tradeByPosition = new Map<string, LogicalTrade>();
   const tradeByOpportunity = new Map<string, LogicalTrade>();
   for (const trade of snapshot.ledger.logicalTrades) {
@@ -263,11 +296,14 @@ export function adaptDecisionAtlasSnapshot(input: {
   const opportunities: AtlasOpportunity[] = [];
   for (const trade of snapshot.ledger.logicalTrades.filter((row) => row.status === "closed")) {
     const logical = tradeLogicalId(trade);
-    const structural = enrich(tradeOpportunity(trade, "structural_history"), factsByLogical.get(logical));
+    const activeSpec = specBySlug.get(trade.channelSlug);
+    const currentChannelSpecId = currentChannelSpecIdBySlug.get(trade.channelSlug) ?? null;
+    const structural = enrich(tradeOpportunity(trade, "structural_history",
+      currentChannelSpecId === trade.configuration.channelSpecVersionId ? activeSpec : undefined), factsByLogical.get(logical));
     opportunities.push(structural);
     if (trade.accountId) opportunities.push({ ...structural,
       id: `actual_portfolio:${trade.id}`, evidenceLayer: "actual_portfolio" });
-    if (exactCurrent(trade, snapshot.currentConfigurationEpochId)) opportunities.push({ ...structural,
+    if (isExactCurrentChannelConfiguration(trade.configuration, currentChannelSpecId)) opportunities.push({ ...structural,
       id: `exact_current_configuration:${trade.id}`, evidenceLayer: "exact_current_configuration" });
   }
   const virtualBySignal = new Map(snapshot.virtualTrades.map((row) => [row.signal_id, row]));
@@ -279,6 +315,8 @@ export function adaptDecisionAtlasSnapshot(input: {
     const facts = factsByLogical.get(logical);
     const rationale = object(signal.rationale);
     const spec = specBySlug.get(slug);
+    const signalChannelSpecId = signal.configuration_epoch_id
+      ? channelSpecIdBySlugEpoch.get(`${slug}\u0000${signal.configuration_epoch_id}`) : null;
     const entryPrice = number(virtual?.entry_px) ?? number(rationale?.ask) ?? facts?.fillPrice ?? null;
     const pnl = number(virtual?.pnl_per_contract);
     const returnPct = pnl != null && entryPrice != null && entryPrice > 0 ? pnl / entryPrice : null;
@@ -290,7 +328,13 @@ export function adaptDecisionAtlasSnapshot(input: {
       session: etDateOf(signal.created_at),
       signalAt: signal.created_at,
       exitAt: virtual?.exit_at ?? null,
-      configurationEra: signal.configuration_epoch_id ?? facts?.configurationEra ?? "prospective:unstamped",
+      configurationEra: signalChannelSpecId
+        ? `channel-spec:${signalChannelSpecId}`
+        : spec && signal.configuration_epoch_id === snapshot.currentConfigurationEpochId
+          ? `channel-spec:${currentChannelSpecIdBySlug.get(slug) ?? spec.id}`
+        : `prospective-channel:${signal.configuration_epoch_id ?? facts?.portfolioConfigurationEra ?? "unstamped"}`,
+      portfolioConfigurationEra: signal.configuration_epoch_id
+        ?? facts?.portfolioConfigurationEra ?? "portfolio:unstamped",
       managerVersion: spec?.managerVersion ?? null,
       evidenceLayer: "prospective_virtual",
       accountId: facts?.accountId ?? spec?.accountId ?? null,
@@ -330,7 +374,8 @@ export function adaptDecisionAtlasSnapshot(input: {
       id: `prospective_virtual:${virtual.signal_id}`,
       channel: virtual.slug,
       session: etDateOf(virtual.signal_at), signalAt: virtual.signal_at, exitAt: virtual.exit_at,
-      configurationEra: "prospective:signal-row-missing", managerVersion: spec?.managerVersion ?? null,
+      configurationEra: "prospective-channel:signal-row-missing",
+      portfolioConfigurationEra: "portfolio:signal-row-missing", managerVersion: spec?.managerVersion ?? null,
       evidenceLayer: "prospective_virtual", accountId: spec?.accountId ?? null,
       underlying: spec?.symbolScope[0] ?? "UNKNOWN", occSymbol: virtual.occ, direction: null,
       contractSelected: virtual.occ ? true : null, quoteEligible: null, admissionAllowed: null, filled: null,
@@ -349,7 +394,7 @@ export function adaptDecisionAtlasSnapshot(input: {
     return [{
       opportunityId: tradeLogicalId(trade),
       channel: run.channel_slug,
-      configurationEra: run.configuration_epoch_id ?? trade.configuration.key,
+      configurationEra: channelConfigurationEra(trade.configuration),
       managerId: run.manager_id,
       managerVersion: `${run.manager_policy_version}:${run.shadow_book_version}`,
       status: run.status,
@@ -364,6 +409,9 @@ export function adaptDecisionAtlasSnapshot(input: {
     opportunities,
     managerPaths,
     accountBudgets: budgets(snapshot),
+    activeChannels: snapshot.activeChannelSpecs.map((spec) => spec.slug),
+    currentChannelConfigurationEras: Object.fromEntries([...currentChannelSpecIdBySlug]
+      .map(([slug, id]) => [slug, `channel-spec:${id}`])),
     channelPremiumCaps: Object.fromEntries(snapshot.activeChannelSpecs.map((spec) =>
       [spec.slug, spec.maxDebitUsd / spec.quantity])),
     channelMaxEntriesPerSession: Object.fromEntries(snapshot.activeChannelSpecs.map((spec) => {

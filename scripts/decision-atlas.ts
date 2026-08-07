@@ -99,6 +99,7 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
     snapshot: {
       ledger, strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots,
       activeChannelSpecs: control.compiled.channelSpecs,
+      activeChannelSpecDatabaseIdsByVersionKey: control.databaseIdentity?.channelSpecDatabaseIdsByVersionKey ?? {},
       currentConfigurationEpochId: control.activationReceipt?.configurationEpochId ?? null,
     },
     timingsMs,
@@ -115,7 +116,9 @@ function renderDossier(channel: string, atlas: ReturnType<typeof buildDecisionAt
     "",
     ...dossier.firstGlance.map((metric) => `- ${metric.label}: **${metric.value}** — ${metric.detail}`),
     "",
-    `Basis: ${dossier.decisionCohort.fact} Era: \`${dossier.decisionCohort.configurationEra}\`.`,
+    `Basis: ${dossier.decisionCohort.sessions} sessions · ${dossier.decisionCohort.opportunities} logical opportunities · ${dossier.decisionCohort.portfolioConfigurationEras.length} portfolio receipt(s). ${dossier.decisionCohort.fact}`,
+    "",
+    `Channel era: \`${dossier.decisionCohort.configurationEra}\`.`,
     "",
     "This dossier is read-only research and cannot change production behavior.",
     "",
@@ -153,7 +156,7 @@ async function main(): Promise<void> {
   const report = renderDecisionAtlasMarkdown(atlas);
   const proposals = renderDecisionAtlasProposalPacket(atlas);
   const receipt = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt,
     throughSession,
     posture,
@@ -169,6 +172,7 @@ async function main(): Promise<void> {
       managerRuns: snapshot.managerRuns.length,
       equitySnapshots: snapshot.equitySnapshots.length,
       activeChannelSpecs: snapshot.activeChannelSpecs.length,
+      activeChannelSpecDatabaseIds: Object.keys(snapshot.activeChannelSpecDatabaseIdsByVersionKey ?? {}).length,
     },
     logicalOpportunities: atlas.evidence.logicalOpportunities,
     channels: Object.keys(atlas.channels).length,

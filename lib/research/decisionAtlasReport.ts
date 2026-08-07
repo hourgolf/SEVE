@@ -8,7 +8,7 @@ export function renderDecisionAtlasMarkdown(atlas: DecisionAtlas): string {
     "",
     "**READ ONLY · NO ORDER, CONFIGURATION, ROSTER, OR DEPLOYMENT AUTHORITY**",
     "",
-    "The default table answers what is working, what is not, and what deserves the next controlled investigation. Each row uses one declared evidence layer and configuration era; other evidence remains separate below.",
+    "The default table answers what is working, what is not, and what deserves the next controlled investigation. Channel evidence resets only when that channel specification changes; portfolio receipt eras remain separate for routing and capacity replay.",
     "",
     "| Channel | Disposition | Typical result | Best move | Gave back | Additional opportunity | Evidence | Basis |",
     "|---|---|---:|---:|---:|---:|---:|---|",
@@ -23,16 +23,19 @@ export function renderDecisionAtlasMarkdown(atlas: DecisionAtlas): string {
   }
   lines.push("", "## Channel dossiers", "");
   for (const dossier of Object.values(atlas.channels).sort((a, b) => a.channel.localeCompare(b.channel))) {
+    const supportedCapacity = dossier.capacity.bestSupportedContracts
+      ? dossier.capacity.points[dossier.capacity.bestSupportedContracts - 1] : null;
     lines.push(
       `<details><summary><strong>${cell(dossier.channel)}</strong> · ${cell(dossier.disposition.replaceAll("_", " "))}</summary>`,
       "",
       dossier.summary,
       "",
-      `- Decision cohort: ${dossier.decisionCohort.fact}`,
+      `- Decision cohort: ${dossier.decisionCohort.sessions} sessions and ${dossier.decisionCohort.opportunities} logical opportunities under one channel specification across ${dossier.decisionCohort.portfolioConfigurationEras.length} portfolio receipt(s). ${dossier.decisionCohort.fact}`,
       `- Opportunity path: ${dossier.waterfall.opportunities} signals → ${dossier.waterfall.contractSelected}/${dossier.waterfall.coverage.contractSelectedObserved} observed contracts → ${dossier.waterfall.quoteEligible}/${dossier.waterfall.coverage.quoteEligibilityObserved} observed eligible quotes → ${dossier.waterfall.admitted}/${dossier.waterfall.coverage.admissionObserved} observed admissions → ${dossier.waterfall.filled}/${dossier.waterfall.coverage.fillObserved} observed fills → ${dossier.waterfall.scored} scored outcomes.`,
       `- Supported size: ${dossier.capacity.bestSupportedContracts ?? "not established"} contract(s).`,
+      `- Capacity effect: ${supportedCapacity == null ? "not established." : `${supportedCapacity.marginalPortfolioResultVsOneContractUsd == null ? "—" : `${supportedCapacity.marginalPortfolioResultVsOneContractUsd >= 0 ? "+" : "−"}$${Math.abs(supportedCapacity.marginalPortfolioResultVsOneContractUsd).toLocaleString("en-US")}`} portfolio result versus one contract; ${supportedCapacity.additionalDisplacedOtherOpportunitiesVsOneContract ?? 0} additional competing opportunities displaced; $${Math.abs(supportedCapacity.additionalDisplacedOtherCounterfactualUsdVsOneContract ?? 0).toLocaleString("en-US")} displaced counterfactual; $${supportedCapacity.portfolioMaxDrawdownUsd.toLocaleString("en-US")} portfolio drawdown.`}`,
       `- Portfolio behavior: ${dossier.lifecycle.uniqueness.replaceAll("_", " ")}.`,
-      `- More evidence: ${dossier.lifecycle.additionalIndependentSessions == null ? "unresolved" : `${dossier.lifecycle.additionalIndependentSessions} independent session(s) estimated`}.`,
+      `- Uncertainty horizon: ${dossier.lifecycle.additionalIndependentSessions == null ? "unresolved" : `${dossier.lifecycle.additionalIndependentSessions} additional session(s) estimated for the session-clustered interval`}—an uncertainty estimate, not an automatic decision gate.`,
       "",
     );
     if (dossier.waterfall.blocked.length) {
@@ -40,8 +43,8 @@ export function renderDecisionAtlasMarkdown(atlas: DecisionAtlas): string {
       for (const item of dossier.waterfall.blocked) lines.push(`| ${cell(item.reason)} | ${item.opportunities} | ${item.counterfactualScored} | ${item.typicalCounterfactualUsd ?? "—"} |`);
       lines.push("");
     }
-    lines.push("Evidence layers:", "", "| Layer | Opportunities | Sessions | Configuration eras |", "|---|---:|---:|---|");
-    for (const layer of dossier.evidenceLayers) lines.push(`| ${cell(layer.layer)} | ${layer.opportunities} | ${layer.sessions} | ${cell(layer.configurationEras.join(", "))} |`);
+    lines.push("Evidence layers:", "", "| Layer | Opportunities | Sessions | Channel eras | Portfolio receipts |", "|---|---:|---:|---|---:|");
+    for (const layer of dossier.evidenceLayers) lines.push(`| ${cell(layer.layer)} | ${layer.opportunities} | ${layer.sessions} | ${cell(layer.configurationEras.join(", "))} | ${layer.portfolioConfigurationEras.length} |`);
     lines.push("", "</details>", "");
   }
   lines.push(
@@ -93,12 +96,15 @@ function recommendation(review: PendingAtlasReview, dossier: AtlasChannelDossier
 } {
   if (!dossier) return { state: "HOLD", reason: "No Decision Atlas dossier is available." };
   if (review.change === "hold") return { state: "GO", reason: `The requested no-change posture preserves ${dossier.lifecycle.evidenceSessions} sessions of evidence.` };
-  if (review.change === "size") return dossier.disposition === "size"
+  if (review.change === "size") {
+    const four = dossier.capacity.points.find((point) => point.contracts === 4);
+    return dossier.disposition === "size"
     && (dossier.capacity.bestSupportedContracts ?? 0) >= 4
-    ? { state: "GO", reason: "The bounded replay supports four contracts after capital use and displaced opportunities." }
+    ? { state: "GO", reason: `Four contracts change replayed portfolio result by ${four?.marginalPortfolioResultVsOneContractUsd == null ? "an unresolved amount" : `${four.marginalPortfolioResultVsOneContractUsd >= 0 ? "+" : "−"}$${Math.abs(four.marginalPortfolioResultVsOneContractUsd).toLocaleString("en-US")}`} versus one contract and cause ${four?.additionalDisplacedOtherOpportunitiesVsOneContract ?? "an unknown number of"} additional competing-opportunity displacement(s).` }
     : dossier.capacity.bestSupportedContracts != null && dossier.capacity.bestSupportedContracts >= 4
-      ? { state: "HOLD", reason: `Four contracts fit the replay, but ${dossier.lifecycle.evidenceSessions} independent current-cohort sessions do not clear the evidence floor.` }
+      ? { state: "HOLD", reason: `${dossier.decisionCohort.sessions} sessions/${dossier.decisionCohort.opportunities} opportunities under the unchanged channel specification; four contracts change replayed portfolio result by ${four?.marginalPortfolioResultVsOneContractUsd == null ? "an unresolved amount" : `${four.marginalPortfolioResultVsOneContractUsd >= 0 ? "+" : "−"}$${Math.abs(four.marginalPortfolioResultVsOneContractUsd).toLocaleString("en-US")}`} with ${four?.additionalDisplacedOtherOpportunitiesVsOneContract ?? "unknown"} additional competing displacements, but the lifecycle uncertainty remains unresolved.` }
       : { state: "HOLD", reason: `The replay supports ${dossier.capacity.bestSupportedContracts ?? "no verified"} contract level; four is not yet defensible.` };
+  }
   if (review.change === "retirement") return dossier.disposition === "retire"
     ? { state: "GO", reason: "Typical evidence is negative and the portfolio graph finds substantial duplication." }
     : { state: "HOLD", reason: `The lifecycle result is ${dossier.disposition.replaceAll("_", " ")}, not retirement.` };
