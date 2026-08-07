@@ -356,9 +356,11 @@ function receiptBoundRootBindings(
     return { bindings: {}, issue: "receipt-bound startup topology is incomplete" };
   }
   const bindings: Record<string, ActiveRootBinding> = {};
+  const seen = new Set<string>();
   for (const value of meta.roots) {
     const root = object(value);
     const slug = string(root?.slug);
+    const executionPosture = string(root?.executionPosture) ?? "paper";
     const channelHash = string(root?.channelSpecContentHash);
     const managerHash = string(root?.managerVersion);
     const rootEpoch = string(root?.configurationEpochId);
@@ -381,9 +383,17 @@ function receiptBoundRootBindings(
         || !Number.isInteger(entries)
         || entries < 1
         || entries > 3
-        || Object.prototype.hasOwnProperty.call(bindings, slug)) {
+        || (executionPosture !== "paper"
+          && executionPosture !== "observe-only")
+        || (slug ? seen.has(slug) : false)) {
       return { bindings: {}, issue: `receipt-bound startup topology is invalid${slug ? ` at ${slug}` : ""}` };
     }
+    seen.add(slug);
+    // The worker includes observe-only specifications in the sealed topology so
+    // their policy identity remains auditable, but explicitly filters them out
+    // of the paper executor. Mirror that authority boundary in the dashboard:
+    // a sealed identity is not, by itself, permission to submit an order.
+    if (executionPosture === "observe-only") continue;
     bindings[slug] = {
       slug,
       accountId,
@@ -395,6 +405,12 @@ function receiptBoundRootBindings(
       configurationEpochId: rootEpoch!,
       maxEntriesPerSession: entries,
       source: "activation-receipt",
+    };
+  }
+  if (!Object.keys(bindings).length) {
+    return {
+      bindings: {},
+      issue: "receipt-bound startup topology has no paper-executing roots",
     };
   }
   return { bindings, issue: null };
