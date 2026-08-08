@@ -33,11 +33,11 @@ const IcCog = () => (
 
 type MobileRoom = "play" | "studio" | "book" | "review" | "ops";
 const ROOMS: { id: MobileRoom; label: string; sub: string }[] = [
-  { id: "play", label: "PLAY", sub: "CHART" },
-  { id: "studio", label: "STUDIO", sub: "CHANNELS" },
-  { id: "book", label: "BOOK", sub: "POSITIONS" },
-  { id: "review", label: "REVIEW", sub: "EVIDENCE" },
-  { id: "ops", label: "OPS", sub: "SYSTEM" },
+  { id: "play", label: "HOME", sub: "MARKET" },
+  { id: "studio", label: "CHANNELS", sub: "ROSTER" },
+  { id: "book", label: "POSITIONS", sub: "BOOK" },
+  { id: "review", label: "REVIEW", sub: "RESEARCH" },
+  { id: "ops", label: "SYSTEM", sub: "STATUS" },
 ];
 
 export function MobileShell(props: SurfaceProps) {

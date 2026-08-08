@@ -3,7 +3,7 @@
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { findSealedReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
-import { SeveWorkspaceHeader } from "@/components/ui/Seve909";
+import { SeveEvidenceContext, SeveWorkspaceHeader } from "@/components/ui/Seve909";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 const age = (seconds: number | null): string => seconds == null ? "—" : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h`;
@@ -20,13 +20,27 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
   const account = accounts.find((row) => row.id === acctId);
   const reconciliation = surface.opsReadiness.evidence.find((item) => item.id === "reconciliation");
   const processAge = workerRuns.currentHeartbeatAtMs == null ? null : Math.max(0, Math.round((Date.now() - workerRuns.currentHeartbeatAtMs) / 1000));
+  const allReadiness = [...surface.opsReadiness.configuration, ...surface.opsReadiness.evidence];
+  const exceptions = allReadiness.filter((item) => item.tone === "red" || item.tone === "yellow");
+  const tradingItems = allReadiness.filter((item) => ["release", "paper-boundary", "reconciliation"].includes(item.id));
+  const dataItems = allReadiness.filter((item) => ["capture-config", "manager-config", "candidates", "fills", "capture", "managers", "publisher"].includes(item.id));
+  const laneState = (items: typeof allReadiness, ready: string) => items.some((item) => item.tone === "red") ? "NEEDS REVIEW" : items.some((item) => item.tone === "yellow") ? "ATTENTION" : ready;
 
   return <section className="opsw" id="perform-ops" tabIndex={-1} aria-label="Operations evidence workspace">
     <SeveWorkspaceHeader
-      title="OPERATIONS"
-      subtitle="read-only control-plane evidence · paper desk"
-      boundary="EVIDENCE ONLY"
+      title="SYSTEM STATUS"
+      subtitle="exceptions first · technical evidence available on demand"
+      boundary="READ ONLY"
     />
+    <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={localTime(reconciliation?.observedAt ?? release?.createdAt)} era="current sealed release" sample={`${surface.opsReadiness.counts.candidates} candidate decisions`} quality={surface.opsReadiness.summary.tone === "red" ? "partial" : surface.opsReadiness.summary.tone === "yellow" ? "building" : "complete"} detail="Readiness is based on observed broker, process, market, and research evidence." />
+    <section className={`opsw-system-summary ${surface.opsReadiness.summary.tone}`}>
+      <span><small>OVERALL</small><b>{surface.opsReadiness.summary.state}</b><p>{surface.opsReadiness.summary.detail}</p></span>
+      <div><span><small>TRADING</small><b>{laneState(tradingItems, "READY")}</b></span><span><small>DATA</small><b>{laneState(dataItems, "COMPLETE")}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? "CURRENT" : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
+    </section>
+    <section className="opsw-exceptions"><header><span><small>NEEDS ATTENTION</small><b>{exceptions.length ? `${exceptions.length} system checks` : "No blocking system issue"}</b></span><em>{exceptions.length ? "REVIEW BEFORE NEXT SESSION" : "DESK READY"}</em></header>
+      {exceptions.length ? <div>{exceptions.slice(0, 6).map((item) => <article key={item.id} className={item.tone}><i /><span><b>{item.label}</b><p>{item.detail}</p></span><em>{item.state}</em></article>)}</div> : <p>Trading, data, broker reconciliation, and the current release are available. Research collection may continue without operator action.</p>}
+    </section>
+    <details className="opsw-technical"><summary><span><small>TECHNICAL SYSTEM EVIDENCE</small><b>Receipts, clocks, reads, broker detail, and operator state</b></span><em>OPEN FOR TROUBLESHOOTING</em><i>▾</i></summary><div>
     <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="operations" />
     <div className="opsw-grid">
       <section className="opsw-card opsw-readiness"><header><span>00</span><b>CAPTURE + OBSERVER READINESS</b><em>configured ≠ observed</em></header><OpsReadinessPanel model={surface.opsReadiness} /></section>
@@ -54,5 +68,6 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
         <StateLamp label="BROKER RECONCILIATION" state={reconciliation?.tone === "green" ? "observed" : reconciliation?.tone === "red" ? "error" : reconciliation?.tone === "yellow" ? "warning" : "checking"} detail={reconciliation ? `${reconciliation.state} · ${reconciliation.detail}` : "checking current paper accounts"} />
       </div></section>
     </div>
+    </div></details>
   </section>;
 }

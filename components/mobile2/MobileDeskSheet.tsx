@@ -63,7 +63,7 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
     <div className="m2-book-nav"><span><b>BOOK</b><small>POSITIONS · EXPOSURE · EXITS</small></span>{onViewMarket && <div><button type="button" onClick={() => onViewMarket("chart")}>CHART</button><button type="button" onClick={() => onViewMarket("chain")}>CHAIN</button></div>}</div>
     <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="positions" channelSlugs={feed.positions.map((position) => position.strategist_slug)} />
     {reconciliation?.tone !== "green" && <BrokerReconciliationStrip model={props.opsReadiness} compact />}
-    {isQuietBook ? <div className="m2-book-empty" role="status"><b>NO OPEN POSITIONS</b><span>No session exits</span></div> : <>
+    {isQuietBook ? <div className="m2-book-empty" role="status"><b>DESK FLAT</b><p>There are no open positions or current-session exits for this account.</p><ul><li>No capital is deployed</li><li>The next position will appear here</li><li>{reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is checking"}</li></ul></div> : <>
     {(hasOpenPositions || attributionBlocked) && <MobilePositions props={props} strategists={props.view.desk.strategists} compact />}
     {hasOpenPositions && <div className="m2-desk-hero">
       <span><small>OPEN</small><b>{feed.positions.length}</b></span>

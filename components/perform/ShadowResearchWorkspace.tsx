@@ -18,6 +18,7 @@ import type {
 } from "@/lib/research/shadowResearch";
 import { shadowSessionDate, sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
 import { signedUsd } from "@/lib/format";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 const percent = (wins: number, scored: number): string =>
   scored ? `${Math.round((1000 * wins) / scored) / 10}%` : "—";
@@ -170,6 +171,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   const [windowMode, setWindowMode] = useState<"day" | "cumulative">("day");
   const [excluded, setExcluded] = useState<Record<ResearchLane, string[]>>({ vb: [], all: [] });
   const [focusSlug, setFocusSlug] = useState("");
+  const [viewMode, setViewMode] = useState<"decisions" | "data">("decisions");
   useEffect(() => {
     if (!session && shadowResearch.sessions.length) setSession(shadowResearch.sessions[0].session);
   }, [session, shadowResearch.sessions]);
@@ -209,6 +211,9 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     ? /TEST ENTRY|TEST EXIT|RETIREMENT/.test(item.label)
     : item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT");
   const atlasNext = [...atlasWorking, ...atlasReview][0] ?? null;
+  const atlasDecisionRows = [...atlasWorking, ...atlasReview, ...atlasReads.filter((item) =>
+    !atlasWorking.some((candidate) => candidate.slug === item.slug)
+    && !atlasReview.some((candidate) => candidate.slug === item.slug))];
   const focusedCurve = windowMode === "cumulative"
     ? shadowResearch.dryPowderBySlug[focusSlug]
     : selected ? shadowResearch.dryPowderBySession[selected.session]?.[focusSlug] : undefined;
@@ -252,6 +257,19 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   return <section className={`srw${compact ? " compact" : ""}`} id="perform-research" tabIndex={-1} aria-label="Shadow research workspace">
     <header className="srw-head"><span><b>SHADOW LEDGER</b><small>ALL PAPER · NATIVE NOW · EXACT T+1</small></span>
       <em>READ ONLY</em></header>
+    <SeveEvidenceContext
+      kind="virtual"
+      scope={`all paper · ${lane === "vb" ? "VB channels" : "all observed channels"}`}
+      asOf={selected?.session ?? shadowResearch.cumulative?.throughSession ?? "checking"}
+      era="current native exits"
+      sample={`${totals.scored} virtual paths`}
+      quality={shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "established" : totals.scored >= 5 ? "building" : "checking"}
+      detail="Virtual opportunities are hypothetical and are never combined with account profit and loss."
+    />
+    <nav className="srw-view-mode" aria-label="Research presentation">
+      <button type="button" className={viewMode === "decisions" ? "on" : ""} aria-pressed={viewMode === "decisions"} onClick={() => setViewMode("decisions")}><b>DECISIONS</b><small>what the evidence suggests</small></button>
+      <button type="button" className={viewMode === "data" ? "on" : ""} aria-pressed={viewMode === "data"} onClick={() => setViewMode("data")}><b>DATA</b><small>full virtual ledger</small></button>
+    </nav>
     <div className="srw-controls">
       <nav className="srw-sessions" aria-label="research session">
         {recentSessions.map((item) => <button type="button" key={item.session} className={windowMode === "day" && selected?.session === item.session ? "on" : ""} onClick={() => { setSession(item.session); setWindowMode("day"); }}>{shortSession(item.session)}</button>)}
@@ -286,6 +304,29 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
           <span><small>COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></span>
           <span><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></span>
         </section>
+        {viewMode === "decisions" && <section className="srw-decisions" aria-label="Channel research decisions">
+          <header><span><small>WHAT DESERVES REVIEW?</small><b>What is working, what is not, and what to test next</b></span><em>{atlasDecisionRows.length} CHANNELS</em></header>
+          <div className="srw-decision-list">{atlasDecisionRows.slice(0, 10).map((item) => {
+            const row = rows.find((candidate) => candidate.slug === item.slug);
+            const brief = surface.decisionAtlas.bySlug[item.slug];
+            const label = item.label ?? item.read.label;
+            return <button type="button" key={item.slug} className={focusSlug === item.slug ? "on" : ""} aria-pressed={focusSlug === item.slug} onClick={() => setFocusSlug(item.slug)}>
+              <span><b>{item.slug}</b><small>{row && row.scored < 5 ? "LOW SAMPLE" : row && row.scored < 10 ? "BUILDING" : "ESTABLISHED"}</small></span>
+              <strong>{label}</strong>
+              <p>{brief?.recommendation.summary ?? item.read.summary}</p>
+              <em>{brief?.recommendation.nextExperiment ?? "Continue collecting the same evidence."}</em>
+            </button>;
+          })}</div>
+          {focusSlug && <div className="srw-decision-detail">
+            <DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
+            <details className="srw-channel-analysis"><summary><span><small>SUPPORTING EVIDENCE</small><b>Current execution, capacity, and managers</b></span><em>OPEN COMPARISON</em><i>▾</i></summary><div>
+              <CurrentEvidenceCard selectedSlug={focusSlug} executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted} comparison={focusedComparison} state={shadowResearch.currentExecutedState} error={shadowResearch.currentExecutedError} truncated={shadowResearch.currentExecutedTruncated} />
+              <ChannelDryPowderCurve curve={focusedCurve} />
+              <ChannelManagerEvidencePanel evidence={focusedManagerEvidence} currentManagerLabel={focusedPassport?.rootPolicy?.managerLabel} currentConfigurationEpochId={surface.channelControlPlane.view?.configurationEpochId} />
+            </div></details>
+          </div>}
+        </section>}
+        {viewMode === "data" && <>
         <section className="srw-native">
           <header><span><b>{nativeTitle}</b><small>every table row is virtual · hypothetical entries · not portfolio P&amp;L</small></span>
             <em>{totals.scored} {lane === "vb" ? "VB" : "ALL"} PATHS</em></header>
@@ -328,6 +369,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
           <ExactStatus surface={surface} session={selected.session} />
           <ManagerFleetHeatmap book={surface.managerEvidence.book} channelSlugs={surface.view.desk.strategists.map((channel) => channel.slug)} selectedSlug={focusSlug} onSelect={setFocusSlug} />
         </div></details>
+        </>}
       </>}
   </section>;
 }

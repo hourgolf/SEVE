@@ -2,6 +2,7 @@
 
 import type { useSentinelDigest, ScanRow } from "@/hooks/useSentinelDigest";
 import { deriveSentinelReceiptStatus } from "@/lib/sentinel/receipt";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 type SentinelDigest = ReturnType<typeof useSentinelDigest>;
 
@@ -49,10 +50,25 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
   const terrain = brief?.sentLevels?.[symbol];
   const above = terrain?.above ?? brief?.carry.above ?? [];
   const below = terrain?.below ?? brief?.carry.below ?? [];
+  const receipt = deriveSentinelDigestReceipt(sentinel);
+  const findings = operatorPacket?.findings ?? [];
+  const nextAction = judge?.soWhat ?? (findings.some((finding) => finding.action === "replay")
+    ? "Complete the queued replay before changing the paper configuration."
+    : "Keep the current paper configuration while evidence collects.");
+  const plainFinding = (action: string): string => action === "replay" ? "Replay required"
+    : action === "collect" ? "Continue collecting" : action.replaceAll("_", " ");
 
   return <section className="sntw" id="perform-sentinel" tabIndex={-1} aria-label="Sentinel evidence workspace">
-    <header className="sntw-head"><span><b>SENTINEL</b><small>ALL PAPER · NEXT OPEN · CLOSE REVIEW</small></span>
+    <header className="sntw-head"><span><b>NEXT-SESSION BRIEF</b><small>ALL PAPER · NEXT OPEN · what is ready · what remains incomplete</small></span>
       <em>READ ONLY</em></header>
+    <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={receipt.publishedAt ? dateTime(receipt.publishedAt) : "checking"} era="next-session packet" sample={`${findings.length || scan?.promote.length || 0} findings`} quality={receipt.tone === "green" ? "complete" : receipt.tone === "yellow" ? "partial" : "checking"} detail={receipt.detail} />
+    <section className={`sntw-priority ${receipt.tone}`}><span><small>NEXT ACTION</small><b>{judge?.verdict ?? (receipt.tone === "green" ? "REVIEW" : "WAIT")}</b><p>{nextAction}</p></span><em>{operatorPacket?.forDate ?? brief?.forDate ?? sentinel.forDate ?? "next session"}</em></section>
+    <div className="sntw-simple-grid">
+      <section><small>SESSION READY?</small><b>{receipt.tone === "green" ? "YES" : "PARTIAL"}</b><p>{operatorPacket ? `${operatorPacket.liveBook.closed} closed trades reconciled; ${operatorPacket.liveBook.open} remain open.` : receipt.detail}</p></section>
+      <section><small>WHAT NEEDS REVIEW?</small><b>{findings.length || judge?.drift.length || 0} ITEMS</b><ul>{findings.slice(0, 3).map((finding) => <li key={finding.code}>{finding.title} · {plainFinding(finding.action)}</li>)}{!findings.length && judge?.drift.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul></section>
+      <section><small>WHAT STAYS FIXED?</small><b>PAPER CONFIGURATION</b><p>No entry, exit, manager, size, or roster change is authorized by this brief.</p></section>
+    </div>
+    <details className="sntw-technical"><summary><span><small>SUPPORTING EVIDENCE</small><b>Receipts, paths, levels, and deterministic scan</b></span><em>OPEN FOR DETAIL</em><i>▾</i></summary><div>
     <SentinelReceiptStrip sentinel={sentinel} />
     {state !== "ok" ? <div className="sntw-state"><b>{state.toUpperCase()}</b><span>{err || "Sentinel evidence is not available yet."}</span></div> : <div className="sntw-grid">
       <section className="sntw-card sntw-next">
@@ -105,5 +121,6 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
         </div>}
       </section>
     </div>}
+    </div></details>
   </section>;
 }

@@ -9,6 +9,8 @@ import { ChannelCollectionCullPanel } from "@/components/studio/ChannelCollectio
 import { CanaryCommandCenter } from "@/components/studio/CanaryCommandCenter";
 import { useChannelRosterBundleControl } from "@/hooks/useChannelRosterBundleControl";
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
+import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -19,7 +21,7 @@ const SORTS: { value: StudioSort; label: string }[] = [
 
 export type StudioScope = "attention" | "roots" | "dark" | "all";
 
-export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, onScope, onSort, onSelect }: {
+export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
   selectedSlug?: string;
@@ -27,6 +29,9 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
   sort: StudioSort;
   passports: ChannelWorkspaceModel;
   controlPlane?: ChannelControlPlaneViewRead;
+  decisions: Record<string, ChannelDecisionBrief>;
+  accountName: string;
+  evidenceAsOf: string;
   onScope: (scope: StudioScope) => void;
   onSort: (sort: StudioSort) => void;
   onSelect: (slug: string) => void;
@@ -46,6 +51,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
         <span title={passports.release.fact}><i /><b>{passports.release.state === "verified" ? "RUNTIME SEALED" : passports.releaseView.label}</b></span>
       </div>
       <CanaryCommandCenter controlPlane={controlPlane} bundles={roster.bundles} compact />
+      <SeveEvidenceContext kind="mixed" scope={accountName} asOf={evidenceAsOf} era="current runtime + latest nightly research" sample={`${summary.total} channels in view`} quality="live" detail="Current session results and nightly channel research remain visibly separate." />
       <header className="fleet-summary">
         <div className="fleet-title">
           <span className="fleet-kicker">STUDIO · FLEET</span>
@@ -88,17 +94,17 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
       <div className="fleet-table" role="table" aria-label={`${scope} strategy channels`}>
         <div className="fleet-grid fleet-head" role="row">
           <span role="columnheader">CHANNEL</span>
-          <span role="columnheader">LIVE MODE</span>
-          <span role="columnheader">POSITION / SESSION ATTRIB</span>
-          <span className="fc-risk" role="columnheader">RISK / TRADE</span>
-          <span className="fc-signal" role="columnheader">DECISION</span>
-          <span className="fc-tune" role="columnheader">CONTEXT</span>
+          <span role="columnheader">STATE</span>
+          <span role="columnheader">WHY THIS STATE</span>
+          <span role="columnheader">CURRENT SESSION</span>
+          <span role="columnheader">NEXT REVIEW</span>
         </div>
         <div className="fleet-rows" role="rowgroup">
           {rows.map((row) => {
             const passport = passports.bySlug[row.channel.slug];
             const pnlClass = row.pnl.dayPnl < 0 ? "neg" : row.pnl.dayPnl > 0 ? "pos" : "";
             const decision = channelDecisionState(row.lastSignal);
+            const brief = decisions[row.channel.slug];
             const liveMode = passport?.lifecycle === "paper-root"
               ? "TRADING"
               : passport?.lifecycle === "dark-evidence"
@@ -123,22 +129,17 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                   <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{liveMode}</em>
                   <small>{liveModeDetail}</small>
                 </span>
+                <span className="fleet-reason" role="cell">
+                  <b>{row.attentionReasons[0] ?? (passport?.database.differsFromRuntime ? "Saved settings need review" : decision.label === "IDLE" ? "Ready for the next eligible signal" : decision.label)}</b>
+                  <small>{liveMode === "OBSERVING" ? "Research only; entries are blocked" : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? "No unresolved exception"}</small>
+                </span>
                 <span className="fleet-position" role="cell">
                   <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : "—"}</b>
                   <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{row.pnl.dayPnl ? signedUsd(row.pnl.dayPnl) : "$0"} attrib</small>
                 </span>
-                <span className="fc-risk fleet-value" role="cell">{usd0(passport?.rootPolicy?.riskBudgetUsd ?? row.channel.config.capital_pct)}</span>
-                <span className="fc-signal fleet-signal" role="cell" title={row.lastSignal?.message}>
-                  <b className={decision.tone}>{decision.label}</b><small>{row.lastSignal?.signal_type ?? "no recent candidate"}</small>
-                </span>
-                <span className="fc-tune fleet-tags" role="cell">
-                  {row.attentionReasons.length
-                    ? row.attentionReasons.slice(0, 3).map((reason) => <i key={reason}>{reason}</i>)
-                    : passport?.database.differsFromRuntime
-                      ? <i className="runtime" title="The sealed runtime is active; the database label is supporting context only.">Runtime active · database label is stale</i>
-                    : row.configDiffs.length
-                      ? row.configDiffs.slice(0, 2).map((diff) => <i className="context" key={diff}>{diff}</i>)
-                      : <span>nominal</span>}
+                <span className="fleet-next" role="cell">
+                  <b>{brief?.recommendation.label ?? "CONTINUE COLLECTING"}</b>
+                  <small>{brief?.recommendation.summary ?? "Review after more independent evidence."}</small>
                 </span>
               </button>
             );

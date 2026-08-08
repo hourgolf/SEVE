@@ -6,7 +6,7 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import { derivePositionsWorkspace } from "@/lib/perform/derivePositionsWorkspace";
 import { BrokerReconciliationStrip } from "@/components/ops/OpsReadinessPanel";
-import { SeveMetricStrip, SeveWorkspaceHeader, type SeveMetricTone } from "@/components/ui/Seve909";
+import { SeveEmptyState, SeveEvidenceContext, SeveMetricStrip, SeveWorkspaceHeader, type SeveMetricTone } from "@/components/ui/Seve909";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 const money = (value: number) => Math.abs(value) >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
@@ -117,15 +117,18 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
   const hasRecentExits = model.exits.rows.length > 0;
   const isQuietBook = !attributionBlocked && !hasOpenPositions && !hasRecentExits;
   const showReconciliation = reconciliation?.tone !== "green";
+  const account = surface.accounts.find((row) => row.id === surface.acctId);
+  const asOf = surface.feed.updatedAt ? new Date(surface.feed.updatedAt).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT" : "checking";
 
   return <section className="pf-positions-shell" data-nav-target="true" tabIndex={-1}>
       <SeveWorkspaceHeader
         title="POSITIONS"
         boundary="PAPER · CONFIRM TO CLOSE"
       />
+    <SeveEvidenceContext kind="actual" scope={account?.name ?? "selected account"} asOf={asOf} era="current routed positions" sample={`${surface.feed.positions.length} open · ${model.exits.logicalTrades} closed`} quality={attributionBlocked ? "partial" : "live"} />
     <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="positions" channelSlugs={surface.feed.positions.map((position) => position.strategist_slug)} />
     {showReconciliation && <BrokerReconciliationStrip model={surface.opsReadiness} />}
-    {isQuietBook ? <div className="pf-positions-empty" role="status"><b>NO OPEN POSITIONS</b><span>No session exits</span></div> : <>
+    {isQuietBook ? <SeveEmptyState title="DESK FLAT" summary="There are no open positions or current-session exits for this account." facts={[reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is still checking", "No capital is currently deployed", "The next position will appear here with its live exit evidence"]} /> : <>
     <SeveMetricStrip metrics={[
       { label: "REALIZED", value: attributionBlocked ? "—" : signedUsd(model.exits.realized), tone: attributionBlocked ? "attention" : realizedTone },
       { label: "WINNERS", value: attributionBlocked ? "—" : model.exits.wins },

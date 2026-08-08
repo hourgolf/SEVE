@@ -154,10 +154,6 @@ export function MobileRackRow({
     if (v !== tp) setCfg({ take_profit_pct: v });
   };
 
-  const databaseTag = passport?.database.differsFromRuntime ? { txt: "DB DIFFERS", cls: "muted" }
-    : status === "draft" ? { txt: "BENCH", cls: "darkch" }
-    : status === "disabled" ? { txt: "OFF", cls: "darkch" }
-    : null;
   const dot = passport?.lifecycle === "paper-root"
     ? true
     : passport?.lifecycle === "dark-evidence"
@@ -166,11 +162,12 @@ export function MobileRackRow({
   const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "TRADING", cls: "root" }
     : passport?.lifecycle === "dark-evidence" ? { txt: "OBSERVING", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
-  const firesSummary = passport?.rootPolicy
-    ? activeRootExitLabel(passport.rootPolicy, true)
-    : passport?.lifecycle === "dark-evidence"
-      ? "NO FILL · T+1 PATH"
-      : ride ? `−${premStop}% · ride · EOD` : `−${premStop}/+${tp} · EOD`;
+  const plainReason = passport?.database.differsFromRuntime
+    ? "Runtime is live; saved settings need review"
+    : status === "draft" ? "On the bench"
+      : status === "disabled" ? "Entries are disabled"
+        : passport?.lifecycle === "dark-evidence" ? "Research only; entries are blocked"
+          : decisionBrief?.recommendation.summary ?? "Ready for the next eligible signal";
 
   return (
     <section id={`m2-channel-${slug}`} className={`m2-rack${config.muted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>
@@ -180,11 +177,10 @@ export function MobileRackRow({
           <span className="m2-rr-slug">{slug}</span>
           {rootPolicy?.runner === "a13" && <span className="m2-rr-a13">⚡A13</span>}
           <span className={`m2-rr-tag ${runtimeTag.cls}`}>{runtimeTag.txt}</span>
-          {databaseTag && <span className={`m2-rr-tag ${databaseTag.cls}`}>{databaseTag.txt}</span>}
+          <span className="m2-rr-reason">{plainReason}</span>
         </span>
         <span className="m2-rr-right">
-          <span className="m2-rr-fires num">{firesSummary}</span>
-          <span className={`m2-rr-pnl num ${pnlCls}`} title="current-session channel attribution; not account NAV">{signedUsd(day)}</span>
+          <small>TODAY</small><span className={`m2-rr-pnl num ${pnlCls}`} title="current-session channel attribution; not account NAV">{signedUsd(day)}</span>
           <span className="m2-rr-chev">{open ? "▾" : "▸"}</span>
         </span>
       </button>

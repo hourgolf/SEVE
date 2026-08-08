@@ -6,7 +6,7 @@ import { MobileDock } from "@/components/mobile2/MobileDock";
 import { MobilePositions } from "@/components/mobile2/MobilePositions";
 import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import { pmVar } from "@/lib/desk/colors";
-import { timeOfDay } from "@/lib/format";
+import { signedUsd, timeOfDay } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { MarketEvent } from "@/lib/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
@@ -17,6 +17,7 @@ import { OptionChain } from "@/components/OptionChain";
 import { ContractDetailView } from "@/components/ContractDetail";
 import { MarketOpenRisk, MarketReadStrip } from "@/components/perform/PerformMarketsWorkspace";
 import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
+import { buildFleetDecisionSummary } from "@/lib/research/channelDecisionSummary";
 
 // =============================================================================
 // MOBILE · PERFORM (S5) — the watch surface as ONE vertical scroll (the gallery
@@ -139,6 +140,8 @@ export function MobilePerform({
 }) {
   const { data, view, feed, spotUp, symbol, setSymbol, selected, setSelected, contractHistory } = props;
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
+  const fleet = buildFleetDecisionSummary(props.decisionAtlas.bySlug, props.decisionAtlas.throughSession);
+  const ready = props.incident.severity === "normal" && props.opsReadiness.summary.tone !== "red";
   const changeSymbol = (next: string) => {
     setSelected(null);
     setSymbol(next);
@@ -147,6 +150,11 @@ export function MobilePerform({
   return (
     <>
       <div className="m2-scroll">
+        <section className={`m2-decision-home ${ready ? "ready" : "attention"}`} aria-label="Decision Home summary">
+          <header><span><small>DECISION HOME</small><b>{ready ? "READY FOR THE NEXT SESSION" : "CHECK BEFORE THE NEXT SESSION"}</b></span><em>{signedUsd(props.liveFund.dayPnl)} TODAY</em></header>
+          <p>{fleet.lead ? `Next review: ${fleet.lead.channel} · ${fleet.lead.disposition.toLowerCase()}.` : "No urgent channel action. Continue collecting evidence."}</p>
+          <div><span><small>TRADING</small><b>{props.opsReadiness.summary.tone === "red" ? "REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{data.status === "err" ? "REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{props.decisionAtlas.state === "ready" ? "CURRENT" : "CHECKING"}</b></span></div>
+        </section>
         <nav className="m2-market-switch" aria-label="Markets workspace">
           <button type="button" className={marketView === "chart" ? "on" : ""} onClick={() => onMarketViewChange("chart")} aria-pressed={marketView === "chart"}>CHART</button>
           <button type="button" className={marketView === "chain" ? "on" : ""} onClick={() => onMarketViewChange("chain")} aria-pressed={marketView === "chain"}>CHAIN</button>

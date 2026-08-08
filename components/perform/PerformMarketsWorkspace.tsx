@@ -7,11 +7,15 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import { deriveMarketRisk } from "@/lib/perform/deriveMarketWorkspace";
+import { SeveEvidenceContext, SeveWorkspaceHeader } from "@/components/ui/Seve909";
 
 const after = (a: string | null, b: string | null) => a != null && (b == null || Date.parse(a) > Date.parse(b));
 const pacificTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", {
   hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "America/Los_Angeles",
 });
+const pacificDateTime = (iso: string | null) => iso ? new Date(iso).toLocaleString("en-US", {
+  month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles",
+}) + " PT" : "checking";
 
 export function MarketReadStrip({ surface, compact = false }: { surface: SurfaceProps; compact?: boolean }) {
   const { data, incident } = surface;
@@ -80,6 +84,9 @@ export function PerformMarketsWorkspace({ surface }: { surface: SurfaceProps }) 
 
   return (
     <section className="pf-markets-workspace" id="perform-market" data-nav-target="true" tabIndex={-1}>
+      <div className="pf-markets-heading"><SeveWorkspaceHeader title="MARKETS" subtitle="observed prices · current paper exposure" boundary="READ ONLY" />
+        <SeveEvidenceContext kind="actual" scope={`${symbol} + selected paper account`} asOf={pacificDateTime(data.lastIngestTs)} era="current market session" sample={`${data.snapshot.length} observed contracts`} quality={data.status === "err" ? "partial" : data.status === "stale" ? "building" : "live"} detail="Observed quotes support inspection; they are not an execution promise." />
+      </div>
       <div className="pf-markets-chart">
         <IntradayChart
           bars={data.bars}
