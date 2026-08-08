@@ -1,6 +1,6 @@
 // Read-only orchestrator for the canonical profitability ledger, Decision
-// Atlas, and concise weekly evidence. It is intentionally unscheduled; adding
-// it to an external scheduler requires separate operator approval.
+// Atlas, and concise weekly evidence. The approved after-close workflow runs
+// it only after the session shadow ledger has been independently verified.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
@@ -13,8 +13,9 @@ const arg = (name: string): string | null => {
 };
 const through = arg("through") ?? etDateOf(new Date().toISOString());
 const outputRoot = resolve(arg("out-dir") ?? `data/decision-atlas/runs/${through}`);
-const envFile = resolve(arg("env-file") ?? process.env.SEVE_ENV_FILE ?? ".env.local");
-if (!existsSync(envFile)) throw new Error(`environment file not found: ${envFile}`);
+const explicitEnvFile = arg("env-file") ?? process.env.SEVE_ENV_FILE ?? null;
+const envFile = explicitEnvFile ? resolve(explicitEnvFile) : null;
+if (envFile && !existsSync(envFile)) throw new Error(`environment file not found: ${envFile}`);
 const virtualCatchupFile = arg("virtual-catchup-file");
 const virtualCatchupManifest = arg("virtual-catchup-manifest");
 if (Boolean(virtualCatchupFile) !== Boolean(virtualCatchupManifest)) {
@@ -28,8 +29,9 @@ const run = (script: string, args: string[]): void => {
   execFileSync(process.execPath, ["--import", "tsx", script, ...args], { stdio: "inherit", env: process.env });
 };
 
-run("scripts/profitability-ledger.ts", ["--env-file", envFile, "--as-of", through, "--out-dir", ledgerDir]);
-run("scripts/decision-atlas.ts", ["--env-file", envFile, "--through", through,
+const envArgs = envFile ? ["--env-file", envFile] : [];
+run("scripts/profitability-ledger.ts", [...envArgs, "--as-of", through, "--out-dir", ledgerDir]);
+run("scripts/decision-atlas.ts", [...envArgs, "--through", through,
   "--ledger-file", resolve(ledgerDir, "ledger.json"), "--out-dir", atlasDir,
   ...(virtualCatchupFile && virtualCatchupManifest
     ? ["--virtual-catchup-file", resolve(virtualCatchupFile), "--virtual-catchup-manifest", resolve(virtualCatchupManifest)] : [])]);
