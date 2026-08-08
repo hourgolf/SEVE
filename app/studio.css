@@ -724,11 +724,17 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 }
 .shell-root[data-mode="studio"] .insp-close:hover { color:var(--lcd-ink); border-color:var(--amber); }
 .shell-root[data-mode="studio"] .insp-close:focus-visible { outline:2px solid var(--909-focus); outline-offset:1px; }
+.shell-root[data-mode="studio"] .inspector-scroll {
+  flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable;
+}
+.shell-root[data-mode="studio"] .inspector-scroll:focus-visible { outline:2px solid var(--909-focus); outline-offset:-3px; }
+.shell-root[data-mode="studio"] .inspector-scroll .mixer-deck { min-height:auto; overflow:visible; }
 .shell-root[data-mode="studio"] .mixer-meter { flex: 0 0 auto; display: grid; grid-template-columns: 1fr .75fr 1.25fr; gap: 1px; padding: 6px; background: #08090a; border-bottom: 1px solid #000; }
 .shell-root[data-mode="studio"] .mixer-meter > span { min-width: 0; display: grid; gap: 3px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 3px; background: linear-gradient(180deg,#171a1c,#101214); }
 .shell-root[data-mode="studio"] .mixer-meter small { color: var(--dk-dim); font: 700 var(--fs-label)/1 var(--sh-mono); letter-spacing: .08em; }
 .shell-root[data-mode="studio"] .mixer-meter b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lcd-ink); font: 750 var(--fs-chip)/1.2 var(--sh-mono); }
 .shell-root[data-mode="studio"] .mixer-deck { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-auto-rows:max-content; gap: 7px; padding: 8px; align-content: start; background-image: repeating-linear-gradient(90deg,transparent 0,transparent 31px,rgba(255,255,255,.015) 32px); }
+.shell-root[data-mode="studio"] .operating-context > div { padding:6px; }
 .shell-root[data-mode="studio"] .mix-bank { border: 1px solid #32363a; border-radius: 6px; background: linear-gradient(180deg,#202326,#151719); box-shadow: 0 1px 0 rgba(255,255,255,.05) inset,0 2px 5px rgba(0,0,0,.45); }
 .shell-root[data-mode="studio"] .mix-bank > header { padding: 5px 8px; color: #8d9296; border-bottom: 1px solid #070809; font: 800 var(--fs-label)/1 var(--sh-mono); letter-spacing: .15em; }
 .shell-root[data-mode="studio"] .mix-bank-body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
@@ -987,6 +993,17 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
   .shell-root[data-mode="studio"] .canary-command-policy,
   .shell-root[data-mode="studio"] .canary-command-sequence,
   .shell-root[data-mode="studio"] .roster-workflow ol { grid-template-columns:1fr 1fr; }
+}
+@media (min-width: 951px) and (max-width: 1550px) {
+  .shell-root[data-mode="studio"] .studio-v4b.inspector-open {
+    position:relative; grid-template-columns:minmax(0,1fr);
+  }
+  .shell-root[data-mode="studio"] .studio-v4b.inspector-open .fleet { grid-column:1; }
+  .shell-root[data-mode="studio"] .studio-v4b.inspector-open .inspector {
+    position:absolute; z-index:12; grid-column:1; grid-row:1; top:7px; right:7px; bottom:calc(var(--h-band) + 14px);
+    width:min(520px,calc(100% - 28px)); box-shadow:0 10px 32px rgba(0,0,0,.55);
+  }
+  .shell-root[data-mode="studio"] .studio-v4b.inspector-open .sband { grid-column:1; }
 }
 @media (max-width: 950px) {
   .shell-root[data-mode="studio"] .studio-v4b { --insp-w: 310px; }

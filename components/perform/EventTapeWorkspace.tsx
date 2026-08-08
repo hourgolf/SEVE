@@ -53,20 +53,28 @@ export function EventTapeWorkspace({ events, health, strategists, readiness, emb
   const visible = useMemo(() => filterTapeRows(rows, filter), [rows, filter]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map(({ id }) => [id, filterTapeRows(rows, id).length])), [rows]);
   const evidenceStatus = deriveAfterActionStatus(readiness);
+  const latestAttention = rows.find((row) => row.category === "risk");
 
   return <section className="etw" id="perform-tape" tabIndex={-1} aria-label="Event Tape evidence workspace">
-    <header className={`etw-head${embedded ? " embedded" : ""}`}>{!embedded && <span><b>EVENT TAPE</b><small>live operations + linked after-action evidence</small></span>}<nav aria-label="review view"><button type="button" className={view === "live" ? "on" : ""} onClick={() => setView("live")}>LIVE TAPE</button><button type="button" className={view === "evidence" ? "on" : ""} onClick={() => setView("evidence")}>TRADE EVIDENCE</button></nav></header>
+    <header className={`etw-head${embedded ? " embedded" : ""}`}>{!embedded && <span><b>SESSION REVIEW</b><small>what happened first; technical evidence on demand</small></span>}<nav aria-label="review view"><button type="button" className={view === "live" ? "on" : ""} onClick={() => setView("live")}>SESSION SUMMARY</button><button type="button" className={view === "evidence" ? "on" : ""} onClick={() => setView("evidence")}>POSITION EVIDENCE</button></nav></header>
     {view === "live" ? <TapeReadStrip health={health} events={events} /> : <div className={`tape-read-strip evidence ${evidenceStatus.tone}`} role="status"><i /><span><b>{evidenceStatus.label}</b><small>{evidenceStatus.detail}</small></span></div>}
-    <div className="etw-tools">
-      {view === "live" ? <><nav aria-label="event tape filter">{FILTERS.map((item) => <button type="button" key={item.id} className={filter === item.id ? "on" : ""} onClick={() => setFilter(item.id)}>{item.label}<span>{counts[item.id] ?? 0}</span></button>)}</nav><p>Supabase <code>events</code> · newest {events.length}/14 rows queried · filters apply only to this retained window</p></>
-        : <p>linked by RC5 opportunity and position identity · configured evidence claims remain in Ops</p>}
-    </div>
-    {view === "live" ? <div className="etw-list">
-      {visible.length === 0 ? <div className="etw-empty">no {filter === "all" ? "" : `${filter} `}events in the retained window</div> : visible.map((event) => <article key={event.id} data-kind={event.category}>
-        <time>{timeOfDay(event.created_at)}</time><span className="etw-level">{event.level}</span><span className="etw-category">{event.category}</span>
-        <EventMessage event={event} strategists={strategists} readiness={readiness} />
-        {event.count > 1 && <strong title={`${event.count} adjacent identical events`}>×{event.count}</strong>}
-      </article>)}
-    </div> : <div className="etw-evidence"><PositionEvidenceChains model={readiness} /></div>}
+    {view === "live" ? <>
+      <section className="etw-summary" aria-label="Plain-language session summary">
+        <span><small>DESK ACTIVITY</small><b>{counts.execution ?? 0}</b><em>orders, fills, closes, manager, and worker updates</em></span>
+        <span><small>WARNINGS TO REVIEW</small><b>{counts.risk ?? 0}</b><em title={latestAttention?.message}>{latestAttention ? latestAttention.message : "none in the latest event window"}</em></span>
+        <span><small>DATA CHECKS</small><b>{(counts.data ?? 0) + (counts.sentinel ?? 0)}</b><em>market-data and monitor updates</em></span>
+      </section>
+      <details className="etw-technical">
+        <summary><span><small>TECHNICAL DETAIL</small><b>EVENT LOG</b></span><em>{rows.length} retained events · open only when diagnosing</em><i>▾</i></summary>
+        <div className="etw-tools"><nav aria-label="event tape filter">{FILTERS.map((item) => <button type="button" key={item.id} className={filter === item.id ? "on" : ""} onClick={() => setFilter(item.id)}>{item.label}<span>{counts[item.id] ?? 0}</span></button>)}</nav><p>Newest {events.length}/14 event rows · filters apply to this retained window</p></div>
+        <div className="etw-list">
+          {visible.length === 0 ? <div className="etw-empty">no {filter === "all" ? "" : `${filter} `}events in the retained window</div> : visible.map((event) => <article key={event.id} data-kind={event.category}>
+            <time>{timeOfDay(event.created_at)}</time><span className="etw-level">{event.level}</span><span className="etw-category">{event.category}</span>
+            <EventMessage event={event} strategists={strategists} readiness={readiness} />
+            {event.count > 1 && <strong title={`${event.count} adjacent identical events`}>×{event.count}</strong>}
+          </article>)}
+        </div>
+      </details>
+    </> : <div className="etw-evidence"><PositionEvidenceChains model={readiness} /></div>}
   </section>;
 }

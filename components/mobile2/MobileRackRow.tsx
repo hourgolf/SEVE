@@ -154,7 +154,7 @@ export function MobileRackRow({
     if (v !== tp) setCfg({ take_profit_pct: v });
   };
 
-  const databaseTag = databaseConfig.muted ? { txt: "DB MUTED", cls: "muted" }
+  const databaseTag = passport?.database.differsFromRuntime ? { txt: "DB DIFFERS", cls: "muted" }
     : status === "draft" ? { txt: "BENCH", cls: "darkch" }
     : status === "disabled" ? { txt: "OFF", cls: "darkch" }
     : null;
@@ -163,8 +163,8 @@ export function MobileRackRow({
     : passport?.lifecycle === "dark-evidence"
       ? false
       : active && status === "armed" && !config.muted;
-  const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "PAPER", cls: "root" }
-    : passport?.lifecycle === "dark-evidence" ? { txt: "OBSERVE", cls: "dark" }
+  const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "TRADING", cls: "root" }
+    : passport?.lifecycle === "dark-evidence" ? { txt: "OBSERVING", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
   const firesSummary = passport?.rootPolicy
     ? activeRootExitLabel(passport.rootPolicy, true)
@@ -191,6 +191,11 @@ export function MobileRackRow({
 
       {open && (
         <div className="m2-insp">
+          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
+          {passport?.effective && <details className="channel-disclosure operating-context">
+            <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS MODE</em><i>▾</i></summary>
+            <div><ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact /></div>
+          </details>}
           <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE TIGHTEN / WIDEN OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
@@ -325,8 +330,6 @@ export function MobileRackRow({
               {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
             </>}
           </div>
-          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
-          {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
           <details className="channel-disclosure"><summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary><div>
             {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
               state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}

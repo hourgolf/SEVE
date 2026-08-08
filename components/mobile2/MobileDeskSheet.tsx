@@ -155,7 +155,7 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
 
     {mobileReviewHas(mode, "shadow-research") && <ShadowResearchWorkspace surface={props} compact />}
 
-    {mobileReviewHas(mode, "event-tape") && <Section title="EVENT TAPE" meta="retained operational view · newest 14">
+    {mobileReviewHas(mode, "event-tape") && <Section title="TECHNICAL EVENT LOG" meta="newest 14 · open when diagnosing" collapsible>
       <TapeReadStrip health={props.data.readHealth.events} events={props.data.events} compact />
       <div className="m2-review-tape">
         {tape.length === 0 ? <div className="m2-desk-empty">no retained events</div> : tape.map((event) => <div key={event.id} data-kind={event.category}>

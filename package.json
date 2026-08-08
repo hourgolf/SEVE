@@ -261,6 +261,7 @@
     "after-close-research-selftest": "tsx lib/research/afterCloseResearch.selftest.ts",
     "fixture-lane-selftest": "tsx lib/ui/fixtureLane.selftest.ts",
     "ui-control-contract-selftest": "tsx lib/ui/controlContract.selftest.ts",
+    "ui-clarity-selftest": "tsx components/perform/uiClarityLayout.selftest.ts && tsx components/perform/clarityDisclosure.selftest.ts && tsx components/research/DecisionAtlasHierarchy.selftest.ts",
     "execution-observation-persistence-selftest": "tsx worker/src/executionObservationPersistence.selftest.ts",
     "position-route-observation-selftest": "tsx worker/src/positionRouteObservation.selftest.ts",
     "position-route-receipt-audit-selftest": "tsx lib/ops/positionRouteReceiptAudit.selftest.ts",

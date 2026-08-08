@@ -57,11 +57,11 @@ export function MobileStudio({
         />
         <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" disabled={canWrite && !canDirectConfigure} title={canDirectConfigure ? "Add a channel" : props.write.configurationWriteFact} onClick={canDirectConfigure ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD VIA PROPOSAL" : "SIGN IN TO REVIEW"}</button></div>
         <div className="m2-channel-scope" role="group" aria-label="Channel runtime scope">
-          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>PAPER IN VIEW <b>{passports.roots}</b></button>
-          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVE IN VIEW <b>{passports.dark}</b></button>
-          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>DESK ROWS <b>{channels.length}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>TRADING <b>{passports.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVING <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL <b>{channels.length}</b></button>
         </div>
-        {passports.release.state === "verified" && <p className="m2-roster-reconciliation">RECEIPT AUTHORITY · <b>{passports.release.rootSlugs.length} ROOTS</b></p>}
+        {passports.release.state === "verified" && <p className="m2-roster-reconciliation">LIVE ENTRY AUTHORITY · <b>{passports.release.rootSlugs.length} TRADING ROOTS</b></p>}
         <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · FORK GOVERNED DRAFT · DIRECT WRITES FENCED" : "READ ONLY · SIGN IN TO REVIEW CONTROLS"}</span><span className="ln" /></div>
         {visibleChannels.length === 0 ? (
           <div className="m2-ghost">no channels in this runtime scope</div>

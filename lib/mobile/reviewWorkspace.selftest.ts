@@ -15,7 +15,7 @@ const check = (name: string, run: () => void) => {
   console.log(`PASS ${name}`);
 };
 
-check("evidence is the default operator review", () => assert.equal(DEFAULT_MOBILE_REVIEW_MODE, "evidence"));
+check("plain session summary is the default operator review", () => assert.equal(DEFAULT_MOBILE_REVIEW_MODE, "session"));
 check("four explicit review modes are exposed", () => assert.deepEqual(MOBILE_REVIEW_MODES.map((mode) => mode.id), ["session", "shadow", "evidence", "sentinel"]));
 check("review modes render as one four-segment rail", () => {
   const css = readFileSync("app/seve-909.css", "utf8");
