@@ -135,7 +135,7 @@ function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
   const axis = brief.recommendation.axis;
   if (axis === "entry") {
     const weak = brief.entryFrequency.rows.find((row) => row.sessions >= 5 && row.scored >= 5 && (row.typicalResultPerContractUsd ?? 0) <= 0);
-    return { label: weak ? `ENTRY ${weak.entryNumber}` : "ENTRY ORDER", value: weak ? money(weak.typicalResultPerContractUsd, "/ct") : "COLLECTING", fact: brief.entryFrequency.conclusion };
+    return { label: weak ? `${weak.entryNumber === 2 ? "SECOND" : `ENTRY ${weak.entryNumber}`} ENTRY` : "ENTRY ORDER", value: weak ? money(weak.typicalResultPerContractUsd, "/ct") : "COLLECTING", fact: brief.entryFrequency.conclusion };
   }
   if (axis === "exit") return (brief.nativeExit.typicalReturnPct ?? 0) < 0 && (brief.nativeExit.typicalBestMovePct ?? 0) > 0
     ? { label: "EXIT RESULT", value: "BELOW ENTRY", fact: brief.nativeExit.conclusion }
@@ -152,6 +152,28 @@ function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
   if (axis === "promotion") return { label: "PORTFOLIO OVERLAP", value: brief.collision.strongestOverlap ? brief.collision.strongestOverlap.redundancy.toUpperCase() : "UNKNOWN", fact: brief.collision.conclusion };
   if (axis === "retirement") return { label: "REDUNDANCY", value: brief.collision.strongestOverlap ? brief.collision.strongestOverlap.redundancy.toUpperCase() : "UNKNOWN", fact: brief.collision.conclusion };
   return { label: "MOVE KEPT", value: percent(brief.nativeExit.typicalCapture), fact: brief.nativeExit.conclusion };
+}
+
+function plainDiagnosis(brief: ChannelDecisionBrief): string {
+  const axis = brief.recommendation.axis;
+  if (axis === "entry") {
+    const weak = brief.entryFrequency.rows.find((row) => row.sessions >= 5 && row.scored >= 5 && (row.typicalResultPerContractUsd ?? 0) <= 0);
+    if (weak) return `The ${weak.entryNumber === 2 ? "second" : `number ${weak.entryNumber}`} entry typically lost $${Math.abs(Math.round(weak.typicalResultPerContractUsd ?? 0)).toLocaleString("en-US")}/ct. Test one fewer entry before changing the exit.`;
+  }
+  if (axis === "exit" && (brief.nativeExit.typicalBestMovePct ?? 0) > 0 && (brief.nativeExit.typicalReturnPct ?? 0) < 0) {
+    return "Entries found a favorable move, but the current exit typically finished below the entry price.";
+  }
+  if (axis === "manager") return "One exit manager deserves a controlled comparison on the same opportunities.";
+  if (axis === "size") return "The current entry and exit shape is promising enough to test one additional size step in the portfolio replay.";
+  return concise(brief.recommendation.summary);
+}
+
+function plainNextTest(brief: ChannelDecisionBrief): string {
+  if (brief.recommendation.axis === "entry") return "Allow one fewer entry per session and compare the same signal sequence.";
+  if (brief.recommendation.axis === "exit") return "Compare one exit alternative with the current exit on the same opportunities.";
+  if (brief.recommendation.axis === "manager") return "Compare one manager with the current manager on the same filled positions.";
+  if (brief.recommendation.axis === "size") return "Replay one contract step with account capacity and displaced opportunities included.";
+  return conciseTest(brief.recommendation.nextExperiment);
 }
 
 export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): ChannelDecisionSummary {
@@ -173,8 +195,8 @@ export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): Channe
     throughSession: brief.throughSession,
     sourceLabel: "NIGHTLY PAIRED",
     disposition: dispositionForAxis(brief.recommendation.axis),
-    diagnosis: concise(brief.recommendation.summary),
-    nextTest: conciseTest(brief.recommendation.nextExperiment),
+    diagnosis: plainDiagnosis(brief),
+    nextTest: plainNextTest(brief),
     keepFixed: fixedForAxis(brief.recommendation.axis),
     evidenceState: evidence.state,
     evidenceStateFact: evidence.fact,

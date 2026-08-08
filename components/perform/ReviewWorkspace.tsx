@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EventTapeWorkspace } from "@/components/perform/EventTapeWorkspace";
 import { AutopsyPanel } from "@/components/console/AutopsyPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
@@ -8,12 +8,23 @@ import { ForensicsPanel } from "@/components/console/ForensicsPanel";
 import { REVIEW_SECTIONS, type ReviewSection } from "@/lib/perform/reviewWorkspace";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
+import { ReviewSessionScorecard } from "@/components/perform/ReviewSessionScorecard";
+import { shouldAnchorHistoricalResults } from "@/lib/perform/sessionReview";
 
 export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
   const [section, setSection] = useState<ReviewSection>("tape");
   const { data, view, feed, livePnl, liveFund, reviewEvidence } = surface;
   const selectedAccount = surface.accounts.find((account) => account.id === surface.acctId);
   const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
+  const historicalResultsInitialized = useRef(false);
+  const latestCompletedSession = reviewEvidence.daily.reports[0]?.report_date ?? null;
+  useEffect(() => {
+    if (section !== "performance" || historicalResultsInitialized.current) return;
+    historicalResultsInitialized.current = true;
+    if (reviewEvidence.pnlWindow === "today" && shouldAnchorHistoricalResults(latestCompletedSession)) {
+      reviewEvidence.setPnlWindow("week");
+    }
+  }, [latestCompletedSession, reviewEvidence, section]);
 
   return (
     <section className="rvw" id="perform-tape" tabIndex={-1} aria-label="Review workspace">
@@ -42,13 +53,19 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>
         {section === "tape" && (
-          <EventTapeWorkspace
-            events={data.events}
-            health={data.readHealth.events}
-            strategists={view.desk.strategists}
-            readiness={surface.opsReadiness}
-            embedded
-          />
+          <>
+            <ReviewSessionScorecard evidence={reviewEvidence.daily} />
+            <details className="rvw-system-activity">
+              <summary><span><small>SYSTEM ACTIVITY</small><b>Diagnostics and event history</b></span><em>Open only when checking platform behavior</em><i>▾</i></summary>
+              <EventTapeWorkspace
+                events={data.events}
+                health={data.readHealth.events}
+                strategists={view.desk.strategists}
+                readiness={surface.opsReadiness}
+                embedded
+              />
+            </details>
+          </>
         )}
         {section === "autopsy" && (
           <AutopsyPanel
@@ -58,17 +75,20 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
           />
         )}
         {section === "performance" && (
-          <PnlPanel
-            strategists={view.desk.strategists}
-            pnlByStrategist={livePnl}
-            fundPnl={liveFund}
-            equityCurve={feed.equityCurve}
-            window={reviewEvidence.pnlWindow}
-            setWindow={reviewEvidence.setPnlWindow}
-            windowed={reviewEvidence.windowedPnl}
-            scopeLabel={accountScope}
-            todayAttribution={feed.positionAttribution}
-          />
+          <>
+            {latestCompletedSession && <div className="rvw-results-anchor"><b>LAST COMPLETED SESSION · {latestCompletedSession}</b><span>Account Results opens to the week through this close; choose Today only for the live session.</span></div>}
+            <PnlPanel
+              strategists={view.desk.strategists}
+              pnlByStrategist={livePnl}
+              fundPnl={liveFund}
+              equityCurve={feed.equityCurve}
+              window={reviewEvidence.pnlWindow}
+              setWindow={reviewEvidence.setPnlWindow}
+              windowed={reviewEvidence.windowedPnl}
+              scopeLabel={accountScope}
+              todayAttribution={feed.positionAttribution}
+            />
+          </>
         )}
         {section === "counterfactuals" && (
           <>

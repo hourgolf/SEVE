@@ -517,7 +517,7 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 
 .shell-root[data-mode="studio"] .fleet-table { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .shell-root[data-mode="studio"] .fleet-grid {
-  display: grid; grid-template-columns: minmax(150px, 1.4fr) 72px 92px 90px minmax(105px, 0.8fr) minmax(130px, 1fr);
+  display: grid; grid-template-columns: minmax(150px, 1.2fr) 86px 92px 86px minmax(110px, 0.8fr) minmax(175px, 1.35fr);
   gap: 10px; align-items: center; padding: 0 clamp(10px, 1vw, 17px); min-width: 0;
 }
 .shell-root[data-mode="studio"] .fleet-head {
@@ -560,7 +560,7 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 .shell-root[data-mode="studio"] .fleet-signal b.risk { color: var(--red-soft); }
 .shell-root[data-mode="studio"] .fleet-signal small { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--hw-soft); font-size: var(--fs-chip); }
 .shell-root[data-mode="studio"] .fleet-tags { min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; }
-.shell-root[data-mode="studio"] .fleet-tags i { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 5px; border: 1px solid var(--hw-line); border-radius: 3px; color: var(--hw-soft); font: normal 700 var(--fs-chip)/1 var(--sh-mono); }
+.shell-root[data-mode="studio"] .fleet-tags i { flex: 0 1 auto; display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; white-space:normal; padding:2px 5px; border:1px solid var(--hw-line); border-radius:3px; color:var(--hw-soft); font:normal 700 var(--fs-chip)/1.25 var(--sh-mono); }
 .shell-root[data-mode="studio"] .fleet-tags > span { color: var(--hw-soft); }
 .shell-root[data-mode="studio"] .fleet-empty { height: 100%; min-height: 180px; display: grid; place-content: center; justify-items: center; gap: 9px; text-align: center; font-family: var(--sh-mono); color: var(--hw-soft); }
 .shell-root[data-mode="studio"] .fleet-empty strong { color: var(--green-soft); font-size: var(--fs-num); letter-spacing: 0.12em; }

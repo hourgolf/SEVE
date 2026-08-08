@@ -14,6 +14,14 @@ const topExit = (ex: Record<string, number>) => {
   const e = Object.entries(ex).sort((a, b) => b[1] - a[1])[0];
   return e ? `${e[0]} ${Math.round((e[1] / Object.values(ex).reduce((a, b) => a + b, 0)) * 100)}%` : "—";
 };
+const plainFinding = (value: string): string => {
+  const known: Record<string, string> = {
+    gate_starved: "Signals blocked before entry",
+    overtrading: "Too many entries",
+    giveback: "Profit given back before exit",
+  };
+  return known[value] ?? value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
 
 // The DAY view of the merged Autopsy panel (frame + DAY⇄WEEK seg live in AutopsyPanel).
 // Glance = fund line + harvest meter + findings CHIPS + movers; expand = the full report.
@@ -81,16 +89,16 @@ export function DailyAutopsyBody({
         <div className="au-fund">
           <span title={logicalEvidence ? `${d.evidence?.positionRows ?? 0} position rows · ${d.evidence?.runnerRowsCollapsed ?? 0} runners collapsed · immutable routes` : "This stored report predates logical-trade evidence; do not compare its count directly with current reports."}>{d.fund.trades} {observationLabel} · {d.fund.channelsTraded} ch</span>
           <span className={d.fund.dayRealized < 0 ? "neg" : "pos"}>{signedUsd(d.fund.dayRealized)}</span>
-          <span>positive {Math.round(d.fund.winRate * 100)}%</span>
+          <span>{Math.round(d.fund.winRate * d.fund.trades)} of {d.fund.trades} finished profitable</span>
         </div>
       )}
 
       {/* HARVEST — found vs kept, the day's one-line verdict (meter, not prose) */}
       {harvest && (
         <div className="mrow" style={{ margin: "5px 0 2px" }}>
-          <span className="mut" style={{ whiteSpace: "nowrap" }}>avg peak +{harvest.peak}%</span>
+          <span className="mut" style={{ whiteSpace: "nowrap" }}>average best move +{harvest.peak}%</span>
           <span className="meter"><i style={{ width: `${Math.min(100, Math.max(0, harvest.kept))}%`, background: harvest.kept >= 50 ? "var(--green)" : "var(--red)" }} /></span>
-          <b className={harvest.kept >= 50 ? "pos" : "neg"} style={{ whiteSpace: "nowrap" }}>kept {harvest.kept}%</b>
+          <b className={harvest.kept >= 50 ? "pos" : "neg"} style={{ whiteSpace: "nowrap" }}>retained {harvest.kept}% of that move</b>
         </div>
       )}
 
@@ -98,7 +106,7 @@ export function DailyAutopsyBody({
       {!expanded && !!n?.systemFindings?.length && (
         <div className="au-flaws" style={{ margin: "5px 0 2px" }}>
           {n.systemFindings.slice(0, 3).map((f, i) => (
-            <span key={i} className={`au-flaw ${SEV_CLASS[f.severity] ?? "au-sev-low"}`} title={f.evidence}>{f.type}</span>
+            <span key={i} className={`au-flaw ${SEV_CLASS[f.severity] ?? "au-sev-low"}`} title={f.evidence}>{plainFinding(f.type)}</span>
           ))}
         </div>
       )}
@@ -119,24 +127,24 @@ export function DailyAutopsyBody({
                 <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(m.realizedPnl)}</span>
               </div>
               <div className="au-metrics">
-                {m.nTrades}t · {Math.round(m.winRate * 100)}% · hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R · exit {topExit(c.exitReasons)}
+                {m.nTrades} trades · {Math.round(m.winRate * m.nTrades)} profitable · median hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R · most common exit {topExit(c.exitReasons)}
                 {m.peakCapturePct != null && (
                   <span title={`${m.nPeaked}/${m.nTrades} trades peaked above entry · avg peak +${m.avgPeakPct}% · kept ${m.peakCapturePct}% of the peak gain`}>
-                    {" "}· peak +{m.avgPeakPct}% · <b className={m.peakCapturePct >= 50 ? "pos" : "neg"}>kept {m.peakCapturePct}%</b>
+                    {" "}· best move +{m.avgPeakPct}% · <b className={m.peakCapturePct >= 50 ? "pos" : "neg"}>retained {m.peakCapturePct}%</b>
                   </span>
                 )}
               </div>
               {cn?.verdict && <div className="au-verdict">{cn.verdict}</div>}
               {c.flaws.length > 0 && (
                 <div className="au-flaws">
-                  {c.flaws.map((f) => <span key={f.type} className={`au-flaw ${SEV_CLASS[f.severity] ?? "au-sev-low"}`}>{f.type}</span>)}
+                  {c.flaws.map((f) => <span key={f.type} className={`au-flaw ${SEV_CLASS[f.severity] ?? "au-sev-low"}`}>{plainFinding(f.type)}</span>)}
                 </div>
               )}
             </div>
           );
         })}
         {dormant.length > 0 && (
-          <div className="au-dormant">dormant: {dormant.map((c) => c.name).join(" · ")}</div>
+          <div className="au-dormant">No recorded trade: {dormant.map((c) => c.name).join(" · ")}</div>
         )}
       </div>
       )}
@@ -157,13 +165,13 @@ export function DailyAutopsyBody({
               <span className="au-pnl neg">{signedUsd(worst.metrics.realizedPnl)}</span>
             </span>
           )}
-          <span className="au-mv-count">{traded.length} ch{dormant.length ? ` · ${dormant.length} dormant` : ""}</span>
+          <span className="au-mv-count">{traded.length} channels traded{dormant.length ? ` · ${dormant.length} had no recorded trade` : ""}</span>
         </div>
       )}
 
       {!expanded && (
         <button className="au-expand-foot" onClick={toggleExp}>
-          ▾ {traded.length} channel{traded.length === 1 ? "" : "s"}{nFindings ? ` · ${nFindings} finding${nFindings === 1 ? "" : "s"}` : ""}{nActions ? ` · ${nActions} action${nActions === 1 ? "" : "s"}` : ""} — full report
+          ▾ {traded.length} channel{traded.length === 1 ? "" : "s"} reviewed{nFindings ? ` · ${nFindings} finding${nFindings === 1 ? "" : "s"}` : ""}{nActions ? ` · ${nActions} proposed next step${nActions === 1 ? "" : "s"}` : ""} — open details
         </button>
       )}
 
@@ -179,7 +187,7 @@ export function DailyAutopsyBody({
                 <span className={`au-chip ${SEV_CLASS[f.severity] ?? "au-sev-low"}`}>{f.category}/{f.severity}</span>
                 {f.recurrence === "recurring" && <span className="au-chip au-recur">↻ recurring</span>}
                 {f.recurrence === "resolved" && <span className="au-chip au-resolved">✓ resolved</span>}
-                <b className="au-ftype">{f.type}</b>
+                <b className="au-ftype">{plainFinding(f.type)}</b>
                 {!!f.channels?.length && <span className="au-fch">{f.channels.join(", ")}</span>}
               </div>
               <div className="au-ev">{f.evidence}</div>

@@ -22,6 +22,7 @@ import {
   type MobileReviewMode,
 } from "@/lib/mobile/reviewWorkspace";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
+import { ReviewSessionScorecard } from "@/components/perform/ReviewSessionScorecard";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -126,31 +127,26 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
     <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="review" />
 
     {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
-    {mobileReviewHas(mode, "session-summary") && <div className="m2-desk-hero">
-      <span><small>{accountScope} · SESSION NAV Δ</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{attributedValue(signedUsd(liveFund.dayPnl))}</b></span>
-      <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span>
-      <span><small>CLOSED LOGICAL</small><b>{attributedValue(String(feed.sessionTrades.closed))}</b></span>
-      <span><small>OPEN LOGICAL</small><b>{attributedValue(String(feed.sessionTrades.open))}</b></span>
-    </div>}
+    {mobileReviewHas(mode, "session-summary") && <ReviewSessionScorecard evidence={props.reviewEvidence.daily} />}
 
-    {mobileReviewHas(mode, "equity") && <Section title="EQUITY" meta={`${accountScope} · account NAV · today`}>
-      {equity.length >= 2 ? <LineChart values={equity} height={92} id="m2-desk-equity" baseline={equity[0]} format={usd0} formatDelta={signedUsd} labels={feed.equityCurve.map((point) => timeOfDay(point.ts))} />
-        : <div className="m2-desk-empty">awaiting equity history</div>}
-    </Section>}
-
-    {mobileReviewHas(mode, "attribution") && <Section title="CHANNEL ATTRIBUTION" meta={`${accountScope} · immutable execution routes`}>
+    {mobileReviewHas(mode, "session-summary") && <Section title="LIVE ACCOUNT NOW" meta={`${accountScope} · immutable execution routes`} collapsible>
+      <div className="m2-desk-hero">
+        <span><small>SESSION NAV CHANGE</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{attributedValue(signedUsd(liveFund.dayPnl))}</b></span>
+        <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span>
+        <span><small>CLOSED LOGICAL</small><b>{attributedValue(String(feed.sessionTrades.closed))}</b></span>
+        <span><small>OPEN LOGICAL</small><b>{attributedValue(String(feed.sessionTrades.open))}</b></span>
+      </div>
+      {equity.length >= 2 ? <LineChart values={equity} height={92} id="m2-desk-equity" baseline={equity[0]} format={usd0} formatDelta={signedUsd} labels={feed.equityCurve.map((point) => timeOfDay(point.ts))} /> : <div className="m2-desk-empty">No intraday equity history yet.</div>}
       {attributionBlocked ? <div className="review-evidence-blocked" role="alert"><b>CURRENT ATTRIBUTION BLOCKED</b>{feed.positionAttribution.issues.map((issue) => <span key={issue}>{issue}</span>)}<small>No strategist-account fallback was used.</small></div>
-        : attributionChecking ? <div className="m2-desk-empty">checking immutable execution-account routes…</div>
-          : <div className="m2-review-rows">
-        {rows.map(({ channel, pnl }) => {
-          const trades = pnl?.trades ?? 0;
-          const peak = pnl?.pkN ? Math.round(pnl.pkSum / pnl.pkN) : null;
-          const win = trades ? Math.round((100 * pnl.wins) / trades) : null;
-          return <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b>
-            <span className={(pnl?.dayPnl ?? 0) < 0 ? "neg" : (pnl?.dayPnl ?? 0) > 0 ? "pos" : ""}>{signedUsd(pnl?.dayPnl ?? 0)}</span>
-            <small>{trades} trades · best move {peak ?? "—"}% · win {win ?? "—"}%</small></div>;
-        })}
-      </div>}
+        : attributionChecking ? <div className="m2-desk-empty">Checking immutable execution-account routes…</div>
+          : <div className="m2-review-rows">{rows.map(({ channel, pnl }) => {
+            const trades = pnl?.trades ?? 0;
+            const peak = pnl?.pkN ? Math.round(pnl.pkSum / pnl.pkN) : null;
+            const profitable = pnl?.wins ?? 0;
+            return <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b>
+              <span className={(pnl?.dayPnl ?? 0) < 0 ? "neg" : (pnl?.dayPnl ?? 0) > 0 ? "pos" : ""}>{signedUsd(pnl?.dayPnl ?? 0)}</span>
+              <small>{trades} trades · {profitable} profitable · best move {peak ?? "—"}%</small></div>;
+          })}</div>}
     </Section>}
 
     {mobileReviewHas(mode, "shadow-research") && <ShadowResearchWorkspace surface={props} compact />}

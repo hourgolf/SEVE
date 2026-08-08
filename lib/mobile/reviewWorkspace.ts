@@ -18,7 +18,7 @@ export const MOBILE_REVIEW_MODES: ReadonlyArray<{
   label: string;
   sub: string;
 }> = [
-  { id: "session", label: "SUMMARY", sub: "today" },
+  { id: "session", label: "SUMMARY", sub: "last close" },
   { id: "shadow", label: "RESEARCH", sub: "virtual" },
   { id: "evidence", label: "TRADES", sub: "proof" },
   { id: "sentinel", label: "NEXT", sub: "next open" },
