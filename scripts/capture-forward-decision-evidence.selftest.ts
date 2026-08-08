@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("./capture-forward.ts", import.meta.url), "utf8");
+const workflow = readFileSync(new URL("../.github/workflows/after-close-research.yml", import.meta.url), "utf8");
 const readiness = source.indexOf('run("postclose-readiness"');
 const publish = source.indexOf('run("gate-shadow (stamped session)"');
 const verify = source.indexOf('run("verify-shadow-rebuild (session)"');
@@ -15,4 +16,12 @@ assert.match(source, /const shadowPublished = postcloseReady && run/);
 assert.match(source, /const shadowVerified = shadowPublished && run/);
 assert.match(source, /if \(shadowVerified\)/);
 assert.doesNotMatch(source, /gate-shadow \(close pass\)/, "the unstamped rolling publisher must not preempt the stamped session publisher");
+const hostedPublish = workflow.indexOf("--stamp-provenance");
+const hostedVerify = workflow.indexOf("verify-shadow-rebuild:hosted");
+const hostedAtlas = workflow.indexOf("nightly-decision-atlas");
+const hostedReadiness = workflow.indexOf("priority-a-retune-readiness");
+assert.ok(hostedPublish >= 0 && hostedPublish < hostedVerify && hostedVerify < hostedAtlas && hostedAtlas < hostedReadiness,
+  "the hosted schedule must stamp, verify, build the Atlas, then verify experiment baselines");
+assert.match(workflow, /--virtual-trades-only/);
+assert.doesNotMatch(workflow, /(?:ALPACA|RAILWAY)_[A-Z_]+:/);
 console.log("capture-forward decision evidence selftest: PASS");
