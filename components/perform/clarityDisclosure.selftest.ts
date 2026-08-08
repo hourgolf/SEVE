@@ -20,7 +20,7 @@ assert.match(research, /srw-inline-detail/);
 assert.match(research, /srw-channel-analysis/);
 assert.match(research, /srw-deep-dive/);
 assert.match(research, /TYPICAL\/CT/);
-assert.match(research, /hypothetical entries · current channel exits · not portfolio P&amp;L/);
+assert.match(research, /every table row is virtual · hypothetical entries · not portfolio P&amp;L/);
 assert.match(positionReview, /best move/);
 assert.match(positionReview, /gave back the gain and finished below entry/);
 assert.match(livePositions, />BEST <b>/);

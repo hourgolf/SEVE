@@ -5,10 +5,10 @@ export const REVIEW_SECTIONS: ReadonlyArray<{
   label: string;
   hint: string;
 }> = [
-  { id: "tape", label: "TAPE", hint: "CHRONOLOGY" },
-  { id: "autopsy", label: "AUTOPSY", hint: "DAY · WEEK" },
-  { id: "performance", label: "PERFORMANCE", hint: "P&L · EQUITY" },
-  { id: "counterfactuals", label: "COUNTERFACTUALS", hint: "RESEARCH ONLY" },
+  { id: "tape", label: "SUMMARY", hint: "WHAT HAPPENED" },
+  { id: "autopsy", label: "TRADE REVIEW", hint: "DAY · WEEK" },
+  { id: "performance", label: "RESULTS", hint: "P&L · EQUITY" },
+  { id: "counterfactuals", label: "WHAT-IFS", hint: "RESEARCH ONLY" },
 ];
 
 export const isReviewSection = (value: string): value is ReviewSection =>

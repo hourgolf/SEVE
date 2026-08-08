@@ -11,17 +11,17 @@ export type MobileReviewSection =
   | "deterministic-scan"
   | "shadow-research";
 
-export const DEFAULT_MOBILE_REVIEW_MODE: MobileReviewMode = "evidence";
+export const DEFAULT_MOBILE_REVIEW_MODE: MobileReviewMode = "session";
 
 export const MOBILE_REVIEW_MODES: ReadonlyArray<{
   id: MobileReviewMode;
   label: string;
   sub: string;
 }> = [
-  { id: "session", label: "SESSION", sub: "results" },
-  { id: "shadow", label: "SHADOW", sub: "swarm" },
-  { id: "evidence", label: "EVIDENCE", sub: "receipts" },
-  { id: "sentinel", label: "SENTINEL", sub: "next open" },
+  { id: "session", label: "SUMMARY", sub: "today" },
+  { id: "shadow", label: "RESEARCH", sub: "virtual" },
+  { id: "evidence", label: "TRADES", sub: "proof" },
+  { id: "sentinel", label: "NEXT", sub: "next open" },
 ];
 
 const SECTIONS: Record<MobileReviewMode, readonly MobileReviewSection[]> = {

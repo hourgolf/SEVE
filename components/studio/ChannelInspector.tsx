@@ -84,6 +84,11 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
   const managerLabel = rootPolicy?.managerLabel;
   const a13 = rootPolicy?.runner === "a13";
+  const liveModeLabel = passport?.lifecycle === "paper-root"
+    ? "TRADING"
+    : passport?.lifecycle === "dark-evidence"
+      ? "OBSERVING"
+      : "UNVERIFIED";
   const pairedCurrent = researchEvidence?.pairedCurrent.find((item) =>
     item.executedSlug === slug || item.virtualSlug === slug);
   const currentExecuted = pairedCurrent
@@ -120,15 +125,19 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   return (
     <aside className="inspector mixer-inspector" style={{ ["--pm" as string]: pmVar(color) }}>
       <div className="insp-head"><span className="idx">02</span><span className="t">INSPECTOR</span><span className="grow" /><button type="button" className="insp-close" onClick={onClose} aria-label="Close channel inspector">×</button></div>
-      <div className="insp-hero">
-        <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
-        {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{passport.effective.execution.label}</span>}
-        {a13 && <span className="ih-tag amber">⚡ A13</span>}
-        <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
-      </div>
-      <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
-      {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
-      <div className="mixer-deck">
+      <div className="inspector-scroll" tabIndex={0} aria-label={`${slug} channel details`}>
+        <div className="insp-hero">
+          <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
+          {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{liveModeLabel}</span>}
+          {a13 && <span className="ih-tag amber">⚡ A13</span>}
+          <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
+        </div>
+        <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
+        <div className="mixer-deck">
+        {passport?.effective && <details className="channel-disclosure operating-context">
+          <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS CHANNEL IS IN ITS CURRENT MODE</em><i>▾</i></summary>
+          <div><ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact /></div>
+        </details>}
         <details className="channel-disclosure">
           <summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary>
           <div>{researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
@@ -162,7 +171,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           <button type="button" className={databaseConfig.boosted ? "on boost" : ""} disabled={!canPersist} onClick={() => setCfg({ boosted: !databaseConfig.boosted })}><i />BOOST<small>{databaseConfig.boosted ? "2× today" : "normal"}</small></button>
         </div></section>
         <div className="mixer-meter">
-          <span><small>RUNTIME</small><b>{passport?.effective.execution.label ?? "UNVERIFIED"}</b></span>
+          <span><small>LIVE MODE</small><b>{liveModeLabel}</b></span>
           <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
           <span><small>POLICY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
         </div>
@@ -209,6 +218,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           onSeal={() => void managerProposal.seal()}
           /></div>
         </details>
+        </div>
       </div>
 
       <div className="insp-foot">

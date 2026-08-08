@@ -81,7 +81,7 @@ export function ChannelDryPowderCurve({ curve, defaultContracts = 2, compact = f
       <span><small>PRICE / DEBIT</small><b>{curve.gates.premiumOrDebit}</b></span>
       <span><small>CAPACITY</small><b>{curve.gates.concurrency}</b></span>
       <span><small>FREQUENCY</small><b>{curve.gates.frequency}</b></span>
-      <span><small>DARK / MUTED</small><b>{curve.gates.lifecycle}</b></span>
+      <span><small>OBSERVING / PAUSED</small><b>{curve.gates.lifecycle}</b></span>
       <span><small>OTHER</small><b>{curve.gates.other}</b></span>
     </div>
     <footer>ORDINAL, CORRELATED SIMULATION · NATIVE MID-BASIS EXITS · PEAK STACK USES OBSERVED PATH DURATION · NOT EXECUTABLE P&amp;L OR A MANAGER COMPARISON</footer>

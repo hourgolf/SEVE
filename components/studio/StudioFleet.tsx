@@ -52,18 +52,18 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
           <strong>{summary.attention ? `${summary.attention} need attention` : "fleet nominal"}</strong>
         </div>
         <div className="fleet-metrics" aria-label="Fleet summary">
-          <span><small>ARMED</small><b>{summary.armed}</b></span>
-          <span><small>MUTED</small><b>{summary.muted}</b></span>
-          <span><small>BOOST</small><b>{summary.boosted}</b></span>
+          <span><small>TRADING IN VIEW</small><b>{passports.roots}</b></span>
+          <span><small>OBSERVING IN VIEW</small><b>{passports.dark}</b></span>
+          <span><small>ATTENTION</small><b>{summary.attention}</b></span>
         </div>
       </header>
 
       <div className="fleet-tools">
         <div className="fleet-scope" role="group" aria-label="Channel scope">
           <button type="button" className={scope === "attention" ? "on" : ""} onClick={() => onScope("attention")}>ATTENTION <b>{summary.attention}</b></button>
-          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>PAPER IN VIEW <b>{passports.roots}</b></button>
-          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>OBSERVE IN VIEW <b>{passports.dark}</b></button>
-          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => onScope("all")}>DESK ROWS <b>{summary.total}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>TRADING IN VIEW <b>{passports.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>OBSERVING IN VIEW <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "all" ? "on" : ""} onClick={() => onScope("all")}>ALL IN VIEW <b>{summary.total}</b></button>
         </div>
         <label className="fleet-sort">SORT
           <select value={sort} onChange={(event) => onSort(event.target.value as StudioSort)}>
@@ -73,14 +73,14 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
       </div>
       {passports.release.state === "verified" && <details className="runtime-roster-map">
         <summary>
-          <b>RECEIPT AUTHORITY</b>
-          <em>{authorityRootSlugs.length} ROOTS</em>
+          <b>LIVE ENTRY AUTHORITY</b>
+          <em>{authorityRootSlugs.length} TRADING ROOTS</em>
           <i aria-hidden="true">▾</i>
         </summary>
         <div>
-          <span><small>IMMUTABLE RECEIPT AUTHORITY</small><b>{authorityRootSlugs.join(" · ")}</b></span>
-          <span><small>NOT PRESENT IN THE {summary.total}-ROW DESK VIEW</small><b>{outsideDeskView.length ? outsideDeskView.join(" · ") : "NONE"}</b></span>
-          <p>The receipt list governs paper entry authority. The desk rows are a curated operating view; their counts must not be read as the full runtime roster.</p>
+          <span><small>CHANNELS ALLOWED TO OPEN PAPER TRADES</small><b>{authorityRootSlugs.join(" · ")}</b></span>
+          <span><small>TRADING ROOTS OUTSIDE THIS {summary.total}-ROW VIEW</small><b>{outsideDeskView.length ? outsideDeskView.join(" · ") : "NONE"}</b></span>
+          <p>Trading channels may open paper positions. Observing channels collect research only. This list is the live authority; database labels are supporting context.</p>
         </div>
       </details>}
       <ChannelCollectionCullPanel />
@@ -88,17 +88,29 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
       <div className="fleet-table" role="table" aria-label={`${scope} strategy channels`}>
         <div className="fleet-grid fleet-head" role="row">
           <span role="columnheader">CHANNEL</span>
-          <span role="columnheader">RECEIPT / DATABASE</span>
+          <span role="columnheader">LIVE MODE</span>
           <span role="columnheader">POSITION / SESSION ATTRIB</span>
           <span className="fc-risk" role="columnheader">RISK / TRADE</span>
           <span className="fc-signal" role="columnheader">DECISION</span>
-          <span className="fc-tune" role="columnheader">POSTURE / POLICY</span>
+          <span className="fc-tune" role="columnheader">WHY ATTENTION</span>
         </div>
         <div className="fleet-rows" role="rowgroup">
           {rows.map((row) => {
             const passport = passports.bySlug[row.channel.slug];
             const pnlClass = row.pnl.dayPnl < 0 ? "neg" : row.pnl.dayPnl > 0 ? "pos" : "";
             const decision = channelDecisionState(row.lastSignal);
+            const liveMode = passport?.lifecycle === "paper-root"
+              ? "TRADING"
+              : passport?.lifecycle === "dark-evidence"
+                ? "OBSERVING"
+                : "UNVERIFIED";
+            const liveModeDetail = passport?.database.differsFromRuntime
+              ? "database differs · live mode wins"
+              : passport?.lifecycle === "paper-root"
+                ? passport.rootPolicy ? `paper · ${passport.rootPolicy.quantity} ct` : "paper entry allowed"
+                : passport?.lifecycle === "dark-evidence"
+                  ? "research only · no paper entry"
+                  : "live authority not verified";
             return (
               <button
                 type="button"
@@ -110,8 +122,8 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
               >
                 <span className="fleet-channel" role="cell"><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></span>
                 <span className="fleet-runtime" role="cell">
-                  <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{passport?.effective.execution.label ?? row.stateLabel}</em>
-                  <small className={passport?.database.differsFromRuntime ? "diff" : ""}>DB {passport?.database.state ?? row.stateLabel} · {passport?.database.executor ?? row.channel.executor ?? "cron"}</small>
+                  <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{liveMode}</em>
+                  <small className={passport?.database.differsFromRuntime ? "diff" : ""}>{liveModeDetail}</small>
                 </span>
                 <span className="fleet-position" role="cell">
                   <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : "—"}</b>
@@ -125,7 +137,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                   {row.attentionReasons.length
                     ? row.attentionReasons.slice(0, 3).map((reason) => <i key={reason}>{reason}</i>)
                     : passport?.database.differsFromRuntime
-                      ? <i className="runtime">runtime overlay differs</i>
+                      ? <i className="runtime">database differs · live mode wins</i>
                     : row.configDiffs.length
                       ? row.configDiffs.slice(0, 2).map((diff) => <i className="context" key={diff}>{diff}</i>)
                       : <span>nominal</span>}

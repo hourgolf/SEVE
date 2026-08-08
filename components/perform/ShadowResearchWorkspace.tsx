@@ -24,6 +24,7 @@ const percent = (wins: number, scored: number): string =>
 const money = (value: number | null): string => value == null ? "—" : signedUsd(value);
 const shortSession = (session: string): string => session.slice(5).replace("-", "/");
 const RECENT_SESSION_LIMIT = 4;
+const DEFAULT_CHANNEL_LIMIT = 12;
 type ResearchLane = "vb" | "all";
 type EvidenceLabel = "HISTORICAL VIRTUAL" | "SESSION VIRTUAL";
 const laneTotals = (rows: ShadowChannelSummary[]) => {
@@ -110,6 +111,7 @@ export function NativeTable({
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<ShadowChannelSortKey>("average");
   const [sortDirection, setSortDirection] = useState<ShadowChannelSortDirection>("desc");
+  const [showAll, setShowAll] = useState(false);
   const selectedCount = rows.filter((row) => !excluded.includes(row.slug)).length;
   const allSelected = rows.length > 0 && selectedCount === rows.length;
   const visibleRows = useMemo(() => {
@@ -119,6 +121,12 @@ export function NativeTable({
       : rows;
     return sortShadowChannelSummaries(matched, sortKey, sortDirection);
   }, [query, rows, sortDirection, sortKey]);
+  const displayedRows = useMemo(() => {
+    if (query.trim() || showAll || visibleRows.length <= DEFAULT_CHANNEL_LIMIT) return visibleRows;
+    const first = visibleRows.slice(0, DEFAULT_CHANNEL_LIMIT);
+    const selected = selectedSlug ? visibleRows.find((row) => row.slug === selectedSlug) : undefined;
+    return selected && !first.some((row) => row.slug === selected.slug) ? [...first, selected] : first;
+  }, [query, selectedSlug, showAll, visibleRows]);
   const chooseSort = (key: ShadowChannelSortKey) => {
     if (key === sortKey) {
       setSortDirection((current) => current === "asc" ? "desc" : "asc");
@@ -139,9 +147,10 @@ export function NativeTable({
       <label><span>SORT</span><select value={sortKey} onChange={(event) => chooseSort(event.target.value as ShadowChannelSortKey)} aria-label="Sort research channels"><option value="channel">CHANNEL</option><option value="paths">PATHS</option><option value="win">WIN</option><option value="average">TYPICAL/CT</option><option value="total">TOTAL/CT</option><option value="mfe">BEST MOVE</option><option value="exits">EXITS</option></select></label>
       <button type="button" className="srw-sort-direction" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} aria-label={`Change sort direction, currently ${sortDirection}ending`}>{sortDirection === "asc" ? "ASC ▲" : "DESC ▼"}</button>
       {query ? <em>{visibleRows.length}/{rows.length} MATCH</em> : null}
+      {!query && visibleRows.length > DEFAULT_CHANNEL_LIMIT ? <button type="button" className="srw-row-limit" aria-expanded={showAll} onClick={() => setShowAll((current) => !current)}>{showAll ? `SHOW TOP ${DEFAULT_CHANNEL_LIMIT}` : `SHOW ALL ${visibleRows.length}`}</button> : null}
     </div>
     <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "PATHS")}</span><span>{sortLabel("win", "WIN")}</span><span>{sortLabel("average", "TYPICAL/CT")}</span><span>{sortLabel("total", "TOTAL/CT")}</span><span>{sortLabel("mfe", "BEST MOVE")}</span><span>{sortLabel("exits", "EXITS")}</span></div>
-    {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : visibleRows.map((row) => <Fragment key={row.slug}>
+    {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : displayedRows.map((row) => <Fragment key={row.slug}>
       <div className={`srw-row${selectedSlug === row.slug ? " selected" : ""}`}>
         <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span className="srw-channel-identity">{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}<small>{evidenceLabel} · THRU {shortSession(shadowSessionDate(row.lastAt))}</small></span></b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
         <strong className={`srw-cell-avg ${(row.typicalPerPath ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.typicalPerPath)}</strong>
@@ -150,6 +159,7 @@ export function NativeTable({
       </div>
       {selectedSlug === row.slug && renderDetail ? <div className="srw-inline-detail" aria-label={`${row.slug} channel evidence`}>{renderDetail(row.slug)}</div> : null}
     </Fragment>)}
+    {!query && !showAll && visibleRows.length > displayedRows.length ? <div className="srw-row-summary">Showing the first {DEFAULT_CHANNEL_LIMIT} channels by the current sort. Select “show all” to scan the full ledger.</div> : null}
   </div>;
 }
 
