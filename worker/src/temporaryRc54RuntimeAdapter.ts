@@ -6,6 +6,8 @@ import {
 import {
   RC54_CONTROL_ADMISSION_POLICY,
   RC54_LAB_ADMISSION_POLICY,
+  RC54_MORGUE_ACCOUNT_ID,
+  RC54_MORGUE_ADMISSION_POLICY,
   RC54_ROOTS,
   type Rc54AdmissionCandidateIdentity,
   type Rc54AdmissionRoot,
@@ -29,7 +31,7 @@ import {
 import type { ChannelConfig, PositionRow } from "./store.js";
 
 export const TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION =
-  "temporary-rc54-runtime-adapter-v3" as const;
+  "temporary-rc54-runtime-adapter-v4" as const;
 
 const SHA256 = /^sha256:([0-9a-f]{64})$/i;
 
@@ -68,7 +70,6 @@ export function validateReceiptBoundRc54Topology(
     if (expected) {
       const topology: Array<[string, unknown, unknown]> = [
         ["cohort", root.cohort, expected.cohort],
-        ["domain", root.domainId, expected.domainId],
         ["family", root.familyId, expected.familyId],
         ["underlying", root.underlying, expected.underlying],
         ["priority", root.priority, expected.priority],
@@ -82,8 +83,15 @@ export function validateReceiptBoundRc54Topology(
           errors.push(`temporary_rc54_adapter:${expected.slug}:${field}`);
         }
       }
+      const allowedDomains = expected.accountId === RC54_MORGUE_ACCOUNT_ID
+        ? [expected.domainId, RC54_MORGUE_ADMISSION_POLICY.id]
+        : [expected.domainId];
+      if (!allowedDomains.includes(root.domainId)) {
+        errors.push(`temporary_rc54_adapter:${expected.slug}:domain`);
+      }
     } else {
-      if (![RC54_CONTROL_ADMISSION_POLICY.id, RC54_LAB_ADMISSION_POLICY.id]
+      if (![RC54_CONTROL_ADMISSION_POLICY.id, RC54_LAB_ADMISSION_POLICY.id,
+        RC54_MORGUE_ADMISSION_POLICY.id]
         .includes(root.domainId)) {
         errors.push(`temporary_rc54_adapter:${root.slug}:domain`);
       }
@@ -111,10 +119,13 @@ export function validateReceiptBoundRc54Topology(
         errors.push(`temporary_rc54_adapter:${root.slug}:account`);
       }
     }
-    const expectedDomain = root.cohort === "control"
-      ? RC54_CONTROL_ADMISSION_POLICY.id
-      : RC54_LAB_ADMISSION_POLICY.id;
-    if (root.domainId !== expectedDomain) {
+    const validDomainCohort = root.domainId === RC54_CONTROL_ADMISSION_POLICY.id
+      ? root.cohort === "control"
+      : root.domainId === RC54_LAB_ADMISSION_POLICY.id
+        ? root.cohort === "lab"
+        : root.domainId === RC54_MORGUE_ADMISSION_POLICY.id
+          && root.accountId === RC54_MORGUE_ACCOUNT_ID;
+    if (!validDomainCohort) {
       errors.push(`temporary_rc54_adapter:${root.slug}:domain_cohort`);
     }
     if (strategistIds.has(root.strategistId)) {
@@ -252,10 +263,19 @@ export function buildReceiptBoundRc54AdmissionPolicies(
 ): readonly Readonly<AdmissionDomainPolicy>[] {
   const topologyErrors = validateReceiptBoundRc54Topology(runtime);
   if (topologyErrors.length) throw new Error(topologyErrors.join(";"));
-  const sealedById = new Map([
+  const sealedById = new Map<string, Readonly<AdmissionDomainPolicy>>([
     [RC54_CONTROL_ADMISSION_POLICY.id, RC54_CONTROL_ADMISSION_POLICY],
     [RC54_LAB_ADMISSION_POLICY.id, RC54_LAB_ADMISSION_POLICY],
   ]);
+  if (runtime.roots.some((root) =>
+    root.domainId === RC54_MORGUE_ADMISSION_POLICY.id)
+      || runtime.admissionPolicies.some((policy) =>
+        policy.id === RC54_MORGUE_ADMISSION_POLICY.id)) {
+    sealedById.set(
+      RC54_MORGUE_ADMISSION_POLICY.id,
+      RC54_MORGUE_ADMISSION_POLICY,
+    );
+  }
   const errors: string[] = [];
   const policies = runtime.admissionPolicies.map((observed) => {
     const sealed = sealedById.get(observed.id);
