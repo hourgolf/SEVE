@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { buildDecisionAtlasPreview } from "@/lib/research/decisionAtlasPreview";
+import { dispositionForAxis } from "@/lib/research/channelDecisionSummary";
 import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
 import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
@@ -179,7 +180,9 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   const totals = laneTotals(filteredRows);
   const atlasReads = rows.map((row) => ({
     slug: row.slug,
-    label: surface.decisionAtlas.bySlug[row.slug]?.recommendation.label ?? null,
+    label: surface.decisionAtlas.bySlug[row.slug]
+      ? dispositionForAxis(surface.decisionAtlas.bySlug[row.slug].recommendation.axis)
+      : null,
     read: buildDecisionAtlasPreview({
       summary: row,
       dryPowder: windowMode === "cumulative"
@@ -190,10 +193,10 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     }),
   }));
   const atlasWorking = atlasReads.filter((item) => item.label
-    ? /PROMOTION|SIZE|MANAGER|TEST/.test(item.label)
+    ? /PROMOTION|SIZE|MANAGER/.test(item.label)
     : item.read.label === "DARK TEST" || item.read.label === "TEST CAPACITY" || item.read.label === "REVIEW MANAGER");
   const atlasReview = atlasReads.filter((item) => item.label
-    ? /REVIEW ENTRY|REVIEW EXIT|RETIREMENT/.test(item.label)
+    ? /TEST ENTRY|TEST EXIT|RETIREMENT/.test(item.label)
     : item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT");
   const atlasNext = [...atlasWorking, ...atlasReview][0] ?? null;
   const focusedCurve = windowMode === "cumulative"
@@ -291,15 +294,16 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
             selectedSlug={focusSlug}
             onInspect={setFocusSlug}
             evidenceLabel={windowMode === "cumulative" ? "HISTORICAL VIRTUAL" : "SESSION VIRTUAL"}
-            renderDetail={() => <><CurrentEvidenceCard
-              selectedSlug={focusSlug}
-              executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted}
-              comparison={focusedComparison}
-              state={shadowResearch.currentExecutedState}
-              error={shadowResearch.currentExecutedError}
-              truncated={shadowResearch.currentExecutedTruncated}
-            /><DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
+            renderDetail={() => <><DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
               <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
+              <CurrentEvidenceCard
+                selectedSlug={focusSlug}
+                executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted}
+                comparison={focusedComparison}
+                state={shadowResearch.currentExecutedState}
+                error={shadowResearch.currentExecutedError}
+                truncated={shadowResearch.currentExecutedTruncated}
+              />
               <ChannelDryPowderCurve curve={focusedCurve} />
               <ChannelManagerEvidencePanel
                 evidence={focusedManagerEvidence}

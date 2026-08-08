@@ -7,6 +7,7 @@ import { PnlPanel } from "@/components/console/PnlPanel";
 import { ForensicsPanel } from "@/components/console/ForensicsPanel";
 import { REVIEW_SECTIONS, type ReviewSection } from "@/lib/perform/reviewWorkspace";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
   const [section, setSection] = useState<ReviewSection>("tape");
@@ -37,6 +38,7 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
           ))}
         </nav>
       </header>
+      <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="review" />
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>
         {section === "tape" && (

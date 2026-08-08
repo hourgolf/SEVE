@@ -8,6 +8,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { computeNetExposure } from "@/lib/desk/netExposure";
 import { signedUsd } from "@/lib/format";
 import { derivePositionsWorkspace } from "@/lib/perform/derivePositionsWorkspace";
+import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 export function FolioBookDesktop({ surface }: { surface: SurfaceProps }) {
   const exposure = computeNetExposure(surface.feed.positions, surface.liveMarks);
@@ -24,6 +25,7 @@ export function FolioBookDesktop({ surface }: { surface: SurfaceProps }) {
           <span><small>UNREALIZED</small><b className={unrealized < 0 ? "neg" : unrealized > 0 ? "pos" : ""}>{signedUsd(unrealized)}</b></span>
         </div>
       </header>
+      <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="positions" channelSlugs={surface.feed.positions.map((position) => position.strategist_slug)} />
       <BrokerReconciliationStrip model={surface.opsReadiness} />
       <div className="folio-book-grid">
         <section className="folio-book-open">

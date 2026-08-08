@@ -7,6 +7,7 @@ import { PerformMarketsWorkspace } from "@/components/perform/PerformMarketsWork
 import { deriveSentinelDigestReceipt, SentinelWorkspace } from "@/components/perform/SentinelWorkspace";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { signedUsd } from "@/lib/format";
+import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 function WorkspaceTitle({ eyebrow, title, detail, stats }: {
   eyebrow: string;
@@ -52,6 +53,7 @@ export function FolioReviewDesktop({ surface }: { surface: SurfaceProps }) {
       { label: "REALIZED", value: signedUsd(realized), tone: realized < 0 ? "neg" : realized > 0 ? "pos" : "" },
       { label: "CHAINS", value: surface.opsReadiness.chains.length },
     ]} />
+    <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="review" />
     <div className="folio-native-body"><EventTapeWorkspace events={surface.data.events} health={surface.data.readHealth.events} strategists={surface.view.desk.strategists} readiness={surface.opsReadiness} /></div>
   </div>;
 }

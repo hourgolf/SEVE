@@ -7,6 +7,7 @@ import { signedUsd, timeOfDay } from "@/lib/format";
 import { derivePositionsWorkspace } from "@/lib/perform/derivePositionsWorkspace";
 import { BrokerReconciliationStrip } from "@/components/ops/OpsReadinessPanel";
 import { SeveMetricStrip, SeveWorkspaceHeader, type SeveMetricTone } from "@/components/ui/Seve909";
+import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 const money = (value: number) => Math.abs(value) >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
 const rootOf = (occ: string) => occ.match(/^([A-Z]+)\d/)?.[1] ?? "?";
@@ -122,6 +123,7 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
         title="POSITIONS"
         boundary="PAPER · CONFIRM TO CLOSE"
       />
+    <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="positions" channelSlugs={surface.feed.positions.map((position) => position.strategist_slug)} />
     {showReconciliation && <BrokerReconciliationStrip model={surface.opsReadiness} />}
     {isQuietBook ? <div className="pf-positions-empty" role="status"><b>NO OPEN POSITIONS</b><span>No session exits</span></div> : <>
     <SeveMetricStrip metrics={[
