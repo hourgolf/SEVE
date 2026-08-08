@@ -165,6 +165,8 @@
     "research-channel-registry-selftest": "tsx lib/channels/researchChannelRegistry.selftest.ts",
     "research-channel-preregistration-selftest": "tsx lib/channels/researchChannelPreregistration.selftest.ts",
     "decision-atlas-promotion-candidate-selftest": "tsx lib/channels/decisionAtlasPromotionCandidate.selftest.ts",
+    "prepare-breakout-promotion": "tsx scripts/prepare-breakout-promotion.ts",
+    "prepare-breakout-promotion-selftest": "tsx scripts/prepare-breakout-promotion.selftest.ts",
     "weekend-decision-preparation-selftest": "tsx lib/research/weekendDecisionPreparation.selftest.ts",
     "sunday-decision-packet": "tsx scripts/sunday-decision-packet.ts",
     "research-channel-preregistration": "tsx --env-file=.env.local scripts/preregister-research-channel-inventory.ts",
