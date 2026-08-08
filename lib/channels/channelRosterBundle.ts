@@ -3,6 +3,7 @@ import {
   compileReleaseManifest,
   contentHash,
   projectAdmissionPolicyReentry,
+  type AdmissionPolicySpec,
   type ChannelSpecVersion,
   type ChannelSpecVersionDraft,
   type CompiledReleaseManifest,
@@ -25,6 +26,7 @@ export interface ChannelRosterTarget {
   executionPosture?: "paper" | "observe-only";
   quantity?: number;
   maxRiskUsd?: number;
+  collisionDomain?: string;
 }
 
 export interface ChannelRosterBundleDraft {
@@ -32,6 +34,7 @@ export interface ChannelRosterBundleDraft {
   baseManifestId: string;
   baseManifestContentHash: string;
   changes: ChannelRosterTarget[];
+  admissionPolicyUpserts?: AdmissionPolicySpec[];
   reason: string;
   evidenceRefs: string[];
   operatorId: string;
@@ -40,7 +43,7 @@ export interface ChannelRosterBundleDraft {
 
 export interface ChannelRosterBundleDiff {
   slug: string;
-  source: "active-manifest" | "research-registry";
+  source: "active-manifest" | "research-registry" | "admission-policy";
   fields: Array<{ field: string; before: string; after: string }>;
 }
 
@@ -81,7 +84,7 @@ function fieldsChanged(
   before: ChannelSpecVersionDraft,
   after: ChannelSpecVersionDraft,
 ): ChannelRosterBundleDiff["fields"] {
-  return ["executionPosture", "quantity", "maxDebitUsd", "riskLimits"]
+  return ["executionPosture", "quantity", "maxDebitUsd", "riskLimits", "collisionDomain"]
     .map((field) => ({
       field,
       before: canonicalJson(
@@ -107,12 +110,10 @@ function applyTarget(input: {
     : 0;
   const maxRiskUsd = input.target.maxRiskUsd
     ?? Math.round(maxDebitUsd * priorRatio * 100) / 100;
-  return {
+  const candidate: ChannelSpecVersionDraft = {
     ...structuredClone(input.source),
     id: `spec:bundle:${input.bundle.id}:${input.source.slug}`,
     parentVersionId: input.source.id,
-    executionPosture: input.target.executionPosture
-      ?? input.source.executionPosture,
     quantity,
     maxDebitUsd,
     riskLimits: {
@@ -120,12 +121,18 @@ function applyTarget(input: {
       maxDebitUsd,
       maxRiskUsd,
     },
+    collisionDomain: input.target.collisionDomain
+      ?? input.source.collisionDomain,
     validFrom: input.bundle.createdAt,
     validUntil: null,
     createdAt: input.bundle.createdAt,
     createdBy: `operator:${input.bundle.operatorId}`,
     status: "draft",
   };
+  const posture = input.target.executionPosture ?? input.source.executionPosture;
+  if (posture != null) candidate.executionPosture = posture;
+  else delete candidate.executionPosture;
+  return candidate;
 }
 
 export function buildChannelRosterBundlePreview(input: {
@@ -194,7 +201,7 @@ export function buildChannelRosterBundlePreview(input: {
     if (target.membership === "exclude") {
       if (!active) blockers.push(`bundle:exclude_not_active:${target.slug}`);
       else if (target.executionPosture != null || target.quantity != null
-          || target.maxRiskUsd != null) {
+          || target.maxRiskUsd != null || target.collisionDomain != null) {
         blockers.push(`bundle:exclude_must_be_standalone:${target.slug}`);
       } else {
         removals.add(active.id);
@@ -211,7 +218,7 @@ export function buildChannelRosterBundlePreview(input: {
       continue;
     }
     if (target.executionPosture == null && target.quantity == null
-        && target.maxRiskUsd == null) {
+        && target.maxRiskUsd == null && target.collisionDomain == null) {
       blockers.push(`bundle:empty_change:${target.slug}`);
       continue;
     }
@@ -268,9 +275,30 @@ export function buildChannelRosterBundlePreview(input: {
       blockers.push(`bundle:paper_collection_not_active:${spec.slug}`);
     }
   }
+  const policyById = new Map(input.active.manifest.admissionPolicies.map((policy) =>
+    [policy.id, structuredClone(policy)]));
+  const seenPolicyUpserts = new Set<string>();
+  for (const policy of input.draft.admissionPolicyUpserts ?? []) {
+    if (!policy.id || seenPolicyUpserts.has(policy.id)) {
+      blockers.push(`bundle:admission_policy_duplicate:${policy.id || "missing"}`);
+      continue;
+    }
+    seenPolicyUpserts.add(policy.id);
+    const prior = policyById.get(policy.id) ?? null;
+    policyById.set(policy.id, structuredClone(policy));
+    diffs.push({
+      slug: `admission:${policy.id}`,
+      source: "admission-policy",
+      fields: [{
+        field: "policy",
+        before: canonicalJson(prior),
+        after: canonicalJson(policy),
+      }],
+    });
+  }
   const domains = new Set(specs.map((spec) => spec.collisionDomain));
   const admissionPolicies = projectAdmissionPolicyReentry(
-    input.active.manifest.admissionPolicies.map((policy) => ({
+    [...policyById.values()].map((policy) => ({
       ...policy,
       priorityBySlug: Object.fromEntries(specs
         .filter((spec) => spec.collisionDomain === policy.id)
@@ -292,6 +320,7 @@ export function buildChannelRosterBundlePreview(input: {
     id: input.draft.id,
     baseManifestContentHash: input.draft.baseManifestContentHash,
     changes: input.draft.changes,
+    admissionPolicyUpserts: input.draft.admissionPolicyUpserts ?? [],
   });
   const flat = input.live.complete
     && input.live.openOrders === 0
