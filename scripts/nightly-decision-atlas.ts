@@ -24,6 +24,7 @@ if (Boolean(virtualCatchupFile) !== Boolean(virtualCatchupManifest)) {
 const ledgerDir = resolve(outputRoot, "profitability");
 const atlasDir = resolve(outputRoot, "atlas");
 const weeklyDir = resolve(outputRoot, "weekly");
+const briefsDir = resolve(outputRoot, "briefs");
 mkdirSync(outputRoot, { recursive: true });
 const run = (script: string, args: string[]): void => {
   execFileSync(process.execPath, ["--import", "tsx", script, ...args], { stdio: "inherit", env: process.env });
@@ -37,4 +38,7 @@ run("scripts/decision-atlas.ts", [...envArgs, "--through", through,
     ? ["--virtual-catchup-file", resolve(virtualCatchupFile), "--virtual-catchup-manifest", resolve(virtualCatchupManifest)] : [])]);
 run("scripts/weekly-readout.ts", ["--through", through, "--ledger-file", resolve(ledgerDir, "ledger.json"),
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--atlas-file", resolve(atlasDir, "atlas.json"), "--out-dir", weeklyDir]);
+run("scripts/channel-decision-briefs.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
+  "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--weekly-file", resolve(weeklyDir, "weekly.json"),
+  "--out-dir", briefsDir]);
 console.log(`nightly-decision-atlas: PASS · local artifacts only · ${outputRoot}`);

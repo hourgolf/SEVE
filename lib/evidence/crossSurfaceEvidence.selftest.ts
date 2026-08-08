@@ -36,6 +36,7 @@ assert.equal(evidenceEnvelope({
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
 const atlasCard = read("../../components/research/DecisionAtlasPreviewCard.tsx");
+const atlasHook = read("../../hooks/useDecisionAtlasReports.ts");
 const currentCard = read("../../components/research/CurrentEvidenceCard.tsx");
 const studioPanel = read("../../components/studio/StudioModules.tsx");
 const review = read("../../hooks/useWindowedPnl.ts");
@@ -50,6 +51,10 @@ const dayReport = read("../../scripts/day-report.ts");
 const forensicsPanel = read("../../components/console/ForensicsPanel.tsx");
 assert.match(atlasCard, /HISTORICAL VIRTUAL/);
 assert.match(atlasCard, /NOT EXECUTED/);
+assert.match(atlasCard, /brief\.executed\.label/);
+assert.match(atlasCard, /Executed and virtual results are never pooled/);
+assert.match(atlasHook, /decision_atlas_channel_reports/);
+assert.match(atlasHook, /useRefreshTick/);
 assert.match(currentCard, /CURRENT EXECUTED/);
 assert.match(currentCard, /SAME-CLOCK VIRTUAL/);
 assert.match(studioPanel, /GROSS \/ LOGICAL TRADE/);

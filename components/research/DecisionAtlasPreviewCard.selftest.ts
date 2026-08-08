@@ -12,6 +12,15 @@ const workspaceCss = read("../../app/seve-909.css");
 
 assert.match(card, /DECISION ATLAS · HISTORICAL VIRTUAL/);
 assert.match(card, /DECISION ATLAS · PROSPECTIVE TEST/);
+assert.match(card, /DECISION ATLAS · NIGHTLY PAIRED/);
+assert.match(card, /Full paired review/);
+assert.match(card, /brief\.executed\.label/);
+assert.match(card, /brief\.historicalVirtual\.label/);
+assert.match(card, /Entry frequency/);
+assert.match(card, /Native exit/);
+assert.match(card, /Manager alternatives/);
+assert.match(card, /Capacity \+ collisions/);
+assert.match(card, /brief\.metrics\.map/);
 assert.match(card, /CONTROL UNCHANGED/);
 assert.match(card, /NOT EXECUTED/);
 assert.match(card, /model\.metrics\.map/);
@@ -34,6 +43,8 @@ assert(inspector.indexOf("<DecisionAtlasPreviewCard") < inspector.indexOf("<deta
 assert.match(css, /data-skin="blackout"/);
 assert.match(css, /@media\(max-width:760px\)/);
 assert.match(css, /grid-template-columns:repeat\(5/);
+assert.match(css, /\.atlas-brief-layers/);
+assert.match(css, /\.atlas-capacity-strip/);
 assert.match(css, /var\(--surface-panel/,
   "cream mode must inherit the chassis panel instead of a dark LCD token");
 assert.doesNotMatch(css, /var\(--lcd-2/,

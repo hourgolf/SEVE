@@ -179,6 +179,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   const totals = laneTotals(filteredRows);
   const atlasReads = rows.map((row) => ({
     slug: row.slug,
+    label: surface.decisionAtlas.bySlug[row.slug]?.recommendation.label ?? null,
     read: buildDecisionAtlasPreview({
       summary: row,
       dryPowder: windowMode === "cumulative"
@@ -188,8 +189,12 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
       retuneEvidence: shadowResearch.boundedRetunes.experiments.find((experiment) => experiment.definition.channel === row.slug)?.evidence,
     }),
   }));
-  const atlasWorking = atlasReads.filter((item) => item.read.label === "DARK TEST" || item.read.label === "TEST CAPACITY" || item.read.label === "REVIEW MANAGER");
-  const atlasReview = atlasReads.filter((item) => item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT");
+  const atlasWorking = atlasReads.filter((item) => item.label
+    ? /PROMOTION|SIZE|MANAGER|TEST/.test(item.label)
+    : item.read.label === "DARK TEST" || item.read.label === "TEST CAPACITY" || item.read.label === "REVIEW MANAGER");
+  const atlasReview = atlasReads.filter((item) => item.label
+    ? /REVIEW ENTRY|REVIEW EXIT|RETIREMENT/.test(item.label)
+    : item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT");
   const atlasNext = [...atlasWorking, ...atlasReview][0] ?? null;
   const focusedCurve = windowMode === "cumulative"
     ? shadowResearch.dryPowderBySlug[focusSlug]
@@ -266,7 +271,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
           <span><small>WORKING</small><b>{atlasWorking.length}</b></span>
           <span><small>NEEDS REVIEW</small><b>{atlasReview.length}</b></span>
           <span><small>COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></span>
-          <span><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.read.label}` : "NO CLEAR LEAD"}</b></span>
+          <span><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></span>
         </section>
         <section className="srw-native">
           <header><span><b>{nativeTitle}</b><small>every table row is virtual · hypothetical entries · not portfolio P&amp;L</small></span>
@@ -293,7 +298,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
               state={shadowResearch.currentExecutedState}
               error={shadowResearch.currentExecutedError}
               truncated={shadowResearch.currentExecutedTruncated}
-            /><DecisionAtlasPreviewCard summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
+            /><DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
               <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
               <ChannelDryPowderCurve curve={focusedCurve} />
               <ChannelManagerEvidencePanel

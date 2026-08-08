@@ -21,7 +21,7 @@ import type { StudioScope } from "@/components/studio/StudioFleet";
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, channelWorkspace, channelControlPlane, shadowResearch, managerEvidence }: SurfaceProps) {
+export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, channelWorkspace, channelControlPlane, shadowResearch, managerEvidence, decisionAtlas }: SurfaceProps) {
   void symbol;
   const { desk } = view;
 
@@ -65,7 +65,7 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
         onSelect={(slug) => setSelSlug((current) => current === slug ? null : slug)}
       />
 
-      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} controlPlane={channelControlPlane} dryPowder={selectedRow ? shadowResearch.dryPowderBySlug[selectedRow.channel.slug] : undefined} shadowSummary={selectedRow ? shadowResearch.cumulative?.dark.find((item) => item.slug === selectedRow.channel.slug) : undefined} managerEvidence={selectedRow ? managerEvidence.book?.channels[selectedRow.channel.slug] : undefined} researchEvidence={shadowResearch} onClose={() => setSelSlug(null)} />
+      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} controlPlane={channelControlPlane} dryPowder={selectedRow ? shadowResearch.dryPowderBySlug[selectedRow.channel.slug] : undefined} shadowSummary={selectedRow ? shadowResearch.cumulative?.dark.find((item) => item.slug === selectedRow.channel.slug) : undefined} managerEvidence={selectedRow ? managerEvidence.book?.channels[selectedRow.channel.slug] : undefined} decisionBrief={selectedRow ? decisionAtlas.bySlug[selectedRow.channel.slug] : undefined} researchEvidence={shadowResearch} onClose={() => setSelSlug(null)} />
 
       <StudioBand
         fund={desk.fund}

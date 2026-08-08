@@ -24,10 +24,11 @@ import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlane
 import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } from "@/lib/research/shadowResearch";
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
+import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, researchEvidence, onClose }: {
+export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, onClose }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
@@ -36,6 +37,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   dryPowder?: DryPowderCurve;
   shadowSummary?: ShadowChannelSummary;
   managerEvidence?: ChannelManagerEvidence;
+  decisionBrief?: ChannelDecisionBrief;
   researchEvidence?: ShadowResearch;
   onClose?: () => void;
 }) {
@@ -128,7 +130,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
       {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
         state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
         truncated={researchEvidence.currentExecutedTruncated} compact />}
-      <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
+      <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
       <div className="mixer-deck">
         <details className="channel-disclosure">
           <summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary>
