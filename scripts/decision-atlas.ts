@@ -28,6 +28,7 @@ import {
   renderDecisionAtlasProposalPacket,
 } from "../lib/research/decisionAtlasReport";
 import { createServerSupabaseClient } from "./serverSupabase";
+import { etSessionCloseUtc } from "../lib/research/afterCloseResearch";
 
 const arg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
@@ -211,7 +212,10 @@ function renderDossier(channel: string, atlas: ReturnType<typeof buildDecisionAt
 async function main(): Promise<void> {
   if (!existsSync(ledgerFile)) throw new Error(`canonical profitability artifact not found: ${ledgerFile}`);
   const artifact = JSON.parse(readFileSync(ledgerFile, "utf8")) as ProfitabilityArtifact;
-  const generatedAt = arg("generated-at") ?? new Date().toISOString();
+  // Freeze the default evidence clock at the selected session close. Wall-clock
+  // generation time belongs in the receipt, not in decision-bearing payloads:
+  // repeated runs through the same session must keep the same semantic hashes.
+  const generatedAt = arg("generated-at") ?? etSessionCloseUtc(throughSession);
   if (!Number.isFinite(Date.parse(generatedAt))) throw new Error("generated-at must be an ISO timestamp");
   let snapshot: DecisionAtlasSourceSnapshot;
   let timingsMs: Record<string, number>;

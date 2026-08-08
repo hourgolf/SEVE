@@ -17,6 +17,8 @@ assert.match(pkg.scripts["decision-atlas-selftest"], /boundedRetuneSignalStamp\.
 assert.match(runner, /allowedMethods:\s*\["SELECT", "GET"\]/);
 assert.match(runner, /productionWrites:\s*0/);
 assert.match(runner, /schemaVersion:\s*3/);
+assert.match(runner, /arg\("generated-at"\) \?\? etSessionCloseUtc\(throughSession\)/,
+  "decision-bearing artifacts must not use a wall-clock generation timestamp by default");
 assert.match(runner, /scheduleActivationAuthorized:\s*false/);
 assert.match(runner, /activeChannelSpecDatabaseIdsByVersionKey/,
   "nightly snapshot must preserve the active database spec identity per channel");
