@@ -109,7 +109,7 @@ export function NativeTable({
   evidenceLabel: EvidenceLabel;
 }) {
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<ShadowChannelSortKey>("average");
+  const [sortKey, setSortKey] = useState<ShadowChannelSortKey>("paths");
   const [sortDirection, setSortDirection] = useState<ShadowChannelSortDirection>("desc");
   const [showAll, setShowAll] = useState(false);
   const selectedCount = rows.filter((row) => !excluded.includes(row.slug)).length;
@@ -144,15 +144,15 @@ export function NativeTable({
   return <div className="srw-table">
     <div className="srw-table-controls">
       <label><span>FILTER</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="channel name" aria-label="Filter research channels" /></label>
-      <label><span>SORT</span><select value={sortKey} onChange={(event) => chooseSort(event.target.value as ShadowChannelSortKey)} aria-label="Sort research channels"><option value="channel">CHANNEL</option><option value="paths">PATHS</option><option value="win">WIN</option><option value="average">TYPICAL/CT</option><option value="total">TOTAL/CT</option><option value="mfe">BEST MOVE</option><option value="exits">EXITS</option></select></label>
+      <label><span>SORT</span><select value={sortKey} onChange={(event) => chooseSort(event.target.value as ShadowChannelSortKey)} aria-label="Sort research channels"><option value="channel">CHANNEL</option><option value="paths">EVIDENCE</option><option value="win">POSITIVE</option><option value="average">TYPICAL</option><option value="total">PATH SUM</option><option value="mfe">BEST MOVE</option><option value="exits">EXITS</option></select></label>
       <button type="button" className="srw-sort-direction" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} aria-label={`Change sort direction, currently ${sortDirection}ending`}>{sortDirection === "asc" ? "ASC ▲" : "DESC ▼"}</button>
       {query ? <em>{visibleRows.length}/{rows.length} MATCH</em> : null}
       {!query && visibleRows.length > DEFAULT_CHANNEL_LIMIT ? <button type="button" className="srw-row-limit" aria-expanded={showAll} onClick={() => setShowAll((current) => !current)}>{showAll ? `SHOW TOP ${DEFAULT_CHANNEL_LIMIT}` : `SHOW ALL ${visibleRows.length}`}</button> : null}
     </div>
-    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "PATHS")}</span><span>{sortLabel("win", "WIN")}</span><span>{sortLabel("average", "TYPICAL/CT")}</span><span>{sortLabel("total", "TOTAL/CT")}</span><span>{sortLabel("mfe", "BEST MOVE")}</span><span>{sortLabel("exits", "EXITS")}</span></div>
+    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL")}</span><span>{sortLabel("paths", "EVIDENCE")}</span><span>{sortLabel("win", "POSITIVE")}</span><span>{sortLabel("average", "TYPICAL")}</span><span>{sortLabel("total", "PATH SUM")}</span><span>{sortLabel("mfe", "BEST MOVE")}</span><span>{sortLabel("exits", "EXITS")}</span></div>
     {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : displayedRows.map((row) => <Fragment key={row.slug}>
-      <div className={`srw-row${selectedSlug === row.slug ? " selected" : ""}`}>
-        <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span className="srw-channel-identity">{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}<small>{evidenceLabel} · THRU {shortSession(shadowSessionDate(row.lastAt))}</small></span></b><span className="srw-cell-paths">{row.scored}/{row.paths}</span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
+      <div className={`srw-row evidence-${row.scored >= 10 ? "established" : row.scored >= 5 ? "building" : "low"}${selectedSlug === row.slug ? " selected" : ""}`}>
+        <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span className="srw-channel-identity">{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}<small>{evidenceLabel} · THRU {shortSession(shadowSessionDate(row.lastAt))}</small></span></b><span className="srw-cell-paths"><b>{row.scored}/{row.paths}</b><small>{row.scored >= 10 ? "ESTABLISHED" : row.scored >= 5 ? "BUILDING" : "LOW SAMPLE"}</small></span><span className="srw-cell-win">{percent(row.winners, row.scored)}</span>
         <strong className={`srw-cell-avg ${(row.typicalPerPath ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.typicalPerPath)}</strong>
         <span className="srw-cell-total">{money(row.pnlPerContract)}</span><span className="srw-cell-mfe">{row.averageMfePct == null ? "—" : `${row.averageMfePct}%`}</span>
         <span className="srw-cell-exits">{row.targets}T · {row.stops}S · {row.flattens}B</span>
@@ -271,17 +271,17 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
       <span className={`srw-read ${shadowResearch.state}${shadowResearch.truncated ? " partial" : ""}`}>{shadowResearch.truncated ? "PARTIAL" : shadowResearch.state.toUpperCase()}</span>
     </div>
     {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>
-      <span><small>RUNNING VIRTUAL · {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shadowResearch.cohortStart}</small>
-        <b className={running.pnl >= 0 ? "pos" : "neg"}>{money(running.pnl)} TOTAL/CT</b></span>
-      <em>{windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} strategies · ` : ""}{running.scored} scored · {shadowResearch.cumulative.sessionCount} sessions · {percent(running.winners, running.scored)} win</em>
+      <span><small>VIRTUAL PATH SUM · {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shortSession(shadowResearch.cohortStart)}</small>
+        <b>{money(running.pnl)}/ct PATH SUM</b></span>
+      <em>Not portfolio P&amp;L · overlapping hypothetical paths are counted separately · {windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} channels · ` : ""}{running.scored.toLocaleString()} paths · {shadowResearch.cumulative.sessionCount} sessions</em>
     </div> : null}
     {shadowResearch.state === "loading" || shadowResearch.state === "idle" ? <div className="srw-empty">loading bounded research ledger…</div>
       : shadowResearch.state === "error" ? <div className="srw-empty error">research read failed · {shadowResearch.error}</div>
       : !selected ? <div className="srw-empty">no reconstructed virtual paths since the Day 1 cohort</div>
       : <>
         <section className="srw-atlas-brief" aria-label="Decision Atlas research summary">
-          <span><small>DECISION ATLAS</small><b>WHAT DESERVES REVIEW?</b></span>
-          <span><small>WORKING</small><b>{atlasWorking.length}</b></span>
+          <span><small>DECISION ATLAS</small><b>WHERE SHOULD WE LOOK NEXT?</b></span>
+          <span><small>PROMISING</small><b>{atlasWorking.length}</b></span>
           <span><small>NEEDS REVIEW</small><b>{atlasReview.length}</b></span>
           <span><small>COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></span>
           <span><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></span>

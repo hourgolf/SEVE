@@ -60,8 +60,8 @@ function Shell({ folded, onFold, dateTag, children, foldable = true }: { folded:
   return (
     <div className={`panel${folded ? " folded" : ""}`}>
       <div className="phead">
-        <span className="t">Shadow Book</span>
-        <span className="x">would-haves vs the live book{dateTag}</span>
+        <span className="t">Research Questions</span>
+        <span className="x">hypothetical paths compared with actual outcomes{dateTag}</span>
         {foldable && <button type="button" className="pfold" onClick={onFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>}
       </div>
       <div className="pbody">{children}</div>
@@ -70,15 +70,15 @@ function Shell({ folded, onFold, dateTag, children, foldable = true }: { folded:
 }
 
 // One instrument = one glance row (chevron · label · mid · stat) + a folded breakdown.
-function Inst({ k, label, mid, stat, children }: { k: string; label: string; mid: React.ReactNode; stat: React.ReactNode; children?: React.ReactNode }) {
+function Inst({ k, label, question, mid, stat, children }: { k: string; label: string; question: string; mid: React.ReactNode; stat: React.ReactNode; children?: React.ReactNode }) {
   const [folded, toggle] = useFold(`sb-${k}`, true);
   return (
     <>
       <button type="button" className="sb-row" onClick={toggle} aria-expanded={!folded}>
         <span className="sb-ch">{folded ? "▸" : "▾"}</span>
-        <span className="sb-lbl">{label}</span>
-        <span className="sb-mid">{mid}</span>
-        <span className="sb-stat">{stat}</span>
+        <span className="sb-lbl"><b>{label}</b><small>{question}</small></span>
+        <span className="sb-mid"><small>FINDING</small><span>{mid}</span></span>
+        <span className="sb-stat"><small>WHY IT MATTERS</small><span>{stat}</span></span>
       </button>
       {!folded && children != null && <div className="sb-brk">{children}</div>}
     </>
@@ -141,17 +141,17 @@ export function ForensicsPanel({
     <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}>
       {/* ── ONE-ACCOUNT — the dream team in a single live-sized cash pool ── */}
       <Inst
-        k="oneacct" label="One-acct"
+        k="oneacct" label="Account capacity" question="Would one paper account block otherwise useful trades?"
         mid={oas && oas.curve.length > 0 ? (
           <>
             <NavSparkline pts={oas.curve} base={oas.params.equity} />
             {oas.curve.filter((p) => p.rej + p.dwn > 0).length === 0
               ? <span className="pos">cash never bound</span>
-              : <span className="neg">contention {oas.curve.filter((p) => p.rej + p.dwn > 0).length}/{oas.curve.length}d</span>}
+              : <span className="neg">room ran out in {oas.curve.filter((p) => p.rej + p.dwn > 0).length} of {oas.curve.length} sessions</span>}
           </>
         ) : <span className="mut">accruing — first curve at the next post-close publish</span>}
         stat={oas && oas.curve.length > 0 ? (
-          <span className={cls(oas.totalPnl)}>{(100 * oas.totalPnl / oas.params.equity) >= 0 ? "+" : ""}{(100 * oas.totalPnl / oas.params.equity).toFixed(1)}% <span className="mut">${oas.navEnd.toLocaleString()}</span></span>
+          <span className={oas.curve.some((p) => p.rej + p.dwn > 0) ? "neg" : "pos"}>{oas.curve.filter((p) => p.rej + p.dwn > 0).length} of {oas.curve.length} sessions needed more room</span>
         ) : <span className="mut">—</span>}
       >
         {oas && oas.curve.length > 0 && (
@@ -210,7 +210,7 @@ export function ForensicsPanel({
 
       {/* ── GIVE-BACK — is the desk keeping its peaks? ── */}
       <Inst
-        k="giveback" label="Give-back"
+        k="giveback" label="Profit protection" question="How much of each trade's best move did the exit retain?"
         mid={gb && gb.capturePct != null ? (
           <>
             {trend.length >= 2 && <CaptureSparkline pts={trend} />}
@@ -245,7 +245,7 @@ export function ForensicsPanel({
 
       {/* ── OVERRIDE — manual close vs ride-to-close ── */}
       <Inst
-        k="override" label="Override"
+        k="override" label="Manual exits" question="Did manual closes beat leaving the original exit in control?"
         mid={sc.n > 0
           ? <span>beat <b>{sc.wins}/{sc.n}</b> <span className="mut">manual vs ride{sc.span ? ` · ${sc.span}` : ""}</span></span>
           : <span className="mut">no overrides recorded yet</span>}
@@ -289,7 +289,7 @@ export function ForensicsPanel({
 
       {/* ── BENCHED — did the cut channels earn their bench? ── */}
       <Inst
-        k="benched" label="Benched"
+        k="benched" label="Benched channels" question="Would removed channels have added value if they were still collecting?"
         mid={(() => {
           if (showBvToday) {
             if (!bvl?.sameWeek) return <span className="mut">same-week only (7d quotes)</span>;
@@ -301,7 +301,7 @@ export function ForensicsPanel({
         stat={(() => {
           const tot = showBvToday ? (ranAny ? bvl!.benchedTotal : null) : benchedCum!.benchedTotal;
           if (tot == null) return <span className="mut">—</span>;
-          return tot < 0 ? <span className="pos">cull ✓</span> : <span className="neg">would&apos;ve added</span>;
+          return tot < 0 ? <span className="pos">Removing them avoided additional losses</span> : <span className="neg">Their missed opportunity deserves review</span>;
         })()}
       >
         <div className="sb-toggle-row">
@@ -338,7 +338,7 @@ export function ForensicsPanel({
 
       {/* ── RATCHET — the virtual arm-high third arm (actual│ratchet per day) ── */}
       <Inst
-        k="ratchet" label="Ratchet"
+        k="ratchet" label="Trailing-stop replay" question="Would protecting gains after a run-up improve the same trades?"
         mid={rs && rs.scored > 0 ? (
           <>
             <span className="sb-pairs" title="per session: actual (left, faded) vs ratchet (right) — height ∝ |P&L|">
@@ -357,8 +357,8 @@ export function ForensicsPanel({
         ) : <span className="mut">accruing — replays each twin/momo trade nightly</span>}
         stat={rs && rs.scored > 0 ? (
           rsSlots.length > 0
-            ? <span>{rsSlots.map((b) => { const r = b.arms.find((a) => a.name === "ratchet")?.usd ?? 0; const c = Math.max(...b.arms.filter((a) => a.name !== "ratchet").map((a) => a.usd)); return <span key={b.slug} className={cls(r - c)}>{b.slug} {signedUsd(r - c)} </span>; })}</span>
-            : <span className={cls(rs.deltaUsd)}>Δ {signedUsd(rs.deltaUsd)} <span className="mut">ceiling</span></span>
+            ? <span>{rsSlots.map((b) => { const r = b.arms.find((a) => a.name === "ratchet")?.usd ?? 0; const c = Math.max(...b.arms.filter((a) => a.name !== "ratchet").map((a) => a.usd)); const delta = r - c; return <span key={b.slug} className={cls(delta)}>{b.slug} {delta >= 0 ? "improved" : "worsened"} by ${Math.abs(Math.round(delta)).toLocaleString("en-US")} </span>; })}</span>
+            : <span className={cls(rs.deltaUsd)}>Replay {rs.deltaUsd >= 0 ? "improved" : "worsened"} results by ${Math.abs(Math.round(rs.deltaUsd)).toLocaleString("en-US")}</span>
         ) : <span className="mut">—</span>}
       >
         {rs && rs.scored > 0 && (
@@ -407,13 +407,13 @@ export function ForensicsPanel({
 
       {/* ── PYRAMID — live adds + would-be adds on V3/ALT winners ── */}
       <Inst
-        k="pyramid" label="Pyramid"
+        k="pyramid" label="Add-on sizing" question="Did strong continuations offer a useful second entry?"
         mid={ps.loading ? <span className="mut">loading…</span>
           : ps.error ? <span className="mut">couldn&apos;t load</span>
-          : <span>{ps.execs.length} live add{ps.execs.length === 1 ? "" : "s"} · {ps.events.length} would-be · 14d</span>}
+          : <span>{ps.execs.length + ps.events.length === 0 ? "No qualifying second entries in 14 days" : `${ps.execs.length} live second entries · ${ps.events.length} hypothetical`}</span>}
         stat={(ps.execs.length + ps.events.length) > 0
           ? <span className="pos">+{ps.execs.reduce((s, e) => s + e.addQty, 0)} live · ×{ps.byChannel.reduce((s, c) => s + c.contracts, 0)} shadow</span>
-          : <span className="mut">—</span>}
+          : <span className="mut">Keep collecting before judging add-on size</span>}
       >
         {ps.execs.length > 0 && (
           <div className="fx-rows">
@@ -443,18 +443,18 @@ export function ForensicsPanel({
 
       {/* ── VB BENCH — the vb-* virtual fleet (the old Lab panel, merged) ── */}
       <Inst
-        k="vbbench" label="VB Bench"
+        k="vbbench" label="Observe roster" question="Which research-only channels are producing repeatable opportunity?"
         mid={vb.loading ? <span className="mut">loading…</span>
           : vbTop.length === 0 ? <span className="mut">no reconstructions yet</span>
           : (
             <>
               {vbTop.slice(0, 2).map((b) => (
-                <span key={b.slug} className={`sb-chip ${cls(vbAvg(b))}`}>{b.slug.replace(/^vb-/, "")} {signedUsd(Math.round(vbAvg(b) * 10) / 10)}/ct avg{b.scored ? ` · ${Math.round((100 * b.wins) / b.scored)}%w` : ""}</span>
+                <span key={b.slug} className={`sb-chip ${cls(vbAvg(b))}`}>{b.slug.replace(/^vb-/, "")} {signedUsd(Math.round(vbAvg(b) * 10) / 10)} per contract{b.scored ? ` · ${Math.round((100 * b.wins) / b.scored)}% profitable` : ""}</span>
               ))}
-              {vbRed > 0 && <span className="mut">{vbRed} red</span>}
+              {vbRed > 0 && <span className="mut">{vbRed} losing</span>}
             </>
           )}
-        stat={<span className="mut">{vbShowToday ? `today` : `since ${vb.since ? shortDate(vb.since) : "—"}`}</span>}
+        stat={<span className={vbRed > 0 ? "neg" : "mut"}>{vbTop.length === 0 ? "No decision yet" : vbRed > 0 ? `${vbRed} losing channels still need review` : "No losing channel in this view"}</span>}
       >
         <div className="sb-toggle-row">
           <span className="roster-toggle sc-toggle" title="today's signals (ET) vs the accrued book">
@@ -475,7 +475,7 @@ export function ForensicsPanel({
         <div className="brkfoot">gate-shadow blocks: {vb.gateBlocks.scored}/{vb.gateBlocks.n} scored · Σ {signedUsd(Math.round(vb.gateBlocks.pnl))}/ct — K eval at ≥30</div>
       </Inst>
 
-      <div className="fx-foot">as of {asOf} ET · mid-basis + capital-blind would-haves — never an arm basis · one day = noise</div>
+      <div className="fx-foot">Updated {asOf} ET · hypothetical research only. These comparisons cannot change orders or configuration, and one session is not enough evidence.</div>
     </Shell>
   );
 }

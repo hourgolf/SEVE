@@ -92,7 +92,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
           <span role="columnheader">POSITION / SESSION ATTRIB</span>
           <span className="fc-risk" role="columnheader">RISK / TRADE</span>
           <span className="fc-signal" role="columnheader">DECISION</span>
-          <span className="fc-tune" role="columnheader">WHY ATTENTION</span>
+          <span className="fc-tune" role="columnheader">CONTEXT</span>
         </div>
         <div className="fleet-rows" role="rowgroup">
           {rows.map((row) => {
@@ -104,13 +104,11 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
               : passport?.lifecycle === "dark-evidence"
                 ? "OBSERVING"
                 : "UNVERIFIED";
-            const liveModeDetail = passport?.database.differsFromRuntime
-              ? "database differs · live mode wins"
-              : passport?.lifecycle === "paper-root"
-                ? passport.rootPolicy ? `paper · ${passport.rootPolicy.quantity} ct` : "paper entry allowed"
+            const liveModeDetail = passport?.lifecycle === "paper-root"
+                ? passport.rootPolicy ? `${passport.rootPolicy.quantity} ct paper` : "paper enabled"
                 : passport?.lifecycle === "dark-evidence"
-                  ? "research only · no paper entry"
-                  : "live authority not verified";
+                  ? "research only"
+                  : "not verified";
             return (
               <button
                 type="button"
@@ -123,7 +121,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                 <span className="fleet-channel" role="cell"><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></span>
                 <span className="fleet-runtime" role="cell">
                   <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{liveMode}</em>
-                  <small className={passport?.database.differsFromRuntime ? "diff" : ""}>{liveModeDetail}</small>
+                  <small>{liveModeDetail}</small>
                 </span>
                 <span className="fleet-position" role="cell">
                   <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : "—"}</b>
@@ -137,7 +135,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                   {row.attentionReasons.length
                     ? row.attentionReasons.slice(0, 3).map((reason) => <i key={reason}>{reason}</i>)
                     : passport?.database.differsFromRuntime
-                      ? <i className="runtime">database differs · live mode wins</i>
+                      ? <i className="runtime" title="The sealed runtime is active; the database label is supporting context only.">Runtime active · database label is stale</i>
                     : row.configDiffs.length
                       ? row.configDiffs.slice(0, 2).map((diff) => <i className="context" key={diff}>{diff}</i>)
                       : <span>nominal</span>}

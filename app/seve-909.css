@@ -1828,7 +1828,7 @@
 .m2-app:not(.folio-mobile) .srw-cell-paths::before { content: "PATHS"; }
 .m2-app:not(.folio-mobile) .srw-cell-win::before { content: "WIN"; }
 .m2-app:not(.folio-mobile) .srw-cell-avg::before { content: "TYPICAL/CT"; }
-.m2-app:not(.folio-mobile) .srw-cell-total::before { content: "TOTAL/CT"; }
+.m2-app:not(.folio-mobile) .srw-cell-total::before { content: "PATH SUM"; }
 .m2-app:not(.folio-mobile) .srw-cell-mfe::before { content: "BEST MOVE"; }
 .m2-app:not(.folio-mobile) .srw-cell-exits::before { content: "EXITS"; }
 .m2-app:not(.folio-mobile) .srw-current-evidence{min-width:0;display:grid;gap:8px;padding:10px;border:1px solid color-mix(in srgb,var(--909-positive-text) 38%,var(--909-border));border-radius:6px;background:var(--909-surface-panel-raised)}
