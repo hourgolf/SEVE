@@ -12,6 +12,7 @@ import { buildOperatorPaperCapacityEnvelope } from "../lib/channels/channelPortf
 import { previewChannelCollectionCull } from "../lib/channels/channelCollectionState";
 import { loadChannelCollectionInventory } from "../lib/channels/channelCollectionStateServer";
 import { buildResearchChannelRegistry } from "../lib/channels/researchChannelRegistry";
+import { buildDecisionAtlasBreakoutRegistration } from "../lib/channels/decisionAtlasPromotionCandidate";
 import { createServerSupabaseClient } from "./serverSupabase";
 
 const arg = (name: string, fallback: string): string => {
@@ -75,10 +76,11 @@ interface RegistrationRow {
   candidate_spec: unknown | null;
   cartridge: unknown | null;
 }
+interface WorkerRunRow { version: string; git_sha: string; last_heartbeat_at: string; ended_at: string | null }
 
 async function main(): Promise<void> {
   const sb = createServerSupabaseClient("decision-atlas-change-packets");
-  const [control, collectionInventory, equitiesRead, promotionRead, configRead] = await Promise.all([
+  const [control, collectionInventory, equitiesRead, promotionRead, configRead, workerRead] = await Promise.all([
     loadStoredReceiptBoundControlPlane(sb),
     loadChannelCollectionInventory(sb),
     sb.from("equity_snapshots").select("account_id,net_liquidation,captured_at")
@@ -91,9 +93,11 @@ async function main(): Promise<void> {
       "id", "slug", "name", "underlying", "account_id", "status", "is_active",
       "strategist_config(capital_pct,max_contracts,daily_stop_usd,premium_stop_pct,take_profit_pct,entry_dte,strike_offset,event_policy,pyramid_adds,stall_minutes,stall_max_favor_pct)",
     ].join(",")).eq("slug", promotionSlug ?? "__no_qualified_promotion__").maybeSingle(),
+    sb.from("worker_runs").select("version,git_sha,last_heartbeat_at,ended_at")
+      .is("ended_at", null).order("last_heartbeat_at", { ascending: false }).limit(20),
   ]);
   if (!control.compiled || control.state === "failed") throw new Error(`active control plane unavailable: ${control.error ?? control.state}`);
-  for (const [label, error] of [["equity", equitiesRead.error], ["promotion registration", promotionRead.error], ["promotion config", configRead.error]] as const) {
+  for (const [label, error] of [["equity", equitiesRead.error], ["promotion registration", promotionRead.error], ["promotion config", configRead.error], ["worker runtime", workerRead.error]] as const) {
     if (error) throw new Error(`${label} read failed: ${error.message}`);
   }
   const latest = new Map<string, EquityRow>();
@@ -137,9 +141,14 @@ async function main(): Promise<void> {
   });
 
   const bySlug = new Map(collectionInventory.map((item) => [item.channelSlug, item]));
-  const collectionPreview = previewChannelCollectionCull({
+  const newlyPauseableSlugs = pauseSlugs.filter((slug) => bySlug.get(slug)?.collectionState !== "paused");
+  const alreadyPausedSlugs = [...new Set([
+    ...preservedPauseSlugs,
+    ...pauseSlugs.filter((slug) => bySlug.get(slug)?.collectionState === "paused"),
+  ])].sort();
+  const collectionPreview = newlyPauseableSlugs.length ? previewChannelCollectionCull({
     inventory: collectionInventory,
-    changes: pauseSlugs.map((slug) => {
+    changes: newlyPauseableSlugs.map((slug) => {
       const current = bySlug.get(slug);
       if (!current) throw new Error(`collection inventory missing ${slug}`);
       return {
@@ -149,9 +158,9 @@ async function main(): Promise<void> {
         evidenceRefs: [ACTIONABLE_EVIDENCE, `decision-atlas:retire-review:${slug}`],
       };
     }),
-  });
-  if (collectionPreview.state !== "reviewable") throw new Error(`collection preview blocked: ${collectionPreview.blockers.join("; ")}`);
-  const preservedPauses = preservedPauseSlugs.map((slug) => {
+  }) : null;
+  if (collectionPreview && collectionPreview.state !== "reviewable") throw new Error(`collection preview blocked: ${collectionPreview.blockers.join("; ")}`);
+  const preservedPauses = alreadyPausedSlugs.map((slug) => {
     const current = bySlug.get(slug);
     if (!current || current.collectionState !== "paused") throw new Error(`${slug} is not currently paused`);
     return { channel: slug, state: current.collectionState, receiptId: current.currentReceiptId };
@@ -160,6 +169,7 @@ async function main(): Promise<void> {
   const active = control.compiled.channelSpecs.map((spec) => ({
     channel: spec.slug,
     account: spec.accountRole,
+    executionPosture: spec.executionPosture ?? "paper",
     quantityBefore: spec.quantity,
     quantityAfter: spec.quantity,
     decision: sizingProposals.some((proposal) => proposal.channel === spec.slug) ? "independent_size_proposal" : "stay_unchanged",
@@ -168,14 +178,62 @@ async function main(): Promise<void> {
     managerChanged: false,
     routingChanged: false,
   })).sort((left, right) => left.channel.localeCompare(right.channel));
+  const paperExecuting = active.filter((row) => row.executionPosture === "paper");
+  const observeOnly = active.filter((row) => row.executionPosture === "observe-only");
   const registration = promotionRead.data as RegistrationRow | null;
+  const currentWorker = ((workerRead.data ?? []) as WorkerRunRow[]).find((row) =>
+    !!row.version && /^[a-f0-9]{7,40}$/i.test(row.git_sha));
   const rawPromotion = configRead.data as Record<string, unknown> | null;
   const rawConfig = Array.isArray(rawPromotion?.strategist_config)
     ? rawPromotion?.strategist_config[0] as Record<string, unknown> | undefined
     : rawPromotion?.strategist_config as Record<string, unknown> | undefined;
+  const preparedRegistration = promotionSlug === "breakout" && currentWorker
+    ? buildDecisionAtlasBreakoutRegistration({
+      active: control.compiled,
+      runtimeVersion: currentWorker.version,
+      runtimeSourceCommit: currentWorker.git_sha,
+      registeredAt: generatedAt,
+      registeredBy: `operator:${deterministicUuid("operator:decision-atlas:proposal-only")}`,
+    })
+    : null;
+  const preparedRegistry = preparedRegistration ? buildResearchChannelRegistry([{
+    id: preparedRegistration.id,
+    channelId: preparedRegistration.channelId,
+    slug: preparedRegistration.slug,
+    registeredAt: preparedRegistration.registeredAt,
+    registeredBy: preparedRegistration.registeredBy,
+    cartridge: preparedRegistration.cartridge,
+    candidateSpec: preparedRegistration.candidateSpec,
+    declaredBlockers: preparedRegistration.declaredBlockers,
+  }]) : buildResearchChannelRegistry([]);
+  const promotionDraft: ChannelRosterBundleDraft | null = preparedRegistration ? {
+    id: deterministicUuid(`${control.compiled.manifest.contentHash}:promote:${promotionSlug}:2`),
+    baseManifestId: control.compiled.manifest.id,
+    baseManifestContentHash: control.compiled.manifest.contentHash,
+    changes: [{
+      slug: preparedRegistration.slug,
+      membership: "include",
+      executionPosture: "paper",
+      quantity: 2,
+    }],
+    reason: "Decision Atlas breakout promotion proposal: add the unmodified native signal at two paper contracts in LAB while preserving its independent native exit.",
+    evidenceRefs: [ACTIONABLE_EVIDENCE, "decision-atlas:promotion-replay:breakout:2026-08-07"],
+    operatorId: deterministicUuid("operator:decision-atlas:proposal-only"),
+    createdAt: generatedAt,
+  } : null;
+  const promotionPreview = promotionDraft ? buildChannelRosterBundlePreview({
+    active: control.compiled,
+    registry: preparedRegistry,
+    draft: promotionDraft,
+    envelope,
+    live: { complete: true, observedAt: generatedAt, openOrders: 0, positions: [] },
+    collectionStates,
+  }) : null;
   const promotion = {
     channel: promotionSlug,
-    decision: "prepared_but_blocked",
+    decision: promotionPreview?.state === "ready-for-worker-ack"
+      ? "prepared_requires_fresh_postclose_preview"
+      : "prepared_but_blocked",
     intendedChange: "add one paper-executing channel at two contracts",
     evidencePreservingConfiguration: {
       underlying: rawPromotion?.underlying ?? null,
@@ -199,11 +257,24 @@ async function main(): Promise<void> {
       hasCartridge: !!registration.cartridge,
       hasCandidateSpec: !!registration.candidate_spec,
     } : null,
-    placementDecisionRequired: {
-      controlDomain: "Candidate placement must be replayed against current same-clock, family, OCC, occupancy, and capital limits.",
-      recommendedDirection: `Prepare ${promotionSlug ?? "the candidate"} as a sealed limited-size experiment; preserve independent exits and re-run collision/capacity preview after its candidate spec exists.`,
+    preparedCandidate: preparedRegistration ? {
+      state: preparedRegistration.state,
+      blockers: preparedRegistration.blockers,
+      contentHash: preparedRegistration.contentHash,
+      account: "LAB",
+      quantity: 2,
+      executionPostureBeforeActivation: "observe-only",
+      executionAuthority: preparedRegistration.executionAuthority,
+      runtimeMutationAuthorized: preparedRegistration.runtimeMutationAuthorized,
+      orderAuthority: preparedRegistration.orderAuthority,
+    } : null,
+    placementDecision: {
+      result: "LAB, MORGUE, and FIRST-TEAM replay identically on the available history: 39 deployments, +$189.48 portfolio increment, zero added displaced peers, and $981.64 portfolio drawdown. LAB is selected operationally as the least-loaded research account, not because the replay proves it is economically superior.",
+      crossAccountSameOcc: "permitted_with_independent_exits",
       notSilentlyChosen: true,
     },
+    draft: promotionDraft,
+    preview: promotionPreview,
     activationReady: false,
   };
 
@@ -220,12 +291,14 @@ async function main(): Promise<void> {
       methods: ["SELECT", "GET"],
     },
     plainSummary: {
-      executingBefore: active.length,
-      executingAfterApprovedReadyChanges: active.length,
-      executingAfterBlockedPromotionResolved: active.length + (promotionSlug ? 1 : 0),
-      unchangedExecutingChannels: active.filter((row) => row.decision === "stay_unchanged").length,
+      paperExecutingBefore: paperExecuting.length,
+      observeOnlyBefore: observeOnly.length,
+      authorityRootsBefore: active.length,
+      paperExecutingAfterApprovedReadyChanges: paperExecuting.length,
+      paperExecutingAfterPreparedPromotionApplied: paperExecuting.length + (promotionPreview?.state === "ready-for-worker-ack" ? 1 : 0),
+      unchangedPaperExecutingChannels: paperExecuting.filter((row) => row.decision === "stay_unchanged").length,
       independentSizingProposals: sizePackets.length,
-      newlyPausedCollectors: collectionPreview.changes.length,
+      newlyPausedCollectors: collectionPreview?.changes.length ?? 0,
       alreadyPausedCollectorsPreserved: preservedPauses.length,
       entryChanges: 0,
       exitChanges: 0,
@@ -235,7 +308,7 @@ async function main(): Promise<void> {
     executingRoster: active,
     sizingPackets: sizePackets,
     collectionPacket: {
-      state: "prepared_reviewable",
+      state: collectionPreview ? "prepared_reviewable" : "no_new_changes",
       preview: collectionPreview,
       preservedExistingPauses: preservedPauses,
       applyAuthorized: false,
@@ -253,7 +326,7 @@ async function main(): Promise<void> {
     semanticHash: sha256(canonical(packet)),
     artifactHash: sha256(json),
     sourceManifest: control.compiled.manifest.contentHash,
-    collectionPreviewHash: collectionPreview.previewHash,
+    collectionPreviewHash: collectionPreview?.previewHash ?? null,
     sizingCandidates: sizePackets.map((item) => ({
       channel: item.channel,
       manifestHash: item.preview.candidate?.manifest.contentHash ?? null,
@@ -266,8 +339,8 @@ async function main(): Promise<void> {
   mkdirSync(outputDir, { recursive: true });
   writeFileSync(resolve(outputDir, "change-packets.json"), json);
   writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
-  console.log(`decision-atlas-change-packets: PASS · ${active.length} executing · ${collectionPreview.changes.length} collector pauses`);
-  console.log(`  sizing: ${sizePackets.length} independent proposal(s) · promotion: ${promotionSlug ?? "none"} blocked (${registration?.blockers.length ?? 0} registration blockers)`);
+  console.log(`decision-atlas-change-packets: PASS · ${paperExecuting.length} paper executing + ${observeOnly.length} observe-only · ${collectionPreview?.changes.length ?? 0} new collector pauses · ${preservedPauses.length} already preserved`);
+  console.log(`  sizing: ${sizePackets.length} independent proposal(s) · promotion: ${promotionSlug ?? "none"} ${promotionPreview?.state ?? "not prepared"} · stored legacy registration blockers ${registration?.blockers.length ?? 0}`);
   console.log(`  output: ${outputDir}`);
   console.log("  production writes: 0 · authority: none");
 }

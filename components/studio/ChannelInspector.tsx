@@ -87,6 +87,8 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const currentExecuted = pairedCurrent
     ? researchEvidence?.currentExecutedBySlug[pairedCurrent.executedSlug]
     : researchEvidence?.currentExecutedBySlug[slug];
+  const retuneEvidence = researchEvidence?.boundedRetunes.experiments
+    .find((experiment) => experiment.definition.channel === slug)?.evidence;
 
   const stageCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : dispatch({ type: "SET_CONFIG", slug, patch });
   const commitCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : persistConfig(id, patch);
@@ -126,7 +128,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
       {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
         state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
         truncated={researchEvidence.currentExecutedTruncated} compact />}
-      <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} compact />
+      <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
       <div className="mixer-deck">
         <details className="channel-disclosure">
           <summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary>

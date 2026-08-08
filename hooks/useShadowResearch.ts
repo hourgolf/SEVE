@@ -15,6 +15,7 @@ import {
   deriveSessionDryPowderCurves,
   deriveShadowCumulative,
   deriveShadowSessions,
+  shadowSessionDate,
   type ChannelDryPowderCurve,
   type CurrentExecutedSummary,
   type ExecutedResearchRow,
@@ -23,12 +24,22 @@ import {
   type ShadowResearchRow,
   type ShadowSessionSummary,
 } from "@/lib/research/shadowResearch";
+import { buildBoundedRetuneBook, type BoundedRetuneBook } from "@/lib/research/boundedRetuneExperiments";
+import {
+  parseBoundedRetuneSignalStamp,
+  PRIORITY_A_BOUNDED_RETUNES,
+  PRIORITY_A_RETUNE_COHORT_START,
+} from "@/lib/research/boundedRetuneRegistry";
+import type { AtlasOpportunity } from "@/lib/research/decisionAtlas";
 
 const COHORT_START = "2026-07-20";
 const COHORT_START_ISO = "2026-07-20T04:00:00.000Z";
 const PAGE_SIZE = 1_000;
 const MAX_ROWS = 10_000;
 const MAX_EXECUTED_ROWS = 2_000;
+const ROUTE_BATCH_SIZE = 50;
+const ROUTE_PAGE_SIZE = 1_000;
+const MAX_ROUTE_ROWS_PER_BATCH = 10_000;
 
 export interface ShadowResearch {
   state: "idle" | "loading" | "ok" | "empty" | "error";
@@ -41,6 +52,7 @@ export interface ShadowResearch {
   currentExecutedState: "ok" | "empty" | "error";
   currentExecutedError: string;
   currentExecutedTruncated: boolean;
+  boundedRetunes: BoundedRetuneBook;
   virtualEvidence: EvidenceEnvelope;
   currentExecutedEvidence: EvidenceEnvelope;
   cohortStart: typeof COHORT_START;
@@ -60,6 +72,11 @@ const EMPTY: ShadowResearch = {
   currentExecutedState: "empty",
   currentExecutedError: "",
   currentExecutedTruncated: false,
+  boundedRetunes: buildBoundedRetuneBook({
+    generatedAt: "",
+    throughSession: "",
+    opportunities: [],
+  }),
   virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity", fromSession: null, throughSession: null,
     configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
     completeness: "unavailable", reconciliation: "unverified", source: "virtual_trades", receiptHash: null,
@@ -129,6 +146,76 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
         const cumulative = deriveShadowCumulative(rows);
         const dryPowderBySlug = deriveChannelDryPowderCurves(rows);
         const dryPowderBySession = deriveSessionDryPowderCurves(rows);
+        const virtualBySignal = new Map(rows.map((row) => [row.signalId ?? "", row]));
+        const retuneSignals: Array<{
+          id: string;
+          strategist_id: string;
+          created_at: string;
+          rationale: Record<string, unknown> | null;
+        }> = [];
+        const retuneStrategistIds = PRIORITY_A_BOUNDED_RETUNES.map((row) => row.strategistId);
+        for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
+          const signalRead = await getSupabase().from("signals")
+            .select("id,strategist_id,created_at,rationale")
+            .in("strategist_id", retuneStrategistIds)
+            .gte("created_at", `${PRIORITY_A_RETUNE_COHORT_START}T04:00:00.000Z`)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(offset, offset + PAGE_SIZE - 1);
+          if (signalRead.error) throw signalRead.error;
+          const page = (signalRead.data ?? []) as typeof retuneSignals;
+          retuneSignals.push(...page);
+          if (page.length < PAGE_SIZE) break;
+          if (offset + PAGE_SIZE >= MAX_ROWS) throw new Error("bounded-retune signal read reached its safety cap");
+        }
+        const retuneDefinitionByStrategist = new Map(PRIORITY_A_BOUNDED_RETUNES
+          .map((definition) => [definition.strategistId, definition]));
+        const retuneOpportunities = retuneSignals.flatMap((signal): AtlasOpportunity[] => {
+          const definition = retuneDefinitionByStrategist.get(signal.strategist_id);
+          if (!definition) return [];
+          const virtual = virtualBySignal.get(signal.id);
+          const entryPrice = virtual?.entryPrice ?? null;
+          const result = virtual?.pnlPerContract ?? null;
+          const rationale = signal.rationale && typeof signal.rationale === "object" ? signal.rationale : {};
+          const configurationEpochId = typeof rationale.configuration_epoch_id === "string"
+            ? rationale.configuration_epoch_id : null;
+          return [{
+            logicalOpportunityId: `signal:${signal.id}`,
+            id: `prospective_virtual:${signal.id}`,
+            channel: definition.channel,
+            session: shadowSessionDate(signal.created_at),
+            signalAt: signal.created_at,
+            exitAt: virtual?.exitAt ?? null,
+            configurationEra: configurationEpochId,
+            portfolioConfigurationEra: configurationEpochId,
+            managerVersion: null,
+            evidenceLayer: "prospective_virtual",
+            accountId: null,
+            underlying: "UNKNOWN",
+            occSymbol: virtual?.occ ?? null,
+            direction: null,
+            contractSelected: virtual?.occ ? true : null,
+            quoteEligible: null,
+            admissionAllowed: null,
+            filled: false,
+            blockedReason: virtual?.blocked ?? null,
+            quantity: null,
+            entryPrice,
+            resultPerContractUsd: result,
+            returnPct: result != null && entryPrice != null && entryPrice > 0 ? result / entryPrice : null,
+            mfePct: virtual?.mfePct ?? null,
+            maePct: null,
+            captureRatio: null,
+            stopExposurePerContractUsd: null,
+            boundedRetuneStamp: parseBoundedRetuneSignalStamp(rationale.bounded_retune_experiment),
+            sourceRefs: [`signals:${signal.id}`, ...(virtual ? [`virtual_trades:${signal.id}`] : [])],
+          }];
+        });
+        const boundedRetunes = buildBoundedRetuneBook({
+          generatedAt: new Date().toISOString(),
+          throughSession: cumulative?.throughSession ?? PRIORITY_A_RETUNE_COHORT_START,
+          opportunities: retuneOpportunities,
+        });
         let currentExecutedBySlug: Record<string, CurrentExecutedSummary> = {};
         let pairedCurrent: PairedCurrentComparison[] = [];
         let currentExecutedState: ShadowResearch["currentExecutedState"] = "empty";
@@ -160,12 +247,31 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
             }];
           });
           const observations: ExecutionAccountObservation[] = [];
-          for (let from = 0; from < rawExecutedRows.length; from += 200) {
-            const routeRead = await getSupabase().from("execution_observations")
-              .select("id,position_id,account_id,event_at")
-              .in("position_id", rawExecutedRows.slice(from, from + 200).map((row) => row.id));
-            if (routeRead.error) throw routeRead.error;
-            observations.push(...((routeRead.data ?? []) as ExecutionAccountObservation[]));
+          // A single `.in(...)` read silently stops at PostgREST's row ceiling.
+          // Current positions can have many observations each, so the old
+          // unpaged query returned 1,000 rows and made the remaining positions
+          // look unrouted. Read only immutable account-bearing observations and
+          // page every bounded position batch to completion.
+          for (let batchStart = 0; batchStart < rawExecutedRows.length; batchStart += ROUTE_BATCH_SIZE) {
+            const positionIds = rawExecutedRows
+              .slice(batchStart, batchStart + ROUTE_BATCH_SIZE)
+              .map((row) => row.id);
+            for (let offset = 0; offset < MAX_ROUTE_ROWS_PER_BATCH; offset += ROUTE_PAGE_SIZE) {
+              const routeRead = await getSupabase().from("execution_observations")
+                .select("id,position_id,account_id,event_at")
+                .in("position_id", positionIds)
+                .not("account_id", "is", null)
+                .order("event_at", { ascending: true })
+                .order("id", { ascending: true })
+                .range(offset, offset + ROUTE_PAGE_SIZE - 1);
+              if (routeRead.error) throw routeRead.error;
+              const page = (routeRead.data ?? []) as ExecutionAccountObservation[];
+              observations.push(...page);
+              if (page.length < ROUTE_PAGE_SIZE) break;
+              if (offset + ROUTE_PAGE_SIZE >= MAX_ROUTE_ROWS_PER_BATCH) {
+                throw new Error(`immutable route read exceeded ${MAX_ROUTE_ROWS_PER_BATCH} rows for ${positionIds.length} positions`);
+              }
+            }
           }
           const attribution = attributePositionsByImmutableExecutionAccount({
             positions: rawExecutedRows,
@@ -199,6 +305,7 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
           currentExecutedState,
           currentExecutedError,
           currentExecutedTruncated,
+          boundedRetunes,
           virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity",
             fromSession: cumulative?.fromSession ?? null, throughSession: cumulative?.throughSession ?? null,
             configurationEpochId: null, managerVersion: null,

@@ -96,6 +96,8 @@ export function MobileRackRow({
   const currentExecuted = pairedCurrent
     ? researchEvidence?.currentExecutedBySlug[pairedCurrent.executedSlug]
     : researchEvidence?.currentExecutedBySlug[slug];
+  const retuneEvidence = researchEvidence?.boundedRetunes.experiments
+    .find((experiment) => experiment.definition.channel === slug)?.evidence;
 
   const persistPatch = (patch: Partial<StrategistConfig>) => {
     if (draft.active) { draft.update(patch); return; }
@@ -325,7 +327,7 @@ export function MobileRackRow({
           {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
             state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
             truncated={researchEvidence.currentExecutedTruncated} compact />}
-          <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} compact />
+          <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
           <details className="channel-disclosure"><summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary><div>
             <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
             <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={rootPolicy?.managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />

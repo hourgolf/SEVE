@@ -13,6 +13,8 @@ const arg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : null;
 };
+const envFile = resolve(arg("env-file") ?? process.env.SEVE_ENV_FILE ?? ".env.local");
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const SESSION = arg("session") ?? "";
 if (!/^\d{4}-\d{2}-\d{2}$/.test(SESSION)) {

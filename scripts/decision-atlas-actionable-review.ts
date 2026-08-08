@@ -51,6 +51,17 @@ interface PromotionReview {
   channel: string;
   intendedAccount: string | null;
   intendedAccountName: string | null;
+  recommendedAccount: string | null;
+  recommendedAccountName: string | null;
+  accountPlacements: Array<{
+    accountId: string;
+    accountName: string | null;
+    deployedOpportunities: number;
+    portfolioResultUsd: number | null;
+    displacedOtherOpportunities: number | null;
+    displacedOtherCounterfactualUsd: number | null;
+    portfolioMaxDrawdownUsd: number | null;
+  }>;
   historicalEvidence: {
     scoredSessions: number;
     scoredOpportunities: number;
@@ -257,18 +268,18 @@ function renderMarkdown(packet: {
     "",
     "## Recommended sequence",
     "",
-    "1. Qualify only the strongest promotion candidate in a sealed, limited-size root proposal; hold the other four behind it.",
+    `1. Qualify only the strongest promotion candidate in a sealed, limited-size root proposal; hold the other ${Math.max(0, packet.promotions.length - 1)} behind it.`,
     "2. Treat sizing as independent changes: one channel, one size step, one rollback receipt.",
     "3. Pause negative redundant collectors rather than delete them; preserve their history and make reversal one receipt away.",
-    "4. Run the 42 retunes as dark paired experiments, not as 42 production edits.",
+    `4. Run the ${packet.retunes.length} retunes as dark paired experiments, not as ${packet.retunes.length} production edits.`,
     "",
     "## Promotion reviews",
     "",
-    "| Channel | Account | Sessions / outcomes | Typical path / session | Replay at 2 contracts | Other channels displaced | Decision |",
+    "| Channel | Best account | Sessions / outcomes | Typical path / session | Replay at 2 contracts | Other channels displaced | Decision |",
     "|---|---|---:|---:|---:|---:|---|",
     ...packet.promotions.map((row) => {
       const point = row.replay.points[1];
-      return `| ${row.channel} | ${row.intendedAccountName ?? "—"} | ${row.historicalEvidence.scoredSessions} / ${row.historicalEvidence.scoredOpportunities} | ${money(row.historicalEvidence.typicalOpportunityUsd)} / ${money(row.historicalEvidence.typicalSessionUsd)} | ${point?.deployedOpportunities ?? 0} fills · ${money(row.twoContractIncrement.portfolioResultUsd)} incremental | ${row.twoContractIncrement.displacedOtherOpportunities ?? "—"} | ${row.recommendation.replaceAll("_", " ")} |`;
+      return `| ${row.channel} | ${row.recommendedAccountName ?? "—"} | ${row.historicalEvidence.scoredSessions} / ${row.historicalEvidence.scoredOpportunities} | ${money(row.historicalEvidence.typicalOpportunityUsd)} / ${money(row.historicalEvidence.typicalSessionUsd)} | ${point?.deployedOpportunities ?? 0} fills · ${money(row.twoContractIncrement.portfolioResultUsd)} incremental | ${row.twoContractIncrement.displacedOtherOpportunities ?? "—"} | ${row.recommendation.replaceAll("_", " ")} |`;
     }),
     "",
     "The replay removes only the dark-lifecycle and current-mute blocks required to model a promotion. Daily stops, cost gates, halts, same-account OCC collision, account occupancy, debit, and stop-exposure limits remain enforced. Cross-account same-OCC overlap remains permitted.",
@@ -289,7 +300,7 @@ function renderMarkdown(packet: {
     "",
     "A bounded retune is **one dark, reversible A/B comparison**, not a live configuration rewrite. The native channel remains the control. One variable gets one predeclared alternative; entry logic, exit logic, size, and manager cannot all move together. Both arms score the same future logical opportunities. Review begins after at least 5 new independent sessions and 10 scored outcomes, and continues longer when those counts disagree or uncertainty remains wide. Promotion requires a better typical session, improvement in at least 60% of paired sessions, no worse downside, no material new displacement, and no dependence on one large winner. A failed test is removed while the baseline collector continues unchanged.",
     "",
-    `The 42 channels break down into ${packet.retunes.filter((row) => row.priority === "A").length} priority A, ${packet.retunes.filter((row) => row.priority === "B").length} priority B, and ${packet.retunes.filter((row) => row.priority === "C").length} priority C experiments. Priority is research-queue readiness, not production-config certainty or a promise that the retune will win. All 42 source cohorts are historical-unstamped, so each experiment must begin a new versioned prospective cohort.`,
+    `The ${packet.retunes.length} channels break down into ${packet.retunes.filter((row) => row.priority === "A").length} priority A, ${packet.retunes.filter((row) => row.priority === "B").length} priority B, and ${packet.retunes.filter((row) => row.priority === "C").length} priority C experiments. Priority is research-queue readiness, not production-config certainty or a promise that the retune will win. All ${packet.retunes.length} source cohorts are historical-unstamped, so each experiment must begin a new versioned prospective cohort.`,
     "",
     "| Priority | Channel | Evidence | Focus | Experiment |",
     "|---|---|---:|---|---|",
@@ -310,6 +321,8 @@ function main(): void {
   const receipt = JSON.parse(readFileSync(resolve(atlasDir, "receipt.json"), "utf8")) as { generatedAt: string };
   const inventoryReceipt = JSON.parse(readFileSync(inventoryFile, "utf8")) as InventoryReceipt;
   const inventoryBySlug = new Map(inventoryReceipt.inventory.channels.map((row) => [row.identity.slug, row]));
+  const accountNameById = new Map(inventoryReceipt.inventory.channels.flatMap((row) =>
+    row.identity.accountId ? [[row.identity.accountId, row.identity.accountName] as const] : []));
   const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt: receipt.generatedAt, throughSession: atlas.throughSession });
   const rebuilt = buildDecisionAtlas(normalized);
   if (JSON.stringify(rebuilt) !== JSON.stringify(atlas)) {
@@ -323,29 +336,62 @@ function main(): void {
     const inventory = inventoryBySlug.get(channel);
     if (!inventory) throw new Error(`inventory missing ${channel}`);
     const prepared = promotionRows(decisionRows(normalized, dossier), inventory);
-    const replay = buildCapacityReplay({
-      targetChannel: channel,
-      targetRows: prepared.rows,
-      portfolioRows: portfolio,
-      accountBudgets: normalized.accountBudgets,
-      channelPremiumCaps: normalized.channelPremiumCaps,
-      channelMaxEntriesPerSession: normalized.channelMaxEntriesPerSession,
-    });
-    const baseline = buildCapacityReplay({
-      targetChannel: channel,
-      targetRows: prepared.rows.map((row) => ({ ...row,
-        admissionAllowed: false, blockedReason: "proposal_baseline_excluded" })),
-      portfolioRows: portfolio,
-      accountBudgets: normalized.accountBudgets,
-      channelPremiumCaps: normalized.channelPremiumCaps,
-      channelMaxEntriesPerSession: normalized.channelMaxEntriesPerSession,
-    });
+    const replayPlacement = (accountId: string) => {
+      const targetRows = prepared.rows.map((row) => ({ ...row, accountId }));
+      const replay = buildCapacityReplay({
+        targetChannel: channel,
+        targetRows,
+        portfolioRows: portfolio,
+        accountBudgets: normalized.accountBudgets,
+        channelPremiumCaps: normalized.channelPremiumCaps,
+        channelMaxEntriesPerSession: normalized.channelMaxEntriesPerSession,
+      });
+      const baseline = buildCapacityReplay({
+        targetChannel: channel,
+        targetRows: targetRows.map((row) => ({ ...row,
+          admissionAllowed: false, blockedReason: "proposal_baseline_excluded" })),
+        portfolioRows: portfolio,
+        accountBudgets: normalized.accountBudgets,
+        channelPremiumCaps: normalized.channelPremiumCaps,
+        channelMaxEntriesPerSession: normalized.channelMaxEntriesPerSession,
+      });
+      const point = replay.points[1];
+      const baselinePoint = baseline.points[1];
+      return {
+        accountId,
+        accountName: accountNameById.get(accountId) ?? null,
+        replay,
+        baseline,
+        deployedOpportunities: point?.deployedOpportunities ?? 0,
+        portfolioResultUsd: point && baselinePoint
+          ? Math.round((point.portfolioTotalResultUsd - baselinePoint.portfolioTotalResultUsd) * 100) / 100 : null,
+        displacedOtherOpportunities: point && baselinePoint
+          ? point.displacedOtherOpportunities - baselinePoint.displacedOtherOpportunities : null,
+        displacedOtherCounterfactualUsd: point && baselinePoint
+          ? Math.round((point.displacedOtherCounterfactualUsd - baselinePoint.displacedOtherCounterfactualUsd) * 100) / 100 : null,
+        portfolioMaxDrawdownUsd: point?.portfolioMaxDrawdownUsd ?? null,
+      };
+    };
+    const placements = normalized.accountBudgets.map((budget) => replayPlacement(budget.accountId))
+      .sort((left, right) => Number((right.displacedOtherOpportunities ?? Infinity) === 0)
+        - Number((left.displacedOtherOpportunities ?? Infinity) === 0)
+        || (right.portfolioResultUsd ?? -Infinity) - (left.portfolioResultUsd ?? -Infinity)
+        || right.deployedOpportunities - left.deployedOpportunities
+        || (left.portfolioMaxDrawdownUsd ?? Infinity) - (right.portfolioMaxDrawdownUsd ?? Infinity)
+        || left.accountId.localeCompare(right.accountId));
+    const preferred = placements[0] ?? (inventory.identity.accountId ? replayPlacement(inventory.identity.accountId) : null);
+    if (!preferred) throw new Error(`no paper account budget available for ${channel}`);
+    const replay = preferred.replay;
+    const baseline = preferred.baseline;
     const twoContract = replay.points[1];
     const baselinePoint = baseline.points[1];
     return {
       channel,
       intendedAccount: inventory.identity.accountId,
       intendedAccountName: inventory.identity.accountName,
+      recommendedAccount: preferred.accountId,
+      recommendedAccountName: preferred.accountName,
+      accountPlacements: placements.map(({ replay: _replay, baseline: _baseline, ...placement }) => placement),
       historicalEvidence: {
         scoredSessions: dossier.decisionCohort.scoredSessions,
         scoredOpportunities: dossier.decisionCohort.scoredOpportunities,

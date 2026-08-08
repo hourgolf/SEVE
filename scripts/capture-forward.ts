@@ -29,6 +29,11 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
+
+const envFile = resolve(process.env.SEVE_ENV_FILE ?? ".env.local");
+if (!existsSync(envFile)) throw new Error(`environment file not found: ${envFile}`);
+process.loadEnvFile(envFile);
 
 const ET = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
 const etDate = (ms: number) => ET.format(new Date(ms));
@@ -80,7 +85,6 @@ async function main() {
   // every cycle below plus the 02:15 catch-up, and option_quotes hold 7d (the GAP CHECK
   // screams long before loss). Scheduled via launchd at 13:03 local (16:03 ET).
   run(`day-report ${recentDays[0]} (close pass)`, ["day-report", "--", "--date", recentDays[0]], 2);
-  run("gate-shadow (close pass)", ["gate-shadow"], 2);
   // ratchet-shadow (2026-07-08): the A4 twins' virtual third arm — replays each twin trade's
   // real quote path under the fixed arm-high ratchet, banked before the 7d prune. Log-only.
   run("ratchet-shadow (close pass)", ["ratchet-shadow"], 2);
@@ -122,6 +126,36 @@ async function main() {
   // post-reconcile) republishes the panel with the complete, settled ledger. day-report is idempotent.
   for (const d of recentDays) run(`day-report ${d}`, ["day-report", "--", "--date", d], 2);
   run("build-training-store", ["build-training-store"], 2);
+
+  // TRUSTED DECISION EVIDENCE — after the raw tape and clean-books checks have
+  // settled, publish only the bounded current session's virtual paths with the
+  // immutable source configuration/manager stamps captured by the worker.
+  // The readiness observation is SELECT/GET-only and must pass before the one
+  // permitted research write (`virtual_trades`) is attempted. The independent
+  // verifier then compares every local and remote payload before the Atlas is
+  // regenerated locally. No events, orders, positions, configuration, roster,
+  // account routing, managers, sizing, or trading economics are writable here.
+  const decisionRoot = `data/decision-atlas/runs/${recentDays[0]}`;
+  const shadowRoot = `${decisionRoot}/shadow`;
+  const postcloseReady = run("postclose-readiness", ["postclose-readiness", "--", "--env-file", envFile], 2);
+  const shadowPublished = postcloseReady && run("gate-shadow (stamped session)", [
+    "gate-shadow", "--", "--session", recentDays[0], "--output-dir", shadowRoot,
+    "--virtual-trades-only", "--stamp-provenance",
+  ], 2);
+  const shadowVerified = shadowPublished && run("verify-shadow-rebuild (session)", [
+    "verify-shadow-rebuild", "--", "--session", recentDays[0], "--output-dir", shadowRoot,
+    "--env-file", envFile,
+  ], 2);
+  if (shadowVerified) {
+    run("nightly Decision Atlas", [
+      "nightly-decision-atlas", "--", "--through", recentDays[0], "--out-dir", decisionRoot,
+      "--env-file", envFile,
+    ], 2);
+    run("priority-A retune readiness", [
+      "priority-a-retune-readiness", "--", "--out-dir", `${decisionRoot}/priority-a-readiness`,
+      "--env-file", envFile,
+    ], 2);
+  }
   // WEEKLY READOUT (approved 2026-07-02): Fridays only — the week's aggregate interrogation
   // of the banked data (rollup + near-miss + vb-fleet-vs-prior + gate counters). Analysis
   // only; scheduling it here is the whole point (the re-mine cadence was a memory note).
