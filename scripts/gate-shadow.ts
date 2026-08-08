@@ -62,6 +62,8 @@ const valueArg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && process.argv[index + 1] ? String(process.argv[index + 1]) : null;
 };
+const envFile = resolve(valueArg("env-file") ?? process.env.SEVE_ENV_FILE ?? ".env.local");
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 const AUTHORIZED_CATCHUP_MANIFEST = valueArg("authorized-catchup-manifest");
 const AUTHORIZED_CATCHUP_SHA256 = valueArg("authorized-catchup-sha256");
 const NOW_MS = Date.now();

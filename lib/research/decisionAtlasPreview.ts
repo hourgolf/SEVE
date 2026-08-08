@@ -1,9 +1,10 @@
 import type { ChannelManagerEvidence } from "./channelManagerEvidence";
 import type { ChannelDryPowderCurve, ShadowChannelSummary } from "./shadowResearch";
 import { boundedRetuneForChannel, type BoundedRetuneExperimentDefinition } from "./boundedRetuneRegistry";
+import type { BoundedRetuneEvidence } from "./boundedRetuneExperiments";
 
 export interface DecisionAtlasPreviewMetric {
-  label: "typical result" | "best move" | "gave back" | "next entry" | "evidence";
+  label: string;
   value: string;
   fact: string;
 }
@@ -24,6 +25,7 @@ export function buildDecisionAtlasPreview(input: {
   summary?: ShadowChannelSummary | null;
   dryPowder?: ChannelDryPowderCurve | null;
   managerEvidence?: ChannelManagerEvidence | null;
+  retuneEvidence?: BoundedRetuneEvidence | null;
 }): DecisionAtlasPreview {
   const typical = input.summary?.typicalPerPath ?? null;
   const sessions = input.dryPowder?.sessionCount ?? input.managerEvidence?.sessions ?? 0;
@@ -39,9 +41,16 @@ export function buildDecisionAtlasPreview(input: {
   if (experiment) {
     label = "DARK TEST";
     tone = "warning";
-    summary = experiment.variable === "max_entries_per_session"
-      ? `Compare every signal with the first ${experiment.alternativeValue} per session. Exit, manager, and size stay fixed.`
-      : `Compare the native +${experiment.controlValue}% exit with +${experiment.alternativeValue}%. Entry, stop, manager, and size stay fixed.`;
+    const progress = input.retuneEvidence;
+    summary = progress?.status === "awaiting_first_session"
+      ? `Starts ${experiment.cohortStartSession.slice(5).replace("-", "/")}. The live control stays unchanged while one alternative is scored.`
+      : progress?.status === "collecting"
+        ? `Collecting the same opportunities under one alternative; the live control remains unchanged.`
+        : progress?.status === "review_ready"
+          ? `The evidence floor is met. Review the paired result before proposing any change.`
+          : experiment.variable === "max_entries_per_session"
+            ? `Compare every signal with the first ${experiment.alternativeValue} per session. Exit, manager, and size stay fixed.`
+            : `Compare the native +${experiment.controlValue}% exit with +${experiment.alternativeValue}%. Entry, stop, manager, and size stay fixed.`;
   } else if (manager) {
     label = "REVIEW MANAGER";
     tone = "positive";
@@ -59,24 +68,33 @@ export function buildDecisionAtlasPreview(input: {
     tone = "warning";
     summary = "The typical virtual path is negative; check uniqueness and configuration era before keeping or retiring it.";
   }
+  const defaultMetrics: DecisionAtlasPreviewMetric[] = [
+    { label: "typical result", value: `${signed(typical, " / ct")}`,
+      fact: "Median native path; one large winner cannot move it much." },
+    { label: "best move", value: signed(input.summary?.averageMfePct ?? null, "%"),
+      fact: "Average best move while the path was open." },
+    { label: "gave back", value: signed(input.summary?.averageGivebackPct ?? null, "%"),
+      fact: "Average of the move surrendered; above 100% means the path finished below entry." },
+    { label: "next entry", value: `${signed(next, " / ct")}`,
+      fact: "Typical quality of the second same-session signal; capital-blind." },
+    { label: "evidence", value: `${sessions} session${sessions === 1 ? "" : "s"}`,
+      fact: "Independent market sessions represented." },
+  ];
+  const progress = input.retuneEvidence;
+  const experimentMetrics: DecisionAtlasPreviewMetric[] | null = experiment && progress ? [
+    { label: "sessions", value: `${progress.prospectiveSessions}/5`, fact: "Independent prospective sessions; review requires five." },
+    { label: "outcomes", value: `${progress.scoredLogicalOutcomes}/10`, fact: "Scored logical opportunities; review requires ten." },
+    { label: "typical change", value: signed(progress.typicalDeltaUsd, " / session"), fact: "Median paired session change from control to the one-variable alternative." },
+    { label: "weak-day change", value: signed(progress.downsideDeltaUsd, " / session"), fact: "Change in the weak-session tail; negative means the alternative worsened bad days." },
+    { label: "paired wins", value: progress.pairedSessionImprovement == null ? "—" : `${Math.round(progress.pairedSessionImprovement * 100)}%`, fact: "Share of paired sessions improved by the alternative; review threshold is 60%." },
+  ] : null;
   return {
     label,
     tone,
     summary,
-    metrics: [
-      { label: "typical result", value: `${signed(typical, " / ct")}`,
-        fact: "Median native path; one large winner cannot move it much." },
-      { label: "best move", value: signed(input.summary?.averageMfePct ?? null, "%"),
-        fact: "Average best move while the path was open." },
-      { label: "gave back", value: signed(input.summary?.averageGivebackPct ?? null, "%"),
-        fact: "Average of the move surrendered; above 100% means the path finished below entry." },
-      { label: "next entry", value: `${signed(next, " / ct")}`,
-        fact: "Typical quality of the second same-session signal; capital-blind." },
-      { label: "evidence", value: `${sessions} session${sessions === 1 ? "" : "s"}`,
-        fact: "Independent market sessions represented." },
-    ],
+    metrics: experimentMetrics ?? defaultMetrics,
     evidenceFact: input.summary
-      ? `${input.summary.scored}/${input.summary.paths} historical native paths scored · largest winner ${input.summary.largestWinnerShare == null ? "unknown" : `${Math.round(input.summary.largestWinnerShare * 100)}% of positive result`}.${experiment ? ` Prospective scoring starts ${experiment.cohortStartSession}; review waits for 5 sessions and 10 logical outcomes.` : ""} Full configuration-era, collision, capital, and paired-exit checks remain in the nightly dossier.`
+      ? `${input.summary.scored}/${input.summary.paths} historical native paths scored · largest winner ${input.summary.largestWinnerShare == null ? "unknown" : `${Math.round(input.summary.largestWinnerShare * 100)}% of positive result`}.${experiment ? ` Prospective scoring starts ${experiment.cohortStartSession}; review waits for 5 sessions and 10 logical outcomes.${progress ? ` Missing or mismatched source stamps: ${progress.censored.missingExperimentStamp + progress.censored.baselineMismatch}.` : ""}` : ""} Full configuration-era, collision, capital, and paired-exit checks remain in the nightly dossier.`
       : "No cumulative native-path summary is available. Full methodology remains in the nightly dossier.",
     experiment,
   };

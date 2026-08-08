@@ -59,6 +59,8 @@ assert.match(actionable, /configurationAuthority:\s*false/);
 assert.match(actionable, /activationAuthorized:\s*false/);
 assert.match(actionable, /alternativeArms:\s*1/,
   "bounded retunes must compare the baseline with one alternative rather than a parameter grid");
+assert.doesNotMatch(actionable, /(?:the|all) 42|42 retunes/i,
+  "retune queue copy must use the generated cohort count rather than stale prose");
 assert.doesNotMatch(actionable, /\.from\([^\n]+\)\.(?:insert|upsert|update|delete)\(/);
 assert.doesNotMatch(actionable, /\.rpc\(/);
 assert.match(packets, /simulatedFlatBoundary:\s*true/,

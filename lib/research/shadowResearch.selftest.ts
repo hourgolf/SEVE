@@ -208,8 +208,12 @@ assert.deepEqual(paired[0], {
 });
 const workspaceSource = readFileSync("components/perform/ShadowResearchWorkspace.tsx", "utf8");
 const currentCardSource = readFileSync("components/research/CurrentEvidenceCard.tsx", "utf8");
+const hookSource = readFileSync("hooks/useShadowResearch.ts", "utf8");
 assert.match(workspaceSource, /HISTORICAL VIRTUAL/, "cumulative rows keep their evidence layer visible");
 assert.match(currentCardSource, /CURRENT EXECUTED/, "executed evidence is explicitly separated from virtual paths");
 assert.match(currentCardSource, /SAME-CLOCK VIRTUAL/, "paired comparison labels its counterfactual side");
 assert.match(workspaceSource, /every table row is virtual/, "the default table cannot imply portfolio execution");
+assert.match(hookSource, /\.not\("account_id", "is", null\)/, "current execution reads only immutable account-bearing observations");
+assert.match(hookSource, /\.range\(offset, offset \+ ROUTE_PAGE_SIZE - 1\)/, "current execution route reads are paginated");
+assert.match(hookSource, /ROUTE_BATCH_SIZE = 50/, "route reads use bounded position batches");
 console.log("shadow-research-selftest: PASS");

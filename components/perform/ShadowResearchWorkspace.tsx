@@ -185,9 +185,10 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
         ? shadowResearch.dryPowderBySlug[row.slug]
         : selected ? shadowResearch.dryPowderBySession[selected.session]?.[row.slug] : undefined,
       managerEvidence: surface.managerEvidence.book?.channels[row.slug],
+      retuneEvidence: shadowResearch.boundedRetunes.experiments.find((experiment) => experiment.definition.channel === row.slug)?.evidence,
     }),
   }));
-  const atlasWorking = atlasReads.filter((item) => item.read.label === "TEST CAPACITY" || item.read.label === "REVIEW MANAGER");
+  const atlasWorking = atlasReads.filter((item) => item.read.label === "DARK TEST" || item.read.label === "TEST CAPACITY" || item.read.label === "REVIEW MANAGER");
   const atlasReview = atlasReads.filter((item) => item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT");
   const atlasNext = [...atlasWorking, ...atlasReview][0] ?? null;
   const focusedCurve = windowMode === "cumulative"
@@ -196,6 +197,8 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   const focusedPassport = surface.channelWorkspace.bySlug[focusSlug];
   const focusedSummary = rows.find((row) => row.slug === focusSlug);
   const focusedManagerEvidence = surface.managerEvidence.book?.channels[focusSlug];
+  const focusedRetuneEvidence = shadowResearch.boundedRetunes.experiments
+    .find((experiment) => experiment.definition.channel === focusSlug)?.evidence;
   const focusedExecuted = shadowResearch.currentExecutedBySlug[focusSlug];
   const focusedComparison = shadowResearch.pairedCurrent.find((item) =>
     item.executedSlug === focusSlug || item.virtualSlug === focusSlug);
@@ -290,7 +293,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
               state={shadowResearch.currentExecutedState}
               error={shadowResearch.currentExecutedError}
               truncated={shadowResearch.currentExecutedTruncated}
-            /><DecisionAtlasPreviewCard summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} />
+            /><DecisionAtlasPreviewCard summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
               <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
               <ChannelDryPowderCurve curve={focusedCurve} />
               <ChannelManagerEvidencePanel
