@@ -29,7 +29,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -67,7 +67,7 @@ jobs:
           DRY_RUN_INPUT: ${{ inputs.dry_run }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          args=(--session "$SESSION_DATE_ET" --virtual-trades-only)
+          args=(--session "$SESSION_DATE_ET" --virtual-trades-only --stamp-provenance)
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN_INPUT" == "true" ]]; then
             args+=(--read-only)
           fi
@@ -77,6 +77,19 @@ jobs:
               --session "$SESSION_DATE_ET" \
               --output-dir data
           fi
+      - name: Build nightly Decision Atlas
+        shell: bash
+        run: |
+          npm run nightly-decision-atlas -- \
+            --through "$SESSION_DATE_ET" \
+            --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET"
+      - name: Verify Priority A experiment baselines
+        id: priority-a-readiness
+        continue-on-error: true
+        shell: bash
+        run: |
+          npm run priority-a-retune-readiness -- \
+            --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET/priority-a-readiness"
       - name: Freeze dark candidate exact-contract requests
         shell: bash
         run: |
@@ -112,7 +125,11 @@ jobs:
               "data/dark-candidate-freezes/$SESSION_DATE_ET/report.md" \
               "data/dark-candidate-freezes/$SESSION_DATE_ET/receipt.json" \
               "data/sentinel-packets/$SESSION_DATE_ET.json" \
-              "data/sentinel-packets/$SESSION_DATE_ET.receipt.json"
+              "data/sentinel-packets/$SESSION_DATE_ET.receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/profitability/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/weekly/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/priority-a-readiness/readiness.json"
             if [[ -f data/gate-shadow-verification.json ]]; then
               sha256sum data/gate-shadow-verification.json
             fi
@@ -135,6 +152,7 @@ jobs:
             data/vb-candidate-censors.json
             data/dark-candidate-freezes/**
             data/sentinel-packets/**
+            data/decision-atlas/runs/**
             after-close-sha256.txt
           if-no-files-found: error
           retention-days: 30

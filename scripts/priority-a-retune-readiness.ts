@@ -11,9 +11,11 @@ const arg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : null;
 };
-const envFile = resolve(arg("env-file") ?? process.env.SEVE_ENV_FILE ?? ".env.local");
-if (!existsSync(envFile)) throw new Error(`environment file not found: ${envFile}`);
-process.loadEnvFile(envFile);
+const explicitEnvFile = arg("env-file") ?? process.env.SEVE_ENV_FILE ?? null;
+const envFile = explicitEnvFile ? resolve(explicitEnvFile) : null;
+if (envFile && !existsSync(envFile)) throw new Error(`environment file not found: ${envFile}`);
+if (envFile) process.loadEnvFile(envFile);
+else if (existsSync(resolve(".env.local"))) process.loadEnvFile(resolve(".env.local"));
 const outputDir = resolve(arg("out-dir") ?? "data/decision-atlas/priority-a-retunes/latest");
 
 function canonical(value: unknown): string {
@@ -88,4 +90,3 @@ main().catch((error) => {
   console.error(`priority-a-retune-readiness: FAIL · ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });
-
