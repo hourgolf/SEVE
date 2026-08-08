@@ -126,15 +126,15 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         {a13 && <span className="ih-tag amber">⚡ A13</span>}
         <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
       </div>
-      {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
-      {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
-        state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
-        truncated={researchEvidence.currentExecutedTruncated} compact />}
       <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
+      {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
       <div className="mixer-deck">
         <details className="channel-disclosure">
           <summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary>
-          <div><ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
+          <div>{researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
+            state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
+            truncated={researchEvidence.currentExecutedTruncated} compact />}
+            <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
             <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact /></div>
         </details>
         <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : rootPolicy ? "SEALED RUNTIME · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">

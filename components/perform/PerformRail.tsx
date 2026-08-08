@@ -16,6 +16,8 @@ import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorksp
 import type { OpsEvidenceChain, ReadinessItem } from "@/lib/ops/readiness";
 import { deriveOpenPositionRows } from "@/lib/perform/derivePositionsWorkspace";
 import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
+import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
+import type { DecisionAtlasReportsRead } from "@/hooks/useDecisionAtlasReports";
 
 // PERFORM right rail (slice S2): POSITIONS (row-per-leg with pk glow ring +
 // ratchet/LOCK-RIDE/giveback badges) · SENTINEL (verdict chip + one-line digest
@@ -249,7 +251,7 @@ function TapeSection({ events, strategists, targeted }: { events: MarketEvent[];
 }
 
 export function PerformRail({
-  positions, strategists, liveMarks, peaks, events, symbol, sent, incident, write, section, channelWorkspace,
+  positions, strategists, liveMarks, peaks, events, symbol, sent, incident, write, section, channelWorkspace, decisionAtlas,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -262,12 +264,14 @@ export function PerformRail({
   write: SurfaceProps["write"];
   section: PerformSection;
   channelWorkspace: ChannelWorkspaceModel;
+  decisionAtlas: DecisionAtlasReportsRead;
 }) {
   return (
     <aside className="pf-rail">
       {/* P5 slice 3 — deterministic system-health strip; open-position truth visible in every state. */}
       <SystemHealthStrip incident={incident} />
       <IncidentDetail incident={incident} />
+      <DecisionAtlasFleetPulse reports={decisionAtlas} />
       {positions.length > 0 && <PositionsSection positions={positions} strategists={strategists} liveMarks={liveMarks} peaks={peaks} write={write} targeted={section === "positions"} channelWorkspace={channelWorkspace} />}
       <SentinelSection symbol={symbol} sent={sent} targeted={section === "sentinel"} />
       <TapeSection events={events} strategists={strategists} targeted={section === "tape"} />

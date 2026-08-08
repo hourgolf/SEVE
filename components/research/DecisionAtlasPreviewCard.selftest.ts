@@ -10,26 +10,26 @@ const mobile = read("../mobile2/MobileRackRow.tsx");
 const css = read("../../app/decision-atlas.css");
 const workspaceCss = read("../../app/seve-909.css");
 
-assert.match(card, /DECISION ATLAS · HISTORICAL VIRTUAL/);
-assert.match(card, /DECISION ATLAS · PROSPECTIVE TEST/);
-assert.match(card, /DECISION ATLAS · NIGHTLY PAIRED/);
-assert.match(card, /Full paired review/);
-assert.match(card, /brief\.executed\.label/);
-assert.match(card, /brief\.historicalVirtual\.label/);
-assert.match(card, /Entry frequency/);
-assert.match(card, /Native exit/);
-assert.match(card, /Manager alternatives/);
-assert.match(card, /Capacity \+ collisions/);
-assert.match(card, /brief\.metrics\.map/);
+assert.match(card, /HISTORICAL VIRTUAL/);
+assert.match(card, /PROSPECTIVE TEST/);
+assert.match(card, /model\.sourceLabel/);
+assert.match(card, /See supporting evidence/);
+assert.match(card, /CURRENT EXECUTED/);
+assert.match(card, /HISTORICAL VIRTUAL/);
+assert.match(card, /DO LATER ENTRIES STILL HELP/);
+assert.match(card, /HOW MUCH OF THE MOVE DID THE EXIT KEEP/);
+assert.match(card, /DOES A DIFFERENT EXIT WIN TYPICALLY/);
+assert.match(card, /WHAT DOES EACH EXTRA CONTRACT ADD/);
+assert.match(card, /model\.metrics\.map/);
 assert.match(card, /CONTROL UNCHANGED/);
 assert.match(card, /NOT EXECUTED/);
-assert.match(card, /model\.metrics\.map/);
-assert.match(card, /Experiment \+ evidence/);
+assert.match(card, /NEXT CONTROLLED TEST/);
+assert.match(card, /KEEP FIXED/);
 assert.match(current, /withheld rather than shown as zero/);
 assert.match(current, /<details className="srw-current-evidence-detail">/);
 assert.doesNotMatch(current, /<p>\{error \|\|/,
   "raw lineage diagnostics must stay out of the default card");
-assert.doesNotMatch(card, /hash|sha256|confidence interval|configuration epoch/i,
+assert.doesNotMatch(card.split(/<details className="atlas-evidence-drawer">/)[0], /hash|sha256|confidence interval|configuration epoch/i,
   "technical provenance stays out of the first-glance card");
 assert.match(inspector, /<DecisionAtlasPreviewCard/);
 assert.match(inspector, /<CurrentEvidenceCard/);
@@ -42,9 +42,11 @@ assert(inspector.indexOf("<DecisionAtlasPreviewCard") < inspector.indexOf("<deta
   "decision-first summary must precede deep analysis");
 assert.match(css, /data-skin="blackout"/);
 assert.match(css, /@media\(max-width:760px\)/);
-assert.match(css, /grid-template-columns:repeat\(5/);
-assert.match(css, /\.atlas-brief-layers/);
-assert.match(css, /\.atlas-capacity-strip/);
+assert.match(css, /grid-template-columns:repeat\(3/);
+assert.match(css, /\.atlas-entry-sequence/);
+assert.match(css, /\.atlas-capture-track/);
+assert.match(css, /\.atlas-manager-duel/);
+assert.match(css, /\.atlas-size-steps/);
 assert.match(css, /var\(--surface-panel/,
   "cream mode must inherit the chassis panel instead of a dark LCD token");
 assert.doesNotMatch(css, /var\(--lcd-2/,

@@ -325,12 +325,12 @@ export function MobileRackRow({
               {sealed && <footer>SEALED READ-ONLY · ACTIVE RC5 CONTROLS CANNOT BE MUTATED</footer>}
             </>}
           </div>
-          {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
-          {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
-            state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
-            truncated={researchEvidence.currentExecutedTruncated} compact />}
           <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
+          {passport?.effective && <ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact />}
           <details className="channel-disclosure"><summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary><div>
+            {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
+              state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
+              truncated={researchEvidence.currentExecutedTruncated} compact />}
             <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
             <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={rootPolicy?.managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />
           </div></details>

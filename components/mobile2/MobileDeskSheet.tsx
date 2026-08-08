@@ -21,6 +21,7 @@ import {
   mobileReviewHas,
   type MobileReviewMode,
 } from "@/lib/mobile/reviewWorkspace";
+import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -59,6 +60,7 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
 
   return <>
     <div className="m2-book-nav"><span><b>BOOK</b><small>POSITIONS · EXPOSURE · EXITS</small></span>{onViewMarket && <div><button type="button" onClick={() => onViewMarket("chart")}>CHART</button><button type="button" onClick={() => onViewMarket("chain")}>CHAIN</button></div>}</div>
+    <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="positions" channelSlugs={feed.positions.map((position) => position.strategist_slug)} />
     {reconciliation?.tone !== "green" && <BrokerReconciliationStrip model={props.opsReadiness} compact />}
     {isQuietBook ? <div className="m2-book-empty" role="status"><b>NO OPEN POSITIONS</b><span>No session exits</span></div> : <>
     {(hasOpenPositions || attributionBlocked) && <MobilePositions props={props} strategists={props.view.desk.strategists} compact />}
@@ -121,6 +123,7 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
     <nav className="m2-review-modes" aria-label="Review workspace">
       {MOBILE_REVIEW_MODES.map((item) => <button type="button" key={item.id} className={mode === item.id ? "on" : ""} onClick={() => setMode(item.id)} aria-pressed={mode === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
     </nav>
+    <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="review" />
 
     {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
     {mobileReviewHas(mode, "session-summary") && <div className="m2-desk-hero">
@@ -195,6 +198,7 @@ export function MobileOpsView({ props, channels, onOpenSettings }: { props: Surf
   return <>
     <section className={`m2-incident-card ${incident.severity}`}><header><i /><b>{incident.title}</b><span>{incident.severity.toUpperCase()}</span></header>
       <p>desk shows {feed.positions.length} open positions</p>{incident.facts.slice(0, 3).map((fact, index) => <p key={index}>{fact}</p>)}</section>
+    <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="operations" />
     <Section title="PREFLIGHT" meta={incident.session.replaceAll("_", " ")}>
       <div className="m2-preflight">
         <span><b>PROCESS</b><em>{workerRuns.query.state === "ok" ? "OBSERVED" : workerRuns.query.state.toUpperCase()}</em><small>{workerRuns.rowsIn16h} runs / 16h</small></span>

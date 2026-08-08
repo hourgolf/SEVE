@@ -76,6 +76,7 @@ export function PerformSurface({
             write={write}
             section={section}
             channelWorkspace={surface.channelWorkspace}
+            decisionAtlas={surface.decisionAtlas}
           />
         </>}
       </main>

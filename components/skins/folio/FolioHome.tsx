@@ -12,6 +12,7 @@ import { deriveSentinelDigestReceipt } from "@/components/perform/SentinelWorksp
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { timeOfDay } from "@/lib/format";
 import { deriveTapeRows } from "@/lib/perform/eventTape";
+import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 function FolioSentinelCard({ surface, compact = false }: { surface: SurfaceProps; compact?: boolean }) {
   const { sentinel, symbol } = surface;
@@ -89,6 +90,7 @@ export function FolioHomeDesktop({ surface }: { surface: SurfaceProps }) {
       <div className="folio-home-grid">
         <FolioMarketCard surface={surface} />
         <aside className="folio-home-side">
+          <DecisionAtlasFleetPulse reports={surface.decisionAtlas} />
           <section className="folio-health-card"><SystemHealthStrip incident={surface.incident} /><IncidentDetail incident={surface.incident} /></section>
           <div className="folio-position-card">
             <PositionsSection
@@ -118,6 +120,7 @@ export function FolioHomeMobile({ surface }: { surface: SurfaceProps }) {
   return (
     <div className="folio-home folio-home-mobile">
       <div className="folio-home-scroll">
+        <DecisionAtlasFleetPulse reports={surface.decisionAtlas} />
         <FolioMarketCard surface={surface} mobile />
         <MobilePositions props={surface} strategists={surface.view.desk.strategists} />
         <FolioSentinelCard surface={surface} compact />

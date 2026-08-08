@@ -4,6 +4,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { findSealedReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
 import { SeveWorkspaceHeader } from "@/components/ui/Seve909";
+import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 
 const age = (seconds: number | null): string => seconds == null ? "—" : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h`;
 const localTime = (value: string | null | undefined): string => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " PT" : "—";
@@ -26,6 +27,7 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
       subtitle="read-only control-plane evidence · paper desk"
       boundary="EVIDENCE ONLY"
     />
+    <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="operations" />
     <div className="opsw-grid">
       <section className="opsw-card opsw-readiness"><header><span>00</span><b>CAPTURE + OBSERVER READINESS</b><em>configured ≠ observed</em></header><OpsReadinessPanel model={surface.opsReadiness} /></section>
       <section className="opsw-card"><header><span>01</span><b>PROCESS + EXECUTORS</b><em>liveness clocks remain distinct</em></header><div className="opsw-lamps">
