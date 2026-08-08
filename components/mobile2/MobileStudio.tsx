@@ -62,7 +62,7 @@ export function MobileStudio({
           <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL <b>{channels.length}</b></button>
         </div>
         {passports.release.state === "verified" && <p className="m2-roster-reconciliation">LIVE ENTRY AUTHORITY · <b>{passports.release.rootSlugs.length} TRADING ROOTS</b></p>}
-        <div className="m2-seam"><span className="m2-silk">{canWrite ? "TAP ROW · FORK GOVERNED DRAFT · DIRECT WRITES FENCED" : "READ ONLY · SIGN IN TO REVIEW CONTROLS"}</span><span className="ln" /></div>
+        <div className="m2-seam"><span className="m2-silk">SELECT A CHANNEL TO REVIEW EVIDENCE OR PREPARE A GOVERNED PROPOSAL</span><span className="ln" /></div>
         {visibleChannels.length === 0 ? (
           <div className="m2-ghost">no channels in this runtime scope</div>
         ) : visibleChannels.map((s) => (

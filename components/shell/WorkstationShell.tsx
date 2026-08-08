@@ -21,14 +21,14 @@ interface WorkstationShellProps {
 }
 
 const NAV = [
-  { key: "overview", label: "Dashboard", icon: "▣", group: "trade", mode: "perform" as const, section: "overview" as const },
+  { key: "overview", label: "Home", icon: "▣", group: "trade", mode: "perform" as const, section: "overview" as const },
   { key: "market", label: "Markets", icon: "▤", group: "trade", mode: "perform" as const, section: "market" as const },
   { key: "positions", label: "Positions", icon: "⌁", group: "trade", mode: "perform" as const, section: "positions" as const },
   { key: "studio", label: "Channels", icon: "◉", group: "trade", mode: "studio" as const },
   { key: "research", label: "Research", icon: "∿", group: "evidence", mode: "perform" as const, section: "research" as const },
-  { key: "sentinel", label: "Sentinel", icon: "◇", group: "evidence", mode: "perform" as const, section: "sentinel" as const },
+  { key: "sentinel", label: "Next Open", icon: "◇", group: "evidence", mode: "perform" as const, section: "sentinel" as const },
   { key: "tape", label: "Review", icon: "≋", group: "evidence", mode: "perform" as const, section: "tape" as const },
-  { key: "ops", label: "Ops", icon: "⌘", group: "system", mode: "perform" as const, section: "ops" as const },
+  { key: "ops", label: "System", icon: "⌘", group: "system", mode: "perform" as const, section: "ops" as const },
 ];
 
 const compactUsd = (value: number): string => {
@@ -122,6 +122,12 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
     if (item.section === "overview") return;
     window.setTimeout(() => document.getElementById(`perform-${item.section}`)?.focus({ preventScroll: true }), 0);
   };
+  const navigateFromSurface = (target: PerformSection | "studio") => {
+    const item = target === "studio"
+      ? NAV.find((candidate) => candidate.key === "studio")
+      : NAV.find((candidate) => candidate.mode === "perform" && "section" in candidate && candidate.section === target);
+    if (item) navigate(item);
+  };
 
   return (
     <div className="shell-root ws909" data-mode={mode} data-section={activeNav.key} data-skin={skin} data-density={density} data-incident={incident.severity}>
@@ -210,7 +216,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
         </nav>
 
         <section className="ws-display" aria-label={`${activeNav.label} workspace`}>
-          {mode === "perform" ? <PerformSurface {...surface} section={performSection} /> : <StudioSurface {...surface} />}
+          {mode === "perform" ? <PerformSurface {...surface} section={performSection} onNavigate={navigateFromSurface} /> : <StudioSurface {...surface} />}
         </section>
       </main>
 

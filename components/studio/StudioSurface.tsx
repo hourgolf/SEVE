@@ -21,7 +21,7 @@ import type { StudioScope } from "@/components/studio/StudioFleet";
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, symbol, channelWorkspace, channelControlPlane, shadowResearch, managerEvidence, decisionAtlas }: SurfaceProps) {
+export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, acctId, symbol, channelWorkspace, channelControlPlane, shadowResearch, managerEvidence, decisionAtlas }: SurfaceProps) {
   void symbol;
   const { desk } = view;
 
@@ -49,6 +49,9 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
   const selectedRow = selSlug
     ? visibleRows.find((row) => row.channel.slug === selSlug)
     : undefined;
+  const evidenceAsOf = feed.updatedAt
+    ? new Date(feed.updatedAt).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT"
+    : decisionAtlas.throughSession ?? "checking";
 
   return (
     <div className={`studio studio-v4 studio-v4b ${selectedRow ? "inspector-open" : "inspector-collapsed"}`}>
@@ -60,6 +63,9 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, acctId, sy
         sort={sort}
         passports={channelWorkspace}
         controlPlane={channelControlPlane}
+        decisions={decisionAtlas.bySlug}
+        accountName={accounts.find((account) => account.id === acctId)?.name ?? "selected paper account"}
+        evidenceAsOf={evidenceAsOf}
         onScope={setScope}
         onSort={setSort}
         onSelect={(slug) => setSelSlug((current) => current === slug ? null : slug)}

@@ -13,6 +13,7 @@ import { SentinelWorkspace } from "@/components/perform/SentinelWorkspace";
 import { ReviewWorkspace } from "@/components/perform/ReviewWorkspace";
 import { OpsWorkspace } from "@/components/perform/OpsWorkspace";
 import { ShadowResearchWorkspace } from "@/components/perform/ShadowResearchWorkspace";
+import { DecisionHomeWorkspace } from "@/components/perform/DecisionHomeWorkspace";
 import { derivePerformFocus, type PerformSection } from "@/lib/perform/derivePerformView";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 
@@ -31,8 +32,9 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 
 export function PerformSurface({
   section = "overview",
+  onNavigate,
   ...surface
-}: SurfaceProps & { section?: PerformSection }) {
+}: SurfaceProps & { section?: PerformSection; onNavigate?: (section: PerformSection | "studio") => void }) {
   const {
     data, view, feed, write, spotUp, symbol, setSymbol, acctId, livePnl, liveMarks, sentinel, positionPeaks, incident,
   } = surface;
@@ -49,7 +51,7 @@ export function PerformSurface({
       <IncidentBanner incident={incident} />
       <main className="pf-stage">
         {data.warning && <div className="market-read-warning" role="status">{data.warning}</div>}
-        {section === "market" ? <PerformMarketsWorkspace surface={surface} /> : section === "positions" ? <PerformPositionsWorkspace surface={surface} /> : section === "research" ? <ShadowResearchWorkspace surface={surface} /> : section === "sentinel" ? <SentinelWorkspace sentinel={sentinel} symbol={symbol} /> : section === "tape" ? <ReviewWorkspace surface={surface} /> : section === "ops" ? <OpsWorkspace surface={surface} /> : <>
+        {section === "market" ? <PerformMarketsWorkspace surface={surface} /> : section === "positions" ? <PerformPositionsWorkspace surface={surface} /> : section === "research" ? <ShadowResearchWorkspace surface={surface} /> : section === "sentinel" ? <SentinelWorkspace sentinel={sentinel} symbol={symbol} /> : section === "tape" ? <ReviewWorkspace surface={surface} /> : section === "ops" ? <OpsWorkspace surface={surface} /> : onNavigate ? <DecisionHomeWorkspace surface={surface} onNavigate={onNavigate} /> : <>
           <div className="pf-market-target" tabIndex={-1}>
             <IntradayChart
               bars={data.bars}
