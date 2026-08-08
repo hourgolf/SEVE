@@ -23,6 +23,7 @@ import type { useVirtualBench } from "@/hooks/useVirtualBench";
 import type { PnlWindow, WindowedPnl } from "@/hooks/useWindowedPnl";
 import type { useChannelControlPlaneView } from "@/hooks/useChannelControlPlaneView";
 import type { ChannelManagerEvidenceRead } from "@/hooks/useChannelManagerEvidence";
+import type { useDecisionAtlasReports } from "@/hooks/useDecisionAtlasReports";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
@@ -102,6 +103,8 @@ export interface SurfaceProps {
   /** Operator-authenticated, SELECT-only eight-arm manager history. The book
    * keeps counterfactual outcomes paired to canonical executed trades. */
   managerEvidence: ChannelManagerEvidenceRead;
+  /** Latest deterministic nightly dossiers; read-only research, never configuration authority. */
+  decisionAtlas: ReturnType<typeof useDecisionAtlasReports>;
   /** Native Review evidence is subscribed once at the page seam. Legacy and
    * native presenters consume this same read model during the parity period. */
   reviewEvidence: ReviewEvidence;

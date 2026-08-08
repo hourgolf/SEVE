@@ -5,6 +5,7 @@ const source = readFileSync(new URL("./nightly-decision-atlas.ts", import.meta.u
 assert.match(source, /profitability-ledger\.ts/);
 assert.match(source, /decision-atlas\.ts/);
 assert.match(source, /weekly-readout\.ts/);
+assert.match(source, /channel-decision-briefs\.ts/);
 assert.doesNotMatch(source, /capture-forward|launchctl|cron|\.from\(|insert\(|upsert\(/);
 assert.match(source, /after-close workflow/);
 assert.match(source, /independently verified/);

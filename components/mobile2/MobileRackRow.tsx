@@ -23,6 +23,7 @@ import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlane
 import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } from "@/lib/research/shadowResearch";
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
+import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -42,7 +43,7 @@ const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
 }).format(new Date(iso));
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle, write, passport, dryPowder, shadowSummary, managerEvidence, researchEvidence, controlPlane,
+  strategist, pnl, active, open, onToggle, write, passport, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, controlPlane,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
@@ -54,6 +55,7 @@ export function MobileRackRow({
   dryPowder?: DryPowderCurve;
   shadowSummary?: ShadowChannelSummary;
   managerEvidence?: ChannelManagerEvidence;
+  decisionBrief?: ChannelDecisionBrief;
   researchEvidence?: ShadowResearch;
   controlPlane?: ChannelControlPlaneViewRead;
 }) {
@@ -327,7 +329,7 @@ export function MobileRackRow({
           {researchEvidence && <CurrentEvidenceCard selectedSlug={slug} executed={currentExecuted} comparison={pairedCurrent}
             state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
             truncated={researchEvidence.currentExecutedTruncated} compact />}
-          <DecisionAtlasPreviewCard summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
+          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
           <details className="channel-disclosure"><summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary><div>
             <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
             <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={rootPolicy?.managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />

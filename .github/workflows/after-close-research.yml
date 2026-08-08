@@ -83,6 +83,15 @@ jobs:
           npm run nightly-decision-atlas -- \
             --through "$SESSION_DATE_ET" \
             --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET"
+      - name: Publish concise Atlas briefs for the dashboard
+        if: vars.DECISION_ATLAS_DASHBOARD_PUBLISH == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
+        shell: bash
+        run: |
+          npm run publish-channel-decision-briefs -- \
+            --publish \
+            --expected-through "$SESSION_DATE_ET" \
+            --briefs-file "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/briefs.json" \
+            --receipt-file "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/publication-receipt.json"
       - name: Verify Priority A experiment baselines
         id: priority-a-readiness
         continue-on-error: true
@@ -129,6 +138,7 @@ jobs:
               "data/decision-atlas/runs/$SESSION_DATE_ET/profitability/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/weekly/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/priority-a-readiness/readiness.json"
             if [[ -f data/gate-shadow-verification.json ]]; then
               sha256sum data/gate-shadow-verification.json
