@@ -198,7 +198,7 @@ check("atomic pause and research enable compiles one candidate manifest", () => 
     live: flat(),
     collectionStates: collectionStates(),
   });
-  assert.equal(result.state, "ready-for-worker-ack");
+  assert.equal(result.state, "ready-for-worker-ack", result.blockers.join(";"));
   assert.deepEqual(result.blockers, []);
   assert.equal(result.candidate?.channelSpecs.length, 10);
   assert.equal(result.candidate?.channelSpecs.find((spec) =>
@@ -403,6 +403,44 @@ check("paper promotion requires independent collection to be active", () => {
   assert.ok(result.blockers.includes(
     "bundle:paper_collection_not_active:momo-shape-2",
   ));
+});
+
+check("an account-specific admission domain is explicit and receipt-visible", () => {
+  const isolated = draft();
+  isolated.changes = [{
+    slug: "orb-ustop-ctl",
+    collisionDomain: "rc54-morgue",
+  }];
+  isolated.admissionPolicyUpserts = [{
+    id: "rc54-morgue",
+    reentry: "bounded",
+    maxOpenByUnderlying: { SPY: 2, QQQ: 1, IWM: 0 },
+    maxOpenGlobal: 2,
+    sameOccOpenMax: 1,
+    sameClockMaxByUnderlying: { SPY: 1, QQQ: 1, IWM: 0 },
+    maxOpenPerFamily: 1,
+    priorityBySlug: {},
+    crossDomainSameOcc: "allow-with-receipt",
+    enabledForNewEntries: true,
+  }];
+  const limits = envelope();
+  limits.correlationGroups[0].maxOpenPositions = 8;
+  const result = buildChannelRosterBundlePreview({
+    active,
+    registry: registry(),
+    draft: isolated,
+    envelope: limits,
+    live: flat(),
+    collectionStates: collectionStates(),
+  });
+  assert.equal(result.state, "ready-for-worker-ack", result.blockers.join(";"));
+  assert.equal(result.candidate?.channelSpecs.find((spec) =>
+    spec.slug === "orb-ustop-ctl")?.collisionDomain, "rc54-morgue");
+  assert.ok(result.candidate?.manifest.admissionPolicies.some((policy) =>
+    policy.id === "rc54-morgue"));
+  assert.ok(result.diffs.some((diff) =>
+    diff.slug === "admission:rc54-morgue"
+    && diff.source === "admission-policy"));
 });
 
 console.log(`channel-roster-bundle selftest: ${checks} checks passed`);
