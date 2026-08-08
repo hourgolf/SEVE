@@ -35,7 +35,9 @@ export const RC54_COHORT_ID = "rc54-executable-2026-07-27" as const;
 export const RC54_COHORT_FROM = "2026-07-27" as const;
 export const RC54_CONTROL_DOMAIN = "rc54-control" as const;
 export const RC54_LAB_DOMAIN = "rc54-lab" as const;
+export const RC54_MORGUE_DOMAIN = "rc54-morgue" as const;
 export const RC54_LAB_ACCOUNT_ID = "56daa293-e6bc-447d-83ac-2bfafb4d0ac1" as const;
+export const RC54_MORGUE_ACCOUNT_ID = "995aa327-b0da-4050-bede-97ab462b06cd" as const;
 
 export const RC54_ROOTS = [
   {
@@ -236,6 +238,23 @@ export const RC54_LAB_ADMISSION_POLICY: AdmissionDomainPolicy = {
     RC54_ROOTS.filter((root) => root.cohort === "lab")
       .map((root) => [root.slug, root.priority]),
   ),
+  crossDomainSameOcc: "allow-with-receipt",
+};
+
+export const RC54_MORGUE_ADMISSION_POLICY: AdmissionDomainPolicy = {
+  id: RC54_MORGUE_DOMAIN,
+  enabledForNewEntries: true,
+  maxOpenPerFamily: 1,
+  maxOpenByUnderlying: { SPY: 2, QQQ: 1, IWM: 0 },
+  maxOpenGlobal: 2,
+  sameOccOpenMax: 1,
+  reentry: "disabled",
+  sameClockMaxByUnderlying: { SPY: 1, QQQ: 1, IWM: 0 },
+  priorityBySlug: {
+    "qqq-thrust-trail-wd": 1,
+    "grind-v3": 2,
+    "orb-ustop-ctl": 4,
+  },
   crossDomainSameOcc: "allow-with-receipt",
 };
 

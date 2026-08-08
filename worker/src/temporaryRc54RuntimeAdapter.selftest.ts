@@ -8,6 +8,8 @@ import { buildReceiptBoundEntryPolicy } from "./receiptBoundEntryPolicy.js";
 import {
   finalizeRc54ReleaseAdmissions,
   prepareRc54ReleaseAdmissions,
+  RC54_MORGUE_ACCOUNT_ID,
+  RC54_MORGUE_ADMISSION_POLICY,
   RC54_ROOTS,
 } from "./rc54ReleasePolicy.js";
 import {
@@ -17,6 +19,7 @@ import {
   receiptBoundRc54CandidateIdentity,
   receiptBoundRc54ConfigurationWriteStamp,
   receiptBoundRc54ReleaseEvidenceContext,
+  TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION,
   validateReceiptBoundRc54RestartRows,
   validateReceiptBoundRc54Topology,
 } from "./temporaryRc54RuntimeAdapter.js";
@@ -81,6 +84,10 @@ function check(name: string, run: () => void): void {
 }
 
 check("no-op receipt uses the exact RC5.4 topology", () => {
+  assert.equal(
+    TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION,
+    "temporary-rc54-runtime-adapter-v4",
+  );
   assert.deepEqual(validateReceiptBoundRc54Topology(runtime), []);
   const resolve = buildReceiptBoundRc54AdmissionRootResolver(runtime);
   for (const sealed of RC54_ROOTS) {
@@ -217,6 +224,78 @@ check("receipt-bound roster may exclude a sealed root without relaxing policy ca
   assert.equal(
     buildReceiptBoundRc54AdmissionRootResolver(reduced)(removed.slug),
     null,
+  );
+});
+
+check("a sealed MORGUE domain isolates one paper account without breaking legacy manifests", () => {
+  assert.equal(buildReceiptBoundRc54AdmissionPolicies(runtime).length, 2);
+  const source = runtime.roots.find((root) => root.slug === "vb-macd-state");
+  assert.ok(source);
+  const morgueRoot = {
+    ...source,
+    slug: "qqq-thrust-trail-wd",
+    cohort: "lab" as const,
+    domainId: RC54_MORGUE_ADMISSION_POLICY.id,
+    familyId: "QQQ-THRUST-WD",
+    underlying: "QQQ" as const,
+    priority: 1,
+    strategistId: "99999999-9999-4999-8999-999999999998",
+    accountId: RC54_MORGUE_ACCOUNT_ID,
+    channelSpecVersionId: "spec:qqq-thrust-trail-wd:v1",
+    channelSpecContentHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    configuration: {
+      ...source.configuration,
+      channelSlug: "qqq-thrust-trail-wd",
+      accountId: RC54_MORGUE_ACCOUNT_ID,
+      channelSpecVersionId: "spec:qqq-thrust-trail-wd:v1",
+      channelSpecContentHash:
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    },
+  };
+  const moved = new Set(["grind-v3", "orb-ustop-ctl"]);
+  const expanded = {
+    ...runtime,
+    roots: [
+      ...runtime.roots.map((root) => moved.has(root.slug)
+        ? { ...root, domainId: RC54_MORGUE_ADMISSION_POLICY.id }
+        : root),
+      morgueRoot,
+    ],
+    admissionPolicies: [
+      ...runtime.admissionPolicies.map((policy) =>
+        policy.id === "rc54-control"
+          ? {
+            ...policy,
+            priorityBySlug: Object.fromEntries(
+              Object.entries(policy.priorityBySlug)
+                .filter(([slug]) => !moved.has(slug)),
+            ),
+          }
+          : policy),
+      {
+        ...RC54_MORGUE_ADMISSION_POLICY,
+        reentry: "disabled" as const,
+      },
+    ],
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.deepEqual(validateReceiptBoundRc54Topology(expanded), []);
+  const policies = buildReceiptBoundRc54AdmissionPolicies(expanded);
+  assert.equal(policies.length, 3);
+  assert.deepEqual(
+    policies.find((policy) => policy.id === RC54_MORGUE_ADMISSION_POLICY.id)
+      ?.priorityBySlug,
+    RC54_MORGUE_ADMISSION_POLICY.priorityBySlug,
+  );
+  const wrongAccount = {
+    ...expanded,
+    roots: expanded.roots.map((root) => root.slug === morgueRoot.slug
+      ? { ...root, accountId: source.accountId }
+      : root),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.ok(
+    validateReceiptBoundRc54Topology(wrongAccount)
+      .includes(`temporary_rc54_adapter:${morgueRoot.slug}:domain_cohort`),
   );
 });
 
