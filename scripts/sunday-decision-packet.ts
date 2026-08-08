@@ -18,7 +18,7 @@ const arg = (name: string, fallback: string): string => {
 const root = resolve(arg("evidence-root", "data/weekend-evidence/tonight-2026-08-07"));
 const outputDir = resolve(arg("out-dir", `${root}/sunday-packet`));
 const docFile = resolve(arg("doc-file", "docs/sunday-decision-packet-2026-08-09.md"));
-const generatedAt = arg("generated-at", new Date().toISOString());
+const generatedAt = arg("generated-at", "2026-08-07T20:00:00.000Z");
 if (!Number.isFinite(Date.parse(generatedAt))) throw new Error("generated-at must be ISO-8601");
 
 const paths = {
@@ -166,7 +166,7 @@ const markdown = [
   "## The short version",
   "",
   "- **Trust repair:** the false missing-lineage warning was caused by a 1,000-row observation-read cap, not 43 unrouted trades. The dashboard read is now bounded and paged. Legacy uncertainty remains visibly separate.",
-  "- **Forward evidence:** the close runner now performs a stamped virtual-only rebuild, independent verification, Decision Atlas refresh, and retune-readiness pass in sequence.",
+  "- **Forward evidence:** the hosted weekday close runner now performs a stamped virtual-only rebuild, independent verification, Decision Atlas refresh, and retune-readiness pass in sequence. Friday remains honestly historical; the first fully prospective stamped cohort begins 2026-08-10.",
   `- **Promotion:** conditionally promote **breakout** at **2 paper contracts in LAB** after one fresh flat/post-close preview. Its 39 replayed opportunities add ${money(promotion?.twoContractIncrement.portfolioResultUsd)} with zero newly displaced peers. All three accounts tie in replay; LAB is chosen for operational separation.`,
   "- **Managers:** keep vb-gap-drift unchanged while it collects; continue LOCK50/30 as a dark challenger for vb-macd-state; reject LOCK50/30 for orb-qqq-trail on current evidence.",
   "- **Sizing:** no new increase. The three approved 2→4 changes are already live.",
@@ -213,10 +213,11 @@ const markdown = [
   "",
   "## What remains before any Sunday apply",
   "",
-  "1. Merge and deploy the dashboard/read-path fixes; smoke-test cream/blackout desktop and mobile at 100% zoom.",
-  "2. Install or confirm the after-close runner invocation so the new stamped rebuild/verify/Atlas chain runs automatically; the code alone does not prove the scheduler invoked it.",
-  "3. Re-run breakout’s roster preview against fresh flat broker/desk truth, then persist its paper-eligible registration and separately apply the roster bundle if approved.",
-  "4. Do not switch a manager this weekend. vb-macd-state needs three more independent paired sessions; the other two do not support a switch.",
+  "1. Re-run breakout’s roster preview against fresh flat broker/desk truth, then persist its paper-eligible registration and separately apply the roster bundle if approved.",
+  "2. Do not switch a manager this weekend. vb-macd-state needs three more independent paired sessions; the other two do not support a switch.",
+  "3. Do not apply a Priority-A retune before its prospective cohort starts Monday; the 22 exact production baselines are verified and ready to collect.",
+  "",
+  "The dashboard/read-path fixes and hosted after-close schedule are merged and deployed. Production is flat with zero open orders after the automatic Railway restart.",
   "",
   "## Trust boundary",
   "",
@@ -224,6 +225,8 @@ const markdown = [
   "",
   `Ledger hash: \`${profitability.ledgerSha256}\``,
   `Atlas hash: \`${atlasReceipt.hashes.atlas}\``,
+  "",
+  "That Atlas hash is semantic and deterministic: two independent replays of the same Friday snapshot produced identical Atlas and bounded-retune payloads. Raw snapshot hashes remain allowed to change when new source rows arrive.",
   "",
   "No production writes, orders, routing, roster, manager, sizing, or trading-economics changes were made by generating this packet.",
   "",

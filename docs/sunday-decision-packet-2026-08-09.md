@@ -5,7 +5,7 @@ Evidence through Friday, August 7. This packet proposes decisions; it does not p
 ## The short version
 
 - **Trust repair:** the false missing-lineage warning was caused by a 1,000-row observation-read cap, not 43 unrouted trades. The dashboard read is now bounded and paged. Legacy uncertainty remains visibly separate.
-- **Forward evidence:** the close runner now performs a stamped virtual-only rebuild, independent verification, Decision Atlas refresh, and retune-readiness pass in sequence.
+- **Forward evidence:** the hosted weekday close runner now performs a stamped virtual-only rebuild, independent verification, Decision Atlas refresh, and retune-readiness pass in sequence. Friday remains honestly historical; the first fully prospective stamped cohort begins 2026-08-10.
 - **Promotion:** conditionally promote **breakout** at **2 paper contracts in LAB** after one fresh flat/post-close preview. Its 39 replayed opportunities add +$189 with zero newly displaced peers. All three accounts tie in replay; LAB is chosen for operational separation.
 - **Managers:** keep vb-gap-drift unchanged while it collects; continue LOCK50/30 as a dark challenger for vb-macd-state; reject LOCK50/30 for orb-qqq-trail on current evidence.
 - **Sizing:** no new increase. The three approved 2→4 changes are already live.
@@ -76,16 +76,19 @@ A retune changes one entry or exit variable in the dark while native behavior re
 
 ## What remains before any Sunday apply
 
-1. Merge and deploy the dashboard/read-path fixes; smoke-test cream/blackout desktop and mobile at 100% zoom.
-2. Install or confirm the after-close runner invocation so the new stamped rebuild/verify/Atlas chain runs automatically; the code alone does not prove the scheduler invoked it.
-3. Re-run breakout’s roster preview against fresh flat broker/desk truth, then persist its paper-eligible registration and separately apply the roster bundle if approved.
-4. Do not switch a manager this weekend. vb-macd-state needs three more independent paired sessions; the other two do not support a switch.
+1. Re-run breakout’s roster preview against fresh flat broker/desk truth, then persist its paper-eligible registration and separately apply the roster bundle if approved.
+2. Do not switch a manager this weekend. vb-macd-state needs three more independent paired sessions; the other two do not support a switch.
+3. Do not apply a Priority-A retune before its prospective cohort starts Monday; the 22 exact production baselines are verified and ready to collect.
+
+The dashboard/read-path fixes and hosted after-close schedule are merged and deployed. Production is flat with zero open orders after the automatic Railway restart.
 
 ## Trust boundary
 
 The canonical ledger contains 1,519 logical trades: 93 exact-configuration, 437 with immutable account routes, and 1,082 structural-only. The Atlas contains 38,027 logical opportunities across 68 channels. Structural history can nominate reversible experiments; it cannot be relabeled as exact-current evidence.
 
 Ledger hash: `sha256:c263c9aa35919b78cfc8676eb09364c1615bdaa65233ac5e2f93ad58c46ec2fd`
-Atlas hash: `sha256:61816325a76d97bb0ca48b98313af097d874e5f1de0a47023fc15769f72b51c4`
+Atlas hash: `sha256:dab71ce2817d13c9c86df15bf4e144b77254e89a42912b591e0b21f440f9b91c`
+
+That Atlas hash is semantic and deterministic: two independent replays of the same Friday snapshot produced identical Atlas and bounded-retune payloads. Raw snapshot hashes remain allowed to change when new source rows arrive.
 
 No production writes, orders, routing, roster, manager, sizing, or trading-economics changes were made by generating this packet.
