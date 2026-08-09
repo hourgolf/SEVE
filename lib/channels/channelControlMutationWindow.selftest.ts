@@ -41,6 +41,15 @@ for (const path of strictWriteRoutes) {
   assert.match(source, /channelControlMutationWindow\(Date\.now\(\)\)/);
   assert.match(source, /if \(!mutationWindow\.allowed\)/);
 }
+const activationApplyRoute = readFileSync(new URL(
+  "../../app/api/channel-activation/apply/route.ts",
+  import.meta.url,
+), "utf8");
+assert.match(
+  activationApplyRoute,
+  /acknowledgementId,configurationEpochId,confirmation,previewId,proposalId/,
+  "apply request keys must match JavaScript's lexicographic sort order",
+);
 for (const path of [
   "../../app/api/channel-roster-bundles/preview/route.ts",
   "../../app/api/channel-roster-bundles/rollback/route.ts",
