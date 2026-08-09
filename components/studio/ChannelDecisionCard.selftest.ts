@@ -17,8 +17,10 @@ assert.match(card, /GOVERNED ACTIVATION LAYER/);
 assert.match(card, /DRAFT → VALIDATE\/PREVIEW → WORKER ACK → EXPLICIT NEXT-SAFE-ENTRY RECEIPT/);
 assert.doesNotMatch(card, /\bfetch\s*\(/);
 assert.match(card, /DRAFT PAUSE · KEEP COLLECTING/);
+assert.match(card, /DRAFT ENTRY CAP/);
+assert.match(card, /createEntryCapDraft/);
 assert.match(card, /APPLY NEXT SAFE ENTRY/);
-assert.match(inspector, /<ChannelDecisionCard effective=\{passport\.effective\}/);
-assert.match(mobile, /<ChannelDecisionCard effective=\{passport\.effective\} controlPlane=\{controlPlane\} compact/);
+assert.match(inspector, /<ChannelDecisionCard effective=\{passport\.effective\} controlPlane=\{controlPlane\} decisionBrief=\{decisionBrief\}/);
+assert.match(mobile, /<ChannelDecisionCard effective=\{passport\.effective\} controlPlane=\{controlPlane\} decisionBrief=\{decisionBrief\} compact/);
 
 console.log("channel-decision-card-selftest: read-only desktop + mobile integration passed");
