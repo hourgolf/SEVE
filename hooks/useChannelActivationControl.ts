@@ -148,6 +148,34 @@ export function useChannelActivationControl(input: {
     }
   }, [input, refresh, request]);
 
+  const createEntryCapDraft = useCallback(async (
+    maxEntriesPerSession: number,
+    evidenceRefs: string[] = [],
+  ) => {
+    if (!input.baseSpecVersionId || !input.baseSpecContentHash) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await request("/api/channel-proposals", {
+        baseSpecVersionId: input.baseSpecVersionId,
+        baseSpecContentHash: input.baseSpecContentHash,
+        proposedPatch: { maxEntriesPerSession },
+        reason: `Test ${maxEntriesPerSession} same-session entr${maxEntriesPerSession === 1 ? "y" : "ies"} while keeping exit, manager, size, route, and collision policy fixed.`,
+        evidenceRefs: [...new Set([...input.evidenceRefs, ...evidenceRefs])],
+        changeClass: "governed-operational-policy",
+      });
+      setNotice("Immutable entry-cap draft created. Review it before validation.");
+      await refresh();
+    } catch (writeError) {
+      setError(writeError instanceof Error
+        ? writeError.message
+        : "entry-cap draft failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [input, refresh, request]);
+
   const preparePreview = useCallback(async () => {
     if (!proposal) return;
     setBusy(true);
@@ -209,6 +237,7 @@ export function useChannelActivationControl(input: {
     acknowledgementFresh,
     signedIn: Boolean(session && operator),
     createPostureDraft,
+    createEntryCapDraft,
     preparePreview,
     apply,
     refresh,

@@ -8,6 +8,7 @@ import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlane
 import { useChannelActivationControl } from "@/hooks/useChannelActivationControl";
 import { useChannelCollectionControl } from "@/hooks/useChannelCollectionControl";
 import { signedUsd, usd0 } from "@/lib/format";
+import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 
 const short = (value: string | null): string => value ? `${value.replace(/^sha256:/, "").slice(0, 10)}…` : "—";
 const comparisonLabel: Record<DecisionEvidenceLayer["comparability"], string> = {
@@ -34,9 +35,10 @@ function EvidenceLayer({ layer }: { layer: DecisionEvidenceLayer }) {
   );
 }
 
-export function ChannelDecisionCard({ effective, controlPlane, compact = false }: {
+export function ChannelDecisionCard({ effective, controlPlane, decisionBrief, compact = false }: {
   effective: EffectiveChannelState;
   controlPlane?: ChannelControlPlaneViewRead;
+  decisionBrief?: ChannelDecisionBrief | null;
   compact?: boolean;
 }) {
   const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -72,6 +74,16 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
       : activeSpec
         ? "EXISTING ROOT · DRAFT READY"
         : "PROMOTION PREREGISTRATION REQUIRED";
+  const weakLaterEntry = decisionBrief?.recommendation.axis === "entry"
+    ? decisionBrief.entryFrequency.rows.find((row) => row.entryNumber > 1
+      && row.sessions >= 5
+      && row.scored >= 5
+      && (row.typicalResultPerContractUsd ?? 1) <= 0) ?? null
+    : null;
+  const proposedEntryCap = weakLaterEntry ? weakLaterEntry.entryNumber - 1 : null;
+  const entryCapReady = activeSpec && proposedEntryCap != null
+    && proposedEntryCap >= 1
+    && proposedEntryCap < activeSpec.maxEntriesPerSession;
   return (
     <details className={`channel-decision-card ${model.tone}${compact ? " compact" : ""}`} open={!compact}>
       <summary>
@@ -117,6 +129,16 @@ export function ChannelDecisionCard({ effective, controlPlane, compact = false }
               {activeSpec.executionPosture === "paper"
                 ? "DRAFT PAUSE · KEEP COLLECTING"
                 : "DRAFT RESUME · PAPER"}
+            </button>}
+            {!activation.proposal && entryCapReady && <button
+              type="button"
+              disabled={!activation.signedIn || activation.busy || controlPlane?.view?.state !== "receipt-bound"}
+              onClick={() => void activation.createEntryCapDraft(
+                proposedEntryCap,
+                [`decision-atlas:${decisionBrief?.throughSession}:${effective.slug}:entry-frequency`],
+              )}
+            >
+              DRAFT ENTRY CAP {activeSpec.maxEntriesPerSession}→{proposedEntryCap}
             </button>}
             {activation.proposal?.approval_state === "draft" && <button
               type="button"
