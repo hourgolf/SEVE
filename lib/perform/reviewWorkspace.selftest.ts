@@ -77,8 +77,10 @@ assert.match(page, /activeRoom === "ops" \|\| activeRoom === "tape"/);
 assert.match(component, /todayAttribution=\{feed\.positionAttribution\}/);
 assert.match(mobileReview, /immutable execution routes/);
 assert.match(mobileReview, /ALL PAPER ACCOUNTS/);
-assert.match(shadowWorkspace, /ALL PAPER · NATIVE NOW/);
-assert.match(sentinelWorkspace, /ALL PAPER · NEXT OPEN/);
+assert.match(shadowWorkspace, /scope=\{`all paper · \$\{lane === "vb"/);
+assert.match(shadowWorkspace, /NATIVE PATHS · PAIRED DECISIONS/);
+assert.match(sentinelWorkspace, /scope="all paper accounts"/);
+assert.match(sentinelWorkspace, /era="next-session packet"/);
 assert.match(sentinelHook, /packet \? operatorPacketToJudge\(packet\) :/);
 
 assert.match(shell, /performSection === "research" \|\| performSection === "tape"/);
