@@ -18,6 +18,7 @@ const envFile = explicitEnvFile ? resolve(explicitEnvFile) : null;
 if (envFile && !existsSync(envFile)) throw new Error(`environment file not found: ${envFile}`);
 const virtualCatchupFile = arg("virtual-catchup-file");
 const virtualCatchupManifest = arg("virtual-catchup-manifest");
+const shadowCatchupManifest = arg("shadow-catchup-manifest");
 if (Boolean(virtualCatchupFile) !== Boolean(virtualCatchupManifest)) {
   throw new Error("--virtual-catchup-file and --virtual-catchup-manifest must be supplied together");
 }
@@ -25,6 +26,7 @@ const ledgerDir = resolve(outputRoot, "profitability");
 const atlasDir = resolve(outputRoot, "atlas");
 const weeklyDir = resolve(outputRoot, "weekly");
 const briefsDir = resolve(outputRoot, "briefs");
+const learningDir = resolve(outputRoot, "learning");
 mkdirSync(outputRoot, { recursive: true });
 const run = (script: string, args: string[]): void => {
   execFileSync(process.execPath, ["--import", "tsx", script, ...args], { stdio: "inherit", env: process.env });
@@ -41,4 +43,8 @@ run("scripts/weekly-readout.ts", ["--through", through, "--ledger-file", resolve
 run("scripts/channel-decision-briefs.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--weekly-file", resolve(weeklyDir, "weekly.json"),
   "--out-dir", briefsDir]);
+run("scripts/nightly-channel-learning.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
+  "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--briefs-file", resolve(briefsDir, "briefs.json"),
+  "--out-dir", learningDir,
+  ...(shadowCatchupManifest ? ["--shadow-catchup-manifest", resolve(shadowCatchupManifest)] : [])]);
 console.log(`nightly-decision-atlas: PASS · local artifacts only · ${outputRoot}`);

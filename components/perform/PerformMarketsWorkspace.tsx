@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { ContractDetailView } from "@/components/ContractDetail";
 import { IntradayChart } from "@/components/IntradayChart";
 import { OptionChain } from "@/components/OptionChain";
@@ -8,6 +9,7 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, timeOfDay } from "@/lib/format";
 import { deriveMarketRisk } from "@/lib/perform/deriveMarketWorkspace";
 import { SeveEvidenceContext, SeveWorkspaceHeader } from "@/components/ui/Seve909";
+import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 const after = (a: string | null, b: string | null) => a != null && (b == null || Date.parse(a) > Date.parse(b));
 const pacificTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", {
@@ -75,16 +77,22 @@ export function MarketOpenRisk({ surface, compact = false }: { surface: SurfaceP
 
 /** Full desktop Markets workspace. It keeps open exposure visible while a leg
  * is selected and reuses only page-owned market and contract-history reads. */
-export function PerformMarketsWorkspace({ surface }: { surface: SurfaceProps }) {
+export function PerformMarketsWorkspace({ surface, destination, onNavigate }: { surface: SurfaceProps; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const { data, feed, spotUp, symbol, setSymbol, selected, setSelected, contractHistory } = surface;
   const changeSymbol = (next: string) => {
     setSelected(null);
     setSymbol(next);
   };
+  useEffect(() => {
+    if (destination?.section !== "market" || !destination.occ) return;
+    const root = destination.occ.match(/^([A-Z]+)/)?.[1];
+    if (root && root !== symbol) setSymbol(root);
+    setSelected(destination.occ);
+  }, [destination?.occ, destination?.section, setSelected, setSymbol, symbol]);
 
   return (
     <section className="pf-markets-workspace" id="perform-market" data-nav-target="true" tabIndex={-1}>
-      <div className="pf-markets-heading"><SeveWorkspaceHeader title="MARKETS" subtitle="observed prices · current paper exposure" boundary="READ ONLY" />
+      <div className="pf-markets-heading"><SeveWorkspaceHeader title="MARKETS" subtitle="prices · exposure" boundary="READ ONLY" />
         <SeveEvidenceContext kind="actual" scope={`${symbol} + selected paper account`} asOf={pacificDateTime(data.lastIngestTs)} era="current market session" sample={`${data.snapshot.length} observed contracts`} quality={data.status === "err" ? "partial" : data.status === "stale" ? "building" : "live"} detail="Observed quotes support inspection; they are not an execution promise." />
       </div>
       <div className="pf-markets-chart">
@@ -110,7 +118,11 @@ export function PerformMarketsWorkspace({ surface }: { surface: SurfaceProps }) 
             spot={data.spot}
             deltasModeled={data.deltasModeled}
             selected={selected}
-            onSelect={(occ) => setSelected((current) => current === occ ? null : occ)}
+            onSelect={(occ) => {
+              const next = selected === occ ? null : occ;
+              setSelected(next);
+              onNavigate?.({ section: "market", occ: next ?? undefined });
+            }}
             symbol={symbol}
           />
         </div>

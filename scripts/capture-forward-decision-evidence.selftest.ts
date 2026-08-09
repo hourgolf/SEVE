@@ -12,6 +12,7 @@ const retunes = source.indexOf('run("priority-A retune readiness"');
 assert.ok(readiness >= 0 && readiness < publish, "flatness/readiness must precede research publication");
 assert.ok(publish < verify && verify < atlas && atlas < retunes, "publication, verification, Atlas, and experiment readiness stay ordered");
 assert.match(source, /--virtual-trades-only", "--stamp-provenance/);
+assert.match(source, /--shadow-catchup-manifest/);
 assert.match(source, /const shadowPublished = postcloseReady && run/);
 assert.match(source, /const shadowVerified = shadowPublished && run/);
 assert.match(source, /if \(shadowVerified\)/);
@@ -23,5 +24,7 @@ const hostedReadiness = workflow.indexOf("priority-a-retune-readiness");
 assert.ok(hostedPublish >= 0 && hostedPublish < hostedVerify && hostedVerify < hostedAtlas && hostedAtlas < hostedReadiness,
   "the hosted schedule must stamp, verify, build the Atlas, then verify experiment baselines");
 assert.match(workflow, /--virtual-trades-only/);
+assert.match(workflow, /--shadow-catchup-manifest data\/gate-shadow-catchup-manifest\.json/);
+assert.match(workflow, /learning\/dashboard-briefs\.json/);
 assert.doesNotMatch(workflow, /(?:ALPACA|RAILWAY)_[A-Z_]+:/);
 console.log("capture-forward decision evidence selftest: PASS");

@@ -50,7 +50,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 
 export function PositionsSection({
   positions, strategists, liveMarks, peaks, write, targeted, reconciliation, evidenceChains, channelWorkspace,
-  attribution,
+  attribution, onOpenChannel, onOpenContract,
 }: {
   positions: Position[];
   strategists: StrategistState[];
@@ -62,6 +62,8 @@ export function PositionsSection({
   evidenceChains?: OpsEvidenceChain[];
   channelWorkspace?: ChannelWorkspaceModel;
   attribution?: SurfaceProps["feed"]["positionAttribution"];
+  onOpenChannel?: (slug: string) => void;
+  onOpenContract?: (occ: string) => void;
 }) {
   const closeFlow = usePositionCloseFlow(write);
   const stratOf = (slug: string) => strategists.find((s) => s.slug === slug);
@@ -106,11 +108,9 @@ export function PositionsSection({
           return (
             <div className="pfp-row" key={p.id} style={{ ["--pm" as string]: pm }}>
               <span className="pfp-dot" />
-              <div className="pfp-slug">{p.strategist_slug}</div>
+              <div className="pfp-slug">{onOpenChannel ? <button type="button" onClick={() => onOpenChannel(p.strategist_slug)}>{p.strategist_slug}</button> : p.strategist_slug}</div>
               <div className={`pfp-pnl ${unreal < 0 ? "neg" : "pos"}`}>{signedUsd(unreal)}</div>
-              <div className="pfp-ctr">
-                {occRoot(p.occ_symbol, s?.underlying ?? "SPY")} {p.strike.toFixed(0)}{p.opt_type === "call" ? "C" : "P"} ×{p.qty}{dte != null ? ` · ${dte}DTE` : ""}
-              </div>
+              <div className="pfp-ctr">{onOpenContract ? <button type="button" onClick={() => onOpenContract(p.occ_symbol)}>{occRoot(p.occ_symbol, s?.underlying ?? "SPY")} {p.strike.toFixed(0)}{p.opt_type === "call" ? "C" : "P"} ×{p.qty}{dte != null ? ` · ${dte}DTE` : ""}</button> : <>{occRoot(p.occ_symbol, s?.underlying ?? "SPY")} {p.strike.toFixed(0)}{p.opt_type === "call" ? "C" : "P"} ×{p.qty}{dte != null ? ` · ${dte}DTE` : ""}</>}</div>
               <div className="pfp-meta">{p.opened_at ? timeOfDay(p.opened_at) : "—"} · marked ${Math.round(markedNotional)}</div>
               <div className="pfp-decision">
                 <span>IN <b>{entry.toFixed(2)}</b></span><i>→</i><span>MARK <b>{mark.toFixed(2)}</b></span>

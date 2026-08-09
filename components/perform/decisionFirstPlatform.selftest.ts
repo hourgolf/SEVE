@@ -18,6 +18,8 @@ for (const phrase of ["WHAT CHANGED?", "WHAT NEEDS ATTENTION?", "WHAT SHOULD I D
 assert.match(shell, /label: "Home"/);
 assert.match(shell, /label: "System"/);
 for (const label of ["EVIDENCE", "SCOPE", "AS OF", "CONFIGURATION", "SAMPLE"]) assert.match(evidence, new RegExp(label));
+assert.match(evidence, /<details className=\{`sv909-evidence-context/);
+assert.match(evidence, /<summary>/);
 
 assert(sentinel.indexOf("NEXT ACTION") < sentinel.indexOf("sntw-technical"));
 assert(ops.indexOf("NEEDS ATTENTION") < ops.indexOf("opsw-technical"));
@@ -26,8 +28,10 @@ assert.match(ops, /<details className="opsw-technical"/);
 
 for (const heading of ["STATE", "WHY THIS STATE", "CURRENT SESSION", "NEXT REVIEW"]) assert.match(fleet, new RegExp(`>${heading}<`));
 assert.doesNotMatch(fleet, />RISK \/ TRADE<|>LIVE MODE<|>CONTEXT</);
+assert.doesNotMatch(fleet, /paper enabled|No unresolved exception|\$0.*attrib/);
 assert.doesNotMatch(mobileRow, /DB DIFFERS|m2-rr-fires num/);
-assert.match(mobileRow, /Research only; entries are blocked/);
+assert.match(mobileRow, /COLLECTING EVIDENCE/);
+assert.doesNotMatch(mobileRow, /recommendation\.summary/);
 
 for (const mapping of [
   'label: "HOME", sub: "MARKET"',
@@ -39,6 +43,7 @@ for (const mapping of [
 
 assert.match(research, /"decisions"\s*\|\s*"data"/);
 assert.match(research, /SUPPORTING EVIDENCE/);
+assert.doesNotMatch(research, /<em>\{brief\?\.recommendation\.nextExperiment/);
 assert.match(book, /DESK FLAT/);
 assert.match(book, /No capital is deployed/);
 

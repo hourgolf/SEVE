@@ -21,7 +21,7 @@ const SORTS: { value: StudioSort; label: string }[] = [
 
 export type StudioScope = "attention" | "roots" | "dark" | "all";
 
-export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect }: {
+export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect, onCurrentSession, onNextReview }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
   selectedSlug?: string;
@@ -35,6 +35,8 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
   onScope: (scope: StudioScope) => void;
   onSort: (sort: StudioSort) => void;
   onSelect: (slug: string) => void;
+  onCurrentSession?: (slug: string) => void;
+  onNextReview?: (slug: string) => void;
 }) {
   const roster = useChannelRosterBundleControl(controlPlane);
   const authorityRootSlugs = passports.release.state === "verified"
@@ -56,11 +58,6 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
         <div className="fleet-title">
           <span className="fleet-kicker">STUDIO · FLEET</span>
           <strong>{summary.attention ? `${summary.attention} need attention` : "fleet nominal"}</strong>
-        </div>
-        <div className="fleet-metrics" aria-label="Fleet summary">
-          <span><small>TRADING IN VIEW</small><b>{passports.roots}</b></span>
-          <span><small>OBSERVING IN VIEW</small><b>{passports.dark}</b></span>
-          <span><small>ATTENTION</small><b>{summary.attention}</b></span>
         </div>
       </header>
 
@@ -111,37 +108,40 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                 ? "OBSERVING"
                 : "UNVERIFIED";
             const liveModeDetail = passport?.lifecycle === "paper-root"
-                ? passport.rootPolicy ? `${passport.rootPolicy.quantity} ct paper` : "paper enabled"
+                ? passport.rootPolicy ? `${passport.rootPolicy.quantity} CT` : null
                 : passport?.lifecycle === "dark-evidence"
-                  ? "research only"
-                  : "not verified";
+                  ? "NO ENTRY"
+                  : null;
+            const reasonLabel = row.attentionReasons[0]
+              ?? (passport?.database.differsFromRuntime ? "Saved settings need review" : decision.label === "IDLE" ? "Ready" : decision.label);
+            const reasonDetail = liveMode === "OBSERVING"
+              ? "Collecting only"
+              : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? null;
             return (
-              <button
-                type="button"
+              <div
                 role="row"
                 key={row.channel.slug}
+                data-channel-row={row.channel.slug}
                 className={`fleet-grid fleet-row${selectedSlug === row.channel.slug ? " selected" : ""}`}
                 style={{ ["--pm" as string]: pmVar(row.channel.color) }}
-                onClick={() => onSelect(row.channel.slug)}
               >
-                <span className="fleet-channel" role="cell"><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></span>
+                <button type="button" className="fleet-channel fleet-cell-link" role="cell" onClick={() => onSelect(row.channel.slug)} aria-expanded={selectedSlug === row.channel.slug}><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></button>
                 <span className="fleet-runtime" role="cell">
                   <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{liveMode}</em>
-                  <small>{liveModeDetail}</small>
+                  {liveModeDetail && <small>{liveModeDetail}</small>}
                 </span>
                 <span className="fleet-reason" role="cell">
-                  <b>{row.attentionReasons[0] ?? (passport?.database.differsFromRuntime ? "Saved settings need review" : decision.label === "IDLE" ? "Ready for the next eligible signal" : decision.label)}</b>
-                  <small>{liveMode === "OBSERVING" ? "Research only; entries are blocked" : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? "No unresolved exception"}</small>
+                  <b>{reasonLabel}</b>
+                  {reasonDetail && <small>{reasonDetail}</small>}
                 </span>
-                <span className="fleet-position" role="cell">
-                  <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : "—"}</b>
-                  <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{row.pnl.dayPnl ? signedUsd(row.pnl.dayPnl) : "$0"} attrib</small>
-                </span>
-                <span className="fleet-next" role="cell">
+                <button type="button" className="fleet-position fleet-cell-link" role="cell" onClick={() => onCurrentSession?.(row.channel.slug)} aria-label={`Open ${row.channel.slug} current-session review`}>
+                  <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : row.pnl.dayPnl ? "CLOSED" : "QUIET"}</b>
+                  {row.pnl.dayPnl !== 0 && <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{signedUsd(row.pnl.dayPnl)}</small>}
+                </button>
+                <button type="button" className="fleet-next fleet-cell-link" role="cell" onClick={() => onNextReview?.(row.channel.slug)} title={brief?.recommendation.summary ?? "Review after more independent evidence."}>
                   <b>{brief?.recommendation.label ?? "CONTINUE COLLECTING"}</b>
-                  <small>{brief?.recommendation.summary ?? "Review after more independent evidence."}</small>
-                </span>
-              </button>
+                </button>
+              </div>
             );
           })}
           {rows.length === 0 && (

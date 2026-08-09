@@ -59,14 +59,14 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
     : action === "collect" ? "Continue collecting" : action.replaceAll("_", " ");
 
   return <section className="sntw" id="perform-sentinel" tabIndex={-1} aria-label="Sentinel evidence workspace">
-    <header className="sntw-head"><span><b>NEXT-SESSION BRIEF</b><small>ALL PAPER · NEXT OPEN · what is ready · what remains incomplete</small></span>
+    <header className="sntw-head"><span><b>NEXT-SESSION BRIEF</b><small>NEXT ACTION · EXCEPTIONS</small></span>
       <em>READ ONLY</em></header>
     <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={receipt.publishedAt ? dateTime(receipt.publishedAt) : "checking"} era="next-session packet" sample={`${findings.length || scan?.promote.length || 0} findings`} quality={receipt.tone === "green" ? "complete" : receipt.tone === "yellow" ? "partial" : "checking"} detail={receipt.detail} />
     <section className={`sntw-priority ${receipt.tone}`}><span><small>NEXT ACTION</small><b>{judge?.verdict ?? (receipt.tone === "green" ? "REVIEW" : "WAIT")}</b><p>{nextAction}</p></span><em>{operatorPacket?.forDate ?? brief?.forDate ?? sentinel.forDate ?? "next session"}</em></section>
     <div className="sntw-simple-grid">
       <section><small>SESSION READY?</small><b>{receipt.tone === "green" ? "YES" : "PARTIAL"}</b><p>{operatorPacket ? `${operatorPacket.liveBook.closed} closed trades reconciled; ${operatorPacket.liveBook.open} remain open.` : receipt.detail}</p></section>
       <section><small>WHAT NEEDS REVIEW?</small><b>{findings.length || judge?.drift.length || 0} ITEMS</b><ul>{findings.slice(0, 3).map((finding) => <li key={finding.code}>{finding.title} · {plainFinding(finding.action)}</li>)}{!findings.length && judge?.drift.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul></section>
-      <section><small>WHAT STAYS FIXED?</small><b>PAPER CONFIGURATION</b><p>No entry, exit, manager, size, or roster change is authorized by this brief.</p></section>
+      <section><small>WHAT STAYS FIXED?</small><b>ENTRY · EXIT · MANAGER · SIZE · ROSTER</b></section>
     </div>
     <details className="sntw-technical"><summary><span><small>SUPPORTING EVIDENCE</small><b>Receipts, paths, levels, and deterministic scan</b></span><em>OPEN FOR DETAIL</em><i>▾</i></summary><div>
     <SentinelReceiptStrip sentinel={sentinel} />

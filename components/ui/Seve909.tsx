@@ -42,14 +42,21 @@ export function SeveEvidenceContext({
   quality: SeveEvidenceQuality;
   detail?: string;
 }) {
-  return <aside className={`sv909-evidence-context quality-${quality}`} aria-label="Evidence context" title={detail}>
-    <span><small>EVIDENCE</small><b>{evidenceKindLabel[kind]}</b></span>
-    <span><small>SCOPE</small><b>{scope}</b></span>
-    <span><small>AS OF</small><b>{asOf}</b></span>
-    <span><small>CONFIGURATION</small><b>{era}</b></span>
-    <span><small>SAMPLE</small><b>{sample}</b></span>
-    <em>{quality.toUpperCase()}</em>
-  </aside>;
+  return <details className={`sv909-evidence-context quality-${quality}`} aria-label="Evidence context" title={detail}>
+    <summary>
+      <span><small>EVIDENCE</small><b>{evidenceKindLabel[kind]}</b></span>
+      <p><b>{scope}</b><span>{asOf} · {sample}</span></p>
+      <em>{quality.toUpperCase()}</em>
+      <i aria-hidden="true">CONTEXT ▾</i>
+    </summary>
+    <div>
+      <span><small>SCOPE</small><b>{scope}</b></span>
+      <span><small>AS OF</small><b>{asOf}</b></span>
+      <span><small>CONFIGURATION</small><b>{era}</b></span>
+      <span><small>SAMPLE</small><b>{sample}</b></span>
+      {detail && <p>{detail}</p>}
+    </div>
+  </details>;
 }
 
 export function SeveEmptyState({

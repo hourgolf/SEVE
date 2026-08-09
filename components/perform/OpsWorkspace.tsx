@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
+
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { findSealedReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
 import { SeveEvidenceContext, SeveWorkspaceHeader } from "@/components/ui/Seve909";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
+import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 const age = (seconds: number | null): string => seconds == null ? "—" : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h`;
 const localTime = (value: string | null | undefined): string => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " PT" : "—";
@@ -14,7 +17,7 @@ function StateLamp({ state, label, detail }: { state: string; label: string; det
   return <div className={`opsw-lamp ${tone}`}><i /><span><small>{label}</small><b>{state.toUpperCase()}</b><em>{detail}</em></span></div>;
 }
 
-export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
+export function OpsWorkspace({ surface, destination, onNavigate }: { surface: SurfaceProps; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const { data, ops, workerRuns, incident, feed, write, accounts, acctId } = surface;
   const release = findSealedReleaseReceipt(data.releaseEvents);
   const account = accounts.find((row) => row.id === acctId);
@@ -25,20 +28,24 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
   const tradingItems = allReadiness.filter((item) => ["release", "paper-boundary", "reconciliation"].includes(item.id));
   const dataItems = allReadiness.filter((item) => ["capture-config", "manager-config", "candidates", "fills", "capture", "managers", "publisher"].includes(item.id));
   const laneState = (items: typeof allReadiness, ready: string) => items.some((item) => item.tone === "red") ? "NEEDS REVIEW" : items.some((item) => item.tone === "yellow") ? "ATTENTION" : ready;
+  useEffect(() => {
+    if (destination?.section !== "ops" || !destination.check) return;
+    window.setTimeout(() => document.querySelector(`[data-system-check="${CSS.escape(destination.check!)}"]`)?.scrollIntoView({ block: "center" }), 0);
+  }, [destination?.check, destination?.section]);
 
   return <section className="opsw" id="perform-ops" tabIndex={-1} aria-label="Operations evidence workspace">
     <SeveWorkspaceHeader
       title="SYSTEM STATUS"
-      subtitle="exceptions first · technical evidence available on demand"
+      subtitle="exceptions first"
       boundary="READ ONLY"
     />
     <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={localTime(reconciliation?.observedAt ?? release?.createdAt)} era="current sealed release" sample={`${surface.opsReadiness.counts.candidates} candidate decisions`} quality={surface.opsReadiness.summary.tone === "red" ? "partial" : surface.opsReadiness.summary.tone === "yellow" ? "building" : "complete"} detail="Readiness is based on observed broker, process, market, and research evidence." />
     <section className={`opsw-system-summary ${surface.opsReadiness.summary.tone}`}>
-      <span><small>OVERALL</small><b>{surface.opsReadiness.summary.state}</b><p>{surface.opsReadiness.summary.detail}</p></span>
+      <span><small>OVERALL</small><b>{surface.opsReadiness.summary.state}</b></span>
       <div><span><small>TRADING</small><b>{laneState(tradingItems, "READY")}</b></span><span><small>DATA</small><b>{laneState(dataItems, "COMPLETE")}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? "CURRENT" : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
     </section>
     <section className="opsw-exceptions"><header><span><small>NEEDS ATTENTION</small><b>{exceptions.length ? `${exceptions.length} system checks` : "No blocking system issue"}</b></span><em>{exceptions.length ? "REVIEW BEFORE NEXT SESSION" : "DESK READY"}</em></header>
-      {exceptions.length ? <div>{exceptions.slice(0, 6).map((item) => <article key={item.id} className={item.tone}><i /><span><b>{item.label}</b><p>{item.detail}</p></span><em>{item.state}</em></article>)}</div> : <p>Trading, data, broker reconciliation, and the current release are available. Research collection may continue without operator action.</p>}
+      {exceptions.length ? <div>{exceptions.slice(0, 6).map((item) => <article key={item.id} data-system-check={item.id} className={`${item.tone}${destination?.check === item.id ? " selected" : ""}`}><button type="button" onClick={() => onNavigate?.({ section: "ops", check: item.id })}><i /><span><b>{item.label}</b><p>{item.detail}</p></span><em>{item.state}</em><strong aria-hidden="true">→</strong></button></article>)}</div> : <p>Trading, data, broker reconciliation, and the current release are available. Research collection may continue without operator action.</p>}
     </section>
     <details className="opsw-technical"><summary><span><small>TECHNICAL SYSTEM EVIDENCE</small><b>Receipts, clocks, reads, broker detail, and operator state</b></span><em>OPEN FOR TROUBLESHOOTING</em><i>▾</i></summary><div>
     <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="operations" />

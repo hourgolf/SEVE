@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LineChart } from "@/components/charts/LineChart";
 import { MobilePositions } from "@/components/mobile2/MobilePositions";
 import { computeNetExposure } from "@/lib/desk/netExposure";
@@ -23,6 +23,7 @@ import {
 } from "@/lib/mobile/reviewWorkspace";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 import { ReviewSessionScorecard } from "@/components/perform/ReviewSessionScorecard";
+import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -49,7 +50,7 @@ function Section({ title, meta, children, collapsible = false }: {
   return <section className="m2-desk-section"><header><b>{title}</b>{meta && <span>{meta}</span>}</header><div className="m2-desk-body">{children}</div></section>;
 }
 
-export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; onViewMarket?: (view: "chart" | "chain") => void }) {
+export function MobileBookView({ props, onViewMarket, onNavigate }: { props: SurfaceProps; onViewMarket?: (view: "chart" | "chain") => void; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const { feed, liveMarks } = props;
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
   const recentExits = useMemo(() => deriveRecentExits(feed.recentTrades), [feed.recentTrades]);
@@ -61,10 +62,10 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
 
   return <>
     <div className="m2-book-nav"><span><b>BOOK</b><small>POSITIONS · EXPOSURE · EXITS</small></span>{onViewMarket && <div><button type="button" onClick={() => onViewMarket("chart")}>CHART</button><button type="button" onClick={() => onViewMarket("chain")}>CHAIN</button></div>}</div>
-    <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="positions" channelSlugs={feed.positions.map((position) => position.strategist_slug)} />
+    <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="positions" channelSlugs={feed.positions.map((position) => position.strategist_slug)} onNavigate={onNavigate} />
     {reconciliation?.tone !== "green" && <BrokerReconciliationStrip model={props.opsReadiness} compact />}
     {isQuietBook ? <div className="m2-book-empty" role="status"><b>DESK FLAT</b><p>There are no open positions or current-session exits for this account.</p><ul><li>No capital is deployed</li><li>The next position will appear here</li><li>{reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is checking"}</li></ul></div> : <>
-    {(hasOpenPositions || attributionBlocked) && <MobilePositions props={props} strategists={props.view.desk.strategists} compact />}
+    {(hasOpenPositions || attributionBlocked) && <MobilePositions props={props} strategists={props.view.desk.strategists} onOpenChannel={(slug) => onNavigate?.({ section: "studio", channel: slug })} onOpenContract={(occ) => onNavigate?.({ section: "market", occ })} compact />}
     {hasOpenPositions && <div className="m2-desk-hero">
       <span><small>OPEN</small><b>{feed.positions.length}</b></span>
       <span><small>CONTRACTS</small><b>{exposure.totalContracts}</b></span>
@@ -105,7 +106,7 @@ export function MobileBookView({ props, onViewMarket }: { props: SurfaceProps; o
   </>;
 }
 
-export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceProps; channels: StrategistState[]; livePnl: Record<string, ChannelPnl> }) {
+export function MobileReviewView({ props, channels, livePnl, destination, onNavigate }: { props: SurfaceProps; channels: StrategistState[]; livePnl: Record<string, ChannelPnl>; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const [mode, setMode] = useState<MobileReviewMode>(DEFAULT_MOBILE_REVIEW_MODE);
   const { feed, liveFund, sentinel } = props;
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug] })).sort((a, b) => Math.abs(b.pnl?.dayPnl ?? 0) - Math.abs(a.pnl?.dayPnl ?? 0));
@@ -119,12 +120,16 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
   const attributionBlocked = feed.positionAttribution.state === "blocked";
   const attributedValue = (value: string): string =>
     attributionChecking ? "…" : attributionBlocked ? "BLOCKED" : value;
+  useEffect(() => {
+    if (destination?.section === "research") setMode("shadow");
+    else if (destination?.section === "tape") setMode(destination.reviewSection === "counterfactuals" ? "evidence" : "session");
+  }, [destination?.reviewSection, destination?.section]);
 
   return <>
     <nav className="m2-review-modes" aria-label="Review workspace">
-      {MOBILE_REVIEW_MODES.map((item) => <button type="button" key={item.id} className={mode === item.id ? "on" : ""} onClick={() => setMode(item.id)} aria-pressed={mode === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
+      {MOBILE_REVIEW_MODES.map((item) => <button type="button" key={item.id} className={mode === item.id ? "on" : ""} onClick={() => { setMode(item.id); onNavigate?.({ section: item.id === "shadow" ? "research" : item.id === "sentinel" ? "sentinel" : "tape", researchMode: item.id === "shadow" ? "decisions" : undefined }); }} aria-pressed={mode === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
     </nav>
-    <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="review" />
+    <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="review" onNavigate={onNavigate} />
 
     {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
     {mobileReviewHas(mode, "session-summary") && <ReviewSessionScorecard evidence={props.reviewEvidence.daily} />}
@@ -149,7 +154,7 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
           })}</div>}
     </Section>}
 
-    {mobileReviewHas(mode, "shadow-research") && <ShadowResearchWorkspace surface={props} compact />}
+    {mobileReviewHas(mode, "shadow-research") && <ShadowResearchWorkspace surface={props} destination={destination} onNavigate={onNavigate} compact />}
 
     {mobileReviewHas(mode, "event-tape") && <Section title="TECHNICAL EVENT LOG" meta="newest 14 · open when diagnosing" collapsible>
       <TapeReadStrip health={props.data.readHealth.events} events={props.data.events} compact />
@@ -183,18 +188,20 @@ export function MobileReviewView({ props, channels, livePnl }: { props: SurfaceP
   </>;
 }
 
-export function MobileOpsView({ props, channels, onOpenSettings }: { props: SurfaceProps; channels: StrategistState[]; onOpenSettings: () => void }) {
+export function MobileOpsView({ props, channels, destination, onNavigate, onOpenSettings }: { props: SurfaceProps; channels: StrategistState[]; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void; onOpenSettings: () => void }) {
   const { data, ops, workerRuns, incident, liveFund, feed, livePnl } = props;
   const active = channels.filter((channel) => channel.status === "armed" && !channel.config.muted);
   const risk = active.reduce((sum, channel) => sum + (channel.config.capital_pct || 0), 0);
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug]?.dayPnl ?? 0 })).filter((row) => row.pnl !== 0).sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
   const ingestAge = data.lastIngestTs ? Math.max(0, Math.round((Date.now() - Date.parse(data.lastIngestTs)) / 1000)) : null;
   const release = findSealedReleaseReceipt(data.releaseEvents);
+  const selectedCheck = destination?.check ? [...props.opsReadiness.configuration, ...props.opsReadiness.evidence].find((item) => item.id === destination.check) : undefined;
 
   return <>
     <section className={`m2-incident-card ${incident.severity}`}><header><i /><b>{incident.title}</b><span>{incident.severity.toUpperCase()}</span></header>
       <p>desk shows {feed.positions.length} open positions</p>{incident.facts.slice(0, 3).map((fact, index) => <p key={index}>{fact}</p>)}</section>
     <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="operations" />
+    {selectedCheck && <button type="button" className={`m2-system-check ${selectedCheck.tone}`} onClick={() => onNavigate?.({ section: "ops" })}><small>SELECTED CHECK</small><b>{selectedCheck.label}</b><span>{selectedCheck.detail}</span><em>CLEAR ×</em></button>}
     <Section title="PREFLIGHT" meta={incident.session.replaceAll("_", " ")}>
       <div className="m2-preflight">
         <span><b>PROCESS</b><em>{workerRuns.query.state === "ok" ? "OBSERVED" : workerRuns.query.state.toUpperCase()}</em><small>{workerRuns.rowsIn16h} runs / 16h</small></span>
@@ -258,17 +265,19 @@ export function MobileDeskSheet({ open, onClose, props, channels, livePnl, onOpe
   </div>;
 }
 
-export function MobileDeskRoom({ room, props, channels, livePnl, onViewMarket, onOpenSettings }: {
+export function MobileDeskRoom({ room, props, channels, livePnl, destination, onNavigate, onViewMarket, onOpenSettings }: {
   room: "book" | "review" | "ops";
   props: SurfaceProps;
   channels: StrategistState[];
   livePnl: Record<string, ChannelPnl>;
   onViewMarket: (view: "chart" | "chain") => void;
   onOpenSettings: () => void;
+  destination?: WorkspaceDestination;
+  onNavigate?: (destination: WorkspaceDestination) => void;
 }) {
   return <div className="m2-scroll m2-room-scroll"><div className="m2-desk-scroll">
-    {room === "book" && <MobileBookView props={props} onViewMarket={onViewMarket} />}
-    {room === "review" && <MobileReviewView props={props} channels={channels} livePnl={livePnl} />}
-    {room === "ops" && <MobileOpsView props={props} channels={channels} onOpenSettings={onOpenSettings} />}
+    {room === "book" && <MobileBookView props={props} onViewMarket={onViewMarket} onNavigate={onNavigate} />}
+    {room === "review" && <MobileReviewView props={props} channels={channels} livePnl={livePnl} destination={destination} onNavigate={onNavigate} />}
+    {room === "ops" && <MobileOpsView props={props} channels={channels} destination={destination} onNavigate={onNavigate} onOpenSettings={onOpenSettings} />}
   </div></div>;
 }

@@ -7,6 +7,7 @@ import { useChannelRosterBundleControl } from "@/hooks/useChannelRosterBundleCon
 import { useEffect, useMemo, useState } from "react";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 // =============================================================================
 // MOBILE · STUDIO (S5) — the tune surface (the gallery mock's studio frame):
@@ -17,13 +18,15 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 // =============================================================================
 
 export function MobileStudio({
-  props, channels, livePnl, openSlug, setOpenSlug, onAddChannel, onOpenSettings,
+  props, channels, livePnl, openSlug, setOpenSlug, destination, onNavigate, onAddChannel, onOpenSettings,
 }: {
   props: SurfaceProps;
   channels: StrategistState[];
   livePnl: Record<string, ChannelPnl>;
   openSlug: string | null;
   setOpenSlug: (s: string | null) => void;
+  destination?: WorkspaceDestination;
+  onNavigate?: (destination: WorkspaceDestination) => void;
   onAddChannel: () => void;
   onOpenSettings: () => void;
 }) {
@@ -62,7 +65,7 @@ export function MobileStudio({
           <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL <b>{channels.length}</b></button>
         </div>
         {passports.release.state === "verified" && <p className="m2-roster-reconciliation">LIVE ENTRY AUTHORITY · <b>{passports.release.rootSlugs.length} TRADING ROOTS</b></p>}
-        <div className="m2-seam"><span className="m2-silk">SELECT A CHANNEL TO REVIEW EVIDENCE OR PREPARE A GOVERNED PROPOSAL</span><span className="ln" /></div>
+        <div className="m2-seam"><span className="m2-silk">TAP A CHANNEL FOR EVIDENCE</span><span className="ln" /></div>
         {visibleChannels.length === 0 ? (
           <div className="m2-ghost">no channels in this runtime scope</div>
         ) : visibleChannels.map((s) => (
@@ -79,6 +82,9 @@ export function MobileStudio({
             decisionBrief={props.decisionAtlas.bySlug[s.slug]}
             researchEvidence={props.shadowResearch}
             controlPlane={props.channelControlPlane}
+            focusAxis={destination?.channel === s.slug ? destination.axis : undefined}
+            onCurrentSession={() => onNavigate?.({ section: "tape", channel: s.slug, reviewSection: "tape", session: props.decisionAtlas.throughSession ?? undefined })}
+            onNextReview={() => onNavigate?.({ section: "research", channel: s.slug, axis: axisForDisposition(props.decisionAtlas.bySlug[s.slug]?.recommendation.axis), researchMode: "decisions" })}
             open={openSlug === s.slug}
             onToggle={() => setOpenSlug(openSlug === s.slug ? null : s.slug)}
           />

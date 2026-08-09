@@ -82,7 +82,8 @@ jobs:
         run: |
           npm run nightly-decision-atlas -- \
             --through "$SESSION_DATE_ET" \
-            --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET"
+            --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET" \
+            --shadow-catchup-manifest data/gate-shadow-catchup-manifest.json
       - name: Publish concise Atlas briefs for the dashboard
         if: vars.DECISION_ATLAS_DASHBOARD_PUBLISH == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
         shell: bash
@@ -90,7 +91,7 @@ jobs:
           npm run publish-channel-decision-briefs -- \
             --publish \
             --expected-through "$SESSION_DATE_ET" \
-            --briefs-file "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/briefs.json" \
+            --briefs-file "data/decision-atlas/runs/$SESSION_DATE_ET/learning/dashboard-briefs.json" \
             --receipt-file "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/publication-receipt.json"
       - name: Verify Priority A experiment baselines
         id: priority-a-readiness
@@ -127,6 +128,7 @@ jobs:
             sha256sum \
               data/gate-shadow.json \
               data/gate-shadow-receipt.json \
+              data/gate-shadow-catchup-manifest.json \
               data/vb-candidates.json \
               data/vb-candidate-censors.json \
               "data/dark-candidate-freezes/$SESSION_DATE_ET/freeze.json" \
@@ -139,6 +141,8 @@ jobs:
               "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/weekly/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/learning/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/learning/packet.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/priority-a-readiness/readiness.json"
             if [[ -f data/gate-shadow-verification.json ]]; then
               sha256sum data/gate-shadow-verification.json
@@ -157,6 +161,7 @@ jobs:
           path: |
             data/gate-shadow.json
             data/gate-shadow-receipt.json
+            data/gate-shadow-catchup-manifest.json
             data/gate-shadow-verification.json
             data/vb-candidates.json
             data/vb-candidate-censors.json

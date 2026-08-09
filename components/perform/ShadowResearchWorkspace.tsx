@@ -19,6 +19,7 @@ import type {
 import { shadowSessionDate, sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
 import { signedUsd } from "@/lib/format";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
+import { axisForDisposition, type WorkspaceDestination, type ResearchFilter } from "@/lib/shell/workspaceDestination";
 
 const percent = (wins: number, scored: number): string =>
   scored ? `${Math.round((1000 * wins) / scored) / 10}%` : "—";
@@ -26,6 +27,7 @@ const money = (value: number | null): string => value == null ? "—" : signedUs
 const shortSession = (session: string): string => session.slice(5).replace("-", "/");
 const RECENT_SESSION_LIMIT = 4;
 const DEFAULT_CHANNEL_LIMIT = 12;
+const DEFAULT_DECISION_LIMIT = 4;
 type ResearchLane = "vb" | "all";
 type EvidenceLabel = "HISTORICAL VIRTUAL" | "SESSION VIRTUAL";
 const laneTotals = (rows: ShadowChannelSummary[]) => {
@@ -164,7 +166,7 @@ export function NativeTable({
   </div>;
 }
 
-export function ShadowResearchWorkspace({ surface, compact = false }: { surface: SurfaceProps; compact?: boolean }) {
+export function ShadowResearchWorkspace({ surface, compact = false, destination, onNavigate }: { surface: SurfaceProps; compact?: boolean; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const { shadowResearch } = surface;
   const [session, setSession] = useState("");
   const [lane, setLane] = useState<ResearchLane>("vb");
@@ -172,6 +174,8 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   const [excluded, setExcluded] = useState<Record<ResearchLane, string[]>>({ vb: [], all: [] });
   const [focusSlug, setFocusSlug] = useState("");
   const [viewMode, setViewMode] = useState<"decisions" | "data">("decisions");
+  const [showAllDecisions, setShowAllDecisions] = useState(false);
+  const [decisionFilter, setDecisionFilter] = useState<ResearchFilter | null>(null);
   useEffect(() => {
     if (!session && shadowResearch.sessions.length) setSession(shadowResearch.sessions[0].session);
   }, [session, shadowResearch.sessions]);
@@ -211,9 +215,19 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     ? /TEST ENTRY|TEST EXIT|RETIREMENT/.test(item.label)
     : item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT");
   const atlasNext = [...atlasWorking, ...atlasReview][0] ?? null;
+  const atlasNextSlug = atlasNext?.slug;
   const atlasDecisionRows = [...atlasWorking, ...atlasReview, ...atlasReads.filter((item) =>
     !atlasWorking.some((candidate) => candidate.slug === item.slug)
     && !atlasReview.some((candidate) => candidate.slug === item.slug))];
+  const filteredDecisionRows = decisionFilter === "promising" ? atlasWorking
+    : decisionFilter === "review" ? atlasReview
+      : decisionFilter === "collecting" ? atlasDecisionRows.filter((item) =>
+        !atlasWorking.some((candidate) => candidate.slug === item.slug)
+        && !atlasReview.some((candidate) => candidate.slug === item.slug))
+        : atlasDecisionRows;
+  const displayedDecisionRows = showAllDecisions
+    ? filteredDecisionRows
+    : filteredDecisionRows.slice(0, DEFAULT_DECISION_LIMIT);
   const focusedCurve = windowMode === "cumulative"
     ? shadowResearch.dryPowderBySlug[focusSlug]
     : selected ? shadowResearch.dryPowderBySession[selected.session]?.[focusSlug] : undefined;
@@ -231,8 +245,33 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
     .sort((left, right) => (right.medianDeltaPct ?? -Infinity) - (left.medianDeltaPct ?? -Infinity))[0];
   useEffect(() => {
     if (!rows.length) { setFocusSlug(""); return; }
-    if (!rows.some((row) => row.slug === focusSlug)) setFocusSlug(rows[0].slug);
-  }, [focusSlug, rows]);
+    if (!rows.some((row) => row.slug === focusSlug)) setFocusSlug(atlasNextSlug ?? rows[0].slug);
+  }, [atlasNextSlug, focusSlug, rows]);
+  useEffect(() => {
+    if (destination?.section !== "research") return;
+    if (destination.session && shadowResearch.sessions.some((item) => item.session === destination.session)) {
+      setSession(destination.session);
+      setWindowMode("day");
+    }
+    if (destination.channel) {
+      const cumulativeLane = shadowResearch.cumulative?.vb.some((row) => row.slug === destination.channel)
+        ? "vb"
+        : shadowResearch.cumulative?.dark.some((row) => row.slug === destination.channel)
+          ? "all"
+          : null;
+      if (!destination.session && cumulativeLane) {
+        setLane(cumulativeLane);
+        setWindowMode("cumulative");
+      }
+      setFocusSlug(destination.channel);
+    }
+    if (destination.researchMode) setViewMode(destination.researchMode);
+    setDecisionFilter(destination.researchFilter ?? null);
+    if (destination.channel) window.setTimeout(() => document.getElementById("research-channel-decision")?.scrollIntoView({ block: "nearest" }), 0);
+  }, [destination?.channel, destination?.researchFilter, destination?.researchMode, destination?.section, destination?.session, shadowResearch.sessions]);
+  useEffect(() => {
+    setShowAllDecisions(false);
+  }, [lane, session, windowMode]);
   const runningRows = shadowResearch.cumulative
     ? (lane === "vb" ? shadowResearch.cumulative.vb : shadowResearch.cumulative.dark)
     : [];
@@ -255,7 +294,7 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
   }));
 
   return <section className={`srw${compact ? " compact" : ""}`} id="perform-research" tabIndex={-1} aria-label="Shadow research workspace">
-    <header className="srw-head"><span><b>SHADOW LEDGER</b><small>ALL PAPER · NATIVE NOW · EXACT T+1</small></span>
+    <header className="srw-head"><span><b>SHADOW LEDGER</b><small>NATIVE PATHS · PAIRED DECISIONS</small></span>
       <em>READ ONLY</em></header>
     <SeveEvidenceContext
       kind="virtual"
@@ -288,37 +327,31 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
       <nav className="srw-lanes" aria-label="research lane"><button type="button" className={lane === "vb" ? "on" : ""} onClick={() => setLane("vb")}>VB SWARM</button><button type="button" className={lane === "all" ? "on" : ""} onClick={() => setLane("all")}>ALL OBSERVE</button></nav>
       <span className={`srw-read ${shadowResearch.state}${shadowResearch.truncated ? " partial" : ""}`}>{shadowResearch.truncated ? "PARTIAL" : shadowResearch.state.toUpperCase()}</span>
     </div>
-    {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>
-      <span><small>VIRTUAL PATH SUM · {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shortSession(shadowResearch.cohortStart)}</small>
-        <b>{money(running.pnl)}/ct PATH SUM</b></span>
-      <em>Not portfolio P&amp;L · overlapping hypothetical paths are counted separately · {windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} channels · ` : ""}{running.scored.toLocaleString()} paths · {shadowResearch.cumulative.sessionCount} sessions</em>
-    </div> : null}
     {shadowResearch.state === "loading" || shadowResearch.state === "idle" ? <div className="srw-empty">loading bounded research ledger…</div>
       : shadowResearch.state === "error" ? <div className="srw-empty error">research read failed · {shadowResearch.error}</div>
       : !selected ? <div className="srw-empty">no reconstructed virtual paths since the Day 1 cohort</div>
       : <>
         <section className="srw-atlas-brief" aria-label="Decision Atlas research summary">
           <span><small>DECISION ATLAS</small><b>WHERE SHOULD WE LOOK NEXT?</b></span>
-          <span><small>PROMISING</small><b>{atlasWorking.length}</b></span>
-          <span><small>NEEDS REVIEW</small><b>{atlasReview.length}</b></span>
-          <span><small>COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></span>
-          <span><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></span>
+          <button type="button" className={decisionFilter === "promising" ? "on" : ""} onClick={() => { const next = decisionFilter === "promising" ? undefined : "promising"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>PROMISING</small><b>{atlasWorking.length}</b></button>
+          <button type="button" className={decisionFilter === "review" ? "on" : ""} onClick={() => { const next = decisionFilter === "review" ? undefined : "review"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>NEEDS REVIEW</small><b>{atlasReview.length}</b></button>
+          <button type="button" className={decisionFilter === "collecting" ? "on" : ""} onClick={() => { const next = decisionFilter === "collecting" ? undefined : "collecting"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></button>
+          <button type="button" onClick={() => atlasNext && onNavigate?.({ section: "research", channel: atlasNext.slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[atlasNext.slug]?.recommendation.axis), researchMode: "decisions" })}><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></button>
         </section>
         {viewMode === "decisions" && <section className="srw-decisions" aria-label="Channel research decisions">
-          <header><span><small>WHAT DESERVES REVIEW?</small><b>What is working, what is not, and what to test next</b></span><em>{atlasDecisionRows.length} CHANNELS</em></header>
-          <div className="srw-decision-list">{atlasDecisionRows.slice(0, 10).map((item) => {
+          <header><span><small>WHAT DESERVES REVIEW?</small><b>{decisionFilter ? `${decisionFilter.toUpperCase()} CHANNELS` : "What is working, what is not, and what to test next"}</b></span><div><em>{showAllDecisions ? `ALL ${filteredDecisionRows.length}` : `TOP ${Math.min(DEFAULT_DECISION_LIMIT, filteredDecisionRows.length)} OF ${filteredDecisionRows.length}`}</em>{filteredDecisionRows.length > DEFAULT_DECISION_LIMIT ? <button type="button" aria-expanded={showAllDecisions} onClick={() => setShowAllDecisions((current) => !current)}>{showAllDecisions ? `SHOW TOP ${DEFAULT_DECISION_LIMIT}` : `SHOW ALL ${filteredDecisionRows.length}`}</button> : null}</div></header>
+          <div className="srw-decision-list">{displayedDecisionRows.map((item) => {
             const row = rows.find((candidate) => candidate.slug === item.slug);
             const brief = surface.decisionAtlas.bySlug[item.slug];
             const label = item.label ?? item.read.label;
-            return <button type="button" key={item.slug} className={focusSlug === item.slug ? "on" : ""} aria-pressed={focusSlug === item.slug} onClick={() => setFocusSlug(item.slug)}>
+            return <button type="button" key={item.slug} className={focusSlug === item.slug ? "on" : ""} aria-pressed={focusSlug === item.slug} onClick={() => { setFocusSlug(item.slug); onNavigate?.({ section: "research", channel: item.slug, axis: axisForDisposition(brief?.recommendation.axis), researchMode: "decisions", researchFilter: decisionFilter ?? undefined }); }}>
               <span><b>{item.slug}</b><small>{row && row.scored < 5 ? "LOW SAMPLE" : row && row.scored < 10 ? "BUILDING" : "ESTABLISHED"}</small></span>
               <strong>{label}</strong>
               <p>{brief?.recommendation.summary ?? item.read.summary}</p>
-              <em>{brief?.recommendation.nextExperiment ?? "Continue collecting the same evidence."}</em>
             </button>;
           })}</div>
-          {focusSlug && <div className="srw-decision-detail">
-            <DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
+          {focusSlug && <div id="research-channel-decision" className="srw-decision-detail">
+            <DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} focusAxis={destination?.channel === focusSlug ? destination.axis : undefined} onAxisChange={(axis) => onNavigate?.({ section: "research", channel: focusSlug, axis, researchMode: "decisions", researchFilter: decisionFilter ?? undefined })} />
             <details className="srw-channel-analysis"><summary><span><small>SUPPORTING EVIDENCE</small><b>Current execution, capacity, and managers</b></span><em>OPEN COMPARISON</em><i>▾</i></summary><div>
               <CurrentEvidenceCard selectedSlug={focusSlug} executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted} comparison={focusedComparison} state={shadowResearch.currentExecutedState} error={shadowResearch.currentExecutedError} truncated={shadowResearch.currentExecutedTruncated} />
               <ChannelDryPowderCurve curve={focusedCurve} />
@@ -327,6 +360,11 @@ export function ShadowResearchWorkspace({ surface, compact = false }: { surface:
           </div>}
         </section>}
         {viewMode === "data" && <>
+        {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>
+          <span><small>VIRTUAL PATH SUM · {lane === "vb" ? "VB SWARM" : "ALL OBSERVE"} · SINCE {shortSession(shadowResearch.cohortStart)}</small>
+            <b>{money(running.pnl)}/ct PATH SUM</b></span>
+          <em>Not portfolio P&amp;L · overlapping hypothetical paths are counted separately · {windowMode === "cumulative" ? `${filteredRunningRows.length}/${runningRows.length} channels · ` : ""}{running.scored.toLocaleString()} paths · {shadowResearch.cumulative.sessionCount} sessions</em>
+        </div> : null}
         <section className="srw-native">
           <header><span><b>{nativeTitle}</b><small>every table row is virtual · hypothetical entries · not portfolio P&amp;L</small></span>
             <em>{totals.scored} {lane === "vb" ? "VB" : "ALL"} PATHS</em></header>
