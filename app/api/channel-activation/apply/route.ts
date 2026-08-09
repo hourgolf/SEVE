@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     }
     const body = await readBody(req);
     if (Object.keys(body).sort().join(",")
-        !== "acknowledgementId,confirmation,configurationEpochId,previewId,proposalId") {
+        !== "acknowledgementId,configurationEpochId,confirmation,previewId,proposalId") {
       return json({ ok: false, error: "apply request shape is not exact" }, 400);
     }
     const proposalId = String(body.proposalId ?? "");
