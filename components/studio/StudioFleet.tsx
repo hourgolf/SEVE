@@ -21,7 +21,7 @@ const SORTS: { value: StudioSort; label: string }[] = [
 
 export type StudioScope = "attention" | "roots" | "dark" | "all";
 
-export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect }: {
+export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect, onCurrentSession, onNextReview }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
   selectedSlug?: string;
@@ -35,6 +35,8 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
   onScope: (scope: StudioScope) => void;
   onSort: (sort: StudioSort) => void;
   onSelect: (slug: string) => void;
+  onCurrentSession?: (slug: string) => void;
+  onNextReview?: (slug: string) => void;
 }) {
   const roster = useChannelRosterBundleControl(controlPlane);
   const authorityRootSlugs = passports.release.state === "verified"
@@ -116,15 +118,14 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
               ? "Collecting only"
               : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? null;
             return (
-              <button
-                type="button"
+              <div
                 role="row"
                 key={row.channel.slug}
+                data-channel-row={row.channel.slug}
                 className={`fleet-grid fleet-row${selectedSlug === row.channel.slug ? " selected" : ""}`}
                 style={{ ["--pm" as string]: pmVar(row.channel.color) }}
-                onClick={() => onSelect(row.channel.slug)}
               >
-                <span className="fleet-channel" role="cell"><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></span>
+                <button type="button" className="fleet-channel fleet-cell-link" role="cell" onClick={() => onSelect(row.channel.slug)} aria-expanded={selectedSlug === row.channel.slug}><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></button>
                 <span className="fleet-runtime" role="cell">
                   <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{liveMode}</em>
                   {liveModeDetail && <small>{liveModeDetail}</small>}
@@ -133,14 +134,14 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                   <b>{reasonLabel}</b>
                   {reasonDetail && <small>{reasonDetail}</small>}
                 </span>
-                <span className="fleet-position" role="cell">
+                <button type="button" className="fleet-position fleet-cell-link" role="cell" onClick={() => onCurrentSession?.(row.channel.slug)} aria-label={`Open ${row.channel.slug} current-session review`}>
                   <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : row.pnl.dayPnl ? "CLOSED" : "QUIET"}</b>
                   {row.pnl.dayPnl !== 0 && <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{signedUsd(row.pnl.dayPnl)}</small>}
-                </span>
-                <span className="fleet-next" role="cell" title={brief?.recommendation.summary ?? "Review after more independent evidence."}>
+                </button>
+                <button type="button" className="fleet-next fleet-cell-link" role="cell" onClick={() => onNextReview?.(row.channel.slug)} title={brief?.recommendation.summary ?? "Review after more independent evidence."}>
                   <b>{brief?.recommendation.label ?? "CONTINUE COLLECTING"}</b>
-                </span>
-              </button>
+                </button>
+              </div>
             );
           })}
           {rows.length === 0 && (

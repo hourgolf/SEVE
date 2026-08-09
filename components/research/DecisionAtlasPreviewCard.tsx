@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "@/app/decision-atlas.css";
 import { buildDecisionAtlasPreview } from "@/lib/research/decisionAtlasPreview";
 import { buildChannelDecisionSummary, type ChannelDecisionSummary } from "@/lib/research/channelDecisionSummary";
@@ -8,6 +8,7 @@ import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEviden
 import type { ChannelDryPowderCurve, ShadowChannelSummary } from "@/lib/research/shadowResearch";
 import type { BoundedRetuneEvidence } from "@/lib/research/boundedRetuneExperiments";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
+import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
 
 type EvidenceView = "entry" | "exit" | "manager" | "size" | "sources";
 
@@ -94,8 +95,14 @@ function EvidenceSources({ model }: { model: ChannelDecisionSummary }) {
   </section>;
 }
 
-function AuthoritativeDecision({ brief, compact }: { brief: ChannelDecisionBrief; compact: boolean }) {
-  const [view, setView] = useState<EvidenceView>("entry");
+function AuthoritativeDecision({ brief, compact, focusAxis, onAxisChange }: { brief: ChannelDecisionBrief; compact: boolean; focusAxis?: EvidenceAxis; onAxisChange?: (axis: EvidenceAxis) => void }) {
+  const [view, setView] = useState<EvidenceView>(focusAxis ?? "entry");
+  const [expanded, setExpanded] = useState(Boolean(focusAxis));
+  useEffect(() => {
+    if (!focusAxis) return;
+    setView(focusAxis);
+    setExpanded(true);
+  }, [focusAxis]);
   const model = buildChannelDecisionSummary(brief);
   return <section className={`atlas-preview authoritative decision-first${compact ? " compact" : ""}`} aria-label="Decision Atlas paired channel report">
     <header>
@@ -108,8 +115,8 @@ function AuthoritativeDecision({ brief, compact }: { brief: ChannelDecisionBrief
       <span><small>NEXT CONTROLLED TEST</small><b>{model.nextTest}</b></span>
       <span><small>KEEP FIXED</small><b>{model.keepFixed.join(" · ")}</b></span>
     </div>
-    <details className="atlas-evidence-drawer"><summary>See supporting evidence</summary><div className="atlas-brief-body">
-      <nav aria-label="Decision evidence views">{(["entry", "exit", "manager", "size", "sources"] as EvidenceView[]).map((item) => <button key={item} type="button" className={view === item ? "on" : ""} aria-pressed={view === item} onClick={() => setView(item)}>{item === "sources" ? "SOURCES" : item.toUpperCase()}</button>)}</nav>
+    <details className="atlas-evidence-drawer" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}><summary>See supporting evidence</summary><div className="atlas-brief-body">
+      <nav aria-label="Decision evidence views">{(["entry", "exit", "manager", "size", "sources"] as EvidenceView[]).map((item) => <button key={item} type="button" className={view === item ? "on" : ""} aria-pressed={view === item} onClick={() => { setView(item); onAxisChange?.(item); }}>{item === "sources" ? "SOURCES" : item.toUpperCase()}</button>)}</nav>
       {view === "entry" && <EntrySequence model={model} />}
       {view === "exit" && <ExitCapture model={model} />}
       {view === "manager" && <ManagerComparison model={model} />}
@@ -119,16 +126,18 @@ function AuthoritativeDecision({ brief, compact }: { brief: ChannelDecisionBrief
   </section>;
 }
 
-export function DecisionAtlasPreviewCard({ brief, summary, dryPowder, managerEvidence, retuneEvidence, compact = false }: {
+export function DecisionAtlasPreviewCard({ brief, summary, dryPowder, managerEvidence, retuneEvidence, focusAxis, onAxisChange, compact = false }: {
   brief?: ChannelDecisionBrief | null;
   summary?: ShadowChannelSummary | null;
   dryPowder?: ChannelDryPowderCurve | null;
   managerEvidence?: ChannelManagerEvidence | null;
   retuneEvidence?: BoundedRetuneEvidence | null;
+  focusAxis?: EvidenceAxis;
+  onAxisChange?: (axis: EvidenceAxis) => void;
   compact?: boolean;
 }) {
   const model = buildDecisionAtlasPreview({ summary, dryPowder, managerEvidence, retuneEvidence });
-  if (brief) return <AuthoritativeDecision brief={brief} compact={compact} />;
+  if (brief) return <AuthoritativeDecision brief={brief} compact={compact} focusAxis={focusAxis} onAxisChange={onAxisChange} />;
   return <section className={`atlas-preview ${model.tone}${compact ? " compact" : ""}`} aria-label="Decision Atlas channel summary">
     <header><span><small>{model.experiment ? "PROSPECTIVE TEST" : "HISTORICAL VIRTUAL"}</small><b>{model.label}</b></span><em>{model.experiment ? retuneEvidence?.status.replaceAll("_", " ").toUpperCase() ?? "CONTROL UNCHANGED" : "NOT EXECUTED"}</em></header>
     <p>{model.summary}</p>

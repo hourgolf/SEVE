@@ -3,8 +3,8 @@
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { SeveEvidenceContext, SeveWorkspaceHeader } from "@/components/ui/Seve909";
 import { buildFleetDecisionSummary } from "@/lib/research/channelDecisionSummary";
-import type { PerformSection } from "@/lib/perform/derivePerformView";
 import { signedUsd } from "@/lib/format";
+import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 const pt = (value: string | null | undefined): string => value ? new Date(value).toLocaleString("en-US", {
   timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
@@ -19,7 +19,7 @@ const plainChange = (message: string): string => {
 
 export function DecisionHomeWorkspace({ surface, onNavigate }: {
   surface: SurfaceProps;
-  onNavigate: (section: PerformSection | "studio") => void;
+  onNavigate: (destination: WorkspaceDestination) => void;
 }) {
   const account = surface.accounts.find((row) => row.id === surface.acctId);
   const fleet = buildFleetDecisionSummary(surface.decisionAtlas.bySlug, surface.decisionAtlas.throughSession);
@@ -30,10 +30,10 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
   const evidenceQuality = readiness.tone === "red" || surface.decisionAtlas.state === "error" ? "partial"
     : surface.decisionAtlas.state === "ready" ? "complete" : "checking";
   const attention = [
-    surface.incident.severity !== "normal" ? surface.incident.title : null,
-    fleet.lead ? `${fleet.lead.channel}: ${fleet.lead.disposition.toLowerCase()}` : null,
-    readiness.tone === "red" ? readiness.detail : null,
-  ].filter((item): item is string => Boolean(item)).slice(0, 3);
+    surface.incident.severity !== "normal" ? { label: surface.incident.title, destination: { section: "ops" as const, check: "reconciliation" } } : null,
+    fleet.lead ? { label: `${fleet.lead.channel}: ${fleet.lead.disposition.toLowerCase()}`, destination: { section: "research" as const, channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" as const } } : null,
+    readiness.tone === "red" ? { label: readiness.detail, destination: { section: "ops" as const } } : null,
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 3);
 
   return <section className="decision-home" id="perform-overview" tabIndex={-1} aria-label="Decision Home">
     <SeveWorkspaceHeader title="DECISION HOME" subtitle="ready · changed · next" boundary="PAPER DESK" />
@@ -49,7 +49,7 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
     <section className={`decision-home-status ${healthy ? "healthy" : "attention"}`}>
       <span><small>DESK STATUS</small><b>{healthy ? "READY FOR THE NEXT SESSION" : "CHECK BEFORE THE NEXT SESSION"}</b><p>{deskFlat ? `${account?.name ?? "The selected paper account"} is flat.` : `${surface.feed.positions.length} selected-account paper positions remain open.`}</p></span>
       <div><span><small>TRADING</small><b>{readiness.tone === "red" ? "NEEDS REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{surface.data.status === "err" ? "NEEDS REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? "CURRENT" : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
-      <button type="button" onClick={() => onNavigate("ops")}>OPEN SYSTEM STATUS</button>
+      <button type="button" onClick={() => onNavigate({ section: "ops" })}>OPEN SYSTEM STATUS</button>
     </section>
     <div className="decision-home-grid">
       <section className="decision-home-card changed"><header><small>01</small><b>WHAT CHANGED?</b></header>
@@ -58,16 +58,16 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
           <li><b>Channel evidence</b><span>{fleet.reports} reports through {fleet.throughSession ?? "the latest close"}.</span></li>
           <li><b>Platform</b><span>{latestEvent ? plainChange(latestEvent.message) : "No new operational event is available."}</span></li>
         </ul>
-        <button type="button" onClick={() => onNavigate("tape")}>REVIEW THE LAST CLOSE</button>
+        <button type="button" onClick={() => onNavigate({ section: "tape", reviewSection: "tape", session: fleet.throughSession ?? undefined })}>REVIEW THE LAST CLOSE</button>
       </section>
       <section className="decision-home-card attention"><header><small>02</small><b>WHAT NEEDS ATTENTION?</b></header>
-        {attention.length ? <ol>{attention.map((item) => <li key={item}>{item}</li>)}</ol> : <p className="decision-home-clear">No urgent operator action. Continue collecting channel evidence.</p>}
-        <button type="button" onClick={() => onNavigate(fleet.lead ? "research" : "sentinel")}>{fleet.lead ? "OPEN CHANNEL DECISIONS" : "OPEN NEXT-SESSION BRIEF"}</button>
+        {attention.length ? <ol>{attention.map((item) => <li key={item.label}><button type="button" onClick={() => onNavigate(item.destination)}>{item.label}<span aria-hidden="true">→</span></button></li>)}</ol> : <p className="decision-home-clear">No urgent operator action. Continue collecting channel evidence.</p>}
+        <button type="button" onClick={() => onNavigate(fleet.lead ? { section: "research", channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" } : { section: "sentinel" })}>{fleet.lead ? "OPEN CHANNEL DECISIONS" : "OPEN NEXT-SESSION BRIEF"}</button>
       </section>
       <section className="decision-home-card next"><header><small>03</small><b>WHAT SHOULD I DO NEXT?</b></header>
         <strong>{fleet.lead ? `Review ${fleet.lead.channel}` : "Keep the current paper configuration"}</strong>
         <p>{fleet.lead ? `${fleet.lead.disposition}. Compare the supporting evidence before preparing a controlled proposal.` : "No channel decision currently clears the evidence floor for immediate review."}</p>
-        <div><button type="button" onClick={() => onNavigate("studio")}>OPEN CHANNELS</button><button type="button" onClick={() => onNavigate("market")}>OPEN MARKETS</button></div>
+        <div><button type="button" onClick={() => onNavigate({ section: "studio", channel: fleet.lead?.channel })}>OPEN CHANNEL</button><button type="button" onClick={() => onNavigate({ section: "market" })}>OPEN MARKETS</button></div>
       </section>
     </div>
     <details className="decision-home-technical"><summary><span><small>TECHNICAL CONTEXT</small><b>Current receipt and feed details</b></span><em>OPEN ONLY FOR TROUBLESHOOTING</em><i>▾</i></summary><div>

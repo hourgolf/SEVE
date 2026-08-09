@@ -25,10 +25,11 @@ import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } fr
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
+import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, onClose }: {
+export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, decisionAxis, onClose }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
@@ -39,6 +40,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   managerEvidence?: ChannelManagerEvidence;
   decisionBrief?: ChannelDecisionBrief;
   researchEvidence?: ShadowResearch;
+  decisionAxis?: EvidenceAxis;
   onClose?: () => void;
 }) {
   const dispatch = useDeskDispatch();
@@ -132,7 +134,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           {a13 && <span className="ih-tag amber">⚡ A13</span>}
           <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
         </div>
-        <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
+        <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
         <div className="mixer-deck">
         {passport?.effective && <details className="channel-disclosure operating-context">
           <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS CHANNEL IS IN ITS CURRENT MODE</em><i>▾</i></summary>

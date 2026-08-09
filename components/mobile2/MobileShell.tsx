@@ -14,6 +14,8 @@ import { AccountSwitcher } from "@/components/console/AccountSwitcher";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { useShell } from "@/hooks/useShellState";
 import type { SurfaceProps } from "@/components/surfaceTypes";
+import { useWorkspaceDestination } from "@/hooks/useWorkspaceDestination";
+import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 // =============================================================================
 // MOBILE SHELL — a phone-native 909 desk. The legacy mobile information
@@ -50,6 +52,24 @@ export function MobileShell(props: SurfaceProps) {
   const [setOpen, setSetOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>(null); // studio accordion — one at a time
+  const { destination, navigate } = useWorkspaceDestination("overview");
+
+  const roomFor = (next: WorkspaceDestination): MobileRoom => next.section === "studio" ? "studio"
+    : next.section === "positions" ? "book"
+      : next.section === "research" || next.section === "tape" ? "review"
+        : next.section === "ops" ? "ops" : "play";
+  useEffect(() => {
+    setRoom(roomFor(destination));
+    if (destination.channel && destination.section === "studio") setOpenSlug(destination.channel);
+    if (destination.section === "market") {
+      setMarketView("chain");
+      if (destination.occ) {
+        const root = destination.occ.match(/^([A-Z]+)/)?.[1];
+        if (root) props.setSymbol(root);
+        props.setSelected(destination.occ);
+      }
+    }
+  }, [destination, props.setSelected, props.setSymbol]);
 
   // REVIEW enables the bounded page-owned research ledger. Hidden phone rooms
   // remain quiet, while every leaf stays subscription-free.
@@ -75,10 +95,16 @@ export function MobileShell(props: SurfaceProps) {
   const openMarket = (next: MobileMarketView) => {
     setMarketView(next);
     setRoom("play");
+    navigate({ section: "market" });
   };
   const openStudioChannel = (slug: string) => {
     setOpenSlug(slug);
     setRoom("studio");
+    navigate({ section: "studio", channel: slug });
+  };
+  const navigateMobile = (next: WorkspaceDestination) => {
+    setRoom(roomFor(next));
+    navigate(next);
   };
   return (
     <div className="m2-app" data-mode={room === "studio" ? "studio" : "perform"} data-room={room} data-skin={skin}>
@@ -108,17 +134,18 @@ export function MobileShell(props: SurfaceProps) {
       </header>
 
       <main className="m2-main">
+        {(destination.channel || destination.check || destination.occ) && <button type="button" className="m2-context-back" onClick={() => window.history.back()}>← BACK</button>}
         {data.error && <ErrorBanner message={data.error} isAccessError={data.isAccessError} />}
         {data.warning && (room === "play" || room === "ops") && <div className="market-read-warning" role="status">{data.warning}</div>}
         {room === "play" ? (
           <MobilePerform props={props} channels={channels} sent={sent} livePnl={livePnl} marketView={marketView} onMarketViewChange={setMarketView} onOpenChannel={openStudioChannel} />
         ) : room === "studio" ? (
-          <MobileStudio props={props} channels={channels} livePnl={livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={() => setAddOpen(true)} onOpenSettings={() => setSetOpen(true)} />
-        ) : <MobileDeskRoom room={room} props={props} channels={channels} livePnl={livePnl} onViewMarket={openMarket} onOpenSettings={() => setSetOpen(true)} />}
+          <MobileStudio props={props} channels={channels} livePnl={livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} destination={destination} onNavigate={navigateMobile} onAddChannel={() => setAddOpen(true)} onOpenSettings={() => setSetOpen(true)} />
+        ) : <MobileDeskRoom room={room} props={props} channels={channels} livePnl={livePnl} destination={destination} onNavigate={navigateMobile} onViewMarket={openMarket} onOpenSettings={() => setSetOpen(true)} />}
       </main>
 
       <nav className="m2-padbar" aria-label="rooms">
-        {ROOMS.map((item) => <button type="button" key={item.id} className={`m2-modepad m2-roompad${room === item.id ? " on" : ""}`} onClick={() => setRoom(item.id)} aria-pressed={room === item.id} aria-current={room === item.id ? "page" : undefined}>
+        {ROOMS.map((item) => <button type="button" key={item.id} className={`m2-modepad m2-roompad${room === item.id ? " on" : ""}`} onClick={() => navigateMobile({ section: item.id === "studio" ? "studio" : item.id === "book" ? "positions" : item.id === "review" ? "tape" : item.id === "ops" ? "ops" : "overview" })} aria-pressed={room === item.id} aria-current={room === item.id ? "page" : undefined}>
           {item.label}<small>{item.sub}</small>
         </button>)}
       </nav>

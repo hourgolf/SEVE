@@ -1049,6 +1049,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .decision-home-card li { display:grid; gap:3px; padding-left:13px; position:relative; font-size:10px; line-height:1.35; }
 .decision-home-card li::before { content:""; width:5px; height:5px; position:absolute; left:0; top:5px; border-radius:50%; background:var(--909-status-info,#77736b); }
 .decision-home-card li b { font-size:9px; letter-spacing:.05em; }
+.decision-home-card li>button{appearance:none;display:flex;align-items:center;gap:8px;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}.decision-home-card li>button span{margin-left:auto}.decision-home-card li>button:hover{text-decoration:underline;text-underline-offset:2px}
 .decision-home-card li span,.decision-home-card p { margin:0; color:var(--909-text-muted,#77736b); }
 .decision-home-card>strong { font-size:16px; line-height:1.25; }
 .decision-home-card>button,.decision-home-card>div { margin-top:auto; }
@@ -1141,10 +1142,13 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .opsw-exceptions>header b { font-size:12px; }
 .shell-root.ws909 .opsw-exceptions>header em { margin-left:auto; color:var(--909-text-muted); font-size:8px; font-style:normal; }
 .shell-root.ws909 .opsw-exceptions>div { display:grid; gap:5px; }
-.shell-root.ws909 .opsw-exceptions article { display:grid; grid-template-columns:7px minmax(0,1fr) auto; align-items:center; gap:8px; padding:8px; border:1px solid var(--909-border); border-radius:5px; }
-.shell-root.ws909 .opsw-exceptions article>i { width:7px; height:7px; border-radius:50%; background:var(--909-status-attention); }
-.shell-root.ws909 .opsw-exceptions article.red>i { background:var(--909-status-risk); }
+.shell-root.ws909 .opsw-exceptions article { border:1px solid var(--909-border); border-radius:5px; }
+.shell-root.ws909 .opsw-exceptions article.selected{outline:2px solid var(--909-status-attention);outline-offset:2px}.shell-root.ws909 .opsw-exceptions article>button{appearance:none;width:100%;display:grid;grid-template-columns:7px minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:8px;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.shell-root.ws909 .opsw-exceptions article>button:hover b{text-decoration:underline;text-underline-offset:2px}.shell-root.ws909 .opsw-exceptions article strong{color:var(--909-text-muted)}
+.shell-root.ws909 .opsw-exceptions article>button>i { width:7px; height:7px; border-radius:50%; background:var(--909-status-attention); }
+.shell-root.ws909 .opsw-exceptions article.red>button>i { background:var(--909-status-risk); }
 .shell-root.ws909 .opsw-exceptions article span { display:grid; gap:3px; }
 .shell-root.ws909 .opsw-exceptions article b { font-size:9px; }
 .shell-root.ws909 .opsw-exceptions article em { color:var(--909-text-muted); font-size:8px; font-style:normal; }
 @media(max-width:950px){.shell-root.ws909 .sntw-simple-grid{grid-template-columns:1fr}.shell-root.ws909 .opsw-system-summary{grid-template-columns:1fr}}
+.shell-root.ws909 .rvw-channel-context{display:flex;align-items:center;gap:10px;margin:0 8px;padding:7px 9px;border:1px solid var(--909-border);border-radius:5px;background:var(--909-surface-panel);color:var(--909-text-secondary);font:800 8px/1 var(--sh-mono);letter-spacing:.06em}.shell-root.ws909 .rvw-channel-context>span{display:grid;gap:4px}.shell-root.ws909 .rvw-channel-context small{color:var(--909-text-muted)}.shell-root.ws909 .rvw-channel-context button{appearance:none;margin-left:auto;padding:5px 7px;border:1px solid var(--909-border);border-radius:3px;background:transparent;color:inherit;font:inherit;cursor:pointer}.shell-root.ws909 .rvw-channel-context button:hover{text-decoration:underline;text-underline-offset:2px}
+.shell-root.ws909 .pfp-slug button,.shell-root.ws909 .pfp-ctr button{appearance:none;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}.shell-root.ws909 .pfp-slug button:hover,.shell-root.ws909 .pfp-ctr button:hover{text-decoration:underline;text-underline-offset:2px}.shell-root.ws909 .pfp-slug button:focus-visible,.shell-root.ws909 .pfp-ctr button:focus-visible{outline:2px solid var(--pm);outline-offset:2px}

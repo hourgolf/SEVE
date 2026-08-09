@@ -28,10 +28,12 @@ function Ring({ pct, color }: { pct: number; color: string }) {
   </svg>;
 }
 
-export function MobilePositions({ props, strategists, compact = false }: {
+export function MobilePositions({ props, strategists, compact = false, onOpenChannel, onOpenContract }: {
   props: SurfaceProps;
   strategists: StrategistState[];
   compact?: boolean;
+  onOpenChannel?: (slug: string) => void;
+  onOpenContract?: (occ: string) => void;
 }) {
   const { feed, liveMarks, positionPeaks, write } = props;
   const positions = feed.positions;
@@ -60,9 +62,9 @@ export function MobilePositions({ props, strategists, compact = false }: {
         const dte = dteOf(position.expiration);
         return <div className="m2-pos-row" key={position.id} style={{ ["--pm" as string]: pm }}>
           <span className="m2-p-dot" />
-          <div className="m2-p-slug">{position.strategist_slug}</div>
+          <div className="m2-p-slug">{onOpenChannel ? <button type="button" onClick={() => onOpenChannel(position.strategist_slug)}>{position.strategist_slug}</button> : position.strategist_slug}</div>
           <div className={`m2-p-pnl num ${unreal < 0 ? "neg" : "pos"}`}>{signedUsd(unreal)}</div>
-          <div className="m2-p-ctr">{occRoot(position.occ_symbol, strategist?.underlying ?? "SPY")} {position.strike.toFixed(0)}{position.opt_type === "call" ? "C" : "P"} ×{position.qty}{dte != null ? ` · ${dte}DTE` : ""}</div>
+          <div className="m2-p-ctr">{onOpenContract ? <button type="button" onClick={() => onOpenContract(position.occ_symbol)}>{occRoot(position.occ_symbol, strategist?.underlying ?? "SPY")} {position.strike.toFixed(0)}{position.opt_type === "call" ? "C" : "P"} ×{position.qty}{dte != null ? ` · ${dte}DTE` : ""}</button> : <>{occRoot(position.occ_symbol, strategist?.underlying ?? "SPY")} {position.strike.toFixed(0)}{position.opt_type === "call" ? "C" : "P"} ×{position.qty}{dte != null ? ` · ${dte}DTE` : ""}</>}</div>
           <div className="m2-p-meta">{position.opened_at ? timeOfDay(position.opened_at) : "—"} · ${Math.round(markedNotional)}</div>
           <div className="m2-p-decision">
             <span>IN <b>{entry.toFixed(2)}</b></span><i>→</i><span>MARK <b>{mark.toFixed(2)}</b></span>

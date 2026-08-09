@@ -531,6 +531,9 @@ body:has(.shell-root[data-mode="studio"]) { padding: 0; overflow: hidden; }
 }
 .shell-root[data-mode="studio"] .fleet-row:hover { background: color-mix(in srgb, var(--pm) 5%, transparent); }
 .shell-root[data-mode="studio"] .fleet-row.selected { background: color-mix(in srgb, var(--pm) 9%, transparent); box-shadow: 3px 0 0 var(--pm) inset; }
+.shell-root[data-mode="studio"] .fleet-cell-link { appearance:none; min-width:0; padding:0; border:0; background:transparent; color:inherit; text-align:left; cursor:pointer; }
+.shell-root[data-mode="studio"] .fleet-cell-link:hover b { text-decoration:underline; text-underline-offset:3px; }
+.shell-root[data-mode="studio"] .fleet-cell-link:focus-visible { outline:2px solid var(--pm); outline-offset:-2px; border-radius:3px; }
 .shell-root[data-mode="studio"] .fleet-channel { min-width: 0; display: grid; grid-template-columns: 8px minmax(0, auto) 1fr; align-items: center; gap: 7px; }
 .shell-root[data-mode="studio"] .fleet-channel i { width: 7px; height: 7px; border-radius: 50%; background: var(--pm); box-shadow: 0 0 6px color-mix(in srgb, var(--pm) 65%, transparent); }
 .shell-root[data-mode="studio"] .fleet-channel b { overflow: hidden; text-overflow: ellipsis; font: 750 var(--fs-dslug)/1 var(--sh-mono); color: color-mix(in srgb, var(--pm) 65%, var(--hw-ink)); }

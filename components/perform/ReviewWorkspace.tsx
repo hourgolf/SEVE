@@ -11,8 +11,10 @@ import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFlee
 import { ReviewSessionScorecard } from "@/components/perform/ReviewSessionScorecard";
 import { buildSessionReviewModel, shouldAnchorHistoricalResults } from "@/lib/perform/sessionReview";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
+import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { signedUsd } from "@/lib/format";
 
-export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
+export function ReviewWorkspace({ surface, destination, onNavigate }: { surface: SurfaceProps; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const [section, setSection] = useState<ReviewSection>("tape");
   const { data, view, feed, livePnl, liveFund, reviewEvidence } = surface;
   const selectedAccount = surface.accounts.find((account) => account.id === surface.acctId);
@@ -20,6 +22,8 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
   const historicalResultsInitialized = useRef(false);
   const latestCompletedSession = reviewEvidence.daily.reports[0]?.report_date ?? null;
   const latestSessionModel = reviewEvidence.daily.reports[0] ? buildSessionReviewModel(reviewEvidence.daily.reports[0]) : null;
+  const focusedPnl = destination?.channel ? livePnl[destination.channel] : undefined;
+  const focusedRows = destination?.channel ? feed.recentTrades.filter((trade) => trade.strategist_slug === destination.channel) : [];
   useEffect(() => {
     if (section !== "performance" || historicalResultsInitialized.current) return;
     historicalResultsInitialized.current = true;
@@ -27,6 +31,9 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
       reviewEvidence.setPnlWindow("week");
     }
   }, [latestCompletedSession, reviewEvidence, section]);
+  useEffect(() => {
+    if (destination?.section === "tape" && destination.reviewSection) setSection(destination.reviewSection);
+  }, [destination?.reviewSection, destination?.section]);
 
   return (
     <section className="rvw" id="perform-tape" tabIndex={-1} aria-label="Review workspace">
@@ -43,7 +50,7 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
               role="tab"
               className={section === item.id ? "on" : ""}
               aria-selected={section === item.id}
-              onClick={() => setSection(item.id)}
+              onClick={() => { setSection(item.id); onNavigate?.({ section: "tape", reviewSection: item.id, channel: destination?.channel, session: destination?.session }); }}
             >
               <b>{item.label}</b>
               <small>{item.hint}</small>
@@ -51,7 +58,8 @@ export function ReviewWorkspace({ surface }: { surface: SurfaceProps }) {
           ))}
         </nav>
       </header>
-      <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="review" />
+      <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="review" onNavigate={onNavigate} />
+      {destination?.channel && <section className="rvw-channel-context"><span><small>CURRENT SESSION · {destination.channel}</small><b>{signedUsd(focusedPnl?.dayPnl ?? 0)} ATTRIBUTED · {focusedRows.length} POSITION ROWS · {focusedPnl?.openCount ?? 0} OPEN</b></span><button type="button" onClick={() => onNavigate?.({ section: "research", channel: destination.channel, axis: "sources", researchMode: "decisions" })}>OPEN PAIRED REVIEW →</button></section>}
       {latestSessionModel && <SeveEvidenceContext kind="actual" scope={latestSessionModel.scope.replaceAll("_", " ")} asOf={latestSessionModel.reportDate} era="executed session" sample={`${latestSessionModel.observations} ${latestSessionModel.evidenceLabel}`} quality={latestSessionModel.limitation ? "partial" : "complete"} />}
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>

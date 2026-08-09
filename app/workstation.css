@@ -538,3 +538,4 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 @media (min-width:931px) and (max-height:800px) {
   .ws909 { grid-template-rows:64px minmax(0,1fr) 60px; }
 }
+.ws-context-back{position:absolute;z-index:30;top:6px;right:8px;appearance:none;padding:5px 8px;border:1px solid var(--hw-line);border-radius:4px;background:var(--hw-panel);color:var(--hw-soft);font:800 var(--fs-label)/1 var(--sh-mono);letter-spacing:.08em;cursor:pointer}.ws-context-back:hover{color:var(--hw-ink);border-color:var(--hw-ink)}

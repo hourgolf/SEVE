@@ -24,6 +24,7 @@ import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } fr
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
+import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -43,7 +44,7 @@ const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
 }).format(new Date(iso));
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle, write, passport, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, controlPlane,
+  strategist, pnl, active, open, onToggle, write, passport, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, controlPlane, focusAxis, onCurrentSession, onNextReview,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
@@ -58,6 +59,9 @@ export function MobileRackRow({
   decisionBrief?: ChannelDecisionBrief;
   researchEvidence?: ShadowResearch;
   controlPlane?: ChannelControlPlaneViewRead;
+  focusAxis?: EvidenceAxis;
+  onCurrentSession?: () => void;
+  onNextReview?: () => void;
 }) {
   const dispatch = useDeskDispatch();
   const { persistConfig } = write;
@@ -187,7 +191,8 @@ export function MobileRackRow({
 
       {open && (
         <div className="m2-insp">
-          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} compact />
+          <nav className="m2-channel-links" aria-label={`${slug} related workspaces`}><button type="button" onClick={onCurrentSession}>CURRENT SESSION →</button><button type="button" onClick={onNextReview}>NEXT REVIEW →</button></nav>
+          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={focusAxis} compact />
           {passport?.effective && <details className="channel-disclosure operating-context">
             <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS MODE</em><i>▾</i></summary>
             <div><ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} compact /></div>

@@ -8,6 +8,7 @@ import { derivePositionsWorkspace } from "@/lib/perform/derivePositionsWorkspace
 import { BrokerReconciliationStrip } from "@/components/ops/OpsReadinessPanel";
 import { SeveEmptyState, SeveEvidenceContext, SeveMetricStrip, SeveWorkspaceHeader, type SeveMetricTone } from "@/components/ui/Seve909";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
+import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 const money = (value: number) => Math.abs(value) >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
 const rootOf = (occ: string) => occ.match(/^([A-Z]+)\d/)?.[1] ?? "?";
@@ -106,7 +107,7 @@ export function RecentExits({ surface }: { surface: SurfaceProps }) {
 
 /** Full-stage position book. The guarded close workflow stays in the existing
  * shared open-book leaf; aggregate and exit context are read-only seam data. */
-export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }) {
+export function PerformPositionsWorkspace({ surface, onNavigate }: { surface: SurfaceProps; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const reconciliation = surface.opsReadiness.evidence.find((item) => item.id === "reconciliation");
   const model = derivePositionsWorkspace(surface.feed.positions, surface.feed.recentTrades, surface.liveMarks, surface.positionPeaks);
   const manualExits = model.exits.rows.filter(({ position }) => position.close_reason?.startsWith("manual"));
@@ -126,7 +127,7 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
         boundary="PAPER · CONFIRM TO CLOSE"
       />
     <SeveEvidenceContext kind="actual" scope={account?.name ?? "selected account"} asOf={asOf} era="current routed positions" sample={`${surface.feed.positions.length} open · ${model.exits.logicalTrades} closed`} quality={attributionBlocked ? "partial" : "live"} />
-    <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="positions" channelSlugs={surface.feed.positions.map((position) => position.strategist_slug)} />
+    <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="positions" channelSlugs={surface.feed.positions.map((position) => position.strategist_slug)} onNavigate={onNavigate} />
     {showReconciliation && <BrokerReconciliationStrip model={surface.opsReadiness} />}
     {isQuietBook ? <SeveEmptyState title="DESK FLAT" summary="There are no open positions or current-session exits for this account." facts={[reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is still checking", "No capital is currently deployed", "The next position will appear here with its live exit evidence"]} /> : <>
     <SeveMetricStrip metrics={[
@@ -146,6 +147,8 @@ export function PerformPositionsWorkspace({ surface }: { surface: SurfaceProps }
         reconciliation={reconciliation}
         evidenceChains={surface.opsReadiness.chains}
         attribution={surface.feed.positionAttribution}
+        onOpenChannel={(slug) => onNavigate?.({ section: "studio", channel: slug })}
+        onOpenContract={(occ) => onNavigate?.({ section: "market", occ })}
       />}
       <aside className="pf-positions-context">
         {attributionBlocked ? <BrokerTruthFallback surface={surface} /> : <>{hasOpenPositions && <AggregateExposure surface={surface} />}{hasRecentExits && <RecentExits surface={surface} />}</>}

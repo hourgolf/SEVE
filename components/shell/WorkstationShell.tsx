@@ -14,6 +14,8 @@ import { signedUsd, usd0 } from "@/lib/format";
 import { deriveBrokerTelemetry, deriveProcessTelemetry } from "@/lib/shell/workstationTelemetry";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import type { PerformSection } from "@/lib/perform/derivePerformView";
+import { useWorkspaceDestination } from "@/hooks/useWorkspaceDestination";
+import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 interface WorkstationShellProps {
   surface: SurfaceProps;
@@ -62,6 +64,16 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const [now, setNow] = useState<Date | null>(null);
   const [performSection, setPerformSection] = useState<PerformSection>("overview");
   const [authOpen, setAuthOpen] = useState(false);
+  const { destination, navigate: navigateDestination } = useWorkspaceDestination("overview");
+
+  useEffect(() => {
+    if (destination.section === "studio") {
+      setMode("studio");
+      return;
+    }
+    setMode("perform");
+    setPerformSection(destination.section);
+  }, [destination.section, setMode]);
 
   useEffect(() => {
     const tick = () => setNow(new Date());
@@ -117,16 +129,24 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const activeNav = NAV.find((item) => mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section))) ?? NAV[0];
   const navigate = (item: (typeof NAV)[number]) => {
     setMode(item.mode);
-    if (item.mode !== "perform" || !("section" in item)) return;
+    if (item.mode !== "perform" || !("section" in item)) {
+      navigateDestination({ section: "studio" });
+      return;
+    }
     setPerformSection(item.section);
+    navigateDestination({ section: item.section });
     if (item.section === "overview") return;
     window.setTimeout(() => document.getElementById(`perform-${item.section}`)?.focus({ preventScroll: true }), 0);
   };
-  const navigateFromSurface = (target: PerformSection | "studio") => {
-    const item = target === "studio"
+  const navigateFromSurface = (target: WorkspaceDestination) => {
+    const item = target.section === "studio"
       ? NAV.find((candidate) => candidate.key === "studio")
-      : NAV.find((candidate) => candidate.mode === "perform" && "section" in candidate && candidate.section === target);
-    if (item) navigate(item);
+      : NAV.find((candidate) => candidate.mode === "perform" && "section" in candidate && candidate.section === target.section);
+    if (!item) return;
+    setMode(item.mode);
+    if (item.mode === "perform" && "section" in item) setPerformSection(item.section);
+    navigateDestination(target);
+    window.setTimeout(() => document.getElementById(item.mode === "studio" ? "studio-workspace" : `perform-${target.section}`)?.focus({ preventScroll: true }), 0);
   };
 
   return (
@@ -216,7 +236,8 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
         </nav>
 
         <section className="ws-display" aria-label={`${activeNav.label} workspace`}>
-          {mode === "perform" ? <PerformSurface {...surface} section={performSection} onNavigate={navigateFromSurface} /> : <StudioSurface {...surface} />}
+          {(destination.channel || destination.check || destination.occ) && <button type="button" className="ws-context-back" onClick={() => window.history.back()} aria-label="Back to previous workspace">← BACK</button>}
+          {mode === "perform" ? <PerformSurface {...surface} section={performSection} destination={destination} onNavigate={navigateFromSurface} /> : <StudioSurface {...surface} destination={destination} onNavigate={navigateFromSurface} />}
         </section>
       </main>
 
