@@ -5,6 +5,8 @@ SEVE's nightly learning loop connects three decisions that previously required s
 1. Is tonight's evidence complete enough to trust?
 2. What single channel-specific paper experiment is justified next?
 3. Does the executed trail and portfolio replay support one more contract?
+4. Did worker restarts preserve a trustworthy decision/order/fill/position chain?
+5. Which channels now belong in promote, size, test, collect, or retire review?
 
 It runs after the profitability ledger, Decision Atlas, weekly readout, and channel briefs. The command is:
 
@@ -51,6 +53,13 @@ The execution audit checks decision-to-broker trace continuity, fill-to-position
 
 Cross-account same-OCC positions are allowed and retain independent exits. Overlap is reported, not treated as an automatic veto.
 
+The worker also claims each deterministic client order id immediately before
+the broker request. The claim is process-local and is never released after an
+ambiguous request error, preventing a bar cycle and fast sweep from submitting
+the same order from a shared stale snapshot. Broker-result evidence carries the
+guard version so the nightly report can distinguish a historical incident from
+a failure of the current protection.
+
 ## Outputs and authority
 
 Each run writes deterministic local JSON and concise Markdown:
@@ -59,8 +68,18 @@ Each run writes deterministic local JSON and concise Markdown:
 - `evidence`: source coverage and exact recovery proposals;
 - `experiments`: one-variable preregistrations and collection state;
 - `execution-capacity`: execution integrity and one-contract replay decisions;
+- `execution-resilience`: deterministic trace invariants and worker-run restart history;
+- `portfolio-capacity`: chronological 1–6 contract replay across paper-account placements;
+- `lifecycle`: finite promote, size, manager, test, collection, and retirement queues;
 - `receipt`: hashes for every input and output.
 - `dashboard-briefs`: existing channel briefs enriched with one compact
   data/test/size status strip for separately approved publication.
 
 These artifacts perform zero production reads and zero production writes. They cannot place orders, change configuration, alter the roster, activate schedules, route accounts, select a manager, or change sizing. Recovery publication and every paper experiment remain separately approved operations.
+
+The lifecycle queue never collects indefinitely: unchanged controls, unique
+collectors, and bounded tests all carry a finite independent-session review
+clock. Historical unstamped evidence may nominate research, but it cannot be
+reported as exact-current execution. Account-placement replay allows
+cross-account same-OCC positions with independent exits and still charges
+same-account OCC occupancy and displaced peer value.

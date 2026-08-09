@@ -56,6 +56,10 @@ import {
 } from "./receiptBoundEntryPolicy.js";
 import { virtualPathPolicyStamp } from "../../lib/research/virtualPathPolicy.js";
 import { boundedRetuneSignalStamp } from "./boundedRetuneSignalStamp.js";
+import {
+  ORDER_SUBMISSION_GUARD_VERSION,
+  orderSubmissionGuard,
+} from "./orderSubmissionGuard.js";
 
 // RUNNER config for an exit (R1, 64_runner_tranche): threaded from the channel by the
 // call sites that can hit a take-profit. frac 0 = OFF (the dark default) → executeExit
@@ -221,6 +225,13 @@ async function placeFill(
   // Direct fast-sweep exits do not pass through the bar-close decision loop.
   // Deterministic ids make this a harmless no-op when that loop already wrote it.
   captureDecisionObservation(observationBase);
+  if (!orderSubmissionGuard.claim(coidBase)) {
+    await store.journal("WARN",
+      `${slug}: suppressed duplicate broker submission ${coidBase} (${action}/${reason})`,
+      { kind: "order-submission-deduped", slug, occ, action, reason, client_order_id: coidBase,
+        execution_guard_version: ORDER_SUBMISSION_GUARD_VERSION });
+    return { id: "", fill: 0, filledQty: 0, status: "submission_deduped", crossedQty: 0 };
+  }
   const submittedAtMs = Date.now();
   try {
     let result: { id: string; fill: number; filledQty: number; status: string; crossedQty: number };
@@ -247,6 +258,7 @@ async function placeFill(
       filledQty: result.filledQty,
       fillPrice: result.fill,
       positionId,
+      executionGuardVersion: ORDER_SUBMISSION_GUARD_VERSION,
     });
     if (action === "exit" && side === "sell" && positionId && quality && result.filledQty > 0 && result.fill > 0) {
       const effectivePremiumStop = reason === "stop_premium"
@@ -301,6 +313,7 @@ async function placeFill(
       fillPrice: 0,
       positionId,
       error: (e as Error).message,
+      executionGuardVersion: ORDER_SUBMISSION_GUARD_VERSION,
     });
     throw e;
   }

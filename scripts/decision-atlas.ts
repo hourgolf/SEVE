@@ -17,6 +17,7 @@ import {
   adaptDecisionAtlasSnapshot,
   type AtlasEquitySnapshotRow,
   type AtlasExecutionRow,
+  type AtlasWorkerRunRow,
   type AtlasSignalRow,
   type AtlasStrategistRow,
   type AtlasVirtualTradeRow,
@@ -144,7 +145,7 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
     timingsMs[label] = Date.now() - started;
     return value;
   };
-  const [strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, control] = await Promise.all([
+  const [strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns, control] = await Promise.all([
     timed("strategists", () => pageAll<AtlasStrategistRow>((from) => sb.from("strategists")
       .select("id,slug,underlying").order("id"), { ...readOptions, max: 5_000 })),
     timed("signals", () => pageAll<AtlasSignalRow>((from) => sb.from("signals")
@@ -154,7 +155,7 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
       .select(["id", "trace_id", "event_kind", "event_at", "strategist_id", "account_id", "channel_slug",
         "opportunity_id", "position_id", "action", "reason", "blocked_reason", "underlying", "occ_symbol",
         "option_side", "bid", "ask", "requested_qty", "broker_status", "filled_qty", "fill_price", "payload",
-        "configuration_epoch_id"].join(","))
+        "configuration_epoch_id", "source_bar_at", "client_order_id", "broker_order_id", "source_boot_id"].join(","))
       .gte("event_at", cohortFrom).order("event_at").order("id"), readOptions)),
     timed("virtual_trades", () => pageAll<AtlasVirtualTradeRow>((from) => sb.from("virtual_trades")
       .select("signal_id,strategist_id,slug,occ,signal_at,blocked,entry_px,exit_reason,exit_px,exit_at,pnl_per_contract,mfe_pct,giveback_pct")
@@ -173,12 +174,15 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
       if (result.error) throw result.error;
       return (result.data ?? []) as unknown as Array<AtlasEquitySnapshotRow & { id: string }>;
     }),
+    timed("worker_runs", () => pageAll<AtlasWorkerRunRow>((from) => sb.from("worker_runs")
+      .select("boot_id,instance_id,git_sha,railway_deployment,started_at,last_heartbeat_at,shutdown_started_at,ended_at,termination_kind,last_phase,memory_rss_mb")
+      .gte("started_at", cohortFrom).order("started_at").order("boot_id"), { ...readOptions, max: 5_000 })),
     timed("active_control_plane", () => loadStoredReceiptBoundControlPlane(sb)),
   ]);
   if (!control.compiled) throw new Error(`active control plane unavailable: ${control.error ?? control.state}`);
   return {
     snapshot: {
-      ledger, strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots,
+      ledger, strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
       activeChannelSpecs: control.compiled.channelSpecs,
       activeChannelSpecDatabaseIdsByVersionKey: control.databaseIdentity?.channelSpecDatabaseIdsByVersionKey ?? {},
       currentConfigurationEpochId: control.activationReceipt?.configurationEpochId ?? null,
@@ -267,6 +271,7 @@ async function main(): Promise<void> {
       virtualTrades: snapshot.virtualTrades.length,
       managerRuns: snapshot.managerRuns.length,
       equitySnapshots: snapshot.equitySnapshots.length,
+      workerRuns: snapshot.workerRuns?.length ?? 0,
       activeChannelSpecs: snapshot.activeChannelSpecs.length,
       activeChannelSpecDatabaseIds: Object.keys(snapshot.activeChannelSpecDatabaseIdsByVersionKey ?? {}).length,
     },
@@ -281,7 +286,7 @@ async function main(): Promise<void> {
       boundedRetunesReport: sha256(boundedRetunesReport),
     },
     sourceTables: ["strategists", "signals", "execution_observations", "virtual_trades",
-      "manager_shadow_runs", "equity_snapshots", "release_manifests", "release_manifest_channels",
+      "manager_shadow_runs", "equity_snapshots", "worker_runs", "release_manifests", "release_manifest_channels",
       "channel_spec_versions", "activation_receipts"],
     productionWrites: 0,
     allowedMethods: ["SELECT", "GET"],
