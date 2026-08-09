@@ -163,11 +163,11 @@ export function MobileRackRow({
     : passport?.lifecycle === "dark-evidence" ? { txt: "OBSERVING", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
   const plainReason = passport?.database.differsFromRuntime
-    ? "Runtime is live; saved settings need review"
+    ? "SAVED SETTINGS CHANGED"
     : status === "draft" ? "On the bench"
       : status === "disabled" ? "Entries are disabled"
-        : passport?.lifecycle === "dark-evidence" ? "Research only; entries are blocked"
-          : decisionBrief?.recommendation.summary ?? "Ready for the next eligible signal";
+        : passport?.lifecycle === "dark-evidence" ? "COLLECTING EVIDENCE"
+          : decisionBrief?.recommendation.label ?? "READY";
 
   return (
     <section id={`m2-channel-${slug}`} className={`m2-rack${config.muted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>

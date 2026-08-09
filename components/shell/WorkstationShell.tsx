@@ -204,13 +204,13 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
             const active = item.key === activeNav.key;
             const newGroup = index > 0 && NAV[index - 1].group !== item.group;
             return (
-              <button key={item.key} type="button" className={`${active ? "on" : ""}${newGroup ? " group-start" : ""}`} aria-current={active ? "page" : undefined} onClick={() => navigate(item)}>
+              <button key={item.key} type="button" title={item.label} className={`${active ? "on" : ""}${newGroup ? " group-start" : ""}`} aria-current={active ? "page" : undefined} onClick={() => navigate(item)}>
                 <span aria-hidden="true">{item.icon}</span><span className="ws-left-copy"><b>{item.label}</b></span>
               </button>
             );
           })}
-          <button type="button" className="group-start" onClick={onLegacy}><span aria-hidden="true">⌗</span><span className="ws-left-copy"><b>Legacy Rooms</b></span></button>
-          <button type="button" className="ws-auth-launch" onClick={() => setAuthOpen(true)}>
+          <button type="button" title="Legacy Rooms" className="group-start" onClick={onLegacy}><span aria-hidden="true">⌗</span><span className="ws-left-copy"><b>Legacy Rooms</b></span></button>
+          <button type="button" title={write.canWrite ? "Operator" : "Sign In"} className="ws-auth-launch" onClick={() => setAuthOpen(true)}>
             <span aria-hidden="true">OP</span><span className="ws-left-copy"><b>{write.canWrite ? "Operator" : "Sign In"}</b></span>
           </button>
         </nav>

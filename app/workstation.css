@@ -280,6 +280,7 @@ body:has(.ws909) { padding: 0; overflow: hidden; background: #171816; }
 }
 
 @media (min-width: 931px) and (max-width: 1180px) {
+  .ws-left-copy b { overflow:visible; text-overflow:clip; white-space:normal; font-size:10px; line-height:1.1; letter-spacing:.035em; }
   .ws-master .kill { gap:3px; transform:none; }
   .ws-master .kill-cover { width:20px; height:24px; border-radius:4px; }
   .ws-master .kill-cover-grip { width:11px; }

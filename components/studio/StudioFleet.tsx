@@ -57,11 +57,6 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
           <span className="fleet-kicker">STUDIO · FLEET</span>
           <strong>{summary.attention ? `${summary.attention} need attention` : "fleet nominal"}</strong>
         </div>
-        <div className="fleet-metrics" aria-label="Fleet summary">
-          <span><small>TRADING IN VIEW</small><b>{passports.roots}</b></span>
-          <span><small>OBSERVING IN VIEW</small><b>{passports.dark}</b></span>
-          <span><small>ATTENTION</small><b>{summary.attention}</b></span>
-        </div>
       </header>
 
       <div className="fleet-tools">
@@ -111,10 +106,15 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                 ? "OBSERVING"
                 : "UNVERIFIED";
             const liveModeDetail = passport?.lifecycle === "paper-root"
-                ? passport.rootPolicy ? `${passport.rootPolicy.quantity} ct paper` : "paper enabled"
+                ? passport.rootPolicy ? `${passport.rootPolicy.quantity} CT` : null
                 : passport?.lifecycle === "dark-evidence"
-                  ? "research only"
-                  : "not verified";
+                  ? "NO ENTRY"
+                  : null;
+            const reasonLabel = row.attentionReasons[0]
+              ?? (passport?.database.differsFromRuntime ? "Saved settings need review" : decision.label === "IDLE" ? "Ready" : decision.label);
+            const reasonDetail = liveMode === "OBSERVING"
+              ? "Collecting only"
+              : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? null;
             return (
               <button
                 type="button"
@@ -127,19 +127,18 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                 <span className="fleet-channel" role="cell"><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></span>
                 <span className="fleet-runtime" role="cell">
                   <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{liveMode}</em>
-                  <small>{liveModeDetail}</small>
+                  {liveModeDetail && <small>{liveModeDetail}</small>}
                 </span>
                 <span className="fleet-reason" role="cell">
-                  <b>{row.attentionReasons[0] ?? (passport?.database.differsFromRuntime ? "Saved settings need review" : decision.label === "IDLE" ? "Ready for the next eligible signal" : decision.label)}</b>
-                  <small>{liveMode === "OBSERVING" ? "Research only; entries are blocked" : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? "No unresolved exception"}</small>
+                  <b>{reasonLabel}</b>
+                  {reasonDetail && <small>{reasonDetail}</small>}
                 </span>
                 <span className="fleet-position" role="cell">
-                  <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : "—"}</b>
-                  <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{row.pnl.dayPnl ? signedUsd(row.pnl.dayPnl) : "$0"} attrib</small>
+                  <b>{row.pnl.openCount ? `${row.pnl.openCount} · ${usd0(row.pnl.exposure)}` : row.pnl.dayPnl ? "CLOSED" : "QUIET"}</b>
+                  {row.pnl.dayPnl !== 0 && <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{signedUsd(row.pnl.dayPnl)}</small>}
                 </span>
-                <span className="fleet-next" role="cell">
+                <span className="fleet-next" role="cell" title={brief?.recommendation.summary ?? "Review after more independent evidence."}>
                   <b>{brief?.recommendation.label ?? "CONTINUE COLLECTING"}</b>
-                  <small>{brief?.recommendation.summary ?? "Review after more independent evidence."}</small>
                 </span>
               </button>
             );

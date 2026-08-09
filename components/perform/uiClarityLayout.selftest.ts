@@ -15,10 +15,12 @@ const reviewModel = source("lib/perform/reviewWorkspace.ts");
 const mobileReviewModel = source("lib/mobile/reviewWorkspace.ts");
 const studioCss = source("app/studio.css");
 const performCss = source("app/perform.css");
+const workstationCss = source("app/workstation.css");
+const evidenceCss = source("app/seve-909.css");
 
 // These are the required manual/browser QA targets for every hierarchy change.
-const VIEWPORTS = ["1280x720", "1440x900", "390x844"] as const;
-assert.deepEqual(VIEWPORTS, ["1280x720", "1440x900", "390x844"]);
+const VIEWPORTS = ["1076x787", "1280x720", "1440x900", "390x844"] as const;
+assert.deepEqual(VIEWPORTS, ["1076x787", "1280x720", "1440x900", "390x844"]);
 
 assert.match(inspector, /className="inspector-scroll" tabIndex=\{0\}/);
 assert(inspector.indexOf("inspector-scroll") < inspector.indexOf("<DecisionAtlasPreviewCard"));
@@ -50,11 +52,15 @@ assert.match(performCss, /grid-template-rows:auto auto minmax\(0,1fr\)/);
 assert.match(performCss, /data-skin="blackout"[^}]*\.etw-summary|data-skin="blackout"\] \.etw-summary/);
 
 assert.match(research, /DEFAULT_CHANNEL_LIMIT = 12/);
+assert.match(research, /DEFAULT_DECISION_LIMIT = 4/);
 assert.match(research, /useState<ShadowChannelSortKey>\("paths"\)/);
 assert.match(research, /LOW SAMPLE/);
 assert.match(research, /Not portfolio P&amp;L/);
 assert.match(research, /SHOW ALL \$\{visibleRows\.length\}/);
 assert.match(research, /displayedRows\.map/);
 assert.match(performCss, /data-skin="blackout"[^}]*\.srw-row-summary|data-skin="blackout"\] \.srw-row-summary/);
+assert.match(workstationCss, /@media \(min-width: 931px\) and \(max-width: 1180px\)[\s\S]*?\.ws-left-copy b \{[^}]*white-space:normal;[^}]*font-size:10px;/);
+assert.match(evidenceCss, /\.sv909-evidence-context>summary \{[^}]*grid-template-columns:/);
+assert.match(evidenceCss, /\.sv909-evidence-context>div \{[^}]*grid-template-columns:/);
 
 console.log(`ui-clarity-layout-selftest: PASS · ${VIEWPORTS.join(" · ")} · cream + blackout`);

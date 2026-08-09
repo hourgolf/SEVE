@@ -32,11 +32,11 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
   const attention = [
     surface.incident.severity !== "normal" ? surface.incident.title : null,
     fleet.lead ? `${fleet.lead.channel}: ${fleet.lead.disposition.toLowerCase()}` : null,
-    readiness.tone === "yellow" ? readiness.detail : null,
+    readiness.tone === "red" ? readiness.detail : null,
   ].filter((item): item is string => Boolean(item)).slice(0, 3);
 
   return <section className="decision-home" id="perform-overview" tabIndex={-1} aria-label="Decision Home">
-    <SeveWorkspaceHeader title="DECISION HOME" subtitle="what is ready · what changed · what needs attention" boundary="PAPER DESK" />
+    <SeveWorkspaceHeader title="DECISION HOME" subtitle="ready · changed · next" boundary="PAPER DESK" />
     <SeveEvidenceContext
       kind="mixed"
       scope={`${account?.name ?? "selected account"} + all-paper research`}
@@ -47,7 +47,7 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
       detail="Actual selected-account positions are kept separate from all-paper nightly research."
     />
     <section className={`decision-home-status ${healthy ? "healthy" : "attention"}`}>
-      <span><small>DESK STATUS</small><b>{healthy ? "READY FOR THE NEXT SESSION" : "CHECK BEFORE THE NEXT SESSION"}</b><p>{deskFlat ? `${account?.name ?? "The selected paper account"} is flat.` : `${surface.feed.positions.length} selected-account paper positions remain open.`} {readiness.detail}</p></span>
+      <span><small>DESK STATUS</small><b>{healthy ? "READY FOR THE NEXT SESSION" : "CHECK BEFORE THE NEXT SESSION"}</b><p>{deskFlat ? `${account?.name ?? "The selected paper account"} is flat.` : `${surface.feed.positions.length} selected-account paper positions remain open.`}</p></span>
       <div><span><small>TRADING</small><b>{readiness.tone === "red" ? "NEEDS REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{surface.data.status === "err" ? "NEEDS REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? "CURRENT" : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
       <button type="button" onClick={() => onNavigate("ops")}>OPEN SYSTEM STATUS</button>
     </section>

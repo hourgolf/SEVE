@@ -1081,6 +1081,8 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909 .srw-decisions>header>span { display:grid; gap:3px; }
 .shell-root.ws909 .srw-decisions>header small,.shell-root.ws909 .srw-decisions>header em { color:var(--909-text-muted,#77736b); font:800 8px/1 var(--sh-mono); font-style:normal; letter-spacing:.09em; }
 .shell-root.ws909 .srw-decisions>header b { font:900 11px/1.2 var(--sh-mono); letter-spacing:.05em; }
+.shell-root.ws909 .srw-decisions>header>div { display:flex; align-items:center; gap:8px; }
+.shell-root.ws909 .srw-decisions>header>div button { min-height:28px; padding:0 9px; border:1px solid var(--909-line,#c9c4b9); border-radius:4px; background:transparent; color:var(--909-text,#4b4944); font:900 8px/1 var(--sh-mono); letter-spacing:.06em; cursor:pointer; }
 .shell-root.ws909 .srw-decision-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
 .shell-root.ws909 .srw-decision-list>button { min-width:0; display:grid; grid-template-columns:minmax(150px,.8fr) auto; gap:6px 12px; padding:10px; border:1px solid var(--909-line,#c9c4b9); border-radius:6px; background:transparent; color:inherit; text-align:left; cursor:pointer; }
 .shell-root.ws909 .srw-decision-list>button.on { border-color:var(--909-accent,#a56f21); box-shadow:inset 3px 0 0 var(--909-accent,#a56f21); }
@@ -1101,7 +1103,9 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .shell-root.ws909[data-skin="blackout"] .srw-decisions { background:#111516; color:#e5e7e3; border-color:rgba(255,255,255,.12); }
 .shell-root.ws909[data-skin="blackout"] .srw-view-mode button,
 .shell-root.ws909[data-skin="blackout"] .srw-decision-list>button,
+.shell-root.ws909[data-skin="blackout"] .srw-decisions>header>div button,
 .shell-root.ws909[data-skin="blackout"] .srw-decision-detail>details { border-color:rgba(255,255,255,.1); }
+.shell-root.ws909[data-skin="blackout"] .srw-decisions>header>div button { color:#e5e7e3; }
 .shell-root.ws909[data-skin="blackout"] .srw-decisions>header,
 .shell-root.ws909[data-skin="blackout"] .srw-decision-detail>details>div { border-color:rgba(255,255,255,.08); }
 @media(max-width:800px){.shell-root.ws909 .srw-decision-list{grid-template-columns:1fr}}

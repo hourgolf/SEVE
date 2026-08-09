@@ -36,6 +36,9 @@ assert.match(inspector, /<CurrentEvidenceCard/);
 assert.match(research, /<DecisionAtlasPreviewCard/);
 assert.match(research, /srw-atlas-brief/);
 assert.match(research, /WHAT DESERVES REVIEW\?/);
+assert.match(research, /DEFAULT_DECISION_LIMIT = 4/);
+assert.match(research, /SHOW ALL \$\{atlasDecisionRows\.length\}/);
+assert.match(research, /displayedDecisionRows\.map/);
 assert.match(mobile, /<DecisionAtlasPreviewCard/);
 assert.match(mobile, /<CurrentEvidenceCard/);
 assert(inspector.indexOf("<DecisionAtlasPreviewCard") < inspector.indexOf("<details className=\"channel-disclosure\""),

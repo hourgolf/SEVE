@@ -29,12 +29,12 @@ export function OpsWorkspace({ surface }: { surface: SurfaceProps }) {
   return <section className="opsw" id="perform-ops" tabIndex={-1} aria-label="Operations evidence workspace">
     <SeveWorkspaceHeader
       title="SYSTEM STATUS"
-      subtitle="exceptions first · technical evidence available on demand"
+      subtitle="exceptions first"
       boundary="READ ONLY"
     />
     <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={localTime(reconciliation?.observedAt ?? release?.createdAt)} era="current sealed release" sample={`${surface.opsReadiness.counts.candidates} candidate decisions`} quality={surface.opsReadiness.summary.tone === "red" ? "partial" : surface.opsReadiness.summary.tone === "yellow" ? "building" : "complete"} detail="Readiness is based on observed broker, process, market, and research evidence." />
     <section className={`opsw-system-summary ${surface.opsReadiness.summary.tone}`}>
-      <span><small>OVERALL</small><b>{surface.opsReadiness.summary.state}</b><p>{surface.opsReadiness.summary.detail}</p></span>
+      <span><small>OVERALL</small><b>{surface.opsReadiness.summary.state}</b></span>
       <div><span><small>TRADING</small><b>{laneState(tradingItems, "READY")}</b></span><span><small>DATA</small><b>{laneState(dataItems, "COMPLETE")}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? "CURRENT" : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
     </section>
     <section className="opsw-exceptions"><header><span><small>NEEDS ATTENTION</small><b>{exceptions.length ? `${exceptions.length} system checks` : "No blocking system issue"}</b></span><em>{exceptions.length ? "REVIEW BEFORE NEXT SESSION" : "DESK READY"}</em></header>

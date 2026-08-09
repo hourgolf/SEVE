@@ -84,7 +84,7 @@ export function PerformMarketsWorkspace({ surface }: { surface: SurfaceProps }) 
 
   return (
     <section className="pf-markets-workspace" id="perform-market" data-nav-target="true" tabIndex={-1}>
-      <div className="pf-markets-heading"><SeveWorkspaceHeader title="MARKETS" subtitle="observed prices · current paper exposure" boundary="READ ONLY" />
+      <div className="pf-markets-heading"><SeveWorkspaceHeader title="MARKETS" subtitle="prices · exposure" boundary="READ ONLY" />
         <SeveEvidenceContext kind="actual" scope={`${symbol} + selected paper account`} asOf={pacificDateTime(data.lastIngestTs)} era="current market session" sample={`${data.snapshot.length} observed contracts`} quality={data.status === "err" ? "partial" : data.status === "stale" ? "building" : "live"} detail="Observed quotes support inspection; they are not an execution promise." />
       </div>
       <div className="pf-markets-chart">
