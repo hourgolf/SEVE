@@ -53,6 +53,24 @@ export interface AtlasExecutionRow {
   fill_price: number | string | null;
   payload: Record<string, unknown> | null;
   configuration_epoch_id: string | null;
+  source_bar_at?: string | null;
+  client_order_id?: string | null;
+  broker_order_id?: string | null;
+  source_boot_id?: string | null;
+}
+
+export interface AtlasWorkerRunRow {
+  boot_id: string;
+  instance_id: string | null;
+  git_sha: string | null;
+  railway_deployment: string | null;
+  started_at: string;
+  last_heartbeat_at: string | null;
+  shutdown_started_at: string | null;
+  ended_at: string | null;
+  termination_kind: string | null;
+  last_phase: string | null;
+  memory_rss_mb: number | string | null;
 }
 
 export interface AtlasVirtualTradeRow {
@@ -88,6 +106,7 @@ export interface DecisionAtlasSourceSnapshot {
   activeChannelSpecs: ChannelSpecVersion[];
   activeChannelSpecDatabaseIdsByVersionKey?: Record<string, string>;
   currentConfigurationEpochId: string | null;
+  workerRuns?: AtlasWorkerRunRow[];
 }
 
 const number = (value: unknown): number | null => {

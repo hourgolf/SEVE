@@ -11,6 +11,9 @@ import type { DecisionAtlas } from "../lib/research/decisionAtlas";
 import { adaptDecisionAtlasSnapshot, type DecisionAtlasSourceSnapshot } from "../lib/research/decisionAtlasAdapter";
 import { buildEvidenceReconciliation, renderEvidenceReconciliation } from "../lib/research/evidenceReconciliation";
 import { buildExecutionCapacityReadiness, renderExecutionCapacityReadiness } from "../lib/research/executionCapacityReadiness";
+import { buildExecutionResilienceReport, renderExecutionResilienceReport } from "../lib/research/executionResilience";
+import { buildPortfolioCapacityDecisionPacket, renderPortfolioCapacityDecisionPacket } from "../lib/research/portfolioCapacityDecision";
+import { buildChannelLifecycleDecisionPacket, renderChannelLifecycleDecisionPacket } from "../lib/research/channelLifecycleDecision";
 import type { GateShadowCatchupManifest } from "../lib/research/gateShadowCatchupAuthorization";
 
 const arg = (name: string, fallback: string): string => {
@@ -42,11 +45,17 @@ const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt: atlas.gen
 const evidence = buildEvidenceReconciliation({ atlas, snapshot, opportunities: normalized.opportunities, catchupManifests });
 const experiments = buildChannelExperimentPacket(briefs, normalized.opportunities);
 const executionCapacity = buildExecutionCapacityReadiness({ atlas, briefs, snapshot });
+const executionResilience = buildExecutionResilienceReport({ snapshot, generatedAt: atlas.generatedAt,
+  throughSession: atlas.throughSession });
+const portfolioCapacity = buildPortfolioCapacityDecisionPacket({ atlas, briefs,
+  opportunities: normalized.opportunities, accountBudgets: normalized.accountBudgets });
+const lifecycle = buildChannelLifecycleDecisionPacket({ atlas, briefs, experiments,
+  capacity: portfolioCapacity, execution: executionResilience });
 const hash = (value: unknown): string => `sha256:${createHash("sha256")
   .update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex")}`;
 const headline = evidence.state === "recovery_proposed"
   ? `Repair ${evidence.summary.missingVirtualRows} missing virtual path${evidence.summary.missingVirtualRows === 1 ? "" : "s"} before scoring new decisions.`
-  : executionCapacity.execution.state === "block"
+  : executionResilience.state === "block" || executionCapacity.execution.state === "block"
     ? "Repair execution trace continuity before preparing sizing changes."
     : `${experiments.summary.preregistered} channel experiment${experiments.summary.preregistered === 1 ? " is" : "s are"} ready for operator review.`;
 const packet = {
@@ -58,11 +67,17 @@ const packet = {
   evidence,
   experiments,
   executionCapacity,
+  executionResilience,
+  portfolioCapacity,
+  lifecycle,
   nextActions: [
     ...(evidence.state === "recovery_proposed" ? ["Review the exact virtual_trades-only recovery proposal; publish only after separate approval and verify every readback."] : []),
     ...(executionCapacity.execution.state === "block" ? ["Investigate orphaned execution traces before relying on replayed capacity."] : []),
+    ...(executionResilience.state === "limited" ? ["Review restart/trace exceptions and require the first guarded broker receipt before declaring the submit-once correction proven live."] : []),
     ...(experiments.summary.preregistered ? ["Review preregistered one-variable paper experiments; activation remains a separate decision."] : []),
     ...(executionCapacity.summary.paperStepsReady ? ["Review replay-supported one-contract sizing steps, including displaced peer opportunities."] : []),
+    ...(lifecycle.queues.retirement_review.length ? [`Review ${lifecycle.queues.retirement_review.length} mature negative/redundant retirement proposal(s).`] : []),
+    ...(lifecycle.queues.promotion_review.length ? [`Review ${lifecycle.queues.promotion_review.length} bounded paper promotion proposal(s).`] : []),
   ],
   guarantees: { productionReads: 0, productionWrites: 0, orderAuthority: false,
     configurationAuthority: false, rosterAuthority: false, scheduleAuthority: false },
@@ -93,6 +108,9 @@ const receipt = {
     shadowCatchupManifestSha256: catchupManifestFile ? hash(readFileSync(resolve(catchupManifestFile), "utf8")) : null },
   outputs: { packetSha256: hash(packet), evidenceSha256: evidence.receiptSha256,
     experimentsSha256: experiments.packetSha256, executionCapacitySha256: executionCapacity.receiptSha256,
+    executionResilienceSha256: executionResilience.receiptSha256,
+    portfolioCapacitySha256: portfolioCapacity.receiptSha256,
+    lifecycleSha256: lifecycle.receiptSha256,
     dashboardBriefsSha256: hash(dashboardBriefs) },
   productionReads: 0,
   productionWrites: 0,
@@ -108,6 +126,8 @@ const markdown = [
   `- Evidence: ${evidence.summary.readyChannels} ready · ${evidence.summary.channelsNeedingRecovery} recovery · ${evidence.summary.limitedChannels} limited`,
   `- Experiments: ${experiments.summary.preregistered} preregistered · ${experiments.summary.draft} draft · ${experiments.summary.control_only} unchanged controls`,
   `- Capacity: ${executionCapacity.summary.paperStepsReady} paper steps ready · ${executionCapacity.summary.holds} hold · ${executionCapacity.summary.insufficientEvidence} need evidence`,
+  `- Execution: ${executionResilience.state} · ${executionResilience.traces.total} traces · ${executionResilience.restarts.observedRuns} worker runs`,
+  `- Lifecycle queue: ${lifecycle.queues.promotion_review.length} promote · ${lifecycle.queues.size_review.length} size · ${lifecycle.queues.manager_review.length} manager · ${lifecycle.queues.retirement_review.length} retire`,
   "",
   "## Next actions",
   "",
@@ -127,6 +147,12 @@ writeFileSync(resolve(outputDir, "experiments.json"), `${JSON.stringify(experime
 writeFileSync(resolve(outputDir, "experiments.md"), `${renderChannelExperimentPacket(experiments)}\n`);
 writeFileSync(resolve(outputDir, "execution-capacity.json"), `${JSON.stringify(executionCapacity, null, 2)}\n`);
 writeFileSync(resolve(outputDir, "execution-capacity.md"), `${renderExecutionCapacityReadiness(executionCapacity)}\n`);
+writeFileSync(resolve(outputDir, "execution-resilience.json"), `${JSON.stringify(executionResilience, null, 2)}\n`);
+writeFileSync(resolve(outputDir, "execution-resilience.md"), `${renderExecutionResilienceReport(executionResilience)}\n`);
+writeFileSync(resolve(outputDir, "portfolio-capacity.json"), `${JSON.stringify(portfolioCapacity, null, 2)}\n`);
+writeFileSync(resolve(outputDir, "portfolio-capacity.md"), `${renderPortfolioCapacityDecisionPacket(portfolioCapacity)}\n`);
+writeFileSync(resolve(outputDir, "lifecycle.json"), `${JSON.stringify(lifecycle, null, 2)}\n`);
+writeFileSync(resolve(outputDir, "lifecycle.md"), `${renderChannelLifecycleDecisionPacket(lifecycle)}\n`);
 writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 console.log(`nightly-channel-learning: PASS · through ${atlas.throughSession}`);
 console.log(`  ${headline}`);

@@ -183,6 +183,7 @@ export interface BrokerObservationInput extends DecisionObservationInput {
   fillPrice: number;
   positionId?: string | null;
   error?: string | null;
+  executionGuardVersion?: string | null;
 }
 
 export function buildBrokerObservation(input: BrokerObservationInput): ExecutionObservationDraft | null {
@@ -208,6 +209,9 @@ export function buildBrokerObservation(input: BrokerObservationInput): Execution
     payload: {
       ...decision.payload,
       error: input.error ?? null,
+      ...(input.executionGuardVersion
+        ? { execution_guard_version: input.executionGuardVersion }
+        : {}),
     },
   };
 }
