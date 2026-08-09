@@ -288,6 +288,8 @@
     "publish-channel-decision-briefs-selftest": "tsx scripts/publish-channel-decision-briefs.selftest.ts",
     "nightly-decision-atlas": "tsx scripts/nightly-decision-atlas.ts",
     "nightly-decision-atlas-selftest": "tsx scripts/nightly-decision-atlas.selftest.ts",
+    "nightly-channel-learning": "tsx scripts/nightly-channel-learning.ts",
+    "nightly-channel-learning-selftest": "tsx lib/research/evidenceReconciliation.selftest.ts && tsx lib/research/channelExperimentLifecycle.selftest.ts && tsx lib/research/executionCapacityReadiness.selftest.ts && tsx scripts/nightly-channel-learning.selftest.ts",
     "capture-forward-decision-evidence-selftest": "tsx scripts/capture-forward-decision-evidence.selftest.ts",
     "desk-briefing": "tsx scripts/desk-briefing.ts",
     "sentinel": "tsx --env-file=.env.local scripts/sentinel.ts",

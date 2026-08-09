@@ -6,6 +6,8 @@ assert.match(source, /profitability-ledger\.ts/);
 assert.match(source, /decision-atlas\.ts/);
 assert.match(source, /weekly-readout\.ts/);
 assert.match(source, /channel-decision-briefs\.ts/);
+assert.match(source, /nightly-channel-learning\.ts/);
+assert.match(source, /--shadow-catchup-manifest/);
 assert.doesNotMatch(source, /capture-forward|launchctl|cron|\.from\(|insert\(|upsert\(/);
 assert.match(source, /after-close workflow/);
 assert.match(source, /independently verified/);

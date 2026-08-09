@@ -115,6 +115,12 @@ function AuthoritativeDecision({ brief, compact, focusAxis, onAxisChange }: { br
       <span><small>NEXT CONTROLLED TEST</small><b>{model.nextTest}</b></span>
       <span><small>KEEP FIXED</small><b>{model.keepFixed.join(" · ")}</b></span>
     </div>
+    {brief.learning && <div className="atlas-learning-state" title={brief.learning.fact}>
+      <small>{brief.learning.label}</small>
+      <span className={brief.learning.evidence === "ready" ? "ready" : "review"}>DATA {brief.learning.evidence === "ready" ? "READY" : "CHECK"}</span>
+      <span className={brief.learning.experiment === "ready_to_score" ? "ready" : "neutral"}>TEST {brief.learning.experiment.replaceAll("_", " ").toUpperCase()}</span>
+      <span className={brief.learning.capacity === "paper_step_ready" ? "ready" : "neutral"}>SIZE {brief.learning.capacity === "paper_step_ready" ? `${brief.learning.currentContracts ?? "?"}→${brief.learning.proposedContracts ?? "?"}` : "HOLD"}</span>
+    </div>}
     <details className="atlas-evidence-drawer" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}><summary>See supporting evidence</summary><div className="atlas-brief-body">
       <nav aria-label="Decision evidence views">{(["entry", "exit", "manager", "size", "sources"] as EvidenceView[]).map((item) => <button key={item} type="button" className={view === item ? "on" : ""} aria-pressed={view === item} onClick={() => { setView(item); onAxisChange?.(item); }}>{item === "sources" ? "SOURCES" : item.toUpperCase()}</button>)}</nav>
       {view === "entry" && <EntrySequence model={model} />}

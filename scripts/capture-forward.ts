@@ -150,6 +150,7 @@ async function main() {
     run("nightly Decision Atlas", [
       "nightly-decision-atlas", "--", "--through", recentDays[0], "--out-dir", decisionRoot,
       "--env-file", envFile,
+      "--shadow-catchup-manifest", `${shadowRoot}/gate-shadow-catchup-manifest.json`,
     ], 2);
     run("priority-A retune readiness", [
       "priority-a-retune-readiness", "--", "--out-dir", `${decisionRoot}/priority-a-readiness`,

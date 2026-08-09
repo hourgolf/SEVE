@@ -100,6 +100,16 @@ export interface ChannelDecisionBrief {
     layers: AtlasChannelDossier["evidenceLayers"];
     limitations: string[];
   };
+  learning?: {
+    label: "NIGHTLY LEARNING";
+    evidence: "ready" | "needs_recovery" | "limited";
+    experiment: "control_only" | "draft" | "preregistered" | "collecting" | "ready_to_score";
+    capacity: "paper_step_ready" | "hold" | "insufficient_evidence";
+    experimentVariable: string | null;
+    currentContracts: number | null;
+    proposedContracts: number | null;
+    fact: string;
+  };
 }
 
 export interface ChannelDecisionBriefBundle {
