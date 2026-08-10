@@ -56,7 +56,8 @@ const portfolioCapacity = buildPortfolioCapacityDecisionPacket({ atlas, briefs,
   opportunities: normalized.opportunities, accountBudgets: normalized.accountBudgets });
 const lifecycle = buildChannelLifecycleDecisionPacket({ atlas, briefs, experiments,
   capacity: portfolioCapacity, execution: executionResilience });
-const operatorPacket = buildOperatorExperimentPacket({ briefs, experiments, lifecycle, trails });
+const operatorPacket = buildOperatorExperimentPacket({ briefs, experiments, lifecycle, trails,
+  atlas, snapshot, capacity: portfolioCapacity });
 const hash = (value: unknown): string => `sha256:${createHash("sha256")
   .update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex")}`;
 const headline = evidence.state === "recovery_proposed"
