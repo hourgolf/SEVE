@@ -61,6 +61,7 @@ jobs:
           npm run sentinel-manager-book-selftest
           npm run sentinel-release-audit-selftest
           npm run channel-decision-packet-selftest
+          npm run channel-trail-frontier-selftest
       - name: Build and publish session research
         shell: bash
         env:
@@ -139,6 +140,8 @@ jobs:
               "data/sentinel-packets/$SESSION_DATE_ET.receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/profitability/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/trails/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/trails/frontier.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/weekly/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/learning/receipt.json" \

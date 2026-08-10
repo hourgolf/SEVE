@@ -181,7 +181,12 @@ const actualBeforeManager = attachActualClose(run("LOCK20/30"), {
 });
 const terminalAfterActual = advanceManagerShadowRun(actualBeforeManager, tick(1.23));
 check("shadow manager continues after actual close", [terminalAfterActual.kind, terminalAfterActual.run.terminalReturnPct], ["terminal", 23]);
+check("post-close quote cannot repair missing pre-close evidence", terminalAfterActual.run.evidenceState, "no_eligible_quote_before_actual_close");
 check("actual outcome remains context after shadow terminal", [terminalAfterActual.run.actualCloseReason, terminalAfterActual.run.actualRealizedPnl], ["operator_rationale_tp", 48]);
+const postCloseBoot = "88888888-8888-4888-8888-888888888888";
+const terminalAfterActualRow = encodeManagerShadowRun(terminalAfterActual.run, { sourceBootId: postCloseBoot, terminalBootId: postCloseBoot });
+truth("post-close observation boundary remains persistable", terminalAfterActualRow);
+check("post-close observation boundary survives hydration", decodeManagerShadowRun(terminalAfterActualRow!)?.evidenceState, "no_eligible_quote_before_actual_close");
 check("actual close may attach after manager terminal", attachActualClose(lockExit.run, {
   atMs: Date.parse("2026-07-13T14:33:00Z"), reason: "later_actual", realizedPnl: 50,
 }).actualCloseReason, "later_actual");

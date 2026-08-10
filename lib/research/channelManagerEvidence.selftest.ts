@@ -72,4 +72,20 @@ const absent = filterChannelManagerEvidenceByEpoch(alpha, "epoch-missing");
 assert.equal(absent.positions, 0);
 assert.equal(absent.managers[0].verdict, "collecting");
 
+const noPrecloseQuote = deriveChannelManagerEvidenceBook({
+  managerRuns: COMMON_MANAGER_ARMS.map((managerId) => run(managerId, "late", {
+    evidence_state: "no_eligible_quote_before_actual_close",
+    terminal_return_pct: 50,
+    peak_return_pct: 80,
+  })),
+  positions: [{ id: "late", runner_of: null, realized_pnl: 20 }],
+  generatedAt: "2026-08-05T21:00:00Z",
+});
+const late = noPrecloseQuote.channels.alpha;
+assert.equal(late.terminalArms, 0, "post-close-only paths cannot count as terminal paired evidence");
+assert.equal(late.censoredArms, COMMON_MANAGER_ARMS.length);
+assert.equal(late.coverage, 0);
+assert.equal(late.commonMfeCoverage, 0, "post-close-only no-stop MFE must not become common opportunity evidence");
+assert.equal(late.trades[0].arms[0].censorCode, "no_eligible_quote_before_actual_close");
+
 console.log("channel-manager-evidence-selftest: PASS");

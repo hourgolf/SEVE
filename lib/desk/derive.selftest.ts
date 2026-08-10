@@ -1,0 +1,63 @@
+import assert from "node:assert/strict";
+import { liveFundAdjust, liveFundPnl } from "./derive";
+import type { Position } from "./types";
+
+const position = (overrides: Partial<Position> = {}): Position => ({
+  id: "position-1",
+  strategist_slug: "grind-v3",
+  occ_symbol: "SPY260810P00774000",
+  expiration: "2026-08-10",
+  strike: 774,
+  opt_type: "put",
+  qty: 4,
+  avg_entry_price: 0.87,
+  current_mark: 0.91,
+  unrealized_pnl: 16,
+  status: "open",
+  ...overrides,
+});
+
+const accountSnapshot = { nav: 899_964, dayPnl: -36 };
+const liveMarks = { SPY260810P00774000: 0.7125 };
+
+assert.equal(
+  Math.round(liveFundAdjust([position()], liveMarks, -36)),
+  -27,
+  "live adjustment must bridge from the account snapshot's -$36 unrealized basis to the -$63 live mark",
+);
+assert.deepEqual(
+  liveFundPnl(accountSnapshot, [position()], liveMarks, -36),
+  { nav: 899_937, dayPnl: -63 },
+  "the stale +$16 position row must not create the observed false -$115 headline",
+);
+assert.deepEqual(
+  liveFundPnl(accountSnapshot, [position()], liveMarks, null),
+  accountSnapshot,
+  "missing snapshot basis must fail closed instead of mixing clocks",
+);
+assert.deepEqual(
+  liveFundPnl(accountSnapshot, [position()], {}, -36),
+  accountSnapshot,
+  "an incomplete live mark set must not partially re-mark account NAV",
+);
+assert.equal(
+  Math.round(liveFundAdjust([
+    position(),
+    position({
+      id: "position-2",
+      occ_symbol: "SPY260810C00775000",
+      qty: 2,
+      avg_entry_price: 1,
+      unrealized_pnl: 20,
+    }),
+  ], { ...liveMarks, SPY260810C00775000: 1.2 }, 4)),
+  -27,
+  "multiple open positions must reconcile from one account-level unrealized basis",
+);
+assert.equal(
+  liveFundAdjust([position({ status: "closed" })], liveMarks, -36),
+  0,
+  "closed positions must never re-mark the account snapshot",
+);
+
+console.log("desk-derive-selftest: PASS");

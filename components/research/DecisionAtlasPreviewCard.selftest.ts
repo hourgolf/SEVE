@@ -19,6 +19,8 @@ assert.match(card, /HISTORICAL VIRTUAL/);
 assert.match(card, /DO LATER ENTRIES STILL HELP/);
 assert.match(card, /HOW MUCH OF THE MOVE DID THE EXIT KEEP/);
 assert.match(card, /DOES A DIFFERENT EXIT WIN TYPICALLY/);
+assert.match(card, /CHANNEL TRAIL READ/);
+assert.match(card, /Compare six bounded trail shapes/);
 assert.match(card, /WHAT DOES EACH EXTRA CONTRACT ADD/);
 assert.match(card, /model\.metrics\.map/);
 assert.match(card, /CONTROL UNCHANGED/);
@@ -49,6 +51,7 @@ assert.match(css, /grid-template-columns:repeat\(3/);
 assert.match(css, /\.atlas-entry-sequence/);
 assert.match(css, /\.atlas-capture-track/);
 assert.match(css, /\.atlas-manager-duel/);
+assert.match(css, /\.atlas-trail-callout/);
 assert.match(css, /\.atlas-size-steps/);
 assert.match(css, /var\(--surface-panel/,
   "cream mode must inherit the chassis panel instead of a dark LCD token");

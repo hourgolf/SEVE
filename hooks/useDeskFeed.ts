@@ -41,7 +41,7 @@ export interface DeskFeed {
     positionRows: number;
   };
   pnlByStrategist: Record<string, ChannelPnl>;
-  fundPnl: { nav: number; dayPnl: number };
+  fundPnl: { nav: number; dayPnl: number; snapshotUnrealizedPnl: number | null };
   equityCurve: { ts: string; equity: number }[];
   signals: Signal[];
   steps: Step[];
@@ -94,6 +94,7 @@ export function useDeskFeed(
   const [signals, setSignals] = useState<Signal[]>([]);
   const [curve, setCurve] = useState<{ ts: string; equity: number }[]>([]);
   const [latestNav, setLatestNav] = useState<number | null>(null);
+  const [latestSnapshotUnrealizedPnl, setLatestSnapshotUnrealizedPnl] = useState<number | null>(null);
   const [sessionOpenNav, setSessionOpenNav] = useState<number | null>(null);
   const [status, setStatus] = useState<FeedStatus>("empty");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
@@ -116,8 +117,8 @@ export function useDeskFeed(
     const equityQuery = () => {
       const sb = getSupabase();
       return (acctId
-        ? sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).eq("account_id", acctId)
-        : sb.from("equity_snapshots").select("net_liquidation,captured_at").is("strategist_id", null).is("account_id", null)
+        ? sb.from("equity_snapshots").select("net_liquidation,unrealized_pnl,captured_at").is("strategist_id", null).eq("account_id", acctId)
+        : sb.from("equity_snapshots").select("net_liquidation,unrealized_pnl,captured_at").is("strategist_id", null).is("account_id", null)
       ).order("captured_at", { ascending: false });
     };
 
@@ -144,9 +145,14 @@ export function useDeskFeed(
       try {
         const res = await equityQuery().limit(MAX_CURVE);
         if (res.error || !mounted.current) return;
-        const rows = ((res.data ?? []) as { net_liquidation: number; captured_at: string }[])
+        const snapshots = (res.data ?? []) as { net_liquidation: number; unrealized_pnl: number | null; captured_at: string }[];
+        const rows = snapshots
           .slice().reverse().map((r) => ({ ts: r.captured_at, equity: Number(r.net_liquidation) }));
         commitCurve(rows);
+        const snapshotUnrealized = snapshots[0]?.unrealized_pnl;
+        setLatestSnapshotUnrealizedPnl(snapshotUnrealized == null || !Number.isFinite(Number(snapshotUnrealized))
+          ? null
+          : Number(snapshotUnrealized));
       } catch {
         /* the compact feed remains usable without curve history */
       }
@@ -310,6 +316,12 @@ export function useDeskFeed(
           .slice()
           .reverse()
           .map((r) => ({ ts: r.captured_at as string, equity: Number(r.net_liquidation) }));
+        const latestSnapshot = ((eqRes.data ?? []) as any[])[0];
+        setLatestSnapshotUnrealizedPnl(
+          latestSnapshot?.unrealized_pnl == null || !Number.isFinite(Number(latestSnapshot.unrealized_pnl))
+            ? null
+            : Number(latestSnapshot.unrealized_pnl),
+        );
         const merged = new Map(curveRef.current.map((row) => [row.ts, row]));
         for (const row of latestEq) merged.set(row.ts, row);
         const eq = sessionSlice(
@@ -407,8 +419,12 @@ export function useDeskFeed(
     // note) — use it only as a fallback when there's no NAV curve yet.
     const navDay =
       latestNav != null && sessionOpenNav != null ? Math.round(latestNav - sessionOpenNav) : null;
-    return { nav: base.nav, dayPnl: navDay ?? base.dayPnl };
-  }, [dayPositions, totalCapital, latestNav, sessionOpenNav]);
+    return {
+      nav: base.nav,
+      dayPnl: navDay ?? base.dayPnl,
+      snapshotUnrealizedPnl: latestSnapshotUnrealizedPnl,
+    };
+  }, [dayPositions, totalCapital, latestNav, latestSnapshotUnrealizedPnl, sessionOpenNav]);
   // Channel colors for the tape — same slug→color map the "Today's trades" dots
   // use, so a lit pad and its trade row always agree.
   const colorBySlug = useMemo(() => {

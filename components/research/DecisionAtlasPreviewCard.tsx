@@ -52,8 +52,9 @@ function ExitCapture({ model }: { model: ChannelDecisionSummary }) {
   </section>;
 }
 
-function ManagerComparison({ model }: { model: ChannelDecisionSummary }) {
+function ManagerComparison({ model, trail }: { model: ChannelDecisionSummary; trail?: ChannelDecisionBrief["trail"] }) {
   const challenger = model.manager.challenger;
+  const leadingTrail = trail?.leading ?? null;
   return <section className="atlas-view" aria-label="Native manager versus leading challenger">
     <header><b>DOES A DIFFERENT EXIT WIN TYPICALLY?</b><span>same opportunities</span></header>
     <p>{model.manager.conclusion}</p>
@@ -63,6 +64,15 @@ function ManagerComparison({ model }: { model: ChannelDecisionSummary }) {
       <span><small>LEADING CHALLENGER</small><b>{challenger?.id ?? "NONE YET"}</b><strong>{signed(challenger?.typicalBenefitPct ?? null, " pts")}</strong><em>{challenger ? `${pct(challenger.improvementFrequency)} improved · ${challenger.sessions}s` : "no paired cohort"}</em></span>
     </div>
     {challenger && <div className={`atlas-manager-verdict ${challenger.robust ? "ready" : "hold"}`}>{challenger.robust ? "READY FOR A CONTROLLED PAPER TEST" : "NATIVE HOLDS · CHALLENGER IS NOT ROBUST YET"}</div>}
+    {trail && <div className={`atlas-trail-callout ${trail.state}`}>
+      <span><small>CHANNEL TRAIL READ</small><b>{leadingTrail?.label ?? "NO COMPLETE TRAIL PATH"}</b></span>
+      <span><small>TYPICAL LIFT</small><b>{signed(leadingTrail?.typicalBenefitPct ?? null, " pts")}</b></span>
+      <span><small>CONSISTENCY</small><b>{leadingTrail ? `${pct(leadingTrail.improvementFrequency)} · ${leadingTrail.pairedOpportunities} paths / ${leadingTrail.sessions}s` : "—"}</b></span>
+      <p>{trail.conclusion}</p>
+      {trail.compared.length > 1 && <details><summary>Compare six bounded trail shapes</summary><div className="atlas-expert-table">
+        {trail.compared.map((row) => <span key={row.candidateId}><b>{row.label}</b><em>{row.sessions}s · {row.pairedOpportunities} pairs</em><strong>{signed(row.typicalBenefitPct, " pts")}</strong><small>{row.verdict.toUpperCase()}</small></span>)}
+      </div></details>}
+    </div>}
     {model.manager.all.length > 1 && <div className="atlas-expert-table" role="table" aria-label="Complete manager comparison">
       {model.manager.all.map((row) => <span role="row" key={`${row.managerId}-${row.managerVersion}`}><b role="cell">{row.managerId}</b><em role="cell">{row.sessions}s · {row.pairedOpportunities} pairs</em><strong role="cell">{signed(row.typicalBenefitPct, " pts")}</strong><small role="cell">{pct(row.improvementFrequency)} improved</small></span>)}
     </div>}
@@ -125,7 +135,7 @@ function AuthoritativeDecision({ brief, compact, focusAxis, onAxisChange }: { br
       <nav aria-label="Decision evidence views">{(["entry", "exit", "manager", "size", "sources"] as EvidenceView[]).map((item) => <button key={item} type="button" className={view === item ? "on" : ""} aria-pressed={view === item} onClick={() => { setView(item); onAxisChange?.(item); }}>{item === "sources" ? "SOURCES" : item.toUpperCase()}</button>)}</nav>
       {view === "entry" && <EntrySequence model={model} />}
       {view === "exit" && <ExitCapture model={model} />}
-      {view === "manager" && <ManagerComparison model={model} />}
+      {view === "manager" && <ManagerComparison model={model} trail={brief.trail} />}
       {view === "size" && <SizingSteps model={model} />}
       {view === "sources" && <EvidenceSources model={model} />}
     </div></details>
