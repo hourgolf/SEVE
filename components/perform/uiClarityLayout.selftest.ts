@@ -39,6 +39,7 @@ assert(review.indexOf("className=\"etw-summary\"") < review.indexOf("className=\
 assert.match(review, /<small>DESK ACTIVITY<\/small>/);
 assert.match(review, /TECHNICAL DETAIL/);
 assert(reviewWorkspace.indexOf("<ReviewSessionScorecard") < reviewWorkspace.indexOf("className=\"rvw-system-activity\""));
+assert(reviewWorkspace.indexOf("<b>SESSION EVIDENCE</b>") < reviewWorkspace.indexOf("<small>ACTUAL RESULTS · CLOSED SESSIONS</small>"));
 assert.match(reviewWorkspace, /shouldAnchorHistoricalResults/);
 assert.match(reviewScorecard, /LAST COMPLETED TRADING SESSION/);
 assert.match(reviewScorecard, /PROFITABLE OUTCOMES/);
@@ -62,5 +63,10 @@ assert.match(performCss, /data-skin="blackout"[^}]*\.srw-row-summary|data-skin="
 assert.match(workstationCss, /@media \(min-width: 931px\) and \(max-width: 1180px\)[\s\S]*?\.ws-left-copy b \{[^}]*white-space:normal;[^}]*font-size:10px;/);
 assert.match(evidenceCss, /\.sv909-evidence-context>summary \{[^}]*grid-template-columns:/);
 assert.match(evidenceCss, /\.sv909-evidence-context>div \{[^}]*grid-template-columns:/);
+for (const token of ["--909-type-workspace-title", "--909-type-workspace-meta", "--909-type-section-label", "--909-type-section-title", "--909-type-body", "--909-type-detail", "--909-type-metric"]) {
+  assert.match(evidenceCss, new RegExp(token));
+}
+assert.match(evidenceCss, /\.rvw-head > div > b/);
+assert.match(evidenceCss, /\.sntw-priority p[\s\S]*?\.srw-decision-list p[\s\S]*?\.rvw-next-action b/);
 
 console.log(`ui-clarity-layout-selftest: PASS · ${VIEWPORTS.join(" · ")} · cream + blackout`);

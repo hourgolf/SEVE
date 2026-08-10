@@ -39,8 +39,8 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
     <section className="rvw" id="perform-tape" tabIndex={-1} aria-label="Review workspace">
       <header className="rvw-head">
         <div>
-          <small>REVIEW</small>
           <b>SESSION EVIDENCE</b>
+          <small>ACTUAL RESULTS · CLOSED SESSIONS</small>
         </div>
         <nav role="tablist" aria-label="Review sections">
           {REVIEW_SECTIONS.map((item) => (
