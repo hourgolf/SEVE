@@ -64,7 +64,10 @@ export interface OperatorExperimentPacket {
 const sha256 = (value: unknown): string => `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 const pct = (value: number | null): string => value == null ? "—" : `${Math.round(value * 100)}%`;
 const signedPoints = (value: number | null): string => value == null ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(1)} pts`;
-const count = (value: number, singular: string): string => `${value} ${singular}${value === 1 ? "" : "s"}`;
+const count = (value: number, singular: string): string => {
+  const plural = singular === "opportunity" ? "opportunities" : `${singular}s`;
+  return `${value} ${value === 1 ? singular : plural}`;
+};
 const plainTrail = (candidate: TrailCandidateSummary): string => {
   const labels: Record<string, string> = {
     "FULL-R20-K50": "after +20%, protect half of the best gain",
