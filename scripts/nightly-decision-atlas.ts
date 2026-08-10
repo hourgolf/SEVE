@@ -50,6 +50,7 @@ run("scripts/channel-decision-briefs.ts", ["--atlas-file", resolve(atlasDir, "at
   "--trail-file", resolve(trailDir, "frontier.json"), "--out-dir", briefsDir]);
 run("scripts/nightly-channel-learning.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--briefs-file", resolve(briefsDir, "briefs.json"),
+  "--trail-file", resolve(trailDir, "frontier.json"),
   "--out-dir", learningDir,
   ...(shadowCatchupManifest ? ["--shadow-catchup-manifest", resolve(shadowCatchupManifest)] : [])]);
 console.log(`nightly-decision-atlas: PASS · local artifacts only · ${outputRoot}`);
