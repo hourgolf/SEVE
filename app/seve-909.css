@@ -3154,6 +3154,7 @@
   .srw,
   .sntw,
   .etw,
+  .rvw,
   .opsw,
   .pf-positions-shell,
   .studio
@@ -3163,13 +3164,21 @@
   --fs-num: 13px;
   --fs-num-lg: 16px;
   --fs-body: 13px;
+  --909-type-workspace-title: clamp(18px, 1vw, 22px);
+  --909-type-workspace-meta: clamp(11px, .68vw, 13px);
+  --909-type-section-label: 9px;
+  --909-type-section-title: 13px;
+  --909-type-body: 11px;
+  --909-type-detail: 10px;
+  --909-type-metric: 16px;
 }
 
 .shell-root.ws909[data-skin] :is(
   .sv909-workspace-head,
   .srw-head,
   .sntw-head,
-  .etw-head
+  .etw-head,
+  .rvw-head
 ) {
   min-height: 58px;
   padding: 10px 12px;
@@ -3182,8 +3191,9 @@
   .srw-head,
   .sntw-head,
   .etw-head
-) :is(b, > span > b) {
-  font-size: clamp(18px, 1vw, 22px);
+) > span > b,
+.shell-root.ws909[data-skin] .rvw-head > div > b {
+  font-size: var(--909-type-workspace-title);
   line-height: 1.1;
   letter-spacing: .1em;
 }
@@ -3193,9 +3203,71 @@
   .srw-head,
   .sntw-head,
   .etw-head
-) :is(small, em) {
-  font-size: clamp(11px, .68vw, 13px);
+) :is(small, em),
+.shell-root.ws909[data-skin] .rvw-head > div > small {
+  font-size: var(--909-type-workspace-meta);
   line-height: 1.35;
+}
+
+/* Shared decision hierarchy: the same information role now has the same size
+   in Review, Next Open, and Research. Page-specific density may change layout,
+   never the semantic type scale. */
+.shell-root.ws909[data-skin] :is(
+  .sntw-priority small,
+  .sntw-simple-grid small,
+  .srw-decisions > header small,
+  .srw-atlas-brief small,
+  .atlas-preview small,
+  .rvw-session-scorecard small,
+  .rvw-next-action small
+) {
+  font-size: var(--909-type-section-label);
+  line-height: 1.25;
+}
+
+.shell-root.ws909[data-skin] :is(
+  .sntw-priority b,
+  .sntw-simple-grid b,
+  .srw-decisions > header b,
+  .srw-decision-list > button > span b,
+  .atlas-preview header b,
+  .rvw-session-scorecard > header b,
+  .rvw-next-action b
+) {
+  font-size: var(--909-type-section-title);
+  line-height: 1.25;
+}
+
+.shell-root.ws909[data-skin] :is(
+  .sntw-priority p,
+  .sntw-simple-grid p,
+  .sntw-simple-grid li,
+  .srw-decisions > header b,
+  .srw-decision-list p,
+  .atlas-diagnosis,
+  .atlas-plan b,
+  .rvw-next-action b
+) {
+  font-size: var(--909-type-body);
+  line-height: 1.45;
+}
+
+.shell-root.ws909[data-skin] :is(
+  .sntw-technical summary b,
+  .srw-decision-list > button > span small,
+  .rvw-session-scorecard > p,
+  .rvw-session-metrics em
+) {
+  font-size: var(--909-type-detail);
+  line-height: 1.4;
+}
+
+.shell-root.ws909[data-skin] :is(
+  .atlas-preview-metrics b,
+  .rvw-session-metrics b
+) {
+  font-size: var(--909-type-metric);
+  line-height: 1.1;
 }
 
 .shell-root.ws909[data-skin] .opsw-card > header {
