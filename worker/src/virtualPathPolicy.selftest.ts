@@ -11,6 +11,11 @@ assert.equal(base.scoredStopPct, 30);
 assert.equal(base.takeProfitPct, 25);
 assert.match(base.policyVersion, /^sha256:[0-9a-f]{64}$/);
 assert.deepEqual(parseVirtualPathPolicyStamp(base), base);
+assert.deepEqual(
+  parseVirtualPathPolicyStamp(Object.fromEntries(Object.entries(base).reverse())),
+  base,
+  "JSONB key ordering must not invalidate an exact policy stamp",
+);
 assert.deepEqual(base, virtualPathPolicyStamp({
   channel: { premium_stop_pct: 30, take_profit_pct: 25 },
   defaultPremiumStopPct: 50,

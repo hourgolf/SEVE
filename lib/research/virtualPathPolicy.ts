@@ -75,7 +75,9 @@ export function parseVirtualPathPolicyStamp(value: unknown): VirtualPathPolicySt
       defaultPremiumStopPct: row.scoredStopPct,
       managerVersion: row.managerVersion as string | null,
     });
-    return JSON.stringify(expected) === JSON.stringify(row) ? expected : null;
+    // JSONB does not preserve insertion order. Compare the canonical payload,
+    // not the property order returned by the storage adapter.
+    return stable(expected) === stable(row) ? expected : null;
   } catch {
     return null;
   }
