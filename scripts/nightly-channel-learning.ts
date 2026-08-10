@@ -15,6 +15,8 @@ import { buildExecutionResilienceReport, renderExecutionResilienceReport } from 
 import { buildPortfolioCapacityDecisionPacket, renderPortfolioCapacityDecisionPacket } from "../lib/research/portfolioCapacityDecision";
 import { buildChannelLifecycleDecisionPacket, renderChannelLifecycleDecisionPacket } from "../lib/research/channelLifecycleDecision";
 import type { GateShadowCatchupManifest } from "../lib/research/gateShadowCatchupAuthorization";
+import { buildOperatorExperimentPacket, renderOperatorExperimentPacket } from "../lib/research/operatorExperimentPacket";
+import type { ChannelTrailFrontierBook } from "../lib/research/channelTrailFrontier";
 
 const arg = (name: string, fallback: string): string => {
   const index = process.argv.indexOf(`--${name}`);
@@ -23,19 +25,22 @@ const arg = (name: string, fallback: string): string => {
 const atlasFile = resolve(arg("atlas-file", "data/decision-atlas/latest/atlas/atlas.json"));
 const snapshotFile = resolve(arg("snapshot-file", "data/decision-atlas/latest/atlas/snapshot.json"));
 const briefsFile = resolve(arg("briefs-file", "data/decision-atlas/latest/briefs/briefs.json"));
+const trailFile = resolve(arg("trail-file", "data/decision-atlas/latest/trails/frontier.json"));
 const outputDir = resolve(arg("out-dir", "data/decision-atlas/latest/learning"));
 const catchupManifestFile = arg("shadow-catchup-manifest", "");
-for (const file of [atlasFile, snapshotFile, briefsFile]) {
+for (const file of [atlasFile, snapshotFile, briefsFile, trailFile]) {
   if (!existsSync(file)) throw new Error(`required frozen artifact not found: ${file}`);
 }
 const source = {
   atlas: readFileSync(atlasFile, "utf8"),
   snapshot: readFileSync(snapshotFile, "utf8"),
   briefs: readFileSync(briefsFile, "utf8"),
+  trails: readFileSync(trailFile, "utf8"),
 };
 const atlas = JSON.parse(source.atlas) as DecisionAtlas;
 const snapshot = JSON.parse(source.snapshot) as DecisionAtlasSourceSnapshot;
 const briefs = JSON.parse(source.briefs) as ChannelDecisionBriefBundle;
+const trails = JSON.parse(source.trails) as ChannelTrailFrontierBook;
 const catchupManifests = catchupManifestFile ? [JSON.parse(readFileSync(resolve(catchupManifestFile), "utf8")) as GateShadowCatchupManifest] : [];
 if (briefs.throughSession !== atlas.throughSession) {
   throw new Error(`briefs through ${briefs.throughSession} do not match Atlas through ${atlas.throughSession}`);
@@ -51,6 +56,7 @@ const portfolioCapacity = buildPortfolioCapacityDecisionPacket({ atlas, briefs,
   opportunities: normalized.opportunities, accountBudgets: normalized.accountBudgets });
 const lifecycle = buildChannelLifecycleDecisionPacket({ atlas, briefs, experiments,
   capacity: portfolioCapacity, execution: executionResilience });
+const operatorPacket = buildOperatorExperimentPacket({ briefs, experiments, lifecycle, trails });
 const hash = (value: unknown): string => `sha256:${createHash("sha256")
   .update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex")}`;
 const headline = evidence.state === "recovery_proposed"
@@ -105,12 +111,14 @@ const receipt = {
   generatedAt: atlas.generatedAt,
   throughSession: atlas.throughSession,
   inputs: { atlasSha256: hash(source.atlas), snapshotSha256: hash(source.snapshot), briefsSha256: hash(source.briefs),
+    trailsSha256: hash(source.trails),
     shadowCatchupManifestSha256: catchupManifestFile ? hash(readFileSync(resolve(catchupManifestFile), "utf8")) : null },
   outputs: { packetSha256: hash(packet), evidenceSha256: evidence.receiptSha256,
     experimentsSha256: experiments.packetSha256, executionCapacitySha256: executionCapacity.receiptSha256,
     executionResilienceSha256: executionResilience.receiptSha256,
     portfolioCapacitySha256: portfolioCapacity.receiptSha256,
     lifecycleSha256: lifecycle.receiptSha256,
+    operatorPacketSha256: operatorPacket.packetSha256,
     dashboardBriefsSha256: hash(dashboardBriefs) },
   productionReads: 0,
   productionWrites: 0,
@@ -153,6 +161,8 @@ writeFileSync(resolve(outputDir, "portfolio-capacity.json"), `${JSON.stringify(p
 writeFileSync(resolve(outputDir, "portfolio-capacity.md"), `${renderPortfolioCapacityDecisionPacket(portfolioCapacity)}\n`);
 writeFileSync(resolve(outputDir, "lifecycle.json"), `${JSON.stringify(lifecycle, null, 2)}\n`);
 writeFileSync(resolve(outputDir, "lifecycle.md"), `${renderChannelLifecycleDecisionPacket(lifecycle)}\n`);
+writeFileSync(resolve(outputDir, "operator-packet.json"), `${JSON.stringify(operatorPacket, null, 2)}\n`);
+writeFileSync(resolve(outputDir, "operator-packet.md"), `${renderOperatorExperimentPacket(operatorPacket)}\n`);
 writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 console.log(`nightly-channel-learning: PASS · through ${atlas.throughSession}`);
 console.log(`  ${headline}`);
