@@ -32,6 +32,8 @@ assert.equal(packet.summary.paperTrailTrials, 1);
 assert.equal(packet.guarantees.productionWrites, 0);
 assert.equal(packet.guarantees.automaticActivation, false);
 assert.match(renderOperatorExperimentPacket(packet), /One channel, one change/);
+assert.match(renderOperatorExperimentPacket(packet), /20 opportunities/);
+assert.doesNotMatch(renderOperatorExperimentPacket(packet), /opportunitys/);
 assert.match(renderOperatorExperimentPacket(packet), /No production behavior change is authorized/);
 assert.throws(() => buildOperatorExperimentPacket({
   briefs, experiments: { ...experiments, throughSession: "2026-08-09" }, lifecycle, trails,
