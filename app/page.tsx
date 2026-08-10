@@ -123,7 +123,12 @@ function Surface({
   useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
-  const liveFund = liveFundPnl(feed.fundPnl, feed.positions, liveMarks);
+  const liveFund = liveFundPnl(
+    feed.fundPnl,
+    feed.positions,
+    liveMarks,
+    feed.fundPnl.snapshotUnrealizedPnl,
+  );
   // P5 slice 1 — shared remote reads LIFTED to the seam (called ONCE here, carried through
   // SurfaceProps). PERFORM + mobile leaves consumed these directly before; now they never
   // subscribe. sentinel (brief/scan/judge/lens), workerRuns (crash-attribution ledger, wired

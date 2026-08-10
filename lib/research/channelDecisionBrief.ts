@@ -7,6 +7,7 @@ import type {
   DecisionAtlas,
 } from "./decisionAtlas";
 import type { WeeklyExecutedRow, WeeklyReadout, WeeklyVirtualSummary } from "./weeklyReadout";
+import type { ChannelTrailFrontierBook, TrailCandidateSummary } from "./channelTrailFrontier";
 
 export const CHANNEL_DECISION_BRIEF_VERSION = "channel-decision-brief-v1" as const;
 
@@ -78,6 +79,15 @@ export interface ChannelDecisionBrief {
     conclusion: string;
     recommended: AtlasManagerFrontier | null;
     compared: AtlasManagerFrontier[];
+  };
+  trail?: {
+    label: "TRAIL FRONTIER";
+    state: "ready" | "collecting" | "unavailable";
+    configurationEra: string | null;
+    recommendation: "test_full_ratchet" | "test_bank_then_ratchet" | "keep_native" | "collect_paths";
+    conclusion: string;
+    leading: TrailCandidateSummary | null;
+    compared: TrailCandidateSummary[];
   };
   capacity: {
     conclusion: string;
@@ -266,8 +276,9 @@ function chooseRecommendation(input: {
   currentContracts: number | null;
   currentSizeObserved: boolean;
   bestSupportedContracts: number | null;
+  trail: ChannelDecisionBrief["trail"];
 }): ChannelDecisionBrief["recommendation"] {
-  const { dossier, native, managers, entries } = input;
+  const { dossier, native, managers, entries, trail } = input;
   let axis: ChannelDecisionAxis = "collection";
   let label = "KEEP COLLECTING";
   let summary = dossier.summary;
@@ -275,6 +286,10 @@ function chooseRecommendation(input: {
   if (dossier.disposition === "retire") {
     axis = "retirement"; label = "REVIEW RETIREMENT";
     nextExperiment = "Confirm that the negative evidence is redundant, then prepare a reversible collection pause.";
+  } else if (trail?.state === "ready" && trail.leading
+      && (trail.recommendation === "test_full_ratchet" || trail.recommendation === "test_bank_then_ratchet")) {
+    axis = "manager"; label = "REVIEW TRAIL"; summary = trail.conclusion;
+    nextExperiment = `Keep entry, size, route, and admission fixed; compare ${trail.leading.label} with the native exit on the same new opportunities.`;
   } else if (managers.recommended) {
     axis = "manager"; label = "REVIEW MANAGER"; summary = managers.conclusion;
     nextExperiment = `Keep entry and size fixed; compare ${managers.recommended.managerId} with the native exit on the same new opportunities.`;
@@ -318,6 +333,7 @@ export function buildChannelDecisionBriefs(input: {
   weekly: WeeklyReadout;
   opportunities: readonly AtlasOpportunity[];
   currentContractsByChannel?: Readonly<Record<string, number>>;
+  trailFrontier?: ChannelTrailFrontierBook | null;
 }): ChannelDecisionBriefBundle {
   const channels = Object.fromEntries(Object.values(input.atlas.channels).map((dossier) => {
     const rows = decisionRows(input.opportunities, dossier);
@@ -327,6 +343,24 @@ export function buildChannelDecisionBriefs(input: {
     const entries = entryFrequency(rows, dossier);
     const native = nativeExit(rows, frontier);
     const managers = managerReview(frontier);
+    const trailChannel = input.trailFrontier?.channels[dossier.channel];
+    const trailEra = trailChannel?.eras.find((row) => row.configurationEra === trailChannel.selectedConfigurationEra) ?? null;
+    const trailLeading = trailEra
+      ? trailEra.candidates.find((row) => row.candidateId === trailEra.recommendedCandidateId)
+        ?? [...trailEra.candidates].sort((left, right) =>
+          (right.typicalBenefitPct ?? Number.NEGATIVE_INFINITY) - (left.typicalBenefitPct ?? Number.NEGATIVE_INFINITY))[0]
+        ?? null
+      : null;
+    const trail: ChannelDecisionBrief["trail"] = trailEra ? {
+      label: "TRAIL FRONTIER",
+      state: trailEra.recommendedCandidateId ? "ready"
+        : trailEra.candidates.some((row) => row.pairedOpportunities > 0) ? "collecting" : "unavailable",
+      configurationEra: trailEra.configurationEra,
+      recommendation: trailEra.recommendation,
+      conclusion: trailEra.plainLanguage,
+      leading: trailLeading,
+      compared: trailEra.candidates,
+    } : undefined;
     const collision = collisionReview(input.atlas.collisionGraph, dossier.channel);
     const currentContracts = input.currentContractsByChannel?.[dossier.channel] ?? null;
     const currentSizeObserved = currentContracts == null || rows.some((row) => row.quantity === currentContracts);
@@ -336,7 +370,7 @@ export function buildChannelDecisionBriefs(input: {
       ? `${currentContracts == null ? "Current size is not in the nightly inventory" : `Current size is ${currentContracts} contracts${currentSizeObserved ? " and is represented in the decision cohort" : " but is not yet represented in the decision cohort"}`}. The replay remains deployable through ${bestPoint.contracts} contracts, with ${bestPoint.additionalDisplacedOtherOpportunitiesVsOneContract ?? 0} additional peer opportunities displaced versus one contract.`
       : "The 1–6 contract replay does not support an additional size conclusion.";
     const recommendation = chooseRecommendation({ dossier, native, managers, entries, currentContracts,
-      currentSizeObserved, bestSupportedContracts: dossier.capacity.bestSupportedContracts });
+      currentSizeObserved, bestSupportedContracts: dossier.capacity.bestSupportedContracts, trail });
     const brief: ChannelDecisionBrief = {
       schemaVersion: 1,
       briefVersion: CHANNEL_DECISION_BRIEF_VERSION,
@@ -376,6 +410,7 @@ export function buildChannelDecisionBriefs(input: {
       entryFrequency: entries,
       nativeExit: native,
       managers,
+      trail,
       capacity: { conclusion: capacityConclusion, currentContracts, currentSizeObserved,
         bestSupportedContracts: dossier.capacity.bestSupportedContracts, points: dossier.capacity.points },
       collision,

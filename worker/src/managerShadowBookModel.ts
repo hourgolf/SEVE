@@ -431,7 +431,12 @@ export function advanceManagerShadowRun(run: ManagerShadowRun, tick: ManagerQuot
   const peakReturnPct = run.peakReturnPct == null ? currentReturnPct : Math.max(run.peakReturnPct, currentReturnPct);
   const observed: ManagerShadowRun = {
     ...run,
-    evidenceState: "observing",
+    // A quote first seen after the actual position closed may continue the
+    // observation-only path, but it can never repair the missing pre-close
+    // comparison. Preserve that boundary for every later transition.
+    evidenceState: run.evidenceState === "no_eligible_quote_before_actual_close"
+      ? run.evidenceState
+      : "observing",
     firstQuoteAt: run.firstQuoteAt ?? new Date(tick.quoteAtMs).toISOString(),
     firstQuoteEventAgeMs: run.firstQuoteEventAgeMs ?? quoteAgeMs,
     firstSnapshotFetchAgeMs: run.firstSnapshotFetchAgeMs
@@ -632,7 +637,10 @@ export function decodeManagerShadowRun(row: ManagerShadowDbRow): ManagerShadowRu
   const firstQuoteComplete = row.first_quote_at != null && row.first_quote_event_age_ms != null && row.first_snapshot_fetch_age_ms != null;
   if (!firstQuoteAllNull && !firstQuoteComplete) return null;
   if ((row.evidence_state === "pending_quote") !== firstQuoteAllNull && row.evidence_state !== "no_eligible_quote_before_actual_close") return null;
-  if (row.evidence_state === "no_eligible_quote_before_actual_close" && (row.actual_close_at == null || !firstQuoteAllNull)) return null;
+  if (row.evidence_state === "no_eligible_quote_before_actual_close") {
+    if (row.actual_close_at == null) return null;
+    if (row.first_quote_at != null && Date.parse(row.first_quote_at) < Date.parse(row.actual_close_at)) return null;
+  }
   if (row.last_quote_at != null && Date.parse(row.last_quote_at) < Date.parse(entryAt)) return null;
   if (row.actual_close_at != null && Date.parse(row.actual_close_at) < Date.parse(entryAt)) return null;
   if (row.censored_at != null && Date.parse(row.censored_at) < Date.parse(entryAt)) return null;

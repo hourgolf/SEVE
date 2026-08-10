@@ -68,6 +68,8 @@
     "phase1d-pb-replay": "tsx --env-file=.env.local engine/phase1d-pb-truth-replay.ts",
     "manager-shadow-selftest": "tsx worker/src/managerShadow.selftest.ts",
     "manager-shadow-book-selftest": "tsx worker/src/managerShadowBook.selftest.ts",
+    "channel-trail-frontier-selftest": "tsx lib/research/channelTrailFrontier.selftest.ts",
+    "channel-trail-frontier": "tsx scripts/channel-trail-frontier.ts",
     "family-admission-selftest": "tsx worker/src/familyAdmission.selftest.ts",
     "observer-scorecard-selftest": "tsx lib/research/observerScorecard.selftest.ts",
     "account-equity-selftest": "tsx lib/research/accountEquity.selftest.ts",
@@ -141,6 +143,7 @@
     "ops-evidence-read-selftest": "tsx hooks/useOpsEvidence.selftest.ts",
     "ops-status-egress-selftest": "tsx hooks/useOpsStatus.selftest.ts",
     "desk-feed-egress-selftest": "tsx hooks/useDeskFeed.selftest.ts",
+    "desk-derive-selftest": "tsx lib/desk/derive.selftest.ts",
     "ops-readiness-selftest": "tsx lib/ops/readiness.selftest.ts",
     "broker-reconciliation-selftest": "tsx lib/ops/brokerReconciliation.selftest.ts",
     "channel-passport-selftest": "tsx lib/channels/channelPassport.selftest.ts",
@@ -411,6 +414,7 @@
     "momo-evolve-probe": "tsx --env-file=.env.local engine/momo-evolve-probe.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1086.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

@@ -302,18 +302,25 @@ export function deriveChannelManagerEvidenceBook(input: {
       const pnl = actualPnl(positionId);
       const actualReturnPct = pnl != null && debit > 0 ? round((pnl / debit) * 100) : null;
       const noStop = positionRuns.find((row) => row.manager_id === "BELL/no-stop");
-      const commonMfe = noStop?.status === "terminal" ? finite(noStop.peak_return_pct) : null;
+      const commonMfe = noStop?.status === "terminal" && noStop.evidence_state === "observing"
+        ? finite(noStop.peak_return_pct)
+        : null;
       const runByManager = new Map(positionRuns.map((row) => [row.manager_id, row]));
       const arms = COMMON_MANAGER_ARMS.map((managerId): ChannelManagerArmPoint => {
         const run = runByManager.get(managerId);
-        const returnPct = run?.status === "terminal" ? finite(run.terminal_return_pct) : null;
+        const invalidBeforeActualClose = run?.evidence_state === "no_eligible_quote_before_actual_close";
+        const returnPct = run?.status === "terminal" && !invalidBeforeActualClose
+          ? finite(run.terminal_return_pct)
+          : null;
         return {
           managerId,
-          status: run?.status ?? "missing",
+          status: invalidBeforeActualClose ? "censored" : run?.status ?? "missing",
           returnPct,
           deltaVsActualPct: returnPct != null && actualReturnPct != null ? round(returnPct - actualReturnPct) : null,
           terminalAt: run?.terminal_at ?? null,
-          censorCode: run?.censor_code ?? null,
+          censorCode: invalidBeforeActualClose
+            ? "no_eligible_quote_before_actual_close"
+            : run?.censor_code ?? null,
         };
       });
       return {
