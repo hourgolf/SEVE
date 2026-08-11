@@ -5,11 +5,11 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { pageAll } from "../engine/pageAll";
-import type { LogicalTrade, ProfitabilityLedger } from "../lib/profitability/profitabilityLedger";
+import { etDateOf, type LogicalTrade, type ProfitabilityLedger } from "../lib/profitability/profitabilityLedger";
 import { etSessionCloseUtc, etWallMinuteUtc } from "../lib/research/afterCloseResearch";
 import {
   buildChannelTrailFrontier,
@@ -18,6 +18,7 @@ import {
   type TrailQuote,
 } from "../lib/research/channelTrailFrontier";
 import type { DecisionAtlas } from "../lib/research/decisionAtlas";
+import type { DecisionAtlasSourceSnapshot } from "../lib/research/decisionAtlasAdapter";
 import type { QuoteArchiveReceiptRow } from "../worker/src/quoteArchiveReceiptStore";
 import { createServerSupabaseClient } from "./serverSupabase";
 
@@ -27,6 +28,7 @@ const arg = (name: string, fallback?: string): string | null => {
 };
 const ledgerFile = resolve(arg("ledger-file", "data/decision-atlas/latest/profitability/ledger.json")!);
 const atlasFile = resolve(arg("atlas-file", "data/decision-atlas/latest/atlas/atlas.json")!);
+const snapshotFile = resolve(arg("snapshot-file", resolve(dirname(atlasFile), "snapshot.json"))!);
 const quotesDir = resolve(arg("quotes-dir", "data/quotes-archive")!);
 const outputDir = resolve(arg("out-dir", "data/decision-atlas/latest/trails")!);
 const envFile = arg("env-file") ?? process.env.SEVE_ENV_FILE ?? null;
@@ -36,6 +38,27 @@ else if (existsSync(resolve(".env.local"))) process.loadEnvFile(resolve(".env.lo
 interface LedgerArtifact { ledger: ProfitabilityLedger }
 interface ArchiveQuoteRow { occ_symbol: string; bid: number | string | null; captured_at: string }
 interface RemoteQuoteRow { occ_symbol: string; bid: number | string | null; captured_at: string }
+interface TrailSeed {
+  logicalOpportunityId: string;
+  channel: string;
+  session: string;
+  configurationEra: string;
+  evidenceLayer: TrailOpportunity["evidenceLayer"];
+  entryAt: string;
+  entryPrice: number;
+  quantity: number;
+  nativeReturnPct: number;
+  nativeExitAt: string | null;
+  occSymbol: string;
+}
+
+const numeric = (value: unknown): number | null => {
+  const parsed = value == null || value === "" ? Number.NaN : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+const object = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value)
+  ? value as Record<string, unknown> : null;
+const text = (value: unknown): string | null => typeof value === "string" && value.length ? value : null;
 
 const r2Configured = (): boolean => Boolean(
   process.env.R2_ACCOUNT_ID
@@ -169,38 +192,102 @@ function renderMarkdown(book: ChannelTrailFrontierBook): string {
     "|---|---|---|---|---:|---:|---:|",
   ];
   for (const channel of Object.values(book.channels).sort((left, right) => left.channel.localeCompare(right.channel))) {
-    const era = channel.eras.find((row) => row.configurationEra === channel.selectedConfigurationEra)!;
-    const candidate = era.candidates.find((row) => row.candidateId === era.recommendedCandidateId)
-      ?? [...era.candidates].sort((left, right) => (right.typicalBenefitPct ?? -Infinity) - (left.typicalBenefitPct ?? -Infinity))[0];
-    const pct = (value: number | null): string => value == null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
-    lines.push(`| ${channel.channel} | ${era.configurationEra} | ${era.recommendation.replaceAll("_", " ")} | ${candidate?.label ?? "—"} | ${pct(candidate?.typicalBenefitPct ?? null)} | ${candidate?.improvementFrequency == null ? "—" : `${Math.round(candidate.improvementFrequency * 100)}%`} | ${candidate?.pairedOpportunities ?? 0} paths / ${candidate?.sessions ?? 0}s |`);
+    const selected = [
+      channel.eras.find((row) => row.configurationEra === channel.selectedConfigurationEra) ?? null,
+      channel.virtualEras.find((row) => row.configurationEra === channel.selectedVirtualConfigurationEra) ?? null,
+    ];
+    for (const era of selected) {
+      if (!era) continue;
+      const candidate = era.candidates.find((row) => row.candidateId === era.recommendedCandidateId)
+        ?? [...era.candidates].sort((left, right) => (right.typicalBenefitPct ?? -Infinity) - (left.typicalBenefitPct ?? -Infinity))[0];
+      const pct = (value: number | null): string => value == null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+      lines.push(`| ${channel.channel} (${era.evidenceLayer.replaceAll("_", " ")}) | ${era.configurationEra} | ${era.recommendation.replaceAll("_", " ")} | ${candidate?.label ?? "—"} | ${pct(candidate?.typicalBenefitPct ?? null)} | ${candidate?.improvementFrequency == null ? "—" : `${Math.round(candidate.improvementFrequency * 100)}%`} | ${candidate?.pairedOpportunities ?? 0} paths / ${candidate?.sessions ?? 0}s |`);
+    }
   }
-  lines.push("", "A trail is proposal-ready only when its paired benefit, chronological validation, leave-session-out validation, and nearby parameter plateau agree. Capacity and displacement still require a separate pass.", "");
+  lines.push("", "Executed and exact-current virtual paths are displayed in separate rows and are never pooled. A trail is proposal-ready only when its paired benefit, chronological validation, leave-session-out validation, and nearby parameter plateau agree. Capacity and displacement still require a separate pass.", "");
   return lines.join("\n");
 }
 
 async function main(): Promise<void> {
-  for (const file of [ledgerFile, atlasFile]) if (!existsSync(file)) throw new Error(`required frozen artifact not found: ${file}`);
+  for (const file of [ledgerFile, atlasFile, snapshotFile]) if (!existsSync(file)) throw new Error(`required frozen artifact not found: ${file}`);
   const ledgerText = readFileSync(ledgerFile, "utf8");
   const atlasText = readFileSync(atlasFile, "utf8");
+  const snapshotText = readFileSync(snapshotFile, "utf8");
   const ledger = (JSON.parse(ledgerText) as LedgerArtifact).ledger;
   const atlas = JSON.parse(atlasText) as DecisionAtlas;
+  const snapshot = JSON.parse(snapshotText) as DecisionAtlasSourceSnapshot;
   const trades = ledger.logicalTrades.filter((trade) => trade.status === "closed" && trade.closedAt
     && trade.quantity > 0 && trade.entryDebitUsd != null && trade.entryDebitUsd > 0
     && trade.realizedReturnPct != null && trade.occSymbol && trade.openedAt
     && trade.openedAt <= `${atlas.throughSession}T23:59:59.999Z`);
-  const bySession = new Map<string, LogicalTrade[]>();
+  const seeds: TrailSeed[] = [];
   for (const trade of trades) {
     const session = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(trade.openedAt));
-    bySession.set(session, [...(bySession.get(session) ?? []), trade]);
+    seeds.push({
+      logicalOpportunityId: trade.id,
+      channel: trade.channelSlug,
+      session,
+      configurationEra: exactConfigurationEra(trade),
+      evidenceLayer: "executed",
+      entryAt: trade.openedAt,
+      entryPrice: (trade.entryDebitUsd as number) / (trade.quantity * 100),
+      quantity: trade.quantity,
+      nativeReturnPct: trade.realizedReturnPct as number,
+      nativeExitAt: trade.closedAt,
+      occSymbol: trade.occSymbol,
+    });
   }
+  const signalById = new Map(snapshot.signals.map((row) => [row.id, row]));
+  const activeSpecBySlug = new Map(snapshot.activeChannelSpecs.map((row) => [row.slug, row]));
+  const currentVirtualConfigurationEras: Record<string, string> = {};
+  const latestVirtualAtByChannel = new Map<string, string>();
+  let virtualMissingSignal = 0;
+  let virtualMissingConfigurationStamp = 0;
+  for (const virtual of snapshot.virtualTrades) {
+    const signal = signalById.get(virtual.signal_id);
+    const entryPrice = numeric(virtual.entry_px);
+    const pnl = numeric(virtual.pnl_per_contract);
+    if (!signal) { virtualMissingSignal += 1; continue; }
+    if (!virtual.occ || !(entryPrice != null && entryPrice > 0) || pnl == null || !virtual.exit_at
+      || etDateOf(virtual.signal_at) > atlas.throughSession) continue;
+    const rationale = object(signal.rationale);
+    const observedPolicyEpoch = text(rationale?.observed_policy_configuration_epoch_id)
+      ?? text(rationale?.configuration_epoch_id) ?? signal.configuration_epoch_id;
+    if (!observedPolicyEpoch) { virtualMissingConfigurationStamp += 1; continue; }
+    const activeSpec = activeSpecBySlug.get(virtual.slug);
+    const activeDatabaseId = activeSpec
+      ? snapshot.activeChannelSpecDatabaseIdsByVersionKey?.[activeSpec.id] ?? null : null;
+    const configurationEra = activeDatabaseId && signal.configuration_epoch_id === snapshot.currentConfigurationEpochId
+      ? `channel-spec:${activeDatabaseId}` : `prospective-policy:${observedPolicyEpoch}`;
+    const quantity = activeSpec?.quantity ?? Math.max(1, Math.floor(numeric(rationale?.qty) ?? 1));
+    seeds.push({
+      logicalOpportunityId: `signal:${virtual.signal_id}`,
+      channel: virtual.slug,
+      session: etDateOf(virtual.signal_at),
+      configurationEra,
+      evidenceLayer: "virtual",
+      entryAt: virtual.signal_at,
+      entryPrice,
+      quantity,
+      nativeReturnPct: pnl / entryPrice,
+      nativeExitAt: virtual.exit_at,
+      occSymbol: virtual.occ,
+    });
+    const latestAt = latestVirtualAtByChannel.get(virtual.slug);
+    if (!latestAt || virtual.signal_at > latestAt) {
+      latestVirtualAtByChannel.set(virtual.slug, virtual.signal_at);
+      currentVirtualConfigurationEras[virtual.slug] = configurationEra;
+    }
+  }
+  const bySession = new Map<string, TrailSeed[]>();
+  for (const seed of seeds) bySession.set(seed.session, [...(bySession.get(seed.session) ?? []), seed]);
   const receipts = await quoteArchiveReceipts([...bySession.keys()]);
   const opportunities: TrailOpportunity[] = [];
   let archiveSessions = 0;
   let r2Sessions = 0;
   let remoteSessions = 0;
   let missingSessions = 0;
-  for (const [session, sessionTrades] of [...bySession].sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [session, sessionSeeds] of [...bySession].sort(([left], [right]) => left.localeCompare(right))) {
     let quoteBook = localSessionQuotes(session);
     let source: TrailOpportunity["source"] = "frozen_option_archive";
     if (quoteBook) archiveSessions += 1;
@@ -210,28 +297,28 @@ async function main(): Promise<void> {
       r2Sessions += 1;
     }
     else {
-      quoteBook = await remoteSessionQuotes(session, [...new Set(sessionTrades.map((trade) => trade.occSymbol))]);
+      quoteBook = await remoteSessionQuotes(session, [...new Set(sessionSeeds.map((seed) => seed.occSymbol))]);
       source = "live_option_quotes";
       if (quoteBook.size) remoteSessions += 1;
       else missingSessions += 1;
     }
     const cutoff = flattenAtMs(session);
-    for (const trade of sessionTrades) {
-      const entryPrice = (trade.entryDebitUsd as number) / (trade.quantity * 100);
-      const quotes = (quoteBook.get(trade.occSymbol) ?? []).filter((quote) => {
+    for (const seed of sessionSeeds) {
+      const quotes = (quoteBook.get(seed.occSymbol) ?? []).filter((quote) => {
         const at = Date.parse(quote.at);
-        return at >= Date.parse(trade.openedAt) && at <= cutoff;
+        return at >= Date.parse(seed.entryAt) && at <= cutoff;
       });
       opportunities.push({
-        logicalOpportunityId: trade.id,
-        channel: trade.channelSlug,
-        session,
-        configurationEra: exactConfigurationEra(trade),
-        entryAt: trade.openedAt,
-        entryPrice,
-        quantity: trade.quantity,
-        nativeReturnPct: trade.realizedReturnPct as number,
-        nativeExitAt: trade.closedAt,
+        logicalOpportunityId: seed.logicalOpportunityId,
+        channel: seed.channel,
+        session: seed.session,
+        configurationEra: seed.configurationEra,
+        evidenceLayer: seed.evidenceLayer,
+        entryAt: seed.entryAt,
+        entryPrice: seed.entryPrice,
+        quantity: seed.quantity,
+        nativeReturnPct: seed.nativeReturnPct,
+        nativeExitAt: seed.nativeExitAt,
         quotes,
         source,
       });
@@ -244,6 +331,7 @@ async function main(): Promise<void> {
     throughSession: atlas.throughSession,
     opportunities,
     currentConfigurationEras,
+    currentVirtualConfigurationEras,
   });
   const json = `${JSON.stringify(book, null, 2)}\n`;
   const markdown = `${renderMarkdown(book)}\n`;
@@ -254,8 +342,11 @@ async function main(): Promise<void> {
     frontierVersion: book.frontierVersion,
     channels: Object.keys(book.channels).length,
     logicalOpportunities: book.sourceOpportunities,
+    executedLogicalOpportunities: book.executedSourceOpportunities,
+    virtualLogicalOpportunities: book.virtualSourceOpportunities,
+    virtualCensors: { missingSignal: virtualMissingSignal, missingConfigurationStamp: virtualMissingConfigurationStamp },
     pathSources: { localArchiveSessions: archiveSessions, verifiedR2Sessions: r2Sessions, remoteSelectSessions: remoteSessions, missingSessions },
-    inputs: { ledgerSha256: sha256(ledgerText), atlasSha256: sha256(atlasText) },
+    inputs: { ledgerSha256: sha256(ledgerText), atlasSha256: sha256(atlasText), snapshotSha256: sha256(snapshotText) },
     outputs: { frontierSha256: sha256(json), markdownSha256: sha256(markdown) },
     productionReads: [
       ...(receipts.size ? ["quote_archive_receipts:SELECT", "r2_quote_archive:GET"] : []),

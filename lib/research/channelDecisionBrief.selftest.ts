@@ -16,7 +16,7 @@ const trailFrontier = buildChannelTrailFrontier({
   generatedAt: atlas.generatedAt,
   throughSession: atlas.throughSession,
   opportunities: [{
-    logicalOpportunityId: "a", channel: "test", session: "2026-08-06", configurationEra: "current",
+    logicalOpportunityId: "a", channel: "test", session: "2026-08-06", configurationEra: "current", evidenceLayer: "executed",
     entryAt: "2026-08-06T14:00:00Z", entryPrice: 1, quantity: 2, nativeReturnPct: 30,
     nativeExitAt: "2026-08-06T14:10:00Z", source: "frozen_option_archive",
     quotes: [{ at: "2026-08-06T14:01:00Z", bid: 1.5 }, { at: "2026-08-06T14:02:00Z", bid: 1.2 }],

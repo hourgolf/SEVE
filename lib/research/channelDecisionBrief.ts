@@ -82,6 +82,7 @@ export interface ChannelDecisionBrief {
   };
   trail?: {
     label: "TRAIL FRONTIER";
+    evidenceLayer: "executed" | "virtual";
     state: "ready" | "collecting" | "unavailable";
     configurationEra: string | null;
     recommendation: "test_full_ratchet" | "test_bank_then_ratchet" | "keep_native" | "collect_paths";
@@ -344,7 +345,9 @@ export function buildChannelDecisionBriefs(input: {
     const native = nativeExit(rows, frontier);
     const managers = managerReview(frontier);
     const trailChannel = input.trailFrontier?.channels[dossier.channel];
-    const trailEra = trailChannel?.eras.find((row) => row.configurationEra === trailChannel.selectedConfigurationEra) ?? null;
+    const trailEra = trailChannel?.eras.find((row) => row.configurationEra === trailChannel.selectedConfigurationEra)
+      ?? trailChannel?.virtualEras.find((row) => row.configurationEra === trailChannel.selectedVirtualConfigurationEra)
+      ?? null;
     const trailLeading = trailEra
       ? trailEra.candidates.find((row) => row.candidateId === trailEra.recommendedCandidateId)
         ?? [...trailEra.candidates].sort((left, right) =>
@@ -353,6 +356,7 @@ export function buildChannelDecisionBriefs(input: {
       : null;
     const trail: ChannelDecisionBrief["trail"] = trailEra ? {
       label: "TRAIL FRONTIER",
+      evidenceLayer: trailEra.evidenceLayer,
       state: trailEra.recommendedCandidateId ? "ready"
         : trailEra.candidates.some((row) => row.pairedOpportunities > 0) ? "collecting" : "unavailable",
       configurationEra: trailEra.configurationEra,

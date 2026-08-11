@@ -70,7 +70,8 @@ async function main(): Promise<void> {
   const receipt = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    cohortStartSession: PRIORITY_A_BOUNDED_RETUNES[0].cohortStartSession,
+    cohortStartSession: [...new Set(PRIORITY_A_BOUNDED_RETUNES.map((row) => row.cohortStartSession))].sort()[0],
+    cohortStartSessions: [...new Set(PRIORITY_A_BOUNDED_RETUNES.map((row) => row.cohortStartSession))].sort(),
     summary: { registered: channels.length, ready: channels.filter((row) => row.state === "ready").length,
       blocked: channels.filter((row) => row.state === "blocked").length },
     channels,

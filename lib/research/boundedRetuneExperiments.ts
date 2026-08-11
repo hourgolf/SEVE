@@ -4,13 +4,14 @@ import {
   type BoundedRetuneExperimentDefinition,
 } from "./boundedRetuneRegistry";
 
-export const BOUNDED_RETUNE_SCORER_VERSION = "bounded-retune-scorer-v1" as const;
+export const BOUNDED_RETUNE_SCORER_VERSION = "bounded-retune-scorer-v2" as const;
 
 export interface BoundedRetuneEvidence {
   experimentId: string;
   channel: string;
   status: "awaiting_first_session" | "collecting" | "review_ready";
   prospectiveSessions: number;
+  eligibleLogicalOutcomes: number;
   scoredLogicalOutcomes: number;
   remainingSessions: number;
   remainingLogicalOutcomes: number;
@@ -24,6 +25,8 @@ export interface BoundedRetuneEvidence {
   censored: {
     missingExperimentStamp: number;
     baselineMismatch: number;
+    unscoredLogicalOpportunities: number;
+    duplicateLogicalRows: number;
     incompleteSessions: number;
   };
   decisionChecks: {
@@ -90,19 +93,33 @@ function scoreExperiment(
     row.boundedRetuneStamp?.experimentId === definition.experimentId);
   const baselineMismatch = stamped.filter((row) => !row.boundedRetuneStamp?.baselineMatches).length;
   const eligible = stamped.filter((row) => row.boundedRetuneStamp?.baselineMatches);
+  const byLogicalOpportunity = new Map<string, AtlasOpportunity[]>();
+  for (const row of eligible) {
+    byLogicalOpportunity.set(row.logicalOpportunityId,
+      [...(byLogicalOpportunity.get(row.logicalOpportunityId) ?? []), row]);
+  }
+  const completeForDefinition = (row: AtlasOpportunity): boolean => finite(row.resultPerContractUsd)
+    && (definition.variable !== "take_profit_pct"
+      || (finite(row.entryPrice) && row.entryPrice > 0 && finite(row.returnPct) && finite(row.mfePct)));
+  const scored: AtlasOpportunity[] = [];
+  let unscoredLogicalOpportunities = 0;
+  let duplicateLogicalRows = 0;
+  for (const rows of byLogicalOpportunity.values()) {
+    duplicateLogicalRows += Math.max(0, rows.length - 1);
+    const complete = [...rows].filter(completeForDefinition)
+      .sort((left, right) => left.signalAt.localeCompare(right.signalAt))[0];
+    if (complete) scored.push(complete);
+    else unscoredLogicalOpportunities += 1;
+  }
   const bySession = new Map<string, AtlasOpportunity[]>();
-  for (const row of eligible) bySession.set(row.session, [...(bySession.get(row.session) ?? []), row]);
+  for (const row of scored) bySession.set(row.session, [...(bySession.get(row.session) ?? []), row]);
 
   const pairs: Array<{ session: string; control: number; alternative: number }> = [];
   let scoredLogicalOutcomes = 0;
-  let incompleteSessions = 0;
+  const eligibleSessions = new Set(eligible.map((row) => row.session));
   for (const [session, rows] of [...bySession].sort(([left], [right]) => left.localeCompare(right))) {
     const ordered = [...rows].sort((left, right) => left.signalAt.localeCompare(right.signalAt)
       || left.logicalOpportunityId.localeCompare(right.logicalOpportunityId));
-    const complete = ordered.every((row) => finite(row.resultPerContractUsd)
-      && (definition.variable !== "take_profit_pct"
-        || (finite(row.entryPrice) && row.entryPrice > 0 && finite(row.returnPct) && finite(row.mfePct))));
-    if (!complete) { incompleteSessions += 1; continue; }
     scoredLogicalOutcomes += ordered.length;
     const control = round(ordered.reduce((sum, row) => sum + row.resultPerContractUsd!, 0));
     let alternative = control;
@@ -153,6 +170,7 @@ function scoreExperiment(
     status: sessions === 0 ? "awaiting_first_session"
       : evidenceFloorMet ? "review_ready" : "collecting",
     prospectiveSessions: sessions,
+    eligibleLogicalOutcomes: byLogicalOpportunity.size,
     scoredLogicalOutcomes,
     remainingSessions: Math.max(0, minimum.sessions - sessions),
     remainingLogicalOutcomes: Math.max(0, minimum.logicalOutcomes - scoredLogicalOutcomes),
@@ -164,7 +182,13 @@ function scoreExperiment(
     alternativeOutlierShare,
     provisionalRead: !evidenceFloorMet ? "insufficient_evidence"
       : allSupport ? "supports_alternative" : clearlyWorse ? "keep_control" : "mixed",
-    censored: { missingExperimentStamp, baselineMismatch, incompleteSessions },
+    censored: {
+      missingExperimentStamp,
+      baselineMismatch,
+      unscoredLogicalOpportunities,
+      duplicateLogicalRows,
+      incompleteSessions: [...eligibleSessions].filter((session) => !bySession.has(session)).length,
+    },
     decisionChecks: checks,
   };
 }
@@ -185,7 +209,7 @@ export function buildBoundedRetuneBook(input: {
     scorerVersion: BOUNDED_RETUNE_SCORER_VERSION,
     generatedAt: input.generatedAt,
     throughSession: input.throughSession,
-    cohortStartSession: definitions[0]?.cohortStartSession ?? "",
+    cohortStartSession: [...definitions.map((row) => row.cohortStartSession)].sort()[0] ?? "",
     experiments,
     summary: {
       registered: experiments.length,
@@ -194,7 +218,9 @@ export function buildBoundedRetuneBook(input: {
       reviewReady: experiments.filter((row) => row.evidence.status === "review_ready").length,
       sourceSignalsCensored: experiments.reduce((sum, row) => sum
         + row.evidence.censored.missingExperimentStamp
-        + row.evidence.censored.baselineMismatch, 0),
+        + row.evidence.censored.baselineMismatch
+        + row.evidence.censored.unscoredLogicalOpportunities
+        + row.evidence.censored.duplicateLogicalRows, 0),
     },
     productionWrites: 0,
     executionAuthority: false,
@@ -211,7 +237,7 @@ export function renderBoundedRetuneBookMarkdown(book: BoundedRetuneBook): string
   return [
     `# Priority-A bounded retunes — through ${book.throughSession}`,
     "",
-    `Prospective cohort begins **${book.cohortStartSession}**. These are dark comparisons only: ${book.summary.registered} registered, ${book.summary.awaiting} awaiting, ${book.summary.collecting} collecting, and ${book.summary.reviewReady} ready for human review.`,
+    `Prospective cohorts begin on or after **${book.cohortStartSession}**. These are dark comparisons only: ${book.summary.registered} registered, ${book.summary.awaiting} awaiting, ${book.summary.collecting} collecting, and ${book.summary.reviewReady} ready for human review.`,
     "",
     "| Channel | One variable | Comparison | Progress | Read |",
     "|---|---|---|---:|---|",
@@ -224,7 +250,7 @@ export function renderBoundedRetuneBookMarkdown(book: BoundedRetuneBook): string
     "",
     "## Boundaries",
     "",
-    "The source signal carries the experiment identity and observed baseline. Missing stamps, changed baseline settings, and incomplete sessions are censored rather than pooled. No order, execution, sizing, manager, roster, account, or configuration authority is present.",
+    "The source signal carries the experiment identity and observed baseline. Missing stamps, changed baseline settings, duplicate rows, and logical opportunities without a scored outcome are counted explicitly rather than silently pooled. A scored opportunity can still contribute when another raw signal in the session was not selected for a complete virtual path. No order, execution, sizing, manager, roster, account, or configuration authority is present.",
     "",
   ].join("\n");
 }

@@ -2,7 +2,9 @@
 // logical opportunity is the unit: every candidate walks the same executable
 // bid path and is paired against that opportunity's native executed result.
 
-export const CHANNEL_TRAIL_FRONTIER_VERSION = "channel-trail-frontier-v1" as const;
+export const CHANNEL_TRAIL_FRONTIER_VERSION = "channel-trail-frontier-v2" as const;
+
+export type TrailEvidenceLayer = "executed" | "virtual";
 
 export type TrailCandidateId =
   | "FULL-R20-K50"
@@ -38,6 +40,7 @@ export interface TrailOpportunity {
   channel: string;
   session: string;
   configurationEra: string;
+  evidenceLayer: TrailEvidenceLayer;
   entryAt: string;
   entryPrice: number;
   quantity: number;
@@ -96,6 +99,7 @@ export interface TrailCandidateSummary {
 
 export interface ChannelTrailEra {
   configurationEra: string;
+  evidenceLayer: TrailEvidenceLayer;
   opportunities: number;
   scoredNativeOpportunities: number;
   sessions: number;
@@ -108,8 +112,10 @@ export interface ChannelTrailEra {
 
 export interface ChannelTrailFrontier {
   channel: string;
-  selectedConfigurationEra: string;
+  selectedConfigurationEra: string | null;
   eras: ChannelTrailEra[];
+  selectedVirtualConfigurationEra: string | null;
+  virtualEras: ChannelTrailEra[];
 }
 
 export interface ChannelTrailFrontierBook {
@@ -120,6 +126,8 @@ export interface ChannelTrailFrontierBook {
   candidates: readonly TrailPolicy[];
   channels: Record<string, ChannelTrailFrontier>;
   sourceOpportunities: number;
+  executedSourceOpportunities: number;
+  virtualSourceOpportunities: number;
   productionWrites: 0;
   orderAuthority: false;
   configurationAuthority: false;
@@ -274,7 +282,8 @@ function markPlateaus(summaries: TrailCandidateSummary[]): TrailCandidateSummary
   });
 }
 
-function buildEra(configurationEra: string, opportunities: readonly TrailOpportunity[]): ChannelTrailEra {
+function buildEra(configurationEra: string, evidenceLayer: TrailEvidenceLayer,
+  opportunities: readonly TrailOpportunity[]): ChannelTrailEra {
   let candidates = TRAIL_CANDIDATES.map((policy) => summarizeCandidate(policy, opportunities.map((opportunity) => replay(opportunity, policy)), opportunities.length));
   candidates = markPlateaus(candidates);
   const ranked = [...candidates].sort((left, right) => Number(right.verdict === "promising") - Number(left.verdict === "promising") || Number(right.stableParameterPlateau) - Number(left.stableParameterPlateau) || (right.typicalBenefitPct ?? Number.NEGATIVE_INFINITY) - (left.typicalBenefitPct ?? Number.NEGATIVE_INFINITY));
@@ -286,7 +295,7 @@ function buildEra(configurationEra: string, opportunities: readonly TrailOpportu
     : anyScored ? "No bounded trail beats the native exit robustly enough to switch; keep the native exit while paths continue collecting."
       : "No complete executable-bid path is available for a fair trail comparison yet.";
   return {
-    configurationEra, opportunities: opportunities.length,
+    configurationEra, evidenceLayer, opportunities: opportunities.length,
     scoredNativeOpportunities: opportunities.filter((row) => Number.isFinite(row.nativeReturnPct)).length,
     sessions: new Set(opportunities.map((row) => row.session)).size,
     candidates, recommendation, recommendedCandidateId: recommended?.candidateId ?? null, plainLanguage,
@@ -303,25 +312,46 @@ export function buildChannelTrailFrontier(input: {
   throughSession: string;
   opportunities: readonly TrailOpportunity[];
   currentConfigurationEras?: Readonly<Record<string, string>>;
+  currentVirtualConfigurationEras?: Readonly<Record<string, string>>;
 }): ChannelTrailFrontierBook {
   const valid = input.opportunities.filter((row) => row.session <= input.throughSession && row.channel && row.configurationEra && row.entryPrice > 0 && row.quantity > 0 && Number.isFinite(row.nativeReturnPct));
   const byChannel = new Map<string, TrailOpportunity[]>();
   for (const row of valid) byChannel.set(row.channel, [...(byChannel.get(row.channel) ?? []), row]);
   const channels = Object.fromEntries([...byChannel].sort(([left], [right]) => left.localeCompare(right)).map(([channel, rows]) => {
-    const byEra = new Map<string, TrailOpportunity[]>();
-    for (const row of rows) byEra.set(row.configurationEra, [...(byEra.get(row.configurationEra) ?? []), row]);
-    const eras = [...byEra].map(([era, eraRows]) => buildEra(era, eraRows)).sort((left, right) => right.opportunities - left.opportunities || left.configurationEra.localeCompare(right.configurationEra));
+    const buildLayer = (layer: TrailEvidenceLayer): ChannelTrailEra[] => {
+      const byEra = new Map<string, TrailOpportunity[]>();
+      for (const row of rows.filter((item) => item.evidenceLayer === layer)) {
+        byEra.set(row.configurationEra, [...(byEra.get(row.configurationEra) ?? []), row]);
+      }
+      return [...byEra].map(([era, eraRows]) => buildEra(era, layer, eraRows))
+        .sort((left, right) => right.opportunities - left.opportunities
+          || left.configurationEra.localeCompare(right.configurationEra));
+    };
+    const eras = buildLayer("executed");
+    const virtualEras = buildLayer("virtual");
     const requested = input.currentConfigurationEras?.[channel];
     const requestedSpecId = requested?.startsWith("channel-spec:") ? requested.slice("channel-spec:".length) : null;
     const selected = eras.find((era) => era.configurationEra === requested)
       ?? (requestedSpecId ? eras.find((era) => era.configurationEra.startsWith(`epoch:${requestedSpecId}:`)) : null)
-      ?? eras[0];
-    return [channel, { channel, selectedConfigurationEra: selected.configurationEra, eras } satisfies ChannelTrailFrontier];
+      ?? (requested ? null : eras[0] ?? null);
+    const requestedVirtual = input.currentVirtualConfigurationEras?.[channel];
+    const selectedVirtual = virtualEras.find((era) => era.configurationEra === requestedVirtual)
+      ?? (requestedVirtual ? null : virtualEras[0] ?? null);
+    return [channel, {
+      channel,
+      selectedConfigurationEra: selected?.configurationEra ?? null,
+      eras,
+      selectedVirtualConfigurationEra: selectedVirtual?.configurationEra ?? null,
+      virtualEras,
+    } satisfies ChannelTrailFrontier];
   }));
+  const executedSourceOpportunities = valid.filter((row) => row.evidenceLayer === "executed").length;
+  const virtualSourceOpportunities = valid.filter((row) => row.evidenceLayer === "virtual").length;
   return {
     schemaVersion: 1, frontierVersion: CHANNEL_TRAIL_FRONTIER_VERSION,
     generatedAt: input.generatedAt, throughSession: input.throughSession,
     candidates: TRAIL_CANDIDATES, channels, sourceOpportunities: valid.length,
+    executedSourceOpportunities, virtualSourceOpportunities,
     productionWrites: 0, orderAuthority: false, configurationAuthority: false,
   };
 }

@@ -6,10 +6,10 @@ import {
   buildBoundedRetuneSignalStamp,
 } from "./boundedRetuneRegistry";
 
-assert.equal(PRIORITY_A_BOUNDED_RETUNES.length, 22);
-assert.equal(new Set(PRIORITY_A_BOUNDED_RETUNES.map((row) => row.channel)).size, 22);
-assert.equal(PRIORITY_A_BOUNDED_RETUNES.filter((row) => row.variable === "max_entries_per_session").length, 15);
-assert.equal(PRIORITY_A_BOUNDED_RETUNES.filter((row) => row.variable === "take_profit_pct").length, 7);
+assert.equal(PRIORITY_A_BOUNDED_RETUNES.length, 24);
+assert.equal(new Set(PRIORITY_A_BOUNDED_RETUNES.map((row) => row.channel)).size, 24);
+assert.equal(PRIORITY_A_BOUNDED_RETUNES.filter((row) => row.variable === "max_entries_per_session").length, 18);
+assert.equal(PRIORITY_A_BOUNDED_RETUNES.filter((row) => row.variable === "take_profit_pct").length, 6);
 assert(PRIORITY_A_BOUNDED_RETUNES.every((row) => row.executionAuthority === false
   && row.minimumEvidence.sessions === 5 && row.minimumEvidence.logicalOutcomes === 10));
 
@@ -82,5 +82,18 @@ const censored = buildBoundedRetuneBook({
 assert.equal(censored.prospectiveSessions, 0);
 assert.equal(censored.censored.missingExperimentStamp, 1);
 
-console.log("bounded retune experiments self-test: PASS");
+const partial = opportunity("2026-08-10", 1, 0);
+partial.resultPerContractUsd = null;
+const partiallyScored = buildBoundedRetuneBook({
+  generatedAt: "2026-08-11T00:00:00.000Z",
+  throughSession: "2026-08-10",
+  opportunities: [opportunity("2026-08-10", 0, 10), partial],
+  definitions: [definition],
+}).experiments[0].evidence;
+assert.equal(partiallyScored.prospectiveSessions, 1,
+  "one unscored signal must not poison a complete logical opportunity in the same session");
+assert.equal(partiallyScored.scoredLogicalOutcomes, 1);
+assert.equal(partiallyScored.censored.unscoredLogicalOpportunities, 1);
+assert.equal(partiallyScored.censored.incompleteSessions, 0);
 
+console.log("bounded retune experiments self-test: PASS");
