@@ -69,6 +69,9 @@ export function managerPolicyContentHash(input: {
   stopLoss: ChannelStopLossPolicy;
   ratchetParameters: ChannelRatchetPolicy;
   liquidationEt: unknown;
+  underlyingStopPct?: number;
+  stallMinutes?: number;
+  stallMaxFavorablePct?: number;
 }): string {
   return contentHash({
     profileId: input.managerProfileId,
@@ -77,6 +80,17 @@ export function managerPolicyContentHash(input: {
     ratchetParameters: input.ratchetParameters,
     liquidationEt: input.liquidationEt ?? null,
     priceBasis: "executable-option-bid",
+    ...(input.underlyingStopPct != null
+      || input.stallMinutes != null
+      || input.stallMaxFavorablePct != null
+      ? {
+        operationalExit: {
+          underlyingStopPct: input.underlyingStopPct ?? 0,
+          stallMinutes: input.stallMinutes ?? 0,
+          stallMaxFavorablePct: input.stallMaxFavorablePct ?? 0,
+        },
+      }
+      : {}),
   });
 }
 
@@ -448,6 +462,7 @@ export interface WorkerChannelProjection {
   entryDte: number;
   strikeOffset: number;
   maxEntriesPerSession: number;
+  eventPolicy?: "standdown" | "ignore";
   quantity: number;
   premiumCap: number;
   aggregateDebitCap: number;
@@ -455,6 +470,13 @@ export interface WorkerChannelProjection {
   stopLoss: ChannelStopLossPolicy;
   ratchetParameters: ChannelRatchetPolicy;
   riskLimits: ChannelRiskLimits;
+  dailyEntryLossLatchUsd?: number;
+  dailyEntryProfitLatchUsd?: number;
+  underlyingStopPct?: number;
+  pyramidAdds?: number;
+  stallMinutes?: number;
+  stallMaxFavorablePct?: number;
+  gapMinPct?: number;
   managerProfileId: string;
   strategistId: string;
   accountId: string;
@@ -730,6 +752,9 @@ export function compileReleaseManifest(
     entryDte: Number(spec.entryParameters.entryDte),
     strikeOffset: Number(spec.entryParameters.strikeOffset),
     maxEntriesPerSession: maxEntriesPerSessionForSpec(spec) ?? 0,
+    eventPolicy: spec.entryParameters.eventPolicy === "ignore"
+      ? "ignore"
+      : "standdown",
     quantity: spec.quantity,
     premiumCap: Number(spec.entryParameters.premiumCap),
     aggregateDebitCap: spec.maxDebitUsd,
@@ -737,6 +762,15 @@ export function compileReleaseManifest(
     stopLoss: spec.stopLoss,
     ratchetParameters: spec.ratchetParameters,
     riskLimits: spec.riskLimits,
+    dailyEntryLossLatchUsd: Number(spec.entryParameters.dailyStopUsd ?? 0),
+    dailyEntryProfitLatchUsd: Number(spec.entryParameters.dailyTargetUsd ?? 0),
+    underlyingStopPct: Number(spec.exitParameters.underlyingStopPct ?? 0),
+    pyramidAdds: Number(spec.entryParameters.pyramidAdds ?? 0),
+    stallMinutes: Number(spec.exitParameters.stallMinutes ?? 0),
+    stallMaxFavorablePct: Number(
+      spec.exitParameters.stallMaxFavorablePct ?? 0,
+    ),
+    gapMinPct: Number(spec.entryParameters.gapMinPct ?? 0),
     managerProfileId: spec.managerProfileId,
     strategistId: spec.channelId,
     accountId: spec.accountId,
