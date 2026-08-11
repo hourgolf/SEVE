@@ -13,6 +13,7 @@ const opportunities: TrailOpportunity[] = Array.from({ length: 10 }, (_, index) 
   const session = `2026-08-${String(index + 1).padStart(2, "0")}`;
   return {
     logicalOpportunityId: `trade-${index}`, channel: "gives-back", session, configurationEra: "current",
+    evidenceLayer: "executed",
     entryAt: `${session}T14:30:00.000Z`, entryPrice: 1, quantity: 2, nativeReturnPct: 5,
     nativeExitAt: `${session}T19:25:00.000Z`, quotes: quotePath(session), source: "frozen_option_archive",
   };
@@ -44,6 +45,20 @@ const bank = oneLot.channels["one-lot"].eras[0].candidates.find((candidate) => c
 assert.equal(bank.pairedOpportunities, 0);
 assert.equal(bank.censoredOpportunities, 1);
 
+const virtual = buildChannelTrailFrontier({
+  generatedAt: book.generatedAt,
+  throughSession: book.throughSession,
+  opportunities: [{ ...opportunities[0], channel: "dark", logicalOpportunityId: "virtual-1",
+    evidenceLayer: "virtual", configurationEra: "prospective-policy:one" }],
+  currentVirtualConfigurationEras: { dark: "prospective-policy:one" },
+});
+assert.equal(virtual.channels.dark.eras.length, 0);
+assert.equal(virtual.channels.dark.virtualEras.length, 1);
+assert.equal(virtual.channels.dark.selectedConfigurationEra, null);
+assert.equal(virtual.channels.dark.selectedVirtualConfigurationEra, "prospective-policy:one");
+assert.equal(virtual.executedSourceOpportunities, 0);
+assert.equal(virtual.virtualSourceOpportunities, 1);
+
 const repeated = buildChannelTrailFrontier({ generatedAt: book.generatedAt, throughSession: book.throughSession, opportunities, currentConfigurationEras: { "gives-back": `channel-spec:${currentSpec}` } });
 assert.deepEqual(repeated, book, "the frontier must be byte-stable for identical frozen inputs");
 assert.equal(book.productionWrites, 0);
@@ -55,6 +70,8 @@ assert.match(runner, /quote_archive_receipts/);
 assert.match(runner, /GetObjectCommand/);
 assert.match(runner, /compressed_sha256/);
 assert.match(runner, /manifest_sha256/);
+assert.match(runner, /snapshot-file/);
+assert.match(runner, /evidenceLayer: "virtual"/);
 assert.doesNotMatch(runner, /PutObjectCommand|\.from\([^\n]+\)[\s\S]{0,160}\.(?:insert|upsert|update|delete)\(/,
   "trail runner must remain SELECT\/GET only");
 

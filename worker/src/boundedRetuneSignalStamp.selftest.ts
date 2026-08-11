@@ -16,25 +16,32 @@ assert.equal(baseline?.baselineMatches, false);
 assert.deepEqual(baseline?.mismatches, ["sourceContentHash"]);
 
 const registry = boundedRetuneSignalStamp({
+  slug: "pb-ride-2",
+  spec_json: null,
+  max_contracts: 10,
+  premium_stop_pct: 30,
+  take_profit_pct: 20,
+});
+assert.equal(registry?.baselineMatches, true);
+assert.equal(registry?.executionAuthority, false);
+assert.equal(registry?.alternativeValue, 3);
+
+const drift = boundedRetuneSignalStamp({
+  slug: "pb-ride-2",
+  spec_json: null,
+  max_contracts: 10,
+  premium_stop_pct: 30,
+  take_profit_pct: 21,
+});
+assert.equal(drift?.baselineMatches, false);
+assert.deepEqual(drift?.mismatches, ["takeProfitPct"]);
+assert.equal(boundedRetuneSignalStamp({
   slug: "power",
   spec_json: null,
   max_contracts: 6,
   premium_stop_pct: null,
   take_profit_pct: 75,
-});
-assert.equal(registry?.baselineMatches, true);
-assert.equal(registry?.executionAuthority, false);
-assert.equal(registry?.alternativeValue, 20);
-
-const drift = boundedRetuneSignalStamp({
-  slug: "power",
-  spec_json: null,
-  max_contracts: 6,
-  premium_stop_pct: null,
-  take_profit_pct: 70,
-});
-assert.equal(drift?.baselineMatches, false);
-assert.deepEqual(drift?.mismatches, ["takeProfitPct"]);
+}), null, "paused experiments remain parseable historically but are not stamped going forward");
 assert.equal(boundedRetuneSignalStamp({
   slug: "not-registered",
   spec_json: null,

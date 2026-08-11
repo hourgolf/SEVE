@@ -65,7 +65,7 @@ function ManagerComparison({ model, trail }: { model: ChannelDecisionSummary; tr
     </div>
     {challenger && <div className={`atlas-manager-verdict ${challenger.robust ? "ready" : "hold"}`}>{challenger.robust ? "READY FOR A CONTROLLED PAPER TEST" : "NATIVE HOLDS · CHALLENGER IS NOT ROBUST YET"}</div>}
     {trail && <div className={`atlas-trail-callout ${trail.state}`}>
-      <span><small>CHANNEL TRAIL READ</small><b>{leadingTrail?.label ?? "NO COMPLETE TRAIL PATH"}</b></span>
+      <span><small>{trail.evidenceLayer === "virtual" ? "VIRTUAL TRAIL READ" : "EXECUTED TRAIL READ"}</small><b>{leadingTrail?.label ?? "NO COMPLETE TRAIL PATH"}</b></span>
       <span><small>TYPICAL LIFT</small><b>{signed(leadingTrail?.typicalBenefitPct ?? null, " pts")}</b></span>
       <span><small>CONSISTENCY</small><b>{leadingTrail ? `${pct(leadingTrail.improvementFrequency)} · ${leadingTrail.pairedOpportunities} paths / ${leadingTrail.sessions}s` : "—"}</b></span>
       <p>{trail.conclusion}</p>

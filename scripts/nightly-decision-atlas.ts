@@ -42,6 +42,7 @@ run("scripts/decision-atlas.ts", [...envArgs, "--through", through,
 run("scripts/channel-trail-frontier.ts", [...envArgs,
   "--ledger-file", resolve(ledgerDir, "ledger.json"),
   "--atlas-file", resolve(atlasDir, "atlas.json"),
+  "--snapshot-file", resolve(atlasDir, "snapshot.json"),
   "--out-dir", trailDir]);
 run("scripts/weekly-readout.ts", ["--through", through, "--ledger-file", resolve(ledgerDir, "ledger.json"),
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--atlas-file", resolve(atlasDir, "atlas.json"), "--out-dir", weeklyDir]);
