@@ -46,7 +46,11 @@ import { useVirtualBench } from "@/hooks/useVirtualBench";
 import { useChannelControlPlaneView } from "@/hooks/useChannelControlPlaneView";
 import { useWindowedPnl, type PnlWindow } from "@/hooks/useWindowedPnl";
 import type { Room } from "@/components/surfaceTypes";
-import { deriveChannelPassports } from "@/lib/channels/channelPassport";
+import {
+  deriveChannelPassports,
+  scopeChannelsToAccount,
+  scopeChannelWorkspace,
+} from "@/lib/channels/channelPassport";
 import { deriveOpsReadiness } from "@/lib/ops/readiness";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthControl } from "@/components/AuthControl";
@@ -141,12 +145,8 @@ function Surface({
   // Channel runtime identity is a page-owned, skin-neutral view model. Desktop,
   // mobile, and any future visual shell receive the exact same release state,
   // lifecycle classification, evidence counts, and policy identity.
-  const accountChannels = useMemo(
-    () => (acctId ? view.desk.strategists.filter((channel) => channel.account_id === acctId) : view.desk.strategists),
-    [view.desk.strategists, acctId],
-  );
-  const channelWorkspace = useMemo(() => deriveChannelPassports({
-    channels: accountChannels,
+  const allChannelWorkspace = useMemo(() => deriveChannelPassports({
+    channels: view.desk.strategists,
     events: data.releaseEvents,
     signals: feed.signals,
     positions: feed.positions,
@@ -163,7 +163,15 @@ function Surface({
       : data.releaseReceiptHealth.lastSuccessAt
         ? "ok"
         : "checking",
-  }), [accountChannels, data.releaseEvents, data.releaseReceiptHealth.lastError, data.releaseReceiptHealth.lastSuccessAt, feed.signals, feed.positions, feed.recentTrades, studioEvidence.asOf, studioEvidence.basis, studioEvidence.bySlug, studioEvidence.error, studioEvidence.loading]);
+  }), [view.desk.strategists, data.releaseEvents, data.releaseReceiptHealth.lastError, data.releaseReceiptHealth.lastSuccessAt, feed.signals, feed.positions, feed.recentTrades, studioEvidence.asOf, studioEvidence.basis, studioEvidence.bySlug, studioEvidence.error, studioEvidence.loading]);
+  const accountChannels = useMemo(
+    () => scopeChannelsToAccount(view.desk.strategists, allChannelWorkspace, acctId),
+    [view.desk.strategists, allChannelWorkspace, acctId],
+  );
+  const channelWorkspace = useMemo(
+    () => scopeChannelWorkspace(allChannelWorkspace, accountChannels),
+    [allChannelWorkspace, accountChannels],
+  );
   // P5 slice 3 — deterministic incident, derived ONCE at the seam from ops/workerRuns/positions/fund/
   // session. A 15s tick (+ the hook polls) keeps nowMs fresh so time-based escalation re-renders.
   useRefreshTick(15_000);
@@ -249,7 +257,7 @@ function Surface({
   // operator returns to the same room/layout. Lifted to the seam (passed down).
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/
@@ -297,7 +305,7 @@ function Surface({
       {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats over EITHER
           room. Opens on the shared `seve:command-palette` event; roster scoped to the account. */}
       <CommandPalette
-        channels={acctId ? view.desk.strategists.filter((s) => s.account_id === acctId) : view.desk.strategists}
+        channels={accountChannels}
       />
     </>
   );

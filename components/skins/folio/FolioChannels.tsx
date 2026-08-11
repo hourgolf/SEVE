@@ -19,10 +19,7 @@ const SORTS: Array<{ value: StudioSort; label: string }> = [
 ];
 
 export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
-  const channels = useMemo(
-    () => surface.acctId ? surface.view.desk.strategists.filter((row) => row.account_id === surface.acctId) : surface.view.desk.strategists,
-    [surface.view.desk.strategists, surface.acctId],
-  );
+  const channels = surface.accountChannels;
   const [scope, setScope] = useState<"roots" | "dark" | "all">("roots");
   const [sort, setSort] = useState<StudioSort>("attention");
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
@@ -81,6 +78,6 @@ export function FolioChannelsMobile({ surface, openSlug, setOpenSlug, onAddChann
   onAddChannel: () => void;
   onOpenSettings: () => void;
 }) {
-  const channels = surface.acctId ? surface.view.desk.strategists.filter((row) => row.account_id === surface.acctId) : surface.view.desk.strategists;
+  const channels = surface.accountChannels;
   return <div className="folio-channels folio-channels-mobile"><MobileStudio props={surface} channels={channels} livePnl={surface.livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={onAddChannel} onOpenSettings={onOpenSettings} /></div>;
 }

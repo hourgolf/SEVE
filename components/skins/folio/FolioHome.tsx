@@ -80,9 +80,7 @@ function FolioMarketCard({ surface, mobile = false }: { surface: SurfaceProps; m
 }
 
 export function FolioHomeDesktop({ surface }: { surface: SurfaceProps }) {
-  const channels = surface.acctId
-    ? surface.view.desk.strategists.filter((channel) => channel.account_id === surface.acctId)
-    : surface.view.desk.strategists;
+  const channels = surface.accountChannels;
   const reconciliation = surface.opsReadiness.evidence.find((item) => item.id === "reconciliation");
 
   return (
@@ -114,9 +112,7 @@ export function FolioHomeDesktop({ surface }: { surface: SurfaceProps }) {
 }
 
 export function FolioHomeMobile({ surface }: { surface: SurfaceProps }) {
-  const channels = surface.acctId
-    ? surface.view.desk.strategists.filter((channel) => channel.account_id === surface.acctId)
-    : surface.view.desk.strategists;
+  const channels = surface.accountChannels;
   return (
     <div className="folio-home folio-home-mobile">
       <div className="folio-home-scroll">

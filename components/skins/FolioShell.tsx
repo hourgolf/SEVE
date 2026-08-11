@@ -176,10 +176,7 @@ function FolioMobile({ surface }: { surface: SurfaceProps }) {
     return () => window.clearInterval(id);
   }, []);
 
-  const channels = useMemo(
-    () => (surface.acctId ? surface.view.desk.strategists.filter((row) => row.account_id === surface.acctId) : surface.view.desk.strategists),
-    [surface.view.desk.strategists, surface.acctId],
-  );
+  const channels = surface.accountChannels;
   const clock = now?.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--";
   const status = surface.incident.severity === "normal" ? "Nominal" : surface.incident.title;
   const openMarket = (view: MobileMarketView) => {

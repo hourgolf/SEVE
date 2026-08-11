@@ -124,6 +124,7 @@ export function DesktopSurface({
   accounts,
   acctId,
   setAcctId,
+  accountChannels,
   ops,
   liveMarks,
   livePnl,
@@ -190,9 +191,6 @@ export function DesktopSurface({
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, [setActiveRoom]);
-
-  // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
-  const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
 
   // Traded indices (desk-wide, armed) for the TODAY readiness strip — gaps are market-wide, so
   // this isn't account-scoped. Order SPY · QQQ · IWM, then anything else.
