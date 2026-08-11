@@ -34,6 +34,14 @@ assert(mobileInspector.indexOf("<DecisionAtlasPreviewCard") < mobileInspector.in
 assert.match(fleet, />TRADING IN VIEW </);
 assert.match(fleet, />OBSERVING IN VIEW </);
 assert.doesNotMatch(fleet, /<small>ARMED<\/small>|<small>MUTED<\/small>|runtime overlay differs/);
+assert.match(inspector, /passport\?\.lifecycle === "paper-root"[\s\S]*?\? "TRADING"/,
+  "desktop inspector must prefer receipt-bound runtime posture over legacy database mute state");
+assert.match(inspector, /SAVED DATABASE/,
+  "desktop inspector must label divergent database posture as saved-only context");
+assert.match(mobileInspector, /passport\?\.lifecycle !== "paper-root" && config\.muted/,
+  "mobile active roots must not be visually muted by a legacy database flag");
+assert.match(mobileInspector, /SAVED DATABASE/,
+  "mobile passport must label divergent database posture as saved-only context");
 
 assert(review.indexOf("className=\"etw-summary\"") < review.indexOf("className=\"etw-technical\""));
 assert.match(review, /<small>DESK ACTIVITY<\/small>/);

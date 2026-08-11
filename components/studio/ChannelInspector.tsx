@@ -91,6 +91,16 @@ export function ChannelInspector({ strategist, summary, passport, write, control
     : passport?.lifecycle === "dark-evidence"
       ? "OBSERVING"
       : "UNVERIFIED";
+  const effectiveStateLabel = (summary?.pnl.openCount ?? 0) > 0
+    ? "OPEN"
+    : passport?.lifecycle === "paper-root"
+      ? "TRADING"
+      : passport?.lifecycle === "dark-evidence"
+        ? "OBSERVING"
+        : summary?.stateLabel ?? status.toUpperCase();
+  const databaseStateLabel = passport
+    ? `${passport.database.state} · ${passport.database.differsFromRuntime ? "SAVED ONLY" : passport.database.executor}`
+    : status.toUpperCase();
   const pairedCurrent = researchEvidence?.pairedCurrent.find((item) =>
     item.executedSlug === slug || item.virtualSlug === slug);
   const currentExecuted = pairedCurrent
@@ -132,7 +142,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
           {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{liveModeLabel}</span>}
           {a13 && <span className="ih-tag amber">⚡ A13</span>}
-          <span className="ih-stats">state <b>{summary?.stateLabel ?? status.toUpperCase()}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
+          <span className="ih-stats">state <b>{effectiveStateLabel}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
         </div>
         <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
         <div className="mixer-deck">
@@ -174,7 +184,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         </div></section>
         <div className="mixer-meter">
           <span><small>LIVE MODE</small><b>{liveModeLabel}</b></span>
-          <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
+          <span><small>{passport?.database.differsFromRuntime ? "SAVED DATABASE" : "DATABASE"}</small><b>{databaseStateLabel}</b></span>
           <span><small>POLICY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
         </div>
         <section className={`mix-bank mix-bank--runtime lane-${passport?.lifecycle ?? "unverified"}${passportOpen ? " open" : " collapsed"}`}>
