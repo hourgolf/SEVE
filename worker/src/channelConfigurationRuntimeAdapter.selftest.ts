@@ -145,6 +145,39 @@ check("receipt-bound overlay ignores mutable strategist economics and routing", 
   }
 });
 
+check("receipt-bound overlay preserves explicitly sealed optional economics", () => {
+  const first = productionRuntime.roots[0];
+  assert.ok(first);
+  const customRuntime = {
+    ...productionRuntime,
+    roots: productionRuntime.roots.map((root, index) => index ? root : {
+      ...root,
+      eventPolicy: "ignore" as const,
+      dailyEntryLossLatchUsd: 3_750,
+      dailyEntryProfitLatchUsd: 250,
+      underlyingStopPct: 0.35,
+      pyramidAdds: 2,
+      stallMinutes: 120,
+      stallMaxFavorablePct: 25,
+      gapMinPct: 0.5,
+    }),
+  };
+  const overlaid = applyReceiptBoundRuntimeFleetOverlay({
+    channels: sourceChannels,
+    runtime: customRuntime,
+  });
+  const channel = overlaid.find((row) => row.slug === first.slug);
+  assert.ok(channel);
+  assert.equal(channel.event_policy, "ignore");
+  assert.equal(channel.daily_stop_usd, 3_750);
+  assert.equal(channel.daily_target_usd, 250);
+  assert.equal(channel.underlying_stop_pct, 0.35);
+  assert.equal(channel.pyramid_adds, 2);
+  assert.equal(channel.stall_minutes, 120);
+  assert.equal(channel.stall_max_favor_pct, 25);
+  assert.equal(channel.gap_min, 0.5);
+});
+
 check("non-roster channels are new-entry-dark while collection eligibility is preserved", () => {
   const unknown = {
     ...sourceChannel("pb-ride"),
