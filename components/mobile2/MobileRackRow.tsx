@@ -166,6 +166,10 @@ export function MobileRackRow({
   const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "TRADING", cls: "root" }
     : passport?.lifecycle === "dark-evidence" ? { txt: "OBSERVING", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
+  const runtimeMuted = passport?.lifecycle !== "paper-root" && config.muted;
+  const databaseStateLabel = passport
+    ? `${passport.database.state} · ${passport.database.differsFromRuntime ? "SAVED ONLY" : passport.database.executor}`
+    : status.toUpperCase();
   const plainReason = passport?.database.differsFromRuntime
     ? "SAVED SETTINGS CHANGED"
     : status === "draft" ? "On the bench"
@@ -174,7 +178,7 @@ export function MobileRackRow({
           : decisionBrief?.recommendation.label ?? "READY";
 
   return (
-    <section id={`m2-channel-${slug}`} className={`m2-rack${config.muted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>
+    <section id={`m2-channel-${slug}`} className={`m2-rack${runtimeMuted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>
       <button type="button" className="m2-rrow" onClick={onToggle} aria-expanded={open}>
         <span className="m2-rr-left">
           <span className={`m2-rr-dot${dot ? " on" : ""}${rootPolicy?.runner === "a13" ? " hot" : ""}`} />
@@ -310,7 +314,7 @@ export function MobileRackRow({
             {passportOpen && <>
               <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
               <div>
-                <span><small>DATABASE</small><b>{passport ? `${passport.database.state} · ${passport.database.executor}` : status.toUpperCase()}</b></span>
+                <span><small>{passport?.database.differsFromRuntime ? "SAVED DATABASE" : "DATABASE"}</small><b>{databaseStateLabel}</b></span>
                 <span><small>FAMILY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
                 <span><small>DECISIONS</small><b>{passport?.evidence.recentSignals ?? 0} · {passport?.evidence.censoredSignals ?? 0} censored</b></span>
                 <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
