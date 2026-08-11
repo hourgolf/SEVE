@@ -38,13 +38,12 @@ export function PerformSurface({
   ...surface
 }: SurfaceProps & { section?: PerformSection; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const {
-    data, view, feed, write, spotUp, symbol, setSymbol, acctId, livePnl, liveMarks, sentinel, positionPeaks, incident,
+    data, view, feed, write, spotUp, symbol, setSymbol, accountChannels, livePnl, liveMarks, sentinel, positionPeaks, incident,
   } = surface;
   const { desk } = view;
   const sent = sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
 
-  // Scope the roster to the selected account (same rule as DesktopSurface).
-  const channels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
+  const channels = accountChannels;
   const focus = section === "positions" ? "positions" : derivePerformFocus(incident.severity, feed.positions.length);
 
   return (

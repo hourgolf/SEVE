@@ -24,6 +24,7 @@ import type { PnlWindow, WindowedPnl } from "@/hooks/useWindowedPnl";
 import type { useChannelControlPlaneView } from "@/hooks/useChannelControlPlaneView";
 import type { ChannelManagerEvidenceRead } from "@/hooks/useChannelManagerEvidence";
 import type { useDecisionAtlasReports } from "@/hooks/useDecisionAtlasReports";
+import type { StrategistState } from "@/lib/desk/types";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
@@ -63,6 +64,9 @@ export interface SurfaceProps {
   accounts: ReturnType<typeof useAccounts>["accounts"];
   acctId: string | null;
   setAcctId: Dispatch<SetStateAction<string | null>>;
+  /** Account-scoped roster resolved from immutable receipt routes for paper
+   * roots, with mutable database assignment used only as a safe fallback. */
+  accountChannels: StrategistState[];
   /** Ops health (stream/cron/exec) — lifted so the shell + OPS share one 15s poll. */
   ops: OpsStatus;
   /** Live option marks + the P&L derived off them — shared by the shell LEDs + rooms. */

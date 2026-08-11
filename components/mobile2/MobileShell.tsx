@@ -2,7 +2,7 @@
 
 import "@/app/mobile2.css";
 import "@/app/seve-909.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { LedDisplay, LedWordmark } from "@/components/console/hw/LedDisplay";
 import { MobilePerform, type MobileMarketView } from "@/components/mobile2/MobilePerform";
 import { MobileStudio } from "@/components/mobile2/MobileStudio";
@@ -43,7 +43,7 @@ const ROOMS: { id: MobileRoom; label: string; sub: string }[] = [
 ];
 
 export function MobileShell(props: SurfaceProps) {
-  const { data, view, accounts, acctId, setAcctId, liveFund, livePnl } = props;
+  const { data, view, accounts, acctId, setAcctId, accountChannels, liveFund, livePnl } = props;
   const { skin, setSkin, setMode } = useShell();
   const sent = props.sentinel; // P5 slice 1 — from the page seam (SurfaceProps), no local subscription
 
@@ -83,10 +83,7 @@ export function MobileShell(props: SurfaceProps) {
   }, [room, props.setActiveRoom, setMode]);
 
   const { desk } = view;
-  const channels = useMemo(
-    () => (acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists),
-    [desk.strategists, acctId],
-  );
+  const channels = accountChannels;
 
   const down = liveFund.dayPnl < 0;
   const dayLed = `${down ? "-" : "+"}$${Math.abs(Math.round(liveFund.dayPnl))}`;

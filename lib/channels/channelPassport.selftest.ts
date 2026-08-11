@@ -1,6 +1,11 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
-import { deriveChannelPassports } from "./channelPassport";
+import {
+  deriveChannelPassports,
+  effectiveChannelAccountId,
+  scopeChannelsToAccount,
+  scopeChannelWorkspace,
+} from "./channelPassport";
 import { DAY1_CONFIG_HASH, DAY1_MANAGER_ARMS, DAY1_RELEASE_ID, DAY1_ROOTS, DAY1_WORKER_VERSION, day1RootExitLabel } from "./day1Release";
 import {
   RC54_CONFIG_HASH,
@@ -164,6 +169,53 @@ assert.equal(receiptBound.bySlug["pb-ride"].rootPolicy, null);
 assert.match(receiptBound.bySlug["pb-ride"].lifecycleFact, /immutable activation receipt/i);
 assert.equal(receiptBound.bySlug["pb-ride-2"].lifecycle, "dark-evidence");
 
+const receiptScopedChannels = [channel("pb-ride"), channel("pb-ride-2")];
+const receiptScopedWorkspace = deriveChannelPassports({
+  channels: receiptScopedChannels,
+  events: receiptBoundEvents,
+  signals: [], positions: [], recentTrades: [], evidenceBySlug: {},
+});
+const runtimePbAccount = RC54_ROOTS["pb-ride"].accountId;
+assert.notEqual(receiptScopedChannels[0].account_id, runtimePbAccount);
+assert.equal(
+  effectiveChannelAccountId(receiptScopedChannels[0], receiptScopedWorkspace),
+  runtimePbAccount,
+  "verified roots must use the immutable receipt route",
+);
+assert.deepEqual(
+  scopeChannelsToAccount(receiptScopedChannels, receiptScopedWorkspace, runtimePbAccount).map((row) => row.slug),
+  ["pb-ride"],
+  "a receipt-routed root must appear in its live account",
+);
+assert.deepEqual(
+  scopeChannelsToAccount(receiptScopedChannels, receiptScopedWorkspace, "acct").map((row) => row.slug),
+  ["pb-ride-2"],
+  "stale database assignment must not keep a live root in the wrong account",
+);
+assert.deepEqual(
+  scopeChannelsToAccount(receiptScopedChannels, receiptScopedWorkspace, null).map((row) => row.slug),
+  ["pb-ride", "pb-ride-2"],
+);
+const scopedReceiptWorkspace = scopeChannelWorkspace(
+  receiptScopedWorkspace,
+  scopeChannelsToAccount(receiptScopedChannels, receiptScopedWorkspace, runtimePbAccount),
+);
+assert.deepEqual(Object.keys(scopedReceiptWorkspace.bySlug), ["pb-ride"]);
+assert.equal(scopedReceiptWorkspace.roots, 1);
+assert.equal(scopedReceiptWorkspace.dark, 0);
+assert.match(scopedReceiptWorkspace.releaseView.accountLifecycleLabel, /1 PAPER IN VIEW · 0 OBSERVE IN VIEW/);
+
+const unverifiedScopedChannels = [channel("pb-ride")];
+const unverifiedScopedWorkspace = deriveChannelPassports({
+  channels: unverifiedScopedChannels,
+  events: [], signals: [], positions: [], recentTrades: [], evidenceBySlug: {},
+});
+assert.equal(
+  effectiveChannelAccountId(unverifiedScopedChannels[0], unverifiedScopedWorkspace),
+  "acct",
+  "database assignment remains the safe fallback while authority is unverified",
+);
+
 const resizedReceiptBound = deriveChannelPassports({
   channels: [channel("pb-ride")],
   events: [event(
@@ -306,6 +358,30 @@ for (const clientRoot of Object.values(RC54_ROOTS)) {
   assert.ok(rc54Dossier.includes(`\`${clientRoot.slug}\``));
   assert.equal(clientRoot.riskBudgetUsd, clientRoot.aggregateDebitCap * 0.30);
 }
+
+const accountScopeSurfaces = [
+  "../../app/page.tsx",
+  "../../components/DesktopSurface.tsx",
+  "../../components/mobile/MobileApp.tsx",
+  "../../components/mobile2/MobileShell.tsx",
+  "../../components/perform/PerformSurface.tsx",
+  "../../components/skins/FolioShell.tsx",
+  "../../components/skins/folio/FolioChannels.tsx",
+  "../../components/skins/folio/FolioHome.tsx",
+  "../../components/studio/StudioSurface.tsx",
+];
+for (const sourcePath of accountScopeSurfaces) {
+  const source = readFileSync(new URL(sourcePath, import.meta.url), "utf8");
+  assert.doesNotMatch(
+    source,
+    /strategists\.filter\([^\n]*account_id/,
+    `${sourcePath} must consume the page-owned receipt-bound account scope`,
+  );
+}
+assert.match(
+  readFileSync(new URL("../../app/page.tsx", import.meta.url), "utf8"),
+  /scopeChannelsToAccount\(view\.desk\.strategists, allChannelWorkspace, acctId\)/,
+);
 
 const databaseConfig = {
   capital_pct: 1_200,

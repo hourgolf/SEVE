@@ -69,6 +69,55 @@ export interface ChannelWorkspaceModel {
   dark: number;
 }
 
+/**
+ * Resolve the account that owns a channel in the operator UI. A verified
+ * receipt-bound root must follow its immutable broker route; mutable database
+ * metadata remains the fallback for observe-only or unverified channels.
+ */
+export function effectiveChannelAccountId(
+  channel: StrategistState,
+  workspace: ChannelWorkspaceModel,
+): string | null {
+  const passport = workspace.bySlug[channel.slug];
+  if (passport?.effective.authority.state === "verified"
+    && passport.effective.route.accountId) {
+    return passport.effective.route.accountId;
+  }
+  return channel.account_id ?? null;
+}
+
+export function scopeChannelsToAccount(
+  channels: StrategistState[],
+  workspace: ChannelWorkspaceModel,
+  accountId: string | null,
+): StrategistState[] {
+  if (!accountId) return channels;
+  return channels.filter((channel) =>
+    effectiveChannelAccountId(channel, workspace) === accountId);
+}
+
+/** Keep release authority global while making counts and passports honest for
+ * the selected account's channel slice. */
+export function scopeChannelWorkspace(
+  workspace: ChannelWorkspaceModel,
+  channels: StrategistState[],
+): ChannelWorkspaceModel {
+  const bySlug: Record<string, ChannelPassport> = Object.fromEntries(channels.flatMap((channel) => {
+    const passport = workspace.bySlug[channel.slug];
+    return passport ? [[channel.slug, passport]] : [];
+  }));
+  const passports = Object.values(bySlug);
+  const roots = passports.filter((passport) => passport.lifecycle === "paper-root").length;
+  const dark = passports.filter((passport) => passport.lifecycle === "dark-evidence").length;
+  return {
+    ...workspace,
+    releaseView: presentRelease(workspace.release, roots, dark),
+    bySlug,
+    roots,
+    dark,
+  };
+}
+
 function presentRelease(release: ActiveReleaseObservation, roots: number, dark: number): ChannelReleasePresentation {
   const label = release.state === "verified"
     ? "SEALED RELEASE RUNTIME"

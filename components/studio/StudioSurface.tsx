@@ -22,15 +22,11 @@ import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/works
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, acctId, symbol, channelWorkspace, channelControlPlane, shadowResearch, managerEvidence, decisionAtlas, destination, onNavigate }: SurfaceProps & { destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
+export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, acctId, accountChannels, symbol, channelWorkspace, channelControlPlane, shadowResearch, managerEvidence, decisionAtlas, destination, onNavigate }: SurfaceProps & { destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   void symbol;
   const { desk } = view;
 
-  // Scope the roster to the selected account (identical to DesktopSurface).
-  const channels = useMemo(
-    () => (acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists),
-    [desk.strategists, acctId],
-  );
+  const channels = accountChannels;
 
   const [selSlug, setSelSlug] = useState<string | null>(null);
   const [scope, setScope] = useState<StudioScope>("roots");

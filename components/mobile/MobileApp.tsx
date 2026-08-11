@@ -75,10 +75,8 @@ function inRth(): boolean {
   return d >= 1 && d <= 5 && m >= 570 && m < 960;
 }
 
-export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, ops, liveMarks, livePnl, liveFund, reviewEvidence }: SurfaceProps) {
+export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, reviewEvidence }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
-  // Multi-account: scope the roster to the selected account (accounts/acctId lifted to Surface).
-  const accountChannels = acctId ? desk.strategists.filter((s) => s.account_id === acctId) : desk.strategists;
   const selectedAccount = accounts.find((account) => account.id === acctId);
   const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
 
