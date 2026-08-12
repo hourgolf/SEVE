@@ -51,7 +51,7 @@ export interface OperatorTrailTrial {
   action: "prepare_paper_trial" | "shadow_only" | "collect_more_paths";
   candidateId: string;
   challenger: string;
-  challengerPolicy: Pick<TrailPolicy, "family" | "bankPct" | "armPct" | "retainPeakGain" | "preArmStopPct">;
+  challengerPolicy: Pick<TrailPolicy, "family" | "takeProfitPct" | "bankPct" | "armPct" | "retainPeakGain" | "preArmStopPct">;
   evidence: string;
   typicalLiftPct: number | null;
   improvementFrequency: number | null;
@@ -265,7 +265,8 @@ export function buildOperatorExperimentPacket(input: {
       action,
       candidateId: leading.candidateId,
       challenger: plainTrail(leading),
-      challengerPolicy: { family: policy.family, bankPct: policy.bankPct, armPct: policy.armPct,
+      challengerPolicy: { family: policy.family, takeProfitPct: policy.takeProfitPct,
+        bankPct: policy.bankPct, armPct: policy.armPct,
         retainPeakGain: policy.retainPeakGain, preArmStopPct: policy.preArmStopPct },
       evidence: `${count(leading.pairedOpportunities, "path")} · ${count(leading.sessions, "session")} · beat native ${pct(leading.improvementFrequency)}`,
       typicalLiftPct: leading.typicalBenefitPct,

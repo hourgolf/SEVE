@@ -85,7 +85,7 @@ export interface ChannelDecisionBrief {
     evidenceLayer: "executed" | "virtual";
     state: "ready" | "collecting" | "unavailable";
     configurationEra: string | null;
-    recommendation: "test_full_ratchet" | "test_bank_then_ratchet" | "keep_native" | "collect_paths";
+    recommendation: "test_take_profit" | "test_full_ratchet" | "test_bank_then_ratchet" | "keep_native" | "collect_paths";
     conclusion: string;
     leading: TrailCandidateSummary | null;
     compared: TrailCandidateSummary[];
@@ -288,8 +288,8 @@ function chooseRecommendation(input: {
     axis = "retirement"; label = "REVIEW RETIREMENT";
     nextExperiment = "Confirm that the negative evidence is redundant, then prepare a reversible collection pause.";
   } else if (trail?.state === "ready" && trail.leading
-      && (trail.recommendation === "test_full_ratchet" || trail.recommendation === "test_bank_then_ratchet")) {
-    axis = "manager"; label = "REVIEW TRAIL"; summary = trail.conclusion;
+      && trail.recommendation.startsWith("test_")) {
+    axis = "manager"; label = "REVIEW EXIT"; summary = trail.conclusion;
     nextExperiment = `Keep entry, size, route, and admission fixed; compare ${trail.leading.label} with the native exit on the same new opportunities.`;
   } else if (managers.recommended) {
     axis = "manager"; label = "REVIEW MANAGER"; summary = managers.conclusion;

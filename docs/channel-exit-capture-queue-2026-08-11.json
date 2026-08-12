@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "throughSession": "2026-08-11",
+  "authority": {
+    "researchPreparation": true,
+    "configurationAssembly": false,
+    "activation": false,
+    "orders": false
+  },
+  "queued": [
+    {
+      "channel": "orb-ustop-ctl",
+      "status": "operator_selected_pending_bundle",
+      "changeAxis": "exit_manager",
+      "executable": "LOCK50/30",
+      "shadowControl": "exact_current_native",
+      "fixed": [
+        "entry",
+        "contract_selection",
+        "account_route",
+        "contracts",
+        "admission",
+        "collision_policy",
+        "capital_policy"
+      ],
+      "contracts": 4,
+      "account": "MORGUE",
+      "cleanScoreFloor": {
+        "independentSessions": 3,
+        "logicalOpportunities": 5
+      },
+      "excludeFromCleanScore": [
+        "manual_close"
+      ],
+      "activationAuthorized": false
+    }
+  ],
+  "nextProposals": [
+    {
+      "channel": "fomc-follow",
+      "changeAxis": "paper_promotion_with_manager",
+      "executable": "ARM35_KEEP_TWO_THIRDS",
+      "shadowControl": "native",
+      "status": "prepare_proposal"
+    },
+    {
+      "channel": "orb-qqq-trail",
+      "changeAxis": "exit_manager",
+      "executable": "BANK30_A13_RUNNER",
+      "shadowControl": "exact_current_native",
+      "status": "prepare_proposal"
+    },
+    {
+      "channel": "breakout",
+      "changeAxis": "exit_manager",
+      "executable": "LOCK50/30",
+      "shadowControl": "exact_current_native",
+      "status": "continue_shadow_before_proposal"
+    }
+  ],
+  "researchModel": {
+    "version": "channel-trail-frontier-v3",
+    "presetsAreBenchmarksOnly": true,
+    "channelAdaptiveCandidates": [
+      "path_quantile_take_profit",
+      "path_quantile_ratchet_arm",
+      "channel_retained_gain_floor",
+      "channel_calibrated_bank_runner"
+    ],
+    "maximumAdaptiveCandidatesPerChannelEra": 8,
+    "separateConfigurationEras": true,
+    "productionAuthority": false
+  },
+  "productionWrites": 0
+}
