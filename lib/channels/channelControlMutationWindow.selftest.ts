@@ -22,6 +22,16 @@ assert.deepEqual(
 assert.equal(at("2026-08-01T15:00:00.000Z").allowed, true);
 assert.equal(at("2026-07-03T15:00:00.000Z").allowed, true);
 assert.deepEqual(
+  [at("2026-08-12T04:30:00.000Z").allowed,
+    at("2026-08-12T04:30:00.000Z").code],
+  [true, "mutation_window:verified_overnight"],
+);
+assert.deepEqual(
+  [at("2026-08-12T08:00:00.000Z").allowed,
+    at("2026-08-12T08:00:00.000Z").code],
+  [false, "mutation_window:premarket"],
+);
+assert.deepEqual(
   [at("2028-07-31T15:00:00.000Z").allowed,
     at("2028-07-31T15:00:00.000Z").code],
   [false, "mutation_window:calendar_unknown"],
@@ -69,4 +79,4 @@ assert.ok(
     < collectionRoute.indexOf("channelControlMutationWindow(Date.now())"),
 );
 
-console.log("channel-control-mutation-window-selftest: 16/16 passed");
+console.log("channel-control-mutation-window-selftest: 18/18 passed");

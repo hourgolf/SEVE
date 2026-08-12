@@ -345,6 +345,8 @@
     "preopen-packet": "tsx scripts/render-preopen-readiness-packet.ts",
     "postclose-readiness": "tsx scripts/preopen-readiness.ts --require-flat",
     "postclose-readiness-selftest": "tsx scripts/postclose-readiness.selftest.ts",
+    "retire-paper-channel": "tsx scripts/retire-paper-channel.ts",
+    "retire-paper-channel-selftest": "tsx scripts/retire-paper-channel.selftest.ts",
     "research-annotations-selftest": "tsx lib/research/positionAnnotations.selftest.ts",
     "intraminute-observer-selftest": "tsx worker/src/intraminuteObserver.selftest.ts",
     "intraminute-capture-selftest": "tsx worker/src/intraminuteCapture.selftest.ts",
