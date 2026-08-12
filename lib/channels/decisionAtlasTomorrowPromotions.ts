@@ -455,7 +455,9 @@ function candidateSpec(input: {
     accountMode: "paper",
     symbolScope: ["SPY"],
     familyId: candidate.familyId,
-    cohort: "lab",
+    // The temporary RC5.4 adapter binds the control admission domain to the
+    // control cohort. LAB and MORGUE candidates remain research cohorts.
+    cohort: candidate.collisionDomain === "rc54-control" ? "control" : "lab",
     priority: candidate.priority,
     quantity: candidate.quantity,
     maxDebitUsd: candidate.maxDebitUsd,

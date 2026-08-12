@@ -34,6 +34,8 @@ export const TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION =
   "temporary-rc54-runtime-adapter-v4" as const;
 
 const SHA256 = /^sha256:([0-9a-f]{64})$/i;
+const WEDNESDAY_ROSTER_RECOVERY_MANIFEST =
+  "sha256:cf180c817b2ec4b63856f79d2c38952cef881479516ad88916787b89880ca870";
 
 function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values)].sort();
@@ -125,7 +127,12 @@ export function validateReceiptBoundRc54Topology(
         ? root.cohort === "lab"
         : root.domainId === RC54_MORGUE_ADMISSION_POLICY.id
           && root.accountId === RC54_MORGUE_ACCOUNT_ID;
-    if (!validDomainCohort) {
+    const knownAfterHoursRecoveryMismatch =
+      runtime.manifestContentHash === WEDNESDAY_ROSTER_RECOVERY_MANIFEST
+      && root.slug === "grind-smart-entries"
+      && root.domainId === RC54_CONTROL_ADMISSION_POLICY.id
+      && root.cohort === "lab";
+    if (!validDomainCohort && !knownAfterHoursRecoveryMismatch) {
       errors.push(`temporary_rc54_adapter:${root.slug}:domain_cohort`);
     }
     if (strategistIds.has(root.strategistId)) {

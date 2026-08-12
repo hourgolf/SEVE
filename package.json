@@ -179,6 +179,8 @@
     "prepare-tomorrow-session-packet-selftest": "tsx scripts/prepare-tomorrow-session-packet.selftest.ts",
     "activate-tomorrow-session-packet": "tsx scripts/activate-tomorrow-session-packet.ts",
     "activate-tomorrow-session-packet-selftest": "tsx scripts/activate-tomorrow-session-packet.selftest.ts",
+    "rollback-tomorrow-roster": "tsx scripts/rollback-tomorrow-roster.ts",
+    "rollback-tomorrow-roster-selftest": "tsx scripts/rollback-tomorrow-roster.selftest.ts",
     "decision-atlas-tomorrow-manager-experiments-selftest": "tsx lib/channels/decisionAtlasTomorrowManagerExperiments.selftest.ts",
     "prepare-pb-itm-ustop-experiments": "tsx scripts/prepare-pb-itm-ustop-experiments.ts",
     "prepare-pb-itm-ustop-experiments-selftest": "tsx scripts/prepare-pb-itm-ustop-experiments.selftest.ts",

@@ -49,6 +49,10 @@ for (const candidate of DECISION_ATLAS_TOMORROW_PROMOTIONS) {
   });
   assert.equal(registration.candidateSpec?.accountId, candidate.accountId);
   assert.equal(registration.candidateSpec?.collisionDomain, candidate.collisionDomain);
+  assert.equal(
+    registration.candidateSpec?.cohort,
+    candidate.collisionDomain === "rc54-control" ? "control" : "lab",
+  );
   assert.equal(registration.candidateSpec?.quantity, 2);
   assert.equal(registration.candidateSpec?.executionPosture, "observe-only");
   assert.equal(registration.candidateSpec?.entryParameters.maxEntriesPerSession, 1);

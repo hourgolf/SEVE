@@ -842,7 +842,11 @@ export async function loadCompiledControlPlaneByManifestKey(
   try {
     return {
       compiled: reconstructStoredControlPlane({
-        manifestRow: manifests[0],
+        // A rollback target is expected to have a superseded lifecycle row.
+        // Reconstruct its immutable semantics as an active candidate without
+        // changing the stored lifecycle state; manifest/spec content hashes
+        // remain the authority for exact rollback verification.
+        manifestRow: { ...manifests[0], status: "active" },
         membershipRows: memberships,
         specRows: (specsRead.data ?? []) as unknown as Array<Record<string, unknown>>,
       }),
