@@ -22,6 +22,7 @@ import {
   type MobileReviewMode,
 } from "@/lib/mobile/reviewWorkspace";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
+import { ResearchCouncilRoom } from "@/components/research/ResearchCouncilRoom";
 import { ReviewSessionScorecard } from "@/components/perform/ReviewSessionScorecard";
 import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
@@ -127,9 +128,17 @@ export function MobileReviewView({ props, channels, livePnl, destination, onNavi
 
   return <>
     <nav className="m2-review-modes" aria-label="Review workspace">
-      {MOBILE_REVIEW_MODES.map((item) => <button type="button" key={item.id} className={mode === item.id ? "on" : ""} onClick={() => { setMode(item.id); onNavigate?.({ section: item.id === "shadow" ? "research" : item.id === "sentinel" ? "sentinel" : "tape", researchMode: item.id === "shadow" ? "decisions" : undefined }); }} aria-pressed={mode === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
+      {MOBILE_REVIEW_MODES.map((item) => <button type="button" key={item.id} className={mode === item.id ? "on" : ""} onClick={() => {
+        setMode(item.id);
+        if (item.id !== "council") onNavigate?.({ section: item.id === "shadow" ? "research" : item.id === "sentinel" ? "sentinel" : "tape", researchMode: item.id === "shadow" ? "decisions" : undefined });
+      }} aria-pressed={mode === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
     </nav>
-    <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="review" onNavigate={onNavigate} />
+    {mode !== "council" && <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="review" onNavigate={onNavigate} />}
+
+    {mobileReviewHas(mode, "research-council") && <div className="m2-council-home">
+      <ResearchCouncilRoom reports={props.decisionAtlas} onNavigate={onNavigate} />
+      <button type="button" className="m2-council-full" onClick={() => { setMode("shadow"); onNavigate?.({ section: "research", researchMode: "decisions" }); }}>OPEN FULL CHANNEL RESEARCH</button>
+    </div>}
 
     {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
     {mobileReviewHas(mode, "session-summary") && <ReviewSessionScorecard evidence={props.reviewEvidence.daily} />}

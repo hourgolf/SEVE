@@ -16,17 +16,18 @@ export interface ResearchAgentDefinition {
   name: string;
   callsign: string;
   role: string;
+  voice: string;
   color: string;
 }
 
 export const RESEARCH_AGENTS: readonly ResearchAgentDefinition[] = Object.freeze([
-  { id: "scout", name: "Signal Scout", callsign: "SCOUT", role: "Entry quality", color: "cyan" },
-  { id: "harvester", name: "Gain Harvester", callsign: "HARVEST", role: "Exit capture", color: "amber" },
-  { id: "mechanic", name: "Fill Mechanic", callsign: "WRENCH", role: "Execution friction", color: "orange" },
-  { id: "allocator", name: "Stack Architect", callsign: "STACK", role: "Capacity + overlap", color: "violet" },
-  { id: "skeptic", name: "Prior Hunter", callsign: "GHOST", role: "Contradictions", color: "red" },
-  { id: "designer", name: "Test Designer", callsign: "VECTOR", role: "Next experiment", color: "green" },
-  { id: "arbiter", name: "Desk Arbiter", callsign: "CHIEF", role: "Decision synthesis", color: "cream" },
+  { id: "scout", name: "Signal Scout", callsign: "SCOUT", role: "Entry quality", voice: "Hype dies at the evidence line.", color: "cyan" },
+  { id: "harvester", name: "Gain Harvester", callsign: "HARVEST", role: "Exit capture", voice: "Counts every dollar the exit left behind.", color: "amber" },
+  { id: "mechanic", name: "Fill Mechanic", callsign: "WRENCH", role: "Execution friction", voice: "Blames the plumbing before the strategy.", color: "orange" },
+  { id: "allocator", name: "Stack Architect", callsign: "STACK", role: "Capacity + overlap", voice: "Loves capacity. Hates paperwork.", color: "violet" },
+  { id: "skeptic", name: "Prior Hunter", callsign: "GHOST", role: "Contradictions", voice: "Professional vibe checker—with receipts.", color: "red" },
+  { id: "designer", name: "Test Designer", callsign: "VECTOR", role: "Next experiment", voice: "One knob or it didn't happen.", color: "green" },
+  { id: "arbiter", name: "Desk Arbiter", callsign: "CHIEF", role: "Decision synthesis", voice: "Turns arguments into the next move.", color: "cream" },
 ]);
 
 export type ResearchDispatchKind = "finding" | "challenge" | "experiment" | "decision";
@@ -101,6 +102,7 @@ const signedMoney = (value: number | null): string => value == null ? "—"
   : `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
 const percent = (value: number | null): string => value == null ? "—" : `${Math.round(value * 100)}%`;
 const compact = (value: string, max = 168): string => value.length <= max ? value : `${value.slice(0, max - 1).trimEnd()}…`;
+const pickVoice = (channel: string, lines: readonly string[]): string => lines[[...channel].reduce((sum, char) => sum + char.charCodeAt(0), 0) % lines.length]!;
 const stableId = (...parts: Array<string | number | null>): string => parts.filter((part) => part != null)
   .join(":").toLowerCase().replace(/[^a-z0-9:-]+/g, "-").replace(/-+/g, "-");
 const confidence = (brief: ChannelDecisionBrief): ResearchDispatch["confidence"] =>
@@ -114,6 +116,16 @@ const agentForAxis = (axis: ChannelDecisionAxis): ResearchAgentId =>
 const axisPriority = (axis: ChannelDecisionAxis): number => ({
   retirement: 92, promotion: 88, manager: 84, exit: 80, entry: 76, size: 72, collection: 48,
 })[axis];
+const voicedPrimary = (brief: ChannelDecisionBrief): string => {
+  const summary = brief.recommendation.summary;
+  if (brief.recommendation.axis === "promotion") return `Okay, this one brought receipts. ${summary}`;
+  if (brief.recommendation.axis === "retirement") return `I checked twice. The vibes are not the edge. ${summary}`;
+  if (brief.recommendation.axis === "exit") return `The entry did its job; the exit left the fridge open. ${summary}`;
+  if (brief.recommendation.axis === "manager") return `Manager, please report to the principal's office. ${summary}`;
+  if (brief.recommendation.axis === "size") return `More contracts are not a personality. ${summary}`;
+  if (brief.recommendation.axis === "entry") return `Signal check: timing gets the microscope. ${summary}`;
+  return `No victory lap yet. ${summary}`;
+};
 
 function primaryDispatch(brief: ChannelDecisionBrief): ResearchDispatch {
   const id = stableId("dispatch", brief.channel, brief.recommendation.axis, "primary");
@@ -125,7 +137,7 @@ function primaryDispatch(brief: ChannelDecisionBrief): ResearchDispatch {
     channel: brief.channel,
     axis: brief.recommendation.axis,
     headline: brief.recommendation.label,
-    message: compact(brief.recommendation.summary),
+    message: compact(voicedPrimary(brief)),
     evidence: [
       { label: "TYPICAL", value: signedMoney(brief.historicalVirtual.typicalResultPerContractUsd ?? brief.executed.typicalResultUsd) },
       { label: "EVIDENCE", value: `${brief.evidence.decisionSessions}s / ${brief.evidence.decisionOpportunities}` },
@@ -145,7 +157,7 @@ function contradictionDispatches(brief: ChannelDecisionBrief, parent: ResearchDi
     rows.push({
       id: stableId("dispatch", brief.channel, "unstamped-promotion"), sequence: 0, agentId: "skeptic", kind: "challenge",
       channel: brief.channel, axis: "promotion", headline: "PROMOTION CASE IS HISTORICAL",
-      message: "This case comes from historical virtual paths, not current fills. Treat it as a bounded paper experiment—not a proven root.",
+      message: "Respectfully: that's a résumé written by the shadow ledger. Run a bounded paper experiment before calling it a proven root.",
       evidence: [{ label: "SOURCE", value: "HISTORICAL VIRTUAL" }, { label: "CURRENT", value: brief.executed.logicalTrades ? `${brief.executed.logicalTrades} trades` : "NO SAMPLE" }],
       confidence: confidence(brief), priority: 96, replyTo: parent.id,
     });
@@ -154,7 +166,7 @@ function contradictionDispatches(brief: ChannelDecisionBrief, parent: ResearchDi
     rows.push({
       id: stableId("dispatch", brief.channel, "typical-total-conflict"), sequence: 0, agentId: "skeptic", kind: "challenge",
       channel: brief.channel, axis: brief.recommendation.axis, headline: "TYPICAL TRADE AND TOTAL DISAGREE",
-      message: "The typical opportunity made money, but all paths together lost. Trade frequency or a few large losses still need an explanation.",
+      message: "Median says hero; total says blooper reel. A few large losses or too much frequency still need an explanation.",
       evidence: [{ label: "TYPICAL", value: signedMoney(virtualTypical) }, { label: "PATH SUM", value: signedMoney(virtualTotal) }],
       confidence: confidence(brief), priority: 94, replyTo: parent.id,
     });
@@ -163,7 +175,11 @@ function contradictionDispatches(brief: ChannelDecisionBrief, parent: ResearchDi
     rows.push({
       id: stableId("dispatch", brief.channel, "executed-virtual-conflict"), sequence: 0, agentId: "skeptic", kind: "challenge",
       channel: brief.channel, axis: brief.recommendation.axis, headline: "CURRENT TRADES AND HISTORY DISAGREE",
-      message: "Current fills and historical virtual paths point in opposite directions. Keep them separate and investigate what changed.",
+      message: pickVoice(brief.channel, [
+        "Plot twist: current fills and old virtual paths disagree. Keep them separate and find what changed before touching a knob.",
+        "The fills and the backtest are subtweeting each other. Separate the eras, then find out who changed the story.",
+        "History said moon; current fills said basement. Nobody touches a knob until we find what changed.",
+      ]),
       evidence: [{ label: "EXECUTED", value: signedMoney(executedTypical) }, { label: "VIRTUAL", value: signedMoney(virtualTypical) }],
       confidence: confidence(brief), priority: 98, replyTo: parent.id,
     });
@@ -172,7 +188,7 @@ function contradictionDispatches(brief: ChannelDecisionBrief, parent: ResearchDi
     rows.push({
       id: stableId("dispatch", brief.channel, "outlier-warning"), sequence: 0, agentId: "skeptic", kind: "challenge",
       channel: brief.channel, axis: "exit", headline: "RESULT LEANS ON OUTLIERS",
-      message: "A small share of outcomes carries too much of the result. Judge the typical path before treating total profit as repeatable.",
+      message: "One whale is wearing the whole channel as a hat. Judge the typical path before calling total profit repeatable.",
       evidence: [{ label: "OUTLIER SHARE", value: percent(brief.nativeExit.outlierShare) }, { label: "CAPTURE", value: percent(brief.nativeExit.typicalCapture) }],
       confidence: confidence(brief), priority: 90, replyTo: parent.id,
     });
@@ -186,7 +202,7 @@ function supportingDispatches(brief: ChannelDecisionBrief, parent: ResearchDispa
   if (block && block.scored >= 5) rows.push({
     id: stableId("dispatch", brief.channel, "blocked-opportunity"), sequence: 0, agentId: "mechanic", kind: "finding",
     channel: brief.channel, axis: "entry", headline: "BLOCKED PATHS HAVE A READ",
-    message: compact(`${block.reason.replaceAll("_", " ")} blocked ${block.opportunities} opportunities; the scored counterfactual is ${signedMoney(block.typicalUsd)} per contract.`),
+    message: compact(`Found the traffic cone: ${block.reason.replaceAll("_", " ")} blocked ${block.opportunities} opportunities. Those paths scored ${signedMoney(block.typicalUsd)}/ct.`),
     evidence: [{ label: "BLOCKED", value: String(block.opportunities) }, { label: "SCORED", value: String(block.scored) }],
     confidence: confidence(brief), priority: 66, replyTo: parent.id,
   });
@@ -194,14 +210,14 @@ function supportingDispatches(brief: ChannelDecisionBrief, parent: ResearchDispa
   if (overlap && (overlap.sameOcc > 0 || overlap.accountOccupancy > 0)) rows.push({
     id: stableId("dispatch", brief.channel, "overlap"), sequence: 0, agentId: "allocator", kind: "finding",
     channel: brief.channel, axis: "size", headline: "ROSTER PLACEMENT MATTERS",
-    message: compact(brief.collision.conclusion),
+    message: compact(`Same OCC isn't a crime; unmanaged paperwork is. ${brief.collision.conclusion}`),
     evidence: [{ label: "SAME OCC", value: String(overlap.sameOcc) }, { label: "ACCOUNT", value: String(overlap.accountOccupancy) }],
     confidence: confidence(brief), priority: 64, replyTo: parent.id,
   });
   if (brief.recommendation.nextExperiment) rows.push({
     id: stableId("dispatch", brief.channel, "next-test"), sequence: 0, agentId: "designer", kind: "experiment",
     channel: brief.channel, axis: brief.recommendation.axis, headline: "CLEAN NEXT TEST",
-    message: compact(brief.recommendation.nextExperiment),
+    message: compact(`${pickVoice(brief.channel, ["Science-fair rule: one knob, one control.", "One knob—not a buffet.", "Control group says: hands off everything else."])} ${brief.recommendation.nextExperiment}`),
     evidence: [{ label: "CHANGE", value: "ONE VARIABLE" }, { label: "CONTROL", value: "KEEP NATIVE" }],
     confidence: confidence(brief), priority: Math.max(58, axisPriority(brief.recommendation.axis) - 18), replyTo: parent.id,
   });
@@ -224,8 +240,8 @@ export function buildResearchCouncil(input: {
   const arbiter: ResearchDispatch = {
     id: stableId("dispatch", "arbiter", input.throughSession), sequence: 0, agentId: "arbiter", kind: "decision",
     channel: top?.channel ?? null, axis: top?.axis ?? null, headline: top ? `START WITH ${top.channel}` : "NO CLEAR LEAD",
-    message: top ? compact(`${top.headline}: ${top.message}`) : "No channel has enough linked evidence for a defensible next action.",
-    evidence: [{ label: "CHANNELS", value: String(Object.keys(input.briefs).length) }, { label: "CONFLICTS", value: String(ranked.filter((row) => row.kind === "challenge").length) }],
+    message: top ? compact(`Tonight's boss fight is ${top.channel}. ${top.agentId === "skeptic" ? "GHOST found two stories in the receipts; settle the era split before touching a knob." : `Room consensus: ${top.message}`}`) : "No channel has enough linked evidence for a defensible next action.",
+    evidence: top?.evidence.slice(0, 2) ?? [{ label: "CHANNELS", value: String(Object.keys(input.briefs).length) }],
     confidence: top?.confidence ?? "checking", priority: 110, replyTo: top?.id ?? null,
   };
   const dispatches = [arbiter, ...ranked].map((row, index) => ({ ...row, sequence: index + 1 }));

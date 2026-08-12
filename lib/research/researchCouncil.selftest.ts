@@ -33,6 +33,7 @@ assert.ok(packet.dispatches.some((row) => row.agentId === "skeptic" && /TYPICAL 
 assert.ok(packet.dispatches.some((row) => row.agentId === "skeptic" && /CURRENT TRADES AND HISTORY/.test(row.headline)));
 assert.ok(packet.dispatches.some((row) => row.agentId === "designer" && row.kind === "experiment"));
 assert.ok(packet.dispatches.every((row) => row.message.length <= 168));
+assert.ok(packet.dispatches.some((row) => /shadow ledger|blooper reel|Plot twist|subtweeting|moon|whale/.test(row.message)));
 assert.equal(packet.productionWrites, 0);
 assert.equal(packet.orderAuthority, false);
 assert.equal(packet.configurationAuthority, false);
