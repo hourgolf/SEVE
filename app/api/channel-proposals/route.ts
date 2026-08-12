@@ -5,6 +5,7 @@ import { loadActiveCompiledControlPlane } from "@/lib/channels/channelControlPla
 import {
   ProposalInputError,
   buildOperatorProposal,
+  proposalDraftCapacityCollisionImpact,
   proposalDraftRpcName,
 } from "@/lib/channels/channelProposalWrite";
 import { buildRc54OperatorProposal } from "@/lib/channels/rc54ChannelProposalAdapter";
@@ -98,7 +99,9 @@ export async function POST(req: Request) {
       p_change_class: built.proposal.changeClass,
       p_validation_results: built.proposal.validationResults,
       p_replay_summary: built.proposal.replaySummary,
-      p_capacity_collision_impact: built.capacityCollisionImpact,
+      p_capacity_collision_impact: proposalDraftCapacityCollisionImpact(
+        built.capacityCollisionImpact,
+      ),
       p_created_at: built.proposal.createdAt,
     }).abortSignal(AbortSignal.timeout(8_000)).single();
 

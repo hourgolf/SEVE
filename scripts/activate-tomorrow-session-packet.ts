@@ -39,6 +39,7 @@ import {
 } from "../lib/channels/decisionAtlasTomorrowManagerExperiments";
 import {
   buildOperatorProposal,
+  proposalDraftCapacityCollisionImpact,
   proposalDraftRpcName,
 } from "../lib/channels/channelProposalWrite";
 import { loadChannelRosterBundleServerContext } from "../lib/channels/channelRosterBundleServerContext";
@@ -327,7 +328,9 @@ async function activateManager(input: {
     p_change_class: built.proposal.changeClass,
     p_validation_results: built.proposal.validationResults,
     p_replay_summary: built.proposal.replaySummary,
-    p_capacity_collision_impact: built.capacityCollisionImpact,
+    p_capacity_collision_impact: proposalDraftCapacityCollisionImpact(
+      built.capacityCollisionImpact,
+    ),
     p_created_at: built.proposal.createdAt,
   }).abortSignal(AbortSignal.timeout(8_000)).single();
   if (proposalWrite.error) {

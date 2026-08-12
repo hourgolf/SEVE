@@ -136,6 +136,26 @@ export function deriveStaticCapacityCollisionImpact(input: {
   };
 }
 
+/**
+ * Draft persistence must begin authority-dark. Static compilation may report
+ * a passing shape, but current broker/capacity evidence is attached only by
+ * the server-side activation preview.
+ */
+export function proposalDraftCapacityCollisionImpact(
+  staticImpact: JsonObject,
+): JsonObject {
+  return {
+    ...structuredClone(staticImpact),
+    state: "not-run",
+    fact:
+      "Static capacity and collision shape compiled; fresh broker, desk, and admission evidence has not yet been attached.",
+    limitations: [
+      "Draft persistence carries no current-session capacity authority.",
+      "The activation preview must independently re-run the flat-book and collision checks.",
+    ],
+  };
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

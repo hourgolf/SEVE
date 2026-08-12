@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   ProposalInputError,
   buildOperatorProposal,
+  proposalDraftCapacityCollisionImpact,
   proposalDraftRpcName,
 } from "./channelProposalWrite";
 import { compileReleaseManifest } from "./channelControlPlane";
@@ -77,6 +78,14 @@ check("valid bounded request builds a draft-only server-authored proposal", () =
   assert.equal(built.capacityCollisionImpact.state, "pass");
   assert.deepEqual(built.capacityCollisionImpact.changedCapacityFields, []);
   assert.equal((built.capacityCollisionImpact.evidenceRefs as string[]).length, 2);
+  const storedDraftImpact = proposalDraftCapacityCollisionImpact(
+    built.capacityCollisionImpact,
+  );
+  assert.equal(storedDraftImpact.state, "not-run");
+  assert.deepEqual(
+    storedDraftImpact.changedCapacityFields,
+    built.capacityCollisionImpact.changedCapacityFields,
+  );
 });
 
 check("client cannot supply identity or lifecycle fields", () => {
