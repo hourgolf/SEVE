@@ -63,7 +63,7 @@ assert.match(fleet, /<b>LIVE ENTRY AUTHORITY<\/b>/);
 assert.match(fleet, /<CanaryCommandCenter/);
 assert.match(fleet, /CHANNELS ALLOWED TO OPEN PAPER TRADES/);
 assert.match(fleet, /TRADING IN VIEW/);
-assert.match(fleet, /POSITION \/ SESSION ATTRIB/);
+assert.match(fleet, /CURRENT SESSION/);
 assert.doesNotMatch(fleet, /\}\s*day<\/small>/);
 assert.match(fleet, /not account NAV/);
 assert.doesNotMatch(component, /\bfetch\s*\(/);

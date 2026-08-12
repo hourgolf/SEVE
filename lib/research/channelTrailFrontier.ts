@@ -2,11 +2,11 @@
 // logical opportunity is the unit: every candidate walks the same executable
 // bid path and is paired against that opportunity's native executed result.
 
-export const CHANNEL_TRAIL_FRONTIER_VERSION = "channel-trail-frontier-v2" as const;
+export const CHANNEL_TRAIL_FRONTIER_VERSION = "channel-trail-frontier-v3" as const;
 
 export type TrailEvidenceLayer = "executed" | "virtual";
 
-export type TrailCandidateId =
+type PresetTrailCandidateId =
   | "FULL-R20-K50"
   | "FULL-R35-K67"
   | "FULL-R50-K67"
@@ -14,10 +14,18 @@ export type TrailCandidateId =
   | "BANK20-R50-K67"
   | "BANK30-R50-K67";
 
+export type TrailCandidateId = PresetTrailCandidateId
+  | `TP-${number}`
+  | `FULL-R${number}-K${number}`
+  | `BANK${number}-R${number}-K${number}`;
+
 export interface TrailPolicy {
   id: TrailCandidateId;
   label: string;
-  family: "full_ratchet" | "bank_then_ratchet";
+  family: "take_profit" | "full_ratchet" | "bank_then_ratchet";
+  origin: "preset" | "channel_adaptive";
+  parameterSource: string;
+  takeProfitPct: number | null;
   bankPct: number | null;
   armPct: number;
   retainPeakGain: number;
@@ -25,12 +33,12 @@ export interface TrailPolicy {
 }
 
 export const TRAIL_CANDIDATES: readonly TrailPolicy[] = [
-  { id: "FULL-R20-K50", label: "ARM +20 · KEEP HALF", family: "full_ratchet", bankPct: null, armPct: 20, retainPeakGain: .5, preArmStopPct: 30 },
-  { id: "FULL-R35-K67", label: "ARM +35 · KEEP TWO THIRDS", family: "full_ratchet", bankPct: null, armPct: 35, retainPeakGain: 2 / 3, preArmStopPct: 30 },
-  { id: "FULL-R50-K67", label: "A13 · ARM +50 · KEEP TWO THIRDS", family: "full_ratchet", bankPct: null, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
-  { id: "FULL-R50-K75", label: "ARM +50 · KEEP THREE QUARTERS", family: "full_ratchet", bankPct: null, armPct: 50, retainPeakGain: .75, preArmStopPct: 30 },
-  { id: "BANK20-R50-K67", label: "BANK +20 · A13 RUNNER", family: "bank_then_ratchet", bankPct: 20, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
-  { id: "BANK30-R50-K67", label: "BANK +30 · A13 RUNNER", family: "bank_then_ratchet", bankPct: 30, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
+  { id: "FULL-R20-K50", label: "ARM +20 · KEEP HALF", family: "full_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: null, armPct: 20, retainPeakGain: .5, preArmStopPct: 30 },
+  { id: "FULL-R35-K67", label: "ARM +35 · KEEP TWO THIRDS", family: "full_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: null, armPct: 35, retainPeakGain: 2 / 3, preArmStopPct: 30 },
+  { id: "FULL-R50-K67", label: "A13 · ARM +50 · KEEP TWO THIRDS", family: "full_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: null, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
+  { id: "FULL-R50-K75", label: "ARM +50 · KEEP THREE QUARTERS", family: "full_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: null, armPct: 50, retainPeakGain: .75, preArmStopPct: 30 },
+  { id: "BANK20-R50-K67", label: "BANK +20 · A13 RUNNER", family: "bank_then_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: 20, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
+  { id: "BANK30-R50-K67", label: "BANK +30 · A13 RUNNER", family: "bank_then_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: 30, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
 ] as const;
 
 export interface TrailQuote { at: string; bid: number }
@@ -57,7 +65,7 @@ export interface TrailPathResult {
   state: "scored" | "censored";
   censorCode: "missing_executable_path" | "staged_manager_requires_two_contracts" | null;
   exitAt: string | null;
-  exitReason: "prearm_stop" | "ratchet" | "bank_runner_stop" | "time_flatten" | null;
+  exitReason: "prearm_stop" | "take_profit" | "ratchet" | "bank_runner_stop" | "time_flatten" | null;
   nativeReturnPct: number;
   candidateReturnPct: number | null;
   deltaVsNativePct: number | null;
@@ -104,7 +112,7 @@ export interface ChannelTrailEra {
   scoredNativeOpportunities: number;
   sessions: number;
   candidates: TrailCandidateSummary[];
-  recommendation: "test_full_ratchet" | "test_bank_then_ratchet" | "keep_native" | "collect_paths";
+  recommendation: "test_take_profit" | "test_full_ratchet" | "test_bank_then_ratchet" | "keep_native" | "collect_paths";
   recommendedCandidateId: TrailCandidateId | null;
   plainLanguage: string;
   limitations: string[];
@@ -171,6 +179,68 @@ function orderedQuotes(opportunity: TrailOpportunity): TrailQuote[] {
   return [...byClock].sort(([left], [right]) => left - right).map(([, quote]) => quote);
 }
 
+const boundedWholePct = (value: number, minimum = 5, maximum = 200): number =>
+  Math.max(minimum, Math.min(maximum, Math.round(value)));
+const boundedKeepPct = (value: number): number =>
+  Math.max(25, Math.min(90, Math.round(value / 5) * 5));
+
+function opportunityMfe(opportunity: TrailOpportunity): number | null {
+  const quotes = orderedQuotes(opportunity);
+  if (!quotes.length) return null;
+  return Math.max(...quotes.map((quote) => (quote.bid / opportunity.entryPrice - 1) * 100));
+}
+
+// This is intentionally a small, explainable search. Thresholds come only
+// from this channel-era's observed path distribution; they are not a global
+// grid and are always replayed against the same logical opportunities.
+function adaptiveCandidates(opportunities: readonly TrailOpportunity[]): TrailPolicy[] {
+  const positiveMfes = opportunities.map(opportunityMfe).filter(finite).filter((value) => value >= 5);
+  if (!positiveMfes.length) return [];
+  const targetLevels = [...new Set([.25, .5, .75]
+    .map((percentile) => quantile(positiveMfes, percentile))
+    .filter(finite)
+    .map((value) => boundedWholePct(value)))].sort((left, right) => left - right);
+  const observedCapture = opportunities.map((opportunity) => {
+    const mfe = opportunityMfe(opportunity);
+    return mfe != null && mfe > 0 ? opportunity.nativeReturnPct / mfe : null;
+  }).filter(finite);
+  const typicalCapture = quantile(observedCapture, .5) ?? .5;
+  const keepLevels = [...new Set([
+    boundedKeepPct((typicalCapture + .1) * 100),
+    boundedKeepPct((typicalCapture + .25) * 100),
+  ])].sort((left, right) => left - right);
+  const armLevels = [...new Set(targetLevels.slice(0, 2))];
+  const source = "channel-era favorable-move and retained-gain quantiles";
+  const candidates: TrailPolicy[] = targetLevels.map((target): TrailPolicy => ({
+    id: `TP-${target}`, label: `TAKE PROFIT +${target}`, family: "take_profit",
+    origin: "channel_adaptive", parameterSource: source, takeProfitPct: target,
+    bankPct: null, armPct: target, retainPeakGain: 1, preArmStopPct: 30,
+  }));
+  for (const arm of armLevels) {
+    for (const keepPct of keepLevels) {
+      candidates.push({
+        id: `FULL-R${arm}-K${keepPct}`, label: `ARM +${arm} · KEEP ${keepPct}%`, family: "full_ratchet",
+        origin: "channel_adaptive", parameterSource: source, takeProfitPct: null,
+        bankPct: null, armPct: arm, retainPeakGain: keepPct / 100, preArmStopPct: 30,
+      });
+    }
+  }
+  if (targetLevels.length >= 2 && keepLevels.length) {
+    const bank = targetLevels[0];
+    const arm = targetLevels[1];
+    const keepPct = keepLevels.at(-1)!;
+    candidates.push({
+      id: `BANK${bank}-R${arm}-K${keepPct}`,
+      label: `BANK HALF +${bank} · ARM +${arm} · KEEP ${keepPct}%`, family: "bank_then_ratchet",
+      origin: "channel_adaptive", parameterSource: source, takeProfitPct: null,
+      bankPct: bank, armPct: arm, retainPeakGain: keepPct / 100, preArmStopPct: 30,
+    });
+  }
+  const presets = new Set(TRAIL_CANDIDATES.map((candidate) => candidate.id));
+  return candidates.filter((candidate, index) => !presets.has(candidate.id)
+    && candidates.findIndex((row) => row.id === candidate.id) === index).slice(0, 8);
+}
+
 function blendBankRunner(quantity: number, bankReturn: number, runnerReturn: number): number {
   const bankQuantity = Math.floor(quantity / 2);
   return (bankReturn * bankQuantity + runnerReturn * (quantity - bankQuantity)) / quantity;
@@ -197,6 +267,15 @@ function replay(opportunity: TrailOpportunity, policy: TrailPolicy): TrailPathRe
       exitReason = bankReturn == null ? "prearm_stop" : "bank_runner_stop";
       break;
     }
+    if (policy.family === "take_profit" && current >= (policy.takeProfitPct as number)) {
+      // Credit the requested target, not any favorable overshoot between
+      // archived quotes. This keeps sparse quote sampling conservative.
+      candidateReturn = policy.takeProfitPct as number;
+      exitAt = quotes[index].at;
+      exitReason = "take_profit";
+      break;
+    }
+    if (policy.family === "take_profit") continue;
     if (armedPeak == null && current >= policy.armPct) armedPeak = current;
     else if (armedPeak != null) armedPeak = Math.max(armedPeak, current);
     if (armedPeak != null && current <= Math.max(0, armedPeak * policy.retainPeakGain)) {
@@ -270,30 +349,40 @@ function summarizeCandidate(policy: TrailPolicy, rows: readonly TrailPathResult[
   };
 }
 
-function markPlateaus(summaries: TrailCandidateSummary[]): TrailCandidateSummary[] {
+function markPlateaus(summaries: TrailCandidateSummary[], policies: readonly TrailPolicy[]): TrailCandidateSummary[] {
   return summaries.map((summary) => {
-    const policy = TRAIL_CANDIDATES.find((candidate) => candidate.id === summary.candidateId)!;
+    const policy = policies.find((candidate) => candidate.id === summary.candidateId)!;
     const neighbors = summaries.filter((candidate) => {
       if (candidate.candidateId === summary.candidateId || candidate.family !== summary.family) return false;
-      const other = TRAIL_CANDIDATES.find((item) => item.id === candidate.candidateId)!;
-      return Math.abs(other.armPct - policy.armPct) <= 20 && Math.abs(other.retainPeakGain - policy.retainPeakGain) <= .25 && Math.abs((other.bankPct ?? 0) - (policy.bankPct ?? 0)) <= 10;
+      const other = policies.find((item) => item.id === candidate.candidateId)!;
+      if (policy.family === "take_profit") {
+        return Math.abs((other.takeProfitPct ?? 0) - (policy.takeProfitPct ?? 0)) <= 10;
+      }
+      return Math.abs(other.armPct - policy.armPct) <= 20
+        && Math.abs(other.retainPeakGain - policy.retainPeakGain) <= .25
+        && Math.abs((other.bankPct ?? 0) - (policy.bankPct ?? 0)) <= 10;
     });
     return { ...summary, stableParameterPlateau: (summary.typicalBenefitPct ?? 0) > 0 && neighbors.some((neighbor) => (neighbor.typicalBenefitPct ?? 0) > 0) };
   });
 }
 
 function buildEra(configurationEra: string, evidenceLayer: TrailEvidenceLayer,
-  opportunities: readonly TrailOpportunity[]): ChannelTrailEra {
-  let candidates = TRAIL_CANDIDATES.map((policy) => summarizeCandidate(policy, opportunities.map((opportunity) => replay(opportunity, policy)), opportunities.length));
-  candidates = markPlateaus(candidates);
+  opportunities: readonly TrailOpportunity[], policyRegistry: Map<TrailCandidateId, TrailPolicy>): ChannelTrailEra {
+  const policies = [...TRAIL_CANDIDATES, ...adaptiveCandidates(opportunities)];
+  for (const policy of policies) policyRegistry.set(policy.id, policy);
+  let candidates = policies.map((policy) => summarizeCandidate(policy, opportunities.map((opportunity) => replay(opportunity, policy)), opportunities.length));
+  candidates = markPlateaus(candidates, policies);
   const ranked = [...candidates].sort((left, right) => Number(right.verdict === "promising") - Number(left.verdict === "promising") || Number(right.stableParameterPlateau) - Number(left.stableParameterPlateau) || (right.typicalBenefitPct ?? Number.NEGATIVE_INFINITY) - (left.typicalBenefitPct ?? Number.NEGATIVE_INFINITY));
   const recommended = ranked.find((candidate) => candidate.verdict === "promising" && candidate.stableParameterPlateau) ?? null;
   const anyScored = candidates.some((candidate) => candidate.pairedOpportunities > 0);
-  const recommendation = recommended ? recommended.family === "full_ratchet" ? "test_full_ratchet" : "test_bank_then_ratchet" : anyScored ? "keep_native" : "collect_paths";
+  const recommendation = recommended
+    ? recommended.family === "take_profit" ? "test_take_profit"
+      : recommended.family === "full_ratchet" ? "test_full_ratchet" : "test_bank_then_ratchet"
+    : anyScored ? "keep_native" : "collect_paths";
   const plainLanguage = recommended
-    ? `${recommended.label} improves the typical paired trade and nearby settings also work; prepare a paper exit test with entry and size fixed.`
-    : anyScored ? "No bounded trail beats the native exit robustly enough to switch; keep the native exit while paths continue collecting."
-      : "No complete executable-bid path is available for a fair trail comparison yet.";
+    ? `${recommended.label} improves the typical paired trade and nearby channel-specific settings also work; prepare a paper exit test with entry and size fixed.`
+    : anyScored ? "No bounded channel-specific exit beats the native exit robustly enough to switch; keep the native exit while paths continue collecting."
+      : "No complete executable-bid path is available for a fair exit comparison yet.";
   return {
     configurationEra, evidenceLayer, opportunities: opportunities.length,
     scoredNativeOpportunities: opportunities.filter((row) => Number.isFinite(row.nativeReturnPct)).length,
@@ -301,6 +390,7 @@ function buildEra(configurationEra: string, evidenceLayer: TrailEvidenceLayer,
     candidates, recommendation, recommendedCandidateId: recommended?.candidateId ?? null, plainLanguage,
     limitations: [
       "Premium-bid trails are evaluated separately from underlying ATR/chandelier trails.",
+      "Adaptive candidates are bounded to path-derived favorable-move and retained-gain quantiles within this configuration era; presets remain benchmarks, not limits.",
       "Per-opportunity comparisons do not authorize a manager change until capacity and displacement replay also pass.",
       ...(candidates.some((candidate) => candidate.convexTailOpportunities === 0) ? ["No 120%+ premium path is present in this era, so large-winner retention remains unmeasured."] : []),
     ],
@@ -316,6 +406,7 @@ export function buildChannelTrailFrontier(input: {
 }): ChannelTrailFrontierBook {
   const valid = input.opportunities.filter((row) => row.session <= input.throughSession && row.channel && row.configurationEra && row.entryPrice > 0 && row.quantity > 0 && Number.isFinite(row.nativeReturnPct));
   const byChannel = new Map<string, TrailOpportunity[]>();
+  const policyRegistry = new Map<TrailCandidateId, TrailPolicy>(TRAIL_CANDIDATES.map((policy) => [policy.id, policy]));
   for (const row of valid) byChannel.set(row.channel, [...(byChannel.get(row.channel) ?? []), row]);
   const channels = Object.fromEntries([...byChannel].sort(([left], [right]) => left.localeCompare(right)).map(([channel, rows]) => {
     const buildLayer = (layer: TrailEvidenceLayer): ChannelTrailEra[] => {
@@ -323,7 +414,7 @@ export function buildChannelTrailFrontier(input: {
       for (const row of rows.filter((item) => item.evidenceLayer === layer)) {
         byEra.set(row.configurationEra, [...(byEra.get(row.configurationEra) ?? []), row]);
       }
-      return [...byEra].map(([era, eraRows]) => buildEra(era, layer, eraRows))
+      return [...byEra].map(([era, eraRows]) => buildEra(era, layer, eraRows, policyRegistry))
         .sort((left, right) => right.opportunities - left.opportunities
           || left.configurationEra.localeCompare(right.configurationEra));
     };
@@ -350,7 +441,8 @@ export function buildChannelTrailFrontier(input: {
   return {
     schemaVersion: 1, frontierVersion: CHANNEL_TRAIL_FRONTIER_VERSION,
     generatedAt: input.generatedAt, throughSession: input.throughSession,
-    candidates: TRAIL_CANDIDATES, channels, sourceOpportunities: valid.length,
+    candidates: [...policyRegistry.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    channels, sourceOpportunities: valid.length,
     executedSourceOpportunities, virtualSourceOpportunities,
     productionWrites: 0, orderAuthority: false, configurationAuthority: false,
   };

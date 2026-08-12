@@ -188,7 +188,7 @@ function renderMarkdown(book: ChannelTrailFrontierBook): string {
     "",
     "Read-only paired executable-bid research. Entry, size, route, roster, and production managers remain unchanged.",
     "",
-    "| Channel | Era | Decision | Leading trail | Typical lift | Beat rate | Evidence |",
+    "| Channel | Era | Decision | Leading exit | Typical lift | Beat rate | Evidence |",
     "|---|---|---|---|---:|---:|---:|",
   ];
   for (const channel of Object.values(book.channels).sort((left, right) => left.channel.localeCompare(right.channel))) {
@@ -204,7 +204,7 @@ function renderMarkdown(book: ChannelTrailFrontierBook): string {
       lines.push(`| ${channel.channel} (${era.evidenceLayer.replaceAll("_", " ")}) | ${era.configurationEra} | ${era.recommendation.replaceAll("_", " ")} | ${candidate?.label ?? "—"} | ${pct(candidate?.typicalBenefitPct ?? null)} | ${candidate?.improvementFrequency == null ? "—" : `${Math.round(candidate.improvementFrequency * 100)}%`} | ${candidate?.pairedOpportunities ?? 0} paths / ${candidate?.sessions ?? 0}s |`);
     }
   }
-  lines.push("", "Executed and exact-current virtual paths are displayed in separate rows and are never pooled. A trail is proposal-ready only when its paired benefit, chronological validation, leave-session-out validation, and nearby parameter plateau agree. Capacity and displacement still require a separate pass.", "");
+  lines.push("", "Executed and exact-current virtual paths are displayed in separate rows and are never pooled. An exit is proposal-ready only when its paired benefit, chronological validation, leave-session-out validation, and nearby parameter plateau agree. Capacity and displacement still require a separate pass.", "");
   return lines.join("\n");
 }
 

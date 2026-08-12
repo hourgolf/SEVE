@@ -40,6 +40,35 @@ assert.equal(a13.verdict, "promising");
 assert.equal(a13.stableParameterPlateau, true);
 assert.equal(a13.convexTailOpportunities, 0);
 
+const targetOpportunities: TrailOpportunity[] = Array.from({ length: 10 }, (_, index) => {
+  const session = `2026-07-${String(index + 1).padStart(2, "0")}`;
+  const peak = index < 3 ? 1.22 : index < 6 ? 1.23 : 1.24;
+  return {
+    logicalOpportunityId: `target-${index}`, channel: "target-22", session, configurationEra: "current",
+    evidenceLayer: "executed", entryAt: `${session}T14:30:00.000Z`, entryPrice: 1, quantity: 2,
+    nativeReturnPct: -30, nativeExitAt: `${session}T19:25:00.000Z`, source: "frozen_option_archive",
+    quotes: [
+      { at: `${session}T14:31:00.000Z`, bid: 1 },
+      { at: `${session}T14:32:00.000Z`, bid: peak },
+      { at: `${session}T19:25:00.000Z`, bid: .7 },
+    ],
+  };
+});
+const targetBook = buildChannelTrailFrontier({ generatedAt: book.generatedAt, throughSession: book.throughSession,
+  opportunities: targetOpportunities });
+const targetEra = targetBook.channels["target-22"].eras[0];
+const target22 = targetEra.candidates.find((candidate) => candidate.candidateId === "TP-22")!;
+assert.ok(target22, "channel-era favorable moves should produce a bespoke +22% target");
+assert.equal(target22.typicalBenefitPct, 52);
+assert.equal(target22.improvementFrequency, 1);
+assert.equal(target22.verdict, "promising");
+assert.equal(target22.stableParameterPlateau, true, "nearby path-derived targets must corroborate the setting");
+assert.equal(targetEra.recommendation, "test_take_profit");
+const targetPolicy = targetBook.candidates.find((candidate) => candidate.id === "TP-22")!;
+assert.equal(targetPolicy.origin, "channel_adaptive");
+assert.equal(targetPolicy.takeProfitPct, 22);
+assert.match(targetPolicy.parameterSource, /channel-era/);
+
 const oneLot = buildChannelTrailFrontier({ generatedAt: book.generatedAt, throughSession: book.throughSession, opportunities: opportunities.slice(0, 1).map((row) => ({ ...row, channel: "one-lot", quantity: 1 })) });
 const bank = oneLot.channels["one-lot"].eras[0].candidates.find((candidate) => candidate.candidateId === "BANK20-R50-K67")!;
 assert.equal(bank.pairedOpportunities, 0);
