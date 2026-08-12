@@ -40,7 +40,7 @@ export function FolioSentinelDesktop({ surface }: { surface: SurfaceProps }) {
       { label: "FOR DATE", value: surface.sentinel.forDate || surface.sentinel.brief?.forDate || "—" },
       { label: "PROBES", value: candidates },
     ]} />
-    <div className="folio-native-body"><SentinelWorkspace sentinel={surface.sentinel} symbol={surface.symbol} /></div>
+    <div className="folio-native-body"><SentinelWorkspace sentinel={surface.sentinel} symbol={surface.symbol} activeConfigurationHash={surface.channelWorkspace.release.state === "verified" ? surface.channelWorkspace.release.expectedHash : null} /></div>
   </div>;
 }
 

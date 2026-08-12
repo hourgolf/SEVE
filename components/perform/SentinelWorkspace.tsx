@@ -2,6 +2,7 @@
 
 import type { useSentinelDigest, ScanRow } from "@/hooks/useSentinelDigest";
 import { deriveSentinelReceiptStatus } from "@/lib/sentinel/receipt";
+import { deriveSentinelConfigurationFreshness } from "@/lib/sentinel/operatorPacket";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 type SentinelDigest = ReturnType<typeof useSentinelDigest>;
@@ -44,7 +45,7 @@ export function SentinelReceiptStrip({ sentinel, compact = false }: { sentinel: 
   </div>;
 }
 
-export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDigest; symbol: string }) {
+export function SentinelWorkspace({ sentinel, symbol, activeConfigurationHash }: { sentinel: SentinelDigest; symbol: string; activeConfigurationHash?: string | null }) {
   const { brief, scan, judge, operatorPacket, state, err } = sentinel;
   const deterministic = sentinel.interpretiveProvider === "none" || operatorPacket != null;
   const terrain = brief?.sentLevels?.[symbol];
@@ -52,7 +53,14 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
   const below = terrain?.below ?? brief?.carry.below ?? [];
   const receipt = deriveSentinelDigestReceipt(sentinel);
   const findings = operatorPacket?.findings ?? [];
-  const nextAction = judge?.soWhat ?? (findings.some((finding) => finding.action === "replay")
+  const configurationFreshness = deriveSentinelConfigurationFreshness(
+    operatorPacket?.release.configurationSha256,
+    activeConfigurationHash,
+  );
+  const packetSuperseded = configurationFreshness.state === "superseded";
+  const nextAction = packetSuperseded
+    ? "New paper settings are active. Hold them fixed for the next session and collect clean evidence; the older replay remains queued separately."
+    : judge?.soWhat ?? (findings.some((finding) => finding.action === "replay")
     ? "Complete the queued replay before changing the paper configuration."
     : "Keep the current paper configuration while evidence collects.");
   const plainFinding = (action: string): string => action === "replay" ? "Replay required"
@@ -61,12 +69,12 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
   return <section className="sntw" id="perform-sentinel" tabIndex={-1} aria-label="Sentinel evidence workspace">
     <header className="sntw-head"><span><b>NEXT-SESSION BRIEF</b><small>NEXT ACTION · EXCEPTIONS</small></span>
       <em>READ ONLY</em></header>
-    <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={receipt.publishedAt ? dateTime(receipt.publishedAt) : "checking"} era="next-session packet" sample={`${findings.length || scan?.promote.length || 0} findings`} quality={receipt.tone === "green" ? "complete" : receipt.tone === "yellow" ? "partial" : "checking"} detail={receipt.detail} />
-    <section className={`sntw-priority ${receipt.tone}`}><span><small>NEXT ACTION</small><b>{judge?.verdict ?? (receipt.tone === "green" ? "REVIEW" : "WAIT")}</b><p>{nextAction}</p></span><em>{operatorPacket?.forDate ?? brief?.forDate ?? sentinel.forDate ?? "next session"}</em></section>
+    <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={receipt.publishedAt ? dateTime(receipt.publishedAt) : "checking"} era="next-session packet" sample={`${findings.length || scan?.promote.length || 0} findings`} quality={packetSuperseded ? "partial" : receipt.tone === "green" ? "complete" : receipt.tone === "yellow" ? "partial" : "checking"} detail={packetSuperseded ? "This brief predates the active paper configuration. Its evidence remains valid history, but its configuration instruction is no longer current." : receipt.detail} />
+    <section className={`sntw-priority ${packetSuperseded ? "yellow" : receipt.tone}`}><span><small>NEXT ACTION</small><b>{packetSuperseded ? "COLLECT" : judge?.verdict ?? (receipt.tone === "green" ? "REVIEW" : "WAIT")}</b><p>{nextAction}</p></span><em>{operatorPacket?.forDate ?? brief?.forDate ?? sentinel.forDate ?? "next session"}</em></section>
     <div className="sntw-simple-grid">
-      <section><small>SESSION READY?</small><b>{receipt.tone === "green" ? "YES" : "PARTIAL"}</b><p>{operatorPacket ? `${operatorPacket.liveBook.closed} closed trades reconciled; ${operatorPacket.liveBook.open} remain open.` : receipt.detail}</p></section>
+      <section><small>BRIEF CURRENT?</small><b>{packetSuperseded ? "SUPERSEDED" : configurationFreshness.state === "current" ? "YES" : receipt.tone === "green" ? "YES" : "PARTIAL"}</b><p>{packetSuperseded ? "A newer receipt-bound configuration is active. This packet is retained as historical evidence." : operatorPacket ? `${operatorPacket.liveBook.closed} closed trades reconciled; ${operatorPacket.liveBook.open} remain open.` : receipt.detail}</p></section>
       <section><small>WHAT NEEDS REVIEW?</small><b>{findings.length || judge?.drift.length || 0} ITEMS</b><ul>{findings.slice(0, 3).map((finding) => <li key={finding.code}>{finding.title} · {plainFinding(finding.action)}</li>)}{!findings.length && judge?.drift.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul></section>
-      <section><small>WHAT STAYS FIXED?</small><b>ENTRY · EXIT · MANAGER · SIZE · ROSTER</b></section>
+      <section><small>{packetSuperseded ? "ACTIVE PLAN" : "WHAT STAYS FIXED?"}</small><b>{packetSuperseded ? "NEW SETTINGS · COLLECT CLEAN SESSION" : "ENTRY · EXIT · MANAGER · SIZE · ROSTER"}</b></section>
     </div>
     <details className="sntw-technical"><summary><span><small>SUPPORTING EVIDENCE</small><b>Receipts, paths, levels, and deterministic scan</b></span><em>OPEN FOR DETAIL</em><i>▾</i></summary><div>
     <SentinelReceiptStrip sentinel={sentinel} />
@@ -77,7 +85,7 @@ export function SentinelWorkspace({ sentinel, symbol }: { sentinel: SentinelDige
           <div className="sntw-day"><b>{operatorPacket.forDate}</b><span>evidence {operatorPacket.overallState.replaceAll("_", " ")}</span></div>
           <div className="sntw-sub">SESSION RECEIPT</div>
           <ul>
-            <li>release {operatorPacket.release.releaseId ?? "missing"} · {operatorPacket.release.state}</li>
+            <li>release {operatorPacket.release.releaseId ?? "missing"} · {operatorPacket.release.state}{packetSuperseded ? " · superseded by active runtime" : ""}</li>
             <li>
               live {operatorPacket.liveBook.closed}/{operatorPacket.liveBook.opened} closed · {operatorPacket.liveBook.open} open
               {operatorPacket.liveBook.positionRows == null

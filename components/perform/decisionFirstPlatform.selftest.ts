@@ -31,6 +31,10 @@ assert.doesNotMatch(fleet, />RISK \/ TRADE<|>LIVE MODE<|>CONTEXT</);
 assert.doesNotMatch(fleet, /paper enabled|No unresolved exception|\$0.*attrib/);
 assert.doesNotMatch(mobileRow, /DB DIFFERS|m2-rr-fires num/);
 assert.match(mobileRow, /COLLECTING EVIDENCE/);
+assert.match(mobileRow, /LIVE SETTINGS ACTIVE · COLLECTING/);
+assert.doesNotMatch(mobileRow, /DATABASE EXIT PREVIEW · NOT ACTIVE RC5/);
+assert.match(fleet, /Live settings active/);
+assert.doesNotMatch(fleet, /Saved settings need review/);
 assert.doesNotMatch(mobileRow, /recommendation\.summary/);
 
 for (const mapping of [

@@ -85,6 +85,30 @@ export interface DeterministicSentinelJudge {
   soWhat: string;
 }
 
+export type SentinelConfigurationFreshness =
+  | { state: "current"; briefHash: string; activeHash: string }
+  | { state: "superseded"; briefHash: string; activeHash: string }
+  | { state: "unknown"; briefHash: string | null; activeHash: string | null };
+
+const configurationHash = (value: string | null | undefined): string | null => {
+  const normalized = value?.trim().toLowerCase().replace(/^sha256:/, "") ?? "";
+  return /^[a-f0-9]{64}$/.test(normalized) ? normalized : null;
+};
+
+/** Keep a historically valid next-session packet immutable while making it
+ * obvious when a later activation has replaced the configuration it reviewed. */
+export function deriveSentinelConfigurationFreshness(
+  briefConfigurationSha256: string | null | undefined,
+  activeConfigurationSha256: string | null | undefined,
+): SentinelConfigurationFreshness {
+  const briefHash = configurationHash(briefConfigurationSha256);
+  const activeHash = configurationHash(activeConfigurationSha256);
+  if (!briefHash || !activeHash) return { state: "unknown", briefHash, activeHash };
+  return briefHash === activeHash
+    ? { state: "current", briefHash, activeHash }
+    : { state: "superseded", briefHash, activeHash };
+}
+
 const record = (value: unknown): value is Record<string, unknown> => value != null && typeof value === "object" && !Array.isArray(value);
 const evidenceStates = new Set<SentinelEvidenceState>(["ok", "partial", "missing", "error", "stale", "conflict", "not_due"]);
 const evidenceFact = (value: unknown): value is Record<string, unknown> => record(value)

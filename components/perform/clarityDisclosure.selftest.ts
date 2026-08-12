@@ -30,5 +30,10 @@ assert.match(livePositions, /gave back .*% of best gain/);
 assert.match(mobilePositions, />BEST <b>/);
 assert.match(sentinel, /best move/);
 assert.match(sentinel, /giveback/);
+assert.match(sentinel, /BRIEF CURRENT\?/);
+assert.match(sentinel, /SUPERSEDED/);
+assert.match(sentinel, /NEW SETTINGS · COLLECT CLEAN SESSION/);
+assert.match(desktopInspector, /ACTIVE RUNTIME · EXIT SHAPE/);
+assert.match(mobileInspector, /ACTIVE RUNTIME · EXIT SHAPE/);
 
 console.log("clarity-disclosure-selftest: decision-first progressive disclosure contracts passed");

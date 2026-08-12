@@ -84,7 +84,8 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const ustopOff = ustop > 0 && ustop * 180 >= premStop;
   const pyr = config.pyramid_adds ?? 0;
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
-  const managerLabel = rootPolicy?.managerLabel;
+  const receiptSettingsActive = passport?.lifecycle === "paper-root" && activeSpec != null;
+  const managerLabel = activeSpec?.managerLabel ?? rootPolicy?.managerLabel;
   const a13 = rootPolicy?.runner === "a13";
   const liveModeLabel = passport?.lifecycle === "paper-root"
     ? "TRADING"
@@ -158,20 +159,20 @@ export function ChannelInspector({ strategist, summary, passport, write, control
             <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
             <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact /></div>
         </details>
-        <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : rootPolicy ? "SEALED RUNTIME · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
+        <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : receiptSettingsActive ? "ACTIVE RUNTIME · ENTRY CONFIG" : rootPolicy ? "SEALED RUNTIME · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
           <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
           <div className="ctl"><span className="cl">strike offset</span><span className="ival" title="effective configured strike offset">{strikeLabel(config.strike_offset ?? 0)}</span></div>
           <div className="ctl"><span className="cl">event policy</span>{seg(eventPolicy, [{ v: "standdown", label: "STAND-DOWN" }, { v: "ignore", label: "TRADE-THRU" }], (v) => setCfg({ event_policy: v }))}</div>
         </div></section>
 
-        <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : rootPolicy ? "SEALED RUNTIME · RISK + SIZE" : "DATABASE KNOBS · FUTURE EPOCH"}</header><div className="knob-bank">
+        <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : receiptSettingsActive ? "ACTIVE RUNTIME · RISK + SIZE" : rootPolicy ? "SEALED RUNTIME · RISK + SIZE" : "DATABASE KNOBS · FUTURE EPOCH"}</header><div className="knob-bank">
           {knob(config.capital_pct, 25, 5000, 25, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
           {knob(config.daily_stop_usd, 0, 5000, 50, "ENTRY LATCH", (v) => v === 0 ? "OFF" : `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
           {knob(premStop, 10, 90, 5, "PREM STOP · POLICY", (v) => `−${v}%`, "premium_stop_pct", "#25272a", false)}
           {knob(config.max_contracts, 1, 12, 1, "HARD CAP", (v) => `${v} ct`, "max_contracts")}
         </div></section>
 
-        <section className="mix-bank"><header>{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : "EXIT SHAPE"}</header><div className="mix-bank-body two-col">
+        <section className="mix-bank"><header>{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : receiptSettingsActive ? "ACTIVE RUNTIME · EXIT SHAPE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : "DATABASE EXIT REFERENCE"}</header><div className="mix-bank-body two-col">
           <div className="ctl"><span className="cl">u-stop %{ustopOff && <span className="uoff">uS·off</span>}</span>{step("u-stop", ustop === 0 ? "off" : `${ustop.toFixed(2)}%`, () => setCfg({ underlying_stop_pct: Math.max(0, +(ustop - 0.05).toFixed(2)) }), () => setCfg({ underlying_stop_pct: Math.min(2, +(ustop + 0.05).toFixed(2)) }))}</div>
           <div className="ctl"><span className="cl">take profit</span>{step("take profit", config.take_profit_pct ? `+${config.take_profit_pct}%` : "ride", () => setCfg({ take_profit_pct: Math.max(0, (config.take_profit_pct ?? 0) - 5) }), () => setCfg({ take_profit_pct: Math.min(300, (config.take_profit_pct ?? 0) + 5) }))}</div>
           {pyrEligible ? <div className="ctl"><span className="cl">pyramid</span>{seg(pyr > 0 ? "on" : "off", [{ v: "off", label: "OFF" }, { v: "on", label: "+3 · CAP12" }], (v) => setCfg(v === "on" ? { pyramid_adds: 3, max_contracts: Math.max(config.max_contracts, 12) } : { pyramid_adds: 0 }))}</div> : <div className="ctl"><span className="cl">pyramid</span><span className="ival muted">n/a</span></div>}
