@@ -13,6 +13,7 @@ export interface ChannelControlMutationWindow {
   calendarCoverageKnown: boolean;
   code:
     | "mutation_window:verified_closed"
+    | "mutation_window:verified_overnight"
     | "mutation_window:premarket"
     | "mutation_window:market_open"
     | "mutation_window:calendar_unknown";
@@ -40,13 +41,26 @@ export function channelControlMutationWindow(
     });
   }
   if (observed.session === "premarket") {
+    // Midnight ET is not operationally the same as the active premarket.
+    // Preserve a six-hour freeze before RTH while allowing receipt-bound,
+    // flat-book maintenance during the early overnight close window.
+    if ((observed.secondsToOpen ?? 0) >= 6 * 60 * 60) {
+      return Object.freeze({
+        version: CHANNEL_CONTROL_MUTATION_WINDOW_VERSION,
+        allowed: true,
+        session: observed.session,
+        calendarCoverageKnown: true,
+        code: "mutation_window:verified_overnight",
+        message: "The verified early-overnight configuration-write window is open.",
+      });
+    }
     return Object.freeze({
       version: CHANNEL_CONTROL_MUTATION_WINDOW_VERSION,
       allowed: false,
       session: observed.session,
       calendarCoverageKnown: true,
       code: "mutation_window:premarket",
-      message: "Configuration writes are read-only before the regular session.",
+      message: "Configuration writes are read-only within six hours of the regular session.",
     });
   }
   if (observed.session === "open") {
