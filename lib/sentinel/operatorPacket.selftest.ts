@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { deriveSentinelConfigurationFreshness, deriveSentinelOperatorPacket, operatorPacketToJudge, readSentinelOperatorPacket, type SentinelOperatorPacketInput } from "./operatorPacket.js";
+import { deriveSentinelConfigurationFreshness, deriveSentinelOperatorPacket, deterministicSentinelRunId, operatorPacketToJudge, readSentinelOperatorPacket, type SentinelOperatorPacketInput } from "./operatorPacket.js";
 
 const fact = { state: "ok" as const, source: "fixture", asOf: "2026-07-22T21:30:00.000Z", detail: "observed" };
 const base: SentinelOperatorPacketInput = {
@@ -77,5 +77,13 @@ assert.equal(deriveSentinelConfigurationFreshness("a".repeat(64), `sha256:${"a".
 assert.equal(deriveSentinelConfigurationFreshness("a".repeat(64), "b".repeat(64)).state, "superseded");
 assert.equal(deriveSentinelConfigurationFreshness(null, "b".repeat(64)).state, "unknown");
 assert.equal(deriveSentinelConfigurationFreshness("not-a-hash", "b".repeat(64)).state, "unknown");
+assert.equal(
+  deterministicSentinelRunId("2026-08-11", "2026-08-12", `sha256:${"a".repeat(64)}`),
+  `deterministic-sentinel-publisher-v3:2026-08-11:2026-08-12:${"a".repeat(64)}`,
+);
+assert.equal(
+  deterministicSentinelRunId("2026-08-11", "2026-08-12", null),
+  "deterministic-sentinel-publisher-v3:2026-08-11:2026-08-12:unverified",
+);
 
-console.log("sentinel-operator-packet-selftest: 30/30 passed");
+console.log("sentinel-operator-packet-selftest: 32/32 passed");
