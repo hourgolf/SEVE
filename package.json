@@ -238,6 +238,8 @@
     "decision-atlas-change-packets": "tsx scripts/decision-atlas-change-packets.ts",
     "decision-atlas-selftest": "tsx lib/research/decisionAtlas.selftest.ts && tsx lib/research/decisionAtlasAdapter.selftest.ts && tsx lib/research/boundedRetuneExperiments.selftest.ts && tsx worker/src/boundedRetuneSignalStamp.selftest.ts && tsx scripts/decision-atlas.selftest.ts",
     "decision-atlas-preview-selftest": "tsx lib/research/decisionAtlasPreview.selftest.ts && tsx lib/research/channelDecisionSummary.selftest.ts && tsx components/research/DecisionAtlasPreviewCard.selftest.ts && tsx components/research/DecisionAtlasHierarchy.selftest.ts",
+    "research-council": "tsx scripts/research-council.ts",
+    "research-council-selftest": "tsx lib/research/researchCouncil.selftest.ts && tsx scripts/research-council.selftest.ts && tsx components/research/ResearchCouncilRoom.selftest.ts",
     "priority-a-retune-readiness": "tsx scripts/priority-a-retune-readiness.ts",
     "priority-a-retune-readiness-selftest": "tsx scripts/priority-a-retune-readiness.selftest.ts",
     "cross-surface-evidence-selftest": "tsx lib/evidence/crossSurfaceEvidence.selftest.ts",

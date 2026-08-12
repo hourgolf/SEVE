@@ -28,6 +28,7 @@ const weeklyDir = resolve(outputRoot, "weekly");
 const briefsDir = resolve(outputRoot, "briefs");
 const learningDir = resolve(outputRoot, "learning");
 const trailDir = resolve(outputRoot, "trails");
+const councilDir = resolve(outputRoot, "council");
 mkdirSync(outputRoot, { recursive: true });
 const run = (script: string, args: string[]): void => {
   execFileSync(process.execPath, ["--import", "tsx", script, ...args], { stdio: "inherit", env: process.env });
@@ -49,6 +50,8 @@ run("scripts/weekly-readout.ts", ["--through", through, "--ledger-file", resolve
 run("scripts/channel-decision-briefs.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--weekly-file", resolve(weeklyDir, "weekly.json"),
   "--trail-file", resolve(trailDir, "frontier.json"), "--out-dir", briefsDir]);
+run("scripts/research-council.ts", ["--briefs-file", resolve(briefsDir, "briefs.json"),
+  "--out-dir", councilDir]);
 run("scripts/nightly-channel-learning.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--briefs-file", resolve(briefsDir, "briefs.json"),
   "--trail-file", resolve(trailDir, "frontier.json"),
