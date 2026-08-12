@@ -236,8 +236,10 @@ async function activateRoster(input: {
   const write = await input.sb.rpc("activate_channel_roster_bundle", {
     p_activation_receipt_id: randomUUID(),
     p_approval_id: randomUUID(),
-    p_approved_lifecycle_receipt_id:
-      acknowledgement.validated_lifecycle_receipt_id,
+    // The worker acknowledgement pins its own validated lifecycle receipt.
+    // Activation must append a distinct approved lifecycle receipt rather
+    // than attempting to reuse that immutable primary key.
+    p_approved_lifecycle_receipt_id: randomUUID(),
     p_bundle_id: bundleId,
     p_worker_acknowledgement_id: acknowledgement.id,
     p_operator_id: input.operator.id,
@@ -264,6 +266,8 @@ async function activateRoster(input: {
     state: "activated",
     bundleId,
     acknowledgementId: acknowledgement.id,
+    validatedLifecycleReceiptId:
+      acknowledgement.validated_lifecycle_receipt_id,
     configurationEpochId: expectedEpoch,
     priorManifestId: before.manifest.id,
     priorManifestContentHash: before.manifest.contentHash,
