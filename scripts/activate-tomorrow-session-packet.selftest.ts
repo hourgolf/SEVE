@@ -11,6 +11,11 @@ assert.match(source, /activation requires a printable --approval-ref/);
 assert.match(source, /channelControlMutationWindow/);
 assert.match(source, /packet\.intendedSession !== "2026-08-12"/);
 assert.match(source, /activate_channel_roster_bundle/);
+assert.match(source, /p_approved_lifecycle_receipt_id: randomUUID\(\)/);
+assert.doesNotMatch(
+  source,
+  /p_approved_lifecycle_receipt_id:\s*acknowledgement\.validated_lifecycle_receipt_id/,
+);
 assert.match(source, /prepare_channel_change_proposal_preview/);
 assert.match(source, /activate_channel_change_proposal/);
 assert.match(source, /promotionsActive/);
