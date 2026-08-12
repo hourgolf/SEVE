@@ -11,6 +11,7 @@ import { etDayRangeUtc } from "@/lib/research/afterCloseResearch";
 import { nextTradingDay } from "@/engine/market-calendar";
 import {
   DETERMINISTIC_SENTINEL_PUBLISHER_VERSION,
+  deterministicSentinelRunId,
   deriveSentinelOperatorPacket,
   operatorPacketToJudge,
   type SentinelOperatorPacketInput,
@@ -416,7 +417,11 @@ async function main(): Promise<void> {
   }
   const judge = operatorPacketToJudge(packet);
   const digest = renderDigest(packet);
-  const publisherRunId = `${DETERMINISTIC_SENTINEL_PUBLISHER_VERSION}:${SESSION}:${forDate}`;
+  const publisherRunId = deterministicSentinelRunId(
+    SESSION,
+    forDate,
+    packet.release.configurationSha256,
+  );
   const meta = {
     kind: "sentinel",
     schemaVersion: 4,

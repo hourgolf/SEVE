@@ -109,6 +109,18 @@ export function deriveSentinelConfigurationFreshness(
     : { state: "superseded", briefHash, activeHash };
 }
 
+/** A session may legitimately have more than one sealed configuration after an
+ * after-close activation. Idempotency is therefore scoped to the runtime
+ * configuration, not merely to the calendar date. */
+export function deterministicSentinelRunId(
+  session: string,
+  forDate: string,
+  configurationSha256: string | null | undefined,
+): string {
+  const hash = configurationHash(configurationSha256) ?? "unverified";
+  return `${DETERMINISTIC_SENTINEL_PUBLISHER_VERSION}:${session}:${forDate}:${hash}`;
+}
+
 const record = (value: unknown): value is Record<string, unknown> => value != null && typeof value === "object" && !Array.isArray(value);
 const evidenceStates = new Set<SentinelEvidenceState>(["ok", "partial", "missing", "error", "stale", "conflict", "not_due"]);
 const evidenceFact = (value: unknown): value is Record<string, unknown> => record(value)
