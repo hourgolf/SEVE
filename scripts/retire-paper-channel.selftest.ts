@@ -15,6 +15,8 @@ assert.match(source, /activate_channel_roster_bundle/);
 assert.match(source, /preview\.diffs\.length !== 1/);
 assert.match(source, /collectionStates\.get\(current\.channelId\) !== "active"/);
 assert.match(source, /historicalEvidenceMutation: false/);
+assert.match(source, /buildShadowRuntimeProjection\(before\)\.configurationEpochId/);
+assert.match(source, /configurationEpochId: preview\.configurationEpochId/);
 assert.match(source, /brokerOrders: 0/);
 assert.doesNotMatch(source, /\.from\("(?:orders|positions|virtual_trades|events)"\)/);
 

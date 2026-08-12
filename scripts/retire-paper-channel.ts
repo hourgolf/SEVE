@@ -12,6 +12,7 @@ import {
   type CompiledReleaseManifest,
 } from "../lib/channels/channelControlPlane";
 import { channelControlMutationWindow } from "../lib/channels/channelControlMutationWindow";
+import { buildShadowRuntimeProjection } from "../lib/channels/channelActivation";
 import { loadActiveCompiledControlPlane } from "../lib/channels/channelControlPlanePersistence";
 import {
   buildChannelRosterBundlePreview,
@@ -248,13 +249,13 @@ async function main(): Promise<void> {
     before: {
       manifestId: before.manifest.id,
       manifestContentHash: before.manifest.contentHash,
-      configurationEpochId: before.workerProjection.configurationEpochId,
+      configurationEpochId: buildShadowRuntimeProjection(before).configurationEpochId,
       executionPosture: current.executionPosture ?? "paper",
     },
     after: {
       manifestId: after.manifest.id,
       manifestContentHash: after.manifest.contentHash,
-      configurationEpochId: after.workerProjection.configurationEpochId,
+      configurationEpochId: preview.configurationEpochId,
       executionPosture: final.executionPosture,
     },
     bundleId: draft.id,
@@ -287,7 +288,7 @@ async function main(): Promise<void> {
   writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   console.log(`${slug}: RETIRED · paper → observe-only`);
   console.log(`  manifest: ${after.manifest.id}`);
-  console.log(`  epoch: ${after.workerProjection.configurationEpochId}`);
+  console.log(`  epoch: ${preview.configurationEpochId}`);
   console.log("  collection: active · broker orders 0 · historical mutations 0");
   console.log(`  receipt: ${resolve(outputDir, "receipt.json")}`);
 }
