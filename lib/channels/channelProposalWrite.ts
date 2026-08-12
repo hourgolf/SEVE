@@ -156,6 +156,23 @@ export function proposalDraftCapacityCollisionImpact(
   };
 }
 
+/**
+ * Legacy proposal RPCs preserve execution_posture from the base row but their
+ * pinned JSON envelope predates that field. Omit the redundant projection for
+ * every non-posture proposal; the content hash still covers the full compiled
+ * draft and is verified when the stored row is reconstructed.
+ */
+export function proposalDraftSpecForRpc(
+  proposal: ChannelChangeProposal,
+  draftSpec: ChannelSpecVersion,
+): Record<string, unknown> {
+  const serialized = structuredClone(draftSpec) as unknown as Record<string, unknown>;
+  if (!("executionPosture" in proposal.proposedPatch)) {
+    delete serialized.executionPosture;
+  }
+  return serialized;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

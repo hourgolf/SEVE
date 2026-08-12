@@ -4,6 +4,7 @@ import {
   ProposalInputError,
   buildOperatorProposal,
   proposalDraftCapacityCollisionImpact,
+  proposalDraftSpecForRpc,
   proposalDraftRpcName,
 } from "./channelProposalWrite";
 import { compileReleaseManifest } from "./channelControlPlane";
@@ -86,6 +87,12 @@ check("valid bounded request builds a draft-only server-authored proposal", () =
     storedDraftImpact.changedCapacityFields,
     built.capacityCollisionImpact.changedCapacityFields,
   );
+  const rpcSpec = proposalDraftSpecForRpc(
+    built.proposal,
+    { ...built.draftSpec, executionPosture: "paper" },
+  );
+  assert.equal("executionPosture" in rpcSpec, false);
+  assert.equal(rpcSpec.contentHash, built.draftSpec.contentHash);
 });
 
 check("client cannot supply identity or lifecycle fields", () => {
@@ -171,6 +178,10 @@ check("governed execution posture is one explicit pause or resume axis", () => {
     executionPosture: "observe-only",
   });
   assert.equal(paused.draftSpec.executionPosture, "observe-only");
+  assert.equal(
+    proposalDraftSpecForRpc(paused.proposal, paused.draftSpec).executionPosture,
+    "observe-only",
+  );
   assert.equal(paused.capacityCollisionImpact.state, "pass");
   assert.equal(
     proposalDraftRpcName(paused.proposal),

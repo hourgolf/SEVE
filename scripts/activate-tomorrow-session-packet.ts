@@ -40,6 +40,7 @@ import {
 import {
   buildOperatorProposal,
   proposalDraftCapacityCollisionImpact,
+  proposalDraftSpecForRpc,
   proposalDraftRpcName,
 } from "../lib/channels/channelProposalWrite";
 import { loadChannelRosterBundleServerContext } from "../lib/channels/channelRosterBundleServerContext";
@@ -320,7 +321,10 @@ async function activateManager(input: {
     p_base_version_key: built.proposal.baseSpecVersionId,
     p_base_content_hash: built.proposal.baseSpecContentHash,
     p_proposed_version_key: built.proposal.proposedSpecVersionId,
-    p_proposed_spec: built.draftSpec,
+    p_proposed_spec: proposalDraftSpecForRpc(
+      built.proposal,
+      built.draftSpec,
+    ),
     p_proposed_patch: built.proposal.proposedPatch,
     p_reason: built.proposal.reason,
     p_evidence_refs: built.proposal.evidenceRefs,
