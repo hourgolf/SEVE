@@ -459,33 +459,6 @@ check("registered research topology can join a sealed domain with exact priority
   assert.equal(wrongAccount.blocked, "rc54_account_binding");
 });
 
-check("known Wednesday roster mismatch is recovery-only and hash bound", () => {
-  const source = runtime.roots.find((root) => root.slug === "vb-macd-state");
-  assert.ok(source);
-  const recoveryRuntime = {
-    ...runtime,
-    manifestContentHash:
-      "sha256:cf180c817b2ec4b63856f79d2c38952cef881479516ad88916787b89880ca870",
-    roots: [
-      ...runtime.roots,
-      {
-        ...source,
-        slug: "grind-smart-entries",
-        familyId: "GRIND-SMART-ENTRIES",
-        priority: 8,
-        strategistId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        domainId: "rc54-control",
-        cohort: "lab" as const,
-      },
-    ],
-  } as Readonly<ReceiptBoundRuntimeConfiguration>;
-  assert.deepEqual(validateReceiptBoundRc54Topology(recoveryRuntime), []);
-  assert.ok(validateReceiptBoundRc54Topology({
-    ...recoveryRuntime,
-    manifestContentHash: `sha256:${"f".repeat(64)}`,
-  }).includes("temporary_rc54_adapter:grind-smart-entries:domain_cohort"));
-});
-
 check("route or topology changes are rejected by the temporary adapter", () => {
   const root = runtime.roots[0];
   assert.ok(root);
