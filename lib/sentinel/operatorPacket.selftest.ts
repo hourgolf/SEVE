@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { deriveSentinelOperatorPacket, operatorPacketToJudge, readSentinelOperatorPacket, type SentinelOperatorPacketInput } from "./operatorPacket.js";
+import { deriveSentinelConfigurationFreshness, deriveSentinelOperatorPacket, operatorPacketToJudge, readSentinelOperatorPacket, type SentinelOperatorPacketInput } from "./operatorPacket.js";
 
 const fact = { state: "ok" as const, source: "fixture", asOf: "2026-07-22T21:30:00.000Z", detail: "observed" };
 const base: SentinelOperatorPacketInput = {
@@ -73,4 +73,9 @@ assert.throws(() => deriveSentinelOperatorPacket({
   liveBook: { ...base.liveBook, opened: 3, closed: 3, open: 0, positionRows: 2 },
 }), /position rows/);
 
-console.log("sentinel-operator-packet-selftest: 26/26 passed");
+assert.equal(deriveSentinelConfigurationFreshness("a".repeat(64), `sha256:${"a".repeat(64)}`).state, "current");
+assert.equal(deriveSentinelConfigurationFreshness("a".repeat(64), "b".repeat(64)).state, "superseded");
+assert.equal(deriveSentinelConfigurationFreshness(null, "b".repeat(64)).state, "unknown");
+assert.equal(deriveSentinelConfigurationFreshness("not-a-hash", "b".repeat(64)).state, "unknown");
+
+console.log("sentinel-operator-packet-selftest: 30/30 passed");

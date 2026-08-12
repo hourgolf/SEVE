@@ -112,9 +112,13 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                 : passport?.lifecycle === "dark-evidence"
                   ? "NO ENTRY"
                   : null;
+            const receiptSettingsActive = passport?.lifecycle === "paper-root"
+              && passport.database.differsFromRuntime;
             const reasonLabel = row.attentionReasons[0]
-              ?? (passport?.database.differsFromRuntime ? "Saved settings need review" : decision.label === "IDLE" ? "Ready" : decision.label);
-            const reasonDetail = liveMode === "OBSERVING"
+              ?? (receiptSettingsActive ? "Live settings active" : passport?.database.differsFromRuntime ? "Saved settings differ" : decision.label === "IDLE" ? "Ready" : decision.label);
+            const reasonDetail = receiptSettingsActive
+              ? "Collecting clean evidence"
+              : liveMode === "OBSERVING"
               ? "Collecting only"
               : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? null;
             return (

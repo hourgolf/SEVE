@@ -84,6 +84,8 @@ export function MobileRackRow({
   const { id, slug, color, status, config: databaseConfig } = strategist;
   const sealed = passport?.release.state === "verified";
   const rootPolicy = passport?.rootPolicy;
+  const receiptSettingsActive = passport?.lifecycle === "paper-root" && activeSpec != null;
+  const managerLabel = activeSpec?.managerLabel ?? rootPolicy?.managerLabel;
   const config = draft.active
     ? draft.proposed ?? draft.baseConfig ?? databaseConfig
     : draft.baseConfig ?? databaseConfig;
@@ -170,8 +172,10 @@ export function MobileRackRow({
   const databaseStateLabel = passport
     ? `${passport.database.state} · ${passport.database.differsFromRuntime ? "SAVED ONLY" : passport.database.executor}`
     : status.toUpperCase();
-  const plainReason = passport?.database.differsFromRuntime
-    ? "SAVED SETTINGS CHANGED"
+  const plainReason = receiptSettingsActive && passport?.database.differsFromRuntime
+    ? "LIVE SETTINGS ACTIVE · COLLECTING"
+    : passport?.database.differsFromRuntime
+      ? "SAVED SETTINGS DIFFER"
     : status === "draft" ? "On the bench"
       : status === "disabled" ? "Entries are disabled"
         : passport?.lifecycle === "dark-evidence" ? "COLLECTING EVIDENCE"
@@ -201,7 +205,7 @@ export function MobileRackRow({
             <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS MODE</em><i>▾</i></summary>
             <div><ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} decisionBrief={decisionBrief} compact /></div>
           </details>}
-          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : passport?.release.state === "verified" ? "DATABASE EXIT PREVIEW · NOT ACTIVE RC5" : "FIRES — BINDING EXITS · USE TIGHTEN / WIDEN OR TAP VALUE"}</span><span className="ln" /></div>
+          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : receiptSettingsActive ? "ACTIVE RUNTIME · EXIT SHAPE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : passport?.release.state === "verified" ? "OBSERVE-ONLY EXIT REFERENCE" : "FIRES — BINDING EXITS · USE TIGHTEN / WIDEN OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
               <div className="m2-exit-stepper">
@@ -340,7 +344,7 @@ export function MobileRackRow({
               state={researchEvidence.currentExecutedState} error={researchEvidence.currentExecutedError}
               truncated={researchEvidence.currentExecutedTruncated} compact />}
             <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
-            <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={rootPolicy?.managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />
+            <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact />
           </div></details>
           <details className="channel-disclosure change-control"><summary><span><small>CHANGE</small><b>GOVERNED DRAFT</b></span><em>REVIEW BEFORE APPLY</em><i>▾</i></summary><div>
           <ChannelRosterActivationConsole selectedSlug={slug} controlPlane={controlPlane} />
