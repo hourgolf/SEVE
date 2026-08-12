@@ -9,6 +9,7 @@ import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManage
 import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
 import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
 import { ManagerFleetHeatmap } from "@/components/research/ManagerFleetHeatmap";
+import { ResearchCouncilRoom } from "@/components/research/ResearchCouncilRoom";
 import { exactShadowReceipt } from "@/lib/research/exactShadowArchive";
 import type {
   ShadowChannelSummary,
@@ -339,6 +340,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
           <button type="button" onClick={() => atlasNext && onNavigate?.({ section: "research", channel: atlasNext.slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[atlasNext.slug]?.recommendation.axis), researchMode: "decisions" })}><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></button>
         </section>
         {viewMode === "decisions" && <section className="srw-decisions" aria-label="Channel research decisions">
+          <ResearchCouncilRoom reports={surface.decisionAtlas} onNavigate={onNavigate} />
           <header><span><small>WHAT DESERVES REVIEW?</small><b>{decisionFilter ? `${decisionFilter.toUpperCase()} CHANNELS` : "What is working, what is not, and what to test next"}</b></span><div><em>{showAllDecisions ? `ALL ${filteredDecisionRows.length}` : `TOP ${Math.min(DEFAULT_DECISION_LIMIT, filteredDecisionRows.length)} OF ${filteredDecisionRows.length}`}</em>{filteredDecisionRows.length > DEFAULT_DECISION_LIMIT ? <button type="button" aria-expanded={showAllDecisions} onClick={() => setShowAllDecisions((current) => !current)}>{showAllDecisions ? `SHOW TOP ${DEFAULT_DECISION_LIMIT}` : `SHOW ALL ${filteredDecisionRows.length}`}</button> : null}</div></header>
           <div className="srw-decision-list">{displayedDecisionRows.map((item) => {
             const row = rows.find((candidate) => candidate.slug === item.slug);
