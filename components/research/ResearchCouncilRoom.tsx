@@ -32,12 +32,14 @@ function AgentAvatar({ id }: { id: ResearchAgentId }) {
   </span>;
 }
 
-function DispatchCard({ dispatch, onOpen }: { dispatch: ResearchDispatch; onOpen?: (destination: WorkspaceDestination) => void }) {
+function DispatchCard({ dispatch, replyTo, onOpen }: { dispatch: ResearchDispatch; replyTo?: ResearchDispatch; onOpen?: (destination: WorkspaceDestination) => void }) {
   const agent = RESEARCH_AGENTS.find((row) => row.id === dispatch.agentId)!;
+  const replyAgent = replyTo ? RESEARCH_AGENTS.find((row) => row.id === replyTo.agentId) : null;
   return <article className={`rc-dispatch kind-${dispatch.kind}${dispatch.replyTo ? " reply" : ""}`}>
     <AgentAvatar id={dispatch.agentId} />
     <div className="rc-message">
       <header><span><b>{agent.callsign}</b><small>{agent.role}</small></span><em>{dispatch.confidence}</em></header>
+      {replyTo ? <small className="rc-replying">↳ {dispatch.kind === "challenge" ? "PUSHING BACK ON" : "REPLYING TO"} {replyAgent?.callsign ?? "ROOM"}{replyTo.channel ? ` · ${replyTo.channel}` : ""}</small> : null}
       <strong>{dispatch.headline}</strong>
       <p>{dispatch.message}</p>
       <footer>
@@ -86,10 +88,10 @@ export function ResearchCouncilRoom({ reports, onNavigate }: {
       </nav>
     </div>
     <div className="rc-feed">
-      {displayed.map((dispatch) => <DispatchCard key={dispatch.id} dispatch={dispatch} onOpen={onNavigate} />)}
+      {displayed.map((dispatch) => <DispatchCard key={dispatch.id} dispatch={dispatch} replyTo={packet.dispatches.find((row) => row.id === dispatch.replyTo)} onOpen={onNavigate} />)}
       {!displayed.length ? <p className="rc-quiet">No conflicts in the current nightly packet.</p> : null}
     </div>
     {filtered.length > collapsedLimit ? <button type="button" className="rc-more" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>{expanded ? `SHOW SHORT ${filter.toUpperCase()}` : `SHOW ${filtered.length - collapsedLimit} MORE`}</button> : null}
-    <details className="rc-method"><summary>HOW THIS ROOM WORKS <i>▾</i></summary><p>Specialists read the same frozen channel briefs from different angles. GHOST challenges contradictions. CHIEF ranks the unresolved evidence. Messages are generated from linked metrics and cannot change trading behavior.</p></details>
+    <details className="rc-method"><summary>MEET THE CREW · HOW THIS WORKS <i>▾</i></summary><p>Specialists read the same frozen briefs from different angles. The personality is presentation; every claim still carries linked evidence and no one here can change trading behavior.</p><div className="rc-crew">{packet.agents.map((agent) => <span key={agent.id}><AgentAvatar id={agent.id} /><b>{agent.callsign}</b><small>{agent.voice}</small></span>)}</div></details>
   </section>;
 }
