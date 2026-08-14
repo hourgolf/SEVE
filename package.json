@@ -265,6 +265,7 @@
     "backfill-forensics": "tsx --env-file=.env.local scripts/backfill-forensics.ts",
     "forensics-mine": "tsx scripts/forensics-mine.ts",
     "reconcile-alpaca": "tsx --env-file=.env.local scripts/reconcile-alpaca.ts",
+    "correct-position-from-broker-fills": "tsx --env-file=.env.local scripts/correct-position-from-broker-fills.ts",
     "gate-shadow": "tsx scripts/gate-shadow.ts",
     "gate-shadow:hosted": "tsx scripts/gate-shadow.ts",
     "verify-shadow-rebuild": "tsx scripts/verify-shadow-rebuild.ts",
