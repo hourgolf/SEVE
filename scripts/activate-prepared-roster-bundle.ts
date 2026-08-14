@@ -6,10 +6,8 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { User } from "@supabase/supabase-js";
 import { isDeskOperator } from "../lib/auth/operator";
-import {
-  canonicalJson,
-  type CompiledReleaseManifest,
-} from "../lib/channels/channelControlPlane";
+import type { CompiledReleaseManifest } from "../lib/channels/channelControlPlane";
+import { buildShadowRuntimeProjection } from "../lib/channels/channelActivation";
 import { channelControlMutationWindow } from "../lib/channels/channelControlMutationWindow";
 import { loadActiveCompiledControlPlane } from "../lib/channels/channelControlPlanePersistence";
 import { loadChannelRosterBundleServerContext } from "../lib/channels/channelRosterBundleServerContext";
@@ -157,7 +155,7 @@ async function main(): Promise<void> {
   while (Date.now() < verifyDeadline) {
     const observed = await active(sb);
     if (observed.manifest.contentHash === expectedHash
-        && observed.workerProjection.configurationEpochId === expectedEpoch) {
+        && buildShadowRuntimeProjection(observed).configurationEpochId === expectedEpoch) {
       after = observed;
       break;
     }
@@ -176,7 +174,7 @@ async function main(): Promise<void> {
     after: {
       manifestId: after.manifest.id,
       contentHash: after.manifest.contentHash,
-      configurationEpochId: after.workerProjection.configurationEpochId,
+      configurationEpochId: buildShadowRuntimeProjection(after).configurationEpochId,
     },
     rollbackTargetManifestId: before.manifest.id,
     workerAcknowledgementId: acknowledgement.id,
