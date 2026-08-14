@@ -86,7 +86,7 @@ function check(name: string, run: () => void): void {
 check("no-op receipt uses the exact RC5.4 topology", () => {
   assert.equal(
     TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION,
-    "temporary-rc54-runtime-adapter-v4",
+    "temporary-rc54-runtime-adapter-v5",
   );
   assert.deepEqual(validateReceiptBoundRc54Topology(runtime), []);
   const resolve = buildReceiptBoundRc54AdmissionRootResolver(runtime);
@@ -99,6 +99,39 @@ check("no-op receipt uses the exact RC5.4 topology", () => {
     assert.equal(root.accountId, sealed.accountId);
     assert.equal(root.configurationEpochId, runtime.configurationEpochId);
   }
+});
+
+check("receipt-bound priority may change only with an exact policy projection", () => {
+  const target = runtime.roots.find((root) => root.slug === "orb-ustop-ctl");
+  assert.ok(target);
+  const reprioritized = {
+    ...runtime,
+    roots: runtime.roots.map((root) => root.slug === target.slug
+      ? { ...root, priority: 1 }
+      : root),
+    admissionPolicies: runtime.admissionPolicies.map((policy) =>
+      policy.id === target.domainId
+        ? {
+          ...policy,
+          priorityBySlug: { ...policy.priorityBySlug, [target.slug]: 1 },
+        }
+        : policy),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.deepEqual(validateReceiptBoundRc54Topology(reprioritized), []);
+  assert.equal(
+    buildReceiptBoundRc54AdmissionPolicies(reprioritized)
+      .find((policy) => policy.id === target.domainId)
+      ?.priorityBySlug[target.slug],
+    1,
+  );
+  const policyDrift = {
+    ...reprioritized,
+    admissionPolicies: runtime.admissionPolicies,
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.throws(
+    () => buildReceiptBoundRc54AdmissionPolicies(policyDrift),
+    /admission_priority/,
+  );
 });
 
 check("receipt-bound quantity drives admission without changing topology", () => {
