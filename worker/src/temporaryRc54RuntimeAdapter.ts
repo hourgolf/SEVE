@@ -31,7 +31,9 @@ import {
 import type { ChannelConfig, PositionRow } from "./store.js";
 
 export const TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION =
-  "temporary-rc54-runtime-adapter-v5" as const;
+  "temporary-rc54-runtime-adapter-v6" as const;
+
+const RC54_LAB_BOUNDED_IWM_ROOT = "vb-ribbon-cross-iwm" as const;
 
 const SHA256 = /^sha256:([0-9a-f]{64})$/i;
 
@@ -294,9 +296,20 @@ export function buildReceiptBoundRc54AdmissionPolicies(
         errors.push(`temporary_rc54_adapter:${observed.id}:admission_${field}`);
       }
     }
+    const boundedLabIwm = observed.id === RC54_LAB_ADMISSION_POLICY.id
+      && runtime.roots.some((root) =>
+        root.slug === RC54_LAB_BOUNDED_IWM_ROOT
+        && root.domainId === observed.id
+        && root.underlying === "IWM");
+    const expectedUnderlying = boundedLabIwm
+      ? { ...sealed.maxOpenByUnderlying, IWM: 1 }
+      : sealed.maxOpenByUnderlying;
+    const expectedClock = boundedLabIwm
+      ? { ...sealed.sameClockMaxByUnderlying, IWM: 1 }
+      : sealed.sameClockMaxByUnderlying;
     for (const [field, actual, expected] of [
-      ["underlying", observed.maxOpenByUnderlying, sealed.maxOpenByUnderlying],
-      ["clock", observed.sameClockMaxByUnderlying, sealed.sameClockMaxByUnderlying],
+      ["underlying", observed.maxOpenByUnderlying, expectedUnderlying],
+      ["clock", observed.sameClockMaxByUnderlying, expectedClock],
     ] as const) {
       if (JSON.stringify(
         Object.fromEntries(Object.entries(actual).sort()),

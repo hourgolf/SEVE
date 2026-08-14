@@ -86,7 +86,7 @@ function check(name: string, run: () => void): void {
 check("no-op receipt uses the exact RC5.4 topology", () => {
   assert.equal(
     TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION,
-    "temporary-rc54-runtime-adapter-v5",
+    "temporary-rc54-runtime-adapter-v6",
   );
   assert.deepEqual(validateReceiptBoundRc54Topology(runtime), []);
   const resolve = buildReceiptBoundRc54AdmissionRootResolver(runtime);
@@ -490,6 +490,72 @@ check("registered research topology can join a sealed domain with exact priority
     rootResolver: resolver,
   })[0];
   assert.equal(wrongAccount.blocked, "rc54_account_binding");
+});
+
+check("approved Account 2 IWM root receives one bounded slot only", () => {
+  const source = runtime.roots.find((root) => root.slug === "vb-macd-state");
+  assert.ok(source);
+  const added = {
+    ...source,
+    slug: "vb-ribbon-cross-iwm",
+    familyId: "IWM-RIBBON-CROSS",
+    underlying: "IWM",
+    strategistId: "7a4f2a8e-232b-49b1-83cf-5e0d7a26c502",
+    executionPosture: "paper" as const,
+    quantity: 2,
+    maxEntriesPerSession: 1,
+    reentryPolicy: "disabled" as const,
+    channelSpecVersionId: "spec:research:vb-ribbon-cross-iwm:2026-08-17-v1",
+    channelSpecContentHash:
+      "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    configuration: {
+      ...source.configuration,
+      channelSlug: "vb-ribbon-cross-iwm",
+      accountId: source.accountId,
+      channelSpecVersionId: "spec:research:vb-ribbon-cross-iwm:2026-08-17-v1",
+      channelSpecContentHash:
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    },
+  };
+  const expanded = {
+    ...runtime,
+    roots: [...runtime.roots, added],
+    admissionPolicies: runtime.admissionPolicies.map((policy) =>
+      policy.id === added.domainId
+        ? {
+          ...policy,
+          maxOpenByUnderlying: { ...policy.maxOpenByUnderlying, IWM: 1 },
+          sameClockMaxByUnderlying: {
+            ...policy.sameClockMaxByUnderlying,
+            IWM: 1,
+          },
+          priorityBySlug: {
+            ...policy.priorityBySlug,
+            [added.slug]: added.priority,
+          },
+        }
+        : policy),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.deepEqual(validateReceiptBoundRc54Topology(expanded), []);
+  const lab = buildReceiptBoundRc54AdmissionPolicies(expanded)
+    .find((policy) => policy.id === added.domainId);
+  assert.equal(lab?.maxOpenByUnderlying.IWM, 1);
+  assert.equal(lab?.sameClockMaxByUnderlying.IWM, 1);
+
+  const overbroad = {
+    ...expanded,
+    admissionPolicies: expanded.admissionPolicies.map((policy) =>
+      policy.id === added.domainId
+        ? {
+          ...policy,
+          maxOpenByUnderlying: { ...policy.maxOpenByUnderlying, IWM: 2 },
+        }
+        : policy),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.throws(
+    () => buildReceiptBoundRc54AdmissionPolicies(overbroad),
+    /admission_underlying/,
+  );
 });
 
 check("route or topology changes are rejected by the temporary adapter", () => {
