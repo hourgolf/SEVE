@@ -291,6 +291,67 @@ check("LAB same-clock arbitration is deterministic within its own domain",
     ["lab-spy-primary", null],
   ]);
 
+const overflowPolicy: AdmissionDomainPolicy = {
+  ...policy("lab-canary", {
+    "lab-spy-primary": 1,
+    "lab-spy-overflow": 2,
+    "lab-spy-ineligible": 3,
+  }),
+  maxOpenByUnderlying: { SPY: 2, QQQ: 1, IWM: 0 },
+  maxOpenGlobal: 2,
+  sameClockMaxByUnderlying: { SPY: 1, QQQ: 1, IWM: 0 },
+  overflowCapacity: {
+    eligibleSlugs: ["lab-spy-overflow"],
+    maxOpenByUnderlying: { SPY: 2, QQQ: 1, IWM: 0 },
+    maxOpenGlobal: 3,
+    sameClockMaxByUnderlying: { SPY: 2, QQQ: 1, IWM: 0 },
+  },
+};
+const overflowState = buildAdmissionDomainsState({
+  open: [{
+    domainId: "lab-canary",
+    accountId: LAB_ACCOUNT_ID,
+    familyId: "QQQ-OPEN",
+    underlying: "QQQ",
+    occSymbol: "QQQ260727C00600000",
+  }],
+  sessionEntries: [],
+});
+const overflow = finalizeAdmissionDomains({
+  candidates: [
+    domainCandidate("lab-canary", "lab-spy-ineligible", "SPY-INELIGIBLE", "SPY", "SPY260727C00703000", 3),
+    domainCandidate("lab-canary", "lab-spy-overflow", "SPY-OVERFLOW", "SPY", "SPY260727C00702000", 3),
+    domainCandidate("lab-canary", "lab-spy-primary", "SPY-PRIMARY", "SPY", "SPY260727C00701000", 3),
+  ],
+  policies: new Map([["lab-canary", overflowPolicy]]),
+  state: overflowState,
+  globalPositionTruthComplete: true,
+  globalOrderTruthComplete: true,
+});
+check("only the named slug may use same-clock overflow while QQQ is open",
+  overflow.map((row) => [row.decision.slug, row.decision.blocked]), [
+    ["lab-spy-ineligible", "admission_domain_same_clock_collision"],
+    ["lab-spy-overflow", null],
+    ["lab-spy-primary", null],
+  ]);
+
+const sameOccOverflowState = buildAdmissionDomainsState({ open: [], sessionEntries: [] });
+const sameOccOverflow = finalizeAdmissionDomains({
+  candidates: [
+    domainCandidate("lab-canary", "lab-spy-overflow", "SPY-OVERFLOW", "SPY", sharedOcc, 4),
+    domainCandidate("lab-canary", "lab-spy-primary", "SPY-PRIMARY", "SPY", sharedOcc, 4),
+  ],
+  policies: new Map([["lab-canary", overflowPolicy]]),
+  state: sameOccOverflowState,
+  globalPositionTruthComplete: true,
+  globalOrderTruthComplete: true,
+});
+check("overflow never weakens same-OCC protection",
+  sameOccOverflow.map((row) => [row.decision.slug, row.decision.blocked]), [
+    ["lab-spy-overflow", "admission_domain_same_clock_collision"],
+    ["lab-spy-primary", null],
+  ]);
+
 const reentryState = buildAdmissionDomainsState({
   open: [],
   sessionEntries: [{

@@ -175,6 +175,15 @@ export function partialRemainder(rowQty: number, filledQty: number): { sold: num
 // sibling's share. These helpers make the late fill discoverable instead.
 export interface OrderLike { client_order_id: string; side: string; status: string; filled_qty: number; filled_avg_price: number }
 
+/** A broker-absent desk row may be booked closed only from a confirmed sell
+ * fill. A live option quote is a valuation, not proof that contracts left the
+ * account. Treating it as an exit allowed transiently incomplete Alpaca
+ * position snapshots to close the desk row while the broker lot remained live.
+ */
+export function confirmedReconciliationExit(input: { px: number; estimated: boolean }): boolean {
+  return Number.isFinite(input.px) && input.px > 0 && input.estimated === false;
+}
+
 // ---- ORDER-TAG current-lot cross-check (2026-07-13 session-1 audit) ---------
 // `allOrders` is newest-first and can contain several completed round trips for
 // the same channel + OCC. Averaging every buy and sell together produces the

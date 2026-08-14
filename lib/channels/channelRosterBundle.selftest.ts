@@ -309,6 +309,58 @@ check("quantity-only change does not materialize an implicit paper posture", () 
     spec.slug === "orb-ustop-ctl")?.executionPosture, undefined);
 });
 
+check("priority changes are receipt-visible and remain bound to admission policy", () => {
+  const reprioritized = draft();
+  reprioritized.changes = [
+    { slug: "orb-ustop-ctl", priority: 2 },
+    { slug: "grind-v3", priority: 4 },
+  ];
+  reprioritized.admissionPolicyUpserts = active.manifest.admissionPolicies.map(
+    (policy) => policy.id !== "rc54-control" ? policy : {
+      ...structuredClone(policy),
+      priorityBySlug: {
+        ...policy.priorityBySlug,
+        "orb-ustop-ctl": 2,
+        "grind-v3": 4,
+      },
+    },
+  );
+  const result = buildChannelRosterBundlePreview({
+    active,
+    registry: registry(),
+    draft: reprioritized,
+    envelope: envelope(),
+    live: flat(),
+    collectionStates: collectionStates(),
+  });
+  assert.equal(result.state, "ready-for-worker-ack", result.blockers.join(";"));
+  assert.equal(result.candidate?.channelSpecs.find((spec) =>
+    spec.slug === "orb-ustop-ctl")?.priority, 2);
+  assert.ok(result.diffs.some((diff) =>
+    diff.slug === "orb-ustop-ctl"
+    && diff.fields.some((field) => field.field === "priority")));
+  assert.ok(result.diffs.some((diff) =>
+    diff.slug === "admission:rc54-control"
+    && diff.source === "admission-policy"));
+});
+
+check("invalid priority changes fail closed", () => {
+  const invalid = draft();
+  invalid.changes = [{ slug: "orb-ustop-ctl", priority: 0 }];
+  const result = buildChannelRosterBundlePreview({
+    active,
+    registry: registry(),
+    draft: invalid,
+    envelope: envelope(),
+    live: flat(),
+    collectionStates: collectionStates(),
+  });
+  assert.ok(result.blockers.includes(
+    "bundle:priority_invalid:orb-ustop-ctl",
+  ));
+  assert.equal(result.candidate, null);
+});
+
 check("portfolio overrun blocks an otherwise valid atomic roster", () => {
   const constrained = envelope();
   const paper3 = constrained.accounts.find((limit) =>

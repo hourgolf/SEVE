@@ -127,6 +127,71 @@ function tradeLogicalId(trade: LogicalTrade): string {
   return trade.opportunityId ? `opportunity:${trade.opportunityId}` : trade.id;
 }
 
+/**
+ * Manager shadows are persisted per position row, while a scaled trade can be
+ * represented by a root row plus one or more runner/tranche rows. Decision
+ * evidence must remain one row per logical trade, so combine every arm across
+ * the rows that belong to the same logical trade before comparing it with the
+ * native result.
+ */
+export function buildLogicalManagerPaths(
+  managerRuns: readonly ChannelManagerRunRow[],
+  tradeByPosition: ReadonlyMap<string, LogicalTrade>,
+): AtlasManagerPath[] {
+  interface Group {
+    trade: LogicalTrade;
+    managerId: string;
+    managerVersion: string;
+    runs: ChannelManagerRunRow[];
+  }
+  const groups = new Map<string, Group>();
+  for (const run of managerRuns) {
+    const trade = tradeByPosition.get(run.position_id);
+    if (!trade) continue;
+    const opportunityId = tradeLogicalId(trade);
+    const managerVersion = `${run.manager_policy_version}:${run.shadow_book_version}`;
+    const key = `${opportunityId}\u0000${run.manager_id}\u0000${managerVersion}`;
+    const group = groups.get(key) ?? {
+      trade,
+      managerId: run.manager_id,
+      managerVersion,
+      runs: [],
+    };
+    group.runs.push(run);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map(({ trade, managerId, managerVersion, runs }) => {
+    const terminal = runs.every((run) => run.status === "terminal");
+    const active = runs.some((run) => run.status === "active");
+    const status: AtlasManagerPath["status"] = terminal ? "terminal" : active ? "active" : "censored";
+    const completeEconomics = terminal && runs.every((run) => {
+      const quantity = number(run.original_qty);
+      return number(run.terminal_pnl) != null && number(run.entry_price) != null
+        && quantity != null && quantity > 0;
+    });
+    const quantity = completeEconomics
+      ? runs.reduce((sum, run) => sum + (number(run.original_qty) ?? 0), 0) : null;
+    const pnl = completeEconomics
+      ? runs.reduce((sum, run) => sum + (number(run.terminal_pnl) ?? 0), 0) : null;
+    const entryDebit = completeEconomics
+      ? runs.reduce((sum, run) => sum
+        + (number(run.entry_price) ?? 0) * (number(run.original_qty) ?? 0) * 100, 0) : null;
+    return {
+      opportunityId: tradeLogicalId(trade),
+      channel: trade.channelSlug,
+      configurationEra: channelConfigurationEra(trade.configuration),
+      managerId,
+      managerVersion,
+      status,
+      resultPerContractUsd: pnl != null && quantity != null && quantity > 0 ? pnl / quantity : null,
+      returnPct: pnl != null && entryDebit != null && entryDebit > 0 ? pnl / entryDebit * 100 : null,
+      captureRatio: null,
+    };
+  }).sort((left, right) => left.opportunityId.localeCompare(right.opportunityId)
+    || left.managerId.localeCompare(right.managerId)
+    || left.managerVersion.localeCompare(right.managerVersion));
+}
+
 export function channelConfigurationEra(configuration: LogicalTrade["configuration"]): string {
   if (configuration.channelSpecVersionId) {
     return `channel-spec:${configuration.channelSpecVersionId}`;
@@ -408,23 +473,7 @@ export function adaptDecisionAtlasSnapshot(input: {
       sourceRefs: [`virtual_trades:${virtual.signal_id}`, "limitation:signal-row-missing"],
     });
   }
-  const managerPaths: AtlasManagerPath[] = snapshot.managerRuns.flatMap((run) => {
-    const trade = tradeByPosition.get(run.position_id);
-    if (!trade) return [];
-    const quantity = number(run.original_qty);
-    const result = number(run.terminal_pnl);
-    return [{
-      opportunityId: tradeLogicalId(trade),
-      channel: run.channel_slug,
-      configurationEra: channelConfigurationEra(trade.configuration),
-      managerId: run.manager_id,
-      managerVersion: `${run.manager_policy_version}:${run.shadow_book_version}`,
-      status: run.status,
-      resultPerContractUsd: result != null && quantity != null && quantity > 0 ? result / quantity : null,
-      returnPct: number(run.terminal_return_pct),
-      captureRatio: null,
-    }];
-  });
+  const managerPaths = buildLogicalManagerPaths(snapshot.managerRuns, tradeByPosition);
   return {
     generatedAt: input.generatedAt,
     throughSession: input.throughSession,

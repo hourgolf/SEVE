@@ -19,7 +19,7 @@
 process.env.ALPACA_KEY ??= "selftest";
 process.env.ALPACA_SECRET ??= "selftest";
 process.env.SUPABASE_URL ??= "http://localhost";
-const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid, currentLotOrderTagPnl } = await import("./exitRules.js");
+const { premiumExitReason, trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid, currentLotOrderTagPnl, confirmedReconciliationExit } = await import("./exitRules.js");
 const { groupChannelsByAccount, resolveDefaultAccount, unresolvedAccount, acctCanEnter, acctCanManage, SYNTH_DEFAULT } = await import("./routing.js");
 const { makeExitGuard, sweepExitAllowed, mapOpenPositions } = await import("./exitGuard.js");
 const { shadowLifecycleAction } = await import("./shadowManageModel.js");
@@ -465,6 +465,13 @@ check("1b#6: missing bid → null", freshExecutableBid(undefined, 5_000), null);
 check("1b#6: null bid → null", freshExecutableBid(null, 5_000), null);
 check("1b#6: negative/garbage bid → null", freshExecutableBid(-1, 5_000), null);
 check("1b#6: explicit tighter maxAge is honored", freshExecutableBid(1.25, 40_000, 30_000), null);
+
+// A quote is not custody evidence. Broker-absent reconciliation can close a
+// desk row only when the exit price came from a confirmed sell fill.
+check("reconcile: confirmed sell fill may book", confirmedReconciliationExit({ px: 1.21, estimated: false }), true);
+check("reconcile: live-mark estimate may not book", confirmedReconciliationExit({ px: 1.38, estimated: true }), false);
+check("reconcile: zero-price evidence may not book", confirmedReconciliationExit({ px: 0, estimated: false }), false);
+check("reconcile: non-finite evidence may not book", confirmedReconciliationExit({ px: Number.NaN, estimated: false }), false);
 
 // premiumExitReason on BID inputs — the function is PURE and price-agnostic (unchanged); these
 // pin the new CALLER CONTRACT: the sweep passes the fresh executable BID as `mark` and a

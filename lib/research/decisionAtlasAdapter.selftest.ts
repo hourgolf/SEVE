@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import type { ConfigurationIdentity } from "../profitability/profitabilityLedger";
+import type { ConfigurationIdentity, LogicalTrade } from "../profitability/profitabilityLedger";
+import type { ChannelManagerRunRow } from "./channelManagerEvidence";
 import {
+  buildLogicalManagerPaths,
   channelConfigurationEra,
   isExactCurrentChannelConfiguration,
 } from "./decisionAtlasAdapter";
@@ -32,5 +34,44 @@ assert.equal(isExactCurrentChannelConfiguration(firstReceipt, "spec-orb"), true)
 assert.equal(isExactCurrentChannelConfiguration(secondReceipt, "spec-orb"), true);
 assert.equal(isExactCurrentChannelConfiguration(changedChannel, "spec-orb"), false,
   "a real channel-spec change must reset the exact-current cohort");
+
+const logicalTrade = {
+  id: "trade:root",
+  opportunityId: "opportunity-1",
+  channelSlug: "grind-v3",
+  configuration: firstReceipt,
+} as LogicalTrade;
+const run = (overrides: Partial<ChannelManagerRunRow>): ChannelManagerRunRow => ({
+  id: "run-root",
+  position_id: "root",
+  channel_slug: "grind-v3",
+  manager_id: "LOCK30/30",
+  manager_policy_version: "policy-v1",
+  shadow_book_version: "book-v2",
+  configuration_epoch_id: "epoch-a",
+  status: "terminal",
+  evidence_state: "terminal",
+  entry_at: "2026-08-13T14:00:00.000Z",
+  entry_price: 1,
+  original_qty: 2,
+  economic_mode: "paper",
+  peak_return_pct: 50,
+  terminal_at: "2026-08-13T14:30:00.000Z",
+  terminal_return_pct: 25,
+  terminal_pnl: 50,
+  censored_at: null,
+  censor_code: null,
+  ...overrides,
+});
+const logicalPaths = buildLogicalManagerPaths([
+  run({}),
+  run({ id: "run-runner", position_id: "runner", entry_price: 2, original_qty: 1,
+    terminal_pnl: -20, terminal_return_pct: -10 }),
+], new Map([["root", logicalTrade], ["runner", logicalTrade]]));
+assert.equal(logicalPaths.length, 1, "root and runner arms must form one logical manager path");
+assert.equal(logicalPaths[0]?.resultPerContractUsd, 10,
+  "logical manager result per contract must use summed P&L and quantity");
+assert.equal(logicalPaths[0]?.returnPct, 7.5,
+  "logical manager return must use summed P&L over summed entry debit");
 
 console.log("decision-atlas adapter selftest: PASS");

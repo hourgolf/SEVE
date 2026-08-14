@@ -161,6 +161,14 @@ export interface AdmissionPolicySpec {
   sameClockMaxByUnderlying: Record<string, number>;
   priorityBySlug: Record<string, number>;
   crossDomainSameOcc: "block" | "allow-with-receipt";
+  /** Optional paper-only overflow envelope. Baseline limits remain authoritative
+   * for every slug not explicitly listed here. */
+  overflowCapacity?: {
+    eligibleSlugs: string[];
+    maxOpenByUnderlying: Record<string, number>;
+    maxOpenGlobal: number;
+    sameClockMaxByUnderlying: Record<string, number>;
+  };
 }
 
 export interface ReleaseManifest {
@@ -629,6 +637,32 @@ function compileValidation(
     if (canonicalJson(expectedPrioritySlugs) !== canonicalJson(actualPrioritySlugs)) {
       collisionErrors.push(`${policy.id}:priority_roster`);
     }
+    const overflow = policy.overflowCapacity;
+    if (overflow) {
+      const eligible = [...new Set(overflow.eligibleSlugs)].sort();
+      if (!eligible.length
+          || canonicalJson(eligible) !== canonicalJson([...overflow.eligibleSlugs].sort())
+          || eligible.some((slug) => !expectedPrioritySlugs.includes(slug))) {
+        collisionErrors.push(`${policy.id}:overflow_eligible_roster`);
+      }
+      if (!Number.isInteger(overflow.maxOpenGlobal)
+          || overflow.maxOpenGlobal <= policy.maxOpenGlobal
+          || overflow.maxOpenGlobal > policy.maxOpenGlobal + 1) {
+        collisionErrors.push(`${policy.id}:overflow_global_limit`);
+      }
+      for (const underlying of Object.keys(policy.maxOpenByUnderlying)) {
+        const baseOpen = policy.maxOpenByUnderlying[underlying] ?? 0;
+        const overflowOpen = overflow.maxOpenByUnderlying[underlying] ?? baseOpen;
+        const baseClock = policy.sameClockMaxByUnderlying[underlying] ?? 0;
+        const overflowClock = overflow.sameClockMaxByUnderlying[underlying] ?? baseClock;
+        if (!Number.isInteger(overflowOpen) || overflowOpen < baseOpen
+            || overflowOpen > baseOpen + 1
+            || !Number.isInteger(overflowClock) || overflowClock < baseClock
+            || overflowClock > overflowOpen) {
+          collisionErrors.push(`${policy.id}:overflow_underlying_limit:${underlying}`);
+        }
+      }
+    }
     const priorityKeys = new Set<string>();
     for (const spec of roots) {
       const key = `${spec.symbolScope[0] ?? ""}:${spec.priority}`;
@@ -701,6 +735,18 @@ export function compileReleaseManifest(
       maxOpenByUnderlying: Object.fromEntries(Object.entries(policy.maxOpenByUnderlying).sort()),
       sameClockMaxByUnderlying: Object.fromEntries(Object.entries(policy.sameClockMaxByUnderlying).sort()),
       priorityBySlug: Object.fromEntries(Object.entries(policy.priorityBySlug).sort()),
+      ...(policy.overflowCapacity ? {
+        overflowCapacity: {
+          eligibleSlugs: [...policy.overflowCapacity.eligibleSlugs].sort(),
+          maxOpenByUnderlying: Object.fromEntries(
+            Object.entries(policy.overflowCapacity.maxOpenByUnderlying).sort(),
+          ),
+          maxOpenGlobal: policy.overflowCapacity.maxOpenGlobal,
+          sameClockMaxByUnderlying: Object.fromEntries(
+            Object.entries(policy.overflowCapacity.sameClockMaxByUnderlying).sort(),
+          ),
+        },
+      } : {}),
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
   const manifestSemantic = {

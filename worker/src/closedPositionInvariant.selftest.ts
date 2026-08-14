@@ -7,6 +7,7 @@ function truth(name: string, value: unknown): void {
 }
 
 const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+const execute = readFileSync(new URL("./execute.ts", import.meta.url), "utf8");
 const manual = readFileSync(new URL("../../app/api/close-position/route.ts", import.meta.url), "utf8");
 const legacy = readFileSync(new URL("../../supabase/functions/paper-trader/index.ts", import.meta.url), "utf8");
 const dispatcher = readFileSync(new URL("../../supabase/functions/paper-trader/index.dispatcher.draft.ts", import.meta.url), "utf8");
@@ -20,5 +21,7 @@ truth("legacy close clears unrealized", legacy.includes('unrealized_pnl: 0,\n   
 truth("dispatcher close paths clear unrealized", (dispatcher.match(/status: "closed"[^\n]+unrealized_pnl: 0/g) ?? []).length >= 3);
 truth("migration backfills closed rows", migration.includes("where status = 'closed'") && migration.includes("set unrealized_pnl = 0"));
 truth("database enforces closed-zero invariant", migration.includes("positions_closed_unrealized_zero") && migration.includes("coalesce(unrealized_pnl, 1) = 0"));
+truth("broker-absent reconcile estimate remains open", (execute.match(/broker_flat_without_confirmed_sell/g) ?? []).length >= 2);
+truth("both reconciliation paths reject estimated quotes", (execute.match(/if \(estimated && mark > 0\) \{/g) ?? []).length >= 2);
 
 console.log(`closed-position-invariant-selftest: ${passed}/${passed} PASS`);

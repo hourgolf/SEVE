@@ -52,6 +52,8 @@ check("hosted workflow retains independent verification", workflow.includes("dat
 check("hosted workflow has redundant after-hours pass", workflow.includes('cron: "30 23 * * 1-5"'), true);
 check("hosted workflow suppresses event writes", workflow.includes("--virtual-trades-only"), true);
 check("hosted workflow independently verifies publication", workflow.includes("verify-shadow-rebuild:hosted"), true);
+check("hosted workflow preserves fail-closed diagnostics", workflow.includes("if: always()")
+  && workflow.includes("if-no-files-found: warn"), true);
 check("hosted workflow remains credential-minimal", /DATABENTO|ALPACA|R2_/.test(workflow), false);
 
 let invalid = false;
