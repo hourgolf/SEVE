@@ -24,6 +24,7 @@ export interface ChannelRosterTarget {
   slug: string;
   membership?: "include" | "exclude";
   executionPosture?: "paper" | "observe-only";
+  priority?: number;
   quantity?: number;
   maxRiskUsd?: number;
   collisionDomain?: string;
@@ -84,7 +85,7 @@ function fieldsChanged(
   before: ChannelSpecVersionDraft,
   after: ChannelSpecVersionDraft,
 ): ChannelRosterBundleDiff["fields"] {
-  return ["executionPosture", "quantity", "maxDebitUsd", "riskLimits", "collisionDomain"]
+  return ["executionPosture", "priority", "quantity", "maxDebitUsd", "riskLimits", "collisionDomain"]
     .map((field) => ({
       field,
       before: canonicalJson(
@@ -114,6 +115,7 @@ function applyTarget(input: {
     ...structuredClone(input.source),
     id: `spec:bundle:${input.bundle.id}:${input.source.slug}`,
     parentVersionId: input.source.id,
+    priority: input.target.priority ?? input.source.priority,
     quantity,
     maxDebitUsd,
     riskLimits: {
@@ -200,7 +202,8 @@ export function buildChannelRosterBundlePreview(input: {
     }
     if (target.membership === "exclude") {
       if (!active) blockers.push(`bundle:exclude_not_active:${target.slug}`);
-      else if (target.executionPosture != null || target.quantity != null
+      else if (target.executionPosture != null || target.priority != null
+          || target.quantity != null
           || target.maxRiskUsd != null || target.collisionDomain != null) {
         blockers.push(`bundle:exclude_must_be_standalone:${target.slug}`);
       } else {
@@ -217,12 +220,18 @@ export function buildChannelRosterBundlePreview(input: {
       blockers.push(`bundle:membership_invalid:${target.slug}`);
       continue;
     }
-    if (target.executionPosture == null && target.quantity == null
+    if (target.executionPosture == null && target.priority == null
+        && target.quantity == null
         && target.maxRiskUsd == null && target.collisionDomain == null) {
       blockers.push(`bundle:empty_change:${target.slug}`);
       continue;
     }
     const quantity = target.quantity ?? source.quantity;
+    const priority = target.priority ?? source.priority;
+    if (!Number.isInteger(priority) || priority < 1) {
+      blockers.push(`bundle:priority_invalid:${target.slug}`);
+      continue;
+    }
     if (!Number.isInteger(quantity) || quantity < 1
         || quantity > MAX_QUANTITY) {
       blockers.push(`bundle:quantity_invalid:${target.slug}`);
