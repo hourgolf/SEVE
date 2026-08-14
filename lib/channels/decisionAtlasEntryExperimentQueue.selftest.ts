@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { compileReleaseManifest } from "./channelControlPlane.js";
 import {
-  buildMorguePriorityDraft,
+  account3CapacityReplayVariants,
+  account3PriorityPolicy,
+  buildAccount3PriorityDraft,
   ENTRY_EXPERIMENT_QUEUE,
-  morgueCapacityReplayVariants,
-  morguePriorityPolicy,
 } from "./decisionAtlasEntryExperimentQueue.js";
 import {
   RC54_CONTROL_PLANE_FIXTURE,
@@ -15,10 +15,23 @@ const base = structuredClone(RC54_CONTROL_PLANE_FIXTURE);
 const orb = base.channelSpecs.find((row) => row.slug === "orb-ustop-ctl");
 const grind = base.channelSpecs.find((row) => row.slug === "grind-v3");
 assert.ok(orb && grind);
+const breakout = {
+  ...structuredClone(grind),
+  id: "spec:fixture:breakout-alt-v3-itm",
+  channelId: "11111111-2222-4333-8444-555555555555",
+  slug: "breakout-alt-v3-itm",
+  strategyIdentity: "fixture:breakout-alt-v3-itm",
+  signalVersion: "fixture:breakout-alt-v3-itm:v1",
+  familyId: "SPY-BREAKOUT-ITM",
+  accountRole: "PAPER-3",
+  collisionDomain: "rc54-morgue",
+  priority: 1,
+};
 orb.collisionDomain = "rc54-morgue";
 grind.collisionDomain = "rc54-morgue";
 orb.priority = 4;
 grind.priority = 2;
+base.channelSpecs.push(breakout);
 base.admissionPolicies = [
   ...base.admissionPolicies.map((policy) => ({
     ...policy,
@@ -36,28 +49,34 @@ base.admissionPolicies = [
     sameOccOpenMax: 1,
     reentry: "bounded",
     sameClockMaxByUnderlying: { SPY: 1, QQQ: 1, IWM: 0 },
-    priorityBySlug: { "grind-v3": 2, "orb-ustop-ctl": 4 },
+    priorityBySlug: {
+      "breakout-alt-v3-itm": 1,
+      "grind-v3": 2,
+      "orb-ustop-ctl": 4,
+    },
     crossDomainSameOcc: "allow-with-receipt",
   },
 ];
 const active = compileReleaseManifest(base);
-const policy = morguePriorityPolicy(active);
-assert.equal(policy.priorityBySlug["orb-ustop-ctl"], 2);
-assert.equal(policy.priorityBySlug["grind-v3"], 4);
+const policy = account3PriorityPolicy(active);
+assert.equal(policy.priorityBySlug["orb-ustop-ctl"], 1);
+assert.equal(policy.priorityBySlug["breakout-alt-v3-itm"], 2);
+assert.equal(policy.priorityBySlug["grind-v3"], 3);
 assert.equal(policy.sameOccOpenMax, 1);
 
-const draft = buildMorguePriorityDraft({
+const draft = buildAccount3PriorityDraft({
   active,
   operatorId: "22222222-2222-4222-8222-222222222222",
   createdAt: "2026-08-13T20:15:00.000Z",
   evidenceRefs: ["decision-atlas:2026-08-13:entry-drift"],
 });
 assert.deepEqual(draft.changes, [
-  { slug: "orb-ustop-ctl", priority: 2 },
-  { slug: "grind-v3", priority: 4 },
+  { slug: "orb-ustop-ctl", priority: 1 },
+  { slug: "breakout-alt-v3-itm", priority: 2 },
+  { slug: "grind-v3", priority: 3 },
 ]);
 assert.match(draft.id, /^[0-9a-f-]{36}$/);
-assert.equal(morgueCapacityReplayVariants(active).length, 4);
+assert.equal(account3CapacityReplayVariants(active).length, 4);
 assert.ok(ENTRY_EXPERIMENT_QUEUE.some((row) =>
   row.channel === "orb-ustop-ctl" && row.lane === "admission"));
 assert.equal(RC54_CONTROL_PLANE_SPECS.length > 0, true);

@@ -23,7 +23,7 @@ export const ENTRY_EXPERIMENT_QUEUE: readonly EntryExperimentQueueItem[] =
       channel: "orb-ustop-ctl",
       lane: "admission",
       state: "configuration-draft",
-      change: "Move ORB ahead of GRIND for simultaneous SPY candidates in MORGUE; keep same-OCC protection.",
+      change: "Set Account 3 SPY priority to ORB, then BREAKOUT, then GRIND; keep same-OCC protection.",
       heldFixed: ["signal", "entry parameters", "exit", "quantity", "account"],
       evidence: "Its two blocked same-clock paths totaled +$20/ct in the 2026-08-13 mid-basis shadow.",
     },
@@ -89,36 +89,39 @@ export function deterministicQueueUuid(seed: string): string {
   ].join("-");
 }
 
-export function morguePriorityPolicy(
+export function account3PriorityPolicy(
   active: CompiledReleaseManifest,
 ): AdmissionPolicySpec {
   const policy = active.manifest.admissionPolicies.find((row) =>
     row.id === "rc54-morgue");
-  if (!policy) throw new Error("active MORGUE admission policy is missing");
-  for (const slug of ["orb-ustop-ctl", "grind-v3"]) {
+  if (!policy) throw new Error("active Account 3 admission policy is missing");
+  for (const slug of [
+    "orb-ustop-ctl", "breakout-alt-v3-itm", "grind-v3",
+  ]) {
     const spec = active.channelSpecs.find((row) => row.slug === slug);
     if (!spec || spec.collisionDomain !== policy.id
         || spec.symbolScope[0] !== "SPY") {
-      throw new Error(`${slug}: active MORGUE identity drifted`);
+      throw new Error(`${slug}: active Account 3 identity drifted`);
     }
   }
   return {
     ...structuredClone(policy),
     priorityBySlug: {
       ...policy.priorityBySlug,
-      "orb-ustop-ctl": 2,
-      "grind-v3": 4,
+      "orb-ustop-ctl": 1,
+      "breakout-alt-v3-itm": 2,
+      "grind-v3": 3,
     },
   };
 }
 
-export function buildMorguePriorityDraft(input: {
+export function buildAccount3PriorityDraft(input: {
   active: CompiledReleaseManifest;
   operatorId: string;
   createdAt: string;
   evidenceRefs: string[];
 }): ChannelRosterBundleDraft {
-  const policy = morguePriorityPolicy(input.active);
+  const policy = account3PriorityPolicy(input.active);
   const id = deterministicQueueUuid([
     DECISION_ATLAS_ENTRY_EXPERIMENT_QUEUE_VERSION,
     input.active.manifest.contentHash,
@@ -129,22 +132,23 @@ export function buildMorguePriorityDraft(input: {
     baseManifestId: input.active.manifest.id,
     baseManifestContentHash: input.active.manifest.contentHash,
     changes: [
-      { slug: "orb-ustop-ctl", priority: 2 },
-      { slug: "grind-v3", priority: 4 },
+      { slug: "orb-ustop-ctl", priority: 1 },
+      { slug: "breakout-alt-v3-itm", priority: 2 },
+      { slug: "grind-v3", priority: 3 },
     ],
     admissionPolicyUpserts: [policy],
     reason:
-      "Move orb-ustop-ctl ahead of grind-v3 for same-clock SPY admission in MORGUE while preserving breakout-alt-v3-itm as the first SPY candidate. Preserve entry formulas, managers, sizing, routing, same-OCC protection, and all other capacity limits.",
+      "Set Account 3 same-clock SPY priority to orb-ustop-ctl, then breakout-alt-v3-itm, then grind-v3. Preserve entry formulas, managers, sizing, routing, same-OCC protection, and all other capacity limits.",
     evidenceRefs: [...new Set(input.evidenceRefs)].sort(),
     operatorId: input.operatorId,
     createdAt: input.createdAt,
   };
 }
 
-export function morgueCapacityReplayVariants(
+export function account3CapacityReplayVariants(
   active: CompiledReleaseManifest,
 ): Array<Record<string, unknown>> {
-  const policy = morguePriorityPolicy(active);
+  const policy = account3PriorityPolicy(active);
   return [
     {
       id: "priority-only",

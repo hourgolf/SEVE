@@ -1,4 +1,4 @@
-// Build and optionally persist one authority-dark MORGUE priority draft plus
+// Build and optionally persist one authority-dark Account 3 priority draft plus
 // the channel-specific entry/exit research queue. This script cannot approve,
 // activate, deploy, mutate a worker, or place an order.
 
@@ -10,14 +10,17 @@ import { isDeskOperator } from "../lib/auth/operator";
 import { loadActiveCompiledControlPlane } from "../lib/channels/channelControlPlanePersistence";
 import { channelControlMutationWindow } from "../lib/channels/channelControlMutationWindow";
 import {
-  buildMorguePriorityDraft,
+  account3CapacityReplayVariants,
+  buildAccount3PriorityDraft,
   DECISION_ATLAS_ENTRY_EXPERIMENT_QUEUE_VERSION,
   deterministicQueueUuid,
   ENTRY_EXPERIMENT_QUEUE,
-  morgueCapacityReplayVariants,
 } from "../lib/channels/decisionAtlasEntryExperimentQueue";
 import { buildChannelRosterBundlePreview } from "../lib/channels/channelRosterBundle";
-import { prepareRosterBundleDraftWrite } from "../lib/channels/channelRosterBundlePersistence";
+import {
+  prepareRosterBundleDraftWrite,
+  prepareRosterBundleLifecycleWrite,
+} from "../lib/channels/channelRosterBundlePersistence";
 import { loadChannelRosterBundleServerContext } from "../lib/channels/channelRosterBundleServerContext";
 import { createServerSupabaseClient } from "./serverSupabase";
 
@@ -28,6 +31,9 @@ const arg = (name: string, fallback: string): string => {
 };
 const publish = process.argv.includes("--publish-draft");
 const acknowledged = process.argv.includes("--ack-authority-dark");
+const supersedeIndex = process.argv.indexOf("--supersede-bundle-id");
+const supersedeBundleId = supersedeIndex >= 0 && process.argv[supersedeIndex + 1]
+  ? String(process.argv[supersedeIndex + 1]) : null;
 const envFile = resolve(arg(
   "env-file",
   process.env.SEVE_ENV_FILE ?? ".env.local",
@@ -60,14 +66,14 @@ function markdown(packet: Record<string, unknown>): string {
     "",
     "**PREPARED ONLY · NO ACTIVATION · NO ORDER AUTHORITY**",
     "",
-    `MORGUE priority draft: **${preview.state}**. `
-      + "ORB moves ahead of GRIND for simultaneous SPY candidates; BREAKOUT stays first and every other entry, exit, size, account, and collision setting stays fixed.",
+    `Account 3 priority draft: **${preview.state}**. `
+      + "Account 3 priority becomes ORB, then BREAKOUT, then GRIND; every other entry, exit, size, account, and collision setting stays fixed.",
     "",
     "| Channel | Lane | Queued change | Held fixed |",
     "|---|---|---|---|",
     ...queue.map((row) => `| \`${row.channel}\` | ${row.lane} | ${row.change} | ${row.heldFixed.join(", ")} |`),
     "",
-    "## MORGUE capacity replay",
+    "## Account 3 capacity replay",
     "",
     ...variants.map((row) => `- **${row.id}:** ${row.description}`),
     "",
@@ -102,7 +108,7 @@ async function main(): Promise<void> {
     "decision-atlas:channel-native-shadow-evaluation:2026-08-13",
     ...context.evidenceRefs,
   ];
-  const draft = buildMorguePriorityDraft({
+  const draft = buildAccount3PriorityDraft({
     active: activeRead.compiled,
     operatorId: operator.id,
     createdAt: generatedAt,
@@ -124,6 +130,7 @@ async function main(): Promise<void> {
   }
 
   let storageReceipt: unknown = null;
+  let supersessionReceipt: unknown = null;
   if (publish) {
     const write = prepareRosterBundleDraftWrite({
       draft,
@@ -158,6 +165,46 @@ async function main(): Promise<void> {
         configurationEpochId: existing.data.configuration_epoch_id,
       };
     } else storageReceipt = stored.data;
+
+    if (supersedeBundleId) {
+      if (supersedeBundleId === draft.id) {
+        throw new Error("a queue draft cannot supersede itself");
+      }
+      const old = await sb.from("channel_roster_bundle_current")
+        .select("id,state,order_authority,runtime_mutation_authorized")
+        .eq("id", supersedeBundleId).single();
+      if (old.error) throw new Error(`superseded draft read failed: ${old.error.message}`);
+      if (old.data.order_authority !== false
+          || old.data.runtime_mutation_authorized !== false) {
+        throw new Error("superseded draft unexpectedly carries runtime authority");
+      }
+      if (old.data.state === "superseded") {
+        supersessionReceipt = { state: "already-superseded", id: old.data.id };
+      } else {
+        if (!["draft", "validated"].includes(old.data.state)) {
+          throw new Error(`superseded draft has incompatible state: ${old.data.state}`);
+        }
+        const transition = prepareRosterBundleLifecycleWrite({
+          receiptId: deterministicQueueUuid(
+            `entry-queue-supersession:${supersedeBundleId}:${draft.id}`,
+          ),
+          bundleId: supersedeBundleId,
+          targetState: "superseded",
+          successorBundleId: draft.id,
+          reason:
+            "Operator corrected Account 3 priority to orb-ustop-ctl, then breakout-alt-v3-itm, then grind-v3.",
+          evidenceRefs,
+          operatorId: operator.id,
+          effectiveAt: new Date().toISOString(),
+        });
+        const transitioned = await sb.rpc(transition.rpc, transition.args)
+          .abortSignal(AbortSignal.timeout(8_000)).single();
+        if (transitioned.error) {
+          throw new Error(`old queue supersession rejected: ${transitioned.error.message}`);
+        }
+        supersessionReceipt = transitioned.data;
+      }
+    }
   }
 
   const packet = {
@@ -169,9 +216,10 @@ async function main(): Promise<void> {
       draft,
       preview,
       storageReceipt,
+      supersessionReceipt,
     },
     queue: ENTRY_EXPERIMENT_QUEUE,
-    capacityReplay: morgueCapacityReplayVariants(activeRead.compiled),
+    capacityReplay: account3CapacityReplayVariants(activeRead.compiled),
     authority: {
       configurationDraftWrite: publish,
       activation: false,
@@ -194,7 +242,7 @@ async function main(): Promise<void> {
     orderAuthority: false,
   }, null, 2)}\n`);
   console.log(`prepare-entry-experiment-queue: PASS · ${publish ? "draft persisted" : "preview only"}`);
-  console.log(`  priority: breakout-alt-v3-itm 1 · orb-ustop-ctl 2 · grind-v3 4`);
+  console.log(`  Account 3 priority: orb-ustop-ctl 1 · breakout-alt-v3-itm 2 · grind-v3 3`);
   console.log(`  queue items: ${ENTRY_EXPERIMENT_QUEUE.length}`);
   console.log(`  output: ${outDir}`);
 }
