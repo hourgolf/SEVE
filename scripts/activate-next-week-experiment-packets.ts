@@ -663,7 +663,8 @@ async function main(): Promise<void> {
     finalManifest: {
       id: final.manifest.id,
       contentHash: final.manifest.contentHash,
-      configurationEpochId: final.workerProjection.configurationEpochId,
+      configurationEpochId: buildShadowRuntimeProjection(final)
+        .configurationEpochId,
     },
     verified: {
       grindMaxEntriesPerSession: grind.entryParameters.maxEntriesPerSession,
@@ -685,7 +686,9 @@ async function main(): Promise<void> {
     `${createHash("sha256").update(body).digest("hex")}  activation-receipt.json\n`);
   console.log("activate-next-week-experiment-packets: PASS · 2 experiments active");
   console.log(`  active manifest: ${final.manifest.contentHash}`);
-  console.log(`  configuration epoch: ${final.workerProjection.configurationEpochId}`);
+  console.log(`  configuration epoch: ${
+    buildShadowRuntimeProjection(final).configurationEpochId
+  }`);
   console.log(`  receipt: ${resolve(outputDir, "activation-receipt.json")}`);
   console.log("  historical evidence mutation: false · order authority: false");
 }
