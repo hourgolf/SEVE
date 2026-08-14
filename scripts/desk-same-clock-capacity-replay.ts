@@ -98,9 +98,11 @@ function withAccount3Priority(
 function pairedSameClock(
   policies: DeskReplayPolicy[],
   expandUnderlyingCapacity: boolean,
+  domainIds = new Set(policies.map((policy) => policy.id)),
 ): DeskReplayPolicy[] {
   return policies.map((policy) => {
     const copy = structuredClone(policy);
+    if (!domainIds.has(copy.id)) return copy;
     for (const underlying of Object.keys(copy.sameClockMaxByUnderlying)) {
       if ((copy.maxOpenByUnderlying[underlying] ?? 0) < 1) continue;
       copy.sameClockMaxByUnderlying[underlying] = 2;
@@ -111,6 +113,18 @@ function pairedSameClock(
       }
     }
     if (expandUnderlyingCapacity) copy.maxOpenGlobal = Math.max(3, copy.maxOpenGlobal);
+    return copy;
+  });
+}
+
+function prioritizeSlug(
+  policies: DeskReplayPolicy[],
+  domainId: string,
+  slug: string,
+): DeskReplayPolicy[] {
+  return policies.map((policy) => {
+    const copy = structuredClone(policy);
+    if (copy.id === domainId) copy.priorityBySlug[slug] = 0;
     return copy;
   });
 }
@@ -153,6 +167,9 @@ function markdown(packet: Record<string, any>): string {
   const rows = packet.comparisons as Array<Record<string, any>>;
   const incremental = new Map((packet.capacityComparisons as Array<Record<string, any>>)
     .map((row) => [row.variantId, row]));
+  const isolated = packet.capacityComparisons as Array<Record<string, any>>;
+  const priority = packet.priorityComparisons as Array<Record<string, any>>;
+  const channelCapacity = packet.channelCapacityComparisons as Array<Record<string, any>>;
   return [
     "# Desk-wide distinct-OCC same-clock replay · through 2026-08-13",
     "",
@@ -164,6 +181,25 @@ function markdown(packet: Record<string, any>): string {
       const capacity = incremental.get(row.variantId);
       return `| ${row.variantId} | ${row.added.length} | ${row.displaced.length} | ${usd(row.modeledPnlDeltaUsd)} | ${capacity ? usd(capacity.modeledPnlDeltaUsd) : "—"} |`;
     }),
+    "",
+    "## Isolated account capacity",
+    "",
+    "| Account experiment | Modeled change vs Account 3 priority | Session split |",
+    "|---|---:|---|",
+    ...isolated.filter((row) => row.variantId.startsWith("account"))
+      .map((row) => `| ${row.variantId} | ${usd(row.modeledPnlDeltaUsd)} | ${row.bySession.map((session: any) => `${session.session}: ${usd(session.modeledPnlDeltaUsd)}`).join(" · ")} |`),
+    "",
+    "## Bounded priority-first sensitivity",
+    "",
+    "| Priority perturbation | Modeled change vs Account 3 priority |",
+    "|---|---:|",
+    ...priority.map((row) => `| ${row.variantId} | ${usd(row.modeledPnlDeltaUsd)} |`),
+    "",
+    "## Channel-specific extra-slot screening",
+    "",
+    "| Eligible second signal | Modeled change vs Account 3 priority |",
+    "|---|---:|",
+    ...channelCapacity.map((row) => `| ${row.variantId} | ${usd(row.modeledPnlDeltaUsd)} |`),
     "",
     "## What the variants mean",
     "",
@@ -279,15 +315,58 @@ async function main(): Promise<void> {
     active.manifest.admissionPolicies as DeskReplayPolicy[],
   );
   const priorityPolicies = withAccount3Priority(currentPolicies, active);
-  const variants = [
+  const domainExperiments = [
+    { label: "account1", id: "rc54-control" },
+    { label: "account2", id: "rc54-lab" },
+    { label: "account3", id: "rc54-morgue" },
+  ];
+  const capacityVariants = domainExperiments.flatMap((domain) => [
     {
-      id: "current-policy", label: "Current policy",
-      distinctOccAtSameClock: false, policies: currentPolicies,
+      id: `${domain.label}-distinct-occ-current-caps`,
+      label: `${domain.label} two distinct OCC at current caps`,
+      distinctOccAtSameClock: true,
+      policies: pairedSameClock(priorityPolicies, false, new Set([domain.id])),
     },
     {
-      id: "account3-priority", label: "Account 3 priority",
-      distinctOccAtSameClock: false, policies: priorityPolicies,
+      id: `${domain.label}-distinct-occ-two-slot`,
+      label: `${domain.label} two distinct OCC with two-slot capacity`,
+      distinctOccAtSameClock: true,
+      policies: pairedSameClock(priorityPolicies, true, new Set([domain.id])),
     },
+  ]);
+  const observedSlugsByDomain = new Map<string, string[]>();
+  for (const candidate of candidates) {
+    const values = observedSlugsByDomain.get(candidate.domainId) ?? [];
+    if (!values.includes(candidate.slug)) values.push(candidate.slug);
+    observedSlugsByDomain.set(candidate.domainId, values);
+  }
+  const priorityVariants = domainExperiments.flatMap((domain) =>
+    (observedSlugsByDomain.get(domain.id) ?? []).sort().map((slug) => ({
+      id: `priority-first-${domain.label}-${slug}`,
+      label: `${domain.label}: ${slug} first`,
+      distinctOccAtSameClock: false,
+      policies: prioritizeSlug(priorityPolicies, domain.id, slug),
+    })));
+  const channelCapacityVariants = domainExperiments.flatMap((domain) =>
+    (observedSlugsByDomain.get(domain.id) ?? []).sort().map((slug) => {
+      const baselinePolicy = priorityPolicies.find((policy) => policy.id === domain.id);
+      if (!baselinePolicy) throw new Error(`${domain.label}: policy missing`);
+      return {
+        id: `extra-slot-${domain.label}-${slug}`,
+        label: `${domain.label}: ${slug} eligible for second slot`,
+        distinctOccAtSameClock: true,
+        policies: pairedSameClock(priorityPolicies, true, new Set([domain.id])),
+        extraSameClockEligibleByDomain: { [domain.id]: [slug] },
+        additionalCapacityEligibilityByDomain: {
+          [domain.id]: {
+            eligibleSlugs: [slug],
+            baselineMaxOpenGlobal: baselinePolicy.maxOpenGlobal,
+            baselineMaxOpenByUnderlying: baselinePolicy.maxOpenByUnderlying,
+          },
+        },
+      };
+    }));
+  const globalCapacityVariants = [
     {
       id: "distinct-occ-current-caps", label: "Two distinct OCC at current caps",
       distinctOccAtSameClock: true,
@@ -298,6 +377,20 @@ async function main(): Promise<void> {
       distinctOccAtSameClock: true,
       policies: pairedSameClock(priorityPolicies, true),
     },
+  ];
+  const variants = [
+    {
+      id: "current-policy", label: "Current policy",
+      distinctOccAtSameClock: false, policies: currentPolicies,
+    },
+    {
+      id: "account3-priority", label: "Account 3 priority",
+      distinctOccAtSameClock: false, policies: priorityPolicies,
+    },
+    ...capacityVariants,
+    ...globalCapacityVariants,
+    ...priorityVariants,
+    ...channelCapacityVariants,
   ];
   const results = variants.map((variant) => replayDeskSameClockCapacity({
     candidates,
@@ -318,8 +411,17 @@ async function main(): Promise<void> {
     sessions: [...new Set(candidates.map((row) => row.session))].sort(),
     baseline,
     results,
-    comparisons: results.slice(1).map((row) => summarizeDifference(baseline, row)),
-    capacityComparisons: results.slice(2)
+    comparisons: results.filter((row) => [
+      "account3-priority", "distinct-occ-current-caps", "distinct-occ-two-slot",
+    ].includes(row.variantId)).map((row) => summarizeDifference(baseline, row)),
+    capacityComparisons: results.filter((row) =>
+      row.variantId.includes("distinct-occ"))
+      .map((row) => summarizeDifference(priorityBaseline, row)),
+    priorityComparisons: results.filter((row) =>
+      row.variantId.startsWith("priority-first-"))
+      .map((row) => summarizeDifference(priorityBaseline, row)),
+    channelCapacityComparisons: results.filter((row) =>
+      row.variantId.startsWith("extra-slot-"))
       .map((row) => summarizeDifference(priorityBaseline, row)),
     validation: {
       originalActed: actedIds.size,

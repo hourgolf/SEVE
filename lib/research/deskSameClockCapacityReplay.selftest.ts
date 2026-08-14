@@ -60,4 +60,39 @@ assert.equal(comparison.modeledPnlDeltaUsd, 20);
 assert.ok(expanded.rejected.some((item) =>
   item.id === "grind-1" && item.reason === "same_clock_same_occ"));
 
-console.log("desk-same-clock-capacity-replay selftest: 9/9 passed");
+const allowlisted = replayDeskSameClockCapacity({
+  candidates,
+  variant: {
+    id: "allowlisted", label: "allowlisted", distinctOccAtSameClock: true,
+    policies: [{ ...policy, sameClockMaxByUnderlying: { SPY: 2 } }],
+    extraSameClockEligibleByDomain: { "paper-3": ["grind"] },
+  },
+});
+assert.deepEqual(allowlisted.admitted.map((item) => item.id), ["orb-1"]);
+assert.ok(allowlisted.rejected.some((item) =>
+  item.id === "breakout-1" && item.reason === "extra_slot_not_eligible"));
+
+const sequential = replayDeskSameClockCapacity({
+  candidates: [
+    row({ id: "orb-open", slug: "orb", occ: "SPY-C-1", pnlUsd: 10, exitAtMs: 3_000 }),
+    row({
+      id: "breakout-later", slug: "breakout", occ: "SPY-C-2", pnlUsd: 20,
+      atMs: 1_500, sourceBarAtMs: 1_400,
+    }),
+  ],
+  variant: {
+    id: "protected", label: "protected", distinctOccAtSameClock: true,
+    policies: [{ ...policy, maxOpenByUnderlying: { SPY: 2 } }],
+    additionalCapacityEligibilityByDomain: {
+      "paper-3": {
+        eligibleSlugs: ["grind"], baselineMaxOpenGlobal: 2,
+        baselineMaxOpenByUnderlying: { SPY: 1 },
+      },
+    },
+  },
+});
+assert.deepEqual(sequential.admitted.map((item) => item.id), ["orb-open"]);
+assert.ok(sequential.rejected.some((item) =>
+  item.id === "breakout-later" && item.reason === "additional_capacity_not_eligible"));
+
+console.log("desk-same-clock-capacity-replay selftest: 13/13 passed");
