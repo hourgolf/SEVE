@@ -36,6 +36,8 @@ const supplementalVirtualFiles = arg("supplemental-virtual-files", "")
   .map((value) => value.trim())
   .filter(Boolean)
   .map((value) => resolve(value));
+const requestedCohort = arg("cohort", "").trim();
+const requestedThroughSession = arg("through-session", "").trim();
 
 interface SignalRow {
   id: string;
@@ -171,9 +173,12 @@ function markdown(packet: Record<string, any>): string {
   const priority = packet.priorityComparisons as Array<Record<string, any>>;
   const channelCapacity = packet.channelCapacityComparisons as Array<Record<string, any>>;
   return [
-    "# Desk-wide distinct-OCC same-clock replay · through 2026-08-13",
+    `# Desk-wide distinct-OCC same-clock replay · through ${packet.throughSession ?? "no observed session"}`,
     "",
     "**READ-ONLY COUNTERFACTUAL · NO CONFIGURATION OR ORDER AUTHORITY**",
+    packet.cohortMode === "frozen_historical_epoch"
+      ? `\nFrozen historical cohort \`${packet.cohort}\` replayed under the currently active routing and admission policy. This is not exact-current execution evidence.\n`
+      : "",
     "",
     "| Variant | Added | Displaced | vs current desk | Capacity effect after Account 3 priority |",
     "|---|---:|---:|---:|---:|",
@@ -249,7 +254,8 @@ async function main(): Promise<void> {
   const actualByOpportunity = new Map(snapshot.ledger.logicalTrades
     .filter((row) => row.opportunityId)
     .map((row) => [row.opportunityId!, row]));
-  const cohort = `epoch-${snapshot.currentConfigurationEpochId.replace(/^sha256:/, "").slice(0, 16)}`;
+  const activeCohort = `epoch-${snapshot.currentConfigurationEpochId.replace(/^sha256:/, "").slice(0, 16)}`;
+  const cohort = requestedCohort || activeCohort;
   const candidates: DeskReplayCandidate[] = [];
   const missingPaths: Array<{ id: string; slug: string; reason: string }> = [];
 
@@ -406,8 +412,12 @@ async function main(): Promise<void> {
     schemaVersion: 1,
     version: "desk-same-clock-capacity-packet-v1",
     generatedAt: new Date().toISOString(),
-    throughSession: "2026-08-13",
+    throughSession: requestedThroughSession
+      || [...new Set(candidates.map((row) => row.session))].sort().at(-1)
+      || null,
     cohort,
+    cohortMode: cohort === activeCohort ? "active_epoch" : "frozen_historical_epoch",
+    activeCohort,
     sessions: [...new Set(candidates.map((row) => row.session))].sort(),
     baseline,
     results,
@@ -465,6 +475,7 @@ async function main(): Promise<void> {
   }, null, 2)}\n`);
   console.log("desk-same-clock-capacity-replay: PASS");
   console.log(`  sessions: ${packet.sessions.join(", ")}`);
+  console.log(`  cohort: ${packet.cohort} (${packet.cohortMode})`);
   console.log(`  candidates: ${candidates.length} · missing paths: ${missingPaths.length}`);
   for (const row of packet.comparisons) {
     console.log(`  ${row.variantId}: ${row.modeledPnlDeltaUsd >= 0 ? "+" : ""}$${row.modeledPnlDeltaUsd} · +${row.added.length}/-${row.displaced.length}`);
