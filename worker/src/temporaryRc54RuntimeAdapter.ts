@@ -31,7 +31,7 @@ import {
 import type { ChannelConfig, PositionRow } from "./store.js";
 
 export const TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION =
-  "temporary-rc54-runtime-adapter-v4" as const;
+  "temporary-rc54-runtime-adapter-v5" as const;
 
 const SHA256 = /^sha256:([0-9a-f]{64})$/i;
 
@@ -43,9 +43,10 @@ function uniqueSorted(values: readonly string[]): string[] {
  * RC5.4 remains the temporary execution-mechanics and admission adapter. The
  * immutable manifest may change roster membership and bounded per-root
  * economics/posture. Existing RC5.4 roots may not silently change topology or
- * route, and every newly admitted research root must fit the already sealed
- * paper domains and supported symbol/entry envelope. Scaling or concurrency
- * changes still require a different reviewed adapter.
+ * route. Priority is receipt-bound admission policy, so a reviewed immutable
+ * manifest may reorder roots when root and policy projections agree. Every new
+ * research root must fit the sealed paper domains and supported symbol/entry
+ * envelope. Scaling or concurrency changes still require a reviewed adapter.
  */
 export function validateReceiptBoundRc54Topology(
   runtime: Readonly<ReceiptBoundRuntimeConfiguration>,
@@ -72,7 +73,6 @@ export function validateReceiptBoundRc54Topology(
         ["cohort", root.cohort, expected.cohort],
         ["family", root.familyId, expected.familyId],
         ["underlying", root.underlying, expected.underlying],
-        ["priority", root.priority, expected.priority],
         ["entry_dte", root.entryDte, expected.entryDte],
         ["strike_offset", root.strikeOffset, expected.strikeOffset],
         ["strategist", root.strategistId, expected.strategistId],
@@ -101,9 +101,6 @@ export function validateReceiptBoundRc54Topology(
       if (!["SPY", "QQQ", "IWM"].includes(root.underlying)) {
         errors.push(`temporary_rc54_adapter:${root.slug}:underlying`);
       }
-      if (!Number.isInteger(root.priority) || root.priority < 1) {
-        errors.push(`temporary_rc54_adapter:${root.slug}:priority`);
-      }
       if (!Number.isInteger(root.entryDte)
           || root.entryDte < 0 || root.entryDte > 1) {
         errors.push(`temporary_rc54_adapter:${root.slug}:entry_dte`);
@@ -118,6 +115,9 @@ export function validateReceiptBoundRc54Topology(
       if (!root.accountId.trim()) {
         errors.push(`temporary_rc54_adapter:${root.slug}:account`);
       }
+    }
+    if (!Number.isInteger(root.priority) || root.priority < 1) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:priority`);
     }
     const validDomainCohort = root.domainId === RC54_CONTROL_ADMISSION_POLICY.id
       ? root.cohort === "control"
