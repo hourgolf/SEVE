@@ -184,6 +184,8 @@
     "decision-atlas-tomorrow-manager-experiments-selftest": "tsx lib/channels/decisionAtlasTomorrowManagerExperiments.selftest.ts",
     "decision-atlas-entry-experiment-queue-selftest": "tsx lib/channels/decisionAtlasEntryExperimentQueue.selftest.ts",
     "prepare-entry-experiment-queue": "tsx scripts/prepare-entry-experiment-queue.ts",
+    "desk-same-clock-capacity-replay-selftest": "tsx lib/research/deskSameClockCapacityReplay.selftest.ts",
+    "desk-same-clock-capacity-replay": "tsx scripts/desk-same-clock-capacity-replay.ts",
     "prepare-pb-itm-ustop-experiments": "tsx scripts/prepare-pb-itm-ustop-experiments.ts",
     "prepare-pb-itm-ustop-experiments-selftest": "tsx scripts/prepare-pb-itm-ustop-experiments.selftest.ts",
     "weekend-decision-preparation-selftest": "tsx lib/research/weekendDecisionPreparation.selftest.ts",
