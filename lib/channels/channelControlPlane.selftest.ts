@@ -506,4 +506,25 @@ check("configuration UI cannot disguise stop direction or bypass activation rece
   assert.doesNotMatch(addChannelSource, /onClick=\{\(\) => persist\("armed"\)\}/);
 });
 
+check("an overflow envelope is roster-bound, additive by one, and hash-visible", () => {
+  const draft = structuredClone(RC54_CONTROL_PLANE_FIXTURE);
+  const policy = draft.admissionPolicies.find((row) => row.id === "rc54-control");
+  assert.ok(policy);
+  policy.overflowCapacity = {
+    eligibleSlugs: ["pb-ride"],
+    maxOpenByUnderlying: { ...policy.maxOpenByUnderlying, SPY: 2 },
+    maxOpenGlobal: policy.maxOpenGlobal + 1,
+    sameClockMaxByUnderlying: { ...policy.sameClockMaxByUnderlying, SPY: 2 },
+  };
+  const overflow = compileReleaseManifest(draft);
+  assert.equal(overflow.validationResults.find((row) =>
+    row.gate === "collision")?.state, "pass");
+  assert.notEqual(overflow.manifest.contentHash, compiled.manifest.contentHash);
+
+  policy.overflowCapacity.eligibleSlugs = ["not-on-roster"];
+  const invalid = compileReleaseManifest(draft);
+  assert.equal(invalid.validationResults.find((row) =>
+    row.gate === "collision")?.state, "block");
+});
+
 console.log(`channel-control-plane-selftest: ${checks}/${checks} passed · ${compiled.manifest.contentHash}`);

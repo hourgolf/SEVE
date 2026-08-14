@@ -67,7 +67,7 @@ function markdown(packet: Record<string, unknown>): string {
     "**PREPARED ONLY · NO ACTIVATION · NO ORDER AUTHORITY**",
     "",
     `Account 3 priority draft: **${preview.state}**. `
-      + "Account 3 priority becomes ORB, then BREAKOUT, then GRIND; every other entry, exit, size, account, and collision setting stays fixed.",
+      + "Account 3 priority becomes ORB, then BREAKOUT, then GRIND; only BREAKOUT may use the bounded overflow slot, while same-OCC protection remains fixed.",
     "",
     "| Channel | Lane | Queued change | Held fixed |",
     "|---|---|---|---|",

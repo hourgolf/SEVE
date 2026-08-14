@@ -15,6 +15,12 @@ export interface AdmissionDomainPolicy {
   sameClockMaxByUnderlying: Readonly<Record<string, number>>;
   priorityBySlug: Readonly<Record<string, number>>;
   crossDomainSameOcc: "allow-with-receipt" | "block";
+  overflowCapacity?: Readonly<{
+    eligibleSlugs: readonly string[];
+    maxOpenByUnderlying: Readonly<Record<string, number>>;
+    maxOpenGlobal: number;
+    sameClockMaxByUnderlying: Readonly<Record<string, number>>;
+  }>;
 }
 
 export interface AdmissionDomainOccupancy {
@@ -187,14 +193,32 @@ export function finalizeAdmissionDomains(input: {
   for (const group of clocks.values()) {
     const policy = input.policies.get(output[group[0].index].domainId)!;
     const max = policy.sameClockMaxByUnderlying[key(output[group[0].index].underlying)]!;
+    const overflow = policy.overflowCapacity;
+    const overflowMax = overflow?.sameClockMaxByUnderlying[
+      key(output[group[0].index].underlying)
+    ] ?? max;
     group.sort((left, right) => left.priority - right.priority
       || output[left.index].decision.slug.localeCompare(output[right.index].decision.slug)
       || output[left.index].accountId.localeCompare(output[right.index].accountId));
-    for (const loser of group.slice(max)) {
-      output[loser.index].decision = block(
-        output[loser.index].decision,
-        "admission_domain_same_clock_collision",
-      );
+    const selectedOcc = new Set<string>();
+    let selected = 0;
+    for (const row of group) {
+      const candidate = output[row.index];
+      const occ = key(candidate.decision.occ ?? "");
+      const baselineSlot = selected < max;
+      const overflowSlot = !baselineSlot
+        && selected < overflowMax
+        && Boolean(overflow?.eligibleSlugs.includes(candidate.decision.slug))
+        && (!occ || !selectedOcc.has(occ));
+      if (!baselineSlot && !overflowSlot) {
+        candidate.decision = block(
+          candidate.decision,
+          "admission_domain_same_clock_collision",
+        );
+        continue;
+      }
+      selected++;
+      if (occ) selectedOcc.add(occ);
     }
   }
 
@@ -218,6 +242,19 @@ export function finalizeAdmissionDomains(input: {
       ? [...(input.state.openDomainsByOcc.get(occ) ?? new Set<string>())]
         .filter((id) => id !== candidate.domainId).sort()
       : [];
+    const overflow = policy.overflowCapacity;
+    const overflowEligible = Boolean(
+      overflow?.eligibleSlugs.includes(candidate.decision.slug),
+    );
+    const openUnderlying = domain.openByUnderlying.get(underlying) ?? 0;
+    const baseUnderlyingBlocked = openUnderlying
+      >= (policy.maxOpenByUnderlying[underlying] ?? 0);
+    const overflowUnderlyingBlocked = openUnderlying
+      >= (overflow?.maxOpenByUnderlying[underlying]
+        ?? policy.maxOpenByUnderlying[underlying] ?? 0);
+    const baseGlobalBlocked = domain.openTotal >= policy.maxOpenGlobal;
+    const overflowGlobalBlocked = domain.openTotal
+      >= (overflow?.maxOpenGlobal ?? policy.maxOpenGlobal);
     let reason: string | null = null;
     if ((domain.openFamilyCount.get(candidate.familyId) ?? 0) >= policy.maxOpenPerFamily) {
       reason = "admission_domain_family_open";
@@ -232,10 +269,10 @@ export function finalizeAdmissionDomains(input: {
       reason = "admission_domain_same_occ_open";
     } else if (otherDomains.length && policy.crossDomainSameOcc === "block") {
       reason = "admission_cross_domain_same_occ_open";
-    } else if ((domain.openByUnderlying.get(underlying) ?? 0)
-      >= (policy.maxOpenByUnderlying[underlying] ?? 0)) {
+    } else if (baseUnderlyingBlocked
+        && (!overflowEligible || overflowUnderlyingBlocked)) {
       reason = "admission_domain_underlying_concurrency";
-    } else if (domain.openTotal >= policy.maxOpenGlobal) {
+    } else if (baseGlobalBlocked && (!overflowEligible || overflowGlobalBlocked)) {
       reason = "admission_domain_global_concurrency";
     }
     if (reason) {

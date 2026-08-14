@@ -6,7 +6,7 @@ import type {
 import type { ChannelRosterBundleDraft } from "./channelRosterBundle";
 
 export const DECISION_ATLAS_ENTRY_EXPERIMENT_QUEUE_VERSION =
-  "decision-atlas-entry-experiment-queue-v1" as const;
+  "decision-atlas-entry-experiment-queue-v2" as const;
 
 export interface EntryExperimentQueueItem {
   channel: string;
@@ -23,7 +23,7 @@ export const ENTRY_EXPERIMENT_QUEUE: readonly EntryExperimentQueueItem[] =
       channel: "orb-ustop-ctl",
       lane: "admission",
       state: "configuration-draft",
-      change: "Set Account 3 SPY priority to ORB, then BREAKOUT, then GRIND; keep same-OCC protection.",
+      change: "Set Account 3 SPY priority to ORB, then BREAKOUT, then GRIND; only BREAKOUT may use the bounded overflow slot; keep same-OCC protection.",
       heldFixed: ["signal", "entry parameters", "exit", "quantity", "account"],
       evidence: "Its two blocked same-clock paths totaled +$20/ct in the 2026-08-13 mid-basis shadow.",
     },
@@ -112,6 +112,18 @@ export function account3PriorityPolicy(
       "breakout-alt-v3-itm": 2,
       "grind-v3": 3,
     },
+    overflowCapacity: {
+      eligibleSlugs: ["breakout-alt-v3-itm"],
+      maxOpenByUnderlying: {
+        ...policy.maxOpenByUnderlying,
+        SPY: 2,
+      },
+      maxOpenGlobal: 3,
+      sameClockMaxByUnderlying: {
+        ...policy.sameClockMaxByUnderlying,
+        SPY: 2,
+      },
+    },
   };
 }
 
@@ -126,6 +138,7 @@ export function buildAccount3PriorityDraft(input: {
     DECISION_ATLAS_ENTRY_EXPERIMENT_QUEUE_VERSION,
     input.active.manifest.contentHash,
     JSON.stringify(policy.priorityBySlug),
+    JSON.stringify(policy.overflowCapacity),
   ].join(":"));
   return {
     id,
@@ -138,7 +151,7 @@ export function buildAccount3PriorityDraft(input: {
     ],
     admissionPolicyUpserts: [policy],
     reason:
-      "Set Account 3 same-clock SPY priority to orb-ustop-ctl, then breakout-alt-v3-itm, then grind-v3. Preserve entry formulas, managers, sizing, routing, same-OCC protection, and all other capacity limits.",
+      "Set Account 3 same-clock SPY priority to orb-ustop-ctl, then breakout-alt-v3-itm, then grind-v3. Permit only breakout-alt-v3-itm to use one overflow slot so QQQ can coexist with two distinct-OCC SPY positions. Preserve entry formulas, managers, sizing, routing, and same-OCC protection.",
     evidenceRefs: [...new Set(input.evidenceRefs)].sort(),
     operatorId: input.operatorId,
     createdAt: input.createdAt,
@@ -156,7 +169,7 @@ export function account3CapacityReplayVariants(
       maxOpenSpy: policy.maxOpenByUnderlying.SPY,
       maxOpenGlobal: policy.maxOpenGlobal,
       sameOccOpenMax: policy.sameOccOpenMax,
-      description: "ORB wins the tie; all capacity stays fixed.",
+      description: "ORB wins the tie; only BREAKOUT may use the bounded overflow envelope.",
     },
     {
       id: "two-spy-same-clock",

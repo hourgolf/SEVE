@@ -63,6 +63,12 @@ assert.equal(policy.priorityBySlug["orb-ustop-ctl"], 1);
 assert.equal(policy.priorityBySlug["breakout-alt-v3-itm"], 2);
 assert.equal(policy.priorityBySlug["grind-v3"], 3);
 assert.equal(policy.sameOccOpenMax, 1);
+assert.deepEqual(policy.overflowCapacity, {
+  eligibleSlugs: ["breakout-alt-v3-itm"],
+  maxOpenByUnderlying: { SPY: 2, QQQ: 1, IWM: 0 },
+  maxOpenGlobal: 3,
+  sameClockMaxByUnderlying: { SPY: 2, QQQ: 1, IWM: 0 },
+});
 
 const draft = buildAccount3PriorityDraft({
   active,
@@ -76,9 +82,11 @@ assert.deepEqual(draft.changes, [
   { slug: "grind-v3", priority: 3 },
 ]);
 assert.match(draft.id, /^[0-9a-f-]{36}$/);
+assert.deepEqual(draft.admissionPolicyUpserts?.[0].overflowCapacity,
+  policy.overflowCapacity);
 assert.equal(account3CapacityReplayVariants(active).length, 4);
 assert.ok(ENTRY_EXPERIMENT_QUEUE.some((row) =>
   row.channel === "orb-ustop-ctl" && row.lane === "admission"));
 assert.equal(RC54_CONTROL_PLANE_SPECS.length > 0, true);
 
-console.log("decision-atlas-entry-experiment-queue selftest: 12/12 passed");
+console.log("decision-atlas-entry-experiment-queue selftest: 14/14 passed");
