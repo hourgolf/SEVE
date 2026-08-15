@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import type { ChannelDecisionBrief, ChannelDecisionAxis } from "./channelDecisionBrief";
 import { buildChannelDecisionSummary, buildFleetDecisionSummary, CHANNEL_DISPOSITIONS, dispositionForAxis } from "./channelDecisionSummary";
 
-const axes: ChannelDecisionAxis[] = ["entry", "exit", "manager", "size", "collection", "promotion", "retirement"];
+const axes: ChannelDecisionAxis[] = ["entry", "exit", "manager", "size", "admission", "collection", "promotion", "retirement"];
 assert.deepEqual(axes.map(dispositionForAxis), CHANNEL_DISPOSITIONS);
 
 const brief = (axis: ChannelDecisionAxis): ChannelDecisionBrief => ({
@@ -33,6 +33,8 @@ const brief = (axis: ChannelDecisionAxis): ChannelDecisionBrief => ({
     { contracts: 2, eligibleOpportunities: 12, deployedOpportunities: 11, deploymentFrequency: .92, totalResultUsd: 210, typicalResultPerOpportunityUsd: 19, marginalResultVsPriorUsd: 90, peakDebitUsd: 600, peakStopExposureUsd: 360, displacedOpportunities: 1, displacedCounterfactualUsd: 5, maxDrawdownUsd: 75, portfolioEligibleOpportunities: 50, portfolioDeployedOpportunities: 48, portfolioTotalResultUsd: 575, marginalPortfolioResultVsOneContractUsd: 75, portfolioMaxDrawdownUsd: 135, displacedTargetOpportunities: 1, displacedOtherOpportunities: 1, displacedOtherCounterfactualUsd: 5, additionalDisplacedOtherOpportunitiesVsOneContract: 1, additionalDisplacedOtherCounterfactualUsdVsOneContract: 5, displacedByChannel: [{ channel: "peer", opportunities: 1, counterfactualUsd: 5 }] },
   ] },
   collision: { conclusion: "Overlap is evidence, not a veto.", strongestOverlap: null, edges: [] },
+  platformEffect: { state: "missing", candidates: 0, sessions: 0, protectedLosses: 0, blockedWinners: 0, managerCensors: 0,
+    typicalAcrossManagersUsd: null, conclusion: "No exact blocked cohort.", byReason: [] },
   evidence: { decisionLayer: "exact_current_configuration", configurationEra: "current", decisionSessions: 6, decisionOpportunities: 12, exactCurrentAvailable: true, layers: [], limitations: ["Fixture limitation."] },
 });
 
@@ -57,8 +59,8 @@ assert.deepEqual(buildChannelDecisionSummary(negativeCapture).metrics[2], {
 });
 
 const fleet = buildFleetDecisionSummary(Object.fromEntries(axes.map((axis) => [axis, brief(axis)])), "2026-08-07");
-assert.equal(fleet.reports, 7);
-assert.equal(fleet.investigate, 4);
+assert.equal(fleet.reports, 8);
+assert.equal(fleet.investigate, 5);
 assert.equal(fleet.promoteOrRetire, 2);
 assert.equal(fleet.collecting, 1);
 

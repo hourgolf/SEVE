@@ -17,6 +17,8 @@ const brief = (channel: string, overrides: Partial<ChannelDecisionBrief> = {}): 
   managers: { conclusion: "Native holds.", recommended: null, compared: [] },
   capacity: { conclusion: "No step.", currentContracts: 2, currentSizeObserved: true, bestSupportedContracts: null, points: [] },
   collision: { conclusion: "peer overlap", strongestOverlap: null, edges: [] },
+  platformEffect: { state: "missing", candidates: 0, sessions: 0, protectedLosses: 0, blockedWinners: 0, managerCensors: 0,
+    typicalAcrossManagersUsd: null, conclusion: "No exact blocked cohort.", byReason: [] },
   evidence: { decisionLayer: "prospective_virtual", configurationEra: "legacy", decisionSessions: 12, decisionOpportunities: 20, exactCurrentAvailable: false, layers: [], limitations: [] },
   ...overrides,
 });

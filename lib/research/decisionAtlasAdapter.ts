@@ -95,6 +95,39 @@ export interface AtlasEquitySnapshotRow {
   captured_at: string;
 }
 
+export interface AtlasVbCandidateReceiptRow {
+  id: string;
+  opportunity_id: string;
+  signal_id: string;
+  channel_slug: string;
+  session_date_et: string;
+  source_bar_at: string;
+  blocked_reason: string;
+  channel_version: string;
+  configuration_epoch_id: string;
+  manager_paths_expected: number;
+  manager_paths_published: number;
+  manager_censors: unknown;
+}
+
+export interface AtlasVbExactPathReceiptRow {
+  id: string;
+  candidate_id: string;
+  opportunity_id: string;
+  entry_ask: number | string;
+}
+
+export interface AtlasVbExactManagerPathReceiptRow {
+  id: string;
+  candidate_id: string;
+  opportunity_id: string;
+  channel_slug: string;
+  manager_id: string;
+  pnl_per_contract: number | string;
+  basis: string;
+  independent_opportunity: boolean;
+}
+
 export interface DecisionAtlasSourceSnapshot {
   ledger: ProfitabilityLedger;
   strategists: AtlasStrategistRow[];
@@ -107,6 +140,9 @@ export interface DecisionAtlasSourceSnapshot {
   activeChannelSpecDatabaseIdsByVersionKey?: Record<string, string>;
   currentConfigurationEpochId: string | null;
   workerRuns?: AtlasWorkerRunRow[];
+  vbCandidateReceipts?: AtlasVbCandidateReceiptRow[];
+  vbExactPathReceipts?: AtlasVbExactPathReceiptRow[];
+  vbExactManagerPathReceipts?: AtlasVbExactManagerPathReceiptRow[];
 }
 
 const number = (value: unknown): number | null => {
@@ -125,6 +161,48 @@ function payloadSignalId(row: AtlasExecutionRow): string | null {
 
 function tradeLogicalId(trade: LogicalTrade): string {
   return trade.opportunityId ? `opportunity:${trade.opportunityId}` : trade.id;
+}
+
+/**
+ * Virtual collectors can persist one path for every polling-row signal while a
+ * setup remains true. Those rows are valuable entry-time alternatives, but a
+ * channel could not have opened all of them while its first native path was
+ * still active. Collapse overlapping paths into one natural opportunity
+ * episode and allow a new episode only after the first path has ended.
+ *
+ * The first path deliberately owns the episode boundary. Extending the
+ * boundary with later alternative paths would make an entry-timing variant
+ * change the natural re-entry availability of the channel.
+ */
+export function buildVirtualEpisodeIds(
+  virtualTrades: readonly AtlasVirtualTradeRow[],
+): Map<string, string> {
+  interface ActiveEpisode {
+    id: string;
+    activeUntilMs: number;
+  }
+  const activeByChannelSession = new Map<string, ActiveEpisode>();
+  const result = new Map<string, string>();
+  const ordered = [...virtualTrades].sort((left, right) =>
+    left.signal_at.localeCompare(right.signal_at) || left.signal_id.localeCompare(right.signal_id));
+  for (const row of ordered) {
+    const session = etDateOf(row.signal_at);
+    const key = `${row.slug}\u0000${session}`;
+    const signalMs = Date.parse(row.signal_at);
+    const active = activeByChannelSession.get(key);
+    if (active && Number.isFinite(signalMs) && signalMs <= active.activeUntilMs) {
+      result.set(row.signal_id, active.id);
+      continue;
+    }
+    const id = `virtual-episode:${row.slug}:${session}:${row.signal_id}`;
+    const exitMs = row.exit_at ? Date.parse(row.exit_at) : Number.POSITIVE_INFINITY;
+    activeByChannelSession.set(key, {
+      id,
+      activeUntilMs: Number.isFinite(exitMs) && exitMs >= signalMs ? exitMs : Number.POSITIVE_INFINITY,
+    });
+    result.set(row.signal_id, id);
+  }
+  return result;
 }
 
 /**
@@ -392,17 +470,30 @@ export function adaptDecisionAtlasSnapshot(input: {
       id: `exact_current_configuration:${trade.id}`, evidenceLayer: "exact_current_configuration" });
   }
   const virtualBySignal = new Map(snapshot.virtualTrades.map((row) => [row.signal_id, row]));
-  for (const signal of snapshot.signals) {
+  const exactCandidateBySignal = new Map((snapshot.vbCandidateReceipts ?? [])
+    .map((row) => [row.signal_id, row]));
+  const exactPathByCandidate = new Map((snapshot.vbExactPathReceipts ?? [])
+    .map((row) => [row.candidate_id, row]));
+  const virtualEpisodeBySignal = buildVirtualEpisodeIds(snapshot.virtualTrades);
+  const evidenceBackedSignals = snapshot.signals.filter((row) =>
+    virtualBySignal.has(row.id) || logicalBySignal.has(row.id) || row.acted_on);
+  for (const signal of evidenceBackedSignals) {
     const strategist = strategistById.get(signal.strategist_id);
     const slug = strategist?.slug ?? `unknown:${signal.strategist_id}`;
     const virtual = virtualBySignal.get(signal.id);
-    const logical = logicalBySignal.get(signal.id) ?? `signal:${signal.id}`;
+    const exactCandidate = exactCandidateBySignal.get(signal.id);
+    const exactPath = exactCandidate ? exactPathByCandidate.get(exactCandidate.id) : undefined;
+    const logical = logicalBySignal.get(signal.id)
+      ?? (exactCandidate ? `opportunity:${exactCandidate.opportunity_id}` : null)
+      ?? virtualEpisodeBySignal.get(signal.id)
+      ?? `signal:${signal.id}`;
     const facts = factsByLogical.get(logical);
     const rationale = object(signal.rationale);
     const spec = specBySlug.get(slug);
     const signalChannelSpecId = signal.configuration_epoch_id
       ? channelSpecIdBySlugEpoch.get(`${slug}\u0000${signal.configuration_epoch_id}`) : null;
-    const entryPrice = number(virtual?.entry_px) ?? number(rationale?.ask) ?? facts?.fillPrice ?? null;
+    const entryPrice = number(exactPath?.entry_ask) ?? number(virtual?.entry_px)
+      ?? number(rationale?.ask) ?? facts?.fillPrice ?? null;
     const pnl = number(virtual?.pnl_per_contract);
     const returnPct = pnl != null && entryPrice != null && entryPrice > 0 ? pnl / entryPrice : null;
     const mfePct = number(virtual?.mfe_pct);
@@ -426,8 +517,8 @@ export function adaptDecisionAtlasSnapshot(input: {
       underlying: facts?.underlying ?? strategist?.underlying ?? spec?.symbolScope[0] ?? "UNKNOWN",
       occSymbol: virtual?.occ ?? facts?.occSymbol ?? text(rationale?.occ),
       direction: signal.direction === "call" || signal.direction === "put" ? signal.direction : facts?.direction ?? null,
-      contractSelected: facts?.contractSelected ?? (text(rationale?.occ) ? true : null),
-      quoteEligible: facts?.quoteEligible ?? null,
+      contractSelected: exactCandidate ? true : facts?.contractSelected ?? (text(rationale?.occ) ? true : null),
+      quoteEligible: exactPath ? true : facts?.quoteEligible ?? null,
       admissionAllowed: facts?.admissionAllowed ?? signal.acted_on,
       filled: facts?.filled ?? null,
       blockedReason: facts?.blockedReason ?? signal.blocked_reason ?? virtual?.blocked ?? null,
@@ -444,6 +535,8 @@ export function adaptDecisionAtlasSnapshot(input: {
         `signals:${signal.id}`,
         ...(virtual ? [`virtual_trades:${virtual.signal_id}`] : []),
         ...(facts?.refs ?? []),
+        ...(exactCandidate ? [`vb_candidate_receipts:${exactCandidate.id}`] : []),
+        ...(exactPath ? [`vb_exact_path_receipts:${exactPath.id}`] : []),
         ...(spec ? [`channel_spec_versions:${spec.id}`] : []),
       ].sort(),
     };
@@ -456,7 +549,9 @@ export function adaptDecisionAtlasSnapshot(input: {
     const returnPct = pnl != null && entryPrice != null && entryPrice > 0 ? pnl / entryPrice : null;
     const mfePct = number(virtual.mfe_pct);
     opportunities.push({
-      logicalOpportunityId: logicalBySignal.get(virtual.signal_id) ?? `signal:${virtual.signal_id}`,
+      logicalOpportunityId: logicalBySignal.get(virtual.signal_id)
+        ?? virtualEpisodeBySignal.get(virtual.signal_id)
+        ?? `signal:${virtual.signal_id}`,
       id: `prospective_virtual:${virtual.signal_id}`,
       channel: virtual.slug,
       session: etDateOf(virtual.signal_at), signalAt: virtual.signal_at, exitAt: virtual.exit_at,
@@ -489,5 +584,33 @@ export function adaptDecisionAtlasSnapshot(input: {
       const configured = number(spec.entryParameters.maxEntriesPerSession);
       return [spec.slug, configured != null && configured >= 1 ? Math.floor(configured) : 1];
     })),
+    sourceNormalization: {
+      rawSignalRows: snapshot.signals.length,
+      evidenceBackedSignalRows: evidenceBackedSignals.length,
+      ambientSignalRowsExcluded: snapshot.signals.length - evidenceBackedSignals.length,
+      virtualPathRows: snapshot.virtualTrades.length,
+      virtualOpportunityEpisodes: new Set(virtualEpisodeBySignal.values()).size,
+    },
+    exactBlockedCandidates: (snapshot.vbCandidateReceipts ?? []).map((candidate) => {
+      const managerRows = (snapshot.vbExactManagerPathReceipts ?? []).filter((row) =>
+        row.candidate_id === candidate.id
+        && row.opportunity_id === candidate.opportunity_id
+        && row.basis === "databento_entry_ask_to_executable_bid"
+        && row.independent_opportunity === true);
+      return {
+        opportunityId: candidate.opportunity_id,
+        candidateId: candidate.id,
+        channel: candidate.channel_slug,
+        session: candidate.session_date_et,
+        signalAt: candidate.source_bar_at,
+        blockedReason: candidate.blocked_reason,
+        channelVersion: candidate.channel_version,
+        configurationEpochId: candidate.configuration_epoch_id,
+        managerResultsUsd: managerRows.map((row) => number(row.pnl_per_contract)).filter((value): value is number => value != null),
+        managerPathsExpected: number(candidate.manager_paths_expected) ?? 0,
+        managerPathsPublished: number(candidate.manager_paths_published) ?? 0,
+        managerCensors: Array.isArray(candidate.manager_censors) ? candidate.manager_censors.length : 0,
+      };
+    }),
   };
 }

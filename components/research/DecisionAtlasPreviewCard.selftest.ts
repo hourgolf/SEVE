@@ -11,6 +11,8 @@ const css = read("../../app/decision-atlas.css");
 const workspaceCss = read("../../app/seve-909.css");
 
 assert.match(card, /HISTORICAL VIRTUAL/);
+assert.match(card, /PLATFORM RULES/);
+assert.match(card, /opportunities suppressed/);
 assert.match(card, /PROSPECTIVE TEST/);
 assert.match(card, /model\.sourceLabel/);
 assert.match(card, /See supporting evidence/);

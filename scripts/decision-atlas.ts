@@ -21,6 +21,9 @@ import {
   type AtlasSignalRow,
   type AtlasStrategistRow,
   type AtlasVirtualTradeRow,
+  type AtlasVbCandidateReceiptRow,
+  type AtlasVbExactManagerPathReceiptRow,
+  type AtlasVbExactPathReceiptRow,
   type DecisionAtlasSourceSnapshot,
 } from "../lib/research/decisionAtlasAdapter";
 import type { ChannelManagerRunRow } from "../lib/research/channelManagerEvidence";
@@ -145,7 +148,16 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
     timingsMs[label] = Date.now() - started;
     return value;
   };
-  const [strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns, control] = await Promise.all([
+  const optional = async <T>(read: () => Promise<T[]>): Promise<T[]> => {
+    try { return await read(); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/42P01|PGRST205|does not exist|schema cache/i.test(message)) return [];
+      throw error;
+    }
+  };
+  const [strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
+    vbCandidateReceipts, vbExactPathReceipts, vbExactManagerPathReceipts, control] = await Promise.all([
     timed("strategists", () => pageAll<AtlasStrategistRow>((from) => sb.from("strategists")
       .select("id,slug,underlying").order("id"), { ...readOptions, max: 5_000 })),
     timed("signals", () => pageAll<AtlasSignalRow>((from) => sb.from("signals")
@@ -177,12 +189,25 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
     timed("worker_runs", () => pageAll<AtlasWorkerRunRow>((from) => sb.from("worker_runs")
       .select("boot_id,instance_id,git_sha,railway_deployment,started_at,last_heartbeat_at,shutdown_started_at,ended_at,termination_kind,last_phase,memory_rss_mb")
       .gte("started_at", cohortFrom).order("started_at").order("boot_id"), { ...readOptions, max: 5_000 })),
+    timed("vb_candidate_receipts", () => optional(() => pageAll<AtlasVbCandidateReceiptRow>((from) =>
+      sb.from("vb_candidate_receipts")
+        .select("id,opportunity_id,signal_id,channel_slug,session_date_et,source_bar_at,blocked_reason,channel_version,configuration_epoch_id,manager_paths_expected,manager_paths_published,manager_censors")
+        .gte("source_bar_at", cohortFrom).order("source_bar_at").order("id"), { ...readOptions, max: 20_000 }))),
+    timed("vb_exact_path_receipts", () => optional(() => pageAll<AtlasVbExactPathReceiptRow>((from) =>
+      sb.from("vb_exact_path_receipts")
+        .select("id,candidate_id,opportunity_id,entry_ask")
+        .gte("completed_at", cohortFrom).order("completed_at").order("id"), { ...readOptions, max: 20_000 }))),
+    timed("vb_exact_manager_path_receipts", () => optional(() => pageAll<AtlasVbExactManagerPathReceiptRow>((from) =>
+      sb.from("vb_exact_manager_path_receipts")
+        .select("id,candidate_id,opportunity_id,channel_slug,manager_id,pnl_per_contract,basis,independent_opportunity")
+        .gte("source_bar_at", cohortFrom).order("source_bar_at").order("id"), { ...readOptions, max: 100_000 }))),
     timed("active_control_plane", () => loadStoredReceiptBoundControlPlane(sb)),
   ]);
   if (!control.compiled) throw new Error(`active control plane unavailable: ${control.error ?? control.state}`);
   return {
     snapshot: {
       ledger, strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
+      vbCandidateReceipts, vbExactPathReceipts, vbExactManagerPathReceipts,
       activeChannelSpecs: control.compiled.channelSpecs,
       activeChannelSpecDatabaseIdsByVersionKey: control.databaseIdentity?.channelSpecDatabaseIdsByVersionKey ?? {},
       currentConfigurationEpochId: control.activationReceipt?.configurationEpochId ?? null,
@@ -272,6 +297,9 @@ async function main(): Promise<void> {
       managerRuns: snapshot.managerRuns.length,
       equitySnapshots: snapshot.equitySnapshots.length,
       workerRuns: snapshot.workerRuns?.length ?? 0,
+      vbCandidateReceipts: snapshot.vbCandidateReceipts?.length ?? 0,
+      vbExactPathReceipts: snapshot.vbExactPathReceipts?.length ?? 0,
+      vbExactManagerPathReceipts: snapshot.vbExactManagerPathReceipts?.length ?? 0,
       activeChannelSpecs: snapshot.activeChannelSpecs.length,
       activeChannelSpecDatabaseIds: Object.keys(snapshot.activeChannelSpecDatabaseIdsByVersionKey ?? {}).length,
     },
@@ -287,7 +315,8 @@ async function main(): Promise<void> {
     },
     sourceTables: ["strategists", "signals", "execution_observations", "virtual_trades",
       "manager_shadow_runs", "equity_snapshots", "worker_runs", "release_manifests", "release_manifest_channels",
-      "channel_spec_versions", "activation_receipts"],
+      "channel_spec_versions", "activation_receipts", "vb_candidate_receipts", "vb_exact_path_receipts",
+      "vb_exact_manager_path_receipts"],
     productionWrites: 0,
     allowedMethods: ["SELECT", "GET"],
     orderAuthority: false,

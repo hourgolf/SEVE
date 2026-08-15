@@ -99,6 +99,7 @@ function EvidenceSources({ model }: { model: ChannelDecisionSummary }) {
       <span><small>CURRENT EXECUTED</small><b>{sources.executed.state === "available" ? `${sources.executed.sessions}s · ${sources.executed.logicalTrades} trades` : "NO CURRENT SAMPLE"}</b><em>{sources.executed.configurationEra ?? "no configuration era"}</em></span>
       <span><small>HISTORICAL VIRTUAL</small><b>{sources.historicalVirtual.state === "available" ? `${sources.historicalVirtual.sessions}s · ${sources.historicalVirtual.scored} paths` : "NO VIRTUAL SAMPLE"}</b><em>{sources.historicalVirtual.configurationEra ?? "no configuration era"}</em></span>
       <span><small>DECISION COHORT</small><b>{sources.decisionSessions}s · {sources.decisionOpportunities} opportunities</b><em>{sources.exactCurrentAvailable ? "exact current configuration" : sources.configurationEra}</em></span>
+      {sources.platformEffect.state === "available" && <span><small>PLATFORM RULES</small><b>{sources.platformEffect.blockedWinners} opportunities suppressed · {sources.platformEffect.protectedLosses} losses avoided</b><em>{sources.platformEffect.sessions}s · {sources.platformEffect.candidates} exact candidates · {sources.platformEffect.managerCensors} arms withheld</em></span>}
     </div>
     <p>{model.evidenceStateFact} Executed, virtual, and manager results are never pooled.</p>
     {sources.limitations.length > 0 && <ul>{sources.limitations.map((item) => <li key={item}>{item}</li>)}</ul>}

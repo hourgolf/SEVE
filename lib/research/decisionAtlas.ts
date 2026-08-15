@@ -81,6 +81,41 @@ export interface AtlasAccountBudget {
   maxOpenPositions: number;
 }
 
+export interface AtlasExactBlockedCandidate {
+  opportunityId: string;
+  candidateId: string;
+  channel: string;
+  session: string;
+  signalAt: string;
+  blockedReason: string;
+  channelVersion: string;
+  configurationEpochId: string;
+  managerResultsUsd: number[];
+  managerPathsExpected: number;
+  managerPathsPublished: number;
+  managerCensors: number;
+}
+
+export interface AtlasPlatformEffect {
+  state: "available" | "missing";
+  candidates: number;
+  sessions: number;
+  managerPaths: number;
+  managerCensors: number;
+  protectedLosses: number;
+  blockedWinners: number;
+  mixedOrFlat: number;
+  typicalAcrossManagersUsd: number | null;
+  byReason: Array<{
+    reason: string;
+    candidates: number;
+    protectedLosses: number;
+    blockedWinners: number;
+    typicalAcrossManagersUsd: number | null;
+  }>;
+  fact: string;
+}
+
 export interface AtlasInput {
   generatedAt: string;
   throughSession: string;
@@ -91,6 +126,14 @@ export interface AtlasInput {
   currentChannelConfigurationEras?: Readonly<Record<string, string>>;
   channelPremiumCaps?: Readonly<Record<string, number>>;
   channelMaxEntriesPerSession?: Readonly<Record<string, number>>;
+  exactBlockedCandidates?: readonly AtlasExactBlockedCandidate[];
+  sourceNormalization?: {
+    rawSignalRows: number;
+    evidenceBackedSignalRows: number;
+    ambientSignalRowsExcluded: number;
+    virtualPathRows: number;
+    virtualOpportunityEpisodes: number;
+  };
 }
 
 export interface AtlasInterval {
@@ -249,6 +292,7 @@ export interface AtlasChannelDossier {
   frontiers: AtlasEntryExitFrontier[];
   capacity: AtlasCapacityReplay;
   lifecycle: AtlasLifecycle;
+  platformEffect: AtlasPlatformEffect;
 }
 
 export interface DecisionAtlas {
@@ -266,6 +310,7 @@ export interface DecisionAtlas {
     managerPaths: number;
     configurationEras: string[];
     layerCounts: Record<AtlasEvidenceLayer, number>;
+    sourceNormalization: AtlasInput["sourceNormalization"] | null;
     limitations: string[];
   };
   productionWrites: 0;
@@ -830,6 +875,44 @@ function selectDecisionCohort(rows: readonly AtlasOpportunity[]): AtlasOpportuni
   return rows.filter((row) => (row.configurationEra ?? "legacy / unstamped") === era);
 }
 
+function buildPlatformEffect(rows: readonly AtlasExactBlockedCandidate[]): AtlasPlatformEffect {
+  if (!rows.length) return {
+    state: "missing", candidates: 0, sessions: 0, managerPaths: 0, managerCensors: 0,
+    protectedLosses: 0, blockedWinners: 0, mixedOrFlat: 0,
+    typicalAcrossManagersUsd: null, byReason: [],
+    fact: "No exact executable-bid blocked-candidate cohort is published yet.",
+  };
+  const latest = [...rows].sort((a, b) => b.signalAt.localeCompare(a.signalAt))[0]!;
+  const cohort = rows.filter((row) => row.channelVersion === latest.channelVersion);
+  const scored = cohort.map((row) => ({ row, typical: median(row.managerResultsUsd) }));
+  const protectedLosses = scored.filter((item) => (item.typical ?? 0) < 0).length;
+  const blockedWinners = scored.filter((item) => (item.typical ?? 0) > 0).length;
+  const reasons = [...new Set(cohort.map((row) => row.blockedReason))].sort().map((reason) => {
+    const items = scored.filter((item) => item.row.blockedReason === reason);
+    return {
+      reason,
+      candidates: items.length,
+      protectedLosses: items.filter((item) => (item.typical ?? 0) < 0).length,
+      blockedWinners: items.filter((item) => (item.typical ?? 0) > 0).length,
+      typicalAcrossManagersUsd: median(items.map((item) => item.typical).filter(finite)),
+    };
+  });
+  const typicalAcrossManagersUsd = median(scored.map((item) => item.typical).filter(finite));
+  return {
+    state: "available",
+    candidates: cohort.length,
+    sessions: new Set(cohort.map((row) => row.session)).size,
+    managerPaths: cohort.reduce((sum, row) => sum + row.managerResultsUsd.length, 0),
+    managerCensors: cohort.reduce((sum, row) => sum + row.managerCensors, 0),
+    protectedLosses,
+    blockedWinners,
+    mixedOrFlat: cohort.length - protectedLosses - blockedWinners,
+    typicalAcrossManagersUsd,
+    byReason: reasons,
+    fact: `In the latest channel version, exact executable-bid manager arms show ${blockedWinners} blocked favorable and ${protectedLosses} blocked unfavorable candidate(s); ${cohort.reduce((sum, row) => sum + row.managerCensors, 0)} manager arm(s) were explicitly censored.`,
+  };
+}
+
 export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
   const rows = dedupe(input.opportunities);
   const activeChannels = new Set(input.activeChannels
@@ -871,6 +954,8 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
     const capacityBest = capacity.bestSupportedContracts
       ? capacity.points[capacity.bestSupportedContracts - 1] : null;
     const additional = capacityBest?.marginalPortfolioResultVsOneContractUsd ?? null;
+    const platformEffect = buildPlatformEffect((input.exactBlockedCandidates ?? [])
+      .filter((row) => row.channel === channel));
     const dossier: AtlasChannelDossier = {
       channel, disposition: life.disposition,
       summary: life.plainLanguage,
@@ -909,7 +994,7 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
           life.decisionGroup === "needs_more_evidence"
             ? "Start inference at 5 scored sessions and 10 scored logical outcomes."
             : `${life.decisionGroup.replaceAll("_", " ")} · ${life.configurationCertainty.replaceAll("_", " ")}.` },
-      ], waterfall, frontiers, capacity, lifecycle: life,
+      ], waterfall, frontiers, capacity, lifecycle: life, platformEffect,
     };
     return [channel, dossier];
   }));
@@ -934,12 +1019,14 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
       managerPaths: input.managerPaths.length,
       configurationEras: [...new Set(rows.map((row) => row.configurationEra ?? "legacy / unstamped"))].sort(),
       layerCounts,
+      sourceNormalization: input.sourceNormalization ?? null,
       limitations: [
         "Observational evidence can support a proposal, not prove causality.",
         "Blocked counterfactuals are reported only when a durable virtual outcome exists.",
         "Cross-account same-OCC overlap is allowed and retains independent exits.",
         "Missing stage evidence is shown as missing and is never inferred from timestamps.",
         "Decision maturity counts scored logical outcomes, not every observed signal.",
+        "Ambient polling rows without an execution receipt or durable virtual path are excluded from opportunity counts.",
         "Trade-level and session-level typical results are reported separately so signal density cannot impersonate consistency.",
       ],
     },
