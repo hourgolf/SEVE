@@ -291,7 +291,13 @@ async function activateManager(input: {
   const before = await active(input.sb);
   const current = before.channelSpecs.find((spec) => spec.slug === input.slug);
   if (!current) throw new Error(`active manager base missing: ${input.slug}`);
-  if (current.managerProfileId === definition.managerProfileId) {
+  const managerAlreadyExact = current.managerProfileId === definition.managerProfileId
+    && canonicalJson(current.takeProfit) === canonicalJson(definition.takeProfit)
+    && canonicalJson(current.ratchetParameters)
+      === canonicalJson(definition.ratchetParameters)
+    && current.stopLoss.catastrophePct
+      === (definition.stopLossCatastrophePct ?? current.stopLoss.catastrophePct);
+  if (managerAlreadyExact) {
     input.receipts.push({
       kind: "manager",
       slug: input.slug,

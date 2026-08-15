@@ -53,7 +53,36 @@ export interface ChannelExperimentPacket {
 const sha256 = (value: unknown): string => `sha256:${createHash("sha256")
   .update(JSON.stringify(value)).digest("hex")}`;
 
+interface FrozenExperimentDefinition {
+  experimentId: string;
+  axis: ChannelDecisionAxis;
+  name: string;
+  control: string;
+  challenger: string;
+  managerId?: string;
+}
+
+/**
+ * Operator-selected, channel-specific experiments whose challenger must stay
+ * stable across nightly regenerations. This is deliberately not a global
+ * manager rule: an entry here applies only to the named channel.
+ */
+const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefinition>> =
+  Object.freeze({
+    "qqq-thrust-trail-wd": Object.freeze({
+      experimentId: "qqq-thrust-trail-wd:native-vs-lock20-30:2026-08-17:v1",
+      axis: "exit",
+      name: "exit policy",
+      control: "native all-out +50% / -50% stop",
+      challenger: "LOCK20/30 all-out +20% / -30% stop",
+      managerId: "LOCK20/30",
+    }),
+  });
+
 function variableFor(brief: ChannelDecisionBrief): ChannelExperimentVariable | null {
+  const frozen = FROZEN_CHANNEL_EXPERIMENTS[brief.channel];
+  if (frozen) return { axis: frozen.axis, name: frozen.name,
+    control: frozen.control, challenger: frozen.challenger };
   const axis = brief.recommendation.axis;
   if (axis === "collection") return null;
   if (axis === "entry") {
@@ -91,6 +120,7 @@ function stageFor(brief: ChannelDecisionBrief, variable: ChannelExperimentVariab
 }
 
 function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOpportunity[]): ChannelExperimentPlan {
+  const frozen = FROZEN_CHANNEL_EXPERIMENTS[brief.channel] ?? null;
   const observed = observedRows.filter((row) => row.boundedRetuneStamp);
   const clean = observed.filter((row) => row.boundedRetuneStamp?.baselineMatches === true);
   const stamps = observed.map((row) => row.boundedRetuneStamp!).filter(Boolean);
@@ -102,12 +132,21 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
     challenger: String(stamp.alternativeValue),
   } : null;
   const variable = observedVariable ?? variableFor(brief);
-  const collection = { independentSessions: new Set(clean.map((row) => row.session)).size,
-    logicalOpportunities: new Set(clean.map((row) => row.logicalOpportunityId)).size,
+  const frozenManager = frozen?.managerId
+    ? brief.managers.compared.find((row) => row.managerId === frozen.managerId) ?? null
+    : null;
+  const collection = { independentSessions: frozenManager?.sessions
+      ?? new Set(clean.map((row) => row.session)).size,
+    logicalOpportunities: frozenManager?.pairedOpportunities
+      ?? new Set(clean.map((row) => row.logicalOpportunityId)).size,
     contaminatedOpportunities: new Set(observed.filter((row) => row.boundedRetuneStamp?.baselineMatches === false)
       .map((row) => row.logicalOpportunityId)).size };
   const baseStage = stageFor(brief, variable);
-  const stage: ChannelExperimentStage = stamps.length
+  const stage: ChannelExperimentStage = frozen
+    ? collection.contaminatedOpportunities ? "draft"
+      : collection.independentSessions >= 5 && collection.logicalOpportunities >= 10
+        ? "ready_to_score" : "collecting"
+    : stamps.length
     ? collection.contaminatedOpportunities ? "draft"
       : collection.independentSessions >= 5 && collection.logicalOpportunities >= 10 ? "ready_to_score" : "collecting"
     : baseStage;
@@ -115,7 +154,8 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
     ? `Changing only ${variable.name} from ${variable.control} to ${variable.challenger} improves the typical paired opportunity without worsening session downside or displacing better peer opportunities.`
     : "Continue the unchanged control until the next decision threshold is reached.";
   const body = {
-    experimentId: stamp?.experimentId ?? `${brief.throughSession}:${brief.channel}:${brief.recommendation.axis}`,
+    experimentId: frozen?.experimentId ?? stamp?.experimentId
+      ?? `${brief.throughSession}:${brief.channel}:${brief.recommendation.axis}`,
     channel: brief.channel,
     throughSession: brief.throughSession,
     stage,

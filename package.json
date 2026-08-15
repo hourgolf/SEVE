@@ -320,6 +320,8 @@
     "prepare-next-week-experiment-packets-selftest": "tsx scripts/prepare-next-week-experiment-packets.selftest.ts",
     "activate-next-week-experiment-packets": "tsx scripts/activate-next-week-experiment-packets.ts",
     "activate-next-week-experiment-packets-selftest": "tsx scripts/activate-next-week-experiment-packets.selftest.ts",
+    "five-step-channel-program": "tsx scripts/five-step-channel-program.ts",
+    "five-step-channel-program-selftest": "tsx lib/research/fiveStepChannelProgram.selftest.ts && tsx scripts/five-step-channel-program.selftest.ts",
     "iwm-promotion-selftest": "tsx lib/channels/decisionAtlasIwmPromotionCandidate.selftest.ts",
     "channel-decision-briefs": "tsx scripts/channel-decision-briefs.ts",
     "channel-decision-briefs-selftest": "tsx lib/research/channelDecisionBrief.selftest.ts",

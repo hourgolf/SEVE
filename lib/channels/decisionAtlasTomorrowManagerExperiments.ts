@@ -30,6 +30,7 @@ export interface TomorrowManagerExperimentDefinition {
   managerLabel: string;
   takeProfit: ChannelTakeProfitPolicy;
   ratchetParameters: ChannelRatchetPolicy;
+  stopLossCatastrophePct?: number;
   plain: string;
   evidenceRef: string;
 }
@@ -37,13 +38,26 @@ export interface TomorrowManagerExperimentDefinition {
 export const DECISION_ATLAS_TOMORROW_MANAGER_EXPERIMENTS = Object.freeze([
   {
     slug: "orb-ustop-ctl",
-    managerProfileId: "ORB-ALL-OUT-50",
-    managerLabel: "ALL OUT @ +50% · -30% STOP",
-    takeProfit: { kind: "bank", targetPct: 50, fraction: 0 },
-    ratchetParameters: NONE,
-    plain: "Take the full position at +50%; keep the current entry and size.",
+    managerProfileId: "ORB54-B30-A13",
+    managerLabel: "BANK HALF @ +30% · RUN HALF ON A13",
+    takeProfit: { kind: "bank", targetPct: 30, fraction: 0.5 },
+    ratchetParameters: A13,
+    plain:
+      "Restore the prior bank-half-at-30% and A13 runner while preserving the current entry, four-contract size, and Account 3 priority.",
     evidenceRef:
-      "decision-atlas:exit-frontier:orb-ustop-ctl:through-2026-08-11",
+      "decision-atlas:manager-era-autopsy:orb-ustop-ctl:through-2026-08-14",
+  },
+  {
+    slug: "qqq-thrust-trail-wd",
+    managerProfileId: "LOCK20/30",
+    managerLabel: "ALL OUT @ +20% · -30% STOP",
+    takeProfit: { kind: "bank", targetPct: 20, fraction: 0 },
+    ratchetParameters: NONE,
+    stopLossCatastrophePct: 30,
+    plain:
+      "Use the +20% all-out target with the -30% catastrophe stop while preserving the exact QQQ entry, size, route, and priority.",
+    evidenceRef:
+      "decision-atlas:paired-manager:qqq-thrust-trail-wd:through-2026-08-14",
   },
   {
     slug: "orb-qqq-trail",
@@ -115,9 +129,6 @@ export function buildTomorrowManagerProposalRequest(input: {
   if (!selection || !base) {
     throw new Error(`manager proposal base is missing: ${input.slug}`);
   }
-  if (base.managerProfileId === selection.managerProfileId) {
-    throw new Error(`manager proposal is already active: ${input.slug}`);
-  }
   return {
     baseSpecVersionId: base.id,
     baseSpecContentHash: base.contentHash,
@@ -126,7 +137,11 @@ export function buildTomorrowManagerProposalRequest(input: {
         managerProfileId: selection.managerProfileId,
         managerLabel: selection.managerLabel,
         takeProfit: selection.takeProfit,
-        stopLoss: base.stopLoss,
+        stopLoss: {
+          ...base.stopLoss,
+          catastrophePct:
+            selection.stopLossCatastrophePct ?? base.stopLoss.catastrophePct,
+        },
         ratchetParameters: selection.ratchetParameters,
       },
     },
