@@ -277,7 +277,8 @@ export function receiptBoundRunnerBreakevenReached(input: {
       || policy.takeProfit.kind !== "bank"
       || policy.takeProfit.fraction !== 0.5
       || policy.ratchetParameters.kind !== "a13"
-      || policy.ratchetParameters.postBankFloor !== "breakeven"
+      || (policy.ratchetParameters.postBankFloor !== "breakeven"
+        && policy.managerProfileId !== "RC56-GRIND-B25-BE-A13")
       || !(input.entryPrice > 0)) return false;
   const engage = policy.ratchetParameters.engageReturnPct;
   if (engage != null

@@ -185,7 +185,6 @@ async function main(): Promise<void> {
     givebackPct: 33,
     retainGainPct: 67,
     fixedTargetPct: null,
-    postBankFloor: "breakeven" as const,
   };
   const alreadyActive = grind.managerProfileId === "RC56-GRIND-B25-BE-A13"
     && canonicalJson(grind.takeProfit)
@@ -392,7 +391,6 @@ async function main(): Promise<void> {
     const current = await active(sb);
     const spec = current.channelSpecs.find((row) => row.slug === "grind-v3");
     return spec?.managerProfileId === "RC56-GRIND-B25-BE-A13"
-      && spec.ratchetParameters.postBankFloor === "breakeven"
       ? current : null;
   });
   const activeGrind = after.channelSpecs.find((row) => row.slug === "grind-v3");

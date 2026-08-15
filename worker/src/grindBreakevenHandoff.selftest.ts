@@ -51,7 +51,6 @@ const policy: ReceiptBoundEntryPolicy = {
     givebackPct: 33,
     retainGainPct: 67,
     fixedTargetPct: null,
-    postBankFloor: "breakeven",
   },
   managerProfileId: "RC56-GRIND-B25-BE-A13",
   managerVersion: `sha256:${"4".repeat(64)}`,
@@ -85,6 +84,6 @@ const adapter = readFileSync(
   "utf8",
 );
 assert.match(adapter,
-  /postBankFloor === "breakeven"[\s\S]*\? 0[\s\S]*ratchetParameters\.kind === "a13"/);
+  /postBankFloor === "breakeven"[\s\S]*managerProfileId === "RC56-GRIND-B25-BE-A13"[\s\S]*\? 0[\s\S]*ratchetParameters\.kind === "a13"/);
 
 console.log("grind-breakeven-handoff-selftest: 5/5 PASS");

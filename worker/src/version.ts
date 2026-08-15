@@ -14,7 +14,7 @@ export const RC54_WORKER_VERSION = "stream-2026-07-27a" as const;
 // intentionally separate so an evidence-plumbing/runtime-only deploy can be
 // verified in the heartbeat and run ledger without mutating sealed strategy
 // provenance.
-export const WORKER_RUNTIME_VERSION = "stream-runtime-2026-08-15a" as const;
+export const WORKER_RUNTIME_VERSION = "stream-runtime-2026-08-15b" as const;
 
 export function activeWorkerVersion(rc54ReleaseEnabled: boolean): string {
   return rc54ReleaseEnabled ? RC54_WORKER_VERSION : WORKER_VERSION;
