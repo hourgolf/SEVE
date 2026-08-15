@@ -25,7 +25,7 @@
 | `orb-qqq-trail` | Keep unchanged | One current loss is not an exit verdict; collect paired path evidence |
 | `pb-ride` | Keep unchanged | Diagnose why entries fail to develop before changing its exit |
 | `pb-ride-itm` | Keep unchanged at one contract | Confirm positive typical behavior and account-room cost |
-| `qqq-thrust-trail-wd` | Keep native live; continue arm-20/keep-half shadow | Compare paired capture and downside without changing the entry |
+| `qqq-thrust-trail-wd` | `LOCK20/30` paper experiment active | Native all-out +20% / -30% stop versus the former +50% / -50% native as the paired shadow control; entry, size, and route stay fixed |
 | `vb-gap-drift` | Keep unchanged | Build an exact-current sample before revisiting its manager |
 | `vb-macd-state` | Keep native live; continue A13 shadow | Separate first entry from blocked later opportunities |
 
