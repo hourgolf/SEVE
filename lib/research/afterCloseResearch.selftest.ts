@@ -52,9 +52,16 @@ check("hosted workflow retains independent verification", workflow.includes("dat
 check("hosted workflow has redundant after-hours pass", workflow.includes('cron: "30 23 * * 1-5"'), true);
 check("hosted workflow suppresses event writes", workflow.includes("--virtual-trades-only"), true);
 check("hosted workflow independently verifies publication", workflow.includes("verify-shadow-rebuild:hosted"), true);
+check("legacy verifier cannot starve exact capture", workflow.includes("id: shadow-rebuild")
+  && workflow.includes("continue-on-error: true")
+  && workflow.indexOf("Capture current and score prior exact candidates") > workflow.indexOf("id: shadow-rebuild"), true);
+check("legacy verifier failure remains a visible blocker", workflow.includes("Enforce legacy shadow integrity after capture")
+  && workflow.includes("steps.shadow-rebuild.outcome != 'success'"), true);
 check("hosted workflow preserves fail-closed diagnostics", workflow.includes("if: always()")
   && workflow.includes("if-no-files-found: warn"), true);
-check("hosted workflow remains credential-minimal", /DATABENTO|ALPACA|R2_/.test(workflow), false);
+check("hosted workflow carries exact research credentials", /DATABENTO_API_KEY/.test(workflow)
+  && /R2_ACCOUNT_ID/.test(workflow), true);
+check("hosted workflow carries no broker authority", /ALPACA/.test(workflow), false);
 
 let invalid = false;
 try { resolveAfterCloseSession("07/21/2026", 0); } catch { invalid = true; }
