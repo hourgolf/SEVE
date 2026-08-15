@@ -88,6 +88,41 @@ check("execution posture is explicit without changing legacy paper hashes", () =
   assert.equal(explicitPaper.manifest.contentHash, EXPECTED_MANIFEST_HASH);
 });
 
+check("a post-bank breakeven floor is hash-visible and split-runner only", () => {
+  const valid = compileReleaseManifest({
+    ...RC54_CONTROL_PLANE_FIXTURE,
+    channelSpecs: RC54_CONTROL_PLANE_FIXTURE.channelSpecs.map((spec) =>
+      spec.slug === "orb-ustop-ctl"
+        ? {
+          ...spec,
+          ratchetParameters: {
+            ...spec.ratchetParameters,
+            postBankFloor: "breakeven" as const,
+          },
+        }
+        : spec),
+  });
+  assert.equal(valid.validationResults.find((row) =>
+    row.gate === "reentry-scaling")?.state, "pass");
+  assert.notEqual(valid.manifest.contentHash, EXPECTED_MANIFEST_HASH);
+
+  const invalid = compileReleaseManifest({
+    ...RC54_CONTROL_PLANE_FIXTURE,
+    channelSpecs: RC54_CONTROL_PLANE_FIXTURE.channelSpecs.map((spec) =>
+      spec.slug === "pb-ride"
+        ? {
+          ...spec,
+          ratchetParameters: {
+            ...spec.ratchetParameters,
+            postBankFloor: "breakeven" as const,
+          },
+        }
+        : spec),
+  });
+  assert.equal(invalid.validationResults.find((row) =>
+    row.gate === "reentry-scaling")?.state, "block");
+});
+
 check("a mixed domain supports explicit bounded re-entry without changing single-shot roots", () => {
   const result = compileReleaseManifest({
     ...RC54_CONTROL_PLANE_FIXTURE,

@@ -14,10 +14,12 @@ export const BASE_MANAGER_IDS = [
 ] as const;
 
 export const PB_RIDE_2_MANAGER_ID = "PB2-BANK15/HALF-GIVEBACK" as const;
+export const GRIND_CURRENT_MANAGER_ID = "GRIND-B25/CURRENT-A13" as const;
 
 export const MANAGER_IDS = [
   ...BASE_MANAGER_IDS,
   PB_RIDE_2_MANAGER_ID,
+  GRIND_CURRENT_MANAGER_ID,
 ] as const;
 
 export type ManagerId = typeof MANAGER_IDS[number];
@@ -34,9 +36,10 @@ export interface ManagerState {
  * would recreate the global-exit fallacy the replay rejected.
  */
 export function managerIdsForChannel(channelSlug: string): readonly ManagerId[] {
-  return channelSlug.toLowerCase() === "pb-ride-2"
-    ? MANAGER_IDS
-    : BASE_MANAGER_IDS;
+  const slug = channelSlug.toLowerCase();
+  if (slug === "pb-ride-2") return [...BASE_MANAGER_IDS, PB_RIDE_2_MANAGER_ID];
+  if (slug === "grind-v3") return [...BASE_MANAGER_IDS, GRIND_CURRENT_MANAGER_ID];
+  return BASE_MANAGER_IDS;
 }
 
 export interface ManagerExit {
@@ -106,6 +109,35 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
       }
       return { state, exit: null };
     }
+    case "GRIND-B25/CURRENT-A13": {
+      if (state.bankReturnPct == null) {
+        if (ret <= -30) return terminal(managerId, "prebank_stop", ret, state);
+        if (ret >= 25) {
+          state.bankReturnPct = ret;
+          state.armedPeakPct = ret;
+        }
+      } else {
+        state.armedPeakPct = Math.max(state.armedPeakPct ?? ret, ret);
+      }
+      if (state.bankReturnPct != null && state.armedPeakPct != null) {
+        const runnerFloor = state.armedPeakPct >= 50
+          ? state.armedPeakPct * 0.67
+          : -33 + state.armedPeakPct * 0.67;
+        if (ret <= runnerFloor) {
+          return terminal(managerId, state.armedPeakPct >= 50
+            ? "runner_a13" : "runner_legacy_ratchet",
+          (state.bankReturnPct + ret) / 2, state);
+        }
+      }
+      if (isBell) {
+        const blended = state.bankReturnPct == null ? ret
+          : (state.bankReturnPct + ret) / 2;
+        return terminal(managerId,
+          state.bankReturnPct == null ? "bell" : "runner_bell",
+          blended, state);
+      }
+      return { state, exit: null };
+    }
     case "ARM20/HALF-GIVEBACK": {
       if (state.armedPeakPct == null) {
         if (ret <= -30) return terminal(managerId, "prearm_stop", ret, state);
@@ -132,5 +164,7 @@ export function recoverManagerState(managerId: ManagerId, peakReturnPct: number)
     return { armedPeakPct: peakReturnPct, recovered: true };
   if (managerId === PB_RIDE_2_MANAGER_ID && peakReturnPct >= 15)
     return { bankReturnPct: 15, armedPeakPct: peakReturnPct, recovered: true };
+  if (managerId === GRIND_CURRENT_MANAGER_ID && peakReturnPct >= 25)
+    return { bankReturnPct: 25, armedPeakPct: peakReturnPct, recovered: true };
   return {};
 }

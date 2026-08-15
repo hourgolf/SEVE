@@ -202,7 +202,9 @@ export function managerShadowTerminalObservationId(positionId: string, managerId
 
 export function managerAllocation(originalQty: number, managerId: ManagerId): ManagerAllocation | null {
   if (!Number.isInteger(originalQty) || originalQty < 1) return null;
-  if (managerId !== "BANK20/RUN50" && managerId !== "PB2-BANK15/HALF-GIVEBACK") {
+  if (managerId !== "BANK20/RUN50"
+      && managerId !== "PB2-BANK15/HALF-GIVEBACK"
+      && managerId !== "GRIND-B25/CURRENT-A13") {
     return { kind: "all_out", totalQty: originalQty, exitQty: originalQty, bankQty: 0, runnerQty: 0 };
   }
   if (originalQty === 1) {
@@ -313,7 +315,9 @@ export function quantityWeightedReturnPct(
   currentReturnPct: number,
 ): number | null {
   if (!finite(currentReturnPct)) return null;
-  if (run.managerId !== "BANK20/RUN50" && run.managerId !== "PB2-BANK15/HALF-GIVEBACK")
+  if (run.managerId !== "BANK20/RUN50"
+      && run.managerId !== "PB2-BANK15/HALF-GIVEBACK"
+      && run.managerId !== "GRIND-B25/CURRENT-A13")
     return rounded(currentReturnPct);
   if (!finite(state.bankReturnPct) || state.bankReturnPct == null) return rounded(currentReturnPct);
   const { totalQty, bankQty, runnerQty } = run.allocation;

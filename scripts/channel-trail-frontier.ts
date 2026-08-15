@@ -17,6 +17,13 @@ import {
   type TrailOpportunity,
   type TrailQuote,
 } from "../lib/research/channelTrailFrontier";
+import {
+  buildRunnerHandoffFrontier,
+  type RunnerHandoffFrontierBook,
+  type RunnerHandoffProfile,
+} from "../lib/research/runnerHandoffFrontier";
+import { tomorrowManagerExperimentBySlug } from "../lib/channels/decisionAtlasTomorrowManagerExperiments";
+import { ORB_MANAGER_AUTOPSY } from "../lib/research/fiveStepChannelProgram";
 import type { DecisionAtlas } from "../lib/research/decisionAtlas";
 import type { DecisionAtlasSourceSnapshot } from "../lib/research/decisionAtlasAdapter";
 import type { QuoteArchiveReceiptRow } from "../worker/src/quoteArchiveReceiptStore";
@@ -208,6 +215,98 @@ function renderMarkdown(book: ChannelTrailFrontierBook): string {
   return lines.join("\n");
 }
 
+function runnerHandoffProfiles(snapshot: DecisionAtlasSourceSnapshot): RunnerHandoffProfile[] {
+  const profiles: RunnerHandoffProfile[] = snapshot.activeChannelSpecs.flatMap((spec) => {
+    const bankPct = numeric(spec.takeProfit.targetPct);
+    const runnerFraction = numeric(spec.takeProfit.fraction);
+    const armPct = numeric(spec.ratchetParameters.engageReturnPct);
+    const retainPct = numeric(spec.ratchetParameters.retainGainPct);
+    const stopPct = numeric(spec.stopLoss.catastrophePct);
+    if (spec.takeProfit.kind !== "bank" || !(bankPct != null && bankPct > 0)
+      || !(runnerFraction != null && runnerFraction > 0 && runnerFraction < 1)
+      || spec.ratchetParameters.kind !== "a13" || !(armPct != null && armPct >= bankPct)
+      || !(retainPct != null && retainPct > 0 && retainPct < 100) || !(stopPct != null && stopPct > 0)) return [];
+    return [{
+      channel: spec.slug,
+      profileId: spec.managerProfileId,
+      profileSource: "active_spec" as const,
+      channelSpecDatabaseId: snapshot.activeChannelSpecDatabaseIdsByVersionKey?.[spec.id] ?? null,
+      bankPct,
+      runnerFraction,
+      armPct,
+      retainPeakGain: retainPct / 100,
+      catastropheStopPct: stopPct,
+      fixedRunnerTargetPct: armPct,
+    }];
+  });
+  // ORB's approved all-out experiment deliberately displaced its former
+  // B30/A13 manager. Preserve that exact prior manager as an explicitly
+  // historical research control; it is never described as live.
+  const orb = tomorrowManagerExperimentBySlug("orb-ustop-ctl");
+  const activeOrb = snapshot.activeChannelSpecs.find((row) => row.slug === "orb-ustop-ctl");
+  if (orb?.takeProfit.kind === "bank" && (orb.takeProfit.fraction ?? 0) > 0
+    && orb.takeProfit.targetPct && orb.ratchetParameters.kind === "a13"
+    && activeOrb?.managerProfileId !== orb.managerProfileId) {
+    profiles.push({
+      channel: orb.slug,
+      profileId: orb.managerProfileId,
+      profileSource: "historical_reference",
+      channelSpecDatabaseId: ORB_MANAGER_AUTOPSY.priorSpecDatabaseId,
+      bankPct: orb.takeProfit.targetPct,
+      runnerFraction: orb.takeProfit.fraction,
+      armPct: orb.ratchetParameters.engageReturnPct ?? 50,
+      retainPeakGain: (orb.ratchetParameters.retainGainPct ?? 67) / 100,
+      catastropheStopPct: orb.stopLossCatastrophePct ?? activeOrb?.stopLoss.catastrophePct ?? 30,
+      fixedRunnerTargetPct: orb.ratchetParameters.engageReturnPct ?? 50,
+    });
+  }
+  return profiles;
+}
+
+function renderRunnerHandoffMarkdown(book: RunnerHandoffFrontierBook): string {
+  const pct = (value: number | null): string => value == null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+  const money = (value: number | null): string => value == null ? "—" : `${value < 0 ? "-" : "+"}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
+  const lines = [
+    `# Runner Handoff Frontier — through ${book.throughSession}`,
+    "",
+    "Read-only paired executable-bid research. Every row keeps entry, contract, quantity, session, and configuration era fixed.",
+    "",
+    "| Channel | Profile | Evidence relation | Layer | Candidate | Typical result | Typical lift | Total modeled P&L | Negative runner | Rebound after exit | Paths |",
+    "|---|---|---|---|---|---:|---:|---:|---:|---:|---:|",
+  ];
+  const representative = new Map<string, RunnerHandoffFrontierBook["eras"][number]>();
+  for (const era of book.eras) {
+    const key = [era.channel, era.profile.profileId, era.profile.profileSource, era.evidenceLayer].join("\u0000");
+    const prior = representative.get(key);
+    const exact = era.profile.channelSpecDatabaseId != null
+      && (era.configurationEra === `channel-spec:${era.profile.channelSpecDatabaseId}`
+        || era.configurationEra.startsWith(`epoch:${era.profile.channelSpecDatabaseId}:`));
+    const priorExact = prior?.profile.channelSpecDatabaseId != null
+      && (prior.configurationEra === `channel-spec:${prior.profile.channelSpecDatabaseId}`
+        || prior.configurationEra.startsWith(`epoch:${prior.profile.channelSpecDatabaseId}:`));
+    const bankPaths = era.candidates.find((row) => row.candidateId === "CURRENT_HANDOFF")?.bankHitOpportunities ?? 0;
+    const priorBankPaths = prior?.candidates.find((row) => row.candidateId === "CURRENT_HANDOFF")?.bankHitOpportunities ?? 0;
+    if (!prior || Number(exact) > Number(priorExact)
+      || (exact === priorExact && (bankPaths > priorBankPaths
+        || (bankPaths === priorBankPaths && era.sessions > prior.sessions)))) representative.set(key, era);
+  }
+  for (const era of [...book.channelSpecRollups, ...representative.values()]
+    .sort((left, right) => left.channel.localeCompare(right.channel)
+      || left.evidenceLayer.localeCompare(right.evidenceLayer))) {
+    const selected = era.candidates.find((row) => row.candidateId === era.leadingCandidateId)
+      ?? era.candidates.find((row) => row.candidateId === "CURRENT_HANDOFF")!;
+    const exactProfileSpec = era.profile.channelSpecDatabaseId != null
+      && (era.configurationEra === `channel-spec:${era.profile.channelSpecDatabaseId}`
+        || era.configurationEra === `channel-spec-rollup:${era.profile.channelSpecDatabaseId}`
+        || era.configurationEra.startsWith(`epoch:${era.profile.channelSpecDatabaseId}:`));
+    const relation = era.profile.profileSource === "historical_reference"
+      ? "historical manager control" : exactProfileSpec ? "exact channel spec" : "structural history";
+    lines.push(`| ${era.channel} | ${era.profile.profileId} | ${relation} | ${era.evidenceLayer} | ${selected.label} | ${pct(selected.typicalBankHitResultPct)} | ${pct(selected.typicalBankHitBenefitVsCurrentPct)} | ${money(selected.bankHitTotalPnlUsd)} | ${selected.negativeRunnerFrequency == null ? "—" : `${Math.round(selected.negativeRunnerFrequency * 100)}%`} | ${selected.reboundAfterExitFrequency == null ? "—" : `${Math.round(selected.reboundAfterExitFrequency * 100)}%`} | ${selected.bankHitOpportunities}/${selected.bankHitSessions}s |`);
+  }
+  lines.push("", "The table is intentionally concise: it shows an exact channel-spec rollup when available, otherwise the most informative separated era for each profile and evidence layer. Full era-by-era comparisons remain in frontier.json.", "", "A challenger is an investigation lead, not an activation recommendation. Threshold fills exclude spread, slippage, and queue position; historical-reference profiles are never presented as current production behavior.", "");
+  return lines.join("\n");
+}
+
 async function main(): Promise<void> {
   for (const file of [ledgerFile, atlasFile, snapshotFile]) if (!existsSync(file)) throw new Error(`required frozen artifact not found: ${file}`);
   const ledgerText = readFileSync(ledgerFile, "utf8");
@@ -333,8 +432,16 @@ async function main(): Promise<void> {
     currentConfigurationEras,
     currentVirtualConfigurationEras,
   });
+  const handoffBook = buildRunnerHandoffFrontier({
+    generatedAt: atlas.generatedAt,
+    throughSession: atlas.throughSession,
+    opportunities,
+    profiles: runnerHandoffProfiles(snapshot),
+  });
   const json = `${JSON.stringify(book, null, 2)}\n`;
   const markdown = `${renderMarkdown(book)}\n`;
+  const handoffJson = `${JSON.stringify(handoffBook, null, 2)}\n`;
+  const handoffMarkdown = `${renderRunnerHandoffMarkdown(handoffBook)}\n`;
   const receipt = {
     schemaVersion: 1,
     generatedAt: book.generatedAt,
@@ -347,7 +454,10 @@ async function main(): Promise<void> {
     virtualCensors: { missingSignal: virtualMissingSignal, missingConfigurationStamp: virtualMissingConfigurationStamp },
     pathSources: { localArchiveSessions: archiveSessions, verifiedR2Sessions: r2Sessions, remoteSelectSessions: remoteSessions, missingSessions },
     inputs: { ledgerSha256: sha256(ledgerText), atlasSha256: sha256(atlasText), snapshotSha256: sha256(snapshotText) },
-    outputs: { frontierSha256: sha256(json), markdownSha256: sha256(markdown) },
+    runnerHandoff: { profiles: handoffBook.profiles.length, eras: handoffBook.eras.length,
+      channelSpecRollups: handoffBook.channelSpecRollups.length },
+    outputs: { frontierSha256: sha256(json), markdownSha256: sha256(markdown),
+      runnerHandoffSha256: sha256(handoffJson), runnerHandoffMarkdownSha256: sha256(handoffMarkdown) },
     productionReads: [
       ...(receipts.size ? ["quote_archive_receipts:SELECT", "r2_quote_archive:GET"] : []),
       ...(remoteSessions ? ["option_quotes:SELECT"] : []),
@@ -358,14 +468,24 @@ async function main(): Promise<void> {
     configurationAuthority: false,
   };
   mkdirSync(resolve(outputDir, "channels"), { recursive: true });
+  mkdirSync(resolve(outputDir, "runner-handoffs", "channels"), { recursive: true });
   writeFileSync(resolve(outputDir, "frontier.json"), json);
   writeFileSync(resolve(outputDir, "frontier.md"), markdown);
   writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
+  writeFileSync(resolve(outputDir, "runner-handoffs", "frontier.json"), handoffJson);
+  writeFileSync(resolve(outputDir, "runner-handoffs", "frontier.md"), handoffMarkdown);
   for (const channel of Object.values(book.channels)) {
     writeFileSync(resolve(outputDir, "channels", `${safeName(channel.channel)}.json`), `${JSON.stringify(channel, null, 2)}\n`);
   }
+  for (const channel of [...new Set(handoffBook.eras.map((era) => era.channel))]) {
+    const payload = { ...handoffBook,
+      eras: handoffBook.eras.filter((era) => era.channel === channel),
+      channelSpecRollups: handoffBook.channelSpecRollups.filter((era) => era.channel === channel) };
+    writeFileSync(resolve(outputDir, "runner-handoffs", "channels", `${safeName(channel)}.json`), `${JSON.stringify(payload, null, 2)}\n`);
+  }
   console.log(`channel-trail-frontier: PASS · ${receipt.channels} channels · ${receipt.logicalOpportunities} logical opportunities`);
   console.log(`  local archive ${archiveSessions}s · verified R2 ${r2Sessions}s · remote SELECT ${remoteSessions}s · missing ${missingSessions}s`);
+  console.log(`  runner handoffs ${handoffBook.profiles.length} profiles · ${handoffBook.eras.length} separate eras`);
   console.log("  production writes: 0 · authority: none");
 }
 

@@ -83,6 +83,7 @@ check("five contracts split 2 bank / 3 runner", bank5, { kind: "bank_runner", to
 check("all-out manager exits all five", managerAllocation(5, "LOCK20/30"), { kind: "all_out", totalQty: 5, exitQty: 5, bankQty: 0, runnerQty: 0 });
 check("one-lot bank is explicitly fractional", managerEconomicMode(managerAllocation(1, "BANK20/RUN50")!), "normalized_fractional");
 check("pb2 five-contract split is quantity-aware", managerAllocation(5, "PB2-BANK15/HALF-GIVEBACK"), { kind: "bank_runner", totalQty: 5, exitQty: 0, bankQty: 2, runnerQty: 3 });
+check("grind current shadow keeps exact two-lot economics", managerAllocation(4, "GRIND-B25/CURRENT-A13"), { kind: "bank_runner", totalQty: 4, exitQty: 0, bankQty: 2, runnerQty: 2 });
 check("manager-specific minimums accept whole-lot two-contract economics", [minimumModeledQty("LOCK20/30"), minimumModeledQty("PB2-BANK15/HALF-GIVEBACK"), MIN_MODELED_SOURCE_QTY, MIN_STAGED_SOURCE_QTY], [2, 2, 2, 2]);
 check("bad quantity has no allocation", managerAllocation(0, "BANK20/RUN50"), null);
 

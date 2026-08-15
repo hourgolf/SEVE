@@ -61,6 +61,9 @@ export interface ChannelRatchetPolicy {
   givebackPct: number | null;
   retainGainPct: number | null;
   fixedTargetPct: number | null;
+  /** Optional post-bank protection for a split runner. Omitted preserves the
+   * historic peak-price ratchet semantics and its byte-stable content hash. */
+  postBankFloor?: "none" | "breakeven";
 }
 
 export function managerPolicyContentHash(input: {
@@ -682,6 +685,17 @@ function compileValidation(
 
   for (const spec of specs) {
     const ratchet = spec.ratchetParameters;
+    if (ratchet.postBankFloor != null
+        && ratchet.postBankFloor !== "none"
+        && ratchet.postBankFloor !== "breakeven") {
+      compatibilityErrors.push(`${spec.slug}:post_bank_floor_value`);
+    }
+    if (ratchet.postBankFloor === "breakeven"
+        && (spec.takeProfit.kind !== "bank"
+          || spec.takeProfit.fraction !== 0.5
+          || ratchet.kind !== "a13")) {
+      compatibilityErrors.push(`${spec.slug}:post_bank_floor_shape`);
+    }
     if (ratchet.kind === "none" && [ratchet.engageReturnPct, ratchet.givebackPct,
       ratchet.retainGainPct, ratchet.fixedTargetPct].some((value) => value !== null)) {
       compatibilityErrors.push(`${spec.slug}:ratchet_none_payload`);

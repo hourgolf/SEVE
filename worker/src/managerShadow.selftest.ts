@@ -24,6 +24,21 @@ const pb2Peak = advanceManager("PB2-BANK15/HALF-GIVEBACK", pb2Bank.state, 60, fa
 check("pb2 candidate banks then follows runner peak", pb2Peak.state, { bankReturnPct: 16, armedPeakPct: 60 });
 check("pb2 candidate exits runner at half peak", advanceManager("PB2-BANK15/HALF-GIVEBACK", pb2Peak.state, 30, false).exit?.reason, "runner_half_giveback");
 check("pb2 candidate is channel scoped", [managerIdsForChannel("pb-ride-2").length, managerIdsForChannel("pb-ride").length], [9, 8]);
+const grindBank = advanceManager("GRIND-B25/CURRENT-A13", {}, 26, false);
+const grindPreArmPeak = advanceManager("GRIND-B25/CURRENT-A13", grindBank.state, 40, false);
+check("grind current shadow preserves the below-entry pre-arm trail",
+  advanceManager("GRIND-B25/CURRENT-A13", grindPreArmPeak.state, -6.2, false).exit?.reason,
+  "runner_legacy_ratchet");
+const grindArmed = advanceManager("GRIND-B25/CURRENT-A13", grindBank.state, 60, false);
+check("grind current shadow preserves A13 after +50",
+  advanceManager("GRIND-B25/CURRENT-A13", grindArmed.state, 40.2, false).exit?.reason,
+  "runner_a13");
+check("grind current manager is channel scoped",
+  [managerIdsForChannel("grind-v3").length, managerIdsForChannel("grind-v3").at(-1)],
+  [9, "GRIND-B25/CURRENT-A13"]);
+check("grind current restart recovers bank and peak",
+  recoverManagerState("GRIND-B25/CURRENT-A13", 60),
+  { bankReturnPct: 25, armedPeakPct: 60, recovered: true });
 
 const position = {
   id: "11111111-1111-4111-8111-111111111111", occ_symbol: "SPY260713C00600000",

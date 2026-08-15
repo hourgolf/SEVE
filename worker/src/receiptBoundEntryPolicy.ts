@@ -92,6 +92,10 @@ function validRatchet(value: unknown): value is ChannelRatchetPolicy {
   ] as const) {
     if (row[field] !== null && !finite(row[field])) return false;
   }
+  if (row.postBankFloor != null
+      && row.postBankFloor !== "none"
+      && row.postBankFloor !== "breakeven") return false;
+  if (row.postBankFloor === "breakeven" && row.kind !== "a13") return false;
   if (row.kind === "a13") {
     return finite(row.engageReturnPct)
       && row.engageReturnPct > 0
@@ -173,6 +177,9 @@ export function parseReceiptBoundEntryPolicy(
       || !validTakeProfit(row.takeProfit)
       || !validStopLoss(row.stopLoss)
       || !validRatchet(row.ratchetParameters)
+      || (record(row.ratchetParameters)?.postBankFloor === "breakeven"
+        && (record(row.takeProfit)?.kind !== "bank"
+          || record(row.takeProfit)?.fraction !== 0.5))
       || row.managerProfileId !== row.configuration.managerProfileId
       || row.managerVersion !== row.configuration.managerVersion
       || (row.policyVersion === RECEIPT_BOUND_ENTRY_POLICY_VERSION
@@ -253,6 +260,29 @@ export function receiptBoundA13GivebackReached(input: {
   const floor = input.entryPrice
     + (input.peak - input.entryPrice) * (retain / 100);
   return input.mark <= floor;
+}
+
+/** A split runner may protect entry until A13 arms. The runner row itself is
+ * durable proof that the bank leg completed; once the stamped A13 engage peak
+ * is reached, the higher retained-gain floor exclusively owns the exit. */
+export function receiptBoundRunnerBreakevenReached(input: {
+  policy: Readonly<ReceiptBoundEntryPolicy> | null;
+  isRunner: boolean;
+  entryPrice: number;
+  mark: number;
+  peak: number;
+}): boolean {
+  const policy = input.policy;
+  if (!policy || !input.isRunner
+      || policy.takeProfit.kind !== "bank"
+      || policy.takeProfit.fraction !== 0.5
+      || policy.ratchetParameters.kind !== "a13"
+      || policy.ratchetParameters.postBankFloor !== "breakeven"
+      || !(input.entryPrice > 0)) return false;
+  const engage = policy.ratchetParameters.engageReturnPct;
+  if (engage != null
+      && input.peak >= input.entryPrice * (1 + engage / 100)) return false;
+  return input.mark <= input.entryPrice;
 }
 
 export function receiptBoundNativeAtrExitEligible(input: {
