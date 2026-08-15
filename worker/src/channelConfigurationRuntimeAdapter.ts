@@ -190,6 +190,7 @@ function overlayRoot(channel: ChannelConfig, root: Readonly<ReceiptBoundRuntimeR
     ? root.takeProfit.targetPct ?? 0
     : 0;
   const runnerGiveback = root.ratchetParameters.postBankFloor === "breakeven"
+      || root.managerProfileId === "RC56-GRIND-B25-BE-A13"
     ? 0
     : root.ratchetParameters.kind === "a13"
     ? root.ratchetParameters.givebackPct ?? 0
