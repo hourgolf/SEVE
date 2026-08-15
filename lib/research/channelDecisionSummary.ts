@@ -7,6 +7,7 @@ export const CHANNEL_DISPOSITIONS = [
   "TEST EXIT",
   "TEST MANAGER",
   "REVIEW SIZE",
+  "TEST ADMISSION",
   "KEEP COLLECTING",
   "REVIEW PROMOTION",
   "REVIEW RETIREMENT",
@@ -73,6 +74,7 @@ export interface ChannelDecisionSummary {
     executed: ChannelDecisionBrief["executed"];
     historicalVirtual: ChannelDecisionBrief["historicalVirtual"];
     collision: ChannelDecisionBrief["collision"];
+    platformEffect: ChannelDecisionBrief["platformEffect"];
   };
 }
 
@@ -104,6 +106,7 @@ export function dispositionForAxis(axis: ChannelDecisionAxis): ChannelDispositio
   if (axis === "exit") return "TEST EXIT";
   if (axis === "manager") return "TEST MANAGER";
   if (axis === "size") return "REVIEW SIZE";
+  if (axis === "admission") return "TEST ADMISSION";
   if (axis === "promotion") return "REVIEW PROMOTION";
   if (axis === "retirement") return "REVIEW RETIREMENT";
   return "KEEP COLLECTING";
@@ -114,6 +117,7 @@ function fixedForAxis(axis: ChannelDecisionAxis): string[] {
   if (axis === "exit") return ["entry", "manager", "size"];
   if (axis === "manager") return ["entry", "size", "account route"];
   if (axis === "size") return ["entry", "exit", "manager"];
+  if (axis === "admission") return ["entry", "exit", "manager", "size", "account route"];
   if (axis === "promotion") return ["entry", "exit", "manager", "size"];
   if (axis === "retirement") return ["history", "other channels", "live roster"];
   return ["entry", "exit", "manager", "size"];
@@ -149,6 +153,11 @@ function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
     const supported = brief.capacity.bestSupportedContracts;
     return { label: "SIZE STEP", value: current != null && supported != null && supported > current ? `${current}→${supported} ct` : current != null ? `HOLD ${current} ct` : "NO STEP", fact: brief.capacity.conclusion };
   }
+  if (axis === "admission") return {
+    label: "PLATFORM EFFECT",
+    value: `${brief.platformEffect.blockedWinners} SUPPRESSED / ${brief.platformEffect.protectedLosses} PROTECTED`,
+    fact: brief.platformEffect.conclusion,
+  };
   if (axis === "promotion") return { label: "PORTFOLIO OVERLAP", value: brief.collision.strongestOverlap ? brief.collision.strongestOverlap.redundancy.toUpperCase() : "UNKNOWN", fact: brief.collision.conclusion };
   if (axis === "retirement") return { label: "REDUNDANCY", value: brief.collision.strongestOverlap ? brief.collision.strongestOverlap.redundancy.toUpperCase() : "UNKNOWN", fact: brief.collision.conclusion };
   return { label: "MOVE KEPT", value: percent(brief.nativeExit.typicalCapture), fact: brief.nativeExit.conclusion };
@@ -165,6 +174,7 @@ function plainDiagnosis(brief: ChannelDecisionBrief): string {
   }
   if (axis === "manager") return "One exit manager deserves a controlled comparison on the same opportunities.";
   if (axis === "size") return "The current entry and exit shape is promising enough to test one additional size step in the portfolio replay.";
+  if (axis === "admission") return brief.platformEffect.conclusion;
   return concise(brief.recommendation.summary);
 }
 
@@ -173,6 +183,7 @@ function plainNextTest(brief: ChannelDecisionBrief): string {
   if (brief.recommendation.axis === "exit") return "Compare one exit alternative with the current exit on the same opportunities.";
   if (brief.recommendation.axis === "manager") return "Compare one manager with the current manager on the same filled positions.";
   if (brief.recommendation.axis === "size") return "Replay one contract step with account capacity and displaced opportunities included.";
+  if (brief.recommendation.axis === "admission") return "Relax one channel-specific admission rule in paper replay while every other variable stays fixed.";
   return conciseTest(brief.recommendation.nextExperiment);
 }
 
@@ -204,6 +215,11 @@ export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): Channe
       { label: "TYPICAL RESULT", value: typical.value, fact: typical.fact },
       { label: "EVIDENCE", value: sample.value, fact: sample.fact },
       metricForAxis(brief),
+      ...(brief.platformEffect.state === "available" && brief.recommendation.axis !== "admission" ? [{
+        label: "PLATFORM EFFECT",
+        value: `${brief.platformEffect.blockedWinners} ↑ / ${brief.platformEffect.protectedLosses} ↓`,
+        fact: brief.platformEffect.conclusion,
+      }] : []),
     ],
     entry: {
       conclusion: brief.entryFrequency.conclusion,
@@ -235,13 +251,19 @@ export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): Channe
       bestSupportedContracts: brief.capacity.bestSupportedContracts,
       steps,
     },
-    sources: { ...brief.evidence, executed: brief.executed, historicalVirtual: brief.historicalVirtual, collision: brief.collision },
+    sources: {
+      ...brief.evidence,
+      executed: brief.executed,
+      historicalVirtual: brief.historicalVirtual,
+      collision: brief.collision,
+      platformEffect: brief.platformEffect,
+    },
   };
 }
 
 export function buildFleetDecisionSummary(bySlug: Readonly<Record<string, ChannelDecisionBrief>>, throughSession: string | null): FleetDecisionSummary {
   const summaries = Object.values(bySlug).map(buildChannelDecisionSummary);
-  const investigate = summaries.filter((row) => ["TEST ENTRY TIMING", "TEST EXIT", "TEST MANAGER", "REVIEW SIZE"].includes(row.disposition)).length;
+  const investigate = summaries.filter((row) => ["TEST ENTRY TIMING", "TEST EXIT", "TEST MANAGER", "REVIEW SIZE", "TEST ADMISSION"].includes(row.disposition)).length;
   const promoteOrRetire = summaries.filter((row) => row.disposition === "REVIEW PROMOTION" || row.disposition === "REVIEW RETIREMENT").length;
   const collecting = summaries.filter((row) => row.disposition === "KEEP COLLECTING").length;
   const lead = summaries.find((row) => row.evidenceState === "DECISION READY" && row.disposition !== "KEEP COLLECTING")

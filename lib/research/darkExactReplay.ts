@@ -7,7 +7,7 @@ import { MANAGER_POLICY_VERSION, managerIdsForChannel, type ManagerId } from "..
 import type { DarkCandidateFreeze, FrozenDarkCandidateDecision } from "./darkCandidateFreeze.js";
 import type { VbCandidateReceipt, VbCandidateScorecard, VbManagerArmResult } from "./vbCandidateEvidence.js";
 
-export const DARK_EXACT_REPLAY_VERSION = "dark-exact-replay-v2" as const;
+export const DARK_EXACT_REPLAY_VERSION = "dark-exact-replay-v3" as const;
 
 export type DarkExactReplayCensorCode =
   | "duplicate_candidate"
@@ -226,7 +226,7 @@ export function deriveDarkExactReplay(input: {
         continue;
       }
       const decisionAtMs = Date.parse(candidate.decisionObservedAt);
-      if (!finite(arm.exitAtMs) || arm.exitAtMs < decisionAtMs || !finite(arm.exitBid) || arm.exitBid <= 0
+      if (!finite(arm.exitAtMs) || !finite(arm.exitBid) || arm.exitBid <= 0
           || !finite(arm.returnPct) || !finite(arm.pnlPerContract)) {
         addCensor(censors, candidate, "invalid_manager_exit", `${arm.exitAtMs}/${arm.exitBid}`, managerId);
         continue;
@@ -238,7 +238,13 @@ export function deriveDarkExactReplay(input: {
         addCensor(censors, candidate, "sequential_reentry_active", new Date(priorExitAtMs).toISOString(), managerId);
         continue;
       }
-      activeUntil.set(key, arm.exitAtMs);
+      // CBBO-1s is event-sparse. The quote stamped immediately before a
+      // sub-second decision remains the carried-forward executable state at
+      // that decision boundary. Persist the decision clock as the earliest
+      // possible exit while retaining the provider quote timestamp inside the
+      // immutable exact-path object.
+      const exitAtMs = Math.max(arm.exitAtMs, decisionAtMs);
+      activeUntil.set(key, exitAtMs);
       paths.push({
         candidateId: candidate.candidateId,
         opportunityId: candidate.executionOpportunityId,
@@ -252,7 +258,7 @@ export function deriveDarkExactReplay(input: {
         sourceBarAt: candidate.sourceBarAt,
         decisionObservedAt: candidate.decisionObservedAt,
         entryAsk: scorecard.exactEntryAsk,
-        exitAt: new Date(arm.exitAtMs).toISOString(),
+        exitAt: new Date(exitAtMs).toISOString(),
         exitBid: arm.exitBid,
         exitReason: arm.exitReason,
         returnPct: arm.returnPct,

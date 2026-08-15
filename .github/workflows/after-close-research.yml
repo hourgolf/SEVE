@@ -29,10 +29,16 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      DATABENTO_API_KEY: ${{ secrets.DATABENTO_API_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      SEVE_DARK_EXACT_MAX_COST_USD: ${{ vars.SEVE_DARK_EXACT_MAX_COST_USD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,12 +58,18 @@ jobs:
             exit 1
           fi
           echo "SESSION_DATE_ET=$session" >> "$GITHUB_ENV"
+          prior="$(date -d "$session -1 day" +%F)"
+          while [[ "$(date -d "$prior" +%u)" -gt 5 ]]; do prior="$(date -d "$prior -1 day" +%F)"; done
+          echo "PRIOR_SESSION_DATE_ET=$prior" >> "$GITHUB_ENV"
       - name: Verify research policy
         run: |
           npm run after-close-research-selftest
           npm run gate-shadow-policy-selftest
           npm run vb-candidate-evidence-selftest
           npm run dark-candidate-freeze-selftest
+          npm run dark-candidate-t1-safety-selftest
+          npm run nightly-dark-exact-learning-selftest
+          npm run publish-dark-exact-receipts-selftest
           npm run sentinel-manager-book-selftest
           npm run sentinel-release-audit-selftest
           npm run channel-decision-packet-selftest
@@ -78,6 +90,23 @@ jobs:
             npm run verify-shadow-rebuild:hosted -- \
               --session "$SESSION_DATE_ET" \
               --output-dir data
+          fi
+      - name: Capture current and score prior exact candidates
+        shell: bash
+        run: |
+          npm run dark-candidate-freeze:hosted -- \
+            --date "$SESSION_DATE_ET" \
+            --out "data/dark-candidate-freezes/$SESSION_DATE_ET"
+          if [[ -n "$DATABENTO_API_KEY" && -n "$R2_ACCOUNT_ID" && -n "$R2_ACCESS_KEY_ID" \
+                && -n "$R2_SECRET_ACCESS_KEY" && -n "$R2_BUCKET" \
+                && "$SEVE_DARK_EXACT_MAX_COST_USD" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            npm run nightly-dark-exact-learning -- \
+              --session "$PRIOR_SESSION_DATE_ET" \
+              --output-dir "data/decision-atlas/runs/$PRIOR_SESSION_DATE_ET/exact-learning" \
+              --max-provider-cost-usd "$SEVE_DARK_EXACT_MAX_COST_USD" \
+              --publish
+          else
+            echo "Exact T+1 learning skipped: provider/storage credentials or cost ceiling are unavailable."
           fi
       - name: Build nightly Decision Atlas
         shell: bash
@@ -102,12 +131,6 @@ jobs:
         run: |
           npm run priority-a-retune-readiness -- \
             --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET/priority-a-readiness"
-      - name: Freeze dark candidate exact-contract requests
-        shell: bash
-        run: |
-          npm run dark-candidate-freeze:hosted -- \
-            --date "$SESSION_DATE_ET" \
-            --out "data/dark-candidate-freezes/$SESSION_DATE_ET"
       - name: Build deterministic Sentinel operator packet
         shell: bash
         env:
@@ -152,6 +175,11 @@ jobs:
               "data/decision-atlas/runs/$SESSION_DATE_ET/priority-a-readiness/readiness.json"
             if [[ -f data/gate-shadow-verification.json ]]; then
               sha256sum data/gate-shadow-verification.json
+            fi
+            if [[ -f "data/decision-atlas/runs/$PRIOR_SESSION_DATE_ET/exact-learning/receipt.json" ]]; then
+              sha256sum \
+                "data/decision-atlas/runs/$PRIOR_SESSION_DATE_ET/exact-learning/receipt.json" \
+                "data/decision-atlas/runs/$PRIOR_SESSION_DATE_ET/exact-learning/publication-receipt.json"
             fi
           } | tee after-close-sha256.txt
           {

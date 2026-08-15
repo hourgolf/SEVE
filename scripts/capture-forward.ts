@@ -41,6 +41,12 @@ const di = process.argv.indexOf("--days");
 const CATCHUP_DAYS = di >= 0 && process.argv[di + 1] ? Math.max(1, Number(process.argv[di + 1])) : 6;
 const now = Date.now();
 const recentDays = Array.from({ length: CATCHUP_DAYS }, (_, i) => etDate(now - i * 86_400_000)); // today → back
+function previousWeekday(dateEt: string): string {
+  const cursor = new Date(`${dateEt}T12:00:00.000Z`);
+  do cursor.setUTCDate(cursor.getUTCDate() - 1);
+  while (cursor.getUTCDay() === 0 || cursor.getUTCDay() === 6);
+  return cursor.toISOString().slice(0, 10);
+}
 
 const stamp = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const dur = (ms: number) => (ms / 1000).toFixed(1) + "s";
@@ -138,6 +144,27 @@ async function main() {
   const decisionRoot = `data/decision-atlas/runs/${recentDays[0]}`;
   const shadowRoot = `${decisionRoot}/shadow`;
   const postcloseReady = run("postclose-readiness", ["postclose-readiness", "--", "--env-file", envFile], 2);
+  // Freeze today's suppressed candidate clocks while their exact contract
+  // identity and policy provenance are still fresh. This is SELECT-only and
+  // local-only, so a broker flatness failure does not destroy the learning
+  // record. T+1 scoring is intentionally performed on the prior weekday.
+  run("dark candidate freeze (current session)", [
+    "dark-candidate-freeze", "--", "--date", recentDays[0],
+    "--out", `${decisionRoot}/exact-learning/freeze`,
+  ], 2);
+  const exactCeiling = Number(process.env.SEVE_DARK_EXACT_MAX_COST_USD ?? "");
+  if (Number.isFinite(exactCeiling) && exactCeiling > 0) {
+    const priorSession = previousWeekday(recentDays[0]);
+    run(`dark exact learning ${priorSession}`, [
+      "nightly-dark-exact-learning", "--", "--session", priorSession,
+      "--output-dir", `data/decision-atlas/runs/${priorSession}/exact-learning`,
+      "--env-file", envFile,
+      "--max-provider-cost-usd", String(exactCeiling),
+      "--publish",
+    ], 2);
+  } else {
+    console.log("\n· exact T+1 learning skipped: SEVE_DARK_EXACT_MAX_COST_USD is not a positive safety ceiling");
+  }
   const shadowPublished = postcloseReady && run("gate-shadow (stamped session)", [
     "gate-shadow", "--", "--session", recentDays[0], "--output-dir", shadowRoot,
     "--virtual-trades-only", "--stamp-provenance",

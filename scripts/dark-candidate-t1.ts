@@ -35,6 +35,7 @@ import {
   type VbExactPathDbPayload,
 } from "../lib/research/vbCandidateEvidence.js";
 import { withBoundedRetry } from "../lib/research/boundedRetry.js";
+import { managerIdsForChannel } from "../engine/managerPolicy.js";
 
 const arg = (name: string, fallback = ""): string => {
   const index = process.argv.indexOf(`--${name}`);
@@ -48,13 +49,22 @@ const OUT_DIR = arg("outdir", "data/dark-candidate-t1");
 const MINIMUM_AGE_HOURS = Number(arg("minimum-history-age-hours", "24"));
 const ESTIMATE = flag("estimate") || flag("download");
 const DOWNLOAD = flag("download");
+const MAX_PROVIDER_COST_USD = arg("max-provider-cost-usd")
+  ? Number(arg("max-provider-cost-usd"))
+  : null;
 const PROVIDER_TIMEOUT_MS = 120_000;
+const PROVIDER_PATH_TIMEOUT_MS = 600_000;
 const PROVIDER_RETRY_DELAYS_MS = [1_000, 3_000, 7_000] as const;
+const PROVIDER_ESTIMATE_CONCURRENCY = 4;
+const PROVIDER_DOWNLOAD_CONCURRENCY = 4;
 
 if (!FREEZE) throw new Error("--freeze is required");
 if (!/^[0-9a-f]{64}$/.test(EXPECTED_FILE_SHA256)) throw new Error("--expected-file-sha256 must be 64 lowercase hex characters");
 if (!/^[0-9a-f]{64}$/.test(EXPECTED_CANONICAL_SHA256)) throw new Error("--expected-canonical-sha256 must be 64 lowercase hex characters");
 if (!Number.isFinite(MINIMUM_AGE_HOURS) || MINIMUM_AGE_HOURS < 0) throw new Error("--minimum-history-age-hours must be non-negative");
+if (DOWNLOAD && (MAX_PROVIDER_COST_USD == null || !Number.isFinite(MAX_PROVIDER_COST_USD) || MAX_PROVIDER_COST_USD <= 0)) {
+  throw new Error("--download requires a positive --max-provider-cost-usd safety ceiling");
+}
 
 const sha256 = (bytes: Buffer | string): string => createHash("sha256").update(bytes).digest("hex");
 const freezeBytes = readFileSync(FREEZE);
@@ -103,7 +113,10 @@ async function databento(
     delaysMs: PROVIDER_RETRY_DELAYS_MS,
     operation: async (attempt) => {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+      const timer = setTimeout(
+        () => controller.abort(),
+        method === "timeseries.get_range" ? PROVIDER_PATH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS,
+      );
       try {
         const response = await fetch(`https://hist.databento.com/v0/${method}?${query}`, {
           headers: { Authorization: auth },
@@ -149,6 +162,20 @@ async function estimate(request: DarkCandidateContractRequest): Promise<number> 
   const parsed = Number(JSON.parse(await databento("metadata.get_cost", request)));
   if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`invalid provider cost for ${request.requestId}`);
   return parsed;
+}
+
+async function mapLimit<T, R>(rows: readonly T[], limit: number, work: (row: T) => Promise<R>): Promise<R[]> {
+  const output = new Array<R>(rows.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, rows.length) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= rows.length) return;
+      output[index] = await work(rows[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return output;
 }
 
 async function fetchQuotes(request: DarkCandidateContractRequest): Promise<{
@@ -281,8 +308,9 @@ async function main(): Promise<void> {
 
   const costByRequest = new Map<string, number>();
   let estimatedCostUsd = 0;
-  for (const request of freeze.contractRequests) {
-    const cost = await estimate(request);
+  const estimates = await mapLimit(freeze.contractRequests, PROVIDER_ESTIMATE_CONCURRENCY, estimate);
+  for (const [index, request] of freeze.contractRequests.entries()) {
+    const cost = estimates[index]!;
     costByRequest.set(request.requestId, cost);
     estimatedCostUsd += cost;
     console.log(`  ${request.occSymbol} · estimate $${cost.toFixed(6)}`);
@@ -291,6 +319,12 @@ async function main(): Promise<void> {
     console.log(`  estimated total $${estimatedCostUsd.toFixed(6)} · no download requested · external writes NONE`);
     return;
   }
+  if (estimatedCostUsd > MAX_PROVIDER_COST_USD!) {
+    throw new Error(
+      `provider estimate $${estimatedCostUsd.toFixed(6)} exceeds authorized ceiling $${MAX_PROVIDER_COST_USD!.toFixed(6)}`,
+    );
+  }
+  console.log(`  provider ceiling PASS · $${estimatedCostUsd.toFixed(6)} <= $${MAX_PROVIDER_COST_USD!.toFixed(6)}`);
 
   const candidatesByContract = new Map<string, typeof freeze.candidates>();
   for (const candidate of freeze.candidates) {
@@ -301,14 +335,19 @@ async function main(): Promise<void> {
   const candidatePayloads: VbCandidateDbPayload[] = [];
   const exactPathPayloads: VbExactPathDbPayload[] = [];
   const exactPathByCandidate = new Map<string, VbExactPathDbPayload>();
-  for (const request of freeze.contractRequests) {
+  const providerResults = await mapLimit(freeze.contractRequests, PROVIDER_DOWNLOAD_CONCURRENCY, async (request) => {
+    const result = cachedQuotes(request) ?? await fetchQuotes(request);
+    console.log(`  ${request.occSymbol} · downloaded ${result.quotes.length} valid rows · crossed ${result.crossedQuoteRows}`);
+    return result;
+  });
+  for (const [requestIndex, request] of freeze.contractRequests.entries()) {
     const rows = candidatesByContract.get(request.occSymbol) ?? [];
     const expectedIds = [...new Set(rows.map((row) => row.candidateId))].sort();
     if (JSON.stringify(expectedIds) !== JSON.stringify([...request.candidateIds].sort())
         || rows.length !== request.rawDecisionCount) {
       throw new Error(`frozen request identity mismatch for ${request.occSymbol}`);
     }
-    const result = cachedQuotes(request) ?? await fetchQuotes(request);
+    const result = providerResults[requestIndex]!;
     const payload = Buffer.from(`${JSON.stringify(result.quotes)}\n`, "utf8");
     const compressed = gzipSync(payload, { level: 9 });
     const contentSha256 = sha256(payload);
@@ -370,6 +409,29 @@ async function main(): Promise<void> {
   }
 
   const replay = deriveDarkExactReplay({ freeze, scorecards });
+  const structuralCensors = replay.censors.filter((row) =>
+    row.code !== "sequential_reentry_active" && row.code !== "manager_arm_censored");
+  const pathsByCandidate = new Map<string, number>();
+  for (const path of replay.paths) pathsByCandidate.set(path.candidateId, (pathsByCandidate.get(path.candidateId) ?? 0) + 1);
+  let durableCensorCoverage = 0;
+  for (const payload of candidatePayloads) {
+    const candidate = freeze.candidates.find((row) => row.candidateId === payload.id);
+    if (!candidate) throw new Error(`candidate payload missing frozen identity: ${String(payload.id)}`);
+    const censors = replay.censors.filter((row) => row.candidateId === candidate.candidateId
+      && (row.code === "sequential_reentry_active" || row.code === "manager_arm_censored"))
+      .map((row) => ({ managerId: row.managerId, code: row.code, fact: row.fact }));
+    const expected = managerIdsForChannel(candidate.channelSlug).length;
+    const published = pathsByCandidate.get(candidate.candidateId) ?? 0;
+    if (published + censors.length !== expected) {
+      throw new Error(`manager path coverage mismatch for ${candidate.candidateId}: ${published}+${censors.length}/${expected}`);
+    }
+    Object.assign(payload, {
+      manager_paths_expected: expected,
+      manager_paths_published: published,
+      manager_censors: censors,
+    });
+    durableCensorCoverage += censors.length;
+  }
   const managerPathPayloads = replay.paths.map((path) => {
     const exactPath = exactPathByCandidate.get(path.candidateId);
     return exactPath ? darkExactManagerPathDbPayload({
@@ -414,6 +476,14 @@ async function main(): Promise<void> {
     scorecards,
     completeness,
     replay,
+    publicationState: "complete_with_explicit_censors",
+    publicationCoverage: {
+      candidates: candidatePayloads.length,
+      exactPaths: exactPathPayloads.length,
+      managerPaths: replay.paths.length,
+      managerCensors: durableCensorCoverage,
+      expectedManagerPaths: candidatePayloads.reduce((sum, row) => sum + Number((row as Record<string, unknown>).manager_paths_expected), 0),
+    },
     externalWrites: false,
     orderPathAuthorized: false,
     policyChangeAuthorized: false,
@@ -439,8 +509,6 @@ async function main(): Promise<void> {
   console.log(`  exact raw-clock coverage ${completeness.counts.exactEligible}/${completeness.counts.frozenCandidates}`);
   console.log(`  independent manager paths ${replay.source.independentManagerPaths} · overlap censors ${replay.source.overlappingManagerClocksCensored}`);
   console.log(`  wrote ${OUT_DIR} · external writes NONE · order path false`);
-  const structuralCensors = replay.censors.filter((row) =>
-    row.code !== "sequential_reentry_active" && row.code !== "manager_arm_censored");
   if (structuralCensors.length || completeness.counts.exactMissing > 0) {
     throw new Error(
       `exact replay failed closed: completeness ${completeness.state};`

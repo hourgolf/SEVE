@@ -11,7 +11,7 @@ import type { ChannelTrailFrontierBook, TrailCandidateSummary } from "./channelT
 
 export const CHANNEL_DECISION_BRIEF_VERSION = "channel-decision-brief-v1" as const;
 
-export type ChannelDecisionAxis = "entry" | "exit" | "manager" | "size" | "collection" | "promotion" | "retirement";
+export type ChannelDecisionAxis = "entry" | "exit" | "manager" | "size" | "admission" | "collection" | "promotion" | "retirement";
 
 export interface ChannelDecisionBriefMetric {
   label: "typical result" | "evidence" | "exit capture" | "manager test" | "size replay";
@@ -101,6 +101,17 @@ export interface ChannelDecisionBrief {
     conclusion: string;
     strongestOverlap: AtlasPairEdge | null;
     edges: AtlasPairEdge[];
+  };
+  platformEffect: {
+    state: "available" | "missing";
+    candidates: number;
+    sessions: number;
+    protectedLosses: number;
+    blockedWinners: number;
+    managerCensors: number;
+    typicalAcrossManagersUsd: number | null;
+    conclusion: string;
+    byReason: AtlasChannelDossier["platformEffect"]["byReason"];
   };
   evidence: {
     decisionLayer: string;
@@ -278,8 +289,9 @@ function chooseRecommendation(input: {
   currentSizeObserved: boolean;
   bestSupportedContracts: number | null;
   trail: ChannelDecisionBrief["trail"];
+  platformEffect: ChannelDecisionBrief["platformEffect"];
 }): ChannelDecisionBrief["recommendation"] {
-  const { dossier, native, managers, entries, trail } = input;
+  const { dossier, native, managers, entries, trail, platformEffect } = input;
   let axis: ChannelDecisionAxis = "collection";
   let label = "KEEP COLLECTING";
   let summary = dossier.summary;
@@ -287,6 +299,11 @@ function chooseRecommendation(input: {
   if (dossier.disposition === "retire") {
     axis = "retirement"; label = "REVIEW RETIREMENT";
     nextExperiment = "Confirm that the negative evidence is redundant, then prepare a reversible collection pause.";
+  } else if (platformEffect.state === "available" && platformEffect.sessions >= 5
+      && platformEffect.candidates >= 10 && platformEffect.blockedWinners >= platformEffect.protectedLosses * 2
+      && (platformEffect.typicalAcrossManagersUsd ?? 0) > 0) {
+    axis = "admission"; label = "TEST ADMISSION"; summary = platformEffect.conclusion;
+    nextExperiment = "Keep entry, exit, manager, size, and route fixed; relax only the leading channel-specific admission rule in paper replay.";
   } else if (trail?.state === "ready" && trail.leading
       && trail.recommendation.startsWith("test_")) {
     axis = "manager"; label = "REVIEW EXIT"; summary = trail.conclusion;
@@ -366,6 +383,27 @@ export function buildChannelDecisionBriefs(input: {
       compared: trailEra.candidates,
     } : undefined;
     const collision = collisionReview(input.atlas.collisionGraph, dossier.channel);
+    const platform = dossier.platformEffect;
+    const platformConclusion = platform.state === "missing"
+      ? "Exact blocked-candidate scoring is not available yet; no platform-rule claim is made."
+      : platform.sessions < 5 || platform.candidates < 10
+        ? `${platform.fact} Keep collecting until at least 5 sessions and 10 exact blocked candidates.`
+        : platform.blockedWinners >= platform.protectedLosses * 2 && (platform.typicalAcrossManagersUsd ?? 0) > 0
+          ? `${platform.fact} The leading admission rule may be suppressing this channel's opportunity and deserves one controlled paper replay.`
+          : platform.protectedLosses >= platform.blockedWinners * 2 && (platform.typicalAcrossManagersUsd ?? 0) < 0
+            ? `${platform.fact} The gate is more often protecting the desk than suppressing this channel.`
+            : `${platform.fact} The gate effect is mixed; retain it while more exact paths collect.`;
+    const platformEffect: ChannelDecisionBrief["platformEffect"] = {
+      state: platform.state,
+      candidates: platform.candidates,
+      sessions: platform.sessions,
+      protectedLosses: platform.protectedLosses,
+      blockedWinners: platform.blockedWinners,
+      managerCensors: platform.managerCensors,
+      typicalAcrossManagersUsd: platform.typicalAcrossManagersUsd,
+      conclusion: platformConclusion,
+      byReason: platform.byReason,
+    };
     const currentContracts = input.currentContractsByChannel?.[dossier.channel] ?? null;
     const currentSizeObserved = currentContracts == null || rows.some((row) => row.quantity === currentContracts);
     const bestPoint = dossier.capacity.bestSupportedContracts == null ? null
@@ -374,7 +412,7 @@ export function buildChannelDecisionBriefs(input: {
       ? `${currentContracts == null ? "Current size is not in the nightly inventory" : `Current size is ${currentContracts} contracts${currentSizeObserved ? " and is represented in the decision cohort" : " but is not yet represented in the decision cohort"}`}. The replay remains deployable through ${bestPoint.contracts} contracts, with ${bestPoint.additionalDisplacedOtherOpportunitiesVsOneContract ?? 0} additional peer opportunities displaced versus one contract.`
       : "The 1–6 contract replay does not support an additional size conclusion.";
     const recommendation = chooseRecommendation({ dossier, native, managers, entries, currentContracts,
-      currentSizeObserved, bestSupportedContracts: dossier.capacity.bestSupportedContracts, trail });
+      currentSizeObserved, bestSupportedContracts: dossier.capacity.bestSupportedContracts, trail, platformEffect });
     const brief: ChannelDecisionBrief = {
       schemaVersion: 1,
       briefVersion: CHANNEL_DECISION_BRIEF_VERSION,
@@ -418,6 +456,7 @@ export function buildChannelDecisionBriefs(input: {
       capacity: { conclusion: capacityConclusion, currentContracts, currentSizeObserved,
         bestSupportedContracts: dossier.capacity.bestSupportedContracts, points: dossier.capacity.points },
       collision,
+      platformEffect,
       evidence: {
         decisionLayer: dossier.decisionCohort.evidenceLayer,
         configurationEra: dossier.decisionCohort.configurationEra,

@@ -112,9 +112,10 @@ const agentForAxis = (axis: ChannelDecisionAxis): ResearchAgentId =>
   axis === "entry" || axis === "promotion" ? "scout"
     : axis === "exit" || axis === "manager" ? "harvester"
       : axis === "size" ? "allocator"
+        : axis === "admission" ? "mechanic"
         : axis === "retirement" ? "skeptic" : "mechanic";
 const axisPriority = (axis: ChannelDecisionAxis): number => ({
-  retirement: 92, promotion: 88, manager: 84, exit: 80, entry: 76, size: 72, collection: 48,
+  retirement: 92, promotion: 88, manager: 84, exit: 80, admission: 78, entry: 76, size: 72, collection: 48,
 })[axis];
 const voicedPrimary = (brief: ChannelDecisionBrief): string => {
   const summary = brief.recommendation.summary;
@@ -124,6 +125,7 @@ const voicedPrimary = (brief: ChannelDecisionBrief): string => {
   if (brief.recommendation.axis === "manager") return `Manager, please report to the principal's office. ${summary}`;
   if (brief.recommendation.axis === "size") return `More contracts are not a personality. ${summary}`;
   if (brief.recommendation.axis === "entry") return `Signal check: timing gets the microscope. ${summary}`;
+  if (brief.recommendation.axis === "admission") return `The bouncer may be rejecting the right guest. ${summary}`;
   return `No victory lap yet. ${summary}`;
 };
 

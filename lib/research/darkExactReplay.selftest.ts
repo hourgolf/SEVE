@@ -134,4 +134,12 @@ const receipt = exactReceiptForFrozenCandidate(first, baseAt + 30 * 60_000);
 check("exact adapter preserves frozen identities", [receipt.candidateId, receipt.opportunityId, receipt.orderPathAuthorized], [first.candidateId, first.executionOpportunityId, false]);
 check("exact adapter does not upgrade the live snapshot basis", [receipt.liveObservedAsk?.feed, receipt.liveObservedAsk?.exactExecutable], ["alpaca_snapshot", false]);
 
+const subsecond = candidate(9);
+const subsecondCard = scorecard(subsecond, Date.parse(subsecond.decisionObservedAt) - 900);
+const subsecondReplay = deriveDarkExactReplay({ freeze: freeze([subsecond]), scorecards: [subsecondCard] });
+check("carried-forward one-second quote exits normalize to the sub-second decision clock",
+  new Set(subsecondReplay.paths.map((row) => row.exitAt)), new Set([subsecond.decisionObservedAt]));
+check("carried-forward quote normalization does not create an invalid-exit censor",
+  subsecondReplay.censors.some((row) => row.code === "invalid_manager_exit"), false);
+
 console.log(`dark-exact-replay-selftest: ${checks}/${checks} PASS`);

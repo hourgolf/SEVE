@@ -2,10 +2,40 @@ import assert from "node:assert/strict";
 import type { ConfigurationIdentity, LogicalTrade } from "../profitability/profitabilityLedger";
 import type { ChannelManagerRunRow } from "./channelManagerEvidence";
 import {
+  buildVirtualEpisodeIds,
   buildLogicalManagerPaths,
   channelConfigurationEra,
   isExactCurrentChannelConfiguration,
 } from "./decisionAtlasAdapter";
+
+const virtual = (signalId: string, signalAt: string, exitAt: string | null) => ({
+  signal_id: signalId,
+  strategist_id: "strategist-vb",
+  slug: "vb-vwap-revert-qqq",
+  occ: "QQQ260814P00700000",
+  signal_at: signalAt,
+  blocked: "not_armed",
+  entry_px: 1,
+  exit_reason: "target",
+  exit_px: 1.2,
+  exit_at: exitAt,
+  pnl_per_contract: 20,
+  mfe_pct: 25,
+  giveback_pct: 5,
+});
+
+const episodeIds = buildVirtualEpisodeIds([
+  virtual("signal-1", "2026-08-14T14:30:00.000Z", "2026-08-14T15:00:00.000Z"),
+  virtual("signal-2", "2026-08-14T14:31:00.000Z", "2026-08-14T15:20:00.000Z"),
+  virtual("signal-3", "2026-08-14T15:01:00.000Z", "2026-08-14T15:10:00.000Z"),
+  virtual("signal-4", "2026-08-15T14:31:00.000Z", null),
+]);
+assert.equal(episodeIds.get("signal-1"), episodeIds.get("signal-2"),
+  "overlapping polling paths must remain one natural opportunity");
+assert.notEqual(episodeIds.get("signal-1"), episodeIds.get("signal-3"),
+  "a signal after the native path exits may begin a new opportunity");
+assert.notEqual(episodeIds.get("signal-3"), episodeIds.get("signal-4"),
+  "opportunity episodes must not cross trading sessions");
 
 const identity = (
   channelSpecVersionId: string,
