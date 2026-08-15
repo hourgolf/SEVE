@@ -101,6 +101,8 @@ assert.match(runner, /compressed_sha256/);
 assert.match(runner, /manifest_sha256/);
 assert.match(runner, /snapshot-file/);
 assert.match(runner, /evidenceLayer: "virtual"/);
+assert.match(runner, /buildRunnerHandoffFrontier/);
+assert.match(runner, /runner-handoffs/);
 assert.doesNotMatch(runner, /PutObjectCommand|\.from\([^\n]+\)[\s\S]{0,160}\.(?:insert|upsert|update|delete)\(/,
   "trail runner must remain SELECT\/GET only");
 

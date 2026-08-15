@@ -14,6 +14,7 @@ import {
   receiptBoundEntryPolicyStampPresent,
   receiptBoundFixedTargetReached,
   receiptBoundNativeAtrExitEligible,
+  receiptBoundRunnerBreakevenReached,
   receiptBoundRunnerConfiguration,
 } from "./receiptBoundEntryPolicy.js";
 import { RC54_MANAGER_PROFILES } from "./rc54ManagerPolicy.js";
@@ -123,6 +124,33 @@ check("A13 uses the stamped engage and retained-gain parameters", () => {
   }), false);
 });
 
+check("post-bank breakeven protects only the pre-A13 runner", () => {
+  const root = runtime.roots.find((item) =>
+    item.ratchetParameters.kind === "a13"
+      && item.takeProfit.fraction === 0.5);
+  assert.ok(root);
+  const policy = parseReceiptBoundEntryPolicy({
+    ...buildReceiptBoundEntryPolicy(root),
+    ratchetParameters: {
+      ...root.ratchetParameters,
+      postBankFloor: "breakeven",
+    },
+  });
+  assert.ok(policy);
+  assert.equal(receiptBoundRunnerBreakevenReached({
+    policy, isRunner: true, entryPrice: 1, mark: 1, peak: 1.4,
+  }), true);
+  assert.equal(receiptBoundRunnerBreakevenReached({
+    policy, isRunner: false, entryPrice: 1, mark: 1, peak: 1.4,
+  }), false);
+  assert.equal(receiptBoundRunnerBreakevenReached({
+    policy, isRunner: true, entryPrice: 1, mark: 1, peak: 1.5,
+  }), false);
+  assert.equal(receiptBoundA13GivebackReached({
+    policy, isRunner: true, entryPrice: 1, mark: 1.335, peak: 1.5,
+  }), true);
+});
+
 check("native ATR and runner allocation come from the stamped policy", () => {
   const root = runtime.roots.find((item) =>
     item.ratchetParameters.kind === "native-atr");
@@ -201,6 +229,7 @@ check("worker exit paths call the immutable policy helpers", () => {
   assert.match(exitRules, /receiptBoundBankTargetReached/);
   assert.match(exitRules, /receiptBoundFixedTargetReached/);
   assert.match(exitRules, /receiptBoundA13GivebackReached/);
+  assert.match(exitRules, /receiptBoundRunnerBreakevenReached/);
   assert.match(decide, /const sealedManagedRow = sealedRc54Row \|\| sealedReceiptBoundRow/);
   assert.match(decide, /sealedReceiptBoundRow[\s\S]*\? 0[\s\S]*ch\.premium_stop_pct/);
   assert.match(execute, /receiptBoundRunnerConfiguration\(receiptBoundPolicy\)/);

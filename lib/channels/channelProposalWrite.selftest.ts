@@ -225,6 +225,29 @@ check("manager policy expands into one immutable policy identity", () => {
   );
 });
 
+check("manager policy can encode a receipt-bound post-bank breakeven floor", () => {
+  const built = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      managerPolicy: {
+        ...validRequest.proposedPatch.managerPolicy,
+        managerProfileId: "GRIND-B25-BE-A13",
+        managerLabel: "BANK HALF +25% · BREAKEVEN RUNNER · A13",
+        takeProfit: { kind: "bank", targetPct: 25, fraction: 0.5 },
+        ratchetParameters: {
+          ...orb.ratchetParameters,
+          postBankFloor: "breakeven",
+        },
+      },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.equal(built.draftSpec.ratchetParameters.postBankFloor, "breakeven");
+  assert.equal(
+    built.preview.validationResults.some((result) => result.state === "block"),
+    false,
+  );
+});
+
 check("manager policy cannot be mixed with an unrelated economic change", () => {
   expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,

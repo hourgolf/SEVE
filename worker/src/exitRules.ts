@@ -26,6 +26,7 @@ import {
   receiptBoundA13GivebackReached,
   receiptBoundBankTargetReached,
   receiptBoundFixedTargetReached,
+  receiptBoundRunnerBreakevenReached,
   type ReceiptBoundEntryPolicy,
 } from "./receiptBoundEntryPolicy.js";
 
@@ -84,6 +85,13 @@ export function premiumExitReason(c: FastExitCheck, mark: number, peak: number):
   if (rc54RunnerFixedTargetReached({
     profile: rc54Profile, isRunner: !!c.isRunner, entryPrice: entry, mark,
   })) return "target_premium";
+  if (receiptBoundRunnerBreakevenReached({
+    policy: c.receiptBoundEntryPolicy ?? null,
+    isRunner: !!c.isRunner,
+    entryPrice: entry,
+    mark,
+    peak,
+  })) return "runner_breakeven";
   // RUNNER RATCHET (R1): peak-anchored giveback — the remainder ride ends when the mark
   // surrenders runnerGivebackPct of the PEAK. peak > entry guard: the ratchet only ever
   // arms above water (a tranche fired at the TP level, so the peak is ≥ that by then).

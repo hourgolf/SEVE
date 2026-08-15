@@ -332,13 +332,27 @@ function validateManagerPolicy(value: unknown): asserts value is OperatorManager
   if (!isObject(value.ratchetParameters)) {
     throw new ProposalInputError("managerPolicy.ratchetParameters must be an object");
   }
-  requireExactKeys(value.ratchetParameters, [
+  const ratchetKeys = Object.keys(value.ratchetParameters).sort();
+  const baseRatchetKeys = [
     "engageReturnPct",
     "fixedTargetPct",
     "givebackPct",
     "kind",
     "retainGainPct",
-  ], "managerPolicy.ratchetParameters");
+  ].sort();
+  const ratchetKeysValid = (
+    ratchetKeys.length === baseRatchetKeys.length
+      && ratchetKeys.every((key, index) => key === baseRatchetKeys[index])
+  ) || (
+    ratchetKeys.length === baseRatchetKeys.length + 1
+      && ratchetKeys.every((key, index) =>
+        key === [...baseRatchetKeys, "postBankFloor"].sort()[index])
+  );
+  if (!ratchetKeysValid) {
+    throw new ProposalInputError(
+      "managerPolicy.ratchetParameters contains unsupported fields",
+    );
+  }
   const ratchet = value.ratchetParameters;
   const finiteOrNull = ["engageReturnPct", "fixedTargetPct", "givebackPct", "retainGainPct"]
     .every((field) => ratchet[field] === null
@@ -347,7 +361,10 @@ function validateManagerPolicy(value: unknown): asserts value is OperatorManager
     && ratchet.givebackPct === null
     && ratchet.retainGainPct === null
     && ratchet.fixedTargetPct === null;
-  const validRatchet = finiteOrNull && (
+  const validPostBankFloor = ratchet.postBankFloor == null
+    || ratchet.postBankFloor === "none"
+    || ratchet.postBankFloor === "breakeven";
+  const validRatchet = finiteOrNull && validPostBankFloor && (
     ((ratchet.kind === "none" || ratchet.kind === "native-atr") && nullTuning)
     || (ratchet.kind === "fixed-target"
       && ratchet.fixedTargetPct != null
@@ -365,7 +382,10 @@ function validateManagerPolicy(value: unknown): asserts value is OperatorManager
       && Number(ratchet.retainGainPct) > 0
       && Number(ratchet.retainGainPct) < 100
       && Number(ratchet.givebackPct) + Number(ratchet.retainGainPct) === 100
-      && ratchet.fixedTargetPct === null)
+      && ratchet.fixedTargetPct === null
+      && (ratchet.postBankFloor !== "breakeven"
+        || value.takeProfit.kind === "bank"
+        && value.takeProfit.fraction === 0.5))
   );
   if (!validRatchet) {
     throw new ProposalInputError("managerPolicy.ratchetParameters contains an invalid bounded policy");
