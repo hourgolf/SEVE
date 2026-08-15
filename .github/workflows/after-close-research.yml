@@ -62,13 +62,17 @@ jobs:
           while [[ "$(date -d "$prior" +%u)" -gt 5 ]]; do prior="$(date -d "$prior -1 day" +%F)"; done
           echo "PRIOR_SESSION_DATE_ET=$prior" >> "$GITHUB_ENV"
       - name: Verify research policy
+        id: research-policy
         run: |
           npm run after-close-research-selftest
           npm run gate-shadow-policy-selftest
+          npm run gate-shadow-verification-selftest
+          npm run reconcile-shadow-rebuild-selftest
           npm run vb-candidate-evidence-selftest
           npm run dark-candidate-freeze-selftest
           npm run dark-candidate-t1-safety-selftest
           npm run nightly-dark-exact-learning-selftest
+          npm run weekend-exact-research-selftest
           npm run publish-dark-exact-receipts-selftest
           npm run sentinel-manager-book-selftest
           npm run sentinel-release-audit-selftest
@@ -76,6 +80,8 @@ jobs:
           npm run channel-trail-frontier-selftest
           npm run research-council-selftest
       - name: Build and publish session research
+        id: shadow-rebuild
+        continue-on-error: true
         shell: bash
         env:
           DRY_RUN_INPUT: ${{ inputs.dry_run }}
@@ -215,3 +221,9 @@ jobs:
           # mismatch report survive for exact, manifest-bound recovery.
           if-no-files-found: warn
           retention-days: 30
+      - name: Enforce legacy shadow integrity after capture
+        if: always() && steps.shadow-rebuild.outcome != 'success'
+        shell: bash
+        run: |
+          echo "Legacy shadow rebuild or verifier failed; exact capture was allowed to continue and diagnostics were preserved." >&2
+          exit 1

@@ -1,0 +1,116 @@
+name: weekend exact research
+
+on:
+  schedule:
+    # Friday OPRA history clears its T+1 archive gate on Saturday. Running at
+    # 21:30 UTC is safely after that boundary in both US daylight and standard
+    # time, so the weekend packet does not wait until Monday.
+    - cron: "30 21 * * 6"
+  workflow_dispatch:
+    inputs:
+      session:
+        description: "Exact ET session date; blank resolves the prior weekday"
+        required: false
+        type: string
+      dry_run:
+        description: "Score locally without publishing exact receipts or dashboard briefs"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekend-exact-research
+  cancel-in-progress: false
+
+jobs:
+  exact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      DATABENTO_API_KEY: ${{ secrets.DATABENTO_API_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      SEVE_DARK_EXACT_MAX_COST_USD: ${{ vars.SEVE_DARK_EXACT_MAX_COST_USD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Resolve exact session
+        shell: bash
+        env:
+          SESSION_INPUT: ${{ inputs.session }}
+        run: |
+          session="$SESSION_INPUT"
+          if [[ -z "$session" ]]; then
+            session="$(TZ=America/New_York date -d 'yesterday' +%F)"
+            while [[ "$(date -d "$session" +%u)" -gt 5 ]]; do session="$(date -d "$session -1 day" +%F)"; done
+          fi
+          if [[ ! "$session" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Invalid ET session date: $session" >&2
+            exit 1
+          fi
+          echo "EXACT_SESSION_DATE_ET=$session" >> "$GITHUB_ENV"
+      - name: Verify exact research policy
+        run: |
+          npm run dark-candidate-freeze-selftest
+          npm run dark-candidate-t1-safety-selftest
+          npm run nightly-dark-exact-learning-selftest
+          npm run publish-dark-exact-receipts-selftest
+          npm run decision-atlas-selftest
+          npm run nightly-decision-atlas-selftest
+          npm run publish-channel-decision-briefs-selftest
+      - name: Score exact Friday evidence
+        shell: bash
+        env:
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          args=(
+            --session "$EXACT_SESSION_DATE_ET"
+            --output-dir "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/exact-learning"
+            --max-provider-cost-usd "$SEVE_DARK_EXACT_MAX_COST_USD"
+          )
+          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$DRY_RUN_INPUT" != "true" ]]; then
+            args+=(--publish)
+          fi
+          npm run nightly-dark-exact-learning -- "${args[@]}"
+      - name: Rebuild weekend Decision Atlas
+        run: |
+          npm run nightly-decision-atlas -- \
+            --through "$EXACT_SESSION_DATE_ET" \
+            --out-dir "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET"
+      - name: Publish concise weekend briefs
+        if: vars.DECISION_ATLAS_DASHBOARD_PUBLISH == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
+        run: |
+          npm run publish-channel-decision-briefs -- \
+            --publish \
+            --expected-through "$EXACT_SESSION_DATE_ET" \
+            --briefs-file "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/learning/dashboard-briefs.json" \
+            --receipt-file "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/briefs/publication-receipt.json"
+      - name: Freeze checksums
+        shell: bash
+        run: |
+          find "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET" -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | tee weekend-exact-sha256.txt
+      - name: Upload frozen weekend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekend-exact-research-${{ github.run_id }}
+          path: |
+            data/decision-atlas/runs/**
+            weekend-exact-sha256.txt
+          if-no-files-found: warn
+          retention-days: 30
