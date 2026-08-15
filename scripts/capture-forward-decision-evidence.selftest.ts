@@ -34,6 +34,8 @@ assert.ok(hostedPublish >= 0 && hostedPublish < hostedVerify && hostedVerify < h
 assert.ok(hostedExact > hostedVerify && hostedExact < hostedAtlas,
   "the hosted schedule must publish verified prior-session exact receipts before rebuilding the Atlas");
 assert.match(workflow, /SEVE_DARK_EXACT_MAX_COST_USD/);
+assert.match(workflow, /exact_args\+=\(--publish\)/,
+  "manual dry runs must not publish exact production receipts");
 assert.match(workflow, /--virtual-trades-only/);
 assert.match(workflow, /--shadow-catchup-manifest data\/gate-shadow-catchup-manifest\.json/);
 assert.match(workflow, /learning\/dashboard-briefs\.json/);
