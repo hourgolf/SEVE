@@ -93,6 +93,9 @@ jobs:
           fi
       - name: Capture current and score prior exact candidates
         shell: bash
+        env:
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           npm run dark-candidate-freeze:hosted -- \
             --date "$SESSION_DATE_ET" \
@@ -100,11 +103,15 @@ jobs:
           if [[ -n "$DATABENTO_API_KEY" && -n "$R2_ACCOUNT_ID" && -n "$R2_ACCESS_KEY_ID" \
                 && -n "$R2_SECRET_ACCESS_KEY" && -n "$R2_BUCKET" \
                 && "$SEVE_DARK_EXACT_MAX_COST_USD" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-            npm run nightly-dark-exact-learning -- \
-              --session "$PRIOR_SESSION_DATE_ET" \
-              --output-dir "data/decision-atlas/runs/$PRIOR_SESSION_DATE_ET/exact-learning" \
-              --max-provider-cost-usd "$SEVE_DARK_EXACT_MAX_COST_USD" \
-              --publish
+            exact_args=(
+              --session "$PRIOR_SESSION_DATE_ET"
+              --output-dir "data/decision-atlas/runs/$PRIOR_SESSION_DATE_ET/exact-learning"
+              --max-provider-cost-usd "$SEVE_DARK_EXACT_MAX_COST_USD"
+            )
+            if [[ "$EVENT_NAME" != "workflow_dispatch" || "$DRY_RUN_INPUT" != "true" ]]; then
+              exact_args+=(--publish)
+            fi
+            npm run nightly-dark-exact-learning -- "${exact_args[@]}"
           else
             echo "Exact T+1 learning skipped: provider/storage credentials or cost ceiling are unavailable."
           fi
