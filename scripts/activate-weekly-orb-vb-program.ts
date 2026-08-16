@@ -163,7 +163,7 @@ const orbChange: ProgramChange = {
         `active-manifest:${compiled.manifest.contentHash}`,
         "operator-approval:2026-08-15:orb-entry-qualification",
       ],
-      changeClass: "code-strategy-logic",
+      changeClass: "governed-operational-policy",
     };
   },
   verifyAfter(compiled) {

@@ -34,8 +34,8 @@ const BOUNDED_PATCH_KEYS = new Set([
 const GOVERNED_PATCH_KEYS = new Set([
   "executionPosture",
   "maxEntriesPerSession",
+  "entryParameters",
 ]);
-const CODE_STRATEGY_PATCH_KEYS = new Set(["entryParameters"]);
 const MAX_PATCH_BYTES = 16_384;
 const MAX_EVIDENCE_REFS = 32;
 const CAPACITY_COLLISION_FIELDS = new Set([
@@ -219,6 +219,23 @@ function validateProposalPatch(
       }
       return;
     }
+    if ("entryParameters" in patch) {
+      if (!isObject(patch.entryParameters)) {
+        throw new ProposalInputError("entryParameters must be an object");
+      }
+      const version = patch.entryParameters.entryQualificationVersion;
+      const minute = patch.entryParameters.entryStartEtMinute;
+      const tags = patch.entryParameters.standDownDayTags;
+      if (version !== "orb-entry-qualification-v1"
+          || !Number.isInteger(minute) || Number(minute) < 570 || Number(minute) > 925
+          || !Array.isArray(tags) || tags.length < 1
+          || tags.some((tag) => tag !== "cpi" && tag !== "opex")
+          || new Set(tags).size !== tags.length
+          || !Number.isInteger(patch.entryParameters.maxEntriesPerSession)) {
+        throw new ProposalInputError("entryParameters contains an invalid entry qualification");
+      }
+      return;
+    }
     if (!Number.isInteger(patch.maxEntriesPerSession)
         || Number(patch.maxEntriesPerSession) < 1
         || Number(patch.maxEntriesPerSession) > 3) {
@@ -228,18 +245,9 @@ function validateProposalPatch(
     }
     return;
   }
-  if (changeClass === "code-strategy-logic") {
-    const unknown = fields.filter((field) => !CODE_STRATEGY_PATCH_KEYS.has(field));
-    if (unknown.length || fields.length !== 1 || !isObject(patch.entryParameters)) {
-      throw new ProposalInputError(
-        "a code strategy proposal must contain exactly one entryParameters object",
-      );
-    }
-    return;
-  }
   if (changeClass !== "bounded-parameter") {
     throw new ProposalInputError(
-      "this write slice accepts bounded-parameter, governed, or entry-qualification proposals only",
+      "this write slice accepts bounded-parameter or governed proposals only",
     );
   }
   const unknown = fields.filter((field) => !BOUNDED_PATCH_KEYS.has(field));
@@ -522,10 +530,16 @@ export function buildOperatorProposal(
   }
   const requestedLimit = input.proposedPatch.maxEntriesPerSession;
   const requestedPosture = input.proposedPatch.executionPosture;
+  const requestedEntryParameters = input.proposedPatch.entryParameters;
   const managerPolicy = input.proposedPatch.managerPolicy;
   const proposedPatch: ChannelChangeProposal["proposedPatch"] =
     requestedPosture != null
       ? { executionPosture: requestedPosture }
+      : requestedEntryParameters != null
+      ? {
+        reentryPolicy: baseSpec.reentryPolicy,
+        entryParameters: requestedEntryParameters,
+      }
       : requestedLimit == null
       ? managerPolicy == null
         ? input.proposedPatch
