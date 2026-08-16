@@ -257,6 +257,9 @@ function admissionRootFromReceipt(
       : null,
     runnerKind: root.ratchetParameters.kind,
     configurationEpochId: root.configuration.configurationEpochId,
+    entryQualificationVersion: root.entryQualificationVersion,
+    entryStartEtMinute: root.entryStartEtMinute,
+    standDownDayTags: root.standDownDayTags,
   });
 }
 

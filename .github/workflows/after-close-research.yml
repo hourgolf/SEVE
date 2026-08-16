@@ -79,6 +79,8 @@ jobs:
           npm run channel-decision-packet-selftest
           npm run channel-trail-frontier-selftest
           npm run research-council-selftest
+          npm run entry-qualification-policy-selftest
+          npm run manager-pattern-scan-selftest
       - name: Build and publish session research
         id: shadow-rebuild
         continue-on-error: true
@@ -128,6 +130,15 @@ jobs:
             --through "$SESSION_DATE_ET" \
             --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET" \
             --shadow-catchup-manifest data/gate-shadow-catchup-manifest.json
+      - name: Scan manager and entry patterns by logical trade
+        shell: bash
+        run: |
+          npm run manager-pattern-scan -- \
+            --ledger-file "data/decision-atlas/runs/$SESSION_DATE_ET/profitability/ledger.json" \
+            --snapshot-file "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/snapshot.json" \
+            --from 2026-07-14 \
+            --through "$SESSION_DATE_ET" \
+            --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET/manager-patterns"
       - name: Publish concise Atlas briefs for the dashboard
         if: vars.DECISION_ATLAS_DASHBOARD_PUBLISH == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
         shell: bash
@@ -177,6 +188,8 @@ jobs:
               "data/sentinel-packets/$SESSION_DATE_ET.receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/profitability/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/manager-patterns/scan.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/manager-patterns/scan.md" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/trails/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/trails/frontier.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/weekly/receipt.json" \

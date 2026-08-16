@@ -35,6 +35,7 @@ const GOVERNED_PATCH_KEYS = new Set([
   "executionPosture",
   "maxEntriesPerSession",
 ]);
+const CODE_STRATEGY_PATCH_KEYS = new Set(["entryParameters"]);
 const MAX_PATCH_BYTES = 16_384;
 const MAX_EVIDENCE_REFS = 32;
 const CAPACITY_COLLISION_FIELDS = new Set([
@@ -59,6 +60,7 @@ export interface OperatorProposalRequest {
     executionPosture?: "paper" | "observe-only";
     maxEntriesPerSession?: number;
     managerPolicy?: OperatorManagerPolicyRequest;
+    entryParameters?: JsonObject;
   };
   reason: string;
   evidenceRefs: string[];
@@ -226,9 +228,18 @@ function validateProposalPatch(
     }
     return;
   }
+  if (changeClass === "code-strategy-logic") {
+    const unknown = fields.filter((field) => !CODE_STRATEGY_PATCH_KEYS.has(field));
+    if (unknown.length || fields.length !== 1 || !isObject(patch.entryParameters)) {
+      throw new ProposalInputError(
+        "a code strategy proposal must contain exactly one entryParameters object",
+      );
+    }
+    return;
+  }
   if (changeClass !== "bounded-parameter") {
     throw new ProposalInputError(
-      "this write slice accepts bounded-parameter or governed re-entry proposals only",
+      "this write slice accepts bounded-parameter, governed, or entry-qualification proposals only",
     );
   }
   const unknown = fields.filter((field) => !BOUNDED_PATCH_KEYS.has(field));

@@ -53,6 +53,8 @@ assert.equal(isGateShadowBlockReason("rc54_admission_closed"), false, "unknown r
 assert.equal(isGateShadowBlockReason("day1_admission_closed"), false, "post-admission signals are not admitted opportunities");
 assert.equal(isGateShadowBlockReason("day1_session_ledger_unavailable"), false, "missing control truth must remain censored");
 assert.equal(isGateShadowBlockReason("admission_domain_new_entries_disabled"), false, "disabled configuration is not a counterfactual opportunity");
+assert.equal(gateShadowBlockSemantic("orb_cpi_opex_standdown"), "entry_day_tag_standdown", "ORB event stand-down remains reconstructable");
+assert.equal(gateShadowTraversal("orb_before_1030"), "sequential", "ORB early signals are de-duplicated sequentially");
 assert.equal(new Set(GATE_SHADOW_BLOCK_SEMANTICS).size, GATE_SHADOW_BLOCK_SEMANTICS.length, "block semantics must not contain duplicates");
 const script = readFileSync(new URL("../../scripts/gate-shadow.ts", import.meta.url), "utf8");
 assert.match(script, /if \(HAS_SERVICE\) await bank\(s, prior, false\)/, "publication must not skip rows first reconstructed read-only");
@@ -95,5 +97,5 @@ const broadenedBytes = Buffer.from(JSON.stringify({ ...manifest, allowedWriteTab
 const broadenedHash = `sha256:${createHash("sha256").update(broadenedBytes).digest("hex")}`;
 assert.throws(() => authorizeGateShadowCatchup(broadenedBytes, broadenedHash, "2026-08-07"), /failed closed/);
 
-const checks = (legacyReleaseSuppressions.length + domainReleaseSuppressions.length) * 2 + 37;
+const checks = (legacyReleaseSuppressions.length + domainReleaseSuppressions.length) * 2 + 39;
 console.log(`gate-shadow-policy-selftest: ${checks}/${checks} passed`);

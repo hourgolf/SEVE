@@ -28,6 +28,7 @@ import {
   DAY1_SEALED_RUNTIME_POSTURE,
   type Day1RuntimePostureInput,
 } from "./day1ReleasePolicy.js";
+import { evaluateEntryQualification } from "./entryQualificationPolicy.js";
 
 export const RC54_RELEASE_SCHEMA_VERSION = 1 as const;
 export const RC54_RELEASE_ID = "week2-2026-07-27-rc5.4" as const;
@@ -166,6 +167,9 @@ export interface Rc54AdmissionRoot {
   bankTargetPct: number | null;
   runnerKind: "none" | "a13" | "fixed-target" | "native-atr";
   configurationEpochId?: string | null;
+  entryQualificationVersion?: "orb-entry-qualification-v1";
+  entryStartEtMinute?: number;
+  standDownDayTags?: readonly ("cpi" | "opex")[];
 }
 
 export type Rc54AdmissionRootResolver = (
@@ -1025,6 +1029,21 @@ export function prepareRc54ReleaseAdmissions(input: {
     };
     if (!input.sessionLedgerReady) return block(next, "rc54_session_ledger_unavailable");
     if (decision.blocked) return next;
+    const entryQualification = evaluateEntryQualification({
+      channelSlug: decision.slug,
+      currentEtMinute: input.currentEtMinute,
+      eventDay: decision.detail?.eventDay,
+      entryQualificationVersion: root.entryQualificationVersion,
+      entryStartEtMinute: root.entryStartEtMinute,
+      standDownDayTags: root.standDownDayTags,
+    });
+    next = {
+      ...next,
+      detail: { ...(next.detail ?? {}), ...entryQualification.facts },
+    };
+    if (!entryQualification.allowed && entryQualification.blockedReason) {
+      return block(next, entryQualification.blockedReason);
+    }
     if (!(ask > 0)) return block(next, "rc54_unproven_entry_ask");
     if (ask > root.premiumCap || debit > root.aggregateDebitCap + 1e-9) {
       return block(next, "rc54_premium_debit_cap", {

@@ -432,6 +432,25 @@ function validateSpecShape(spec: ChannelSpecVersion): string[] {
   const premiumCap = Number(spec.entryParameters.premiumCap);
   if ((entryDte !== 0 && entryDte !== 1) || !Number.isInteger(strikeOffset)
       || !Number.isFinite(premiumCap) || premiumCap <= 0) errors.push(`${spec.slug}:entry_parameters`);
+  const qualificationFields = [
+    spec.entryParameters.entryQualificationVersion,
+    spec.entryParameters.entryStartEtMinute,
+    spec.entryParameters.standDownDayTags,
+  ];
+  const hasEntryQualification = qualificationFields.some((value) => value != null);
+  if (hasEntryQualification) {
+    const tags = spec.entryParameters.standDownDayTags;
+    if (spec.entryParameters.entryQualificationVersion !== "orb-entry-qualification-v1"
+        || !Number.isInteger(spec.entryParameters.entryStartEtMinute)
+        || Number(spec.entryParameters.entryStartEtMinute) < 570
+        || Number(spec.entryParameters.entryStartEtMinute) > 925
+        || !Array.isArray(tags)
+        || tags.length < 1
+        || tags.some((tag) => tag !== "cpi" && tag !== "opex")
+        || new Set(tags).size !== tags.length) {
+      errors.push(`${spec.slug}:entry_qualification`);
+    }
+  }
   if (typeof spec.exitParameters.accountName !== "string"
       || typeof spec.exitParameters.managerLabel !== "string"
       || !/^\d{2}:\d{2}$/.test(String(spec.exitParameters.eodEt ?? ""))) {
@@ -474,6 +493,9 @@ export interface WorkerChannelProjection {
   strikeOffset: number;
   maxEntriesPerSession: number;
   eventPolicy?: "standdown" | "ignore";
+  entryQualificationVersion?: "orb-entry-qualification-v1";
+  entryStartEtMinute?: number;
+  standDownDayTags?: Array<"cpi" | "opex">;
   quantity: number;
   premiumCap: number;
   aggregateDebitCap: number;
@@ -815,6 +837,13 @@ export function compileReleaseManifest(
     eventPolicy: spec.entryParameters.eventPolicy === "ignore"
       ? "ignore"
       : "standdown",
+    ...(spec.entryParameters.entryQualificationVersion === "orb-entry-qualification-v1"
+      ? {
+        entryQualificationVersion: "orb-entry-qualification-v1" as const,
+        entryStartEtMinute: Number(spec.entryParameters.entryStartEtMinute),
+        standDownDayTags: [...spec.entryParameters.standDownDayTags as Array<"cpi" | "opex">],
+      }
+      : {}),
     quantity: spec.quantity,
     premiumCap: Number(spec.entryParameters.premiumCap),
     aggregateDebitCap: spec.maxDebitUsd,
