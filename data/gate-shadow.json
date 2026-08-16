@@ -70110,6 +70110,24 @@
   "basis": "mid-upper-bound"
  },
  {
+  "signalId": "446d19a8-44d9-49dc-bed0-695682553e03",
+  "slug": "vb-vwap-revert",
+  "occ": "SPY260810P00774000",
+  "createdAt": "2026-08-10T14:05:02.455431+00:00",
+  "blocked": "rc54_dark_lifecycle",
+  "entryAsk": 1.13,
+  "exitReason": "would_stop",
+  "exitPx": 0.79,
+  "exitAt": "2026-08-10T14:32:04.31146+00:00",
+  "pnlPerContract": -33.9,
+  "stopPct": 30,
+  "tpPct": 15,
+  "nQuotes": 355,
+  "mfePct": 3.1,
+  "giveback": 1068,
+  "basis": "mid-upper-bound"
+ },
+ {
   "signalId": "13b88ed6-167c-4bca-8542-44ec4b809930",
   "slug": "vb-or-fail",
   "occ": "SPY260810P00774000",
@@ -70251,6 +70269,24 @@
   "nQuotes": 328,
   "mfePct": 19.9,
   "giveback": 251,
+  "basis": "mid-upper-bound"
+ },
+ {
+  "signalId": "123060fb-61e2-4bef-9ea2-10b0a2efac7a",
+  "slug": "vb-vwap-revert",
+  "occ": "SPY260810P00775000",
+  "createdAt": "2026-08-10T14:33:02.209989+00:00",
+  "blocked": "rc54_dark_lifecycle",
+  "entryAsk": 1.24,
+  "exitReason": "would_target",
+  "exitPx": 1.43,
+  "exitAt": "2026-08-10T14:55:01.767361+00:00",
+  "pnlPerContract": 18.6,
+  "stopPct": 30,
+  "tpPct": 15,
+  "nQuotes": 326,
+  "mfePct": 24.2,
+  "giveback": 38,
   "basis": "mid-upper-bound"
  },
  {
@@ -70902,6 +70938,24 @@
   "basis": "mid-upper-bound"
  },
  {
+  "signalId": "42f4895e-c685-43d3-a391-5d47e5610228",
+  "slug": "vb-vwap-revert",
+  "occ": "SPY260810C00773000",
+  "createdAt": "2026-08-10T16:30:02.496185+00:00",
+  "blocked": "rc54_dark_lifecycle",
+  "entryAsk": 0.96,
+  "exitReason": "would_stop",
+  "exitPx": 0.67,
+  "exitAt": "2026-08-10T16:34:03.978738+00:00",
+  "pnlPerContract": -28.8,
+  "stopPct": 30,
+  "tpPct": 15,
+  "nQuotes": 209,
+  "mfePct": -0.5,
+  "giveback": null,
+  "basis": "mid-upper-bound"
+ },
+ {
   "signalId": "b87e2395-c96d-460f-8363-bf14104dc07f",
   "slug": "vb-curl-reversal-qqq",
   "occ": "QQQ260810P00722000",
@@ -71007,6 +71061,24 @@
   "nQuotes": 206,
   "mfePct": 10.3,
   "giveback": 32,
+  "basis": "mid-upper-bound"
+ },
+ {
+  "signalId": "1d75fe25-99a8-400b-a97d-9b07c3ad1371",
+  "slug": "vb-vwap-revert",
+  "occ": "SPY260810C00773000",
+  "createdAt": "2026-08-10T16:35:02.209429+00:00",
+  "blocked": "rc54_dark_lifecycle",
+  "entryAsk": 0.68,
+  "exitReason": "would_target",
+  "exitPx": 0.78,
+  "exitAt": "2026-08-10T16:37:02.19434+00:00",
+  "pnlPerContract": 10.2,
+  "stopPct": 30,
+  "tpPct": 15,
+  "nQuotes": 205,
+  "mfePct": 17.6,
+  "giveback": 15,
   "basis": "mid-upper-bound"
  },
  {
