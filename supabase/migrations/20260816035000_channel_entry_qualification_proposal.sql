@@ -64,6 +64,15 @@ declare
 begin
   select pg_catalog.pg_get_functiondef(function_identity) into definition;
 
+  -- Management-API application and a later schema-history reconciliation may
+  -- encounter the same function twice. Exact evidence of the completed guard
+  -- makes the migration a safe no-op; partial matches still fail closed below.
+  if pg_catalog.strpos(definition, 'orb-entry-qualification-v1') > 0
+      and pg_catalog.strpos(definition, 'governed entry qualification cannot be removed implicitly') > 0
+      and pg_catalog.strpos(definition, '''standDownDayTags''') > 0 then
+    return;
+  end if;
+
   updated := pg_catalog.replace(definition, old_comparison, new_comparison);
   if updated = definition then
     raise exception 'entry qualification comparison patch did not match current function';

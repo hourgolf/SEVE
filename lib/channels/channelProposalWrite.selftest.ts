@@ -517,6 +517,7 @@ check("ORB entry qualification migration is narrow and authority-dark", () => {
   assert.match(sql, /not between 570 and 925/);
   assert.match(sql, /tag not in \('cpi', 'opex'\)/);
   assert.match(sql, /cannot be removed implicitly/);
+  assert.match(sql, /makes the migration a safe no-op/);
   assert.match(sql, /revoke all on function public\.create_channel_reentry_proposal_draft/);
   assert.doesNotMatch(sql, /activate_channel_change_proposal\s*\(/);
   assert.doesNotMatch(sql, /insert into|update public\.|delete from/i);
