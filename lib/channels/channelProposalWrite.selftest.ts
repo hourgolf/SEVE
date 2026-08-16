@@ -507,6 +507,21 @@ check("governed re-entry migration is isolated, idempotent, and activation-dark"
   assert.match(sql, /commit;\s*$/);
 });
 
+check("ORB entry qualification migration is narrow and authority-dark", () => {
+  const sql = readFileSync(new URL(
+    "../../supabase/migrations/20260816035000_channel_entry_qualification_proposal.sql",
+    import.meta.url,
+  ), "utf8");
+  assert.match(sql, /base_row\.channel_slug <> 'orb-ustop-ctl'/);
+  assert.match(sql, /orb-entry-qualification-v1/);
+  assert.match(sql, /not between 570 and 925/);
+  assert.match(sql, /tag not in \('cpi', 'opex'\)/);
+  assert.match(sql, /cannot be removed implicitly/);
+  assert.match(sql, /revoke all on function public\.create_channel_reentry_proposal_draft/);
+  assert.doesNotMatch(sql, /activate_channel_change_proposal\s*\(/);
+  assert.doesNotMatch(sql, /insert into|update public\.|delete from/i);
+});
+
 check("migration is atomic, service-only, idempotent, and activation-dark", () => {
   const sql = readFileSync(new URL(
     "../../supabase/migrations/20260727235326_channel_proposal_server_write.sql",

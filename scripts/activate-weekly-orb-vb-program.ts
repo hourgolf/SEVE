@@ -42,6 +42,7 @@ const value = (name: string, fallback = ""): string => {
     ? String(process.argv[index + 1]) : fallback;
 };
 const execute = process.argv.includes("--execute");
+const onlySlug = value("only").trim();
 const approvalRef = value("approval-ref").trim();
 const expectedWorkerCommit = value("expected-worker-commit").trim();
 const envFile = resolve(value("env-file", process.env.SEVE_ENV_FILE ?? ".env.local"));
@@ -350,13 +351,15 @@ async function main(): Promise<void> {
     await requireWorkerCommit(sb);
   }
   const receipts: Record<string, unknown>[] = [];
-  for (const change of [orbChange, vbChange]) {
+  const changes = [orbChange, vbChange].filter((change) =>
+    !onlySlug || change.slug === onlySlug);
+  if (!changes.length) throw new Error(`unknown --only channel: ${onlySlug}`);
+  for (const change of changes) {
     receipts.push(await activateChange({ sb, operator, change }));
   }
   const after = await active(sb);
   if (execute) {
-    orbChange.verifyAfter(after);
-    vbChange.verifyAfter(after);
+    for (const change of changes) change.verifyAfter(after);
   }
   const report = {
     schemaVersion: 1, preparedAt, completedAt: new Date().toISOString(),
