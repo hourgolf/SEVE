@@ -17,6 +17,10 @@ const armed = advanceManager("ARM20/HALF-GIVEBACK", {}, 25, false);
 const higher = advanceManager("ARM20/HALF-GIVEBACK", armed.state, 60, false);
 check("giveback uses running peak", advanceManager("ARM20/HALF-GIVEBACK", higher.state, 29, false).exit?.reason, "giveback");
 check("restart recovery is explicit", recoverManagerState("BANK20/RUN50", 80), { bankReturnPct: 20, recovered: true });
+check("VB MACD displaced manager preserves the current +18 target",
+  advanceManager("VB-MACD-CURRENT-LOCK18", {}, 18, false).exit?.reason, "target");
+check("VB MACD displaced manager preserves the current -30 stop",
+  advanceManager("VB-MACD-CURRENT-LOCK18", {}, -30, false).exit?.reason, "stop");
 check("bell control waits", advanceManager("BELL/no-stop", {}, -50, false).exit, null);
 check("bell control exits at bell", advanceManager("BELL/no-stop", {}, -50, true).exit?.reason, "bell");
 const pb2Bank = advanceManager("PB2-BANK15/HALF-GIVEBACK", {}, 16, false);
@@ -39,6 +43,9 @@ check("grind current manager is channel scoped",
 check("grind current restart recovers bank and peak",
   recoverManagerState("GRIND-B25/CURRENT-A13", 60),
   { bankReturnPct: 25, armedPeakPct: 60, recovered: true });
+check("VB MACD current manager is shadowed only on its own channel",
+  [managerIdsForChannel("vb-macd-state").at(-1), managerIdsForChannel("vb-squeeze-break").length],
+  ["VB-MACD-CURRENT-LOCK18", 8]);
 
 const position = {
   id: "11111111-1111-4111-8111-111111111111", occ_symbol: "SPY260713C00600000",

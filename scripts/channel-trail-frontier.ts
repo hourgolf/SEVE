@@ -38,6 +38,7 @@ const atlasFile = resolve(arg("atlas-file", "data/decision-atlas/latest/atlas/at
 const snapshotFile = resolve(arg("snapshot-file", resolve(dirname(atlasFile), "snapshot.json"))!);
 const quotesDir = resolve(arg("quotes-dir", "data/quotes-archive")!);
 const outputDir = resolve(arg("out-dir", "data/decision-atlas/latest/trails")!);
+const fromSession = arg("from");
 const envFile = arg("env-file") ?? process.env.SEVE_ENV_FILE ?? null;
 if (envFile && existsSync(resolve(envFile))) process.loadEnvFile(resolve(envFile));
 else if (existsSync(resolve(".env.local"))) process.loadEnvFile(resolve(".env.local"));
@@ -379,7 +380,10 @@ async function main(): Promise<void> {
     }
   }
   const bySession = new Map<string, TrailSeed[]>();
-  for (const seed of seeds) bySession.set(seed.session, [...(bySession.get(seed.session) ?? []), seed]);
+  for (const seed of seeds) {
+    if (fromSession && seed.session < fromSession) continue;
+    bySession.set(seed.session, [...(bySession.get(seed.session) ?? []), seed]);
+  }
   const receipts = await quoteArchiveReceipts([...bySession.keys()]);
   const opportunities: TrailOpportunity[] = [];
   let archiveSessions = 0;
@@ -446,6 +450,7 @@ async function main(): Promise<void> {
     schemaVersion: 1,
     generatedAt: book.generatedAt,
     throughSession: book.throughSession,
+    fromSession,
     frontierVersion: book.frontierVersion,
     channels: Object.keys(book.channels).length,
     logicalOpportunities: book.sourceOpportunities,

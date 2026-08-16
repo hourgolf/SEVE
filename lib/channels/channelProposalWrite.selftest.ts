@@ -118,11 +118,31 @@ check("bounded change class cannot hide a governed account change", () => {
   }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /unsupported proposal fields: accountId/);
 });
 
-check("the first server write slice rejects governed and code-level classes", () => {
+check("code strategy entry qualification is one receipt-bound patch", () => {
+  const built = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      entryParameters: {
+        ...orb.entryParameters,
+        entryQualificationVersion: "orb-entry-qualification-v1",
+        entryStartEtMinute: 630,
+        standDownDayTags: ["cpi", "opex"],
+      },
+    },
+    reason: "Stand down ORB on CPI and OPEX and wait until 10:30 ET.",
+    changeClass: "code-strategy-logic",
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.equal(built.draftSpec.entryParameters.entryStartEtMinute, 630);
+  assert.deepEqual(built.preview.diffs.map((row) => row.field), ["entryParameters"]);
+  assert.equal(proposalDraftRpcName(built.proposal), "create_channel_change_proposal_draft");
+});
+
+check("code strategy patch cannot carry an unrelated field", () => {
   expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,
+    proposedPatch: { entryParameters: orb.entryParameters, quantity: 3 },
     changeClass: "code-strategy-logic",
-  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /bounded-parameter or governed re-entry proposals only/);
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT), /exactly one entryParameters object/);
 });
 
 check("governed re-entry request expands into one exact reviewed spec patch", () => {

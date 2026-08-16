@@ -19,6 +19,8 @@ export const GATE_SHADOW_BLOCK_SEMANTICS = [
   "cross_domain_same_occ",
   "underlying_concurrency",
   "global_concurrency",
+  "entry_day_tag_standdown",
+  "entry_before_start",
 ] as const;
 
 export type GateShadowBlockSemantic = typeof GATE_SHADOW_BLOCK_SEMANTICS[number];
@@ -59,6 +61,11 @@ const ADMISSION_DOMAIN_SEMANTICS = new Map<string, GateShadowBlockSemantic>([
   ["admission_domain_global_concurrency", "global_concurrency"],
 ]);
 
+const ENTRY_QUALIFICATION_SEMANTICS = new Map<string, GateShadowBlockSemantic>([
+  ["orb_cpi_opex_standdown", "entry_day_tag_standdown"],
+  ["orb_before_1030", "entry_before_start"],
+]);
+
 const RELEASE_SCOPED_SEMANTICS = new Set<GateShadowBlockSemantic>([
   "dark_lifecycle",
   "premium_debit_cap",
@@ -76,6 +83,8 @@ export function gateShadowBlockSemantic(value: string): GateShadowBlockSemantic 
   if (legacy) return legacy;
   const domain = ADMISSION_DOMAIN_SEMANTICS.get(value);
   if (domain) return domain;
+  const entryQualification = ENTRY_QUALIFICATION_SEMANTICS.get(value);
+  if (entryQualification) return entryQualification;
   const releaseMatch = /^rc\d+_(.+)$/.exec(value);
   if (!releaseMatch) return null;
   const semantic = releaseMatch[1] as GateShadowBlockSemantic;

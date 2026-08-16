@@ -15,11 +15,13 @@ export const BASE_MANAGER_IDS = [
 
 export const PB_RIDE_2_MANAGER_ID = "PB2-BANK15/HALF-GIVEBACK" as const;
 export const GRIND_CURRENT_MANAGER_ID = "GRIND-B25/CURRENT-A13" as const;
+export const VB_MACD_CURRENT_MANAGER_ID = "VB-MACD-CURRENT-LOCK18" as const;
 
 export const MANAGER_IDS = [
   ...BASE_MANAGER_IDS,
   PB_RIDE_2_MANAGER_ID,
   GRIND_CURRENT_MANAGER_ID,
+  VB_MACD_CURRENT_MANAGER_ID,
 ] as const;
 
 export type ManagerId = typeof MANAGER_IDS[number];
@@ -39,6 +41,7 @@ export function managerIdsForChannel(channelSlug: string): readonly ManagerId[] 
   const slug = channelSlug.toLowerCase();
   if (slug === "pb-ride-2") return [...BASE_MANAGER_IDS, PB_RIDE_2_MANAGER_ID];
   if (slug === "grind-v3") return [...BASE_MANAGER_IDS, GRIND_CURRENT_MANAGER_ID];
+  if (slug === "vb-macd-state") return [...BASE_MANAGER_IDS, VB_MACD_CURRENT_MANAGER_ID];
   return BASE_MANAGER_IDS;
 }
 
@@ -89,6 +92,7 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
       } else if (isBell) return terminal(managerId, "bell", ret, state);
       return { state, exit: null };
     }
+    case "VB-MACD-CURRENT-LOCK18": return lock(managerId, ret, 18, 30, isBell, state);
     case "PB2-BANK15/HALF-GIVEBACK": {
       if (state.bankReturnPct == null) {
         if (ret <= -30) return terminal(managerId, "prebank_stop", ret, state);

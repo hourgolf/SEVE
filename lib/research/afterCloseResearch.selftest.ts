@@ -52,6 +52,8 @@ check("hosted workflow retains independent verification", workflow.includes("dat
 check("hosted workflow has redundant after-hours pass", workflow.includes('cron: "30 23 * * 1-5"'), true);
 check("hosted workflow suppresses event writes", workflow.includes("--virtual-trades-only"), true);
 check("hosted workflow independently verifies publication", workflow.includes("verify-shadow-rebuild:hosted"), true);
+check("hosted workflow scans managers and entry cohorts by logical trade", workflow.includes("npm run manager-pattern-scan")
+  && workflow.includes("manager-patterns/scan.json"), true);
 check("legacy verifier cannot starve exact capture", workflow.includes("id: shadow-rebuild")
   && workflow.includes("continue-on-error: true")
   && workflow.indexOf("Capture current and score prior exact candidates") > workflow.indexOf("id: shadow-rebuild"), true);
