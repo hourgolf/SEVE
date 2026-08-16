@@ -1036,8 +1036,20 @@ export function projectActiveVersusDraft(
     if (field === "entryParameters") {
       const proposed = proposal.proposedPatch.entryParameters;
       if (proposed && typeof proposed === "object" && !Array.isArray(proposed)) {
-        const { maxEntriesPerSession: _activeLimit, ...activeRest } = active.entryParameters;
-        const { maxEntriesPerSession: _proposedLimit, ...proposedRest } = proposed;
+        const {
+          maxEntriesPerSession: _activeLimit,
+          entryQualificationVersion: _activeQualification,
+          entryStartEtMinute: _activeStart,
+          standDownDayTags: _activeTags,
+          ...activeRest
+        } = active.entryParameters;
+        const {
+          maxEntriesPerSession: _proposedLimit,
+          entryQualificationVersion: _proposedQualification,
+          entryStartEtMinute: _proposedStart,
+          standDownDayTags: _proposedTags,
+          ...proposedRest
+        } = proposed;
         if (canonicalJson(activeRest) === canonicalJson(proposedRest)) {
           required = "governed-operational-policy";
         }
