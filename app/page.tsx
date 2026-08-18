@@ -129,9 +129,10 @@ function Surface({
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
   const liveFund = liveFundPnl(
     feed.fundPnl,
-    feed.positions,
+    [...feed.positions, ...feed.recentTrades],
     liveMarks,
     feed.fundPnl.snapshotUnrealizedPnl,
+    feed.fundPnl.snapshotCapturedAt,
   );
   // P5 slice 1 — shared remote reads LIFTED to the seam (called ONCE here, carried through
   // SurfaceProps). PERFORM + mobile leaves consumed these directly before; now they never

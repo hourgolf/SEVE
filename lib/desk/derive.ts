@@ -73,8 +73,22 @@ export function liveFundAdjust(
   positions: Position[],
   liveMarks?: Record<string, number>,
   snapshotUnrealizedPnl?: number | null,
+  snapshotCapturedAt?: string | null,
 ): number {
   if (!liveMarks || snapshotUnrealizedPnl == null || !Number.isFinite(snapshotUnrealizedPnl)) return 0;
+  const snapshotMs = snapshotCapturedAt ? Date.parse(snapshotCapturedAt) : Number.NaN;
+  if (!Number.isFinite(snapshotMs)) return 0;
+
+  // Account-level unrealized P&L can only be replaced by live position marks
+  // while the book is unchanged. A position opened or closed after the snapshot
+  // means its unrealized basis describes a different set of contracts; re-marking
+  // that basis would erase or double-count the already accumulated session P&L.
+  for (const position of positions) {
+    const openedMs = position.opened_at ? Date.parse(position.opened_at) : Number.NaN;
+    if (position.status === "open" && (!Number.isFinite(openedMs) || openedMs > snapshotMs)) return 0;
+    const closedMs = position.closed_at ? Date.parse(position.closed_at) : Number.NaN;
+    if (position.status === "closed" && Number.isFinite(closedMs) && closedMs > snapshotMs) return 0;
+  }
   const open = positions.filter((position) => position.status === "open");
   if (!open.length) return 0;
   let liveUnrealizedPnl = 0;
@@ -92,8 +106,9 @@ export function liveFundPnl(
   positions: Position[],
   liveMarks?: Record<string, number>,
   snapshotUnrealizedPnl?: number | null,
+  snapshotCapturedAt?: string | null,
 ): { nav: number; dayPnl: number } {
-  const adj = liveFundAdjust(positions, liveMarks, snapshotUnrealizedPnl);
+  const adj = liveFundAdjust(positions, liveMarks, snapshotUnrealizedPnl, snapshotCapturedAt);
   if (!adj) return base;
   return { nav: Math.round(base.nav + adj), dayPnl: Math.round(base.dayPnl + adj) };
 }

@@ -23,5 +23,6 @@ assert.match(source, /POSITION_FIELDS[\s\S]*runner_of/, "the live feed must reta
 assert.match(source, /summarizeLogicalTradeCohort/, "the session denominator must count logical trades");
 assert.match(source, /net_liquidation,unrealized_pnl,captured_at/, "account NAV must carry its own unrealized basis");
 assert.match(source, /snapshotUnrealizedPnl/, "the live headline must expose the matching snapshot basis");
+assert.match(source, /snapshotCapturedAt/, "the live headline must expose the snapshot clock for book-coherence checks");
 
-console.log("desk-feed-egress-selftest: 20/20 passed");
+console.log("desk-feed-egress-selftest: 21/21 passed");
