@@ -1,4 +1,4 @@
-export type PerformanceEvidenceState = "checking" | "ok" | "blocked";
+export type PerformanceEvidenceState = "checking" | "ok" | "partial" | "blocked";
 export type CombinedPerformanceEvidenceState = "checking" | "ok" | "partial" | "blocked";
 
 export function combinePerformanceEvidenceState(
@@ -19,13 +19,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
  * missing position id; dumping hundreds of UUIDs into Review obscures the
  * actionable provenance failure.
  */
-export function summarizePerformanceIssue(issue: string, sampleSize = 3): string {
+export function summarizePerformanceIssue(issue: string, _sampleSize = 3): string {
   const separator = issue.indexOf(":");
   if (separator < 0) return issue;
   const prefix = issue.slice(0, separator).trim();
   const candidates = issue.slice(separator + 1).split(",").map((value) => value.trim()).filter(Boolean);
   if (candidates.length < 2 || !candidates.every((value) => UUID.test(value))) return issue;
-  const sample = candidates.slice(0, Math.max(1, sampleSize));
-  const remainder = candidates.length - sample.length;
-  return `${prefix}: ${candidates.length} position ids · sample ${sample.join(", ")}${remainder > 0 ? ` · +${remainder} more` : ""}`;
+  if (/lack immutable execution-account routing/i.test(prefix)) {
+    return `${candidates.length} older position rows lack verified account routing.`;
+  }
+  return `${prefix}: ${candidates.length} affected position rows.`;
 }

@@ -5,6 +5,7 @@ import { SeveEvidenceContext, SeveWorkspaceHeader } from "@/components/ui/Seve90
 import { buildFleetDecisionSummary } from "@/lib/research/channelDecisionSummary";
 import { signedUsd } from "@/lib/format";
 import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { decisionAtlasFreshnessShortLabel } from "@/lib/research/decisionAtlasFreshness";
 
 const pt = (value: string | null | undefined): string => value ? new Date(value).toLocaleString("en-US", {
   timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
@@ -27,10 +28,16 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
   const deskFlat = surface.feed.positions.length === 0;
   const healthy = surface.incident.severity === "normal" && readiness.tone !== "red";
   const latestEvent = surface.data.events[0];
-  const evidenceQuality = readiness.tone === "red" || surface.decisionAtlas.state === "error" ? "partial"
+  const atlasLabel = decisionAtlasFreshnessShortLabel({
+    freshness: surface.decisionAtlas.freshness,
+    reportThroughSession: surface.decisionAtlas.throughSession,
+  });
+  const atlasStale = surface.decisionAtlas.state === "ready" && surface.decisionAtlas.freshness === "stale";
+  const evidenceQuality = readiness.tone === "red" || surface.decisionAtlas.state === "error" || atlasStale ? "partial"
     : surface.decisionAtlas.state === "ready" ? "complete" : "checking";
   const attention = [
     surface.incident.severity !== "normal" ? { label: surface.incident.title, destination: { section: "ops" as const, check: "reconciliation" } } : null,
+    atlasStale ? { label: "Nightly channel decisions need a fresh close", destination: { section: "research" as const, researchMode: "decisions" as const } } : null,
     fleet.lead ? { label: `${fleet.lead.channel}: ${fleet.lead.disposition.toLowerCase()}`, destination: { section: "research" as const, channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" as const } } : null,
     readiness.tone === "red" ? { label: readiness.detail, destination: { section: "ops" as const } } : null,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 3);
@@ -48,14 +55,14 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
     />
     <section className={`decision-home-status ${healthy ? "healthy" : "attention"}`}>
       <span><small>DESK STATUS</small><b>{healthy ? "READY FOR THE NEXT SESSION" : "CHECK BEFORE THE NEXT SESSION"}</b><p>{deskFlat ? `${account?.name ?? "The selected paper account"} is flat.` : `${surface.feed.positions.length} selected-account paper positions remain open.`}</p></span>
-      <div><span><small>TRADING</small><b>{readiness.tone === "red" ? "NEEDS REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{surface.data.status === "err" ? "NEEDS REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? "CURRENT" : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
+      <div><span><small>TRADING</small><b>{readiness.tone === "red" ? "NEEDS REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{surface.data.status === "err" ? "NEEDS REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? atlasLabel : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
       <button type="button" onClick={() => onNavigate({ section: "ops" })}>OPEN SYSTEM STATUS</button>
     </section>
     <div className="decision-home-grid">
       <section className="decision-home-card changed"><header><small>01</small><b>WHAT CHANGED?</b></header>
         <ul>
           <li><b>Latest result</b><span>{signedUsd(surface.liveFund.dayPnl)} selected-account session NAV change.</span></li>
-          <li><b>Channel evidence</b><span>{fleet.reports} reports through {fleet.throughSession ?? "the latest close"}.</span></li>
+          <li><b>Channel evidence</b><span>{fleet.reports} reports through {fleet.throughSession ?? "the latest close"}{atlasStale && surface.decisionAtlas.evidenceThroughSession ? `; raw paths continue through ${surface.decisionAtlas.evidenceThroughSession}.` : "."}</span></li>
           <li><b>Platform</b><span>{latestEvent ? plainChange(latestEvent.message) : "No new operational event is available."}</span></li>
         </ul>
         <button type="button" onClick={() => onNavigate({ section: "tape", reviewSection: "tape", session: fleet.throughSession ?? undefined })}>REVIEW THE LAST CLOSE</button>

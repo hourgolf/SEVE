@@ -25,6 +25,8 @@ import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFlee
 import { ResearchCouncilRoom } from "@/components/research/ResearchCouncilRoom";
 import { ReviewSessionScorecard } from "@/components/perform/ReviewSessionScorecard";
 import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import type { PnlWindow } from "@/hooks/useWindowedPnl";
+import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -107,20 +109,53 @@ export function MobileBookView({ props, onViewMarket, onNavigate }: { props: Sur
   </>;
 }
 
+const MOBILE_PERIODS: ReadonlyArray<{ id: PnlWindow; label: string }> = [
+  { id: "today", label: "TODAY" },
+  { id: "week", label: "7D" },
+  { id: "month", label: "30D" },
+  { id: "all", label: "ALL" },
+];
+
+function MobilePeriodResults({ props, channels, livePnl }: {
+  props: SurfaceProps;
+  channels: StrategistState[];
+  livePnl: Record<string, ChannelPnl>;
+}) {
+  const period = props.reviewEvidence.pnlWindow;
+  const historical = props.reviewEvidence.windowedPnl;
+  const today = period === "today";
+  const loading = !today && (historical?.loading ?? true);
+  const fundValue = today ? props.liveFund.dayPnl : historical?.fundPnl;
+  const curve = today ? props.feed.equityCurve.map((point) => point.equity) : historical?.curve ?? [];
+  const labels = today ? props.feed.equityCurve.map((point) => timeOfDay(point.ts)) : historical?.curveLabels;
+  const rowFor = (slug: string) => today
+    ? { pnl: livePnl[slug]?.dayPnl ?? 0, trades: livePnl[slug]?.trades ?? 0, wins: livePnl[slug]?.wins ?? 0 }
+    : historical?.statsBySlug[slug] ?? { pnl: 0, trades: 0, wins: 0 };
+  const rows = channels.map((channel) => ({ channel, result: rowFor(channel.slug) }))
+    .filter((row) => row.result.trades > 0 || row.result.pnl !== 0)
+    .sort((left, right) => Math.abs(right.result.pnl) - Math.abs(left.result.pnl));
+  const coveragePartial = !today && historical?.attributionEvidenceState === "partial";
+  const coverageBlocked = !today && historical?.attributionEvidenceState === "blocked";
+  const issue = !today && historical?.attributionIssues[0]
+    ? summarizePerformanceIssue(historical.attributionIssues[0])
+    : null;
+  return <Section title="ACCOUNT RESULTS" meta="selected paper account">
+    <div className="m2-period-results">
+      <nav aria-label="Results period">{MOBILE_PERIODS.map((item) => <button type="button" key={item.id} className={period === item.id ? "on" : ""} onClick={() => props.reviewEvidence.setPnlWindow(item.id)}>{item.label}</button>)}</nav>
+      <div className="m2-period-hero"><span><small>{period === "today" ? "SESSION NAV CHANGE" : `${MOBILE_PERIODS.find((item) => item.id === period)?.label} NAV CHANGE`}</small><b className={(fundValue ?? 0) < 0 ? "neg" : "pos"}>{loading ? "…" : fundValue == null ? "UNAVAILABLE" : signedUsd(fundValue)}</b></span><span><small>CHANNELS THAT TRADED</small><b>{rows.length}</b></span><span><small>LOGICAL TRADES</small><b>{rows.reduce((total, row) => total + row.result.trades, 0)}</b></span></div>
+      {coveragePartial || coverageBlocked ? <div className="m2-period-coverage" role="status"><b>{coverageBlocked ? "CHANNEL HISTORY UNAVAILABLE" : "CHANNEL HISTORY PARTIAL"}</b><span>{issue ?? "Some older channel rows do not have a verified account route."}</span>{coveragePartial ? <small>{historical?.attributedPositionRows ?? 0} verified rows shown · {historical?.withheldPositionRows ?? 0} rows withheld to keep trades whole. Account NAV is complete.</small> : null}</div> : null}
+      {curve.length >= 2 ? <LineChart values={curve} height={92} id={`m2-results-${period}`} baseline={curve[0]} format={usd0} formatDelta={signedUsd} labels={labels} /> : <div className="m2-desk-empty">{loading ? "Loading account history…" : "No account curve in this period."}</div>}
+      {!coverageBlocked ? <div className="m2-review-rows">{rows.slice(0, 10).map(({ channel, result }) => <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b><span className={result.pnl < 0 ? "neg" : result.pnl > 0 ? "pos" : ""}>{signedUsd(result.pnl)}</span><small>{result.trades} logical trade{result.trades === 1 ? "" : "s"} · {result.wins} profitable</small></div>)}{!loading && rows.length === 0 ? <div className="m2-period-empty">No channel activity in this period.</div> : null}</div> : null}
+    </div>
+  </Section>;
+}
+
 export function MobileReviewView({ props, channels, livePnl, destination, onNavigate }: { props: SurfaceProps; channels: StrategistState[]; livePnl: Record<string, ChannelPnl>; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const [mode, setMode] = useState<MobileReviewMode>(DEFAULT_MOBILE_REVIEW_MODE);
-  const { feed, liveFund, sentinel } = props;
-  const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug] })).sort((a, b) => Math.abs(b.pnl?.dayPnl ?? 0) - Math.abs(a.pnl?.dayPnl ?? 0));
-  const equity = feed.equityCurve.map((point) => point.equity);
+  const { sentinel } = props;
   const brief = sentinel.brief;
   const judge = sentinel.judge;
   const tape = useMemo(() => deriveTapeRows(props.data.events).slice(0, 12), [props.data.events]);
-  const selectedAccount = props.accounts.find((account) => account.id === props.acctId);
-  const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
-  const attributionChecking = feed.positionAttribution.state === "checking";
-  const attributionBlocked = feed.positionAttribution.state === "blocked";
-  const attributedValue = (value: string): string =>
-    attributionChecking ? "…" : attributionBlocked ? "BLOCKED" : value;
   useEffect(() => {
     if (destination?.section === "research") setMode("shadow");
     else if (destination?.section === "tape") setMode(destination.reviewSection === "counterfactuals" ? "evidence" : "session");
@@ -143,25 +178,7 @@ export function MobileReviewView({ props, channels, livePnl, destination, onNavi
     {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
     {mobileReviewHas(mode, "session-summary") && <ReviewSessionScorecard evidence={props.reviewEvidence.daily} />}
 
-    {mobileReviewHas(mode, "session-summary") && <Section title="LIVE ACCOUNT NOW" meta={`${accountScope} · immutable execution routes`} collapsible>
-      <div className="m2-desk-hero">
-        <span><small>SESSION NAV CHANGE</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{attributedValue(signedUsd(liveFund.dayPnl))}</b></span>
-        <span><small>NAV</small><b>{usd0(liveFund.nav)}</b></span>
-        <span><small>CLOSED LOGICAL</small><b>{attributedValue(String(feed.sessionTrades.closed))}</b></span>
-        <span><small>OPEN LOGICAL</small><b>{attributedValue(String(feed.sessionTrades.open))}</b></span>
-      </div>
-      {equity.length >= 2 ? <LineChart values={equity} height={92} id="m2-desk-equity" baseline={equity[0]} format={usd0} formatDelta={signedUsd} labels={feed.equityCurve.map((point) => timeOfDay(point.ts))} /> : <div className="m2-desk-empty">No intraday equity history yet.</div>}
-      {attributionBlocked ? <div className="review-evidence-blocked" role="alert"><b>CURRENT ATTRIBUTION BLOCKED</b>{feed.positionAttribution.issues.map((issue) => <span key={issue}>{issue}</span>)}<small>No strategist-account fallback was used.</small></div>
-        : attributionChecking ? <div className="m2-desk-empty">Checking immutable execution-account routes…</div>
-          : <div className="m2-review-rows">{rows.map(({ channel, pnl }) => {
-            const trades = pnl?.trades ?? 0;
-            const peak = pnl?.pkN ? Math.round(pnl.pkSum / pnl.pkN) : null;
-            const profitable = pnl?.wins ?? 0;
-            return <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b>
-              <span className={(pnl?.dayPnl ?? 0) < 0 ? "neg" : (pnl?.dayPnl ?? 0) > 0 ? "pos" : ""}>{signedUsd(pnl?.dayPnl ?? 0)}</span>
-              <small>{trades} trades · {profitable} profitable · best move {peak ?? "—"}%</small></div>;
-          })}</div>}
-    </Section>}
+    {mobileReviewHas(mode, "session-summary") && <MobilePeriodResults props={props} channels={channels} livePnl={livePnl} />}
 
     {mobileReviewHas(mode, "shadow-research") && <ShadowResearchWorkspace surface={props} destination={destination} onNavigate={onNavigate} compact />}
 

@@ -333,6 +333,7 @@
     "channel-decision-briefs": "tsx scripts/channel-decision-briefs.ts",
     "channel-decision-briefs-selftest": "tsx lib/research/channelDecisionBrief.selftest.ts",
     "decision-atlas-report-read-selftest": "tsx hooks/useDecisionAtlasReports.selftest.ts",
+    "decision-atlas-freshness-selftest": "tsx lib/research/decisionAtlasFreshness.selftest.ts",
     "publish-channel-decision-briefs": "tsx scripts/publish-channel-decision-briefs.ts",
     "publish-channel-decision-briefs-selftest": "tsx scripts/publish-channel-decision-briefs.selftest.ts",
     "nightly-decision-atlas": "tsx scripts/nightly-decision-atlas.ts",

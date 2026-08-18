@@ -13,6 +13,9 @@ assert.match(source, /verifiedCandidates !== publication\.planned\.candidates/);
 assert.match(source, /verifiedPaths !== publication\.planned\.exactPaths/);
 assert.match(source, /verifiedManagers !== publication\.planned\.managerPaths/);
 assert.match(source, /eventInserts !== 0/);
+assert.match(source, /if \(explicitEnvFile\)/, "an explicitly requested environment file must remain fail-closed");
+assert.match(source, /else if \(existsSync\(ENV_FILE\)\)/, "the implicit local environment file must be optional on hosted runners");
+assert.match(source, /explicitEnvFile \|\| existsSync\(ENV_FILE\)/, "child publication must not receive a nonexistent implicit env file");
 assert.doesNotMatch(source, /from ["']\.\.\/worker|alpaca|placeOrder|submitOrder/);
 
 console.log("nightly-dark-exact-learning-selftest: PASS");

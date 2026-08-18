@@ -56,7 +56,8 @@ assert.match(reviewScorecard, /EXIT CAPTURE/);
 assert.match(reviewModel, /label: "SUMMARY"/);
 assert.match(reviewModel, /label: "TRADE REVIEW"/);
 assert.match(mobileReviewModel, /DEFAULT_MOBILE_REVIEW_MODE: MobileReviewMode = "session"/);
-assert.match(mobileReviewModel, /label: "SUMMARY"/);
+assert.match(mobileReviewModel, /label: "RESULTS"/);
+assert.match(mobileReviewModel, /label: "ATLAS"/);
 assert.match(performCss, /grid-template-rows:auto auto minmax\(0,1fr\)/);
 assert.match(performCss, /data-skin="blackout"[^}]*\.etw-summary|data-skin="blackout"\] \.etw-summary/);
 

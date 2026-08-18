@@ -295,7 +295,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   }));
 
   return <section className={`srw${compact ? " compact" : ""}`} id="perform-research" tabIndex={-1} aria-label="Shadow research workspace">
-    <header className="srw-head"><span><b>SHADOW LEDGER</b><small>NATIVE PATHS · PAIRED DECISIONS</small></span>
+    <header className="srw-head"><span><b>DECISION ATLAS</b><small>CHANNEL DECISIONS · VIRTUAL PATHS</small></span>
       <em>READ ONLY</em></header>
     <SeveEvidenceContext
       kind="virtual"

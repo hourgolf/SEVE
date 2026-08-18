@@ -31,6 +31,8 @@ export interface WindowedPnl {
   navIssues: string[];
   attributionIssues: string[];
   issues: string[];
+  attributedPositionRows: number;
+  withheldPositionRows: number;
 }
 
 type PerformancePositionRow = Record<string, unknown> & {
@@ -76,6 +78,8 @@ const emptyWindow = (
   navIssues,
   attributionIssues,
   issues: [...navIssues, ...attributionIssues],
+  attributedPositionRows: 0,
+  withheldPositionRows: 0,
 });
 
 /**
@@ -110,7 +114,12 @@ export function useWindowedPnl(
         throw new Error("selected account is not a configured paper account");
       }
 
-      const readAttribution = async (): Promise<Record<string, ChannelStat>> => {
+      const readAttribution = async (): Promise<{
+        stats: Record<string, ChannelStat>;
+        issues: string[];
+        attributedPositionRows: number;
+        withheldPositionRows: number;
+      }> => {
         const allPositions: Record<string, unknown>[] = [];
         for (let from = 0; from <= 60_000; from += 1_000) {
           let query = sb.from("positions")
@@ -160,20 +169,28 @@ export function useWindowedPnl(
           configuredPaperAccountIds: configured,
           positionLabel: "performance positions",
         });
-        if (!attribution.ok) throw new Error(attribution.issues.join("; "));
-        const attributedRows = [...attribution.byAccount.entries()].flatMap(([accountId, rows]) =>
-          rows.map((row) => ({ ...row, immutableAccountId: accountId })));
-        const logical = summarizeLogicalTradeCohort(attributedRows, { allowExternalParents: true });
+        const accountByPositionId = new Map<string, string>();
+        for (const [accountId, rows] of attribution.byAccount.entries()) {
+          for (const row of rows) accountByPositionId.set(row.id, accountId);
+        }
+        const logical = summarizeLogicalTradeCohort(positionRows, { allowExternalParents: true });
         if (logical.issues.length) throw new Error(logical.issues.join("; "));
         const stats: Record<string, ChannelStat> = {};
+        let attributedPositionRows = 0;
+        let withheldPositionRows = 0;
         const bump = (slug: string): ChannelStat =>
           (stats[slug] ??= { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
         for (const trade of logical.groups) {
-          const accounts = [...new Set(trade.rows.map((row) => row.immutableAccountId))];
+          const accounts = [...new Set(trade.rows.map((row) => accountByPositionId.get(row.id)).filter((value): value is string => Boolean(value)))];
+          if (accounts.length === 0 || trade.rows.some((row) => !accountByPositionId.has(row.id))) {
+            withheldPositionRows += trade.rows.length;
+            continue;
+          }
           if (accounts.length !== 1) {
             throw new Error(`logical trade ${trade.rootPositionId} spans immutable account routes`);
           }
           if (accounts[0] !== acctId) continue;
+          attributedPositionRows += trade.rows.length;
           const slugs = [...new Set(trade.rows.map((row) => slugOf(row)))];
           if (slugs.length !== 1) {
             throw new Error(`logical trade ${trade.rootPositionId} spans channel identities`);
@@ -202,7 +219,7 @@ export function useWindowedPnl(
           }
         }
         for (const channel of Object.values(stats)) channel.pnl = Math.round(channel.pnl);
-        return stats;
+        return { stats, issues: attribution.issues, attributedPositionRows, withheldPositionRows };
       };
 
       const readNav = async (): Promise<{
@@ -253,7 +270,8 @@ export function useWindowedPnl(
 
       const attributionOk = attributionResult.status === "fulfilled";
       const navOk = navResult.status === "fulfilled";
-      const stats = attributionOk ? attributionResult.value : {};
+      const attributionRead = attributionOk ? attributionResult.value : null;
+      const stats = attributionRead?.stats ?? {};
       const nav = navOk
         ? navResult.value
         : { curve: [], curveLabels: [], curveRaw: [], sinceNote: null };
@@ -268,10 +286,12 @@ export function useWindowedPnl(
         ? []
         : [(navResult.reason as Error)?.message ?? "account NAV evidence read failed"];
       const attributionIssues = attributionOk
-        ? []
+        ? attributionRead?.issues ?? []
         : [(attributionResult.reason as Error)?.message ?? "position attribution read failed"];
       const navEvidenceState: PerformanceEvidenceState = navOk ? "ok" : "blocked";
-      const attributionEvidenceState: PerformanceEvidenceState = attributionOk ? "ok" : "blocked";
+      const attributionEvidenceState: PerformanceEvidenceState = attributionOk
+        ? attributionIssues.length ? "partial" : "ok"
+        : "blocked";
       setData({
         statsBySlug: stats,
         fundPnl,
@@ -290,6 +310,8 @@ export function useWindowedPnl(
         navIssues,
         attributionIssues,
         issues: [...navIssues, ...attributionIssues],
+        attributedPositionRows: attributionRead?.attributedPositionRows ?? 0,
+        withheldPositionRows: attributionRead?.withheldPositionRows ?? 0,
       });
     })().catch((error: unknown) => {
       if (!alive) return;

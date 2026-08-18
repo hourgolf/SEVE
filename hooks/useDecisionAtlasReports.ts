@@ -3,40 +3,54 @@
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
+import {
+  decisionAtlasFreshness,
+  type DecisionAtlasFreshness,
+  etSessionDate,
+} from "@/lib/research/decisionAtlasFreshness";
 import { useRefreshTick } from "./useRefreshTick";
 
 export interface DecisionAtlasReportsRead {
   throughSession: string | null;
+  evidenceThroughSession: string | null;
+  freshness: DecisionAtlasFreshness;
   bySlug: Record<string, ChannelDecisionBrief>;
   state: "idle" | "loading" | "ready" | "unavailable" | "error";
   error: string | null;
 }
 
 export function useDecisionAtlasReports(enabled = true): DecisionAtlasReportsRead {
-  const [read, setRead] = useState<DecisionAtlasReportsRead>({ throughSession: null, bySlug: {}, state: enabled ? "loading" : "idle", error: null });
+  const [read, setRead] = useState<DecisionAtlasReportsRead>({ throughSession: null, evidenceThroughSession: null, freshness: "unknown", bySlug: {}, state: enabled ? "loading" : "idle", error: null });
   const tick = useRefreshTick();
   useEffect(() => {
     if (!enabled) {
-      setRead({ throughSession: null, bySlug: {}, state: "idle", error: null });
+      setRead({ throughSession: null, evidenceThroughSession: null, freshness: "unknown", bySlug: {}, state: "idle", error: null });
       return;
     }
     let alive = true;
     (async () => {
       setRead((prior) => ({ ...prior, state: prior.throughSession ? "ready" : "loading", error: null }));
       const sb = getSupabase();
-      const latest = await sb.from("decision_atlas_channel_reports")
-        .select("through_session").order("through_session", { ascending: false }).limit(1).maybeSingle();
+      const [latest, latestEvidence] = await Promise.all([
+        sb.from("decision_atlas_channel_reports")
+          .select("through_session").order("through_session", { ascending: false }).limit(1).maybeSingle(),
+        sb.from("virtual_trades")
+          .select("signal_at").order("signal_at", { ascending: false }).limit(1).maybeSingle(),
+      ]);
       if (!alive) return;
       const missingTable = latest.error && (latest.error.code === "42P01" || latest.error.code === "PGRST205"
         || /decision_atlas_channel_reports/.test(latest.error.message ?? ""));
       if (missingTable) {
-        setRead({ throughSession: null, bySlug: {}, state: "unavailable", error: null });
+        setRead({ throughSession: null, evidenceThroughSession: null, freshness: "unknown", bySlug: {}, state: "unavailable", error: null });
         return;
       }
       if (latest.error) throw latest.error;
+      const evidenceThroughSession = latestEvidence.error
+        ? null
+        : etSessionDate(latestEvidence.data?.signal_at ? String(latestEvidence.data.signal_at) : null);
       const throughSession = latest.data?.through_session ? String(latest.data.through_session) : null;
       if (!throughSession) {
-        setRead({ throughSession: null, bySlug: {}, state: "unavailable", error: null });
+        setRead({ throughSession: null, evidenceThroughSession, freshness: "unknown", bySlug: {}, state: "unavailable", error: null });
         return;
       }
       const reports = await sb.from("decision_atlas_channel_reports")
@@ -46,9 +60,9 @@ export function useDecisionAtlasReports(enabled = true): DecisionAtlasReportsRea
       const bySlug = Object.fromEntries((reports.data ?? []).map((row) => [
         String(row.channel_slug), row.brief as ChannelDecisionBrief,
       ]));
-      setRead({ throughSession, bySlug, state: "ready", error: null });
+      setRead({ throughSession, evidenceThroughSession, freshness: decisionAtlasFreshness(throughSession, evidenceThroughSession), bySlug, state: "ready", error: null });
     })().catch((error) => {
-      if (alive) setRead({ throughSession: null, bySlug: {}, state: "error", error: (error as Error)?.message ?? "Atlas brief read failed" });
+      if (alive) setRead({ throughSession: null, evidenceThroughSession: null, freshness: "unknown", bySlug: {}, state: "error", error: (error as Error)?.message ?? "Atlas brief read failed" });
     });
     return () => { alive = false; };
   }, [enabled, tick]);

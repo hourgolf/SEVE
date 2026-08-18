@@ -59,6 +59,10 @@ check("legacy verifier cannot starve exact capture", workflow.includes("id: shad
   && workflow.indexOf("Capture current and score prior exact candidates") > workflow.indexOf("id: shadow-rebuild"), true);
 check("legacy verifier failure remains a visible blocker", workflow.includes("Enforce legacy shadow integrity after capture")
   && workflow.includes("steps.shadow-rebuild.outcome != 'success'"), true);
+check("exact learning cannot starve Atlas publication", workflow.includes("id: exact-learning")
+  && workflow.includes("Enforce exact-learning integrity after Atlas publication")
+  && workflow.indexOf("Build nightly Decision Atlas") > workflow.indexOf("id: exact-learning")
+  && workflow.indexOf("Enforce exact-learning integrity after Atlas publication") > workflow.indexOf("Publish concise Atlas briefs for the dashboard"), true);
 check("hosted workflow preserves fail-closed diagnostics", workflow.includes("if: always()")
   && workflow.includes("if-no-files-found: warn"), true);
 check("hosted workflow carries exact research credentials", /DATABENTO_API_KEY/.test(workflow)

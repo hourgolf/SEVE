@@ -75,7 +75,7 @@ export function ResearchCouncilRoom({ reports, onNavigate }: {
     <header className="rc-head">
       <span><small>NIGHTLY RESEARCH ROOM · THROUGH {packet.throughSession.slice(5).replace("-", "/")}</small><b>{packet.summary.headline}</b></span>
       <div className="rc-roster" aria-label={`${packet.agents.length} research agents`}>{packet.agents.map((agent) => <span key={agent.id} title={`${agent.name} · ${agent.role}`}><AgentAvatar id={agent.id} /></span>)}</div>
-      <em>READ ONLY</em>
+      <em>{reports.freshness === "stale" ? "STALE · READ ONLY" : "READ ONLY"}</em>
     </header>
     <div className="rc-pulse">
       <span><b>{packet.summary.channelsReviewed}</b><small>CHANNELS CHECKED</small></span>
