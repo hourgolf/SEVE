@@ -20,7 +20,7 @@ const throughSession = arg("through", "9999-12-31")!;
 
 interface LogicalTrade {
   id: string; rootPositionId: string; channelSlug: string; openedAt: string;
-  quantity: number; realizedPnlUsd: number | null;
+  quantity: number; realizedPnlUsd: number | null; occSymbol: string | null;
 }
 interface ManagerPath {
   logicalTradeId: string; positionId: string; managerId: string; status: string;
@@ -31,7 +31,7 @@ interface PositionRow {
   occ_symbol: string | null;
 }
 interface LedgerArtifact { ledger: { logicalTrades: LogicalTrade[]; managerCounterfactualPaths: ManagerPath[] } }
-interface SnapshotArtifact { positions: PositionRow[] }
+interface SnapshotArtifact { positions?: PositionRow[] }
 
 const MANAGERS = [
   "LOCK20/30", "LOCK30/30", "LOCK50/30", "BANK20/RUN50",
@@ -74,6 +74,10 @@ export function selectLogicalManagerPaths(trade: Pick<LogicalTrade, "rootPositio
   paths: readonly ManagerPath[]): readonly ManagerPath[] {
   const rootPath = paths.find((row) => row.positionId === trade.rootPositionId);
   return rootPath ? [rootPath] : paths;
+}
+
+export function indexRootPositions(snapshot: SnapshotArtifact): ReadonlyMap<string, PositionRow> {
+  return new Map((snapshot.positions ?? []).filter((row) => !row.runner_of).map((row) => [row.id, row]));
 }
 
 function stability(rows: readonly PairedRow[]): { chronological: boolean | null; leaveSessionOut: boolean | null } {
@@ -150,7 +154,7 @@ function main(): void {
   const ledger = (JSON.parse(ledgerText) as LedgerArtifact).ledger;
   const snapshot = JSON.parse(snapshotText) as SnapshotArtifact;
   const tradeById = new Map(ledger.logicalTrades.map((trade) => [trade.id, trade]));
-  const rootById = new Map(snapshot.positions.filter((row) => !row.runner_of).map((row) => [row.id, row]));
+  const rootById = indexRootPositions(snapshot);
   const grouped = new Map<string, ManagerPath[]>();
   for (const path of ledger.managerCounterfactualPaths) {
     if (!managerSet.has(path.managerId)) continue;
@@ -195,10 +199,11 @@ function main(): void {
       return [manager, row?.terminal ? row.modeled : null];
     }));
     const tested = Object.values(managerRows).filter((value): value is number => typeof value === "number");
-    return { trade, session, ordinal, feature, occ: root?.occ_symbol ?? null, managerRows,
+    const occ = root?.occ_symbol ?? trade.occSymbol ?? null;
+    return { trade, session, ordinal, feature, occ, managerRows,
       opportunityFound: tested.length ? Math.max(...tested) > 0 : null,
       bestModeledPnlUsd: tested.length ? Math.max(...tested) : null,
-      cohorts: cohortLabels({ trade, feature, ordinal, occ: root?.occ_symbol ?? null }) };
+      cohorts: cohortLabels({ trade, feature, ordinal, occ }) };
   });
   const cohortKeys = [...new Set(orbRows.flatMap((row) => row.cohorts.map((cohort) => `${cohort.family}\u0000${cohort.value}`)))].sort();
   const orbCohorts = cohortKeys.map((key) => {
@@ -247,5 +252,10 @@ if (process.argv.includes("--selftest")) {
   assert.deepEqual(selectLogicalManagerPaths({ rootPositionId: "root" }, [path("root", 200), path("runner", 100)]), [path("root", 200)]);
   assert.equal(sum(selectLogicalManagerPaths({ rootPositionId: "root" }, [path("root", 200), path("runner", 100)])
     .map((row) => row.counterfactualPnlUsd ?? 0)), 200);
+  assert.equal(indexRootPositions({}).size, 0);
+  assert.equal(indexRootPositions({ positions: [
+    { id: "root", runner_of: null, entry_features: { aware: "clean" }, occ_symbol: "SPY260817C00600000" },
+    { id: "runner", runner_of: "root", entry_features: null, occ_symbol: "SPY260817C00600000" },
+  ] }).size, 1);
   console.log("manager-pattern-scan-selftest: PASS");
 } else main();

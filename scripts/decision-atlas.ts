@@ -17,6 +17,7 @@ import {
   adaptDecisionAtlasSnapshot,
   type AtlasEquitySnapshotRow,
   type AtlasExecutionRow,
+  type AtlasPositionContextRow,
   type AtlasWorkerRunRow,
   type AtlasSignalRow,
   type AtlasStrategistRow,
@@ -156,10 +157,13 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
       throw error;
     }
   };
-  const [strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
+  const [strategists, positions, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
     vbCandidateReceipts, vbExactPathReceipts, vbExactManagerPathReceipts, control] = await Promise.all([
     timed("strategists", () => pageAll<AtlasStrategistRow>((from) => sb.from("strategists")
       .select("id,slug,underlying").order("id"), { ...readOptions, max: 5_000 })),
+    timed("position_context", () => pageAll<AtlasPositionContextRow>((from) => sb.from("positions")
+      .select("id,runner_of,entry_features,occ_symbol,opened_at")
+      .gte("opened_at", cohortFrom).order("opened_at").order("id"), readOptions)),
     timed("signals", () => pageAll<AtlasSignalRow>((from) => sb.from("signals")
       .select("id,strategist_id,signal_type,underlying_price,direction,rationale,acted_on,blocked_reason,created_at,configuration_epoch_id")
       .gte("created_at", cohortFrom).order("created_at").order("id"), readOptions)),
@@ -206,7 +210,7 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
   if (!control.compiled) throw new Error(`active control plane unavailable: ${control.error ?? control.state}`);
   return {
     snapshot: {
-      ledger, strategists, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
+      ledger, strategists, positions, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
       vbCandidateReceipts, vbExactPathReceipts, vbExactManagerPathReceipts,
       activeChannelSpecs: control.compiled.channelSpecs,
       activeChannelSpecDatabaseIdsByVersionKey: control.databaseIdentity?.channelSpecDatabaseIdsByVersionKey ?? {},
@@ -291,6 +295,7 @@ async function main(): Promise<void> {
     localVirtualCatchup: catchup.metadata,
     sourceRows: {
       logicalTrades: snapshot.ledger.logicalTrades.length,
+      positionContext: snapshot.positions?.length ?? 0,
       signals: snapshot.signals.length,
       executionObservations: snapshot.executionObservations.length,
       virtualTrades: snapshot.virtualTrades.length,
@@ -313,7 +318,7 @@ async function main(): Promise<void> {
       boundedRetunes: sha256(boundedRetunesJson),
       boundedRetunesReport: sha256(boundedRetunesReport),
     },
-    sourceTables: ["strategists", "signals", "execution_observations", "virtual_trades",
+    sourceTables: ["strategists", "positions", "signals", "execution_observations", "virtual_trades",
       "manager_shadow_runs", "equity_snapshots", "worker_runs", "release_manifests", "release_manifest_channels",
       "channel_spec_versions", "activation_receipts", "vb_candidate_receipts", "vb_exact_path_receipts",
       "vb_exact_manager_path_receipts"],
