@@ -128,8 +128,21 @@ export interface AtlasVbExactManagerPathReceiptRow {
   independent_opportunity: boolean;
 }
 
+export interface AtlasPositionContextRow {
+  id: string;
+  runner_of: string | null;
+  entry_features: Record<string, unknown> | null;
+  occ_symbol: string | null;
+  opened_at: string;
+}
+
 export interface DecisionAtlasSourceSnapshot {
   ledger: ProfitabilityLedger;
+  /**
+   * Minimal position context used by downstream entry-cohort research. Older
+   * frozen snapshots legitimately omit it, so consumers must tolerate absence.
+   */
+  positions?: AtlasPositionContextRow[];
   strategists: AtlasStrategistRow[];
   signals: AtlasSignalRow[];
   executionObservations: AtlasExecutionRow[];
