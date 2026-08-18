@@ -100,6 +100,8 @@ jobs:
               --output-dir data
           fi
       - name: Capture current and score prior exact candidates
+        id: exact-learning
+        continue-on-error: true
         shell: bash
         env:
           DRY_RUN_INPUT: ${{ inputs.dry_run }}
@@ -239,4 +241,10 @@ jobs:
         shell: bash
         run: |
           echo "Legacy shadow rebuild or verifier failed; exact capture was allowed to continue and diagnostics were preserved." >&2
+          exit 1
+      - name: Enforce exact-learning integrity after Atlas publication
+        if: always() && steps.exact-learning.outcome != 'success'
+        shell: bash
+        run: |
+          echo "Exact T+1 learning failed; core Atlas, briefs, council, Sentinel, and diagnostics were still allowed to publish." >&2
           exit 1

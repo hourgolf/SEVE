@@ -8,6 +8,7 @@ import { OpsReadinessPanel } from "@/components/ops/OpsReadinessPanel";
 import { SeveEvidenceContext, SeveWorkspaceHeader } from "@/components/ui/Seve909";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
 import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { decisionAtlasFreshnessShortLabel } from "@/lib/research/decisionAtlasFreshness";
 
 const age = (seconds: number | null): string => seconds == null ? "—" : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h`;
 const localTime = (value: string | null | undefined): string => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " PT" : "—";
@@ -28,6 +29,7 @@ export function OpsWorkspace({ surface, destination, onNavigate }: { surface: Su
   const tradingItems = allReadiness.filter((item) => ["release", "paper-boundary", "reconciliation"].includes(item.id));
   const dataItems = allReadiness.filter((item) => ["capture-config", "manager-config", "candidates", "fills", "capture", "managers", "publisher"].includes(item.id));
   const laneState = (items: typeof allReadiness, ready: string) => items.some((item) => item.tone === "red") ? "NEEDS REVIEW" : items.some((item) => item.tone === "yellow") ? "ATTENTION" : ready;
+  const atlasLabel = decisionAtlasFreshnessShortLabel({ freshness: surface.decisionAtlas.freshness, reportThroughSession: surface.decisionAtlas.throughSession });
   useEffect(() => {
     if (destination?.section !== "ops" || !destination.check) return;
     window.setTimeout(() => document.querySelector(`[data-system-check="${CSS.escape(destination.check!)}"]`)?.scrollIntoView({ block: "center" }), 0);
@@ -42,7 +44,7 @@ export function OpsWorkspace({ surface, destination, onNavigate }: { surface: Su
     <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={localTime(reconciliation?.observedAt ?? release?.createdAt)} era="current sealed release" sample={`${surface.opsReadiness.counts.candidates} candidate decisions`} quality={surface.opsReadiness.summary.tone === "red" ? "partial" : surface.opsReadiness.summary.tone === "yellow" ? "building" : "complete"} detail="Readiness is based on observed broker, process, market, and research evidence." />
     <section className={`opsw-system-summary ${surface.opsReadiness.summary.tone}`}>
       <span><small>OVERALL</small><b>{surface.opsReadiness.summary.state}</b></span>
-      <div><span><small>TRADING</small><b>{laneState(tradingItems, "READY")}</b></span><span><small>DATA</small><b>{laneState(dataItems, "COMPLETE")}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? "CURRENT" : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
+      <div><span><small>TRADING</small><b>{laneState(tradingItems, "READY")}</b></span><span><small>DATA</small><b>{laneState(dataItems, "COMPLETE")}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? atlasLabel : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
     </section>
     <section className="opsw-exceptions"><header><span><small>NEEDS ATTENTION</small><b>{exceptions.length ? `${exceptions.length} system checks` : "No blocking system issue"}</b></span><em>{exceptions.length ? "REVIEW BEFORE NEXT SESSION" : "DESK READY"}</em></header>
       {exceptions.length ? <div>{exceptions.slice(0, 6).map((item) => <article key={item.id} data-system-check={item.id} className={`${item.tone}${destination?.check === item.id ? " selected" : ""}`}><button type="button" onClick={() => onNavigate?.({ section: "ops", check: item.id })}><i /><span><b>{item.label}</b><p>{item.detail}</p></span><em>{item.state}</em><strong aria-hidden="true">→</strong></button></article>)}</div> : <p>Trading, data, broker reconciliation, and the current release are available. Research collection may continue without operator action.</p>}

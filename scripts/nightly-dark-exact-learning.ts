@@ -19,13 +19,21 @@ const flag = (name: string): boolean => process.argv.includes(`--${name}`);
 const SESSION = arg("session");
 const MAX_COST = Number(arg("max-provider-cost-usd"));
 const OUTPUT = resolve(arg("output-dir", SESSION ? `data/decision-atlas/runs/${SESSION}/exact-learning` : ""));
-const ENV_FILE = resolve(arg("env-file", process.env.SEVE_ENV_FILE ?? ".env.local"));
+const explicitEnvFile = arg("env-file", process.env.SEVE_ENV_FILE ?? "");
+const ENV_FILE = resolve(explicitEnvFile || ".env.local");
 const PUBLISH = flag("publish");
 
 if (!/^\d{4}-\d{2}-\d{2}$/.test(SESSION)) throw new Error("--session must be YYYY-MM-DD");
 if (!Number.isFinite(MAX_COST) || MAX_COST <= 0) throw new Error("--max-provider-cost-usd must be positive");
-if (!existsSync(ENV_FILE)) throw new Error(`environment file not found: ${ENV_FILE}`);
-process.loadEnvFile(ENV_FILE);
+// Hosted runners receive their credentials through the workflow environment and
+// deliberately do not carry a developer .env.local file. An explicitly named
+// environment file remains fail-closed; the implicit local default is optional.
+if (explicitEnvFile) {
+  if (!existsSync(ENV_FILE)) throw new Error(`environment file not found: ${ENV_FILE}`);
+  process.loadEnvFile(ENV_FILE);
+} else if (existsSync(ENV_FILE)) {
+  process.loadEnvFile(ENV_FILE);
+}
 
 const freezeDir = resolve(OUTPUT, "freeze");
 const scoreDir = resolve(OUTPUT, "t1");
@@ -95,7 +103,7 @@ async function main(): Promise<void> {
   run("scripts/publish-dark-exact-receipts.ts", [
     "--report", reportFile,
     "--receipt", publicationReceipt,
-    "--env-file", ENV_FILE,
+    ...(explicitEnvFile || existsSync(ENV_FILE) ? ["--env-file", ENV_FILE] : []),
     ...(PUBLISH ? ["--publish"] : []),
   ]);
   const publication = json<{

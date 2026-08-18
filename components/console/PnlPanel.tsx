@@ -67,7 +67,7 @@ export function PnlPanel({
   };
   const fundVal = isToday ? fundPnl.dayPnl : windowed?.fundPnl;
   const equityValues = isToday ? equityCurve.map((p) => p.equity) : (windowed?.curve ?? []);
-  const attributionAvailable = isToday || windowed?.attributionEvidenceState === "ok";
+  const attributionAvailable = isToday || windowed?.attributionEvidenceState === "ok" || windowed?.attributionEvidenceState === "partial";
 
   const hasCurve =
     equityValues.length >= 2 && Math.max(...equityValues) !== Math.min(...equityValues);
@@ -115,8 +115,11 @@ export function PnlPanel({
               ? "Current-session attribution unavailable"
               : blocked
                 ? "Historical evidence unavailable"
-                : "Historical evidence partial"}</b>
+                : "Historical channel coverage partial"}</b>
             {evidenceIssues.map((issue) => <span key={issue}>{issue}</span>)}
+            {!isToday && windowed?.attributionEvidenceState === "partial" && (
+              <small>{windowed.attributedPositionRows} verified rows included · {windowed.withheldPositionRows} rows withheld to keep trades whole. Account NAV remains complete.</small>
+            )}
             {!isToday && windowed?.navEvidenceState === "ok" && windowed.attributionEvidenceState === "blocked" && (
               <small>Account NAV remains available; channel rows are withheld.</small>
             )}

@@ -7,6 +7,8 @@ const surfaces = readFileSync(new URL("../components/surfaceTypes.ts", import.me
 assert.match(hook, /from\("decision_atlas_channel_reports"\)/);
 assert.match(hook, /order\("through_session", \{ ascending: false \}\)/);
 assert.match(hook, /eq\("through_session", throughSession\)/);
+assert.match(hook, /from\("virtual_trades"\)/);
+assert.match(hook, /decisionAtlasFreshness\(throughSession, evidenceThroughSession\)/);
 assert.match(hook, /PGRST205/);
 assert.doesNotMatch(hook, /insert\(|upsert\(|update\(|delete\(/);
 assert.match(page, /useDecisionAtlasReports\(!accountsLoading\)/);

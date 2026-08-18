@@ -18,8 +18,9 @@ const ids = [
 ];
 assert.equal(
   summarizePerformanceIssue(`performance positions lack immutable execution-account routing: ${ids.join(",")}`, 2),
-  `performance positions lack immutable execution-account routing: 4 position ids · sample ${ids[0]}, ${ids[1]} · +2 more`,
+  "4 older position rows lack verified account routing.",
 );
+assert.equal(combinePerformanceEvidenceState("partial", "ok"), "partial");
 assert.equal(summarizePerformanceIssue("execution-route read failed: network unavailable"), "execution-route read failed: network unavailable");
 assert.equal(summarizePerformanceIssue("selected account is not configured"), "selected account is not configured");
 

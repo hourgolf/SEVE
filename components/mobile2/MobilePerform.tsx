@@ -18,6 +18,7 @@ import { ContractDetailView } from "@/components/ContractDetail";
 import { MarketOpenRisk, MarketReadStrip } from "@/components/perform/PerformMarketsWorkspace";
 import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 import { buildFleetDecisionSummary } from "@/lib/research/channelDecisionSummary";
+import { decisionAtlasFreshnessShortLabel } from "@/lib/research/decisionAtlasFreshness";
 
 // =============================================================================
 // MOBILE · PERFORM (S5) — the watch surface as ONE vertical scroll (the gallery
@@ -141,6 +142,7 @@ export function MobilePerform({
   const { data, view, feed, spotUp, symbol, setSymbol, selected, setSelected, contractHistory } = props;
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   const fleet = buildFleetDecisionSummary(props.decisionAtlas.bySlug, props.decisionAtlas.throughSession);
+  const atlasLabel = decisionAtlasFreshnessShortLabel({ freshness: props.decisionAtlas.freshness, reportThroughSession: props.decisionAtlas.throughSession });
   const ready = props.incident.severity === "normal" && props.opsReadiness.summary.tone !== "red";
   const changeSymbol = (next: string) => {
     setSelected(null);
@@ -153,7 +155,7 @@ export function MobilePerform({
         <section className={`m2-decision-home ${ready ? "ready" : "attention"}`} aria-label="Decision Home summary">
           <header><span><small>DECISION HOME</small><b>{ready ? "READY FOR THE NEXT SESSION" : "CHECK BEFORE THE NEXT SESSION"}</b></span><em>{signedUsd(props.liveFund.dayPnl)} TODAY</em></header>
           <p>{fleet.lead ? `Next review: ${fleet.lead.channel} · ${fleet.lead.disposition.toLowerCase()}.` : "No urgent channel action. Continue collecting evidence."}</p>
-          <div><span><small>TRADING</small><b>{props.opsReadiness.summary.tone === "red" ? "REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{data.status === "err" ? "REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{props.decisionAtlas.state === "ready" ? "CURRENT" : "CHECKING"}</b></span></div>
+          <div><span><small>TRADING</small><b>{props.opsReadiness.summary.tone === "red" ? "REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{data.status === "err" ? "REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{props.decisionAtlas.state === "ready" ? atlasLabel : "CHECKING"}</b></span></div>
         </section>
         <nav className="m2-market-switch" aria-label="Markets workspace">
           <button type="button" className={marketView === "chart" ? "on" : ""} onClick={() => onMarketViewChange("chart")} aria-pressed={marketView === "chart"}>CHART</button>

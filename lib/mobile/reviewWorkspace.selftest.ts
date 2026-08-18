@@ -39,12 +39,14 @@ check("mode membership fails closed", () => {
   assert.equal(mobileReviewHas("evidence", "trade-evidence"), true);
   assert.equal(mobileReviewHas("sentinel", "event-tape"), false);
 });
-check("mobile session labels selected-account scope and immutable attribution", () => {
+check("mobile session exposes selected-account history without a second subscription", () => {
   const source = readFileSync("components/mobile2/MobileDeskSheet.tsx", "utf8");
-  assert.match(source, /accountScope/);
-  assert.match(source, /immutable execution routes/);
-  assert.match(source, /No strategist-account fallback was used/);
+  assert.match(source, /MOBILE_PERIODS/);
+  assert.match(source, /reviewEvidence\.setPnlWindow/);
+  assert.match(source, /reviewEvidence\.windowedPnl/);
+  assert.match(source, /rows withheld to keep trades whole/);
 });
+check("mobile gives Atlas a first-class label", () => assert.deepEqual(MOBILE_REVIEW_MODES.find((mode) => mode.id === "shadow"), { id: "shadow", label: "ATLAS", sub: "decisions" }));
 check("mobile Sentinel labels its all-paper-account scope", () => {
   const source = readFileSync("components/mobile2/MobileDeskSheet.tsx", "utf8");
   assert.match(source, /ALL PAPER ACCOUNTS/);
