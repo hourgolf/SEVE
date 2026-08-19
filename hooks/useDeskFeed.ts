@@ -41,7 +41,12 @@ export interface DeskFeed {
     positionRows: number;
   };
   pnlByStrategist: Record<string, ChannelPnl>;
-  fundPnl: { nav: number; dayPnl: number; snapshotUnrealizedPnl: number | null };
+  fundPnl: {
+    nav: number;
+    dayPnl: number;
+    snapshotUnrealizedPnl: number | null;
+    snapshotCapturedAt: string | null;
+  };
   equityCurve: { ts: string; equity: number }[];
   signals: Signal[];
   steps: Step[];
@@ -95,6 +100,7 @@ export function useDeskFeed(
   const [curve, setCurve] = useState<{ ts: string; equity: number }[]>([]);
   const [latestNav, setLatestNav] = useState<number | null>(null);
   const [latestSnapshotUnrealizedPnl, setLatestSnapshotUnrealizedPnl] = useState<number | null>(null);
+  const [latestSnapshotCapturedAt, setLatestSnapshotCapturedAt] = useState<string | null>(null);
   const [sessionOpenNav, setSessionOpenNav] = useState<number | null>(null);
   const [status, setStatus] = useState<FeedStatus>("empty");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
@@ -153,6 +159,7 @@ export function useDeskFeed(
         setLatestSnapshotUnrealizedPnl(snapshotUnrealized == null || !Number.isFinite(Number(snapshotUnrealized))
           ? null
           : Number(snapshotUnrealized));
+        setLatestSnapshotCapturedAt(snapshots[0]?.captured_at ?? null);
       } catch {
         /* the compact feed remains usable without curve history */
       }
@@ -322,6 +329,7 @@ export function useDeskFeed(
             ? null
             : Number(latestSnapshot.unrealized_pnl),
         );
+        setLatestSnapshotCapturedAt(latestSnapshot?.captured_at ?? null);
         const merged = new Map(curveRef.current.map((row) => [row.ts, row]));
         for (const row of latestEq) merged.set(row.ts, row);
         const eq = sessionSlice(
@@ -423,8 +431,9 @@ export function useDeskFeed(
       nav: base.nav,
       dayPnl: navDay ?? base.dayPnl,
       snapshotUnrealizedPnl: latestSnapshotUnrealizedPnl,
+      snapshotCapturedAt: latestSnapshotCapturedAt,
     };
-  }, [dayPositions, totalCapital, latestNav, latestSnapshotUnrealizedPnl, sessionOpenNav]);
+  }, [dayPositions, totalCapital, latestNav, latestSnapshotCapturedAt, latestSnapshotUnrealizedPnl, sessionOpenNav]);
   // Channel colors for the tape — same slug→color map the "Today's trades" dots
   // use, so a lit pad and its trade row always agree.
   const colorBySlug = useMemo(() => {
