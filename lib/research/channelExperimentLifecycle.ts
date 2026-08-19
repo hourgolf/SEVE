@@ -60,6 +60,8 @@ interface FrozenExperimentDefinition {
   control: string;
   challenger: string;
   managerId?: string;
+  trailCandidateId?: string;
+  collectionSource?: "decision";
 }
 
 /**
@@ -70,12 +72,36 @@ interface FrozenExperimentDefinition {
 const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefinition>> =
   Object.freeze({
     "qqq-thrust-trail-wd": Object.freeze({
-      experimentId: "qqq-thrust-trail-wd:native-vs-lock20-30:2026-08-17:v1",
+      experimentId: "qqq-thrust-trail-wd:tp20-vs-tp13:2026-08-18:v1",
       axis: "exit",
-      name: "exit policy",
-      control: "native all-out +50% / -50% stop",
-      challenger: "LOCK20/30 all-out +20% / -30% stop",
-      managerId: "LOCK20/30",
+      name: "take-profit threshold",
+      control: "current all-out +20% / -30% stop",
+      challenger: "shadow all-out +13% / -30% stop",
+      trailCandidateId: "TP-13",
+    }),
+    "vb-macd-state": Object.freeze({
+      experimentId: "vb-macd-state:tp50-vs-tp18:2026-08-18:v1",
+      axis: "exit",
+      name: "all-out take-profit threshold",
+      control: "current all-out +50% / -30% stop",
+      challenger: "VB-MACD-CURRENT-LOCK18 all-out +18% / -30% stop",
+      managerId: "VB-MACD-CURRENT-LOCK18",
+    }),
+    "orb-ustop-ctl": Object.freeze({
+      experimentId: "orb-ustop-ctl:raw-vs-qualified-entry:2026-08-18:v1",
+      axis: "entry",
+      name: "entry qualification",
+      control: "raw ORB signals retained in shadow",
+      challenger: "current after-10:30 ET, non-CPI/OPEX paper entry gate",
+      collectionSource: "decision",
+    }),
+    "vb-level-break": Object.freeze({
+      experimentId: "vb-level-break:first-vs-confirmed-entry:2026-08-18:v1",
+      axis: "entry",
+      name: "entry ordinal and confirmation timing",
+      control: "current first eligible entry",
+      challenger: "shadow skip-first / next-confirmed entry",
+      collectionSource: "decision",
     }),
   });
 
@@ -135,9 +161,18 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
   const frozenManager = frozen?.managerId
     ? brief.managers.compared.find((row) => row.managerId === frozen.managerId) ?? null
     : null;
+  const frozenTrail = frozen?.trailCandidateId
+    ? brief.trail?.compared.find((row) => row.candidateId === frozen.trailCandidateId) ?? null
+    : null;
+  const decisionCollection = frozen?.collectionSource === "decision"
+    ? { sessions: brief.evidence.decisionSessions,
+      opportunities: brief.evidence.decisionOpportunities }
+    : null;
   const collection = { independentSessions: frozenManager?.sessions
+      ?? frozenTrail?.sessions ?? decisionCollection?.sessions
       ?? new Set(clean.map((row) => row.session)).size,
     logicalOpportunities: frozenManager?.pairedOpportunities
+      ?? frozenTrail?.pairedOpportunities ?? decisionCollection?.opportunities
       ?? new Set(clean.map((row) => row.logicalOpportunityId)).size,
     contaminatedOpportunities: new Set(observed.filter((row) => row.boundedRetuneStamp?.baselineMatches === false)
       .map((row) => row.logicalOpportunityId)).size };
