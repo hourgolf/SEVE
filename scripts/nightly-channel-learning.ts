@@ -17,6 +17,7 @@ import { buildChannelLifecycleDecisionPacket, renderChannelLifecycleDecisionPack
 import type { GateShadowCatchupManifest } from "../lib/research/gateShadowCatchupAuthorization";
 import { buildOperatorExperimentPacket, renderOperatorExperimentPacket } from "../lib/research/operatorExperimentPacket";
 import type { ChannelTrailFrontierBook } from "../lib/research/channelTrailFrontier";
+import { buildNextSevenActionProgram, renderNextSevenActionProgram } from "../lib/research/nextSevenActionProgram";
 
 const arg = (name: string, fallback: string): string => {
   const index = process.argv.indexOf(`--${name}`);
@@ -49,6 +50,7 @@ const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt: atlas.gen
   throughSession: atlas.throughSession });
 const evidence = buildEvidenceReconciliation({ atlas, snapshot, opportunities: normalized.opportunities, catchupManifests });
 const experiments = buildChannelExperimentPacket(briefs, normalized.opportunities);
+const nextSevenActions = buildNextSevenActionProgram({ briefs, experiments });
 const executionCapacity = buildExecutionCapacityReadiness({ atlas, briefs, snapshot });
 const executionResilience = buildExecutionResilienceReport({ snapshot, generatedAt: atlas.generatedAt,
   throughSession: atlas.throughSession });
@@ -73,6 +75,7 @@ const packet = {
   headline,
   evidence,
   experiments,
+  nextSevenActions,
   executionCapacity,
   executionResilience,
   portfolioCapacity,
@@ -82,6 +85,7 @@ const packet = {
     ...(executionCapacity.execution.state === "block" ? ["Investigate orphaned execution traces before relying on replayed capacity."] : []),
     ...(executionResilience.state === "limited" ? ["Review restart/trace exceptions and require the first guarded broker receipt before declaring the submit-once correction proven live."] : []),
     ...(experiments.summary.preregistered ? ["Review preregistered one-variable paper experiments; activation remains a separate decision."] : []),
+    "Review the seven-action channel program; its four tests, collection holds, and review trigger cannot activate themselves.",
     ...(executionCapacity.summary.paperStepsReady ? ["Review replay-supported one-contract sizing steps, including displaced peer opportunities."] : []),
     ...(lifecycle.queues.retirement_review.length ? [`Review ${lifecycle.queues.retirement_review.length} mature negative/redundant retirement proposal(s).`] : []),
     ...(lifecycle.queues.promotion_review.length ? [`Review ${lifecycle.queues.promotion_review.length} bounded paper promotion proposal(s).`] : []),
@@ -120,6 +124,7 @@ const receipt = {
     portfolioCapacitySha256: portfolioCapacity.receiptSha256,
     lifecycleSha256: lifecycle.receiptSha256,
     operatorPacketSha256: operatorPacket.packetSha256,
+    nextSevenActionsSha256: nextSevenActions.programSha256,
     dashboardBriefsSha256: hash(dashboardBriefs) },
   productionReads: 0,
   productionWrites: 0,
@@ -134,6 +139,7 @@ const markdown = [
   "",
   `- Evidence: ${evidence.summary.readyChannels} ready · ${evidence.summary.channelsNeedingRecovery} recovery · ${evidence.summary.limitedChannels} limited`,
   `- Experiments: ${experiments.summary.preregistered} preregistered · ${experiments.summary.draft} draft · ${experiments.summary.control_only} unchanged controls`,
+  `- Prepared program: ${nextSevenActions.summary.preparedTests} tests · ${nextSevenActions.summary.collectionHolds} collection/review holds · 0 size changes`,
   `- Capacity: ${executionCapacity.summary.paperStepsReady} paper steps ready · ${executionCapacity.summary.holds} hold · ${executionCapacity.summary.insufficientEvidence} need evidence`,
   `- Execution: ${executionResilience.state} · ${executionResilience.traces.total} traces · ${executionResilience.restarts.observedRuns} worker runs`,
   `- Lifecycle queue: ${lifecycle.queues.promotion_review.length} promote · ${lifecycle.queues.size_review.length} size · ${lifecycle.queues.manager_review.length} manager · ${lifecycle.queues.retirement_review.length} retire`,
@@ -164,6 +170,8 @@ writeFileSync(resolve(outputDir, "lifecycle.json"), `${JSON.stringify(lifecycle,
 writeFileSync(resolve(outputDir, "lifecycle.md"), `${renderChannelLifecycleDecisionPacket(lifecycle)}\n`);
 writeFileSync(resolve(outputDir, "operator-packet.json"), `${JSON.stringify(operatorPacket, null, 2)}\n`);
 writeFileSync(resolve(outputDir, "operator-packet.md"), `${renderOperatorExperimentPacket(operatorPacket)}\n`);
+writeFileSync(resolve(outputDir, "next-seven-actions.json"), `${JSON.stringify(nextSevenActions, null, 2)}\n`);
+writeFileSync(resolve(outputDir, "next-seven-actions.md"), `${renderNextSevenActionProgram(nextSevenActions)}\n`);
 writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 console.log(`nightly-channel-learning: PASS · through ${atlas.throughSession}`);
 console.log(`  ${headline}`);
