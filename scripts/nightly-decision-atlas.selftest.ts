@@ -8,6 +8,7 @@ assert.match(source, /entry-atlas\.ts/);
 assert.match(source, /channel-trail-frontier\.ts/);
 assert.match(source, /weekly-readout\.ts/);
 assert.match(source, /channel-decision-briefs\.ts/);
+assert.match(source, /fleet-research-queue\.ts/);
 assert.match(source, /nightly-channel-learning\.ts/);
 assert.match(source, /--shadow-catchup-manifest/);
 assert.doesNotMatch(source, /capture-forward|launchctl|cron|\.from\(|insert\(|upsert\(/);
