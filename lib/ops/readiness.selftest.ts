@@ -295,6 +295,20 @@ assert.equal(find(postClose, "publisher").state, "DUE");
 const sameDayPublisher = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T21:00:00Z"), evidence: evidence({ execution: ok([decision]), publisher: ok([{ id: "today", message: "shadow-publish: day-report done", created_at: "2026-07-20T20:40:00Z" }]) }) }));
 assert.equal(find(sameDayPublisher, "publisher").tone, "green");
 
+const deterministicPublisher = deriveOpsReadiness(base({
+  nowMs: Date.parse("2026-07-20T21:00:00Z"),
+  evidence: evidence({ execution: ok([decision]), publisher: ok() }),
+  sentinel: {
+    state: "ok", session: "2026-07-20", date: "2026-07-20", briefAsOf: "2026-07-20",
+    forDate: "2026-07-21", publishedAt: "2026-07-20T20:45:00Z", schemaVersion: 2,
+    publisherEvidenceState: "partial", publisherEvidenceDetail: "exact replay remains queued",
+  },
+}));
+assert.equal(find(deterministicPublisher, "publisher").state, "LAST RUN OK");
+assert.equal(find(deterministicPublisher, "publisher").tone, "green");
+assert.match(find(deterministicPublisher, "publisher").detail, /deterministic next-session receipt/);
+assert.equal(find(deterministicPublisher, "sentinel").state, "CURRENT · PARTIAL EVIDENCE");
+
 const sentinelConflict = deriveOpsReadiness(base({ sentinel: { state: "ok", session: "2026-07-18", date: "2026-07-18", briefAsOf: "2026-07-17", forDate: "2026-07-20" } }));
 assert.equal(find(sentinelConflict, "sentinel").tone, "yellow");
 assert.equal(sentinelConflict.summary.state, "TRADING READY");

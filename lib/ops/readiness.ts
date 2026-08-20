@@ -329,13 +329,24 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
 
   const publisher = input.evidence.publisher;
   const latestPublisher = publisher.state === "ok" ? latest(publisher.rows, (row) => row.created_at) : null;
-  const publisherFailed = latestPublisher?.message.includes("exited") ?? false;
-  const publisherDone = latestPublisher?.message.includes("done") ?? false;
+  const sentinelPublisherDone = input.sentinel.state === "ok"
+    && input.sentinel.session === clock.date
+    && Boolean(input.sentinel.publishedAt || input.sentinel.createdAt);
+  const legacyPublisherDone = Boolean(latestPublisher?.message.includes("done")
+    && latestPublisher.created_at.slice(0, 10) === clock.date);
+  const publisherDone = sentinelPublisherDone || legacyPublisherDone;
+  const publisherFailed = !sentinelPublisherDone && (latestPublisher?.message.includes("exited") ?? false);
+  const publisherObservedAt = sentinelPublisherDone
+    ? input.sentinel.publishedAt || input.sentinel.createdAt
+    : latestPublisher?.created_at;
+  const publisherDetail = sentinelPublisherDone
+    ? "nightly research and deterministic next-session receipt published"
+    : latestPublisher?.message ?? "publisher complete";
   const postClose = clock.minute >= 16 * 60;
   if (publisher.state === "error") evidence.push(readError("publisher", "POST-CLOSE PUBLISHER", publisher));
   else if (publisherFailed) evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: "FAILED", tone: "red", detail: latestPublisher?.message ?? "publisher failed", observedAt: latestPublisher?.created_at });
-  else if (postClose && (candidates > 0 || fillsByPosition.size > 0) && (!publisherDone || latestPublisher?.created_at.slice(0, 10) !== clock.date)) evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: "DUE", tone: "yellow", detail: "current-session activity exists but no same-session completion receipt is observed" });
-  else evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: publisherDone ? "LAST RUN OK" : "NOT DUE", tone: publisherDone ? "green" : "neutral", detail: publisherDone ? latestPublisher?.message ?? "publisher complete" : "publication is evaluated after the close", observedAt: latestPublisher?.created_at });
+  else if (postClose && (candidates > 0 || fillsByPosition.size > 0) && !publisherDone) evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: "DUE", tone: "yellow", detail: "current-session activity exists but no same-session completion receipt is observed" });
+  else evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: publisherDone ? "LAST RUN OK" : "NOT DUE", tone: publisherDone ? "green" : "neutral", detail: publisherDone ? publisherDetail : "publication is evaluated after the close", observedAt: publisherObservedAt });
 
   evidence.push({ id: "sentinel", label: "SENTINEL RECEIPT", state: sentinel.label, tone: sentinel.tone, detail: sentinel.detail, observedAt: sentinel.publishedAt });
   const broker = input.evidence.broker;
