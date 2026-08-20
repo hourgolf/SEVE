@@ -17,7 +17,9 @@ assert.match(card, /HISTORICAL VIRTUAL/);
 assert.match(card, /PLATFORM RULES/);
 assert.match(card, /opportunities suppressed/);
 assert.match(card, /PROSPECTIVE TEST/);
-assert.match(card, /comparableStoryReady \? "ATLAS" : "CURRENT SAMPLE"/);
+assert.match(card, /SELECTED CHANNEL/);
+assert.match(card, /\{brief\.channel\}/,
+  "the paired report must keep the selected channel visible after fleet-map navigation");
 assert.match(card, /CURRENT SETTINGS/);
 assert.match(card, /COMPARABLE HISTORY/);
 assert.match(card, /ALL RESEARCH/);
@@ -62,6 +64,12 @@ assert.match(finishMap, /typicalFinalReturnPct/,
   "Entry → Finish must plot the observed typical final return, not reconstruct it from capture");
 assert.match(finishMap, /scopeLabel/,
   "Entry → Finish must identify which evidence scope produced its points");
+assert.match(finishMap, /active<\/span>/,
+  "the fleet-map legend must distinguish channels with live entry authority");
+assert.match(finishMap, /shadowing<\/span>/,
+  "the fleet-map legend must name research-only channels plainly");
+assert.match(finishMap, /selection-ring/,
+  "the selected channel must remain visually identifiable in a crowded fleet map");
 assert.match(research, /Comparable fleet view is withheld until the nightly briefs are refreshed/,
   "old published briefs must not masquerade as comparable fleet evidence");
 assert.match(research, /srw-atlas-brief/);
@@ -82,6 +90,10 @@ assert.match(css, /\.atlas-manager-duel/);
 assert.match(css, /\.atlas-trail-callout/);
 assert.match(css, /\.atlas-size-steps/);
 assert.match(css, /\.entry-finish-map/);
+assert.match(css, /map-point\.trading \.posture-dot\{fill:/,
+  "active channels must have a posture-specific bubble fill");
+assert.match(css, /map-point\.observing \.posture-dot\{fill:/,
+  "shadowing channels must have a posture-specific bubble fill");
 assert.match(css, /\.channel-session-strip/);
 assert.match(css, /var\(--surface-panel/,
   "cream mode must inherit the chassis panel instead of a dark LCD token");
