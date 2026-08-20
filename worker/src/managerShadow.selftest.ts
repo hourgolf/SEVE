@@ -43,9 +43,9 @@ check("grind current manager is channel scoped",
 check("grind current restart recovers bank and peak",
   recoverManagerState("GRIND-B25/CURRENT-A13", 60),
   { bankReturnPct: 25, armedPeakPct: 60, recovered: true });
-check("VB MACD current manager is shadowed only on its own channel",
+check("VB MACD native +18 is not duplicated in its shadow book",
   [managerIdsForChannel("vb-macd-state").at(-1), managerIdsForChannel("vb-squeeze-break").length],
-  ["VB-MACD-CURRENT-LOCK18", 8]);
+  ["BELL/no-stop", 8]);
 
 const position = {
   id: "11111111-1111-4111-8111-111111111111", occ_symbol: "SPY260713C00600000",

@@ -1,6 +1,7 @@
-// Activate two independently reversible, receipt-bound paper changes for the
-// week of 2026-08-17. The worker must first acknowledge each exact successor
-// manifest; this script has no broker or historical-research write authority.
+// Activate independently reversible, receipt-bound ORB/VB paper changes. The
+// current VB target is the approved 2026-08-20 +18 native / +50 shadow epoch.
+// The worker must first acknowledge each exact successor manifest; this script
+// has no broker or historical-research write authority.
 
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -46,7 +47,7 @@ const onlySlug = value("only").trim();
 const approvalRef = value("approval-ref").trim();
 const expectedWorkerCommit = value("expected-worker-commit").trim();
 const envFile = resolve(value("env-file", process.env.SEVE_ENV_FILE ?? ".env.local"));
-const outputDir = resolve(value("out-dir", "data/weekly-orb-vb-program/2026-08-17"));
+const outputDir = resolve(value("out-dir", "data/weekly-orb-vb-program/2026-08-20"));
 const pollTimeoutMs = Number(value("poll-timeout-ms", "240000"));
 
 if (execute && (!approvalRef || approvalRef.length > 500
@@ -175,11 +176,11 @@ const orbChange: ProgramChange = {
 
 const vbChange: ProgramChange = {
   slug: "vb-macd-state",
-  displacedShadow: "VB-MACD-CURRENT-LOCK18",
+  displacedShadow: "LOCK50/30",
   alreadyActive(compiled) {
     const spec = compiled.channelSpecs.find((row) => row.slug === this.slug);
-    return spec?.managerProfileId === "RC57-VB-MACD-LOCK50"
-      && canonicalJson(spec.takeProfit) === canonicalJson({ kind: "bank", targetPct: 50, fraction: 0 })
+    return spec?.managerProfileId === "VB-MACD-ALL-OUT-18"
+      && canonicalJson(spec.takeProfit) === canonicalJson({ kind: "bank", targetPct: 18, fraction: 0 })
       && canonicalJson(spec.ratchetParameters) === canonicalJson({
         kind: "none", engageReturnPct: null, givebackPct: null,
         retainGainPct: null, fixedTargetPct: null,
@@ -189,9 +190,9 @@ const vbChange: ProgramChange = {
     const spec = compiled.channelSpecs.find((row) => row.slug === this.slug);
     if (!spec || (spec.managerProfileId !== "VB-MACD-ALL-OUT-18"
         && spec.managerProfileId !== "RC57-VB-MACD-LOCK50")
-        || spec.quantity !== 4 || spec.priority !== 1
+        || spec.quantity !== 4
         || spec.accountId !== "56daa293-e6bc-447d-83ac-2bfafb4d0ac1") {
-      throw new Error("VB MACD base manager drifted from the reviewed +18 all-out exit");
+      throw new Error("VB MACD base drifted from the reviewed four-contract Account 2 experiment");
     }
   },
   request(compiled) {
@@ -200,20 +201,21 @@ const vbChange: ProgramChange = {
       baseSpecVersionId: spec.id,
       baseSpecContentHash: spec.contentHash,
       proposedPatch: { managerPolicy: {
-        managerProfileId: "RC57-VB-MACD-LOCK50",
-        managerLabel: "ALL OUT +50% · STOP -30%",
-        takeProfit: { kind: "bank", targetPct: 50, fraction: 0 },
+        managerProfileId: "VB-MACD-ALL-OUT-18",
+        managerLabel: "ALL OUT +18% · STOP -30%",
+        takeProfit: { kind: "bank", targetPct: 18, fraction: 0 },
         stopLoss: { catastrophePct: 30, priceBasis: "executable-option-bid" },
         ratchetParameters: {
           kind: "none", engageReturnPct: null, givebackPct: null,
           retainGainPct: null, fixedTargetPct: null,
         },
       } },
-      reason: "Approved vb-macd-state paper manager experiment: use all-out +50/-30 natively while retaining the displaced all-out +18/-30 manager as its own exact shadow arm. Preserve entry, size, route, priority, and admission rules.",
+      reason: "Approved vb-macd-state paper manager step for 2026-08-20: use all-out +18/-30 natively after two current-era losses while retaining the displaced all-out +50/-30 manager as the exact LOCK50/30 shadow control. Preserve entry, four-contract size, Account 2 route, priority, and admission rules.",
       evidenceRefs: [
-        "manager-pattern-scan:vb-macd-state:through-2026-08-14",
+        "decision-atlas:vb-macd-state:through-2026-08-19",
+        "manager-pattern-scan:vb-macd-state:through-2026-08-19",
         `active-manifest:${compiled.manifest.contentHash}`,
-        "operator-approval:2026-08-15:vb-macd-lock50-native",
+        "operator-approval:2026-08-19:implement-channel-recommendations",
       ],
       changeClass: "bounded-parameter",
     };

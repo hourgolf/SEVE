@@ -3,10 +3,10 @@ import type { ChannelDecisionBrief, ChannelDecisionBriefBundle } from "./channel
 import type { ChannelExperimentPacket } from "./channelExperimentLifecycle";
 
 export const NEXT_SEVEN_ACTION_PROGRAM_VERSION =
-  "next-seven-channel-actions-2026-08-18-v1" as const;
+  "next-seven-channel-actions-2026-08-20-v2" as const;
 
 export type NextSevenActionKind = "exit_test" | "entry_test" | "collection_hold"
-  | "size_hold" | "review_trigger";
+  | "size_hold" | "collection_and_size_hold" | "review_trigger";
 
 export interface NextSevenAction {
   number: 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -46,9 +46,10 @@ export interface NextSevenActionProgram {
 
 const HOLD_CHANNELS = [
   "grind-v3", "grind-v3-2", "breakout", "breakout-alt-v3-itm",
+  "grind-smart-entries",
 ] as const;
 const SIZE_HOLD_CHANNELS = [
-  "vb-macd-state", "orb-ustop-ctl", "qqq-thrust-trail-wd", "vb-level-break",
+  "vb-macd-state", "momo-shape-2", "orb-ustop-ctl", "qqq-thrust-trail-wd", "vb-level-break",
   ...HOLD_CHANNELS, "vb-ribbon-cross-iwm",
 ] as const;
 
@@ -69,6 +70,15 @@ function requireExperiment(packet: ChannelExperimentPacket, channel: string): vo
   if (!packet.plans[channel]) throw new Error(`next-seven experiment is missing: ${channel}`);
 }
 
+function experimentVariable(packet: ChannelExperimentPacket, channel: string,
+  axis: "entry" | "exit" | "manager"): { control: string; challenger: string } {
+  const variable = packet.plans[channel]?.variable;
+  if (!variable || variable.axis !== axis) {
+    throw new Error(`next-seven ${channel} ${axis} experiment variable is missing or mismatched`);
+  }
+  return { control: variable.control, challenger: variable.challenger };
+}
+
 export function buildNextSevenActionProgram(input: {
   briefs: ChannelDecisionBriefBundle;
   experiments: ChannelExperimentPacket;
@@ -77,13 +87,16 @@ export function buildNextSevenActionProgram(input: {
     throw new Error("next-seven inputs do not share one through-session");
   }
   for (const channel of SIZE_HOLD_CHANNELS) requiredBrief(input.briefs, channel);
-  for (const channel of ["vb-macd-state", "orb-ustop-ctl", "qqq-thrust-trail-wd", "vb-level-break"]) {
+  for (const channel of ["vb-macd-state", "momo-shape-2", "orb-ustop-ctl", "qqq-thrust-trail-wd", "vb-level-break"]) {
     requireExperiment(input.experiments, channel);
   }
 
   const macd = requiredBrief(input.briefs, "vb-macd-state");
-  const macd18 = macd.managers.compared.find((row) =>
-    row.managerId === "VB-MACD-CURRENT-LOCK18") ?? null;
+  const macd50 = macd.managers.compared.find((row) =>
+    row.managerId === "LOCK50/30") ?? null;
+  const momo = requiredBrief(input.briefs, "momo-shape-2");
+  const momoBankRunner = momo.managers.compared.find((row) =>
+    row.managerId === "BANK20/RUN50") ?? null;
   const orb = requiredBrief(input.briefs, "orb-ustop-ctl");
   const thrust = requiredBrief(input.briefs, "qqq-thrust-trail-wd");
   const tp13 = thrust.trail?.compared.find((row) => row.candidateId === "TP-13") ?? null;
@@ -92,19 +105,24 @@ export function buildNextSevenActionProgram(input: {
   const ribbonReviewSessionFloor = 4;
   const ribbonSessionsRemaining = Math.max(0,
     ribbonReviewSessionFloor - ribbon.evidence.decisionSessions);
+  const macdVariable = experimentVariable(input.experiments, "vb-macd-state", "exit");
+  const momoVariable = experimentVariable(input.experiments, "momo-shape-2", "manager");
+  const orbVariable = experimentVariable(input.experiments, "orb-ustop-ctl", "entry");
+  const thrustVariable = experimentVariable(input.experiments, "qqq-thrust-trail-wd", "exit");
+  const levelVariable = experimentVariable(input.experiments, "vb-level-break", "entry");
 
   const actions: NextSevenAction[] = [
     {
       number: 1, kind: "exit_test", channels: ["vb-macd-state"],
-      decision: "Compare the current +50% all-out exit with the already captured +18% all-out control; retain LOCK20/30 as a second shadow observer.",
-      control: "current all-out +50% / -30% stop",
-      challenger: "VB-MACD-CURRENT-LOCK18 all-out +18% / -30% stop",
+      decision: "Run +18% all-out as the paper native and retain the displaced +50% all-out exit as a paired shadow control.",
+      control: macdVariable.control,
+      challenger: macdVariable.challenger,
       keepFixed: ["entry logic", "4 contracts", "account route", "priority", "collision policy"],
       measure: ["typical paired benefit", "improvement frequency", "session downside", "available-move capture"],
       evidence: [
         `${macd.executed.sessions} current-era session(s), ${macd.executed.logicalTrades} logical trade(s), ${money(macd.executed.totalResultUsd)}`,
         `native typical best move ${percent(macd.nativeExit.typicalBestMovePct)} and capture ${percent(macd.nativeExit.typicalCapture == null ? null : macd.nativeExit.typicalCapture * 100)}`,
-        macd18 ? `+18 comparator: ${macd18.pairedOpportunities} paired path(s) across ${macd18.sessions} session(s); typical benefit ${percent(macd18.typicalBenefitPct)}` : "+18 comparator is still awaiting a comparable path",
+        macd50 ? `displaced +50 comparator: ${macd50.pairedOpportunities} paired path(s) across ${macd50.sessions} session(s); typical benefit ${percent(macd50.typicalBenefitPct)}` : "displaced +50 comparator awaits its first new-era path",
       ],
       readiness: "prepared", reviewAfter: "5 independent sessions and 10 paired logical opportunities, with an early stop after two materially worse sessions",
       automaticActivation: false,
@@ -112,8 +130,8 @@ export function buildNextSevenActionProgram(input: {
     {
       number: 2, kind: "entry_test", channels: ["orb-ustop-ctl"],
       decision: "Score the entry gate that is already live against reconstructed raw ORB signals; do not stack another ORB configuration change.",
-      control: "raw ORB signals retained after close",
-      challenger: "current after-10:30 ET, non-CPI/OPEX entry qualification",
+      control: orbVariable.control,
+      challenger: orbVariable.challenger,
       keepFixed: ["B30/A13 exit", "4 contracts", "Account 3 priority 1", "same-OCC protection"],
       measure: ["qualified versus excluded opportunity", "typical result", "blocked winners", "protected losses", "session drawdown"],
       evidence: [
@@ -126,8 +144,8 @@ export function buildNextSevenActionProgram(input: {
     {
       number: 3, kind: "exit_test", channels: ["qqq-thrust-trail-wd"],
       decision: "Shadow a fixed +13% all-out exit against the current +20% all-out exit.",
-      control: "current all-out +20% / -30% stop",
-      challenger: "shadow all-out +13% / -30% stop",
+      control: thrustVariable.control,
+      challenger: thrustVariable.challenger,
       keepFixed: ["entry logic", "2 contracts", "Account 3 route", "one entry per session"],
       measure: ["paired benefit", "target-hit frequency", "downside after reaching +13%", "outlier dependence"],
       evidence: [
@@ -140,8 +158,8 @@ export function buildNextSevenActionProgram(input: {
     {
       number: 4, kind: "entry_test", channels: ["vb-level-break"],
       decision: "Compare the first eligible entry with a shadow path that skips it and waits for the next independently confirmed signal.",
-      control: "current first eligible entry",
-      challenger: "shadow skip-first / next-confirmed entry",
+      control: levelVariable.control,
+      challenger: levelVariable.challenger,
       keepFixed: ["native +25% all-out exit", "-30% stop", "2 contracts", "Account 2 route"],
       measure: ["entry-one versus later-entry typical result", "confirmation frequency", "missed winners", "session downside"],
       evidence: [
@@ -152,29 +170,30 @@ export function buildNextSevenActionProgram(input: {
       automaticActivation: false,
     },
     {
-      number: 5, kind: "collection_hold", channels: [...HOLD_CHANNELS],
-      decision: "Keep these current configurations unchanged so their new-era results remain attributable.",
-      control: "current receipt-bound entry, exit, manager, size, route, and priority",
-      challenger: null,
-      keepFixed: ["all production behavior for the four named channels"],
-      measure: ["current-era sessions", "typical logical-trade result", "exit capture", "entry-order stability"],
-      evidence: HOLD_CHANNELS.map((channel) => {
-        const row = requiredBrief(input.briefs, channel);
-        return `${channel}: ${row.executed.sessions} latest-era session(s), ${row.executed.logicalTrades} trade(s), ${money(row.executed.totalResultUsd)}`;
-      }),
-      readiness: "hold", reviewAfter: "each channel reaches 5 current-era sessions and 10 logical opportunities, or triggers its early-stop rule",
+      number: 5, kind: "exit_test", channels: ["momo-shape-2"],
+      decision: "Keep +27% all-out native while prospectively comparing BANK20/RUN50 on every eligible real fill.",
+      control: momoVariable.control,
+      challenger: momoVariable.challenger,
+      keepFixed: ["entry logic", "6 contracts", "Account 1 route", "priority", "collision policy"],
+      measure: ["typical paired benefit", "improvement frequency", "runner downside", "available-move capture"],
+      evidence: [
+        `${momo.executed.sessions} current-era session(s), ${momo.executed.logicalTrades} logical trade(s), ${money(momo.executed.totalResultUsd)}`,
+        `native typical best move ${percent(momo.nativeExit.typicalBestMovePct)} and capture ${percent(momo.nativeExit.typicalCapture == null ? null : momo.nativeExit.typicalCapture * 100)}`,
+        momoBankRunner ? `BANK20/RUN50: ${momoBankRunner.pairedOpportunities} paired path(s) across ${momoBankRunner.sessions} session(s); typical benefit ${percent(momoBankRunner.typicalBenefitPct)}` : "BANK20/RUN50 awaits its first comparable path",
+      ],
+      readiness: "prepared", reviewAfter: "5 independent sessions and 10 paired logical opportunities, with an early stop after two materially worse sessions",
       automaticActivation: false,
     },
     {
-      number: 6, kind: "size_hold", channels: [...SIZE_HOLD_CHANNELS],
-      decision: "Make no contract change while entry and exit tests are unresolved; keep sizing decisions channel-specific in the nightly replay.",
+      number: 6, kind: "collection_and_size_hold", channels: [...new Set([...SIZE_HOLD_CHANNELS, ...HOLD_CHANNELS])],
+      decision: "Keep the named current configurations and contract counts unchanged while their entry and exit tests resolve; continue channel-specific nightly capacity replay.",
       control: "current per-channel contract count",
       challenger: null,
-      keepFixed: ["each named channel's current quantity"],
-      measure: ["marginal expectancy", "deployment frequency", "peak debit", "displaced peer opportunities", "portfolio drawdown"],
-      evidence: SIZE_HOLD_CHANNELS.map((channel) => {
+      keepFixed: ["receipt-bound entry, exit, manager, size, route, and priority outside the named tests"],
+      measure: ["current-era result", "entry quality", "marginal expectancy", "peak debit", "displaced peer opportunities"],
+      evidence: [...new Set([...SIZE_HOLD_CHANNELS, ...HOLD_CHANNELS])].map((channel) => {
         const row = requiredBrief(input.briefs, channel);
-        return `${channel}: current ${row.capacity.currentContracts ?? "unknown"} contract(s); ${row.capacity.bestSupportedContracts == null ? "no supported next step" : `replay candidate ${row.capacity.bestSupportedContracts}`}`;
+        return `${channel}: ${row.executed.sessions} current-era session(s); current ${row.capacity.currentContracts ?? "unknown"} contract(s); ${row.capacity.bestSupportedContracts == null ? "no supported next step" : `replay candidate ${row.capacity.bestSupportedContracts}`}`;
       }),
       readiness: "hold", reviewAfter: "the channel's active one-variable test resolves and its 1–6 contract replay supports a marginal step",
       automaticActivation: false,
@@ -200,13 +219,30 @@ export function buildNextSevenActionProgram(input: {
     },
   ];
 
+  for (const action of actions.filter((row) => row.kind === "entry_test"
+      || row.kind === "exit_test")) {
+    const channel = action.channels[0];
+    const plan = input.experiments.plans[channel];
+    if (!plan?.variable || plan.variable.control !== action.control
+        || plan.variable.challenger !== action.challenger) {
+      throw new Error(`next-seven action disagrees with frozen experiment: ${channel}`);
+    }
+    const brief = requiredBrief(input.briefs, channel);
+    const eligible = action.kind === "entry_test"
+      ? brief.evidence.decisionOpportunities : brief.executed.logicalTrades;
+    if (eligible > 0 && plan.collection.logicalOpportunities === 0) {
+      throw new Error(`eligible ${channel} fill or decision produced no intended paired experiment evidence`);
+    }
+  }
+
   const body = {
     generatedAt: input.briefs.generatedAt,
     throughSession: input.briefs.throughSession,
     actions,
     summary: {
       preparedTests: actions.filter((row) => row.kind === "entry_test" || row.kind === "exit_test").length,
-      collectionHolds: actions.filter((row) => row.kind === "collection_hold" || row.kind === "review_trigger").length,
+      collectionHolds: actions.filter((row) => row.kind === "collection_hold"
+        || row.kind === "collection_and_size_hold" || row.kind === "review_trigger").length,
       sizeChanges: 0 as const,
       automaticRosterChanges: 0 as const,
     },
@@ -225,7 +261,7 @@ export function renderNextSevenActionProgram(program: NextSevenActionProgram): s
   return [
     `# Seven-action channel program · through ${program.throughSession}`,
     "",
-    "Four channel-specific tests, two explicit holds, and one timed review. Nothing activates automatically.",
+    "Five channel-specific tests, one explicit hold, and one timed review. Nothing activates automatically.",
     "",
     "| # | Channel(s) | State | What happens next |",
     "|---:|---|---|---|",
