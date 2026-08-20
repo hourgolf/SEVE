@@ -177,8 +177,8 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
   }) : null;
   return <section className={`atlas-preview authoritative decision-first${compact ? " compact" : ""}`} aria-label="Decision Atlas paired channel report">
     <header>
-      <span><small>{comparableStoryReady ? "ATLAS" : "CURRENT SAMPLE"} · THROUGH {model.throughSession.slice(5).replace("-", "/")}</small><b>{story?.group ?? model.disposition}</b></span>
-      <em>{comparableStoryReady ? (story ? `${story.freshness} · ${story.maturity}` : model.evidenceState) : "BRIEF NEEDS REFRESH"}</em>
+      <span><small>SELECTED CHANNEL</small><strong>{brief.channel}</strong><b>{story?.group ?? model.disposition}</b></span>
+      <em>{comparableStoryReady ? `ATLAS · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · ${story ? `${story.freshness} · ${story.maturity}` : model.evidenceState}` : `CURRENT SAMPLE · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · BRIEF NEEDS REFRESH`}</em>
     </header>
     <p className="atlas-diagnosis"><small>WHY</small>{story?.why ?? model.diagnosis}</p>
     {!comparableStoryReady && <p className="atlas-scope-warning"><b>CURRENT SAMPLE ONLY</b> This published brief does not contain the comparable session distribution. Refresh the nightly brief before treating this as a channel decision.</p>}

@@ -35,14 +35,17 @@ export function EntryFinishMap({ stories, selectedSlug, postureBySlug = {}, scop
         const mature = story.maturity === "DECISION READY";
         const radius = 4 + Math.min(10, Math.sqrt(story.sessions) * 1.6);
         const posture = postureBySlug[story.channel] ?? "observing";
+        const postureLabel = posture === "trading" ? "active" : posture === "observing" ? "shadowing" : "retired";
+        const selected = selectedSlug === story.channel;
         return <g key={story.channel} className={`map-point ${posture}${selectedSlug === story.channel ? " selected" : ""}${mature ? " mature" : " early"}`}
-          role="button" tabIndex={0} aria-label={`${story.channel}: ${story.group}; ${story.sessions} sessions`}
+          role="button" tabIndex={0} aria-label={`${story.channel}: ${postureLabel}; ${story.group}; ${story.sessions} sessions`}
           onClick={() => onSelect?.(story.channel)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onSelect?.(story.channel); }}>
-          <circle cx={x(story.typicalBestMovePct ?? 0)} cy={y(finish)} r={radius} />
-          {(selectedSlug === story.channel || points.length <= 3) && <text x={x(story.typicalBestMovePct ?? 0) + radius + 3} y={y(finish) + 3}>{story.channel}</text>}
+          {selected && <circle className="selection-ring" cx={x(story.typicalBestMovePct ?? 0)} cy={y(finish)} r={radius + 4} />}
+          <circle className="posture-dot" cx={x(story.typicalBestMovePct ?? 0)} cy={y(finish)} r={radius} />
+          {(selected || points.length <= 3) && <text x={x(story.typicalBestMovePct ?? 0) + radius + 6} y={y(finish) + 3}>{story.channel}</text>}
         </g>;
       })}
     </svg> : <div className="atlas-empty">{emptyMessage}</div>}
-    <footer><span><i className="trading" /> trading</span><span><i className="observing" /> observing</span><span><i className="retired" /> retired</span><em>Bubble size = independent sessions · faded = below evidence floor</em></footer>
+    <footer><span><i className="trading" /> active</span><span><i className="observing" /> shadowing</span><span><i className="retired" /> retired</span><em>Bubble size = independent sessions · faded = below evidence floor</em></footer>
   </section>;
 }
