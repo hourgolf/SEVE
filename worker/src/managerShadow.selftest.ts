@@ -46,6 +46,10 @@ check("grind current restart recovers bank and peak",
 check("VB MACD native +18 is not duplicated in its shadow book",
   [managerIdsForChannel("vb-macd-state").at(-1), managerIdsForChannel("vb-squeeze-break").length],
   ["BELL/no-stop", 8]);
+check("VB MACD pre-change exact sessions retain the historical +18 shadow arm",
+  [managerIdsForChannel("vb-macd-state", "2026-08-19").at(-1),
+    managerIdsForChannel("vb-macd-state", "2026-08-20").length],
+  ["VB-MACD-CURRENT-LOCK18", 8]);
 
 const position = {
   id: "11111111-1111-4111-8111-111111111111", occ_symbol: "SPY260713C00600000",

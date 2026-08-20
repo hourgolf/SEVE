@@ -82,7 +82,8 @@ export function deriveDarkEvidenceCompleteness(input: {
   const byChannel = new Map<string, DarkEvidenceChannelSummary>();
   let expectedManagerArms = 0;
   for (const candidate of input.freeze.candidates) {
-    const expectedPerCandidate = input.expectedManagerArms ?? managerIdsForChannel(candidate.channelSlug).length;
+    const expectedPerCandidate = input.expectedManagerArms
+      ?? managerIdsForChannel(candidate.channelSlug, candidate.sessionDateEt).length;
     expectedManagerArms += expectedPerCandidate;
     const channel = byChannel.get(candidate.channelSlug) ?? {
       channelSlug: candidate.channelSlug,

@@ -185,7 +185,7 @@ export function deriveDarkExactReplay(input: {
       continue;
     }
     const scorecard = rows[0];
-    const expectedManagers = managerIdsForChannel(candidate.channelSlug);
+    const expectedManagers = managerIdsForChannel(candidate.channelSlug, candidate.sessionDateEt);
     if (scorecard.opportunityId !== candidate.executionOpportunityId
         || scorecard.channelSlug !== candidate.channelSlug
         || scorecard.exactEntryAsk == null

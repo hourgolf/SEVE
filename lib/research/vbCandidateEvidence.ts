@@ -329,7 +329,8 @@ export function buildVbExactCandidateDryRun(input: {
 
   scorecard.exactEntryAsk = left.ask;
   scorecard.exactEntryQuoteAtMs = left.atMs;
-  for (const managerId of managerIdsForChannel(candidate.channelSlug)) {
+  const expectedManagerIds = managerIdsForChannel(candidate.channelSlug, candidate.sessionDateEt);
+  for (const managerId of expectedManagerIds) {
     let state = {};
     for (let index = 0; index < throughRight.length; index++) {
       const quote = throughRight[index];
@@ -359,7 +360,7 @@ export function buildVbExactCandidateDryRun(input: {
       });
     }
   }
-  scorecard.eligible = scorecard.exactArms.length === managerIdsForChannel(candidate.channelSlug).length;
+  scorecard.eligible = scorecard.exactArms.length === expectedManagerIds.length;
   if (input.materializeCanonicalObject === false) {
     return {
       request,
