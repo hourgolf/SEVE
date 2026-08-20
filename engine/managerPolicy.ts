@@ -41,7 +41,9 @@ export function managerIdsForChannel(channelSlug: string): readonly ManagerId[] 
   const slug = channelSlug.toLowerCase();
   if (slug === "pb-ride-2") return [...BASE_MANAGER_IDS, PB_RIDE_2_MANAGER_ID];
   if (slug === "grind-v3") return [...BASE_MANAGER_IDS, GRIND_CURRENT_MANAGER_ID];
-  if (slug === "vb-macd-state") return [...BASE_MANAGER_IDS, VB_MACD_CURRENT_MANAGER_ID];
+  // The +18 policy became vb-macd-state's paper native for the 2026-08-20
+  // epoch. LOCK50/30 now preserves the displaced +50 control, so collecting a
+  // second +18 shadow would be redundant and would overstate arm coverage.
   return BASE_MANAGER_IDS;
 }
 

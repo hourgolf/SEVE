@@ -34,8 +34,16 @@ const bundle = {
       recommendation: { axis: "exit", label: "REVIEW EXIT", nextExperiment: "Compare one exit." },
       capacity: { currentContracts: 4, bestSupportedContracts: null, currentSizeObserved: true },
       evidence: { decisionSessions: 1, decisionOpportunities: 1 }, entryFrequency: { rows: [] },
-      managers: { recommended: null, compared: [{ managerId: "VB-MACD-CURRENT-LOCK18",
+      managers: { recommended: null, compared: [{ managerId: "LOCK50/30",
         sessions: 1, pairedOpportunities: 1 }] },
+    },
+    "momo-shape-2": {
+      channel: "momo-shape-2", throughSession: "2026-08-08",
+      recommendation: { axis: "manager", label: "REVIEW MANAGER", nextExperiment: "Compare one manager." },
+      capacity: { currentContracts: 6, bestSupportedContracts: null, currentSizeObserved: true },
+      evidence: { decisionSessions: 2, decisionOpportunities: 2 }, entryFrequency: { rows: [] },
+      managers: { recommended: null, compared: [{ managerId: "BANK20/RUN50",
+        sessions: 2, pairedOpportunities: 2 }] },
     },
     "orb-ustop-ctl": {
       channel: "orb-ustop-ctl", throughSession: "2026-08-08",
@@ -66,10 +74,16 @@ assert.equal(packet.plans["qqq-thrust-trail-wd"].variable?.challenger,
   "shadow all-out +13% / -30% stop");
 assert.deepEqual(packet.plans["qqq-thrust-trail-wd"].collection,
   { independentSessions: 3, logicalOpportunities: 3, contaminatedOpportunities: 0 });
+assert.equal(packet.plans["vb-macd-state"].experimentId,
+  "vb-macd-state:tp18-vs-tp50:2026-08-20:v1");
+assert.equal(packet.plans["vb-macd-state"].variable?.control,
+  "current all-out +18% / -30% stop");
 assert.equal(packet.plans["vb-macd-state"].variable?.challenger,
-  "VB-MACD-CURRENT-LOCK18 all-out +18% / -30% stop");
+  "LOCK50/30 displaced all-out +50% / -30% stop");
 assert.deepEqual(packet.plans["vb-macd-state"].collection,
   { independentSessions: 1, logicalOpportunities: 1, contaminatedOpportunities: 0 });
+assert.equal(packet.plans["momo-shape-2"].variable?.challenger,
+  "BANK20/RUN50 bank half +20% / runner +50% or breakeven");
 assert.equal(packet.plans["orb-ustop-ctl"].variable?.axis, "entry");
 assert.deepEqual(packet.plans["orb-ustop-ctl"].collection,
   { independentSessions: 2, logicalOpportunities: 5, contaminatedOpportunities: 0 });
@@ -81,4 +95,12 @@ const collecting = buildChannelExperimentPacket(bundle, [{ channel: "alpha", ses
     variable: "max_entries_per_session", controlValue: null, alternativeValue: 1, baselineMatches: true } }] as never[]);
 assert.equal(collecting.plans.alpha.stage, "collecting");
 assert.equal(collecting.plans.alpha.collection.logicalOpportunities, 1);
+const staleFrozenStamp = buildChannelExperimentPacket(bundle, [{ channel: "vb-level-break", session: "2026-08-08",
+  logicalOpportunityId: "legacy", boundedRetuneStamp: { experimentId: "legacy-entry-cap",
+    variable: "max_entries_per_session", controlValue: null, alternativeValue: 2,
+    baselineMatches: false } }] as never[]);
+assert.equal(staleFrozenStamp.plans["vb-level-break"].variable?.challenger,
+  "shadow skip-first / next-confirmed entry");
+assert.equal(staleFrozenStamp.plans["vb-level-break"].stage, "collecting");
+assert.equal(staleFrozenStamp.plans["vb-level-break"].collection.contaminatedOpportunities, 0);
 console.log("channel-experiment-lifecycle-selftest: PASS");

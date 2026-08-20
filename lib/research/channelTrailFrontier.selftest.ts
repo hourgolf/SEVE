@@ -69,6 +69,24 @@ assert.equal(targetPolicy.origin, "channel_adaptive");
 assert.equal(targetPolicy.takeProfitPct, 22);
 assert.match(targetPolicy.parameterSource, /channel-era/);
 
+const qqqFrozen = buildChannelTrailFrontier({
+  generatedAt: book.generatedAt, throughSession: book.throughSession,
+  opportunities: [{ ...opportunities[0], channel: "qqq-thrust-trail-wd",
+    logicalOpportunityId: "qqq-frozen", configurationEra: "qqq-current",
+    quotes: [
+      { at: "2026-08-01T14:31:00.000Z", bid: 1 },
+      { at: "2026-08-01T14:32:00.000Z", bid: 1.14 },
+      { at: "2026-08-01T19:25:00.000Z", bid: .7 },
+    ] }],
+});
+const qqqTp13 = qqqFrozen.channels["qqq-thrust-trail-wd"].eras[0].candidates
+  .find((candidate) => candidate.candidateId === "TP-13");
+assert.equal(qqqTp13?.pairedOpportunities, 1,
+  "the frozen QQQ TP13 experiment must emit a comparable path after an eligible fill");
+assert.equal(targetBook.channels["target-22"].eras[0].candidates.some((candidate) =>
+  candidate.candidateId === "TP-13"), false,
+"the QQQ-only frozen target must not become a fleet-wide candidate");
+
 const oneLot = buildChannelTrailFrontier({ generatedAt: book.generatedAt, throughSession: book.throughSession, opportunities: opportunities.slice(0, 1).map((row) => ({ ...row, channel: "one-lot", quantity: 1 })) });
 const bank = oneLot.channels["one-lot"].eras[0].candidates.find((candidate) => candidate.candidateId === "BANK20-R50-K67")!;
 assert.equal(bank.pairedOpportunities, 0);

@@ -2,7 +2,7 @@
 // logical opportunity is the unit: every candidate walks the same executable
 // bid path and is paired against that opportunity's native executed result.
 
-export const CHANNEL_TRAIL_FRONTIER_VERSION = "channel-trail-frontier-v3" as const;
+export const CHANNEL_TRAIL_FRONTIER_VERSION = "channel-trail-frontier-v4" as const;
 
 export type TrailEvidenceLayer = "executed" | "virtual";
 
@@ -40,6 +40,19 @@ export const TRAIL_CANDIDATES: readonly TrailPolicy[] = [
   { id: "BANK20-R50-K67", label: "BANK +20 · A13 RUNNER", family: "bank_then_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: 20, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
   { id: "BANK30-R50-K67", label: "BANK +30 · A13 RUNNER", family: "bank_then_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: 30, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
 ] as const;
+
+// Frozen prospective candidates must be emitted even when a small current-era
+// sample would not independently generate the same adaptive quantile. This is
+// channel-scoped: it does not turn TP13 into a fleet-wide exit recommendation.
+const REQUIRED_CHANNEL_TRAIL_CANDIDATES: Readonly<Record<string, readonly TrailPolicy[]>> =
+  Object.freeze({
+    "qqq-thrust-trail-wd": Object.freeze([{
+      id: "TP-13", label: "TAKE PROFIT +13", family: "take_profit",
+      origin: "channel_adaptive", parameterSource: "frozen qqq-thrust-trail-wd experiment",
+      takeProfitPct: 13, bankPct: null, armPct: 13, retainPeakGain: 1,
+      preArmStopPct: 30,
+    } satisfies TrailPolicy]),
+  });
 
 export interface TrailQuote { at: string; bid: number }
 
@@ -366,9 +379,11 @@ function markPlateaus(summaries: TrailCandidateSummary[], policies: readonly Tra
   });
 }
 
-function buildEra(configurationEra: string, evidenceLayer: TrailEvidenceLayer,
+function buildEra(channel: string, configurationEra: string, evidenceLayer: TrailEvidenceLayer,
   opportunities: readonly TrailOpportunity[], policyRegistry: Map<TrailCandidateId, TrailPolicy>): ChannelTrailEra {
-  const policies = [...TRAIL_CANDIDATES, ...adaptiveCandidates(opportunities)];
+  const policies = [...TRAIL_CANDIDATES, ...(REQUIRED_CHANNEL_TRAIL_CANDIDATES[channel] ?? []),
+    ...adaptiveCandidates(opportunities)]
+    .filter((policy, index, all) => all.findIndex((candidate) => candidate.id === policy.id) === index);
   for (const policy of policies) policyRegistry.set(policy.id, policy);
   let candidates = policies.map((policy) => summarizeCandidate(policy, opportunities.map((opportunity) => replay(opportunity, policy)), opportunities.length));
   candidates = markPlateaus(candidates, policies);
@@ -414,7 +429,7 @@ export function buildChannelTrailFrontier(input: {
       for (const row of rows.filter((item) => item.evidenceLayer === layer)) {
         byEra.set(row.configurationEra, [...(byEra.get(row.configurationEra) ?? []), row]);
       }
-      return [...byEra].map(([era, eraRows]) => buildEra(era, layer, eraRows, policyRegistry))
+      return [...byEra].map(([era, eraRows]) => buildEra(channel, era, layer, eraRows, policyRegistry))
         .sort((left, right) => right.opportunities - left.opportunities
           || left.configurationEra.localeCompare(right.configurationEra));
     };

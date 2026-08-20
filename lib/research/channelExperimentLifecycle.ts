@@ -3,7 +3,7 @@ import type { ChannelDecisionAxis, ChannelDecisionBrief, ChannelDecisionBriefBun
 import type { AtlasOpportunity } from "./decisionAtlas";
 import type { BoundedRetuneSignalStamp } from "./boundedRetuneRegistry";
 
-export const CHANNEL_EXPERIMENT_VERSION = "channel-experiment-lifecycle-v1" as const;
+export const CHANNEL_EXPERIMENT_VERSION = "channel-experiment-lifecycle-v2" as const;
 
 export type ChannelExperimentStage = "control_only" | "draft" | "preregistered" | "collecting" | "ready_to_score";
 
@@ -80,12 +80,20 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
       trailCandidateId: "TP-13",
     }),
     "vb-macd-state": Object.freeze({
-      experimentId: "vb-macd-state:tp50-vs-tp18:2026-08-18:v1",
+      experimentId: "vb-macd-state:tp18-vs-tp50:2026-08-20:v1",
       axis: "exit",
       name: "all-out take-profit threshold",
-      control: "current all-out +50% / -30% stop",
-      challenger: "VB-MACD-CURRENT-LOCK18 all-out +18% / -30% stop",
-      managerId: "VB-MACD-CURRENT-LOCK18",
+      control: "current all-out +18% / -30% stop",
+      challenger: "LOCK50/30 displaced all-out +50% / -30% stop",
+      managerId: "LOCK50/30",
+    }),
+    "momo-shape-2": Object.freeze({
+      experimentId: "momo-shape-2:tp27-vs-bank20-run50:2026-08-20:v1",
+      axis: "manager",
+      name: "profit protection after +20%",
+      control: "current all-out +27% / -40% stop",
+      challenger: "BANK20/RUN50 bank half +20% / runner +50% or breakeven",
+      managerId: "BANK20/RUN50",
     }),
     "orb-ustop-ctl": Object.freeze({
       experimentId: "orb-ustop-ctl:raw-vs-qualified-entry:2026-08-18:v1",
@@ -157,7 +165,10 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
     control: stamp.controlValue == null ? "uncapped control" : String(stamp.controlValue),
     challenger: String(stamp.alternativeValue),
   } : null;
-  const variable = observedVariable ?? variableFor(brief);
+  // A frozen operator-selected experiment is authoritative for its own cohort.
+  // Legacy bounded-retune stamps can remain on historical opportunities, but
+  // they must never rename or contaminate a later one-variable experiment.
+  const variable = frozen ? variableFor(brief) : observedVariable ?? variableFor(brief);
   const frozenManager = frozen?.managerId
     ? brief.managers.compared.find((row) => row.managerId === frozen.managerId) ?? null
     : null;
@@ -174,7 +185,7 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
     logicalOpportunities: frozenManager?.pairedOpportunities
       ?? frozenTrail?.pairedOpportunities ?? decisionCollection?.opportunities
       ?? new Set(clean.map((row) => row.logicalOpportunityId)).size,
-    contaminatedOpportunities: new Set(observed.filter((row) => row.boundedRetuneStamp?.baselineMatches === false)
+    contaminatedOpportunities: frozen ? 0 : new Set(observed.filter((row) => row.boundedRetuneStamp?.baselineMatches === false)
       .map((row) => row.logicalOpportunityId)).size };
   const baseStage = stageFor(brief, variable);
   const stage: ChannelExperimentStage = frozen
