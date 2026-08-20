@@ -138,6 +138,11 @@ function evidenceState(brief: ChannelDecisionBrief): { state: DecisionEvidenceSt
 function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
   const axis = brief.recommendation.axis;
   if (axis === "entry") {
+    if (brief.entryAtlas?.leadingRelationship) return {
+      label: "ENTRY CONTEXT",
+      value: brief.entryAtlas.leadingRelationship.label.toUpperCase(),
+      fact: brief.entryAtlas.leadingRelationship.fact,
+    };
     const weak = brief.entryFrequency.rows.find((row) => row.sessions >= 5 && row.scored >= 5 && (row.typicalResultPerContractUsd ?? 0) <= 0);
     return { label: weak ? `${weak.entryNumber === 2 ? "SECOND" : `ENTRY ${weak.entryNumber}`} ENTRY` : "ENTRY ORDER", value: weak ? money(weak.typicalResultPerContractUsd, "/ct") : "COLLECTING", fact: brief.entryFrequency.conclusion };
   }
@@ -166,6 +171,7 @@ function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
 function plainDiagnosis(brief: ChannelDecisionBrief): string {
   const axis = brief.recommendation.axis;
   if (axis === "entry") {
+    if (brief.entryAtlas) return brief.entryAtlas.conclusion;
     const weak = brief.entryFrequency.rows.find((row) => row.sessions >= 5 && row.scored >= 5 && (row.typicalResultPerContractUsd ?? 0) <= 0);
     if (weak) return `The ${weak.entryNumber === 2 ? "second" : `number ${weak.entryNumber}`} entry typically lost $${Math.abs(Math.round(weak.typicalResultPerContractUsd ?? 0)).toLocaleString("en-US")}/ct. Test one fewer entry before changing the exit.`;
   }
@@ -179,7 +185,9 @@ function plainDiagnosis(brief: ChannelDecisionBrief): string {
 }
 
 function plainNextTest(brief: ChannelDecisionBrief): string {
-  if (brief.recommendation.axis === "entry") return "Allow one fewer entry per session and compare the same signal sequence.";
+  if (brief.recommendation.axis === "entry") return brief.entryAtlas?.leadingRelationship
+    ? brief.entryAtlas.nextTest
+    : "Allow one fewer entry per session and compare the same signal sequence.";
   if (brief.recommendation.axis === "exit") return "Compare one exit alternative with the current exit on the same opportunities.";
   if (brief.recommendation.axis === "manager") return "Compare one manager with the current manager on the same filled positions.";
   if (brief.recommendation.axis === "size") return "Replay one contract step with account capacity and displaced opportunities included.";

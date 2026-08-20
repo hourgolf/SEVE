@@ -12,6 +12,7 @@ import {
 } from "../lib/research/channelDecisionBrief";
 import type { WeeklyReadout } from "../lib/research/weeklyReadout";
 import type { ChannelTrailFrontierBook } from "../lib/research/channelTrailFrontier";
+import type { EntryAtlas } from "../lib/research/entryAtlas";
 
 const arg = (name: string, fallback?: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
@@ -22,6 +23,8 @@ const snapshotFile = resolve(arg("snapshot-file", "data/decision-atlas/latest/sn
 const weeklyFile = resolve(arg("weekly-file", "data/weekly-readouts/latest/weekly.json")!);
 const trailFileArg = arg("trail-file");
 const trailFile = trailFileArg ? resolve(trailFileArg) : null;
+const entryAtlasFileArg = arg("entry-atlas-file");
+const entryAtlasFile = entryAtlasFileArg ? resolve(entryAtlasFileArg) : null;
 const outputDir = resolve(arg("out-dir", "data/decision-atlas/latest/briefs")!);
 for (const file of [atlasFile, snapshotFile, weeklyFile]) {
   if (!existsSync(file)) throw new Error(`required frozen artifact not found: ${file}`);
@@ -35,11 +38,17 @@ const weekly = JSON.parse(weeklyText) as WeeklyReadout;
 const trailFrontier = trailFile && existsSync(trailFile)
   ? JSON.parse(readFileSync(trailFile, "utf8")) as ChannelTrailFrontierBook
   : null;
+const entryAtlas = entryAtlasFile && existsSync(entryAtlasFile)
+  ? JSON.parse(readFileSync(entryAtlasFile, "utf8")) as EntryAtlas
+  : null;
 if (trailFrontier && trailFrontier.throughSession !== atlas.throughSession) {
   throw new Error(`trail frontier through ${trailFrontier.throughSession} does not match Atlas through ${atlas.throughSession}`);
 }
 if (weekly.throughSession !== atlas.throughSession) {
   throw new Error(`weekly through ${weekly.throughSession} does not match Atlas through ${atlas.throughSession}`);
+}
+if (entryAtlas && entryAtlas.throughSession !== atlas.throughSession) {
+  throw new Error(`Entry Atlas through ${entryAtlas.throughSession} does not match Decision Atlas through ${atlas.throughSession}`);
 }
 const normalized = adaptDecisionAtlasSnapshot({
   snapshot,
@@ -52,6 +61,7 @@ const bundle = buildChannelDecisionBriefs({
   opportunities: normalized.opportunities,
   currentContractsByChannel: Object.fromEntries(snapshot.activeChannelSpecs.map((spec) => [spec.slug, spec.quantity])),
   trailFrontier,
+  entryAtlas,
 });
 const json = `${JSON.stringify(bundle, null, 2)}\n`;
 const markdown = `${renderChannelDecisionBriefs(bundle)}\n`;
@@ -62,7 +72,8 @@ const receipt = {
   throughSession: bundle.throughSession,
   channels: Object.keys(bundle.channels).length,
   inputs: { atlasSha256: hash(atlasText), snapshotSha256: hash(snapshotText), weeklySha256: hash(weeklyText),
-    trailSha256: trailFile && existsSync(trailFile) ? hash(readFileSync(trailFile, "utf8")) : null },
+    trailSha256: trailFile && existsSync(trailFile) ? hash(readFileSync(trailFile, "utf8")) : null,
+    entryAtlasSha256: entryAtlasFile && existsSync(entryAtlasFile) ? hash(readFileSync(entryAtlasFile, "utf8")) : null },
   outputs: { briefsSha256: hash(json), markdownSha256: hash(markdown) },
   productionReads: 0,
   productionWrites: 0,
