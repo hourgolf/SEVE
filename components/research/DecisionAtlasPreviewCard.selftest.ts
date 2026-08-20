@@ -9,12 +9,23 @@ const research = read("../perform/ShadowResearchWorkspace.tsx");
 const mobile = read("../mobile2/MobileRackRow.tsx");
 const css = read("../../app/decision-atlas.css");
 const workspaceCss = read("../../app/seve-909.css");
+const manager = read("./ChannelManagerEvidencePanel.tsx");
+const capacity = read("./ChannelDryPowderCurve.tsx");
+const finishMap = read("./EntryFinishMap.tsx");
 
 assert.match(card, /HISTORICAL VIRTUAL/);
 assert.match(card, /PLATFORM RULES/);
 assert.match(card, /opportunities suppressed/);
 assert.match(card, /PROSPECTIVE TEST/);
-assert.match(card, /model\.sourceLabel/);
+assert.match(card, /comparableStoryReady \? "ATLAS" : "CURRENT SAMPLE"/);
+assert.match(card, /CURRENT SETTINGS/);
+assert.match(card, /COMPARABLE HISTORY/);
+assert.match(card, /ALL RESEARCH/);
+assert.match(card, /WHY COUNTS DIFFER/);
+assert.match(card, /BRIEF NEEDS REFRESH/);
+assert.match(card, /CURRENT SAMPLE ONLY/);
+assert.match(card, /DO NOT ACT ON THIS SAMPLE ALONE/);
+assert.match(card, /SessionDistributionStrip/);
 assert.match(card, /See supporting evidence/);
 assert.match(card, /CURRENT EXECUTED/);
 assert.match(card, /HISTORICAL VIRTUAL/);
@@ -43,6 +54,16 @@ assert.doesNotMatch(card.split(/<details className="atlas-evidence-drawer">/)[0]
 assert.match(inspector, /<DecisionAtlasPreviewCard/);
 assert.match(inspector, /<CurrentEvidenceCard/);
 assert.match(research, /<DecisionAtlasPreviewCard/);
+assert.match(research, /<EntryFinishMap/);
+assert.match(manager, /MANAGER COUNTERFACTUAL/);
+assert.match(capacity, /CAPACITY REPLAY/);
+assert.match(current, /LATEST CHANNEL SETTINGS/);
+assert.match(finishMap, /typicalFinalReturnPct/,
+  "Entry → Finish must plot the observed typical final return, not reconstruct it from capture");
+assert.match(finishMap, /scopeLabel/,
+  "Entry → Finish must identify which evidence scope produced its points");
+assert.match(research, /Comparable fleet view is withheld until the nightly briefs are refreshed/,
+  "old published briefs must not masquerade as comparable fleet evidence");
 assert.match(research, /srw-atlas-brief/);
 assert.match(research, /WHAT DESERVES REVIEW\?/);
 assert.match(research, /DEFAULT_DECISION_LIMIT = 4/);
@@ -60,6 +81,8 @@ assert.match(css, /\.atlas-capture-track/);
 assert.match(css, /\.atlas-manager-duel/);
 assert.match(css, /\.atlas-trail-callout/);
 assert.match(css, /\.atlas-size-steps/);
+assert.match(css, /\.entry-finish-map/);
+assert.match(css, /\.channel-session-strip/);
 assert.match(css, /var\(--surface-panel/,
   "cream mode must inherit the chassis panel instead of a dark LCD token");
 assert.doesNotMatch(css, /var\(--lcd-2/,

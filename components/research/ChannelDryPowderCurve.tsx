@@ -41,13 +41,13 @@ export function ChannelDryPowderCurve({ curve, defaultContracts = 2, compact = f
   const read = curve ? curveRead(curve) : null;
 
   if (!curve?.points.length || !selected) return <section className={`dpc${compact ? " compact" : ""} empty`} aria-label="Dry powder curve unavailable">
-    <header><span><b>DRY POWDER CURVE</b><small>capital-blind native paths</small></span><em>NO PATHS</em></header>
+    <header><span><b>DRY POWDER CURVE</b><small>CAPACITY REPLAY · capital-blind native paths</small></span><em>NO PATHS</em></header>
     <p>No prospective virtual entry sequence is available for this channel.</p>
   </section>;
 
   return <section className={`dpc${compact ? " compact" : ""}`} aria-label={`Dry powder curve for ${curve.slug}`}>
     <header className="dpc-head">
-      <span><b>DRY POWDER CURVE</b><small>{curve.slug} · {curve.sessionCount} sessions · {curve.fromSession.slice(5)}→{curve.throughSession.slice(5)}</small></span>
+      <span><b>DRY POWDER CURVE</b><small>CAPACITY REPLAY · {curve.slug} · {curve.sessionCount} sessions · {curve.fromSession.slice(5)}→{curve.throughSession.slice(5)}</small></span>
       <em className={read?.tone}>{read?.label}</em>
       <div role="group" aria-label="Contracts per hypothetical entry">
         {CONTRACT_CHOICES.map((quantity) => <button type="button" key={quantity} className={contracts === quantity ? "on" : ""} onClick={() => setContracts(quantity)}>{quantity}CT</button>)}

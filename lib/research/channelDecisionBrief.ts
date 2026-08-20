@@ -55,6 +55,21 @@ export interface ChannelDecisionBrief {
     typicalResultPerContractUsd: number | null;
     totalResultPerContractUsd: number | null;
   };
+  decisionDistribution?: {
+    label: "DECISION COHORT";
+    sessions: number;
+    opportunities: number;
+    positiveSessions: number;
+    positiveSessionRate: number | null;
+    typicalOpportunityUsd: number | null;
+    typicalSessionUsd: number | null;
+    weakSessionUsd: number | null;
+    strongSessionUsd: number | null;
+    typicalBestMovePct: number | null;
+    typicalFinalReturnPct: number | null;
+    coherentCapture: number | null;
+    largestWinnerShare: number | null;
+  };
   entryFrequency: {
     conclusion: string;
     rows: Array<{
@@ -156,6 +171,14 @@ const median = (values: readonly number[]): number | null => {
   const middle = Math.floor(ordered.length / 2);
   return round(ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2);
 };
+const quantile = (values: readonly number[], fraction: number): number | null => {
+  if (!values.length) return null;
+  const ordered = [...values].sort((left, right) => left - right);
+  const index = (ordered.length - 1) * Math.max(0, Math.min(1, fraction));
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  return round(lower === upper ? ordered[lower] : ordered[lower] + (ordered[upper] - ordered[lower]) * (index - lower));
+};
 const money = (value: number | null, suffix = ""): string => value == null ? "—"
   : `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(Math.round(value)).toLocaleString("en-US")}${suffix}`;
 const percent = (value: number | null): string => value == null ? "—" : `${Math.round(value * 100)}%`;
@@ -180,6 +203,42 @@ function historicalVirtual(rows: readonly WeeklyVirtualSummary[], channel: strin
 function currentFrontier(dossier: AtlasChannelDossier): AtlasEntryExitFrontier | null {
   return dossier.frontiers.find((row) => row.evidenceLayer === dossier.decisionCohort.evidenceLayer
     && row.configurationEra === dossier.decisionCohort.configurationEra) ?? null;
+}
+
+function decisionDistribution(rows: readonly AtlasOpportunity[]): NonNullable<ChannelDecisionBrief["decisionDistribution"]> {
+  const outcomes = rows.map((row) => row.resultPerContractUsd).filter(finite);
+  const bySession = new Map<string, number[]>();
+  for (const row of rows) {
+    if (!finite(row.resultPerContractUsd)) continue;
+    bySession.set(row.session, [...(bySession.get(row.session) ?? []), row.resultPerContractUsd]);
+  }
+  const sessions = [...bySession].map(([session, values]) => ({
+    session,
+    value: round(values.reduce((sum, value) => sum + value, 0)),
+  })).sort((left, right) => left.session.localeCompare(right.session));
+  const sessionValues = sessions.map((row) => row.value);
+  const positiveResults = outcomes.filter((value) => value > 0);
+  const positiveTotal = positiveResults.reduce((sum, value) => sum + value, 0);
+  const rawTypicalBestMovePct = median(rows.map((row) => row.mfePct).filter(finite));
+  const typicalBestMovePct = rawTypicalBestMovePct == null ? null : Math.max(0, rawTypicalBestMovePct);
+  const typicalFinalReturnPct = median(rows.map((row) => row.returnPct).filter(finite));
+  return {
+    label: "DECISION COHORT",
+    sessions: sessions.length,
+    opportunities: rows.length,
+    positiveSessions: sessionValues.filter((value) => value > 0).length,
+    positiveSessionRate: sessionValues.length ? round(sessionValues.filter((value) => value > 0).length / sessionValues.length) : null,
+    typicalOpportunityUsd: median(outcomes),
+    typicalSessionUsd: median(sessionValues),
+    weakSessionUsd: quantile(sessionValues, .25),
+    strongSessionUsd: quantile(sessionValues, .75),
+    typicalBestMovePct,
+    typicalFinalReturnPct,
+    coherentCapture: typicalFinalReturnPct != null && typicalFinalReturnPct <= 0 ? 0
+      : typicalBestMovePct != null && typicalBestMovePct > 0 && typicalFinalReturnPct != null
+        ? round(Math.max(0, Math.min(1, typicalFinalReturnPct / typicalBestMovePct))) : null,
+    largestWinnerShare: positiveTotal > 0 ? round(Math.max(...positiveResults) / positiveTotal) : null,
+  };
 }
 
 function entryFrequency(rows: readonly AtlasOpportunity[], dossier: AtlasChannelDossier): ChannelDecisionBrief["entryFrequency"] {
@@ -366,6 +425,7 @@ export function buildChannelDecisionBriefs(input: {
   const channels = Object.fromEntries(Object.values(input.atlas.channels).map((dossier) => {
     const rows = decisionRows(input.opportunities, dossier);
     const frontier = currentFrontier(dossier);
+    const distribution = decisionDistribution(rows);
     const executed = latestExecuted(input.weekly.executed, dossier.channel);
     const virtual = historicalVirtual(input.weekly.virtual, dossier.channel);
     const entries = entryFrequency(rows, dossier);
@@ -460,6 +520,7 @@ export function buildChannelDecisionBriefs(input: {
         state: "missing", label: "HISTORICAL VIRTUAL", configurationEra: null, sessions: 0,
         opportunities: 0, scored: 0, typicalResultPerContractUsd: null, totalResultPerContractUsd: null,
       },
+      decisionDistribution: distribution,
       entryFrequency: entries,
       entryAtlas,
       nativeExit: native,
