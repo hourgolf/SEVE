@@ -92,11 +92,7 @@ export function buildNextSevenActionProgram(input: {
   }
 
   const macd = requiredBrief(input.briefs, "vb-macd-state");
-  const macd50 = macd.managers.compared.find((row) =>
-    row.managerId === "LOCK50/30") ?? null;
   const momo = requiredBrief(input.briefs, "momo-shape-2");
-  const momoBankRunner = momo.managers.compared.find((row) =>
-    row.managerId === "BANK20/RUN50") ?? null;
   const orb = requiredBrief(input.briefs, "orb-ustop-ctl");
   const thrust = requiredBrief(input.briefs, "qqq-thrust-trail-wd");
   const tp13 = thrust.trail?.compared.find((row) => row.candidateId === "TP-13") ?? null;
@@ -122,7 +118,9 @@ export function buildNextSevenActionProgram(input: {
       evidence: [
         `${macd.executed.sessions} current-era session(s), ${macd.executed.logicalTrades} logical trade(s), ${money(macd.executed.totalResultUsd)}`,
         `native typical best move ${percent(macd.nativeExit.typicalBestMovePct)} and capture ${percent(macd.nativeExit.typicalCapture == null ? null : macd.nativeExit.typicalCapture * 100)}`,
-        macd50 ? `displaced +50 comparator: ${macd50.pairedOpportunities} paired path(s) across ${macd50.sessions} session(s); typical benefit ${percent(macd50.typicalBenefitPct)}` : "displaced +50 comparator awaits its first new-era path",
+        input.experiments.plans["vb-macd-state"].collection.logicalOpportunities
+          ? `displaced +50 comparator: ${input.experiments.plans["vb-macd-state"].collection.logicalOpportunities} new-epoch paired path(s) across ${input.experiments.plans["vb-macd-state"].collection.independentSessions} session(s)`
+          : "displaced +50 comparator awaits its first new-era path",
       ],
       readiness: "prepared", reviewAfter: "5 independent sessions and 10 paired logical opportunities, with an early stop after two materially worse sessions",
       automaticActivation: false,
@@ -179,7 +177,9 @@ export function buildNextSevenActionProgram(input: {
       evidence: [
         `${momo.executed.sessions} current-era session(s), ${momo.executed.logicalTrades} logical trade(s), ${money(momo.executed.totalResultUsd)}`,
         `native typical best move ${percent(momo.nativeExit.typicalBestMovePct)} and capture ${percent(momo.nativeExit.typicalCapture == null ? null : momo.nativeExit.typicalCapture * 100)}`,
-        momoBankRunner ? `BANK20/RUN50: ${momoBankRunner.pairedOpportunities} paired path(s) across ${momoBankRunner.sessions} session(s); typical benefit ${percent(momoBankRunner.typicalBenefitPct)}` : "BANK20/RUN50 awaits its first comparable path",
+        input.experiments.plans["momo-shape-2"].collection.logicalOpportunities
+          ? `BANK20/RUN50: ${input.experiments.plans["momo-shape-2"].collection.logicalOpportunities} new-epoch paired path(s) across ${input.experiments.plans["momo-shape-2"].collection.independentSessions} session(s)`
+          : "BANK20/RUN50 awaits its first new-era path",
       ],
       readiness: "prepared", reviewAfter: "5 independent sessions and 10 paired logical opportunities, with an early stop after two materially worse sessions",
       automaticActivation: false,
@@ -230,7 +230,9 @@ export function buildNextSevenActionProgram(input: {
     const brief = requiredBrief(input.briefs, channel);
     const eligible = action.kind === "entry_test"
       ? brief.evidence.decisionOpportunities : brief.executed.logicalTrades;
-    if (eligible > 0 && plan.collection.logicalOpportunities === 0) {
+    const experimentStarted = !plan.startSession
+      || input.briefs.throughSession >= plan.startSession;
+    if (experimentStarted && eligible > 0 && plan.collection.logicalOpportunities === 0) {
       throw new Error(`eligible ${channel} fill or decision produced no intended paired experiment evidence`);
     }
   }

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import type { ChannelDecisionAxis, ChannelDecisionBrief, ChannelDecisionBriefBundle } from "./channelDecisionBrief";
-import type { AtlasOpportunity } from "./decisionAtlas";
+import type { AtlasManagerPath, AtlasOpportunity } from "./decisionAtlas";
 import type { BoundedRetuneSignalStamp } from "./boundedRetuneRegistry";
 
-export const CHANNEL_EXPERIMENT_VERSION = "channel-experiment-lifecycle-v2" as const;
+export const CHANNEL_EXPERIMENT_VERSION = "channel-experiment-lifecycle-v3" as const;
 
 export type ChannelExperimentStage = "control_only" | "draft" | "preregistered" | "collecting" | "ready_to_score";
 
@@ -18,6 +18,7 @@ export interface ChannelExperimentPlan {
   experimentId: string;
   channel: string;
   throughSession: string;
+  startSession: string | null;
   stage: ChannelExperimentStage;
   decision: string;
   hypothesis: string;
@@ -55,6 +56,7 @@ const sha256 = (value: unknown): string => `sha256:${createHash("sha256")
 
 interface FrozenExperimentDefinition {
   experimentId: string;
+  startSession: string;
   axis: ChannelDecisionAxis;
   name: string;
   control: string;
@@ -73,6 +75,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
   Object.freeze({
     "qqq-thrust-trail-wd": Object.freeze({
       experimentId: "qqq-thrust-trail-wd:tp20-vs-tp13:2026-08-18:v1",
+      startSession: "2026-08-18",
       axis: "exit",
       name: "take-profit threshold",
       control: "current all-out +20% / -30% stop",
@@ -81,6 +84,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
     }),
     "vb-macd-state": Object.freeze({
       experimentId: "vb-macd-state:tp18-vs-tp50:2026-08-20:v1",
+      startSession: "2026-08-20",
       axis: "exit",
       name: "all-out take-profit threshold",
       control: "current all-out +18% / -30% stop",
@@ -89,6 +93,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
     }),
     "momo-shape-2": Object.freeze({
       experimentId: "momo-shape-2:tp27-vs-bank20-run50:2026-08-20:v1",
+      startSession: "2026-08-20",
       axis: "manager",
       name: "profit protection after +20%",
       control: "current all-out +27% / -40% stop",
@@ -97,6 +102,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
     }),
     "orb-ustop-ctl": Object.freeze({
       experimentId: "orb-ustop-ctl:raw-vs-qualified-entry:2026-08-18:v1",
+      startSession: "2026-08-18",
       axis: "entry",
       name: "entry qualification",
       control: "raw ORB signals retained in shadow",
@@ -105,6 +111,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
     }),
     "vb-level-break": Object.freeze({
       experimentId: "vb-level-break:first-vs-confirmed-entry:2026-08-18:v1",
+      startSession: "2026-08-18",
       axis: "entry",
       name: "entry ordinal and confirmation timing",
       control: "current first eligible entry",
@@ -153,7 +160,8 @@ function stageFor(brief: ChannelDecisionBrief, variable: ChannelExperimentVariab
   return "preregistered";
 }
 
-function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOpportunity[]): ChannelExperimentPlan {
+function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOpportunity[],
+  managerPaths: readonly AtlasManagerPath[]): ChannelExperimentPlan {
   const frozen = FROZEN_CHANNEL_EXPERIMENTS[brief.channel] ?? null;
   const observed = observedRows.filter((row) => row.boundedRetuneStamp);
   const clean = observed.filter((row) => row.boundedRetuneStamp?.baselineMatches === true);
@@ -169,9 +177,6 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
   // Legacy bounded-retune stamps can remain on historical opportunities, but
   // they must never rename or contaminate a later one-variable experiment.
   const variable = frozen ? variableFor(brief) : observedVariable ?? variableFor(brief);
-  const frozenManager = frozen?.managerId
-    ? brief.managers.compared.find((row) => row.managerId === frozen.managerId) ?? null
-    : null;
   const frozenTrail = frozen?.trailCandidateId
     ? brief.trail?.compared.find((row) => row.candidateId === frozen.trailCandidateId) ?? null
     : null;
@@ -179,11 +184,28 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
     ? { sessions: brief.evidence.decisionSessions,
       opportunities: brief.evidence.decisionOpportunities }
     : null;
-  const collection = { independentSessions: frozenManager?.sessions
-      ?? frozenTrail?.sessions ?? decisionCollection?.sessions
+  const frozenStarted = !frozen || brief.throughSession >= frozen.startSession;
+  const eligibleManagerRows = frozen?.managerId && frozenStarted
+    ? observedRows.filter((row) => row.session >= frozen.startSession
+      && row.evidenceLayer !== "prospective_virtual" && row.resultPerContractUsd != null)
+    : [];
+  const eligibleManagerById = new Map(eligibleManagerRows.map((row) =>
+    [row.logicalOpportunityId, row] as const));
+  const scopedManagerPairs = frozen?.managerId ? managerPaths.filter((path) =>
+    path.managerId === frozen.managerId && path.status === "terminal"
+      && path.resultPerContractUsd != null && eligibleManagerById.has(path.opportunityId)) : [];
+  const scopedManagerCollection = frozen?.managerId ? {
+    sessions: new Set(scopedManagerPairs.map((path) =>
+      eligibleManagerById.get(path.opportunityId)!.session)).size,
+    opportunities: new Set(scopedManagerPairs.map((path) => path.opportunityId)).size,
+  } : null;
+  const collection = { independentSessions: scopedManagerCollection?.sessions
+      ?? (frozenStarted ? frozenTrail?.sessions : 0)
+      ?? (frozenStarted ? decisionCollection?.sessions : 0)
       ?? new Set(clean.map((row) => row.session)).size,
-    logicalOpportunities: frozenManager?.pairedOpportunities
-      ?? frozenTrail?.pairedOpportunities ?? decisionCollection?.opportunities
+    logicalOpportunities: scopedManagerCollection?.opportunities
+      ?? (frozenStarted ? frozenTrail?.pairedOpportunities : 0)
+      ?? (frozenStarted ? decisionCollection?.opportunities : 0)
       ?? new Set(clean.map((row) => row.logicalOpportunityId)).size,
     contaminatedOpportunities: frozen ? 0 : new Set(observed.filter((row) => row.boundedRetuneStamp?.baselineMatches === false)
       .map((row) => row.logicalOpportunityId)).size };
@@ -204,6 +226,7 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
       ?? `${brief.throughSession}:${brief.channel}:${brief.recommendation.axis}`,
     channel: brief.channel,
     throughSession: brief.throughSession,
+    startSession: frozen?.startSession ?? null,
     stage,
     decision: brief.recommendation.label,
     hypothesis,
@@ -230,9 +253,13 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
   return { ...body, productionChangeAuthorized: false, runtimeMutationAuthorized: false, planSha256: sha256(body) };
 }
 
-export function buildChannelExperimentPacket(bundle: ChannelDecisionBriefBundle, opportunities: readonly AtlasOpportunity[] = []): ChannelExperimentPacket {
+export function buildChannelExperimentPacket(bundle: ChannelDecisionBriefBundle,
+  opportunities: readonly AtlasOpportunity[] = [],
+  managerPaths: readonly AtlasManagerPath[] = []): ChannelExperimentPacket {
   const plans = Object.fromEntries(Object.values(bundle.channels).sort((left, right) => left.channel.localeCompare(right.channel))
-    .map((brief) => [brief.channel, buildPlan(brief, opportunities.filter((row) => row.channel === brief.channel))]));
+    .map((brief) => [brief.channel, buildPlan(brief,
+      opportunities.filter((row) => row.channel === brief.channel),
+      managerPaths.filter((row) => row.channel === brief.channel))]));
   const stages: ChannelExperimentStage[] = ["control_only", "draft", "preregistered", "collecting", "ready_to_score"];
   const summary = Object.fromEntries(stages.map((stage) => [stage,
     Object.values(plans).filter((plan) => plan.stage === stage).length])) as Record<ChannelExperimentStage, number>;

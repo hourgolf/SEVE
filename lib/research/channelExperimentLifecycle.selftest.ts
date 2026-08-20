@@ -73,7 +73,7 @@ assert.equal(packet.plans["qqq-thrust-trail-wd"].experimentId,
 assert.equal(packet.plans["qqq-thrust-trail-wd"].variable?.challenger,
   "shadow all-out +13% / -30% stop");
 assert.deepEqual(packet.plans["qqq-thrust-trail-wd"].collection,
-  { independentSessions: 3, logicalOpportunities: 3, contaminatedOpportunities: 0 });
+  { independentSessions: 0, logicalOpportunities: 0, contaminatedOpportunities: 0 });
 assert.equal(packet.plans["vb-macd-state"].experimentId,
   "vb-macd-state:tp18-vs-tp50:2026-08-20:v1");
 assert.equal(packet.plans["vb-macd-state"].variable?.control,
@@ -81,12 +81,12 @@ assert.equal(packet.plans["vb-macd-state"].variable?.control,
 assert.equal(packet.plans["vb-macd-state"].variable?.challenger,
   "LOCK50/30 displaced all-out +50% / -30% stop");
 assert.deepEqual(packet.plans["vb-macd-state"].collection,
-  { independentSessions: 1, logicalOpportunities: 1, contaminatedOpportunities: 0 });
+  { independentSessions: 0, logicalOpportunities: 0, contaminatedOpportunities: 0 });
 assert.equal(packet.plans["momo-shape-2"].variable?.challenger,
   "BANK20/RUN50 bank half +20% / runner +50% or breakeven");
 assert.equal(packet.plans["orb-ustop-ctl"].variable?.axis, "entry");
 assert.deepEqual(packet.plans["orb-ustop-ctl"].collection,
-  { independentSessions: 2, logicalOpportunities: 5, contaminatedOpportunities: 0 });
+  { independentSessions: 0, logicalOpportunities: 0, contaminatedOpportunities: 0 });
 assert.equal(packet.plans["vb-level-break"].variable?.challenger,
   "shadow skip-first / next-confirmed entry");
 assert.equal(packet.packetSha256, buildChannelExperimentPacket(bundle).packetSha256);
@@ -103,4 +103,19 @@ assert.equal(staleFrozenStamp.plans["vb-level-break"].variable?.challenger,
   "shadow skip-first / next-confirmed entry");
 assert.equal(staleFrozenStamp.plans["vb-level-break"].stage, "collecting");
 assert.equal(staleFrozenStamp.plans["vb-level-break"].collection.contaminatedOpportunities, 0);
+const startedBundle = structuredClone(bundle) as unknown as ChannelDecisionBriefBundle;
+startedBundle.throughSession = "2026-08-20";
+for (const startedBrief of Object.values(startedBundle.channels)) {
+  startedBrief.throughSession = "2026-08-20";
+}
+const started = buildChannelExperimentPacket(startedBundle, [{
+  channel: "vb-macd-state", session: "2026-08-20", logicalOpportunityId: "macd-new-1",
+  evidenceLayer: "exact_current_configuration", resultPerContractUsd: 12,
+}] as never[], [{
+  channel: "vb-macd-state", opportunityId: "macd-new-1", managerId: "LOCK50/30",
+  managerVersion: "lock50-v1", status: "terminal", resultPerContractUsd: 8,
+}] as never[]);
+assert.equal(started.plans["vb-macd-state"].startSession, "2026-08-20");
+assert.deepEqual(started.plans["vb-macd-state"].collection,
+  { independentSessions: 1, logicalOpportunities: 1, contaminatedOpportunities: 0 });
 console.log("channel-experiment-lifecycle-selftest: PASS");

@@ -49,7 +49,8 @@ if (briefs.throughSession !== atlas.throughSession) {
 const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt: atlas.generatedAt,
   throughSession: atlas.throughSession });
 const evidence = buildEvidenceReconciliation({ atlas, snapshot, opportunities: normalized.opportunities, catchupManifests });
-const experiments = buildChannelExperimentPacket(briefs, normalized.opportunities);
+const experiments = buildChannelExperimentPacket(briefs, normalized.opportunities,
+  normalized.managerPaths);
 const nextSevenActions = buildNextSevenActionProgram({ briefs, experiments });
 const executionCapacity = buildExecutionCapacityReadiness({ atlas, briefs, snapshot });
 const executionResilience = buildExecutionResilienceReport({ snapshot, generatedAt: atlas.generatedAt,
