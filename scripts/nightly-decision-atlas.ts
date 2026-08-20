@@ -24,6 +24,7 @@ if (Boolean(virtualCatchupFile) !== Boolean(virtualCatchupManifest)) {
 }
 const ledgerDir = resolve(outputRoot, "profitability");
 const atlasDir = resolve(outputRoot, "atlas");
+const entryDir = resolve(outputRoot, "entry");
 const weeklyDir = resolve(outputRoot, "weekly");
 const briefsDir = resolve(outputRoot, "briefs");
 const learningDir = resolve(outputRoot, "learning");
@@ -40,6 +41,8 @@ run("scripts/decision-atlas.ts", [...envArgs, "--through", through,
   "--ledger-file", resolve(ledgerDir, "ledger.json"), "--out-dir", atlasDir,
   ...(virtualCatchupFile && virtualCatchupManifest
     ? ["--virtual-catchup-file", resolve(virtualCatchupFile), "--virtual-catchup-manifest", resolve(virtualCatchupManifest)] : [])]);
+run("scripts/entry-atlas.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
+  "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--out-dir", entryDir]);
 run("scripts/channel-trail-frontier.ts", [...envArgs,
   "--ledger-file", resolve(ledgerDir, "ledger.json"),
   "--atlas-file", resolve(atlasDir, "atlas.json"),
@@ -49,7 +52,8 @@ run("scripts/weekly-readout.ts", ["--through", through, "--ledger-file", resolve
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--atlas-file", resolve(atlasDir, "atlas.json"), "--out-dir", weeklyDir]);
 run("scripts/channel-decision-briefs.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--weekly-file", resolve(weeklyDir, "weekly.json"),
-  "--trail-file", resolve(trailDir, "frontier.json"), "--out-dir", briefsDir]);
+  "--trail-file", resolve(trailDir, "frontier.json"), "--entry-atlas-file", resolve(entryDir, "entry-atlas.json"),
+  "--out-dir", briefsDir]);
 run("scripts/research-council.ts", ["--briefs-file", resolve(briefsDir, "briefs.json"),
   "--out-dir", councilDir]);
 run("scripts/nightly-channel-learning.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),

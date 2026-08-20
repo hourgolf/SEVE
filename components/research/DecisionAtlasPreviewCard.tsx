@@ -18,9 +18,34 @@ const money = (value: number | null) => value == null ? "—"
   : `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
 const pct = (value: number | null) => value == null ? "—" : `${Math.round(value * 100)}%`;
 
-function EntrySequence({ model }: { model: ChannelDecisionSummary }) {
+function EntrySequence({ model, entryAtlas }: { model: ChannelDecisionSummary; entryAtlas?: ChannelDecisionBrief["entryAtlas"] }) {
   const points = model.entry.points.slice(0, 6);
   const magnitude = Math.max(1, ...points.map((point) => Math.abs(point.typicalUsd ?? 0)));
+  if (entryAtlas) return <section className="atlas-view" aria-label="Entry Atlas evidence">
+    <header><b>IS THIS ENTRY FINDING A REAL MOVE?</b><span>entry opportunity, separated from realized exit P&amp;L</span></header>
+    <p>{entryAtlas.conclusion}</p>
+    <div className="atlas-source-ladder">
+      <span><small>ENTRY READ</small><b>{entryAtlas.read.toUpperCase()}</b><em>{entryAtlas.bestContext}</em></span>
+      <span><small>TYPICAL BEST MOVE</small><b>{signed(entryAtlas.metrics.typicalBestMovePct, "%")}</b><em>while the stored path remained observable</em></span>
+      <span><small>FAVORABLE PATHS</small><b>{pct(entryAtlas.metrics.favorableMoveRate)}</b><em>reached the fixed +10% research yardstick</em></span>
+      <span><small>EVIDENCE</small><b>{entryAtlas.cohort.scoredSessions}s · {entryAtlas.cohort.scoredOpportunities} opportunities</b><em>{entryAtlas.cohort.evidenceLayer.replaceAll("_", " ")}</em></span>
+    </div>
+    <div className="atlas-plan">
+      <span><small>WEAKER CONTEXT</small><b>{entryAtlas.failureContext}</b></span>
+      <span><small>NEXT CONTROLLED TEST</small><b>{entryAtlas.nextTest}</b></span>
+    </div>
+    <details><summary>Compare entry relationships and entry order</summary>
+      <div className="atlas-expert-table">{entryAtlas.relationships.filter((row) => row.state !== "insufficient").slice(0, 8).map((row) =>
+        <span key={row.feature}><b>{row.label}</b><em>{row.sessions}s · {row.opportunities} paths</em><strong>{signed(row.typicalDifferencePct, " pts")}</strong><small>{row.state === "stable_hypothesis" ? "FORWARD TEST" : "DESCRIPTIVE"}</small></span>)}</div>
+      {points.length ? <div className="atlas-entry-sequence">{points.map((point) => {
+        const value = point.typicalUsd ?? 0;
+        return <span key={point.number} className={value > 0 ? "positive" : value < 0 ? "negative" : "neutral"}>
+          <small>#{point.number}</small><i style={{ height: `${Math.max(3, Math.round(Math.abs(value) / magnitude * 34))}px` }} />
+          <b>{money(point.typicalUsd)}</b><em>{point.sessions}s</em>
+        </span>;
+      })}</div> : null}
+    </details>
+  </section>;
   return <section className="atlas-view" aria-label="Entry sequence evidence">
     <header><b>DO LATER ENTRIES STILL HELP?</b><span>typical result per contract</span></header>
     <p>{model.entry.conclusion}</p>
@@ -134,7 +159,7 @@ function AuthoritativeDecision({ brief, compact, focusAxis, onAxisChange }: { br
     </div>}
     <details className="atlas-evidence-drawer" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}><summary>See supporting evidence</summary><div className="atlas-brief-body">
       <nav aria-label="Decision evidence views">{(["entry", "exit", "manager", "size", "sources"] as EvidenceView[]).map((item) => <button key={item} type="button" className={view === item ? "on" : ""} aria-pressed={view === item} onClick={() => { setView(item); onAxisChange?.(item); }}>{item === "sources" ? "SOURCES" : item.toUpperCase()}</button>)}</nav>
-      {view === "entry" && <EntrySequence model={model} />}
+      {view === "entry" && <EntrySequence model={model} entryAtlas={brief.entryAtlas} />}
       {view === "exit" && <ExitCapture model={model} />}
       {view === "manager" && <ManagerComparison model={model} trail={brief.trail} />}
       {view === "size" && <SizingSteps model={model} />}

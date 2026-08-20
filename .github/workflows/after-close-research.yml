@@ -81,6 +81,7 @@ jobs:
           npm run research-council-selftest
           npm run entry-qualification-policy-selftest
           npm run manager-pattern-scan-selftest
+          npm run entry-atlas-selftest
       - name: Build and publish session research
         id: shadow-rebuild
         continue-on-error: true
@@ -190,6 +191,8 @@ jobs:
               "data/sentinel-packets/$SESSION_DATE_ET.receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/profitability/receipt.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/entry/receipt.json" \
+              "data/decision-atlas/runs/$SESSION_DATE_ET/entry/entry-atlas.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/manager-patterns/scan.json" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/manager-patterns/scan.md" \
               "data/decision-atlas/runs/$SESSION_DATE_ET/trails/receipt.json" \

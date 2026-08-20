@@ -77,6 +77,8 @@
     "channel-trail-frontier": "tsx scripts/channel-trail-frontier.ts",
     "manager-pattern-scan": "tsx scripts/manager-pattern-scan.ts",
     "manager-pattern-scan-selftest": "tsx scripts/manager-pattern-scan.ts --selftest",
+    "entry-atlas": "tsx scripts/entry-atlas.ts",
+    "entry-atlas-selftest": "tsx lib/research/entryAtlas.selftest.ts && tsx scripts/entry-atlas.selftest.ts",
     "family-admission-selftest": "tsx worker/src/familyAdmission.selftest.ts",
     "observer-scorecard-selftest": "tsx lib/research/observerScorecard.selftest.ts",
     "account-equity-selftest": "tsx lib/research/accountEquity.selftest.ts",

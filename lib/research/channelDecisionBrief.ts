@@ -8,6 +8,7 @@ import type {
 } from "./decisionAtlas";
 import type { WeeklyExecutedRow, WeeklyReadout, WeeklyVirtualSummary } from "./weeklyReadout";
 import type { ChannelTrailFrontierBook, TrailCandidateSummary } from "./channelTrailFrontier";
+import type { ChannelEntryAtlas, EntryAtlas } from "./entryAtlas";
 
 export const CHANNEL_DECISION_BRIEF_VERSION = "channel-decision-brief-v1" as const;
 
@@ -67,6 +68,7 @@ export interface ChannelDecisionBrief {
     }>;
     leadingBlock: { reason: string; opportunities: number; scored: number; typicalUsd: number | null } | null;
   };
+  entryAtlas?: ChannelEntryAtlas;
   nativeExit: {
     conclusion: string;
     typicalReturnPct: number | null;
@@ -290,8 +292,9 @@ function chooseRecommendation(input: {
   bestSupportedContracts: number | null;
   trail: ChannelDecisionBrief["trail"];
   platformEffect: ChannelDecisionBrief["platformEffect"];
+  entryAtlas?: ChannelEntryAtlas;
 }): ChannelDecisionBrief["recommendation"] {
-  const { dossier, native, managers, entries, trail, platformEffect } = input;
+  const { dossier, native, managers, entries, trail, platformEffect, entryAtlas } = input;
   let axis: ChannelDecisionAxis = "collection";
   let label = "KEEP COLLECTING";
   let summary = dossier.summary;
@@ -317,9 +320,15 @@ function chooseRecommendation(input: {
   } else if (/entry \d+ is the first|first entry is stronger/i.test(entries.conclusion)) {
     axis = "entry"; label = "TEST ENTRY FREQUENCY"; summary = entries.conclusion;
     nextExperiment = "Keep exit, manager, and size fixed; compare the native entry count with one lower same-session cap.";
+  } else if (entryAtlas?.read === "weak" && entryAtlas.leadingRelationship) {
+    axis = "entry"; label = "TEST ENTRY CONTEXT"; summary = entryAtlas.conclusion;
+    nextExperiment = entryAtlas.nextTest;
   } else if (/fails to retain|paired exit test/i.test(native.conclusion)) {
     axis = "exit"; label = "REVIEW EXIT"; summary = native.conclusion;
     nextExperiment = "Keep entry and size fixed; compare one exit alternative with the native exit on the same opportunities.";
+  } else if (entryAtlas?.leadingRelationship && entryAtlas.read !== "promising") {
+    axis = "entry"; label = "TEST ENTRY CONTEXT"; summary = entryAtlas.conclusion;
+    nextExperiment = entryAtlas.nextTest;
   } else if (dossier.disposition === "size") {
     if (input.currentContracts != null && !input.currentSizeObserved) {
       label = "COLLECT CURRENT SIZE";
@@ -352,6 +361,7 @@ export function buildChannelDecisionBriefs(input: {
   opportunities: readonly AtlasOpportunity[];
   currentContractsByChannel?: Readonly<Record<string, number>>;
   trailFrontier?: ChannelTrailFrontierBook | null;
+  entryAtlas?: EntryAtlas | null;
 }): ChannelDecisionBriefBundle {
   const channels = Object.fromEntries(Object.values(input.atlas.channels).map((dossier) => {
     const rows = decisionRows(input.opportunities, dossier);
@@ -411,8 +421,9 @@ export function buildChannelDecisionBriefs(input: {
     const capacityConclusion = bestPoint
       ? `${currentContracts == null ? "Current size is not in the nightly inventory" : `Current size is ${currentContracts} contracts${currentSizeObserved ? " and is represented in the decision cohort" : " but is not yet represented in the decision cohort"}`}. The replay remains deployable through ${bestPoint.contracts} contracts, with ${bestPoint.additionalDisplacedOtherOpportunitiesVsOneContract ?? 0} additional peer opportunities displaced versus one contract.`
       : "The 1–6 contract replay does not support an additional size conclusion.";
+    const entryAtlas = input.entryAtlas?.channels[dossier.channel];
     const recommendation = chooseRecommendation({ dossier, native, managers, entries, currentContracts,
-      currentSizeObserved, bestSupportedContracts: dossier.capacity.bestSupportedContracts, trail, platformEffect });
+      currentSizeObserved, bestSupportedContracts: dossier.capacity.bestSupportedContracts, trail, platformEffect, entryAtlas });
     const brief: ChannelDecisionBrief = {
       schemaVersion: 1,
       briefVersion: CHANNEL_DECISION_BRIEF_VERSION,
@@ -450,6 +461,7 @@ export function buildChannelDecisionBriefs(input: {
         opportunities: 0, scored: 0, typicalResultPerContractUsd: null, totalResultPerContractUsd: null,
       },
       entryFrequency: entries,
+      entryAtlas,
       nativeExit: native,
       managers,
       trail,
