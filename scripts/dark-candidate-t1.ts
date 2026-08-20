@@ -420,7 +420,7 @@ async function main(): Promise<void> {
     const censors = replay.censors.filter((row) => row.candidateId === candidate.candidateId
       && (row.code === "sequential_reentry_active" || row.code === "manager_arm_censored"))
       .map((row) => ({ managerId: row.managerId, code: row.code, fact: row.fact }));
-    const expected = managerIdsForChannel(candidate.channelSlug).length;
+    const expected = managerIdsForChannel(candidate.channelSlug, candidate.sessionDateEt).length;
     const published = pathsByCandidate.get(candidate.candidateId) ?? 0;
     if (published + censors.length !== expected) {
       throw new Error(`manager path coverage mismatch for ${candidate.candidateId}: ${published}+${censors.length}/${expected}`);

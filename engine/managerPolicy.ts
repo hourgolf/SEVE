@@ -16,6 +16,7 @@ export const BASE_MANAGER_IDS = [
 export const PB_RIDE_2_MANAGER_ID = "PB2-BANK15/HALF-GIVEBACK" as const;
 export const GRIND_CURRENT_MANAGER_ID = "GRIND-B25/CURRENT-A13" as const;
 export const VB_MACD_CURRENT_MANAGER_ID = "VB-MACD-CURRENT-LOCK18" as const;
+export const VB_MACD_LOCK18_NATIVE_START_SESSION = "2026-08-20" as const;
 
 export const MANAGER_IDS = [
   ...BASE_MANAGER_IDS,
@@ -37,13 +38,23 @@ export interface ManagerState {
  * +15% staged exit on pb-ride-2 only; silently pooling it across the fleet
  * would recreate the global-exit fallacy the replay rejected.
  */
-export function managerIdsForChannel(channelSlug: string): readonly ManagerId[] {
+export function managerIdsForChannel(
+  channelSlug: string,
+  asOfSessionDateEt?: string,
+): readonly ManagerId[] {
   const slug = channelSlug.toLowerCase();
   if (slug === "pb-ride-2") return [...BASE_MANAGER_IDS, PB_RIDE_2_MANAGER_ID];
   if (slug === "grind-v3") return [...BASE_MANAGER_IDS, GRIND_CURRENT_MANAGER_ID];
   // The +18 policy became vb-macd-state's paper native for the 2026-08-20
   // epoch. LOCK50/30 now preserves the displaced +50 control, so collecting a
   // second +18 shadow would be redundant and would overstate arm coverage.
+  // Historical exact replays retain the arm set that existed for their
+  // session. A later native change must not rewrite immutable path coverage.
+  if (slug === "vb-macd-state"
+      && asOfSessionDateEt
+      && asOfSessionDateEt < VB_MACD_LOCK18_NATIVE_START_SESSION) {
+    return [...BASE_MANAGER_IDS, VB_MACD_CURRENT_MANAGER_ID];
+  }
   return BASE_MANAGER_IDS;
 }
 
