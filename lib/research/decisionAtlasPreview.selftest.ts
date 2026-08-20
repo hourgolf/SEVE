@@ -6,6 +6,10 @@ const summary: ShadowChannelSummary = {
   slug: "alpha", paths: 20, scored: 18, winners: 11, targets: 8, stops: 7, flattens: 3,
   pnlPerContract: 180, averagePerPath: 10, typicalPerPath: 6,
   largestWinnerShare: .28, averageMfePct: 32, averageGivebackPct: 22,
+  typicalMfePct: 30, typicalGivebackPct: 20, typicalReturnPct: 12, typicalCapture: .4,
+  sessions: 6, positiveSessions: 4, positiveSessionRate: .67, typicalSessionPerContract: 20,
+  weakSessionPerContract: -20, strongSessionPerContract: 50, typicalLossPerContract: -30,
+  fromSession: "2026-07-30", throughSession: "2026-08-06", channelSpecVersionIds: [], configurationEpochIds: [],
   lastAt: "2026-08-06T15:00:00.000Z",
 };
 const curve: ChannelDryPowderCurve = {

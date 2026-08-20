@@ -1810,7 +1810,7 @@
   white-space: nowrap;
 }
 
-.m2-app:not(.folio-mobile) .srw-row > :is(.srw-cell-paths, .srw-cell-win, .srw-cell-avg, .srw-cell-total, .srw-cell-mfe, .srw-cell-exits) {
+.m2-app:not(.folio-mobile) .srw-row > :is(.srw-cell-paths, .srw-cell-avg, .srw-cell-mfe, .srw-cell-capture, .srw-cell-weak, .srw-cell-through) {
   min-width: 0;
   display: grid;
   gap: 4px;
@@ -1819,18 +1819,18 @@
   font-weight: 750;
 }
 
-.m2-app:not(.folio-mobile) .srw-row > :is(.srw-cell-paths, .srw-cell-win, .srw-cell-avg, .srw-cell-total, .srw-cell-mfe, .srw-cell-exits)::before {
+.m2-app:not(.folio-mobile) .srw-row > :is(.srw-cell-paths, .srw-cell-avg, .srw-cell-mfe, .srw-cell-capture, .srw-cell-weak, .srw-cell-through)::before {
   color: var(--909-text-tertiary);
   font: 800 9px/1 var(--mono);
   letter-spacing: .07em;
 }
 
-.m2-app:not(.folio-mobile) .srw-cell-paths::before { content: "PATHS"; }
-.m2-app:not(.folio-mobile) .srw-cell-win::before { content: "WIN"; }
-.m2-app:not(.folio-mobile) .srw-cell-avg::before { content: "TYPICAL/CT"; }
-.m2-app:not(.folio-mobile) .srw-cell-total::before { content: "PATH SUM"; }
-.m2-app:not(.folio-mobile) .srw-cell-mfe::before { content: "BEST MOVE"; }
-.m2-app:not(.folio-mobile) .srw-cell-exits::before { content: "EXITS"; }
+.m2-app:not(.folio-mobile) .srw-cell-paths::before { content: "SESSIONS / OPPORTUNITIES"; }
+.m2-app:not(.folio-mobile) .srw-cell-avg::before { content: "TYPICAL DAY"; }
+.m2-app:not(.folio-mobile) .srw-cell-mfe::before { content: "TYPICAL BEST MOVE"; }
+.m2-app:not(.folio-mobile) .srw-cell-capture::before { content: "TYPICAL MOVE KEPT"; }
+.m2-app:not(.folio-mobile) .srw-cell-weak::before { content: "WEAK DAY"; }
+.m2-app:not(.folio-mobile) .srw-cell-through::before { content: "THROUGH"; }
 .m2-app:not(.folio-mobile) .srw-current-evidence{min-width:0;display:grid;gap:8px;padding:10px;border:1px solid color-mix(in srgb,var(--909-positive-text) 38%,var(--909-border));border-radius:6px;background:var(--909-surface-panel-raised)}
 .m2-app:not(.folio-mobile) .srw-current-evidence>header{min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px}.m2-app:not(.folio-mobile) .srw-current-evidence>header span{min-width:0;display:grid;gap:3px}.m2-app:not(.folio-mobile) .srw-current-evidence>header small,.m2-app:not(.folio-mobile) .srw-current-pair small,.m2-app:not(.folio-mobile) .srw-current-kpis small{color:var(--909-text-tertiary);font-size:9px;letter-spacing:.07em}.m2-app:not(.folio-mobile) .srw-current-evidence>header b{overflow:hidden;text-overflow:ellipsis;font-size:12px}.m2-app:not(.folio-mobile) .srw-current-evidence>header em{flex:0 0 auto;color:var(--909-positive-text);font-size:9px;font-style:normal}.m2-app:not(.folio-mobile) .srw-current-pair,.m2-app:not(.folio-mobile) .srw-current-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.m2-app:not(.folio-mobile) .srw-current-pair>span,.m2-app:not(.folio-mobile) .srw-current-kpis>span{min-width:0;display:grid;gap:4px;padding:9px;border:1px solid var(--909-border);border-radius:4px;background:var(--909-surface-panel)}.m2-app:not(.folio-mobile) .srw-current-pair strong{font-size:14px}.m2-app:not(.folio-mobile) .srw-current-pair em{color:var(--909-text-secondary);font-size:9px;font-style:normal}.m2-app:not(.folio-mobile) .srw-current-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.m2-app:not(.folio-mobile) .srw-current-evidence>footer{display:grid;gap:3px;color:var(--909-text-secondary);font-size:9px}.m2-app:not(.folio-mobile) .srw-current-evidence>footer b{color:var(--909-text-primary);font-size:10px}.m2-app:not(.folio-mobile) .srw-current-evidence>p{margin:0;color:var(--909-text-secondary);font-size:10px;line-height:1.4}.m2-app:not(.folio-mobile)[data-skin="blackout"] .srw-current-evidence{background:#101817;border-color:#365544}.m2-app:not(.folio-mobile)[data-skin="blackout"] .srw-current-pair>span,.m2-app:not(.folio-mobile)[data-skin="blackout"] .srw-current-kpis>span{background:#0b100f;border-color:#2d3836}
 .m2-app:not(.folio-mobile) .srw-current-evidence-detail{min-width:0;color:var(--909-text-tertiary);font-size:9px}.m2-app:not(.folio-mobile) .srw-current-evidence-detail summary{cursor:pointer;letter-spacing:.07em}.m2-app:not(.folio-mobile) .srw-current-evidence-detail p{margin:6px 0 0;max-height:100px;overflow:auto;overflow-wrap:anywhere;line-height:1.4}

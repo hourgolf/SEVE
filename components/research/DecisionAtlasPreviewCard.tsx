@@ -9,8 +9,12 @@ import type { ChannelDryPowderCurve, ShadowChannelSummary } from "@/lib/research
 import type { BoundedRetuneEvidence } from "@/lib/research/boundedRetuneExperiments";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
+import { deriveChannelEvidenceScopes } from "@/lib/research/channelEvidenceScope";
+import { deriveChannelLineupStory } from "@/lib/research/channelLineup";
+import { ChannelEntryFinishMini, SessionDistributionStrip } from "./ChannelDecisionVisuals";
 
 type EvidenceView = "entry" | "exit" | "manager" | "size" | "sources";
+type EvidenceLens = "current" | "comparable" | "all";
 
 const signed = (value: number | null, suffix = "") => value == null ? "—"
   : `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(Math.round(value * 10) / 10)}${suffix}`;
@@ -131,7 +135,32 @@ function EvidenceSources({ model }: { model: ChannelDecisionSummary }) {
   </section>;
 }
 
-function AuthoritativeDecision({ brief, compact, focusAxis, onAxisChange }: { brief: ChannelDecisionBrief; compact: boolean; focusAxis?: EvidenceAxis; onAxisChange?: (axis: EvidenceAxis) => void }) {
+function EvidenceScopeSummary({ brief, summary }: { brief: ChannelDecisionBrief; summary?: ShadowChannelSummary | null }) {
+  const [lens, setLens] = useState<EvidenceLens>("comparable");
+  const scopes = deriveChannelEvidenceScopes(brief, summary ? {
+    sessions: summary.sessions,
+    opportunities: summary.scored,
+    fromSession: summary.fromSession,
+    throughSession: summary.throughSession,
+  } : null);
+  const active = scopes[lens];
+  const executedSign = brief.executed.typicalResultUsd == null ? null : Math.sign(brief.executed.typicalResultUsd);
+  const virtualSign = summary?.typicalPerPath == null ? null : Math.sign(summary.typicalPerPath);
+  const agreement = executedSign == null || virtualSign == null ? "PARTIAL SOURCES"
+    : executedSign === virtualSign ? "SOURCES AGREE" : "SOURCES DISAGREE";
+  return <section className="atlas-evidence-scopes" aria-label="Channel evidence scopes">
+    <nav aria-label="Evidence lens">
+      <button type="button" className={lens === "current" ? "on" : ""} onClick={() => setLens("current")}>CURRENT SETTINGS</button>
+      <button type="button" className={lens === "comparable" ? "on" : ""} onClick={() => setLens("comparable")}>COMPARABLE HISTORY</button>
+      <button type="button" className={lens === "all" ? "on" : ""} onClick={() => setLens("all")}>ALL RESEARCH</button>
+    </nav>
+    <div><span><small>{active.label}</small><b>{active.sessions}s / {active.opportunities}</b><em>{active.relation}</em></span><p>{active.fact}</p><strong>{agreement}</strong></div>
+    {lens === "all" && <div className="atlas-scope-sources">{scopes.sources.map((source) => <span key={source.label}><b>{source.label}</b><em>{source.sessions}s / {source.opportunities}</em><small>{source.relation}</small></span>)}</div>}
+    {scopes.countExplanation && <p className="atlas-count-explanation">WHY COUNTS DIFFER · {scopes.countExplanation}</p>}
+  </section>;
+}
+
+function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChange }: { brief: ChannelDecisionBrief; summary?: ShadowChannelSummary | null; compact: boolean; focusAxis?: EvidenceAxis; onAxisChange?: (axis: EvidenceAxis) => void }) {
   const [view, setView] = useState<EvidenceView>(focusAxis ?? "entry");
   const [expanded, setExpanded] = useState(Boolean(focusAxis));
   useEffect(() => {
@@ -140,15 +169,30 @@ function AuthoritativeDecision({ brief, compact, focusAxis, onAxisChange }: { br
     setExpanded(true);
   }, [focusAxis]);
   const model = buildChannelDecisionSummary(brief);
+  const comparableStoryReady = Boolean(brief.decisionDistribution);
+  const story = summary ? deriveChannelLineupStory({
+    summary,
+    brief: comparableStoryReady ? brief : undefined,
+    referenceSession: brief.throughSession,
+  }) : null;
   return <section className={`atlas-preview authoritative decision-first${compact ? " compact" : ""}`} aria-label="Decision Atlas paired channel report">
     <header>
-      <span><small>{model.sourceLabel} · THROUGH {model.throughSession.slice(5).replace("-", "/")}</small><b>{model.disposition}</b></span>
-      <em>{model.evidenceState}</em>
+      <span><small>{comparableStoryReady ? "ATLAS" : "CURRENT SAMPLE"} · THROUGH {model.throughSession.slice(5).replace("-", "/")}</small><b>{story?.group ?? model.disposition}</b></span>
+      <em>{comparableStoryReady ? (story ? `${story.freshness} · ${story.maturity}` : model.evidenceState) : "BRIEF NEEDS REFRESH"}</em>
     </header>
-    <p className="atlas-diagnosis"><small>WHY</small>{model.diagnosis}</p>
-    <div className="atlas-preview-metrics">{model.metrics.map((metric) => <span key={metric.label} title={metric.fact}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div>
+    <p className="atlas-diagnosis"><small>WHY</small>{story?.why ?? model.diagnosis}</p>
+    {!comparableStoryReady && <p className="atlas-scope-warning"><b>CURRENT SAMPLE ONLY</b> This published brief does not contain the comparable session distribution. Refresh the nightly brief before treating this as a channel decision.</p>}
+    {story ? <div className="atlas-preview-metrics five">
+      <span><small>TYPICAL SESSION</small><b>{money(story.typicalSession)}</b></span>
+      <span><small>POSITIVE SESSIONS</small><b>{story.positiveSessions}/{story.sessions}</b></span>
+      <span><small>TYPICAL BEST MOVE</small><b>{signed(story.typicalBestMovePct, "%")}</b></span>
+      <span><small>TYPICAL MOVE KEPT</small><b>{pct(story.typicalCapture)}</b></span>
+      <span><small>WEAK SESSION</small><b>{money(story.weakSession)}</b></span>
+    </div> : <div className="atlas-preview-metrics">{model.metrics.map((metric) => <span key={metric.label} title={metric.fact}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div>}
+    <EvidenceScopeSummary brief={brief} summary={summary} />
+    {story && <div className="atlas-story-visuals"><ChannelEntryFinishMini story={story} /><SessionDistributionStrip story={story} compact /></div>}
     <div className="atlas-plan">
-      <span><small>NEXT CONTROLLED TEST</small><b>{model.nextTest}</b></span>
+      <span><small>NEXT</small><b>{!comparableStoryReady ? "REFRESH NIGHTLY BRIEF · DO NOT ACT ON THIS SAMPLE ALONE" : story ? `${story.next} · ${model.nextTest}` : model.nextTest}</b></span>
       <span><small>KEEP FIXED</small><b>{model.keepFixed.join(" · ")}</b></span>
     </div>
     {brief.learning && <div className="atlas-learning-state" title={brief.learning.fact}>
@@ -179,7 +223,7 @@ export function DecisionAtlasPreviewCard({ brief, summary, dryPowder, managerEvi
   compact?: boolean;
 }) {
   const model = buildDecisionAtlasPreview({ summary, dryPowder, managerEvidence, retuneEvidence });
-  if (brief) return <AuthoritativeDecision brief={brief} compact={compact} focusAxis={focusAxis} onAxisChange={onAxisChange} />;
+  if (brief) return <AuthoritativeDecision brief={brief} summary={summary} compact={compact} focusAxis={focusAxis} onAxisChange={onAxisChange} />;
   return <section className={`atlas-preview ${model.tone}${compact ? " compact" : ""}`} aria-label="Decision Atlas channel summary">
     <header><span><small>{model.experiment ? "PROSPECTIVE TEST" : "HISTORICAL VIRTUAL"}</small><b>{model.label}</b></span><em>{model.experiment ? retuneEvidence?.status.replaceAll("_", " ").toUpperCase() ?? "CONTROL UNCHANGED" : "NOT EXECUTED"}</em></header>
     <p>{model.summary}</p>

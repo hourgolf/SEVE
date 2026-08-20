@@ -9,6 +9,7 @@ import {
   deriveShadowSessions,
   isVirtualBenchSlug,
   sortShadowChannelSummaries,
+  selectLatestObservedChannelSpecRows,
   type ShadowChannelSummary,
   type ExecutedResearchRow,
   type ShadowResearchRow,
@@ -73,6 +74,13 @@ assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averagePerP
 assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averageMfePct, 12);
 assert.equal(cumulative.vb.find((item) => item.slug === "vb-alpha")?.averageGivebackPct, 42.5);
 assert.equal(deriveShadowCumulative([row({ signalAt: "bad" })]), null);
+const specLens = selectLatestObservedChannelSpecRows([
+  row({ signalId: "old", slug: "vb-era", signalAt: "2026-08-01T14:00:00Z", channelSpecVersionId: "spec-old", configurationEpochId: "portfolio-a" }),
+  row({ signalId: "receipt-a", slug: "vb-era", signalAt: "2026-08-18T14:00:00Z", channelSpecVersionId: "spec-current", configurationEpochId: "portfolio-b" }),
+  row({ signalId: "receipt-b", slug: "vb-era", signalAt: "2026-08-19T14:00:00Z", channelSpecVersionId: "spec-current", configurationEpochId: "portfolio-c" }),
+  row({ signalId: "legacy", slug: "vb-unstamped", signalAt: "2026-08-03T14:00:00Z", channelSpecVersionId: null }),
+]);
+assert.deepEqual(specLens.map((item) => item.signalId), ["legacy", "receipt-a", "receipt-b"], "current lens excludes superseded behavior but retains receipt-only churn and labeled legacy channels");
 
 const sortable = sessions[0].dark;
 assert.deepEqual(
@@ -93,10 +101,14 @@ assert.deepEqual(
   "rows with unscored evidence remain visible and sort last",
 );
 
+const extraSummary = { typicalMfePct: null, typicalGivebackPct: null, typicalReturnPct: null, typicalCapture: null,
+  sessions: 1, positiveSessions: 0, positiveSessionRate: 0, typicalSessionPerContract: null,
+  weakSessionPerContract: null, strongSessionPerContract: null, typicalLossPerContract: null,
+  fromSession: "2026-07-22", throughSession: "2026-07-22", channelSpecVersionIds: [], configurationEpochIds: [] };
 const sortRows: ShadowChannelSummary[] = [
-  { slug: "alpha", paths: 10, scored: 10, winners: 8, targets: 8, stops: 2, flattens: 0, pnlPerContract: 100, averagePerPath: 10, typicalPerPath: 12, largestWinnerShare: .3, averageMfePct: 5, averageGivebackPct: 20, lastAt: "2026-07-22T14:00:00Z" },
-  { slug: "beta", paths: 20, scored: 10, winners: 5, targets: 1, stops: 9, flattens: 0, pnlPerContract: 200, averagePerPath: 20, typicalPerPath: 18, largestWinnerShare: .7, averageMfePct: 15, averageGivebackPct: 40, lastAt: "2026-07-22T14:01:00Z" },
-  { slug: "pending", paths: 5, scored: 0, winners: 0, targets: 0, stops: 0, flattens: 0, pnlPerContract: 0, averagePerPath: null, typicalPerPath: null, largestWinnerShare: null, averageMfePct: null, averageGivebackPct: null, lastAt: "2026-07-22T14:02:00Z" },
+  { ...extraSummary, slug: "alpha", paths: 10, scored: 10, winners: 8, targets: 8, stops: 2, flattens: 0, pnlPerContract: 100, averagePerPath: 10, typicalPerPath: 12, largestWinnerShare: .3, averageMfePct: 5, averageGivebackPct: 20, lastAt: "2026-07-22T14:00:00Z" },
+  { ...extraSummary, slug: "beta", paths: 20, scored: 10, winners: 5, targets: 1, stops: 9, flattens: 0, pnlPerContract: 200, averagePerPath: 20, typicalPerPath: 18, largestWinnerShare: .7, averageMfePct: 15, averageGivebackPct: 40, lastAt: "2026-07-22T14:01:00Z" },
+  { ...extraSummary, slug: "pending", paths: 5, scored: 0, winners: 0, targets: 0, stops: 0, flattens: 0, pnlPerContract: 0, averagePerPath: null, typicalPerPath: null, largestWinnerShare: null, averageMfePct: null, averageGivebackPct: null, lastAt: "2026-07-22T14:02:00Z" },
 ];
 const order = (key: Parameters<typeof sortShadowChannelSummaries>[1], direction: Parameters<typeof sortShadowChannelSummaries>[2]) =>
   sortShadowChannelSummaries(sortRows, key, direction).map((item) => item.slug);
@@ -151,10 +163,12 @@ const executed = (overrides: Partial<ExecutedResearchRow>): ExecutedResearchRow 
   closedAt: "2026-08-04T19:25:00.000Z",
   runnerOf: null,
   configurationEpochId: "epoch-current",
+  channelSpecVersionId: "spec-current",
+  releaseManifestId: "release-current",
   ...overrides,
 });
 const currentExecution = deriveCurrentExecutedEvidence([
-  executed({ id: "legacy", openedAt: "2026-08-03T15:00:00Z", realizedPnl: -100, configurationEpochId: "epoch-legacy" }),
+  executed({ id: "legacy", openedAt: "2026-08-03T15:00:00Z", realizedPnl: -100, configurationEpochId: "epoch-legacy", channelSpecVersionId: "spec-legacy" }),
   executed({ id: "split-root", quantity: 1, realizedPnl: 110, openedAt: "2026-08-04T14:26:07Z" }),
   executed({ id: "split-runner", quantity: 1, realizedPnl: 169, openedAt: "2026-08-04T14:26:07Z", runnerOf: "split-root", configurationEpochId: null }),
   executed({ id: "position-2", quantity: 2, realizedPnl: -172, openedAt: "2026-08-05T16:20:03Z" }),
@@ -165,6 +179,7 @@ assert.deepEqual(currentExecution.bySlug["pb-ride"], {
   slug: "pb-ride",
   accountIds: ["paper-1"],
   configurationEpochId: "epoch-current",
+  channelSpecVersionId: "spec-current",
   opportunities: 2,
   sessions: 2,
   winners: 1,
@@ -174,6 +189,11 @@ assert.deepEqual(currentExecution.bySlug["pb-ride"], {
   throughSession: "2026-08-05",
   lastAt: "2026-08-05T16:20:03Z",
 });
+const receiptChurn = deriveCurrentExecutedEvidence([
+  executed({ id: "receipt-a", openedAt: "2026-08-04T15:00:00Z", configurationEpochId: "epoch-a" }),
+  executed({ id: "receipt-b", openedAt: "2026-08-05T15:00:00Z", configurationEpochId: "epoch-b" }),
+]);
+assert.equal(receiptChurn.opportunities.length, 2, "receipt-only portfolio epoch churn does not reset unchanged channel behavior");
 assert.throws(() => deriveCurrentExecutedEvidence([
   executed({ id: "cross-account-root", quantity: 1, realizedPnl: 10 }),
   executed({ id: "cross-account-runner", accountId: "paper-2", quantity: 1, realizedPnl: 10, runnerOf: "cross-account-root", configurationEpochId: null }),

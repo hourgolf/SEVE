@@ -140,14 +140,14 @@ export function ChannelManagerEvidencePanel({ evidence, currentManagerLabel, cur
   const selected = useMemo(() => scopedEvidence?.managers.find((manager) => manager.managerId === selectedManager), [scopedEvidence, selectedManager]);
 
   if (!evidence) return <section className={`cme${compact ? " compact" : ""} empty`} aria-label="Eight-arm manager evidence unavailable">
-    <header className="cme-head"><span><b>EIGHT-ARM MANAGER LAB</b><small>paired executable-bid counterfactuals</small></span><em>COLLECTING</em></header>
+    <header className="cme-head"><span><b>EIGHT-ARM MANAGER LAB</b><small>MANAGER COUNTERFACTUAL · paired executable-bid paths</small></span><em>COLLECTING</em></header>
     <p>No durable filled-position manager cohort exists for this channel yet. Native shadow evidence remains visible; exact eight-arm backfill is queued separately.</p>
   </section>;
 
   if (!scopedEvidence) return null;
   return <section className={`cme${compact ? " compact" : ""}`} aria-label={`Eight-arm manager evidence for ${scopedEvidence.slug}`}>
     <header className="cme-head">
-      <span><b>EIGHT-ARM MANAGER LAB</b><small>{scopedEvidence.slug} · {scopedEvidence.positions} positions · {scopedEvidence.sessions} sessions · {scopedEvidence.shadowBookVersion.replace("manager-shadow-book-", "")}</small></span>
+      <span><b>EIGHT-ARM MANAGER LAB</b><small>MANAGER COUNTERFACTUAL · {scopedEvidence.slug} · {scopedEvidence.positions} positions · {scopedEvidence.sessions} sessions · {scopedEvidence.shadowBookVersion.replace("manager-shadow-book-", "")}</small></span>
       <em className={scopedEvidence.state}>{scopedEvidence.state.toUpperCase()}</em>
       <span className="cme-coverage"><b>{scopedEvidence.terminalArms}/{scopedEvidence.expectedArms}</b><small>terminal arms · {Math.round(scopedEvidence.coverage * 100)}%</small></span>
     </header>

@@ -2,8 +2,18 @@
 
 import { useState } from "react";
 import { FIXTURE_SCENARIOS, type FixtureScenarioId } from "@/lib/ui/fixtureLane";
+import { EntryFinishMap } from "@/components/research/EntryFinishMap";
+import { SessionDistributionStrip } from "@/components/research/ChannelDecisionVisuals";
+import type { ChannelLineupStory } from "@/lib/research/channelLineup";
 
 const usd = (value: number) => `${value < 0 ? "-" : "+"}$${Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+
+const lineupFixtures: ChannelLineupStory[] = [
+  { version: "channel-lineup-v1", channel: "orb-ustop-ctl", group: "GOOD ENTRY · LEAKING EXIT", maturity: "DECISION READY", freshness: "CURRENT", sessions: 23, opportunities: 46, throughSession: "2026-08-19", typicalSession: 18, positiveSessions: 15, positiveSessionRate: .65, typicalBestMovePct: 24, typicalFinalReturnPct: -2, typicalCapture: -.08, weakSession: -61, strongSession: 104, why: "Entries find a useful move; the finish does not retain it.", next: "TEST EXIT" },
+  { version: "channel-lineup-v1", channel: "breakout-alt-v3-itm", group: "WORKING CONSISTENTLY", maturity: "DECISION READY", freshness: "CURRENT", sessions: 12, opportunities: 20, throughSession: "2026-08-19", typicalSession: 31, positiveSessions: 8, positiveSessionRate: .67, typicalBestMovePct: 19, typicalFinalReturnPct: 11, typicalCapture: .58, weakSession: -24, strongSession: 89, why: "Typical sessions are positive and the exit retains the move.", next: "HOLD" },
+  { version: "channel-lineup-v1", channel: "pb-ride-itm", group: "PROMISING BUT FRAGILE", maturity: "DECISION READY", freshness: "CURRENT", sessions: 18, opportunities: 104, throughSession: "2026-08-19", typicalSession: 14, positiveSessions: 11, positiveSessionRate: .61, typicalBestMovePct: 9, typicalFinalReturnPct: 3, typicalCapture: .33, weakSession: -172, strongSession: 96, why: "Frequent small gains remain exposed to a damaging weak-session tail.", next: "COLLECT" },
+  { version: "channel-lineup-v1", channel: "grind", group: "TOO EARLY / STALE", maturity: "BUILDING", freshness: "STALE", sessions: 1, opportunities: 2, throughSession: "2026-08-03", typicalSession: 124, positiveSessions: 1, positiveSessionRate: 1, typicalBestMovePct: 228, typicalFinalReturnPct: 124, typicalCapture: .54, weakSession: 124, strongSession: 124, why: "Two old paths cannot lead a current decision.", next: "COLLECT" },
+];
 
 export function MarketHoursFixtureLab() {
   const [scenarioId, setScenarioId] = useState<FixtureScenarioId>("managed");
@@ -11,7 +21,7 @@ export function MarketHoursFixtureLab() {
   const scenario = FIXTURE_SCENARIOS[scenarioId];
 
   return (
-    <div className="fixture-lab" data-skin={skin}>
+    <div className="fixture-lab" data-skin={skin === "909" ? "blackout" : "folio"}>
       <header className="fixture-toolbar">
         <a href="/">← LIVE DESK</a>
         <div><b>MARKET-HOURS UI LAB</b><span>FIXTURE ONLY · ZERO LIVE READS · ZERO WRITES</span></div>
@@ -55,6 +65,15 @@ export function MarketHoursFixtureLab() {
             <header><span>DARK / VB EVIDENCE</span><b>{scenario.researchEvidence.session} · {scenario.researchEvidence.state.replace("_", " ")}</b></header>
             <div><article><span>FROZEN</span><b>{scenario.researchEvidence.frozen}</b></article><article><span>CONTRACTS</span><b>{scenario.researchEvidence.contracts}</b></article><article><span>EXACT</span><b>{scenario.researchEvidence.exact}</b></article><article><span>MANAGER ARMS</span><b>{scenario.researchEvidence.arms}</b></article></div>
             <p>{scenario.researchEvidence.detail}</p>
+          </section>
+          <section id="decision-clarity" className="fixture-decision-clarity">
+            <header><span>DIRTY DASHBOARD · DECISION CLARITY</span><b>FIXTURE · NO LIVE READS</b></header>
+            <EntryFinishMap stories={lineupFixtures} selectedSlug="orb-ustop-ctl" postureBySlug={{ "orb-ustop-ctl": "trading", "breakout-alt-v3-itm": "trading", "pb-ride-itm": "observing", grind: "retired" }} />
+            <div className="fixture-lineup-states">
+              {lineupFixtures.map((story) => <article key={story.channel}><small>{story.group}</small><b>{story.channel}</b><span>{story.sessions}s / {story.opportunities} logical opportunities · through {story.throughSession}</span><p>{story.why}</p></article>)}
+            </div>
+            <SessionDistributionStrip story={lineupFixtures[2]} />
+            <footer><span>CURRENT SETTINGS · 1s / 2</span><span>COMPARABLE EVIDENCE · 23s / 46</span><span>ALL CHANNEL HISTORY · 28s / 83</span></footer>
           </section>
         </section>
       </main>

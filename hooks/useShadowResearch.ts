@@ -15,6 +15,7 @@ import {
   deriveSessionDryPowderCurves,
   deriveShadowCumulative,
   deriveShadowSessions,
+  selectLatestObservedChannelSpecRows,
   shadowSessionDate,
   type ChannelDryPowderCurve,
   type CurrentExecutedSummary,
@@ -45,6 +46,7 @@ export interface ShadowResearch {
   state: "idle" | "loading" | "ok" | "empty" | "error";
   sessions: ShadowSessionSummary[];
   cumulative: ShadowCumulativeSummary | null;
+  currentCumulative: ShadowCumulativeSummary | null;
   dryPowderBySlug: Record<string, ChannelDryPowderCurve>;
   dryPowderBySession: Record<string, Record<string, ChannelDryPowderCurve>>;
   currentExecutedBySlug: Record<string, CurrentExecutedSummary>;
@@ -65,6 +67,7 @@ const EMPTY: ShadowResearch = {
   state: "idle",
   sessions: [],
   cumulative: null,
+  currentCumulative: null,
   dryPowderBySlug: {},
   dryPowderBySession: {},
   currentExecutedBySlug: {},
@@ -80,7 +83,7 @@ const EMPTY: ShadowResearch = {
   virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity", fromSession: null, throughSession: null,
     configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
     completeness: "unavailable", reconciliation: "unverified", source: "virtual_trades", receiptHash: null,
-    limitations: ["Virtual rows do not yet carry configuration epoch provenance."], asOf: null }),
+    limitations: ["Legacy virtual rows may remain unstamped; stamped rows retain channel, release, portfolio, manager, and publisher provenance."], asOf: null }),
   currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade", fromSession: null, throughSession: null,
     configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
     completeness: "unavailable", reconciliation: "blocked", source: "positions lineage + immutable execution route", receiptHash: null,
@@ -118,7 +121,7 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
         let total = 0;
         for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
           const result = await getSupabase().from("virtual_trades")
-            .select("signal_id,slug,blocked,exit_reason,pnl_per_contract,signal_at,exit_at,occ,entry_px,mfe_pct,giveback_pct", { count: "exact" })
+            .select("signal_id,slug,blocked,exit_reason,pnl_per_contract,signal_at,exit_at,occ,entry_px,mfe_pct,giveback_pct,channel_spec_version_id,release_manifest_id,configuration_epoch_id,native_manager_policy_version,research_publisher_version", { count: "exact" })
             .gte("signal_at", COHORT_START_ISO)
             .order("signal_at", { ascending: true })
             .order("signal_id", { ascending: true })
@@ -141,9 +144,15 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
           entryPrice: row.entry_px == null ? null : Number(row.entry_px),
           mfePct: row.mfe_pct == null ? null : Number(row.mfe_pct),
           givebackPct: row.giveback_pct == null ? null : Number(row.giveback_pct),
+          channelSpecVersionId: row.channel_spec_version_id == null ? null : String(row.channel_spec_version_id),
+          releaseManifestId: row.release_manifest_id == null ? null : String(row.release_manifest_id),
+          configurationEpochId: row.configuration_epoch_id == null ? null : String(row.configuration_epoch_id),
+          nativeManagerPolicyVersion: row.native_manager_policy_version == null ? null : String(row.native_manager_policy_version),
+          researchPublisherVersion: row.research_publisher_version == null ? null : String(row.research_publisher_version),
         } satisfies ShadowResearchRow));
         const sessions = deriveShadowSessions(rows);
         const cumulative = deriveShadowCumulative(rows);
+        const currentCumulative = deriveShadowCumulative(selectLatestObservedChannelSpecRows(rows));
         const dryPowderBySlug = deriveChannelDryPowderCurves(rows);
         const dryPowderBySession = deriveSessionDryPowderCurves(rows);
         const virtualBySignal = new Map(rows.map((row) => [row.signalId ?? "", row]));
@@ -223,7 +232,7 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
         let currentExecutedTruncated = false;
         try {
           const executedRead = await getSupabase().from("positions")
-            .select("id,qty,realized_pnl,opened_at,closed_at,runner_of,configuration_epoch_id,strategists(slug)", { count: "exact" })
+            .select("id,qty,realized_pnl,opened_at,closed_at,runner_of,channel_spec_version_id,release_manifest_id,configuration_epoch_id,strategists(slug)", { count: "exact" })
             .eq("status", "closed")
             .gte("opened_at", COHORT_START_ISO)
             .order("opened_at", { ascending: true })
@@ -244,6 +253,8 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
               closedAt: row.closed_at == null ? null : String(row.closed_at),
               runnerOf: row.runner_of == null ? null : String(row.runner_of),
               configurationEpochId: row.configuration_epoch_id == null ? null : String(row.configuration_epoch_id),
+              channelSpecVersionId: row.channel_spec_version_id == null ? null : String(row.channel_spec_version_id),
+              releaseManifestId: row.release_manifest_id == null ? null : String(row.release_manifest_id),
             }];
           });
           const observations: ExecutionAccountObservation[] = [];
@@ -298,6 +309,7 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
           state: sessions.length ? "ok" : "empty",
           sessions,
           cumulative,
+          currentCumulative,
           dryPowderBySlug,
           dryPowderBySession,
           currentExecutedBySlug,
@@ -311,16 +323,19 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
             configurationEpochId: null, managerVersion: null,
             scope: { kind: "portfolio", accountIds: [], channelSlugs: [...new Set(rows.map((row) => row.slug))] },
             completeness: total > MAX_ROWS ? "partial" : sessions.length ? "complete" : "unavailable",
-            reconciliation: "unverified", source: "virtual_trades", receiptHash: null,
-            limitations: ["Virtual rows do not yet carry configuration epoch provenance.", ...(total > MAX_ROWS ? ["Read reached its bounded row cap."] : [])], asOf }),
+            reconciliation: "unverified", source: "virtual_trades · native hypothetical paths", receiptHash: null,
+            limitations: [
+              ...(rows.some((row) => !row.channelSpecVersionId) ? ["Some legacy virtual rows are unstamped and remain labeled as all-history context."] : []),
+              ...(total > MAX_ROWS ? ["Read reached its bounded row cap."] : []),
+            ], asOf }),
           currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade",
             fromSession: currentSessions[0] ?? null, throughSession: currentSessions.at(-1) ?? null,
             configurationEpochId: null, managerVersion: null,
             scope: { kind: "portfolio", accountIds: [...new Set(Object.values(currentExecutedBySlug).flatMap((summary) => summary.accountIds))], channelSlugs: Object.keys(currentExecutedBySlug) },
             completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
             reconciliation: currentExecutedState === "ok" ? "reconciled" : "blocked",
-            source: "positions lineage + immutable execution route · latest channel configuration epoch", receiptHash: null,
-            limitations: ["Configuration epochs are selected independently per channel.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : [])], asOf }),
+            source: "positions lineage + immutable execution route · latest channel behavior spec", receiptHash: null,
+            limitations: ["Channel behavior specifications are selected independently; receipt-only portfolio epoch changes do not reset unchanged channel evidence.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : [])], asOf }),
           cohortStart: COHORT_START,
           truncated: total > MAX_ROWS,
           error: "",

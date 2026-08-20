@@ -64,7 +64,7 @@ export function CurrentEvidenceCard({
         <span><small>POSITIVE</small><b>{currentSummary?.winners ?? 0}/{currentSummary?.opportunities ?? 0}</b></span>
         <span><small>SESSIONS</small><b>{currentSummary?.sessions ?? 0}</b></span>
       </div>
-      <footer><b>LATEST CONFIGURATION</b><span>through {through} · {currentSummary?.accountIds.length ?? 0} immutable routed account{currentSummary?.accountIds.length === 1 ? "" : "s"} · logical trades</span></footer>
+      <footer><b>LATEST CHANNEL SETTINGS</b><span>through {through} · {currentSummary?.accountIds.length ?? 0} immutable routed account{currentSummary?.accountIds.length === 1 ? "" : "s"} · logical trades · receipt-only portfolio changes retained</span></footer>
     </>}
     {truncated ? <p>Current execution read reached its safety cap; comparison may be partial.</p> : null}
   </section>;

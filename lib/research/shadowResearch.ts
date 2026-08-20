@@ -13,6 +13,11 @@ export interface ShadowResearchRow {
   entryPrice?: number | null;
   mfePct: number | null;
   givebackPct: number | null;
+  channelSpecVersionId?: string | null;
+  releaseManifestId?: string | null;
+  configurationEpochId?: string | null;
+  nativeManagerPolicyVersion?: string | null;
+  researchPublisherVersion?: string | null;
 }
 
 export interface ExecutedResearchRow {
@@ -25,6 +30,8 @@ export interface ExecutedResearchRow {
   closedAt: string | null;
   runnerOf: string | null;
   configurationEpochId: string | null;
+  channelSpecVersionId?: string | null;
+  releaseManifestId?: string | null;
 }
 
 export interface CurrentExecutedOpportunity {
@@ -34,12 +41,15 @@ export interface CurrentExecutedOpportunity {
   session: string;
   pnlPerContract: number;
   configurationEpochId: string;
+  channelSpecVersionId: string | null;
+  behaviorEra: string;
 }
 
 export interface CurrentExecutedSummary {
   slug: string;
   accountIds: string[];
   configurationEpochId: string;
+  channelSpecVersionId: string | null;
   opportunities: number;
   sessions: number;
   winners: number;
@@ -115,11 +125,30 @@ export interface ShadowChannelSummary {
   largestWinnerShare: number | null;
   averageMfePct: number | null;
   averageGivebackPct: number | null;
+  typicalMfePct: number | null;
+  typicalGivebackPct: number | null;
+  typicalReturnPct: number | null;
+  typicalCapture: number | null;
+  sessions: number;
+  positiveSessions: number;
+  positiveSessionRate: number | null;
+  typicalSessionPerContract: number | null;
+  weakSessionPerContract: number | null;
+  strongSessionPerContract: number | null;
+  typicalLossPerContract: number | null;
+  fromSession: string;
+  throughSession: string;
+  channelSpecVersionIds: string[];
+  configurationEpochIds: string[];
   lastAt: string;
 }
 
 export type ShadowChannelSortKey =
+  | "decision"
   | "channel"
+  | "sessions"
+  | "freshness"
+  | "weak"
   | "paths"
   | "win"
   | "average"
@@ -132,7 +161,12 @@ const comparable = (
   row: ShadowChannelSummary,
   key: ShadowChannelSortKey,
 ): string | number | null => {
+  if (key === "decision") return (row.sessions >= 5 && row.scored >= 10 ? 1_000_000 : 0)
+    + Date.parse(row.lastAt) / 1e8 + Math.min(row.sessions, 99);
   if (key === "channel") return row.slug;
+  if (key === "sessions") return row.sessions;
+  if (key === "freshness") return Date.parse(row.lastAt);
+  if (key === "weak") return row.weakSessionPerContract;
   if (key === "paths") return row.paths;
   if (key === "win") return row.scored ? row.winners / row.scored : null;
   if (key === "average") return row.typicalPerPath;
@@ -214,11 +248,22 @@ const median = (values: readonly number[]): number | null => {
   const middle = Math.floor(ordered.length / 2);
   return rounded(ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2);
 };
+const quantile = (values: readonly number[], fraction: number): number | null => {
+  if (!values.length) return null;
+  const ordered = [...values].sort((left, right) => left - right);
+  const index = (ordered.length - 1) * Math.max(0, Math.min(1, fraction));
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return rounded(ordered[lower]);
+  return rounded(ordered[lower] + (ordered[upper] - ordered[lower]) * (index - lower));
+};
 export const isVirtualBenchSlug = (slug: string): boolean => slug.startsWith("vb-");
 
 /**
  * Collapse immutable exit tranches into logical trades, then retain only the
- * latest observed configuration epoch for each channel. This is deliberately
+ * latest observed channel behavior specification for each channel. Receipt,
+ * route, priority and portfolio-epoch churn must not erase otherwise
+ * unchanged channel evidence. Legacy rows fall back to portfolio epoch. This is deliberately
  * separate from virtual paths: one is executed portfolio evidence and the
  * other is a counterfactual research path.
  */
@@ -242,9 +287,11 @@ export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow
     if (accountIds.length !== 1) throw new Error(`logical trade ${trade.rootPositionId} spans immutable account routes`);
     const root = group.find((row) => !row.runnerOf) ?? group[0];
     const configurationEpochId = root.configurationEpochId?.trim() ?? "";
+    const channelSpecVersionId = root.channelSpecVersionId?.trim() || null;
+    const behaviorEra = channelSpecVersionId ?? configurationEpochId;
     const session = shadowSessionDate(root.openedAt);
     const contracts = group.reduce((sum, row) => sum + Math.abs(Number(row.quantity) || 0), 0);
-    if (!configurationEpochId || !session || !(contracts > 0)) return [];
+    if (!behaviorEra || !session || !(contracts > 0)) return [];
     const total = trade.realizedPnl;
     if (total == null) return [];
     return [{
@@ -254,18 +301,20 @@ export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow
       session,
       pnlPerContract: rounded(total / contracts),
       configurationEpochId,
+      channelSpecVersionId,
+      behaviorEra,
     }];
   });
 
-  const latestEpoch = new Map<string, { epoch: string; at: string }>();
+  const latestEpoch = new Map<string, { era: string; at: string }>();
   for (const opportunity of candidates) {
     const current = latestEpoch.get(opportunity.slug);
     if (!current || opportunity.openedAt > current.at) {
-      latestEpoch.set(opportunity.slug, { epoch: opportunity.configurationEpochId, at: opportunity.openedAt });
+      latestEpoch.set(opportunity.slug, { era: opportunity.behaviorEra, at: opportunity.openedAt });
     }
   }
   const opportunities = candidates
-    .filter((row) => row.configurationEpochId === latestEpoch.get(row.slug)?.epoch)
+    .filter((row) => row.behaviorEra === latestEpoch.get(row.slug)?.era)
     .sort((left, right) => left.openedAt.localeCompare(right.openedAt) || left.slug.localeCompare(right.slug));
   const grouped = new Map<string, CurrentExecutedOpportunity[]>();
   for (const opportunity of opportunities) {
@@ -278,6 +327,7 @@ export function deriveCurrentExecutedEvidence(rows: readonly ExecutedResearchRow
       slug,
       accountIds: [...new Set(channelRows.map((row) => row.accountId))].sort(),
       configurationEpochId: channelRows.at(-1)?.configurationEpochId ?? "",
+      channelSpecVersionId: channelRows.at(-1)?.channelSpecVersionId ?? null,
       opportunities: channelRows.length,
       sessions: sessions.length,
       winners: outcomes.filter((value) => value > 0).length,
@@ -497,8 +547,7 @@ export function deriveSessionDryPowderCurves(
   ]));
 }
 
-function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
-  const channels = new Map<string, {
+interface ShadowChannelAccumulator {
     slug: string;
     paths: number;
     scored: number;
@@ -508,14 +557,20 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     flattens: number;
     pnl: number;
     outcomes: number[];
-    mfe: number;
-    mfeCount: number;
-    giveback: number;
-    givebackCount: number;
+    mfe: number[];
+    giveback: number[];
+    returns: number[];
+    capture: number[];
+    sessionOutcomes: Map<string, number[]>;
+    specIds: Set<string>;
+    epochIds: Set<string>;
     lastAt: string;
-  }>();
+}
+
+function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
+  const channels = new Map<string, ShadowChannelAccumulator>();
   for (const row of rows) {
-    const channel = channels.get(row.slug) ?? {
+    const channel: ShadowChannelAccumulator = channels.get(row.slug) ?? {
       slug: row.slug,
       paths: 0,
       scored: 0,
@@ -525,10 +580,13 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
       flattens: 0,
       pnl: 0,
       outcomes: [],
-      mfe: 0,
-      mfeCount: 0,
-      giveback: 0,
-      givebackCount: 0,
+      mfe: [],
+      giveback: [],
+      returns: [],
+      capture: [],
+      sessionOutcomes: new Map(),
+      specIds: new Set(),
+      epochIds: new Set(),
       lastAt: row.signalAt,
     };
     channel.paths += 1;
@@ -536,23 +594,36 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
       channel.scored += 1;
       channel.pnl += row.pnlPerContract;
       channel.outcomes.push(row.pnlPerContract);
+      const session = shadowSessionDate(row.signalAt);
+      if (session) channel.sessionOutcomes.set(session, [...(channel.sessionOutcomes.get(session) ?? []), row.pnlPerContract]);
       if (row.pnlPerContract > 0) channel.winners += 1;
+      const debit = Number(row.entryPrice) * 100;
+      if (debit > 0) {
+        const resultPct = row.pnlPerContract / debit * 100;
+        channel.returns.push(resultPct);
+        if (row.mfePct != null && row.mfePct > 0) channel.capture.push(resultPct / row.mfePct);
+      }
     }
     if (row.mfePct != null) {
-      channel.mfe += row.mfePct;
-      channel.mfeCount += 1;
+      channel.mfe.push(row.mfePct);
     }
     if (row.givebackPct != null) {
-      channel.giveback += row.givebackPct;
-      channel.givebackCount += 1;
+      channel.giveback.push(row.givebackPct);
     }
+    if (row.channelSpecVersionId) channel.specIds.add(row.channelSpecVersionId);
+    if (row.configurationEpochId) channel.epochIds.add(row.configurationEpochId);
     if (row.exitReason === "would_target") channel.targets += 1;
     else if (row.exitReason === "would_stop") channel.stops += 1;
     else if (row.exitReason === "would_flatten") channel.flattens += 1;
     if (row.signalAt > channel.lastAt) channel.lastAt = row.signalAt;
     channels.set(row.slug, channel);
   }
-  return [...channels.values()].map((channel) => ({
+  return [...channels.values()].map((channel) => {
+    const sessionOutcomes = [...channel.sessionOutcomes.entries()].sort(([left], [right]) => left.localeCompare(right))
+      .map(([session, outcomes]) => ({ session, result: rounded(outcomes.reduce((sum, value) => sum + value, 0)) }));
+    const sessionResults = sessionOutcomes.map((row) => row.result);
+    const losses = channel.outcomes.filter((value) => value < 0);
+    return ({
     slug: channel.slug,
     paths: channel.paths,
     scored: channel.scored,
@@ -568,10 +639,25 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
       const total = winners.reduce((sum, value) => sum + value, 0);
       return total > 0 ? rounded(Math.max(...winners) / total) : null;
     })(),
-    averageMfePct: channel.mfeCount ? rounded(channel.mfe / channel.mfeCount) : null,
-    averageGivebackPct: channel.givebackCount ? rounded(channel.giveback / channel.givebackCount) : null,
+    averageMfePct: channel.mfe.length ? rounded(channel.mfe.reduce((sum, value) => sum + value, 0) / channel.mfe.length) : null,
+    averageGivebackPct: channel.giveback.length ? rounded(channel.giveback.reduce((sum, value) => sum + value, 0) / channel.giveback.length) : null,
+    typicalMfePct: median(channel.mfe),
+    typicalGivebackPct: median(channel.giveback),
+    typicalReturnPct: median(channel.returns),
+    typicalCapture: median(channel.capture),
+    sessions: sessionResults.length,
+    positiveSessions: sessionResults.filter((value) => value > 0).length,
+    positiveSessionRate: sessionResults.length ? rounded(sessionResults.filter((value) => value > 0).length / sessionResults.length) : null,
+    typicalSessionPerContract: median(sessionResults),
+    weakSessionPerContract: quantile(sessionResults, .25),
+    strongSessionPerContract: quantile(sessionResults, .75),
+    typicalLossPerContract: median(losses),
+    fromSession: sessionOutcomes[0]?.session ?? "",
+    throughSession: sessionOutcomes.at(-1)?.session ?? "",
+    channelSpecVersionIds: [...channel.specIds].sort(),
+    configurationEpochIds: [...channel.epochIds].sort(),
     lastAt: channel.lastAt,
-  })).sort((a, b) =>
+  }); }).sort((a, b) =>
     (b.typicalPerPath ?? Number.NEGATIVE_INFINITY) - (a.typicalPerPath ?? Number.NEGATIVE_INFINITY)
     || b.scored - a.scored
     || a.slug.localeCompare(b.slug));
@@ -632,4 +718,20 @@ export function deriveShadowCumulative(rows: ShadowResearchRow[]): ShadowCumulat
     sessionCount: sessions.length,
     ...summarizeRows(valid.map((item) => item.row)),
   };
+}
+
+/**
+ * Strict latest-observed channel-spec lens for native virtual paths. Unstamped
+ * legacy channels remain visible only when the channel has no stamped path at
+ * all; they are never silently merged into a stamped current cohort.
+ */
+export function selectLatestObservedChannelSpecRows(rows: readonly ShadowResearchRow[]): ShadowResearchRow[] {
+  const bySlug = new Map<string, ShadowResearchRow[]>();
+  for (const row of rows) bySlug.set(row.slug, [...(bySlug.get(row.slug) ?? []), row]);
+  return [...bySlug.values()].flatMap((channelRows) => {
+    const stamped = channelRows.filter((row) => row.channelSpecVersionId);
+    if (!stamped.length) return channelRows;
+    const latest = [...stamped].sort((left, right) => right.signalAt.localeCompare(left.signalAt))[0].channelSpecVersionId;
+    return stamped.filter((row) => row.channelSpecVersionId === latest);
+  }).sort((left, right) => left.signalAt.localeCompare(right.signalAt) || String(left.signalId ?? "").localeCompare(String(right.signalId ?? "")));
 }

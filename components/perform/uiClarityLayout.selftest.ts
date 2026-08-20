@@ -17,6 +17,7 @@ const studioCss = source("app/studio.css");
 const performCss = source("app/perform.css");
 const workstationCss = source("app/workstation.css");
 const evidenceCss = source("app/seve-909.css");
+const fixture = source("components/fixtures/MarketHoursFixtureLab.tsx");
 
 // These are the required manual/browser QA targets for every hierarchy change.
 const VIEWPORTS = ["1076x787", "1280x720", "1440x900", "390x844"] as const;
@@ -63,9 +64,16 @@ assert.match(performCss, /data-skin="blackout"[^}]*\.etw-summary|data-skin="blac
 
 assert.match(research, /DEFAULT_CHANNEL_LIMIT = 12/);
 assert.match(research, /DEFAULT_DECISION_LIMIT = 4/);
-assert.match(research, /useState<ShadowChannelSortKey>\("paths"\)/);
-assert.match(research, /LOW SAMPLE/);
-assert.match(research, /Not portfolio P&amp;L/);
+assert.match(research, /useState<ShadowChannelSortKey>\("decision"\)/);
+assert.match(research, /evidenceMaturity/);
+assert.match(research, /NON-ADDITIVE TOTAL/);
+assert.match(research, /VIRTUAL NATIVE/);
+assert.match(fixture, /GOOD ENTRY · LEAKING EXIT/);
+assert.match(fixture, /PROMISING BUT FRAGILE/);
+assert.match(fixture, /TOO EARLY \/ STALE/);
+assert.match(fixture, /CURRENT SETTINGS · 1s \/ 2/);
+assert.match(fixture, /COMPARABLE EVIDENCE · 23s \/ 46/);
+assert.match(fixture, /ALL CHANNEL HISTORY · 28s \/ 83/);
 assert.match(research, /SHOW ALL \$\{visibleRows\.length\}/);
 assert.match(research, /displayedRows\.map/);
 assert.match(performCss, /data-skin="blackout"[^}]*\.srw-row-summary|data-skin="blackout"\] \.srw-row-summary/);
