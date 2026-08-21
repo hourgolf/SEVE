@@ -124,7 +124,7 @@ async function requireWorkerCommit(sb: ReturnType<typeof createServerSupabaseCli
 }
 
 interface ProgramChange {
-  slug: "orb-ustop-ctl" | "vb-macd-state";
+  slug: "orb-ustop-ctl" | "vb-macd-state" | "momo-shape-2" | "qqq-thrust-trail-wd";
   request(activeManifest: CompiledReleaseManifest): OperatorProposalRequest;
   alreadyActive(activeManifest: CompiledReleaseManifest): boolean;
   verifyBase(activeManifest: CompiledReleaseManifest): void;
@@ -222,6 +222,116 @@ const vbChange: ProgramChange = {
   },
   verifyAfter(compiled) {
     if (!this.alreadyActive(compiled)) throw new Error("VB MACD manager failed final verification");
+  },
+};
+
+const momoChange: ProgramChange = {
+  slug: "momo-shape-2",
+  displacedShadow: "MOMO2-CURRENT-LOCK27",
+  alreadyActive(compiled) {
+    const spec = compiled.channelSpecs.find((row) => row.slug === this.slug);
+    return spec?.managerProfileId === "MOMO2-B20-BE-R50"
+      && canonicalJson(spec.takeProfit) === canonicalJson({ kind: "bank", targetPct: 20, fraction: 0.5 })
+      && canonicalJson(spec.stopLoss) === canonicalJson({
+        catastrophePct: 40, priceBasis: "executable-option-bid",
+      })
+      && canonicalJson(spec.ratchetParameters) === canonicalJson({
+        kind: "fixed-target", engageReturnPct: null, givebackPct: null,
+        retainGainPct: null, fixedTargetPct: 50, postBankFloor: "breakeven",
+      });
+  },
+  verifyBase(compiled) {
+    const spec = compiled.channelSpecs.find((row) => row.slug === this.slug);
+    if (!spec || (spec.managerProfileId !== "MOMO2-ALL-OUT-27"
+        && spec.managerProfileId !== "MOMO2-B20-BE-R50")
+        || spec.quantity !== 6
+        || spec.accountId !== "cd817549-e025-4d38-805e-d32e607052f7") {
+      throw new Error("momo-shape-2 base drifted from the reviewed six-contract Account 1 experiment");
+    }
+  },
+  request(compiled) {
+    const spec = compiled.channelSpecs.find((row) => row.slug === this.slug)!;
+    return {
+      baseSpecVersionId: spec.id,
+      baseSpecContentHash: spec.contentHash,
+      proposedPatch: { managerPolicy: {
+        managerProfileId: "MOMO2-B20-BE-R50",
+        managerLabel: "BANK HALF +20% · RUN +50% · FLOOR BREAKEVEN",
+        takeProfit: { kind: "bank", targetPct: 20, fraction: 0.5 },
+        stopLoss: { catastrophePct: 40, priceBasis: "executable-option-bid" },
+        ratchetParameters: {
+          kind: "fixed-target", engageReturnPct: null, givebackPct: null,
+          retainGainPct: null, fixedTargetPct: 50, postBankFloor: "breakeven",
+        },
+      } },
+      reason: "Approved momo-shape-2 paper manager step for 2026-08-21: bank half at +20%, run the remainder to +50%, and protect the post-bank runner at breakeven. Preserve entry, six-contract size, Account 1 route, priority, and admission rules; retain displaced +27/-40 all-out behavior as an exact channel-only shadow.",
+      evidenceRefs: [
+        "decision-atlas:momo-shape-2:through-2026-08-20",
+        "manager-pattern-scan:momo-shape-2:through-2026-08-20",
+        `active-manifest:${compiled.manifest.contentHash}`,
+        "operator-approval:2026-08-20:native-manager-swap",
+      ],
+      changeClass: "bounded-parameter",
+    };
+  },
+  verifyAfter(compiled) {
+    this.verifyBase(compiled);
+    if (!this.alreadyActive(compiled)) throw new Error("momo-shape-2 manager failed final verification");
+  },
+};
+
+const qqqChange: ProgramChange = {
+  slug: "qqq-thrust-trail-wd",
+  displacedShadow: "LOCK20/30",
+  alreadyActive(compiled) {
+    const spec = compiled.channelSpecs.find((row) => row.slug === this.slug);
+    return spec?.managerProfileId === "QQQ-THRUST-ALL-OUT-13"
+      && canonicalJson(spec.takeProfit) === canonicalJson({ kind: "bank", targetPct: 13, fraction: 0 })
+      && canonicalJson(spec.stopLoss) === canonicalJson({
+        catastrophePct: 30, priceBasis: "executable-option-bid",
+      })
+      && canonicalJson(spec.ratchetParameters) === canonicalJson({
+        kind: "none", engageReturnPct: null, givebackPct: null,
+        retainGainPct: null, fixedTargetPct: null,
+      });
+  },
+  verifyBase(compiled) {
+    const spec = compiled.channelSpecs.find((row) => row.slug === this.slug);
+    if (!spec || (spec.managerProfileId !== "LOCK20/30"
+        && spec.managerProfileId !== "QQQ-THRUST-ALL-OUT-13")
+        || spec.quantity !== 2
+        || spec.accountId !== "995aa327-b0da-4050-bede-97ab462b06cd") {
+      throw new Error("qqq-thrust-trail-wd base drifted from the reviewed two-contract Account 3 experiment");
+    }
+  },
+  request(compiled) {
+    const spec = compiled.channelSpecs.find((row) => row.slug === this.slug)!;
+    return {
+      baseSpecVersionId: spec.id,
+      baseSpecContentHash: spec.contentHash,
+      proposedPatch: { managerPolicy: {
+        managerProfileId: "QQQ-THRUST-ALL-OUT-13",
+        managerLabel: "ALL OUT +13% · STOP -30%",
+        takeProfit: { kind: "bank", targetPct: 13, fraction: 0 },
+        stopLoss: { catastrophePct: 30, priceBasis: "executable-option-bid" },
+        ratchetParameters: {
+          kind: "none", engageReturnPct: null, givebackPct: null,
+          retainGainPct: null, fixedTargetPct: null,
+        },
+      } },
+      reason: "Approved qqq-thrust-trail-wd paper manager step for 2026-08-21: use all-out +13/-30 natively and retain the displaced all-out +20/-30 behavior through the exact LOCK20/30 shadow. Preserve entry, two-contract size, Account 3 route, priority, one-entry limit, and collision policy.",
+      evidenceRefs: [
+        "decision-atlas:qqq-thrust-trail-wd:through-2026-08-20",
+        "channel-trail-frontier:qqq-thrust-trail-wd:through-2026-08-20",
+        `active-manifest:${compiled.manifest.contentHash}`,
+        "operator-approval:2026-08-20:native-manager-swap",
+      ],
+      changeClass: "bounded-parameter",
+    };
+  },
+  verifyAfter(compiled) {
+    this.verifyBase(compiled);
+    if (!this.alreadyActive(compiled)) throw new Error("qqq-thrust-trail-wd manager failed final verification");
   },
 };
 
@@ -353,7 +463,7 @@ async function main(): Promise<void> {
     await requireWorkerCommit(sb);
   }
   const receipts: Record<string, unknown>[] = [];
-  const changes = [orbChange, vbChange].filter((change) =>
+  const changes = [orbChange, vbChange, momoChange, qqqChange].filter((change) =>
     !onlySlug || change.slug === onlySlug);
   if (!changes.length) throw new Error(`unknown --only channel: ${onlySlug}`);
   for (const change of changes) {

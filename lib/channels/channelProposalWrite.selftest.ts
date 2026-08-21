@@ -269,6 +269,30 @@ check("manager policy can encode a receipt-bound post-bank breakeven floor", () 
   );
 });
 
+check("manager policy can encode a fixed-target runner with a breakeven floor", () => {
+  const built = buildOperatorProposal(compiled, {
+    ...validRequest,
+    proposedPatch: {
+      managerPolicy: {
+        ...validRequest.proposedPatch.managerPolicy,
+        managerProfileId: "MOMO2-B20-BE-R50",
+        managerLabel: "BANK HALF +20% · RUN +50% · FLOOR BREAKEVEN",
+        takeProfit: { kind: "bank", targetPct: 20, fraction: 0.5 },
+        ratchetParameters: {
+          kind: "fixed-target", engageReturnPct: null, givebackPct: null,
+          retainGainPct: null, fixedTargetPct: 50, postBankFloor: "breakeven",
+        },
+      },
+    },
+  }, OPERATOR_ID, REQUEST_ID, CREATED_AT);
+  assert.equal(built.draftSpec.ratchetParameters.postBankFloor, "breakeven");
+  assert.equal(built.draftSpec.ratchetParameters.fixedTargetPct, 50);
+  assert.equal(
+    built.preview.validationResults.some((result) => result.state === "block"),
+    false,
+  );
+});
+
 check("manager policy cannot be mixed with an unrelated economic change", () => {
   expectInputError(() => buildOperatorProposal(compiled, {
     ...validRequest,

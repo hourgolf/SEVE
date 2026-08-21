@@ -21,6 +21,10 @@ check("VB MACD displaced manager preserves the current +18 target",
   advanceManager("VB-MACD-CURRENT-LOCK18", {}, 18, false).exit?.reason, "target");
 check("VB MACD displaced manager preserves the current -30 stop",
   advanceManager("VB-MACD-CURRENT-LOCK18", {}, -30, false).exit?.reason, "stop");
+check("momo-shape-2 displaced manager preserves the current +27 target",
+  advanceManager("MOMO2-CURRENT-LOCK27", {}, 27, false).exit?.reason, "target");
+check("momo-shape-2 displaced manager preserves the current -40 stop",
+  advanceManager("MOMO2-CURRENT-LOCK27", {}, -40, false).exit?.reason, "stop");
 check("bell control waits", advanceManager("BELL/no-stop", {}, -50, false).exit, null);
 check("bell control exits at bell", advanceManager("BELL/no-stop", {}, -50, true).exit?.reason, "bell");
 const pb2Bank = advanceManager("PB2-BANK15/HALF-GIVEBACK", {}, 16, false);
@@ -50,6 +54,11 @@ check("VB MACD pre-change exact sessions retain the historical +18 shadow arm",
   [managerIdsForChannel("vb-macd-state", "2026-08-19").at(-1),
     managerIdsForChannel("vb-macd-state", "2026-08-20").length],
   ["VB-MACD-CURRENT-LOCK18", 8]);
+check("momo-shape-2 swaps the native bank/runner arm for its displaced +27 control",
+  [managerIdsForChannel("momo-shape-2", "2026-08-20").includes("BANK20/RUN50"),
+    managerIdsForChannel("momo-shape-2", "2026-08-21").includes("BANK20/RUN50"),
+    managerIdsForChannel("momo-shape-2", "2026-08-21").at(-1)],
+  [true, false, "MOMO2-CURRENT-LOCK27"]);
 
 const position = {
   id: "11111111-1111-4111-8111-111111111111", occ_symbol: "SPY260713C00600000",

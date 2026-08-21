@@ -95,7 +95,8 @@ function validRatchet(value: unknown): value is ChannelRatchetPolicy {
   if (row.postBankFloor != null
       && row.postBankFloor !== "none"
       && row.postBankFloor !== "breakeven") return false;
-  if (row.postBankFloor === "breakeven" && row.kind !== "a13") return false;
+  if (row.postBankFloor === "breakeven"
+      && row.kind !== "a13" && row.kind !== "fixed-target") return false;
   if (row.kind === "a13") {
     return finite(row.engageReturnPct)
       && row.engageReturnPct > 0
@@ -262,9 +263,10 @@ export function receiptBoundA13GivebackReached(input: {
   return input.mark <= floor;
 }
 
-/** A split runner may protect entry until A13 arms. The runner row itself is
- * durable proof that the bank leg completed; once the stamped A13 engage peak
- * is reached, the higher retained-gain floor exclusively owns the exit. */
+/** A split runner may protect entry until its higher-order exit arms or fills.
+ * The runner row itself is durable proof that the bank leg completed. Once a
+ * stamped A13 engage peak or fixed runner target is reached, that terminal
+ * policy exclusively owns the exit. */
 export function receiptBoundRunnerBreakevenReached(input: {
   policy: Readonly<ReceiptBoundEntryPolicy> | null;
   isRunner: boolean;
@@ -276,11 +278,14 @@ export function receiptBoundRunnerBreakevenReached(input: {
   if (!policy || !input.isRunner
       || policy.takeProfit.kind !== "bank"
       || policy.takeProfit.fraction !== 0.5
-      || policy.ratchetParameters.kind !== "a13"
+      || (policy.ratchetParameters.kind !== "a13"
+        && policy.ratchetParameters.kind !== "fixed-target")
       || (policy.ratchetParameters.postBankFloor !== "breakeven"
         && policy.managerProfileId !== "RC56-GRIND-B25-BE-A13")
       || !(input.entryPrice > 0)) return false;
-  const engage = policy.ratchetParameters.engageReturnPct;
+  const engage = policy.ratchetParameters.kind === "a13"
+    ? policy.ratchetParameters.engageReturnPct
+    : policy.ratchetParameters.fixedTargetPct;
   if (engage != null
       && input.peak >= input.entryPrice * (1 + engage / 100)) return false;
   return input.mark <= input.entryPrice;

@@ -151,6 +151,27 @@ check("post-bank breakeven protects only the pre-A13 runner", () => {
   }), true);
 });
 
+check("post-bank breakeven protects a fixed-target runner until its target", () => {
+  const root = runtime.roots.find((item) =>
+    item.ratchetParameters.kind === "fixed-target"
+      && item.takeProfit.fraction === 0.5);
+  assert.ok(root);
+  const policy = parseReceiptBoundEntryPolicy({
+    ...buildReceiptBoundEntryPolicy(root),
+    ratchetParameters: {
+      ...root.ratchetParameters,
+      postBankFloor: "breakeven",
+    },
+  });
+  assert.ok(policy);
+  assert.equal(receiptBoundRunnerBreakevenReached({
+    policy, isRunner: true, entryPrice: 1, mark: 1, peak: 1.49,
+  }), true);
+  assert.equal(receiptBoundRunnerBreakevenReached({
+    policy, isRunner: true, entryPrice: 1, mark: 1, peak: 1.5,
+  }), false);
+});
+
 check("native ATR and runner allocation come from the stamped policy", () => {
   const root = runtime.roots.find((item) =>
     item.ratchetParameters.kind === "native-atr");

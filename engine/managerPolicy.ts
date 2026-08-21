@@ -16,13 +16,16 @@ export const BASE_MANAGER_IDS = [
 export const PB_RIDE_2_MANAGER_ID = "PB2-BANK15/HALF-GIVEBACK" as const;
 export const GRIND_CURRENT_MANAGER_ID = "GRIND-B25/CURRENT-A13" as const;
 export const VB_MACD_CURRENT_MANAGER_ID = "VB-MACD-CURRENT-LOCK18" as const;
+export const MOMO2_CURRENT_MANAGER_ID = "MOMO2-CURRENT-LOCK27" as const;
 export const VB_MACD_LOCK18_NATIVE_START_SESSION = "2026-08-20" as const;
+export const MOMO2_BANK_RUNNER_NATIVE_START_SESSION = "2026-08-21" as const;
 
 export const MANAGER_IDS = [
   ...BASE_MANAGER_IDS,
   PB_RIDE_2_MANAGER_ID,
   GRIND_CURRENT_MANAGER_ID,
   VB_MACD_CURRENT_MANAGER_ID,
+  MOMO2_CURRENT_MANAGER_ID,
 ] as const;
 
 export type ManagerId = typeof MANAGER_IDS[number];
@@ -54,6 +57,16 @@ export function managerIdsForChannel(
       && asOfSessionDateEt
       && asOfSessionDateEt < VB_MACD_LOCK18_NATIVE_START_SESSION) {
     return [...BASE_MANAGER_IDS, VB_MACD_CURRENT_MANAGER_ID];
+  }
+  // BANK20/RUN50 becomes the paper-native momo-shape-2 manager on 2026-08-21.
+  // Preserve the displaced +27/-40 all-out policy as a distinct shadow while
+  // avoiding a duplicate BANK20/RUN50 arm in the new epoch. Historical dates
+  // retain the exact arm set that was active at the time.
+  if (slug === "momo-shape-2"
+      && (!asOfSessionDateEt
+        || asOfSessionDateEt >= MOMO2_BANK_RUNNER_NATIVE_START_SESSION)) {
+    return [...BASE_MANAGER_IDS.filter((id) => id !== "BANK20/RUN50"),
+      MOMO2_CURRENT_MANAGER_ID];
   }
   return BASE_MANAGER_IDS;
 }
@@ -106,6 +119,7 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
       return { state, exit: null };
     }
     case "VB-MACD-CURRENT-LOCK18": return lock(managerId, ret, 18, 30, isBell, state);
+    case "MOMO2-CURRENT-LOCK27": return lock(managerId, ret, 27, 40, isBell, state);
     case "PB2-BANK15/HALF-GIVEBACK": {
       if (state.bankReturnPct == null) {
         if (ret <= -30) return terminal(managerId, "prebank_stop", ret, state);
