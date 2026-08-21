@@ -10,6 +10,7 @@ import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPre
 import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
 import { ManagerFleetHeatmap } from "@/components/research/ManagerFleetHeatmap";
 import { ResearchCouncilRoom } from "@/components/research/ResearchCouncilRoom";
+import { ResearchBookBoard } from "@/components/research/ChannelResearchBooks";
 import { EntryFinishMap, type ChannelPosture } from "@/components/research/EntryFinishMap";
 import { exactShadowReceipt } from "@/lib/research/exactShadowArchive";
 import type {
@@ -371,6 +372,12 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
           <button type="button" onClick={() => atlasNext && onNavigate?.({ section: "research", channel: atlasNext.slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[atlasNext.slug]?.recommendation.axis), researchMode: "decisions" })}><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></button>
         </section>
         {viewMode === "decisions" && <section className="srw-decisions" aria-label="Channel research decisions">
+          <ResearchBookBoard reports={surface.decisionAtlas} onSelect={(slug) => {
+            setFocusSlug(slug);
+            onNavigate?.({ section: "research", channel: slug,
+              axis: axisForDisposition(surface.decisionAtlas.bySlug[slug]?.recommendation.axis),
+              researchMode: "decisions" });
+          }} />
           <ResearchCouncilRoom reports={surface.decisionAtlas} onNavigate={onNavigate} />
           <EntryFinishMap
             stories={lineupStories}

@@ -4,7 +4,10 @@ import { useState } from "react";
 import { FIXTURE_SCENARIOS, type FixtureScenarioId } from "@/lib/ui/fixtureLane";
 import { EntryFinishMap } from "@/components/research/EntryFinishMap";
 import { SessionDistributionStrip } from "@/components/research/ChannelDecisionVisuals";
+import { ResearchBookBoard } from "@/components/research/ChannelResearchBooks";
 import type { ChannelLineupStory } from "@/lib/research/channelLineup";
+import type { DecisionAtlasReportsRead } from "@/hooks/useDecisionAtlasReports";
+import type { ChannelResearchAssignment, ChannelResearchBook } from "@/lib/research/channelResearchBooks";
 
 const usd = (value: number) => `${value < 0 ? "-" : "+"}$${Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
@@ -14,6 +17,30 @@ const lineupFixtures: ChannelLineupStory[] = [
   { version: "channel-lineup-v1", channel: "pb-ride-itm", group: "PROMISING BUT FRAGILE", maturity: "DECISION READY", freshness: "CURRENT", sessions: 18, opportunities: 104, throughSession: "2026-08-19", typicalSession: 14, positiveSessions: 11, positiveSessionRate: .61, typicalBestMovePct: 9, typicalFinalReturnPct: 3, typicalCapture: .33, weakSession: -172, strongSession: 96, why: "Frequent small gains remain exposed to a damaging weak-session tail.", next: "COLLECT" },
   { version: "channel-lineup-v1", channel: "grind", group: "TOO EARLY / STALE", maturity: "BUILDING", freshness: "STALE", sessions: 1, opportunities: 2, throughSession: "2026-08-03", typicalSession: 124, positiveSessions: 1, positiveSessionRate: 1, typicalBestMovePct: 228, typicalFinalReturnPct: 124, typicalCapture: .54, weakSession: 124, strongSession: 124, why: "Two old paths cannot lead a current decision.", next: "COLLECT" },
 ];
+
+const fixtureAssignment = (book: ChannelResearchBook, question: string, rank: 1 | 2 | 3 | null = null): ChannelResearchAssignment => ({
+  book, bookLabel: book === "core" ? "PROVISIONAL CORE" : book === "experiment" ? "LIVE EXPERIMENT" : book === "shadow" ? "SHADOW INVESTIGATION" : "ARCHIVE",
+  runtimePosture: book === "shadow" ? "observe-only" : "paper", headline: book === "core" ? "Keep live as a provisional control; monitor evidence, not prestige." : book === "experiment" ? "Run one test at a time." : "Investigate in shadow; sealed runtime posture remains separate.",
+  question, control: "current sealed behavior", challenger: book === "experiment" ? "one frozen challenger" : null,
+  keepFixed: ["entry", "exit", "manager", "size", "route"], progress: { independentSessions: book === "experiment" ? 3 : 7,
+    logicalOpportunities: book === "experiment" ? 6 : 14, targetIndependentSessions: 5, targetLogicalOpportunities: 10,
+    state: book === "core" ? "monitoring" : book === "experiment" ? "building" : "ready_for_review" },
+  nextDecision: "Review the paired evidence at the next score point.", metrics: [],
+  operatorDecision: rank ? { rank, action: "one_variable_experiment", headline: "Review one channel-specific experiment." } : null,
+  programSummary: { provisionalCore: 2, liveExperiments: 5, shadowInvestigations: 12, archivedCollectors: 5,
+    archiveChannels: ["power", "power-smart-entries", "momo-shape", "breakout-smart-entries-iwm", "breakout-alt-v3-qqq"],
+    classificationComplete: true, auditMessage: "All sealed roots are assigned exactly once." },
+  proposalOnly: true, runtimeAuthority: false,
+});
+const researchBookFixture = { throughSession: "2026-08-20", bySlug: {
+  breakout: { researchProgram: fixtureAssignment("core", "Does current execution keep confirming a repeatable breakout edge?") },
+  "pb-ride-itm": { researchProgram: fixtureAssignment("core", "Does strong capture survive more independent sessions without the tail returning?") },
+  "grind-v3": { researchProgram: fixtureAssignment("experiment", "Can one entry governor reduce weak repeat entries?", 1) },
+  "orb-ustop-ctl": { researchProgram: fixtureAssignment("experiment", "Does the qualified ORB cohort beat the raw signals?", 2) },
+  "qqq-thrust-trail-wd": { researchProgram: fixtureAssignment("experiment", "Does +13% retain more than +20% without worse downside?", 3) },
+  "vb-level-break": { researchProgram: fixtureAssignment("shadow", "Does the next-confirmed entry improve the typical opportunity?") },
+  "vb-vwap-revert-qqq": { researchProgram: fixtureAssignment("shadow", "Is this unique QQQ reversal evidence repeatable?") },
+} } as unknown as DecisionAtlasReportsRead;
 
 export function MarketHoursFixtureLab() {
   const [scenarioId, setScenarioId] = useState<FixtureScenarioId>("managed");
@@ -68,6 +95,7 @@ export function MarketHoursFixtureLab() {
           </section>
           <section id="decision-clarity" className="fixture-decision-clarity">
             <header><span>DIRTY DASHBOARD · DECISION CLARITY</span><b>FIXTURE · NO LIVE READS</b></header>
+            <ResearchBookBoard reports={researchBookFixture} />
             <EntryFinishMap stories={lineupFixtures} selectedSlug="orb-ustop-ctl" postureBySlug={{ "orb-ustop-ctl": "trading", "breakout-alt-v3-itm": "trading", "pb-ride-itm": "observing", grind: "retired" }} />
             <div className="fixture-lineup-states">
               {lineupFixtures.map((story) => <article key={story.channel}><small>{story.group}</small><b>{story.channel}</b><span>{story.sessions}s / {story.opportunities} logical opportunities · through {story.throughSession}</span><p>{story.why}</p></article>)}

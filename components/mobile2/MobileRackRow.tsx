@@ -9,6 +9,7 @@ import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCur
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
 import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
 import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
+import { ChannelResearchProgramCard } from "@/components/research/ChannelResearchBooks";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -189,6 +190,7 @@ export function MobileRackRow({
           <span className="m2-rr-slug">{slug}</span>
           {rootPolicy?.runner === "a13" && <span className="m2-rr-a13">⚡A13</span>}
           <span className={`m2-rr-tag ${runtimeTag.cls}`}>{runtimeTag.txt}</span>
+          {decisionBrief?.researchProgram && <span className={`m2-rr-book book-${decisionBrief.researchProgram.book}`}>{decisionBrief.researchProgram.book === "experiment" ? "TEST" : decisionBrief.researchProgram.book.toUpperCase()}</span>}
           <span className="m2-rr-reason">{plainReason}</span>
         </span>
         <span className="m2-rr-right">
@@ -200,6 +202,7 @@ export function MobileRackRow({
       {open && (
         <div className="m2-insp">
           <nav className="m2-channel-links" aria-label={`${slug} related workspaces`}><button type="button" onClick={onCurrentSession}>CURRENT SESSION →</button><button type="button" onClick={onNextReview}>NEXT REVIEW →</button></nav>
+          <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
           <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={focusAxis} compact />
           {passport?.effective && <details className="channel-disclosure operating-context">
             <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS MODE</em><i>▾</i></summary>

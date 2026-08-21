@@ -18,6 +18,7 @@ import type { GateShadowCatchupManifest } from "../lib/research/gateShadowCatchu
 import { buildOperatorExperimentPacket, renderOperatorExperimentPacket } from "../lib/research/operatorExperimentPacket";
 import type { ChannelTrailFrontierBook } from "../lib/research/channelTrailFrontier";
 import { buildNextSevenActionProgram, renderNextSevenActionProgram } from "../lib/research/nextSevenActionProgram";
+import { buildChannelResearchBooks, renderChannelResearchBooks } from "../lib/research/channelResearchBooks";
 
 const arg = (name: string, fallback: string): string => {
   const index = process.argv.indexOf(`--${name}`);
@@ -59,6 +60,8 @@ const portfolioCapacity = buildPortfolioCapacityDecisionPacket({ atlas, briefs,
   opportunities: normalized.opportunities, accountBudgets: normalized.accountBudgets });
 const lifecycle = buildChannelLifecycleDecisionPacket({ atlas, briefs, experiments,
   capacity: portfolioCapacity, execution: executionResilience });
+const researchBooks = buildChannelResearchBooks({ briefs, experiments, lifecycle,
+  activeChannelSpecs: snapshot.activeChannelSpecs });
 const operatorPacket = buildOperatorExperimentPacket({ briefs, experiments, lifecycle, trails,
   atlas, snapshot, capacity: portfolioCapacity });
 const hash = (value: unknown): string => `sha256:${createHash("sha256")
@@ -81,6 +84,7 @@ const packet = {
   executionResilience,
   portfolioCapacity,
   lifecycle,
+  researchBooks,
   nextActions: [
     ...(evidence.state === "recovery_proposed" ? ["Review the exact virtual_trades-only recovery proposal; publish only after separate approval and verify every readback."] : []),
     ...(executionCapacity.execution.state === "block" ? ["Investigate orphaned execution traces before relying on replayed capacity."] : []),
@@ -90,7 +94,7 @@ const packet = {
     ...(executionCapacity.summary.paperStepsReady ? ["Review replay-supported one-contract sizing steps, including displaced peer opportunities."] : []),
     ...(lifecycle.queues.retirement_review.length ? [`Review ${lifecycle.queues.retirement_review.length} mature negative/redundant retirement proposal(s).`] : []),
     ...(lifecycle.queues.promotion_review.length ? [`Review ${lifecycle.queues.promotion_review.length} bounded paper promotion proposal(s).`] : []),
-  ],
+  ].slice(0, 3),
   guarantees: { productionReads: 0, productionWrites: 0, orderAuthority: false,
     configurationAuthority: false, rosterAuthority: false, scheduleAuthority: false },
 };
@@ -100,7 +104,7 @@ const dashboardBriefs: ChannelDecisionBriefBundle = {
     const evidenceRow = evidence.channels[channel];
     const experiment = experiments.plans[channel];
     const capacity = executionCapacity.channels[channel];
-    return [channel, { ...brief, learning: {
+    return [channel, { ...brief, researchProgram: researchBooks.channels[channel], learning: {
       label: "NIGHTLY LEARNING" as const,
       evidence: evidenceRow?.state ?? "limited",
       experiment: experiment?.stage ?? "control_only",
@@ -124,6 +128,7 @@ const receipt = {
     executionResilienceSha256: executionResilience.receiptSha256,
     portfolioCapacitySha256: portfolioCapacity.receiptSha256,
     lifecycleSha256: lifecycle.receiptSha256,
+    researchBooksSha256: researchBooks.packetSha256,
     operatorPacketSha256: operatorPacket.packetSha256,
     nextSevenActionsSha256: nextSevenActions.programSha256,
     dashboardBriefsSha256: hash(dashboardBriefs) },
@@ -144,6 +149,7 @@ const markdown = [
   `- Capacity: ${executionCapacity.summary.paperStepsReady} paper steps ready · ${executionCapacity.summary.holds} hold · ${executionCapacity.summary.insufficientEvidence} need evidence`,
   `- Execution: ${executionResilience.state} · ${executionResilience.traces.total} traces · ${executionResilience.restarts.observedRuns} worker runs`,
   `- Lifecycle queue: ${lifecycle.queues.promotion_review.length} promote · ${lifecycle.queues.size_review.length} size · ${lifecycle.queues.manager_review.length} manager · ${lifecycle.queues.retirement_review.length} retire`,
+  `- Research books: ${researchBooks.summary.provisionalCore} provisional core · ${researchBooks.summary.liveExperiments} live experiments · ${researchBooks.summary.shadowInvestigations} shadow · ${researchBooks.summary.archivedCollectors} archive`,
   "",
   "## Next actions",
   "",
@@ -169,6 +175,8 @@ writeFileSync(resolve(outputDir, "portfolio-capacity.json"), `${JSON.stringify(p
 writeFileSync(resolve(outputDir, "portfolio-capacity.md"), `${renderPortfolioCapacityDecisionPacket(portfolioCapacity)}\n`);
 writeFileSync(resolve(outputDir, "lifecycle.json"), `${JSON.stringify(lifecycle, null, 2)}\n`);
 writeFileSync(resolve(outputDir, "lifecycle.md"), `${renderChannelLifecycleDecisionPacket(lifecycle)}\n`);
+writeFileSync(resolve(outputDir, "research-books.json"), `${JSON.stringify(researchBooks, null, 2)}\n`);
+writeFileSync(resolve(outputDir, "research-books.md"), `${renderChannelResearchBooks(researchBooks)}\n`);
 writeFileSync(resolve(outputDir, "operator-packet.json"), `${JSON.stringify(operatorPacket, null, 2)}\n`);
 writeFileSync(resolve(outputDir, "operator-packet.md"), `${renderOperatorExperimentPacket(operatorPacket)}\n`);
 writeFileSync(resolve(outputDir, "next-seven-actions.json"), `${JSON.stringify(nextSevenActions, null, 2)}\n`);
