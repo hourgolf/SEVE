@@ -123,6 +123,26 @@ check("a post-bank breakeven floor is hash-visible and split-runner only", () =>
     row.gate === "reentry-scaling")?.state, "block");
 });
 
+check("a fixed-target split runner may carry a breakeven floor", () => {
+  const valid = compileReleaseManifest({
+    ...RC54_CONTROL_PLANE_FIXTURE,
+    channelSpecs: RC54_CONTROL_PLANE_FIXTURE.channelSpecs.map((spec) =>
+      spec.slug === "vb-macd-state"
+        ? {
+          ...spec,
+          takeProfit: { kind: "bank" as const, targetPct: 20, fraction: 0.5 as const },
+          ratchetParameters: {
+            kind: "fixed-target" as const, engageReturnPct: null,
+            givebackPct: null, retainGainPct: null, fixedTargetPct: 50,
+            postBankFloor: "breakeven" as const,
+          },
+        }
+        : spec),
+  });
+  assert.equal(valid.validationResults.find((row) =>
+    row.gate === "reentry-scaling")?.state, "pass");
+});
+
 check("a mixed domain supports explicit bounded re-entry without changing single-shot roots", () => {
   const result = compileReleaseManifest({
     ...RC54_CONTROL_PLANE_FIXTURE,

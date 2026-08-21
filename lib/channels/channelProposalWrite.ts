@@ -390,7 +390,10 @@ function validateManagerPolicy(value: unknown): asserts value is OperatorManager
       && Number(ratchet.fixedTargetPct) > 0
       && ratchet.engageReturnPct === null
       && ratchet.givebackPct === null
-      && ratchet.retainGainPct === null)
+      && ratchet.retainGainPct === null
+      && (ratchet.postBankFloor !== "breakeven"
+        || value.takeProfit.kind === "bank"
+        && value.takeProfit.fraction === 0.5))
     || (ratchet.kind === "a13"
       && ratchet.engageReturnPct != null
       && Number(ratchet.engageReturnPct) > 0

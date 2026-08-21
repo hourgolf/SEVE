@@ -715,7 +715,7 @@ function compileValidation(
     if (ratchet.postBankFloor === "breakeven"
         && (spec.takeProfit.kind !== "bank"
           || spec.takeProfit.fraction !== 0.5
-          || ratchet.kind !== "a13")) {
+          || (ratchet.kind !== "a13" && ratchet.kind !== "fixed-target"))) {
       compatibilityErrors.push(`${spec.slug}:post_bank_floor_shape`);
     }
     if (ratchet.kind === "none" && [ratchet.engageReturnPct, ratchet.givebackPct,
