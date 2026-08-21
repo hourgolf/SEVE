@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "preparedAt": "2026-08-21T03:54:25.489Z",
+  "completedAt": "2026-08-21T03:55:20.113Z",
+  "mode": "activated",
+  "approvalEvidenceHash": "sha256:8bcb9ad85f2938b39bccca5a0d6b7108b0ec7caa70a9036b121a0f66cff9e516",
+  "expectedWorkerCommit": "436165b2e0f03a9820851630bcc0e849ba20955e",
+  "priorManifest": {
+    "id": "manifest:candidate:70694262-cfd7-4da9-bd6f-d64aa8fcdfd2",
+    "contentHash": "sha256:9e8b31a357d65976bd85c858fc1252078a807f4e48168556cf60d36278c89ddc"
+  },
+  "finalManifest": {
+    "id": "manifest:candidate:6cdc7c98-e37b-4980-89c8-b1cf3c65d57a",
+    "contentHash": "sha256:1dfea609122650f2a0ccea395b816f49f3b95ce93da53eafc01abfeb20db3fdd"
+  },
+  "receipts": [
+    {
+      "slug": "qqq-thrust-trail-wd",
+      "state": "activated",
+      "productionWrites": 1,
+      "proposalId": "6cdc7c98-e37b-4980-89c8-b1cf3c65d57a",
+      "previewId": "796aa671-7ab1-4d1f-b6d6-b23fbdc002d4",
+      "acknowledgementId": "9f9c5849-e17e-4901-8de3-470e14b7bc5f",
+      "configurationEpochId": "sha256:5183333cedba7b2a21d5ddb8fc8e94b34277d22182fe9171f38355fd81819bba",
+      "priorManifestId": "manifest:candidate:70694262-cfd7-4da9-bd6f-d64aa8fcdfd2",
+      "priorManifestContentHash": "sha256:9e8b31a357d65976bd85c858fc1252078a807f4e48168556cf60d36278c89ddc",
+      "activeManifestId": "manifest:candidate:6cdc7c98-e37b-4980-89c8-b1cf3c65d57a",
+      "activeManifestContentHash": "sha256:1dfea609122650f2a0ccea395b816f49f3b95ce93da53eafc01abfeb20db3fdd",
+      "exactDiff": {
+        "fields": [
+          {
+            "after": "{\"catastrophePct\":30,\"priceBasis\":\"executable-option-bid\"}",
+            "before": "{\"catastrophePct\":30,\"priceBasis\":\"executable-option-bid\"}",
+            "field": "stopLoss"
+          },
+          {
+            "after": "{\"fraction\":0,\"kind\":\"bank\",\"targetPct\":13}",
+            "before": "{\"fraction\":0,\"kind\":\"bank\",\"targetPct\":20}",
+            "field": "takeProfit"
+          },
+          {
+            "after": "{\"accountName\":\"MORGUE\",\"eodEt\":\"15:25\",\"managerLabel\":\"ALL OUT +13% · STOP -30%\",\"priceBasis\":\"executable-option-bid\"}",
+            "before": "{\"accountName\":\"MORGUE\",\"eodEt\":\"15:25\",\"managerLabel\":\"ALL OUT @ +20% · -30% STOP\",\"priceBasis\":\"executable-option-bid\"}",
+            "field": "exitParameters"
+          },
+          {
+            "after": "\"sha256:20bc32918c58a1126c3c789d77c29fe604638e76215f8ef65d03daaccab879e2\"",
+            "before": "\"sha256:65c18dc8ccea71a4173e286f1945985c913f30549784bb7c437c7e24f7c4682c\"",
+            "field": "managerVersion"
+          },
+          {
+            "after": "\"QQQ-THRUST-ALL-OUT-13\"",
+            "before": "\"LOCK20/30\"",
+            "field": "managerProfileId"
+          },
+          {
+            "after": "{\"engageReturnPct\":null,\"fixedTargetPct\":null,\"givebackPct\":null,\"kind\":\"none\",\"retainGainPct\":null}",
+            "before": "{\"engageReturnPct\":null,\"fixedTargetPct\":null,\"givebackPct\":null,\"kind\":\"none\",\"retainGainPct\":null}",
+            "field": "ratchetParameters"
+          }
+        ]
+      },
+      "displacedShadow": "LOCK20/30",
+      "storageReceipt": {
+        "activation_receipt_id": "475163a6-ff54-5a67-aea3-1b96310e5c0c",
+        "proposal_id": "6cdc7c98-e37b-4980-89c8-b1cf3c65d57a",
+        "release_manifest_id": "3ba757fd-8069-4058-a5de-1be322f3a126",
+        "release_manifest_key": "manifest:candidate:6cdc7c98-e37b-4980-89c8-b1cf3c65d57a",
+        "configuration_epoch_id": "sha256:5183333cedba7b2a21d5ddb8fc8e94b34277d22182fe9171f38355fd81819bba",
+        "activated_at": "2026-08-21T03:55:19.118+00:00",
+        "rollback_target_manifest_key": "manifest:candidate:70694262-cfd7-4da9-bd6f-d64aa8fcdfd2",
+        "order_authority": false
+      }
+    }
+  ],
+  "authority": {
+    "brokerWrites": 0,
+    "orderAuthority": false,
+    "historicalResearchWrites": 0
+  }
+}

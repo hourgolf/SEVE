@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "preparedAt": "2026-08-21T03:54:07.685Z",
+  "completedAt": "2026-08-21T03:54:19.120Z",
+  "mode": "activated",
+  "approvalEvidenceHash": "sha256:8bcb9ad85f2938b39bccca5a0d6b7108b0ec7caa70a9036b121a0f66cff9e516",
+  "expectedWorkerCommit": "436165b2e0f03a9820851630bcc0e849ba20955e",
+  "priorManifest": {
+    "id": "manifest:candidate:5e258baa-b270-42e4-9563-6619cae4fdac",
+    "contentHash": "sha256:01b748de077dffa50ca2c06a4927ffb33c485e06501064999b1faa77964b55db"
+  },
+  "finalManifest": {
+    "id": "manifest:candidate:70694262-cfd7-4da9-bd6f-d64aa8fcdfd2",
+    "contentHash": "sha256:9e8b31a357d65976bd85c858fc1252078a807f4e48168556cf60d36278c89ddc"
+  },
+  "receipts": [
+    {
+      "slug": "momo-shape-2",
+      "state": "activated",
+      "productionWrites": 1,
+      "proposalId": "70694262-cfd7-4da9-bd6f-d64aa8fcdfd2",
+      "previewId": "463e6b86-5416-4548-9a9f-6af4eb6d7567",
+      "acknowledgementId": "e3227349-ca19-4000-ae3b-111ad41f6a18",
+      "configurationEpochId": "sha256:8ddfa918b1bab8c7b56ed88e3be063282c49614552aebe9755b9d86de69c1298",
+      "priorManifestId": "manifest:candidate:5e258baa-b270-42e4-9563-6619cae4fdac",
+      "priorManifestContentHash": "sha256:01b748de077dffa50ca2c06a4927ffb33c485e06501064999b1faa77964b55db",
+      "activeManifestId": "manifest:candidate:70694262-cfd7-4da9-bd6f-d64aa8fcdfd2",
+      "activeManifestContentHash": "sha256:9e8b31a357d65976bd85c858fc1252078a807f4e48168556cf60d36278c89ddc",
+      "exactDiff": {
+        "fields": [
+          {
+            "after": "{\"catastrophePct\":40,\"priceBasis\":\"executable-option-bid\"}",
+            "before": "{\"catastrophePct\":40,\"priceBasis\":\"executable-option-bid\"}",
+            "field": "stopLoss"
+          },
+          {
+            "after": "{\"fraction\":0.5,\"kind\":\"bank\",\"targetPct\":20}",
+            "before": "{\"fraction\":0,\"kind\":\"bank\",\"targetPct\":27}",
+            "field": "takeProfit"
+          },
+          {
+            "after": "{\"accountName\":\"FIRST-TEAM\",\"eodEt\":\"15:25\",\"managerLabel\":\"BANK HALF +20% · RUN +50% · FLOOR BREAKEVEN\",\"priceBasis\":\"executable-option-bid\"}",
+            "before": "{\"accountName\":\"FIRST-TEAM\",\"eodEt\":\"15:25\",\"managerLabel\":\"ALL OUT @ +27%\",\"priceBasis\":\"executable-option-bid\"}",
+            "field": "exitParameters"
+          },
+          {
+            "after": "\"sha256:404bef2de6013635c5022aa299cb9c7106e4ca0aa92eb123fba8bd87dfd6dccc\"",
+            "before": "\"sha256:278cab4c4684db5ba81bd2d345db081fa3c46e6c8f05f45c34717a8deb65397a\"",
+            "field": "managerVersion"
+          },
+          {
+            "after": "\"MOMO2-B20-BE-R50\"",
+            "before": "\"MOMO2-ALL-OUT-27\"",
+            "field": "managerProfileId"
+          },
+          {
+            "after": "{\"engageReturnPct\":null,\"fixedTargetPct\":50,\"givebackPct\":null,\"kind\":\"fixed-target\",\"postBankFloor\":\"breakeven\",\"retainGainPct\":null}",
+            "before": "{\"engageReturnPct\":null,\"fixedTargetPct\":null,\"givebackPct\":null,\"kind\":\"none\",\"retainGainPct\":null}",
+            "field": "ratchetParameters"
+          }
+        ]
+      },
+      "displacedShadow": "MOMO2-CURRENT-LOCK27",
+      "storageReceipt": {
+        "activation_receipt_id": "e2c7ce9e-d0c4-5b4f-b161-380768939081",
+        "proposal_id": "70694262-cfd7-4da9-bd6f-d64aa8fcdfd2",
+        "release_manifest_id": "29f203db-0605-43b8-b571-9940d63ec970",
+        "release_manifest_key": "manifest:candidate:70694262-cfd7-4da9-bd6f-d64aa8fcdfd2",
+        "configuration_epoch_id": "sha256:8ddfa918b1bab8c7b56ed88e3be063282c49614552aebe9755b9d86de69c1298",
+        "activated_at": "2026-08-21T03:54:18.003+00:00",
+        "rollback_target_manifest_key": "manifest:candidate:5e258baa-b270-42e4-9563-6619cae4fdac",
+        "order_authority": false
+      }
+    }
+  ],
+  "authority": {
+    "brokerWrites": 0,
+    "orderAuthority": false,
+    "historicalResearchWrites": 0
+  }
+}
