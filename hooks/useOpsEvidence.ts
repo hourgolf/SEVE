@@ -80,11 +80,23 @@ async function readExecutions(accountIds: string[], token: string): Promise<Quer
 async function readManagers(accountIds: string[], since: string): Promise<QueryResult> {
   if (!accountIds.length) return { data: [], error: null };
   const sb = getSupabase();
-  const reads = await Promise.all(accountIds.map((accountId) => sb.from("manager_shadow_runs")
-    .select("id,position_id,channel_slug,manager_id,status,evidence_state,entry_at,last_observed_at,manager_policy_version,shadow_book_version,censor_code")
-    .eq("account_id", accountId).gte("created_at", since)
-    .order("created_at", { ascending: false }).limit(500)));
-  return rowsOrError(reads);
+  const columns = "id,position_id,channel_slug,manager_id,status,evidence_state,entry_at,last_observed_at,manager_policy_version,shadow_book_version,censor_code";
+  const reads = await Promise.all(accountIds.flatMap((accountId) => [
+    sb.from("manager_shadow_runs").select(columns)
+      .eq("account_id", accountId).gte("created_at", since)
+      .order("created_at", { ascending: false }).limit(500),
+    // Old active observers are a data-quality condition even when they fall
+    // outside the compact 36-hour current-session evidence window.
+    sb.from("manager_shadow_runs").select(columns)
+      .eq("account_id", accountId).eq("status", "active")
+      .order("created_at", { ascending: false }).limit(500),
+  ]));
+  const combined = rowsOrError(reads);
+  if (combined.error || !Array.isArray(combined.data)) return combined;
+  return {
+    data: [...new Map((combined.data as ManagerEvidenceRow[]).map((row) => [row.id, row])).values()],
+    error: null,
+  };
 }
 
 const OUTCOME_KINDS = [

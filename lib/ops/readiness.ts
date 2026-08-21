@@ -127,6 +127,7 @@ export interface OpsReadinessModel {
     admittedManagerArms: number;
     managerArms: number;
     expectedManagerArms: number;
+    staleManagerArms: number;
   };
   chainEvidenceState: "checking" | "ok" | "blocked";
   chainEvidenceDetail: string;
@@ -315,6 +316,13 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
   } else evidence.push({ id: "capture", label: "HELD CAPTURE", state: captureDue ? "MISSING RECEIPT" : "FLUSHING", tone: captureDue ? "yellow" : "neutral", detail: `${capturedPositions}/${positionIds.size} filled positions have a current-session receipt` });
 
   const managers = input.evidence.managers;
+  const staleManagerRows = managers.state === "ok" ? managers.rows.filter((row) =>
+    row.status === "active" && etParts(Date.parse(row.entry_at)).date < clock.date) : [];
+  if (staleManagerRows.length) evidence.push({
+    id: "stale-managers", label: "STALE MANAGER ARMS", state: "CLEANUP DUE", tone: "yellow",
+    detail: `${staleManagerRows.length} prior-session observer${staleManagerRows.length === 1 ? "" : "s"} remain active · research only; trading is unaffected`,
+    observedAt: latest(staleManagerRows, (row) => row.last_observed_at ?? row.entry_at)?.last_observed_at ?? undefined,
+  });
   const managerRows = managers.state === "ok" ? managers.rows.filter((row) => positionIds.has(row.position_id)) : [];
   const admittedArms = new Set(managerRows.map((row) => `${row.position_id}:${row.manager_id}`));
   const observingArms = new Set(managerRows
@@ -429,7 +437,7 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
 
   return {
     sessionDateEt: clock.date, phase, summary, configuration, evidence,
-    counts: { candidates, suppressed, fills: fillsByPosition.size, capturedPositions, admittedManagerArms: admittedArms.size, managerArms: observingArms.size, expectedManagerArms: expectedArms },
+    counts: { candidates, suppressed, fills: fillsByPosition.size, capturedPositions, admittedManagerArms: admittedArms.size, managerArms: observingArms.size, expectedManagerArms: expectedArms, staleManagerArms: staleManagerRows.length },
     chainEvidenceState,
     chainEvidenceDetail,
     chains,

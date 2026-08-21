@@ -279,6 +279,16 @@ assert.equal(find(wrongObjectRemainsGap, "capture").tone, "red");
 const authLoading = deriveOpsReadiness(base({ evidence: evidence({ managers: loading() }) }));
 assert.equal(find(authLoading, "managers").tone, "neutral");
 
+const staleManager = deriveOpsReadiness(base({ evidence: evidence({ managers: ok([{
+  id: "stale-manager", position_id: "old-position", channel_slug: "momo-shape-2", manager_id: "MOMO2-CURRENT-LOCK27",
+  status: "active", evidence_state: "observing", entry_at: "2026-07-17T14:46:00Z", last_observed_at: "2026-07-17T19:54:00Z",
+  manager_policy_version: "manager", shadow_book_version: "shadow", censor_code: null,
+}]) }) }));
+assert.equal(find(staleManager, "stale-managers").state, "CLEANUP DUE");
+assert.equal(staleManager.counts.staleManagerArms, 1);
+assert.equal(staleManager.summary.state, "TRADING READY");
+assert.equal(staleManager.summary.tone, "yellow");
+
 const badRelease = deriveOpsReadiness(base({ releaseEvents: [], releaseReadState: "ok" }));
 assert.equal(find(badRelease, "release").tone, "red");
 assert.equal(find(badRelease, "paper-boundary").tone, "red");

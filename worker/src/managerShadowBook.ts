@@ -174,16 +174,21 @@ async function attributeActualCloses(): Promise<void> {
   }
 }
 
-async function censorPriorSessionRuns(dateEt: string, nowMs: number): Promise<void> {
+async function censorPriorSessionRuns(dateEt: string, nowMs: number): Promise<{ attempted: number; failed: number }> {
+  let attempted = 0;
+  let failed = 0;
   for (const item of activeRuns()) {
     if (etClock(Date.parse(item.run.entryAt)).date >= dateEt) continue;
+    attempted++;
     const censored = censorManagerShadowRun(item.run, {
       atMs: nowMs,
       code: "missed_session_cutoff",
       fact: "worker resumed after the enrolled session without a durable fresh cutoff bid",
     });
-    await persistTransition(item, censored);
+    if (!await persistTransition(item, censored)) failed++;
   }
+  if (failed) warn(`manager-shadow-book: stale-session cleanup incomplete — ${failed}/${attempted} durable transitions failed`);
+  return { attempted, failed };
 }
 
 async function persistAdmission(input: ManagerEnrollmentInput): Promise<boolean> {
