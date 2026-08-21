@@ -9,6 +9,7 @@ import type {
 import type { WeeklyExecutedRow, WeeklyReadout, WeeklyVirtualSummary } from "./weeklyReadout";
 import type { ChannelTrailFrontierBook, TrailCandidateSummary } from "./channelTrailFrontier";
 import type { ChannelEntryAtlas, EntryAtlas } from "./entryAtlas";
+import type { ChannelResearchAssignment } from "./channelResearchBooks";
 
 export const CHANNEL_DECISION_BRIEF_VERSION = "channel-decision-brief-v1" as const;
 
@@ -149,6 +150,9 @@ export interface ChannelDecisionBrief {
     proposedContracts: number | null;
     fact: string;
   };
+  /** Nightly institutional research posture. This is proposal-only and cannot
+   * override the sealed worker execution posture carried elsewhere in the UI. */
+  researchProgram?: ChannelResearchAssignment;
 }
 
 export interface ChannelDecisionBriefBundle {
