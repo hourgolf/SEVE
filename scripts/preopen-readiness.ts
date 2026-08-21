@@ -33,6 +33,7 @@ import { resolveStoredRc54OperationalAuthority } from "./ops/activeOperationalCo
 import type { AccountRow } from "@/worker/src/store";
 import { createServerSupabaseClient } from "./serverSupabase";
 import { paperAccountLabel } from "@/lib/channels/paperAccountLabel";
+import { assertPreopenAuthoritySourcePure } from "./ops/preopenSourcePurity.js";
 
 const WORKER_FRESH_MS = 150_000;
 const arg = (name: string): string | null => {
@@ -208,6 +209,7 @@ async function observePaperAccount(input: {
 }
 
 async function main(): Promise<void> {
+  assertPreopenAuthoritySourcePure();
   const closeMode = process.argv.includes("--require-flat");
   const sb = createServerSupabaseClient("preopen-readiness");
   const [

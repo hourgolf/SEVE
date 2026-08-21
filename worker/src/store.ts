@@ -851,12 +851,26 @@ export async function loadManagerShadowRows(): Promise<ManagerShadowDbRow[] | nu
   if (!config.hasServiceRole || managerShadowTableAvailable === false) return null;
   // Load retained terminals/censors too so an open actual position cannot
   // re-enroll a manager that already reached its deterministic first terminal.
-  const { data, error } = await sb.from("manager_shadow_runs").select("*")
-    .eq("shadow_book_version", MANAGER_SHADOW_BOOK_VERSION);
-  if (!error) { managerShadowTableAvailable = true; return (data ?? []) as ManagerShadowDbRow[]; }
-  if (missingRelation(error)) managerShadowTableAvailable = false;
-  else warn(`store: manager shadow hydration failed — ${error.message}`);
-  return null;
+  // Supabase caps a select at 1,000 rows by default. A single unpaged read
+  // silently strands older active runs once this table crosses that limit.
+  const rows: ManagerShadowDbRow[] = [];
+  const pageSize = 1_000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await sb.from("manager_shadow_runs").select("*")
+      .eq("shadow_book_version", MANAGER_SHADOW_BOOK_VERSION)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      if (missingRelation(error)) managerShadowTableAvailable = false;
+      else warn(`store: manager shadow hydration failed — ${error.message}`);
+      return null;
+    }
+    managerShadowTableAvailable = true;
+    const page = (data ?? []) as ManagerShadowDbRow[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
 }
 
 export async function insertManagerShadowRuns(runs: readonly ManagerShadowRun[]): Promise<ManagerShadowDbRow[] | null> {

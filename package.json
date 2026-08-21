@@ -67,6 +67,8 @@
     "phase1d-selftest": "tsx engine/market-truth.selftest.ts",
     "phase1d-pb-replay": "tsx --env-file=.env.local engine/phase1d-pb-truth-replay.ts",
     "manager-shadow-selftest": "tsx worker/src/managerShadow.selftest.ts",
+    "manager-shadow-stale-repair": "tsx --env-file=.env.local scripts/reconcile-stale-manager-shadow.ts",
+    "manager-shadow-stale-repair-selftest": "tsx lib/research/managerShadowStaleRepair.selftest.ts",
     "manager-shadow-book-selftest": "tsx worker/src/managerShadowBook.selftest.ts",
     "entry-qualification-policy-selftest": "tsx worker/src/entryQualificationPolicy.selftest.ts",
     "grind-breakeven-handoff-selftest": "tsx worker/src/grindBreakevenHandoff.selftest.ts",
@@ -383,6 +385,7 @@
     "server-supabase-selftest": "tsx scripts/serverSupabase.selftest.ts",
     "preopen": "tsx scripts/preopen-readiness.ts",
     "preopen-readiness-selftest": "tsx lib/ops/preopenReadinessEngine.selftest.ts",
+    "preopen-source-purity-selftest": "tsx scripts/ops/preopenSourcePurity.selftest.ts",
     "preopen-adapter-selftest": "tsx scripts/ops/rc54ReadinessAdapter.selftest.ts",
     "preopen-packet": "tsx scripts/render-preopen-readiness-packet.ts",
     "postclose-readiness": "tsx scripts/preopen-readiness.ts --require-flat",
@@ -478,17 +481,20 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.45.4",
     "@types/web-push": "^3.6.4",
+    "dotenv": "^16.6.1",
     "gsap": "^3.15.0",
     "lightweight-charts": "^5.2.0",
     "next": "15.5.18",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
+    "@types/ws": "^8.18.1",
     "esbuild": "~0.28.0",
     "tsx": "^4.22.3",
     "typescript": "^5.7.3"

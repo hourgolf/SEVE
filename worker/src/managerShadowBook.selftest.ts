@@ -260,6 +260,8 @@ const storeSource = readFileSync(new URL("./store.ts", import.meta.url), "utf8")
 const runtimeSource = readFileSync(new URL("./managerShadowBook.ts", import.meta.url), "utf8");
 truth("duplicate-safe admission returns only persisted rows", /ignoreDuplicates: true \}\)\s*\.select\("\*"\)/.test(storeSource));
 truth("partial duplicate admission fails closed", runtimeSource.includes("persistedRows.length !== candidates.length"));
+truth("manager hydration pages beyond the Supabase row cap", /\.range\(from, from \+ pageSize - 1\)/.test(storeSource));
+truth("failed stale-session cleanup becomes explicit health evidence", runtimeSource.includes("stale-session cleanup incomplete"));
 
 check("targeted quotes deduplicate and sort", targetedOptionBatches(["Z", "A", "z"], 2, 10), [["A", "Z"]]);
 check("targeted quotes batch at provider limit", targetedOptionBatches(Array.from({ length: 101 }, (_, i) => `O${i}`), 100, 500)?.map((b) => b.length), [100, 1]);

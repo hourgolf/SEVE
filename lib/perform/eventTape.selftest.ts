@@ -49,7 +49,7 @@ const model = (
   configuration: [], evidence: [], chains, brokerReceipt: null,
   chainEvidenceState,
   chainEvidenceDetail: chainEvidenceState === "ok" ? "current-session evidence read" : `${chainEvidenceState} fixture`,
-  counts: { candidates: chains.length, suppressed: 0, fills: chains.length, capturedPositions: 0, admittedManagerArms: 0, managerArms: 0, expectedManagerArms: chains.length * 8 },
+  counts: { candidates: chains.length, suppressed: 0, fills: chains.length, capturedPositions: 0, admittedManagerArms: 0, managerArms: 0, expectedManagerArms: chains.length * 8, staleManagerArms: 0 },
 });
 
 assert.equal(deriveAfterActionStatus(model([])).label, "WAITING FOR FIRST FILL");
