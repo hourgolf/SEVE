@@ -228,6 +228,15 @@ assert.equal(complete.counts.managerArms, 8);
 assert.equal(complete.chains[0].steps.find((step) => step.id === "capture")?.state, "OBSERVED");
 assert.equal(complete.chains[0].steps.find((step) => step.id === "managers")?.state, "8/8 OBSERVING");
 
+const completeWithExtraChallenger = deriveOpsReadiness(base({ evidence: evidence({
+  execution: ok([fill, decision]),
+  captures: ok([capture]),
+  managers: ok([...managers, { ...managers[0], id: "manager-extra", manager_id: "CHANNEL-SPECIFIC-CHALLENGER" }]),
+}) }));
+assert.equal(find(completeWithExtraChallenger, "managers").state, "COMPLETE");
+assert.equal(completeWithExtraChallenger.counts.managerArms, 9);
+assert.equal(completeWithExtraChallenger.chains[0].steps.find((step) => step.id === "managers")?.tone, "green");
+
 const pendingManagers = managers.map((row) => ({ ...row, evidence_state: "pending_quote", last_observed_at: null }));
 const awaitingQuotes = deriveOpsReadiness(base({ evidence: evidence({ execution: ok([fill, decision]), captures: ok([capture]), managers: ok(pendingManagers) }) }));
 assert.equal(find(awaitingQuotes, "managers").state, "AWAITING QUOTES");
