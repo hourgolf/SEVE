@@ -722,8 +722,10 @@ function compileValidation(
       ratchet.retainGainPct, ratchet.fixedTargetPct].some((value) => value !== null)) {
       compatibilityErrors.push(`${spec.slug}:ratchet_none_payload`);
     }
-    if (ratchet.kind === "a13" && (ratchet.engageReturnPct !== 50
-        || ratchet.givebackPct !== 33 || ratchet.retainGainPct !== 67
+    if (ratchet.kind === "a13" && (!(Number(ratchet.engageReturnPct) > 0)
+        || !(Number(ratchet.givebackPct) > 0) || !(Number(ratchet.givebackPct) < 100)
+        || !(Number(ratchet.retainGainPct) > 0) || !(Number(ratchet.retainGainPct) < 100)
+        || Number(ratchet.givebackPct) + Number(ratchet.retainGainPct) !== 100
         || ratchet.fixedTargetPct !== null)) compatibilityErrors.push(`${spec.slug}:ratchet_a13_payload`);
     if (ratchet.kind === "fixed-target" && (!(Number(ratchet.fixedTargetPct) > 0)
         || ratchet.engageReturnPct !== null || ratchet.givebackPct !== null

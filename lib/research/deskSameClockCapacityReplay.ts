@@ -31,6 +31,12 @@ export interface DeskReplayPolicy {
   sameClockMaxByUnderlying: Record<string, number>;
   priorityBySlug: Record<string, number>;
   crossDomainSameOcc: "block" | "allow-with-receipt";
+  overflowCapacity?: {
+    eligibleSlugs: string[];
+    maxOpenByUnderlying: Record<string, number>;
+    maxOpenGlobal: number;
+    sameClockMaxByUnderlying: Record<string, number>;
+  };
 }
 
 export interface DeskReplayVariant {
@@ -129,6 +135,10 @@ export function replayDeskSameClockCapacity(input: {
           continue;
         }
         const max = policy.sameClockMaxByUnderlying[key(group[0].underlying)] ?? 0;
+        const overflow = policy.overflowCapacity;
+        const overflowMax = overflow?.sameClockMaxByUnderlying[
+          key(group[0].underlying)
+        ] ?? max;
         const ordered = [...group].sort((left, right) =>
           priority(policy, left) - priority(policy, right)
           || left.slug.localeCompare(right.slug)
@@ -150,7 +160,12 @@ export function replayDeskSameClockCapacity(input: {
             });
             continue;
           }
-          if (selectedCount >= max) {
+          const baselineSlot = selectedCount < max;
+          const overflowSlot = !baselineSlot
+            && selectedCount < overflowMax
+            && Boolean(overflow?.eligibleSlugs.includes(row.slug))
+            && (!occ || !selectedOcc.has(occ));
+          if (!baselineSlot && !overflowSlot) {
             rejected.push({ id: row.id, slug: row.slug, reason: "same_clock" });
             continue;
           }
@@ -176,6 +191,8 @@ export function replayDeskSameClockCapacity(input: {
           && position.candidate.domainId !== row.domainId);
         const protectedCapacity = input.variant
           .additionalCapacityEligibilityByDomain?.[row.domainId];
+        const overflow = policy.overflowCapacity;
+        const overflowEligible = Boolean(overflow?.eligibleSlugs.includes(row.slug));
         const underlyingOpen = domainOpen.filter((position) =>
           key(position.candidate.underlying) === key(row.underlying)).length;
         const usesAdditionalCapacity = protectedCapacity
@@ -200,9 +217,14 @@ export function replayDeskSameClockCapacity(input: {
           && !protectedCapacity!.eligibleSlugs.includes(row.slug)) {
           reason = "additional_capacity_not_eligible";
         } else if (underlyingOpen
-          >= (policy.maxOpenByUnderlying[key(row.underlying)] ?? 0)) {
+          >= (policy.maxOpenByUnderlying[key(row.underlying)] ?? 0)
+          && (!overflowEligible || underlyingOpen
+            >= (overflow?.maxOpenByUnderlying[key(row.underlying)]
+              ?? policy.maxOpenByUnderlying[key(row.underlying)] ?? 0))) {
           reason = "underlying_capacity";
-        } else if (domainOpen.length >= policy.maxOpenGlobal) {
+        } else if (domainOpen.length >= policy.maxOpenGlobal
+          && (!overflowEligible || domainOpen.length
+            >= (overflow?.maxOpenGlobal ?? policy.maxOpenGlobal))) {
           reason = "global_capacity";
         }
         if (reason) {

@@ -2,7 +2,7 @@
 // logical opportunity is the unit: every candidate walks the same executable
 // bid path and is paired against that opportunity's native executed result.
 
-export const CHANNEL_TRAIL_FRONTIER_VERSION = "channel-trail-frontier-v4" as const;
+export const CHANNEL_TRAIL_FRONTIER_VERSION = "channel-trail-frontier-v5" as const;
 
 export type TrailEvidenceLayer = "executed" | "virtual";
 
@@ -12,7 +12,9 @@ type PresetTrailCandidateId =
   | "FULL-R50-K67"
   | "FULL-R50-K75"
   | "BANK20-R50-K67"
-  | "BANK30-R50-K67";
+  | "BANK30-R50-K67"
+  | "BANK20-BE-R50-K67"
+  | "BANK30-BE-R50-K67";
 
 export type TrailCandidateId = PresetTrailCandidateId
   | `TP-${number}`
@@ -30,15 +32,23 @@ export interface TrailPolicy {
   armPct: number;
   retainPeakGain: number;
   preArmStopPct: 30;
+  // A staged manager may protect the runner after the bank tranche fills.
+  // The floor is evaluated against executable bids; gaps can still fill below it.
+  postBankFloorPct?: number | null;
 }
 
 export const TRAIL_CANDIDATES: readonly TrailPolicy[] = [
+  { id: "TP-20", label: "TAKE PROFIT +20 · STOP -30", family: "take_profit", origin: "preset", parameterSource: "fixed-profit benchmark", takeProfitPct: 20, bankPct: null, armPct: 20, retainPeakGain: 1, preArmStopPct: 30 },
+  { id: "TP-30", label: "TAKE PROFIT +30 · STOP -30", family: "take_profit", origin: "preset", parameterSource: "fixed-profit benchmark", takeProfitPct: 30, bankPct: null, armPct: 30, retainPeakGain: 1, preArmStopPct: 30 },
+  { id: "TP-50", label: "TAKE PROFIT +50 · STOP -30", family: "take_profit", origin: "preset", parameterSource: "LOCK50/30 reference preset", takeProfitPct: 50, bankPct: null, armPct: 50, retainPeakGain: 1, preArmStopPct: 30 },
   { id: "FULL-R20-K50", label: "ARM +20 · KEEP HALF", family: "full_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: null, armPct: 20, retainPeakGain: .5, preArmStopPct: 30 },
   { id: "FULL-R35-K67", label: "ARM +35 · KEEP TWO THIRDS", family: "full_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: null, armPct: 35, retainPeakGain: 2 / 3, preArmStopPct: 30 },
   { id: "FULL-R50-K67", label: "A13 · ARM +50 · KEEP TWO THIRDS", family: "full_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: null, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
   { id: "FULL-R50-K75", label: "ARM +50 · KEEP THREE QUARTERS", family: "full_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: null, armPct: 50, retainPeakGain: .75, preArmStopPct: 30 },
   { id: "BANK20-R50-K67", label: "BANK +20 · A13 RUNNER", family: "bank_then_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: 20, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
   { id: "BANK30-R50-K67", label: "BANK +30 · A13 RUNNER", family: "bank_then_ratchet", origin: "preset", parameterSource: "reference preset", takeProfitPct: null, bankPct: 30, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30 },
+  { id: "BANK20-BE-R50-K67", label: "BANK +20 · BREAKEVEN RUNNER · A13", family: "bank_then_ratchet", origin: "preset", parameterSource: "profit-conversion preset", takeProfitPct: null, bankPct: 20, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30, postBankFloorPct: 0 },
+  { id: "BANK30-BE-R50-K67", label: "BANK +30 · BREAKEVEN RUNNER · A13", family: "bank_then_ratchet", origin: "preset", parameterSource: "profit-conversion preset", takeProfitPct: null, bankPct: 30, armPct: 50, retainPeakGain: 2 / 3, preArmStopPct: 30, postBankFloorPct: 0 },
 ] as const;
 
 // Frozen prospective candidates must be emitted even when a small current-era
@@ -78,7 +88,7 @@ export interface TrailPathResult {
   state: "scored" | "censored";
   censorCode: "missing_executable_path" | "staged_manager_requires_two_contracts" | null;
   exitAt: string | null;
-  exitReason: "prearm_stop" | "take_profit" | "ratchet" | "bank_runner_stop" | "time_flatten" | null;
+  exitReason: "prearm_stop" | "take_profit" | "ratchet" | "post_bank_floor" | "bank_runner_stop" | "time_flatten" | null;
   nativeReturnPct: number;
   candidateReturnPct: number | null;
   deltaVsNativePct: number | null;
@@ -274,6 +284,12 @@ function replay(opportunity: TrailOpportunity, policy: TrailPolicy): TrailPathRe
   for (let index = 0; index < quotes.length; index++) {
     const current = returns[index];
     if (policy.family === "bank_then_ratchet" && bankReturn == null && current >= (policy.bankPct as number)) bankReturn = current;
+    if (bankReturn != null && policy.postBankFloorPct != null && current <= policy.postBankFloorPct) {
+      candidateReturn = blendBankRunner(opportunity.quantity, bankReturn, current);
+      exitAt = quotes[index].at;
+      exitReason = "post_bank_floor";
+      break;
+    }
     if (current <= -policy.preArmStopPct && armedPeak == null) {
       candidateReturn = bankReturn == null ? current : blendBankRunner(opportunity.quantity, bankReturn, current);
       exitAt = quotes[index].at;
@@ -301,6 +317,10 @@ function replay(opportunity: TrailOpportunity, policy: TrailPolicy): TrailPathRe
   }
   const delta = round(candidateReturn - opportunity.nativeReturnPct);
   return { ...base, state: "scored", censorCode: null, exitAt, exitReason, candidateReturnPct: round(candidateReturn), deltaVsNativePct: delta, mfePct: round(mfePct), captureRatio: mfePct > 0 ? round(candidateReturn / mfePct) : null };
+}
+
+export function replayTrailOpportunity(opportunity: TrailOpportunity, policy: TrailPolicy): TrailPathResult {
+  return replay(opportunity, policy);
 }
 
 function maxDrawdown(values: readonly number[]): number | null {

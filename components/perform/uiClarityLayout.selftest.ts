@@ -34,6 +34,8 @@ assert.match(studioCss, /\.studio-v4b\.inspector-open \.inspector\s*\{[^}]*posit
 assert(mobileInspector.indexOf("<DecisionAtlasPreviewCard") < mobileInspector.indexOf("className=\"m2-fireslbl\""));
 assert.match(fleet, />TRADING IN VIEW </);
 assert.match(fleet, />OBSERVING IN VIEW </);
+assert.match(fleet, /ROSTER \{passports\.releaseView\.shortHash\}/);
+assert.match(source("components\/mobile2\/MobileStudio.tsx"), /LIVE ROSTER \{passports\.releaseView\.shortHash\}/);
 assert.doesNotMatch(fleet, /<small>ARMED<\/small>|<small>MUTED<\/small>|runtime overlay differs/);
 assert.match(inspector, /passport\?\.lifecycle === "paper-root"[\s\S]*?\? "TRADING"/,
   "desktop inspector must prefer receipt-bound runtime posture over legacy database mute state");

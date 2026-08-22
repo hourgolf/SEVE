@@ -68,6 +68,8 @@ const targetPolicy = targetBook.candidates.find((candidate) => candidate.id === 
 assert.equal(targetPolicy.origin, "channel_adaptive");
 assert.equal(targetPolicy.takeProfitPct, 22);
 assert.match(targetPolicy.parameterSource, /channel-era/);
+assert.ok(targetBook.candidates.some((candidate) => candidate.id === "TP-50"),
+  "LOCK50/30 must remain an explicit fixed benchmark rather than depend on adaptive quantiles");
 
 const qqqFrozen = buildChannelTrailFrontier({
   generatedAt: book.generatedAt, throughSession: book.throughSession,
@@ -91,6 +93,40 @@ const oneLot = buildChannelTrailFrontier({ generatedAt: book.generatedAt, throug
 const bank = oneLot.channels["one-lot"].eras[0].candidates.find((candidate) => candidate.candidateId === "BANK20-R50-K67")!;
 assert.equal(bank.pairedOpportunities, 0);
 assert.equal(bank.censoredOpportunities, 1);
+
+const bankBreakeven = buildChannelTrailFrontier({
+  generatedAt: book.generatedAt,
+  throughSession: book.throughSession,
+  opportunities: Array.from({ length: 10 }, (_, index) => {
+    const session = `2026-06-${String(index + 1).padStart(2, "0")}`;
+    return {
+      ...opportunities[0],
+      logicalOpportunityId: `bank-be-${index}`,
+      channel: "bank-breakeven",
+      session,
+      configurationEra: "current",
+      nativeReturnPct: -30,
+      quantity: 2,
+      entryAt: `${session}T14:30:00.000Z`,
+      nativeExitAt: `${session}T19:25:00.000Z`,
+      quotes: [
+        { at: `${session}T14:31:00.000Z`, bid: 1 },
+        { at: `${session}T14:32:00.000Z`, bid: 1.2 },
+        { at: `${session}T14:33:00.000Z`, bid: 1 },
+        { at: `${session}T19:25:00.000Z`, bid: .7 },
+      ],
+    };
+  }),
+});
+const protectedRunner = bankBreakeven.channels["bank-breakeven"].eras[0].candidates
+  .find((candidate) => candidate.candidateId === "BANK20-BE-R50-K67")!;
+const unprotectedRunner = bankBreakeven.channels["bank-breakeven"].eras[0].candidates
+  .find((candidate) => candidate.candidateId === "BANK20-R50-K67")!;
+assert.equal(protectedRunner.typicalBenefitPct, 40,
+  "banking half at +20 and handing the runner to breakeven should retain a blended +10 versus native -30");
+assert.equal(unprotectedRunner.typicalBenefitPct, 25,
+  "the unprotected runner may fall to the -30 pre-arm stop after the bank fills");
+assert.ok(protectedRunner.typicalBenefitPct! > unprotectedRunner.typicalBenefitPct!);
 
 const virtual = buildChannelTrailFrontier({
   generatedAt: book.generatedAt,
@@ -118,6 +154,9 @@ assert.match(runner, /GetObjectCommand/);
 assert.match(runner, /compressed_sha256/);
 assert.match(runner, /manifest_sha256/);
 assert.match(runner, /snapshot-file/);
+assert.match(runner, /snapshot\.ledger/);
+assert.match(runner, /minimum-analysis-quantity/);
+assert.match(runner, /path-results\.json/);
 assert.match(runner, /evidenceLayer: "virtual"/);
 assert.match(runner, /buildRunnerHandoffFrontier/);
 assert.match(runner, /runner-handoffs/);
