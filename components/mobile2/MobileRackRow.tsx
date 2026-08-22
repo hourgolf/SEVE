@@ -203,7 +203,7 @@ export function MobileRackRow({
         <div className="m2-insp">
           <nav className="m2-channel-links" aria-label={`${slug} related workspaces`}><button type="button" onClick={onCurrentSession}>CURRENT SESSION →</button><button type="button" onClick={onNextReview}>NEXT REVIEW →</button></nav>
           <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
-          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={focusAxis} compact />
+          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={focusAxis} posture={passport?.lifecycle === "paper-root" ? "trading" : passport?.lifecycle === "dark-evidence" ? "observing" : "retired"} compact />
           {passport?.effective && <details className="channel-disclosure operating-context">
             <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS MODE</em><i>▾</i></summary>
             <div><ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} decisionBrief={decisionBrief} compact /></div>

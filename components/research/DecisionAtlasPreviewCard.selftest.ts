@@ -20,15 +20,25 @@ assert.match(card, /PROSPECTIVE TEST/);
 assert.match(card, /SELECTED CHANNEL/);
 assert.match(card, /\{brief\.channel\}/,
   "the paired report must keep the selected channel visible after fleet-map navigation");
+assert.match(card, /postureLabel/,
+  "the same paired report must identify trading, shadowing, or retired posture");
+assert.match(card, /NEXT CONTROLLED MOVE/);
+assert.match(card, /DO NOT CHANGE YET/);
+assert.match(card, /OPPORTUNITY FOUND/);
+assert.match(card, /PROFIT KEPT/);
+assert.match(card, /\{story\.sessions\} sessions · \{story\.opportunities\} opportunities/,
+  "first glance must name evidence units instead of using ambiguous shorthand");
 assert.match(card, /CURRENT SETTINGS/);
 assert.match(card, /COMPARABLE HISTORY/);
 assert.match(card, /ALL RESEARCH/);
 assert.match(card, /WHY COUNTS DIFFER/);
-assert.match(card, /BRIEF NEEDS REFRESH/);
+assert.match(card, /REFRESH DATA/);
 assert.match(card, /CURRENT SAMPLE ONLY/);
-assert.match(card, /DO NOT ACT ON THIS SAMPLE ALONE/);
+assert.match(card, /Refresh the nightly brief before changing this channel/);
 assert.match(card, /SessionDistributionStrip/);
 assert.match(card, /See supporting evidence/);
+assert(card.indexOf("<EvidenceScopeSummary") > card.indexOf("<details className=\"atlas-evidence-drawer\""),
+  "competing evidence lenses and count explanations belong behind progressive disclosure");
 assert.match(card, /CURRENT EXECUTED/);
 assert.match(card, /HISTORICAL VIRTUAL/);
 assert.match(card, /DO LATER ENTRIES STILL HELP/);
@@ -46,7 +56,6 @@ assert.match(card, /model\.metrics\.map/);
 assert.match(card, /CONTROL UNCHANGED/);
 assert.match(card, /NOT EXECUTED/);
 assert.match(card, /NEXT CONTROLLED TEST/);
-assert.match(card, /KEEP FIXED/);
 assert.match(current, /withheld rather than shown as zero/);
 assert.match(current, /<details className="srw-current-evidence-detail">/);
 assert.doesNotMatch(current, /<p>\{error \|\|/,
@@ -84,6 +93,8 @@ assert(inspector.indexOf("<DecisionAtlasPreviewCard") < inspector.indexOf("<deta
 assert.match(css, /data-skin="blackout"/);
 assert.match(css, /@media\(max-width:760px\)/);
 assert.match(css, /grid-template-columns:repeat\(3/);
+assert.match(css, /atlas-preview-metrics\.decision-four/);
+assert.match(css, /atlas-status/);
 assert.match(css, /\.atlas-entry-sequence/);
 assert.match(css, /\.atlas-capture-track/);
 assert.match(css, /\.atlas-manager-duel/);

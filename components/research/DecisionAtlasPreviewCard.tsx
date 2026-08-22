@@ -10,17 +10,51 @@ import type { BoundedRetuneEvidence } from "@/lib/research/boundedRetuneExperime
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
 import { deriveChannelEvidenceScopes } from "@/lib/research/channelEvidenceScope";
-import { deriveChannelLineupStory } from "@/lib/research/channelLineup";
+import { deriveChannelLineupStory, type ChannelLineupStory } from "@/lib/research/channelLineup";
 import { ChannelEntryFinishMini, SessionDistributionStrip } from "./ChannelDecisionVisuals";
 
 type EvidenceView = "entry" | "exit" | "manager" | "size" | "sources";
 type EvidenceLens = "current" | "comparable" | "all";
+export type ChannelPosture = "trading" | "observing" | "retired";
 
 const signed = (value: number | null, suffix = "") => value == null ? "—"
   : `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(Math.round(value * 10) / 10)}${suffix}`;
 const money = (value: number | null) => value == null ? "—"
   : `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
 const pct = (value: number | null) => value == null ? "—" : `${Math.round(value * 100)}%`;
+
+export function ChannelDecisionAtGlance({ channel, story, posture, nextTest, keepFixed, comparableStoryReady = true }: {
+  channel: string;
+  story: ChannelLineupStory;
+  posture?: ChannelPosture;
+  nextTest: string;
+  keepFixed: string[];
+  comparableStoryReady?: boolean;
+}) {
+  const verdict = comparableStoryReady ? story.next : "REFRESH DATA";
+  const postureLabel = posture === "trading" ? "TRADING"
+    : posture === "observing" ? "SHADOWING"
+      : posture === "retired" ? "RETIRED"
+        : "POSTURE UNKNOWN";
+  return <>
+    <header>
+      <span><small>SELECTED CHANNEL</small><strong>{channel}</strong><b>{verdict}</b></span>
+      <div className="atlas-status"><em className={`posture ${posture ?? "unknown"}`}>{postureLabel}</em><em>{story.group}</em></div>
+    </header>
+    <p className="atlas-diagnosis"><small>WHY</small>{story.why}</p>
+    {!comparableStoryReady && <p className="atlas-scope-warning"><b>CURRENT SAMPLE ONLY</b> This published brief does not contain the comparable session distribution. Refresh the nightly brief before treating this as a channel decision.</p>}
+    <div className="atlas-preview-metrics decision-four">
+      <span><small>TYPICAL SESSION</small><b>{money(story.typicalSession)}</b></span>
+      <span><small>OPPORTUNITY FOUND</small><b>{signed(story.typicalBestMovePct, "%")}</b></span>
+      <span><small>PROFIT KEPT</small><b>{pct(story.typicalCapture == null ? null : Math.max(0, story.typicalCapture))}</b></span>
+      <span className="evidence"><small>EVIDENCE</small><b>{story.sessions} sessions · {story.opportunities} opportunities</b></span>
+    </div>
+    <div className="atlas-plan">
+      <span><small>NEXT CONTROLLED MOVE</small><b>{comparableStoryReady ? nextTest : "Refresh the nightly brief before changing this channel."}</b></span>
+      <span><small>DO NOT CHANGE YET</small><b>{keepFixed.join(" · ")}</b></span>
+    </div>
+  </>;
+}
 
 function EntrySequence({ model, entryAtlas }: { model: ChannelDecisionSummary; entryAtlas?: ChannelDecisionBrief["entryAtlas"] }) {
   const points = model.entry.points.slice(0, 6);
@@ -160,7 +194,7 @@ function EvidenceScopeSummary({ brief, summary }: { brief: ChannelDecisionBrief;
   </section>;
 }
 
-function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChange }: { brief: ChannelDecisionBrief; summary?: ShadowChannelSummary | null; compact: boolean; focusAxis?: EvidenceAxis; onAxisChange?: (axis: EvidenceAxis) => void }) {
+function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChange, posture }: { brief: ChannelDecisionBrief; summary?: ShadowChannelSummary | null; compact: boolean; focusAxis?: EvidenceAxis; onAxisChange?: (axis: EvidenceAxis) => void; posture?: ChannelPosture }) {
   const [view, setView] = useState<EvidenceView>(focusAxis ?? "entry");
   const [expanded, setExpanded] = useState(Boolean(focusAxis));
   useEffect(() => {
@@ -176,32 +210,22 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
     referenceSession: brief.throughSession,
   }) : null;
   return <section className={`atlas-preview authoritative decision-first${compact ? " compact" : ""}`} aria-label="Decision Atlas paired channel report">
-    <header>
-      <span><small>SELECTED CHANNEL</small><strong>{brief.channel}</strong><b>{story?.group ?? model.disposition}</b></span>
-      <em>{comparableStoryReady ? `ATLAS · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · ${story ? `${story.freshness} · ${story.maturity}` : model.evidenceState}` : `CURRENT SAMPLE · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · BRIEF NEEDS REFRESH`}</em>
-    </header>
-    <p className="atlas-diagnosis"><small>WHY</small>{story?.why ?? model.diagnosis}</p>
-    {!comparableStoryReady && <p className="atlas-scope-warning"><b>CURRENT SAMPLE ONLY</b> This published brief does not contain the comparable session distribution. Refresh the nightly brief before treating this as a channel decision.</p>}
-    {story ? <div className="atlas-preview-metrics five">
-      <span><small>TYPICAL SESSION</small><b>{money(story.typicalSession)}</b></span>
-      <span><small>POSITIVE SESSIONS</small><b>{story.positiveSessions}/{story.sessions}</b></span>
-      <span><small>TYPICAL BEST MOVE</small><b>{signed(story.typicalBestMovePct, "%")}</b></span>
-      <span><small>TYPICAL MOVE KEPT</small><b>{pct(story.typicalCapture)}</b></span>
-      <span><small>WEAK SESSION</small><b>{money(story.weakSession)}</b></span>
-    </div> : <div className="atlas-preview-metrics">{model.metrics.map((metric) => <span key={metric.label} title={metric.fact}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div>}
-    <EvidenceScopeSummary brief={brief} summary={summary} />
-    {story && <div className="atlas-story-visuals"><ChannelEntryFinishMini story={story} /><SessionDistributionStrip story={story} compact /></div>}
-    <div className="atlas-plan">
-      <span><small>NEXT</small><b>{!comparableStoryReady ? "REFRESH NIGHTLY BRIEF · DO NOT ACT ON THIS SAMPLE ALONE" : story ? `${story.next} · ${model.nextTest}` : model.nextTest}</b></span>
-      <span><small>KEEP FIXED</small><b>{model.keepFixed.join(" · ")}</b></span>
-    </div>
-    {brief.learning && <div className="atlas-learning-state" title={brief.learning.fact}>
-      <small>{brief.learning.label}</small>
-      <span className={brief.learning.evidence === "ready" ? "ready" : "review"}>DATA {brief.learning.evidence === "ready" ? "READY" : "CHECK"}</span>
-      <span className={brief.learning.experiment === "ready_to_score" ? "ready" : "neutral"}>TEST {brief.learning.experiment.replaceAll("_", " ").toUpperCase()}</span>
-      <span className={brief.learning.capacity === "paper_step_ready" ? "ready" : "neutral"}>SIZE {brief.learning.capacity === "paper_step_ready" ? `${brief.learning.currentContracts ?? "?"}→${brief.learning.proposedContracts ?? "?"}` : "HOLD"}</span>
-    </div>}
+    {story ? <ChannelDecisionAtGlance channel={brief.channel} story={story} posture={posture} nextTest={model.nextTest} keepFixed={model.keepFixed} comparableStoryReady={comparableStoryReady} /> : <>
+      <header><span><small>SELECTED CHANNEL</small><strong>{brief.channel}</strong><b>{model.disposition}</b></span><div className="atlas-status"><em>{model.evidenceState}</em></div></header>
+      <p className="atlas-diagnosis"><small>WHY</small>{model.diagnosis}</p>
+      <div className="atlas-preview-metrics">{model.metrics.map((metric) => <span key={metric.label} title={metric.fact}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div>
+      <div className="atlas-plan"><span><small>NEXT CONTROLLED MOVE</small><b>{model.nextTest}</b></span><span><small>DO NOT CHANGE YET</small><b>{model.keepFixed.join(" · ")}</b></span></div>
+    </>}
     <details className="atlas-evidence-drawer" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}><summary>See supporting evidence</summary><div className="atlas-brief-body">
+      <div className="atlas-evidence-heading"><span><small>DECISION COHORT</small><b>Through {model.throughSession} · {story?.freshness ?? model.evidenceState}</b></span><em>Executed, virtual, and counterfactual evidence stay separate.</em></div>
+      <EvidenceScopeSummary brief={brief} summary={summary} />
+      {story && <div className="atlas-story-visuals"><ChannelEntryFinishMini story={story} /><SessionDistributionStrip story={story} compact /></div>}
+      {brief.learning && <div className="atlas-learning-state" title={brief.learning.fact}>
+        <small>{brief.learning.label}</small>
+        <span className={brief.learning.evidence === "ready" ? "ready" : "review"}>DATA {brief.learning.evidence === "ready" ? "READY" : "CHECK"}</span>
+        <span className={brief.learning.experiment === "ready_to_score" ? "ready" : "neutral"}>TEST {brief.learning.experiment.replaceAll("_", " ").toUpperCase()}</span>
+        <span className={brief.learning.capacity === "paper_step_ready" ? "ready" : "neutral"}>SIZE {brief.learning.capacity === "paper_step_ready" ? `${brief.learning.currentContracts ?? "?"}→${brief.learning.proposedContracts ?? "?"}` : "HOLD"}</span>
+      </div>}
       <nav aria-label="Decision evidence views">{(["entry", "exit", "manager", "size", "sources"] as EvidenceView[]).map((item) => <button key={item} type="button" className={view === item ? "on" : ""} aria-pressed={view === item} onClick={() => { setView(item); onAxisChange?.(item); }}>{item === "sources" ? "SOURCES" : item.toUpperCase()}</button>)}</nav>
       {view === "entry" && <EntrySequence model={model} entryAtlas={brief.entryAtlas} />}
       {view === "exit" && <ExitCapture model={model} />}
@@ -212,7 +236,7 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
   </section>;
 }
 
-export function DecisionAtlasPreviewCard({ brief, summary, dryPowder, managerEvidence, retuneEvidence, focusAxis, onAxisChange, compact = false }: {
+export function DecisionAtlasPreviewCard({ brief, summary, dryPowder, managerEvidence, retuneEvidence, focusAxis, onAxisChange, posture, compact = false }: {
   brief?: ChannelDecisionBrief | null;
   summary?: ShadowChannelSummary | null;
   dryPowder?: ChannelDryPowderCurve | null;
@@ -220,10 +244,11 @@ export function DecisionAtlasPreviewCard({ brief, summary, dryPowder, managerEvi
   retuneEvidence?: BoundedRetuneEvidence | null;
   focusAxis?: EvidenceAxis;
   onAxisChange?: (axis: EvidenceAxis) => void;
+  posture?: ChannelPosture;
   compact?: boolean;
 }) {
   const model = buildDecisionAtlasPreview({ summary, dryPowder, managerEvidence, retuneEvidence });
-  if (brief) return <AuthoritativeDecision brief={brief} summary={summary} compact={compact} focusAxis={focusAxis} onAxisChange={onAxisChange} />;
+  if (brief) return <AuthoritativeDecision brief={brief} summary={summary} compact={compact} focusAxis={focusAxis} onAxisChange={onAxisChange} posture={posture} />;
   return <section className={`atlas-preview ${model.tone}${compact ? " compact" : ""}`} aria-label="Decision Atlas channel summary">
     <header><span><small>{model.experiment ? "PROSPECTIVE TEST" : "HISTORICAL VIRTUAL"}</small><b>{model.label}</b></span><em>{model.experiment ? retuneEvidence?.status.replaceAll("_", " ").toUpperCase() ?? "CONTROL UNCHANGED" : "NOT EXECUTED"}</em></header>
     <p>{model.summary}</p>

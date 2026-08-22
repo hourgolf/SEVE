@@ -147,7 +147,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           <span className="ih-stats">state <b>{effectiveStateLabel}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
         </div>
         <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
-        <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
+        <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} posture={passport?.lifecycle === "paper-root" ? "trading" : passport?.lifecycle === "dark-evidence" ? "observing" : "retired"} compact />
         <div className="mixer-deck">
         {passport?.effective && <details className="channel-disclosure operating-context">
           <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS CHANNEL IS IN ITS CURRENT MODE</em><i>▾</i></summary>

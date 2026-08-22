@@ -405,7 +405,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
             </button>;
           })}</div>
           {focusSlug && <div id="research-channel-decision" className="srw-decision-detail">
-            <DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} focusAxis={destination?.channel === focusSlug ? destination.axis : undefined} onAxisChange={(axis) => onNavigate?.({ section: "research", channel: focusSlug, axis, researchMode: "decisions", researchFilter: decisionFilter ?? undefined })} />
+            <DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} focusAxis={destination?.channel === focusSlug ? destination.axis : undefined} onAxisChange={(axis) => onNavigate?.({ section: "research", channel: focusSlug, axis, researchMode: "decisions", researchFilter: decisionFilter ?? undefined })} posture={postureBySlug[focusSlug]} />
             <details className="srw-channel-analysis"><summary><span><small>SUPPORTING EVIDENCE</small><b>Current execution, capacity, and managers</b></span><em>OPEN COMPARISON</em><i>▾</i></summary><div>
               <CurrentEvidenceCard selectedSlug={focusSlug} executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted} comparison={focusedComparison} state={shadowResearch.currentExecutedState} error={shadowResearch.currentExecutedError} truncated={shadowResearch.currentExecutedTruncated} />
               <ChannelDryPowderCurve curve={focusedCurve} />
@@ -439,7 +439,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
             evidenceLabel={windowMode === "cumulative" ? "HISTORICAL VIRTUAL" : "SESSION VIRTUAL"}
             referenceSession={referenceSession}
             briefs={surface.decisionAtlas.bySlug}
-            renderDetail={() => <><DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
+            renderDetail={() => <><DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} posture={postureBySlug[focusSlug]} />
               <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
               <CurrentEvidenceCard
                 selectedSlug={focusSlug}

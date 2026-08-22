@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FIXTURE_SCENARIOS, type FixtureScenarioId } from "@/lib/ui/fixtureLane";
 import { EntryFinishMap } from "@/components/research/EntryFinishMap";
 import { SessionDistributionStrip } from "@/components/research/ChannelDecisionVisuals";
+import { ChannelDecisionAtGlance } from "@/components/research/DecisionAtlasPreviewCard";
 import { ResearchBookBoard } from "@/components/research/ChannelResearchBooks";
 import type { ChannelLineupStory } from "@/lib/research/channelLineup";
 import type { DecisionAtlasReportsRead } from "@/hooks/useDecisionAtlasReports";
@@ -101,6 +102,12 @@ export function MarketHoursFixtureLab() {
               {lineupFixtures.map((story) => <article key={story.channel}><small>{story.group}</small><b>{story.channel}</b><span>{story.sessions}s / {story.opportunities} logical opportunities · through {story.throughSession}</span><p>{story.why}</p></article>)}
             </div>
             <SessionDistributionStrip story={lineupFixtures[2]} />
+            <section className="atlas-preview authoritative decision-first fixture-decision-card" aria-label="Decision-first channel card fixture">
+              <ChannelDecisionAtGlance channel={lineupFixtures[0].channel} story={lineupFixtures[0]} posture="trading"
+                nextTest="Compare one profit-protection exit with the current exit on the same opportunities."
+                keepFixed={["entry", "size", "account route"]} />
+              <details><summary>See supporting evidence</summary><p>Detailed cohorts, charts, manager comparisons, and provenance stay here.</p></details>
+            </section>
             <footer><span>CURRENT SETTINGS · 1s / 2</span><span>COMPARABLE EVIDENCE · 23s / 46</span><span>ALL CHANNEL HISTORY · 28s / 83</span></footer>
           </section>
         </section>
