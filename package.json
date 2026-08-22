@@ -314,7 +314,7 @@
     "fixture-lane-selftest": "tsx lib/ui/fixtureLane.selftest.ts",
     "ui-control-contract-selftest": "tsx lib/ui/controlContract.selftest.ts",
     "workspace-navigation-selftest": "tsx lib/shell/workspaceDestination.selftest.ts && tsx components/perform/workspaceNavigation.selftest.ts",
-    "ui-clarity-selftest": "tsx lib/perform/sessionReview.selftest.ts && tsx lib/shell/workspaceDestination.selftest.ts && tsx components/perform/workspaceNavigation.selftest.ts && tsx components/perform/uiClarityLayout.selftest.ts && tsx components/perform/clarityDisclosure.selftest.ts && tsx components/research/DecisionAtlasHierarchy.selftest.ts && tsx components/perform/decisionFirstPlatform.selftest.ts",
+    "ui-clarity-selftest": "tsx lib/perform/sessionReview.selftest.ts && tsx lib/perform/performanceEvidence.selftest.ts && tsx lib/shell/workspaceDestination.selftest.ts && tsx components/perform/workspaceNavigation.selftest.ts && tsx components/perform/uiClarityLayout.selftest.ts && tsx components/perform/clarityDisclosure.selftest.ts && tsx components/research/DecisionAtlasHierarchy.selftest.ts && tsx components/perform/decisionFirstPlatform.selftest.ts",
     "execution-observation-persistence-selftest": "tsx worker/src/executionObservationPersistence.selftest.ts",
     "position-route-observation-selftest": "tsx worker/src/positionRouteObservation.selftest.ts",
     "position-route-receipt-audit-selftest": "tsx lib/ops/positionRouteReceiptAudit.selftest.ts",

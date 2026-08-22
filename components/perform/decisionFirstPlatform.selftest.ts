@@ -13,6 +13,7 @@ const mobileRow = read("components/mobile2/MobileRackRow.tsx");
 const mobileShell = read("components/mobile2/MobileShell.tsx");
 const research = read("components/perform/ShadowResearchWorkspace.tsx");
 const book = read("components/mobile2/MobileDeskSheet.tsx");
+const pnl = read("components/console/PnlPanel.tsx");
 
 for (const phrase of ["WHAT CHANGED?", "WHAT NEEDS ATTENTION?", "WHAT SHOULD I DO NEXT?"]) assert.match(home, new RegExp(phrase.replace("?", "\\?")));
 for (const label of ["ACTUAL ACCOUNT", "NIGHTLY RESEARCH · READ ONLY", "PLATFORM EVENT", "PROPOSAL ONLY"]) assert.match(home, new RegExp(label));
@@ -52,5 +53,10 @@ assert.match(research, /SUPPORTING EVIDENCE/);
 assert.doesNotMatch(research, /<em>\{brief\?\.recommendation\.nextExperiment/);
 assert.match(book, /DESK FLAT/);
 assert.match(book, /No capital is deployed/);
+for (const label of ["ACTUAL ACCOUNT RESULT", "ACTUAL FILLS ONLY", "CHANNEL BREAKDOWN", "BEST MOVE", "PROFITABLE"]) assert.match(pnl, new RegExp(label, "i"));
+for (const label of ["actual fills · selected paper account", "ACTUAL FILLS ONLY", "CHANNEL BREAKDOWN"]) assert.match(book, new RegExp(label));
+assert.match(pnl, /pnl-coverage-notice/);
+assert.match(book, /m2-period-coverage/);
+assert.doesNotMatch(pnl, /No strategist-account fallback was used/);
 
 console.log("decision-first-platform-selftest: PASS");

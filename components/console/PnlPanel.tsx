@@ -8,7 +8,7 @@ import type { PnlWindow, ChannelStat, WindowedPnl } from "@/hooks/useWindowedPnl
 import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
-import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
+import { performanceCoverageCopy, summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
 
 const WINDOWS: { id: PnlWindow; label: string }[] = [
   { id: "today", label: "Today" },
@@ -55,11 +55,16 @@ export function PnlPanel({
     ? todayAttribution?.state === "blocked"
     : windowed?.evidenceState === "blocked";
   const recovered = isToday && todayAttribution?.state === "recovered";
-  const partial = !isToday && windowed?.evidenceState === "partial";
   const evidenceIssues = isToday
     ? todayAttribution?.issues ?? []
     : (windowed?.issues ?? []).map((issue) => summarizePerformanceIssue(issue));
   const winLabel = WINDOWS.find((w) => w.id === win)!.label.toLowerCase();
+  const coverageCopy = !isToday && windowed ? performanceCoverageCopy({
+    nav: windowed.navEvidenceState,
+    attribution: windowed.attributionEvidenceState,
+    attributedRows: windowed.attributedPositionRows,
+    withheldRows: windowed.withheldPositionRows,
+  }) : null;
 
   const statFor = (slug: string): ChannelStat => {
     if (isToday) { const p = pnlByStrategist[slug]; return { pnl: p?.dayPnl ?? 0, trades: p?.trades ?? 0, wins: p?.wins ?? 0, pkSum: p?.pkSum ?? 0, pkN: p?.pkN ?? 0 }; }
@@ -97,9 +102,9 @@ export function PnlPanel({
           <span className={`pnl-big ${blocked || fundVal == null ? "neg" : fundVal < 0 ? "neg" : "pos"}`}>
             {loading ? "…" : fundVal == null ? "UNAVAILABLE" : signedUsd(fundVal)}
           </span>
-          <span className="pnl-hero-sub" title={windowed?.sinceNote ? "this bucket's account NAV history starts here; channel rows require independent immutable execution-account attribution" : undefined}>
-            {isToday ? "session NAV change" : winLabel}{windowed?.sinceNote ? ` · NAV since ${windowed.sinceNote}` : ""}
-            {!isToday && windowed?.fundPnlSource === "immutable_position_attribution" ? " · attributed positions" : ""}
+          <span className="pnl-hero-sub" title={windowed?.sinceNote ? "this period's account NAV history starts here" : undefined}>
+            <b>ACTUAL ACCOUNT RESULT</b>
+            <small>{isToday ? "SESSION NAV CHANGE" : `${winLabel.toUpperCase()} NAV CHANGE`}{windowed?.sinceNote ? ` · SINCE ${windowed.sinceNote}` : ""}</small>
           </span>
           <div className="seg" aria-label="P&L timeframe" style={{ marginLeft: "auto" }}>
             {WINDOWS.map((w) => (
@@ -109,26 +114,12 @@ export function PnlPanel({
             ))}
           </div>
         </div>
-        {(blocked || partial) && (
-          <div className="review-evidence-blocked" role="alert">
-            <b>{isToday
-              ? "Current-session attribution unavailable"
-              : blocked
-                ? "Historical evidence unavailable"
-                : "Historical channel coverage partial"}</b>
-            {evidenceIssues.map((issue) => <span key={issue}>{issue}</span>)}
-            {!isToday && windowed?.attributionEvidenceState === "partial" && (
-              <small>{windowed.attributedPositionRows} verified rows included · {windowed.withheldPositionRows} rows withheld to keep trades whole. Account NAV remains complete.</small>
-            )}
-            {!isToday && windowed?.navEvidenceState === "ok" && windowed.attributionEvidenceState === "blocked" && (
-              <small>Account NAV remains available; channel rows are withheld.</small>
-            )}
-            {!isToday && windowed?.navEvidenceState === "blocked" && windowed.attributionEvidenceState === "ok" && (
-              <small>Immutable channel attribution remains available; account NAV history is unavailable.</small>
-            )}
-            <small>No strategist-account fallback was used.</small>
-          </div>
-        )}
+        {isToday && blocked && <div className="review-evidence-blocked" role="alert"><b>CURRENT CHANNEL BREAKDOWN IS UNAVAILABLE</b><span>The account result remains visible, but today&apos;s trades cannot be assigned to channels without guessing.</span></div>}
+        {coverageCopy && <div className="pnl-coverage-notice" role="status">
+          <b>{coverageCopy.headline}</b>
+          <span>{coverageCopy.summary}</span>
+          <details><summary>{coverageCopy.detailLabel}</summary><div>{evidenceIssues.map((issue) => <span key={issue}>{issue}</span>)}<small>No fallback routing was used.</small></div></details>
+        </div>}
         {recovered && (
           <div className="pf-position-attribution-recovered" role="status">
             <b>Current-session legacy route recovered</b>
@@ -158,13 +149,14 @@ export function PnlPanel({
         </div>
         {/* channels — diverging bar (loss left / gain right) + the harvest lens (era-4 pk · win).
             amber pk = high peak / low win → spike-carried (fix, don't promote). */}
-        {attributionAvailable ? <div style={{ marginTop: 8, opacity: loading ? 0.5 : 1, transition: "opacity 0.15s" }}>
+        {attributionAvailable ? <div className="pnl-channel-results" style={{ opacity: loading ? 0.5 : 1, transition: "opacity 0.15s" }}>
+          <div className="pnl-channel-boundary"><span><small>ACTUAL FILLS ONLY</small><b>CHANNEL BREAKDOWN</b></span><em>{active.length} channel{active.length === 1 ? "" : "s"} traded</em></div>
           <div className="dvg dvg-hd">
             <span />
             <span />
-            <span className="dvg-val">{winLabel}</span>
-            <span className="dvg-pk">best</span>
-            <span className="dvg-wn">win</span>
+            <span className="dvg-val">result</span>
+            <span className="dvg-pk">best move</span>
+            <span className="dvg-wn">profitable</span>
           </div>
           {shown.map(({ s, st, lens: L }) => {
             const w = Math.max(2, Math.round((Math.abs(st.pnl) / barMax) * 100) / 2); // half-width %
@@ -174,7 +166,7 @@ export function PnlPanel({
             const win = st.trades > 0 ? Math.round((100 * st.wins) / st.trades) : null;
             const hot = pk != null && win != null && st.trades >= 5 && pk >= 25 && win < 40;
             return (
-              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades}t in ${winLabel}${L ? ` · historical pattern: best move ${L.p}% · win ${L.w}% (n=${L.n})` : ""}${hot ? " · large moves but low win rate in this window" : ""}`}>
+              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades} logical trade${st.trades === 1 ? "" : "s"} in ${winLabel}${L ? ` · historical pattern: best move ${L.p}% · profitable ${L.w}% (n=${L.n})` : ""}${hot ? " · large moves but low profitable rate in this window" : ""}`}>
                 <span className="dvg-nm">
                   <span className="dvg-dot" style={{ background: pmVar(s.color), boxShadow: `0 0 5px ${pmVar(s.color)}` }} />
                   {s.name}
@@ -184,7 +176,7 @@ export function PnlPanel({
                 </span>
                 <span className={`dvg-val ${st.pnl < 0 ? "neg" : st.pnl > 0 ? "pos" : "mut"}`}>{st.pnl === 0 ? "—" : signedUsd(st.pnl)}</span>
                 <span className={`dvg-pk${hot ? " hot" : ""}`}>{pk != null ? `${pk}%` : "—"}</span>
-                <span className={`dvg-wn ${win != null ? (win >= 40 ? "pos" : "neg") : "mut"}`}>{win ?? "—"}</span>
+                <span className={`dvg-wn ${win != null ? (win >= 40 ? "pos" : "neg") : "mut"}`}>{win != null ? `${win}%` : "—"}</span>
               </div>
             );
           })}
@@ -194,7 +186,7 @@ export function PnlPanel({
             </button>
           )}
         </div> : (
-          <div className="chart-empty">channel rows withheld — immutable historical account route unavailable</div>
+          <div className="chart-empty">Channel breakdown unavailable. The account total above remains valid.</div>
         )}
       </div>
     </div>

@@ -1,27 +1,16 @@
 import assert from "node:assert/strict";
-import {
-  combinePerformanceEvidenceState,
-  summarizePerformanceIssue,
-} from "./performanceEvidence";
+import { performanceCoverageCopy } from "./performanceEvidence";
 
-assert.equal(combinePerformanceEvidenceState("checking", "ok"), "checking");
-assert.equal(combinePerformanceEvidenceState("ok", "ok"), "ok");
-assert.equal(combinePerformanceEvidenceState("ok", "blocked"), "partial");
-assert.equal(combinePerformanceEvidenceState("blocked", "ok"), "partial");
-assert.equal(combinePerformanceEvidenceState("blocked", "blocked"), "blocked");
+assert.equal(performanceCoverageCopy({ nav: "ok", attribution: "ok", attributedRows: 12, withheldRows: 0 }), null);
 
-const ids = [
-  "3a0199d0-8949-454e-91b1-bc19ade6c19d",
-  "3b646e69-a4ae-499e-a56c-4b346949eb52",
-  "f441f3cc-2381-4ec1-85d7-0426cc074f66",
-  "6ab05e3d-3f02-4418-b9c7-a59a215ccf93",
-];
-assert.equal(
-  summarizePerformanceIssue(`performance positions lack immutable execution-account routing: ${ids.join(",")}`, 2),
-  "4 older position rows lack verified account routing.",
-);
-assert.equal(combinePerformanceEvidenceState("partial", "ok"), "partial");
-assert.equal(summarizePerformanceIssue("execution-route read failed: network unavailable"), "execution-route read failed: network unavailable");
-assert.equal(summarizePerformanceIssue("selected account is not configured"), "selected account is not configured");
+assert.deepEqual(performanceCoverageCopy({ nav: "ok", attribution: "partial", attributedRows: 80, withheldRows: 7 }), {
+  headline: "ACCOUNT TOTAL IS COMPLETE · CHANNEL BREAKDOWN IS PARTIAL",
+  summary: "Trust the account NAV curve and total. 80 verified channel rows are shown; 7 older rows are omitted rather than guessed.",
+  detailLabel: "WHY SOME CHANNEL ROWS ARE OMITTED",
+});
 
-console.log("performance-evidence-selftest: split evidence contract passed");
+assert.match(performanceCoverageCopy({ nav: "ok", attribution: "blocked", attributedRows: 0, withheldRows: 87 })?.summary ?? "", /Trust the account NAV curve and total/);
+assert.match(performanceCoverageCopy({ nav: "blocked", attribution: "ok", attributedRows: 42, withheldRows: 0 })?.headline ?? "", /CHANNEL BREAKDOWN IS AVAILABLE/);
+assert.match(performanceCoverageCopy({ nav: "blocked", attribution: "blocked", attributedRows: 0, withheldRows: 0 })?.headline ?? "", /HISTORICAL RESULTS ARE UNAVAILABLE/);
+
+console.log("performance-evidence-selftest: PASS");

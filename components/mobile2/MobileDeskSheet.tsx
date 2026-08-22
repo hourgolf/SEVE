@@ -26,7 +26,7 @@ import { ResearchCouncilRoom } from "@/components/research/ResearchCouncilRoom";
 import { ReviewSessionScorecard } from "@/components/perform/ReviewSessionScorecard";
 import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 import type { PnlWindow } from "@/hooks/useWindowedPnl";
-import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
+import { performanceCoverageCopy, summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -134,18 +134,21 @@ function MobilePeriodResults({ props, channels, livePnl }: {
   const rows = channels.map((channel) => ({ channel, result: rowFor(channel.slug) }))
     .filter((row) => row.result.trades > 0 || row.result.pnl !== 0)
     .sort((left, right) => Math.abs(right.result.pnl) - Math.abs(left.result.pnl));
-  const coveragePartial = !today && historical?.attributionEvidenceState === "partial";
   const coverageBlocked = !today && historical?.attributionEvidenceState === "blocked";
-  const issue = !today && historical?.attributionIssues[0]
-    ? summarizePerformanceIssue(historical.attributionIssues[0])
-    : null;
-  return <Section title="ACCOUNT RESULTS" meta="selected paper account">
+  const coverageCopy = !today && historical ? performanceCoverageCopy({
+    nav: historical.navEvidenceState,
+    attribution: historical.attributionEvidenceState,
+    attributedRows: historical.attributedPositionRows,
+    withheldRows: historical.withheldPositionRows,
+  }) : null;
+  const issues = !today ? (historical?.issues ?? []).map((issue) => summarizePerformanceIssue(issue)) : [];
+  return <Section title="ACCOUNT RESULTS" meta="actual fills · selected paper account">
     <div className="m2-period-results">
       <nav aria-label="Results period">{MOBILE_PERIODS.map((item) => <button type="button" key={item.id} className={period === item.id ? "on" : ""} onClick={() => props.reviewEvidence.setPnlWindow(item.id)}>{item.label}</button>)}</nav>
       <div className="m2-period-hero"><span><small>{period === "today" ? "SESSION NAV CHANGE" : `${MOBILE_PERIODS.find((item) => item.id === period)?.label} NAV CHANGE`}</small><b className={(fundValue ?? 0) < 0 ? "neg" : "pos"}>{loading ? "…" : fundValue == null ? "UNAVAILABLE" : signedUsd(fundValue)}</b></span><span><small>CHANNELS THAT TRADED</small><b>{rows.length}</b></span><span><small>LOGICAL TRADES</small><b>{rows.reduce((total, row) => total + row.result.trades, 0)}</b></span></div>
-      {coveragePartial || coverageBlocked ? <div className="m2-period-coverage" role="status"><b>{coverageBlocked ? "CHANNEL HISTORY UNAVAILABLE" : "CHANNEL HISTORY PARTIAL"}</b><span>{issue ?? "Some older channel rows do not have a verified account route."}</span>{coveragePartial ? <small>{historical?.attributedPositionRows ?? 0} verified rows shown · {historical?.withheldPositionRows ?? 0} rows withheld to keep trades whole. Account NAV is complete.</small> : null}</div> : null}
+      {coverageCopy ? <div className="m2-period-coverage" role="status"><b>{coverageCopy.headline}</b><span>{coverageCopy.summary}</span><details><summary>{coverageCopy.detailLabel}</summary><div>{issues.map((issue) => <span key={issue}>{issue}</span>)}<small>No fallback routing was used.</small></div></details></div> : null}
       {curve.length >= 2 ? <LineChart values={curve} height={92} id={`m2-results-${period}`} baseline={curve[0]} format={usd0} formatDelta={signedUsd} labels={labels} /> : <div className="m2-desk-empty">{loading ? "Loading account history…" : "No account curve in this period."}</div>}
-      {!coverageBlocked ? <div className="m2-review-rows">{rows.slice(0, 10).map(({ channel, result }) => <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b><span className={result.pnl < 0 ? "neg" : result.pnl > 0 ? "pos" : ""}>{signedUsd(result.pnl)}</span><small>{result.trades} logical trade{result.trades === 1 ? "" : "s"} · {result.wins} profitable</small></div>)}{!loading && rows.length === 0 ? <div className="m2-period-empty">No channel activity in this period.</div> : null}</div> : null}
+      {!coverageBlocked ? <div className="m2-channel-results"><header><span><small>ACTUAL FILLS ONLY</small><b>CHANNEL BREAKDOWN</b></span><em>{rows.length} TRADED</em></header><div className="m2-review-rows">{rows.slice(0, 10).map(({ channel, result }) => <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b><span className={result.pnl < 0 ? "neg" : result.pnl > 0 ? "pos" : ""}>{signedUsd(result.pnl)}</span><small>{result.trades} logical trade{result.trades === 1 ? "" : "s"} · {result.wins} profitable</small></div>)}{!loading && rows.length === 0 ? <div className="m2-period-empty">No channel activity in this period.</div> : null}</div></div> : null}
     </div>
   </Section>;
 }
