@@ -64,7 +64,7 @@ export function MobileStudio({
           <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVING <b>{passports.dark}</b></button>
           <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL <b>{channels.length}</b></button>
         </div>
-        {passports.release.state === "verified" && <p className="m2-roster-reconciliation">LIVE ENTRY AUTHORITY · <b>{passports.release.rootSlugs.length} TRADING ROOTS</b></p>}
+        {passports.release.state === "verified" && <p className="m2-roster-reconciliation" title={passports.release.receipt?.configHash ?? passports.release.expectedHash}>LIVE ROSTER {passports.releaseView.shortHash} · <b>{passports.release.rootSlugs.length} TRADING ROOTS</b></p>}
         <div className="m2-seam"><span className="m2-silk">TAP A CHANNEL FOR EVIDENCE</span><span className="ln" /></div>
         {visibleChannels.length === 0 ? (
           <div className="m2-ghost">no channels in this runtime scope</div>

@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadStoredReceiptBoundControlPlane } from "../lib/channels/channelControlPlanePersistence.js";
 import { NEXT_WEEK_OBSERVE_ONLY, NEXT_WEEK_ROSTER_DECISIONS } from "../lib/channels/nextWeekRoster20260824.js";
+import { WEEKEND_MONDAY_ROSTER, validateWeekendMondayRoster } from "../lib/channels/weekendMondayRoster20260824.js";
 import { replayDeskSameClockCapacity, type DeskReplayCandidate, type DeskReplayPolicy } from "../lib/research/deskSameClockCapacityReplay.js";
 import { createServerSupabaseClient } from "./serverSupabase.js";
 
@@ -43,8 +44,9 @@ const correctedRoster = [
 const baselineManagers: Record<string, string> = {
   "momo-shape-2": "BANK30-R50-K67",
   "vb-level-break": "TP-30",
-  breakout: "TP-50",
+  breakout: "FULL-R35-K67",
   "grind-smart-entries": "FULL-R50-K75",
+  "orb-ustop-ctl": "BANK30-R50-K67",
 };
 const candidateManagers: Record<string, string | null> = {
   "orb-trend-rider": "TP-50",
@@ -95,6 +97,20 @@ const windowResult = (candidates: DeskReplayCandidate[], policies: DeskReplayPol
     variant: { id: `${start}-${endExclusive}`, label: "Monday roster tournament", distinctOccAtSameClock: false, policies },
   });
 
+function combinations(values: readonly string[], count: number): string[][] {
+  const rows: string[][] = [];
+  const visit = (start: number, selected: string[]): void => {
+    if (selected.length === count) { rows.push([...selected]); return; }
+    for (let index = start; index <= values.length - (count - selected.length); index++) {
+      selected.push(values[index]);
+      visit(index + 1, selected);
+      selected.pop();
+    }
+  };
+  visit(0, []);
+  return rows;
+}
+
 function policyWithCandidate(policies: DeskReplayPolicy[], domain: string, slug: string): DeskReplayPolicy[] {
   return structuredClone(policies).map((policy) => {
     if (policy.id !== domain) return policy;
@@ -127,7 +143,21 @@ function sessionDelta(baseline: ReturnType<typeof windowResult>, variant: Return
   };
 }
 
+function absoluteRead(result: ReturnType<typeof windowResult>) {
+  const sessionPnls = result.sessions.map((row) => row.modeledPnlUsd);
+  return {
+    modeledPnlUsd: result.modeledPnlUsd,
+    withoutBestSessionUsd: round(result.modeledPnlUsd - (sessionPnls.length ? Math.max(...sessionPnls) : 0)),
+    typicalSessionUsd: round(median(sessionPnls)),
+    positiveSessions: sessionPnls.filter((value) => value > 0).length,
+    sessions: sessionPnls.length,
+    worstSessionUsd: sessionPnls.length ? round(Math.min(...sessionPnls)) : 0,
+    admitted: result.admitted.length,
+  };
+}
+
 async function main(): Promise<void> {
+  validateWeekendMondayRoster();
   const snapshotText = readFileSync(snapshotFile, "utf8");
   const pathText = readFileSync(pathFile, "utf8");
   const phenotypeText = readFileSync(phenotypeFile, "utf8");
@@ -243,8 +273,15 @@ async function main(): Promise<void> {
   const domainTemplates = new Map<string, ChannelSpec>();
   for (const spec of specs) if (!domainTemplates.has(spec.collisionDomain)) domainTemplates.set(spec.collisionDomain, spec);
   const phenotypeBySlug = new Map(phenotype.channels.map((row) => [String(row.channel), row]));
+  const expandedCandidateManagers = new Map<string, string | null>(
+    phenotype.channels
+      .map((row) => String(row.channel))
+      .filter((slug) => !corrected.has(slug))
+      .map((slug) => [slug, null]),
+  );
+  for (const [slug, manager] of Object.entries(candidateManagers)) expandedCandidateManagers.set(slug, manager);
   const tournament: Array<Record<string, unknown>> = [];
-  for (const [slug, manager] of Object.entries(candidateManagers)) {
+  for (const [slug, manager] of expandedCandidateManagers) {
     const candidatePhenotype = phenotypeBySlug.get(slug);
     if (!candidatePhenotype) continue;
     const candidateUnderlying = slug.endsWith("-qqq") || slug === "qqq-thrust-trail" ? "QQQ"
@@ -257,7 +294,7 @@ async function main(): Promise<void> {
         slug,
         collisionDomain: domain,
         accountId: template.accountId,
-        familyId: candidateFamilies[slug] ?? `TOURNAMENT-${candidateUnderlying}-${slug}`,
+        familyId: specBySlug.get(slug)?.familyId ?? candidateFamilies[slug] ?? `TOURNAMENT-${candidateUnderlying}-${slug}`,
         symbolScope: [candidateUnderlying],
         quantity: 2,
         priority: 999,
@@ -281,8 +318,9 @@ async function main(): Promise<void> {
       }));
       const three = reads["three-week"];
       const two = reads["two-week"];
-      const robust = three.totalUsd > 0 && two.totalUsd >= 0 && three.withoutBestSessionUsd > 0
-        && two.withoutBestSessionUsd >= 0 && three.displacedIncumbentPaths === 0 && two.displacedIncumbentPaths === 0;
+      const robust = three.totalUsd > 0 && two.totalUsd > 0 && three.withoutBestSessionUsd > 0
+        && two.withoutBestSessionUsd > 0 && three.candidateAdmitted >= 5 && two.candidateAdmitted >= 3
+        && three.displacedIncumbentPaths === 0 && two.displacedIncumbentPaths === 0;
       tournament.push({
         channel: slug,
         manager: manager ?? "historical native",
@@ -318,18 +356,20 @@ async function main(): Promise<void> {
     })[0]).sort((left, right) => Number(right.robustOpenLane) - Number(left.robustOpenLane)
       || Number((right.windows as any)["two-week"].withoutBestSessionUsd) - Number((left.windows as any)["two-week"].withoutBestSessionUsd));
 
-  const combinedLeadNames = bestByChannel.filter((row) => row.robustOpenLane).slice(0, 2).map((row) => String(row.channel));
-  const combinedRows = combinedLeadNames.flatMap((slug) => {
-    const placement = bestByChannel.find((row) => row.channel === slug && row.robustOpenLane);
-    if (!placement) return [];
+  const robustPlacements = bestByChannel.filter((row) => row.robustOpenLane);
+  const leadRowsBySlug = new Map<string, DeskReplayCandidate[]>();
+  for (const placement of robustPlacements) {
+    const slug = String(placement.channel);
     const template = domainTemplates.get(String(placement.domain))!;
     const candidateUnderlying = String(placement.underlying);
     const spec: ChannelSpec = { ...template, slug, collisionDomain: String(placement.domain),
-      accountId: String(placement.accountId), familyId: candidateFamilies[slug] ?? `TOURNAMENT-${candidateUnderlying}-${slug}`,
+      accountId: String(placement.accountId), familyId: specBySlug.get(slug)?.familyId ?? candidateFamilies[slug] ?? `TOURNAMENT-${candidateUnderlying}-${slug}`,
       symbolScope: [candidateUnderlying], quantity: 2, priority: 999, executionPosture: "paper",
       entryParameters: { maxEntriesPerSession: 1 } };
-    return buildRows(slug, spec, candidateManagers[slug] ?? null, 2, 1);
-  });
+    leadRowsBySlug.set(slug, buildRows(slug, spec, expandedCandidateManagers.get(slug) ?? null, 2, 1));
+  }
+  const combinedLeadNames = robustPlacements.slice(0, 2).map((row) => String(row.channel));
+  const combinedRows = combinedLeadNames.flatMap((slug) => leadRowsBySlug.get(slug) ?? []);
   let combinedPolicies = policies;
   for (const slug of combinedLeadNames) {
     const placement = bestByChannel.find((row) => row.channel === slug && row.robustOpenLane);
@@ -342,6 +382,114 @@ async function main(): Promise<void> {
       admittedByChannel: Object.fromEntries(combinedLeadNames.map((slug) => [slug, variant.admitted.filter((row) => row.slug === slug).length])),
       displacedIncumbentPaths: Math.max(0, baseResult.admitted.length - variant.admitted.filter((row) => !combinedLeadNames.includes(row.slug)).length) }];
   }));
+
+  const proposedRows = (quantityOverride: Record<string, number> = {}) => WEEKEND_MONDAY_ROSTER.flatMap((decision) => {
+    const template = specBySlug.get(decision.channel) ?? domainTemplates.get(decision.collisionDomain);
+    if (!template) throw new Error(`${decision.channel}: no replay template for ${decision.collisionDomain}`);
+    const domainTemplate = domainTemplates.get(decision.collisionDomain)!;
+    const quantity = quantityOverride[decision.channel] ?? decision.quantity;
+    const spec: ChannelSpec = { ...template,
+      slug: decision.channel,
+      accountId: domainTemplate.accountId,
+      collisionDomain: decision.collisionDomain,
+      familyId: decision.familyId,
+      symbolScope: [decision.underlying],
+      priority: decision.priority,
+      quantity,
+      executionPosture: "paper",
+      entryParameters: { maxEntriesPerSession: decision.entryCap },
+    };
+    const manager = baselineManagers[decision.channel] ?? expandedCandidateManagers.get(decision.channel) ?? null;
+    return buildRows(decision.channel, spec, manager, quantity, decision.entryCap);
+  });
+  const proposedPolicies = structuredClone(policies).map((policy) => ({ ...policy,
+    priorityBySlug: Object.fromEntries(WEEKEND_MONDAY_ROSTER
+      .filter((row) => row.collisionDomain === policy.id)
+      .map((row) => [row.channel, row.priority])),
+  }));
+  const proposedSelectedRows = proposedRows();
+  const proposedExact = Object.fromEntries(windows.map((window) => {
+    const result = windowResult(proposedSelectedRows, proposedPolicies, window.start, window.endExclusive);
+    return [window.id, absoluteRead(result)];
+  }));
+  const selectedByWindow = Object.fromEntries(windows.map((window) => [window.id,
+    windowResult(proposedSelectedRows, proposedPolicies, window.start, window.endExclusive)]));
+  const sizeReplay = Object.fromEntries(WEEKEND_MONDAY_ROSTER.map((decision) => [decision.channel,
+    Object.fromEntries([1, 2, 3, 4, 5, 6].map((quantity) => {
+      const rows = proposedRows({ [decision.channel]: quantity });
+      const reads = Object.fromEntries(windows.map((window) => {
+        const selected = selectedByWindow[window.id];
+        const result = windowResult(rows, proposedPolicies, window.start, window.endExclusive);
+        const channelRejections = result.rejected.filter((row) => row.slug === decision.channel);
+        const reasons = [...new Set(channelRejections.map((row) => row.reason))].sort();
+        return [window.id, { ...absoluteRead(result), deltaVsSelected: sessionDelta(selected, result),
+          admittedChannelPaths: result.admitted.filter((row) => row.slug === decision.channel).length,
+          channelRejections: Object.fromEntries(reasons.map((reason) => [reason,
+            channelRejections.filter((row) => row.reason === reason).length])) }];
+      }));
+      return [String(quantity), { quantity, selected: quantity === decision.quantity, windows: reads }];
+    }))]));
+  const sizingPlans = Object.fromEntries(Object.entries({
+    selected: {},
+    "base-2": { "grind-smart-entries": 2, "vb-level-break": 2 },
+    "grind-4": { "grind-smart-entries": 4, "vb-level-break": 2 },
+    "level-4": { "grind-smart-entries": 2, "vb-level-break": 4 },
+    "evidence-step-4": { "grind-smart-entries": 4, "vb-level-break": 4 },
+    "upper-bound-6": { "grind-smart-entries": 6, "vb-level-break": 6 },
+  }).map(([id, overrides]) => [id, Object.fromEntries(windows.map((window) => {
+    const result = windowResult(proposedRows(overrides), proposedPolicies, window.start, window.endExclusive);
+    return [window.id, absoluteRead(result)];
+  }))]));
+
+  const coreMarginal = Object.fromEntries(correctedRoster.map((slug) => [slug, Object.fromEntries(windows.map((window) => {
+    const baselineResult = windowResult(baselineRows, policies, window.start, window.endExclusive);
+    const withoutResult = windowResult(baselineRows.filter((row) => row.slug !== slug), policies, window.start, window.endExclusive);
+    const baselineIds = new Set(baselineResult.admitted.map((row) => row.id));
+    const substitutes = withoutResult.admitted.filter((row) => !baselineIds.has(row.id));
+    const channelRows = baselineResult.admitted.filter((row) => row.slug === slug);
+    return [window.id, {
+      ...sessionDelta(withoutResult, baselineResult),
+      admitted: channelRows.length,
+      channelPathSumUsd: round(channelRows.reduce((sum, row) => sum + row.pnlUsd, 0)),
+      substitutePathsWhenRemoved: substitutes.length,
+      substitutePathSumUsd: round(substitutes.reduce((sum, row) => sum + row.pnlUsd, 0)),
+    }];
+  }))]));
+
+  const universe = [...correctedRoster, ...robustPlacements.map((row) => String(row.channel))];
+  const rosterTournament = combinations(universe, 10).filter((channels) => channels.includes("vb-macd-state")
+      && channels.some((slug) => (phenotypeBySlug.get(slug)?.family ?? "").includes("iwm") || slug.endsWith("-iwm"))
+      && channels.some((slug) => slug.endsWith("-qqq")))
+    .map((channels) => {
+      let scenarioPolicies = policies;
+      for (const placement of robustPlacements) if (channels.includes(String(placement.channel))) {
+        scenarioPolicies = policyWithCandidate(scenarioPolicies, String(placement.domain), String(placement.channel));
+      }
+      const rows = [
+        ...baselineRows.filter((row) => channels.includes(row.slug)),
+        ...channels.flatMap((slug) => leadRowsBySlug.get(slug) ?? []),
+      ];
+      const reads = Object.fromEntries(windows.map((window) => {
+        const result = windowResult(rows, scenarioPolicies, window.start, window.endExclusive);
+        const sessionPnls = result.sessions.map((row) => row.modeledPnlUsd);
+        return [window.id, {
+          modeledPnlUsd: result.modeledPnlUsd,
+          withoutBestSessionUsd: round(result.modeledPnlUsd - (sessionPnls.length ? Math.max(...sessionPnls) : 0)),
+          typicalSessionUsd: round(median(sessionPnls)),
+          positiveSessions: sessionPnls.filter((value) => value > 0).length,
+          sessions: sessionPnls.length,
+          worstSessionUsd: sessionPnls.length ? Math.min(...sessionPnls) : 0,
+          admitted: result.admitted.length,
+        }];
+      }));
+      return { channels: [...channels].sort(), windows: reads };
+    }).sort((left, right) => right.windows["two-week"].withoutBestSessionUsd - left.windows["two-week"].withoutBestSessionUsd
+      || right.windows["three-week"].withoutBestSessionUsd - left.windows["three-week"].withoutBestSessionUsd
+      || right.windows["two-week"].modeledPnlUsd - left.windows["two-week"].modeledPnlUsd
+      || right.windows["two-week"].worstSessionUsd - left.windows["two-week"].worstSessionUsd);
+  const recommendedChannels = WEEKEND_MONDAY_ROSTER.map((row) => row.channel).sort();
+  const recommendedRoster = rosterTournament.find((row) => JSON.stringify(row.channels) === JSON.stringify(recommendedChannels));
+  if (!recommendedRoster) throw new Error("evidence-led Monday roster was not evaluated in the constrained tournament");
 
   const momo2Spec = specBySlug.get("momo-shape-2")!;
   const momoSpec: ChannelSpec = { ...momo2Spec, slug: "momo-shape", familyId: "SPY-MOMO", quantity: 2,
@@ -379,6 +527,21 @@ async function main(): Promise<void> {
     recommendations: {
       openLane: bestByChannel.filter((row) => row.robustOpenLane),
       combinedOpenLanes: combined,
+      coreMarginal,
+      rosterTournament: {
+        universe,
+        constraints: ["ten channels", "retain vb-macd-state because WIDE20/50 lacks like-for-like exact path coverage", "at least one QQQ channel", "at least one IWM channel"],
+        evaluated: rosterTournament.length,
+        recommended: recommendedRoster,
+        top: rosterTournament.slice(0, 10),
+      },
+      proposedExact: {
+        channels: WEEKEND_MONDAY_ROSTER.map((row) => row.channel).sort(),
+        priorities: Object.fromEntries(WEEKEND_MONDAY_ROSTER.map((row) => [row.channel, row.priority])),
+        windows: proposedExact,
+      },
+      sizeReplay,
+      sizingPlans,
       momoSiblingReplacement: momoReplacement,
       hold: bestByChannel.filter((row) => row.read !== "portfolio_compatible_lead").slice(0, 8),
       boundary: "No candidate receives the lane without improving both windows, surviving removal of its best session, and avoiding incumbent displacement at last priority.",

@@ -77,13 +77,14 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
       {passports.release.state === "verified" && <details className="runtime-roster-map">
         <summary>
           <b>LIVE ENTRY AUTHORITY</b>
+          <small title={passports.release.receipt?.configHash ?? passports.release.expectedHash}>ROSTER {passports.releaseView.shortHash}</small>
           <em>{authorityRootSlugs.length} TRADING ROOTS</em>
           <i aria-hidden="true">▾</i>
         </summary>
         <div>
           <span><small>CHANNELS ALLOWED TO OPEN PAPER TRADES</small><b>{authorityRootSlugs.join(" · ")}</b></span>
           <span><small>TRADING ROOTS OUTSIDE THIS {summary.total}-ROW VIEW</small><b>{outsideDeskView.length ? outsideDeskView.join(" · ") : "NONE"}</b></span>
-          <p>Trading channels may open paper positions. Observing channels collect research only. This list is the live authority; database labels are supporting context.</p>
+          <p>This receipt-bound roster is the live authority. Trading channels may open paper positions; observing channels collect research only. Saved database labels are supporting context.</p>
         </div>
       </details>}
       <ChannelCollectionCullPanel />
