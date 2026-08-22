@@ -7,6 +7,35 @@ export interface PerformanceCoverageCopy {
   detailLabel: string;
 }
 
+export interface AccountNavResult {
+  state: "ok" | "blocked";
+  pnl: number | null;
+  issue: string | null;
+}
+
+/**
+ * An account result requires two finite account-level NAV observations. Channel
+ * attribution is useful evidence, but its sum is not a substitute for account
+ * NAV because it can omit manual activity and other account-level effects.
+ */
+export function deriveAccountNavResult(values: readonly number[]): AccountNavResult {
+  if (values.length < 2) return {
+    state: "blocked",
+    pnl: null,
+    issue: "Account NAV history contains fewer than two verified snapshots.",
+  };
+  if (values.some((value) => !Number.isFinite(value))) return {
+    state: "blocked",
+    pnl: null,
+    issue: "Account NAV history contains an invalid snapshot value.",
+  };
+  return {
+    state: "ok",
+    pnl: Math.round(values[values.length - 1] - values[0]),
+    issue: null,
+  };
+}
+
 export function combinePerformanceEvidenceState(
   nav: PerformanceEvidenceState,
   attribution: PerformanceEvidenceState,

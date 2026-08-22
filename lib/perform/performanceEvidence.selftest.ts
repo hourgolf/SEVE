@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { performanceCoverageCopy } from "./performanceEvidence";
+import { deriveAccountNavResult, performanceCoverageCopy } from "./performanceEvidence";
+
+assert.deepEqual(deriveAccountNavResult([1_000_000, 999_750]), { state: "ok", pnl: -250, issue: null });
+assert.deepEqual(deriveAccountNavResult([1_000_000]), {
+  state: "blocked",
+  pnl: null,
+  issue: "Account NAV history contains fewer than two verified snapshots.",
+});
+assert.equal(deriveAccountNavResult([1_000_000, Number.NaN]).state, "blocked");
 
 assert.equal(performanceCoverageCopy({ nav: "ok", attribution: "ok", attributedRows: 12, withheldRows: 0 }), null);
 

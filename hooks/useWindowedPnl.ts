@@ -9,6 +9,7 @@ import {
 } from "@/lib/ops/brokerReconciliation";
 import {
   combinePerformanceEvidenceState,
+  deriveAccountNavResult,
   type CombinedPerformanceEvidenceState,
   type PerformanceEvidenceState,
 } from "@/lib/perform/performanceEvidence";
@@ -20,7 +21,7 @@ export interface ChannelStat { pnl: number; trades: number; wins: number; pkSum:
 export interface WindowedPnl {
   statsBySlug: Record<string, ChannelStat>;
   fundPnl: number | null;
-  fundPnlSource: "nav_delta" | "immutable_position_attribution" | "unavailable";
+  fundPnlSource: "nav_delta" | "unavailable";
   curve: number[];
   curveLabels: string[];
   sinceNote: string | null;
@@ -275,31 +276,22 @@ export function useWindowedPnl(
       const nav = navOk
         ? navResult.value
         : { curve: [], curveLabels: [], curveRaw: [], sinceNote: null };
-      const navDelta = nav.curveRaw.length >= 2
-        ? Math.round(nav.curveRaw[nav.curveRaw.length - 1] - nav.curveRaw[0])
-        : null;
-      const attributedPnl = attributionOk
-        ? Math.round(Object.values(stats).reduce((total, channel) => total + channel.pnl, 0))
-        : null;
-      const fundPnl = navDelta ?? attributedPnl;
+      const navEvidence = navOk ? deriveAccountNavResult(nav.curveRaw) : null;
+      const fundPnl = navEvidence?.pnl ?? null;
       const navIssues = navOk
-        ? []
+        ? navEvidence?.issue ? [navEvidence.issue] : []
         : [(navResult.reason as Error)?.message ?? "account NAV evidence read failed"];
       const attributionIssues = attributionOk
         ? attributionRead?.issues ?? []
         : [(attributionResult.reason as Error)?.message ?? "position attribution read failed"];
-      const navEvidenceState: PerformanceEvidenceState = navOk ? "ok" : "blocked";
+      const navEvidenceState: PerformanceEvidenceState = navEvidence?.state ?? "blocked";
       const attributionEvidenceState: PerformanceEvidenceState = attributionOk
         ? attributionIssues.length ? "partial" : "ok"
         : "blocked";
       setData({
         statsBySlug: stats,
         fundPnl,
-        fundPnlSource: navDelta != null
-          ? "nav_delta"
-          : attributedPnl != null
-            ? "immutable_position_attribution"
-            : "unavailable",
+        fundPnlSource: fundPnl != null ? "nav_delta" : "unavailable",
         curve: nav.curve,
         curveLabels: nav.curveLabels,
         sinceNote: nav.sinceNote,
