@@ -14,7 +14,7 @@ import { buildChannelRosterBundlePreview, type ChannelRosterBundleDraft, type Ch
 import { prepareResearchChannelRegistrationWrite, prepareRosterBundleDraftWrite } from "../lib/channels/channelRosterBundlePersistence";
 import { loadChannelRosterBundleServerContext } from "../lib/channels/channelRosterBundleServerContext";
 import { NEXT_WEEK_OBSERVE_ONLY, NEXT_WEEK_ROSTER_DECISIONS } from "../lib/channels/nextWeekRoster20260824";
-import { registerResearchChannel, type ResearchChannelRegistration } from "../lib/channels/researchChannelRegistry";
+import { buildResearchChannelRegistry, registerResearchChannel, type ResearchChannelRegistration } from "../lib/channels/researchChannelRegistry";
 import { CORE_REQUIRED_RECEIPTS, type StrategyCartridgeV1 } from "../lib/strategy/channelContract";
 import { createServerSupabaseClient } from "./serverSupabase";
 
@@ -113,7 +113,7 @@ function registration(input: { packetSpec: ChannelSpecVersion; source: SourceRow
     risk: { riskPerTradeUsd: spec.riskLimits.maxRiskUsd, maxContracts: spec.quantity, dailyEntryLatchUsd: spec.maxDebitUsd,
       maxOpenPositions: 1, collisionFamily: spec.familyId, maxConcurrentInCollisionFamily: 1,
       concentrationTags: [spec.symbolScope[0]!, "US-INDEX-LONG-PREMIUM"] },
-    management: { managerId: spec.managerProfileId, managerVersion: spec.managerVersion,
+    management: { managerId: spec.managerProfileId, managerVersion: "1.0.0",
       initialStops: [{ kind: "premium_loss_pct", lossPct: spec.stopLoss.catastrophePct, basis: "bid" }],
       harvest: { allocationMode: "whole_contract_exact", minimumQuantity: 1,
         tranches: [{ id: "all-out", role: "all_out", allocation: { units: 1, of: 1 },
@@ -171,9 +171,21 @@ async function main(): Promise<void> {
   if (current.manifest.contentHash !== before.manifest.contentHash) throw new Error("manifest drifted during registration publication");
   const context = await loadChannelRosterBundleServerContext({ sb, active: current, now: new Date().toISOString() });
   if (execute) for (const row of registrations) if (context.registry.bySlug[row.slug]?.contentHash !== row.contentHash) throw new Error(`${row.slug}: published registration unavailable`);
+  const registry = execute ? context.registry : buildResearchChannelRegistry([
+    ...context.registry.entries.filter((row) => !TRIALS.includes(row.slug as typeof TRIALS[number])).map((row) => ({
+      id: row.id, channelId: row.channelId, slug: row.slug, registeredAt: row.registeredAt,
+      registeredBy: row.registeredBy, cartridge: row.cartridge, candidateSpec: row.candidateSpec,
+      declaredBlockers: row.declaredBlockers,
+    })),
+    ...registrations.map((row) => ({ id: row.id, channelId: row.channelId, slug: row.slug,
+      registeredAt: row.registeredAt, registeredBy: row.registeredBy, cartridge: row.cartridge,
+      candidateSpec: row.candidateSpec, declaredBlockers: row.declaredBlockers })),
+  ]);
   const transitionPriority: Record<string, number> = { "orb-qqq-trail": 2, "breakout-alt-v3-iwm": 2, "grind-v3-2": 5, "vb-gap-drift": 6 };
   const changes: ChannelRosterTarget[] = [
     { slug: "momo-shape-2", quantity: 2 }, { slug: "orb-ustop-ctl", quantity: 2 }, { slug: "grind-v3", quantity: 2 },
+    { slug: "vb-macd-state", priority: 1 }, { slug: "breakout", priority: 2 },
+    { slug: "pb-ride-itm", priority: 3 }, { slug: "vb-level-break", priority: 4 },
     ...NEXT_WEEK_OBSERVE_ONLY.map((slug) => ({ slug, executionPosture: "observe-only" as const, ...(transitionPriority[slug] ? { priority: transitionPriority[slug] } : {}) })),
     ...TRIALS.map((slug) => ({ slug, membership: "include" as const, executionPosture: "paper" as const, quantity: 2, priority: 1 })),
   ];
@@ -182,16 +194,21 @@ async function main(): Promise<void> {
     reason: "Approved 2026-08-24 paper roster: retain ten focused channels, resize momo-shape-2/orb-ustop-ctl/grind-v3 to two contracts, promote bounded QQQ and IWM trials, and return eight weak trials to observe-only collection.",
     evidenceRefs: ["week-review:2026-08-17:2026-08-21", "next-week-roster:2026-08-24", `source-packet:${createHash("sha256").update(packetText).digest("hex")}`],
     operatorId: user.id, createdAt: new Date().toISOString() };
-  const preview = buildChannelRosterBundlePreview({ active: current, registry: context.registry, draft,
+  const preview = buildChannelRosterBundlePreview({ active: current, registry, draft,
     envelope: context.envelope, live: context.live, collectionStates: context.collectionStates });
-  if (preview.state !== "ready-for-worker-ack" || !preview.candidate || !preview.configurationEpochId) throw new Error(`roster preview blocked: ${preview.blockers.join("; ")}`);
+  if (preview.state !== "ready-for-worker-ack" || !preview.candidate || !preview.configurationEpochId) {
+    const validation = preview.candidate?.validationResults
+      .filter((row) => row.state !== "pass")
+      .map((row) => `${row.gate}:${row.code}:${row.fact}`) ?? [];
+    throw new Error(`roster preview blocked: ${[...preview.blockers, ...validation].join("; ")}`);
+  }
   if (!execute) {
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(resolve(outputDir, "roster-preview.json"), `${JSON.stringify({ registrations, draft, preview, authority: { productionWrites: 0, activation: false, orderAuthority: false } }, null, 2)}\n`);
     console.log(`activate-next-week-roster-2026-08-24: PREPARED · ${preview.candidate.manifest.contentHash}`);
     return;
   }
-  const draftWrite = prepareRosterBundleDraftWrite({ draft, preview, registry: context.registry, initialReceiptId: deterministicUuid(`next-week-draft:${preview.configurationEpochId}`) });
+  const draftWrite = prepareRosterBundleDraftWrite({ draft, preview, registry, initialReceiptId: deterministicUuid(`next-week-draft:${preview.configurationEpochId}`) });
   const storedDraft = await sb.rpc(draftWrite.rpc, draftWrite.args).abortSignal(AbortSignal.timeout(8_000)).single();
   if (storedDraft.error) throw new Error(`roster draft rejected: ${storedDraft.error.message}`);
   const acknowledgement = await poll<AckRow>("roster worker acknowledgement", async () => {
